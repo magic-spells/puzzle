@@ -1,5 +1,5 @@
 ---
-name: "D1 — SPA-only, client-side-rendering framework"
+name: 'D1 — Client-rendered runtime: no SSR server, no hydration protocol'
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
 connections:
@@ -7,18 +7,14 @@ connections:
   - COMPONENT-PUZZLE-APP
 ---
 
-# D1 — SPA-only, client-side-rendering framework
-
-The founding decision: Puzzle targets single-page applications exclusively — no SSR, no hydration, no universal rendering.
-
-## Context
-A new framework must decide up front what rendering targets it serves. Server-side rendering, hydration, and universal rendering all impose weight on the runtime and complexity in the compiler output.
+# D1 — Client-rendered runtime: no SSR server, no hydration protocol
 
 ## Decision
-Puzzle targets single-page applications exclusively: no SSR, no hydration, no universal rendering.
+Puzzle's runtime renders on the client only: no request-time server rendering and no hydration protocol. Build-time prerendering is allowed — static output ([[DECISION-D67-HYBRID-PRERENDER]]) renders pages in Node at build time, and the SPA runtime takes the page over on load with one code path.
+
+## Why
+It keeps the runtime small, the mental model simple, and compiler output free of server concerns.
 
 ## Alternatives rejected
-- SSR / hydration / universal rendering — rejected as out of scope for a small, simple framework.
-
-## Consequences
-This keeps the runtime small (~15KB target), the mental model simple, and the compiler output free of server concerns.
+- Request-time SSR / universal rendering — a server runtime and a second render path for a small framework.
+- DOM-adoption hydration — replace-on-commit takeover is flash-free because the markup is identical (D67).

@@ -1,5 +1,5 @@
 ---
-name: "D36 — `{#unless}`: inverted conditional (v1.7)"
+name: 'D36 — `{#unless}`: inverted conditional'
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
 connections:
@@ -9,22 +9,15 @@ connections:
   - DOC-SPEC-TEMPLATE
 ---
 
-# D36 — `{#unless}`: inverted conditional (v1.7)
+# D36 — `{#unless}`: inverted conditional
 
-`{#unless expr} … {/unless}` renders its body when `expr` is falsy (optional `{:else}` for truthy); a parse-time desugar to a negated `{#if}` with zero codegen surface. Settled (v1.7); additive. See [[DOC-SPEC-TEMPLATE]] §6 and [[DOC-TEMPLATE-SYNTAX]].
-
-## Context
-[[DOC-SPEC-TEMPLATE]] §6 deferred `{#unless}` alongside `{#switch}`. `{#unless done}` reads better than `{#if !(done)}` for the common guard-style template, and the desugar makes it nearly free to support (owner call).
+See [[DOC-SPEC-TEMPLATE]] §6.
 
 ## Decision
-D36 lands `{#unless}` as a purely additive amendment (like [[DECISION-D28-ANIMATIONS]]/[[DECISION-D29-LOOP-COUNTER]]): `{#unless expr} … {/unless}` renders its body when `expr` is **falsy**, with an optional `{:else}` that renders when `expr` is truthy. `expr` is ANY JS boolean expression, exactly like `{#if}`. Implementation is a **parse-time desugar** to the existing `If` AST node with a precedence-safe negated condition (`!(expr)` — the parens guard against `&&`/`||`/ternary precedence traps); **codegen is unchanged**, so `{#unless}` costs nothing beyond the parser. Existing `{#if}` templates are untouched.
+`{#unless expr} … {/unless}` renders its body when `expr` is falsy, with an optional `{:else}` for truthy. `expr` is any expression `{#if}` accepts ([[DECISION-D176-EXPRESSION-LANGUAGE]]). The parser desugars it to an `If` node whose condition is `!(expr)` (the parens guard precedence), so codegen has no `unless` surface.
 
-- **`{:else if}` inside `{#unless}` is a positioned compile error** suggesting an `{#if}` restructuring. Rejected supporting it by design: `unless … else-if` chains invert the reader's mental model at every rung and are unreadable — an author who needs a branch ladder should write `{#if}`.
+`{:else if}` inside `{#unless}` is a positioned compile error suggesting an `{#if}` restructure.
 
 ## Alternatives rejected
-- **Not supporting it** — keeping negation-only `{#if !(...)}`, the status quo this improves.
-- **A dedicated `Unless` AST node** — needless; the negated `If` covers every case with zero codegen surface.
-- **`{:else if}` inside `{#unless}`** — a positioned compile error; `unless … else-if` chains invert the reader's mental model at every rung.
-
-## Consequences
-Non-breaking: additive amendment (v1.7).
+- A dedicated `Unless` AST node — the negated `If` covers every case.
+- `{:else if}` inside `{#unless}` — unless/else-if ladders invert the reader's model at every rung.

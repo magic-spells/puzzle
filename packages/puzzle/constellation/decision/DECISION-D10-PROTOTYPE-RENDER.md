@@ -10,24 +10,17 @@ connections:
 code_refs:
   - compiler/internal/codegen/codegen.go
 verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
-notes:
-  - kind: verified
-    text: Claims re-verified against the current Go compiler code; no drift found.
-    sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
 ---
 
 # D10 — Generated `render()` attached via prototype assignment
 
-Settled per [[DOC-SPEC-ANATOMY]] §4. The compiler emits `Component.prototype.render = function () { ... }` after the user's class definition rather than injecting a method into the class body.
-
-## Context
-The compiler must attach a generated `render()` to each component. It could inject a method into the user's class body or attach it externally.
+Enforced by [[DOC-SPEC-ANATOMY]] §4.
 
 ## Decision
-The compiler emits `Component.prototype.render = function () { ... }` **after** the user's class definition rather than injecting a method into the class body.
+The compiler appends `Name.prototype.render = function () { … }` **after** the user's class (and `Name.prototype.renderSkeleton` for a `<puzzle-skeleton>`, [[DECISION-D39-SKELETON]]); it never injects a method into the class body. The name comes from [[DECISION-D24-CLASS-NAME-EXTRACTION]].
+
+## Why
+The user's code is never rewritten, so sourcemaps stay honest and debugging stays sane.
 
 ## Alternatives rejected
-- Injecting the `render()` method into the class body — rejected because it rewrites the user's code, breaking sourcemap honesty and debugging.
-
-## Consequences
-The user's code is never rewritten — sourcemaps stay honest, debugging stays sane.
+- Injecting `render()` into the class body — rewrites user code.

@@ -9,26 +9,13 @@ connections:
 
 # 0.2.0 — true static output
 
-Published 2026-07-24. The release is named for one rename. `output: 'static'`
-had meant "prerendered pages plus the full SPA bundle plus router takeover";
-that mode became `output: 'hybrid'`, byte-identical, which freed `'static'` to
-mean what it says — per-route content-complete HTML with no router, no
-`app.js`, and plain `<a>` page loads.
-
-That rename is why this is a minor and not a patch. Caret ranges do not cross
-0.x minors, and a config key that silently builds a different product is
-exactly the case that protection exists for.
-
-Around the rename sits the ergonomics round that stopped apps reaching into
-framework internals: path-shaped links so a `#` never has to appear in app
-code, inherited route guards, route head management, a router query snapshot,
-and a dev server that survives a busy port. The `.pzl` section tags also went
-singular.
+Published 2026-07-24. `output: 'static'` now means true static pages (no
+router, no `app.js`); the old prerendered-SPA mode is `output: 'hybrid'`
+([[DECISION-D81-STATIC-PAGES-MODE]]). Also path-shaped links, route guards,
+route head management, the router query snapshot, and the dev-server port scan.
 
 ## Upgrade notes
 
-- **Rename `output: 'static'` to `output: 'hybrid'`.** This is the quietest
-  break in the project's history: it is not a compile error and not a warning.
-  The build succeeds and produces a different product.
-- **Rename the `.pzl` section tags:** `<scripts>` → `<script>`, `<styles>` →
-  `<style>`, including `<script lang="ts">` and `<style scoped>`.
+- Rename `output: 'static'` to `output: 'hybrid'` to keep the old product. The
+  old spelling builds without error or warning — it just builds static pages.
+- `.pzl` section tags are singular: `<script>`, `<style>`.

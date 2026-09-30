@@ -1,5 +1,5 @@
 ---
-name: playground WASM build and Node smoke
+name: Playground WASM build and Node smoke
 kind: integration
 status: built
 framework: Node + Go toolchain
@@ -9,24 +9,27 @@ connections:
   - COMPONENT-TEMPLATE-PARSER
   - COMPONENT-CODEGEN
   - FILE-PZL-WASM
-  - FEATURE-PLAYGROUND-WASM-COMPILER
 ---
 
-`scripts/build-wasm.mjs` pins the size and dependency boundary: it asserts the
-`GOOS=js` dependency graph contains no esbuild package, builds the module, copies
-the matching toolchain `wasm_exec.js`, and fails over a 6 MiB raw ceiling.
+# Playground WASM build and Node smoke
 
-`scripts/smoke-wasm.mjs` owns the executable API contract until the Phase 2
-worker exists. It loads the produced module in Node and checks: the canonical
-todos view compiles; a broken source reports a positioned error; `{#svg}` is
-rejected at its path literal; a styled component returns its CSS both plain and
-`scoped` (with the `@scope` id matching the `data-<scopeId>` stamp in the emitted
-JS); an over-deep and an over-long source each answer with a diagnostic AND leave
-the instance able to compile again; a throwing `options` getter does the same. It
-closes by timing 50 repeated compiles.
+The in-browser compiler boundary ([[DECISION-D164-PLAYGROUND-WASM-BOUNDARY]],
+[[FILE-PZL-WASM]]).
 
-The Go side of the same boundary is covered by `TestOverNestingDepth*` in
-`packages/puzzle-lang/parser/depth_test.go` — a native test in the language
-module, which CI's Go jobs test on every push — and by a CI step that builds the
-command under `GOOS=js GOARCH=wasm`, which the `js && wasm` build tag otherwise
-hides from `go build ./...`.
+- **`scripts/build-wasm.mjs`** pins size and dependencies: it asserts the
+  `GOOS=js` dependency graph has no esbuild package, builds the module, copies the
+  matching toolchain `wasm_exec.js`, and fails over a 6 MiB raw ceiling.
+- **`scripts/smoke-wasm.mjs`** owns the executable API contract until the worker
+  exists. It loads the module in Node and checks: the canonical todos view
+  compiles; a broken source reports a positioned error; `{#svg}` is rejected at its
+  path literal; a styled component returns its CSS plain and `scoped` (the `@scope`
+  id matching the `data-<scopeId>` stamp in the JS); an over-deep and an over-long
+  source each answer with a diagnostic AND leave the instance able to compile
+  again; a throwing `options` getter does the same. It ends by timing 50 compiles.
+- **Go side:** `TestOverNestingDepth*` in `packages/puzzle-lang/parser/depth_test.go`,
+  plus a CI step that builds `./compiler/cmd/pzl-wasm` under
+  `GOOS=js GOARCH=wasm` — the `js && wasm` build tag hides it from
+  `go build ./...`.
+
+Run: `node scripts/build-wasm.mjs && node scripts/smoke-wasm.mjs` from
+`packages/puzzle`.

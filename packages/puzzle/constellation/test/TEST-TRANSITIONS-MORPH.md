@@ -19,37 +19,30 @@ connections:
   - DECISION-D69-MORPH-ROLES
   - DECISION-D73-SCROLL-TRIGGER-ANIMATIONS
   - DECISION-D85-FLIP-ATTRIBUTE
-  - FEATURE-MORPH-TRANSITIONS
-  - FEATURE-OVERLAPPING-TRANSITIONS
+  - TEST-BROWSER-SMOKE
   - DOC-TESTING
 ---
 
-
 # Animations, route transitions, and morph flights
 
-Everything WAAPI-driven, from a single view's enter animation up to two routes
-animating past each other.
+Everything WAAPI-driven, from one view's enter animation to two routes animating
+past each other. Suites under `tests/`: `animations`, `leave-inertness-and-hooks`,
+`scroll-trigger-animations`, `flip-reorder`, `router-transitions`,
+`router-overlap`, `router-morph`, `morph-cross-view`, `morph-teardown`. jsdom
+has no WAAPI, so these install a fake and drive it deterministically; real timing
+is left to [[TEST-BROWSER-SMOKE]].
 
-View level: animation-spec normalization and playback, enter/leave hook ordering
-with and without animations, `destroy()` versus `destroyAnimated()`, enter on
-component mount and leave on component removal, reduced motion zeroing durations
-at the source, FLIP keyed reorder (and `flip` staying a framework directive that
-never reaches markup), and scroll-triggered enters — hold and reveal, offset to
-rootMargin, degradation without an observer, teardown and interruption, and the
-shared observer registry.
-
-Route level: sequential transitions where both views animate under a reused
-layout, views without animations keeping the same timing, interruption under the
-token guard, layout swap versus layout reuse, and initial navigation playing the
-routed view in exactly once. The overlap mode is proven separately — the
-incoming view mounts and commits while the outgoing is still fading, hook
-ordering inside that window, interruption staying instant, a failed navigation
-mid-overlap, and patch-driven leaver removal under a reused layout.
-
-Morph level: the router morph handler, supersession during the out phase,
-cross-view capture flights, and teardown with a double-install guard.
-
-jsdom has no WAAPI, so these suites install a fake and drive it deterministically;
-real timing is left to the browser smoke suite.
-
-Covers 8 files under `tests/`.
+- **View level:** animation-spec normalization and playback, enter/leave hook
+  ordering with and without animations, `destroy()` vs `destroyAnimated()`,
+  enter on component mount and leave on removal, reduced motion zeroing
+  durations at the source, FLIP keyed reorder (`flip` never reaching markup),
+  and scroll-triggered enters — hold and reveal, offset to rootMargin,
+  degradation without an observer, teardown, and the shared observer registry.
+- **Route level:** sequential transitions under a reused layout, views without
+  animations keeping the same timing, interruption under the token guard, layout
+  swap vs reuse, and navigation zero playing the routed view in exactly once.
+  Overlap mode separately: the incoming view mounts and commits while the
+  outgoing still fades, hook order in that window, instant interruption, a failed
+  navigation mid-overlap, and patch-driven leaver removal under a reused layout.
+- **Morph level:** the router morph handler, supersession during the out phase,
+  cross-view capture flights, and teardown with a double-install guard.

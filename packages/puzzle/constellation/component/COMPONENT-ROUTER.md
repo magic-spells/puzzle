@@ -9,305 +9,132 @@ connections:
   - COMPONENT-SSG
   - FILE-ROUTER
   - DECISION-D163-LAZY-ROUTE-VIEWS
-notes:
-  - kind: gotcha
-    text: >-
-      A reused ancestor's gated data() runs against the DESTINATION params/snapshot but commits only
-      inside #commitState (D146). Anything the router adds on a non-committing exit path must
-      discard the prepared runs, or their tracked subscriptions strand on a live ancestor.
-  - kind: verified
-    text: >-
-      Re-verified after the 2026-07-24 deep-review round. Corrected two stale claims: the commit no
-      longer syncs managed head tags (D111 — #syncHead is syncTitle(resolveHead(chain)) and nothing
-      else), and url() now delegates to the exported encodeURL shared with both prerender paths.
-      Added the dev-only route-commit emit to the D100 bridge.
-    sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
-  - kind: verified
-    text: >-
-      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
-      card was found true as written, so nothing changed but the baseline. Bound code was read at
-      this sha; the framework suite is green at 1871 tests.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
-  - kind: decision
-    text: >-
-      A view or layout CONSTRUCTOR throw is a pre-commit navigation failure handled exactly like a
-      lazy-loader rejection: reported through onError with phase 'navigation', run through the
-      shared failed-navigation recovery, URL/history/mounted tree untouched, and the same path
-      retryable (before the fix the rejected promise stayed latched to the pending-nav path and
-      every later push() to it replayed the rejection). The abandoned instances are DROPPED, never
-      destroy()ed — a constructed-only view holds no subscription, timer, or registry entry, so
-      destroy() would fire destroyed() for a view whose created() never ran.
-  - kind: decision
-    text: >-
-      The failed-POP URL invariant, made uniform in 0.7.0's pre-release review: after ANY navigation
-      failure that leaves the tree on the committed route, the address bar matches the DOM. A push
-      never moved the URL (pushState fires at commit, D61), so it needs no repair; a pop is the
-      asymmetric case — the browser moved the address bar before #navigate ran. Only the two guard
-      paths (blocked guard, no-op guard redirect) restored it before; the three pre-commit catches —
-      lazy() marker rejection (D163), view/layout constructor throw, and the data() rejection — left
-      the URL on the popped entry over an unchanged tree, so a reload landed on a page the app was
-      not showing. All five now run `if (pop && cur && this.#state === cur)
-      this.#restoreCommittedUrl(cur.path)`. The `this.#state === cur` test is what keeps it correct
-      under a redirect or a newer navigation that already moved the state. #restoreCommittedUrl is a
-      replaceState, so the repair adds no history entry; a urlless mode short-circuits inside it.
-      Pinned by tests/router-failed-pop-url.test.js (one case per failure kind, each asserting
-      location and history.length).
-  - kind: gotcha
-    text: >-
-      #applyFragmentPop mutates #state's path/pathname/query/hash IN PLACE, so `router.current.hash`
-      tracks an in-page anchor move live — but the frozen snapshot each mounted view holds as
-      `this.route` does NOT. A fragment move is not a navigation (D41): nothing loads, nothing
-      refreshes, no snapshot is delivered, so `this.route.hash` keeps whatever the last COMMITTED
-      navigation carried. That is the intended design, not a gap — the snapshot commits with the
-      tree (D146), and adding an `_adoptRoute` seam to push a fresh snapshot into the committed
-      chain would give views a route object that moves without the tree under it. Documented
-      instead, in SPEC §19 and DOC-ROUTER's route-snapshot section: a view that must react to an
-      anchor jump reads `ctx.router.current.hash` and listens for hashchange/popstate itself.
-  - kind: decision
-    text: >-
-      Guard-redirect continuations join the failed-POP URL invariant. A redirect re-enters #navigate
-      for the target while the original pop's address bar is still live, so its own pre-commit
-      failures owe the same replaceState repair as the five direct sites. Neither sibling test works
-      alone there: the re-entrant #navigate bumps #token by construction, so a `token ===
-      this.#token` compare would disable every legitimate repair, and `this.#state === cur` is
-      equally satisfied by a NEWER pop still in its load phase. The chain therefore carries a
-      mutable ownership box, created by the frame that starts the chain and re-stamped by every
-      re-entry of that SAME chain (a nested guard→A→B redirect stays one logical navigation), held
-      by identity across the await; the continuation repairs only when the box's token is still the
-      router's current token AND the committed state is still `cur`. A chain superseded by a newer
-      navigation restores nothing and leaves the winner's URL alone.
-  - kind: state
-    text: >-
-      Guard redirects inherit the denied navigation's verb (D87 amendment, 0.7.0 final review): a
-      string verdict re-enters #navigate through `push()` when the denied navigation was a push, and
-      through `replace()` for a pop or navigation #0. The denied URL still never enters history (a
-      push writes no entry until commit), but a push redirect now mints the destination's own entry
-      so Back returns to the page the user was on — before this, `replaceState` overwrote the origin
-      entry and the documented post-login `replace(redirect)` left Back exiting the site. The
-      failed-POP URL-repair path after a redirect only ever fires for the pop (replace) case. Pinned
-      by `tests/router.test.js` (push redirect + pop redirect siblings) and
-      `tests/router-memory.test.js`.
-  - kind: state
-    text: >-
-      0.7.0 size cleanups: `#syncHead` is now `syncTitle(resolveHeadField(entry.chain, 'title'))` —
-      one field, one chain walk, because D111 made the other three head fields build-time only;
-      `resolveHead`/`HEAD_FIELDS` remain the SSG's entry point and tree-shake out of app bundles
-      (the body's `syncTitle(resolveHead(entry.chain))` wording is the pre-cleanup shape). The three
-      route-table constructor errors (`modesImport`, the loader-function and compiled-out-marker
-      throws in `validateRouteView`) keep their diagnosis in production and build their how-to-fix
-      tails only behind the inline `__PUZZLE_DEV__` probe, the `metadataTagError` split; `lazy()
-      support was compiled out` stays verbatim in both forms.
-  - kind: state
-    text: >-
-      Same-location rebuild (D175, v1.81): `__failedView(null, true)` invalidates the committed
-      chain and layout (`chainInvalid`/`layoutInvalid`, so keep = 0) and re-navigates the committed
-      path in replace mode with `retryView` set to the module-private `REBUILD` marker. In
-      `#navigate` the marker: takes the skeleton-exemption-off path (as SSG takeover does), skips
-      scroll resolution (scrollBehavior not called) and focus/announcement, `skipEnter()`s every
-      fresh level, and parks the outgoing unit as `#pendingOut` so `#swap` destroys it without its
-      out animation. Every test of the marker sits behind the inline `__PUZZLE_HAS_I18N__` probe — a
-      new class method would ship in every app (esbuild never drops class members), which is why it
-      rides on the existing entry. Hello-world/todos raw bytes are unchanged; only esbuild's
-      minified identifiers shift (gzip −1 byte on hello-world).
-  - kind: state
-    text: >-
-      Same-location rebuild, PR #153 review round (D175): (1) when a push is still loading
-      (`#pendingNavPath` set with its `#pendingNavPromise`), `__failedView(null, true)` sets the
-      invalid flags immediately, waits for that push to settle (commit or failure), and then
-      rebuilds whatever location is committed — before this, re-running the old `st.path` superseded
-      the push and stranded the app on the previous page (a switch landing mid-navigation, or a
-      login flow's `setLocale(user.locale)` then `push('/dashboard')`). Replace and pop navigations
-      carry no pending promise and are still superseded by a rebuild that lands mid-flight. (2) The
-      rebuild's promise rejects when it failed and the old chain is still committed at the same
-      token (a `data()` throw, already reported through onError); a newer navigation taking over
-      resolves it. Tests in tests/i18n-app.test.js pin both orderings, no enter/out animation on a
-      switch (fails if the skipEnter/#pendingOut block is removed) and no skeleton flash (fails if
-      REBUILD leaves the takeover-style exemption).
-  - kind: verified
-    text: >-
-      0.8.0 truthing sweep: body and notes checked against the merged release/0.8.0 code
-      (client-runtime formatters/views/router/ssg/static, compiler/internal/codegen,
-      packages/puzzle-lang/parser) for D170 and D172 through D175; only real contradictions were
-      corrected.
-    sha: 5c21245a984c2fe5c86abf097189af44266f3b13
-  - kind: state
-    text: >-
-      Same-location rebuild with a navigation in flight (D175, supersedes the earlier review-round
-      note's promise semantics): push, replace and pop all fill `#pendingNavPromise` now, and
-      `__failedView(null, true)` with one pending sets the invalid flags, schedules
-      `pending.then(again, again)` with its rejection swallowed (a failed rebuild is already
-      reported through onError), and returns null instead of that chain. setLocale therefore
-      resolves once its strings are active and never waits on the navigation, which may be the very
-      one whose layout data() or guard is awaiting it (the old chain deadlocked). The scheduled
-      rebuild re-runs that data()/guard; the i18n service's same-locale no-op stops it from
-      rebuilding again. With no navigation pending the promise still resolves on the rebuilt commit
-      and rejects on a failed rebuild. Tests: tests/i18n-app.test.js ("await setLocale inside ..."
-      cases).
 verified_at: '2026-09-25T10:47:50.423Z'
 verified_sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 ---
 
 # Router
 
-Route compiler and navigation state machine. PATH routing is inline here and
-is the zero-config default; hash and memory routing are opt-in mode objects an
-app imports from `@magic-spells/puzzle/router-modes` (`router/modes.js`) and
-passes as `mode`, so a path-mode bundle carries neither
-([[DECISION-D159-ROUTER-MODE-FACTORIES]]). A mode string is a constructor throw
-naming the import. Public surface: `start`, `stop`, `push`, `replace` (push's
-no-history-entry sibling — same pipeline, `replaceState`/in-place memory-stack
-overwrite, current scroll-entry key kept, scroll untouched by default; D83),
-`go`, `back`, `forward`, `current`, `url` (path-shaped route → mode-encoded
-href, the render-time inverse of the link interceptor; non-`/` strings pass
-through — D79), and the narrow `setMorphHandler` integration seam.
+Route compiler and navigation state machine (`router/router.js`). Public surface and
+semantics are [[DOC-SPEC-ROUTER]]; this card is the implementation contract. Helper
+modules: `routeTree.js` (the one nested-routes → leaf flatten, shared with the SSG
+pass), `routePath.js` (path canonicalization + dynamic-segment shape, shared with
+prerender), `viewClass.js` (view/layout value checks, kept out of `lazy.js` so
+validation survives the `__PUZZLE_HAS_LAZY__` fold), `lazy.js` (D163 resolver),
+`modes.js` (hash/memory factories).
 
-`url()` is a thin call into the module-level `encodeURL(path, mode, base)`
-(`mode` = the Router's mode instance, or null for path routing),
-which the module exports alongside `normalizeBase` precisely so the DOM-free
-prerender paths can reuse the *same* encoder without a live Router: the static
-router stub and the hybrid prerender ctx both call it ([[COMPONENT-SSG]]). That
-sharing is load-bearing rather than tidy — three hand-kept copies of the
-encoding had already drifted, emitting unprefixed hrefs from a based hybrid
-build.
+## Modes and URLs
 
-Nested route definitions flatten to leaf matchers in declaration order.
-Children use relative paths; empty children are index routes; layouts are
-top-level only; merged params reach every view; nearest leaf metadata wins for
-title and transition settings. Top-level `*` is the catch-all. Duplicate params,
-absolute child paths, nested catch-alls/layouts, invalid transition modes,
-non-function guards, a `view`/`layout` that is neither a `PuzzleView` subclass
-nor a `lazy()` marker (D163 — a bare function gets its own message steering to
-`lazy()`; this check runs after the older structural ones so their diagnostics
-keep precedence), and invalid base/memory config fail at construction. Each
-leaf entry compiles its inherited guard chain (`entry.guards`, root→leaf,
-catch-all included; D87), and settles its view/layout class list once: an entry
-with no `lazy()` marker carries a precomputed class array, so nothing about the
-lazy path costs a lazy-free app anything per navigation.
+- PATH routing is inline and the default; hash and memory are mode objects imported
+  from `@magic-spells/puzzle/router-modes` ([[DECISION-D159-ROUTER-MODE-FACTORIES]]), so a
+  path-mode bundle carries neither. A mode string throws naming the import.
+- `url()` calls the exported `encodeURL(path, mode, base)` (with `normalizeBase`), the
+  SAME encoder the static stub and hybrid prerender use ([[COMPONENT-SSG]]) — copies had
+  drifted before.
+- **Canonical path form is percent-encoded** (what `location.pathname` reports). One
+  normalizer runs at every boundary (route compile, `push`, `replace`, `url`, memory
+  initial path, `routerBase`): whole non-ASCII runs plus space `"` `<` `>` `` ` `` `{`
+  `}` `^`; never `?`/`#`. Everything else is byte-identical, so it is idempotent. Param
+  values are decoded once at match time — never double-decode.
+- Path/hash modes intercept safe same-origin unmodified links; hash keeps app paths
+  base-free in the fragment; `routerBase` is inert in memory mode, which owns an entry
+  stack and has no URL/title/scroll effects.
 
-**The canonical internal form of a path is percent-encoded** — the form
-`location.pathname` reports, which is the one input the router cannot change.
-One normalizer is applied at every boundary: route compilation, `push()`,
-`replace()`, `encodeURL()`/`url()`, the memory-mode initial path, and
-`routerBase`. It encodes whole non-ASCII runs (whole runs, so surrogate pairs
-survive) plus the eight ASCII characters the WHATWG path percent-encode set
-escapes and `encodeURIComponent` would otherwise leave alone in a path —
-space, `"`, `<`, `>`, `` ` ``, `{`, `}`, and `^`. `?` and `#` are deliberately
-NOT encoded: they are structural delimiters the query/fragment split depends on.
+## Route table
 
-Everything else stays byte-identical, including regex metacharacters, malformed
-percent text, and existing `%XX` escapes — which is what makes the operation
-idempotent (`/caf%C3%A9` never becomes `/caf%25C3%25A9`). Without this a
-raw-declared `/café` matched only through `push()`, because `push()` matched its
-raw argument string while `#currentPath()` read the browser's encoded pathname:
-cold load, in-app `<a>` clicks, and the back button all fell through to the
-catch-all, and declaring the route pre-encoded instead broke `push()`. Param
-values are unaffected — they were already decoded once at match time and must
-not be double-decoded.
+Nested definitions flatten to leaf matchers in declaration order (children relative,
+empty child = index, layouts top-level only, top-level `*` = catch-all, merged params,
+nearest-leaf metadata wins). Construction throws on duplicate params, absolute child
+paths, nested catch-alls/layouts, bad transition modes, non-function guards, a
+`view`/`layout` that is neither a `PuzzleView` subclass nor a `lazy()` marker, and bad
+base/memory config. Production keeps each diagnosis; how-to-fix tails are dev-only.
+Each leaf precomputes its inherited guard chain (`entry.guards`, root → leaf) and, when
+it has no `lazy()` marker, its class array — lazy-free apps pay nothing per navigation.
 
-Navigation is guard-then-load-then-commit. Guards run in `#navigate` after the
-token bump and before any view/layout construction — sequentially root→leaf on
-every matched navigation (params/query-only included, `{ to, from, ctx }` with
-frozen snapshots, `from` null on nav #0), token-rechecked across awaits.
-`false`/throw = stay put through the shared failed-navigation recovery helper;
-a string verdict redirects through public `push()` when the denied navigation
-was a push and `replace()` for a pop or navigation #0 (denied URL never enters
-history; ten guard redirects without a commit trip the cycle cap, reset in
-`#commitState` and at the start of every externally-initiated navigation). An empty guard chain adds no await — unguarded navigation
-keeps its synchronous path to construction.
+## Navigation pipeline: guard → lazy → load → commit
 
-Lazy route views resolve next ([[DECISION-D163-LAZY-ROUTE-VIEWS]]), and this
-ordering is the contract: only once every guard has ALLOWED the navigation does
-any `lazy()` marker in the matched chain start loading, so a blocked or
-redirected route never downloads its code. All markers in the chain — every
-level's view plus the top-level layout — start together and settle through one
-`Promise.all`, before the reuse calculation (so layout reuse compares resolved
-classes), before any constructor, and before any `data()`. A loader rejection
-is an ordinary pre-commit failure: it reports through `onError` as the existing
-`navigation` phase, runs the shared failed-navigation recovery, and leaves URL,
-history, and the mounted tree untouched, so `errorView` retry re-enters the
-normal same-location rebuild and re-invokes the loader. An entry with no
-markers skips this branch entirely and stays byte-for-byte the synchronous path
-it was.
+1. **Guards** (D87) run in `#navigate` after the token bump, before any construction,
+   sequentially root → leaf, token-rechecked across awaits; an empty chain adds no
+   await. `false`/throw stays put via the shared failed-navigation recovery. A string
+   redirects through `push()` when the denied navigation was a push, `replace()` for a
+   pop or navigation #0 (the denied URL never enters history). Ten redirects without a
+   commit trip the cycle cap.
+2. **Lazy views** ([[DECISION-D163-LAZY-ROUTE-VIEWS]]) start only after every guard
+   allowed, all markers together through one `Promise.all`, before reuse calculation,
+   constructors and `data()`. A rejection is an ordinary pre-commit failure.
+3. **Load**: compute the shared prefix, preload fresh views, prepare reused ancestors
+   (D146 — their gated `data()` runs against the destination but commits only in
+   `#commitState`; any new non-committing exit path must discard the prepared runs, or
+   their subscriptions strand on a live ancestor). One frozen snapshot
+   `{ path, pathname, query, hash, route, params, chain }` per navigation (`parseLocation`,
+   D83). The D39 skeleton gate must start all gated loads before any skeleton-exempt
+   preload opens its tracking scope.
+4. **Commit** (`#commitState`, one synchronous window): location/history, title
+   (`syncTitle(resolveHeadField(chain, 'title'))` — the other head fields are
+   build-time only, D84), scroll bookkeeping, mounted tree, `current`, and the dev-only
+   D100 route emit ([[FILE-DEVTOOLS]]), after `#commitLocation`.
 
-The router then computes the shared route-node prefix, preloads fresh views,
-prepares reused ancestors
-(D146 — run in the gate, committed with the navigation)
-with one frozen
-`{ path, pathname, query, hash, route, params, chain }` snapshot (parsed once
-per navigation by `parseLocation` — frozen null-proto query, repeated keys →
-frozen arrays, URLSearchParams decoding; D83), and abandons/destroys fresh
-work on failure or supersession. The winning swap commits
-location/history/title (`resolveHeadField(chain, 'title')` + `syncTitle` from
-head.js — nearest-defined leaf→root resolution of the title field, only a non-null resolved title assigns, memory mode
-document-untouched; D84), scroll bookkeeping, mounted tree, and `current` in
-one synchronous window. The managed `og:`/`twitter:`/description/canonical tags
-are **not** synced here, in any output mode: D111 made them build-time only, so
-`#syncHead` does exactly `syncTitle(resolveHeadField(entry.chain, 'title'))` and
-`headTags.js` never enters a browser bundle.
-Dev builds emit the committed route to the D100 DevTools bridge
-([[FILE-DEVTOOLS]]) from `#commitState`, beside the existing `warnMissingSlots`
-walk — after `#commitLocation`, so the reported `document.title` is already this
-route's. Committed-same-path pushes are no-ops; a same-path push while that navigation
-is still IN FLIGHT returns the in-flight navigation's own promise, so both
-callers settle at commit (D119). The route announcement reads `document.title`
-but falls back to the committed route's name (then path) when the title didn't
-move — aria-live announces on change only (D119). Trailing `/` is
-insignificant for matching. The D39
-skeleton gate must start all gated loads before any skeleton-exempt preload opens
-its tracking scope, or a store-connected layout's gated sync `data()` queues
-behind the skeleton view's fetch and nothing paints.
+Same-path push when committed is a no-op; while in flight it returns that navigation's
+promise, so both callers settle at commit. The route announcement reads
+`document.title`, falling back to the route name/path (aria-live announces only on
+change). Trailing `/` is insignificant.
 
-The route chain becomes nested keyed component vnodes through each `<Slot/>`.
-The shared prefix keeps its instances; the topmost divergent view (or a changed
-layout) is the sole animator and lower fresh views skip enter. Missing outlets
-warn because a preloaded child has no mount target. The whole chain is rebuilt on
-each navigation, not only the divergent survivor: patchComponent pushes children
-through on every re-render, so a survivor-only swap would be reverted by a later
-ancestor re-render (regression-tested).
+## Failure invariants
 
-A contained routed mount/refresh failure marks the chain non-reusable, destroys
-the failed view, and replaces only its exact owned position with the app error
-view or the invisible recovery marker. Navigation away disposes that
-replacement normally. Explicit retry reconstructs the routed views and reruns
-all route-chain data by forcing an internal same-location `replace` through the
-ordinary navigation pipeline; `chainInvalid` makes `keep = 0`, and the commit
-naturally installs healthy instance bookkeeping. The replacement is HELD for the
-whole rebuild — the commit disposes it, or the load-failure catch swaps it for
-one carrying the new error — so no pre-commit exit (guard verdict, supersession,
-a superseding navigation that also stays put) can leave the position empty. The
-old ancestor-boundary chain
-truncation/invalidation path is gone—replacement never renders above the failed position
-([[DECISION-D145-ERROR-BOUNDARIES]]).
+- **A view/layout constructor throw** is a pre-commit failure like a lazy rejection:
+  `onError` phase `navigation`, shared recovery, retryable. Abandoned instances are
+  DROPPED, never `destroy()`ed (their `created()` never ran).
+- **Failed-POP URL repair**: after any failure that leaves the committed tree, the
+  address bar must match the DOM. A push never moved the URL (pushState at commit, D61);
+  a pop did, so all five failure sites (blocked guard, no-op redirect, lazy rejection,
+  constructor throw, `data()` rejection) run `if (pop && cur && this.#state === cur)
+  this.#restoreCommittedUrl(cur.path)` (a `replaceState`). A guard-redirect
+  continuation carries a mutable ownership box re-stamped by every re-entry of the same
+  chain; it repairs only when the box's token is still current AND the state is still
+  `cur` (neither test alone works across re-entry). Pinned by
+  `tests/router-failed-pop-url.test.js`.
+- **Fragment pops** (`#applyFragmentPop`) mutate `#state` in place, so
+  `router.current.hash` moves but a view's frozen `this.route` does not — by design
+  (D41: not a navigation). Views that care read `ctx.router.current.hash`.
+- **Routed mount/refresh failure** ([[DECISION-D145-ERROR-BOUNDARIES]]): marks the chain
+  non-reusable, destroys the failed view, and puts the app error view (or an invisible
+  marker) in its exact position. Retry forces a same-location `replace` with
+  `chainInvalid` (keep = 0); the replacement is HELD until the commit disposes it or a
+  new failure swaps it, so no pre-commit exit leaves the position empty.
 
-Sequential transitions await the old unit's out phase before commit. A failing
-leave hook is logged and the swap continues so the incoming preloaded chain is
-not leaked. `transitionMode: 'overlap'` pins the leaver at its measured fixed
-rect, commits the entrant immediately, and removes the leaver when out settles.
-Mode resolution is destination-only: nearest route override, incoming
-view/layout class field, then app default. Interruptions synchronously destroy
-doomed pending-out subtrees.
+## Same-location rebuild (D175 locale switch)
 
-The morph slot calls `leave(oldRoot)` at out start and awaits its promise before
-destroy; `enter(newRoot, { initial })` runs post-commit/pre-paint. Errors are
-logged and never wedge navigation. Params-only updates do not fire morph hooks.
+`__failedView(null, true)` sets `chainInvalid`/`layoutInvalid` and re-navigates the
+committed path in replace mode with `retryView = REBUILD` (module-private marker). The
+marker takes the skeleton-exempt path, skips scroll and focus/announcement,
+`skipEnter()`s fresh levels and parks the outgoing unit as `#pendingOut` (destroyed
+without its out animation). Every test of it sits behind the inline
+`__PUZZLE_HAS_I18N__` probe — a new class member would ship in every app. With a
+navigation pending (push, replace and pop all fill `#pendingNavPromise`), it schedules
+`pending.then(again, again)` and returns null, so `setLocale` never waits on a
+navigation whose `data()` or guard may be awaiting it. With none pending, the promise
+resolves on the rebuilt commit and rejects on failure. Tests: `tests/i18n-app.test.js`.
 
-Path/hash modes intercept safe same-origin unmodified links and delegate
-pop/go to browser history. Hash routing keeps app paths base-free inside the
-fragment. `routerBase` prefixes real URLs in path/hash and is inert in
-memory. Memory mode owns an entry stack and has no URL/title/scroll effects.
+## Mounting and transitions
 
-Scroll defaults to top on push and saved position on pop, with per-entry keys,
-sessionStorage persistence (50-entry cap), anchor targets, custom behavior, and
-opt-out. Failed/initial navigations do not move scroll.
+The chain becomes nested keyed component vnodes through each `<Slot/>`; the WHOLE chain
+is rebuilt each navigation (a survivor-only swap would be reverted by a later ancestor
+re-render). The shared prefix keeps its instances; the topmost divergent view or a
+changed layout is the sole animator. Missing outlets warn.
 
-Hybrid output takeover (`output: 'hybrid'`, D67) recognizes matching
-`data-puzzle-ssg` markup at navigation zero, replaces it inside the commit
-window, removes the marker, and skips the initial enter animation. After that
-the page is the same SPA. A failed takeover mount first offers the exact
-position to the app error view; only an absent or failed error view restores
-the snapshotted prerendered nodes + marker on the rejection microtask
-([[DECISION-D140-TAKEOVER-MOUNT-RESTORATION]]),
-and every container-mount branch — including a layout swap — re-runs the
-takeover clear so the restored marker cannot duplicate the page. (True static
-output, `output: 'static'`/D81, involves no router — those pages are mounted by
-`mountStatic`, stamped `data-puzzle-static`, and never taken over.)
+- Sequential mode awaits the old unit's out phase before commit; a failing leave hook
+  is logged and the swap continues. `overlap` pins the leaver at its measured fixed rect
+  and commits the entrant immediately. Mode resolution is destination-only (route
+  override → incoming class field → app default). Interruptions synchronously destroy
+  doomed pending-out subtrees. Enter hooks go through `#playInLogged`.
+- Morph seam: `leave(oldRoot)` at out start (awaited before destroy),
+  `enter(newRoot, { initial })` post-commit/pre-paint; errors logged, never wedge;
+  params-only updates fire no morph hooks.
+- Scroll: top on push, saved on pop, per-entry keys in sessionStorage (50-entry cap),
+  anchors, custom behavior, opt-out. Failed/initial navigations don't move scroll.
+- **Hybrid takeover** (D67): matching `data-puzzle-ssg` markup at navigation zero is
+  replaced in the commit window, the marker removed, initial enter skipped. A failed
+  takeover mount first offers the position to the error view; otherwise the snapshotted
+  prerendered nodes + marker are restored
+  ([[DECISION-D140-TAKEOVER-MOUNT-RESTORATION]]), and every container-mount branch re-runs
+  the takeover clear. Static output (D81) has no router.

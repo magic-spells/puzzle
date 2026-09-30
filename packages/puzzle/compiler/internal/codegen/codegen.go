@@ -3,7 +3,7 @@
 // injected runtime import and an appended `Name.prototype.render = function
 // () {…}` (constellation/doc/DOC-COMPILER-DESIGN.md §d, constellation/doc/DOC-APP-ANATOMY.md §1). The correctness
 // anchor is the Phase 1 hand-written fixture
-// tests/fixtures/todos/Home.compiled.js (D14): this codegen reproduces its
+// tests/fixtures/todos/Home.compiled.js (FILE-TESTS-FIXTURES-TODOS-HOME-COMPILED): this codegen reproduces its
 // render function mechanically.
 //
 // Formatting is byte-exact against the fixture; the golden-file harness
@@ -87,7 +87,7 @@ func ScopedCSS(filename, styles string) string {
 	return "@scope ([data-" + ScopeID(filename) + "]) {\n" + styles + "\n}"
 }
 
-// EmissionMode selects the render root shape (constellation/doc/DOC-DECISIONS.md D20).
+// EmissionMode selects the render root shape (D20).
 type EmissionMode int
 
 const (
@@ -1707,7 +1707,7 @@ func (c *compiler) attrKV(a parser.Attr, scope scopeMap, isComponent bool, emit 
 			}
 		}
 		// DOM listener → '@name' key; component callback prop → bare `name`
-		// (constellation/doc/DOC-DECISIONS.md D16, constellation/doc/DOC-APP-ANATOMY.md §1).
+		// (D16, constellation/doc/DOC-APP-ANATOMY.md §1).
 		if isComponent {
 			if len(at.Modifiers) > 0 {
 				return "", c.cgErr(at.Pos, "event modifiers are not allowed on component callback props")

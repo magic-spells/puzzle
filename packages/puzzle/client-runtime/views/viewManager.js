@@ -1,8 +1,8 @@
 /**
  * ViewManager — render → diff → patch for ViewNode trees (constellation/doc/DOC-RUNTIME-KERNEL.md,
- * constellation/doc/DOC-APP-ANATOMY.md §4, constellation/doc/DOC-DECISIONS.md D20).
+ * constellation/doc/DOC-APP-ANATOMY.md §4, D20).
  *
- * Rewritten from the prototype per constellation/doc/DOC-CODE-REVIEW.md §2.4:
+ * Rewritten from the prototype:
  * - DOM links (`el`) transfer from old to new tree on every patch, so updates
  *   keep working forever (the prototype froze after ~2 renders).
  * - Real keyed reconciliation: children with `key` are matched and MOVED,

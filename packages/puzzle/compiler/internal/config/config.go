@@ -1,5 +1,5 @@
 // Package config loads puzzle.config.js — the app's optional configuration file
-// (constellation/doc/DOC-DECISIONS.md D12). The Go side must never parse JavaScript (D3), so the
+// (D12). The Go side must never parse JavaScript (D3), so the
 // config is read by executing node: it imports the ES module and prints its
 // default export as JSON, which Go then unmarshals. No config file present means
 // zero-config defaults and no node invocation at all.

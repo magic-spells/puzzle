@@ -11,16 +11,13 @@ connections:
 
 # D5 — Schema declared via `Puzzle.*` field builders
 
-Settled per [[DOC-SPEC-DATA]] §7. Schemas use fluent field builders (`Puzzle.string().required().min(1, 'msg')`) instead of raw descriptor objects.
-
-## Context
-Schema fields could be declared either as raw descriptor objects (`{ type: 'string', required: true, validate: [...] }`) or via a fluent builder API. Raw descriptors are boilerplate-heavy and offer no obvious single style.
+Enforced by [[DOC-SPEC-DATA]] §7.
 
 ## Decision
-`Puzzle.string().required().min(1, 'msg')` instead of raw descriptor objects. Builders are the only documented way; raw descriptors remain an internal normalized format.
+Model schemas use fluent builders — `Puzzle.string().required().min(1, 'msg')` — and they are the only documented authoring surface. Raw descriptor objects remain the internal normalized format. Relationships use the same namespace (`Puzzle.hasMany`, `Puzzle.belongsTo`, [[DECISION-D49-MODEL-RELATIONSHIPS]]); validation rules enforce per [[DECISION-D48-SCHEMA-VALIDATION]].
+
+## Why
+Far less boilerplate than descriptors and one obvious style. If the `Puzzle` namespace ever needs app-level statics, a dedicated `field.*` namespace is the fallback.
 
 ## Alternatives rejected
-- Raw descriptor objects as the authoring surface (`{ type: 'string', required: true, validate: [...] }`) — kept only as the internal normalized format, not documented for authors.
-
-## Consequences
-Rationale: dramatically less boilerplate, one obvious style, and a clean future home for relationships (`Puzzle.hasMany('tag')`) inside the same schema block. Open item: if the `Puzzle` namespace ever needs app-level statics, a dedicated `t.*`/`field.*` namespace is the fallback.
+- Raw descriptors (`{ type: 'string', required: true, validate: [...] }`) as the authoring surface — boilerplate with no single style.

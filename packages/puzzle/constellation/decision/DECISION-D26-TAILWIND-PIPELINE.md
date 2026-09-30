@@ -1,5 +1,7 @@
 ---
-name: "D26 — Tailwind pipeline: node-read config, one-shot-per-build CLI, unified composition"
+name: >-
+  D26 — Tailwind pipeline: config read by node, one-shot CLI per production build, one composition
+  path
 status: verified
 verified_at: '2026-08-24T19:03:12.964Z'
 connections:
@@ -8,6 +10,7 @@ connections:
   - FLOW-BUILD
   - DECISION-D12-TAILWIND-FIRST
   - DECISION-D03-SCRIPTS-REAL-JS
+  - DECISION-D27-FAST-DEV-REBUILDS
 code_refs:
   - compiler/cmd/puzzle/add.go
   - compiler/internal/build/build.go
@@ -19,45 +22,20 @@ code_refs:
   - compiler/internal/scaffold/templates/todos/package.json
   - compiler/internal/scaffold/templates/todos/puzzle.config.js
 verified_sha: c809db6680eb9355961897756f54e97f1164b88f
-notes:
-  - kind: verified
-    text: >-
-      Config loading and the Tailwind build/dev split re-truthed against config.go and
-      styles/watch.go.
-    sha: c809db6680eb9355961897756f54e97f1164b88f
-  - kind: gotcha
-    text: >-
-      The "fails loudly" diagnostic must never report only the FIRST stderr line: Tailwind v4 opens
-      stderr with its version banner ("≈ tailwindcss v4.3.3"), so a first-line summary showed four
-      identical banners under a headline claiming the CLI could not be run — while the CLI had in
-      fact run fine and exited non-zero. CI trigger: a dangling `file:` dependency makes Tailwind
-      emit `Error: Can't resolve '@magic-spells/<pkg>/css'`, exactly the line that was being hidden.
-      `NpxRunner.Run` now reports each attempt as its exec error plus the tail of that attempt's
-      stderr (last 20 non-blank lines, indented, with an omitted-lines marker; CRLF normalized for
-      the Windows job), and the headline says no run succeeded. The `puzzle dev` warm-watch path is
-      unaffected — it streams the child's stderr straight to the terminal. `RunOptions.CLIs` is a
-      test-only seam mirroring `WatchOptions.CLI`; nothing in config or the build path populates it.
 ---
 
-# D26 — Tailwind pipeline: node-read config, one-shot-per-build CLI, unified composition
+# D26 — Tailwind pipeline: node-read config, one-shot CLI per build, one composition path
 
-Settled (v1; Phase 3). Three sub-decisions on how `styles: { use: ['tailwindcss'] }` ([[DECISION-D12-TAILWIND-FIRST]]) is implemented: config read by executing node, CLI major auto-detection, and a single one-shot composition path owned by `build.Build`.
-
-## Context
-D12 chose Tailwind-first styling via `puzzle.config.js`'s `styles: { use: ['tailwindcss'] }`. Phase 3 had to implement how that config is read, which Tailwind CLI is invoked, and how the composed stylesheet is produced during both `build` and `dev`.
+How [[DECISION-D12-TAILWIND-FIRST]] is implemented. Dev's warm path is [[DECISION-D27-FAST-DEV-REBUILDS]].
 
 ## Decision
+- **`puzzle.config.js` is executed by node, never parsed** ([[DECISION-D03-SCRIPTS-REAL-JS]]). `compiler/internal/config` runs `node --input-type=module -e` with a script that imports the config and prints its default export as JSON. The config path rides in `process.argv` and becomes a `file:` URL via node's `pathToFileURL` (so `#`, `%` and Windows drive letters work); the JSON follows a unique sentinel and Go reads only the text after its **last** occurrence, so a config that logs on import cannot corrupt the payload. No config file → zero-value defaults, no node run. Node missing → clear error. Malformed JS → node's syntax error. The config is loaded once per `Build()`.
+- **CLI resolution** (`compiler/internal/styles`): Tailwind v4's `@tailwindcss/cli` first, then v3; if none runs, fail loudly with an install hint — never a silent empty stylesheet. v4 needs both `@tailwindcss/cli` and `tailwindcss` as devDependencies. Input is `app/styles/styles.css` when present; `--minify` in production.
+- **`build.Build` owns the whole stylesheet.** It runs the CLI once and composes `dist/styles.css` = Tailwind layer + collected `<style>` blocks (Tailwind first). A declared-but-unrunnable pipeline fails the build.
 
-Three sub-decisions:
-
-- **Config read via node, not parsed ([[DECISION-D03-SCRIPTS-REAL-JS]]).** `puzzle.config.js` is loaded by executing `node --input-type=module -e` with a script that `await import`s the config and writes its default export as JSON to stdout (`compiler/internal/config`). The absolute config path rides in `process.argv` and is turned into a `file:` URL by node's own `pathToFileURL`, so a path containing `#`, `%`, or a Windows drive letter resolves correctly; the JSON is prefixed with a unique sentinel and Go reads only the text after the sentinel's LAST occurrence, so a config that logs on import cannot corrupt the payload. No config file → zero-value defaults with **no** node invocation. Config present but node missing → clear error. Malformed JS → node's syntax error surfaced. `styles.use` accepts only the string `'tailwindcss'`; object entries (the deferred Sass shape) and any other string are parsed-and-rejected with a "not supported in v1" error that names the entry.
-- **CLI major detection.** The runner (`compiler/internal/styles`) tries the modern v4 CLI first (`npx @tailwindcss/cli`) and falls back to v3 (`npx tailwindcss`); if neither runs it fails loudly with an install hint (never a silent empty stylesheet). v4 needs both `@tailwindcss/cli` (the binary) and `tailwindcss` (resolved by the input CSS's `@import "tailwindcss"`), so both are declared as devDependencies. Input CSS is `app/styles/styles.css` when present, else Tailwind's default. `--minify` is added for production.
-- **One-shot per build in `puzzle build`; no `--watch` child (deliberate deviation from the plan's suggestion, which permitted "document your choice").** `build.Build` owns the whole stylesheet: it runs the CLI once and composes `dist/styles.css` = Tailwind layer + collected `<style>` blocks (Tailwind first). Rationale: a single composition path avoids a watch process clobbering the appended `<style>`, needs no watch on `dist/` (so no rebuild loop), and folds a Tailwind failure into the caller's existing error reporting. Cost — re-spawning the CLI per build (~1s observed) — is acceptable for a one-shot command; the live-reload loop gets a warm `--watch` child instead ([[DECISION-D27-FAST-DEV-REBUILDS]]), and every successful dev rebuild (Tailwind included) broadcasts one SSE reload. A declared-but-unrunnable pipeline **fails** the build (and each dev rebuild), per "never silently skip".
+## Gotcha
+A failure report must never show only the first stderr line: Tailwind v4 opens stderr with its version banner, which hid the real error (e.g. `Can't resolve '@magic-spells/<pkg>/css'` from a dangling `file:` dependency). `NpxRunner.Run` reports each attempt's exec error plus the last 20 non-blank stderr lines. `RunOptions.CLIs` is a test-only seam.
 
 ## Alternatives rejected
-- **A `tailwind --watch` child driving `puzzle build`** (the plan's suggestion) — rejected in favor of one-shot composition: a single path avoids a watch process clobbering the appended `<style>` and needs no watch on `dist/`. Dev pays neither cost because D27's warm child writes to a private file the compose step reads.
-- **Object entries / other strings in `styles.use`** (the deferred Sass shape) — parsed-and-rejected with a "not supported in v1" error naming the entry.
-- **Silently skipping a declared-but-unrunnable pipeline** — rejected; it fails the build and each dev rebuild.
-
-## Consequences
-Dev's rebuild loop is [[DECISION-D27-FAST-DEV-REBUILDS]]'s: a warm `--watch` child plus an esbuild incremental context for sub-200ms rebuilds, degrading to this one-shot path whenever the warm child cannot run or dies mid-session. Production `build` keeps the one-shot path, made faster by D27's direct CLI resolution.
+- A `tailwind --watch` child driving `puzzle build` — a watcher can clobber the appended `<style>` layer and needs a watch on `dist/`; dev gets a warm child that writes to a private file instead (D27).
+- Silently skipping an unrunnable pipeline — it fails the build and each dev rebuild.

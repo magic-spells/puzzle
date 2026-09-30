@@ -11,7 +11,7 @@
  * findMany('todo') re-runs on any todo change while findOne('user', 7)
  * only re-runs for user 7.
  *
- * Rewritten from the prototype per constellation/doc/DOC-CODE-REVIEW.md §2.6: models registry,
+ * Rewritten from the prototype: models registry,
  * schema defaults + primary-key handling, findMany filter option, query
  * auto-subscription, collection-level subscriptions, notify-after-delete,
  * optional (injectable) persistence.

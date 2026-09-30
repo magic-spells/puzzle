@@ -25,19 +25,11 @@ connections:
   - DECISION-D33-ROUTER-SCROLL
   - DECISION-D84-HEAD-MANAGEMENT
   - DECISION-D93-ROUTER-FOCUS-MANAGEMENT
-  - DECISION-D119-ROUTER-SETTLEMENT-ANNOUNCEMENT
   - DECISION-D56-OVERLAP-TRANSITIONS
-  - DECISION-D67-SSG-STATIC-BUILD
+  - DECISION-D67-HYBRID-PRERENDER
   - DECISION-D140-TAKEOVER-MOUNT-RESTORATION
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
-notes:
-  - kind: verified
-    text: >-
-      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
-      card was found true as written, so nothing changed but the baseline. Bound code was read at
-      this sha; the framework suite is green at 1871 tests.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Navigation pipeline

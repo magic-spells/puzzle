@@ -8,7 +8,7 @@
  * them into `Store` (v1.57, D95) meant the core carried code no production app
  * runs, and keeping it out of production bundles then needed compiler-emitted
  * build defines threaded through the store constructor, `seed()`,
- * `resetFixtureSeed()` and `_fetch` (v1.59, D96) — four gated branches, two
+ * `resetFixtureSeed()` and `_fetch` (v1.59) — four gated branches, two
  * "was compiled out" throws, and a core file that had to know this feature
  * exists. D98 inverts that: fixtures intercept exactly ONE seam,
  * `Store._network` (the single place an adapter request touches the network).

@@ -81,28 +81,19 @@ connections:
   - DECISION-D132-CROSS-VERB-WRITE-CHAIN
   - DECISION-D157-ADAPTER-SUBPATH
   - DECISION-D57-HMR-STATE-RELOAD
-  - FEATURE-DELETE-IDEMPOTENCY
   - FEATURE-VALIDATE-PK-PARITY
   - FILE-ADAPTER
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
-notes:
-  - kind: verified
-    text: >-
-      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
-      card was found true as written, so nothing changed but the baseline. Bound code was read at
-      this sha; the framework suite is green at 1871 tests.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Store record lifecycle
 
-A record's position in this machine is held by three non-enumerable flags —
-`_store`, `_synced`, `_deleted`. They are provenance and identity, never data:
-`toJSON()` cannot see them, the merge helpers refuse to copy them off a server
-or storage payload, and the persisted wire shape carries provenance out of band
-as a `__synced` marker beside the record's own clean JSON. No payload can forge
-a position.
+A record's position is held by three non-enumerable flags — `_store`, `_synced`,
+`_deleted` — which are provenance, never data: `toJSON()` can't see them, merge helpers
+refuse to copy them from payloads, and persistence carries provenance out of band as a
+`__synced` marker. No payload can forge a position. The verbs that move records are
+[[FLOW-ADAPTER-SYNC]].
 
 ```mermaid
 stateDiagram-v2
@@ -126,85 +117,49 @@ stateDiagram-v2
   removed --> [*]
 ```
 
-## The four positions
+## Positions
 
-**detached** — constructed directly with `new Model(data)` and never handed to a
-Store. `update()` and `validate()` still work, because the rules live on the
-class, but nothing is indexed and nothing notifies. No public path adopts a
-detached record — `createRecord` always builds fresh — so this is a dead end
-rather than a waiting room. `save()` and `delete()` reject *asynchronously*,
-never as a synchronous throw, so callers only ever `await`.
+- **detached** — `new Model(data)`, never handed to a Store: `update()`/`validate()` work,
+  nothing indexes or notifies, no public path adopts it; `save()`/`delete()` reject
+  asynchronously.
+- **local** — indexed, never round-tripped. `save()` dispatches `create`; `delete()` removes
+  locally and sends nothing (after resolving the delete verb, so a partial adapter reports
+  the missing verb).
+- **synced** — has server provenance (load, `upsert`, hydration, own save). `save()`
+  dispatches `update`; `delete()` sends the verb and removes on the ack.
+- **removed** — terminal, reached only through `removeRecord`, shared by `destroy()` and a
+  confirmed delete so a stale reference never has to tell them apart. A removal also records
+  the identity absent for D161.
 
-**local** — indexed by the Store and never round-tripped with a server. `save()`
-dispatches the `create` verb. `delete()` removes locally and sends nothing:
-there is no server row, so a request could only 404 or strand the record behind
-a 4xx the app has already discarded.
-
-**synced** — indexed and carrying server provenance: it arrived from a load, an
-`upsert`, storage hydration, or its own successful save. `save()` dispatches
-`update`; `delete()` sends the server verb and removes locally on the ack.
-
-**removed** — terminal. `removeRecord` is the only path here, and it is shared
-by local `destroy()` and confirmed `delete()`. One terminal state on purpose: a
-stale reference cannot tell the two apart and must not have to.
-
-## Entering
-
-`createRecord` is one indivisible step — defaults, primary key, validation,
-insert, notify. Validation runs after defaults and pk generation and before the
-instance exists, so a failed create inserts nothing, notifies nothing, and
-persists nothing. A missing pk auto-generates, except under an explicit
-`.primary().required()`: there the required error must surface so a create
-form's pre-check blocks submission instead of the Store silently minting a
-random key.
-
-Hydration enters at whichever position the persisted marker names, and a
-markerless old-format blob enters `synced`. Hydration and server upserts are
-validation-exempt by design — startup is fail-soft and the server is
-authoritative — so either can seat a record that local rules would have
-rejected.
+**Entering**: `createRecord` is indivisible (defaults, pk, validation, insert, notify) — a
+failed create leaves no trace. A missing pk auto-generates except under an explicit
+`.primary().required()`. Hydration enters at the persisted marker's position (markerless →
+`synced`); hydration and server upserts skip validation by design.
 
 ## Invariants
 
-- **`_synced` is provenance, not a clean/dirty bit.** It answers one question:
-  does the server have a row for this? It stays true after a save whose response
-  was only partly merged, because clearing it would make the queued follow-up
-  write POST a duplicate.
-- **`_deleted` is read before `_store`.** `removeRecord` nulls `_store`
-  unconditionally, so a store-less record is ambiguous — deleted, or never
-  added? Flag order is the entire disambiguation: `delete()` reads `_deleted`
-  first and resolves idempotently, and only then reads `_store` and rejects with
-  the never-added message.
-- **`removeRecord` is the only writer of `_deleted`.** That is what lets a write
-  queued behind another write test one flag when it reaches the front, with no
-  map lookup, and with no chance of false-positiving a first save — which *is*
-  indexed under its client-side key before its request goes out.
-- **Primary keys are immutable once indexed**, with exactly one sanctioned
-  exception: a first save whose response carries a different key. The Store
-  performs that re-key itself and atomically, assigning the field directly
-  rather than through `update()`, which would throw on a pk change.
-- **The index key is not the field.** Number ids are keyed by their string form,
-  so a record created from a numeric JSON payload is found by a string route
-  param. The field itself keeps the type the server sent.
-- **In-flight is not a position.** Concurrent writes on one record serialize
-  behind a single per-record chain, and each link reads the record when it
-  *reaches the front*, never when it was enqueued. A record awaiting its turn is
-  still `local` or `synced`; what a queued write must expect is that the
-  position moved while it waited.
+- **`_synced` is provenance, not clean/dirty**: "does the server have this row?" It stays
+  true after a partly merged save response — clearing it would make the next write POST a
+  duplicate.
+- **`_deleted` is read before `_store`**: `removeRecord` nulls `_store`, so flag order is
+  what distinguishes deleted (resolve idempotently) from never-added (reject).
+- **`removeRecord` is the only writer of `_deleted`**, so a queued write tests one flag at
+  the front of the chain, with no false positive on a first save.
+- **Primary keys are immutable once indexed**, except a first save whose response carries a
+  different key: the Store re-keys atomically, assigning the field directly (`update()`
+  would throw on a pk change).
+- **The index key is not the field**: numeric ids are keyed by string form
+  ([[DECISION-D112-STORE-ID-KEY-NORMALIZATION]]); the field keeps the server's type.
+- **In-flight is not a position**: writes serialize on one per-record chain and each link
+  reads the record when it reaches the front — the position may have moved while it waited.
 
 ## Gotchas
 
-- A removed record still accepts `update()`. The rules are on the class and the
-  store notification is an optional call, so the patch validates, lands on an
-  object nothing subscribes to, and warns about nothing.
-- `delete()` on a never-synced record resolves its `delete` transport *before*
-  short-circuiting, so a model with a partial adapter reports the missing verb
-  instead of quietly behaving like `destroy()`.
-- `destroy()` on a synced record leaves the server row behind. It is a local
-  removal, not a delete, and nothing reconciles the difference later.
-- Records mutate in place, so identity survives every transition but the last.
-  That is why an upsert updates rather than replaces, and why subscribers and
-  relationship getters can safely hold references across a load.
-- The dev HMR restore is the only way a record moves back from `synced` to
-  `local`: replace mode writes the snapshot's provenance onto the live record so
-  a locally-created, never-saved record still POSTs after a reload.
+- A removed record still accepts `update()`: it validates and lands on an object nothing
+  subscribes to, silently.
+- `destroy()` on a synced record leaves the server row; nothing reconciles it later.
+- Records mutate in place, so identity survives every transition but removal — an upsert
+  updates rather than replaces, and references stay valid across loads.
+- The dev HMR replace-mode restore is the only `synced → local` path: it writes the
+  snapshot's provenance onto the live record so a never-saved record still POSTs after a
+  reload.

@@ -12,101 +12,117 @@ connections:
   - FILE-STYLES-WATCH
   - DECISION-D154-STATIC-DEV-WARM-REBUILDS
   - DECISION-D155-ROUTE-LEVEL-INVALIDATION
-notes:
-  - kind: gotcha
-    text: >-
-      The warm Tailwind child runs in its own process group and can survive the parent. Serve must
-      synchronously stop it on every return path; relying only on the cancellation goroutine can
-      orphan the process when the CLI exits immediately after an error.
-  - kind: verified
-    text: >-
-      Static-dev public classification aligned with the SPA bundle-input test and verified against
-      route_deps.go classify.
-    sha: e76df0fd873bd4739a754d9861197a9f24074a5f
-  - kind: verified
-    text: >-
-      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
-      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
-      one — the path moved, the code did not. No content was re-checked, and none needed to be.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
-  - kind: state
-    text: >-
-      PR #139: dev runs build.PreflightRuntime once at startup (right after resolving the app root,
-      before the workdir sweep, watchers and listener) and returns the error up through Serve →
-      cobra → main's single stderr print + exit 1. It does not re-run on file-change rebuilds. See
-      COMPONENT-COMPILER-CLI for the message and the no-auto-install decision.
-    sha: 9996ca0
-  - kind: state
-    text: >-
-      Locale files in dev (D175, v1.81). SPA `WatchBuilder`: the first build and any batch touching
-      `app/locales/**` reload the locale set (a bad file fails the rebuild and keeps the last good
-      dist and manifest), write the new hashed files into `dist/locales/` without overwriting
-      existing names, refresh the manifest, rebuild `app.js`, and reload over SSE; only after a
-      successful build are superseded files pruned (the first landing prunes every stale file a
-      prior one-shot build left). Build warnings (fill, extra keys, missing literal keys) print once
-      per distinct set. Static dev (`StaticWatchBuilder`): a locale edit reloads the set into all
-      three plugins and `route_deps.go` classifies it render-wide ("a locale file changed") — a
-      locale file is read from disk and never imported, so no metafile carries it (the D155
-      `{#svg}`-style edge); locale files land in the warm staging swap. `dev.go` passes `cfg.I18n`
-      and `ValidatePublic(..., cfg.I18nEnabled())` reserves `locales/`.
-  - kind: gotcha
-    text: >-
-      Locale reloads must remember failure, not just watch the current burst. SPA `WatchBuilder`
-      keeps a `localesFailed` flag, and every rebuild after a failed `locales.Load` retries the load
-      until it succeeds. Without it, a broken es.json followed by an unrelated Home.pzl save landed
-      on the last-good tables and cleared the overlay while the file was still broken. Static
-      `StaticWatchBuilder` gets the same behavior by testing the accumulated `pending` batch
-      (cleared only when a swap lands), not the burst. The SPA builder writes each successful load
-      straight into the live dist. When a load that never landed a bundle is replaced (`nextLocales`
-      superseded), `dropNextLocales` deletes its files unless the committed set (`localeFiles`) or
-      the new load names them; before the first landing, commitLocales' directory sweep handles it.
-      Tests: TestWatchBuilderBrokenLocaleStaysFailedAcrossUnrelatedSaves,
-      TestStaticWatchBrokenLocaleStaysFailedAcrossUnrelatedSaves,
-      TestWatchBuilderPrunesSupersededUncommittedLocale.
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Dev server (`puzzle dev`)
 
-Runs the development build loop over the same plugin/build/style pipeline as production. Startup calls `build.SweepWorkDirs` to clear transient build dirs a previously killed session left in `<root>/.puzzle/tmp` (the static rebuild path would reach this through `build.Build`, but the SPA path never calls it). It recursively watches `app/` (including new subdirectories), root/app public assets, and the config file; a 150ms debounce coalesces save bursts. Known editor/OS scratch files — `.DS_Store`, `Thumbs.db`, `desktop.ini`, vim's `4913` probe and its swap files (only when swap-SHAPED: dot-prefixed or carrying the original's own extension underneath, `Home.pzl.swp` — a plain `player.swf` is a real asset and rebuilds), `*~` backups, emacs `.#lock`/`#autosave#`, JetBrains `___jb_tmp___` — are dropped from a burst before it schedules anything, so a burst of pure junk rebuilds nothing. It is a denylist of specific names, deliberately not an extension allowlist: `public/` legitimately ships `.htaccess`, `_headers`, `_redirects`, `.nojekyll`, and `.well-known/*`, so anything unrecognized must still rebuild. A debounced burst then passes through a content filter before it can schedule anything: `onChange` runs synchronously in the watcher loop, so nothing drains fsnotify while a rebuild runs, and a save's trailing metadata event (the CHTIMES half, a formatter-on-save touch) arrives afterwards, lands in a fresh debounce window, and used to schedule a SECOND rebuild over bytes the first already compiled — one save, two rebuilds, and worse the slower the rebuild. Widening the debounce cannot fix that (the gap is a function of rebuild time), so the filter asks whether the BYTES changed since the last burst the loop acted on — but only inside an echo window a SUCCESSFUL rebuild opens (2s): outside the window every event rebuilds whatever its bytes, and a failed rebuild closes the window and clears the memo, so a re-save always retries after an error and a `touch` forces a rebuild once the window lapses. Suppression always expires on its own; no watcher event can be swallowed with no recovery path. A pure echo inside the window schedules nothing, while two real saves 50ms apart still carry different bytes and still rebuild twice. Successful rebuilds update the incremental esbuild graph, formatter manifest, CSS, and mirrored public files. Failed rebuilds print positioned diagnostics and keep serving the last good output. Under `--fixtures` (D98) the watch builder's entry is the generated `.puzzle/fixtures/app.js` wrapper instead of `app/app.js` — generated once at builder construction and kept for the process lifetime; `.puzzle/` sits outside every watched directory by construction — the recursive roots are `app/` and a root-level `public/`, and root-level events arrive only through the non-recursive config watch, which drops anything that is not `puzzle.config.js` — so neither the wrapper nor the `.puzzle/tmp` scratch tree can feed a rebuild loop.
+`compiler/internal/dev` plus the watch builders in `internal/build` (`WatchBuilder` for
+SPA/hybrid, `StaticWatchBuilder` for static). Same plugin/build/style pipeline as
+production. The end-to-end rebuild sequence is [[FLOW-DEV-REBUILD]].
 
-An `output: 'static'` project gets the REAL pipeline ([[DECISION-D148-PREVIEW-AND-STATIC-DEV]]) driven by its own incremental builder, `build.StaticWatchBuilder` ([[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]): three persistent esbuild contexts plus the same warm Tailwind child the SPA loop uses, composed into a fresh staging dir that is atomically swapped in, so a failed compile OR prerender still keeps the last good pages serving. Construction failing degrades to the old one-shot `build.Build` per save, which produces identical output and runs its own Tailwind. The Tailwind output poll drives a debounced styles-only recompose in BOTH modes: in-place on the SPA path, and through `StaticWatchBuilder.RecomposeStyles` in static mode — an atomic swap of `dist/styles.css` alone, zero routes rendered, a reload only when the bytes changed ([[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]). `--fixtures` + static config is rejected at startup. `hybrid` stays on the SPA loop (it IS the SPA after takeover).
+## Startup
 
-That builder renders only the routes a save can reach ([[DECISION-D155-ROUTE-LEVEL-INVALIDATION]]). Before it does anything it classifies the change batch against a reverse dependency graph captured from the two metafiles the previous rebuild produced: the per-page pass's graph attributes a file to the routes whose chain contains it, the prerender bundle's graph identifies the render-wide inputs (`app/app.js`, `routes.js`, the models registry, the formatters module) that move every page at once, and the compile cache supplies the `{#svg}` edge no metafile carries. The node prerender then runs with a route filter (`argv[4]`), enumerating and slugging every page as always but rendering only the named ones; the rest are hardlinked out of the served tree into staging. Everything the classifier cannot place is a full render, and so is a partial that cannot complete — transparently, inside the same `Rebuild` call. A compile error is deliberately not a fallback trigger. Change paths accumulate until a rebuild LANDS — the graph and the pending set commit only after the staging swap succeeds, so a failed compile, render, or swap leaves every path pending for the next save instead of stranding the serving tree's stale pages as "last-good".
+Resolve the app root → `build.PreflightRuntime` (once; errors go up through Serve to
+one stderr line + exit 1) → `build.SweepWorkDirs` (the SPA path never calls
+`build.Build`, so it must sweep itself) → watchers → listener. The config loaded here is
+handed to every `build.Build` of the session (`build.Options.Config`), so rebuilds never
+re-spawn node to read it and see exactly the config dev uses. A config that FAILS to load
+is non-fatal: dev serves from the zero `Config`, and `configFallbackWarning` names every
+lost key — notably `dev.proxy`, whose loss makes the SPA fallback answer `/api/*` with
+`index.html`. Config edits advise a restart.
 
-The HTTP server binds `127.0.0.1` synchronously before printing its ready banner. A busy port is not fatal: `serve.Listen` (the D90 scan, shared with `puzzle preview` via `internal/serve`) scans upward from `--port` for the first free one (bounded at 10 candidates) and the banner, browser-open, and `httpSrv.Addr` all read the port actually bound, with a warning line when it moved; `--strict-port` restores bind-or-fail ([[DECISION-D90-DEV-PORT-SCAN]]). URL→file mapping goes through the same package's mode-aware `serve.Resolve`, so dev and preview cannot drift: SPA mode keeps history fallback, injects the EventSource client only into the root index response, and leaves nested HTML untouched; static mode resolves clean URLs, answers real 404s (the built `404.html`, else a minimal dev page), and injects the client at serve time into EVERY HTML page it writes — disk stays production-clean, and reload plus the D92 overlay reach static pages through the normal SSE channel. `dev.proxy` prefixes register on the mux before the static catch-all, so proxied backend paths never reach the history fallback ([[FEATURE-DEV-PROXY]]). `/__puzzle/reload` uses buffered per-client channels and non-blocking broadcasts so a slow tab cannot stall a rebuild.
+## Watching and change filtering
 
-Before reload, the injected client invokes [[COMPONENT-DEVSTATE]]; the full page always reloads, with state restored best-effort by the new bundle. No per-module swap is attempted.
+Recursive watches on `app/` (new subdirs included) and root/app `public/`, plus a
+non-recursive config watch that drops everything but `puzzle.config.js` — so
+`.puzzle/` (the `--fixtures` wrapper, `tmp/`) can never feed a rebuild loop. A 150 ms
+debounce coalesces bursts.
 
-The terminal layer prints startup/build timing, changed paths, style status, and TTY-aware color. In a TTY, cbreak `q` exits while signals remain active; the cbreak/listener plumbing lives in `compiler/internal/keys`, shared with `puzzle preview` so both commands quit the same way. SIGINT/SIGTERM cancel watcher/SSE work and gracefully shut down HTTP. Testing caveat: `go run` does not forward SIGTERM to the child, so verify graceful shutdown against the built binary.
+- **Junk denylist** (not an extension allowlist, since `public/` legitimately ships
+  `.htaccess`, `_headers`, `.well-known/*`): `.DS_Store`, `Thumbs.db`, `desktop.ini`,
+  vim's `4913` and swap-SHAPED files (`Home.pzl.swp`, not `player.swf`), `*~`, emacs
+  locks/autosaves, JetBrains `___jb_tmp___`. A pure-junk burst rebuilds nothing.
+- **Echo filter** (`dev/changes.go`): `onChange` runs synchronously, so a save's trailing
+  metadata event lands in a fresh debounce window and would rebuild twice. Inside a 2 s
+  echo window that only a SUCCESSFUL rebuild opens, a burst whose BYTES didn't change
+  schedules nothing. Outside it every event rebuilds; a failed rebuild closes the window
+  and clears the memo. Suppression always expires — no event is swallowed without a
+  recovery path. (Widening the debounce can't fix this; the gap scales with rebuild time.)
 
-The config Serve loads at startup is handed to every `build.Build` the session runs (`build.Options.Config`), so a rebuild never re-spawns `node -e` to re-read a file dev has already decided not to reload — and the builds see exactly the config the rest of the loop uses, closing the gap where a static rebuild silently picked up a mid-session config edit that dev itself was ignoring. A config that FAILED to load is not passed along: dev degrades to the zero `Config` for its own decisions, while a build keeps its own hard failure on a malformed config file.
+## SPA loop
 
-Tailwind uses one warm child process in its own process group — in BOTH serving modes now — and every Serve exit path synchronously reaps it. In static mode Serve waits (bounded) for the child's first non-empty output before the initial build — that build bakes the stylesheet into a full prerender, so building against the empty file would ship an unstyled first page and immediately discard the whole build. SPA mode does NOT wait: `styles.css` is served straight off disk and the output poll recomposes it in place the moment the first output lands, so a startup wait would only inflate `ready in` (~3× on small projects) to prevent a flash no browser is open to see; the poll and death-watch goroutines start only after the styles callback is assigned, so the wiring is race-free under `-race`. `pipeline.recompose` skips a write whose composed bytes match what it last wrote — honored only while the served `styles.css` still exists on disk, so an external delete is healed by the next recompose — collapsing the double composition a single edit produced (once from the rebuild, once from the output poll a moment later) into one atomic write against the file the server is handing out. If the watcher cannot start or dies, the pipeline reports the fallback and uses one-shot composition. Config edits advise a restart because config loads once per dev process.
+Successful rebuilds update the incremental esbuild graph, formatter manifest, CSS and
+mirrored public files; failures print positioned diagnostics and keep serving the last
+good output. Under `--fixtures` (D98) the entry is the generated `.puzzle/fixtures/app.js`
+wrapper for the process lifetime. `hybrid` uses this loop (it IS the SPA after takeover).
 
-A config file that fails to load is **not** fatal — dev keeps serving from the zero `Config` — but the warning has to name every key that loss drops, not just Tailwind. `dev.proxy` is the misleading one: with no proxy registered, the SPA history fallback answers `/api/*` with `index.html`, so the app reports a JSON parse error on `"<!doctype html>"` with nothing tying it back to the config. `configFallbackWarning` names both losses and says to restart. (`LoadConfig` returns no error when there is no config file at all, so a zero-config app never sees it.)
+D156 ([[DECISION-D156-BUILD-PIPELINE-PERFORMANCE]]): the constructor's usage scan serves
+startup; later scans need a `.pzl` change; the full public mirror needs an initial batch,
+a public-path batch, or a changed resolved public source; a public-only batch skips
+esbuild unless that asset was in the prior module graph (symlink-normalized). Living
+under `public/` is never proof a file is an asset.
 
-## D156 performance hardening
+**Locales** (D175): the first build and any batch touching `app/locales/**` reload the
+set (a bad file fails the rebuild, keeping last-good dist and manifest), write new hashed
+files into `dist/locales/` without overwriting, refresh the manifest, rebuild `app.js`
+and reload; superseded files are pruned only after success. **A failed load is
+remembered** (`localesFailed`) and retried on every later rebuild — otherwise an
+unrelated save lands on last-good tables and clears the overlay while the file is still
+broken. A superseded never-landed load's files are deleted (`dropNextLocales`) unless
+the committed or new set names them. `ValidatePublic` reserves `locales/` when i18n is on.
 
-[[DECISION-D156-BUILD-PIPELINE-PERFORMANCE]] makes the SPA watch builder own
-change classification. Its constructor's usage scan is reused for startup;
-later usage scans require a `.pzl` change; the full public mirror requires an
-initial batch, a public-path batch, or a resolved public source that differs
-from the last-synced one (a public tree created mid-session syncs on the next
-rebuild); and a public-only batch skips esbuild unless that asset participated
-in the prior module graph, compared with both sides symlink-normalized. Static
-dev applies the same test at its own layer: a public path the last committed
-route graph knows about is classified as the module it is — attributed to its
-pages, render-wide, or a full render when it disappears — and only a path in
-neither graph set is the zero-route copy-only change
-([[DECISION-D155-ROUTE-LEVEL-INVALIDATION]]). Neither path treats living under
-`public/` as proof that a file is an asset. Once
-the first bundle lands, every successful rebuild and Tailwind trigger
-recomposes styles.css; the byte memo skips the write when the composed output
-is unchanged and still on disk, which also recreates an externally deleted
-styles.css on the next rebuild. Root public validation stays unconditional.
-Tailwind callbacks cannot see working CSS from a failed esbuild pass in either
-SPA or static dev; the static builder adopts its candidate only after the
-staging swap, and a failed stylesheet write leaves the byte memo unarmed so the
-next trigger retries it. `puzzle dev --profile-build` exposes startup and each rebuild
-as stable stderr phase tables in every output mode.
+## Static loop
+
+An `output: 'static'` project runs the real pipeline
+([[DECISION-D148-PREVIEW-AND-STATIC-DEV]]) through `StaticWatchBuilder`
+([[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]): three persistent esbuild contexts plus the
+warm Tailwind child, composed into fresh staging and atomically swapped, so a failed
+compile or prerender keeps the last good pages. If construction fails it degrades to a
+one-shot `build.Build` per save (identical output). `--fixtures` + static is rejected at
+startup.
+
+**Route-level invalidation** ([[DECISION-D155-ROUTE-LEVEL-INVALIDATION]]): the batch is
+classified against a reverse dependency graph from the previous rebuild's two metafiles
+(per-page pass → routes whose chain contains a file; prerender bundle → render-wide
+inputs like `app/app.js`, `routes.js`, the models registry, formatters) plus the compile
+cache's `{#svg}` edge. The prerender runs with an `argv[4]` route filter; unrendered
+pages are hardlinked from the served tree into staging. Anything unplaceable — and any
+partial that can't complete — is a full render inside the same `Rebuild`; a compile error
+is NOT a fallback trigger. A locale file is render-wide (read from disk, never imported).
+A public path the committed graph knows is classified as that module; only a path in
+neither graph set is a zero-route copy. **Change paths stay pending until a rebuild
+LANDS** — graph and pending set commit only after the swap, so failures keep every path
+queued. Locale failure-memory comes from testing the accumulated `pending` batch.
+
+## Styles (both loops)
+
+One warm Tailwind child in its own process group. **Every Serve return path must
+synchronously stop it** — relying on the cancellation goroutine orphans it when the CLI
+exits right after an error. Static mode waits (bounded) for the child's first output
+before the initial build (it bakes CSS into every page); SPA mode doesn't (the poll
+recomposes in place; poll/death-watch goroutines start only after the callback is set).
+The output poll drives a styles-only recompose: in place for SPA, via
+`StaticWatchBuilder.RecomposeStyles` (swap `dist/styles.css` alone, zero routes, reload
+only if bytes changed) for static. `pipeline.recompose` skips a write whose bytes match
+the last write — only while the served file still exists, so an external delete heals.
+Callbacks never see working CSS from a failed esbuild pass; a failed write leaves the memo
+unarmed. If the watcher can't start, one-shot composition is the fallback.
+
+## HTTP and reload
+
+Binds `127.0.0.1` before printing the banner; a busy port scans up to 10 candidates
+(`serve.Listen`, shared with `preview`; `--strict-port` = bind-or-fail,
+[[DECISION-D90-DEV-PORT-SCAN]]), and banner/browser-open read the bound port. URL →
+file mapping is the shared mode-aware `serve.Resolve`, so dev and preview can't drift:
+SPA keeps history fallback and injects the EventSource client only into the root index;
+static resolves clean URLs, answers real 404s, and injects the client into EVERY HTML
+response at serve time (disk stays clean). `dev.proxy` prefixes register before the
+catch-all. `/__puzzle/reload` uses buffered per-client channels and non-blocking
+broadcasts. Before reloading, the client invokes [[COMPONENT-DEVSTATE]]; the page always
+fully reloads.
+
+Terminal: timing, changed paths, TTY color; cbreak `q` quits (`internal/keys`, shared
+with preview); SIGINT/SIGTERM shut down gracefully. `go run` doesn't forward SIGTERM —
+test shutdown against the built binary. `--profile-build` prints stderr phase tables in
+every mode.

@@ -12,16 +12,13 @@ connections:
 
 # D9 — Compiler is Go + an esbuild `onLoad` plugin
 
-Settled per [[DOC-SPEC-ANATOMY]] §11. The compiler registers a `.pzl` esbuild plugin with `api.Build`: Go parses templates and generates render functions; esbuild owns bundling, resolution, sourcemaps, and minification.
-
-## Context
-esbuild is Go-native, which makes it a natural fit for a Go-based compiler. The prototype used a `bundleRuntime()` concatenation approach that produced orphan output files.
+Enforced by [[DOC-SPEC-ANATOMY]] §11.
 
 ## Decision
-The compiler registers a `.pzl` plugin with `api.Build`: the Go side parses templates and generates render functions; esbuild owns module resolution, bundling, sourcemaps, and minification.
+The compiler registers a `.pzl` plugin with esbuild's `api.Build`/`api.Context`: the Go side parses templates (the parser lives in `packages/puzzle-lang`) and generates render functions; esbuild owns module resolution, bundling, sourcemaps and minification. Compiled templates join the module graph, and the runtime ships as the npm package `@magic-spells/puzzle`, which esbuild resolves like any dependency.
+
+## Why
+esbuild is Go-native, so the compiler and bundler share one process and one module graph.
 
 ## Alternatives rejected
-- The prototype's `bundleRuntime()` concatenation approach — deleted; compiled templates join the module graph instead of being orphan output files.
-
-## Consequences
-Compiled templates join the module graph instead of being orphan output files; the runtime ships as a normal npm package (`@magic-spells/puzzle`) that esbuild resolves.
+- Concatenating the runtime and compiled templates into output files (the prototype's `bundleRuntime()`) — orphan files outside the module graph.

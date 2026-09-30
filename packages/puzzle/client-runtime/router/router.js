@@ -1,7 +1,7 @@
 /**
  * Router — client-side navigation for Puzzle SPAs (nested routes, v1.3 / D30).
  *
- * Implements the D19 navigation state machine (constellation/doc/DOC-DECISIONS.md D19/D28/D30,
+ * Implements the D19 navigation state machine (D19/D28/D30,
  * constellation/doc/DOC-VIEW-LIFECYCLE.md §4, constellation/doc/DOC-APP-ANATOMY.md §5) generalized from a
  * flat "one view + optional layout" model to a **route CHAIN of arbitrary depth**.
  *
@@ -574,7 +574,7 @@ export class Router {
 			warnShadowedPaths(findShadowedPaths(this.#routes));
 		}
 		// Bind once so start()/stop() add and remove the SAME reference — the
-		// prototype bound at addEventListener time and leaked (CODE_REVIEW §2.5).
+		// prototype bound at addEventListener time and leaked.
 		this.#onClick = this.#handleClick.bind(this);
 		this.#onPopState = this.#handlePopState.bind(this);
 	}
@@ -2943,7 +2943,7 @@ export class Router {
 	 * from the destination chain — head.js resolveHeadField, the same
 	 * nearest-defined leaf→root walk #setTitle performed for meta.title alone —
 	 * and assign document.title. ONLY `title` is resolved here: the other three
-	 * reserved fields are build-time only (D111 below), so the browser walks the
+	 * reserved fields are build-time only (D84 below), so the browser walks the
 	 * chain once, not four times, and resolveHead/HEAD_FIELDS stay behind in the
 	 * SSG's half of head.js. Runs inside #commitLocation, so D61
 	 * atomicity covers it exactly as it covered the title: a failed or superseded
@@ -2952,7 +2952,7 @@ export class Router {
 	 * note on explicit null).
 	 *
 	 * The managed og:/twitter:/description/canonical tags are deliberately NOT
-	 * synced here, in any output mode (D111, amending D89). Crawlers and unfurlers
+	 * synced here, in any output mode (D84, amending D89). Crawlers and unfurlers
 	 * fetch each URL fresh from the server and never client-navigate, so the tags
 	 * the prerender baked into that page's HTML are always the ones they read; a
 	 * client-side rewrite would only ever be observed by something reading

@@ -1,6 +1,6 @@
 /**
  * flip.js — FLIP (First, Last, Invert, Play) animation for keyed reorders
- * (constellation/doc/DOC-SPEC.md §12, constellation/doc/DOC-DECISIONS.md D85).
+ * (constellation/doc/DOC-SPEC.md §12, D85).
  *
  * Enter/leave animations (animate.js) cover elements that APPEAR or VANISH; a
  * keyed reorder does neither — the same DOM node stays mounted and jumps to a

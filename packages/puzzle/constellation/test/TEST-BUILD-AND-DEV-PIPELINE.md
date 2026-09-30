@@ -28,7 +28,6 @@ connections:
   - DECISION-D90-DEV-PORT-SCAN
   - DECISION-D92-DEV-ERROR-OVERLAY
   - DECISION-D110-DEV-PROXY-PREFIX-VALIDATION
-  - DECISION-D131-DCE-ORACLE-ATTRIBUTION
   - DECISION-D148-PREVIEW-AND-STATIC-DEV
   - DECISION-D152-BUILD-SCOPED-COMPILE-CACHE
   - DECISION-D153-PUZZLE-SCRATCH-DIR
@@ -36,38 +35,33 @@ connections:
   - DECISION-D155-ROUTE-LEVEL-INVALIDATION
   - DECISION-D156-BUILD-PIPELINE-PERFORMANCE
   - DECISION-D160-SPA-CODE-SPLITTING
-  - FEATURE-SPA-CODE-SPLITTING
-  - FEATURE-BUILD-PIPELINE-PERFORMANCE-HARDENING
+  - DECISION-D59-SCOPED-STYLES
   - FEATURE-DEV-PROXY
-  - FEATURE-SCOPED-STYLES
   - DOC-TESTING
 ---
 
-
 # Build pipeline, watch, and dev server
 
-Go integration tests over everything between a project directory and a `dist/`
-folder, plus the long-running dev loop on top of it.
+Go integration tests over everything between a project directory and `dist/`,
+plus the long-running dev loop on top of it. Packages:
+`compiler/internal/{build,plugin,styles,config,locales,fsutil,keys}` and
+`compiler/internal/{dev,serve,preview,ui}`. Run from `packages/puzzle` with
+`go test ./compiler/internal/...`.
 
-Build: option resolution, JavaScript config loading, import aliases, the esbuild
-plugin's resolution and CSS collection, SVG assets, scoped styles, the
-Tailwind-first style pipeline and its resolver, public asset copying with
-case-insensitive collision refusal, atomic staging and swap so a failed build
-preserves the last good output, working-directory handling, runtime env defines,
-the prerender pass for both output modes, static page emission, route dependency
-tracking, route head warnings, and the fixtures flag.
+- **Build:** option resolution, JavaScript config loading, import aliases, the
+  esbuild plugin's resolution and CSS collection, SVG assets, scoped styles, the
+  Tailwind-first style pipeline and its resolver, public asset copying with
+  case-insensitive collision refusal, atomic staging and swap (a failed build
+  keeps the last good output), working-directory handling, runtime env defines,
+  both prerender passes, static page emission, route dependency tracking, route
+  head warnings, SPA code splitting and chunk pruning, locale files, and the
+  fixtures flag.
+- **Caching and performance:** the build-scoped compile cache and its eviction,
+  the scan memo, the pass context, route-level invalidation, and the build
+  profile output.
+- **Dev:** change detection, the rebuild pipeline, warm static rebuilds, the
+  local server with SSE reload, port scanning, proxy prefix validation, preview
+  serving, and terminal UI rendering.
 
-Caching and performance: the build-scoped compile cache with its eviction path,
-the scan memo, the pass context, route-level invalidation, and the build profile
-output.
-
-Dev: change detection, the rebuild pipeline, warm static rebuilds, the local
-server with SSE reload, port scanning when the requested port is taken, proxy
-prefix validation, preview serving, and terminal UI rendering.
-
-Watch behavior has both correctness tests and benchmark-shaped tests in the same
-package; the benchmarks measure rebuild cost rather than asserting it, so they
-are not a pass/fail gate on timing.
-
-Covers 27 `*_test.go` files across `compiler/internal/{build,plugin,styles,config,fsutil,keys}`
-and 7 more across `compiler/internal/{dev,serve,preview,ui}`.
+Watch tests include benchmark-shaped cases that measure rebuild cost; they are
+not a pass/fail timing gate.

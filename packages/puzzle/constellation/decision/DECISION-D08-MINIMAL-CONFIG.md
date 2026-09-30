@@ -1,5 +1,5 @@
 ---
-name: "D8 — Minimal v1 config surface"
+name: D8 — A flat, minimal `PuzzleApp` config; each key earns its own decision
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
 connections:
@@ -7,20 +7,18 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-ANATOMY
   - DECISION-D33-ROUTER-SCROLL
+  - DECISION-D66-APP-LIFECYCLE-HOOKS
 ---
 
-# D8 — Minimal v1 config surface
+# D8 — A flat, minimal `PuzzleApp` config
 
-Settled per [[DOC-SPEC-ANATOMY]] §2. The v1 `PuzzleApp` config is exactly `{ target, routes, models, formatters, apiURL }` — nothing else.
-
-## Context
-The prototype had a kitchen-sink config that implied months of runtime work irrelevant to proving the framework.
+Enforced by [[DOC-SPEC-ANATOMY]] §2, which lists the current keys.
 
 ## Decision
-`new PuzzleApp({ target, routes, models, formatters, apiURL })` — nothing else.
+- The `PuzzleApp` config is one **flat** object. The core is `{ target, routes, models, formatters, apiURL }`; every other key (`scrollBehavior`, `routerMode`, `routerBase`, `transitionMode`, `adapter`, `storage`, the app lifecycle hooks of [[DECISION-D66-APP-LIFECYCLE-HOOKS]], …) was added by its own decision and is passed through only when set.
+- New surface goes in as a flat key with an imported value when it needs one (`routerMode: hashRouter()`), never as a nested options object.
+- There is no app-level `computed`, `methods`, `settings` map or global `events` map: state lives in the store and in views.
 
 ## Alternatives rejected
-- The prototype's kitchen-sink config — app-level `settings`, `computed`, global `events` (incl. keyboard-shortcut strings), `methods`, and app lifecycle hooks are all deferred. Rationale: it implied months of runtime work irrelevant to proving the framework.
-
-## Consequences
-App-level `settings`, `computed`, global `events`, `methods`, and app lifecycle hooks are deferred. (Later, `scrollBehavior` becomes the first amendment to this §2 config surface in v1.5 — see [[DECISION-D33-ROUTER-SCROLL]].)
+- The prototype's kitchen-sink config (app-level settings, computed, global events with keyboard-shortcut strings, methods) — months of runtime work nothing needed.
+- Nested groups (`router: { mode }`) — the surface is flat; [[DECISION-D34-HASH-ROUTING]] followed the `scrollBehavior` precedent.

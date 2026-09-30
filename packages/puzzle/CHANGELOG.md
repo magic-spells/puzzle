@@ -178,7 +178,7 @@ Also translations (`t`, D175), sanitized `raw`, the pieces theme system with
 `puzzle add theme`, and 100 pieces. The never-published 0.7.1 notes (registry
 version floors, the background update notice) are folded in here.
 
-Production sizes: hello-world **21.7 KB gzip**, todos **25.8 KB gzip** (from
+Production sizes: hello-world **21.9 KB gzip**, todos **25.9 KB gzip** (from
 20.8 / 23.8 in 0.7.0). Apps that configure no translations and use no `raw`
 pay nothing for either.
 

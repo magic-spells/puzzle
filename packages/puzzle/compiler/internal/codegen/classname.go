@@ -12,7 +12,7 @@ import (
 )
 
 // classname.go extracts the component class name for the appended
-// `Name.prototype.render = …` assignment (constellation/doc/DOC-DECISIONS.md D24). The Go side
+// `Name.prototype.render = …` assignment (D24). The Go side
 // never parses JavaScript (D3): the name comes from a TEXTUAL scan for the
 // SPEC-mandated `export default class <Name>` declaration — the FIRST REAL one,
 // where "real" means not buried in a string, template literal, comment, or

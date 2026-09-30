@@ -1,5 +1,5 @@
 ---
-name: "D13 — CLI v1 is `puzzle dev` + `puzzle build`; build defaults to production"
+name: D13 — `puzzle dev` is watch + serve + live reload; `puzzle build` defaults to production
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
 connections:
@@ -9,16 +9,13 @@ connections:
   - DOC-SPEC-ANATOMY
 ---
 
-# D13 — CLI v1 is `puzzle dev` + `puzzle build`; build defaults to production
+# D13 — `puzzle dev` and `puzzle build`
 
-Settled; enforced by [[DOC-SPEC-ANATOMY]] §11. v1's CLI is just `puzzle dev` (watch + static server + SSE live reload) and `puzzle build` (production by default).
-
-## Context
-The prototype had a `watch` command and inverted the production/development default behind a `--production` flag.
+Enforced by [[DOC-SPEC-ANATOMY]] §11. The rest of the CLI is [[DECISION-D32-CLI-TOOLING]].
 
 ## Decision
-- `dev` replaces the prototype's `watch` — watch + static server with history fallback + SSE full-page live reload (no HMR in v1).
-- `build` produces optimized output by default with `--mode development` as the override (the prototype had this inverted behind a `--production` flag).
+- `puzzle dev` = watch + static server with history-API fallback + SSE full-page live reload. The reload is state-preserving ([[DECISION-D57-HMR-STATE-RELOAD]]); there is no per-module hot swap. The fast rebuild path is [[DECISION-D27-FAST-DEV-REBUILDS]].
+- `puzzle build` produces optimized production output by default; `--mode development` gives readable output.
 
 ## Alternatives rejected
-- `init`/`generate`/`add`/`doctor`/`info` are deferred (later landed in v1.4, [[DECISION-D32-CLI-TOOLING]]).
+- A `watch` command, and a `--production` opt-in flag (the prototype) — the common case should be the default.

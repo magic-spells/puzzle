@@ -16,495 +16,177 @@ connections:
   - COMPONENT-PUZZLE-MODEL
   - FLOW-REACTIVITY
   - DOC-VIEW-LIFECYCLE
-notes:
-  - kind: decision
-    text: >-
-      2026-09-10 revision 2 — after a GPT-6 Pro review of the plan, the decision text was tightened
-      on correctness rather than direction: (1) revision comparisons always use a snapshot number
-      stored at the last commit, never the old object's live value (same object); (2) model-valued
-      roots are treated as always dirty in 0.8.0 because a revision cannot cover relation getters or
-      computed getters — revision-narrowed roots and the whole-row skip move to 0.8.x; (3) volatile
-      bindings guard on a reserved pass bit, since an all-ones root mask is zero on a pass with
-      nothing dirty; (4) the takeover barrier stages portal ranges and document-level outside
-      listeners, not only mounted() hooks; (5) template cloning is defended against HTML parser
-      repair (compiler prediction, dev walk check, browser suite) with an imperative emitter mode;
-      (6) blocks are created detached and initialized before insertion; (7) island seed bindings
-      initialize once; (8) skeleton swaps preserve root identity when root tags match; (9) slot-only
-      updates keep the child's beforeUpdate/afterUpdate timing. Plan file §17 has the full table.
-  - kind: state
-    text: >-
-      2026-09-10, later — RECOMMENDATION REVERSED, pending Cory. Two byte measurements on five real
-      templates (todos ×3, music QueueDialog + AppLayout), hand-written in the compiled shape and
-      minified+gzipped against today's vnode output: naive guard-line shape +52% gzip across a
-      five-template bundle; with table-driven bindings + walk descriptor + constant folding (and
-      Solid-style tag tightening) still +25–27% gzip (+18–20% per tail), minified at parity. The
-      floor is the static HTML itself: template strings gzip ~560–625 B worse than vnode literals
-      over five templates, and a shared block()/walk() runtime adds ~506 B gzip per app. Break-even
-      ~13 templates; todos −2 KB, stays +0.5 KB, music +1.4 KB. The +10% gate is missed by every
-      variant. Fable's recommendation is to re-scope this decision to a compiler-informed VDOM —
-      persistent keyed list blocks with cached row vnode subtrees, an identity short-circuit in
-      patch(), static subtree caching per instance/row, the record render revision with snapshot
-      prop compare, stable loop handlers via a live scope object, flush-seq dedupe — keeping the
-      direct-DOM design on file as the measured alternative (plan file §11.1–§11.2). Card body still
-      describes the direct-DOM decision until Cory confirms the re-scope.
-  - kind: state
-    text: >-
-      2026-09-10 — BUILT on `feat/render-lists`, NOT yet verified. Runtime (bdf7e9d) and compiler
-      (ff9454a) are in; both suites green at those shas (vitest 125 files / 2088 tests, `go test
-      ./...` ok, test:types clean). Status stays `built` until the plan §11 gates are measured: byte
-      gates (hello-world ≤ +0.5 KB, todos ≤ +1.5 KB, `examples/stays` ≤ +2.0 KB, five-template
-      corpus ≤ +8%) and work gates (`list-update-1` builds ≤ one row's vnodes with 999 identity
-      short-circuits; `list-reorder` builds 0 rows; island vnodes per render → 0; `deep-nest`
-      unchanged at 1 of 1,536). A verification agent is running those now; when the numbers land
-      they go on this card and on [[DOC-STRESS-EXAMPLE]], and the status moves to `verified`. Two
-      measurement paragraphs elsewhere are deliberately left saying "being re-measured" until then:
-      [[COMPONENT-VIEW-MANAGER]]'s island section and the `islands` row of DOC-STRESS-EXAMPLE.
-    sha: ff9454a1857e785d8c8590e5d47f2a6030f107e8
-  - kind: verified
-    text: >-
-      2026-09-10 — plan §11 gates MEASURED on `feat/render-lists`. WORK GATES all met, from the
-      production `examples/stress` bundle: `keyed-list/update-one/1000` (one `record.update()` in
-      1,000 rows) → childDataRuns 1, klRowsTouched 1, klDomMutations 2; `update-all` → 1000 / 1000 /
-      2000 (no row counted twice); `reorder` (a display-order flip that writes no record) →
-      childDataRuns 0, klRowsTouched 0, klDomMutations 1998 (moves only, nothing rebuilt);
-      `islands/shell-renders/20000` → islandChildVnodesPerRender 0 (was 20,000) with
-      islandViolations 0 and shellDidMutate 1; `deep-nest` unchanged at 1 of 1,536. Two further
-      improvements the gates did not predict: the reused-ancestor cascade is O(depth) again
-      (route-churn rcAncestorRenders 2,700 → 1,200, params-only control 2,100 → 600), and
-      `listener-churn/count-listeners/10000/churn` reports 0 add/removeEventListener calls where it
-      reported 400,000 — the churn arm now compiles to a row-cached handler.
-      `benchmarks/baseline.json` was rewritten (83 ops); every counter moved in the improving
-      direction. Two apparent regressions in that diff are NOT D170: route-churn rcAncestorMutations
-      500 → 700 and rcChromeMutations 100 → 300 are the router's own focus bookkeeping per leaf
-      swap, and a build of the branch point `release/0.8.0` measures the identical 700/300 — the
-      baseline figures predate a 0.7.x-era change and were masked because the runner reports only
-      the first mismatching declared counter per op.
-
-
-      BYTE GATES: hello-world 21,304 → 21,834 B gzip (+530 B, +0.52 KiB) against a ≤ +0.5 KB gate —
-      18 bytes over 512, which is Cory's call; todos 24,365 → 25,732 B (+1,367 B, +1.34 KiB) against
-      ≤ +1.5 KB, PASS; `examples/stays` 40,007 B (+1.37 KiB on 37.7 KB) against ≤ +2.0 KB, PASS. The
-      hello-world figure is what it is only because the list runtime is now an import:
-      `views/listBlock.js` is 975 B gzip on its own and used to ride into every app through
-      `PuzzleView.__list`. What remains in a loop-free app is the rest of the mechanism — `__c`,
-      `__dirty`/`__roots`, `__propRevs`/`propsEqual`, `RENDER_REV`, the patch() identity
-      short-circuit and `syncControl`.
-  - kind: verified
-    text: >-
-      2026-09-11 — the gates the two notes above call "plan §11" are recorded here, now that the
-      planning documents are gone. They are the D170 gates: the expects in
-      `benchmarks/scenarios.mjs` plus these numbers.
-
-
-      BUNDLE GZIP (Node zlib level 9, `npm run measure:size`, re-run on `feat/render-lists`
-      2026-09-11): hello-world 21,834 B (+530 B on the 0.7.1 21,304 B) against a ≤ +0.5 KB gate — 18
-      bytes over 512, MARGINAL, and Cory's call; todos 25,732 B (+1,367 B on 24,365 B) against ≤
-      +1.5 KB, PASS; `examples/stays` 40,007 B (+1,402 B) against ≤ +2.0 KB, PASS.
-      `measure-size.mjs` builds and prints hello-world and todos only — it emits no
-      `examples/stays`, corpus or total line, so the stays figure is the one measured in the
-      2026-09-10 gate run and the ≤ +8% five-template corpus gate has no script behind it. The
-      hello-world overage is structural, not incidental: `views/listBlock.js` is 975 B gzip and is
-      now an import rather than riding in through `PuzzleView.__list`, so a loop-free app pays only
-      for `__c`, `__dirty`/`__roots`, `__propRevs`/`propsEqual`, `RENDER_REV`, the patch() identity
-      short-circuit and `syncControl`.
-
-
-      BENCH (`benchmarks/baseline.json`, regenerated on this branch): keyed-list/update-one/1000 →
-      childDataRuns 1, klRowsTouched 1, klDomMutations 2; keyed-list/update-all/1000 → 1000 / 1000 /
-      2000; keyed-list/reorder/1000 → 0 / 0 / 1998; keyed-list/swap-rows/1000 → 0 / 0 / 1994;
-      islands/shell-renders/20000 → islandChildVnodesPerRender 0; route-churn navigate-burst
-      rcAncestorRenders 1,200 (was 2,700) and params-burst 600 (was 2,100); listener-churn
-      count-listeners lcAddListener/lcRemoveListener 0 (was 400,000).
-
-
-      Prerendered HTML is byte-identical across the 78 example output files. Suites green on this
-      branch: `go vet ./...` + `go test ./...` (all packages ok) and `npx vitest run` (127 files /
-      2094 tests passed).
-  - kind: state
-    text: >-
-      2026-09-11 — five runtime corrections from the Codex review of PR #136, each reproduced by a
-      failing test first. (1) patch()'s replace arm now UNMOUNTS before it mounts: a cached row or
-      `__c` subtree is the same object in both trees, so mounting first overwrote its links and the
-      outgoing unmount destroyed the new child and swept the new element's `outside` listeners; the
-      insertion ref is captured before the unmount and resolved after, so a leaving element still
-      receives the replacement before it. (2) A block that missed a render may not trust the root
-      mask (a per-render delta): blocks record the view's new `__rgen` render counter and rebuild
-      every row when they skipped a render — which also covers a nested block whose outer row was
-      cached. (3) An errorView retry bumps the owner's `__rgen` before refreshing, so a failed child
-      under a cached row is revisited instead of being left as a blank position. (4)
-      `collectControls` stops at an `island` element's children (D44 freezes them) and walks through
-      `<Portal>` children (patchPortal never runs under a cached ancestor). (5) The identity
-      short-circuit re-asserts a vnode that is ITSELF a controlled element when it carries no
-      `controls` list — the shape slot expansion produces by cloning the row vnode around it. Tests:
-      tests/patch-replace-ordering.test.js, tests/list-cache-invalidation.test.js,
-      tests/list-control-replay.test.js. Suite green at 130 files / 2105 tests; `test:types` clean.
-  - kind: deviation
-    text: >-
-      2026-09-11 — the island allocation win is DEFERRED, and the two earlier `verified` notes above
-      are stale on exactly one figure: they record `islands/shell-renders/20000 →
-      islandChildVnodesPerRender 0`, measured while the children cache had no static requirement.
-      That rule is reverted; the expect in `benchmarks/scenarios.mjs` is back to 20,000 and every
-      other number in those notes stands. Why: `??=` is per view instance (or per row) while
-      [[DECISION-D44-DOM-ISLANDS]] re-seeds an island from the template on a key-reset remount — and
-      a hide/show remount does the same — so a cached dynamic seed hands every later mount the FIRST
-      render's values. `<div island key={reset}><b>{seed}</b></div>` showed the old seed forever.
-
-
-      THE FOLLOW-UP DESIGN, not built: emit a dynamic island seed as a per-render THUNK — `() => [ …
-      ]` in the children position — that the runtime evaluates at MOUNT only and discards otherwise.
-      One closure allocated per render instead of N vnodes, and a remount re-runs it, so the seed is
-      re-read from the current render's values exactly as D44 promises. It needs a runtime change
-      (ViewNode/mount must recognise a thunk children value and the SSG serializer must too), which
-      is why it is not in this round. The stress example's `islands` scenario is the measurement
-      that would move: 20,000 → ~1 allocation per shell render.
-  - kind: state
-    text: >-
-      2026-09-11 — six COMPILER corrections from the Codex review of PR #136, each reproduced by a
-      failing Go test first. (1) `rangeDepth` is now the general `mapDepth`: it counts every
-      NON-LOWERED loop body — range bodies and the explicit-key `.map` fallback — and gates LOWERING
-      as well as caching, so an item loop nested in either keeps `.map`. It previously only blocked
-      caching inside ranges, so `{#for 1...2, n}<ul>{#for item in items}…` lowered one block shared
-      by both iterations and the same row vnodes were mounted at two DOM positions. (2) An authored
-      binding spelled like a row scope object (`s`, `s1`, …) that stays bare inside a lowered body
-      is mangled to `__pzl<name>` — a range counter, a fallback loop's item/counter, a `<Snippet>`
-      parameter — because `{#for 1...2, s}` inside a row emitted `.map((s) => … s.item.text …)`, a
-      TypeError on the first iteration. (3) A read of an ENCLOSING site's item or counter marks the
-      reading site and every intervening site volatile; without it `{#for group in groups}…{#for
-      item in group.items}{group.label}` kept showing the old label after the outer item changed.
-      (4) An opaque whole-value read of a loop local is `deep`: a formatter pipe, a call argument, a
-      template-literal interpolation, and member access reached through parentheses or a comment all
-      compiled key-only. (5) A read of a mutable global (`Date`, `Math.random`, `window`,
-      `document`, `globalThis`, …) or a clock-reading built-in formatter (`timeago`) makes a site
-      volatile. Handler ARGUMENTS are exempt from (3), (4) and (5) — fire-time reads, the same
-      carve-out `this` already had. (6) The island children cache requires a static seed again (see
-      the deviation note). Tests in `listblock_test.go` / `static_cache_test.go`; `island.golden.js`
-      reverts to its uncached shape and no other golden or fixture moved. `go vet ./...` + `go test
-      ./...` ok, `npx vitest run` 130 files / 2105 tests, `test:types` clean.
-  - kind: decision
-    text: >-
-      Handler ARGUMENTS contribute no row facts at all — not only exempt from volatile/opaque, but
-      also from `fields`, `deep` and the counter read. They are evaluated when the event fires
-      against `s.item`/`s.i`, which listRows reassigns on every pass even for a cached row, so they
-      can never see a stale value; only their `__d` roots stay in the mask (a closure over the
-      render's `__d` must be rebuilt). Without this, `remove(todo.id, todo.author.id)` made every
-      row rebuild every render, and a handler argument naming a field the schema does not declare
-      turned the whole site conservative through the runtime schema check. Conversely, a formatter
-      ARGUMENT is opaque exactly like a piped base: `{ 'by' | byline(post) }` hands the record to
-      the formatter, so the site is `deep`. The condition of a handler-valued conditional stays a
-      render read.
-  - kind: gotcha
-    text: >-
-      A cached vnode can change sibling INDEX without changing identity: a variable-length unkeyed
-      run before it (an unkeyed `{#for}` over primitives, slot content, a row's inner keyless loop
-      before its `s.c[n]`) shifts `this.__c[n]`/`s.c[n]`. Positional pairing then handed the cached
-      object to a DIFFERENT old vnode — patch() adopted that old element into it, and the trailing
-      unmount of the cached object (still in the old list) removed the element it now described,
-      orphaning the original (static markup duplicated, rows vanished). Rule the patcher now keeps:
-      a vnode present in both old and new unkeyed lists pairs with ITSELF. Detection is one test per
-      child — a vnode with `el != null` (mounted before, so reused; a fresh vnode's `el` is null)
-      that is not its positional partner. patchIndexedChildren pre-scans and hands such a list to
-      patchKeyedChildren; the keyed path flags it during pairing and re-pairs the unkeyed run once
-      with an identity Set (reused nodes pair with themselves, the rest consume the unclaimed old
-      nodes positionally), and its move pass places them. A reused-but-unmounted vnode (a branch
-      toggled back on) is a false positive that just takes the re-pair and pairs positionally, as
-      before. Tests: tests/static-cache-shift.test.js.
-  - kind: state
-    text: >-
-      Row facts after D176: `x.size` (the template count, lowered to `__z(x)`) records exactly the
-      facts `x.length` did — `todo.size` is the field `size` on the row item, `todo.tags.size` is a
-      deep read. Calls on items and on globals are no longer possible in a value position, so the
-      "call on the item → opaque/deep" and the volatile-global paths are reachable only through
-      `this.` chains and handler arguments, which were already exempt or volatile.
-  - kind: state
-    text: >-
-      Supersedes the last clause of the "Row facts after D176" note: `this` is not a template
-      identifier (D176 rule 5, handler arguments included), so no row fact comes from the view
-      instance and there is no `this`-reads-volatile case. `volatile` comes from a `timeago` pipe
-      and from mutable-global reads (while `jsGlobals` exists), plus the structural cases in the
-      body (an enclosing site's loop local, a root past the mask cap). The call-on-item and
-      call-on-global fact paths have no template source: calls are rejected in values and handler
-      arguments record no row facts.
-  - kind: state
-    text: >-
-      2026-09-29, D176 P2–P4 — supersedes the two "Row facts after D176" notes, item (5) and the
-      pipe/parentheses/comment wording of item (4) of the PR #136 compiler-corrections note, and the
-      "formatter ARGUMENT … piped base" clause of the handler-arguments note. Row facts are read off
-      the expression tree (`lower.go`); the body's Decision section states them. `volatile` comes
-      only from a `clockFunctions` call (`timeago`) and the structural cases (an enclosing site's
-      local, a root past the mask cap): there is no mutable-global case, because `jsGlobals` is gone
-      and a browser global is a parse error. There is no `.size`/`__z` lowering. A function argument
-      is opaque like any non-member use (`{ byline(post) }` → `deep`). Handler arguments are guarded
-      like any expression and still record only their data roots; a library call in one makes the
-      handler non-cacheable (D62).
-  - kind: gotcha
-    text: >-
-      The index-shift gotcha has a NESTED form the parent-list pre-scan cannot see: a cached vnode
-      inside a FRESH parent whose index moved (`{#for tag in tags}<span/>{/for}<button
-      class={c}><svg ref=… @click:outside=…/></button>`, two variable runs around `<div
-      class={c}><div class="a">…</div></div>`, variable slot content before a fresh `<footer>`, a
-      row's inner keyless loop before a fresh `<em>` holding `s.c[0]`). The fresh parent pairs with
-      a different old node, so the incoming tree reaches the cached object FIRST — mount() into the
-      new parent, or patch() adopting another old node's element — overwriting its `el`/`component`,
-      and the outgoing tree then releases or patches its old position THROUGH THE SAME OBJECT: refs
-      nulled on the live element, its outside listener swept while the detached one leaked on
-      document past destroy(), static markup ending up inside the wrong row, a nested component
-      lost. Rule the patcher keeps: an old position always releases/patches the copy it describes.
-      Mechanism (viewManager.js keepOutgoing/outgoingOf): mount() of a vnode whose `el` is already
-      set, and patch() adopting into a reused newVnode (`el` set, not the old object), first
-      snapshot its links (el, component, instance, html `nodes`, portal range) into a map keyed by
-      the vnode; the OLD-side consumers — patch()'s oldVnode, unmount(), releaseSubtree()'s child
-      walk — read through that map and consume each entry once. Nothing is released early, so a
-      snapshot whose old position was already consumed (a cached branch toggled back on, an old
-      position another vnode already adopted) is simply never asked for; that is why the snapshot is
-      taken unconditionally rather than behind a liveness test, which `el.parentNode` cannot answer
-      exactly. The map lives for one outermost ViewManager.render (renders nest; a depth counter
-      drops it). Cost when unused: one null test per mount/patch/unmount/child release. Consequence:
-      unlike the top-level case, a nested shifted subtree is REMOUNTED (fresh DOM, a nested
-      component recreated, the old instance destroyed), not moved. Rejected: a full-depth pre-scan
-      (O(tree) per level), and release-at-remount with pass stamps (cannot tell the vnode's own old
-      element from one another vnode already adopted, and loses the old position that a later
-      patch(old, new) needs). Tests: the nested block in tests/static-cache-shift.test.js.
 ---
 
 # D170 — Persistent list blocks and an incremental virtual DOM
 
-**Built for 0.8.0.** This card is the record: it holds the decision, its
-reasoning, and what the built mechanism actually is. The hand-written todos
-fixtures (`tests/fixtures/todos/*.compiled.js`) are the byte contract for what
-the compiler emits, and the expects in `benchmarks/scenarios.mjs` are the work
-gates. The 0.8.0 planning documents were removed at Cory's request on
-2026-09-11. [[DECISION-D17-RENDER-FUNCTIONS-VDOM]] carries the
-rendering decision this qualifies ("compiler-informed"), and
-[[DECISION-D62-HANDLER-CACHING]] carries the handler half.
+The todos fixtures (`tests/fixtures/todos/*.compiled.js`) are the byte contract
+for what the compiler emits; the expects in `benchmarks/scenarios.mjs` are the
+work gates. [[DECISION-D17-RENDER-FUNCTIONS-VDOM]] carries the rendering
+decision this qualifies ("compiler-informed"); [[DECISION-D62-HANDLER-CACHING]]
+the handler half.
 
 ## Context
 
-Every view update rebuilt the whole `ViewNode` tree and diffed it, whether or
-not anything changed: a `{#for}` paid N×(row vnode allocation + diff) per
-parent update, and static-heavy templates rebuilt thousands of vnodes that
-produced zero DOM writes ([[COMPONENT-VIEW-MANAGER]]'s island measurement:
-20,000 of 20,000 child vnodes rebuilt per render). Cory asked for lists whose
-rows update independently and for fewer wasted diffs, with the complexity in
-the compiler, no `.pzl` syntax change, and no break to hybrid/static output.
-
-A compiled direct-DOM rewrite (Svelte/Solid style) was planned first and
-measured on five real templates: the emitted output was 25–27% larger gzipped
-in a bundle even with every emitter lever (table-driven bindings, walk
-descriptor, constant folding, Solid-style tag tightening), because the static
-HTML string itself compresses worse than the vnode literals and one vnode
-encoding serves both creation and update. Break-even was ~13 templates. The
-direct-DOM plan was removed with the planning documents; the measurements in
-this paragraph and on [[DECISION-D17-RENDER-FUNCTIONS-VDOM]] are its record.
+Every view update rebuilt and diffed the whole `ViewNode` tree: a `{#for}` paid
+N × (row allocation + diff) per parent update, and static-heavy templates
+rebuilt thousands of vnodes for zero DOM writes. The goal: rows that update
+independently and fewer wasted diffs, with the complexity in the compiler, no
+`.pzl` syntax change, and no break to hybrid/static output.
 
 ## Decision
 
+Keep the virtual DOM and make it incremental.
 
-Keep the virtual DOM and make it incremental. Six additive pieces; `.pzl`
-syntax is unchanged.
-
-1. **An item-form `{#for}` is a persistent list block.** Each loop site
-   compiles to `__l(this, owner, id, coll, (s) => …, __L<id>)` in place of
-   `.map`, backed by `client-runtime/views/listBlock.js` and reached through the
-   package root's `listRows` compiler-support export. `listRows as __l` joins
-   the injected import line **only for a file that lowers at least one site** —
-   exactly as `displayValue as __s` does, and for the same reason: a loop-free
-   app must not pull the list runtime into its bundle, and nothing in
-   `PuzzleView` may import it. The first argument is always the view (it owns
-   the `__dirty` root mask and the dev counters); the second is the owner the
-   rows hang off. The block keeps one row state per key — item, index, stored
-   record revision, the live scope object `s` handlers close over, the row's
-   last rendered vnode subtree, its static caches and its nested blocks — and
-   returns the **cached vnode subtree** for a row whose inputs did not change.
-   The returned array is spliced where `.map()`'s was, so the keyed patcher,
-   mixed keyed/unkeyed pairing, the shared sibling key namespace, leaving rows
-   and FLIP are untouched. Dirtiness: plain objects, arrays and functions always
-   (no revision exists to observe); records on reference or revision change;
-   primitives on `!==` alone; the index when the body reads the counter; a
-   parent root the body reads, via a per-render `__dirty` mask over the
-   compiler-emitted `Class.__roots`; and a `volatile` body — one whose
-   expressions call a clock-reading library function (`timeago`, the one name
-   in codegen's `clockFunctions`; an app-registered function is pure by
-   contract) or read a loop local belonging to an ENCLOSING site. A template
-   expression never reaches the view instance (`this` is not a template
-   identifier, [[DECISION-D176-EXPRESSION-LANGUAGE]] rule 7) or ambient
-   browser state (a browser global is not a template read, D176 rule 1), so
-   neither is ever a row input. Sites reading a relation, a computed getter or
-   a deep path are **conservative** (checked once per model class against the
-   schema, cached on the block) and never cache their record rows.
-   A null key builds uncached (today's positional path, already warned by
-   `ViewNode.keyOf`); a duplicate key within one render builds uncached and
-   warns once in dev. Site ids are per file and share the `__h`/`__c`
-   counters; a nested block's owner is the enclosing row state, so inner
-   blocks are keyed per outer row and die with it.
-2. **`patch()` short-circuits when old and new are the same object.** Two
-   carve-outs ride with it: a live component's `el` is refreshed from the
-   instance (a child can replace its root between renders, and
-   `patchKeyedChildren` uses `newChild.el` as its move guard and insertion
-   ref), and a **component vnode with no live instance falls through** to the
-   ordinary path — a destroyed instance or the takeover-failed `null` arm must
-   still reach `patch()`'s recovery, or a cached row would strand a failed
-   position forever. Cached subtrees carrying controlled form values re-assert
-   them from a `controls` list collected when the row was built, so D147's
-   live-DOM drift correction survives. `mountComponent` ignores a pinned
-   instance that is already destroyed and `unmount` nulls `component`/
-   `instance`, so a cached vnode can be unmounted by a branch toggle and
-   mounted again.
+1. **An item-form `{#for}` is a persistent list block.** Each site compiles to
+   `__l(this, owner, id, coll, (s) => …, __L<id>)` instead of `.map`, backed by
+   `client-runtime/views/listBlock.js` via the `listRows` export. `listRows as
+   __l` is imported **only by a file that lowers a site** (like
+   `displayValue as __s`), so loop-free apps don't bundle it; nothing in
+   `PuzzleView` imports it. The block keeps per-key row state (item, index,
+   stored record revision, live scope object `s`, last vnode subtree, static
+   caches, nested blocks) and returns the **cached subtree** for an unchanged
+   row; the returned array is spliced where `.map()`'s was, so keyed patching,
+   mixed keyed/unkeyed pairing, leaving rows and FLIP are untouched.
+   **A row is dirty when**: its item is a plain object/array/function (always);
+   a record's reference or revision changed; a primitive is `!==`; the body
+   reads the counter and the index moved; a parent root the body reads is set
+   in the per-render `__dirty` mask over `Class.__roots`; or the site is
+   `volatile` — it calls a clock function (codegen's `clockFunctions`:
+   `timeago`) or reads a loop local of an ENCLOSING site. Sites reading a
+   relation, computed getter or deep path are **conservative** (checked once
+   per model class against the schema) and never cache record rows. A null or
+   duplicate key builds uncached (duplicate warns once in dev). A nested
+   block's owner is the enclosing row, so inner blocks die with it.
+2. **`patch()` short-circuits when old and new are the same object**, except:
+   a live component's `el` is refreshed from the instance, and a component
+   vnode with no live instance falls through to recovery. Cached subtrees
+   re-assert controlled form values from a `controls` list collected at build
+   (D147), including a vnode that is itself a controlled element.
+   `collectControls` stops at an `island`'s children and walks through
+   `<Portal>` children.
 3. **Static subtrees are built once** per instance (`this.__c[n]`) or per row
-   (`s.c[n]`): a maximal fully-static subtree of three or more vnodes, or a
-   **fully static `island` element's children array at any size**. The island
-   case is the one cache site with no SIZE threshold — D44 seeds those children
-   once at mount and forbids the patcher from reconciling them again, so
-   rebuilding them is pure waste however small the seed is — but it is not
-   exempt from the static requirement. `??=` is per view instance (or per row),
-   while D44 re-seeds an island from the template on a key-reset remount and a
-   hide/show remount does the same, so a cached DYNAMIC seed would hand every
-   later mount the FIRST render's values: `<div island key={reset}><b>{seed}
-   </b></div>` would show the old seed forever. A static seed is identical on
-   every mount, so caching it is exact. The island ELEMENT is still wrapped only
-   when it is fully static. Never inside a snippet body (stamped per expansion,
-   no owner), never anywhere inside a **non-lowered loop body** — see the
-   `mapDepth` rule below — never a subtree holding a controlled
-   `value`/`checked`, and never the render root: roots are emitted by
-   `emitComponentRoot`/`emitSkeletonRoot`, which do not go through the cache
-   wrapper at all.
+   (`s.c[n]`): a maximal fully-static subtree of ≥3 vnodes, or a fully static
+   `island` element's children at any size. A **dynamic** island seed is never
+   cached — [[DECISION-D44-DOM-ISLANDS]] re-seeds on key-reset and hide/show
+   remount, and a per-instance cache would replay the first render's values.
+   Never cached: inside a snippet body, inside a non-lowered loop body, a
+   subtree holding controlled `value`/`checked`, or the render root.
 4. **Records carry a render revision** — the store notification sequence of
-   the last observable mutation, under a Symbol exported by
-   `client-runtime/renderRev.js` (its own import-free module: `store.js` writes
-   it and `views/` reads it, and neither side may import the other). It is
-   defined non-enumerable at `_instantiate` beside `_type` so every record
-   keeps one hidden class, and written in `Store._notify`; every mutation path
-   reaches `_notify`. A component receiving a record prop compares against a
-   **snapshot** of that revision stored on the child when props were applied
-   (`__propRevs`, written at mount and at every `applyParentUpdate` carrying
-   props), never against the old prop object — after an in-place mutation both
-   sides hold the same already-advanced record. Relation and computed-getter
-   changes still require the child to query in its own `data()`.
+   the last mutation, under a Symbol from `client-runtime/renderRev.js` (its
+   own import-free module shared by `store.js` and `views/`), defined
+   non-enumerable at `_instantiate` and written in `Store._notify`. A child
+   with a record prop compares against a **snapshot** (`__propRevs`, written at
+   mount and each props-carrying `applyParentUpdate`), never the old prop
+   object, which after an in-place mutation is the same advanced record.
 5. **Loop handlers are identity-stable**: a handler whose arguments read only
-   lowered-loop locals (and the DOM `event`) rewrites those locals to the row
-   scope and caches the closure on the row (`(s.h<n> ??= …)`), reading the
-   current item at fire time. Its arguments are lowered like any expression,
-   guarded included (`remove(todo.id)` → `this.events.remove(s.item?.id)`). A
-   handler whose arguments read a data root (`__d`) or call a library function
-   (`__f`) is not data-independent: it keeps its fresh closure every render,
-   and its roots join the site's mask. Handler arguments contribute no other
-   row facts — no `fields`, no `deep`, no counter read, no volatility: they are
-   evaluated at fire time against `s.item`/`s.i`, which `listRows` reassigns on
-   every pass even for a cached row, so they never see a stale value, and an
-   enclosing row's local read there makes no site volatile. The condition of a
-   handler-valued conditional is a render read like any other, and such a
-   value is never cached.
+   loop locals (and `event`) is cached on the row (`(s.h<n> ??= …)`) and reads
+   the current item at fire time (`remove(todo.id)` →
+   `this.events.remove(s.item?.id)`). A handler reading a data root (`__d`) or
+   calling a library function (`__f`) gets a fresh closure per render, and its
+   roots join the mask. Handler arguments add no other row facts (no fields,
+   deep, counter or volatility): `listRows` reassigns `s.item`/`s.i` every pass.
 6. **One flush, one `data()` run** for a child that both receives a record
-   prop and queries that record: `Store` publishes `_flushSeq` for the
-   duration of delivery, and a refresh started inside it stamps `_settleMark`
-   on commit, so the child's own `onStoreChange(seq)` takes the existing
-   `seq <= _settleMark` early return ([[DECISION-D161-AUTO-FETCHING-FINDS]]'s
-   mechanism, one more case).
+   prop and queries it: `Store` publishes `_flushSeq` during delivery and a
+   refresh inside it stamps `_settleMark`, reusing
+   [[DECISION-D161-AUTO-FETCHING-FINDS]]'s early return.
 
-**Three body kinds are not lowered, and nothing nested inside one is lowered or
-cached either.** A **`<Snippet>` body** is stamped fresh per expansion, so a
-block keyed by site id would be shared between stamps. A **range `{#for}`
-body** and an **item-form body that fell back to `.map`** are the same rule,
-tracked in the emitter as `mapDepth`: a non-lowered loop body is emitted ONCE
-and evaluated per iteration, so a block or a cache slot taken inside it is
-shared by every iteration — the same row vnode objects mounted at N DOM
-positions, where a change to the source array reaches only the last one, and one
-static vnode whose `el`, `ref=` and outside-listener teardown all point at the
-last iteration. An **explicit `key=` is hoisted into the site meta** as
-`(item) => <expr>` only when it reads nothing that lives inside `render()`: the
-meta const sits at module scope, where `__d` and `__f` do not exist. A key
-reading a data root, or calling a library function (`key={ slug(id) }` reads
-`__f`), keeps `.map` for the whole site rather than emitting a module-scope
-arrow that would throw — and that fallback body is one of the non-lowered
-bodies above. The synthetic key (`ViewNode.keyOf(item)`) is always hoisted.
+**Non-lowered bodies** — a `<Snippet>` body, a range `{#for}` body, and an
+item body that fell back to `.map` — lower and cache nothing inside them
+(`mapDepth` in the emitter): such a body is emitted once and run per
+iteration, so a block or cache slot there would be shared across iterations.
+An explicit `key=` is hoisted into module-scope site meta only if it reads
+nothing from `render()`; a key reading `__d` or `__f` keeps `.map` for the
+site. The synthetic `ViewNode.keyOf(item)` key is always hoisted.
 
-**A read of a loop local owned by an ENCLOSING site makes the reading site
-volatile**, and every site between it and the owner with it. A nested block only
-runs at all when its enclosing row runs, so "this body depends on what the outer
-row supplies" is exact rather than an over-approximation; without it an inner
-row whose own item did not change comes back cached while the outer row's item
-or counter moved underneath it, and a middle site that cached its rows would
-never re-invoke the inner block at all.
+**Row facts come from the expression tree** (`codegen/lower.go`): a record
+local is on identity only as a direct member (`todo.text`, joining `fields`)
+or the whole value (`{ todo }`). A deeper path, computed member, method call,
+or any opaque use (function argument such as `{ byline(post) }`, operand,
+template-literal part, array element, object value) marks the site `deep`.
 
-**A read the compiler cannot see through is conservative.** Row facts are read
-off each expression's tree (`compiler/internal/codegen/lower.go`, D176), never
-off its source text. A bare record local is on identity ONLY as a direct member
-access (`todo.text`, `todo?.text` — the field joins the site's `fields`) or as
-the whole expression (`{ todo }`, `todo={ todo }`). A deeper path
-(`todo.author.name`), a computed member (`todo[k]`) or a method call on the
-local or a path off it (`todo.text.trim()`) marks the site `deep`. Used any
-other way the local is opaque and marks the site `deep` as well, the same path
-a relation read takes: passed to a function (`{ byline(post) }` hands the
-function the record itself) or into a method's arguments, used as an operand,
-a template-literal part, an array element or an object value.
+**Row scope names are reserved by mangling**: rows use `s`, `s1`, …; an
+authored binding with that spelling that stays bare in a lowered body (range
+counter, fallback loop local, snippet parameter, arrow parameter) becomes
+`__pzl<name>`. `s` itself never moves — it is the fixture byte contract.
 
-**Row scope names are reserved by mangling, not by hoping.** The row scope
-objects are `s`, `s1`, …, so an authored binding spelled the same way that stays
-BARE inside a lowered body — a range counter, a non-lowered loop's item or
-counter, a `<Snippet>` parameter, an arrow parameter — is rewritten to
-`__pzl<name>` and its reads resolve through the scope map like any loop local.
-(A snippet still declares its AUTHORED parameter name in `params` and
-destructures it to the mangled local.) The row scope names themselves never
-move: `s` is the byte contract in the todos fixtures. It is the same mechanism
-that renames the DOM event parameter to `__ev` when an authored binding owns
-`event`.
+**Patcher invariants the caches require** (`viewManager.js`):
 
-## Alternatives rejected
+- A vnode present in both old and new unkeyed lists pairs with itself (a
+  cached vnode can shift index behind a variable-length unkeyed run).
+  `patchIndexedChildren` pre-scans for a reused vnode (`el != null`) not at its
+  positional partner and hands the list to `patchKeyedChildren`, which
+  re-pairs with an identity Set.
+- A cached vnode inside a fresh, shifted parent is reached by the incoming
+  tree first; `keepOutgoing`/`outgoingOf` snapshot its links (el, component,
+  instance, html nodes, portal range) so the old position releases or patches
+  the copy it describes. The map lives for one outermost render. Such a
+  nested subtree is remounted, not moved.
+- `patch()`'s replace arm unmounts before it mounts (a cached subtree is the
+  same object in both trees).
+- A block that missed a render rebuilds every row: it records the view's
+  `__rgen` counter, since the root mask is a per-render delta. An errorView
+  retry bumps `__rgen` so a failed child under a cached row is revisited.
+- `mountComponent` ignores a destroyed pinned instance and `unmount` nulls
+  `component`/`instance`, so a cached vnode can unmount and remount.
 
-- **Compiled direct-DOM output (Svelte 5 / Solid shape).** Measured larger on
-  real Puzzle templates (see Context); its CPU win is mostly reachable with the
-  pieces above; it required rewriting router composition, takeover, prerender,
-  DevTools and ~60 test files and carried several behavior changes.
-- **The original GPT handoff's runtime dependency layer** (per-row store
-  subscriptions, leases, render receipts, a second scheduler, a shared
-  `ChildDomain`, a VDOM-bridge stage, a legacy renderer subpath): the parent's
-  `data()` must re-run anyway, so a pull-based revision compare during its pass
-  gives the same isolation with no subscription lifecycle.
-- **Signals / proxies on records:** against the plain-class model; the revision
-  + snapshot rule gives record-level invalidation without them.
-- **Per-site memoization of dynamic subtrees outside loops:** deferred to 0.8.x
-  pending measurement; lists are where the N× cost is.
-- **Observing direct field assignment** (accessors per schema field on the
-  prototype): would change record shape (`toJSON`, `Object.keys`, hydration);
-  out of scope, noted as the way to make revisions exact later.
+## Work gates (`npm run bench`, asserted exactly)
+
+- `keyed-list/update-one/1000`: klRowsTouched 1, childDataRuns 1.
+- `keyed-list/update-all/1000`: 1000 / 1000. `keyed-list/reorder/1000`: 0 / 0
+  (moves only).
+- `route-churn`: navigate-burst rcAncestorRenders 1,200; params-burst 600 —
+  the reused-ancestor cascade is O(depth).
+- `listener-churn/count-listeners/10000/churn`: 0 add/removeEventListener.
+- `islands/shell-renders/20000`: islandViolations 0,
+  islandChildVnodesPerRender 20,000 (dynamic seed, uncached).
+- `deep-nest`: nodeDataRuns 1 of 1,536 for a single-node write.
+
+Bundle size is reported by `npm run measure:size` (hello-world, todos); no byte
+gate is enforced. A loop-free app pays for `__c`, `__dirty`/`__roots`,
+`__propRevs`/`propsEqual`, `RENDER_REV`, the identity short-circuit and
+`syncControl`, not `listBlock.js`.
+
+## Alternatives
+
+- **Compiled direct-DOM output (Svelte 5 / Solid)** — measured 25–27% larger
+  gzipped on five real templates even with every emitter lever (static HTML
+  strings compress worse than vnode literals; break-even ~13 templates), and
+  it meant rewriting router composition, takeover, prerender and DevTools.
+- **A runtime dependency layer** (per-row subscriptions, leases, a second
+  scheduler) — the parent's `data()` re-runs anyway; a pull-based revision
+  compare gives the same isolation.
+- **Signals / proxies on records** — against the plain-class model.
+- **Observing direct field assignment** (schema accessors) — changes record
+  shape (`toJSON`, `Object.keys`, hydration); the path to exact revisions later.
+- **Per-site memoization outside loops** — deferred pending measurement.
+- **Full-depth pre-scan or pass-stamp release for shifted nested vnodes** —
+  O(tree) per level / cannot tell a vnode's own old element from an adopted one.
+- **Not built: dynamic island seed as a per-render thunk** evaluated at mount
+  only (one closure instead of N vnodes, correct on remount); needs ViewNode,
+  mount and the SSG serializer to accept thunk children.
 
 ## Consequences
 
 
-- Contracts, spelled out in the SPEC ([[DOC-SPEC-TEMPLATE]] §28/§31,
-  [[DOC-SPEC-ANATOMY]] §4): a record prop invalidates
-  its child on the record's own mutations (a child that needs a *related*
-  record's changes must query it — the documented idiom); row caching does not
-  observe direct field assignment on a record, so mutate through `update()` or
-  a store path; plain objects never cache; loop handlers are stable; controlled
-  inputs in cached rows are re-asserted from the controls list. Nothing else
-  observable changes: keys, sibling namespace, branches, skeletons, slots,
-  portals, animations, SSG output, takeover, router, DevTools protocol, HMR.
-- **A library function must be a pure function of its arguments.** That was
-  always the intent and is now load-bearing: a cached row does not re-run its
-  calls, so a function that reads the clock or any other ambient value would
-  freeze its output. The one shipped function that does, `timeago`, is named
-  in codegen's `clockFunctions` and makes a site `volatile`; an app-registered
-  function is pure by contract. A value that depends on the clock or other
-  ambient state is computed in `data()` and read as a field: a parent root that
-  changed this render dirties every row that reads it.
-- The root dirty mask is 32-bit and the compiler caps `__roots` at 31 entries;
-  a site reading a root past the cap is marked `volatile` (always dirty) rather
-  than silently landing in the wrong bit. A template whose loops read no parent
-  root emits no `__roots` and skips the mask computation entirely.
+- Contracts ([[DOC-SPEC-TEMPLATE]] §28/§31, [[DOC-SPEC-ANATOMY]] §4): a record
+  prop invalidates its child on the record's own mutations (related records
+  must be queried); row caching does not see direct field assignment — mutate
+  through `update()` or a store path; plain objects never cache. Nothing else
+  observable changes (keys, branches, slots, portals, SSG, takeover, router,
+  DevTools, HMR).
+- **Library functions must be pure.** A cached row does not re-run calls;
+  clock-dependent values are either `timeago` (volatile) or computed in
+  `data()`.
+- The root mask is 32-bit; `__roots` caps at 31 entries and a site reading a
+  root past the cap is `volatile`. No parent-root reads → no `__roots`.
 - Reserved names: `__lists`, `__c`, `__dirty`, `__propRevs` on instances and
-  `__roots` on the class are **property reservations** documented in SPEC §4 —
-  nothing enforces them, exactly as `__h`/`__ref`/`__bind` are not enforced.
-  The enforced names are module-scope: the `__L<n>` meta consts and the import
-  local `__l`, both checked by `scriptcollide.go`'s reserved-binding check,
-  because a `<script>` binding one would be a real duplicate declaration in the
-  emitted module. Each is reserved only for a file that actually emits it, so a
-  loop-free `.pzl` may still declare `__l` or `__L0`. There is no `__list`
-  instance method: the block is reached through the import. The emitter also
-  claims `__pzl<name>` for an authored binding it has to mangle out of the row
-  scope's way; authored names cannot start with `__`, so that space is free.
-- `component-prop-bailout.test.js` pins the new measurement: one changed record
-  wakes one child. The hand-written fresh-closure arm stays as characterization
-  of a cost an authored view can still pay.
+  `__roots` on the class are unenforced property reservations (SPEC §4;
+  `__rgen` is internal too but not listed there). The module-scope `__L<n>`
+  metas and the `__l` import are enforced by `scriptcollide.go`, only in files
+  that emit them. `__pzl<name>` is the mangling space.
+- Tests: `component-prop-bailout`, `static-cache-shift`,
+  `patch-replace-ordering`, `list-cache-invalidation`, `list-control-replay`
+  (vitest); `listblock_test.go`, `static_cache_test.go` (Go).
 - Dev counters in [[FILE-DEVPERF]] report rows cached / rebuilt / conservative
-  sites and static sites allocated, so an author can see why a list is still
-  rebuilding every row.
+  sites and static sites allocated.

@@ -8,31 +8,26 @@ connections:
   - DOC-COMPILER-DESIGN
   - DOC-SPEC-ANATOMY
   - DECISION-D03-SCRIPTS-REAL-JS
+  - DECISION-D10-PROTOTYPE-RENDER
 code_refs:
   - compiler/internal/codegen/classname.go
   - compiler/internal/codegen/codegen.go
 verified_sha: c809db6680eb9355961897756f54e97f1164b88f
-notes:
-  - kind: verified
-    text: >-
-      Class-name extraction re-truthed against classname.go's token scan: abstract modifier,
-      unrestricted extends target, filename fallback.
-    sha: c809db6680eb9355961897756f54e97f1164b88f
 ---
 
-# D24 — Compiled component name comes from the export default class declaration
-
-Settled. The compiler extracts the component class name by scanning the `<script>` token stream for the mandated `export default class <Name>` declaration — a read-only lookup, never a rewrite.
-
-## Context
-The compiler appends `Name.prototype.render = function () {…}` after the user's `<script>`, so it needs the class name — but the Go side never parses JavaScript ([[DECISION-D03-SCRIPTS-REAL-JS]]).
+# D24 — The compiled component name comes from the `export default class` declaration
 
 ## Decision
+[[DOC-SPEC-ANATOMY]] §4 mandates `export default class <Name> extends …` in `<script>`. The compiler reads `<Name>` from the shared `<script>` token stream (`tokenizeJS`, computed once per compile; it also feeds the import-collision and reserved-binding scans) as the first **real** `export` → `default` → `class` sequence — none of the three inside a string, template literal, comment or regex, so a commented-out `export default class Fake` cannot win. It is a read-only lookup for the `Name.prototype.render` assignment ([[DECISION-D10-PROTOTYPE-RENDER]]); `<script>` stays byte-for-byte verbatim.
 
-[[DOC-SPEC-ANATOMY]] §4 mandates that `<script>` contains `export default class <Name> extends PuzzleView`; the compiler extracts `<Name>` from the shared `<script>` token stream (`tokenizeJS`, computed once per compile, and also feeding the import-collision and reserved-binding scans) by finding the first REAL `export` → `default` → `class` keyword sequence — "real" meaning none of the three sits inside a string, template literal, comment, or regex literal, so a commented-out `export default class Fake` at column 0 cannot win the match. A TypeScript `abstract` modifier between `default` and `class` is accepted, as are generic parameter lists on the declaration. `<script>` itself stays byte-for-byte verbatim. An anonymous default class (`export default class extends …`) is a build error ("name your component class"), and so is a named default class with no class-level `extends` clause; the base identifier is deliberately unrestricted, because a component may extend an intermediate base class rather than `PuzzleView` directly. `<Name>` is any JavaScript identifier, Unicode included (`Übersicht`, `概要`, `Straßenkarte`), read with the `jsident` rules the expression language and the template tag lexer share ([[DECISION-D176-EXPRESSION-LANGUAGE]] rule 8). A name the scan cannot read to its end — a `\u` escape inside it, or a letter newer than Go's Unicode tables, such as U+30FB in `データ・一覧` — is a positioned build error at the name, never a `prototype.render` assignment against a cut name that crashes the module on load. A `.pzl` with no `<script>` at all is legal: codegen synthesizes the module — the runtime import plus an empty `PuzzleView` subclass named from the filename, each rune that cannot continue an identifier replaced with `_` (`Übersicht.pzl` → `Übersicht`) — and compiles the rest exactly as if the user had written it. This matches the Phase 1 golden fixture exactly as written (`Home.pzl` → `TodoHome.prototype.render`), so golden file #1 needs no churn.
+- A TypeScript `abstract` modifier and generic parameters on the declaration are accepted.
+- The `extends` target is unrestricted (a component may extend an intermediate base class), but a class-level `extends` is required.
+- An anonymous default class is a build error ("name your component class").
+- `<Name>` is any JavaScript identifier, Unicode included, read with the shared `jsident` rules ([[DECISION-D176-EXPRESSION-LANGUAGE]] rule 8). A name the scan cannot read to its end (a `\u` escape, a letter newer than Go's Unicode tables) is a positioned build error, never an assignment against a truncated name.
+- A `.pzl` with no `<script>` is legal: codegen synthesizes the runtime import plus an empty `PuzzleView` subclass named from the filename (non-identifier runes become `_`).
 
 ## Alternatives rejected
-- **Filename-derived naming** (the original default plan in COMPILER_DESIGN §b) — breaks the canonical app itself, where `Home.pzl` exports `class TodoHome`.
-- **Real JS parsing** — violates [[DECISION-D03-SCRIPTS-REAL-JS]].
-- **Substituting `export default` with a compiler-owned binding** (`const __PzlSelf = …; export default __PzlSelf`) — works but rewrites user bytes and muddies the verbatim guarantee for no gain.
-- **A line-anchored regex over the raw `<script>` bytes** — cheap, but a commented-out or stringified `export default class` at the start of a line wins the match and emits a `prototype.render` assignment against a name that does not exist at module load.
+- Filename-derived naming — breaks the canonical app, where `Home.pzl` exports `class TodoHome`.
+- Real JS parsing — violates [[DECISION-D03-SCRIPTS-REAL-JS]].
+- Substituting `export default` with a compiler-owned binding — rewrites user bytes for no gain.
+- A line-anchored regex over raw `<script>` — a commented-out or stringified declaration wins the match and crashes the module on load.

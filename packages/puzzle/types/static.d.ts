@@ -48,7 +48,7 @@ export interface MountStaticOptions {
 	adapter?: PuzzleAppConfig['adapter'];
 	/**
 	 * Normalized route URL prefix. The app's `routerMode` is deliberately NOT
-	 * carried into a static page (D117/D159): static output has no router and its
+	 * carried into a static page (D81/D159): static output has no router and its
 	 * files are path-shaped on disk, so `ctx.router.url()` (and therefore the
 	 * `link` formatter) always emits history-style hrefs — but a sub-path deploy
 	 * still wants them prefixed.

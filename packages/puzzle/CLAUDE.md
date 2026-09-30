@@ -65,7 +65,7 @@ enforced, not merely advised.
   manual publish via
   `npm run release:prep` — there is no CI publish). Everything from D88 onward
   shipped in `0.3.0` — minor, not patch: two new export subpaths (`./testing`,
-  `./fixtures`) plus breaking changes in D110/D111/D112. **`0.3.0` is published
+  `./fixtures`) plus breaking changes in D110, D112 and build-time-only managed head tags (D84). **`0.3.0` is published
   but BROKEN and deprecated** — its registry metadata carries no
   `optionalDependencies`, so it installs the CLI shim with no platform binary
   and `puzzle` exits 1 on every machine (D120). `0.3.1` is the same feature set,
@@ -84,11 +84,11 @@ enforced, not merely advised.
   route field (D87/v1.53) — and the dev-server port scan (D90/v1.54). Then the
   framework-gap round (D91-D98: adapter `beforeRequest`, dev build errors in
   the browser, router focus + route announcement, `/testing`, `/fixtures` +
-  mock adapter), agent-skill upgrade ergonomics (D97/D99), the DevTools
+  mock adapter), agent-skill upgrade ergonomics (D78), the DevTools
   runtime bridge (D100 — the extension's v1 is built and smoke-verified in its
   separate public repo `magic-spells/puzzle-devtools`), and a deep-review
   hardening round (D110 `dev.proxy` prefix
-  validation, D111 managed head tags build-time only).
+  validation, managed head tags build-time only per D84).
 - `0.4.0` (2026-07-28): the perf round (D121/D122 profiler + DevTools
   protocol), the Grok review rounds (D132/D133), D134 capitalized composition
   markers + ecosystem migration, and D135–D143 (marker fallback bodies, hybrid
@@ -421,7 +421,7 @@ GitHub, never deleted.
   removes the module entirely.
 - `head.js` / `headTags.js`: route head resolution. `head.js` resolves the four
   reserved `meta` fields and syncs `document.title`; `headTags.js` is
-  build-time only — the SSG injector is its sole consumer (D111).
+  build-time only — the SSG injector is its sole consumer (D84).
 - `morph.js`: optional morph-engine integration.
 - `ssg/`: route prerender orchestration, ViewNode-to-HTML serialization, and the
   shared DOM-free chain assembly used by both prerender modes.

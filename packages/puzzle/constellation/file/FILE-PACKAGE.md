@@ -6,47 +6,40 @@ language: JSON
 summary: The public npm manifest — exports map, files allowlist, bin shim, and the pack-time hook wiring.
 connections:
   - DOC-RELEASE-SURFACE
-  - DECISION-D116-PACK-TIME-PIN-INJECTION
+  - FLOW-RELEASE
+  - DECISION-D120-TARBALL-PUBLISH
 verified_at: '2026-08-24T21:39:23.520Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
-notes:
-  - kind: verified
-    text: >-
-      Re-verified against current code and corrected: at least one claim on this card no longer
-      matched the runtime, and the card was rewritten to state what the code actually does. Verified
-      at this sha with the framework suite green at 1871 tests.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # package.json
 
 The root manifest of the published `@magic-spells/puzzle` package. This card
-owns the shape; per-mechanism rationale lives on the connected cards.
+owns the shape; the release mechanics live on [[FLOW-RELEASE]] and
+[[DECISION-D120-TARBALL-PUBLISH]].
 
-- **Exports map** — eight subpaths follow the same pattern, each pointing into
-  `client-runtime/` with a `types` condition into `types/`: the root (`.`),
-  `./adapter`, `./morph`, `./router-modes`, `./ssg`, `./static`, `./testing`,
-  and `./fixtures`. Two are shaped differently — `./puzzle-env` is types-only
-  (the `.pzl` ambient-module shim) and `./formatters/manifest` is a bare
-  string into `client-runtime/formatters/builtins-all.js` with no `types`
-  condition. A new subpath of the normal shape needs all three of: the exports
-  entry, a `types/<name>.d.ts`, and a `tests-types/tsconfig.json` path
-  mapping — the `/static` subpath shipped without the third and was never
-  type-checked until the 0.3.0 round.
+- **Exports map** — eight normal subpaths point into `client-runtime/` with a
+  `types` condition into `types/`: `.`, `./adapter`, `./morph`, `./router-modes`,
+  `./ssg`, `./static`, `./testing`, `./fixtures`. Three are shaped differently:
+  `./puzzle-env` is types-only (the `.pzl` ambient-module shim), and
+  `./formatters/manifest` and `./i18n/manifest` are bare strings into
+  `client-runtime/` with no `types` condition. A new normal subpath needs all
+  three of: the exports entry, a `types/<name>.d.ts`, and a
+  `tests-types/tsconfig.json` path mapping — without the third it is never
+  type-checked.
 - **`files` allowlist** — `client-runtime` (with `!client-runtime/**/*.go`
-  excluding the compiler sources that live under it), `types`,
-  `puzzle-env.d.ts`, `bin/puzzle.js`, and `CHANGELOG.md`; enforced two-sidedly
-  by `scripts/verify-pack.mjs` against the REAL packed tarball
-  ([[DECISION-D116-PACK-TIME-PIN-INJECTION]]).
-- **No tracked `optionalDependencies`** — the five platform pins are injected
-  by `prepack` and removed by `postpack` (D116); verify-pack fails if the
-  working-tree manifest carries them before or after packing, and its
-  committed-manifest check reads this file as `git show HEAD:./package.json` —
-  the `./` is load-bearing, since a bare `HEAD:package.json` resolves from the
-  monorepo top and would inspect the private root shell instead.
-- **`bin`** — the `puzzle` shim that resolves and execs the platform binary.
-  It keys the platform packages by `process.platform`/`process.arch`, so the
-  Windows package is `puzzle-win32-x64` (not `-windows-`) and the file it
-  resolves inside it is `bin/puzzle.exe`.
-- Also the version source the release scripts assert against `version.go`
-  and the five platform manifests.
+  excluding compiler sources that live under it), `types`, `puzzle-env.d.ts`,
+  `bin/puzzle.js`, and `CHANGELOG.md`; enforced both ways by
+  `scripts/verify-pack.mjs` against the real packed tarball.
+- **No tracked `optionalDependencies`** — the five platform pins (`npm/puzzle-*`)
+  are injected by `prepack` and removed by `postpack`; verify-pack fails if the
+  working-tree manifest carries them before or after packing. Its
+  committed-manifest check reads `git show HEAD:./package.json` — the `./` is
+  load-bearing, since a bare `HEAD:package.json` resolves from the monorepo top
+  and would inspect the private root shell.
+- **`bin`** — the `puzzle` shim that resolves and execs the platform binary,
+  keyed by `process.platform`/`process.arch`: the Windows package is
+  `puzzle-win32-x64` (not `-windows-`), its file is `bin/puzzle.exe`, and a native
+  ARM64 Node on Windows maps to that x64 package.
+- The version here is what the release scripts assert against `version.go` and
+  the five platform manifests.

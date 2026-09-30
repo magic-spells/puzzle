@@ -119,7 +119,7 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 // any third-party bundler keep the takeover path.
 //
 // There is deliberately no managed-head define. The browser never syncs og:/
-// twitter:/canonical tags in ANY output mode (D111, amending D89): crawlers fetch
+// twitter:/canonical tags in ANY output mode (D84, amending D89): crawlers fetch
 // each URL fresh from the server and never client-navigate, so the tags the SSG
 // baked into that page's HTML are always the ones they read. The tab <title> is
 // a separate, always-in concern handled by head.js syncTitle.

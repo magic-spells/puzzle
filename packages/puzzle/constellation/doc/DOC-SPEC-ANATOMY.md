@@ -9,39 +9,32 @@ connections:
   - DOC-VIEW-LIFECYCLE
 verified_at: '2026-08-14T05:01:28.843Z'
 verified_sha: d74916a0e021b6bb86394551171838fbab161347
-notes:
-  - kind: verified
-    text: >-
-      Sections moved byte-for-byte from DOC-SPEC (scripted split, verified by SHA-identical section
-      census); §N numbers unchanged
-    sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
 ---
 
-The frozen v1 contract for app shape: exports and entry points, the app config surface, `.pzl` file anatomy, the real-JavaScript `<script>` rule, component context, project layout, TypeScript scripts, scoped styles, and the `@` module alias. See [[DOC-SPEC]] for the section index and the rest of the contract.
+The contract for app shape: exports and entry points, the app config surface, `.pzl` file anatomy, the real-JavaScript `<script>` rule, component context, project layout, TypeScript scripts, scoped styles, and the `@` module alias. See [[DOC-SPEC]] for the section index.
 
 ## 1. Naming & entry points
 
-The runtime ships as the npm package `@magic-spells/puzzle` with four exports:
+The runtime is the npm package `@magic-spells/puzzle`:
 
 ```js
-import { PuzzleApp, PuzzleView, PuzzleModel, Puzzle } from '@magic-spells/puzzle';
+import { PuzzleApp, PuzzleView, PuzzleModel, Puzzle, lazy } from '@magic-spells/puzzle';
 ```
 
-| Export        | Purpose                                              |
-| ------------- | ---------------------------------------------------- |
-| `PuzzleApp`   | Application class. Instantiate once, call `.mount()`. |
-| `PuzzleView`  | Base class for all `.pzl` components/views/layouts.  |
-| `PuzzleModel` | Base class for models in `/models`.                  |
-| `Puzzle`      | Schema field builders (`Puzzle.string()`, …).        |
+| Export | Purpose |
+| --- | --- |
+| `PuzzleApp` | Application class. Instantiate once, call `.mount()`. |
+| `PuzzleView` | Base class for every `.pzl` component, view and layout. |
+| `PuzzleModel` | Base class for models in `app/models`. |
+| `Puzzle` | Schema field builders (`Puzzle.string()`, …). |
+| `lazy` | Lazy route views (§62). |
 
-Decisions this locks in:
+The root also exports `PuzzleValidationError` (§20) and, for compiled modules only, `FormatterRegistry`, `ViewNode`, the marker tags, `displayValue`, `listRows`, `loopItems` and `loopRange` — not user surface. Subpaths: `./adapter` (§58), `./router-modes` (§15), `./morph`, `./ssg`, `./static`, `./testing` (§53), `./fixtures` (§52), `./puzzle-env`.
 
-- The app class is **`PuzzleApp`** (the runtime's internal `Puzzle` class is renamed; the `Puzzle` name now belongs to the schema-builder namespace).
-- Apps start with **`app.mount()`**. `app.run()` is removed.
-- Components are **class-based** (`extends PuzzleView`). The `Puzzle.createView` functional path and the duplicate view class generated inside `client-runtime/main.js` are removed.
-- `PuzzleView` is a **plain JavaScript class** — not a custom element, no shadow DOM; the ViewManager owns all DOM mounting and patching (D15/D17, see [[DOC-VIEW-LIFECYCLE]]). `<puzzle-view>` survives as the template root element name only.
+- Apps start with **`app.mount()`**.
+- Components are **class-based** (`extends PuzzleView`). `PuzzleView` is a **plain JavaScript class** — not a custom element, no shadow DOM; the ViewManager owns all DOM mounting and patching ([[DOC-VIEW-LIFECYCLE]]). `<puzzle-view>` is only the template root element name.
 
-## 2. App configuration (v1 surface)
+## 2. App configuration
 
 ```js
 // app.js
@@ -52,25 +45,25 @@ import models from './models/index.js';
 
 const app = new PuzzleApp({
   target: '#app',       // CSS selector for the mount element
-  routes,               // array of route definitions
-  models,               // model registry from /models/index.js
-  adapter,              // optional: installs server sync for model adapter configs
-  formatters: {         // optional: app-level template formatters
+  routes,               // route definitions
+  models,               // model registry from app/models/index.js
+  adapter,              // optional: server sync capability (§58)
+  formatters: {         // optional: the app's own template functions
     byline: (name) => (name ? `By ${name}` : 'By an unknown author'),
   },
-  apiURL: '/api',       // optional: base URL for future remote adapters
+  apiURL: '/api',       // optional: base URL for adapter requests
 });
 
 app.mount();
 ```
 
-That is the **entire** v1 config surface: `target`, `routes`, `models`, `formatters`, `apiURL`. (v1.5 adds an optional `scrollBehavior` — see §14; v1.6 adds an optional `routerMode`, an imported mode object since D159 — see §15; v1.19 adds an optional `routerBase` — see §23; v1.24 adds an optional `transitionMode` — see §26; v1.31 adds optional `beforeMount`/`mounted`/`beforeUnmount` app lifecycle hooks — see §34; v1.67/v1.71 add the optional `onError` hook and `errorView` view — see §60; v1.72 adds the optional `adapter` capability — see §58.) App-level `settings`, `computed`, global `events` (including keyboard-shortcut strings), and `methods` remain deferred — see the cut list. An app formatter named like a standard built-in (`pluralize`, `currency`, …) replaces it, with a development warning (D174).
+The whole config surface: `target`, `routes`, `models`, `formatters`, `apiURL`, plus the optional `adapter` (§58), `beforeRequest` (§49), `storage` (a Storage-like object for persistence, §8), `scrollBehavior` (§14), `focusBehavior` (§51), `routerMode` (an imported mode object, §15), `routerBase` (§23), `transitionMode` (§26), `beforeMount`/`mounted`/`beforeUnmount` (§34), and `onError`/`errorView` (§60). Translations are configured in `puzzle.config.js`, not here (§66). The `formatters` key registers the app's template **functions** (§6); a function named like a standard one (`pluralize`, `currency`, …) replaces it, with a development warning (D174). App-level `settings`, `computed`, global `events` and `methods` are rejected ([[DOC-SPEC]] cut list).
 
 ## 3. `.pzl` file anatomy
 
 ```html
 <puzzle-view class="my-component">
-  <!-- markup + template directives -->
+  <!-- markup + template syntax -->
 </puzzle-view>
 
 <script>
@@ -83,20 +76,17 @@ export default class MyComponent extends PuzzleView { ... }
 </style>
 ```
 
-- `<puzzle-view>` is required; `<script>` and `<style>` are optional. (v1.8 adds a fourth optional section, `<puzzle-skeleton>` — see §16.) The section tags are **singular** — `<script>`, `<style>`, plus the attribute forms `<script lang="ts">` (§25) and `<style scoped>` (§29). Sections are recognized only at the top level, so a `<script>`/`<style>` **element inside a template body** is ordinary markup, not a section.
-- Component imports (other `.pzl` files) live inside `<script>`, which is where esbuild resolves them.
-- At most one `<style>` block per file. Blocks are emitted as global CSS — v1 styling is Tailwind-first via utility classes; since v1.27 a bare `scoped` attribute opts a block into per-component scoping (§29, D59).
-- **Two emission modes (D20).** Files under `app/views/**` and `app/layouts/**` compile to a real `<puzzle-view>` DOM element carrying the tag's attributes — the view boundary that navigation swaps and animations target (§12); the base stylesheet ships `puzzle-view { display: block }`. **Reusable components render inline**: the template's contents are emitted with no wrapper element, so `<CustomButton/>` renders as its `<button>` and nested components never stack wrapper elements (a list of items with buttons stays flat). For components, `<puzzle-view>` is only the template delimiter: it must carry **no attributes** (compile error — put them on your root element) and the template needs a **single root element** in v1 (fragments deferred).
+- `<puzzle-view>` is required; `<puzzle-skeleton>` (§16), `<script>` (`lang="ts"`, §25) and `<style>` (`scoped`, §29) are optional. Sections are recognized only at the top level, so a `<script>`/`<style>` **element inside a template body** is ordinary markup.
+- Component imports (other `.pzl` files) live in `<script>`, where esbuild resolves them.
+- At most one `<style>` block per file, emitted as global CSS unless `scoped`. Styling is Tailwind-first.
+- **Two emission modes (D20).** Files under `app/views/**` and `app/layouts/**` compile to a real `<puzzle-view>` element carrying the tag's attributes — the boundary navigation swaps and animations target (§12); the base stylesheet ships `puzzle-view { display: block }`. **Components render inline** with no wrapper element, so nested components never stack wrappers. For a component, `<puzzle-view>` is only the template delimiter: it must carry **no attributes** (compile error) and the template needs a **single root element**.
 
 ## 4. `<script>` blocks are real JavaScript
 
-This is the most consequential rule in the spec. The contents of `<script>` must parse as standard JavaScript — no custom dialect. The compiler extracts the block and hands it to esbuild **untouched**; the Go compiler never parses JS. Editors, ESLint, Prettier, and TypeScript work with zero special tooling. (TypeScript shipped in v1.22 via `<script lang="ts">`, transpile-only — the Go compiler still treats the body as an opaque string; see §25.)
+The contents of `<script>` are standard JavaScript (or TypeScript, §25) — no dialect. The compiler hands the block to esbuild **untouched**; the Go compiler never parses the script body. Editors, ESLint, Prettier and TypeScript work with no special tooling.
 
-Concretely, compared to older examples:
-
-- `events` and `animations` are **class fields** (`events = { ... };`), not `name: { ... }` object-literal members.
-- **No commas between class members.**
-- Handlers inside `events` **must be arrow functions.** A class field initializer evaluates during construction with `this` bound to the instance, so arrows in the field permanently capture the component as `this` — detaching the handler (as event delegation does) cannot break it. Method shorthand (`addTodo(event) { ... }`) parses but binds `this` to the events object or `undefined`; the compiler rejects it with a build error.
+- `events` and `animations` are **class fields** (`events = { ... };`), with **no commas between class members**.
+- Handlers in `events` **must be arrow functions.** The field initializer runs during construction with `this` bound to the instance, so each arrow captures the component permanently. Method shorthand (`addTodo(event) { ... }`) parses, but the runtime calls it as `this.events.addTodo(event)`, so `this` is the events object and `this.setData(...)` throws at event time. Nothing checks this at compile time.
 
 ```js
 import { PuzzleView } from '@magic-spells/puzzle';
@@ -111,7 +101,7 @@ export default class TodoHome extends PuzzleView {
     const local = this.getData();
     return {
       todos,
-      activeTodos: todos.filter(t => !t.completed),
+      activeTodos: todos.filter((t) => !t.completed),
       newTodoText: local.newTodoText,
       currentFilter: local.currentFilter,
     };
@@ -126,60 +116,50 @@ export default class TodoHome extends PuzzleView {
         this.setData('newTodoText', '');
       }
     },
-    setFilter: (filter) => {
-      this.setData('currentFilter', filter);
-    },
+    setFilter: (filter) => this.setData('currentFilter', filter),
   };
-
-  mounted() {}
-  beforeUpdate() {}
-  afterUpdate() {}
-  destroyed() {}
 }
 ```
 
 ### Class contract
 
-| Member       | Kind                      | Notes |
-| ------------ | ------------------------- | ----- |
-| `data(params, props)` | method (may be `async`) | Returns the component model. Re-runs on mount, prop change, route-param change, and subscribed store changes. `setData()` does **not** re-trigger it. **Two-layer state (§35):** each successful `data()` result **replaces** the model layer wholesale — a key an earlier run returned but the new run omits disappears from `getData()` (unless `setData` wrote it). A successful **non-object** result (`undefined`, `null`, a primitive) contributes no model: the previous model layer stands while the run still counts as a successful load (`loaded` flips and the view re-renders) — so an early-return `data()` keeps its last committed model rather than blanking the view. `setData` writes a separate persistent local layer: a `data()` commit wins over an *earlier* `setData` for the same key; a *later* `setData` wins until the next commit; local keys the model never returns survive every re-run. |
-| `events`     | class field (object of arrows) | Template-facing handlers. Arrows only. |
+| Member | Kind | Notes |
+| --- | --- | --- |
+| `data(params, props)` | method (may be `async`) | Returns the component model. Re-runs on mount, prop change, route-param change and subscribed store changes; `setData()` does **not** re-run it. **Two-layer state (§35):** each successful result **replaces** the model layer wholesale — a key the new run omits disappears from `getData()` unless `setData` wrote it. A successful **non-object** result (`undefined`, `null`, a primitive) keeps the previous model layer while still counting as a load (`loaded` flips, the view re-renders). `setData` writes a persistent local layer: a `data()` commit wins over an *earlier* `setData` for the same key, a *later* `setData` wins until the next commit, and local keys the model never returns survive every re-run. |
+| `events` | class field (object of arrows) | Template-facing handlers (§5). |
 | `created` / `mounted` / `beforeUpdate` / `afterUpdate` / `destroyed` | methods | Lifecycle hooks, in that order. |
-| `animations` | class field | Declarative enter/leave animations (v1.1) — see §12. |
-| anything else | methods/fields | Plain JS helpers, called internally. |
+| `animations` | class field | Declarative enter/leave animations (§12). |
+| anything else | methods/fields | Plain JS helpers. A template cannot call them — it has no `this` (§6). |
 
-**Reserved names (§35; amended, D170).** `PuzzleView` owns these member names; a subclass member with the same name overrides framework behavior silently, so treat the list as off-limits for helpers:
+**Reserved names.** `PuzzleView` owns these member names; a subclass member with the same name silently overrides framework behavior:
 
-- **Override points** (the contract — implement these): `data`, `render` (compiler-attached), `events`, `animations`, `transitionMode` (§33), `renderSkeleton`/`skeletonMinDuration` (§16, compiler-attached), and the hooks `created`, `mounted`, `beforeUpdate`, `afterUpdate`, `destroyed`, `viewWillShow`/`viewDidShow`/`viewWillHide`/`viewDidHide` (§12).
-- **Read-only API** (call, never redefine): `getData`, `setData`, `memo` (§32), `ctx`, and the getters `element`, `loaded`, `isDestroyed`, `params`, `props`, `route` (§19).
-- **Framework-called internals** (never touch): `mount`, `preload`, `refresh`, `applyParentUpdate`, `onStoreChange`, `flushUpdates`, `destroy`, `playIn`, `playOut`, `skipEnter`, `destroyAnimated`, `_localState`, and the compiler-reserved `__h` (§31), `__ref` (§38), `__bind` (§6), `__lists` (the per-owner `{#for}` block registry, §28), `__c` (the per-instance static-subtree cache), `__dirty` (the per-render root mask) and `__propRevs` (the record render-revision snapshot). `refs` is the framework-owned element-ref map (§38) — read it, never assign it.
-- **On the class, not the instance:** `__roots` — the ordered list of top-level `data()` keys some loop body in this template reads, stamped after the module marker (§28).
-- **At module scope:** `__L0`, `__L1`, … — one list-block meta const per item-form `{#for}` site in the file — and `__l`, the local the compiled module binds `listRows` to when it lowers at least one such site (there is no `__list` method; the block is an import, so a loop-free app never carries it). Both are hoisted beside the compiler's injected imports, and both are reserved only for a file that actually emits them. These are the reserved names a `<script>` can actually collide with, so binding one at module scope is a **positioned compile error** naming the collision, exactly as binding `ViewNode` or `SLOT_TAG` is. The instance and class names above are reservations by convention: nothing enforces them, and shadowing one silently breaks rendering.
+- **Override points:** `data`, `render` (compiler-attached), `events`, `animations`, `transitionMode` (§33), `renderSkeleton`/`skeletonMinDuration` (§16, compiler-attached), and the hooks `created`, `mounted`, `beforeUpdate`, `afterUpdate`, `destroyed`, `viewWillShow`/`viewDidShow`/`viewWillHide`/`viewDidHide` (§12).
+- **Read-only API:** `getData`, `setData`, `memo` (§32), `ctx`, and the getters `element`, `loaded`, `isDestroyed`, `params`, `props`, `route` (§19). `refs` is the framework-owned element-ref map (§38) — read it, never assign it.
+- **Framework internals:** `mount`, `preload`, `refresh`, `applyParentUpdate`, `onStoreChange`, `flushUpdates`, `destroy`, `playIn`, `playOut`, `skipEnter`, `destroyAnimated`, `_localState`, and the compiler-reserved `__h` (§31), `__ref` (§38), `__bind` (§6), `__lists` (the per-owner `{#for}` block registry, §28), `__c` (static-subtree cache), `__dirty` (per-render root mask), `__rgen` (render-pass counter a list block compares to detect a render it missed), `__walk` (one-shot "walk every vnode" flag after a child mount failure) and `__propRevs` (record render-revision snapshot).
+- **On the class:** `__roots` — the top-level `data()` keys some loop body reads (§28).
+- **At module scope:** `__L0`, `__L1`, … (one list-block meta const per item-form `{#for}` site) and `__l` (the local bound to `listRows` when the file lowers such a site), reserved only in a file that emits them. These are the only names a `<script>` can actually collide with, so binding one at module scope is a **positioned compile error**, as binding `ViewNode` or `SLOT_TAG` is. The instance and class names above are reserved by convention only; shadowing one silently breaks rendering.
 
 ### Runtime/compiler implementation rules
 
-- Generated `render()` is attached via **prototype assignment after the class definition** (`TodoHome.prototype.render = ...`). Generated code never rewrites the user's class body — sourcemaps and debugging stay honest.
-- Class fields initialize **after** `super()` returns, so the `PuzzleView` base constructor must never read `this.events`. The runtime reads `this.events` **lazily at mount time**, when wiring template handlers.
+- Generated `render()` is attached by **prototype assignment after the class** (`TodoHome.prototype.render = ...`); generated code never rewrites the user's class body.
+- Class fields initialize **after** `super()` returns, so the `PuzzleView` constructor never reads `this.events`; the runtime reads it lazily at mount, when wiring handlers.
 
 ## 10. Component context
 
-
-`this.ctx` exposes three services: `store`, `router`, `formatters`. A fourth, `i18n`, is present only when `puzzle.config.js` configures translations (v1.81, §66, [[DECISION-D175-TRANSLATIONS]]) — `ctx` gains the key only then, so an app without `i18n` keeps the three-service ctx. The extended surface in older docs (`this.$app`, `this.$events`, `ctx.utils`, global event bus) is deferred.
+`this.ctx` holds three services: `store`, `router`, `formatters` (the function registry). A fourth, `i18n`, is present only when `puzzle.config.js` configures translations (§66, [[DECISION-D175-TRANSLATIONS]]). `this.$app`, `this.$events`, `ctx.utils` and a global event bus are rejected ([[DOC-SPEC]] cut list).
 
 ## 11. Project layout & build
 
+- Source directory: **`app/`**. The entry is **`app/app.ts`** when it exists, otherwise **`app/app.js`**; both is a build error naming both files (D54 — one resolver, `build.ResolveEntry`, serves every consumer; [[DOC-SPEC-BUILD]] §13). `puzzle.config.js` stays JavaScript. Output: **`dist/`** (`dist/app.js` either way).
+- **`app/public/`** is copied verbatim into `dist/`. **`app/assets/`** is compile-time-only input for `{#svg}` (§18), never copied.
+- Translations (§66): **`app/locales/<tag>.json`**, one per locale, read only when `puzzle.config.js` declares `i18n: { locales: [...], defaultLocale: '…' }`. `locales` is a non-empty list of distinct BCP 47 tags (`-`, never `_`; compared case-insensitively) that must include `defaultLocale` (not the reserved word `default`). Every listed locale needs a file; an unlisted file is skipped with a warning, and `app/locales/` without `i18n` is a warning. Emitted as `dist/locales/<tag>.<hash>.json` ([[DOC-SPEC-BUILD]]).
+- `.pzl` compilation is an **esbuild plugin**: Go parses templates and generates render functions; esbuild owns module resolution, bundling, sourcemaps and minification.
+- CLI: `puzzle build` (production by default) and `puzzle dev` (watch + static server with history-API fallback + reload); the rest of the CLI is §13.
+- Styling: Tailwind-first via `puzzle.config.js` `styles: { use: ['tailwindcss'] }`. Sass is **not supported and will not be** ([[DECISION-D12-TAILWIND-FIRST]]) — native CSS nesting plus Tailwind cover it.
 
-- Source directory: **`app/`**. The entry is **`app/app.ts`** when it exists, otherwise **`app/app.js`**; an app with both is a build error naming both files (D54 — one resolver, `build.ResolveEntry`, serves every consumer; [[DOC-SPEC-BUILD]] §13). `puzzle.config.js` stays JavaScript. Output: **`dist/`** (`dist/app.js` either way).
-- Static files: **`app/public/`** is copied verbatim into `dist/` at build. **`app/assets/`** (v1.14, D46) is the inverse — compile-time-only inputs for `{#svg}` inlining (§18), never copied to `dist/`.
-- Translations (v1.81, §66): **`app/locales/<tag>.json`**, one per locale, read only when `puzzle.config.js` declares `i18n: { locales: [...], defaultLocale: '…' }`. `locales` is a non-empty list of distinct BCP 47 tags (`-`, never `_`; compared case-insensitively) and must include `defaultLocale` (the key is `defaultLocale`, not the reserved word `default`). Every listed locale needs a file; an unlisted file is skipped with a warning, and an `app/locales/` folder without `i18n` is a warning. The compiler emits them as `dist/locales/<tag>.<hash>.json` ([[DOC-SPEC-BUILD]]).
-- `.pzl` compilation is implemented as an **esbuild plugin** (esbuild is Go-native): the Go side parses templates and generates render functions; esbuild owns module resolution, bundling, sourcemaps, and minification.
-- CLI v1: `puzzle build` (production by default) and `puzzle dev` (watch + static server with history-API fallback + live reload via SSE full-page reload; no HMR). (v1.4 adds the scaffolding/tooling commands — see §13.)
-- Styling: Tailwind-first. `puzzle.config.js` with `styles: { use: ['tailwindcss'] }`. A Sass pipeline is **not supported and will not be** (D35) — native CSS nesting plus Tailwind cover the ground a preprocessor used to.
+## 25. TypeScript scripts: `<script lang="ts">`
 
-## 25. TypeScript scripts: `<script lang="ts">` (v1.22)
-
-
-Opt a component's logic into TypeScript. Shipped in v1.22 (D54); parser + esbuild plugin + CLI — **codegen and the runtime kernel are untouched**, and a `<script>` with no `lang` (or `lang="js"`) compiles byte-for-byte as before.
+Opt a component's logic into TypeScript (D54). Codegen and the runtime are untouched; a `<script>` without `lang` (or `lang="js"`) is JavaScript.
 
 ```html
 <puzzle-view class="home"><h1>{ title }</h1></puzzle-view>
@@ -197,37 +177,32 @@ export default class Home extends PuzzleView {
 </script>
 ```
 
-- **Attribute:** the only attribute `<script>` accepts is `lang`. `lang="ts"` → TypeScript; **absent or `lang="js"` → JavaScript** (identical to pre-v1.22). An unknown value, empty value, dynamic `lang={…}`, or a second attribute is a **positioned compile error** (with a did-you-mean for near-misses like `"typescript"`). The Go compiler still treats the `<script>` body as an **opaque string** — it never parses TS (D3).
-- **Transpile-only (like Vite):** esbuild strips types during the build, and the build never type-checks. Checking is the separate `puzzle check` (D165, [[DOC-SPEC-BUILD]] §63), which runs the app's own `tsc` over `.pzl` scripts, template expressions and the app's `.ts` modules; a plain `tsc` or an editor covers the standalone `.ts`/`.js` files and declarations included by `tsconfig.json`, not a `.pzl` `<script>` body. The generated render tail + injected import are plain JS (valid TS), so one loader covers the mixed module: the plugin sets `Loader: LoaderTS`; standalone `pzlc` runs esbuild's Transform API to strip types.
-- **`.pzl` stays the only extension** — a `.pzt` alias was considered and deferred (D54).
-- **Typings:** the package ships `types/index.d.ts` (all four exports + config/store/router/formatters, wired via `exports.types`) and a `puzzle-env.d.ts` shim (`declare module '*.pzl'` → `typeof PuzzleView`) so `import X from './X.pzl'` resolves. `examples/typed-todos` is the worked example.
-- **Entry:** a TypeScript app's build entry is **`app/app.ts`** — the build takes it when it exists, otherwise `app/app.js`, and refuses an app with both (§11).
-- **Scaffold:** `puzzle init --typescript` (or answering yes to the TypeScript prompt, §42) writes the template's TypeScript variant — every component `<script lang="ts">` with a typed `data()` return, props, events and lifecycle hooks; the `app/app.ts` entry (where the app is configured and mounted), `app/routes.ts` and (todos) the models as `.ts`; a strict/noEmit `tsconfig.json`; and a `package.json` with `typescript` `^7` and `"check": "puzzle check"`. The default stays JavaScript.
-- **Generate:** in an app with a `tsconfig.json` at the project root, `puzzle generate` writes TypeScript — `<script lang="ts">` component/view/layout stubs with typed props and `data()`, `app/models/<name>.ts`, and an `index.ts` family barrel ([[DOC-SPEC-BUILD]] §13).
-- **Authoring note:** under `strict`/`noImplicitAny`, annotate `data(params, props)` and event-handler params explicitly — TypeScript does not apply contextual typing from a base-class declaration to a subclass class-body override.
+- **Attribute:** `lang` is the only attribute `<script>` accepts: `"ts"` or `"js"`. An unknown or empty value, a dynamic `lang={…}`, or a second attribute is a **positioned compile error** (did-you-mean for near-misses like `"typescript"`). The body stays an opaque string to Go (D3).
+- **Transpile-only:** esbuild strips types; the build never type-checks. Checking is `puzzle check` (D165, [[DOC-SPEC-BUILD]] §63), which runs the app's own `tsc` over `.pzl` scripts, template expressions and the app's `.ts` modules; a plain `tsc` or an editor covers standalone `.ts`/`.js` files, not a `.pzl` `<script>` body. The generated render tail is plain JS (valid TS), so the plugin uses `Loader: LoaderTS` for the whole module; standalone `pzlc` strips types with esbuild's Transform API.
+- **`.pzl` is the only extension** (a `.pzt` alias was rejected, D54).
+- **Typings:** the package ships `types/index.d.ts` (wired via `exports.types`) and a `puzzle-env.d.ts` shim (`declare module '*.pzl'` → `typeof PuzzleView`). `examples/typed-todos` is the worked example.
+- **Entry:** a TypeScript app's entry is `app/app.ts` (§11).
+- **Scaffold:** `puzzle init --typescript` (or the TypeScript prompt, §42) writes every component as `<script lang="ts">` with typed `data()`, props, events and hooks; `app/app.ts`, `app/routes.ts` and (todos) `.ts` models; a strict/noEmit `tsconfig.json`; and a `package.json` with `typescript` `^7` and `"check": "puzzle check"`. The default stays JavaScript.
+- **Generate:** with a `tsconfig.json` at the project root, `puzzle generate` writes TypeScript stubs, `app/models/<name>.ts` and an `index.ts` family barrel ([[DOC-SPEC-BUILD]] §13).
+- **Authoring note:** under `strict`/`noImplicitAny`, annotate `data(params, props)` and handler params — TypeScript does not contextually type a subclass override from the base declaration.
 
-## 29. Scoped styles: `<style scoped>` (v1.27)
+## 29. Scoped styles: `<style scoped>`
 
-Opt-in per-component style scoping via native CSS `@scope`. Shipped in v1.27 (D59); parser + codegen root-stamp + plugin CSS collector. **A `<style>` block without the attribute emits byte-identically to v1** — global CSS, as always.
+Per-component scoping via native CSS `@scope` (D59). A `<style>` without the attribute is global CSS.
 
-- **Grammar:** `scoped` is a **bare, static** attribute and the only one `<style>` accepts — same posture as `island` (§17) and `min-duration` (§16). A valued or dynamic `scoped`, or any other attribute, is a positioned compile error (did-you-mean when close). One `<style>` per file, as before.
-- **Semantics:** the block's rules match only inside this component's own rendered subtree — two components with colliding selectors in scoped blocks do not affect each other. Scoping is **outward containment, not inward**: rules still cascade into nested child components like ordinary CSS (no hard boundary in this cut); a child's own scoped rule at equal specificity beats the parent's via `@scope` proximity.
-- **Mechanism (the compiler never parses CSS):** a stable scope id is derived per file (`pzl-` + 8-hex FNV-1a of the compiler-relative, slash-normalized path); the template root vnode gains one static `data-<scopeId>` attribute (root-only — the cascade covers descendants; view-mode skeletons reuse the root's attrs and are covered); the collected block is emitted wrapped as `@scope ([data-<scopeId>]) { … }`, verbatim inside. The styles pipeline (§13, Tailwind) is untouched.
-- **Browser floor:** `@scope` ships verbatim in the bundle — Baseline engines (Chrome/Edge 118+, Safari 17.4+, current Firefox). An engine without `@scope` treats the block as global (v1 behavior), never breakage.
-- **Renaming a `.pzl` changes its scope id** (path-derived) — harmless; the stamped attr and the CSS move together in the same build.
+- **Grammar:** `scoped` is a **bare, static** attribute and the only one `<style>` accepts. A valued or dynamic `scoped`, or any other attribute, is a positioned compile error (did-you-mean when close). One `<style>` per file.
+- **Semantics:** the rules match only inside this component's own rendered subtree. Scoping is **outward containment, not inward**: rules still cascade into nested child components (no hard boundary); a child's own scoped rule at equal specificity wins by `@scope` proximity.
+- **Mechanism (the compiler never parses CSS):** a scope id per file (`pzl-` + 8-hex FNV-1a of the compiler-relative, slash-normalized path); the template root vnode gains one static `data-<scopeId>` attribute (root only; view-mode skeletons reuse the root's attrs); the block is emitted verbatim inside `@scope ([data-<scopeId>]) { … }`. The Tailwind pipeline is untouched.
+- **Browser floor:** Baseline `@scope` engines (Chrome/Edge 118+, Safari 17.4+, current Firefox). An engine without `@scope` treats the block as global — never breakage.
+- Renaming a `.pzl` changes its scope id; the stamped attr and the CSS move together in the same build.
 
-## 40. Module resolution — the `@` app alias (v1.42)
+## 40. Module resolution — the `@` app alias
 
+Every bundled import specifier beginning `@/` resolves to the app's `app/` directory (D75): `import Icon from '@/components/Icon.pzl'` means `<project root>/app/components/Icon.pzl` from any depth.
 
-Every bundled import specifier beginning `@/` resolves to the app's `app/` directory (D75). `import Icon from '@/components/Icon.pzl'` means `<project root>/app/components/Icon.pzl` from any file at any depth — the fix for `../../components/…` climbing once views live in subfolders.
-
-**Contract:**
-- **Always on, not configurable.** No opt-in, no `puzzle.config.js` key. `app/` is already the framework-fixed source root (every build path resolves the entry inside it — `app/app.ts` or `app/app.js`, §11), so the anchor needs no configuration. A general `resolve.alias` block stays deferred.
-- **Bundle-wide.** It applies wherever esbuild resolves a specifier: `.pzl` `<script>` blocks, the app entry, `routes.js`, models, `.ts` files under `<script lang="ts">` (§25), JSON imports. All three build paths get it — `puzzle dev`, `puzzle build`, and the separate prerender bundle of `puzzle build --static` / `--hybrid` (§36).
-- **Relative paths are untouched.** `./` and `../` imports keep working exactly as before; `@/` is additive.
-- **Scoped packages are untouched.** esbuild matches alias keys on segment boundaries, so a bare `@` key catches `@` and `@/…` only: `@magic-spells/puzzle`, `@magic-spells/morph-engine`, and every other scoped package resolve normally. npm cannot publish a package named exactly `@`, so no collision exists.
-- **Module resolution only.** It does NOT apply to `{#svg 'icons/x.svg'}` asset paths (already resolved against `app/assets`, §18), to `<style>` blocks, or to `@import`s inside `styles.css` — different resolvers.
-
-**Implementation:** one entry in the esbuild `Alias` map, set in `configureRuntime` (`compiler/internal/build/options.go`) alongside the existing `@magic-spells/puzzle` runtime entries. Parser, codegen, and the runtime kernel are untouched — this is purely a bundler-resolution concern.
-
-**Editor support:** `puzzle init` writes the matching `paths` mapping — `"@/*": ["./app/*"]` — into `tsconfig.json` (`--typescript`) or an editor-only `jsconfig.json` (plain JS). Exactly one of the two is written, since editors ignore a `jsconfig.json` sitting next to a `tsconfig.json`. Existing apps add the same three lines by hand; the build never reads either file.
+- **Always on, not configurable.** `app/` is the fixed source root, so the anchor needs no config. A general `resolve.alias` block is deferred.
+- **Bundle-wide:** `.pzl` `<script>` blocks, the app entry, routes, models, `.ts` files, JSON imports — in `puzzle dev`, `puzzle build`, and the prerender bundle of `--static` / `--hybrid` (§36).
+- **Relative paths and scoped packages are untouched.** esbuild matches alias keys on segment boundaries, so `@` catches only `@` and `@/…`; `@magic-spells/puzzle` resolves normally (npm cannot publish a package named `@`).
+- **Module resolution only** — not `{#svg}` paths (§18), `<style>` blocks, or `@import` in `styles.css`.
+- **Implementation:** one entry in the esbuild `Alias` map, set in `configureRuntime` (`compiler/internal/build/options.go`).
+- **Editor support:** `puzzle init` writes `"@/*": ["./app/*"]` into `tsconfig.json` (`--typescript`) or an editor-only `jsconfig.json` — exactly one, since editors ignore a `jsconfig.json` beside a `tsconfig.json`. The build reads neither.

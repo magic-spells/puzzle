@@ -19,7 +19,7 @@ const embeddedPuzzleSkillRoot = "puzzle"
 // skillVersionFile records which CLI wrote an installed skill. The payload is
 // go:embed-ed, so "which CLI wrote it" IS the skill's version — without the stamp
 // the CLI can only ask whether a directory exists, never whether it is current
-// (D99). Dotfile so it does not read as skill content to the agent loading it.
+// (D78). Dotfile so it does not read as skill content to the agent loading it.
 const skillVersionFile = ".puzzle-skill-version"
 
 // confirmSkillUpdate is the skill-refresh prompt, indirected so tests can answer
@@ -34,7 +34,7 @@ type addEnvironment struct {
 	// skillRoots pins the config dirs to install into (--skill-root). When set,
 	// home detection and the target prompt are both skipped: explicit roots are
 	// explicit intent. `puzzle upgrade` uses this to hand the freshly installed
-	// binary the exact set the user already confirmed (D97).
+	// binary the exact set the user already confirmed (D78).
 	skillRoots []string
 }
 
@@ -58,7 +58,7 @@ var supportedSkillTargets = []struct {
 
 // addSkills installs the embedded skill into the resolved targets. Re-running the
 // command after a CLI upgrade is the normal way to refresh an install, so an
-// existing destination asks rather than refusing (D99): the refusal only survives
+// existing destination asks rather than refusing (D78): the refusal only survives
 // on a non-TTY, where a script must name the clobber with --overwrite.
 func addSkills(w io.Writer, out *ui.Printer, overwrite bool, env addEnvironment) error {
 	selected, err := resolveSkillTargets(w, out, env)
@@ -71,7 +71,7 @@ func addSkills(w io.Writer, out *ui.Printer, overwrite bool, env addEnvironment)
 	}
 
 	// --overwrite is explicit intent: write every selected target, symlinked
-	// destinations included (the D97 upgrade path relies on exactly this).
+	// destinations included (the D78 upgrade refresh relies on exactly this).
 	if overwrite {
 		return installSkills(w, out, selected)
 	}
@@ -223,7 +223,7 @@ func detectSkillTargets(home string) ([]skillTarget, error) {
 // already carry a real Puzzle skill directory (refreshable) and the ones whose
 // install is a symlink. A symlink is a dev checkout link — copying through it
 // would rewrite files in the linked repository, so `puzzle upgrade` reports it
-// and leaves it alone rather than clobbering a working tree (D97).
+// and leaves it alone rather than clobbering a working tree (D78).
 func installedSkillTargets(home string) (refresh []skillTarget, linked []string, err error) {
 	targets, err := detectSkillTargets(home)
 	if err != nil {
@@ -284,8 +284,7 @@ func newSkillPromptForm(input io.Reader, output io.Writer, group *huh.Group) *hu
 // skillPlan splits selected targets by what is already sitting at their
 // destination. Only `stale` needs the user's consent: a missing destination is a
 // plain install, a matching stamp has nothing to replace, and a symlink is a dev
-// checkout link we refuse to write through without --overwrite (D97's rule,
-// applied to `add` in D99).
+// checkout link we refuse to write through without --overwrite (D78; the same rule `puzzle upgrade` applies).
 type skillPlan struct {
 	fresh   []skillTarget
 	current []skillTarget
@@ -320,7 +319,7 @@ func classifySkillTargets(targets []skillTarget) (skillPlan, error) {
 
 // installedSkillVersion reads the CLI version stamped into an installed skill. A
 // missing or unreadable stamp is "unknown", never an error: the stamp only phrases
-// a prompt, and every install written before D99 legitimately has none — those read
+// a prompt, and every install written before the stamp existed legitimately has none — those read
 // as stale, which is the right default.
 func installedSkillVersion(dest string) (string, bool) {
 	data, err := os.ReadFile(filepath.Join(dest, skillVersionFile))
@@ -339,7 +338,7 @@ func installedSkillVersion(dest string) (string, bool) {
 //
 // A real destination is REMOVED first: copySkillTree merges, so a file the new
 // payload dropped would linger and keep telling an agent something the current
-// release contradicts — the staleness D97 exists to prevent, one level down.
+// release contradicts — the staleness the D78 refresh exists to prevent, one level down.
 //
 // A symlinked destination is written THROUGH, never removed: os.RemoveAll on a
 // symlink deletes the link itself, quietly converting a dev checkout link into a

@@ -1,6 +1,6 @@
 /**
  * ViewNode — one node in the virtual tree (constellation/doc/DOC-RUNTIME-KERNEL.md,
- * constellation/doc/DOC-APP-ANATOMY.md §4, constellation/doc/DOC-DECISIONS.md D20).
+ * constellation/doc/DOC-APP-ANATOMY.md §4, D20).
  *
  * Pure data: the ViewManager owns all DOM creation and patching. Compiled
  * render functions build these trees:
@@ -27,7 +27,7 @@
  * - attrs starting with '@' are event listeners (mirrors template syntax).
  * - attrs.key drives keyed reconciliation in lists.
  * - `el` links to the live DOM node the ViewManager transfers across renders
- *   (the prototype failed to — constellation/doc/DOC-CODE-REVIEW.md §2.4); for a component vnode
+ *   (the prototype failed to); for a component vnode
  *   it tracks the child's current root so sibling insertion refs stay valid.
  * - `component` holds the child PuzzleView instance (component vnodes only),
  *   the way element vnodes hold `el`.

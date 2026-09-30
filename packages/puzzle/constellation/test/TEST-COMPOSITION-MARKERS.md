@@ -14,46 +14,36 @@ connections:
   - DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS
   - DECISION-D141-MARKER-FALLBACK-BODIES
   - DECISION-D144-PORTAL
-  - FEATURE-NAMED-SLOTS
+  - DECISION-D166-SNIPPETS
+  - DOC-SPEC-TEMPLATE
   - DOC-TESTING
 ---
 
 # Composition markers, snippets, slots, and Portal
 
-Proves the composition surface that the public invariants ride on: `<Children>`
-as the component default marker, `<Slot name="x">` as named composition,
-`<Slot>` as the router outlet, `<Snippet>` as caller-owned stamped content,
-and `<Portal>` as the out-of-tree escape.
+Proves the composition surface ([[DOC-SPEC-TEMPLATE]] §24, §64): `<Children>` as
+the default marker, `<Slot name="x">` as a named slot, `<Slot>` as the router
+outlet, `<Snippet>` as caller-owned stamped content, and `<Portal>` as the
+out-of-tree escape. Suites: `composition`, `named-slots`, `slot-forwarding`
+(+`-compiled`), `slot-filled`, `marker-fallbacks`, `lazy-slot-fallback`,
+`snippets` (+`-compiled`), `snippet-tag-escape` and `portal` under `tests/`;
+compiled fixtures come from `npm run pretest`.
 
-Guarantees:
-
-- inline component rendering, prop reactivity, teardown on child removal, and
-  keyed component lists.
-- the pre-first-commit slot-update guard.
+- inline component rendering, prop reactivity, teardown on child removal, keyed
+  component lists, and the pre-first-commit slot-update guard.
 - named slots through routing, slotted components crossing control flow,
-  reserved-name slot buckets, and keyed reconciliation inside a slotted region.
-- default-slot forwarding through an intermediate component, end to end through
-  the router, and through the SSG serializer.
-- marker fallback bodies: a paired marker's body renders only while nothing
-  fills the position, and disappears the moment something does.
-- lazy fallbacks (`tests/lazy-slot-fallback.test.js`, compiled fixtures in
-  `tests/fixtures/lazy-fallback/` shaped like the VirtualList piece's row): a
-  snippet-filled marker never evaluates its fallback — no function call, no
-  "object template value" warning — in the browser and in prerendered output;
-  an unfilled fallback is built once per marker and a clean cached row keeps
-  its fallback vnodes and DOM; a stamp that renders nothing builds only its own
-  fallback; a fallback deferred on a cached row builds correctly when a later
-  render unfills the position.
-- Snippet parsing/emission and runtime stamping: marker/ref body
-  exclusions, distinct marker-site uniqueness, per-stamp args/fresh vnodes,
-  stateful variable-length output under the legal loop shape, caller/component
-  refreshes, diagnostics, serialization, and warning-free hybrid/static takeover.
+  reserved-name buckets, and keyed reconciliation inside a slotted region.
+- default-slot forwarding through an intermediate component, through the
+  router, and through the SSG serializer — in two lanes, a handwritten fixture
+  and a layout compiled by the real compiler, so the marker contract is proven
+  against actual emission.
+- fallback bodies render only while nothing fills the position. Lazy fallbacks
+  (fixtures shaped like the VirtualList piece's row): a filled marker never
+  evaluates its fallback, in the browser or in prerendered output; an unfilled
+  fallback is built once per marker and a clean cached row keeps its fallback
+  vnodes and DOM.
+- snippets: marker/ref body exclusions, marker-site uniqueness, per-stamp
+  args and fresh vnodes, variable-length output, caller/component refreshes,
+  diagnostics, serialization, and warning-free hybrid/static takeover.
 - Portal mounting into the framework outlet, teardown, and its interaction with
-  the outside-click modifier.
-
-Slot forwarding runs in two lanes — a handwritten fixture and a layout compiled
-by the real compiler — so the marker contract is proven against actual emission,
-not just against a hand-shaped vnode tree.
-
-Covers focused parser/codegen fixtures plus the snippets, takeover, and
-existing composition suites under `tests/`.
+  the `outside` modifier.
