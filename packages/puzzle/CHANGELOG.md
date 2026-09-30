@@ -1076,6 +1076,11 @@ checklist sent you.
   "since v1.64"**, a spec revision that was never a release. They read "the
   default marker is spelled <Children/> (D134)" and "named slots are spelled
   <Slot name="…"/> (D134)".
+- **The Prettier plugin honors `endOfLine: "crlf"`.** Under `crlf`, or
+  `auto` on a CRLF file, every `<script>` and `<style>` body line ended
+  `\r\r\n`: each format changed the file again, and a multi-line template
+  literal's value changed. The bodies now get the line ending once, like
+  the rest of the file; `lf` output is unchanged.
 - **puzzle-pieces:** phone-width overflow in Toolbar, Pagination, the
   DataTable footer and the Code buttons; `split-panel`'s `snap` no longer
   collapses every release to 0.
