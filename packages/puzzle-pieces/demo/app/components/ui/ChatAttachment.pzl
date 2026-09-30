@@ -56,7 +56,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   <ChatAttachment name="proposal.pdf" size="2.4 MB" />
 //   <ChatAttachment name="hero.png" size="840 KB" href="/files/hero.png" />
 //   <ChatAttachment name="assets.zip" size="18 MB" removable
-//                   @remove={ (fileName) => drop(fileName) } />
+//                   @remove={ drop } />
 //
 // Props:
 //   name       filename — shown text-sm, truncated with a native title tooltip

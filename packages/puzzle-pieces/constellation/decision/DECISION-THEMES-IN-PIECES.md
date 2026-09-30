@@ -18,6 +18,18 @@ notes:
       allow-lists literals by path. 34 of the 68 shared tokens carry different values in the package
       (the re-tune), and the package adds --color-brand-on-tint, --color-danger-on-tint,
       --color-border-dashed.
+  - kind: decision
+    text: >-
+      pre-paint.js hands its <script> parameters to appearance.js: it sets
+      `window.__puzzleAppearance = { key, scheme, mode }` (from data-key / data-default-scheme /
+      data-default-mode, outside its try) and appearance.js seeds `config.storageKey` and
+      `config.fallback` from it at import time; `configure()` still overrides. Without it, boot()
+      fell back to `{ default, null }` and stripped the default pre-paint painted (flash to the OS
+      mode), and a custom data-key without a matching configure() made boot() read the wrong key.
+      Rejected: requiring apps to call configure() mirroring the attributes (two places to keep
+      equal, undocumented). Tested in test/appearance.test.mjs (pre-paint then fresh-import boot in
+      the same fake DOM). The picker's manifest `themes: [dim, warm, void]` makes `add piece
+      appearance-picker` print `puzzle add theme dim warm void` (framework D171).
 ---
 
 # Themes live in pieces as hand-written CSS, four palettes × three modes

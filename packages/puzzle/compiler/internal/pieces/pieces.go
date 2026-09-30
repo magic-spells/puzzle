@@ -54,6 +54,12 @@ type Result struct {
 	NpmDeps  []string // deduped + sorted; never installed (D3)
 	Theme    string   // non-empty ⇒ the `@import './pieces.css';` next-step advisory
 	LockPath string
+	// ThemeHint is non-empty when an existing app/styles/pieces.css differs from
+	// the registry theme — the pieces just copied may use tokens it lacks.
+	ThemeHint string
+	// Themes are the palettes the resolved pieces need that the app has neither
+	// on disk nor package-imported — printed as one `puzzle add theme` line.
+	Themes []string
 }
 
 // plannedFile is a fetched-but-not-yet-written file: the bytes are held so the
@@ -103,21 +109,32 @@ func Add(opts Options) (*Result, error) {
 
 	// Theme fetches and existing-lock parsing can both fail. Complete them after
 	// the conflict pre-flight but before the first destination write so either
-	// error leaves the app tree untouched.
-	theme, advisory, err := planTheme(&opts, reg)
-	if err != nil {
-		return nil, err
-	}
+	// error leaves the app tree untouched. The lock is read first: the stale-theme
+	// hint needs it to tell an older registry copy from a locally edited one.
 	lockPath := filepath.Join(opts.AppRoot, LockFileName)
 	lock, err := readLock(lockPath)
 	if err != nil {
 		return nil, err
 	}
+	theme, advisory, err := planTheme(&opts, reg)
+	if err != nil {
+		return nil, err
+	}
+	themeHint, err := staleThemeHint(&opts, reg, lock)
+	if err != nil {
+		return nil, err
+	}
+	palettes, err := missingThemes(&opts, reg, resolvedPieces)
+	if err != nil {
+		return nil, err
+	}
 
 	result := &Result{
-		AppRoot:  opts.AppRoot,
-		Source:   opts.Fetcher.Source(),
-		LockPath: lockPath,
+		AppRoot:   opts.AppRoot,
+		Source:    opts.Fetcher.Source(),
+		LockPath:  lockPath,
+		ThemeHint: themeHint,
+		Themes:    palettes,
 	}
 	for _, u := range units {
 		ru := Unit{Name: u.name, IsLib: u.isLib}
@@ -446,7 +463,7 @@ func planTheme(opts *Options, reg *Registry) (theme *plannedTheme, advisory stri
 		return nil, "", err
 	}
 	rel := "app/styles/pieces.css"
-	file := FileWrite{Rel: rel, Abs: piecesPath, Hash: hashBytes(data)}
+	file := FileWrite{Rel: rel, Abs: piecesPath, Hash: themeHash(data)}
 	return &plannedTheme{
 		file: plannedFile{rel: rel, abs: piecesPath, data: data},
 		// Keyed by its registry path ("theme/pieces.css"), same lock shape as a lib.
@@ -464,6 +481,104 @@ func writePlannedTheme(theme *plannedTheme) error {
 	return nil
 }
 
+// The stale-theme hints. `add piece` never rewrites an existing pieces.css, so
+// an app whose copy predates the pieces it adds renders them against tokens the
+// copy lacks — silently, unless we say so.
+const (
+	staleThemeHintLine    = "app/styles/pieces.css is an older registry theme — run `puzzle add theme default` to refresh it (new pieces use tokens it lacks)"
+	modifiedThemeHintLine = "app/styles/pieces.css differs from the registry theme — merge the new tokens in by hand, or run `puzzle add theme default --overwrite` to replace it (new pieces use tokens it may lack)"
+)
+
+// staleThemeHint compares an existing app/styles/pieces.css with the registry's
+// theme. Identical is quiet; a copy still matching its pieces.lock hash is an
+// unmodified older registry theme that `add theme default` refreshes as is;
+// anything else was edited, so the refresh needs --overwrite or a hand merge.
+// Tokens hand-merged into styles.css, or imported from the npm package, are not
+// this file's business (npm updates the package; the merge is the user's), and
+// no pieces.css at all is planTheme's state (b). Print-only (D3).
+func staleThemeHint(opts *Options, reg *Registry, lock *Lock) (string, error) {
+	styles, err := readAppStyles(opts.AppRoot)
+	if err != nil {
+		return "", err
+	}
+	if strings.Contains(styles, themeMarker) || themeImportedFromPackage(styles, defaultThemeName) {
+		return "", nil
+	}
+	const rel = "app/styles/pieces.css"
+	existing, err := os.ReadFile(filepath.Join(opts.AppRoot, filepath.FromSlash(rel)))
+	switch {
+	case os.IsNotExist(err):
+		return "", nil
+	case err != nil:
+		return "", fmt.Errorf("reading %s: %w", rel, err)
+	}
+	data, err := opts.Fetcher.Fetch(themePath(reg))
+	if err != nil {
+		// Only a hint: a registry without a theme file must not fail the add.
+		return "", nil
+	}
+	switch h := themeHash(existing); {
+	case h == themeHash(data):
+		return "", nil
+	case h == lock.Pieces[themePath(reg)].Files[rel]:
+		return staleThemeHintLine, nil
+	default:
+		return modifiedThemeHintLine, nil
+	}
+}
+
+// missingThemes unions the palettes the resolved pieces name (deduped, in
+// first-seen order) and keeps the ones the app lacks: not on disk where `add
+// theme` would put it, and not imported from the npm package. The default
+// palette is skipped — whether pieces.css is wanted is planTheme's call. A name
+// becomes a path segment, so it is validated like the registry's own entries.
+func missingThemes(opts *Options, reg *Registry, resolvedPieces []Piece) ([]string, error) {
+	var names []string
+	seen := map[string]bool{}
+	for _, p := range resolvedPieces {
+		for _, n := range p.Themes {
+			if seen[n] {
+				continue
+			}
+			if err := validateThemeName(n); err != nil {
+				return nil, fmt.Errorf("piece %q: %w", p.Name, err)
+			}
+			seen[n] = true
+			names = append(names, n)
+		}
+	}
+	if len(names) == 0 {
+		return nil, nil
+	}
+	themes, err := registryThemes(reg)
+	if err != nil {
+		return nil, err
+	}
+	index := make(map[string]Theme, len(themes))
+	for _, t := range themes {
+		index[t.Name] = t
+	}
+	styles, err := readAppStyles(opts.AppRoot)
+	if err != nil {
+		return nil, err
+	}
+	var missing []string
+	for _, n := range names {
+		rel := themesDir + "/" + n + ".css"
+		if t, ok := index[n]; ok {
+			if isDefaultTheme(reg, t) {
+				continue
+			}
+			rel = themeDestRel(reg, t)
+		}
+		if themeImportedFromPackage(styles, n) || fileOnDisk(filepath.Join(opts.AppRoot, filepath.FromSlash(rel))) {
+			continue
+		}
+		missing = append(missing, n)
+	}
+	return missing, nil
+}
+
 // RenderSummary prints the copy report and next steps through the CLI's Printer,
 // matching the init/add aesthetic (a header, one ✓ line per unit, a Next steps
 // block). Lib deps get their own ✓ line so a shared util is shown once.
@@ -475,14 +590,20 @@ func RenderSummary(w io.Writer, out *ui.Printer, res *Result) {
 			out.Green("✓"), out.Bold(u.Name), out.Dim(fmt.Sprintf("· %d file%s", n, textutil.Plural(n))))
 	}
 
-	if len(res.NpmDeps) == 0 && res.Theme == "" {
+	if len(res.NpmDeps) == 0 && len(res.Themes) == 0 && res.Theme == "" && res.ThemeHint == "" {
 		return
 	}
 	fmt.Fprintf(w, "\n  %s\n", out.Bold("Next steps"))
 	if len(res.NpmDeps) > 0 {
 		fmt.Fprintf(w, "    %s %s\n", out.Dim("$"), "npm install "+strings.Join(res.NpmDeps, " "))
 	}
+	if len(res.Themes) > 0 {
+		fmt.Fprintf(w, "    %s %s\n", out.Dim("$"), "puzzle add theme "+strings.Join(res.Themes, " "))
+	}
 	if res.Theme != "" {
 		fmt.Fprintf(w, "    %s %s\n", out.Yellow("→"), res.Theme)
+	}
+	if res.ThemeHint != "" {
+		fmt.Fprintf(w, "    %s %s\n", out.Yellow("→"), res.ThemeHint)
 	}
 }

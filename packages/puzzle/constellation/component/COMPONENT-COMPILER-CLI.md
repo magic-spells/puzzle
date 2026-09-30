@@ -13,6 +13,16 @@ connections:
   - FILE-PZLC
 verified_at: '2026-08-24T21:11:50.859Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: state
+    text: >-
+      `add piece` next steps also carry (D171): a stale-theme hint when an existing
+      app/styles/pieces.css differs from the registry theme (lock-hash match → `puzzle add theme
+      default`; otherwise hand merge / `--overwrite`), and one `puzzle add theme <names…>` line for
+      the palettes the resolved pieces name in their manifest `themes` array that the app has
+      neither on disk nor package-imported. `pieces.lock` is read before `planTheme` so the hint can
+      tell an older registry copy from an edit. `add theme` with no names marks an installed palette
+      whose bytes differ from the registry's `installed · outdated`.
 ---
 
 # Compiler CLI

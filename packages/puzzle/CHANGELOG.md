@@ -358,6 +358,13 @@ different.
     self-closed spelling still compiles to the same output. A closer such as
     `</br>` or `</input>`, which 0.7 accepted, is a compile error naming the
     void element: delete the closer.
+18. **Refresh the pieces theme before adding 0.8 pieces.** New pieces style
+    themselves with tokens a 0.7 `app/styles/pieces.css` lacks
+    (`surface-frame`, `surface-panel`, `bar-*`, `rail-*`, `shadow-panel`, …),
+    and `puzzle add piece` never rewrites that file, so run
+    `puzzle add theme default`: an unmodified 0.7 copy is refreshed in place;
+    one you edited needs a hand merge or `--overwrite`. `add piece` prints this
+    hint whenever the file differs from the registry's.
 
 Two contracts that row caching makes visible, though neither is new: assign a
 record's fields through `update()` or a store path, never `todo.title = 'x'`,
@@ -556,8 +563,13 @@ checklist sent you.
   (`@magic-spells/puzzle-pieces/themes/<name>.css`) is reported as wired and
   skipped — which also stops `add piece` copying `pieces.css` beside such an
   import. `puzzle add theme` with no name lists the palettes with per-theme
-  install state. styles.css is still never edited: the `@import` and the
-  `data-scheme` switch are printed (D3, D171).
+  install state, marking a copy that differs from the registry's
+  `installed · outdated`. styles.css is still never edited: the `@import` and the
+  `data-scheme` switch are printed (D3, D171). `add piece` prints a stale-theme
+  hint when an existing `pieces.css` differs from the registry's, and a piece
+  manifest may name the palettes it needs (`themes`) — `add piece` prints
+  `puzzle add theme <names…>` for the ones the app has neither copied nor
+  imported from the package.
 - **Registry dependencies carry a version floor (D169).** A piece manifest's
   `dependencies` entry is now an npm install spec — `"@magic-spells/collapsible-content@^1.2.0"` —
   and `puzzle add piece` prints `npm install <name>@<range> …` instead of a bare
@@ -578,7 +590,10 @@ checklist sent you.
   scope a subtree. New package exports: `@magic-spells/puzzle-pieces/themes/
   {default,dim,warm,void}.css`, `…/appearance` (read / persist / apply
   `{ scheme, mode }`, `mode: null` follows the OS, legacy `mixed` reads as
-  `medium`) and `…/pre-paint` (the inline anti-flash `<head>` snippet).
+  `medium`) and `…/pre-paint` (the inline anti-flash `<head>` snippet, whose
+  `data-key` / `data-default-mode` / `data-default-scheme` also seed
+  `appearance`'s storage key and fallback, so `boot()` keeps what it painted
+  without a `configure()` call repeating them).
   `registry.json` gains `modes` and a `themes` array. Every palette × mode is
   held to WCAG 2.2 AA on every declared pair by `test/contrast.test.mjs`, and
   the four files are held to one identical token set by `test/themes.test.mjs`.
@@ -594,7 +609,9 @@ checklist sent you.
   cards that are live miniatures of the shell painted in each palette (scoped
   `data-scheme`), a Light / Medium / Dark / System radiogroup, and
   `@change({ scheme, mode })` for the app to persist through the `appearance`
-  export. The pieces docs shell opens it from the rail's foot as a non-modal
+  export. Its manifest names the palettes its cards offer, so
+  `puzzle add piece appearance-picker` prints `puzzle add theme dim warm void`
+  for the ones not yet installed. The pieces docs shell opens it from the rail's foot as a non-modal
   popover.
 - **`puzzle init --typescript` scaffolds a TypeScript app (D54).** Answering
   yes to the TypeScript prompt, or passing the flag, used to add only a
@@ -949,6 +966,12 @@ checklist sent you.
 
 ### Fixed
 
+- **A snippet that declares a subset of a marker's arguments no longer warns.**
+  Declaring fewer params than the marker hands over was always legal (D166),
+  but the development shape warning demanded an exact match, so
+  `<Snippet fits="day" date day>` against a marker handing over five values
+  logged "the shapes don't match". It now warns only for a declared param the
+  marker does not hand over.
 - **`puzzle check` types library calls as the public types do.** `t`'s
   variables may be any object or `null` — `t('greeting', user)` with an
   interface-typed or class-instance `user` was rejected for lacking an index

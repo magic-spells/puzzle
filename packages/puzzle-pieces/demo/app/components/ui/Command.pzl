@@ -102,8 +102,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   <Command
 //     open={ open }
 //     items={ commands }
-//     @select={ (value) => runCommand(value) }
-//     @close={ () => this.setData('open', false) } />
+//     @select={ runCommand }
+//     @close={ closeCommand } />
 //
 // Each `items` entry is { value, label, group?, keywords?, disabled?, hint? }:
 //   value     — passed back to @select on activation

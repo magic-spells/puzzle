@@ -557,7 +557,7 @@ const installCss = `/* app/styles/styles.css */
 @import "@magic-spells/sheet/css" layer(components);`;
 
 const usageImport = `import Sheet from '@/components/ui/Sheet.pzl';`;
-const usageMarkup = `<Sheet open={ cartOpen } title="Your cart" @hide={ () => this.setData('cartOpen', false) }>
+const usageMarkup = `<Sheet open={ cartOpen } title="Your cart" @hide={ closeCart }>
   <CartLines/>
   <Button slot="footer" @press={ checkout }>Checkout</Button>
 </Sheet>
@@ -603,7 +603,7 @@ const codeHero = `<Button variant="outline" @press={ openSheet }>Open sheet</But
   open={ sheetOpen }
   labelledby="sheet-hero-title"
   position="center"
-  @hide={ () => this.setData('sheetOpen', false) }>
+  @hide={ closeSheet }>
 
   <div slot="header" class="pb-4">
     <div class="relative flex h-8 items-center">
@@ -635,8 +635,8 @@ const codeSnaps = `<Button variant="outline" @press={ openSheet }>Open snapping 
   snapPoints="25vh 55vh 85vh"
   initialSnap={ 1 }
   snap={ snapIndex }
-  @snapChange={ (index) => this.setData('snapIndex', index) }
-  @hide={ () => this.setData('sheetOpen', false) }>
+  @snapChange={ setSnapIndex }
+  @hide={ closeSheet }>
 
   <div class="flex gap-2">
     <button type="button" class="…" @click={ setSnapIndex(0) }>25vh</button>

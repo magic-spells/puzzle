@@ -52,6 +52,9 @@ const (
 	ThemeWiredViaPackage ThemeState = "wired via package"
 	// ThemeInstalled — listing-only: the destination file exists.
 	ThemeInstalled ThemeState = "installed"
+	// ThemeOutdated — listing-only: the destination file exists but differs from
+	// the registry's current file (an older release, or local edits).
+	ThemeOutdated ThemeState = "installed · outdated"
 	// ThemeAbsent — listing-only: not installed and not wired.
 	ThemeAbsent ThemeState = "—"
 )
@@ -506,8 +509,8 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 				return nil, fmt.Errorf("reading %s: %w", rel, rerr)
 			}
 			locked := lock.Pieces[t.File].Files[rel]
-			switch h := hashBytes(existing); {
-			case h == hashBytes(data):
+			switch h := themeHash(existing); {
+			case h == themeHash(data):
 				outcome.State = ThemeUpToDate
 				if adviseWhenUpToDate {
 					result.NextSteps = append(result.NextSteps, advisory)
@@ -529,7 +532,7 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 			file: plannedFile{rel: rel, abs: abs, data: data},
 			// Keyed by its registry path ("theme/dim.css"), same lock shape as the
 			// default theme and a lib.
-			unit:     Unit{Name: t.File, Files: []FileWrite{{Rel: rel, Abs: abs, Hash: hashBytes(data)}}},
+			unit:     Unit{Name: t.File, Files: []FileWrite{{Rel: rel, Abs: abs, Hash: themeHash(data)}}},
 			advisory: advisory,
 			name:     t.Name,
 			updated:  outcome.State == ThemeUpdated,
@@ -619,6 +622,9 @@ func ListThemes(opts ThemeOptions) (*ThemeListing, error) {
 			outcome.State, outcome.Rel = ThemeWiredViaPackage, ""
 		case fileOnDisk(filepath.Join(opts.AppRoot, filepath.FromSlash(rel))):
 			outcome.State = ThemeInstalled
+			if themeOutdated(opts, rel, t.File) {
+				outcome.State = ThemeOutdated
+			}
 		case isDefaultTheme(reg, t) && strings.Contains(styles, themeMarker):
 			// The default's tokens can also be hand-merged into styles.css.
 			outcome.State, outcome.Rel = ThemeWired, ""
@@ -628,6 +634,21 @@ func ListThemes(opts ThemeOptions) (*ThemeListing, error) {
 		listing.Themes = append(listing.Themes, outcome)
 	}
 	return listing, nil
+}
+
+// themeOutdated reports whether an installed palette's bytes differ from the
+// registry's current file. Unreadable either side reads as not outdated — the
+// listing is informational and must not fail over it.
+func themeOutdated(opts ThemeOptions, rel, regFile string) bool {
+	existing, err := os.ReadFile(filepath.Join(opts.AppRoot, filepath.FromSlash(rel)))
+	if err != nil {
+		return false
+	}
+	data, err := opts.Fetcher.Fetch(regFile)
+	if err != nil {
+		return false
+	}
+	return themeHash(existing) != themeHash(data)
 }
 
 func fileOnDisk(p string) bool {

@@ -206,8 +206,8 @@ const codeControlled = `// Pass open + @show/@hide to own the open state in the 
   value={ picks }
   open={ msOpen }
   @change={ setPicks }
-  @show={ () => this.setData('msOpen', true) }
-  @hide={ () => this.setData('msOpen', false) } />`;
+  @show={ onShow }
+  @hide={ onHide } />`;
 
 const codeKeyboard = `<MultiSelect options={ frameworks } value={ picks } @change={ setPicks } />`;
 

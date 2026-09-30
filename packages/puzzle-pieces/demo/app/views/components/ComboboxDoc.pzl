@@ -198,8 +198,8 @@ const codeControlled = `// Pass open + @show/@hide to own the open state in the 
   value={ value }
   open={ cbOpen }
   @change={ setValue }
-  @show={ () => this.setData('cbOpen', true) }
-  @hide={ () => this.setData('cbOpen', false) } />`;
+  @show={ onShow }
+  @hide={ onHide } />`;
 
 const codeKeyboard = `<Combobox options={ frameworks } value={ framework } @change={ setFramework } />`;
 

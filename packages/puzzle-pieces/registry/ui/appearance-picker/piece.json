@@ -6,5 +6,10 @@
   ],
   "registryDependencies": [],
   "dependencies": [],
+  "themes": [
+    "dim",
+    "warm",
+    "void"
+  ],
   "targetDir": "app/components/ui"
 }

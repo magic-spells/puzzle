@@ -86,7 +86,7 @@ import ChatAttachment from './ChatAttachment.pzl';
 //
 //   <Dropzone label="Attachments" files={ files } multiple
 //             accept="image/*" maxSize={ 5 * 1024 * 1024 }
-//             @change={ (next) => this.setData('files', next) } />
+//             @change={ setFiles } />
 //
 // Props:
 //   files      controlled array of File objects or { name, size, type } (parent-owned)

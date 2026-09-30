@@ -98,6 +98,19 @@ test('registry.json mirrors every manifest, including the floors', async () => {
 		assert.deepEqual(row.files, piece.files);
 		assert.deepEqual(row.registryDependencies, piece.registryDependencies);
 		assert.deepEqual(row.dependencies, piece.dependencies);
+		assert.deepEqual(row.themes, piece.themes);
 		assert.equal(row.targetDir, piece.targetDir);
+	}
+});
+
+// `themes` is print-only (the CLI prints `puzzle add theme …`), so a name the
+// registry does not ship would print a command that fails.
+test('every piece.json theme names a palette registry.json ships', async () => {
+	const index = await readJSON('../registry/registry.json');
+	const palettes = new Set(index.themes.map((t) => t.name));
+	for (const [name, piece] of await manifests()) {
+		for (const theme of piece.themes ?? []) {
+			assert.ok(palettes.has(theme), `${name}/piece.json names theme ${theme}, which registry.json does not ship`);
+		}
 	}
 });

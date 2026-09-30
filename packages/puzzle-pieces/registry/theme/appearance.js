@@ -24,8 +24,9 @@
  * dark. Medium is never chosen by the OS.
  *
  * STORAGE. One localStorage key (default `puzzle:appearance`), one JSON object
- * `{ scheme, mode }`, written atomically. Apps that own another key keep it
- * through `configure({ storageKey })`. Reading is lenient: a stored `theme`
+ * `{ scheme, mode }`, written atomically. The key and the empty-store fallback
+ * come from pre-paint.js's `data-key` / `data-default-*` attributes when it ran;
+ * `configure({ storageKey, fallback })` overrides both. Reading is lenient: a stored `theme`
  * field is accepted as `scheme` (Pyramid's shape) and a stored `mixed` reads as
  * `medium` — the same two aliases pre-paint.js applies. CHANGE THEM THERE AND
  * CHANGE THEM HERE.
@@ -57,9 +58,14 @@ export const DEFAULT_STORAGE_KEY = 'puzzle:appearance';
 /** Legacy spellings accepted on read. */
 const MODE_ALIASES = { mixed: 'medium' };
 
+// pre-paint.js leaves its <script> parameters on `window.__puzzleAppearance`
+// ({ key, scheme, mode }). Seeding from them is what keeps boot() from wiping
+// the default it painted, or reading another key than the one it read.
+const seed = globalThis.__puzzleAppearance;
+
 const config = {
-	storageKey: DEFAULT_STORAGE_KEY,
-	fallback: { scheme: DEFAULT_SCHEME, mode: null },
+	storageKey: (typeof seed?.key === 'string' && seed.key) || DEFAULT_STORAGE_KEY,
+	fallback: { scheme: normalizeScheme(seed?.scheme) || DEFAULT_SCHEME, mode: normalizeMode(seed?.mode) },
 };
 
 /** @type {{ scheme: string, mode: string|null }} the choice last applied */

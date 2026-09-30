@@ -6,6 +6,16 @@ connections:
   - DECISION-D32-CLI-TOOLING
   - DECISION-D03-SCRIPTS-REAL-JS
   - COMPONENT-COMPILER-CLI
+notes:
+  - kind: gotcha
+    text: >-
+      Theme hashes fold CRLF to LF (`themeHash` in compiler/internal/pieces/lock.go): Git for
+      Windows' default core.autocrlf=true checks an app's pieces.css out CRLF, and a raw-byte hash
+      read every unmodified copy as locally edited (the merge/--overwrite hint on every `add piece`,
+      `installed · outdated`, and `add theme default` refusing to refresh). Every theme comparison
+      (staleThemeHint, themeOutdated, AddThemes) and every theme hash written to pieces.lock goes
+      through it; LF bytes hash as before, so existing locks still match. Piece and lib hashes stay
+      raw bytes.
 ---
 
 # D171 — `puzzle add theme <name…>`
@@ -16,6 +26,7 @@ listed in `registry.json` under `themes`, with `modes: [light, medium, dark]`.
 palette and lets it drift.
 
 ## Rules
+
 
 - **The default palette reuses `planTheme`.** The entry whose `file` equals
   `Registry.Theme` (matched on the file, not the name) goes where `add piece`
@@ -47,10 +58,27 @@ palette and lets it drift.
   `data-scheme="<name>"` / `data-theme="light|medium|dark"` switch line are
   printed, never written; the switch line prints once per run.
 - **No name** lists palettes (name, label, description) with the app's state
-  per theme (`installed` / `wired via package` / `wired` / `—`), exit 0. An
+  per theme (`installed` / `installed · outdated` when the file's bytes differ
+  from the registry's / `wired via package` / `wired` / `—`), exit 0. An
   unknown name errors with the list plus a did-you-mean.
 - A registry without a `themes` array still offers its single default palette,
   synthesized from `Registry.Theme`.
+- **`add piece` flags a stale theme.** `add piece` never rewrites an existing
+  `app/styles/pieces.css`, so pieces that use newer tokens would render
+  unstyled against an older copy. When the file exists (and the tokens are not
+  hand-merged into styles.css or package-imported), `staleThemeHint` compares
+  it with the registry theme: identical is quiet; a copy matching its lock hash
+  prints "older registry theme — run `puzzle add theme default`"; anything else
+  prints the hand-merge / `--overwrite` wording. Print-only; a registry
+  without the theme file skips the hint rather than failing the add. Pieces
+  may therefore use new tokens freely.
+- **A piece names the palettes it needs** in its manifest's `themes` array
+  (`appearance-picker`: `dim`, `warm`, `void`). `add piece` unions them across
+  the resolved set and prints one `puzzle add theme <names…>` line for the
+  ones the app has neither on disk nor package-imported (the default palette
+  is left to `planTheme`). Print-only (D3), never copied. Not
+  `registryDependencies`: an older CLI would read a palette name as an unknown
+  piece.
 
 ## Alternatives
 

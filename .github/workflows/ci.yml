@@ -203,16 +203,18 @@ jobs:
           node-version: 25
       - run: npm run build:compiler
         working-directory: packages/puzzle
-      - name: Registry lib tests
-        working-directory: packages/puzzle-pieces
-        run: |
-          npm ci
-          npm test
+      # The demo installs first: test/puzzle-lang.test.js loads highlight.js
+      # from demo/node_modules, and skips (throws under CI) without it.
       - name: Demo compiles against the working tree
         working-directory: packages/puzzle-pieces/demo
         run: |
           npm ci
           npm run build
+      - name: Registry lib tests
+        working-directory: packages/puzzle-pieces
+        run: |
+          npm ci
+          npm test
 
   devtools:
     name: DevTools (panel suite)

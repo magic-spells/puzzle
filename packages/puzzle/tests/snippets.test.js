@@ -527,6 +527,26 @@ describe('snippets — development diagnostics', () => {
 		]);
 	});
 
+	it('stays quiet when a snippet declares a subset of what the marker hands over', async () => {
+		// Declaring fewer params than the marker hands over is legal (a snippet
+		// reads the names it needs); only a declared name the marker does not
+		// hand over is a mismatch.
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		class SubsetShape extends PuzzleView {
+			render() {
+				return h('div', {}, [marker('day', { date: 1, day: 2, selected: false, today: true, disabled: false })]);
+			}
+		}
+		const view = new SubsetShape();
+		mounted.push(view);
+		const el = container();
+		await view.mount(el, {
+			children: [snippet('day', ['date', 'day'], ({ day }) => [text(String(day))])],
+		});
+		expect(el.textContent).toBe('2');
+		expect(warn.mock.calls.some(([message]) => String(message).includes('the shapes don\'t match'))).toBe(false);
+	});
+
 	it('stays quiet for a Snippet no marker consumed', async () => {
 		// There is no unused-snippet warning: a marker inside a currently-false
 		// {#if} or an empty {#for} never renders, so an observation of "nothing

@@ -1,6 +1,7 @@
 package pieces
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -36,6 +37,17 @@ type LockEntry struct {
 func hashBytes(b []byte) string {
 	sum := sha256.Sum256(b)
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// themeHash is hashBytes over the theme's bytes with CRLF line endings folded
+// to LF. A theme is a text file git may check out with CRLF (Git for Windows'
+// default core.autocrlf=true), and a raw-byte hash would then read every
+// unmodified copy as locally edited. Every theme comparison — and every theme
+// hash written to pieces.lock — goes through this, so a CRLF checkout of an LF
+// registry copy hashes the same. LF bytes hash exactly as hashBytes does, so
+// locks written before this helper existed still match.
+func themeHash(b []byte) string {
+	return hashBytes(bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n")))
 }
 
 // readLock loads an existing pieces.lock, or returns a fresh empty one when none

@@ -947,3 +947,212 @@ func TestThemeImportedFromPackageRequiresAnImportStatement(t *testing.T) {
 		})
 	}
 }
+
+// --- add piece: stale-theme hint and palette next step -----------------------------
+
+// olderThemeApp is an app wired to a pieces.css from an EARLIER registry release:
+// styles.css imports it, and pieces.lock still holds lockedCSS's hash. The
+// registry's current pieces.css has since grown tokens that copy lacks.
+func olderThemeApp(t *testing.T, piecesCSS, lockedCSS string) string {
+	t.Helper()
+	app := newApp(t, false)
+	writeStyles(t, app, "@import \"tailwindcss\";\n@import './pieces.css';\n")
+	write(t, app, "app/styles/pieces.css", piecesCSS)
+	lock := &Lock{Version: 1, Registry: "old", Pieces: map[string]LockEntry{
+		"theme/pieces.css": {Files: map[string]string{"app/styles/pieces.css": sha(lockedCSS)}},
+	}}
+	if err := writeLock(filepath.Join(app, LockFileName), lock); err != nil {
+		t.Fatal(err)
+	}
+	return app
+}
+
+const olderDefaultThemeCSS = "/* puzzle-pieces design tokens */\n:root { --old: 1; }\n"
+
+func TestAddPieceHintsOlderRegistryTheme(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := olderThemeApp(t, olderDefaultThemeCSS, olderDefaultThemeCSS)
+	res, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.ThemeHint, "older registry theme") || !strings.Contains(res.ThemeHint, "puzzle add theme default") {
+		t.Errorf("expected the stale-theme hint, got %q", res.ThemeHint)
+	}
+	if strings.Contains(res.ThemeHint, "--overwrite") {
+		t.Errorf("an unmodified older copy refreshes without --overwrite, got %q", res.ThemeHint)
+	}
+	if !strings.Contains(render(res), res.ThemeHint) {
+		t.Errorf("summary should print the hint, got:\n%s", render(res))
+	}
+	if got, _ := os.ReadFile(filepath.Join(app, "app", "styles", "pieces.css")); string(got) != olderDefaultThemeCSS {
+		t.Errorf("add piece must never rewrite pieces.css, got %q", got)
+	}
+}
+
+func TestAddPieceHintsModifiedThemeNeedsOverwrite(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := olderThemeApp(t, "/* my edited tokens */\n", olderDefaultThemeCSS)
+	res, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.ThemeHint, "--overwrite") || !strings.Contains(res.ThemeHint, "by hand") {
+		t.Errorf("a copy matching neither lock nor registry needs the overwrite/merge wording, got %q", res.ThemeHint)
+	}
+}
+
+func TestAddPieceNoThemeHintWhenCurrent(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := olderThemeApp(t, defaultThemeCSS, olderDefaultThemeCSS)
+	res, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ThemeHint != "" {
+		t.Errorf("an up-to-date pieces.css needs no hint, got %q", res.ThemeHint)
+	}
+}
+
+func TestListThemesMarksOutdatedCopy(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	write(t, app, "app/styles/pieces.css", olderDefaultThemeCSS)
+	write(t, app, "app/styles/themes/dim.css", dimThemeCSS)
+	listing, err := ListThemes(themeOpts(reg, app))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]ThemeState{"default": ThemeOutdated, "dim": ThemeInstalled, "void": ThemeAbsent}
+	for _, o := range listing.Themes {
+		if o.State != want[o.Name] {
+			t.Errorf("%s state = %q, want %q", o.Name, o.State, want[o.Name])
+		}
+	}
+	if got := renderListing(listing); !strings.Contains(got, "default Default · installed · outdated") {
+		t.Errorf("listing should mark the default outdated, got:\n%s", got)
+	}
+}
+
+// pickerRegistry has pieces that NEED palettes to be useful (an appearance
+// picker offering dim/void cards), one pulling the other in.
+const pickerRegistry = `{
+  "version": 1,
+  "theme": "theme/pieces.css",
+  "themes": [
+    {"name":"default","file":"theme/pieces.css","label":"Default","description":""},
+    {"name":"dim","file":"theme/dim.css","label":"Dim","description":""},
+    {"name":"void","file":"theme/void.css","label":"Void","description":""}
+  ],
+  "pieces": [
+    {"name":"picker","files":["Picker.pzl"],"themes":["dim","void"]},
+    {"name":"shell","files":["Shell.pzl"],"registryDependencies":["picker"],"themes":["void"]}
+  ]
+}`
+
+func pickerFixture(t *testing.T) string {
+	t.Helper()
+	return buildRegistry(t, pickerRegistry,
+		fixtureFile{"ui/picker/Picker.pzl", "x\n"},
+		fixtureFile{"ui/shell/Shell.pzl", "y\n"},
+		fixtureFile{"theme/pieces.css", defaultThemeCSS},
+		fixtureFile{"theme/dim.css", dimThemeCSS},
+		fixtureFile{"theme/void.css", voidThemeCSS},
+	)
+}
+
+func TestAddPiecePrintsItsPalettes(t *testing.T) {
+	reg := pickerFixture(t)
+	app := newApp(t, false)
+	res, err := Add(Options{AppRoot: app, Names: []string{"shell"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(res.Themes, " ") != "void dim" {
+		t.Errorf("palettes = %v, want [void dim] (deduped, first-seen order)", res.Themes)
+	}
+	if out := render(res); !strings.Contains(out, "$ puzzle add theme void dim") {
+		t.Errorf("summary should print the add theme step, got:\n%s", out)
+	}
+	if fileExists(filepath.Join(app, "app", "styles", "themes", "dim.css")) {
+		t.Error("palettes are print-only (D3) — add piece must not copy them")
+	}
+}
+
+func TestAddPieceSkipsPalettesAlreadyThere(t *testing.T) {
+	reg := pickerFixture(t)
+	app := newApp(t, false)
+	write(t, app, "app/styles/themes/dim.css", dimThemeCSS)
+	writeStyles(t, app, "@import \"tailwindcss\";\n@import \"@magic-spells/puzzle-pieces/themes/void.css\";\n")
+	res, err := Add(Options{AppRoot: app, Names: []string{"picker"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Themes) != 0 {
+		t.Errorf("dim is on disk and void package-imported — nothing to print, got %v", res.Themes)
+	}
+	if strings.Contains(render(res), "puzzle add theme") {
+		t.Errorf("no add theme step expected, got:\n%s", render(res))
+	}
+}
+
+// A Windows checkout (core.autocrlf=true) turns the LF registry theme into CRLF
+// on disk. Theme hashes fold CRLF to LF, so that copy is the same theme: no
+// stale hint, plain "installed", and `add theme default` sees it unmodified.
+func TestCRLFThemeCopyCountsAsUnmodified(t *testing.T) {
+	crlf := func(s string) string { return strings.ReplaceAll(s, "\n", "\r\n") }
+	reg := multiThemeFixture(t)
+
+	// Current registry bytes, checked out as CRLF.
+	app := olderThemeApp(t, crlf(defaultThemeCSS), defaultThemeCSS)
+	res, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ThemeHint != "" {
+		t.Errorf("a CRLF copy of the current theme needs no hint, got %q", res.ThemeHint)
+	}
+	listing, err := ListThemes(themeOpts(reg, app))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := stateOf(t, listing.Themes, "default"); st != ThemeInstalled {
+		t.Errorf("default state = %q, want %q", st, ThemeInstalled)
+	}
+	themes, err := AddThemes(themeOpts(reg, app, "default"))
+	if err != nil {
+		t.Fatalf("a CRLF copy of the current theme must not be refused: %v", err)
+	}
+	if st := stateOf(t, themes.Themes, "default"); st != ThemeUpToDate {
+		t.Errorf("add theme default state = %q, want %q", st, ThemeUpToDate)
+	}
+
+	// An OLDER registry copy, checked out as CRLF, still matches its LF lock
+	// hash: the hint says refresh (no --overwrite), and add theme refreshes it.
+	older := olderThemeApp(t, crlf(olderDefaultThemeCSS), olderDefaultThemeCSS)
+	res, err = Add(Options{AppRoot: older, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ThemeHint != staleThemeHintLine {
+		t.Errorf("CRLF older copy: hint = %q, want the refresh line", res.ThemeHint)
+	}
+	themes, err = AddThemes(themeOpts(reg, older, "default"))
+	if err != nil {
+		t.Fatalf("an unmodified CRLF older copy must refresh without --overwrite: %v", err)
+	}
+	if st := stateOf(t, themes.Themes, "default"); st != ThemeUpdated {
+		t.Errorf("add theme default state = %q, want %q", st, ThemeUpdated)
+	}
+}
+
+func stateOf(t *testing.T, outcomes []ThemeOutcome, name string) ThemeState {
+	t.Helper()
+	for _, o := range outcomes {
+		if o.Name == name {
+			return o.State
+		}
+	}
+	t.Fatalf("no outcome for theme %q in %+v", name, outcomes)
+	return ""
+}

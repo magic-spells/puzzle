@@ -44,6 +44,7 @@ A component that owns its loop — data table, virtual list, combobox, tree, mul
 
 ## Decision
 
+
 **Grammar**
 - `<Snippet>` is caller-side, paired-only (self-closing is an error), and legal only as a direct child of a component invocation (the `slot="x"` position rule, including rejection inside control flow).
 - `fits="x"` (static, non-empty) routes to `<Slot name="x">`; omitted, it fills `<Children>`.
@@ -64,7 +65,7 @@ A component that owns its loop — data table, virtual list, combobox, tree, mul
 - Children, not props, because `fn` closes over caller `__d` and loop variables and can't be identity-cached like D62 `__h` handlers; as a prop it would break the shallow compare and re-run the child's `data()` every caller render. The children channel is rebuilt every render and rides the slot-only parent-update path.
 - Partitioning puts snippets in a third bucket; an args-bearing marker with a matching snippet splices `fn(args)` — fresh vnodes per stamp, so N stamps patch through keyed reconciliation with no cloning.
 - SSG and the static kernel share expansion. A `SNIPPET_TAG` vnode reaching the serializer or element mount throws the metadata-tag diagnostic (it came from a build the D89 scan couldn't see). A prepared takeover tree expands once; `ViewManager.renderFresh()` (recovery only) always expands.
-- Dev-only warnings, once per (component, position): declared `params` vs `Object.keys(args)` mismatch; an args-bearing marker that got plain content; a snippet `fn` that returned a marker. No unused-snippet warning (a marker in a false `{#if}` or empty `{#for}` is indistinguishable from a mistake).
+- Dev-only warnings, once per (component, position): a declared param the marker does not hand over (declaring a subset is legal and quiet); an args-bearing marker that got plain content; a snippet `fn` that returned a marker. No unused-snippet warning (a marker in a false `{#if}` or empty `{#for}` is indistinguishable from a mistake).
 - Gated by `__PUZZLE_HAS_SNIPPETS__` (D89): an inline `typeof` probe at each site, never hoisted to a module const. Non-users pay 0 bytes.
 
 **Forwarding.** A bare `<Children/>` inside a nested component invocation forwards the caller's snippets alongside default content (D71's rule), untouched and transitively; the inner component's partitioning consumes them. An args-bearing marker stamps locally and never forwards; a wrapper may do both. Runtime-only, behind the same probe.

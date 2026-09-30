@@ -63,7 +63,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   <Rating value={ 3.5 } readOnly />
 //
 //   // interactive, bound to parent state
-//   <Rating value={ score } @change={ (v) => setData('score', v) } />
+//   <Rating value={ score } @change={ setScore } />
 //
 //   // retint (Sparkline's currentColor trick — a text-* color on the root wins)
 //   <Rating value={ 4 } readOnly class="text-amber-500" />
