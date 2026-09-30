@@ -83,36 +83,51 @@ component tag in `<puzzle-view>` and `<puzzle-skeleton>` as used — like
 `react/jsx-uses-vars` — and never reports anything itself. A component tag is
 any tag whose name does not start with an ASCII lowercase letter (`<Card>`,
 `<Élan>`, `<_Row>`); a family tag (`<Frame.Header>`) marks its root, `Frame`.
+Only markup counts: a tag written inside an HTML or template comment, a
+`{#raw}` block, an attribute value or a string in `{ … }` is not a use.
 Template expressions (`{ title }`) read view data, never `<script>` bindings,
 so a `const` referenced only inside `{ … }` is still reported as unused.
 
 ### TypeScript (`<script lang="ts">`)
 
-For `.pzl` files whose script sections are TypeScript, layer `@typescript-eslint` on the
-virtual `.ts` files the processor emits. `recommended` covers only the JS
-blocks — a TS block needs a TS parser, so without an entry like this one it is
-skipped rather than parsed as JavaScript:
+The processor names a TypeScript block `*.pzl/0_scripts.ts`. `recommended`
+covers only the JS blocks, because a TS block needs a TS parser: without one,
+ESLint would parse it as JavaScript and stop with a fatal error, so
+`recommended` leaves TS blocks unlinted. Add `puzzle.configs.typescript` after
+your TypeScript config to lint them with the same setup the JS blocks get
+(`puzzle/uses-template-components` on, the whitespace/BOM rules off):
 
 ```js
+import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import puzzle from '@magic-spells/eslint-plugin-puzzle';
 
 export default [
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  ...puzzle.configs.recommended,
+  puzzle.configs.typescript,
+];
+```
+
+`puzzle.configs.typescript` is a single entry (no spread) for
+`**/*.pzl/*_scripts.ts`, and it sets **no parser**: it relies on the config
+before it to parse those files as TypeScript, which
+`tseslint.configs.recommended` does for every file. If you wire the parser
+yourself instead, put a parser entry before it:
+
+```js
+export default [
   ...puzzle.configs.recommended,
   {
-    // The processor names TS blocks `*.pzl/0_scripts.ts`.
     files: ['**/*.pzl/*_scripts.ts'],
     languageOptions: { parser: tseslint.parser },
-    plugins: { '@typescript-eslint': tseslint.plugin, puzzle },
+    plugins: { '@typescript-eslint': tseslint.plugin },
     rules: {
-      // What `recommended` applies to the JS blocks.
-      'puzzle/uses-template-components': 'error',
-      'eol-last': 'off',
-      'no-trailing-spaces': 'off',
-      'unicode-bom': 'off',
       // your TS rules
     },
   },
+  puzzle.configs.typescript,
 ];
 ```
 

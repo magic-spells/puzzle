@@ -17,7 +17,15 @@
 // during preprocess and injected as synthetic ESLint messages in postprocess,
 // keyed by filename through a module-level Map.
 
-import { splitSections } from './split.js';
+import {
+	splitSections,
+	scanBraceGroup,
+	scanInlineComment,
+	isBlockCommentOpen,
+	scanBlockComment,
+	isBlockRawOpen,
+	scanBlockRaw,
+} from './split.js';
 
 // Carries splitter errors from preprocess to postprocess, keyed by filename.
 const errorStore = new Map();
@@ -29,12 +37,90 @@ const SECTION_RULE_ID = 'puzzle/no-invalid-sections';
 // from preprocess to the puzzle/uses-template-components rule.
 const tagStore = new Map();
 
-// A component tag per D167: a tag name whose first character is anything but
-// an ASCII lowercase letter (<Card>, <Élan>, <_Row>, <Ωmega>). Tag names start
-// like the compiler lexer's startsTagName (ASCII letter, '_', or a non-ASCII
-// identifier start; never '$'). The capture is the root identifier, so
-// <Frame.Header> yields Frame, the binding the family tag renders.
-const COMPONENT_TAG = /<(?![a-z])([_\p{ID_Start}]\p{ID_Continue}*)/gu;
+// TAG_ROOT reads a tag name's root identifier after '<'. Tag names start like
+// the compiler lexer's startsTagName (ASCII letter, '_', or a non-ASCII
+// identifier start; never '$'), so <$50 is text. The root stops at the first
+// '.', so <Frame.Header> yields Frame, the binding the family tag renders.
+// TAG_REST consumes the remainder of the name (D167 name characters).
+const TAG_ROOT = /[_\p{ID_Start}]\p{ID_Continue}*/uy;
+const TAG_REST = /[\p{ID_Continue}\-:.]*/uy;
+
+// matchAt runs a sticky regex at s[i] and returns the match text or ''.
+function matchAt(re, s, i) {
+	re.lastIndex = i;
+	const m = re.exec(s);
+	return m ? m[0] : '';
+}
+
+// skipBraceSpan steps over a template construct opening at s[i] === '{': an
+// inline {## } or block {#comment} comment, or a balanced {…} group. A
+// malformed group advances one char, leaving the rest for the compiler to
+// report, as findTemplateClose in split.js does.
+function skipBraceSpan(s, i) {
+	let res;
+	if (s.startsWith('{##', i)) {
+		res = scanInlineComment(s, i);
+	} else if (isBlockCommentOpen(s, i)) {
+		res = scanBlockComment(s, i);
+	} else {
+		res = scanBraceGroup(s, i);
+	}
+	return res.err ? i + 1 : res.end;
+}
+
+// skipOpenTagAttrs steps from just past a tag name to just past the tag's
+// closing '>', stepping over quoted attribute values and {…} groups so a '<'
+// or '>' inside either is not markup.
+function skipOpenTagAttrs(s, i) {
+	while (i < s.length) {
+		const c = s[i];
+		if (c === '>') return i + 1;
+		if (c === '"' || c === "'") {
+			const end = s.indexOf(c, i + 1);
+			i = end < 0 ? s.length : end + 1;
+		} else if (c === '{') {
+			i = skipBraceSpan(s, i);
+		} else {
+			i++;
+		}
+	}
+	return i;
+}
+
+// collectComponentTags adds to names the root of every component tag in the
+// template text s. A component tag (D167) is one whose name's first character
+// is anything but an ASCII lowercase letter (<Card>, <Élan>, <_Row>, <Ωmega>).
+// Only ordinary markup counts: the walk mirrors findTemplateClose in split.js,
+// skipping <!-- --> comments, \{ \} escapes, {#raw} spans, template comments
+// and {…} expressions, and each open tag's attribute values, so a tag written
+// inside any of those (<!-- <Old/> -->, { '<Card>' }, title="<Card>") is not
+// a use.
+function collectComponentTags(s, names) {
+	for (let i = 0; i < s.length;) {
+		if (s.startsWith('<!--', i)) {
+			const end = s.indexOf('-->', i + 4);
+			i = end < 0 ? i + 4 : end + 3;
+		} else if (s[i] === '\\' && (s[i + 1] === '{' || s[i + 1] === '}')) {
+			i += 2;
+		} else if (isBlockRawOpen(s, i)) {
+			const raw = scanBlockRaw(s, i);
+			i = raw.err ? s.length : raw.end;
+		} else if (s[i] === '{') {
+			i = skipBraceSpan(s, i);
+		} else if (s[i] === '<') {
+			const root = matchAt(TAG_ROOT, s, i + 1);
+			if (!root) {
+				i++;
+				continue;
+			}
+			if (!(root[0] >= 'a' && root[0] <= 'z')) names.add(root);
+			const nameEnd = i + 1 + root.length;
+			i = skipOpenTagAttrs(s, nameEnd + matchAt(TAG_REST, s, nameEnd).length);
+		} else {
+			i++;
+		}
+	}
+}
 
 // componentTags returns the root names of every component tag in the
 // template sections. Markers (Slot, Children, Snippet, Portal) come along too;
@@ -42,8 +128,7 @@ const COMPONENT_TAG = /<(?![a-z])([_\p{ID_Start}]\p{ID_Continue}*)/gu;
 function componentTags(sections) {
 	const names = new Set();
 	for (const section of [sections.view, sections.skeleton]) {
-		if (!section) continue;
-		for (const m of section.content.matchAll(COMPONENT_TAG)) names.add(m[1]);
+		if (section) collectComponentTags(section.content, names);
 	}
 	return names;
 }
@@ -61,7 +146,7 @@ function blankOutside(src, start, end) {
 			out[i] = src[i];
 		} else {
 			const c = src[i];
-			out[i] = c === '\n' || c === '\r' || (i === 0 && c === '﻿') ? c : ' ';
+			out[i] = c === '\n' || c === '\r' || (i === 0 && c === '\uFEFF') ? c : ' ';
 		}
 	}
 	return out.join('');

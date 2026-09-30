@@ -4,8 +4,8 @@
 // (`puzzle/puzzle`) that lints the <script> body of a .pzl file as real JS/TS
 // and reports section-structure errors, one rule
 // (`puzzle/uses-template-components`) that marks components rendered as
-// template tags as used, plus a `recommended` flat-config array that wires
-// them up.
+// template tags as used, a `recommended` flat-config array that wires them up,
+// and a `typescript` entry that extends the rule setup to `lang="ts"` blocks.
 
 import { createRequire } from 'node:module';
 import { processor, usesTemplateComponents } from './processor.js';
@@ -45,6 +45,13 @@ const plugin = {
 //      ESLint lint it, and a `lang="ts"` block handed to the default parser is
 //      a fatal parse error. TS blocks are linted only when the user's config
 //      adds a TS-parser entry for `**/*.pzl/*_scripts.ts` (see README).
+const virtualScriptRules = {
+	'puzzle/uses-template-components': 'error',
+	'eol-last': 'off',
+	'no-trailing-spaces': 'off',
+	'unicode-bom': 'off',
+};
+
 plugin.configs.recommended = [
 	{
 		name: 'puzzle/recommended',
@@ -56,14 +63,21 @@ plugin.configs.recommended = [
 		name: 'puzzle/virtual-scripts',
 		files: ['**/*.pzl/*_scripts.js'],
 		plugins: { puzzle: plugin },
-		rules: {
-			'puzzle/uses-template-components': 'error',
-			'eol-last': 'off',
-			'no-trailing-spaces': 'off',
-			'unicode-bom': 'off',
-		},
+		rules: { ...virtualScriptRules },
 	},
 ];
+
+// typescript is ONE flat-config object: the same rules as puzzle/virtual-scripts,
+// for the `lang="ts"` blocks. It sets no parser, so it belongs after a config
+// that parses these files with a TS parser (typescript-eslint's
+// `configs.recommended` does, for every file); on its own it would hand TS to
+// the default parser, the fatal error the JS-only glob above avoids.
+plugin.configs.typescript = {
+	name: 'puzzle/typescript',
+	files: ['**/*.pzl/*_scripts.ts'],
+	plugins: { puzzle: plugin },
+	rules: { ...virtualScriptRules },
+};
 
 export default plugin;
 export { plugin, processor };

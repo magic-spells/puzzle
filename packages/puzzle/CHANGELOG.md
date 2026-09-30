@@ -1082,17 +1082,18 @@ checklist sent you.
 - **eslint-plugin-puzzle: an import used only as a template tag is no longer
   reported unused.** The new `puzzle/uses-template-components` rule, on in
   `recommended`, marks every component tag (`<Card>`, `<Élan>`, the root
-  `Frame` of `<Frame.Header>`) used, like `react/jsx-uses-vars`. A `const`
-  read only inside `{ … }` is still reported: template expressions read view
-  data, not `<script>` bindings.
+  `Frame` of `<Frame.Header>`) used, like `react/jsx-uses-vars`. Only markup
+  counts: a tag inside a comment, `{#raw}`, attribute value or string is not a
+  use. A `const` read only inside `{ … }` is still reported: template
+  expressions read view data, not `<script>` bindings.
 - **eslint-plugin-puzzle: autofix no longer corrupts a file that starts with a
   byte-order mark.** Every fix landed one character early.
 - **eslint-plugin-puzzle: `recommended` no longer parses `<script lang="ts">`
   as JavaScript** (a fatal parse error on every TS file). TS blocks are linted
-  only through a TypeScript-parser entry for `**/*.pzl/*_scripts.ts`; the
-  README's entry now also carries the rules `recommended` sets for JS blocks.
-  The README's "extra rules" example targeted `**/*.pzl`, which never reaches
-  the `<script>` body; it now uses `**/*.pzl/*_scripts.js`.
+  when a TypeScript parser covers them; the new `puzzle.configs.typescript`,
+  added after `tseslint.configs.recommended`, gives them the setup the JS
+  blocks get. The README's "extra rules" example targeted `**/*.pzl`, which
+  never reaches the `<script>` body; it now uses `**/*.pzl/*_scripts.js`.
 
 ## 0.7.0 — 2026-09-09
 

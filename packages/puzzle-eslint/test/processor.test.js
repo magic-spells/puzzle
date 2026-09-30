@@ -248,11 +248,11 @@ describe('ESLint end to end (JS)', () => {
 describe('byte-order mark', () => {
 	const rules = { 'prefer-const': 'error', quotes: ['error', 'double'] };
 	const cases = {
-		bom: ['﻿<puzzle-view>é</puzzle-view>\n<script>\n', "let a = 'x'\n", 'export default a\n</script>\n'],
+		bom: ['\uFEFF<puzzle-view>é</puzzle-view>\n<script>\n', "let a = 'x'\n", 'export default a\n</script>\n'],
 		crlf: ['<puzzle-view>é</puzzle-view>\r\n<script>\r\n', "let a = 'x'\r\n", 'export default a\r\n</script>\r\n'],
 		emoji: ['<puzzle-view>🎉🎉 é</puzzle-view>\n<script>\n', "let a = '😀x'\n", 'export default a\n</script>\n'],
 		'bom + crlf + emoji': [
-			'﻿<puzzle-view>🎉</puzzle-view>\r\n<script>\r\n',
+			'\uFEFF<puzzle-view>🎉</puzzle-view>\r\n<script>\r\n',
 			"let a = '😀x'\r\n",
 			'export default a\r\n</script>\r\n',
 		],
@@ -267,26 +267,24 @@ describe('byte-order mark', () => {
 	}
 
 	it('keeps the BOM at index 0 of the virtual text', () => {
-		const blocks = processor.preprocess('﻿<puzzle-view></puzzle-view>\n<script>let a;</script>\n', 'bom.pzl');
+		const blocks = processor.preprocess('\uFEFF<puzzle-view></puzzle-view>\n<script>let a;</script>\n', 'bom.pzl');
 		processor.postprocess([], 'bom.pzl');
-		expect(blocks[0].text[0]).toBe('﻿');
+		expect(blocks[0].text[0]).toBe('\uFEFF');
 	});
 });
 
 // `recommended` only claims the JS blocks: a `lang="ts"` block needs a TS
-// parser, so it is left alone unless the user's own config supplies one (the
-// README's TypeScript entry, mirrored here).
-const tsEntry = {
-	files: ['**/*.pzl/*_scripts.ts'],
-	languageOptions: { parser: tseslint.parser },
-	plugins: { '@typescript-eslint': tseslint.plugin, puzzle: plugin },
-	rules: {
-		'puzzle/uses-template-components': 'error',
-		'eol-last': 'off',
-		'no-trailing-spaces': 'off',
-		'unicode-bom': 'off',
+// parser, so it is left alone unless the user's own config supplies one. This
+// is the README's hand-wired variant: a parser entry, then configs.typescript.
+const TS_BLOCKS = ['**/*.pzl/*_scripts.ts'];
+const tsConfig = [
+	{
+		files: TS_BLOCKS,
+		languageOptions: { parser: tseslint.parser },
+		plugins: { '@typescript-eslint': tseslint.plugin },
 	},
-};
+	plugin.configs.typescript,
+];
 
 async function lintWith(config, src, filePath) {
 	const eslint = new ESLint({ cwd: here, overrideConfigFile: true, overrideConfig: config });
@@ -309,10 +307,32 @@ describe('TypeScript blocks', () => {
 		expect(res.messages).toEqual([]);
 	});
 
-	it('the README TypeScript entry lints TS blocks', async () => {
+	it('tseslint.configs.recommended + configs.typescript: tag imports used, whitespace rules off', async () => {
+		const res = await lintWith(
+			[
+				// Enabled broadly, as a user might; configs.typescript turns them
+				// off for the virtual TS blocks.
+				{ rules: { 'eol-last': 'error', 'no-trailing-spaces': 'error', 'unicode-bom': 'error' } },
+				js.configs.recommended,
+				...tseslint.configs.recommended,
+				...plugin.configs.recommended,
+				plugin.configs.typescript,
+			],
+			fixture('template-components-ts.pzl'),
+			'template-components-ts.pzl',
+		);
+		expect(res.messages.filter((m) => m.fatal)).toEqual([]);
+		// Only the truly unused import and the `{ title }`-only const remain.
+		expect(res.messages.map((m) => [m.ruleId, m.message.match(/'([^']+)'/)[1]]).sort()).toEqual([
+			['@typescript-eslint/no-unused-vars', 'Unused'],
+			['@typescript-eslint/no-unused-vars', 'title'],
+		]);
+	});
+
+	it('the README hand-wired TypeScript entry lints TS blocks', async () => {
 		const src = fixture('basic-ts.pzl').replace('const n: number = 0;', 'let n: number = 0;');
 		const res = await lintWith(
-			[...plugin.configs.recommended, { ...tsEntry, rules: { ...tsEntry.rules, 'prefer-const': 'error' } }],
+			[...plugin.configs.recommended, ...tsConfig, { files: TS_BLOCKS, rules: { 'prefer-const': 'error' } }],
 			src,
 			'basic-ts.pzl',
 		);
@@ -347,13 +367,36 @@ describe('puzzle/uses-template-components', () => {
 		const res = await lintWith(
 			[
 				...plugin.configs.recommended,
-				{ ...tsEntry, rules: { ...tsEntry.rules, '@typescript-eslint/no-unused-vars': 'error' } },
+				...tsConfig,
+				{ files: TS_BLOCKS, rules: { '@typescript-eslint/no-unused-vars': 'error' } },
 			],
 			fixture('template-components-ts.pzl'),
 			'template-components-ts.pzl',
 		);
 		expect(res.messages.filter((m) => m.fatal)).toEqual([]);
 		expect(unusedNames(res, '@typescript-eslint/no-unused-vars')).toEqual(['Unused', 'title']);
+	});
+
+	it('a tag inside a comment, {#raw}, string or attribute value is not a use', async () => {
+		const res = await lintWith(
+			[js.configs.recommended, ...plugin.configs.recommended],
+			fixture('template-components-hidden.pzl'),
+			'template-components-hidden.pzl',
+		);
+		expect(res.messages.filter((m) => m.fatal)).toEqual([]);
+		expect(unusedNames(res, 'no-unused-vars')).toEqual(
+			[
+				'InAttr',
+				'InSingle',
+				'InHtmlComment',
+				'InBlockComment',
+				'InInlineComment',
+				'InRaw',
+				'InString',
+				'InTemplate',
+				'InProp',
+			].sort(),
+		);
 	});
 
 	it('without the rule, tag-only imports are reported (the rule is what marks them)', async () => {
