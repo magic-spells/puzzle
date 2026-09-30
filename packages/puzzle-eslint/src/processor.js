@@ -25,9 +25,35 @@ const errorStore = new Map();
 // SECTION_RULE_ID is the synthetic rule id attached to injected section errors.
 const SECTION_RULE_ID = 'puzzle/no-invalid-sections';
 
+// Carries the component names each file's template renders, keyed by filename,
+// from preprocess to the puzzle/uses-template-components rule.
+const tagStore = new Map();
+
+// A component tag per D167: a tag name whose first character is anything but
+// an ASCII lowercase letter (<Card>, <Élan>, <_Row>, <Ωmega>). Tag names start
+// like the compiler lexer's startsTagName (ASCII letter, '_', or a non-ASCII
+// identifier start; never '$'). The capture is the root identifier, so
+// <Frame.Header> yields Frame, the binding the family tag renders.
+const COMPONENT_TAG = /<(?![a-z])([_\p{ID_Start}]\p{ID_Continue}*)/gu;
+
+// componentTags returns the root names of every component tag in the
+// template sections. Markers (Slot, Children, Snippet, Portal) come along too;
+// they are never script bindings, so marking them used is a no-op.
+function componentTags(sections) {
+	const names = new Set();
+	for (const section of [sections.view, sections.skeleton]) {
+		if (!section) continue;
+		for (const m of section.content.matchAll(COMPONENT_TAG)) names.add(m[1]);
+	}
+	return names;
+}
+
 // blankOutside returns a copy of src with every char outside [start, end)
 // replaced by a space, except '\n' and '\r' which are preserved so line
-// structure is byte-identical.
+// structure is byte-identical, and a leading BOM (U+FEFF at index 0), which
+// is kept so ESLint strips it from the virtual text exactly as it strips it
+// from the physical file — otherwise every autofix range lands one code unit
+// early.
 function blankOutside(src, start, end) {
 	const out = new Array(src.length);
 	for (let i = 0; i < src.length; i++) {
@@ -35,7 +61,7 @@ function blankOutside(src, start, end) {
 			out[i] = src[i];
 		} else {
 			const c = src[i];
-			out[i] = c === '\n' || c === '\r' ? c : ' ';
+			out[i] = c === '\n' || c === '\r' || (i === 0 && c === '﻿') ? c : ' ';
 		}
 	}
 	return out.join('');
@@ -52,6 +78,7 @@ export const processor = {
 	preprocess(text, filename) {
 		const { sections, errors } = splitSections(text, filename);
 		errorStore.set(filename, errors);
+		tagStore.set(filename, componentTags(sections));
 
 		// No <script> section → nothing to lint as JS. Splitter errors are still
 		// surfaced in postprocess (which ESLint calls with an empty message set).
@@ -69,6 +96,7 @@ export const processor = {
 	postprocess(messages, filename) {
 		const injected = errorStore.get(filename) || [];
 		errorStore.delete(filename);
+		tagStore.delete(filename);
 
 		// messages is an array of per-block message arrays. Only block 0 exists
 		// (the extracted <script> body), but flatten defensively.
@@ -90,6 +118,30 @@ export const processor = {
 		}
 
 		return flat;
+	},
+};
+
+// usesTemplateComponents marks every component the template renders as used,
+// the way react/jsx-uses-vars does for JSX: <Card> is the only template
+// construct that reads a <script> binding, so an import used only as a tag is
+// not unused. It never reports. Template expressions (`{ title }`) read view
+// data, never script bindings (D176), so they mark nothing.
+export const usesTemplateComponents = {
+	meta: {
+		type: 'problem',
+		docs: {
+			description: 'Mark components rendered as template tags as used by the <script> body',
+		},
+		schema: [],
+	},
+	create(context) {
+		return {
+			Program() {
+				for (const name of tagStore.get(context.physicalFilename) || []) {
+					context.sourceCode.markVariableAsUsed(name);
+				}
+			},
+		};
 	},
 };
 

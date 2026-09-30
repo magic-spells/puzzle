@@ -54,13 +54,14 @@ export default [
   // applies to the virtual `*.pzl/0_scripts.js` files the processor emits.
   js.configs.recommended,
 
-  // Wire the Puzzle processor onto every .pzl file, and relax a couple of
-  // whitespace/BOM rules on the extracted virtual files.
+  // Wire the Puzzle processor onto every .pzl file, mark components rendered
+  // as template tags as used, and relax a couple of whitespace/BOM rules on
+  // the extracted virtual files.
   ...puzzle.configs.recommended,
 
   // Any extra rules you want on the <script> body:
   {
-    files: ['**/*.pzl'],
+    files: ['**/*.pzl/*_scripts.js'],
     rules: {
       semi: ['error', 'always'],
     },
@@ -68,10 +69,29 @@ export default [
 ];
 ```
 
+Target the extracted block with `**/*.pzl/*_scripts.js` (or
+`**/*.pzl/*_scripts.{js,ts}` alongside a TS parser entry). A `**/*.pzl`
+pattern matches only the outer file, never the extracted `<script>` block, so
+rules scoped to it never reach your code.
+
+### Components used as template tags
+
+An import the `<script>` body only uses as a template tag
+(`import Card from './Card.pzl'` rendered as `<Card>`) is a real use, so
+`recommended` enables `puzzle/uses-template-components`, which marks every
+component tag in `<puzzle-view>` and `<puzzle-skeleton>` as used — like
+`react/jsx-uses-vars` — and never reports anything itself. A component tag is
+any tag whose name does not start with an ASCII lowercase letter (`<Card>`,
+`<Élan>`, `<_Row>`); a family tag (`<Frame.Header>`) marks its root, `Frame`.
+Template expressions (`{ title }`) read view data, never `<script>` bindings,
+so a `const` referenced only inside `{ … }` is still reported as unused.
+
 ### TypeScript (`<script lang="ts">`)
 
 For `.pzl` files whose script sections are TypeScript, layer `@typescript-eslint` on the
-virtual `.ts` files the processor emits:
+virtual `.ts` files the processor emits. `recommended` covers only the JS
+blocks — a TS block needs a TS parser, so without an entry like this one it is
+skipped rather than parsed as JavaScript:
 
 ```js
 import tseslint from 'typescript-eslint';
@@ -83,8 +103,13 @@ export default [
     // The processor names TS blocks `*.pzl/0_scripts.ts`.
     files: ['**/*.pzl/*_scripts.ts'],
     languageOptions: { parser: tseslint.parser },
-    plugins: { '@typescript-eslint': tseslint.plugin },
+    plugins: { '@typescript-eslint': tseslint.plugin, puzzle },
     rules: {
+      // What `recommended` applies to the JS blocks.
+      'puzzle/uses-template-components': 'error',
+      'eol-last': 'off',
+      'no-trailing-spaces': 'off',
+      'unicode-bom': 'off',
       // your TS rules
     },
   },

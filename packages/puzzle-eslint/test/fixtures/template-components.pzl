@@ -1,0 +1,33 @@
+<puzzle-view>
+  <section class="page">
+    <StateGroup label={ title }>
+      <Frame.Header />
+      <Élan />
+      <_Hidden />
+      <Ωmega />
+      <Slot name="aside" />
+      <frame-x></frame-x>
+    </StateGroup>
+  </section>
+</puzzle-view>
+
+<puzzle-skeleton>
+  <Placeholder />
+</puzzle-skeleton>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import StateGroup from './StateGroup.pzl';
+import Frame from './Frame.pzl';
+import Élan from './Elan.pzl';
+import _Hidden from './Hidden.pzl';
+import Ωmega from './Omega.pzl';
+import Placeholder from './Placeholder.pzl';
+import Unused from './Unused.pzl';
+
+// Read only by the template's `{ title }`: template reads resolve against
+// view data, never script bindings (D176), so this stays unused.
+const title = 'Settings';
+
+export default class Page extends PuzzleView {}
+</script>
