@@ -16,7 +16,7 @@ Then open http://localhost:3000.
 ```
 __APP_NAME__/
 ├── app/
-│   ├── app.js            # App init: target, routes, models, formatters
+│   ├── app.js            # App init: target, routes, models, seed data
 │   ├── routes.js         # Route definitions
 │   ├── models/           # Todo model (schema + methods) and registry
 │   ├── components/       # TodoItem.pzl

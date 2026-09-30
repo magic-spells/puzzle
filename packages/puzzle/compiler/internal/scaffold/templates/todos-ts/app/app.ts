@@ -56,25 +56,6 @@ const app = new PuzzleApp({
       updatedAt: new Date('2026-08-01T12:00:00.000Z'),
     });
   },
-
-  // Global formatters available in all templates
-  // (display transformation only — logic belongs in data())
-  formatters: {
-    todoDate: (date: Date | string | null | undefined): string => {
-      if (!date) return '';
-
-      const now = new Date();
-      const todoDate = new Date(date);
-      const diffTime = Math.abs(now.getTime() - todoDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-      if (diffDays === 1) return 'Today';
-      if (diffDays === 2) return 'Yesterday';
-      if (diffDays < 7) return `${diffDays} days ago`;
-
-      return todoDate.toLocaleDateString();
-    },
-  },
 });
 
 // Start the app
