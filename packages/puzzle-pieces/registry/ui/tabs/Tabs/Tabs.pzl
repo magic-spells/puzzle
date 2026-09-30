@@ -68,8 +68,10 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // VARIANT WITHOUT CONTEXT. The root stamps `data-variant`; List and Tab carry
 // every look and switch on a descendant attribute selector. Documented
 // limitation: a nested Tabs with a DIFFERENT variant collides, because the
-// descendant match has equal specificity at both depths — escape with `class=`
-// on the inner members.
+// descendant match has equal specificity at both depths. The same specificity
+// means a plain call-site utility on a List or Tab loses to any property a
+// pills/buttons rule sets: override with the `!` suffix (`px-6!`) or the same
+// `[tab-group[data-variant=…]_&]:` prefix, on the inner members.
 //
 // LAYOUT AND THE LIST↔PANEL GAP LIVE ON THIS ROOT. The host is a flex column
 // with a 1rem gap, for every variant. Two reasons it sits here rather than on a

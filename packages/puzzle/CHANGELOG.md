@@ -919,6 +919,15 @@ checklist sent you.
 - **puzzle-pieces: the `@magic-spells/morph-engine` floor is `^0.4.2`** for
   date-picker, emoji-picker and emoji-picker-simple (D169). 0.4.1 stops the
   morph blob painting a white hairline border on dark themes.
+- **puzzle-pieces: `tabs` owns the gap between the strip and the panel.** The
+  Tabs root is now a flex column with a default `gap-4` in every variant; it
+  has zero specificity, so any `gap-*` on the root replaces it. `<tab-panel>`
+  is an inline custom element, so the old docs' `pt-4` on each panel never
+  moved it — now that panels lay out as blocks it would, so drop `pt-*` from
+  panels copied from older docs. A side-by-side (vertical) layout adds
+  `flex-row` to the root. New `variant="buttons"`: separate outline buttons,
+  the active one filled brand. The underline focus ring is now inset, so the
+  list's `overflow-y: hidden` no longer clips it.
 - **Docs: the Quick Start is `npm install -g @magic-spells/puzzle` then
   `puzzle init`.** The unpublished `create-puzzle-app` wrapper is retired
   (D77).

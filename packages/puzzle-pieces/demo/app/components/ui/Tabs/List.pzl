@@ -25,7 +25,10 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // visible and lets a narrow row break onto a second line.
 //
 // Props
-//   class  merged onto <tab-list>, after the chrome
+//   class  merged onto <tab-list>, after the chrome. Under pills/buttons the
+//          variant rules are (0,2,1)+ specificity, so a plain utility loses on
+//          any property the variant sets — use the `!` suffix (`gap-4!`) or the
+//          same `[tab-group[data-variant=…]_&]:` prefix.
 
 const LIST =
   'items-stretch gap-4 border-b border-border ' +

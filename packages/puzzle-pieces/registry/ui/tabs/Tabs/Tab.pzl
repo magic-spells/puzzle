@@ -24,11 +24,18 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // Props
 //   value     required; the handle this tab reports through @change
 //   disabled  skipped by clicks and by arrow-key roving, upstream
-//   class     merged onto <tab-button>, after the chrome
+//   class     merged onto <tab-button>, after the chrome. Under pills/buttons
+//             the variant rules are (0,2,1)+ specificity, so a plain utility
+//             loses on any property the variant sets — use the `!` suffix
+//             (`px-6!`) or the same `[tab-group[data-variant=…]_&]:` prefix.
 
 const TAB =
   'inline-flex items-center gap-2 whitespace-nowrap text-sm font-medium transition-colors ' +
-  'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+  // The underline ring is INSET (-outline-offset-2): the tab's box is the list's
+  // box, and upstream's `overflow-y: hidden` on <tab-list> would clip an outer
+  // ring on three sides. Pills and buttons have room, so they restate the outer
+  // ring below.
+  'outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2 ' +
   '[&[disabled]]:opacity-50 [&[disabled]]:cursor-not-allowed [&[disabled]]:pointer-events-none ' +
   // underline (default)
   'px-1 pb-2 -mb-px border-b-2 border-transparent text-body hover:text-ink ' +
@@ -37,6 +44,7 @@ const TAB =
   // A neutral segmented control: the active pill is raised, not brand-filled,
   // so it sits quietly in toolbars and filters.
   '[tab-group[data-variant=pills]_&]:mb-0 ' +
+  '[tab-group[data-variant=pills]_&]:focus-visible:outline-offset-2 ' +
   '[tab-group[data-variant=pills]_&]:rounded-md ' +
   '[tab-group[data-variant=pills]_&]:border-b-0 ' +
   '[tab-group[data-variant=pills]_&]:px-3 ' +
@@ -48,6 +56,7 @@ const TAB =
   // soft brand glow. Every border/text/bg line is restated under the variant
   // because the underline defaults above are equal-or-lower specificity.
   '[tab-group[data-variant=buttons]_&]:mb-0 ' +
+  '[tab-group[data-variant=buttons]_&]:focus-visible:outline-offset-2 ' +
   '[tab-group[data-variant=buttons]_&]:rounded-lg ' +
   '[tab-group[data-variant=buttons]_&]:border ' +
   '[tab-group[data-variant=buttons]_&]:border-border ' +

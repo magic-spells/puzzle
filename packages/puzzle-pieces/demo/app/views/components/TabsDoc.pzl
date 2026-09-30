@@ -343,9 +343,13 @@
             on the root and read by the members through a descendant selector, because Puzzle has
             no cross-component context to pass it down as a prop. One consequence: a nested Tabs
             with a <em>different</em> variant collides, since the match has equal specificity at
-            both depths. Give the inner members their own
+            both depths. The same specificity means a plain utility in a List’s or Tab’s
             <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">class</code>
-            to escape it.
+            loses on any property a pills or buttons rule sets — override it with the
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">!</code>
+            suffix or the same
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ variantPrefix }</code>
+            prefix.
           </p>
         </section>
       </div>
@@ -497,13 +501,13 @@ const rootRows = [
 ];
 
 const listRows = [
-  { name: 'class', desc: 'Merged onto tab-list, after the chrome. Must be a direct child of Tabs, with the tabs as its direct children.' },
+  { name: 'class', desc: 'Merged onto tab-list, after the chrome. Must be a direct child of Tabs, with the tabs as its direct children. Under pills and buttons a plain utility loses on any property the variant sets — use the ! suffix (gap-4!) or the same [tab-group[data-variant=…]_&]: prefix.' },
 ];
 
 const tabRows = [
   { name: 'value', desc: 'Required. Carried as data-value; the root maps it to the index upstream works in.' },
   { name: 'disabled', desc: 'Not clickable and skipped by arrow-key roving. Driving `value` to a disabled tab is refused, with a console warning.' },
-  { name: 'class', desc: 'Merged onto tab-button, after the chrome. The selected look hangs off the component’s own aria-selected.' },
+  { name: 'class', desc: 'Merged onto tab-button, after the chrome. The selected look hangs off the component’s own aria-selected. Under pills and buttons a plain utility loses on any property the variant sets — use the ! suffix (px-6!) or the same [tab-group[data-variant=…]_&]: prefix.' },
 ];
 
 const panelRows = [
@@ -548,6 +552,7 @@ export default class TabsDoc extends PuzzleView {
       codePills,
       codeButtons,
       box: BOX,
+      variantPrefix: '[tab-group[data-variant=…]_&]:',
       codeDisabled,
       codeControlled,
       codeDynamic,
