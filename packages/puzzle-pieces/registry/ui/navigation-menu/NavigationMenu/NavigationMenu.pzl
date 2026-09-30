@@ -45,12 +45,27 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // Children are the bar's <li>s. Every NavigationMenu.Item renders one and is a
 // dropdown; a plain top-level link is a bare <li> you write yourself around a
-// NavigationMenu.Link variant="bar".
+// NavigationMenu.Link variant="bar". Anything else a site header carries — a
+// logo, a sign-in button — is a bare <li> too, which is what lets the whole
+// header BE the nav, and a wide mega panel span all of it:
+//
+//   <NavigationMenu class="w-full">
+//     <li class="mr-2"><a href="/">Acme</a></li>
+//     …Items and bar links…
+//     <li class="ml-auto"><Button>Sign in</Button></li>
+//   </NavigationMenu>
+//
+// THE BAR IS CHROME — a rounded, bordered, lightly tinted strip with a little
+// padding (BAR below), the triggers and bar links sitting inside it as rounded
+// pills. It is your copy: edit BAR to drop the frame.
 //
 // The <nav> is `relative` and that is LOAD-BEARING: a `wide` mega panel's host
 // goes position: static so the panel spans the nearest POSITIONED ANCESTOR.
 // This element is it. Remove the class and every wide panel drops a
-// viewport-height below the fold.
+// viewport-height below the fold. The panel's top is therefore the bar's
+// bottom edge, not the trigger's: its 8px gap (DropdownPanel.Panel's mt-2)
+// starts below the bar's padding and border, which is why every Item carries a
+// short close-delay — see Item.pzl.
 //
 // Accessibility — the DISCLOSURE pattern, not menubar/menuitem roles, following
 // APG guidance for site navigation: those roles promise a desktop-app keyboard
@@ -59,22 +74,29 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // aria-expanded / aria-controls itself; never author them here.
 //
 // STYLESHEETS. Through DropdownPanel this piece needs the component's CSS in
-// your app's style entry — the required core sheet plus the optional effects
-// sheet if you want the drawn trigger arrow (the stock Trigger has the hook):
+// your app's style entry. The core sheet is REQUIRED: it positions the panels
+// and draws the hover BRIDGE (an invisible ::before wedge on each trigger) that
+// keeps a hover-opened panel open while the pointer crosses the 8px gap —
+// without it the panel closes under the cursor. The effects sheet is optional
+// and draws the trigger arrow (the stock Trigger has the hook):
 //   @import "@magic-spells/dropdown-panel/css" layer(components);
 //   @import "@magic-spells/dropdown-panel/css/effects" layer(components);
 //
 // Props
 //   label   aria-label for the <nav> (default "Main")
-//   class   merged onto <nav>, after `relative`
-//   gap     Tailwind gap utility for the bar (default "gap-1")
+//   class   merged onto <nav>, after the bar chrome
+//   gap     Tailwind gap utility for the bar (default "gap-0.5")
+
+// `relative` is load-bearing (above). The rest is the look: a tinted, bordered,
+// rounded strip. The list wraps, so a narrow screen never scrolls sideways.
+const BAR = 'relative rounded-xl border border-border bg-surface-sunken/60 p-1.5';
 
 export default class NavigationMenu extends PuzzleView {
   data(params, props) {
     return {
       navLabel: props.label != null ? String(props.label) : 'Main',
-      rootClass: ['relative', props.class].filter(Boolean).join(' '),
-      listClass: ['flex items-center', props.gap || 'gap-1'].join(' '),
+      rootClass: [BAR, props.class].filter(Boolean).join(' '),
+      listClass: ['flex flex-wrap items-center', props.gap || 'gap-0.5'].join(' '),
     };
   }
 }

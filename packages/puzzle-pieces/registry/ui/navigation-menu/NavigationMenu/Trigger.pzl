@@ -26,7 +26,8 @@ import DropdownPanel from '../DropdownPanel/index.js';
 // the component. Do not author them.
 //
 // Props
-//   variant  'bar' (default) — top-level bar chrome
+//   variant  'bar' (default) — a rounded pill in the bar, brand-tinted on
+//                     hover and while its panel is open
 //            'card' — an in-panel submenu trigger: full-width row with the
 //                     arrow pushed to the far edge, matching Link's cards
 //   arrow    true (default) → render the [data-dropdown-arrow] hook
@@ -34,17 +35,28 @@ import DropdownPanel from '../DropdownPanel/index.js';
 
 // The outline COLOR is set unconditionally (outline-ring) so transition-colors
 // does not flash it in from the default on focus.
-const BAR =
-  'inline-flex items-center gap-1 whitespace-nowrap select-none cursor-pointer ' +
-  'rounded-md px-3 py-2 text-sm font-medium text-body transition-colors hover:text-ink ' +
+const FOCUS =
   'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
 
+// A rounded pill inside the bar. Hover and OPEN share one treatment — the
+// brand tint with its on-tint text — so the trigger whose panel is showing
+// stays lit while the pointer is down in the panel. aria-expanded is written
+// by the component; the variant only reads it.
+const BAR =
+  'inline-flex items-center gap-1.5 whitespace-nowrap select-none cursor-pointer ' +
+  'rounded-lg px-3 py-2 text-sm font-medium text-body transition-colors ' +
+  'hover:bg-brand-tint hover:text-brand-on-tint ' +
+  'aria-expanded:bg-brand-tint aria-expanded:text-brand-on-tint ' +
+  FOCUS;
+
 // A submenu trigger sitting inside a panel: same box as a Link card, with the
-// arrow pushed to the trailing edge.
+// arrow pushed to the trailing edge, and held highlighted while its submenu is
+// open.
 const CARD =
   'flex w-full items-center justify-between gap-2 select-none cursor-pointer ' +
-  'rounded-md p-3 text-sm font-medium text-ink transition-colors hover:bg-surface-sunken ' +
-  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+  'rounded-md px-3 py-2 text-sm font-medium text-ink transition-colors ' +
+  'hover:bg-surface-sunken aria-expanded:bg-surface-sunken ' +
+  FOCUS;
 
 export default class Trigger extends PuzzleView {
   data(params, props) {
