@@ -46,6 +46,15 @@ notes:
       This is Cory's explicit choice ("I told you to use bg-noise-dark-20.png"), and it overrides
       the contrast measurement that motivated the swap. bg-noise.png was removed. Don't reintroduce
       a second offset layer: a doubled 20% dark tile darkens the scrim.
+  - kind: decision
+    text: >-
+      2026-09-30: `/themes/shell` (views/themes/Shell.pzl) removed at Cory's request. Compare
+      already renders the same ShellMock in all 4 schemes × 3 modes, the docs site itself is the
+      frame/rail/panel shell, and /theming explains the roles in prose, so the full-size labelled
+      mock was redundant. Design-system panels are now SchemePanel, Compare and Pieces; ShellMock
+      stays (Compare uses it). The Shell.pzl mention in the "Design-system panels" bullet above is
+      historical.
+    sha: '48252974'
 ---
 
 # The demo docs-site app
