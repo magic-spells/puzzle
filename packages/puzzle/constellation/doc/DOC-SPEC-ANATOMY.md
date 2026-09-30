@@ -143,6 +143,7 @@ export default class TodoHome extends PuzzleView {
 
 - Generated `render()` is attached by **prototype assignment after the class** (`TodoHome.prototype.render = ...`); generated code never rewrites the user's class body.
 - Class fields initialize **after** `super()` returns, so the `PuzzleView` constructor never reads `this.events`; the runtime reads it lazily at mount, when wiring handlers.
+- **Development builds warn about a non-arrow handler that uses `this`.** Nothing checks the arrow rule at compile time, but at a view's first mount, behind the inline `__PUZZLE_DEV__` probe, `PuzzleView` reads each own function value of `events` once per view class: when its source (`Function.prototype.toString`) is not an arrow and — comments and quoted strings aside — mentions `this`, it warns once naming the view, the handler and the fix (`name: (…) => { … }`, `async` kept). The check is textual, not a parse: a method literally named `async` reads as an arrow (a miss), and a nested `function` that uses its own `this` reads as a use (a spurious warning). Shorthand that never touches `this` stays quiet. esbuild keeps method shorthand and arrows as written for both JavaScript and `<script lang="ts">`, and dev builds are not minified, so the source text is the author's. Production DCEs the call and the function — `TestBuildDevDefineDCE` asserts the message is absent.
 
 ## 10. Component context
 

@@ -625,6 +625,15 @@ checklist sent you.
   and the command palette rides `dialog-panel`, so its scrim and panel fade
   both ways. The pieces docs site gains a mobile shell: a page pill that
   morphs into a bottom sheet.
+- **A development warning for an `events` handler that gets the wrong `this`
+  (D03).** The runtime calls every handler as `this.events.name(…)`, so a
+  method-shorthand (`play() { … }`) or `function` handler runs with the events
+  object as `this`: it compiled, then broke when the event fired. A view's first
+  mount now warns, once per view class, for each such handler that uses `this`,
+  naming the view and handler and the fix — write it as an arrow function,
+  `play: () => { … }`. A shorthand handler that never touches `this` works and
+  stays quiet. JavaScript and `<script lang="ts">` alike; production builds
+  carry none of it.
 
 ### Changed
 

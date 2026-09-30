@@ -40,7 +40,8 @@ export default class Counter extends PuzzleView {
 
   // Event handlers are a class field of arrow functions so `this` is always the
   // component instance. Method shorthand (increment() {}) gets the events object
-  // as `this` instead, so it breaks as soon as it touches `this`.
+  // as `this` instead, so it breaks as soon as it touches `this` — `puzzle dev`
+  // warns in the console when a handler is written that way.
   events = {
     increment: () => {
       this.setData('count', this.getData().count + 1);

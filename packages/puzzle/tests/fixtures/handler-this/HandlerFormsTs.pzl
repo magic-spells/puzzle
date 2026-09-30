@@ -1,0 +1,38 @@
+<puzzle-view>
+  <button class="play" @click={ play }>play</button>
+  <button class="load" @click={ load }>load</button>
+  <button class="reset" @click={ reset }>reset</button>
+  <button class="bump" @click={ bump }>{ count }</button>
+</puzzle-view>
+
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+
+interface FormsState {
+  count: number;
+}
+
+// The TypeScript twin of HandlerForms: esbuild strips the types and must leave
+// method shorthand and arrows as they were written.
+export default class HandlerFormsTs extends PuzzleView {
+  created(): void {
+    this.setData('count', 0);
+  }
+
+  events = {
+    play(event: MouseEvent): void {
+      (this as { played?: boolean }).played = event.type === 'click';
+    },
+    async load(): Promise<void> {
+      await null;
+      (this as { loaded?: boolean }).loaded = true;
+    },
+    reset(): string {
+      return 'this is fine';
+    },
+    bump: (): void => {
+      this.setData('count', this.getData<FormsState>().count + 1);
+    },
+  };
+}
+</script>
