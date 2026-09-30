@@ -11,6 +11,9 @@
 //     </NavigationMenu.Item>
 //   </NavigationMenu>
 //
+// Group is the one member that composes nothing: a headed column for a `wide`
+// mega panel (see Group.pzl).
+//
 // The members COMPOSE the shared DropdownPanel family rather than re-exporting
 // it, which is what leaves them somewhere to hang this bar's chrome — and what
 // lets you edit NavigationMenu/Trigger.pzl in your own app without forking the
@@ -20,7 +23,8 @@ import Item from './Item.pzl';
 import Trigger from './Trigger.pzl';
 import Content from './Content.pzl';
 import Link from './Link.pzl';
+import Group from './Group.pzl';
 
-export { NavigationMenu, Item, Trigger, Content, Link };
+export { NavigationMenu, Item, Trigger, Content, Link, Group };
 
-export default Object.assign(NavigationMenu, { Item, Trigger, Content, Link });
+export default Object.assign(NavigationMenu, { Item, Trigger, Content, Link, Group });

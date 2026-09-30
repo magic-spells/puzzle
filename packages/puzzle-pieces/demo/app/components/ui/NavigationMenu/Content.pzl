@@ -20,9 +20,26 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //     <NavigationMenu.Link href="/a" label="Analytics" description="…"/>
 //   </NavigationMenu.Content>
 //
-// COLUMNS ARE EXPLICIT. The old piece counted children and flipped to two
-// columns past four of them; now you say so. `columns={ 2 }` is one column on
-// small screens and two from `md` up, which is what a link-card panel wants.
+// COLUMNS. `columns` is 1 (the default for a popover panel), 2, 3 or 4, each
+// collapsing to one column on small screens:
+//   2 → two from md up          3 → two from sm, three from lg
+//   4 → two from sm, four from lg
+//
+// MEGA PANELS. `wide` makes the panel span the whole <nav> and switches to the
+// mega layout: generous padding (px-6 py-5), wide gutters, and — when
+// `columns` is left unset — ONE EQUAL COLUMN PER CHILD from md up (grid-flow-col
+// + auto-cols-fr; two per row from sm, stacked below). That is the shape a mega
+// menu wants: give it one NavigationMenu.Group per column and the count takes
+// care of itself.
+//
+//   <NavigationMenu.Content wide>
+//     <NavigationMenu.Group label="Software">…Links…</NavigationMenu.Group>
+//     <NavigationMenu.Group label="Hardware">…Links…</NavigationMenu.Group>
+//     <NavigationMenu.Group label="Services">…Links…</NavigationMenu.Group>
+//   </NavigationMenu.Content>
+//
+// A wide panel with an explicit `columns` keeps that count instead — the way
+// to lay a flat run of links out in a grid.
 //
 // PLACEMENT IS PURE CSS. There is no measuring pass and no viewport clamp —
 // that JS is gone with the port. Three knobs cover what it did:
@@ -30,34 +47,44 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //   * a panel that should span the whole bar → wide (the family's <nav> is
 //     already `relative`, which is what a wide panel positions against)
 //   * a submenu → opens="right"
+// The gap between a panel and its trigger (8px down, beside a submenu's row)
+// is the shared base's — see DropdownPanel/Panel.pzl.
 //
 // Never put overflow-hidden on this or on anything above it: it clips nested
 // submenus at this panel's edge.
 //
 // Props (forwarded to DropdownPanel.Panel unless noted)
-//   columns  1 (default) | 2 — this member's own layout prop
+//   columns  1 | 2 | 3 | 4 — this member's own layout prop. Default 1, or one
+//            column per child on a wide panel
 //   wide     full-width mega panel spanning the <nav>
 //   opens    'down' (default) | 'right' for a submenu
 //   align    'start' (default) | 'end'
 //   effect   'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
 //   class    merged onto <dropdown-panel>, after the layout classes
 
-const ONE = 'grid grid-cols-1 gap-1';
-const TWO = 'grid grid-cols-1 gap-1 md:grid-cols-2';
-// A mega panel gets more room to breathe than a popover's p-2.
-const WIDE = 'p-4';
+const COLUMNS = {
+  1: 'grid-cols-1',
+  2: 'grid-cols-1 md:grid-cols-2',
+  3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+  4: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4',
+};
+// One equal column per child from md up.
+const AUTO = 'grid-cols-1 sm:grid-cols-2 md:grid-cols-none md:grid-flow-col md:auto-cols-fr';
+
+// A popover panel keeps the base's p-2 and tight rows; a mega panel gets room
+// to breathe between its columns.
+const TIGHT = 'grid gap-1';
+const WIDE = 'grid gap-x-6 gap-y-5 px-6 py-5';
 
 export default class Content extends PuzzleView {
   data(params, props) {
+    const wide = !!props.wide;
+    const count = Number(props.columns);
+    const cols = COLUMNS[count] || (wide ? AUTO : COLUMNS[1]);
+
     return {
-      contentClass: [
-        Number(props.columns) === 2 ? TWO : ONE,
-        props.wide ? WIDE : '',
-        props.class,
-      ]
-        .filter(Boolean)
-        .join(' '),
-      wide: props.wide ? true : false,
+      contentClass: [wide ? WIDE : TIGHT, cols, props.class].filter(Boolean).join(' '),
+      wide,
       opens: props.opens,
       align: props.align,
       effect: props.effect,

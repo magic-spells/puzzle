@@ -30,6 +30,7 @@ const NAV_FILES = [
 	'NavigationMenu/Trigger.pzl',
 	'NavigationMenu/Content.pzl',
 	'NavigationMenu/Link.pzl',
+	'NavigationMenu/Group.pzl',
 	'NavigationMenu/index.js',
 ];
 
@@ -290,9 +291,9 @@ test('both barrels export the D167 Object.assign family shape', async () => {
 	const nav = await readText('../registry/ui/navigation-menu/NavigationMenu/index.js');
 	assert.match(
 		nav,
-		/export default Object\.assign\(NavigationMenu, \{ Item, Trigger, Content, Link \}\)/
+		/export default Object\.assign\(NavigationMenu, \{ Item, Trigger, Content, Link, Group \}\)/
 	);
-	assert.match(nav, /export \{ NavigationMenu, Item, Trigger, Content, Link \}/);
+	assert.match(nav, /export \{ NavigationMenu, Item, Trigger, Content, Link, Group \}/);
 });
 
 test('navigation-menu composes the base rather than re-exporting it', async () => {

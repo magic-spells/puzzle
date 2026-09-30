@@ -20,6 +20,7 @@ const FAMILIES = [
 			'Trigger.pzl',
 			'Content.pzl',
 			'Link.pzl',
+			'Group.pzl',
 			'index.js',
 		],
 	},

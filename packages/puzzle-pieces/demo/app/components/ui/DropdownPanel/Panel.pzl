@@ -76,14 +76,24 @@ function oneOf(value, allowed) {
 const CARD =
   'rounded-lg border border-border bg-surface p-2 shadow-md min-w-48 z-40 text-body';
 
-// The trigger gap. The component's stylesheet pins a downward panel flush at
-// top: 100%, so without this the card's border sits on the trigger's. A flipped
-// panel (bottom: 100%) takes the gap on the other side, and a pointer-placed
-// one — ContextMenu's root, which the component pins with an inline
-// position: fixed — has no trigger to clear, so it drops the gap and opens at
-// the click point. Never on opens="right" (a submenu beside its row) or a wide
-// panel, whose top edge is the bar's, not the trigger's.
-const GAP = 'mt-1.5 [&[flipped]]:mt-0 [&[flipped]]:mb-1.5 [&[style*=fixed]]:mt-0';
+// The trigger gap — 8px of air between a panel and whatever opened it, which
+// the package's hover BRIDGE (a ::before on the trigger) is sized to cross.
+// The component's stylesheet pins every panel flush against its anchor, so
+// without these the card's border sits on the trigger's.
+//   * DOWN (the default, and `wide`): mt-2. A flipped panel (bottom: 100%)
+//     takes it on the other side; a pointer-placed one — ContextMenu's root,
+//     which the component pins with an inline position: fixed — has no trigger
+//     to clear, so it drops the gap and opens at the click point. A wide
+//     panel's top is its positioned ANCESTOR's bottom edge (NavigationMenu's
+//     bar), so there the 8px is measured from the bar, not the trigger.
+//   * RIGHT (a submenu, top: 0; left: 100% of its row): ml-3 plus -mt-2.25.
+//     The row sits inside the parent card's p-2 + 1px border, so left: 100% is
+//     9px short of the parent's outer edge — ml-3 clears it by 3px. -mt-2.25
+//     (-9px: this card's own border + p-2) lifts the submenu so its first row
+//     lines up with the row that opened it. Both assume the stock p-2; a panel
+//     restyled with other padding re-tunes them in its own `class`.
+const GAP_DOWN = 'mt-2 [&[flipped]]:mt-0 [&[flipped]]:mb-2 [&[style*=fixed]]:mt-0';
+const GAP_RIGHT = 'ml-3 -mt-2.25';
 
 // The right-align recipe. `left-auto right-0` is meaningless on a wide panel
 // (it is width: 100% already) and on opens="right" (whose left is the point),
@@ -93,11 +103,11 @@ const ALIGN_END = 'left-auto right-0';
 export default class Panel extends PuzzleView {
   data(params, props) {
     const opens = oneOf(props.opens, ['down', 'right']);
-    const down = !props.wide && opens !== 'right';
-    const alignEnd = props.align === 'end' && down;
+    const right = opens === 'right';
+    const alignEnd = props.align === 'end' && !props.wide && !right;
 
     return {
-      panelClass: [CARD, down ? GAP : '', alignEnd ? ALIGN_END : '', props.class]
+      panelClass: [CARD, right ? GAP_RIGHT : GAP_DOWN, alignEnd ? ALIGN_END : '', props.class]
         .filter(Boolean)
         .join(' '),
       // A boolean attribute on a custom element: presence is the whole signal,

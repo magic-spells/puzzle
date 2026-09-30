@@ -4,6 +4,8 @@
       class="block"
       trigger={ triggerMode }
       arrow={ arrowMode }
+      openDelay={ openDelay }
+      closeDelay={ closeDelay }
       open={ openState }
       @show={ onShow() }
       @hide={ onHide() }><Children/></DropdownPanel>
@@ -55,12 +57,30 @@ import DropdownPanel from '../DropdownPanel/index.js';
 // Props
 //   trigger   'hover' | 'click' | 'both' (default), forwarded
 //   arrow     'flip' (default) | 'static' | 'none', forwarded
+//   openDelay   ms of hover intent before a hover-opened panel shows, forwarded
+//   closeDelay  ms of grace after the pointer leaves before a hover-opened
+//             panel hides, forwarded. DEFAULTS TO 200 here (the base's own
+//             default is 0). The hover bridge is a wedge under the trigger, a
+//             little wider than it; a `wide` panel starts below the bar's
+//             padding and border and runs the whole bar's width, so a DIAGONAL
+//             trip from the trigger to a far column leaves the wedge and
+//             crosses the bar's padding — which is outside the component. A
+//             submenu has the same hole: the sideways wedge is only as tall as
+//             its row, so a slant down to the submenu's lower rows leaves it.
+//             Measured: straight and steep crossings stay open at 0ms; shallow
+//             diagonals need the grace, and 200ms held them at ~120px/s
+//             pointer speed. The pointer landing in the panel fires its
+//             pointerenter, which cancels the pending close. Pass 0 for the
+//             base's instant close.
 //   open      optional-controlled and edge-triggered, forwarded. Leave it off
 //             and the component owns its own state, which is the normal case.
 //   class     merged onto the <li>
 //   @show / @hide  fired when THIS item's panel opens or closes. A nested
 //             submenu's events are filtered out by the base — see
 //             DropdownPanel.pzl.
+
+// See closeDelay above.
+const CLOSE_DELAY = 200;
 
 export default class Item extends PuzzleView {
   data(params, props) {
@@ -69,6 +89,8 @@ export default class Item extends PuzzleView {
       openState: props.open,
       triggerMode: props.trigger,
       arrowMode: props.arrow,
+      openDelay: props.openDelay,
+      closeDelay: props.closeDelay != null ? props.closeDelay : CLOSE_DELAY,
     };
   }
 
