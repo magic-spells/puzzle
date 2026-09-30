@@ -494,6 +494,11 @@ function partitionSlots(slotChildren) {
 	return { default: def ?? [], named };
 }
 
+// Call-site vnode → its mounted clone, so a cached row's control list (which
+// holds the call-site vnode, `el` never set) can reach the live element.
+/** @type {WeakMap<ViewNode, ViewNode>} */
+const slotClones = new WeakMap();
+
 /**
  * Clone a call-site vnode without its `slot` routing attribute (D53). Mirrors
  * expandNode's clone: a fresh ViewNode over the same children, preserving key
@@ -510,6 +515,7 @@ function stripSlotAttr(vnode) {
 		if (k !== 'slot') attrs[k] = vnode.attrs[k];
 	}
 	const clone = new ViewNode(vnode.tag, attrs, vnode.children);
+	slotClones.set(vnode, clone);
 	clone.key = vnode.key;
 	clone.el = vnode.el;
 	clone.component = vnode.component;
@@ -1422,7 +1428,8 @@ function syncControl(el, attrs, owner) {
 function reassertControls(controls, owner) {
 	for (let i = 0; i < controls.length; i++) {
 		const vnode = controls[i];
-		if (vnode.el) syncControl(vnode.el, vnode.attrs, owner);
+		const el = vnode.el ?? slotClones.get(vnode)?.el;
+		if (el) syncControl(el, vnode.attrs, owner);
 	}
 }
 

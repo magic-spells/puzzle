@@ -94,4 +94,33 @@ describe('a cached row re-asserts controls in its components’ slot content', (
 		expect(box.checked).toBe(true);
 		expect(container.querySelector('.row').textContent).toBe('own');
 	});
+
+	// A named-slot child is mounted through a clone without its `slot` attribute;
+	// the row's control list holds the call-site vnode, so it must reach the clone.
+	it.each([
+		['value', { value: 'bound' }, (el) => (el.value = 'typed'), (el) => el.value, 'bound'],
+		['checked', { type: 'checkbox', checked: true }, (el) => (el.checked = false), (el) => el.checked, true],
+	])('resets a control that is a named slot’s root (%s)', async (_name, attrs, drift, read, want) => {
+		class Field extends PuzzleView {
+			render() {
+				return h('div', { class: 'field' }, [new ViewNode(SLOT_TAG, { name: 'field' }, [])]);
+			}
+		}
+		const { container, render } = setup((s) =>
+			h(Field, { key: s.k }, [h('input', { class: 'bound', slot: 'field', ...attrs }, [])])
+		);
+		render();
+		await flush();
+
+		const el = container.querySelector('.bound');
+		expect(read(el)).toBe(want);
+		drift(el);
+
+		// An unrelated parent re-render: the row is a cache hit.
+		render();
+		await flush();
+
+		expect(container.querySelector('.bound')).toBe(el);
+		expect(read(el)).toBe(want);
+	});
 });
