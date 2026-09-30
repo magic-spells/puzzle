@@ -313,7 +313,7 @@ const installCss = `/* app/styles/styles.css */
 @import "@magic-spells/bottom-sheet/css" layer(components);`;
 
 const usageImport = `import BottomSheet from '@/components/ui/BottomSheet.pzl';`;
-const usageMarkup = `<BottomSheet open={ filtersOpen } title="Filters" @hide={ () => this.setData('filtersOpen', false) }>
+const usageMarkup = `<BottomSheet open={ filtersOpen } title="Filters" @hide={ closeFilters }>
   <FilterList/>
   <Button slot="footer" @press={ apply }>Apply</Button>
 </BottomSheet>
@@ -362,8 +362,8 @@ const codeHero = `<Button variant="outline" @press={ openSheet }>Open snapping s
   title="Filters"
   snapPoints="40,70,90"
   snap={ snap }
-  @snapChange={ (value) => this.setData('snap', value) }
-  @hide={ () => this.setData('sheetOpen', false) }>
+  @snapChange={ setSnap }
+  @hide={ closeSheet }>
 
   <div class="flex gap-2">
     <button type="button" class="…" @click={ setSnap(40) }>40%</button>

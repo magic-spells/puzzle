@@ -179,8 +179,8 @@ const codeControlled = `<TimePicker
   value={ time }
   open={ open }
   @change={ setTime }
-  @show={ () => this.setData('open', true) }
-  @hide={ () => this.setData('open', false) } />`;
+  @show={ openPicker }
+  @hide={ closePicker } />`;
 
 const codeError = `<TimePicker
   label="Start"

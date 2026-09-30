@@ -32,7 +32,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // aria-live="polite"), so screen readers announce appended messages. The default
 // slot is the message list (a column of ChatMessage rows).
 //
-//   <ChatScroller height={ 420 } @pin={ (atBottom) => setPinned(atBottom) }>
+//   <ChatScroller height={ 420 } @pin={ setPinned }>
 //     {#for m in messages}
 //       <ChatMessage ... />
 //     {/for}
