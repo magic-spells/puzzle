@@ -6,6 +6,16 @@ connections:
   - DECISION-D32-CLI-TOOLING
   - DECISION-D03-SCRIPTS-REAL-JS
   - COMPONENT-COMPILER-CLI
+notes:
+  - kind: gotcha
+    text: >-
+      Theme hashes fold CRLF to LF (`themeHash` in compiler/internal/pieces/lock.go): Git for
+      Windows' default core.autocrlf=true checks an app's pieces.css out CRLF, and a raw-byte hash
+      read every unmodified copy as locally edited (the merge/--overwrite hint on every `add piece`,
+      `installed · outdated`, and `add theme default` refusing to refresh). Every theme comparison
+      (staleThemeHint, themeOutdated, AddThemes) and every theme hash written to pieces.lock goes
+      through it; LF bytes hash as before, so existing locks still match. Piece and lib hashes stay
+      raw bytes.
 ---
 
 # D171 — `puzzle add theme <name…>`
