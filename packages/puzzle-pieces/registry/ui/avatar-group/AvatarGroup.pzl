@@ -3,7 +3,7 @@
     {#for item in stack}
       <span key={ item.key } class={ item.wrapperClass } style={ item.style }>
         {#if item.type === 'avatar'}
-          <Avatar src={ item.src } name={ item.name } size={ size }/>
+          <Avatar src={ item.src } name={ item.name } size={ size } class={ item.avatarClass }/>
         {:else}
           <span class={ item.chipClass } aria-label={ item.chipLabel }>{ item.chipText }</span>
         {/if}
@@ -35,21 +35,60 @@ import Avatar from './Avatar.pzl';
 //
 // No callbacks — purely presentational.
 //
-// STACKING: every disc (avatar or chip) sits inside a wrapper <span> that
-// carries the overlap (negative left margin, skipped on the first item), a
-// `ring-2 ring-surface` halo so overlapping discs read as separated against
-// the page background, and an inline z-index. z-index DESCENDS left to right
-// (the first/leftmost item is on top) so faces are never clipped by their
-// neighbor; the overflow chip is the last stacked item and so sits lowest.
-// The overlap uses margin, not transform — the Tailwind v4 translate/scale
-// gotcha (CLAUDE.md) does not apply here.
-const AVATAR_OVERLAP = {
-  sm: '-ml-2',
-  md: '-ml-2.5',
-  lg: '-ml-3',
+// STACKING: every disc (avatar or chip) sits inside a wrapper <span> sized to
+// the disc. Every item after the first pulls left over its neighbour with a
+// negative margin and is CUT OUT around it: the wrapper carries an SVG mask of
+// a circle with a bite out of its left side. The bite is a circle concentric
+// with the left neighbour, `gap` px wider than it, so the neighbour sits in
+// the notch with real transparent space around it — the page background shows
+// through whatever it is (no halo ring faking a cutout in one colour). The
+// first item is a plain circle; the "+N" chip is bitten like any avatar.
+// Nothing overlaps once cut, so there is no z-index. The overlap uses margin,
+// not transform — the Tailwind v4 translate/scale gotcha (CLAUDE.md) does not
+// apply here.
+//
+// The bite eats the left `overlap + gap` px of a disc, so centred initials and
+// the chip's "+N" are nudged right in bitten items: `shift` is left padding on
+// the border-box root, which moves centred content right by half its value.
+// On an Avatar it rides `not-has-[img]:` so a photo (size-full img) stays
+// centred while a failed image's initials fallback is still corrected. A
+// three-character chip ("+12") still doesn't fully clear the bite at sm.
+//
+// Per size: `d` disc diameter (px, = the size-* class), `overlap` (px, = the
+// -ml-* class), `gap` (px of clear space around the neighbour).
+const SIZES = {
+  sm: { d: 24, overlap: 8, gap: 1.5, box: 'size-6', pull: '-ml-2', shift: 'pl-2', faceShift: 'not-has-[img]:pl-2' },
+  md: { d: 32, overlap: 10, gap: 2, box: 'size-8', pull: '-ml-2.5', shift: 'pl-2.5', faceShift: 'not-has-[img]:pl-2.5' },
+  lg: { d: 40, overlap: 12, gap: 2.5, box: 'size-10', pull: '-ml-3', shift: 'pl-3', faceShift: 'not-has-[img]:pl-3' },
 };
 
-const WRAPPER_BASE = 'relative inline-block shrink-0 rounded-full ring-2 ring-surface';
+// The bite mask, in a viewBox that is the disc's own px box: the full square
+// minus a circle, filled evenodd. The circle is the left neighbour's disc
+// grown by `gap` — centred `d - overlap` px left of this disc's centre, at
+// (overlap - r, r), radius r + gap. The mask only removes the bite; the
+// disc's own rounded-full edge draws its outer rim, so bitten discs
+// anti-alias exactly like the first one. mask-image reads the SVG's alpha.
+function biteMask({ d, overlap, gap }) {
+  const r = d / 2;
+  const R = r + gap;
+  const n = (v) => +v.toFixed(3);
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${d} ${d}'>` +
+    `<path fill-rule='evenodd' d='M0 0H${d}V${d}H0Z` +
+    `M${n(overlap - r - R)} ${r}a${R} ${R} 0 1 0 ${2 * R} 0a${R} ${R} 0 1 0 ${-2 * R} 0Z'/></svg>`;
+  // Fully percent-encoded (quotes and parens too) so the unquoted url() is
+  // safe inside a style attribute however it gets serialized.
+  const url =
+    'url(data:image/svg+xml,' +
+    encodeURIComponent(svg).replace(/['()]/g, (ch) => '%' + ch.charCodeAt(0).toString(16)) +
+    ')';
+  return ['', '-webkit-']
+    .map((p) => `${p}mask-image:${url};${p}mask-size:100% 100%;${p}mask-repeat:no-repeat`)
+    .join(';');
+}
+
+// Built once per size at module load — identical for every bitten item.
+const BITE = Object.fromEntries(Object.entries(SIZES).map(([k, s]) => [k, biteMask(s)]));
 
 const CHIP_BASE =
   'inline-flex items-center justify-center rounded-full shrink-0 select-none font-medium ' +
@@ -63,13 +102,18 @@ const CHIP_SIZE = {
 
 export default class AvatarGroup extends PuzzleView {
   data(params, props) {
-    const size = CHIP_SIZE[props.size] ? props.size : 'md';
-    const overlap = AVATAR_OVERLAP[size];
+    const size = SIZES[props.size] ? props.size : 'md';
+    const { box, pull, shift, faceShift } = SIZES[size];
     const source = props.avatars || [];
     const max = Number(props.max) > 0 ? Math.floor(Number(props.max)) : 4;
     const visible = source.slice(0, max);
     const overflowCount = source.length > max ? source.length - max : 0;
-    const total = visible.length + (overflowCount > 0 ? 1 : 0);
+
+    // Item 0 is a plain circle; every later item pulls left and is bitten.
+    const wrap = (i) => ({
+      wrapperClass: ['flex shrink-0', box, i === 0 ? '' : pull].filter(Boolean).join(' '),
+      style: i === 0 ? false : BITE[size],
+    });
 
     const stack = visible.map((avatar, i) => ({
       key: 'avatar-' + i,
@@ -79,8 +123,8 @@ export default class AvatarGroup extends PuzzleView {
       chipClass: '',
       chipText: '',
       chipLabel: '',
-      wrapperClass: [WRAPPER_BASE, i === 0 ? '' : overlap].filter(Boolean).join(' '),
-      style: 'z-index:' + (total - i),
+      avatarClass: i === 0 ? '' : faceShift,
+      ...wrap(i),
     }));
 
     if (overflowCount > 0) {
@@ -91,9 +135,11 @@ export default class AvatarGroup extends PuzzleView {
         name: '',
         chipText: '+' + overflowCount,
         chipLabel: overflowCount + ' more',
-        chipClass: [CHIP_BASE, CHIP_SIZE[size]].join(' '),
-        wrapperClass: [WRAPPER_BASE, visible.length === 0 ? '' : overlap].filter(Boolean).join(' '),
-        style: 'z-index:' + (total - visible.length),
+        avatarClass: '',
+        chipClass: [CHIP_BASE, CHIP_SIZE[size], visible.length === 0 ? '' : shift]
+          .filter(Boolean)
+          .join(' '),
+        ...wrap(visible.length),
       });
     }
 
