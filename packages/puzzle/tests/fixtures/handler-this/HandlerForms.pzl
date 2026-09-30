@@ -1,0 +1,48 @@
+<puzzle-view>
+  <button class="play" @click={ play }>play</button>
+  <button class="legacy" @click={ legacy }>legacy</button>
+  <button class="load" @click={ load }>load</button>
+  <button class="reset" @click={ reset }>reset</button>
+  <button class="bump" @click={ bump }>{ count }</button>
+  <button class="save" @click={ save }>save</button>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Every way to write an `events` handler — see tests/handler-this.test.js. The
+// runtime calls each as this.events.name(…), so only the arrows see the view.
+export default class HandlerForms extends PuzzleView {
+  created() {
+    this.setData('count', 0);
+  }
+
+  events = {
+    // Method shorthand using `this`: it is the events object here.
+    play() {
+      this.played = true;
+    },
+    // A `function` expression: the same trap.
+    legacy: function () {
+      this.legacyRan = true;
+    },
+    // Async method shorthand.
+    async load() {
+      await null;
+      this.loaded = true;
+    },
+    // Shorthand that never touches the view works; a string saying so is not a use.
+    reset() {
+      return 'this is fine';
+    },
+    // Arrows close over the view — the correct form.
+    bump: () => {
+      this.setData('count', this.getData().count + 1);
+    },
+    save: async () => {
+      await null;
+      this.setData('saved', true);
+    },
+  };
+}
+</script>

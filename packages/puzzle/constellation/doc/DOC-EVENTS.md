@@ -41,7 +41,7 @@ export default class TodoHome extends PuzzleView {
 ```
 
 - `events` is a class field (`events = { … };`), with no commas between class members.
-- **Every handler must be an arrow function.** The field initializer runs during construction with `this` bound to the instance, so each arrow keeps the component as `this` forever. Method shorthand (`addTodo(event) { … }`) parses, but the runtime calls it as `this.events.addTodo(event)`, so `this` is the `events` object and `this.setData(...)` throws when the event fires. Nothing catches this at compile time.
+- **Every handler must be an arrow function.** The field initializer runs during construction with `this` bound to the instance, so each arrow keeps the component as `this` forever. Method shorthand (`addTodo(event) { … }`) parses, but the runtime calls it as `this.events.addTodo(event)`, so `this` is the `events` object and `this.setData(...)` throws when the event fires. Nothing catches this at compile time, but a **development build warns** in the console at the view's first mount — once per view class, for each non-arrow handler (shorthand or `function`) that uses `this` — with the view, the handler and the fix. A shorthand handler that never touches `this` works and draws no warning. Production builds carry no check.
 
 ## Binding handlers in templates
 
@@ -195,7 +195,7 @@ Expect a new handle after the child remounts. For an element in your **own** tem
 
 ## Common mistakes
 
-1. **Method shorthand in `events`** — `this` is wrong at event time. Use arrows.
+1. **Method shorthand in `events`** — `this` is wrong at event time. Use arrows. In development the console warns about it at the view's first mount.
 2. **Curried handlers** — `(todo) => () => { … }` returns an unused inner function. Write `(todo) => { … }`; the template call passes the arguments.
 3. **Assigning to a variable or to the object `getData()` returned** — invisible to the renderer. Call `setData` or mutate the record.
 4. **Commas between class members** — `events` is a class field; commas go only between handlers inside it.

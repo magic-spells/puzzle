@@ -61,6 +61,43 @@ const INERT_BIND = () => {};
 // nothing but an unused `let` for the minifier to drop.
 let asyncShapeWarned = null;
 
+// Dev steering for an `events` handler whose `this` is not the component (D03,
+// DOC-SPEC §4). The runtime calls every handler as `this.events.name(…)`, so a
+// method-shorthand or `function` handler runs with the events object as `this`:
+// it compiles, then breaks when the event fires. Only an arrow closes over the
+// instance. Checked once per view CLASS at mount — the fix is one edit in one
+// file — from behind the inline __PUZZLE_DEV__ probe, so production keeps
+// nothing but this unused `let` and the dead function for the minifier to drop.
+let thisHandlerChecked = null;
+
+function warnThisHandlers(view) {
+	const View = view.constructor;
+	thisHandlerChecked ??= new WeakSet();
+	if (thisHandlerChecked.has(View)) return;
+	thisHandlerChecked.add(View);
+	const events = view.events;
+	if (events === null || typeof events !== 'object') return;
+	for (const name of Object.keys(events)) {
+		// The descriptor, not events[name]: reading a getter would run app code.
+		const fn = Object.getOwnPropertyDescriptor(events, name)?.value;
+		if (typeof fn !== 'function') continue;
+		const source = Function.prototype.toString.call(fn);
+		// An arrow's source opens with its parameters and `=>`; a method opens with
+		// its key and `(`. A method literally named `async` reads as an arrow — a
+		// miss, never a false warning.
+		if (/^(?:async\s*)?(?:\(|[^\s(){}=]+\s*=>)/.test(source)) continue;
+		// Comments and quoted strings go first, so a comment or message that says
+		// "this" is not a use of it.
+		const code = source.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"/g, '');
+		if (!/\bthis\b/.test(code)) continue;
+		const where = View.__pzlModule || View.name || 'a view';
+		const arrow = fn.constructor.name === 'AsyncFunction' ? 'async (…) => { … }' : '(…) => { … }';
+		console.warn(
+			`[puzzle] ${where}: handler \`${name}\` uses \`this\` but is not an arrow function — the runtime calls it as this.events.${name}(…), so \`this\` is the events object, not the component; write it as an arrow function: \`${name}: ${arrow}\``
+		);
+	}
+}
+
 export class PuzzleView {
 	// Two-layer component state (Change C, SPEC §4). #local holds values written
 	// via setData() (and created()-seeded state, which uses setData); #model holds
@@ -922,8 +959,13 @@ export class PuzzleView {
 	 */
 	async mount(container, { params = {}, props = {}, children = [], ref = null, preloaded = false } = {}) {
 		// D176 §4: an @event handler named like a library function means two things
-		// in one template — say so once per view and name. Development only.
-		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnHandlerShadows(this);
+		// in one template — say so once per view and name. A handler that is not an
+		// arrow and uses `this` gets the events object as `this` (D03) — say so once
+		// per view class. Development only.
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			warnHandlerShadows(this);
+			warnThisHandlers(this);
+		}
 		this.#vm = new ViewManager(container, this.ctx, this);
 		this.#vm.slotChildren = children;
 		if (!preloaded) {

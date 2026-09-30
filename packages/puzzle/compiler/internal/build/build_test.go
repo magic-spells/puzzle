@@ -197,6 +197,9 @@ func TestBuildDevDefineDCE(t *testing.T) {
 	if !strings.Contains(string(devJS), profileRequestSentinel) {
 		t.Errorf("dev bundle should retain the profiler bridge request %q (__PUZZLE_DEV__ define = true)", profileRequestSentinel)
 	}
+	if !strings.Contains(string(devJS), thisHandlerSentinel) {
+		t.Errorf("dev bundle should retain the non-arrow handler warning (__PUZZLE_DEV__ define = true)")
+	}
 
 	// Production: DCE strips every DEV-guarded branch — no __puzzleHMR reaches
 	// the bundle (zero production cost).
@@ -238,6 +241,11 @@ func TestBuildDevDefineDCE(t *testing.T) {
 	if strings.Contains(string(prodJS), profileRequestSentinel) {
 		t.Errorf("production bundle must DCE the profiler bridge — found the %q request present", profileRequestSentinel)
 	}
+	// The non-arrow `events` handler check (D03) runs from mount() behind the
+	// same inline probe; its function and message must leave with it.
+	if strings.Contains(string(prodJS), thisHandlerSentinel) {
+		t.Errorf("production bundle must DCE the non-arrow handler warning — found %q present", thisHandlerSentinel)
+	}
 	if bytes := metafileBytesInOutput(t, prodMetafile, "client-runtime/devperf.js"); bytes != 0 {
 		t.Errorf("production devperf.js bytesInOutput = %d, want 0", bytes)
 	}
@@ -248,6 +256,10 @@ func TestBuildDevDefineDCE(t *testing.T) {
 
 // devperfSentinel is a minification-proof literal unique to devperf.js.
 const devperfSentinel = "__PUZZLE_PERF__"
+
+// thisHandlerSentinel is a literal unique to PuzzleView's development warning
+// for an `events` handler that is not an arrow and uses `this` (D03).
+const thisHandlerSentinel = "is not an arrow function"
 
 // profileRequestSentinel is a minification-proof literal unique to the profiler
 // half of the DevTools bridge (devtools.js, D121) — a request type, so minifying
