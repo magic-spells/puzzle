@@ -1076,6 +1076,19 @@ checklist sent you.
   "since v1.64"**, a spec revision that was never a release. They read "the
   default marker is spelled <Children/> (D134)" and "named slots are spelled
   <Slot name="…"/> (D134)".
+- **The published types match what the runtime exports.** A new check
+  (`npm run test:runtime-types`, in CI and `release:prep`) type-checks the
+  JavaScript runtime from its JSDoc and compares every package export with its
+  declaration. It found three declarations that promised more than the runtime
+  gives:
+  - `PuzzleView.events` is optional: the base class has none, so a view that
+    declares no handlers has no `events`. `puzzle check` now reports a template
+    handler on such a view, which would throw when the event fired.
+  - `@magic-spells/puzzle/router-modes` no longer declares a
+    `puzzleRouterModeBrand` export. It is a type-only brand, and importing it
+    gave `undefined`.
+  - `installFakeAnimate().animateCalls` records the options argument as it was
+    passed: `number | KeyframeAnimationOptions | undefined`.
 - **The Prettier plugin honors `endOfLine: "crlf"`.** Under `crlf`, or
   `auto` on a CRLF file, every `<script>` and `<style>` body line ended
   `\r\r\n`: each format changed the file again, and a multi-line template

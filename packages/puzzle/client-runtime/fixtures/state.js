@@ -20,6 +20,26 @@
 
 import { DEFAULT_FIXTURE_SEED, MOCK_STREAM_OFFSET, mulberry32 } from './generator.js';
 
+/** @import { Store } from '../datastore/store.js' */
+/** @import { Rand } from './generator.js' */
+
+/**
+ * The mock's live collection for one type: pk → stored object.
+ * @typedef {Map<unknown, Record<string, any>>} MockCollection
+ */
+
+/**
+ * One store's fixture bookkeeping.
+ * @typedef {object} FixtureState
+ * @property {number} seed
+ * @property {Rand} fixtureRand value-generation stream
+ * @property {Rand} mockRand the mock's latency/failure stream
+ * @property {number} fixtureIndex monotonic across seed() calls
+ * @property {Map<string, MockCollection> | null} mockCollections type → collection; built on first mock hit
+ * @property {number} mockIdN server-assigned-id counter for mock POSTs
+ */
+
+/** @type {WeakMap<Store, FixtureState>} */
 let stateByStore = new WeakMap();
 let baseSeed = DEFAULT_FIXTURE_SEED;
 
@@ -27,6 +47,8 @@ let baseSeed = DEFAULT_FIXTURE_SEED;
  * Set the seed newly created store states will use. Called by installFixtures
  * with the fixtures config's `seed`; a non-finite value falls back to the fixed
  * default, so an identical config always generates identical fixtures.
+ *
+ * @param {number | undefined} seed
  */
 export function setBaseSeed(seed) {
 	baseSeed = Number.isFinite(seed) ? seed : DEFAULT_FIXTURE_SEED;
@@ -41,8 +63,8 @@ export function clearStates() {
 /**
  * The fixture state for `store`, created on first use.
  *
- * @returns {{ seed: number, fixtureRand: Function, mockRand: Function,
- *   fixtureIndex: number, mockCollections: Map|null, mockIdN: number }}
+ * @param {Store} store
+ * @returns {FixtureState}
  */
 export function stateFor(store) {
 	let state = stateByStore.get(store);
@@ -63,6 +85,9 @@ export function stateFor(store) {
  * Restart both streams and the record counter from `state.seed`, optionally
  * switching to another fixed seed first. Does not touch already-created records
  * or the mock's live collections.
+ *
+ * @param {FixtureState} state
+ * @param {number} [seed]
  */
 export function reseed(state, seed) {
 	if (Number.isFinite(seed)) state.seed = seed;

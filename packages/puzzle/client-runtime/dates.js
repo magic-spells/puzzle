@@ -26,6 +26,8 @@ export const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
  * all arrive as. They are all absent, and absent renders like `undefined` does.
  *
  * Numeric 0 is deliberately NOT here: it is a legitimate epoch timestamp.
+ * @param {unknown} v
+ * @returns {boolean}
  */
 export const noDate = (v) => v == null || v === '' || typeof v === 'boolean';
 
@@ -50,6 +52,7 @@ export const noDate = (v) => v == null || v === '' || typeof v === 'boolean';
  * through — writes the calendar date back exactly as it arrived.
  */
 export class CalendarDate extends Date {
+	/** @override */
 	toJSON() {
 		// Match Date.prototype.toJSON's contract for a non-finite date: null, not
 		// a "NaN-NaN-NaN" string. Unreachable through parseDateInput (it only
@@ -59,13 +62,19 @@ export class CalendarDate extends Date {
 	}
 }
 
-/** True when a value is a calendar date — a DAY — rather than an instant. */
+/**
+ * True when a value is a calendar date — a DAY — rather than an instant.
+ * @param {unknown} v
+ * @returns {boolean}
+ */
 export const isCalendarDate = (v) => v instanceof CalendarDate;
 
 /**
  * The `YYYY-MM-DD` a CalendarDate names, read off its LOCAL fields — the
  * components it was built from. Never `toISOString()`: that re-expresses local
  * midnight as a UTC instant, which is the whole bug.
+ * @param {Date} d
+ * @returns {string}
  */
 export function calendarISO(d) {
 	return (
@@ -77,6 +86,13 @@ export function calendarISO(d) {
 	);
 }
 
+/**
+ * Parse a date input by the D114 rule: absent → Invalid Date, a calendar date
+ * stays one, a bare `YYYY-MM-DD` becomes a local-midnight CalendarDate, and
+ * anything else goes through `new Date(v)`.
+ * @param {any} v author-supplied or JSON-sourced value
+ * @returns {Date}
+ */
 export function parseDateInput(v) {
 	// Invalid Date is exactly what `new Date(undefined)` already produced, so every
 	// caller's existing undefined path covers these without a second branch.

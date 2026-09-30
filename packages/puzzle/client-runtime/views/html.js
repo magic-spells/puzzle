@@ -16,6 +16,8 @@
 
 import { sanitizeHtml, newlineToBr } from '../sanitize.js';
 
+/** @import { ViewNode } from './ViewNode.js' */
+
 /**
  * The markup a live-HTML vnode renders — shared with the SSG serializer. The
  * sanitizer sits behind its own define, `__PUZZLE_HAS_RAW_SANITIZE__` (set only
@@ -23,6 +25,9 @@ import { sanitizeHtml, newlineToBr } from '../sanitize.js';
  * ships the escape-and-<br> helper without the sanitizer. A `raw` vnode that
  * reaches such a build (a template the usage scan never read) renders nothing:
  * never unsanitized markup.
+ *
+ * @param {ViewNode} vnode a '#html' vnode
+ * @returns {string}
  */
 export function htmlOf(vnode) {
 	const { value, br } = vnode.attrs;
@@ -35,12 +40,22 @@ export function htmlOf(vnode) {
 // Parsed through <template>: its content document is inert, so nothing in the
 // markup loads or runs until the nodes are inserted — and the sanitizer has
 // already removed everything that could run.
+/**
+ * @param {ViewNode} vnode
+ * @returns {ChildNode[]}
+ */
 function parse(vnode) {
 	const t = document.createElement('template');
 	t.innerHTML = htmlOf(vnode);
 	return [...t.content.childNodes];
 }
 
+/**
+ * @param {ViewNode} vnode
+ * @param {Node} parent
+ * @param {Node | null} [ref]
+ * @returns {Comment} the position comment (`vnode.el`)
+ */
 export function mountHtml(vnode, parent, ref) {
 	const start = document.createComment('');
 	const nodes = parse(vnode);
@@ -51,6 +66,11 @@ export function mountHtml(vnode, parent, ref) {
 	return start;
 }
 
+/**
+ * @param {ViewNode} oldVnode
+ * @param {ViewNode} newVnode
+ * @returns {boolean} whether the nodes were replaced
+ */
 export function patchHtml(oldVnode, newVnode) {
 	const a = oldVnode.attrs;
 	const b = newVnode.attrs;
@@ -65,18 +85,28 @@ export function patchHtml(oldVnode, newVnode) {
 	return true;
 }
 
-/** The last DOM node of the range — what a keyed move compares its successor against. */
+/**
+ * The last DOM node of the range — what a keyed move compares its successor against.
+ * @param {ViewNode} vnode
+ * @returns {Node}
+ */
 export function htmlTail(vnode) {
 	const nodes = vnode.nodes;
 	return nodes?.length ? nodes[nodes.length - 1] : vnode.el;
 }
 
-/** Move the whole range before `ref`. */
+/**
+ * Move the whole range before `ref`.
+ * @param {Node} parent
+ * @param {ViewNode} vnode
+ * @param {Node | null} ref
+ */
 export function moveHtml(parent, vnode, ref) {
 	parent.insertBefore(vnode.el, ref);
 	for (const node of vnode.nodes) parent.insertBefore(node, ref);
 }
 
+/** @param {ViewNode} vnode */
 export function unmountHtml(vnode) {
 	for (const node of vnode.nodes ?? []) node.remove();
 	vnode.el?.remove();

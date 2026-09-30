@@ -264,6 +264,7 @@ export default class Home extends PuzzleView {
   tags: string[] = [];
   counts: Record<string, number> = {};
   user?: { posts: { published: boolean; title: string }[] };
+  events = { pick: (_tags: string[]) => {}, rename: (_name: string) => {} };
 }
 </script>
 `)

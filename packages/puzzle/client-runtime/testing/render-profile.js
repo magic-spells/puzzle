@@ -19,7 +19,7 @@ export async function measureRenders(handle, callback) {
 	// One-argument form: the first (and only) argument IS the callback. Requiring
 	// `callback === undefined` keeps `measureRenders(fnHandle, cb)` unambiguous.
 	if (callback === undefined && typeof handle === 'function') {
-		callback = handle;
+		callback = /** @type {() => void | Promise<void>} */ (handle);
 		handle = undefined;
 	}
 	if (typeof callback !== 'function') {
@@ -60,6 +60,7 @@ export async function measureRenders(handle, callback) {
 	}
 }
 
+/** @param {Record<string, number>} record @param {string} key */
 function increment(record, key) {
 	record[key] = (record[key] ?? 0) + 1;
 }
@@ -67,6 +68,10 @@ function increment(record, key) {
 /**
  * Freeze the tally in place — the sink is detached moments later and `counts` is
  * never handed out anywhere else, so the report can BE it.
+ *
+ * @template {{ rendersByView: object, causes: object }} T
+ * @param {T} counts
+ * @returns {Readonly<T>}
  */
 function immutableReport(counts) {
 	Object.freeze(counts.rendersByView);

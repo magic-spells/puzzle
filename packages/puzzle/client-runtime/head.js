@@ -23,7 +23,10 @@
  * resolver runs under Node for the prerender pass.
  */
 
-/** The reserved `meta` head fields (SPEC §45). Order is resolution/emission order. */
+/**
+ * The reserved `meta` head fields (SPEC §45). Order is resolution/emission order.
+ * @type {Array<'title' | 'description' | 'canonical' | 'socialImage'>}
+ */
 export const HEAD_FIELDS = ['title', 'description', 'canonical', 'socialImage'];
 
 /**
@@ -45,11 +48,11 @@ export const HEAD_FIELDS = ['title', 'description', 'canonical', 'socialImage'];
  * a never-resolving title also leaves it untouched, so an explicitly-suppressed
  * title keeps that same leave-alone posture rather than blanking the tab).
  *
- * @param {Array<object>} chain route defs root→leaf (entry.chain)
+ * @param {ReadonlyArray<{ meta?: Record<string, any> | null }>} chain route defs root→leaf (entry.chain)
  * @returns {{ title: string|null, description: string|null, canonical: string|null, socialImage: string|null }}
  */
 export function resolveHead(chain) {
-	const out = {};
+	const out = /** @type {ReturnType<typeof resolveHead>} */ ({});
 	for (const field of HEAD_FIELDS) {
 		out[field] = resolveHeadField(chain, field);
 	}
@@ -61,6 +64,10 @@ export function resolveHead(chain) {
  * Exported because the browser router resolves ONE field (`title`) per
  * navigation — resolveHead and HEAD_FIELDS are the SSG's entry point and
  * tree-shake out of app bundles.
+ *
+ * @param {ReadonlyArray<{ meta?: Record<string, any> | null }>} chain route defs root→leaf (entry.chain)
+ * @param {string} field the `meta` key to resolve
+ * @returns {any} the nearest defined value (a string or null by contract), else null
  */
 export function resolveHeadField(chain, field) {
 	// Uniform for ALL reserved fields (title included): `undefined`/absent keeps

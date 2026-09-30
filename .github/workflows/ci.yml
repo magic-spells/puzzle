@@ -139,6 +139,11 @@ jobs:
       # Type-check the public .d.ts surface against a strict consumer fixture
       # (imports from the package root exactly as a `<script lang="ts">` app would).
       - run: npm run test:types
+      # Type-check the plain-JavaScript runtime from its JSDoc
+      # (tsconfig.runtime.json) and hold the published .d.ts to what the runtime
+      # actually exports (tests-types/drift): a removed, renamed or re-signatured
+      # export fails here instead of shipping as a silently wrong declaration.
+      - run: npm run test:runtime-types
 
   e2e-pack:
     name: E2E (packed tarball)

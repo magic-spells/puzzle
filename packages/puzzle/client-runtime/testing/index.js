@@ -31,10 +31,58 @@ export { installFakeObserver } from './fake-observer.js';
 // at @magic-spells/puzzle/fixtures, which is what a --fixtures build imports.
 export { installFixtures } from '../fixtures/index.js';
 
+/** @import { PuzzleView } from '../views/PuzzleView.js' */
+/** @import { Router } from '../router/router.js' */
+/** @import { FormatterRegistry } from '../formatters.js' */
+/** @import { AdapterCapability } from '../capabilities.js' */
+/** @import { I18nService } from '../i18n.js' */
+/** @import { Formatter, RouteSnapshot } from '../../types/index.js' */
+/** @import { TestI18nOptions } from '../../types/testing.js' */
+
+/** @typedef {ReturnType<typeof makeInertRouter>} InertRouter */
+
+/**
+ * The ctx a directly mounted view receives.
+ * @typedef {object} TestContext
+ * @property {Store} store
+ * @property {Router | InertRouter} router
+ * @property {FormatterRegistry} formatters
+ * @property {I18nService} [i18n]
+ */
+
+/**
+ * mountView's options — the runtime side of MountViewOptions (types/testing.d.ts).
+ * @typedef {object} TestViewOptions
+ * @property {any} [props]
+ * @property {Record<string, string>} [params]
+ * @property {any[]} [children]
+ * @property {Node | null} [ref]
+ * @property {RouteSnapshot} [route]
+ * @property {boolean} [preloaded]
+ * @property {Partial<TestContext>} [ctx]
+ * @property {Store} [store]
+ * @property {Router | InertRouter} [router]
+ * @property {Record<string, any>} [models]
+ * @property {Record<string, Formatter>} [formatters]
+ * @property {AdapterCapability} [adapter] the adapter capability (validated by installAdapterCapability)
+ * @property {TestI18nOptions} [i18n]
+ */
+
+/**
+ * What a handle's destroy() releases.
+ * @typedef {object} HandleCleanup
+ * @property {() => void} unregisterRouter
+ * @property {() => void} unregisterStore
+ * @property {(() => void) | null} restoreLocale
+ */
+
 /**
  * Mount one PuzzleView subclass into a detached container and return a
  * query/action handle. Passing `route` (or `preloaded: true`) follows the
  * router-shaped preload → atomic mount path so the first data() sees the route.
+ *
+ * @param {new (ctx: TestContext) => PuzzleView} ViewClass
+ * @param {TestViewOptions} [options]
  */
 export async function mountView(ViewClass, options = {}) {
 	requireDocument('mountView');
@@ -94,6 +142,9 @@ export async function mountView(ViewClass, options = {}) {
  * settle. Takes the element itself; the mounted handles expose the same helper as
  * `handle.type(selectorOrElement, text)`. Checkboxes and radios have no text
  * value — toggle those with `click()`; type() throws on one.
+ *
+ * @param {Element} target
+ * @param {string} text
  */
 export async function type(target, text) {
 	dispatchType(target, text);
@@ -106,6 +157,10 @@ export async function type(target, text) {
  * `routerMode` from config are deliberately overridden; every other PuzzleApp
  * option is passed through. `routerInitialPath` is consumed HERE (it is the one
  * memoryRouter option a test needs) rather than passed to PuzzleApp.
+ *
+ * @param {Record<string, any> & { routerInitialPath?: string, i18n?: TestI18nOptions }} [config]
+ *   PuzzleApp's config (every key passed through but `target`/`routerMode`), plus
+ *   the two test-only keys
  */
 export async function createTestApp(config = {}) {
 	requireDocument('createTestApp');
@@ -162,6 +217,10 @@ export async function createTestApp(config = {}) {
 	});
 }
 
+/**
+ * @param {TestViewOptions} options
+ * @returns {TestContext}
+ */
 function makeContext(options) {
 	const supplied = options.ctx ?? {};
 	const store =
@@ -173,6 +232,7 @@ function makeContext(options) {
 	const formatters =
 		supplied.formatters ??
 		makeFormatterRegistry(options.formatters ?? {}, (path) => router.url(path));
+	/** @type {TestContext} */
 	const ctx = { store, router, formatters };
 	// `i18n: { locale, strings }` (D175): a translated view renders with no fetch.
 	const i18n = supplied.i18n ?? (options.i18n ? createTestI18n(options.i18n) : null);
@@ -188,6 +248,8 @@ function makeContext(options) {
  * `strings` is the flat table a build would emit for `locale` (plural entries
  * stay objects). Loads synchronously enough that `await __ready()` settles
  * before the first render.
+ *
+ * @param {TestI18nOptions} [options]
  */
 function testI18nOptions({ locale = 'en', strings = {} } = {}) {
 	return {
@@ -197,6 +259,7 @@ function testI18nOptions({ locale = 'en', strings = {} } = {}) {
 	};
 }
 
+/** @param {TestI18nOptions} options */
 function createTestI18n(options) {
 	return createI18n(testI18nOptions(options));
 }
@@ -211,9 +274,12 @@ function createTestI18n(options) {
  * handle never restores its own snapshot: a second handle's snapshot is the
  * first handle's locale. Returns the release function (safe to call twice).
  */
+/** @type {Set<object>} */
 const localeHolds = new Set();
+/** @type {{ locale: string | undefined, lang: string | null } | null} */
 let slotsBeforeHolds = null;
 
+/** @returns {() => void} */
 function holdLocaleSlots() {
 	if (localeHolds.size === 0) {
 		slotsBeforeHolds = {
@@ -234,6 +300,7 @@ function holdLocaleSlots() {
 	};
 }
 
+/** @param {RouteSnapshot | null} current */
 function makeInertRouter(current) {
 	return {
 		current,
@@ -242,11 +309,17 @@ function makeInertRouter(current) {
 		go: async () => {},
 		back: async () => {},
 		forward: async () => {},
-		url: (path) => path,
+		url: /** @param {string} path */ (path) => path,
 		setMorphHandler: () => {},
 	};
 }
 
+/**
+ * @param {PuzzleView} instance
+ * @param {HTMLDivElement} container
+ * @param {TestContext} ctx
+ * @param {HandleCleanup} cleanup
+ */
 function makeViewHandle(instance, container, ctx, cleanup) {
 	let destroyed = false;
 	const handle = {
@@ -258,22 +331,27 @@ function makeViewHandle(instance, container, ctx, cleanup) {
 		get element() {
 			return instance.element;
 		},
+		/** @param {string} selector */
 		find(selector) {
 			return findWithin(instance.element, selector);
 		},
+		/** @param {string} selector */
 		findAll(selector) {
 			return findAllWithin(instance.element, selector);
 		},
+		/** @param {string | Element} target */
 		async click(target) {
 			dispatchClick(resolveTarget(handle, target));
 			await settled();
 			return handle;
 		},
+		/** @param {string | Element} target @param {string} text */
 		async type(target, text) {
 			dispatchType(resolveTarget(handle, target), text);
 			await settled();
 			return handle;
 		},
+		/** @param {any} props */
 		async setProps(props) {
 			instance.applyParentUpdate({ props });
 			await settled();
@@ -291,6 +369,13 @@ function makeViewHandle(instance, container, ctx, cleanup) {
 	return handle;
 }
 
+/**
+ * @param {PuzzleApp} app
+ * @param {HTMLDivElement} container
+ * @param {Store} store
+ * @param {Router} router
+ * @param {HandleCleanup} cleanup
+ */
 function makeAppHandle(app, container, store, router, cleanup) {
 	let destroyed = false;
 	const handle = {
@@ -302,22 +387,27 @@ function makeAppHandle(app, container, store, router, cleanup) {
 		get ctx() {
 			return app.ctx;
 		},
+		/** @param {string} selector */
 		find(selector) {
 			return container.querySelector(selector);
 		},
+		/** @param {string} selector */
 		findAll(selector) {
 			return [...container.querySelectorAll(selector)];
 		},
+		/** @param {string | Element} target */
 		async click(target) {
 			dispatchClick(resolveTarget(handle, target));
 			await settled();
 			return handle;
 		},
+		/** @param {string | Element} target @param {string} text */
 		async type(target, text) {
 			dispatchType(resolveTarget(handle, target), text);
 			await settled();
 			return handle;
 		},
+		/** @param {string} path */
 		async visit(path) {
 			await router.push(path);
 			await settled();
@@ -335,14 +425,21 @@ function makeAppHandle(app, container, store, router, cleanup) {
 	return handle;
 }
 
+/** @param {Node | null | undefined} root @param {string} selector @returns {Element | null} */
 function findWithin(root, selector) {
-	return root?.nodeType === 1 ? root.querySelector(selector) : null;
+	return root?.nodeType === 1 ? /** @type {Element} */ (root).querySelector(selector) : null;
 }
 
+/** @param {Node | null | undefined} root @param {string} selector @returns {Element[]} */
 function findAllWithin(root, selector) {
-	return root?.nodeType === 1 ? [...root.querySelectorAll(selector)] : [];
+	return root?.nodeType === 1 ? [.../** @type {Element} */ (root).querySelectorAll(selector)] : [];
 }
 
+/**
+ * @param {{ find(selector: string): Element | null }} handle
+ * @param {string | Element} target
+ * @returns {Element}
+ */
 function resolveTarget(handle, target) {
 	if (typeof target !== 'string') return target;
 	const element = handle.find(target);
@@ -352,6 +449,7 @@ function resolveTarget(handle, target) {
 	return element;
 }
 
+/** @param {any} element an Element — checked here, since tests pass anything */
 function dispatchClick(element) {
 	if (!element || typeof element.dispatchEvent !== 'function') {
 		throw new Error('[puzzle/testing] click() expects a selector or DOM Element');
@@ -394,6 +492,10 @@ function dispatchClick(element) {
 	}
 }
 
+/**
+ * @param {any} element a text-valued form control — checked here, since tests pass anything
+ * @param {string} text
+ */
 function dispatchType(element, text) {
 	if (!element || typeof element.dispatchEvent !== 'function') {
 		throw new Error('[puzzle/testing] type() expects a selector or DOM Element');
@@ -415,6 +517,7 @@ function dispatchType(element, text) {
 	element.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
+/** @param {string} name */
 function requireDocument(name) {
 	if (typeof document === 'undefined') {
 		throw new Error(`[puzzle/testing] ${name}() requires a DOM environment`);

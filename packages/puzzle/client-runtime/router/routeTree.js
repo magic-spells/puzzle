@@ -20,6 +20,10 @@
  * composes to exactly the parent path; otherwise a single '/' joins them with the
  * parent's trailing slash trimmed: '/' + 'a' → '/a', '/settings' + 'x' →
  * '/settings/x'.
+ *
+ * @param {string} parentPath
+ * @param {string} childPath
+ * @returns {string}
  */
 export function joinPath(parentPath, childPath) {
 	if (childPath === '') return parentPath;
@@ -37,6 +41,14 @@ export function joinPath(parentPath, childPath) {
  * REFERENCE (so the walk never allocates a closure), and each caller keeps its
  * own leaf shape — and, Router-side, its per-node validation over the returned
  * chain — inside that one callback.
+ *
+ * @template {{ path: string, children?: ReadonlyArray<N> }} N
+ * @template L
+ * @param {N} node the route definition to walk
+ * @param {L[]} out receives one `makeLeaf` result per leaf
+ * @param {(chain: N[], fullPaths: string[]) => L} makeLeaf
+ * @param {N[]} [ancestors] root→parent definitions (internal recursion)
+ * @param {string[]} [fullPaths] the ancestors' composed paths (internal recursion)
  */
 export function walkRouteTree(node, out, makeLeaf, ancestors = [], fullPaths = []) {
 	const isRoot = ancestors.length === 0;

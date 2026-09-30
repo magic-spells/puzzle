@@ -32,6 +32,8 @@
 
 import { prefersReducedMotion } from './animate.js';
 
+/** @import { ViewNode } from './ViewNode.js' */
+
 // D85 defaults: a snappy standard-curve slide. Overridable per row via the
 // `flip` attr object; anything malformed silently falls back here.
 const DEFAULT_DURATION = 250;
@@ -80,8 +82,8 @@ function warnUnkeyedFlip() {
  * Cancelling first would snap the row to its layout position and make the
  * follow-up animation jump.
  *
- * @param {Array<[object|null, object]>} pairs the keyed patcher's first-pass output
- * @returns {Array<{el: Element, newChild: object, spec: *, first: DOMRect}>|null}
+ * @param {Array<[ViewNode|null, ViewNode]>} pairs the keyed patcher's first-pass output
+ * @returns {Array<{el: Element, newChild: ViewNode, spec: *, first: DOMRect}>|null}
  *   the flip session playFlip() consumes, or null when there is nothing to do
  */
 export function beginFlip(pairs) {
@@ -98,7 +100,7 @@ export function beginFlip(pairs) {
 		const el =
 			componentEl?.nodeType === 1 && componentEl.isConnected ? componentEl : oldChild.el;
 		if (!el || el.nodeType !== 1) continue; // fresh mount / no live element
-		(candidates ??= []).push({ el, newChild, spec, first: null });
+		(candidates ??= []).push({ el, newChild, spec, first: /** @type {DOMRect | null} */ (null) });
 	}
 	if (!candidates) return null;
 
@@ -188,7 +190,10 @@ export function playFlip(candidates) {
 	}
 }
 
-/** Cancel the Puzzle-owned flip on `el`, if any. Never touches other animations. */
+/**
+ * Cancel the Puzzle-owned flip on `el`, if any. Never touches other animations.
+ * @param {Element} el
+ */
 function cancelTrackedFlip(el) {
 	const prior = activeFlips.get(el);
 	if (!prior) return;
@@ -204,6 +209,9 @@ function cancelTrackedFlip(el) {
  * Resolve `{ duration, easing }` from a row's flip spec. `true` (bare attr)
  * and any malformed shape take the defaults — silently, per the optional-config
  * contract. Unknown keys are ignored.
+ *
+ * @param {any} spec the row's `flip` attr value (author-supplied)
+ * @returns {{ duration: number, easing: string }}
  */
 function resolveFlipOptions(spec) {
 	let duration = DEFAULT_DURATION;

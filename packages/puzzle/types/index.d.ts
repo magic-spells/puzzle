@@ -588,9 +588,10 @@ export declare class PuzzleView {
 	 * the DOM event, and `@click={ save(item.id, event) }` passes whatever the
 	 * call lists, so a handler takes any arguments (D176 §4). A class field of
 	 * arrow functions. A handler named like a library function draws a
-	 * development warning at mount.
+	 * development warning at mount. Declared by the subclass: the base class has
+	 * none, so a view without handlers has no `events`.
 	 */
-	events: Record<string, (...args: any[]) => void>;
+	events?: Record<string, (...args: any[]) => void>;
 
 	/** Declarative enter/leave animations (D28). */
 	animations?: Animations;

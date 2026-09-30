@@ -42,6 +42,20 @@ import {
 	devperfStaticCache,
 } from '../devperf.js';
 
+/** @import { ViewNode } from './ViewNode.js' */
+/** @import { ErrorInfo, ErrorSite } from '../errors.js' */
+/** @import { AnimationSpec, RouteSnapshot } from '../../types/index.js' */
+
+/**
+ * The { params, props, route } a prepared data() run evaluates against (D146).
+ * @typedef {{ params: Record<string, any>, props: any, route: RouteSnapshot | null }} EvalScope
+ */
+
+/**
+ * A two-way bind write-back handler (D147) — the listener __bind hands out.
+ * @typedef {(event: InputEvent) => void} BindHandler
+ */
+
 // Dev HMR guard (constellation/doc/DOC-SPEC.md §27, D57): a live-view registry feeds the
 // state snapshot/restore. Gated on the __PUZZLE_DEV__ build define (production
 // DCEs the register/unregister calls, so the registry import tree-shakes away).
@@ -59,6 +73,7 @@ const INERT_BIND = () => {};
 // one edit in one file, so one warning per class is the whole message. Allocated
 // lazily inside the __PUZZLE_DEV__ gate in #noteAsyncShape so production keeps
 // nothing but an unused `let` for the minifier to drop.
+/** @type {WeakSet<object> | null} */
 let asyncShapeWarned = null;
 
 // Dev steering for an `events` handler whose `this` is not the component (D03,
@@ -68,8 +83,12 @@ let asyncShapeWarned = null;
 // instance. Checked once per view CLASS at mount — the fix is one edit in one
 // file — from behind the inline __PUZZLE_DEV__ probe, so production keeps
 // nothing but this unused `let` and the dead function for the minifier to drop.
+/** @type {WeakSet<object> | null} */
 let thisHandlerChecked = null;
 
+/**
+ * @param {{ events?: any, constructor: { __pzlModule?: string, name?: string } }} view
+ */
 function warnThisHandlers(view) {
 	const View = view.constructor;
 	thisHandlerChecked ??= new WeakSet();
@@ -98,6 +117,12 @@ function warnThisHandlers(view) {
 	}
 }
 
+/**
+ * What the router and parents hand refresh()/preload()/prepareRefresh(): the
+ * navigation's params and route snapshot, or a parent's new props.
+ * @typedef {{ params?: Record<string, any>, props?: any, route?: any }} RefreshInput
+ */
+
 export class PuzzleView {
 	// Two-layer component state (Change C, SPEC §4). #local holds values written
 	// via setData() (and created()-seeded state, which uses setData); #model holds
@@ -109,23 +134,30 @@ export class PuzzleView {
 	// the next commit (setData writes #data directly). getData() hands out copies of
 	// #data, so its identity is internal — but it is mutated in place regardless, so
 	// setData's direct writes and the recompose target stay the one object.
+	/** @type {Record<string, any>} */
 	#data = {};
+	/** @type {Record<string, any>} */
 	#local = {};
+	/** @type {Record<string, any>} */
 	#model = {};
 	#params = {};
 	#props = {};
 	// Route snapshot of the navigation that delivered this view's params (v1.15,
 	// D47) — set only when the router threads it through preload()/refresh(), so
 	// it survives store-change refreshes and stays null off-router.
+	/** @type {RouteSnapshot | null} */
 	#route = null;
+	/** @type {ViewNode[]} */
 	#children = [];
 	// Per-instance memo cache (v1.29, D64): key → { deps, value } for
 	// this.memo() reference-stable derived values. Lazily created on first use.
+	/** @type {Map<string, { deps: unknown[], value: any }> | null} */
 	#memo = null;
 	// Per-instance element-ref setter cache (v1.39, D72): name → the stable setter
 	// __ref(name) hands back. Lazily created on first use. The differ must see the
 	// SAME attrs.ref value across renders (a fresh closure would churn every patch),
 	// so the setter identity is memoised per name for this instance's lifetime.
+	/** @type {Map<string, (el: Element | null, oldEl?: Element) => void> | null} */
 	#refSetters = null;
 	// Per-instance write-back handler caches for implicit two-way binding (D147),
 	// on the same memo principle as #refSetters: the differ must see the SAME
@@ -134,7 +166,9 @@ export class PuzzleView {
 	// handlers by "field spec"; #bindMemberMemo keys member handlers by the target
 	// OBJECT first — weakly, so a discarded record's handlers go with it — then by
 	// the same string. Both lazily created on first use.
+	/** @type {Map<string, BindHandler> | null} */
 	#bindLocalMemo = null;
+	/** @type {WeakMap<object, Map<string, BindHandler>> | null} */
 	#bindMemberMemo = null;
 	// Dev-only: the last object seen for each member "field spec" path plus a
 	// write awaiting its next render. A plain-object write can otherwise disappear
@@ -143,8 +177,14 @@ export class PuzzleView {
 	// ACTUALLY written, so a stable target, a rebuilt target that preserved the
 	// value, and record replacement all stay silent. Lazily allocated behind inline
 	// __PUZZLE_DEV__ gates only.
+	/** @type {Map<string, object> | null} */
 	#bindMemberLast = null;
+	/**
+	 * @type {Map<string, { key: string, target: any, value: any, sawTarget: boolean,
+	 *   replacement: any, ambiguous: boolean }> | null}
+	 */
 	#bindMemberPending = null;
+	/** @type {Set<string> | null} */
 	#bindMemberWarned = null;
 	// Dev-only: the value each local bind write last wrote, keyed by field. The
 	// layer-clobber diagnostic reads it at the next recompose to notice a data()
@@ -152,10 +192,15 @@ export class PuzzleView {
 	// reported so the warning is once per key per view rather than once per commit.
 	// Neither is ever allocated in production — every touchpoint is gated INLINE on
 	// __PUZZLE_DEV__.
+	/** @type {Map<string, any> | null} */
 	#bindPending = null;
+	/** @type {Set<string> | null} */
 	#bindWarned = null;
+	/** @type {ViewManager | null} */
 	#vm = null;
+	/** @type {{ error: unknown, info: ErrorInfo } | null} */
 	#pendingFailure = null;
+	/** @type {PuzzleView | null} */
 	#errorView = null;
 	#mounted = false;
 	// Anchor-race gate (Change A): set true when the non-skeleton async mount()
@@ -206,11 +251,13 @@ export class PuzzleView {
 	// evaluates against. Non-null only while such an evaluation is in flight; the
 	// params/route getters read it, and every entry point save/restores it (exact
 	// stack discipline for nested synchronous evals, mirroring Store._tracking).
+	/** @type {EvalScope | null} */
 	#evalScope = null;
 	// Every prepared evaluation of THIS view that is currently in flight, oldest
 	// first. #evalScope is the last entry (or null) — see #beginEvalRun /
 	// #endEvalRun for why the unwind target has to be derived from this list
 	// rather than captured up front.
+	/** @type {EvalScope[]} */
 	#evalRuns = [];
 	// Open #withCommittedScope frames. The fence suppresses #evalScope for the whole
 	// dynamic extent of the OUTERMOST one, so only its exit restores the invariant.
@@ -226,18 +273,23 @@ export class PuzzleView {
 	// skeleton). #holdTimer is the pending deferred-swap timer while the loaded
 	// swap is held so a briefly-shown skeleton doesn't flash away too fast.
 	#skeletonShownAt = 0;
+	/** @type {ReturnType<typeof setTimeout> | null} */
 	#holdTimer = null;
 	// Animation bookkeeping (constellation/doc/DOC-SPEC.md §12).
 	#playedIn = false; // playIn() runs at most once per mount
+	/** @type {ReturnType<typeof playAnimation> | null} */
 	#currentAnimation = null; // live { finished, cancel, play } handle, for interruption
 	// The router may need to restore a committed view after its out animation
 	// finished under fill:'both'. Keep that Puzzle-owned handle past natural
 	// completion so recovery can cancel only it, never app-owned root animations.
+	/** @type {ReturnType<typeof playAnimation> | null} */
 	#outHandle = null;
 	// playOut is one-shot even when the router restores a stalled outgoing view:
 	// #outTask keeps the spent memo for a later instant swap, while #leaving names
 	// only the CURRENT inert interval and can therefore be cleared by recovery.
+	/** @type {Promise<void> | null} */
 	#outTask = null;
+	/** @type {Promise<void> | null} */
 	#leaving = null;
 	// Scroll-triggered enter (v1.40, D73). While a `trigger: 'visible'` enter is
 	// held waiting for the element to scroll into view: #disarmVisible stops the
@@ -245,7 +297,9 @@ export class PuzzleView {
 	// pending playIn() promise on destroy/interrupt, so a torn-down view never
 	// leaks a forever-pending promise with retained closures. Both null when no
 	// visible-trigger enter is pending.
+	/** @type {(() => void) | null} */
 	#disarmVisible = null;
+	/** @type {(() => void) | null} */
 	#enterResolve = null;
 
 	/**
@@ -256,6 +310,8 @@ export class PuzzleView {
 	 * the local layer via _localState(), which is #local — refs stays out for
 	 * free). The compiler emits `ref: this.__ref("name")` in a vnode's attrs; the
 	 * ViewManager calls that setter on mount/unmount (see __ref below).
+	 *
+	 * @type {Record<string, Element | null>}
 	 */
 	refs = {};
 
@@ -269,6 +325,8 @@ export class PuzzleView {
 	 *
 	 * INTERNAL, like `__ref`/`__bind`: part of the compiler-facing surface, never
 	 * spelled in a template, not public typed API.
+	 *
+	 * @type {ViewNode[]}
 	 */
 	__c = [];
 
@@ -308,9 +366,10 @@ export class PuzzleView {
 	// loop body in this template reads (D170, root dirty mask). Null until the
 	// first render, which reports every root dirty. Only a view whose compiled
 	// class carries __roots ever allocates it.
+	/** @type {unknown[] | null} */
 	#prevRoots = null;
 
-	/** @param {object} ctx exactly { store, router, formatters } (SPEC §10) */
+	/** @param {Record<string, any>} [ctx] exactly { store, router, formatters } (SPEC §10) */
 	constructor(ctx = {}) {
 		// D161 tracked-read attribution. On an adapter app this view reads the store
 		// through its OWN handle: only reads made through `this.ctx.store`, by this
@@ -330,9 +389,13 @@ export class PuzzleView {
 
 	// ---- state ---------------------------------------------------------------
 
-	/** The composed component model — the local layer overlaid by data()'s result. */
+	/**
+	 * The composed component model — the local layer overlaid by data()'s result.
+	 * @template [T=any] the caller's view of the model (unchecked, as published)
+	 * @returns {T}
+	 */
 	getData() {
-		return { ...this.#data };
+		return /** @type {T} */ ({ ...this.#data });
 	}
 
 	/**
@@ -344,6 +407,9 @@ export class PuzzleView {
 	 * visible #data directly, so the value shows immediately and wins over any model
 	 * value for that key until the next data() commit recomposes (a later setData
 	 * beats the model; a data() commit beats an earlier setData).
+	 *
+	 * @param {string | Record<string, any>} key a key, or a map of keys to values
+	 * @param {any} [value] the value for a single key
 	 */
 	setData(key, value) {
 		if (this.#destroyed || this.#leaving) return;
@@ -351,8 +417,8 @@ export class PuzzleView {
 			Object.assign(this.#local, key);
 			Object.assign(this.#data, key);
 		} else {
-			this.#local[key] = value;
-			this.#data[key] = value;
+			this.#local[/** @type {string} */ (key)] = value;
+			this.#data[/** @type {string} */ (key)] = value;
 		}
 		this.#scheduleRender();
 	}
@@ -415,6 +481,7 @@ export class PuzzleView {
 	 * @template T
 	 */
 	memo(key, deps, factory) {
+		/** @type {Map<string, { deps: unknown[], value: any }>} */
 		const cache = (this.#memo ??= new Map());
 		const hit = cache.get(key);
 		if (
@@ -456,8 +523,12 @@ export class PuzzleView {
 	 *
 	 * INTERNAL — underscore-prefixed like the compiler-facing surface; never spelled
 	 * in a template. Not part of the public typed API.
+	 *
+	 * @param {string} name the `ref="name"` key
+	 * @returns {(el: Element | null, oldEl?: Element) => void}
 	 */
 	__ref(name) {
+		/** @type {Map<string, (el: Element | null, oldEl?: Element) => void>} */
 		const cache = (this.#refSetters ??= new Map());
 		let setter = cache.get(name);
 		if (!setter) {
@@ -488,8 +559,11 @@ export class PuzzleView {
 	 *
 	 * Null when no prop carries a revision, which is the overwhelmingly common
 	 * case and allocates nothing; `propsEqual` reads it with `?.`.
+	 *
+	 * @param {Record<string, any>} props
 	 */
 	#snapshotPropRevs(props) {
+		/** @type {Record<string, number> | null} */
 		let revs = null;
 		for (const name in props) {
 			const value = props[name];
@@ -521,6 +595,11 @@ export class PuzzleView {
 	 *
 	 * INTERNAL — underscore-prefixed like the rest of the compiler-facing surface;
 	 * never spelled in a template. Not part of the public typed API.
+	 *
+	 * @param {any} target null, or the bound path's resolved root (any app value)
+	 * @param {string} key
+	 * @param {'v' | 'vn' | 'c'} spec
+	 * @returns {BindHandler}
 	 */
 	__bind(target, key, spec) {
 		// A member path whose ROOT resolves to a primitive is not a writable target
@@ -533,6 +612,7 @@ export class PuzzleView {
 		if (target != null && typeof target !== 'object' && typeof target !== 'function') {
 			return INERT_BIND;
 		}
+		/** @type {Map<string, BindHandler>} */
 		let store;
 		if (target == null) {
 			store = (this.#bindLocalMemo ??= new Map());
@@ -552,7 +632,8 @@ export class PuzzleView {
 				// session in Chrome/Safari. The final `input` after compositionend
 				// carries isComposing:false, so the composed text still lands.
 				if (event.isComposing) return;
-				const el = event.target;
+				// A bound <input>/<textarea>/<select>; `checked` is read only for spec 'c'.
+				const el = /** @type {HTMLInputElement} */ (event.target);
 				let value;
 				if (spec === 'c') value = !!el.checked;
 				else if (spec === 'vn') {
@@ -614,6 +695,11 @@ export class PuzzleView {
 	 *    validates and throws BEFORE mutating, so a rejected write leaves the
 	 *    record — and the typed text on screen — untouched.
 	 * 3. anything else → direct mutation plus a repaint of the owning view.
+	 *
+	 * @param {any} target
+	 * @param {string} key
+	 * @param {any} value the coerced control value
+	 * @param {string} spec
 	 */
 	#bindWrite(target, key, value, spec) {
 		if (target == null) {
@@ -707,6 +793,10 @@ export class PuzzleView {
 	/**
 	 * INTERNAL — destroy the failed view and mount the app's ordinary error view at
 	 * this exact position. Returns whether that error view mounted successfully.
+	 *
+	 * @param {unknown} error
+	 * @param {ErrorInfo} info what reportError returned for it
+	 * @returns {Promise<boolean>}
 	 */
 	async __showErrorView(error, info) {
 		if (!this.#vm) {
@@ -741,6 +831,10 @@ export class PuzzleView {
 	 * still holds the slot — so that prologue (plant, mark, destroy) must not run
 	 * again, and its `destroyed && !errorView` guard has to keep refusing every other
 	 * caller, since a torn-down position must never resurrect itself on its own.
+	 *
+	 * @param {unknown} error
+	 * @param {ErrorInfo} info
+	 * @returns {false | Promise<boolean>}
 	 */
 	__retryErrorView(error, info) {
 		// Only a position that is still OURS: no #vm means this instance never
@@ -776,6 +870,9 @@ export class PuzzleView {
 	 * the rebuild ends with this same face still mounted, which is precisely the set
 	 * of outcomes that changed nothing on screen. A face that was replaced or disposed
 	 * fails the identity check instead, so the latch never has to tell them apart.
+	 *
+	 * @param {PuzzleView} face the error view the closure is handed to
+	 * @returns {() => Promise<void>}
 	 */
 	#makeRetry(face) {
 		let inFlight = false;
@@ -833,6 +930,12 @@ export class PuzzleView {
 		};
 	}
 
+	/**
+	 * @param {new (ctx?: object) => PuzzleView} ErrorView the app's errorView class
+	 * @param {unknown} error
+	 * @param {ErrorInfo} info
+	 * @returns {Promise<boolean>}
+	 */
 	async #mountErrorView(ErrorView, error, info) {
 		let errorView;
 		try {
@@ -880,6 +983,8 @@ export class PuzzleView {
 	 * The DOM node occupying this component's position (null before mount).
 	 * While an async data() is in flight this is the anchor placeholder, so
 	 * a parent's sibling insertion refs stay valid (constellation/doc/DOC-APP-ANATOMY.md §4).
+	 *
+	 * @returns {Element | Comment | null}
 	 */
 	get element() {
 		return (
@@ -956,6 +1061,10 @@ export class PuzzleView {
 	 * branch), this returns without setting #mounted or firing mounted() — a
 	 * component torn down before its data resolves must not re-subscribe, start
 	 * timers, or grab focus from a mounted() hook (constellation/doc/DOC-VIEW-LIFECYCLE.md §3).
+	 *
+	 * @param {Node} container the node this view's DOM is inserted into
+	 * @param {{ params?: Record<string, any>, props?: Record<string, any>, children?: ViewNode[],
+	 *   ref?: Node | null, preloaded?: boolean }} [options]
 	 */
 	async mount(container, { params = {}, props = {}, children = [], ref = null, preloaded = false } = {}) {
 		// D176 §4: an @event handler named like a library function means two things
@@ -1085,6 +1194,7 @@ export class PuzzleView {
 	 * navigation (constellation/doc/DOC-VIEW-LIFECYCLE.md §4): pushState and the layout render only
 	 * happen once this promise settles. A later mount({ preloaded: true }) attaches
 	 * the already-loaded instance without re-running created()/data().
+	 * @param {RefreshInput} [input]
 	 */
 	async preload({ params = {}, props = {}, route } = {}) {
 		if (this.#destroyed) return this;
@@ -1101,6 +1211,7 @@ export class PuzzleView {
 	 * this instance for a matching component vnode and forwards the fresh slot
 	 * content plus changed props: props re-run data() (prop reactivity); a slot
 	 * content swap alone re-renders without re-running data().
+	 * @param {{ props?: any, children?: any[] }} update either or both
 	 */
 	applyParentUpdate({ props, children }) {
 		if (this.#destroyed || this.#leaving) return;
@@ -1170,6 +1281,9 @@ export class PuzzleView {
 	 * parents on prop changes, the store via onStoreChange. Queries inside
 	 * data() re-subscribe through the store's tracking scope; a newer refresh
 	 * supersedes an in-flight async one (stale results are discarded).
+	 * @param {RefreshInput} [input]
+	 * @returns {Promise<void> | undefined} the pending commit for an async data(),
+	 *   undefined when the run committed synchronously (or was a no-op)
 	 */
 	refresh({ params, props, route } = {}) {
 		// D146: a refresh runs against this view's COMMITTED params/route, so a
@@ -1178,6 +1292,7 @@ export class PuzzleView {
 		return this.#withCommittedScope(() => this.#refreshInner({ params, props, route }));
 	}
 
+	/** @param {RefreshInput} [input] */
 	#refreshInner({ params, props, route } = {}) {
 		if (this.#destroyed || this.#leaving) return;
 		if (params) this.#params = params;
@@ -1241,7 +1356,7 @@ export class PuzzleView {
 				store,
 				run,
 				expectsAsync,
-				() => this.#destroyed || this.#leaving || token !== this.#runToken,
+				() => /** @type {boolean} */ (this.#destroyed || this.#leaving || token !== this.#runToken),
 				null,
 				token
 			);
@@ -1249,8 +1364,8 @@ export class PuzzleView {
 
 		if (result && typeof result.then === 'function') {
 			return result.then(
-				(model) => this.#commit(token, model, mark),
-				(err) => {
+				(/** @type {any} */ model) => this.#commit(token, model, mark),
+				(/** @type {unknown} */ err) => {
 					if (token !== this.#runToken || this.#destroyed || this.#leaving) return;
 					throw err;
 				}
@@ -1292,7 +1407,8 @@ export class PuzzleView {
 	 * A SYNCHRONOUS data() throw propagates out of this call exactly as it does out
 	 * of refresh() (withTracking rethrows), already reconciled as a failure.
 	 *
-	 * @returns {?{ready: Promise<void>, commit: function(): void, discard: function(): void}}
+	 * @param {RefreshInput} [input]
+	 * @returns {?{ready: Promise<void>, commit: () => void, discard: () => void}}
 	 */
 	prepareRefresh({ params, props, route } = {}) {
 		if (this.#destroyed || this.#leaving) return null;
@@ -1319,9 +1435,12 @@ export class PuzzleView {
 		// The held-eval channel: withTracking parks its success reconcile here instead
 		// of applying it, so the subscription swap lands with the commit (or is
 		// unwound by the discard) rather than at evaluation time.
+		/** @type {boolean | undefined} */
 		let decision;
+		/** @type {((ok: boolean) => void) | undefined} */
 		let reconcile;
 		const pending = {
+			/** @returns {(ok: boolean) => void} */
 			get reconcile() {
 				return (ok) => {
 					if (decision !== undefined) return;
@@ -1330,6 +1449,7 @@ export class PuzzleView {
 					reconcile = undefined;
 				};
 			},
+			/** @param {((ok: boolean) => void) | undefined} callback */
 			set reconcile(callback) {
 				// A discard can precede evaluation's publication of its held lease.
 				if (decision !== undefined) callback?.(decision);
@@ -1377,11 +1497,11 @@ export class PuzzleView {
 			if (out && typeof out.then === 'function') {
 				this.#noteAsyncShape();
 				return out.then(
-					(model) => {
+					(/** @type {any} */ model) => {
 						this.#endEvalRun(mine);
 						return model;
 					},
-					(err) => {
+					(/** @type {unknown} */ err) => {
 						this.#endEvalRun(mine);
 						throw err;
 					}
@@ -1406,11 +1526,12 @@ export class PuzzleView {
 						store,
 						run,
 						expectsAsync,
-						() => this.#destroyed || this.#leaving,
+						() => /** @type {boolean} */ (this.#destroyed || this.#leaving),
 						pending
 					)
 				: store.withTracking(this, run, expectsAsync, pending);
 
+		/** @type {any} the prepared data() result */
 		let model;
 		const ready = Promise.resolve(result).then((m) => {
 			model = m;
@@ -1540,6 +1661,10 @@ export class PuzzleView {
 	 * withTracking rethrows sync errors so router/mount callers still see them — so
 	 * the try/catch takes that arm. refresh() returns undefined on the sync path
 	 * (or when destroyed), hence the optional chain.
+	 *
+	 * @param {string} message the console prefix
+	 * @param {ErrorSite['phase']} phase
+	 * @param {RefreshInput} [args]
 	 */
 	#refreshContained(message, phase, args) {
 		try {
@@ -1557,6 +1682,10 @@ export class PuzzleView {
 	 *
 	 * Router-preloaded views never set #pendingMountHook: preload() resolves before
 	 * their synchronous mount, so Router ownership remains untouched.
+	 *
+	 * @param {string} message the console prefix
+	 * @param {unknown} err
+	 * @param {ErrorSite['phase']} phase
 	 */
 	#handleViewFailure(message, err, phase) {
 		const info = reportError(
@@ -1639,12 +1768,22 @@ export class PuzzleView {
 
 	// ---- hooks & overridables (SPEC §4 class contract) ---------------------------
 
-	/** Component model. Compiled components and views override this. */
+	/**
+	 * Component model. Compiled components and views override this.
+	 *
+	 * @param {Record<string, any>} params
+	 * @param {Record<string, any>} props
+	 * @returns {any} the model object (or a promise of it)
+	 */
 	data(params, props) {
 		return {};
 	}
 
-	/** Attached by the compiler via prototype assignment; null = render nothing. */
+	/**
+	 * Attached by the compiler via prototype assignment; null = render nothing.
+	 *
+	 * @returns {ViewNode | null}
+	 */
 	render() {
 		return null;
 	}
@@ -1762,6 +1901,9 @@ export class PuzzleView {
 	 * 'mount' trigger, no IntersectionObserver, reduced motion) returns false and
 	 * playIn() takes the immediate mount path — the §39 hard rule that content is
 	 * never stranded hidden. An unknown trigger value warns once per spec here.
+	 *
+	 * @param {AnimationSpec | undefined} spec the `animations.in` spec, if any
+	 * @returns {boolean}
 	 */
 	#useVisibleTrigger(spec) {
 		// Malformed spec → false: the mount path's playAnimation() does the
@@ -1792,6 +1934,9 @@ export class PuzzleView {
 	 * Resolve the enter `trigger` to 'mount' | 'visible'. Absent or 'mount' →
 	 * 'mount'; 'visible' → 'visible'; anything else warns once per spec object and
 	 * falls back to 'mount' (§39 — an unknown value must never break rendering).
+	 *
+	 * @param {AnimationSpec} spec
+	 * @returns {'mount' | 'visible'}
 	 */
 	#inTrigger(spec) {
 		const t = spec.trigger;
@@ -1811,6 +1956,9 @@ export class PuzzleView {
 	 * ('0px 0px -<n>px 0px'); a string must match /^\d+(\.\d+)?(px|%)$/
 	 * ('0px 0px -<n>% 0px'). Absent → no offset. An invalid value warns once per
 	 * spec and is treated as absent. Threshold is always 0 (baked into the caller).
+	 *
+	 * @param {AnimationSpec} spec
+	 * @returns {string}
 	 */
 	#inRootMargin(spec) {
 		const raw = spec.triggerOffset;
@@ -1841,7 +1989,7 @@ export class PuzzleView {
 	 *   - not a non-empty string → warn once, observe `el`;
 	 *   - `closest()` throws (invalid selector) or returns null (no ancestor) → warn
 	 *     once, observe `el`.
-	 * @param {object} spec the enter spec (already a valid, visible-trigger spec)
+	 * @param {import('../../types/index.js').AnimationSpec} spec the enter spec (already a valid, visible-trigger spec)
 	 * @param {Element} el this instance's root (the animation target and fallback)
 	 * @returns {Element} the element to observe
 	 */
@@ -1882,6 +2030,9 @@ export class PuzzleView {
 	 * (the "did" hook skipped if destroyed mid-enter). At most once per mount
 	 * (playIn()'s #playedIn guard). The returned promise resolves when the reveal
 	 * completes OR the view is destroyed/interrupted — never left forever-pending.
+	 *
+	 * @param {AnimationSpec} spec a valid, visible-trigger enter spec
+	 * @returns {Promise<void>}
 	 */
 	#deferredEnter(spec) {
 		const el = this.element;
@@ -1900,12 +2051,12 @@ export class PuzzleView {
 		// targets `el` (this instance's root); only the observed element changes, and
 		// `triggerOffset` composes (the anchor is observed under the offset's
 		// rootMargin). Falls back to `el` on any problem, so content is never stranded.
-		const observed = this.#resolveAnchor(spec, el);
+		const observed = this.#resolveAnchor(spec, /** @type {Element} */ (el));
 
 		// Hold the enter at `from` (release: true so it hands the element back once
 		// revealed, like the normal enter). A degraded handle (pause() threw, no
 		// WAAPI) still exposes play()/finished — the reveal just isn't held.
-		const handle = playAnimation(el, spec, { release: true, paused: true });
+		const handle = playAnimation(/** @type {Element} */ (el), spec, { release: true, paused: true });
 		this.#currentAnimation = handle;
 
 		return new Promise((resolve) => {
@@ -2192,6 +2343,8 @@ export class PuzzleView {
 	 * synchronous failure window, so a throw here must be reported and swallowed —
 	 * never allowed to turn a handled navigation failure into a rejecting router
 	 * promise, and never allowed to skip the hook that follows it.
+	 *
+	 * @param {() => void} hook
 	 */
 	#fireRestoreHook(hook) {
 		try {
@@ -2245,12 +2398,15 @@ export class PuzzleView {
 	 * cancellation. Resolves immediately (still async) when the spec is absent or
 	 * the position is the comment anchor (data still in flight) — the surrounding
 	 * hooks always fire regardless (constellation/doc/DOC-SPEC.md §12 hook order).
+	 *
+	 * @param {AnimationSpec | undefined} spec
+	 * @param {{ release?: boolean, retainOut?: boolean }} [options]
 	 */
 	async #runAnimation(spec, { release = false, retainOut = false } = {}) {
 		if (!spec) return;
 		const el = this.element;
 		if (!el || el.nodeType !== 1 /* ELEMENT_NODE */) return;
-		const handle = playAnimation(el, spec, { reducedMotion: prefersReducedMotion(), release });
+		const handle = playAnimation(/** @type {Element} */ (el), spec, { reducedMotion: prefersReducedMotion(), release });
 		this.#currentAnimation = handle;
 		if (retainOut) this.#outHandle = handle;
 		await handle.finished;
@@ -2259,6 +2415,11 @@ export class PuzzleView {
 
 	// ---- internals -----------------------------------------------------------
 
+	/**
+	 * @param {number} token the run token the result belongs to
+	 * @param {any} model the data() result
+	 * @param {number} [mark] the store flush sequence this run evaluated under
+	 */
 	#commit(token, model, mark = 0) {
 		// superseded, torn down, or LEAVING — see #completeMount for why removal is
 		// now asynchronous for any view declaring a hide hook (D136 §3).
@@ -2396,6 +2557,9 @@ export class PuzzleView {
 	 * Install a prepared evaluation's scope (D146) and return the entry that
 	 * retires it. The entry is a fresh copy of `scope`, so overlapping invocations
 	 * of the same prepare stay distinguishable by identity.
+	 *
+	 * @param {EvalScope} scope
+	 * @returns {EvalScope} the installed entry
 	 */
 	#beginEvalRun(scope) {
 		const mine = { ...scope };
@@ -2410,6 +2574,8 @@ export class PuzzleView {
 	 * is what keeps a superseded or abandoned invocation from being resurrected as
 	 * some later invocation's unwind target (see the invariant in prepareRefresh).
 	 * Idempotent: a tail that already retired its entry finds nothing to remove.
+	 *
+	 * @param {EvalScope} mine the entry #beginEvalRun returned
 	 */
 	#endEvalRun(mine) {
 		const at = this.#evalRuns.lastIndexOf(mine);
@@ -2456,6 +2622,10 @@ export class PuzzleView {
 	 * synchronous router.push() in that same frame reads the destination. That is a
 	 * residue of the same family as the setTimeout one above — the alternative is
 	 * stranding the live run — and there is no browser primitive to close it.
+	 *
+	 * @template T
+	 * @param {() => T} fn
+	 * @returns {T}
 	 */
 	#withCommittedScope(fn) {
 		this.#evalScope = null;
@@ -2473,11 +2643,16 @@ export class PuzzleView {
 	 * INTERNAL bridge to #withCommittedScope for the ViewManager, which wraps every
 	 * patch-managed DOM listener so the owner's handler runs against committed
 	 * params/route. Underscore-prefixed by the codebase's internal convention.
+	 *
+	 * @template T
+	 * @param {() => T} fn
+	 * @returns {T}
 	 */
 	__withCommittedScope(fn) {
 		return this.#withCommittedScope(fn);
 	}
 
+	/** @param {ViewNode} [preparedTree] a takeover's already-expanded tree */
 	#renderNow(preparedTree = undefined) {
 		// D146: a render always draws COMMITTED state. A prepared data() run whose
 		// promise is suspended leaves #evalScope set, so a render that lands inside
@@ -2488,6 +2663,7 @@ export class PuzzleView {
 		this.#withCommittedScope(() => this.#renderNowInner(preparedTree));
 	}
 
+	/** @param {ViewNode} [preparedTree] */
 	#renderNowInner(preparedTree = undefined) {
 		if (!this.#vm || this.#destroyed) return;
 		if (
@@ -2559,7 +2735,7 @@ export class PuzzleView {
 		// loops read no parent root emits no `__roots` but still has blocks, and they
 		// need the counter to tell a render they missed from one they ran in.
 		this.__rgen++;
-		const roots = this.constructor.__roots;
+		const roots = /** @type {{ __roots?: string[] }} */ (this.constructor).__roots;
 		if (!Array.isArray(roots)) {
 			this.__dirty = 0;
 			return;
@@ -2592,6 +2768,9 @@ export class PuzzleView {
 	 * empty the view's DOM when a hand-written render() returns null). Everything
 	 * between devperfRenderPrepare and devperfRenderEnd lives here so #renderNow can
 	 * close the prepared mark on a throw without duplicating the body.
+	 *
+	 * @param {ViewNode | undefined} preparedTree
+	 * @param {boolean} showSkeleton
 	 */
 	#renderSpan(preparedTree, showSkeleton) {
 		// Static-cache accounting (D170 §3.3), dev-only: how many `__c` sites this
@@ -2683,6 +2862,7 @@ export class PuzzleView {
 			devperfRenderScheduled(this, 'local-state');
 		}
 
+		/** @type {(cb: () => void) => void} */
 		const schedule =
 			typeof requestAnimationFrame === 'function'
 				? requestAnimationFrame

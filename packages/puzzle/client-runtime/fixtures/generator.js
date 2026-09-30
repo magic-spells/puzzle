@@ -26,10 +26,29 @@
  * not exist at runtime would be worthless.
  */
 
+/** @import { Store } from '../datastore/store.js' */
+/** @import { PuzzleModel } from '../model.js' */
+
+/**
+ * A seeded stream of floats in [0, 1).
+ * @typedef {() => number} Rand
+ */
+
+/**
+ * The parts of a normalized field descriptor the generator reads.
+ * @typedef {object} FieldDef
+ * @property {string} [type]
+ * @property {Array<{ rule: string, value?: any }>} [validate]
+ * @property {boolean} [explicitRequired]
+ */
+
 /**
  * mulberry32 — 32-bit seeded PRNG, ~10 lines, no dependency. Returns a function
  * producing floats in [0, 1). Chosen over xorshift for the shorter body and a
  * full 2^32 period, which is far more than a fixture run needs.
+ *
+ * @param {number} seed
+ * @returns {Rand}
  */
 export function mulberry32(seed) {
 	let a = seed >>> 0;
@@ -67,17 +86,28 @@ const WORDS = [
 const DAY = 86400000;
 const FIXTURE_EPOCH = Date.UTC(2026, 0, 1);
 
+/** @param {object} object @param {PropertyKey} key @returns {boolean} */
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+/** @template T @param {Rand} rand @param {readonly T[]} list @returns {T} */
 const pick = (rand, list) => list[Math.floor(rand() * list.length)];
+/** @param {string} word @returns {string} */
 const capitalize = (word) => word.charAt(0).toUpperCase() + word.slice(1);
 
+/** @param {Rand} rand @param {number} count @returns {string[]} */
 function words(rand, count) {
+	/** @type {string[]} */
 	const out = [];
 	for (let i = 0; i < count; i++) out.push(pick(rand, WORDS));
 	return out;
 }
 
-/** First declared value for a rule name ('min'/'max'), or undefined. */
+/**
+ * First declared value for a rule name ('min'/'max'), or undefined.
+ *
+ * @param {FieldDef} def
+ * @param {string} name
+ * @returns {any}
+ */
 function ruleValue(def, name) {
 	for (const rule of def.validate || []) {
 		if (rule.rule === name) return rule.value;
@@ -85,7 +115,12 @@ function ruleValue(def, name) {
 	return undefined;
 }
 
-/** The `.oneOf()` allow-list when one is declared and usable, else null. */
+/**
+ * The `.oneOf()` allow-list when one is declared and usable, else null.
+ *
+ * @param {FieldDef} def
+ * @returns {unknown[] | null}
+ */
 function oneOfValues(def) {
 	const values = ruleValue(def, 'oneOf');
 	return Array.isArray(values) && values.length ? values : null;
@@ -95,6 +130,11 @@ function oneOfValues(def) {
  * Field-name-aware string. Cheap heuristics only — an `email` field should look
  * like an email and a `title` like words, because a fixture you cannot read is
  * barely better than no fixture. Everything else is two words.
+ *
+ * @param {string} field
+ * @param {Rand} rand
+ * @param {number} index
+ * @returns {string}
  */
 function generateString(field, rand, index) {
 	const name = field.toLowerCase();
@@ -120,6 +160,12 @@ function generateString(field, rand, index) {
  * (§20 measures strings by length). Pad first, then clamp — so a contradictory
  * `min(20).max(5)` schema, which nothing can satisfy, resolves toward max rather
  * than looping.
+ *
+ * @param {string} value
+ * @param {Rand} rand
+ * @param {unknown} min
+ * @param {unknown} max
+ * @returns {string}
  */
 function clampLength(value, rand, min, max) {
 	let out = value;
@@ -128,7 +174,14 @@ function clampLength(value, rand, min, max) {
 	return out;
 }
 
-/** Integer inside `.min()`/`.max()`; an unbounded field spreads over [0, 100]. */
+/**
+ * Integer inside `.min()`/`.max()`; an unbounded field spreads over [0, 100].
+ *
+ * @param {Rand} rand
+ * @param {unknown} min
+ * @param {unknown} max
+ * @returns {number}
+ */
 function generateNumber(rand, min, max) {
 	const lo = typeof min === 'number' ? min : 0;
 	const hi = typeof max === 'number' ? max : lo + 100;
@@ -141,6 +194,11 @@ function generateNumber(rand, min, max) {
  * A date in the 30 days before the fixture epoch — "recent" without touching the
  * clock. Declared `.min()`/`.max()` Dates replace the bounds. Rounded to the
  * second so serialized fixtures stay readable.
+ *
+ * @param {Rand} rand
+ * @param {unknown} min
+ * @param {unknown} max
+ * @returns {Date}
  */
 function generateDate(rand, min, max) {
 	const lo = min instanceof Date ? min.getTime() : FIXTURE_EPOCH - 30 * DAY;
@@ -155,6 +213,12 @@ function generateDate(rand, min, max) {
  * field absent. `.oneOf()` wins over the type generator — never generate a value
  * the schema would immediately reject. array/object are empty by design: the
  * schema does not describe their inner shape, and inventing one would be fiction.
+ *
+ * @param {string} field
+ * @param {FieldDef} def
+ * @param {Rand} rand
+ * @param {number} index
+ * @returns {unknown}
  */
 function generateValue(field, def, rand, index) {
 	const allowed = oneOfValues(def);
@@ -186,6 +250,11 @@ function generateValue(field, def, rand, index) {
  * Author-supplied primary key (`.primary().required()` — a slug, a code). Shaped
  * for UNIQUENESS first, because a duplicate pk throws at createRecord: `todo-1`,
  * `todo-2`, … off the Store's monotonic fixture index. Word-salad would collide.
+ *
+ * @param {string} type
+ * @param {FieldDef} def
+ * @param {number} index
+ * @returns {string | number}
  */
 function generatePrimaryKey(type, def, index) {
 	if (def.type === 'number') return index + 1;
@@ -202,8 +271,15 @@ function generatePrimaryKey(type, def, index) {
  *
  * Reads `recordsByType` directly rather than `findMany`: seeding inside a tracked
  * `data()` must not subscribe the component to the parent collection.
+ *
+ * @param {Store} store
+ * @param {typeof PuzzleModel} Model
+ * @param {Rand} rand
+ * @param {object} overrides
+ * @returns {Record<string, unknown>}
  */
 function relationshipKeys(store, Model, rand, overrides) {
+	/** @type {Record<string, unknown>} */
 	const out = {};
 	const defs = typeof Model.relationshipDefs === 'function' ? Model.relationshipDefs() : {};
 	for (const [name, def] of Object.entries(defs)) {
@@ -233,7 +309,7 @@ function relationshipKeys(store, Model, rand, overrides) {
  * @param {string} type      registry type name
  * @param {object} overrides caller-supplied fields (always win)
  * @param {number} index     the monotonic fixture counter for this store
- * @param {Function} rand    the store's seeded fixture stream (state.js) — passed
+ * @param {Rand} rand        the store's seeded fixture stream (state.js) — passed
  *   in rather than read off the Store, which owns no fixture state (D98)
  */
 export function generateFixture(store, type, overrides, index, rand) {
@@ -242,6 +318,7 @@ export function generateFixture(store, type, overrides, index, rand) {
 	const pk = Model.primaryKey();
 	const foreignKeys = relationshipKeys(store, Model, rand, overrides);
 
+	/** @type {Record<string, unknown>} */
 	const data = {};
 	for (const [field, def] of Object.entries(schema)) {
 		if (hasOwn(overrides, field)) continue;

@@ -4,6 +4,8 @@
  * A dynamic segment is only a complete `:name`-style segment. Colons and stars
  * anywhere else are literal static text because makeEntry regex-escapes every
  * non-dynamic segment in full.
+ *
+ * @param {string} segment one '/'-separated path segment
  */
 export function isDynamicSegment(segment) {
 	return segment.length > 1 && segment[0] === ':';
@@ -29,6 +31,9 @@ export function isDynamicSegment(segment) {
  *
  * '?' and '#' are deliberately NOT encoded: they are structural delimiters that
  * stripPath()/encodeURL() rely on to split query and fragment.
+ *
+ * @param {string} path
+ * @returns {string}
  */
 export function normalizeRoutePath(path) {
 	return path.replace(/[^\x00-\x7F]+|[ "<>`{}^]/g, (literal) => encodeURIComponent(literal));
@@ -38,6 +43,8 @@ export function normalizeRoutePath(path) {
  * Top-level routes are path-shaped (`/about`) except for the bare `*` catch-all.
  * Empty and relative paths are unreachable from intercepted links, so reject
  * them at construction instead of allowing a route the app cannot navigate to.
+ *
+ * @param {unknown} path the declared route path (any value — this validates it)
  */
 export function validateTopLevelPath(path) {
 	if (path === '*') return;
@@ -60,8 +67,12 @@ export function validateTopLevelPath(path) {
  * The returned indexes identify occurrences, not just path strings, so duplicate
  * static declarations do not cause the first (reachable) occurrence to be
  * skipped by the prerenderer.
+ *
+ * @param {ReadonlyArray<{ fullPath: string, matchPath?: string, regex: RegExp | null }>} entries
+ * @returns {Array<{ index: number, path: string, shadowedBy: string }>}
  */
 export function findShadowedPaths(entries) {
+	/** @type {Array<{ index: number, path: string, shadowedBy: string }>} */
 	const shadowed = [];
 	for (let index = 0; index < entries.length; index++) {
 		const { fullPath, matchPath } = entries[index];

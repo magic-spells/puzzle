@@ -13,6 +13,16 @@ connections:
   - DOC-SPEC-BUILD
   - DOC-RELEASE-SURFACE
   - RELEASE-V0-7-0
+notes:
+  - kind: gotcha
+    text: >-
+      `PuzzleView.events` is OPTIONAL in types/index.d.ts (0.8.0, found by the runtime-types drift
+      guard): the base class has no `events`, so a view with none has `this.events === undefined`. A
+      template handler on a view that declares no `events` field therefore checks as "Object is
+      possibly 'undefined'" — a real runtime TypeError, previously hidden because the base type
+      promised a `Record` of handlers. `__PuzzleCheckJSView` only wraps a JS component that declares
+      its own `events`. The live-tsc fixture in internal/check/expr_test.go declares its handlers
+      for this reason.
 ---
 
 `puzzle check` type-checks an app's `.pzl` files — script bodies and template expressions — by emitting virtual TypeScript under `.puzzle/check/`, running the app's own `tsc --noEmit`, and remapping every diagnostic to the authored `.pzl` line and column. Code: `compiler/internal/check` and `compiler/cmd/puzzle/checkcmd.go`.

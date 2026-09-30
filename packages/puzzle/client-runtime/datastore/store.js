@@ -59,6 +59,27 @@ const RELS_INSTALLED = Symbol('puzzleRelationshipsInstalled');
 export const HANDLE_CTX = Symbol('puzzleStoreHandleCtx');
 
 /**
+ * A store handle's context (D161): the open evaluation's request map — request
+ * key → the in-flight fetch it queued — or null when none is open.
+ * @typedef {{ requests: Map<string, Promise<unknown>> | null }} HandleCtx
+ */
+
+/**
+ * What the store tracks and notifies — a PuzzleView in practice: the liveness
+ * probe, the change hook, and (with the adapter) its handle context. A plain
+ * callback is delivered to as well; it simply has none of these.
+ * @typedef {{ isDestroyed?: boolean, onStoreChange?: (seq: number) => void, [HANDLE_CTX]?: HandleCtx }} Subscriber
+ */
+
+/**
+ * A live record: an instance of a registered model class, whose fields are the
+ * author's schema (any name, any value).
+ * @typedef {PuzzleModel & Record<string, any>} StoreRecord
+ */
+
+/** @typedef {import('../model.js').RelationshipDef} RelationshipDef */
+
+/**
  * Dev-only registration guards, run once from the constructor.
  *
  * A module-level function and NOT a `Store` method ON PURPOSE — the same reason
@@ -82,6 +103,7 @@ export const HANDLE_CTX = Symbol('puzzleStoreHandleCtx');
  *
  * The two loops stay separate and in this order: the reserved-field throw wins
  * over a method-name collision in the same model set.
+ * @param {Record<string, typeof PuzzleModel>} models
  */
 function assertModelSchemas(models) {
 	for (const [type, Model] of Object.entries(models)) {
@@ -100,7 +122,9 @@ function assertModelSchemas(models) {
 export class Store {
 	/**
 	 * @param {object} models   type name → model class (from PuzzleApp config)
-	 * @param {object} options  { storage, storageKey, apiURL, adapter, beforeRequest } —
+	 * @param {{ storage?: Pick<Storage, 'getItem' | 'setItem'> | null, storageKey?: string, apiURL?: string,
+	 *   adapter?: import('../capabilities.js').AdapterCapability, beforeRequest?: Function }} [options]
+	 *   { storage, storageKey, apiURL, adapter, beforeRequest } —
 	 *   storage is any Storage-like object (getItem/setItem); pass
 	 *   window.localStorage to persist. apiURL is the base for the D21 server read
 	 *   path. adapter is the opaque app capability retained for the optional module;
@@ -108,7 +132,7 @@ export class Store {
 	 *   hook (v1.55, D91) — see _fetch.
 	 */
 	constructor(models = {}, options = {}) {
-		this.models = models;
+		this.models = /** @type {Record<string, typeof PuzzleModel>} */ (models);
 		this.storage = options.storage || null;
 		this.storageKey = options.storageKey || 'puzzle-store';
 		this.apiURL = options.apiURL || '';
@@ -124,8 +148,10 @@ export class Store {
 		this.subscribersByKey = new Map(); // key → Set(subscriber)
 		this.keysBySubscriber = new Map(); // subscriber → Set(key), for cheap reset
 
+		/** @type {Subscriber | null} */
 		this._tracking = null; // current subscriber during data() evaluation
 		this._asyncTrackingChain = null; // in-flight async tracked eval, or null
+		/** @type {Set<string> | null} */
 		this._trackingAdded = null; // keys the in-flight eval has queried (transactional reset)
 		// D161: there is deliberately NO ambient request slot on the Store. An
 		// evaluation's request map lives on its subscriber's handle context
@@ -171,6 +197,10 @@ export class Store {
 
 	// ---- model plumbing ----------------------------------------------------
 
+	/**
+	 * @param {string} type
+	 * @returns {typeof PuzzleModel}
+	 */
 	modelFor(type) {
 		// OWN properties only: `models` is a plain object literal, so a bare
 		// `this.models[type]` also resolves the Object prototype — a persisted blob
@@ -209,8 +239,14 @@ export class Store {
 		}
 	}
 
+	/**
+	 * @param {typeof PuzzleModel} Model
+	 * @param {string} type
+	 * @param {string} name
+	 * @param {RelationshipDef} def
+	 */
 	_defineRelationship(Model, type, name, def) {
-		const proto = Model.prototype;
+		const proto = /** @type {PuzzleModel & { [RELS_INSTALLED]?: Set<string> }} */ (Model.prototype);
 		const installed = Object.prototype.hasOwnProperty.call(proto, RELS_INSTALLED)
 			? proto[RELS_INSTALLED]
 			: (proto[RELS_INSTALLED] = new Set());
@@ -246,6 +282,7 @@ export class Store {
 				const ownerPk = this.constructor.primaryKey();
 				const ownerKey = recordKey(this[ownerPk]);
 				return this._store._findManyLocal(def.type, {
+					/** @param {StoreRecord} r */
 					filter: (r) => recordKey(r[fkKey]) === ownerKey,
 				});
 			},
@@ -263,11 +300,16 @@ export class Store {
 		});
 	}
 
+	/** @param {string} type */
 	_typeMap(type) {
 		if (!this.recordsByType.has(type)) this.recordsByType.set(type, new Map());
 		return this.recordsByType.get(type);
 	}
 
+	/**
+	 * @param {Map<unknown, unknown>} map
+	 * @returns {string}
+	 */
 	_genId(map) {
 		let id;
 		do {
@@ -283,6 +325,9 @@ export class Store {
 	 * schema validation enforced (constellation/doc/DOC-SPEC.md §20, D48) — on
 	 * failure PuzzleValidationError throws and nothing is inserted, notified,
 	 * or persisted.
+	 * @param {string} type
+	 * @param {Record<string, any>} [data]
+	 * @returns {StoreRecord}
 	 */
 	createRecord(type, data = {}) {
 		const record = this._instantiate(type, data, 'throw', true);
@@ -292,6 +337,8 @@ export class Store {
 	}
 
 	/**
+	 * @param {string} type
+	 * @param {Record<string, any>} data
 	 * @param {'throw'|'skip'} [onDuplicate='throw'] how to handle an explicit
 	 *   primary key that already indexes a live record. createRecord/_upsert
 	 *   throw (a duplicate id is a programming error); _load skips (keep the
@@ -302,6 +349,7 @@ export class Store {
 	 *   hydration (_load) and server upserts (_upsert) leave it false — the
 	 *   server is authoritative and startup hydration is fail-soft, so neither
 	 *   read path may crash on data that would fail local validation.
+	 * @returns {StoreRecord}
 	 */
 	_instantiate(type, data, onDuplicate = 'throw', validate = false) {
 		const Model = this.modelFor(type);
@@ -338,7 +386,7 @@ export class Store {
 			);
 		}
 
-		const record = new Model(withDefaults);
+		const record = /** @type {StoreRecord} */ (new Model(withDefaults));
 		record._store = this;
 		Object.defineProperty(record, '_type', {
 			value: type,
@@ -374,12 +422,17 @@ export class Store {
 	 * model it commits is settled and a committed null means "does not exist".
 	 * Event handlers, model methods, timers and adapter-free apps get the local
 	 * snapshot this has always been.
+	 * @param {string} type
+	 * @param {unknown} id
 	 */
 	findOne(type, id) {
 		return this._findOneLocal(type, id);
 	}
 
-	/** @param {object} [options] { filter: (record) => boolean } */
+	/**
+	 * @param {string} type
+	 * @param {import('../../types/index.js').FindManyOptions} [options] { filter: (record) => boolean }
+	 */
 	findMany(type, options = {}) {
 		return this._findManyLocal(type, options);
 	}
@@ -389,12 +442,18 @@ export class Store {
 	 * methods do but never faulting. The relationship getters use these: traversing
 	 * `post.author` must record the subscription that makes it reactive without
 	 * turning a rendered list into N requests (D49, D161).
+	 * @param {string} type
+	 * @param {unknown} id
 	 */
 	_findOneLocal(type, id) {
 		this._subscribe(type + REC_SEP + id);
 		return this._typeMap(type).get(recordKey(id)) ?? null;
 	}
 
+	/**
+	 * @param {string} type
+	 * @param {import('../../types/index.js').FindManyOptions} [options]
+	 */
 	_findManyLocal(type, options = {}) {
 		this._subscribe(type);
 		let records = [...this._typeMap(type).values()];
@@ -404,7 +463,10 @@ export class Store {
 		return records;
 	}
 
-	/** Called by PuzzleModel.update() — batched change notification. */
+	/**
+	 * Called by PuzzleModel.update() — batched change notification.
+	 * @param {StoreRecord} record
+	 */
 	recordChanged(record) {
 		const type = record._type;
 		if (!type) return;
@@ -412,7 +474,10 @@ export class Store {
 		this._persist();
 	}
 
-	/** Called by PuzzleModel.destroy()/confirmed delete() — removes FIRST, then notifies. */
+	/**
+	 * Called by PuzzleModel.destroy()/confirmed delete() — removes FIRST, then notifies.
+	 * @param {StoreRecord} record
+	 */
 	removeRecord(record) {
 		const type = record._type;
 		if (!type) return;
@@ -465,8 +530,10 @@ export class Store {
 	 * view's FIRST promise-shaped evaluation: from the second on, the caller
 	 * hints true and the eval defers before it runs.
 	 *
+	 * @param {Subscriber} subscriber the tracking target
+	 * @param {() => any} fn the evaluation (a view's data() run)
 	 * @param {boolean} [expectsAsync=false] caller's hint that fn is async.
-	 * @param {?{reconcile?: function(boolean): void}} [pending=null] HELD-eval channel
+	 * @param {?{reconcile?: (committed: boolean) => void}} [pending=null] HELD-eval channel
 	 *   (D146). When given, a SUCCESSFUL eval does not reconcile subscriptions here —
 	 *   it parks the reconcile function on `pending.reconcile` and the caller decides
 	 *   later whether the run is committed (`reconcile(true)` → drop the last-good keys
@@ -474,7 +541,7 @@ export class Store {
 	 *   eval's own additions, leaving the live set exactly as it was). Scope restore
 	 *   (`_tracking`/`_trackingAdded`) is NEVER deferred — that is stack discipline.
 	 *   A failing eval reconciles(false) immediately and leaves `pending` untouched.
-	 * @param {?Map} [requests=null] D161 per-evaluation request map. Installed on
+	 * @param {Map<string, Promise<unknown>> | null} [requests=null] D161 per-evaluation request map. Installed on
 	 *   the SUBSCRIBER'S handle context for the duration of the eval, which is
 	 *   what lets a miss read through that subscriber's handle queue the fetch the
 	 *   caller's settle loop then awaits. Per EVALUATION and per SUBSCRIBER, never
@@ -483,6 +550,7 @@ export class Store {
 	 *   handle cannot fault at all — before or after an await. A subscriber with
 	 *   no handle context (a bare object) installs no map anywhere; its reads are
 	 *   local.
+	 * @returns {any} fn's result, or a promise of it when the eval is async or deferred
 	 */
 	withTracking(subscriber, fn, expectsAsync = false, pending = null, requests = null) {
 		// Liveness probe: a subscriber destroyed since this eval was scheduled must
@@ -545,7 +613,12 @@ export class Store {
 		// same key both hold it and neither one's outcome can drop it out from under
 		// the other. Read fresh from `_heldKeys` every time: a destroy() in the
 		// meantime drops the whole entry and the count correctly reads 0.
+		/** @param {string} key */
 		const heldCount = (key) => this._heldKeys.get(subscriber)?.get(key)?.count ?? 0;
+		/**
+		 * @param {boolean} ok
+		 * @param {Set<string> | null} [adopted]
+		 */
 		const reconcile = (ok, adopted = null) => {
 			if (ok) {
 				for (const key of before) {
@@ -565,6 +638,7 @@ export class Store {
 				}
 			}
 		};
+		/** @param {boolean} ok */
 		const finalize = (ok) => {
 			// D146 held eval: park the SUCCESS reconcile for the caller's commit/discard
 			// decision. The subscriber is transiently over-subscribed (last-good keys AND
@@ -654,6 +728,7 @@ export class Store {
 				return this._asyncTrackingChain.then(retry, retry);
 			}
 
+			/** @type {(value?: unknown) => void} */
 			let release;
 			const chain = new Promise((r) => (release = r));
 			this._asyncTrackingChain = chain;
@@ -661,7 +736,7 @@ export class Store {
 				if (this._asyncTrackingChain === chain) this._asyncTrackingChain = null;
 				release();
 			};
-			return result.then(
+			return /** @type {Promise<any>} */ (result).then(
 				(model) => {
 					finalize(true);
 					settle();
@@ -678,7 +753,10 @@ export class Store {
 		return result;
 	}
 
-	/** Drop every subscription held by this subscriber (component destroy). */
+	/**
+	 * Drop every subscription held by this subscriber (component destroy).
+	 * @param {Subscriber} subscriber
+	 */
 	unsubscribe(subscriber) {
 		// A destroy() during this subscriber's OWN suspended async data() leaves it
 		// as the live tracking target (_tracking stays set across the eval's awaits).
@@ -705,7 +783,11 @@ export class Store {
 		for (const key of [...keys]) this._dropSubscription(key, subscriber);
 	}
 
-	/** Remove one (key, subscriber) link, pruning now-empty sets on both sides. */
+	/**
+	 * Remove one (key, subscriber) link, pruning now-empty sets on both sides.
+	 * @param {string} key
+	 * @param {Subscriber} subscriber
+	 */
 	_dropSubscription(key, subscriber) {
 		const subs = this.subscribersByKey.get(key);
 		if (subs) {
@@ -721,6 +803,7 @@ export class Store {
 		}
 	}
 
+	/** @param {string} key */
 	_subscribe(key) {
 		const subscriber = this._tracking;
 		if (!subscriber) return;
@@ -737,6 +820,10 @@ export class Store {
 
 	// ---- change notification (batched) ---------------------------------------
 
+	/**
+	 * @param {string} type
+	 * @param {unknown} id
+	 */
 	_notify(type, id) {
 		const seq = ++this._notifySeq;
 		this._pendingKeys.set(type, seq);
@@ -904,7 +991,7 @@ export class Store {
 					if (typeof sub === 'function') {
 						const result = sub();
 						if (result && typeof result.then === 'function') {
-							result.catch((err) => console.error('[puzzle] store subscriber failed:', err));
+							/** @type {Promise<unknown>} */ (result).catch((err) => console.error('[puzzle] store subscriber failed:', err));
 						}
 					} else {
 						sub.onStoreChange?.(seq);
@@ -936,6 +1023,7 @@ export class Store {
 	 * §27, D57) — the dev path calls this directly (same-package convention).
 	 */
 	_serializeAll() {
+		/** @type {Record<string, object[]>} */
 		const out = {};
 		for (const [type, map] of this.recordsByType) {
 			// __synced rides out-of-band next to the record's fields so save()'s
@@ -1029,6 +1117,8 @@ export class Store {
 	 * Fail-soft: a 'null'/array/primitive `data` parses fine but Object.entries()
 	 * would throw (null) or iterate garbage — crashing PuzzleApp.mount. Only a
 	 * plain object is a valid store snapshot, so anything else is ignored.
+	 * @param {unknown} data a parsed wire-shape snapshot — untrusted
+	 * @param {{ replace?: boolean }} [options]
 	 */
 	_hydrateAll(data, { replace = false } = {}) {
 		if (!data || typeof data !== 'object' || Array.isArray(data)) return;

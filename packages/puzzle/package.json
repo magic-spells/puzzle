@@ -90,6 +90,7 @@
 		"bench": "node benchmarks/runner.mjs",
 		"bench:update": "node benchmarks/runner.mjs --update-baseline",
 		"test:types": "tsc -p tests-types",
+		"test:runtime-types": "tsc -p tsconfig.runtime.json && tsc -p tests-types/drift",
 		"test:e2e-pack": "node scripts/e2e-pack.mjs",
 		"verify:pack": "node scripts/verify-pack.mjs",
 		"measure:size": "node scripts/measure-size.mjs",

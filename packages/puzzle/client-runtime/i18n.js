@@ -19,6 +19,28 @@ import { displayValue } from './display.js';
 import { nearestFormatter } from './formatters.js';
 import { localeNumber, setFormatLocale } from './formatters/locale.js';
 
+/** @import { FormatterRegistry } from './formatters.js' */
+/** @import { PuzzleI18n } from '../types/index.js' */
+
+/**
+ * One locale's flat, build-filled table: key → string, or a plural entry
+ * (CLDR category, plus an optional exact-zero `zero`, → string).
+ * @typedef {Record<string, string | Record<string, string>>} LocaleTable
+ */
+
+/**
+ * The build's locale manifest (D175).
+ * @typedef {object} I18nManifest
+ * @property {string} defaultLocale
+ * @property {Record<string, string>} locales tag → dist-relative table path
+ * @property {string} [base] URL of the folder the build's entry module was served from
+ */
+
+/**
+ * The service createI18n returns (`ctx.i18n`, `app.i18n`).
+ * @typedef {NonNullable<ReturnType<typeof createI18n>>} I18nService
+ */
+
 /** The localStorage key that remembers a viewer's explicit setLocale() choice. */
 export const LOCALE_STORAGE_KEY = '__puzzleLocale';
 
@@ -31,11 +53,13 @@ export const LOCALE_STORAGE_KEY = '__puzzleLocale';
  * @param {string[]} tags configured locales, in config order
  * @param {string} defaultLocale
  * @param {?string} stored the remembered choice, if any
- * @param {string[]} [languages] the viewer's preferred languages (navigator.languages)
+ * @param {readonly string[]} [languages] the viewer's preferred languages (navigator.languages)
  * @returns {string} a configured tag
  */
 export function selectLocale(tags, defaultLocale, stored, languages = []) {
+	/** @param {string} tag */
 	const find = (tag) => tags.find((t) => t.toLowerCase() === tag.toLowerCase());
+	/** @param {string} tag */
 	const baseOf = (tag) => tag.split('-')[0].toLowerCase();
 	if (typeof stored === 'string' && stored) {
 		const hit = find(stored);
@@ -58,6 +82,7 @@ function readStoredLocale() {
 	}
 }
 
+/** @param {string} tag */
 function storeLocale(tag) {
 	try {
 		localStorage.setItem(LOCALE_STORAGE_KEY, tag);
@@ -75,6 +100,9 @@ function viewerLanguages() {
  * The table a prerendered page carries for its build locale
  * (`<script type="application/json" data-puzzle-locale="en">`), or null when the
  * page has none or it is for a different locale.
+ *
+ * @param {string} tag
+ * @returns {LocaleTable | null}
  */
 function readIsland(tag) {
 	if (typeof document === 'undefined') return null;
@@ -88,8 +116,14 @@ function readIsland(tag) {
 }
 
 // Plural rules, keyed by locale. Module-level: they hold nothing app-specific.
+/** @type {Map<string, Intl.PluralRules>} */
 const pluralRules = new Map();
 
+/**
+ * @param {string} locale
+ * @param {number} count
+ * @returns {Intl.LDMLPluralRule}
+ */
 function pluralCategory(locale, count) {
 	let rules = pluralRules.get(locale);
 	if (!rules) {
@@ -113,6 +147,10 @@ function pluralCategory(locale, count) {
  * `count` prints in the formatter locale's number format — the helper
  * `number_with_delimiter` and `pluralize` share, which the service points at the
  * active locale. A `{` with no closing `}` is literal text.
+ *
+ * @param {string} text
+ * @param {Record<string, unknown>} vars
+ * @returns {string}
  */
 export function fillPlaceholders(text, vars) {
 	let out = '';
@@ -150,18 +188,18 @@ export function fillPlaceholders(text, vars) {
  * before its first render.
  *
  * @param {object} [options]
- * @param {object} [options.manifest] `{ defaultLocale, locales: { tag: path },
+ * @param {I18nManifest} [options.manifest] `{ defaultLocale, locales: { tag: path },
  *   base }` — `base` is the URL of the folder the build's entry module was served
  *   from; defaults to the build's manifest module
  * @param {(path: string, base?: string) => string} [options.url] resolves a
  *   dist-relative manifest path (and the manifest's base) to a fetchable URL
  * @param {boolean} [options.lang] false leaves `<html lang>` alone (memory mode)
- * @param {Record<string, object>} [options.tables] preloaded tables by tag — the
+ * @param {Record<string, LocaleTable>} [options.tables] preloaded tables by tag — the
  *   prerender and the testing utilities pass these so nothing is fetched
  * @param {string} [options.locale] a forced starting locale (the prerender always
  *   renders the default); skips storage and navigator
  * @param {() => unknown} [options.refresh] re-renders the host after a switch
- * @returns {object|null}
+ * @returns the service (its type is inferred), or null without translations
  */
 export function createI18n(options = {}) {
 	const manifest = options.manifest ?? manifestData;
@@ -170,23 +208,28 @@ export function createI18n(options = {}) {
 	const defaultLocale = manifest.defaultLocale;
 	const { tables, url = (path) => path, refresh, lang = true } = options;
 
+	/** @type {LocaleTable | null} */
 	let table = null;
 	let locale = defaultLocale;
 	let token = 0;
+	/** @type {Promise<unknown> | null} */
 	let pending = null;
 	// The last re-render into the active locale failed, so the page may still show
 	// the old strings: a setLocale of that same locale re-renders instead of no-oping.
 	let stale = false;
+	/** @type {Set<string> | undefined} */
 	let warned;
 
 	// Development-only, warn-once. Every CALL sits behind the inline
 	// `__PUZZLE_DEV__` probe too, so production drops the message strings with it.
+	/** @param {string} key @param {string} message */
 	const warnOnce = (key, message) => {
 		if ((warned ??= new Set()).has(key)) return;
 		warned.add(key);
 		console.warn(message);
 	};
 
+	/** @param {string} tag @returns {Promise<LocaleTable>} */
 	const load = (tag) => {
 		const preloaded = tables?.[tag] ?? readIsland(tag);
 		if (preloaded) return Promise.resolve(preloaded);
@@ -198,6 +241,7 @@ export function createI18n(options = {}) {
 
 	// The table, the locale, the formatter locale and <html lang> switch together
 	// (not <html lang> in memory mode, which touches nothing document-wide).
+	/** @param {string} tag @param {LocaleTable} strings */
 	const apply = (tag, strings) => {
 		table = strings;
 		locale = tag;
@@ -207,6 +251,7 @@ export function createI18n(options = {}) {
 
 	// The startup load: the active locale, falling back ONCE to the default when
 	// that file fails. Only a failure of the default too rejects.
+	/** @param {string} tag */
 	const begin = (tag) => {
 		const my = ++token;
 		const p = load(tag)
@@ -227,6 +272,7 @@ export function createI18n(options = {}) {
 		return p;
 	};
 
+	/** @param {unknown} tag @returns {string | undefined} */
 	const canonical = (tag) =>
 		typeof tag === 'string' ? tags.find((t) => t.toLowerCase() === tag.toLowerCase()) : undefined;
 
@@ -250,6 +296,11 @@ export function createI18n(options = {}) {
 		 * object, list or function is no key at all — usually the variables passed
 		 * first, `t({ count: n }, 'key')` — so it prints what the key rule prints
 		 * for it, which for an object is nothing (D173 V6), and warns.
+		 *
+		 * @param {string | number | boolean | object | null | undefined} key any value;
+		 *   only a string, number or boolean is a key
+		 * @param {any} [vars] the template's variables object; anything else is ignored
+		 * @returns {string}
 		 */
 		t(key, vars) {
 			if (key == null) return '';
@@ -326,6 +377,9 @@ export function createI18n(options = {}) {
 		 * call a later one overtook settles with the LATER call's outcome, so it
 		 * never reports a switch that did not happen. An unconfigured tag throws a
 		 * RangeError.
+		 *
+		 * @param {string} tag
+		 * @returns {Promise<void>} settles once the switch and its re-render are done
 		 */
 		setLocale(tag) {
 			const match = canonical(tag);
@@ -368,7 +422,7 @@ export function createI18n(options = {}) {
 				}
 			);
 			pending = p;
-			return p;
+			return /** @type {Promise<void>} */ (p);
 		},
 
 		/**
@@ -396,6 +450,9 @@ export function createI18n(options = {}) {
 /**
  * Register the service-bound `t(key, vars)` library function (D175, D176 §4)
  * unless the app registered its own — an app `t` wins, like an app `link` does.
+ *
+ * @param {FormatterRegistry} registry
+ * @param {Pick<PuzzleI18n, 't'>} i18n
  */
 export function installTranslate(registry, i18n) {
 	if (!registry.getAll().t) registry.register('t', (key, vars) => i18n.t(key, vars));
