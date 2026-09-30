@@ -1440,12 +1440,12 @@ func TestParseCompositionMarkersD141(t *testing.T) {
 		{
 			name:        "lowercase children is retired",
 			src:         `<puzzle-view><children/></puzzle-view>` + "\n<script></script>",
-			wantMessage: "the default marker is spelled <Children/> since v1.64 (D134)",
+			wantMessage: "the default marker is spelled <Children/> (D134)",
 		},
 		{
 			name:        "lowercase children paired form is retired",
 			src:         `<puzzle-view><children>fallback</children></puzzle-view>` + "\n<script></script>",
-			wantMessage: "the default marker is spelled <Children/> since v1.64 (D134)",
+			wantMessage: "the default marker is spelled <Children/> (D134)",
 		},
 		{
 			name:        "bare lowercase slot is retired",
@@ -1460,12 +1460,12 @@ func TestParseCompositionMarkersD141(t *testing.T) {
 		{
 			name:        "lowercase named slot is retired",
 			src:         `<puzzle-view><slot name="x"/></puzzle-view>` + "\n<script></script>",
-			wantMessage: `named slots are spelled <Slot name="…"/> since v1.64 (D134)`,
+			wantMessage: `named slots are spelled <Slot name="…"/> (D134)`,
 		},
 		{
 			name:        "lowercase dynamic named slot is retired",
 			src:         `<puzzle-view><slot name={ target }/></puzzle-view>` + "\n<script></script>",
-			wantMessage: `named slots are spelled <Slot name="…"/> since v1.64 (D134)`,
+			wantMessage: `named slots are spelled <Slot name="…"/> (D134)`,
 		},
 		{
 			name:        "ref on Children marker",

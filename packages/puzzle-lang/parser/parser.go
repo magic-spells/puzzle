@@ -500,12 +500,12 @@ func (p *parser) parseElement() (Node, *ParseError) {
 	var snippetParams []string
 	if !p.raw {
 		if name == "children" {
-			return nil, errAt(p.file, pos, "the default marker is spelled <Children/> since v1.64 (D134)")
+			return nil, errAt(p.file, pos, "the default marker is spelled <Children/> (D134)")
 		}
 		if name == "slot" {
 			for _, a := range attrs {
 				if attrNameOf(a) == "name" {
-					return nil, errAt(p.file, pos, `named slots are spelled <Slot name="…"/> since v1.64 (D134)`)
+					return nil, errAt(p.file, pos, `named slots are spelled <Slot name="…"/> (D134)`)
 				}
 			}
 			return nil, errAt(p.file, pos, "bare <slot> is not a marker — use <Children/> for call-site content or <Slot/> for the router outlet (D134)")
