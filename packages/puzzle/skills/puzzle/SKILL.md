@@ -111,8 +111,8 @@ export default class Counter extends PuzzleView {
   data() { return { count: this.getData()?.count ?? 0 }; }  // runs at render — and under NODE during prerender
   events = {
     increment: () => this.setData('count', this.getData().count + 1),
-  };  // handlers MUST be arrow functions in the `events` class field —
-      // method shorthand is a compile error (`this` would break at fire time)
+  };  // handlers should be arrow functions in the `events` class field so
+      // `this` is the component — method shorthand gets the events object as `this`
   mounted() { /* browser-only setup: listeners, intervals, DOM */ }
   destroyed() { /* MANDATORY cleanup of window listeners/intervals */ }
 }

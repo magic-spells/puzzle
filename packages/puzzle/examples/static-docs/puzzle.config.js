@@ -1,4 +1,4 @@
-// Puzzle app configuration (constellation/doc/DOC-DECISIONS.md D12/D26). Read by
+// Puzzle app configuration (D12/D26). Read by
 // the compiler via node — the Go side never parses JS (D3).
 export default {
 	// Declaring the Tailwind pipeline makes `puzzle build` / `puzzle dev` run the
