@@ -17,6 +17,7 @@ palette and lets it drift.
 
 ## Rules
 
+
 - **The default palette reuses `planTheme`.** The entry whose `file` equals
   `Registry.Theme` (matched on the file, not the name) goes where `add piece`
   puts it: `app/styles/pieces.css`, lock key `theme/pieces.css`, the
@@ -47,10 +48,27 @@ palette and lets it drift.
   `data-scheme="<name>"` / `data-theme="light|medium|dark"` switch line are
   printed, never written; the switch line prints once per run.
 - **No name** lists palettes (name, label, description) with the app's state
-  per theme (`installed` / `wired via package` / `wired` / `—`), exit 0. An
+  per theme (`installed` / `installed · outdated` when the file's bytes differ
+  from the registry's / `wired via package` / `wired` / `—`), exit 0. An
   unknown name errors with the list plus a did-you-mean.
 - A registry without a `themes` array still offers its single default palette,
   synthesized from `Registry.Theme`.
+- **`add piece` flags a stale theme.** `add piece` never rewrites an existing
+  `app/styles/pieces.css`, so pieces that use newer tokens would render
+  unstyled against an older copy. When the file exists (and the tokens are not
+  hand-merged into styles.css or package-imported), `staleThemeHint` compares
+  it with the registry theme: identical is quiet; a copy matching its lock hash
+  prints "older registry theme — run `puzzle add theme default`"; anything else
+  prints the hand-merge / `--overwrite` wording. Print-only; a registry
+  without the theme file skips the hint rather than failing the add. Pieces
+  may therefore use new tokens freely.
+- **A piece names the palettes it needs** in its manifest's `themes` array
+  (`appearance-picker`: `dim`, `warm`, `void`). `add piece` unions them across
+  the resolved set and prints one `puzzle add theme <names…>` line for the
+  ones the app has neither on disk nor package-imported (the default palette
+  is left to `planTheme`). Print-only (D3), never copied. Not
+  `registryDependencies`: an older CLI would read a palette name as an unknown
+  piece.
 
 ## Alternatives
 

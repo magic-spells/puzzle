@@ -55,6 +55,12 @@ type Piece struct {
 	// against the older schema keeps working. We never run npm (D3) — the specs
 	// are accumulated (see collectNpmDeps) and printed as a next step.
 	Dependencies []string `json:"dependencies"`
+	// Themes names the palettes (registry `themes` entries) the piece needs to be
+	// useful — the appearance picker offers dim/warm/void cards. Like
+	// Dependencies it is print-only: `add piece` prints the `puzzle add theme`
+	// line for the ones the app lacks (see missingThemes), never copies them (D3).
+	// Not a registryDependency: an older CLI would read the name as a piece.
+	Themes []string `json:"themes"`
 	// TargetDir is the app-relative destination for this piece's files; empty
 	// means the default (app/components/ui).
 	TargetDir string `json:"targetDir"`

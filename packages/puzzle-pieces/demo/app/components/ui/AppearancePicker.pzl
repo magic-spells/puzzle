@@ -131,6 +131,9 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // changes with it; nothing in this file knows a hex. It is also why no palette
 // block in the theme files may be anchored to `:root`.
 //
+// THE CARDS NEED THEIR PALETTES. Dim, Warm and Void paint only once their theme
+// files are in the app — `puzzle add piece` prints `puzzle add theme dim warm void`.
+//
 // APPLIES ON THE CLICK, NO SAVE BUTTON. Both groups fire `@change` immediately —
 // the whole point is watching the app repaint behind the picker.
 //

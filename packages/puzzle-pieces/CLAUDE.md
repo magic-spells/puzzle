@@ -101,6 +101,11 @@ Rules that follow from this:
   you bump a component in `demo/package.json`, bump the piece manifests with it. The `add`
   CLI still accepts a bare name (third-party registries) and prints it bare, but nothing
   in this registry may ship one.
+- `themes` — optional palette names (`registry.json` `themes` entries) the piece needs to be
+  useful; `appearance-picker` lists `dim`, `warm`, `void`. Print-only: `add piece` prints
+  `puzzle add theme <names…>` for the ones the app has neither on disk nor package-imported.
+  Deliberately NOT `registryDependencies` — an older CLI would read the name as a piece.
+  `test/registry-deps.test.js` checks every name is a shipped palette.
 
 ## Versioning
 
@@ -245,8 +250,9 @@ CLI — it is unrelated and must not be bumped along with the release.
   name, wrapped in `@layer components` (it holds because collected component CSS is
   appended after Tailwind's output), with `@property` rules outside the layer and a
   `prefers-reduced-motion` section. Utilities in `class` win except on properties the
-  animation drives. Layout, size and colour stay utilities — and only on tokens older
-  shipped themes already have, since `puzzle add` never rewrites an existing pieces.css.
+  animation drives. Layout, size and colour stay utilities. New tokens are fine:
+  `puzzle add` never rewrites an existing pieces.css, but `add piece` prints the
+  stale-theme hint (`puzzle add theme default`) when the app's copy differs from the registry's.
   Note `@apply` does NOT work inside `<style>` — Tailwind never processes that text, so
   the rule survives literally into the bundle and the browser silently drops it. Raw
   properties and `var(--…)` are fine.
@@ -373,6 +379,9 @@ with:
 - Theme is copied like a piece: `theme/pieces.css` is written verbatim to
   `app/styles/pieces.css` when the app has neither the tokens nor the file, and the
   one-line `@import './pieces.css';` wiring step is printed (styles.css is user-owned).
+  When an app's pieces.css exists but differs from the registry's, `add piece` prints a
+  stale-theme hint: `puzzle add theme default` for an unmodified older copy (it still
+  matches its `pieces.lock` hash), a hand merge or `--overwrite` for an edited one.
   Detection keys on the `puzzle-pieces design tokens` header comment in `pieces.css` —
   **don't reword that comment without updating the CLI's marker.** `registry.json`'s
   `themes` array (`{ name, file, label, description }`) and `modes` list the palettes for
