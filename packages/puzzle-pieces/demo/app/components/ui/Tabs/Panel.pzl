@@ -25,6 +25,16 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // is decided by Tailwind's generated order rather than by the merge order in
 // this file. Style the panel entirely from the call site.
 //
+// It still lays out as a BLOCK: the root is a flex column, which blockifies
+// this otherwise-inline custom element without a display utility here, and the
+// root's gap puts the space between it and the list. So call-site chrome just
+// works — a boxed body is one class string on every Panel:
+//
+//   <Tabs.Panel value="a" class="rounded-xl border border-border bg-surface p-5">
+//
+// (A wrapper element around the panels is not an option: upstream only finds
+// panels that are DIRECT children of the group.)
+//
 // Props
 //   value  required; must match the Tabs.Tab at the same position
 //   class  rendered on <tab-panel>
