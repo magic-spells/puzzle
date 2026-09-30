@@ -277,15 +277,16 @@ dialog-backdrop {
  * The morph engine reads each end's computed per-corner radii and lerps
  * between them. Tailwind v4's `rounded-full` is `calc(infinity * 1px)`, which
  * computes to ~1.68e7px, so a pill → panel morph stayed a stadium for the
- * whole flight and snapped square at the reveal. Both ends of both shell
- * morphs therefore carry the SAME finite 22px, so the radius never tweens:
+ * whole flight and snapped square at the reveal. Both ends of each shell
+ * morph therefore carry the SAME finite radius, so it never tweens:
  *   - the mobile docs pill (22px = half its h-11 height, i.e. fully round)
  *     and the Sheet card it morphs into. sheet.css paints the card's corners
  *     from --sheet-card-border-radius inside layer(components); this rule is
  *     unlayered, so it wins.
- *   - the lg search field and the SearchDialog panel it morphs into (sm+ only:
- *     below sm the dialog is full-screen and does not morph). Below lg the
- *     trigger is an icon button and keeps its rounded-md.
+ *   - the lg search field and the SearchDialog panel it morphs into, 12px —
+ *     rounded corners, not a pill (sm+ only: below sm the dialog is
+ *     full-screen and does not morph). Below lg the trigger is an icon button
+ *     and keeps its rounded-md.
  */
 [data-docs-pill],
 dialog-panel:has([data-docs-drawer]) > dialog {
@@ -294,13 +295,13 @@ dialog-panel:has([data-docs-drawer]) > dialog {
 
 @media (min-width: 40rem) {
   [data-search-dialog] {
-    border-radius: 22px;
+    border-radius: 12px;
   }
 }
 
 @media (min-width: 64rem) {
   [data-search-open] {
-    border-radius: 22px;
+    border-radius: 12px;
   }
 }
 

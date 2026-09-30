@@ -151,7 +151,7 @@ import { searchDocs, SEARCH_COUNT } from '@/docs/search.js';
 // rather than a bare `flex` keeps dialog:not([open]){display:none} intact;
 // `morph-display="flex"` is the same display for the engine's flight.
 // The corner radius of both ends (the lg field and the sm+ panel) is a literal
-// 22px from styles.css ("Morph endpoints"), not a rounded-* utility, so the
+// 12px from styles.css ("Morph endpoints"), not a rounded-* utility, so the
 // radius the engine reads is identical at both ends and never tweens.
 //
 // LOADING. dialog-panel registers `class extends HTMLElement` at module scope,
