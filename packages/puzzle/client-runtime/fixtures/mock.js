@@ -143,6 +143,10 @@ function resolveKey(collection, id) {
 
 /**
  * The request path relative to `apiURL + endpoint` — '' for the collection.
+ * A URL spelled differently from that prefix — an absolute URL against the
+ * default relative apiURL, a `URL` or `Request` object's href — is resolved
+ * against the page and routed by pathname (plus query), so it reaches the mock
+ * exactly as the relative spelling does.
  *
  * @param {Store} store
  * @param {string} endpoint
@@ -151,7 +155,16 @@ function resolveKey(collection, id) {
  */
 function requestPath(store, endpoint, url) {
 	const base = store.apiURL + endpoint;
-	return url.startsWith(base) ? url.slice(base.length) : url;
+	if (url.startsWith(base)) return url.slice(base.length);
+	const page = globalThis.location?.href;
+	try {
+		const target = new URL(url, page);
+		const root = new URL(base, page).pathname;
+		if (target.pathname.startsWith(root)) return target.pathname.slice(root.length) + target.search;
+	} catch {
+		// Unresolvable (no page to resolve a relative spelling against): unrouted.
+	}
+	return url;
 }
 
 /**

@@ -1574,6 +1574,12 @@ class AdapterStoreMethods {
 	}
 }
 
+/**
+ * What installAdapter() adds to PuzzleModel.prototype, as a type: optional in
+ * the runtime check, present in the drift guard (each has an installed.d.ts).
+ * @typedef {AdapterModelMethods} AdapterModelInstalled
+ */
+
 class AdapterModelMethods {
 	/**
 	 * Sync this record to the server (constellation/doc/DOC-SPEC.md §22, D50). The

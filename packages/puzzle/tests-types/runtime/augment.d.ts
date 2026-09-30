@@ -19,10 +19,6 @@ declare module '../../client-runtime/model.js' {
 		_synced: boolean;
 		/** Removed-instance flag (D50); non-enumerable. */
 		_deleted: boolean;
-		/** Installed by the adapter capability (D157). */
-		save(): Promise<PuzzleModel>;
-		/** Installed by the adapter capability (D157). */
-		delete(): Promise<PuzzleModel>;
 	}
 	// The author's subclass declares these statics.
 	namespace PuzzleModel {

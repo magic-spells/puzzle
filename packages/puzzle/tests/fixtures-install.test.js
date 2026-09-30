@@ -181,6 +181,23 @@ describe('mock config — model block and fixtures file merge per key', () => {
 		expect(byRequest.map((r) => r.text)).toEqual(['mocked']);
 	});
 
+	it('an absolute URL reaches the mock under the default relative apiURL', async () => {
+		install();
+		const data = [{ id: 't1', text: 'mocked' }];
+		// apiURL defaults to '' — the mock's prefix is the bare endpoint, so an
+		// absolute request routes by its resolved pathname instead.
+		for (const target of [
+			() => new URL('/api/todos', location.origin),
+			() => `${location.origin}/api/todos`,
+		]) {
+			class AbsoluteTodo extends modelWith({ data }) {
+				static adapter = { ...super.adapter, loadMany: (fetch) => fetch(target()) };
+			}
+			const records = await new Store({ todo: AbsoluteTodo }).loadMany('todo');
+			expect(records.map((r) => r.text)).toEqual(['mocked']);
+		}
+	});
+
 	it('a model block alone still works with no fixtures-file mock', async () => {
 		install();
 		const records = await storeWith({ data: [{ id: 't1', text: 'from the model' }] }).loadMany(
