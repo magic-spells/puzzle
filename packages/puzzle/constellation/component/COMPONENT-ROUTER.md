@@ -104,16 +104,19 @@ change). Trailing `/` is insignificant.
 
 ## Same-location rebuild (D175 locale switch)
 
+
 `__failedView(null, true)` sets `chainInvalid`/`layoutInvalid` and re-navigates the
 committed path in replace mode with `retryView = REBUILD` (module-private marker). The
 marker takes the skeleton-exempt path, skips scroll and focus/announcement,
 `skipEnter()`s fresh levels and parks the outgoing unit as `#pendingOut` (destroyed
 without its out animation). Every test of it sits behind the inline
 `__PUZZLE_HAS_I18N__` probe — a new class member would ship in every app. With a
-navigation pending (push, replace and pop all fill `#pendingNavPromise`), it schedules
-`pending.then(again, again)` and returns null, so `setLocale` never waits on a
-navigation whose `data()` or guard may be awaiting it. With none pending, the promise
-resolves on the rebuilt commit and rejects on failure. Tests: `tests/i18n-app.test.js`.
+navigation pending (push, replace, pop and `start()`'s navigation zero all fill
+`#pendingNavPromise`), it schedules `pending.then(again, again)` and returns null, so
+`setLocale` never waits on a navigation whose `data()` or guard may be awaiting it — a
+switch from a layout's `data()` on the first load therefore rebuilds once nav zero
+commits. With none pending, the promise resolves on the rebuilt commit and rejects on
+failure. Tests: `tests/i18n-app.test.js`.
 
 ## Mounting and transitions
 

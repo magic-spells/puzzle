@@ -186,6 +186,7 @@ change it and `chunkFilePattern` in `locales.go` must follow.
 
 ## Locale selection
 
+
 At startup: (1) `localStorage['__puzzleLocale']` (try/catch) if still
 configured; (2) each `navigator.languages` tag in order — exact
 (case-insensitive), then base language (`es-CO` → `es`), then the first
@@ -201,12 +202,15 @@ Prerender always uses `defaultLocale`.
 - **Last-wins via a token.** An overtaken call settles with the later call's
   outcome (never reports a switch that didn't happen); an overtaken call
   whose own fetch failed rejects with its own error.
-- Before the first commit (e.g. in `beforeMount`) it replaces the pending
-  startup load and refreshes nothing.
+- In `beforeMount` it replaces the pending startup load and refreshes
+  nothing. From a guard or `data()` during navigation zero it rebuilds once
+  that navigation commits.
 - The active locale again is a no-op (still overtakes an in-flight switch),
   except after a failed rebuild into it, when it retries. The no-op test is
   `match === locale && table && !stale`; `stale` is keyed on the locale
   (set when a refresh rejects while its locale is active), not the token.
+- App teardown retires the service (`__dispose`): a load or switch still in
+  flight applies nothing, stores nothing and rebuilds nothing.
 
 ## Loading and switching
 
