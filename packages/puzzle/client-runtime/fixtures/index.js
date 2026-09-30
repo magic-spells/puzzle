@@ -56,13 +56,24 @@ import { DEFAULT_FIXTURE_SEED, generateFixture } from './generator.js';
 import { mockFetch } from './mock.js';
 import { clearStates, reseed, setBaseSeed, stateFor } from './state.js';
 
+/** @import { PuzzleModel } from '../model.js' */
+/** @import { FixturesConfig } from '../../types/fixtures.js' */
+/** @import { PuzzleApp as PublicPuzzleApp } from '../../types/index.js' */
+
 export { DEFAULT_FIXTURE_SEED } from './generator.js';
+
+/**
+ * What installFixtures() adds to Store.prototype, as a type (the drift guard,
+ * tests-types/drift, declares it on Store once fixtures are installed).
+ * @typedef {{ seed: typeof seed, resetFixtureSeed: typeof resetFixtureSeed }} FixtureStoreInstalled
+ */
 
 /**
  * The config passed to the most recent `installFixtures()`, or null when the
  * module is not installed. Read live (never captured) so a re-install swaps
  * behavior for already-constructed stores and apps.
  */
+/** @type {FixturesConfig | null} */
 let activeConfig = null;
 
 /** True between the first install and the matching uninstall. */
@@ -74,7 +85,9 @@ let installed = false;
  * replaces activeConfig) can never capture our own patched functions and leave
  * uninstall restoring them forever.
  */
+/** @type {Store['_network'] | null} */
 let originalNetwork = null;
+/** @type {PuzzleApp['mount'] | null} */
 let originalMount = null;
 
 /**
@@ -95,7 +108,7 @@ const FIXTURES_COMPOSED = Symbol('puzzleFixturesComposed');
 /**
  * Install the fixtures module.
  *
- * @param {object} [config] the fixtures file's default export:
+ * @param {FixturesConfig} [config] the fixtures file's default export:
  *   - `seed`     {number}   base seed for generation and the mock's rolls
  *   - `mock`     {object}   type → mock config, merged OVER the model's own
  *                           `adapter.mock` per key (the file wins). A type with
@@ -103,7 +116,7 @@ const FIXTURES_COMPOSED = Symbol('puzzleFixturesComposed');
  *                           an entry here.
  *   - `setup`    {Function} `setup(app)` run at beforeMount timing on every
  *                           `PuzzleApp.mount()` — where an app seeds its store.
- * @returns {Function} `uninstall()` — idempotent; restores the core exactly.
+ * @returns {() => void} `uninstall()` — idempotent; restores the core exactly.
  */
 export function installFixtures(config = {}) {
 	if (config === null || typeof config !== 'object' || Array.isArray(config)) {
@@ -184,13 +197,13 @@ export function uninstall() {
  */
 function seed(type, countOrShapes = 1, overrides = {}) {
 	const shapes = Array.isArray(countOrShapes) ? countOrShapes : null;
-	if (!shapes && !(Number.isInteger(countOrShapes) && countOrShapes >= 0)) {
+	if (!shapes && !(Number.isInteger(countOrShapes) && /** @type {number} */ (countOrShapes) >= 0)) {
 		throw new Error(
 			`[puzzle] seed('${type}') expects a record count or an array of record shapes`
 		);
 	}
 	const state = stateFor(this);
-	const list = shapes || new Array(countOrShapes).fill(null);
+	const list = shapes || new Array(/** @type {number} */ (countOrShapes)).fill(null);
 	return list.map((shape) => {
 		const merged = { ...overrides, ...(shape || {}) };
 		return this.createRecord(
@@ -206,6 +219,7 @@ function seed(type, countOrShapes = 1, overrides = {}) {
  * to a different (still fixed) one. Does not touch already-created records.
  *
  * @this {Store}
+ * @param {number} [seedValue]
  */
 function resetFixtureSeed(seedValue) {
 	reseed(stateFor(this), seedValue);
@@ -223,17 +237,29 @@ function resetFixtureSeed(seedValue) {
  * `failRate`). Either alone is enough to mock a type.
  *
  * @this {Store}
+ * @param {RequestInfo | URL} url
+ * @param {RequestInit} init
+ * @param {{ type: string, method: string, url: string }} context
+ * @returns {Promise<Response>}
  */
 function mockNetwork(url, init, context) {
 	const modelMock = this.modelFor(context.type).adapter?.mock;
 	const fileMock = activeConfig?.mock?.[context.type];
 	if (modelMock || fileMock) {
-		return mockFetch(this, context.type, { ...modelMock, ...fileMock }, url, init);
+		// context.url, not `url`: an author verb may fetch a URL or Request object,
+		// and the mock routes by the string form _fetch already derived. The mock's
+		// result is a Response-shaped stand-in, hence the cast.
+		return /** @type {Promise<Response>} */ (
+			mockFetch(this, context.type, { ...modelMock, ...fileMock }, context.url, init)
+		);
 	}
 	return originalNetwork.call(this, url, init, context);
 }
 
 // ---- PuzzleApp.prototype.mount --------------------------------------------
+
+/** @typedef {PuzzleApp & { [COMPOSED_BEFORE_MOUNT]?: Function }} Stamped an app carrying its composed hook */
+/** @typedef {Function & { [FIXTURES_COMPOSED]?: boolean }} Branded a hook carrying the composed brand */
 
 /**
  * Wrapped `mount()`. The fixtures config's `setup(app)` must run where a store
@@ -259,15 +285,18 @@ function fixturesMount() {
 	// at all, still needs composing.
 	const alreadyComposed =
 		existing != null &&
-		(existing === this[COMPOSED_BEFORE_MOUNT] || existing[FIXTURES_COMPOSED] === true);
+		(existing === /** @type {Stamped} */ (this)[COMPOSED_BEFORE_MOUNT] || /** @type {Branded} */ (existing)[FIXTURES_COMPOSED] === true);
 	if (this.config && !alreadyComposed) {
+		/** @this {PuzzleApp} @param {PuzzleApp} app */
 		const composed = async function composedBeforeMount(app) {
 			if (existing != null) await existing.call(this, app);
 			const setup = activeConfig?.setup;
-			if (typeof setup === 'function') await setup.call(this, app);
+			// `setup` is typed against the published PuzzleApp declaration, which the
+			// checker sees as a type separate from this runtime class.
+			if (typeof setup === 'function') await setup.call(/** @type {PublicPuzzleApp} */ (/** @type {unknown} */ (this)), /** @type {PublicPuzzleApp} */ (/** @type {unknown} */ (app)));
 		};
 		composed[FIXTURES_COMPOSED] = true;
-		this[COMPOSED_BEFORE_MOUNT] = composed;
+		/** @type {Stamped} */ (this)[COMPOSED_BEFORE_MOUNT] = composed;
 		this.config.beforeMount = composed;
 	}
 	return originalMount.call(this);

@@ -1,0 +1,19 @@
+// The published-types drift guard (see drift.ts). Strict, like a consumer's
+// project; the runtime's JavaScript is read for its types only (allowJs without
+// checkJs) — tsconfig.runtime.json is what type-checks its bodies.
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "strictFunctionTypes": false,
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "include": ["drift.ts", "installed.d.ts", "../runtime/env.d.ts", "../runtime/augment.d.ts"]
+}

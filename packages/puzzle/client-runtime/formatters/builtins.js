@@ -22,23 +22,27 @@ import { formatLocale, localeNumber } from './locale.js';
 import { sanitizeHtml, newlineToBr } from '../sanitize.js';
 
 // null/undefined render as empty string, never the literal "null"/"undefined"
+/** @param {unknown} v @returns {string} */
 const str = (v) => (v == null ? '' : String(v));
 
 // A number read from a display value, or NaN. A missing value (and '' and a
 // boolean) is NaN rather than Number()'s 0, so `{ currency(unset) }` prints
 // nothing instead of "$0.00".
+/** @param {unknown} v @returns {number} */
 const num = (v) => (v == null || v === '' || typeof v === 'boolean' ? NaN : Number(v));
 
 // What a text-producing number formatter prints for input that is not a finite
 // number: nothing for a NaN or ±Infinity NUMBER (`{ currency(total / count) }`
 // on an empty list), exactly as the bare value prints (D173 V6); anything else —
 // a missing value, a non-numeric string — prints as text (D174 deviation 2).
+/** @param {unknown} v @returns {string} */
 const notFinite = (v) => (typeof v === 'number' ? '' : str(v));
 
 // Normalize a `places` argument to a digit count toFixed accepts: coerce to an
 // integer and clamp to 0–100. A non-numeric, NaN, or infinite argument falls back
 // to `dflt` so a bad argument fails soft instead of throwing RangeError. Shared by
 // currency/percentage (round takes negative places too, with its own clamp).
+/** @param {unknown} decimals @param {number} dflt @returns {number} */
 const normDecimals = (decimals, dflt) => {
 	const n = Math.trunc(Number(decimals));
 	if (!Number.isFinite(n)) return dflt;
@@ -48,6 +52,7 @@ const normDecimals = (decimals, dflt) => {
 // n × 10^p computed on the DECIMAL digits, not in binary: `1.005` shifted by 2 is
 // exactly 100.5 here, where `1.005 * 100` is 100.49999999999999. Handles the
 // exponent form String() uses outside 1e-6 … 1e21.
+/** @param {number} n @param {number} p @returns {number} */
 const shift = (n, p) => {
 	const [m, e = 0] = String(n).split('e');
 	return Number(`${m}e${Number(e) + p}`);
@@ -55,6 +60,7 @@ const shift = (n, p) => {
 
 // Round half away from zero on the decimal value (D174 F19). Negative places
 // round to tens, hundreds, …. A value too large to scale is returned unchanged.
+/** @param {number} n @param {number} p @returns {number} */
 function roundHalfAway(n, p) {
 	if (!Number.isFinite(n)) return n;
 	const scaled = shift(Math.abs(n), p);
@@ -65,6 +71,7 @@ function roundHalfAway(n, p) {
 
 // Group the digits of a whole-number string in threes. A function replacement,
 // so a delimiter containing `$` is inserted literally.
+/** @param {string} whole @param {string} delimiter @returns {string} */
 const group = (whole, delimiter) => whole.replace(/\B(?=(\d{3})+(?!\d))/g, () => delimiter);
 
 // Locale-rendered numbers (`localeNumber`, formatters/locale.js) use the
@@ -77,6 +84,7 @@ const group = (whole, delimiter) => whole.replace(/\B(?=(\d{3})+(?!\d))/g, () =>
 // A text interpolation already escapes (it becomes a text node), so `escape` is an
 // identity: the page shows the value's characters, `<b>` as `<b>` — never the
 // double-escaped `&lt;b&gt;` (D174 F8).
+/** @param {unknown} v @returns {string} */
 export function escape(v) {
 	return str(v);
 }
@@ -88,10 +96,12 @@ export function escape(v) {
 // function registered under `raw` can never inject markup. The functions return
 // the markup strings the node renders — for script code, and for the shared
 // conformance table.
+/** @param {unknown} v @returns {string} */
 export function raw(v) {
 	return sanitizeHtml(str(v));
 }
 
+/** @param {unknown} v @returns {string} */
 export function newline_to_br(v) {
 	return newlineToBr(str(v));
 }
@@ -100,6 +110,7 @@ export function newline_to_br(v) {
 
 // Upper-cases the first character and leaves the rest alone, so `iPhone` and
 // `NASA` survive (D174 F1). The old behavior is `capitalize(s.toLowerCase())`.
+/** @param {unknown} v @returns {string} */
 export function capitalize(v) {
 	const s = str(v);
 	if (s === '') return s;
@@ -109,6 +120,7 @@ export function capitalize(v) {
 
 // Counts code points, and the result is never longer than `length`: an ellipsis
 // longer than the limit is clipped (D174 F25).
+/** @param {unknown} v @param {unknown} [length] @param {unknown} [ellipsis] @returns {string} */
 export function truncate(v, length = 100, ellipsis = '…') {
 	const s = str(v);
 	let n = Math.trunc(Number(length));
@@ -125,6 +137,7 @@ export function truncate(v, length = 100, ellipsis = '…') {
 
 // Scan to the `>` closing a tag that starts at `start`, skipping quoted attribute
 // values; -1 when the tag never closes.
+/** @param {string} s @param {number} start @returns {number} */
 function tagEnd(s, start) {
 	let quote = '';
 	for (let i = start; i < s.length; i++) {
@@ -144,6 +157,7 @@ function tagEnd(s, start) {
 // tagEnd(s, i). Tracking the answer for each quote state at i + 1 is what makes
 // it exact — a scan from a later `<` is not simply the tail of an earlier one,
 // because it starts outside any quote.
+/** @param {string} s @returns {Int32Array} */
 function tagEnds(s) {
 	const ends = new Int32Array(s.length + 1);
 	let open = -1; // from i + 1, outside a quote
@@ -168,6 +182,7 @@ function tagEnds(s) {
 // later `<` (`'<a'.repeat(40000)` took seconds), so the first failure switches
 // to the precomputed tagEnds table, and a comment with no `-->` means no later
 // one has one either.
+/** @param {unknown} v @returns {string} */
 export function strip_html(v) {
 	const s = str(v);
 	let out = '';
@@ -202,6 +217,7 @@ export function strip_html(v) {
 	return out;
 }
 
+/** @param {unknown} v @returns {string} */
 export function strip_newlines(v) {
 	return str(v).replace(/[\r\n]/g, '');
 }
@@ -209,6 +225,7 @@ export function strip_newlines(v) {
 // Prints the count AND the word: `1 comment`, `3 comments`, `2 men`. The word is
 // `singular` only for exactly 1; the count is formatted in the viewer's locale,
 // like number_with_delimiter (D174 F15).
+/** @param {unknown} count @param {unknown} singular @param {unknown} [plural] @returns {string} */
 export function pluralize(count, singular, plural) {
 	const n = num(count);
 	if (!Number.isFinite(n)) return notFinite(count);
@@ -223,6 +240,7 @@ export function pluralize(count, singular, plural) {
 // F19). Returns a number, so another function can keep formatting it as one.
 // Stays in the library (D176 §4): `Math.round` takes no places, and
 // `.toFixed()` rounds the binary value and returns a padded string.
+/** @param {unknown} v @param {unknown} [places] @returns {number} */
 export function round(v, places = 0) {
 	let p = Math.trunc(Number(places));
 	if (!Number.isFinite(p)) p = 0;
@@ -231,6 +249,7 @@ export function round(v, places = 0) {
 
 // Groups thousands with `,`, puts the sign before the symbol (`-$1,234.50`), and
 // rounds by round's rule (D174 F3). An amount that rounds to zero is unsigned.
+/** @param {unknown} v @param {unknown} [symbol] @param {unknown} [places] @returns {string} */
 export function currency(v, symbol = '$', places = 2) {
 	const n = num(v);
 	if (!Number.isFinite(n)) return notFinite(v);
@@ -242,6 +261,7 @@ export function currency(v, symbol = '$', places = 2) {
 
 // Takes the number as written: `percentage(12.5, 1)` is `12.5%`. A ratio is
 // `percentage(ratio * 100)` (D174 F14, D176).
+/** @param {unknown} v @param {unknown} [places] @returns {string} */
 export function percentage(v, places = 0) {
 	const n = num(v);
 	if (!Number.isFinite(n)) return notFinite(v);
@@ -252,6 +272,7 @@ export function percentage(v, places = 0) {
 // Groups the whole part and keeps the decimals as given. With no argument it
 // follows the viewer's locale (`1.234,5` in de-DE); an explicit delimiter forces
 // it, groups in threes and keeps `.` as the decimal point.
+/** @param {unknown} v @param {unknown} [delimiter] @returns {string} */
 export function number_with_delimiter(v, delimiter) {
 	const n = num(v);
 	if (!Number.isFinite(n)) return notFinite(v);
@@ -262,8 +283,11 @@ export function number_with_delimiter(v, delimiter) {
 
 // Shortens a large number with a localized suffix: `1.2K`, `45K`, `3.4M` in en.
 // One cached formatter, rebuilt when the formatter locale moves (D175).
+/** @type {Intl.NumberFormat | undefined} */
 let compactFormatter;
+/** @type {string | undefined} */
 let compactLocale;
+/** @param {unknown} v @returns {string} */
 export function compact_number(v) {
 	const n = num(v);
 	if (!Number.isFinite(n)) return notFinite(v);
@@ -284,6 +308,7 @@ export function compact_number(v) {
 // Compare two strings by Unicode code point (UTF-8 byte order, which is what Go's
 // map-key sort uses). UTF-16 code-unit order differs only when a surrogate meets
 // U+E000–U+FFFF, so remap those two ranges before comparing.
+/** @param {string} a @param {string} b @returns {number} */
 function compareCodePoints(a, b) {
 	const len = Math.min(a.length, b.length);
 	for (let i = 0; i < len; i++) {
@@ -302,6 +327,11 @@ function compareCodePoints(a, b) {
 // a JS object always enumerates integer-like keys first, so no rebuilt object can
 // carry code-point order. A cycle serializes as `null` rather than throwing.
 // The output is NOT HTML-escaped — the text node it lands in handles that.
+/**
+ * @param {any} v any value; its own `toJSON` is honored
+ * @param {unknown[]} stack the containers being serialized, for cycle detection
+ * @returns {string | undefined} undefined for a function or symbol
+ */
 function toJSON(v, stack) {
 	if (v != null && typeof v.toJSON === 'function') v = v.toJSON();
 	if (v == null) return 'null';
@@ -336,6 +366,7 @@ function toJSON(v, stack) {
 	return out;
 }
 
+/** @param {unknown} v @returns {string} */
 export function json(v) {
 	return toJSON(v, []) ?? 'null';
 }
@@ -365,8 +396,12 @@ export function json(v) {
 // preset it equals share one formatter. The shared objects are bindings, never
 // `DATE_PRESETS.date.medium`: a property read at module level is a side effect
 // to the bundler, which would then keep both tables in apps with no dates.
+/** @typedef {'date' | 'time' | 'datetime'} DateKind */
+/** @type {Intl.DateTimeFormatOptions} */
 const MEDIUM_DATE = { dateStyle: 'medium' };
+/** @type {Intl.DateTimeFormatOptions} */
 const SHORT_TIME = { timeStyle: 'short' };
+/** @type {Record<DateKind, Record<string, Intl.DateTimeFormatOptions>>} */
 const DATE_PRESETS = {
 	date: {
 		short: { dateStyle: 'short' },
@@ -384,25 +419,35 @@ const DATE_PRESETS = {
 		long: { dateStyle: 'long', timeStyle: 'long' },
 	},
 };
+/** @type {Record<DateKind, Intl.DateTimeFormatOptions>} */
 const DATE_DEFAULTS = {
 	date: MEDIUM_DATE,
 	time: SHORT_TIME,
 	datetime: { dateStyle: 'medium', timeStyle: 'short' },
 };
 
+// Keyed by locale (only undefined and string locales are stored), then by the
+// options object.
+/** @type {Map<Intl.LocalesArgument, Map<Intl.DateTimeFormatOptions, Intl.DateTimeFormat>>} */
 const DATE_FORMATTERS = new Map();
+/** @type {Map<string, Intl.DateTimeFormat>} */
 const TIMEZONE_FORMATTERS = new Map();
 // `timeago` takes no locale, so there is exactly one formatter to cache — built
 // on first use so importing the module never constructs an Intl object.
+/** @type {Intl.RelativeTimeFormat | undefined} */
 let relativeTimeFormatter;
+/** @type {string | undefined} */
 let relativeLocale;
 // Dev-only warn-once ledger for unknown presets and time zones; production never
 // touches it.
+/** @type {Set<string> | undefined} */
 let warnedPresets;
 
+/** @param {number} n @returns {string} */
 const pad2 = (n) => String(n).padStart(2, '0');
 
 // RFC 3339 pieces in the Date's local zone: `15:04:05` plus `Z` or `±hh:mm`.
+/** @param {Date} d @returns {string} */
 function isoTime(d) {
 	const offset = -d.getTimezoneOffset();
 	const abs = Math.abs(offset);
@@ -411,6 +456,13 @@ function isoTime(d) {
 	return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) + zone;
 }
 
+/**
+ * @param {DateKind} kind
+ * @param {unknown} v
+ * @param {string} [preset]
+ * @param {Intl.LocalesArgument} [locale]
+ * @returns {string}
+ */
 function formatDate(kind, v, preset, locale) {
 	// An absent value renders NOTHING, in every preset (`iso` included). The invalid
 	// -date fall-through below already does that for null/undefined/'' via str(), but
@@ -477,18 +529,22 @@ function formatDate(kind, v, preset, locale) {
 }
 
 // `preset` is optional in all three; leaving it out renders DATE_DEFAULTS.
+/** @param {unknown} v @param {string} [preset] @param {Intl.LocalesArgument} [locale] @returns {string} */
 export function date(v, preset, locale) {
 	return formatDate('date', v, preset, locale);
 }
 
+/** @param {unknown} v @param {string} [preset] @param {Intl.LocalesArgument} [locale] @returns {string} */
 export function time(v, preset, locale) {
 	return formatDate('time', v, preset, locale);
 }
 
+/** @param {unknown} v @param {string} [preset] @param {Intl.LocalesArgument} [locale] @returns {string} */
 export function datetime(v, preset, locale) {
 	return formatDate('datetime', v, preset, locale);
 }
 
+/** @param {unknown} v @param {string} [tz] IANA zone id @returns {Date | ''} */
 export function in_timezone(v, tz = 'UTC') {
 	// An absent value has no instant to re-express, and the fail-soft below would
 	// hand the outer function an Invalid Date — `{ date(in_timezone(x, 'UTC')) }`
@@ -520,6 +576,7 @@ export function in_timezone(v, tz = 'UTC') {
 			TIMEZONE_FORMATTERS.set(tz, formatter);
 		}
 		const parts = formatter.formatToParts(d);
+		/** @param {Intl.DateTimeFormatPartTypes} t */
 		const get = t => parts.find(p => p.type === t)?.value;
 		const iso = `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`;
 		return new Date(iso);
@@ -541,6 +598,7 @@ export function in_timezone(v, tz = 'UTC') {
 	}
 }
 
+/** @param {unknown} v @returns {string} */
 export function timeago(v) {
 	// `{ timeago(todo.completedAt) }` on an incomplete todo: nothing to say.
 	if (noDate(v)) return '';
@@ -556,6 +614,7 @@ export function timeago(v) {
 		{ numeric: 'auto' },
 	));
 	const diff = Math.round((then - Date.now()) / 1000);
+	/** @type {Array<[Intl.RelativeTimeFormatUnit, number]>} */
 	const units = [
 		['year', 31536000],
 		['month', 2592000],

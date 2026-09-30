@@ -59,10 +59,12 @@
 // Every table below is a literal — no top-level call or loop — so the module
 // has no side effects and tree-shakes out of an app that never reaches it.
 // Space-padded name lists are matched by `has`; tag names never hold a space.
+/** @type {(list: string, name: string) => boolean} */
 const has = (list, name) => list.includes(' ' + name + ' ');
 
 // Tags kept with attributes beyond the global three, then the tags kept with
 // only the global three.
+/** @type {Record<string, string>} */
 const TAG_ATTRS = {
 	a: 'href target',
 	img: 'src srcset alt width height',
@@ -85,7 +87,11 @@ const PLAIN_TAGS =
 const GLOBAL_ATTRS = ' title lang dir class id ';
 const URL_ATTRS = ' href src srcset action formaction xlink:href ';
 
-/** The attributes a kept tag keeps beyond the global three, or null for a dropped tag. */
+/**
+ * The attributes a kept tag keeps beyond the global three, or null for a dropped tag.
+ * @param {string} name
+ * @returns {string | null}
+ */
 function tagAttrs(name) {
 	if (Object.hasOwn(TAG_ATTRS, name)) return ' ' + TAG_ATTRS[name] + ' ';
 	return has(PLAIN_TAGS, name) ? ' ' : null;
@@ -107,6 +113,7 @@ const DROP_NESTED = ' template object applet svg math select head frameset ';
 // the ones obfuscated URLs spell a scheme with (`javascript&colon;`,
 // `java&Tab;script:`). Anything not here stays literal text, and since decoded
 // values are re-emitted with `&` escaped, the browser reads it literally too.
+/** @type {Record<string, string>} */
 const NAMED = {
 	amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0', colon: ':', Tab: '\t',
 	NewLine: '\n',
@@ -117,7 +124,12 @@ const WS = /[\t\n\f\r ]/;
 // text and plain attribute values (decoding it can never produce markup there).
 const REF = /&(?:#\d+|#[xX][\da-fA-F]+|[A-Za-z][A-Za-z\d]*);/y;
 
-/** Escape text or a plain attribute value, keeping well-formed character references. */
+/**
+ * Escape text or a plain attribute value, keeping well-formed character references.
+ * @param {string} s
+ * @param {boolean} quote also escape `"` (an attribute value)
+ * @returns {string}
+ */
 function escapeKeepRefs(s, quote) {
 	let out = '';
 	for (let i = 0; i < s.length; i++) {
@@ -133,12 +145,21 @@ function escapeKeepRefs(s, quote) {
 	return out;
 }
 
-/** Escape every markup character — the value is final text, nothing is left to decode. */
+/**
+ * Escape every markup character — the value is final text, nothing is left to decode.
+ * @param {string} s
+ * @param {boolean} quote also escape `"` (an attribute value)
+ * @returns {string}
+ */
 function escapeAll(s, quote) {
 	s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 	return quote ? s.replace(/"/g, '&quot;') : s;
 }
 
+/**
+ * @param {string} s
+ * @returns {string}
+ */
 function decodeRefs(s) {
 	return s.replace(/&(?:#(\d+)|#[xX]([\da-fA-F]+));?|&([A-Za-z][A-Za-z\d]*);/g, (m, dec, hex, name) => {
 		if (name) return Object.hasOwn(NAMED, name) ? NAMED[name] : m;
@@ -154,6 +175,10 @@ function decodeRefs(s) {
  * The URL parser strips leading C0 controls and spaces (U+0000–U+0020, which
  * `trim()` does not all cover) and removes every tab and newline before it
  * reads a scheme, so the check does the same.
+ *
+ * @param {string} url
+ * @param {boolean} link the value is an `<a href>` (mailto:/tel: allowed)
+ * @returns {boolean}
  */
 function safeUrl(url, link) {
 	const scheme = /^([a-z][a-z\d+.-]*):/i.exec(url.replace(/[\t\n\r]/g, '').replace(/^[\x00-\x20]+/, ''));
@@ -162,7 +187,14 @@ function safeUrl(url, link) {
 	return s === 'http' || s === 'https' || (link && (s === 'mailto' || s === 'tel'));
 }
 
-/** The emitted ` name="value"` for one attribute, or '' when it is dropped. */
+/**
+ * The emitted ` name="value"` for one attribute, or '' when it is dropped.
+ * @param {string} allowed the tag's space-padded attribute list (tagAttrs)
+ * @param {string} tag
+ * @param {string} name
+ * @param {string} value the raw (undecoded) attribute value
+ * @returns {string}
+ */
 function keepAttr(allowed, tag, name, value) {
 	if (!has(GLOBAL_ATTRS, name) && !has(allowed, name)) return '';
 	if (name === 'id') {
@@ -192,12 +224,17 @@ function keepAttr(allowed, tag, name, value) {
  * to whitespace, `/`, `>` or `=`; a value is double-quoted, single-quoted or
  * unquoted to whitespace or `>`. End tags are parsed the same way so a `>`
  * inside a quoted value does not end them early.
+ *
+ * @param {string} s
+ * @param {number} i the index of the `<`
+ * @returns {{ name: string, attrs: Array<[string, string]>, selfClosing: boolean, end: number } | null}
  */
 function readTag(s, i) {
 	let j = i + (s[i + 1] === '/' ? 2 : 1);
 	const start = j;
 	while (j < s.length && !WS.test(s[j]) && s[j] !== '/' && s[j] !== '>') j++;
 	const name = s.slice(start, j).toLowerCase();
+	/** @type {Array<[string, string]>} */
 	const attrs = [];
 	let selfClosing = false;
 	for (;;) {
@@ -234,7 +271,13 @@ function readTag(s, i) {
 	return { name, attrs, selfClosing, end: j + 1 };
 }
 
-/** The index just past `</name…>` for a RAWTEXT element, or the end of the input. */
+/**
+ * The index just past `</name…>` for a RAWTEXT element, or the end of the input.
+ * @param {string} s
+ * @param {number} i
+ * @param {string} name
+ * @returns {number}
+ */
 function rawtextEnd(s, i, name) {
 	const re = new RegExp('</' + name + '[\\t\\n\\f\\r />]', 'ig');
 	re.lastIndex = i;
@@ -242,7 +285,11 @@ function rawtextEnd(s, i, name) {
 	return m ? m.index : s.length;
 }
 
-/** Sanitize a markup string against the allowlist. Always returns a string. */
+/**
+ * Sanitize a markup string against the allowlist. Always returns a string.
+ * @param {unknown} value
+ * @returns {string}
+ */
 export function sanitizeHtml(value) {
 	const s = String(value ?? '').replace(/\0/g, '');
 	const open = [];
@@ -343,6 +390,9 @@ export function sanitizeHtml(value) {
 /**
  * `newline_to_br`: the value as escaped text, with a real `<br>` for every
  * `\r\n`, `\r` and `\n`. Safe by construction — the only markup is the `<br>`s.
+ *
+ * @param {unknown} value
+ * @returns {string}
  */
 export function newlineToBr(value) {
 	return escapeAll(String(value ?? ''), false).replace(/\r\n|\r|\n/g, '<br>');

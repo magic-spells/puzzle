@@ -13,12 +13,14 @@
 // namespace-imports builtins.js, so a helper exported from there would become a
 // formatter name.
 
+/** @type {string | undefined} */
 export let formatLocale;
 
 /**
  * Set the locale the locale-rendered formatters use. Called by the i18n service
  * and the prerender only. A change drops the cached number formats; the
  * single-slot caches in builtins.js compare the locale they were built for.
+ * @param {string | undefined} tag BCP 47 locale tag, or undefined for the viewer's locale
  */
 export function setFormatLocale(tag) {
 	// A tag Intl rejects (`en_US`) would throw RangeError from every
@@ -39,7 +41,12 @@ export function setFormatLocale(tag) {
 // the decimals print as given — `1234.5` stays one decimal, never Intl's default
 // three-digit rounding. Shared by `pluralize`, `number_with_delimiter` and `t`'s
 // `{count}`. The cache holds one locale's formats; setFormatLocale clears it.
+/** @type {Map<number, Intl.NumberFormat>} */
 const NUMBER_FORMATTERS = new Map();
+/**
+ * @param {number} n
+ * @returns {string}
+ */
 export function localeNumber(n) {
 	// Intl prints -0 as "-0" (a negative fraction through ceil/round, a negative
 	// number times zero); every other number path prints it as 0 (D173 V6).

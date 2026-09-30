@@ -1099,6 +1099,25 @@ checklist sent you.
   "since v1.64"**, a spec revision that was never a release. They read "the
   default marker is spelled <Children/> (D134)" and "named slots are spelled
   <Slot name="…"/> (D134)".
+- **The published types match what the runtime exports.** A new check
+  (`npm run test:runtime-types`, in CI and `release:prep`) type-checks the
+  JavaScript runtime from its JSDoc and compares every package export with its
+  declaration. It found three declarations that promised more than the runtime
+  gives:
+  - `PuzzleView.events` is optional: the base class has none, so a view that
+    declares no handlers has no `events`. `puzzle check` now reports a template
+    handler on such a view, which would throw when the event fired.
+  - `@magic-spells/puzzle/router-modes` no longer declares a
+    `puzzleRouterModeBrand` export. It is a type-only brand, and importing it
+    gave `undefined`.
+  - `installFakeAnimate().animateCalls` records the options argument as it was
+    passed: `number | KeyframeAnimationOptions | undefined`.
+- **The fixtures mock serves an adapter verb that fetches an absolute URL, a
+  `URL` or a `Request`.** With fixtures installed, `loadMany: (fetch) =>
+  fetch(new URL('/api/todos', location.origin))` on a mocked model threw
+  `url.startsWith is not a function`, and an absolute URL string got a 404
+  under the default relative `apiURL`. The mock now resolves the request
+  against the page and routes it by path, like the relative spelling.
 - **The Prettier plugin honors `endOfLine: "crlf"`.** Under `crlf`, or
   `auto` on a CRLF file, every `<script>` and `<style>` body line ended
   `\r\r\n`: each format changed the file again, and a multi-line template

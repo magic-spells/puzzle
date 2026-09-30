@@ -86,6 +86,9 @@ export const HTML_TAG = '#html';
  * probe into a module const stops esbuild folding it — see build_test.go) and
  * production keeps a short line naming the tag. Development is where anyone
  * reads the long form anyway. Both are built only on the throw path.
+ *
+ * @param {string} tag the reserved '#'-prefixed tag that reached a rendering path
+ * @returns {Error}
  */
 export function metadataTagError(tag) {
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
@@ -106,6 +109,7 @@ export function metadataTagError(tag) {
 // global, like viewManager's warnDuplicateKey and animate.js's malformed-spec
 // warning — so a loop of keyless rows stays quiet after the first.
 let warnedNullKey = false;
+/** @param {unknown} item the keyless {#for} row value */
 function warnNullKey(item) {
 	if (warnedNullKey) return;
 	warnedNullKey = true;
@@ -117,6 +121,13 @@ function warnNullKey(item) {
 }
 
 export class ViewNode {
+	/**
+	 * @param {any} tag an element/text tag name, a reserved tag, or a PuzzleView
+	 *   subclass (component vnode)
+	 * @param {Record<string, any>} [attrs] attributes, listeners, or a component's props
+	 * @param {any[] | string} [children] child vnodes, or a raw HTML string for an
+	 *   island-frozen subtree
+	 */
 	constructor(tag, attrs = {}, children = []) {
 		this.tag = tag;
 		this.attrs = attrs || {};
@@ -176,8 +187,13 @@ export class ViewNode {
 	// its model's primaryKey() (so `.primary()` and template keying agree), any
 	// other value keys by `.id` (v1 behavior). A null/undefined result warns once
 	// and returns null (positional fallback, now diagnosed instead of silent).
+	/**
+	 * @param {any} item the row value (author data)
+	 * @returns {any} the row's key, or null
+	 */
 	static keyOf(item) {
-		if (item instanceof PuzzleModel) return item[item.constructor.primaryKey()];
+		if (item instanceof PuzzleModel)
+			return /** @type {Record<string, any>} */ (item)[/** @type {typeof PuzzleModel} */ (item.constructor).primaryKey()];
 		const key = item?.id;
 		if (key == null) {
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnNullKey(item);

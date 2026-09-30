@@ -73,7 +73,7 @@ export function playAnimation(el, spec, { reducedMotion = false, release = false
 
 	let animation;
 	try {
-		animation = el.animate([spec.from, spec.to], {
+		animation = el.animate(/** @type {Keyframe[]} */ ([spec.from, spec.to]), {
 			duration,
 			delay,
 			easing: spec.easing || 'linear',
@@ -171,6 +171,9 @@ function instantFinish() {
  * Anything else is treated as malformed (warn once, skip). Exported so PuzzleView
  * can gate the D73 visible-trigger branch on a valid spec (a malformed spec must
  * take the normal warn/skip path — no hold, no defer).
+ *
+ * @param {any} spec an author-supplied animation spec (any value)
+ * @returns {boolean}
  */
 export function isValidSpec(spec) {
 	return (
@@ -183,7 +186,10 @@ export function isValidSpec(spec) {
 	);
 }
 
-/** Warn at most once per spec object (or once globally for non-object specs). */
+/**
+ * Warn at most once per spec object (or once globally for non-object specs).
+ * @param {unknown} spec
+ */
 function warnOnce(spec) {
 	if (spec && typeof spec === 'object') {
 		if (warnedSpecs.has(spec)) return;

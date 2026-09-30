@@ -33,16 +33,24 @@ Before claiming success, run the suites:
 
 ```bash
 npx vitest run
+npm run test:runtime-types             # runtime JSDoc + published .d.ts drift
 (cd compiler && go test ./...)
 (cd ../puzzle-lang && go test ./...)   # the parser is its own Go module
 ```
+
+`test:runtime-types` type-checks the plain-JavaScript `client-runtime/` from
+its JSDoc (`tsconfig.runtime.json`) and holds `types/*.d.ts` to what each
+package export actually exports (`tests-types/drift`). A runtime edit stays
+JavaScript: when it trips the check, fix the JSDoc (or `types/*.d.ts`, if the
+export's contract changed) — never by changing code to please the checker.
 
 Run focused checks as well when appropriate: `npm run test:types`,
 `npm run verify:pack`, example builds, or browser tests. Report anything not
 run.
 
 CI exists (`.github/workflows/ci.yml`: Go vet/build/test, `npm test`,
-`verify:pack`, `test:types`, `test:e2e-pack`, and a Playwright browser smoke),
+`verify:pack`, `test:types`, `test:runtime-types`, `test:e2e-pack`, and a
+Playwright browser smoke),
 so do not describe this repo as having none — what it has no job for is
 *publishing*. Run the suites locally anyway: CI is a backstop, not a substitute
 for verifying your own change.

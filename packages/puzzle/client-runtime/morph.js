@@ -62,6 +62,24 @@
 
 import { MorphEngine } from '@magic-spells/morph-engine';
 
+/** @import { PuzzleApp } from './app.js' */
+
+/**
+ * A morph element's inline style is read and written (HTML or SVG element).
+ * @typedef {Element & ElementCSSInlineStyle} StyledElement
+ */
+/**
+ * The shown (or in-flight) LIVE pairing (D55).
+ * @typedef {{ id: string | null, source: Element, target: Element }} LivePair
+ */
+/**
+ * A leave-time capture awaiting its sibling-swap flight (D68).
+ * @typedef {{
+ *   pinned: { id: string | null, clone: StyledElement, rect: DOMRect, ttl: ReturnType<typeof setTimeout> } | null,
+ *   snapshots: Map<string | null, { el: Element, rect: DOMRect }>,
+ * }} Captures
+ */
+
 const ATTRIBUTE = 'data-puzzle-morph';
 
 // A clicked candidate is a live hint for at most this long (an abandoned click
@@ -104,6 +122,7 @@ const PIN_CLONE_EXCLUDED_STYLES = new Set([
 // first (never stacking a duplicate document click listener), and app.unmount()
 // can reach the teardown through the handler object. WeakMap: a discarded app and
 // its teardown closure GC together.
+/** @type {WeakMap<PuzzleApp, () => void>} */
 const installedMorphs = new WeakMap();
 
 /**
@@ -111,11 +130,11 @@ const installedMorphs = new WeakMap();
  * Call once, after `new PuzzleApp(...)` — before or after mount() both work
  * (the handler is only consulted during swaps).
  *
- * @param {import('./app.js').PuzzleApp} app
- * @param {object} [options] MorphEngine options (attraction, friction,
+ * @param {PuzzleApp} app
+ * @param {{ attribute?: string, [option: string]: any }} [options] MorphEngine options (attraction, friction,
  *   revealAt, zIndex, ...) plus `attribute` to override the base morph attribute
  *   (all three roles — plain / `-trigger` / `-target` — derive from it).
- * @returns {MorphEngine} the engine, for live tuning and events
+ * @returns {import('../types/morph.js').MorphEngine} the engine, for live tuning and events
  */
 export function enableMorph(app, options = {}) {
 	// Double-install guard: tear down any prior enableMorph on this same app first,
@@ -132,6 +151,7 @@ export function enableMorph(app, options = {}) {
 	// plain + target. querySelectorAll dedupes and returns document order.
 	const launchSelector = `[${attribute}], [${triggerAttribute}]`;
 	const receiveSelector = `[${attribute}], [${targetAttribute}]`;
+	/** @type {import('../types/morph.js').MorphEngine} */
 	const engine = new MorphEngine({ attraction: 0.1, friction: 0.32, ...engineOptions });
 
 	// The currently shown (or in-flight) LIVE pairing. `id` is the attribute value
@@ -140,16 +160,20 @@ export function enableMorph(app, options = {}) {
 	// compares against this to refuse flying back to the wrong counterpart. Clone
 	// flights never set this — they are one-shot (the reverse trip is a fresh
 	// capture from the next leave, never engine.hide()).
+	/** @type {LivePair | null} */
 	let pair = null;
 	// The most recent click that could start a navigation: { el, time } or null.
 	// Recorded with ZERO DOM writes — only leave() acts on it. Lets leave() pin a
 	// clone pre-fade so the clicked surface holds still during the out phase.
+	/** @type {{ el: Element, time: number } | null} */
 	let lastClicked = null;
 	// Snapshots taken at leave time for a pending sibling-swap flight:
 	// { pinned: { id, clone, rect, ttl } | null, snapshots: Map<id,{el,rect}> } | null.
+	/** @type {Captures | null} */
 	let captures = null;
 	// A deferred-target watcher (skeleton views mount the real template a beat late):
 	// { observer, ttl } | null.
+	/** @type {{ observer: MutationObserver, ttl: ReturnType<typeof setTimeout> } | null} */
 	let crossFlight = null;
 
 	// Warn-once misuse guard (the D43 formatter / D58 null-key posture): one flag,
@@ -160,6 +184,7 @@ export function enableMorph(app, options = {}) {
 	// Read an element's morph id across the three roles — plain, else `-target`, else
 	// `-trigger` (an element carrying more than one is undefined behavior: first in
 	// this precedence wins, no warning). The single id read behind every scan.
+	/** @param {Element} el */
 	const morphId = (el) =>
 		el.getAttribute(attribute) ?? el.getAttribute(targetAttribute) ?? el.getAttribute(triggerAttribute);
 
@@ -167,6 +192,7 @@ export function enableMorph(app, options = {}) {
 	// the wrong element unless disambiguated — targets drop out of the launch maps, so
 	// this only fires for multiple untagged/`-trigger` sources sharing a value. Fires
 	// from both id-collecting scans (leave snapshots, live-pair counterparts); capped.
+	/** @param {string | null} id */
 	const warnDuplicateId = (id) => {
 		if (warnedDuplicateId) return;
 		warnedDuplicateId = true;
@@ -184,26 +210,39 @@ export function enableMorph(app, options = {}) {
 	const reducedMotion = () =>
 		typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+	/** @param {Element | null | undefined} el */
 	const measurable = (el) => !!el && el.getClientRects && el.getClientRects().length > 0;
 
 	// Elements matching `selector` inside `root` (root itself counts), in document
 	// order — the one scan behind every subtree walk. `launchElements` (plain +
 	// trigger) drives leave snapshots and live-pair sources; `receiveElements` (plain
 	// + target) drives the enter-side landing scans.
+	/**
+	 * @param {Element} root
+	 * @param {string} selector
+	 */
 	const scan = (root, selector) => {
+		/** @type {Element[]} */
 		const out = [];
 		if (root.matches(selector)) out.push(root);
 		for (const e of root.querySelectorAll(selector)) out.push(e);
 		return out;
 	};
+	/** @param {Element} root */
 	const launchElements = (root) => scan(root, launchSelector);
+	/** @param {Element} root */
 	const receiveElements = (root) => scan(root, receiveSelector);
 
 	// Clone `el` into a position:fixed stand-in pinned over `rect`. The clone must
 	// NEVER match a scan/observer/counterpart lookup, so ALL THREE role attributes are
 	// stripped; z below the engine's blob, pointer-events off so it can't trap clicks.
+	/**
+	 * @param {StyledElement} el
+	 * @param {DOMRect} rect
+	 * @returns {StyledElement}
+	 */
 	const pinClone = (el, rect) => {
-		const clone = el.cloneNode(true);
+		const clone = /** @type {StyledElement} */ (el.cloneNode(true));
 		clone.removeAttribute(attribute);
 		clone.removeAttribute(triggerAttribute);
 		clone.removeAttribute(targetAttribute);
@@ -230,6 +269,7 @@ export function enableMorph(app, options = {}) {
 	};
 
 	// Fade a clone out over 150ms, then remove it (art-morph's TTL recipe).
+	/** @param {StyledElement | null | undefined} clone */
 	const fadeRemove = (clone) => {
 		if (!clone || !clone.isConnected) return;
 		clone.style.transition = `opacity ${FADE_MS}ms`;
@@ -262,6 +302,10 @@ export function enableMorph(app, options = {}) {
 	// always drop the clone; call engine.stop() ONLY on a true settle with a
 	// non-idle engine — a false settle means a newer flight superseded this one and
 	// may already own the engine, so stopping then would abort ITS morph.
+	/**
+	 * @param {Element} clone
+	 * @param {Element} target
+	 */
 	const runCloneFlight = async (clone, target) => {
 		const settled = await engine.show({ from: clone, to: target });
 		if (clone.isConnected) clone.remove();
@@ -272,6 +316,10 @@ export function enableMorph(app, options = {}) {
 	// pinned clone when it matches (cancelling its TTL); otherwise mints one NOW
 	// from the detached snapshot at its captured rect — enter is pre-paint, so the
 	// clone appears the same frame as the new view's first paint.
+	/**
+	 * @param {string | null} id
+	 * @param {Element} target
+	 */
 	const flyCapture = (id, target) => {
 		let clone;
 		if (captures.pinned && captures.pinned.id === id) {
@@ -280,7 +328,7 @@ export function enableMorph(app, options = {}) {
 			captures.pinned = null;
 		} else {
 			const snap = captures.snapshots.get(id);
-			clone = pinClone(snap.el, snap.rect);
+			clone = pinClone(/** @type {StyledElement} */ (snap.el), snap.rect);
 		}
 		// Any remaining capture (a pinned clone for a different id) is now dead.
 		discardCaptures();
@@ -292,6 +340,7 @@ export function enableMorph(app, options = {}) {
 	// a snapshot. Landing preference (D69): a `-target` element is the declared
 	// destination, so it wins over a plain same-id element regardless of document order
 	// (the artist's header art beats a plain re-feature card lower on the page).
+	/** @param {Element} root */
 	const tryCapturePath = (root) => {
 		const candidates = receiveElements(root).filter(
 			(t) => measurable(t) && captures.snapshots.has(morphId(t))
@@ -305,6 +354,7 @@ export function enableMorph(app, options = {}) {
 	// Watch `root` for a deferred target (skeleton → real template swap). On each
 	// mutation batch retry the capture path; a 2s TTL drops the capture if the
 	// target never lands (failed nav, wrong route, not-found).
+	/** @param {Element} root */
 	const armDeferred = (root) => {
 		const observer = new MutationObserver(() => {
 			if (!captures) {
@@ -329,6 +379,10 @@ export function enableMorph(app, options = {}) {
 	// snapshotted or click-pinned here — a dialog's close button sits INSIDE the
 	// morph-marked shell, so the click hint resolves to the shell itself, and
 	// pinning it would leave a frozen ghost of the dialog behind the fly-back.
+	/**
+	 * @param {Element} el
+	 * @param {Element | null} [dismissed]
+	 */
 	const captureFromLeaving = (el, dismissed = null) => {
 		// The previous navigation's capture never got claimed — drop it now.
 		discardCaptures();
@@ -339,6 +393,7 @@ export function enableMorph(app, options = {}) {
 
 		// Launch-eligible only (plain + trigger; targets never launch). Detached refs
 		// stay cloneable after the view is destroyed; first id wins.
+		/** @type {Captures['snapshots']} */
 		const snapshots = new Map();
 		for (const e of launchElements(el)) {
 			if (e === dismissed) continue;
@@ -373,7 +428,7 @@ export function enableMorph(app, options = {}) {
 			) {
 				const id = morphId(c);
 				const rect = c.getBoundingClientRect();
-				const clone = pinClone(c, rect);
+				const clone = pinClone(/** @type {StyledElement} */ (c), rect);
 				const ttl = setTimeout(() => {
 					fadeRemove(clone);
 					if (captures && captures.pinned && captures.pinned.clone === clone) captures.pinned = null;
@@ -389,8 +444,9 @@ export function enableMorph(app, options = {}) {
 	// leave() can pin exactly it. Only plain + trigger elements are candidates — a
 	// clicked `-target` records nothing. Clicks that never navigate cost nothing.
 	// Guarded for SSG — enableMorph runs under node during prerender, no document.
+	/** @param {Event} event */
 	const onDocumentClick = (event) => {
-		const t = event.target;
+		const t = /** @type {Element | null} */ (event.target);
 		if (!t || t.nodeType !== 1) return;
 		let candidate = t.closest(launchSelector);
 		if (!candidate) {
@@ -406,7 +462,12 @@ export function enableMorph(app, options = {}) {
 	// first-per-id — the live-pair SOURCE candidates. Targets are absent from the
 	// selector, so a `-target` element can never become a source. Collected ONCE per
 	// enter (a busy grid can hold ~50 elements) so the live-pair scan is a map lookup.
+	/**
+	 * @param {Element} excludeRoot
+	 * @returns {Map<string | null, Element>}
+	 */
 	const collectCounterparts = (excludeRoot) => {
+		/** @type {Map<string | null, Element>} */
 		const map = new Map();
 		for (const candidate of document.querySelectorAll(launchSelector)) {
 			if (excludeRoot.contains(candidate)) continue;

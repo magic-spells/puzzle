@@ -20,6 +20,8 @@
 //   2.5. README size banner — scripts/measure-size.mjs --check builds the two
 //      reference apps (hello-world, todos) and fails if the README's gzip
 //      figures no longer match the measurement.
+//   2.6. Published types — `npm run test:runtime-types` type-checks the runtime
+//      from its JSDoc and fails when types/*.d.ts drifted from its exports.
 //   3. Cross-compile the per-platform CLI binaries into npm/<pkg>/bin/puzzle
 //      (puzzle.exe on windows), version-stamped via -ldflags.
 //   4. Copy LICENSE.txt (MIT) into each platform package dir.
@@ -293,6 +295,15 @@ try {
 	execFileSync('node', ['scripts/measure-size.mjs', '--check'], { cwd: repoRoot, stdio: 'inherit' });
 } catch {
 	fail('measure-size.mjs --check failed — the README size banner is stale (see output above)');
+}
+
+// --- 2.6 Published types match the runtime ----------------------------------
+// The declarations ship in the tarball; a drifted one is a published bug.
+console.log('\nrelease-prep: checking the runtime types and the published .d.ts (npm run test:runtime-types)...');
+try {
+	execFileSync('npm', ['run', 'test:runtime-types'], { cwd: repoRoot, stdio: 'inherit' });
+} catch {
+	fail('test:runtime-types failed — the runtime JSDoc or the published types/*.d.ts drifted (see output above)');
 }
 
 // --- 3. Cross-compile the per-platform CLI binaries -------------------------

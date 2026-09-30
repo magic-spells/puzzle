@@ -189,7 +189,8 @@ export interface FakeAnimation {
 
 export interface FakeAnimateController {
 	readonly animations: FakeAnimation[];
-	readonly animateCalls: Array<[Element, any, KeyframeAnimationOptions]>;
+	/** Every `element.animate(keyframes, options)` call, arguments as passed. */
+	readonly animateCalls: Array<[Element, any, number | KeyframeAnimationOptions | undefined]>;
 	finishAll(): void;
 	uninstall(): void;
 }

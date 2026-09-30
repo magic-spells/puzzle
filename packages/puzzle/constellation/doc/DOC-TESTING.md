@@ -21,11 +21,12 @@ truth. Two audiences: the framework's own suites (below), and the shipped
 
 ```sh
 npx vitest run
+npm run test:runtime-types             # runtime JSDoc + published .d.ts drift
 (cd compiler && go test ./...)
 (cd ../puzzle-lang && go test ./...)   # the parser is its own Go module
 ```
 
-All three pass before any work is called complete. `npm test` adds a pretest
+All four pass before any work is called complete. `npm test` adds a pretest
 that compiles the generated fixtures and smoke-builds the example apps it
 depends on; use it when a change touches build integration or examples.
 
@@ -40,11 +41,41 @@ depends on; use it when a change touches build integration or examples.
   Golden files pair `.pzl` input with expected JavaScript; regenerate only
   deliberately with `go test ./internal/codegen -update` (from `compiler/`)
   and review the diff.
+- **Runtime types** (`test:runtime-types`, CI's JS job, and `release:prep`
+  step 2.6). The runtime stays plain JavaScript with no build step; TypeScript
+  7 checks it from its JSDoc and the published `types/*.d.ts` are held to it.
+  Two programs:
+  - `tsconfig.runtime.json` — `allowJs` + `checkJs` over `client-runtime/`,
+    with `noImplicitAny` and every other strict-family flag except
+    `strictNullChecks` (~180 errors, nearly all "possibly null" reads guarded
+    by runtime invariants; clearing them would take a JSDoc cast per site for
+    little signal). Type-only support lives in `tests-types/runtime/`:
+    `env.d.ts` (the `__PUZZLE_*__` build flags, `window` hooks, two `node:`
+    shims for the SSG, the untyped morph-engine peer), `augment.d.ts` (members
+    installed by `defineProperty`, stamped on by another module, or declared
+    by the author's subclass) and `installed.d.ts` (the adapter/fixtures Store
+    members, OPTIONAL so core code cannot assume them).
+  - `tests-types/drift` — strict, `allowJs` without `checkJs`. For every
+    package export it fails on a runtime value export the `.d.ts` does not
+    declare, a declared value the runtime does not export, and a runtime value
+    not ASSIGNABLE to its declaration (one way: a declaration may be narrower —
+    generics, literal unions, brands — never promise more). Parameters compare
+    bivariantly (`strictFunctionTypes` off) because runtime classes carry `#`
+    private fields and are nominal; arity and returns stay strict. It models
+    everything installed (`drift/installed.d.ts`), matching the published
+    augmentations. Deliberate gaps are named with a reason in `drift.ts`:
+    the adapter module's test seams (`STORE_RAW`, `serializeReadState`,
+    `hydrateReadState`) and `mountView`'s shape (its generic constraint names
+    the published vs the runtime `PuzzleView`).
+  A runtime edit that trips either program is fixed in JSDoc (or in
+  `types/*.d.ts` when the contract changed) — never by changing code.
+  Production bundles are unaffected by JSDoc (esbuild strips comments when
+  minifying); development bundles keep some inline `/** @type */` comments.
 
 Also, in proportion to the change and all of them for a release candidate:
-`npm run test:types` (public declarations), `npm run verify:pack` (tarball
-contents and metadata), `npm run test:e2e-pack` (packed install into a clean
-consumer), `npm run test:browser` (Playwright).
+`npm run test:types` (public declarations against a strict consumer),
+`npm run verify:pack` (tarball contents and metadata), `npm run test:e2e-pack`
+(packed install into a clean consumer), `npm run test:browser` (Playwright).
 
 ## Test design rules
 

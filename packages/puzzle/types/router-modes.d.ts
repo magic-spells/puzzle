@@ -15,6 +15,10 @@
  */
 
 declare const puzzleRouterModeBrand: unique symbol;
+// Without an export statement every top-level declaration in a .d.ts module is
+// implicitly exported — the brand above included, which would let an app import
+// a value that does not exist at runtime. This keeps it module-private.
+export {};
 
 /**
  * A router mode, produced by `hashRouter()` or `memoryRouter()` and passed as

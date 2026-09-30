@@ -35,6 +35,31 @@
 
 import { normalizeRoutePath } from './routePath.js';
 
+/** @import { Router } from './router.js' */
+
+/**
+ * The opaque descriptor `hashRouter()` / `memoryRouter()` return. `create()` is
+ * called once per Router; the instance it returns is internal to router.js.
+ * @typedef {Omit<import('../../types/router-modes.js').RouterMode, 'create'> & { name: string, create: () => RouterModeInstance }} RouterModeDescriptor
+ */
+
+/**
+ * The per-Router mode instance `create()` returns — only the seams where the mode
+ * deviates from path routing (see the module comment). A `urlless` mode also
+ * implements the entry-bookkeeping members (`start` … `commit`).
+ * @typedef {object} RouterModeInstance
+ * @property {(path: string, base: string) => string} encode
+ * @property {(base: string) => string | null} [readPath]
+ * @property {(fragment: string, e: MouseEvent, base: string, router: Router) => void} [clickFragment]
+ * @property {(url: URL, e: MouseEvent, base: string, router: Router) => boolean} [clickLink]
+ * @property {boolean} [urlless]
+ * @property {() => string} [start]
+ * @property {() => void} [reset]
+ * @property {() => void} [clearPending]
+ * @property {(n: number) => { path: string, index: number } | null} [go]
+ * @property {(path: string, push: boolean, replace: boolean, popIndex: number | null) => void} [commit]
+ */
+
 /**
  * Hash routing (v1.6, D34): the route rides in `location.hash` (`/#/user/123`)
  * instead of the pathname, for static hosts with no server-side rewrite. The
@@ -47,13 +72,15 @@ import { normalizeRoutePath } from './routePath.js';
  * popstate whose hash is a NON-route fragment (`#section2`, an in-page anchor)
  * is ignored — `readPath` returns null and the rendered view is left alone.
  */
+/** @returns {RouterModeDescriptor} */
 export function hashRouter() {
 	// `name` is diagnostics only (the SSG names the mode a hybrid build refuses);
 	// nothing in the Router reads it.
-	return { name: 'hash', create: () => hashMode };
+	return /** @type {RouterModeDescriptor} */ ({ name: 'hash', create: () => hashMode });
 }
 
 // Stateless, so every hashRouter() descriptor hands out the same instance.
+/** @type {RouterModeInstance} */
 const hashMode = {
 	/**
 	 * Parse `location.hash` into a path-shaped, BASE-STRIPPED route (D34/D51):
@@ -67,6 +94,9 @@ const hashMode = {
 	 * `'#' + base + '/'`; any OTHER fragment (including a `'#/...'` outside the
 	 * base) → `null`. A bare `''`/`'#'` still → `'/'` (the host root maps to the
 	 * app root).
+	 *
+	 * @param {string} base
+	 * @returns {string | null}
 	 */
 	readPath(base) {
 		const hash = location.hash;
@@ -81,7 +111,11 @@ const hashMode = {
 		return null;
 	},
 
-	/** Write-side inverse of readPath: the base rides inside the fragment. */
+	/**
+	 * Write-side inverse of readPath: the base rides inside the fragment.
+	 * @param {string} path
+	 * @param {string} base
+	 */
 	encode(path, base) {
 		return '#' + base + path;
 	},
@@ -89,6 +123,11 @@ const hashMode = {
 	/**
 	 * A relative `'#…'` href: `'#/...'` IS a route here — intercept it; a bare
 	 * `'#anchor'` is still an in-page anchor and falls through to the browser.
+	 *
+	 * @param {string} fragment
+	 * @param {MouseEvent} e
+	 * @param {string} base
+	 * @param {Router} router
 	 */
 	clickFragment(fragment, e, base, router) {
 		tryHashFragment(fragment, e, base, router);
@@ -99,6 +138,11 @@ const hashMode = {
 	 * is an in-app navigation. A differing pathname is a real navigation away
 	 * from the app shell — never push its pathname. Either way the hash mode owns
 	 * the decision, so the interceptor stops here (returns true).
+	 *
+	 * @param {URL} url
+	 * @param {MouseEvent} e
+	 * @param {string} base
+	 * @param {Router} router
 	 */
 	clickLink(url, e, base, router) {
 		if (url.pathname === location.pathname) tryHashFragment(url.hash, e, base, router);
@@ -112,6 +156,11 @@ const hashMode = {
  * a query, or under `'#' + base + '/'`; base-less, any `'#/...'` is a route. A
  * bare `'#anchor'` matches nothing and is left to the browser. preventDefault is
  * called HERE, before push.
+ *
+ * @param {string} fragment
+ * @param {MouseEvent} e
+ * @param {string} base
+ * @param {Router} router
  */
 function tryHashFragment(fragment, e, base, router) {
 	if (base) {
@@ -157,12 +206,17 @@ function tryHashFragment(fragment, e, base, router) {
  * falls through to the browser.
  *
  * @param {{ initialPath?: string }} [options] the first route (default `'/'`)
+ * @returns {RouterModeDescriptor}
  */
 export function memoryRouter({ initialPath } = {}) {
 	const seed = normalizeRoutePath(initialPath ?? '/');
-	return { name: 'memory', create: () => makeMemoryMode(seed) };
+	return /** @type {RouterModeDescriptor} */ ({ name: 'memory', create: () => makeMemoryMode(seed) });
 }
 
+/**
+ * @param {string} seed the normalized initial path
+ * @returns {RouterModeInstance}
+ */
 function makeMemoryMode(seed) {
 	// The entry stack + current index; both move ONLY at commit (D19), so a
 	// superseded navigation leaves them exactly as they were. `pending` is the
@@ -170,14 +224,19 @@ function makeMemoryMode(seed) {
 	// two SYNCHRONOUS back() calls would both read `index` and collapse into one
 	// move. Null until start() (and again after reset()), which is why go() and
 	// commit() degrade silently before the router is started.
+	/** @type {Array<{ path: string }> | null} */
 	let stack = null;
 	let index = -1;
+	/** @type {number | null} */
 	let pending = null;
 
 	return {
 		urlless: true,
 
-		/** No URL carrier, so a path is its own href (D79). */
+		/**
+		 * No URL carrier, so a path is its own href (D79).
+		 * @param {string} path
+		 */
 		encode(path) {
 			return path;
 		},
@@ -213,6 +272,8 @@ function makeMemoryMode(seed) {
 		 * or `n` that lands on the entry already targeted (go(0), or a forward that
 		 * exactly undoes a pending back — a browser would RELOAD on go(0), which
 		 * memory mode has no notion of).
+		 *
+		 * @param {number} n
 		 */
 		go(n) {
 			if (!stack) return null;
@@ -229,6 +290,11 @@ function makeMemoryMode(seed) {
 		 * truncates forward entries and appends; replace overwrites the current
 		 * entry IN PLACE (no truncate, no append, no index move); a pop advances the
 		 * index to the target go() computed.
+		 *
+		 * @param {string} path
+		 * @param {boolean} push
+		 * @param {boolean} replace
+		 * @param {number | null} popIndex
 		 */
 		commit(path, push, replace, popIndex) {
 			if (push) {

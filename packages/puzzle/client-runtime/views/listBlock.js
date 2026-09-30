@@ -35,20 +35,39 @@
 import { RENDER_REV } from '../renderRev.js';
 import { devperfListRows } from '../devperf.js';
 
+/** @import { ViewNode } from './ViewNode.js' */
+
+/**
+ * One row's persistent state — the scope object the compiled row factory
+ * receives (it adds its own `h0…` handler slots on first use).
+ *
+ * @typedef {{ k: any, item: any, i: number, rev: number, vnode: any,
+ *   controls: ViewNode[] | null, gen: number, c: any[], __lists: any[] | undefined }} ListRow
+ */
+
+/**
+ * One loop site's block: the row states by key plus the per-class verdicts.
+ *
+ * @typedef {{ rows: Map<any, ListRow>, gen: number, seen: number,
+ *   verdicts: Map<Function, boolean> | null }} ListBlock
+ */
+
 /**
  * Render one loop site.
  *
- * @param {object} view the PuzzleView whose render() is running — the owner of
+ * @param {import('./PuzzleView.js').PuzzleView} view the PuzzleView whose render() is running — the owner of
  *   the `__dirty` root mask (§3.6) and the reporter of the dev counters
- * @param {object} owner where this site's block lives: the view for a top-level
+ * @param {{ __lists?: any[] }} owner where this site's block lives: the view for a top-level
  *   loop, the enclosing ROW STATE for a nested one, so inner blocks are keyed
  *   per outer row and die with it
  * @param {number} id the site id (per file, shared with the `__h`/`__c` counters)
- * @param {Iterable} items the loop's items
- * @param {(row: object) => object} factory the compiled row body
- * @param {object} meta the site's static facts: `key` (always), plus `counter`,
- *   `ctrl`, `roots`, `fields`, `deep`, `volatile` when non-default
- * @returns {object[]} the row vnodes, in order
+ * @param {any} items the loop's items (any value: a non-list loops zero times, D173 V12)
+ * @param {(row: object) => import('./ViewNode.js').ViewNode} factory the compiled row body
+ * @param {{ key: (item: any, index: number) => any, counter?: boolean, ctrl?: boolean,
+ *   roots?: number, fields?: string[], deep?: boolean, volatile?: boolean }} meta the
+ *   site's static facts: `key` (always), plus `counter`, `ctrl`, `roots`, `fields`,
+ *   `deep`, `volatile` when non-default
+ * @returns {import('./ViewNode.js').ViewNode[]} the row vnodes, in order
  */
 export function listRows(view, owner, id, items, factory, meta) {
 	// A missing collection loops zero times, and so does any other non-list
@@ -201,6 +220,7 @@ export function listRows(view, owner, id, items, factory, meta) {
 	return out;
 }
 
+/** @type {unknown[]} */
 const EMPTY = [];
 
 /**
@@ -244,6 +264,10 @@ export function loopRange(from, to) {
 	return out;
 }
 
+/**
+ * @param {any} value a range bound as authored (a number, a numeric string, …)
+ * @returns {number}
+ */
 function rangeBound(value) {
 	if (value == null) return NaN;
 	const n = Math.trunc(value);
@@ -263,6 +287,10 @@ function rangeBound(value) {
 	return Number.isFinite(n) ? n : NaN;
 }
 
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
 function describe(value) {
 	if (typeof value === 'string') return JSON.stringify(value);
 	if (typeof value === 'number' || typeof value === 'boolean') return String(value);
@@ -272,7 +300,9 @@ function describe(value) {
 // One warning per distinct message per session, dev-only behind the inline
 // probe like warnDuplicateListKey, so production tree-shakes the helpers and
 // their once-state away.
+/** @type {Set<string> | undefined} */
 let warnedLoop;
+/** @param {string} message */
 function warnLoopOnce(message) {
 	const seen = (warnedLoop ??= new Set());
 	if (seen.has(message)) return;
@@ -286,6 +316,13 @@ function warnLoopOnce(message) {
  * body adds its own cached handlers as `s.h0`, `s.h1`, … on first use. `c` is
  * the row's static-subtree cache (`(s.c[0] ??= …)`) and `__lists` holds nested
  * blocks, allocated by listRows only if a nested site is actually visited.
+ *
+ * @param {any} k
+ * @param {any} item
+ * @param {number} i
+ * @param {number} gen
+ * @param {number} rev
+ * @returns {ListRow}
  */
 function newRow(k, item, i, gen, rev) {
 	return {
@@ -308,7 +345,12 @@ const NOT_CACHEABLE = -1;
 // item itself is the whole test.
 const PRIMITIVE = -2;
 
-/** A record's stored render revision, or one of the two sentinels above. */
+/**
+ * A record's stored render revision, or one of the two sentinels above.
+ *
+ * @param {any} item a loop item (any author value)
+ * @returns {number}
+ */
 function revisionOf(item) {
 	if (item === null || (typeof item !== 'object' && typeof item !== 'function')) {
 		return PRIMITIVE;
@@ -333,6 +375,11 @@ function revisionOf(item) {
  * verdict is a property of the class, not of the record, and a list of 1,000
  * todos must not pay 1,000 schema walks. Formatters are display-pure by SPEC
  * contract and do not count.
+ *
+ * @param {ListBlock} block
+ * @param {any} item a record (model instance) row item
+ * @param {string[]} fields
+ * @returns {boolean}
  */
 function isConservative(block, item, fields) {
 	const Model = item.constructor;
@@ -363,6 +410,9 @@ function isConservative(block, item, fields) {
  * it has seen? Reported as a counter so an author can see WHY a list is still
  * rebuilding every row (the dev-counter half of §12's risk mitigation) — a
  * conservative site is the one shape that keeps paying full price.
+ *
+ * @param {ListBlock} block
+ * @returns {boolean}
  */
 function isConservativeSite(block) {
 	const verdicts = block.verdicts;
@@ -392,13 +442,21 @@ function isConservativeSite(block) {
  * when the patch actually reaches the portal vnode, and a cached ancestor returns
  * before that ever happens. The portaled vnodes keep usable `el` links (they live
  * in the outlet), so re-asserting from here is the same work patchAttrs would do.
+ *
+ * @param {ViewNode} vnode
+ * @returns {ViewNode[] | null}
  */
 function collectControls(vnode) {
+	/** @type {ViewNode[]} */
 	const out = [];
 	collectInto(vnode, out);
 	return out.length > 0 ? out : null;
 }
 
+/**
+ * @param {ViewNode} vnode
+ * @param {ViewNode[]} out
+ */
 function collectInto(vnode, out) {
 	const tag = vnode.tag;
 	const attrs = vnode.attrs;
@@ -418,6 +476,7 @@ function collectInto(vnode, out) {
 // viewManager's warnDuplicateKey, so production tree-shakes the helper and its
 // once-state away.
 let warnedDuplicateListKey = false;
+/** @param {unknown} key */
 function warnDuplicateListKey(key) {
 	if (warnedDuplicateListKey) return;
 	warnedDuplicateListKey = true;

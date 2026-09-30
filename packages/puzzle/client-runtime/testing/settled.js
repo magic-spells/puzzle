@@ -11,11 +11,25 @@
 
 import { PuzzleView } from '../views/PuzzleView.js';
 
+/** @import { Store } from '../datastore/store.js' */
+
+/**
+ * A Router, or any router-shaped double (the testing module's inert router, an
+ * author's stub): only its navigation methods and `current` are read.
+ * @typedef {Record<string, any>} RouterLike
+ */
+
+/** @type {Set<PromiseLike<unknown>>} */
 const pendingWork = new Set();
+/** @type {Map<Store, number>} */
 const stores = new Map();
+/** @type {Set<PuzzleView>} */
 const views = new Set();
+/** @type {WeakMap<object, { count: number, ownDescriptors: Map<string, PropertyDescriptor | null> }>} */
 const routers = new WeakMap();
+/** @type {WeakMap<object, PromiseLike<unknown>>} */
 const latestWork = new WeakMap();
+/** @type {Set<Map<string, number>>} */
 const activeDiagnostics = new Set();
 const navigationMethods = ['push', 'replace', 'go', 'back', 'forward'];
 const DEFAULT_MAX_PASSES = 100;
@@ -55,7 +69,13 @@ export function ensureTracking() {
 	};
 }
 
-/** Track a thenable without changing its identity or rejection behavior. */
+/**
+ * Track a thenable without changing its identity or rejection behavior.
+ *
+ * @param {any} value any value; only a thenable is tracked
+ * @param {string} [source]
+ * @returns {any} `value`, unchanged
+ */
 export function trackWork(value, source = 'async framework work') {
 	if (!value || typeof value.then !== 'function' || pendingWork.has(value)) return value;
 	pendingWork.add(value);
@@ -73,6 +93,11 @@ export function trackWork(value, source = 'async framework work') {
  * Track only the current promise for one last-wins owner. A newer view refresh
  * or router navigation makes the older promise irrelevant to framework state,
  * even if the app's underlying fetch never resolves.
+ *
+ * @param {object} owner
+ * @param {any} value any value; only a thenable is tracked
+ * @param {string} [source]
+ * @returns {any} `value`, unchanged
  */
 function trackLatestWork(owner, value, source = 'async framework work') {
 	const previous = latestWork.get(owner);
@@ -94,6 +119,7 @@ function trackLatestWork(owner, value, source = 'async framework work') {
 	return value;
 }
 
+/** @param {object} owner */
 function clearLatestWork(owner) {
 	const value = latestWork.get(owner);
 	if (!value) return;
@@ -101,6 +127,7 @@ function clearLatestWork(owner) {
 	removeWork(value);
 }
 
+/** @param {PromiseLike<unknown>} value */
 function removeWork(value) {
 	if (!pendingWork.delete(value)) return;
 	// Completion changes fixed-point stability but is not a new registration,
@@ -108,7 +135,12 @@ function removeWork(value) {
 	advanceWork();
 }
 
-/** Keep one helper-owned reference count per Store shared across handles. */
+/**
+ * Keep one helper-owned reference count per Store shared across handles.
+ *
+ * @param {Store | null | undefined} store
+ * @returns {() => void} the release
+ */
 export function registerStore(store) {
 	if (!store || typeof store.flush !== 'function') return () => {};
 	stores.set(store, (stores.get(store) ?? 0) + 1);
@@ -126,6 +158,9 @@ export function registerStore(store) {
  * Track navigation promises started directly by app code, including pushes from
  * event handlers. Wrapping is per Router instance and restored with the last
  * helper handle that registered it.
+ *
+ * @param {RouterLike | null | undefined} router
+ * @returns {() => void} the release
  */
 export function registerRouter(router) {
 	if (!router) return () => {};
@@ -139,6 +174,7 @@ export function registerRouter(router) {
 			Object.defineProperty(router, name, {
 				configurable: true,
 				writable: true,
+				/** @param {...unknown} args */
 				value(...args) {
 					return trackLatestWork(
 						router,
@@ -234,17 +270,20 @@ export async function settled({ maxPasses = DEFAULT_MAX_PASSES } = {}) {
 	}
 }
 
+/** @param {string} [source] */
 function advanceWork(source) {
 	workVersion++;
 	if (source) recordActivity(source);
 }
 
+/** @param {string} source */
 function recordActivity(source) {
 	for (const activity of activeDiagnostics) {
 		activity.set(source, (activity.get(source) ?? 0) + 1);
 	}
 }
 
+/** @param {Map<string, number>} activity */
 function describeActivity(activity) {
 	const mostActive = [...activity]
 		.sort((a, b) => b[1] - a[1])
@@ -253,10 +292,12 @@ function describeActivity(activity) {
 	return mostActive.join(', ') || 'unlabelled framework work';
 }
 
+/** @param {PuzzleView} view */
 function viewName(view) {
 	return view.constructor?.name || 'anonymous';
 }
 
+/** @param {RouterLike} router @param {string} method @param {unknown[]} args */
 function navigationSource(router, method, args) {
 	if (method === 'push' || method === 'replace') {
 		return `navigation ${method} to ${String(args[0])}`;
@@ -266,6 +307,7 @@ function navigationSource(router, method, args) {
 	return `navigation ${method}${argument}${current ? ` from ${current}` : ''}`;
 }
 
+/** @param {Store} store */
 function recordStoreNotifications(store) {
 	// Sampling (never mutating) the pending key set is cheap and preserves the
 	// model type that would be lost once public, idempotent flush() returns.

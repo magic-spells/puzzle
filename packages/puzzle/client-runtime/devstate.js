@@ -18,6 +18,24 @@
 
 import { hydrateReadState, serializeReadState } from './capabilities.js';
 
+/** @import { PuzzleView } from './views/PuzzleView.js' */
+/** @import { PuzzleApp } from './app.js' */
+/** @import { ReadStateEnvelope } from './capabilities.js' */
+
+/**
+ * The one-shot sessionStorage transplant blob: its write time, the store's
+ * persistence wire shape, the adapter read state, and each keyed view's
+ * JSON-safe local state.
+ * @typedef {{
+ *   t: number,
+ *   store: Record<string, unknown[]>,
+ *   read?: ReadStateEnvelope | null,
+ *   views: { key: string, data: object }[],
+ * }} HmrBlob
+ */
+
+/** @typedef {(view: PuzzleView, mounted: boolean) => void} ViewObserver */
+
 // Never dereference __PUZZLE_DEV__ directly: unbundled it is an undeclared
 // identifier and a bare read throws ReferenceError — the typeof probe is the
 // point. Bundled, esbuild replaces it with the literal so the whole expression
@@ -41,6 +59,7 @@ const DROP = Symbol('drop');
 // deterministic across the reload: the same URL mounts the same chain in the
 // same order (D57). PuzzleView adds on #mounted-true and removes on destroy();
 // key derivation lives here so PuzzleView stays minimal.
+/** @type {Set<PuzzleView>} */
 const liveViews = new Set();
 
 // A single optional observer of the registry, filled by devtools.js while a
@@ -49,6 +68,7 @@ const liveViews = new Set();
 // (devtools → devstate, for safeState + liveViewList), and the mount/destroy
 // push travels back through this callback instead of a second import edge.
 // Null — and therefore free — whenever no extension is listening.
+/** @type {ViewObserver | null} */
 let viewObserver = null;
 
 // The gates below are all written as positive `if (DEV) { … }` blocks, not
@@ -57,7 +77,10 @@ let viewObserver = null;
 // the negative form would leave the guarded body (and its string/Set literals)
 // in the production bundle and defeat the DCE (D57). Verified by the build test.
 
-/** Register a newly-mounted view (no-op in production). */
+/**
+ * Register a newly-mounted view (no-op in production).
+ * @param {PuzzleView} view
+ */
 export function registerView(view) {
 	if (DEV) {
 		liveViews.add(view);
@@ -65,7 +88,10 @@ export function registerView(view) {
 	}
 }
 
-/** Drop a destroyed view from the registry (no-op in production). */
+/**
+ * Drop a destroyed view from the registry (no-op in production).
+ * @param {PuzzleView} view
+ */
 export function unregisterView(view) {
 	if (DEV) {
 		// Notify ONLY when this view was actually registered: destroying a
@@ -80,6 +106,8 @@ export function unregisterView(view) {
  * Install (or clear, with null) the registry observer — `fn(view, mounted)`.
  * Dev-internal, called only by devtools.js at hook registration/teardown.
  * No-op in production.
+ *
+ * @param {ViewObserver | null} fn
  */
 export function setViewObserver(fn) {
 	if (DEV) viewObserver = typeof fn === 'function' ? fn : null;
@@ -89,6 +117,8 @@ export function setViewObserver(fn) {
  * The live mounted views in mount order, as a plain array snapshot. The
  * dev-internal reader devtools.js uses to replay pre-registration mounts and to
  * walk the component forest. Empty in production.
+ *
+ * @returns {PuzzleView[]}
  */
 export function liveViewList() {
 	return DEV ? [...liveViews] : [];
@@ -100,9 +130,12 @@ export function liveViewList() {
  * order. Computed identically at snapshot and restore time, so a view's state
  * lands back on its counterpart; a class-name collision or a divergent mount
  * order simply mis-keys and that view cold-starts (fail-soft, D57).
+ *
+ * @returns {{ key: string, view: PuzzleView }[]}
  */
 function keyedViews() {
 	const counts = Object.create(null);
+	/** @type {{ key: string, view: PuzzleView }[]} */
 	const out = [];
 	for (const view of liveViews) {
 		const name = view?.constructor?.name || 'View';
@@ -137,6 +170,9 @@ function getSessionStorage() {
  * store records that data() derived from queries are intentionally dropped —
  * the restored store re-provides them; only local setData state (drafts,
  * toggles, form fields) needs to cross the reload. Exported for direct testing.
+ *
+ * @param {unknown} data
+ * @returns {object}
  */
 export function safeState(data) {
 	const walked = walk(data, 0, new WeakSet());
@@ -145,6 +181,12 @@ export function safeState(data) {
 	return walked === DROP || walked === null || typeof walked !== 'object' ? {} : walked;
 }
 
+/**
+ * @param {any} value arbitrary author data, narrowed by typeof below
+ * @param {number} depth
+ * @param {WeakSet<object>} seen
+ * @returns {unknown} the JSON-safe copy, or DROP
+ */
 function walk(value, depth, seen) {
 	if (value === null) return null;
 	const t = typeof value;
@@ -163,6 +205,7 @@ function walk(value, depth, seen) {
 	seen.add(value);
 	try {
 		if (Array.isArray(value)) {
+			/** @type {unknown[]} */
 			const arr = [];
 			for (const item of value) {
 				const w = walk(item, depth + 1, seen);
@@ -175,6 +218,7 @@ function walk(value, depth, seen) {
 		// a Date, a Map) has a non-Object prototype and is dropped wholesale.
 		const proto = Object.getPrototypeOf(value);
 		if (proto !== Object.prototype && proto !== null) return DROP;
+		/** @type {Record<string, unknown>} */
 		const obj = {};
 		for (const k of Object.keys(value)) {
 			const w = walk(value[k], depth + 1, seen);
@@ -192,17 +236,21 @@ function walk(value, depth, seen) {
  * Every step is wrapped fail-soft: a serialization error, an unreadable view,
  * or a full/absent storage degrades to a partial-or-empty blob, never a throw
  * (the reload must always proceed). No-op in production.
+ *
+ * @param {PuzzleApp} app
  */
 export function snapshotToStorage(app) {
 	// Positive gate so DCE empties this (and orphans snapshotImpl) in production.
 	if (DEV) snapshotImpl(app);
 }
 
+/** @param {PuzzleApp} app */
 function snapshotImpl(app) {
 	try {
 		const storage = getSessionStorage();
 		if (!storage) return;
 
+		/** @type {HmrBlob} */
 		const blob = { t: Date.now(), store: {}, views: [] };
 
 		// Store: the same wire shape _persist() writes (type → [toJSON()]), via
@@ -256,6 +304,9 @@ function snapshotImpl(app) {
  * the next mutation — the masked bug). Returns the validated blob (or null) so
  * phase 2 can restore view-local state without re-reading storage; every step is
  * fail-soft. No-op in production.
+ *
+ * @param {PuzzleApp} app
+ * @returns {HmrBlob | null}
  */
 export function restoreStoreFromStorage(app) {
 	// Positive gate so DCE empties this (and orphans restoreStoreImpl) in production.
@@ -263,7 +314,12 @@ export function restoreStoreFromStorage(app) {
 	return null;
 }
 
+/**
+ * @param {PuzzleApp} app
+ * @returns {HmrBlob | null}
+ */
 function restoreStoreImpl(app) {
+	/** @type {any} parsed sessionStorage JSON, validated field by field below */
 	let blob;
 	try {
 		const storage = getSessionStorage();
@@ -315,15 +371,19 @@ function restoreStoreImpl(app) {
  * state onto its live keyed counterpart (store already transplanted in phase 1).
  * Fail-soft: a null blob (cold start / expired / corrupt) or a missing view is a
  * no-op, never a crash. No-op in production.
+ *
+ * @param {HmrBlob | null} blob
  */
 export function restoreViewsFromStorage(blob) {
 	// Positive gate so DCE empties this (and orphans restoreViewsImpl) in production.
 	if (DEV) restoreViewsImpl(blob);
 }
 
+/** @param {HmrBlob | null} blob */
 function restoreViewsImpl(blob) {
 	try {
 		if (!blob || !Array.isArray(blob.views)) return;
+		/** @type {Map<string, PuzzleView>} */
 		const byKey = new Map();
 		for (const { key, view } of keyedViews()) byKey.set(key, view);
 		for (const entry of blob.views) {

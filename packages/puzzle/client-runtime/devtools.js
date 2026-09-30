@@ -39,6 +39,83 @@
 import { devperfInstallSink } from './devperf.js';
 import { liveViewList, safeState, setViewObserver } from './devstate.js';
 
+/** @import { PuzzleApp } from './app.js' */
+/** @import { PuzzleView } from './views/PuzzleView.js' */
+/** @import { ViewNode } from './views/ViewNode.js' */
+/** @import { Store } from './datastore/store.js' */
+/** @import { PerfEvent } from './devperf.js' */
+
+/**
+ * A request from the extension: parsed wire data, so every payload field is
+ * whatever the panel sent.
+ * @typedef {{ type?: unknown, payload?: Record<string, any> } | null | undefined} DevtoolsRequest
+ */
+
+/**
+ * The hook object the extension installs on window (only its two methods are
+ * relied on, after the typeof checks in appMountedImpl).
+ * @typedef {{
+ *   emit: (message: { puzzle: 1, v: number, type: string, payload: unknown }) => void,
+ *   onRequest: (handler: (message: DevtoolsRequest) => object | null) => void,
+ * }} DevtoolsHook
+ */
+
+/**
+ * Anything whose class the bridge names: a view, or a store subscriber. The
+ * codegen stamps `__pzlModule` on a compiled view class (D81).
+ * @typedef {{ constructor: { name: string, __pzlModule?: string | null } }} NamedInstance
+ */
+
+/** @typedef {{ id: number | null, name: string, module: string | null }} ViewInfo */
+
+/** @typedef {ViewInfo & { children: TreeNode[] }} TreeNode */
+
+/**
+ * The committed navigation the router hands devtoolsRouteCommit (the fields
+ * the bridge reads).
+ * @typedef {{ views?: PuzzleView[] | null, pathname?: string | null, query?: object | null,
+ *   params?: object | null }} CommittedRoute
+ */
+
+/**
+ * One view's row in a recording.
+ * @typedef {ViewInfo & {
+ *   renders: number,
+ *   wastedRenders: number,
+ *   domMutations: number,
+ *   renderMs: number,
+ *   patchMs: number,
+ *   dataMs: number,
+ *   causes: Record<string, number>,
+ *   memoHits: number,
+ *   memoMisses: number,
+ *   propsBailouts: number,
+ *   propsReruns: number,
+ * }} ProfileRow
+ */
+
+/** @typedef {{ at: number, keys: string[], notified: number, durationMs: number }} FlushRow */
+
+/**
+ * @typedef {{ kind: string, viewId: number | null, name: string | null, detail: string,
+ *   count: number }} PerfWarning
+ */
+
+/**
+ * One panel recording (perf:start → perf:stop).
+ * @typedef {{
+ *   startedAt: number,
+ *   stoppedAt: number,
+ *   recording: boolean,
+ *   views: Map<number, ProfileRow>,
+ *   dataRuns: number,
+ *   storeFlushes: number,
+ *   storeNotifications: number,
+ *   flushes: FlushRow[],
+ *   warnings: Map<string, PerfWarning>,
+ * }} Profile
+ */
+
 // Never dereference __PUZZLE_DEV__ directly — see the identical note in
 // devstate.js. MODULE scope only; class methods must spell the probe inline.
 const DEV = typeof __PUZZLE_DEV__ === 'undefined' ? true : __PUZZLE_DEV__;
@@ -66,31 +143,38 @@ const OVERLAY_MARK = 'data-puzzle-devtools';
 
 // The registered hook, or null when no extension is listening. Every emit path
 // short-circuits on null, which is the no-extension fast path.
+/** @type {DevtoolsHook | null} */
 let hook = null;
 
 // The app instance this bridge is bound to. Store/router reads go through it,
 // and app-unmounted only unregisters for the SAME instance.
+/** @type {PuzzleApp | null} */
 let boundApp = null;
 
 // The single reused highlight element (fixed-position, pointer-events none).
+/** @type {HTMLDivElement | null} */
 let overlay = null;
 
 // View names of the most recently committed route chain. router.current exposes
 // route ENTRIES (view classes, guards — not JSON-safe) and no instances, so the
 // names are captured at commit time and replayed by snapshot:route.
+/** @type {string[]} */
 let lastChain = [];
 
 // Stable per-instance ids handed to the extension. A WeakMap so a destroyed
 // view is collectable; ids are never reused within a session.
+/** @type {WeakMap<object, number>} */
 const viewIds = new WeakMap();
 let nextViewId = 1;
 
 // The devperf sink detach function while this bridge is registered, else null.
+/** @type {(() => void) | null} */
 let perfDetach = null;
 
 // The current recording, or null before the first perf:start — which is the
 // difference between "0 renders measured" and "never recorded" (the report
 // distinguishes them; see profileReport).
+/** @type {Profile | null} */
 let profile = null;
 
 // The flush row awaiting its duration. devtoolsFlush() runs inside the store's
@@ -98,6 +182,7 @@ let profile = null;
 // of the same synchronous flush() and knows the DURATION. This one-slot handoff
 // joins them — and because the inner flush of a re-entrant pair completes first,
 // each event fills the row its own flush pushed.
+/** @type {FlushRow | null} */
 let pendingFlushRow = null;
 
 // The gates below are positive `if (DEV) { … }` blocks, never `if (!DEV) return`
@@ -112,12 +197,17 @@ let pendingFlushRow = null;
  * window.__PUZZLE_APP__ — i.e. after the services are wired and before
  * navigation #0, so the store/router are readable and the first view mounts
  * arrive as live events rather than replay.
+ *
+ * @param {PuzzleApp} app
  */
 export function devtoolsAppMounted(app) {
 	if (DEV) appMountedImpl(app);
 }
 
-/** Unregister at teardown: emit app-unmounted, detach the observer, drop the overlay. */
+/**
+ * Unregister at teardown: emit app-unmounted, detach the observer, drop the overlay.
+ * @param {PuzzleApp} app
+ */
 export function devtoolsAppUnmounted(app) {
 	if (DEV) appUnmountedImpl(app);
 }
@@ -126,6 +216,10 @@ export function devtoolsAppUnmounted(app) {
  * Report one completed store flush batch: the keys that changed and the exact
  * subscriber set that was notified (PuzzleView instances become ids, function
  * subscribers become the literal 'fn').
+ *
+ * @param {Store} store
+ * @param {string[]} keys
+ * @param {Set<object>} notified
  */
 export function devtoolsFlush(store, keys, notified) {
 	if (DEV) flushImpl(store, keys, notified);
@@ -135,6 +229,8 @@ export function devtoolsFlush(store, keys, notified) {
  * Report a committed navigation. Called from Router.#commitState next to the
  * dev-only warnMissingSlots walk, so document.title is already the new route's
  * (the head sync runs inside #commitLocation, immediately before).
+ *
+ * @param {CommittedRoute} next
  */
 export function devtoolsRouteCommit(next) {
 	if (DEV) routeCommitImpl(next);
@@ -142,6 +238,7 @@ export function devtoolsRouteCommit(next) {
 
 // ---- registration ----------------------------------------------------------
 
+/** @param {PuzzleApp} app */
 function appMountedImpl(app) {
 	try {
 		if (typeof window === 'undefined') return;
@@ -191,6 +288,7 @@ function appMountedImpl(app) {
 	}
 }
 
+/** @param {PuzzleApp} app */
 function appUnmountedImpl(app) {
 	try {
 		// A different app tearing down must not unregister this one's bridge.
@@ -212,6 +310,10 @@ function appUnmountedImpl(app) {
 
 // ---- runtime → extension events --------------------------------------------
 
+/**
+ * @param {string} type
+ * @param {unknown} payload
+ */
 function emit(type, payload) {
 	if (!hook) return;
 	try {
@@ -221,15 +323,25 @@ function emit(type, payload) {
 	}
 }
 
-/** devstate's view-registry observer: true on mount, false on destroy. */
+/**
+ * devstate's view-registry observer: true on mount, false on destroy.
+ * @param {PuzzleView} view
+ * @param {boolean} mounted
+ */
 function onViewChange(view, mounted) {
 	if (mounted) emit('view-mounted', viewInfo(view));
 	else emit('view-destroyed', { id: viewId(view) });
 }
 
+/**
+ * @param {Store} store
+ * @param {string[]} keys
+ * @param {Set<object>} notified
+ */
 function flushImpl(store, keys, notified) {
 	try {
 		if (!hook) return;
+		/** @type {(number | string | null)[]} */
 		const ids = [];
 		for (const sub of notified) ids.push(subscriberId(sub));
 		// The store-side half of a recording comes from HERE rather than from
@@ -244,6 +356,7 @@ function flushImpl(store, keys, notified) {
 	}
 }
 
+/** @param {CommittedRoute} next */
 function routeCommitImpl(next) {
 	try {
 		lastChain = chainNames(next?.views);
@@ -267,6 +380,9 @@ function routeCommitImpl(next) {
  * result payload, or `{ error }` for an unknown type, a missing target, or any
  * throw from the work below (a validation failure on edit:record arrives this
  * way, carrying the real message).
+ *
+ * @param {DevtoolsRequest} message
+ * @returns {object | null}
  */
 function handleRequest(message) {
 	try {
@@ -300,7 +416,7 @@ function handleRequest(message) {
 			default:
 				return { error: `unknown devtools request "${String(type)}"` };
 		}
-	} catch (err) {
+	} catch (/** @type {any} */ err) {
 		return { error: err?.message ?? String(err) };
 	}
 }
@@ -316,19 +432,25 @@ function handleRequest(message) {
  * splices the very same vnode objects) or nothing, so stopping makes every
  * instance claimed by exactly one parent. Roots are the live views nobody
  * claimed: the router's chain head, or the layout when one is configured.
+ *
+ * @returns {TreeNode[]}
  */
 function snapshotViews() {
 	const views = liveViewList();
+	/** @type {Map<PuzzleView, PuzzleView[]>} */
 	const childrenOf = new Map();
+	/** @type {Set<PuzzleView>} */
 	const claimed = new Set();
 
 	for (const view of views) {
+		/** @type {PuzzleView[]} */
 		const kids = [];
 		collectChildViews(readTree(view), kids);
 		childrenOf.set(view, kids);
 		for (const kid of kids) claimed.add(kid);
 	}
 
+	/** @type {TreeNode[]} */
 	const roots = [];
 	for (const view of views) {
 		if (!claimed.has(view)) roots.push(buildTreeNode(view, childrenOf, new Set()));
@@ -336,6 +458,10 @@ function snapshotViews() {
 	return roots;
 }
 
+/**
+ * @param {PuzzleView} view
+ * @returns {ViewNode | null}
+ */
 function readTree(view) {
 	try {
 		return view?._vnodeTree?.() ?? null;
@@ -344,6 +470,10 @@ function readTree(view) {
 	}
 }
 
+/**
+ * @param {ViewNode | null | undefined} vnode
+ * @param {PuzzleView[]} out
+ */
 function collectChildViews(vnode, out) {
 	if (!vnode || typeof vnode !== 'object') return;
 	if (vnode.component) {
@@ -355,7 +485,14 @@ function collectChildViews(vnode, out) {
 	for (const child of vnode.children) collectChildViews(child, out);
 }
 
+/**
+ * @param {PuzzleView} view
+ * @param {Map<PuzzleView, PuzzleView[]>} childrenOf
+ * @param {Set<PuzzleView>} seen
+ * @returns {TreeNode}
+ */
 function buildTreeNode(view, childrenOf, seen) {
+	/** @type {TreeNode} */
 	const node = { ...viewInfo(view), children: [] };
 	// Claiming is unique, so a cycle is impossible — the guard is belt-and-braces
 	// against a torn/interrupted tree rather than an expected case.
@@ -367,6 +504,7 @@ function buildTreeNode(view, childrenOf, seen) {
 	return node;
 }
 
+/** @param {unknown} id a view id from the panel */
 function inspectView(id) {
 	const view = requireView(id);
 	return {
@@ -383,8 +521,10 @@ function inspectView(id) {
 
 // ---- store ------------------------------------------------------------------
 
+/** @param {string | null | undefined} type */
 function snapshotRecords(type) {
 	const store = requireStore();
+	/** @type {Record<string, object[]>} */
 	const types = {};
 	for (const [recordType, map] of store.recordsByType) {
 		if (type != null && recordType !== type) continue;
@@ -414,21 +554,25 @@ function snapshotRecords(type) {
  */
 function snapshotSubscriptions() {
 	const store = requireStore();
+	/** @type {Record<string, (number | string | null)[]>} */
 	const byKey = {};
 	for (const [key, subs] of store.subscribersByKey) {
 		byKey[key] = [...subs].map(subscriberId);
 	}
+	/** @type {Record<string, string[]>} */
 	const byView = {};
 	for (const [sub, keys] of store.keysBySubscriber) {
 		const id = subscriberId(sub);
 		const bucket = (byView[id] ??= []);
 		for (const key of keys) if (!bucket.includes(key)) bucket.push(key);
 	}
+	/** @type {Record<string, string[]>} */
 	const held = {};
 	// _heldKeys is Map<subscriber, Map<key, {count, adopted}>> (D146 refcounting);
 	// the wire shape stays a flat array of key strings — the counts are internal.
 	for (const [sub, counts] of store._heldKeys ?? []) {
 		const id = subscriberId(sub);
+		/** @type {string[] | null} */
 		let bucket = null;
 		for (const [key, { count }] of counts) {
 			if (count <= 0) continue;
@@ -439,6 +583,11 @@ function snapshotSubscriptions() {
 	return { byKey, byView, held };
 }
 
+/**
+ * @param {string} type
+ * @param {unknown} id a primary key as it came back over JSON
+ * @param {Record<string, unknown> | null | undefined} patch
+ */
 function editRecord(type, id, patch) {
 	const store = requireStore();
 	if (!patch || typeof patch !== 'object') {
@@ -450,12 +599,17 @@ function editRecord(type, id, patch) {
 		// The REAL mutation path: validation, primary-key immutability, store
 		// notification and batched persistence all behave exactly as app code.
 		record.update(patch);
-	} catch (err) {
+	} catch (/** @type {any} */ err) {
 		return { error: err?.message ?? String(err) };
 	}
 	return { ok: true };
 }
 
+/**
+ * @param {Store} store
+ * @param {string} type
+ * @param {any} id a primary key as it came back over JSON — the loose match below absorbs a string/number mismatch
+ */
 function findRecord(store, type, id) {
 	const map = store.recordsByType.get(type);
 	if (!map) return null;
@@ -535,6 +689,7 @@ const CAUSE_KEYS = ['data', 'store', 'parent', 'route', 'manual', 'slot'];
  * so a cause a newer runtime starts emitting stays visible without a panel
  * update.
  */
+/** @type {Record<string, string>} */
 const CAUSE_BUCKET = {
 	initial: 'data', // the mount's first data() run
 	refresh: 'data', // an explicit refresh() re-ran data()
@@ -547,6 +702,7 @@ const CAUSE_BUCKET = {
 };
 
 /** devperf's loop-detector kinds → the protocol's. */
+/** @type {Record<string, string>} */
 const WARNING_KIND = {
 	recursive: 'recursive-loop',
 	'cross-frame': 'runaway-rerender',
@@ -597,6 +753,7 @@ function profileReport() {
 	}
 
 	const totals = emptyProfileTotals();
+	/** @type {ProfileRow[]} */
 	const views = [];
 	for (const row of profile.views.values()) {
 		totals.renders += row.renders;
@@ -640,6 +797,9 @@ function emptyProfileTotals() {
 /**
  * devperf's sink. `subject` is the instance the event is about — a view for
  * every case below, and the only way to reach this module's id space.
+ *
+ * @param {PerfEvent} event
+ * @param {object | null} subject
  */
 function onPerfEvent(event, subject) {
 	try {
@@ -707,11 +867,16 @@ function onPerfEvent(event, subject) {
 	}
 }
 
+/**
+ * @param {object | null} view
+ * @returns {ProfileRow | null}
+ */
 function profileRow(view) {
 	if (!view || !profile) return null;
 	const id = viewId(view);
 	let row = profile.views.get(id);
 	if (row) return row;
+	/** @type {Record<string, number>} */
 	const causes = {};
 	for (const key of CAUSE_KEYS) causes[key] = 0;
 	row = {
@@ -732,6 +897,10 @@ function profileRow(view) {
 	return row;
 }
 
+/**
+ * @param {ProfileRow} row
+ * @param {string} cause
+ */
 function countCause(row, cause) {
 	const bucket = CAUSE_BUCKET[cause] ?? cause;
 	row.causes[bucket] = (row.causes[bucket] ?? 0) + 1;
@@ -749,6 +918,9 @@ function countCause(row, cause) {
  * The push is unconditional (a loop matters whether or not anyone is recording);
  * the FOLD only happens while the recording is open, because perf:stop freezes
  * the report — a detection after the stop must not rewrite a finished window.
+ *
+ * @param {PerfEvent} event
+ * @param {object | null} subject
  */
 function profileWarning(event, subject) {
 	const kind = WARNING_KIND[event.kind] ?? event.kind ?? 'unknown';
@@ -771,6 +943,10 @@ function profileWarning(event, subject) {
 	emit('perf-warning', { kind, viewId: id, name, detail, count });
 }
 
+/**
+ * @param {string[]} keys
+ * @param {number} notified
+ */
 function recordProfileFlush(keys, notified) {
 	profile.storeFlushes++;
 	profile.storeNotifications += notified;
@@ -780,20 +956,28 @@ function recordProfileFlush(keys, notified) {
 	pendingFlushRow = row;
 }
 
-/** performance.now() is fractional; two decimals is all the panel prints. */
+/**
+ * performance.now() is fractional; two decimals is all the panel prints.
+ * @param {number} value
+ */
 function round2(value) {
 	return Math.round(value * 100) / 100;
 }
 
 // ---- highlight + log --------------------------------------------------------
 
+/**
+ * @param {unknown} id
+ * @param {unknown} on
+ */
 function highlightView(id, on) {
 	if (on === false) {
 		removeOverlay();
 		return { ok: true };
 	}
 	const view = requireView(id);
-	const element = view.element;
+	// Element | Comment: the probe below tells the two apart.
+	const element = /** @type {Partial<Element> | null} */ (view.element);
 	// A view whose data() is still in flight occupies its position with a comment
 	// placeholder — nothing to outline.
 	if (!element || typeof element.getBoundingClientRect !== 'function') {
@@ -835,6 +1019,7 @@ function removeOverlay() {
 	overlay = null;
 }
 
+/** @param {unknown} id */
 function logView(id) {
 	const view = requireView(id);
 	publishInspectGlobal(view);
@@ -842,6 +1027,10 @@ function logView(id) {
 	return { ok: true };
 }
 
+/**
+ * @param {string} type
+ * @param {unknown} id
+ */
 function logRecord(type, id) {
 	const store = requireStore();
 	const record = findRecord(store, type, id);
@@ -851,13 +1040,20 @@ function logRecord(type, id) {
 	return { ok: true };
 }
 
-/** The DevTools console convenience handle, mirroring $0/$r conventions. */
+/**
+ * The DevTools console convenience handle, mirroring $0/$r conventions.
+ * @param {unknown} value
+ */
 function publishInspectGlobal(value) {
 	if (typeof window !== 'undefined') window.$p = value;
 }
 
 // ---- identity helpers -------------------------------------------------------
 
+/**
+ * @param {object | null | undefined} view
+ * @returns {number | null}
+ */
 function viewId(view) {
 	if (!view) return null;
 	let id = viewIds.get(view);
@@ -868,27 +1064,51 @@ function viewId(view) {
 	return id;
 }
 
+/**
+ * @param {NamedInstance | null | undefined} view
+ * @returns {string}
+ */
 function viewName(view) {
 	return view?.constructor?.name || 'View';
 }
 
-/** The codegen-stamped app-root-relative source path (D81), or null for a hand-written class. */
+/**
+ * The codegen-stamped app-root-relative source path (D81), or null for a hand-written class.
+ * @param {NamedInstance | null | undefined} view
+ * @returns {string | null}
+ */
 function viewModule(view) {
 	return view?.constructor?.__pzlModule ?? null;
 }
 
+/**
+ * @param {object} view
+ * @returns {ViewInfo}
+ */
 function viewInfo(view) {
 	return { id: viewId(view), name: viewName(view), module: viewModule(view) };
 }
 
+/**
+ * @param {PuzzleView[] | null | undefined} views
+ * @returns {string[]}
+ */
 function chainNames(views) {
 	return Array.isArray(views) ? views.map(viewName) : [];
 }
 
+/**
+ * @param {object} sub a view, or a function subscriber
+ * @returns {number | 'fn' | null}
+ */
 function subscriberId(sub) {
 	return typeof sub === 'function' ? 'fn' : viewId(sub);
 }
 
+/**
+ * @param {unknown} id
+ * @returns {PuzzleView}
+ */
 function requireView(id) {
 	for (const view of liveViewList()) {
 		if (viewIds.get(view) === id) return view;
@@ -896,6 +1116,7 @@ function requireView(id) {
 	throw new Error(`no live view with id ${JSON.stringify(id)}`);
 }
 
+/** @returns {Store} */
 function requireStore() {
 	let store = null;
 	try {

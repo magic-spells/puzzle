@@ -1,5 +1,11 @@
+/** @type {Set<string> | undefined} */
 let warned;
 
+/**
+ * @param {string} kind
+ * @param {string | number} expression
+ * @param {string} message
+ */
 function warnOnce(kind, expression, message) {
 	const key = kind + (expression || '');
 	if ((warned ??= new Set()).has(key)) return;
@@ -31,6 +37,11 @@ function warnOnce(kind, expression, message) {
  *
  * The compiler passes expression names behind a bundle-time dev gate so
  * production output carries none of the diagnostic strings.
+ *
+ * @param {unknown} value
+ * @param {string | number} [expression] development diagnostic label; 0 = none
+ * @param {string} [sep] attribute token-list separator
+ * @returns {string}
  */
 export function displayValue(value, expression = 0, sep) {
 	if (Array.isArray(value)) {
