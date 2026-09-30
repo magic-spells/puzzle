@@ -10,8 +10,8 @@ const app = new PuzzleApp({
 	// Route definitions
 	routes,
 
-	// Global formatters available in every template
-	// (display transformation only — logic belongs in data())
+	// App functions, called by name in any template — Home.pzl calls
+	// { shout('hello') }. Display transformation only; logic belongs in data().
 	formatters: {
 		shout: (value) => `${String(value).toUpperCase()}!`,
 	},

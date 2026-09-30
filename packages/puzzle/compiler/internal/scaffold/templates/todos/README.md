@@ -1,6 +1,6 @@
 # __APP_NAME__
 
-A complete todo application built with the [Puzzle](https://github.com/magic-spells/puzzle) framework, demonstrating the core patterns: reactive `data()`, models with schema, arrow-function event handlers, formatters, and view/component animations.
+A complete todo application built with the [Puzzle](https://github.com/magic-spells/puzzle) framework, demonstrating the core patterns: reactive `data()`, models with schema, arrow-function event handlers, display functions, and view/component animations.
 
 ## Getting started
 
@@ -16,7 +16,7 @@ Then open http://localhost:3000.
 ```
 __APP_NAME__/
 ├── app/
-│   ├── app.js            # App init: target, routes, models, formatters
+│   ├── app.js            # App init: target, routes, models, seed data
 │   ├── routes.js         # Route definitions
 │   ├── models/           # Todo model (schema + methods) and registry
 │   ├── components/       # TodoItem.pzl
@@ -33,7 +33,8 @@ __APP_NAME__/
 - **Reactive data loading** — `data()` auto-subscribes to store queries.
 - **Event handling** — `events` is a class field of arrow functions.
 - **Models** — schema via `Puzzle` field builders, computed getters, methods.
-- **Formatters** — display-only transformations in templates.
+- **Display functions** — display-only transformations called by name in
+  templates: `{ datetime(todo.createdAt, 'short') }`.
 - **Animations** — declarative enter/leave via the Web Animations API.
 
 ## Scripts
