@@ -29,7 +29,14 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //   align   'start' (default) | 'end'
 //   opens   'down' (default) | 'right'
 //   effect  'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
-//   class   merged onto <dropdown-panel>, after the card box
+//   class   merged onto <dropdown-panel>.
+//           Merging is not precedence: a utility of yours on a property the
+//           stock chrome already sets wins only if Tailwind emits it LATER in
+//           the stylesheet (mt-1 or mt-1.5 cannot beat mt-2, ml-2 cannot beat
+//           ml-3). Add the ! suffix (mt-1!) to force it.
+//           An opens="right" panel inherits the base's submenu offset
+//           (ml-3 -mt-2.25), tuned to line a p-2 MENU row up with its trigger;
+//           pass mt-0! to cancel the lift.
 
 // The base Panel carries the border, surface, shadow, rounding and z-index; a
 // hover card just wants a wider, roomier box than a menu.

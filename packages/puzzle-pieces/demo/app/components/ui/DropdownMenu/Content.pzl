@@ -36,16 +36,21 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //   flip    opt-in: open upward when the panel would run past the bottom of the
 //           viewport and there is room above
 //   effect  'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
-//   class   merged onto <dropdown-panel>, after the padding
+//   class   merged onto <dropdown-panel>.
+//           Merging is not precedence: a utility of yours on a property the
+//           stock chrome already sets wins only if Tailwind emits it LATER in
+//           the stylesheet (mt-1 or mt-1.5 cannot beat mt-2, ml-2 cannot beat
+//           ml-3, p-1 cannot beat p-2). Add the ! suffix (mt-1!) to force it.
 
-// The base Panel carries border, surface, shadow, rounding, min-w-48 and z-40; a
-// menu panel just wants the tighter row padding.
-const CONTENT = 'p-1';
+// All chrome — border, surface, shadow, rounding, min-w-48, z-40 AND the p-2
+// padding — is the base Panel's. (This member used to add p-1, which never
+// rendered: Tailwind emits .p-1 before .p-2, so the base's p-2 always won, and
+// the submenu offsets in Panel.pzl are tuned to that 8px.)
 
 export default class Content extends PuzzleView {
   data(params, props) {
     return {
-      contentClass: [CONTENT, props.class].filter(Boolean).join(' '),
+      contentClass: props.class || false,
       align: props.align,
       opens: props.opens,
       flip: props.flip ? true : false,

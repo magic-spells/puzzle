@@ -60,7 +60,11 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //   opens    'down' (default) | 'right' for a submenu
 //   align    'start' (default) | 'end'
 //   effect   'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
-//   class    merged onto <dropdown-panel>, after the layout classes
+//   class    merged onto <dropdown-panel>.
+//            Merging is not precedence: a utility of yours on a property the
+//            stock chrome already sets wins only if Tailwind emits it LATER in
+//            the stylesheet (mt-1 or mt-1.5 cannot beat mt-2, ml-2 cannot beat
+//            ml-3). Add the ! suffix (mt-1!) to force it.
 
 const COLUMNS = {
   1: 'grid-cols-1',

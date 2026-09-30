@@ -24,7 +24,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // property to set, because the component's own stylesheet declares no colours
 // at all. It contributes position, opacity, pointer-events, z-index and an
 // opacity transition; everything you can see below is ours. Restyle it by
-// passing `class`, or edit CARD in this file — it is your copy.
+// passing `class`, or edit CARD in this file — it is your copy. Passing `class`
+// is NOT a guaranteed override: see the `class` prop below.
 //
 // NEVER overflow-hidden, here or anywhere up the chain. It clips a nested
 // submenu at the parent panel's edge, and clips the drawn arrow.
@@ -63,8 +64,11 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //            no measuring pass and nothing to re-run on resize. Kept as the two
 //            utilities rather than the 2.1.0 `align` attribute: five shipped
 //            families already depend on this recipe and the two are equivalent.
-//   class    merged onto <dropdown-panel>, after the stock chrome, so your
-//            utilities win.
+//   class    merged onto <dropdown-panel>. Merging is not precedence: a
+//            utility of yours on a property CARD or a GAP already sets wins
+//            only if Tailwind emits it LATER in the stylesheet — p-4 beats
+//            p-2, but mt-1 or mt-1.5 cannot beat mt-2 and ml-2 cannot beat
+//            ml-3. Add the ! suffix (mt-1!, ml-2!) to force an override.
 
 function oneOf(value, allowed) {
   return allowed.includes(value) ? value : false;
@@ -91,7 +95,9 @@ const CARD =
 //     9px short of the parent's outer edge — ml-3 clears it by 3px. -mt-2.25
 //     (-9px: this card's own border + p-2) lifts the submenu so its first row
 //     lines up with the row that opened it. Both assume the stock p-2; a panel
-//     restyled with other padding re-tunes them in its own `class`.
+//     restyled with other padding re-tunes them with important utilities in
+//     its own `class` (ml-2! -mt-1.25!), since a plain ml-2 or -mt-1.25 loses
+//     to these in stylesheet order.
 const GAP_DOWN = 'mt-2 [&[flipped]]:mt-0 [&[flipped]]:mb-2 [&[style*=fixed]]:mt-0';
 const GAP_RIGHT = 'ml-3 -mt-2.25';
 
