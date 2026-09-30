@@ -51,6 +51,12 @@
 	var seq = 0;
 	var streaming = false;
 
+	// The latest `hello` and the app-mounted/unmounted envelopes after it, kept
+	// outside the ring. The panel only reaches CONNECTED on a `hello`, so every
+	// attach must see one: a first attach after the ring overflowed, and a
+	// reopened DevTools after streaming started, both get it from here.
+	var lifecycle = [];
+
 	// The single handler the runtime registered, or null. Only one bridge can
 	// own the request channel; a later registration replaces an earlier one.
 	var handler = null;
@@ -75,6 +81,10 @@
 		if (!message || typeof message !== 'object') return;
 		seq += 1;
 		var envelope = { source: SOURCE_HOOK, seq: seq, message: message };
+		if (message.type === 'hello') lifecycle = [envelope];
+		else if (message.type === 'app-mounted' || message.type === 'app-unmounted') {
+			lifecycle = lifecycle.slice(0, 1).concat(envelope);
+		}
 		if (streaming) {
 			post(envelope);
 			return;
@@ -138,6 +148,9 @@
 	function replay() {
 		var pending = buffer;
 		buffer = [];
+		for (var j = 0; j < lifecycle.length; j++) {
+			if (pending.indexOf(lifecycle[j]) === -1) post(lifecycle[j]);
+		}
 		for (var i = 0; i < pending.length; i++) post(pending[i]);
 	}
 
@@ -150,13 +163,12 @@
 			if (!data || typeof data !== 'object' || data.source !== SOURCE_PANEL) return;
 
 			if (data.control === CONTROL_LISTENING) {
-				// First attach replays the backlog; a later re-attach (service worker
-				// recycled) only re-arms streaming — replaying again would duplicate
-				// everything the panel already has.
-				if (!streaming) {
-					streaming = true;
-					replay();
-				}
+				// First attach replays the backlog. A later one (DevTools reopened, or
+				// the service worker recycled) finds the ring empty and gets only the
+				// lifecycle again — a fresh panel needs the `hello` to connect, and
+				// re-applying it to a panel that already has it is idempotent.
+				streaming = true;
+				replay();
 				return;
 			}
 

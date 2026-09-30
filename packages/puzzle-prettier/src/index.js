@@ -15,7 +15,7 @@
 import { doc } from 'prettier';
 import { splitSections } from './split.js';
 
-const { printDocToString } = doc.printer;
+const { hardline } = doc.builders;
 
 // parse builds a flat AST: a root whose children are `verbatim` slices of the
 // source interleaved with `embed` nodes for the <script>/<style> inner bodies.
@@ -71,18 +71,18 @@ const printer = {
 
 	// embed reprints the <script>/<style> body via Prettier's own formatters.
 	// Using textToDoc is the sanctioned Prettier-3 way to inherit the user's
-	// options; we then materialize the sub-doc to a string so we control the
-	// leading/trailing newlines exactly (one newline after the open tag, the
-	// formatted body, one newline before the close tag), independent of whatever
-	// trailing-newline convention the embedded formatter's doc carries.
+	// options; textToDoc already strips the sub-doc's trailing hardline, so the
+	// body sits between exactly one newline after the open tag and one before
+	// the close tag. It returns a doc, not a printed string: the outer printer
+	// applies `endOfLine` once, where printing here first would convert the
+	// body's newlines twice under crlf ("\r\r\n").
 	embed(path) {
 		const node = path.node;
 		if (node.type !== 'embed') return undefined;
-		return async (textToDoc, _print, _path, options) => {
+		return async (textToDoc) => {
 			const bodyDoc = await textToDoc(node.value, { parser: node.parser });
-			const { formatted } = printDocToString(bodyDoc, options);
-			const code = formatted.replace(/^\n+/, '').replace(/\s+$/, '');
-			return code === '' ? '\n' : '\n' + code + '\n';
+			if (bodyDoc === '' || (Array.isArray(bodyDoc) && bodyDoc.length === 0)) return '\n';
+			return [hardline, bodyDoc, hardline];
 		};
 	},
 };

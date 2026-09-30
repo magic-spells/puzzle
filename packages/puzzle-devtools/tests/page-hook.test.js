@@ -95,14 +95,71 @@ describe('page-hook: buffering and replay', () => {
 		expect(box.sent[HOOK_BUFFER_LIMIT - 1].message.payload.keys[0]).toBe(`k${overflow - 1}`);
 	});
 
-	it('does not replay a second time when the panel re-attaches', () => {
+	it('keeps hello and app-mounted through a pre-attach burst past the cap', () => {
 		const hook = box.window[HOOK_KEY];
-		hook.emit(envelope('hello'));
-		box.deliver(listening());
-		expect(box.sent).toHaveLength(1);
+		hook.emit(envelope('hello', { protocolVersion: 1 }));
+		hook.emit(envelope('app-mounted'));
+		for (let i = 0; i < HOOK_BUFFER_LIMIT + 1; i++) hook.emit(envelope('view-mounted', { id: i }));
 
 		box.deliver(listening());
-		expect(box.sent).toHaveLength(1);
+
+		const types = box.sent.map((m) => m.message.type);
+		expect(types.slice(0, 2)).toEqual(['hello', 'app-mounted']);
+		expect(types.filter((t) => t === 'hello')).toHaveLength(1);
+		expect(types.filter((t) => t === 'app-mounted')).toHaveLength(1);
+		expect(box.sent).toHaveLength(HOOK_BUFFER_LIMIT + 2);
+	});
+
+	it('does not duplicate lifecycle events still inside the buffer', () => {
+		const hook = box.window[HOOK_KEY];
+		hook.emit(envelope('hello'));
+		hook.emit(envelope('app-mounted'));
+		hook.emit(envelope('flush'));
+		box.deliver(listening());
+
+		expect(box.sent.map((m) => m.message.type)).toEqual(['hello', 'app-mounted', 'flush']);
+	});
+
+	it('re-delivers only hello + app-mounted when the panel re-attaches', () => {
+		const hook = box.window[HOOK_KEY];
+		hook.emit(envelope('hello'));
+		hook.emit(envelope('app-mounted'));
+		hook.emit(envelope('view-mounted', { id: 1 }));
+		box.deliver(listening());
+		hook.emit(envelope('flush'));
+		expect(box.sent).toHaveLength(4);
+
+		// DevTools closed and reopened on the same page: a fresh panel needs the
+		// handshake again, but not the history it will snapshot for itself.
+		box.deliver(listening());
+		expect(box.sent.slice(4).map((m) => m.message.type)).toEqual(['hello', 'app-mounted']);
+
+		// Still streaming afterwards.
+		hook.emit(envelope('flush'));
+		expect(box.sent).toHaveLength(7);
+	});
+
+	it('app-unmounted replaces app-mounted in the lifecycle it re-delivers', () => {
+		const hook = box.window[HOOK_KEY];
+		hook.emit(envelope('hello'));
+		hook.emit(envelope('app-mounted'));
+		box.deliver(listening());
+		hook.emit(envelope('app-unmounted'));
+
+		box.deliver(listening());
+		expect(box.sent.slice(3).map((m) => m.message.type)).toEqual(['hello', 'app-unmounted']);
+	});
+
+	it('a new hello restarts the lifecycle', () => {
+		const hook = box.window[HOOK_KEY];
+		hook.emit(envelope('hello', { n: 1 }));
+		hook.emit(envelope('app-mounted'));
+		hook.emit(envelope('hello', { n: 2 }));
+		box.deliver(listening());
+		box.sent.length = 0;
+
+		box.deliver(listening());
+		expect(box.sent.map((m) => [m.message.type, m.message.payload.n])).toEqual([['hello', 2]]);
 	});
 
 	it('ignores non-object emissions', () => {

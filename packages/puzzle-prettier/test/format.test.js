@@ -747,6 +747,52 @@ describe('idempotency', () => {
 	}
 });
 
+describe('endOfLine (CRLF and CR)', () => {
+	// The outer printer converts every "\n" to the target line ending once; the
+	// embedded <script>/<style> bodies must not be converted a second time
+	// ("\r\r\n"). Output under any ending is the lf output with "\n" swapped.
+	const toLf = (s) => s.replace(/\r\n?/g, '\n');
+	const eols = { lf: '\n', crlf: '\r\n', cr: '\r' };
+	const edgeCases = {
+		'empty script': '<script></script>\n<puzzle-view><p/></puzzle-view>\n',
+		'whitespace-only script and style': '<script>\n  \n</script>\n<style>\n\n</style>\n<puzzle-view><p/></puzzle-view>\n',
+		'comment-only script': '<script>// only a comment\n</script>\n<puzzle-view><p/></puzzle-view>\n',
+		'TS template literal': '<style>/* c */</style>\n<script lang="ts">\nconst x: number = `a\nb`.length\n</script>\n<puzzle-view><p/></puzzle-view>\n',
+	};
+	const sources = { ...Object.fromEntries(fixtures.map((f) => [f, read(f)])), ...edgeCases };
+
+	for (const [name, lfSource] of Object.entries(sources)) {
+		for (const [eol, sep] of Object.entries(eols)) {
+			it(`${name}: endOfLine ${eol} is the lf output with ${JSON.stringify(sep)} and idempotent`, async () => {
+				const lf = await format(toLf(lfSource), { endOfLine: 'lf' });
+				const out = await format(lfSource.replace(/\n/g, sep), { endOfLine: eol });
+				expect(out).toBe(lf.replace(/\n/g, sep));
+				expect(await format(out, { endOfLine: eol })).toBe(out);
+			});
+			it(`${name}: endOfLine auto keeps a ${eol} source's endings`, async () => {
+				const lf = await format(toLf(lfSource), { endOfLine: 'lf' });
+				const out = await format(lfSource.replace(/\n/g, sep), { endOfLine: 'auto' });
+				expect(out).toBe(lf.replace(/\n/g, sep));
+				expect(await format(out, { endOfLine: 'auto' })).toBe(out);
+			});
+		}
+	}
+
+	it('keeps a template literal value intact under crlf', async () => {
+		const out = await format(edgeCases['TS template literal'], { endOfLine: 'crlf' });
+		expect(out).toContain('`a\r\nb`');
+		expect(out).not.toContain('\r\r');
+	});
+
+	it('passes bodies through unformatted under embeddedLanguageFormatting off', async () => {
+		const src = '<script>\nconst  a=1\n</script>\n<puzzle-view><p/></puzzle-view>\n';
+		for (const [eol, sep] of Object.entries(eols)) {
+			const out = await format(src.replace(/\n/g, sep), { endOfLine: eol, embeddedLanguageFormatting: 'off' });
+			expect(out).toBe(src.replace(/\n/g, sep));
+		}
+	});
+});
+
 describe('error handling', () => {
 	it('throws a positioned error when <puzzle-view> is missing', async () => {
 		await expect(format('<script>\nexport default 1;\n</script>\n')).rejects.toThrow(/missing <puzzle-view>/);
