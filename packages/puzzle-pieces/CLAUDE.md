@@ -146,7 +146,9 @@ CLI — it is unrelated and must not be bumped along with the release.
   wiring guards for the `sheet` and `bottom-sheet` wrapper pieces, and parity suites that
   assert the demo copies are byte-identical to their `registry/` sources. These are
   repo-internal — nothing under `test/` or the root `package.json` is ever copied to a
-  consumer. Every sheet MOTION suite (engine, drag, snap points, scroll policy, dismissal
+  consumer. `test/puzzle-lang.test.js` loads highlight.js from `demo/node_modules`: it
+  skips locally and THROWS under `CI` when the demo isn't installed, so run the demo's
+  `npm ci` first. Every sheet MOTION suite (engine, drag, snap points, scroll policy, dismissal
   math) is gone with the two ports — that behavior now lives in `@magic-spells/sheet` and
   `@magic-spells/bottom-sheet` and is tested there.
 

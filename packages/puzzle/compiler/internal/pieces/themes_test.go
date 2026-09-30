@@ -1095,3 +1095,64 @@ func TestAddPieceSkipsPalettesAlreadyThere(t *testing.T) {
 		t.Errorf("no add theme step expected, got:\n%s", render(res))
 	}
 }
+
+// A Windows checkout (core.autocrlf=true) turns the LF registry theme into CRLF
+// on disk. Theme hashes fold CRLF to LF, so that copy is the same theme: no
+// stale hint, plain "installed", and `add theme default` sees it unmodified.
+func TestCRLFThemeCopyCountsAsUnmodified(t *testing.T) {
+	crlf := func(s string) string { return strings.ReplaceAll(s, "\n", "\r\n") }
+	reg := multiThemeFixture(t)
+
+	// Current registry bytes, checked out as CRLF.
+	app := olderThemeApp(t, crlf(defaultThemeCSS), defaultThemeCSS)
+	res, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ThemeHint != "" {
+		t.Errorf("a CRLF copy of the current theme needs no hint, got %q", res.ThemeHint)
+	}
+	listing, err := ListThemes(themeOpts(reg, app))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := stateOf(t, listing.Themes, "default"); st != ThemeInstalled {
+		t.Errorf("default state = %q, want %q", st, ThemeInstalled)
+	}
+	themes, err := AddThemes(themeOpts(reg, app, "default"))
+	if err != nil {
+		t.Fatalf("a CRLF copy of the current theme must not be refused: %v", err)
+	}
+	if st := stateOf(t, themes.Themes, "default"); st != ThemeUpToDate {
+		t.Errorf("add theme default state = %q, want %q", st, ThemeUpToDate)
+	}
+
+	// An OLDER registry copy, checked out as CRLF, still matches its LF lock
+	// hash: the hint says refresh (no --overwrite), and add theme refreshes it.
+	older := olderThemeApp(t, crlf(olderDefaultThemeCSS), olderDefaultThemeCSS)
+	res, err = Add(Options{AppRoot: older, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ThemeHint != staleThemeHintLine {
+		t.Errorf("CRLF older copy: hint = %q, want the refresh line", res.ThemeHint)
+	}
+	themes, err = AddThemes(themeOpts(reg, older, "default"))
+	if err != nil {
+		t.Fatalf("an unmodified CRLF older copy must refresh without --overwrite: %v", err)
+	}
+	if st := stateOf(t, themes.Themes, "default"); st != ThemeUpdated {
+		t.Errorf("add theme default state = %q, want %q", st, ThemeUpdated)
+	}
+}
+
+func stateOf(t *testing.T, outcomes []ThemeOutcome, name string) ThemeState {
+	t.Helper()
+	for _, o := range outcomes {
+		if o.Name == name {
+			return o.State
+		}
+	}
+	t.Fatalf("no outcome for theme %q in %+v", name, outcomes)
+	return ""
+}

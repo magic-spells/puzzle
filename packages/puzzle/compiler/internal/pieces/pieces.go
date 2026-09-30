@@ -463,7 +463,7 @@ func planTheme(opts *Options, reg *Registry) (theme *plannedTheme, advisory stri
 		return nil, "", err
 	}
 	rel := "app/styles/pieces.css"
-	file := FileWrite{Rel: rel, Abs: piecesPath, Hash: hashBytes(data)}
+	file := FileWrite{Rel: rel, Abs: piecesPath, Hash: themeHash(data)}
 	return &plannedTheme{
 		file: plannedFile{rel: rel, abs: piecesPath, data: data},
 		// Keyed by its registry path ("theme/pieces.css"), same lock shape as a lib.
@@ -517,8 +517,8 @@ func staleThemeHint(opts *Options, reg *Registry, lock *Lock) (string, error) {
 		// Only a hint: a registry without a theme file must not fail the add.
 		return "", nil
 	}
-	switch h := hashBytes(existing); {
-	case h == hashBytes(data):
+	switch h := themeHash(existing); {
+	case h == themeHash(data):
 		return "", nil
 	case h == lock.Pieces[themePath(reg)].Files[rel]:
 		return staleThemeHintLine, nil

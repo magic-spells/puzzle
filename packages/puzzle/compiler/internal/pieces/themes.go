@@ -509,8 +509,8 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 				return nil, fmt.Errorf("reading %s: %w", rel, rerr)
 			}
 			locked := lock.Pieces[t.File].Files[rel]
-			switch h := hashBytes(existing); {
-			case h == hashBytes(data):
+			switch h := themeHash(existing); {
+			case h == themeHash(data):
 				outcome.State = ThemeUpToDate
 				if adviseWhenUpToDate {
 					result.NextSteps = append(result.NextSteps, advisory)
@@ -532,7 +532,7 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 			file: plannedFile{rel: rel, abs: abs, data: data},
 			// Keyed by its registry path ("theme/dim.css"), same lock shape as the
 			// default theme and a lib.
-			unit:     Unit{Name: t.File, Files: []FileWrite{{Rel: rel, Abs: abs, Hash: hashBytes(data)}}},
+			unit:     Unit{Name: t.File, Files: []FileWrite{{Rel: rel, Abs: abs, Hash: themeHash(data)}}},
 			advisory: advisory,
 			name:     t.Name,
 			updated:  outcome.State == ThemeUpdated,
@@ -648,7 +648,7 @@ func themeOutdated(opts ThemeOptions, rel, regFile string) bool {
 	if err != nil {
 		return false
 	}
-	return hashBytes(existing) != hashBytes(data)
+	return themeHash(existing) != themeHash(data)
 }
 
 func fileOnDisk(p string) bool {
