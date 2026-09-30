@@ -1079,6 +1079,11 @@ checklist sent you.
 - **puzzle-pieces:** phone-width overflow in Toolbar, Pagination, the
   DataTable footer and the Code buttons; `split-panel`'s `snap` no longer
   collapses every release to 0.
+- **puzzle-devtools:** the panel connects when DevTools is opened after more
+  than 500 events (a 1,000-row list) or closed and reopened on the same page.
+  Both showed "No Puzzle app detected" until a reload; the page hook now keeps
+  the latest `hello` and app-mounted/unmounted outside its ring and re-sends
+  them on every attach.
 
 ## 0.7.0 — 2026-09-09
 
