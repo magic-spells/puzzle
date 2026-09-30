@@ -23,7 +23,6 @@ export const SCHEME_PANELS = SCHEMES.map((s) => ({
 
 export const THEMES = [
 	{ title: 'Compare', path: '/themes/compare', description: 'All four schemes × three modes as mini shells, one screen.' },
-	{ title: 'Shell', path: '/themes/shell', description: 'A full-size frame / rail / panel mock with the roles called out.' },
 	{ title: 'Pieces', path: '/themes/pieces', description: 'The registry pieces in the current scheme and mode.' },
 ];
 

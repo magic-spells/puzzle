@@ -4,7 +4,6 @@ import ComponentsIndex from './views/ComponentsIndex.pzl';
 import Theming from './views/Theming.pzl';
 import SchemePanel from './views/themes/SchemePanel.pzl';
 import Compare from './views/themes/Compare.pzl';
-import Shell from './views/themes/Shell.pzl';
 import Pieces from './views/themes/Pieces.pzl';
 import AccordionDoc from './views/components/AccordionDoc.pzl';
 import AlertDoc from './views/components/AlertDoc.pzl';
@@ -132,20 +131,13 @@ export default [
 		meta: { title: 'Theming & tokens — Puzzle Pieces' },
 	},
 	// Design-system panels (FEATURE-THEMES). Static paths first so the router
-	// never reads `compare` / `shell` / `pieces` as a scheme name.
+	// never reads `compare` / `pieces` as a scheme name.
 	{
 		path: '/themes/compare',
 		name: 'themes-compare',
 		view: Compare,
 		layout: DefaultLayout,
 		meta: { title: 'Compare schemes × modes — Puzzle Pieces' },
-	},
-	{
-		path: '/themes/shell',
-		name: 'themes-shell',
-		view: Shell,
-		layout: DefaultLayout,
-		meta: { title: 'Shell composition — Puzzle Pieces' },
 	},
 	{
 		path: '/themes/pieces',

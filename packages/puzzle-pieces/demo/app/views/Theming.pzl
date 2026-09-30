@@ -334,7 +334,6 @@ const tokenLinks = [
 	{ href: '#/themes/warm', label: 'Warm' },
 	{ href: '#/themes/void', label: 'Void' },
 	{ href: '#/themes/compare', label: 'Compare' },
-	{ href: '#/themes/shell', label: 'Shell' },
 	{ href: '#/themes/pieces', label: 'Pieces' },
 ];
 

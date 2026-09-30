@@ -40,7 +40,7 @@ demo/                         # Puzzle docs-site app (port 3070) — CONSUMES co
 ├── app/components/ui/*.pzl   # COPIES of registry pieces (downstream)
 ├── app/lib/*.js              # COPIES of registry/lib files (+ appearance.js copy, tokenNames.js name list)
 ├── app/styles/styles.css     # imports the four registry/theme/*.css DIRECTLY (not copies)
-├── app/views/themes/*.pzl    # design-system panels: SchemePanel, Compare, Shell, Pieces
+├── app/views/themes/*.pzl    # design-system panels: SchemePanel, Compare, Pieces
 ├── app/views/components/*Doc.pzl  # one docs page per piece
 ├── app/docs/nav.js           # sidebar / index / prev-next config (single source list)
 └── app/routes.js             # route table (kebab piece names, alphabetical)
