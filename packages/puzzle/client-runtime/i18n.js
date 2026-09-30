@@ -425,6 +425,12 @@ export function createI18n(options = {}) {
 			return /** @type {Promise<void>} */ (p);
 		},
 
+		/** INTERNAL — app teardown retires the service: no load in flight applies. */
+		__dispose() {
+			token++;
+			pending = null;
+		},
+
 		/**
 		 * INTERNAL — settles once the latest load has, following any setLocale()
 		 * that superseded the startup load. Rejects only when no table could be

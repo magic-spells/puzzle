@@ -10,6 +10,16 @@ connections:
   - FILE-PARSER
   - FILE-PARSER-SCANNER
   - TEST-COMPILER-PARSER
+notes:
+  - kind: state
+    text: >-
+      When `findScriptClose` finds no `</script>`, it also returns where the opaque unit (string,
+      regex, template literal, comment) that swallowed the file's last `</script>` began, and the
+      splitter reports "string or regex starting here runs past </script>; if it is a regex literal
+      after an unbraced if/while/for, wrap the body in braces" at that position instead of "missing
+      </script> for <script>" at the tag. Usual cause: `if (x) /["']/.test(x)` — after `)` the `/`
+      reads as division (the scanner rule is unchanged), so the quote in the class opens a string.
+      Diagnostic only; the eslint/prettier ports keep their own "missing </script>" message.
 ---
 
 # sections.go

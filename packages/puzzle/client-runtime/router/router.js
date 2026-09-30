@@ -732,13 +732,13 @@ export class Router {
 		// entry, no extra push). #scrollEnabled() is false above, so none of the
 		// scroll/storage/scrollRestoration setup ran.
 		if (this.#mode?.urlless) {
-			await this.#navigate(this.#mode.start(), { push: false });
+			await this.#trackNav(this.#token, this.#navigate(this.#mode.start(), { push: false }));
 			return this;
 		}
 
 		// Initial nav reads the current URL for our mode; a hash-mode app loaded at
 		// a non-route fragment (or none) routes '/' (#currentPath → null).
-		await this.#navigate(this.#currentPath() ?? '/', { push: false });
+		await this.#trackNav(this.#token, this.#navigate(this.#currentPath() ?? '/', { push: false }));
 		return this;
 	}
 
@@ -2296,12 +2296,13 @@ export class Router {
 	 */
 	__failedView(view, retry = false) {
 		const st = this.#state;
-		if (!st) return retry ? null : undefined;
 		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && view === null) {
 			// Invalidating the committed chain is what forces keep = 0 and a fresh
 			// layout. It is left set if this navigation is superseded or fails, so the
 			// next navigation rebuilds every level too — no view keeps stale strings.
-			st.chainInvalid = st.layoutInvalid = true;
+			// Nothing is committed yet during navigation zero (start() tracks it, so
+			// the rebuild below is queued behind it).
+			if (st) st.chainInvalid = st.layoutInvalid = true;
 			// A push, replace or pop still loading owns where the app is going:
 			// rebuilding the committed location now would supersede it and strand the
 			// app on the old page (and a pop's entry under the old URL). Let it land
@@ -2317,6 +2318,7 @@ export class Router {
 				pending.then(again, again).catch(() => {});
 				return null;
 			}
+			if (!st) return null;
 			// Resolves once the rebuilt chain commits (or a newer navigation takes over);
 			// rejects when the rebuild itself failed and the old chain is still on
 			// screen (a data() failure, already reported through onError), so
@@ -2335,6 +2337,7 @@ export class Router {
 				}
 			});
 		}
+		if (!st) return retry ? null : undefined;
 		const routed = st.layout === view || st.views.includes(view);
 		if (retry) {
 			return routed

@@ -142,15 +142,20 @@ func SplitSections(src, filename string) (*Sections, error) {
 		// body uses the full template grammar (SPEC §16), so it wants the template
 		// scanner too. findTemplateClose keys off `name`'s own close tag.
 		var rel int
+		swallowedAt := -1
 		switch name {
 		case "script":
-			rel = findScriptClose(src, afterOpen)
+			rel, swallowedAt = findScriptClose(src, afterOpen)
 		case "style":
 			rel = findStyleClose(src, afterOpen)
 		case "puzzle-view", "puzzle-skeleton":
 			rel = findTemplateClose(src, afterOpen, closeTag)
 		default:
 			rel = strings.Index(src[afterOpen:], closeTag)
+		}
+		if rel < 0 && swallowedAt >= 0 {
+			return nil, posErr(src, filename, swallowedAt,
+				"string or regex starting here runs past </script>; if it is a regex literal after an unbraced if/while/for, wrap the body in braces")
 		}
 		if rel < 0 {
 			return nil, posErr(src, filename, i, "missing "+closeTag+" for <"+name+">")
@@ -350,19 +355,26 @@ func misnamedSectionTagAt(src string, i int) (badName, goodName string) {
 // block comments via the shared LexSkip scanner (lexskip.go — "one shared
 // scanner", scan.go) so a literal "</script>" inside a comment or string does
 // not truncate the body. Returns the close tag's '<' index RELATIVE to `from`, or
-// -1 when none is found (the caller then reports a missing-close error).
+// -1 when none is found (the caller then reports a missing-close error). With -1
+// it also returns where the opaque unit that swallowed the last "</script>" in
+// the file began (absolute; -1 when none did), so the error can point there.
 //
 // A '<' never begins a LexSkip lexical unit, so the prefix check at the top of
 // the loop always gets a chance to fire before any byte is consumed. LexSkip
 // recursively scans template-literal ${…} interiors, including nested
 // backticks, so a close-tag literal anywhere inside the template stays opaque.
-func findScriptClose(s string, from int) int {
+func findScriptClose(s string, from int) (int, int) {
 	prevEndsExpr := false
+	lastClose := strings.LastIndex(s, "</script>")
+	swallowedAt := -1
 	for i := from; i < len(s); {
 		if strings.HasPrefix(s[i:], "</script>") {
-			return i - from
+			return i - from, -1
 		}
 		if next, pee, consumed := LexSkip(s, i, prevEndsExpr); consumed {
+			if i < lastClose && lastClose < next {
+				swallowedAt = i
+			}
 			prevEndsExpr = pee
 			i = next
 			continue
@@ -370,7 +382,7 @@ func findScriptClose(s string, from int) int {
 		prevEndsExpr = LexPlainEndsExpr(s[i], prevEndsExpr)
 		i++
 	}
-	return -1
+	return -1, swallowedAt
 }
 
 // findStyleClose scans a <style> body from `from` for its real </style> close

@@ -2458,7 +2458,12 @@ export class PuzzleView {
 				this.#holdTimer = setTimeout(() => {
 					this.#holdTimer = null;
 					if (this.#destroyed) return; // torn down mid-hold — no late render
-					this.#swapLoaded();
+					// A timer callback: nothing up the stack catches, so funnel here.
+					try {
+						this.#swapLoaded();
+					} catch (err) {
+						this.#handleViewFailure('[puzzle] render failed after a skeleton hold:', err, 'mount');
+					}
 				}, this.#holdRemaining());
 			}
 			return;

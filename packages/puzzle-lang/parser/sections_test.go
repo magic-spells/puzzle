@@ -431,6 +431,44 @@ export default class A {
 	}
 }
 
+// TestSplitSectionsScriptCloseSwallowed covers the diagnostic when an opaque
+// unit (a string, regex, template literal or comment) runs past the real
+// </script>: the error points at where that unit started, not at <script>. A
+// regex after an unbraced if/while/for reads as division, so its quote opens a
+// string; bracing the body is the steer, and the braced control compiles.
+func TestSplitSectionsScriptCloseSwallowed(t *testing.T) {
+	wrap := func(body string) string {
+		return "<puzzle-view><p>x</p></puzzle-view>\n<script>\nexport default class A {\n  data(text) {\n    " +
+			body + "\n    return {};\n  }\n}\n</script>\n"
+	}
+	cases := []struct {
+		name      string
+		body      string
+		line, col int
+	}{
+		{"regex after unbraced if", `if (text) /["']/.test(text);`, 5, 17},
+		{"unterminated string", `const s = 'oops;`, 5, 15},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := SplitSections(wrap(tc.body), "A.pzl")
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("error = %v (%T), want a *ParseError", err, err)
+			}
+			if !strings.Contains(pe.Message, "runs past </script>") || !strings.Contains(pe.Message, "wrap the body in braces") {
+				t.Fatalf("message = %q", pe.Message)
+			}
+			if pe.Line != tc.line || pe.Col != tc.col {
+				t.Fatalf("position = %d:%d, want %d:%d", pe.Line, pe.Col, tc.line, tc.col)
+			}
+		})
+	}
+	if _, err := SplitSections(wrap(`if (text) { /["']/.test(text); }`), "A.pzl"); err != nil {
+		t.Fatalf("braced control: %v", err)
+	}
+}
+
 func TestSplitSectionsTemplateCloseAware(t *testing.T) {
 	cases := []struct {
 		name     string
