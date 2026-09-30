@@ -75,8 +75,9 @@ import Avatar from './Avatar.pzl';
 //
 // The two bite masks (hole on the left, hole on the right) are set once as
 // custom properties on the root (`--avatar-bite-l`, `--avatar-bite-r`); each
-// bitten wrapper's classes pick one per writing direction with
-// `mask-(--avatar-bite-…)`; Tailwind's build adds the -webkit- forms.
+// bitten wrapper picks one per writing direction with a mask utility that
+// reads the custom property (see BITE_CLASS); Tailwind's build adds the
+// -webkit- forms.
 //
 // The bite eats `overlap + gap` px off one side of a disc, so centred initials
 // and the chip's "+N" are nudged away from it in bitten items: `shift` is
