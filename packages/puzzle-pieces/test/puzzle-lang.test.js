@@ -15,6 +15,11 @@ const hljsInstalled = await access(new URL('core.js', hljsDir)).then(
 	() => true,
 	() => false
 );
+// Locally a missing demo install skips; in CI it is a broken job order, and a
+// skip there would silently stop testing the highlighter.
+if (!hljsInstalled && process.env.CI) {
+	throw new Error('demo/node_modules/highlight.js is not installed — run `npm ci` in demo/ before `npm test`');
+}
 const skip = hljsInstalled ? false : 'demo/node_modules/highlight.js not installed';
 
 let highlight;
