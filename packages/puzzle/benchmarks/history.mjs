@@ -25,14 +25,16 @@ import { fmtMs, renderTable } from './report.mjs';
 const HISTORY_DIR = path.join(ROOT, 'benchmarks/history');
 
 /**
- * The ops quoted across releases: the full-DOM list at its largest size, the
- * windowed create at the same size, and the async census. `async-waterfall`
- * has no script time; its paint column is wall time around 20 serialized cells.
+ * The ops quoted across releases. The full-DOM list at the sizes real apps
+ * render (1k, 10k) leads; 50k is the stress ceiling, kept as a create/clear
+ * pair plus the windowed create at the same size. `async-waterfall` has no
+ * script time; its paint column is wall time around 20 serialized cells.
  */
 const HEADLINE = [
+	...[1000, 10000].flatMap((n) =>
+		['create', 'update-every-10th', 'swap-rows', 'clear'].map((op) => `keyed-list/${op}/${n}`)
+	),
 	'keyed-list/create/50000',
-	'keyed-list/update-every-10th/50000',
-	'keyed-list/swap-rows/50000',
 	'keyed-list/clear/50000',
 	'virtual-list/create/50000',
 	'async-waterfall/remount/20',
