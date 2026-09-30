@@ -261,7 +261,7 @@ export const SECTIONS = [
 		{ name: "table", title: "Table", path: "/components/table",
 			description: "Config-first styled semantic table rendered from a columns schema and an array of row objects, with per-column alignment, an optional caption, and an empty state — the presentational tier, not a data grid (no sorting, selection, or virtualization)" },
 		{ name: "tabs", title: "Tabs", path: "/components/tabs",
-			description: "Accessible tablist family — underline or pill variant, with the roving tabindex, arrow/Home/End keyboard model, disabled-tab skipping and every ARIA attribute coming from the tab-group web component; panels are real members whose bodies take arbitrary markup" },
+			description: "Accessible tablist family — underline, segmented-pill or button variant, with the roving tabindex, arrow/Home/End keyboard model, disabled-tab skipping and every ARIA attribute coming from the tab-group web component; panels are real members whose bodies take arbitrary markup" },
 		{ name: "timeline", title: "Timeline", path: "/components/timeline",
 			description: "Vertical event timeline from an items array — dot/connector rail with per-item title, time, description, optional status color, and optional icon or step-number markers" },
 		{ name: "toggle", title: "Toggle", path: "/components/toggle",

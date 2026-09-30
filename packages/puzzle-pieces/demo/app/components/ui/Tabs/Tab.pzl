@@ -33,7 +33,9 @@ const TAB =
   // underline (default)
   'px-1 pb-2 -mb-px border-b-2 border-transparent text-body hover:text-ink ' +
   'aria-selected:text-brand aria-selected:border-brand ' +
-  // pills — a descendant attribute selector, so it outranks the lines above
+  // pills — a descendant attribute selector, so it outranks the lines above.
+  // A neutral segmented control: the active pill is raised, not brand-filled,
+  // so it sits quietly in toolbars and filters.
   '[tab-group[data-variant=pills]_&]:mb-0 ' +
   '[tab-group[data-variant=pills]_&]:rounded-md ' +
   '[tab-group[data-variant=pills]_&]:border-b-0 ' +
@@ -41,7 +43,26 @@ const TAB =
   '[tab-group[data-variant=pills]_&]:py-1.5 ' +
   '[tab-group[data-variant=pills]_&]:aria-selected:bg-surface ' +
   '[tab-group[data-variant=pills]_&]:aria-selected:text-ink ' +
-  '[tab-group[data-variant=pills]_&]:aria-selected:shadow-sm';
+  '[tab-group[data-variant=pills]_&]:aria-selected:shadow-sm ' +
+  // buttons — separate outline buttons; the active one filled brand with a
+  // soft brand glow. Every border/text/bg line is restated under the variant
+  // because the underline defaults above are equal-or-lower specificity.
+  '[tab-group[data-variant=buttons]_&]:mb-0 ' +
+  '[tab-group[data-variant=buttons]_&]:rounded-lg ' +
+  '[tab-group[data-variant=buttons]_&]:border ' +
+  '[tab-group[data-variant=buttons]_&]:border-border ' +
+  '[tab-group[data-variant=buttons]_&]:bg-surface ' +
+  '[tab-group[data-variant=buttons]_&]:px-4 ' +
+  '[tab-group[data-variant=buttons]_&]:py-2 ' +
+  '[tab-group[data-variant=buttons]_&]:hover:border-border-strong ' +
+  '[tab-group[data-variant=buttons]_&]:hover:bg-surface-sunken ' +
+  '[tab-group[data-variant=buttons]_&]:aria-selected:border-brand ' +
+  '[tab-group[data-variant=buttons]_&]:aria-selected:bg-brand ' +
+  '[tab-group[data-variant=buttons]_&]:aria-selected:text-brand-ink ' +
+  '[tab-group[data-variant=buttons]_&]:aria-selected:shadow-md ' +
+  '[tab-group[data-variant=buttons]_&]:aria-selected:shadow-brand/25 ' +
+  '[tab-group[data-variant=buttons]_&]:aria-selected:hover:border-brand-dark ' +
+  '[tab-group[data-variant=buttons]_&]:aria-selected:hover:bg-brand-dark';
 
 export default class TabsTab extends PuzzleView {
   data(params, props) {
