@@ -353,7 +353,7 @@ function toJSON(v, stack) {
 	stack.push(v);
 	let out;
 	if (Array.isArray(v)) {
-		out = '[' + v.map((item) => toJSON(item, stack) ?? 'null').join(',') + ']';
+		out = '[' + Array.from(v, (item) => toJSON(item, stack) ?? 'null').join(',') + ']';
 	} else {
 		const parts = [];
 		for (const key of Object.keys(v).sort(compareCodePoints)) {

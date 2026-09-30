@@ -460,6 +460,13 @@ describe('FormatterRegistry', () => {
 			cycle.self = cycle;
 			expect(f.json(cycle)).toBe('{"a":1,"self":null}');
 		});
+
+		it('json prints null for sparse-array holes, like JSON.stringify', () => {
+			expect(f.json(new Array(2))).toBe('[null,null]');
+			expect(f.json([, 1])).toBe('[null,1]');
+			expect(f.json(new Array(1))).toBe('[null]');
+			expect(f.json({ items: [new Array(2), [, 1]] })).toBe('{"items":[[null,null],[null,1]]}');
+		});
 	});
 
 	describe('removed list formatters (D174)', () => {
