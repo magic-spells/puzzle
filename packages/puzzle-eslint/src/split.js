@@ -239,7 +239,7 @@ const blockCloseKeywords = new Set(['if', 'unless', 'case', 'for', 'svg', 'comme
 // scanBraceGroup is the one shared balanced-brace scan. s[open] must be '{'.
 // Returns { inner, end, err }. err is a message string (never throws) so callers
 // can decide whether a malformed group is fatal or should be skipped.
-function scanBraceGroup(s, open) {
+export function scanBraceGroup(s, open) {
 	if (open >= s.length || s[open] !== '{') {
 		return { inner: '', end: 0, err: "internal error: scanBraceGroup not positioned at '{'" };
 	}
@@ -292,7 +292,7 @@ function isKnownBlockCloserAt(s, open) {
 
 // scanInlineComment scans a {## … } inline comment (D70). Dumb scanner: only
 // tracks brace nesting and honors \{ / \} escapes. Returns { end, err }.
-function scanInlineComment(s, open) {
+export function scanInlineComment(s, open) {
 	let depth = 0;
 	for (let i = open; i < s.length; i++) {
 		const c = s[i];
@@ -310,7 +310,7 @@ function scanInlineComment(s, open) {
 	return { end: 0, err: 'unclosed {## comment' };
 }
 
-function isBlockCommentOpen(s, open) {
+export function isBlockCommentOpen(s, open) {
 	if (open + 2 > s.length || s[open] !== '{' || s[open + 1] !== '#') return false;
 	return firstWord(s.slice(open + 2)) === 'comment';
 }
@@ -330,7 +330,7 @@ function matchCommentCloser(s, open) {
 
 // scanBlockComment scans a {#comment} … {/comment} block (D70) from the opening
 // '{'. Body consumed raw; nested openers counted. Returns { end, err }.
-function scanBlockComment(s, open) {
+export function scanBlockComment(s, open) {
 	let depth = 1;
 	for (let i = open + 1; i < s.length;) {
 		if (s[i] !== '{') {
@@ -357,7 +357,7 @@ function scanBlockComment(s, open) {
 // isBlockRawOpen reports whether s[open] begins a {#raw} lex-off block opener
 // (D150). The keyword match is exact; content after it is allowed and ignored,
 // matching {#comment}. Mirrors scan.go isBlockRawOpen.
-function isBlockRawOpen(s, open) {
+export function isBlockRawOpen(s, open) {
 	if (open + 2 > s.length || s[open] !== '{' || s[open + 1] !== '#') return false;
 	return firstWord(s.slice(open + 2)) === 'raw';
 }
@@ -382,7 +382,7 @@ function matchRawCloser(s, open) {
 // as template grammar: the opener runs to its first '}', then the FIRST valid
 // closer wins (raw blocks do not nest). Returns { end, err } with end just past
 // the closer. Mirrors scan.go scanBlockRaw.
-function scanBlockRaw(s, open) {
+export function scanBlockRaw(s, open) {
 	const openerEnd = s.indexOf('}', open + 2);
 	if (openerEnd < 0) return { end: 0, err: 'unterminated {#raw} — expected {/raw}' };
 	for (let i = openerEnd + 1; i < s.length; i++) {
