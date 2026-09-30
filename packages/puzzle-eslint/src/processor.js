@@ -68,6 +68,33 @@ function skipBraceSpan(s, i) {
 	return res.err ? i + 1 : res.end;
 }
 
+// skipQuotedValue steps from an attribute value's opening quote at s[open] to
+// just past its closing quote, mirroring the compiler lexer's lexQuotedValue:
+// a \{ or \} escape is two plain chars, and a '{' runs the shared brace scan,
+// so a quote inside an expression (title="{ q ? '"' : '' }") does not end the
+// value. An unclosed brace group falls back to the next matching quote.
+function skipQuotedValue(s, open) {
+	const q = s[open];
+	for (let i = open + 1; i < s.length;) {
+		const c = s[i];
+		if (c === '\\' && (s[i + 1] === '{' || s[i + 1] === '}')) {
+			i += 2;
+		} else if (c === '{') {
+			const bg = scanBraceGroup(s, i);
+			if (bg.err) {
+				const end = s.indexOf(q, i + 1);
+				return end < 0 ? s.length : end + 1;
+			}
+			i = bg.end;
+		} else if (c === q) {
+			return i + 1;
+		} else {
+			i++;
+		}
+	}
+	return s.length;
+}
+
 // skipOpenTagAttrs steps from just past a tag name to just past the tag's
 // closing '>', stepping over quoted attribute values and {…} groups so a '<'
 // or '>' inside either is not markup.
@@ -76,8 +103,7 @@ function skipOpenTagAttrs(s, i) {
 		const c = s[i];
 		if (c === '>') return i + 1;
 		if (c === '"' || c === "'") {
-			const end = s.indexOf(c, i + 1);
-			i = end < 0 ? s.length : end + 1;
+			i = skipQuotedValue(s, i);
 		} else if (c === '{') {
 			i = skipBraceSpan(s, i);
 		} else {
