@@ -50,16 +50,17 @@ Plus `benchmarks/baseline.json`, but only under `npm run bench:update`.
 **It never writes to `examples/stress/dist/`.** That directory belongs to
 whoever is running `puzzle dev`, and the benchmark stays out of it. This is not
 a stylistic preference — it was a real incident. `puzzle build` has no
-output-dir flag (`--fixtures`, `--hybrid`, `--mode`, `--static` is the entire
-set), so building the example in place emits `examples/stress/dist` and
+output-dir flag (`--fixtures`, `--hybrid`, `--mode`, `--profile-build`,
+`--static` is the entire set), so building the example in place emits `examples/stress/dist` and
 overwrites the dev bundle a human's browser is holding open. Because a
 production build strips the DevTools bridge by design, their Performance panel
 went dead with "No Puzzle app detected" and nothing said why.
 
 So the runner copies the example's source into `benchmarks/.build/stress-src`
 and builds the copy. The copy lives inside the repo, so `@magic-spells/puzzle`
-still resolves through the root `node_modules` exactly as it does for the
-example (`examples/stress` has no `node_modules` of its own). Verified by
+still resolves to the in-repo runtime (the compiler walks up to the checkout's
+`client-runtime/`) exactly as it does for the example (`examples/stress` has no
+`node_modules` of its own). Verified by
 checksum: `examples/stress/dist/app.js` is byte-identical before and after a
 benchmark run.
 
@@ -319,7 +320,10 @@ Nothing is truncated silently.
 
 Machine of record: darwin-arm64, headless Chromium 149.0.7827.55, Node v25.1.0,
 production build (99.4 KB), 15 iterations, medians. Reproduced from
-`baseline.json`.
+`baseline.json` as it stood before D170 (0.8.0) changed the renderer. The
+committed `baseline.json` has since been regenerated on the D170 renderer
+(Chromium 151), so its numbers differ from these tables; read current figures
+from it or from `npm run bench`.
 
 ### keyed-list — every row mounted
 
@@ -424,6 +428,13 @@ props.
   function object per site per view instance, identical across renders. An
   untouched row's props then compare fully equal and `applyParentUpdate()`
   returns without running `data()` and without rendering.
+
+> **Since D170 (0.8.0) the `inline` arm no longer mints fresh arrows.** A
+> handler whose arguments capture only loop locals is cached on the row scope
+> (`s.h0 ??= (event) => this.events.selectRow(s.item)`) and reads the row's
+> current item when it fires, so both arms now hand the patcher a stable
+> identity. The tables in this section are the pre-D170 measurement, kept
+> because they are what priced the problem.
 
 The row capture has to go somewhere, and in `stable` it moves **into the child**:
 `ListRow` calls `props.select?.(props.id)` and the parent re-queries by id. That
@@ -630,6 +641,10 @@ Structural counts over 20 renders of 10,000 rows, and they are the finding:
 | `churn` | 400,000 | 400,000 | 40,000 |
 | `stable` | **0** | **0** | **0** |
 | `none` | **0** | **0** | **0** |
+
+Those are the pre-D170 counts. Since D170 (0.8.0) the `churn` arm's
+`@click={ selectRow(row) }` is cached on the row scope too, and all three arms
+count **0** (the committed baseline gates on it).
 
 **Zero. The canonical Puzzle handler spelling rebinds nothing**, because
 `@click={ onSelect }` compiles to a per-instance cached arrow and never fails

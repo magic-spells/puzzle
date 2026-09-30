@@ -8,7 +8,7 @@ translations all come in the box.
 
 A Go compiler with esbuild inside turns the app into one small bundle. A
 minimal app is **21.9 KB gzip** with the router, store and validation
-included, and the complete todos example is **25.9 KB gzip**. The CLI is a
+included, and the complete todos example is **26.0 KB gzip**. The CLI is a
 single prebuilt binary: no Babel, no bundler config, no postinstall scripts.
 
 **[Live demo: Puzzle Sounds](https://puzzle-music-demo.vercel.app/)**, a
@@ -70,21 +70,22 @@ and is gitignored. `puzzle generate view Album` (or `component`, `layout`,
 
 A `.pzl` file is a template, a `<script>` and an optional `<style>`. `data()`
 returns what the template reads. Handlers live in an `events` field.
-`{ value | formatter }` formats a value for display.
+A display function such as `{ pluralize(n, 'track') }` formats a value for
+display.
 
 ```html
 <!-- app/components/TrackList.pzl -->
 <puzzle-view>
   <section>
     <h2>{ title }</h2>
-    <p class="count">{ tracks.size | pluralize('track') }</p>
+    <p class="count">{ pluralize(tracks.length, 'track') }</p>
 
-    {#if tracks.size > 0}
+    {#if tracks.length > 0}
       <ol>
         {#for track in tracks}
           <li>
             <span>{ track.title }</span>
-            <span class="plays">{ track.plays | compact_number } plays</span>
+            <span class="plays">{ compact_number(track.plays) } plays</span>
             <button class="like {#if track.liked}on{/if}" @click={ like(track) }>
               {#if track.liked}Liked{:else}Like{/if}
             </button>
@@ -121,14 +122,15 @@ export default class TrackList extends PuzzleView {
 ```
 
 `pluralize` prints `2 tracks` and `compact_number` prints `45K`. A template
-expression is data plus operators: fields, `.size` for a count, `+ - * / %`,
-comparisons and `??` for a fallback. It never calls JavaScript on a value
-(`name.trim()` and `.length` are compile errors); that work goes in `data()`.
-A template never reaches the view instance: `this` is a compile error in every
-template expression, and an `@event` handler reaches the view through its own
-name (`@click={ save(x) }` calls the view's `save`). Formatters chain left to
-right and take arguments. They go in values only: an `{#if}` or `{#for}` header
-takes no pipe, so compute that value in `data()`. A path like
+expression is JavaScript from a closed table: fields, `.length` for a count,
+`+ - * / %`, comparisons, `??` for a fallback, a set of string, array and
+number methods (`name.trim()`, `tracks.filter(t => t.liked)`), and display
+functions called by name. Anything outside the table, such as `new Date()`, is
+a compile error that names what to write instead. A template never reaches the
+view instance: `this` is a compile error in every template expression, and an
+`@event` handler reaches the view through its own name (`@click={ save(x) }`
+calls the view's `save`). Function calls nest (`truncate(capitalize(title), 40)`)
+and work in `{#if}` and `{#for}` headers too. A path like
 `{ user.address.city }` prints nothing instead of throwing when `address` is
 missing.
 
@@ -168,7 +170,7 @@ the URL, title and page together. Routes nest with `children`, and a layout
 stays mounted while the views inside it swap. Path routing is the default;
 hash and memory routing are `hashRouter()` and `memoryRouter()` from
 `@magic-spells/puzzle/router-modes`. Write links path-shaped with the `link`
-formatter, `href="{ '/album/' + album.id | link }"`, and they work in every
+function, `href="{ link('/album/' + album.id) }"`, and they work in every
 mode.
 
 ### Models and the store
@@ -256,8 +258,8 @@ export default {
 ```html
 <!-- app/views/Home.pzl -->
 <puzzle-view>
-  <h1>{ 'greeting' | t({ name: user.name }) }</h1>
-  <p>{ 'cart.items' | t({ count: cart.count }) }</p>
+  <h1>{ t('greeting', { name: user.name }) }</h1>
+  <p>{ t('cart.items', { count: cart.count }) }</p>
   <button @click={ switchTo('es') }>Español</button>
 </puzzle-view>
 
@@ -313,7 +315,7 @@ Every example is a complete app under
 | [hello-world](packages/puzzle/examples/hello-world) | The smallest app, and the baseline for the size figures above |
 
 The [framework README](packages/puzzle/README.md) covers the full template
-syntax, every built-in formatter and every CLI command.
+syntax, every built-in display function and every CLI command.
 
 ## This repository
 
@@ -323,7 +325,7 @@ framework lives under `packages/`:
 | Package | What it is | Ships as |
 |---|---|---|
 | [`packages/puzzle`](packages/puzzle) | The framework: runtime, compiler, CLI, examples | `@magic-spells/puzzle` on npm |
-| [`packages/puzzle-lang`](packages/puzzle-lang) | The Puzzle language as a Go module: lexer, section splitter, AST, positioned errors | Go module, tagged `packages/puzzle-lang/vX.Y.Z` |
+| [`packages/puzzle-lang`](packages/puzzle-lang) | The Puzzle language as a Go module: lexer, section splitter, AST, expression parser, positioned errors | Go module, tagged `packages/puzzle-lang/vX.Y.Z` |
 | [`packages/puzzle-pieces`](packages/puzzle-pieces) | Copy-in UI component registry for `puzzle add piece` | `@magic-spells/puzzle-pieces` on npm |
 | [`packages/puzzle-devtools`](packages/puzzle-devtools) | Chrome DevTools extension | extension zip (never npm) |
 | [`packages/puzzle-eslint`](packages/puzzle-eslint) | ESLint plugin for `.pzl` files | `@magic-spells/eslint-plugin-puzzle` (not yet published) |

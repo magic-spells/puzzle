@@ -40,7 +40,7 @@ instantly visible on every navigation.
 
 ## Running the Example
 
-From the repo root:
+From `packages/puzzle`:
 
 ```bash
 puzzle dev examples/transitions-demo

@@ -175,7 +175,7 @@ range.**
 Also in this release: incremental rendering (D170): `{#for}` rows and static
 markup are cached between renders, and a record prop refreshes its child.
 Also translations (`t`, D175), sanitized `raw`, the pieces theme system with
-`puzzle add theme`, and 100 pieces. The never-published 0.7.1 notes (registry
+`puzzle add theme`, and 102 pieces. The never-published 0.7.1 notes (registry
 version floors, the background update notice) are folded in here.
 
 Production sizes: hello-world **21.9 KB gzip**, todos **26.0 KB gzip** (from
@@ -635,7 +635,7 @@ checklist sent you.
   `app/models/<name>.ts` with a typed fields interface and record type, a
   family's barrel is `index.ts`, and the model hint points at
   `app/models/index.ts`. A JavaScript app's stubs are unchanged byte for byte.
-- **puzzle-pieces: 100 pieces.** New: `image-zoom` (a wrapper over
+- **puzzle-pieces: 102 pieces.** New: `image-zoom` (a wrapper over
   `@magic-spells/image-zoom`), `split-text`, `hamburger` (a menu button with
   converge, twist and slide motion), and CSS-only loading motion — `spinner`
   variants and `shimmer-text`. The Sidebar piece gains a `collapsible` prop,

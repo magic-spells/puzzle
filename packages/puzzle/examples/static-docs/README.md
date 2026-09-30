@@ -56,8 +56,10 @@ npm install
 npm run dev
 ```
 
-`puzzle dev` is **unchanged by the output mode** — it always serves the live SPA
-with live reload. Output mode is a build-time concern only.
+`puzzle dev` **follows the output mode** (D148). On this `output: 'static'`
+project every rebuild runs the real prerender pass, and the pages are served
+the way they ship: clean URLs, plain full-page navigation and a real 404, with
+live reload. A `hybrid` project still develops as the SPA.
 
 ### Building
 
@@ -130,17 +132,17 @@ work at any depth.
   The store is serialized into that page's data island, and `mountStatic`
   rehydrates it before re-rendering — the browser sees the same records with no
   fetch and no re-run of `beforeMount`.
-- **Formatters that work at build time *and* client-side.** `titlecase` and
+- **App functions that work at build time *and* client-side.** `titlecase` and
   `plural` live in [`app/formatters.js`](./app/formatters.js). The static build
-  reads formatters from that file so they exist in each page's module and
-  re-render identically after mount. Formatters registered **only** in the
+  reads the `formatters` map from that file so they exist in each page's module and
+  re-render identically after mount. Functions registered **only** in the
   `app.js` config would render at build time but be missing client-side — the
   build warns about that; keeping them in `app/formatters.js` is the fix. Models
   come from [`app/models/index.js`](./app/models/index.js) the same way.
 - **Static, then interactive.** The Home page's counter is prerendered showing
   *"Clicked 0 times"*. Load `dist/index.html`, then **click the button** — the
   page's module has mounted the view over the very same DOM, flash-free, and the
-  counter (and its `plural` formatter) is now live. No router involved.
+  counter (and its `plural` function) is now live. No router involved.
 
 ### Dynamic routes are skipped (conceptual)
 
@@ -211,6 +213,7 @@ static-docs/
 │   │   └── principle.js           # trivial build-time model
 │   ├── styles/styles.css          # Tailwind v4, "warm paper" theme
 │   ├── public/index.html          # the shell (empty #app; /app.js tag stripped in static mode)
+│   ├── components/ContentCard.pzl # card chrome the layout forwards <Slot/> through (D69)
 │   ├── layouts/Default.pzl        # nav + footer chrome around <Slot/>
 │   └── views/
 │       ├── Home.pzl               # interactive counter (client-mount demo)

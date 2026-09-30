@@ -10,10 +10,15 @@ live under `packages/` (decision D162):
   operating guide, and the constellation under `packages/puzzle/constellation/`
   is the source of truth (constellation MCP: pass `repo=packages/puzzle`;
   the parser's FILE and test cards live in `repo=packages/puzzle-lang`, and
-  pieces' own constellation is `repo=packages/puzzle-pieces`).
+  pieces' own constellation is `repo=packages/puzzle-pieces`. These paths
+  resolve against the session's own repo, so they work only from the monorepo
+  root; elsewhere pass a connected name, `repo=puzzle` from
+  `packages/puzzle-pieces` or `repo=puzzle-lang` from `packages/puzzle`, or an
+  absolute path).
 - `packages/puzzle-lang` — the Puzzle language as its own Go module
   (`github.com/magic-spells/puzzle/packages/puzzle-lang`): the `.pzl` parser
-  (section splitter, lexer, AST, positioned errors) plus the `jsident` and
+  (section splitter, lexer, AST, positioned errors), the `expr` expression
+  parser (D176), the shared `conformance` tables, and the `jsident` and
   `textutil` helpers the compiler shares. The compiler imports it through a
   `replace => ../puzzle-lang`; outside consumers need a
   `packages/puzzle-lang/vX.Y.Z` tag, which Cory creates (D172). It has its

@@ -79,6 +79,7 @@ Browse them all in the [live component library](https://magicspells.io/puzzle-pi
 in [`registry/ui/`](./registry/ui/), or by running the docs app locally:
 
 ```sh
+npm run build:compiler                  # once, at the monorepo root: the demo runs ../../puzzle/puzzle
 cd demo && npm install && npm run dev   # http://localhost:3070
 ```
 

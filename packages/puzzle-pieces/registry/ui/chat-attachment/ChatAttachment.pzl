@@ -71,8 +71,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // Callback:
 //   @remove(name, event)  fired from the × button with the filename first
 //
-// The leading glyphs are inline stroke-current SVG PATHS only (never <text>,
-// which the compiler drops) tinted text-muted. The href/no-href branches repeat
+// The leading glyphs are inline stroke-current SVG PATHS only (no <text>)
+// tinted text-muted. The href/no-href branches repeat
 // the icon+label block because a single root can't swap only its tag name; the
 // shared class strings keep the two arms identical.
 

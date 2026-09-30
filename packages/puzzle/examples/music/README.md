@@ -21,7 +21,7 @@ pretending to be the real thing.
 puzzle dev                       # watch + rebuild + live-reload dev server
 puzzle build                     # production build → dist/
 
-# From the repo root (drives the in-tree compiler):
+# From packages/puzzle (drives the in-tree compiler):
 ./puzzle dev examples/music      # equivalently: go run ./compiler/cmd/puzzle dev examples/music
 ./puzzle build examples/music
 ```
@@ -115,7 +115,7 @@ dependency — an app that imports none of these paths bundles none of it.
 ```
 app/
 ├── app.js              # PuzzleApp config (hash mode, formatters) + parallel seed in beforeMount (D60)
-├── routes.js           # 8 flat routes across two layouts (AppLayout vs PlayerLayout)
+├── routes.js           # 8 top-level routes across two layouts (AppLayout vs PlayerLayout); /artist/:id nests the info overlay
 ├── storage.js          # localStorage load/save (one key: puzzle-sounds/v1)
 ├── models/
 │   ├── index.js        # model registry
@@ -148,7 +148,7 @@ app/
 │   ├── QueueDialog.pzl # centered modal queue; morphs out of the MiniPlayer's Queue button
 │   ├── Toast.pzl       # global pill, nonce-keyed auto-dismiss
 │   ├── EqualizerBars.pzl# now-playing visualizer, rippling bars
-│   └── Button.pzl      # reusable pill button, label via <Slot/>
+│   └── Button.pzl      # reusable pill button, label via <Children/>
 └── public/
     ├── index.html      # mount target
     └── artists.json / albums.json / tracks.json   # flat seed data (D21 read path)

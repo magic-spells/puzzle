@@ -40,8 +40,8 @@ npm run dev        # serves on http://localhost:3000
 - **The enter's `to` equals resting CSS.** WAAPI releases the enter fill on
   finish, so every `in.to` (e.g. the panel's `translateX(0)`) matches the
   element's natural state to avoid a snap on settle.
-- **Active nav is declarative.** `AppShell` reads `window.location.pathname` in
-  `data()` (which re-runs after the URL commits on each reused-layout swap) to
+- **Active nav is declarative.** `AppShell` reads the root route name from
+  `this.route.chain` (the per-navigation route snapshot, D47) in `data()` to
   highlight the current section — no DOM class juggling.
 
 ### Things to try

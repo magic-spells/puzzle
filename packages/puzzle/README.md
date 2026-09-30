@@ -43,8 +43,9 @@ npm install -D @magic-spells/puzzle
 > [CHANGELOG.md](CHANGELOG.md#upgrading-across-versions) before upgrading.
 >
 > **[constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) is the canonical, frozen v1
-> contract** — its per-amendment sections (§12–§41) are the source of truth for
-> exactly what shipped when; if anything here conflicts with it, the spec wins.
+> contract** — it indexes the numbered sections (§1–§66) across six domain
+> cards, and they are the source of truth for exactly what ships; if anything
+> here conflicts with it, the spec wins.
 
 ## Features
 
@@ -60,14 +61,14 @@ npm install -D @magic-spells/puzzle
 - **Raw template blocks** — `{#raw}…{/raw}` turns off template-expression parsing so JSON, JavaScript, CSS, and syntax examples with literal braces compile as-is (HTML inside still renders normally)
 - **Nested routing** with view slots — path routing by default, hash/memory via `hashRouter()`/`memoryRouter()` from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` function
 - **On-demand route views** — `view: lazy(() => import('./views/Admin.pzl'))` in the route table downloads a view or layout the first time a navigation needs it, guards first
-- **Virtual DOM** with efficient diffing and pk-aware list keying
+- **Virtual DOM** with efficient diffing, pk-aware list keying, and `{#for}` rows and static markup cached between renders
 - **Built-in view & component animations** (Web Animations API), including visibility-triggered enters and app lifecycle hooks
 - **Route transitions**: sequential by default; overlapping cross-fades and shared-element morphs *(experimental — see below)*
 - **App-level error handling** — one compiled `errorView` replaces a failed view in place with `{ error, info, retry }`; the `onError` hook funnels every framework-contained error
 - **Go-based compiler** for fast builds and state-preserving live reload (store and JSON-safe local view state survive edits)
 - **Type-checked templates** — `puzzle check` runs the app's own TypeScript over every `.pzl`, so a typo in `{ user.nmae }` is a type error reported at its real line and column
 - **SPA-first output with two optional prerender modes** — `output: 'hybrid'` (prerendered pages the SPA takes over) and `output: 'static'` (true static pages, no router or `app.js`); no request-time SSR server or hydration layer
-- **[Puzzle Pieces](https://github.com/magic-spells/puzzle-pieces) component library** — ready-made `.pzl` components installed with `puzzle add piece <name>` ([browse the catalog](https://magic-spells.github.io/puzzle-pieces/))
+- **[Puzzle Pieces](../puzzle-pieces) component library** — ready-made `.pzl` components installed with `puzzle add piece <name>` ([browse the catalog](https://magicspells.io/puzzle-pieces))
 
 > **Experimental:** overlapping route transitions (`transitionMode:
 > 'overlap'`) and shared-element morph transitions (`@magic-spells/puzzle/morph`)
@@ -558,15 +559,20 @@ export default Object.assign(Frame, { Wrapper, Content });
 ```
 
 ```html
-<script>
-  import Frame from '@/components/Frame';
-</script>
+<puzzle-view>
+  <Frame>
+    <Frame.Wrapper>
+      <Frame.Content>…</Frame.Content>
+    </Frame.Wrapper>
+  </Frame>
+</puzzle-view>
 
-<Frame>
-  <Frame.Wrapper>
-    <Frame.Content>…</Frame.Content>
-  </Frame.Wrapper>
-</Frame>
+<script>
+  import { PuzzleView } from '@magic-spells/puzzle';
+  import Frame from '@/components/Frame';
+
+  export default class Page extends PuzzleView {}
+</script>
 ```
 
 A dotted tag is an ordinary member expression resolved against module scope —
@@ -580,8 +586,8 @@ repository; the repo root is a private shell whose scripts delegate here.
 `packages/` holds everything that releases in lockstep with it:
 
 - [`packages/puzzle-lang`](../puzzle-lang) — the Puzzle template language
-  (lexer, section splitter, AST, positioned errors) as its own Go module, which
-  the compiler imports
+  (lexer, section splitter, AST, expression parser, positioned errors) as its
+  own Go module, which the compiler imports
 - [`packages/puzzle-pieces`](../puzzle-pieces) — the official component
   library (published to npm as `@magic-spells/puzzle-pieces`)
 - [`packages/puzzle-devtools`](../puzzle-devtools) — the Chrome DevTools
@@ -603,7 +609,7 @@ puzzle add piece <name>
 ```
 
 Pieces are fetched from the `@magic-spells/puzzle-pieces` npm package,
-version-matched to your CLI — puzzle 0.7.x pulls the newest pieces 0.7.x — so a
+version-matched to your CLI — puzzle 0.8.x pulls the newest pieces 0.8.x — so a
 piece is always authored for the compiler installing it. `--pieces-version`
 pins an exact release; `--registry` accepts `npm:pkg[@version]`, a local
 directory, or an http(s) URL.
@@ -767,9 +773,10 @@ puzzle init my-app --template todos --typescript
 # app with a tsconfig.json
 puzzle generate component UserCard --path components/ui/
 
-# Wire up Tailwind, install a piece (see Puzzle Pieces above), or run diagnostics
+# Wire up Tailwind, install a piece or a palette (see Puzzle Pieces above), or run diagnostics
 puzzle add tailwind
 puzzle add piece <name>
+puzzle add theme <name>
 puzzle add skills
 puzzle doctor
 ```

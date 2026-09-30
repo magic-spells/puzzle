@@ -18,7 +18,7 @@ commits `record.update()` writes.
 ## Run it
 
 ```bash
-puzzle dev examples/canvas      # from the repo root: go run ./compiler/cmd/puzzle dev examples/canvas
+puzzle dev examples/canvas      # from packages/puzzle: go run ./compiler/cmd/puzzle dev examples/canvas
 ```
 
 Then open the dev server URL. Production bundle:
@@ -51,7 +51,7 @@ go run ./compiler/cmd/puzzle build examples/canvas
 | Reactive fan-out from `record.update()` | `app/components/Inspector.pzl` — every slider/swatch writes the record; canvas, layers panel, and overlay all re-render from the store subscription |
 | Pure derivation in `data()` | `Editor.pzl` `data()` — render tree, ghost layer, drop-target flag, overlay bounds, and marquee box all derived from records + ephemeral state, no side effects |
 | Component callback props (single-payload convention) | `CanvasShape`/`CanvasFrame` → `this.props.press({ event, id })`; `SelectionOverlay` → `resize({ event, dir })` |
-| `{#case}` multi-branch (v1.7) | stage node dispatch in `Editor.pzl`; element type dispatch in `CanvasShape.pzl` |
+| `{#case}` multi-branch (v1.7) | stage node and ghost-layer dispatch in `Editor.pzl` |
 | Attribute expression binding `attr={ expr }` | `style={ node.css }` everywhere — style strings composed in `app/lib/geometry.js` |
 | Frame stack layout (positions as pure functions) | `placeChildren()` in `app/lib/geometry.js` + the frame branch of `Editor.data()` |
 | Layers tree + inspector as independent store projections | `LayersPanel.pzl` (stable tree, survives mid-drag), `Inspector.pzl` |

@@ -1,7 +1,8 @@
 # overlays
 
 The `<Portal>` example (D144 / product line v1.66). One page, four overlays,
-three of them teleported.
+three of them teleported, plus one case that is not an overlay: caller-owned
+list rows through `<Snippet>` (D166).
 
 ```bash
 npm install
@@ -48,6 +49,14 @@ The modal deliberately does **not** use a Portal. The browser's top layer
 already escapes every ancestor stacking context, transform and overflow, and
 throws in a focus trap, an inert background, `::backdrop` and Escape-to-close.
 That is D144's own recommendation.
+
+**4 · Caller-owned list rows: `app/components/SnippetRoster.pzl`**
+
+The roster owns the loop; `Home.pzl` owns the row markup. Each `<Snippet>`
+declares the names it receives (`<Snippet member index>`, and
+`<Snippet fits="heading" total>` for the named `heading` position), and the
+roster stamps it once per row with `<Children member={ member } index={ index }>`.
+The marker bodies are fallbacks, shown when the caller supplies no snippet.
 
 ## Two things that surprise people
 

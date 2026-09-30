@@ -59,8 +59,9 @@ has a `tsconfig.json`),
   warns when it moved. `--strict-port` restores bind-or-fail.
 - `puzzle upgrade skills` refreshes the installed agent skill from the running
   binary. `puzzle upgrade` also offers the refresh after it installs a new
-  version. Re-running `puzzle add skills` asks before replacing an existing
-  install rather than erroring.
+  version. Re-running `puzzle add skills` skips an install that is already
+  current and asks before replacing an older one (a non-interactive run needs
+  `--overwrite` for that).
 
 Production builds default to ES2022, minification, and **console stripping** —
 set `build: { dropConsole: false }` in puzzle.config.js to keep console calls.
@@ -120,6 +121,12 @@ export default class Counter extends PuzzleView {
 </script>
 ```
 
+Names starting with `__` belong to the compiler: don't define `__`-prefixed
+fields or methods on a component (`__c`, `__lists`, `__dirty`, `__rgen`,
+`__propRevs`, a static `__roots`, …) or bind them in a `<script>` (`__l`,
+`__e`, `__r`, `__L0`, …; binding one the compiled template also emits,
+such as `__l` beside a `{#for}`, is a compile error).
+
 Template syntax: `{ expr }` — a JavaScript-shaped expression (see *Template
 expressions* below; a display transform is a function call, `{ currency(price) }`),
 `{#if}/{:else if}/{:else}/{/if}`, `{#unless}`, `{#for item in items, i}`
@@ -128,12 +135,15 @@ grammar off inside — literal braces compile as-is, HTML still parses; no
 nesting, and attribute-value use is a compile error; a single literal brace
 anywhere, attribute values included, is `\{` / `\}` — e.g. `pattern="[0-9]\{5\}"`),
 `@event={ handler }` with modifiers, component imports used as capitalized tags
-(dotted family members too — `<Frame.Wrapper>`).
+(dotted family members too — `<Frame.Wrapper>`). A range loop binds its
+counter after the range: `{#for 1...n, i}`. HTML void elements (`<br>`,
+`<img …>`, `<input …>`) need no `/>`, and a closer such as `</br>` is a
+compile error.
 `<script lang="ts">` for TypeScript (build remains transpile-only; run
 `puzzle check` separately for static checks).
 
 The function library is the standard set shared with Sites plus the
-browser-only `link` and `timeago`; a template calls one by name, and calls
+PuzzleKit-only `link` and `timeago`; a template calls one by name, and calls
 nest (`{ truncate(capitalize(title), 40) }`). Text: `capitalize` (first
 character only — `iPhone` stays `IPhone`), `truncate(s, n, '…')`,
 `strip_html`, `strip_newlines`, `pluralize(n, 'comment')` → `3 comments`
@@ -145,19 +155,28 @@ a second argument forces the delimiter), `compact_number(v)` → `1.2K`. Values:
 `json(v)`. Markup: `raw` and `newline_to_br` (see Rendering HTML below). Dates:
 `date(v, preset)`, `time(v, preset)`, `datetime(v, preset)` with presets
 `short`, `medium`, `long`, `iso` — no preset is `date` medium (`Sep 24, 2026`),
-`time` short (`3:04 PM`), `datetime` medium date + short time; a literal
-preset the standard functions do not know (`time(at, 'shrot')`) is a build
-warning, and at run time an unknown preset renders the default.
-`in_timezone(v, 'America/New_York')` re-expresses an instant; `t(key, vars)`
+`time` short (`3:04 PM`), `datetime` medium date + short time;
+`date(v, 'short')` is date-only (`9/24/26`), so a short date-and-time stamp
+is `datetime(v, 'short')`. A literal preset the standard functions do not know
+(`time(at, 'shrot')`) is a build warning, and at run time an unknown preset
+renders the default. `in_timezone(v, 'America/New_York')` re-expresses an
+instant and returns a `Date`, which prints nothing on its own, so format it:
+`date(in_timezone(v, 'America/New_York'))`. `t(key, vars)`
 translates (below); `link(path)` builds an href (Routing). What a JavaScript
 method or `Math` global already says is not a function: write
 `name.toUpperCase()`, `.toLowerCase()`, `.trim()`, `.replaceAll(a, b)`,
 `tags.join(', ')`, `Math.floor(x)` / `ceil` / `abs`. There are **no list
 functions** either — shape a list with array methods (`items.filter(…)`,
-`.toSorted(…)`, `.at(-1)`) or in `data()`. App functions register through the
+`.toSorted(…)`, `.at(-1)`) or in `data()`. A removed 0.7 name written as a
+call (`upcase(name)`) is NOT a compile error: it passes the value through
+unchanged, with a dev error naming the replacement, so convert an old pipe
+to the method, never to a same-named call. App functions register through the
 `formatters` config map (the key keeps its name) and are called like the
 built-ins: `{ specialFormat(product.title) }`. Don't register one under a
 standard name (it wins, with a dev warning, and changes what the name means).
+Keep an app function a pure function of its arguments: a cached `{#for}` row
+does not re-run its calls, so one that reads the clock or other ambient state
+freezes. Compute such values in `data()`.
 
 ### Rendering HTML: `raw` and `newline_to_br` (puzzle ≥ 0.8.0) — security
 
@@ -252,6 +271,14 @@ Rules that bite:
   JavaScript precedence (`+ - * / %`, comparisons, `== != === !==`, `&& || !`,
   `??`, `?:`). Count with `.length` (a string counts UTF-16 units, as in
   JavaScript); fall back with `??` (not `||`, which swallows `0` and `''`).
+  JavaScript semantics include its sharp edges, which 0.7's coercing
+  formatters hid: a string method throws on a non-string
+  (`{ zip.toUpperCase() }` on a number sends the view to `errorView`), so
+  coerce with `String(zip ?? '')` first; `+` with a string concatenates
+  (`Number(count) + 1`); `.replace()` replaces only the first match
+  (`.replaceAll()`); `.split()` needs its separator; and `.toSorted()`
+  without a comparator compares as text, so pass one
+  (`items.toSorted((a, b) => a - b)`).
   Calls are three kinds: a **function** by name (`currency(price)`, the library
   above plus the app's own); a **method** from the table on a string
   (`trim`, `toUpperCase`, `toLowerCase`, `includes`, `startsWith`, `slice`,
@@ -288,7 +315,8 @@ Rules that bite:
   and a method call on a missing value prints nothing too (dev warning). A
   bare call names the library, so a data field is never callable; a bare read
   names `data()`. A missing collection or a non-list loops zero times (dev
-  warns on a non-list; range bounds truncate to whole numbers). `==` keeps its
+  warns on a non-list; range bounds truncate to whole numbers), so a string's
+  characters are `{#for c in text.split('')}`. `==` keeps its
   JavaScript meaning; `x == null` is the absence test. Object literals work as
   function arguments (`{ t('cart.count', { count: n }) }`) but cannot START an
   expression. A component with no `<script>` reads its props by bare name
@@ -304,7 +332,10 @@ Rules that bite:
   `@click={ pick(event.target.closest('li')) }`. Call `event.preventDefault()`
   inside the handler method (or use `:prevent`), never as the handler value.
   Calling a template binding (a loop item, a snippet parameter, an arrow
-  parameter) is a compile error.
+  parameter) is a compile error. Outside handlers a data field or prop named
+  `event` reads as data (`<EventCard event={ item } />` works), but a template
+  that both reads one and uses `event` inside a handler is a compile error:
+  rename the field or prop.
 - **`puzzle check` types the language.** Methods are checked as the same
   JavaScript methods, so a wrong method or argument is a real TypeScript error
   at its line and column, and library calls check against the function
@@ -827,13 +858,14 @@ await app.router.push('/todos/1');
   translated view with no fetch; `strings` is the flat dotted-key table).
   Returns a handle: `instance`, `container`,
   `element`, `ctx`, `store`, `router`, `find(sel)`, `findAll(sel)`,
-  `click(target)`, `setProps(props)`, `destroy()`.
+  `click(target)`, `type(target, text)`, `setProps(props)`, `destroy()`.
 - `createTestApp(config)` boots a REAL `PuzzleApp` — `target` and memory
   routing are forced (`routerInitialPath` seeds it), everything else passes
   through (`i18n: { locale, strings }` too). Handle: `app`, `store`, `router`, `ctx`,
-  `find`, `findAll`, `click`, `destroy()`.
-- `settled()` awaits the framework's pending render/flush work. `click()` and
-  `setProps()` already await it; use it directly after mutating the store.
+  `find`, `findAll`, `click`, `type`, `visit(path)`, `destroy()`.
+- `settled()` awaits the framework's pending render/flush work. `click()`,
+  `type()`, `setProps()` and `visit()` already await it; use it directly after
+  mutating the store.
 - `installFakeAnimate()` / `installFakeObserver()` stub Web Animations and
   IntersectionObserver so animation and `trigger: 'visible'` code paths run
   deterministically under jsdom.
@@ -954,7 +986,12 @@ production-host semantics for any mode (SPA deep-link fallback, static real
 1. **`data()` and `beforeMount` run under Node at build time** (both modes).
    Guard every browser global: `typeof document !== 'undefined'` before touching
    `document`, `window`, `localStorage`, `matchMedia`. DOM behavior belongs in
-   `mounted()`.
+   `mounted()`. The locale-aware functions (`date`, `time`, `datetime`,
+   `timeago`, `number_with_delimiter`, `compact_number`, the `pluralize`
+   count) print in the build machine's locale (`LANG`/`LC_ALL`, or
+   `i18n.defaultLocale` when configured) and time zone (`TZ`), then re-render
+   in the viewer's in the browser. Pin the locale and `TZ` on the build
+   machine for deterministic HTML.
 2. **In static mode `beforeMount` NEVER runs in the browser.** Its store seeds
    (CMS fetches etc.) are serialized into an inline JSON island per page and
    rehydrated before mount — so build-time credentials stay build-side, and
@@ -1021,11 +1058,20 @@ the stored choice paints before first paint.
 
 ## puzzle-pieces (component library)
 
-Copy-in registry, shadcn-style: the files land in your app; nothing imports
-the registry package at runtime. Use `puzzle add piece <name…>` (copies each
+Copy-in registry, shadcn-style: the piece files land in your app, and no
+piece imports the registry package (only the optional theme CSS and the
+`appearance`/`pre-paint` helpers under Styling come from it). Use
+`puzzle add piece <name…>` (copies each
 piece + its transitive piece/lib dependencies verbatim, records hashes in
-`pieces.lock`; `--overwrite` to refresh; required npm packages and the theme
-merge are printed as next steps). The printed install line carries each
+`pieces.lock`; refuses to overwrite any existing file unless `--overwrite`;
+never runs npm or edits styles.css: required npm packages and the theme
+merge are printed as next steps). When the app has no theme yet it writes
+`app/styles/pieces.css` and prints the `@import` line. When the app's
+`pieces.css` differs from the registry's, it prints a hint: run
+`puzzle add theme default` for an unmodified older copy (0.8 pieces use
+tokens a 0.7 theme lacks, such as `surface-frame`, `bar-*` and `rail-*`),
+or hand-merge / `--overwrite` an edited one. A piece that needs extra
+palettes prints `puzzle add theme <names…>` for the missing ones. The printed install line carries each
 package's version floor — `npm install @magic-spells/collapsible-content@^1.2.0`
 — so a piece never resolves against an npm `latest` older than the component it
 wraps; run it as printed. The default source is the

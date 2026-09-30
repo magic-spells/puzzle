@@ -13,7 +13,7 @@ Both bodies honor your Prettier options (`singleQuote`, `useTabs`, `tabWidth`, `
 
 ## What it preserves verbatim (for now)
 
-Template reformatting is **deliberately deferred to a future version.** In this v1 release the following are preserved **byte-for-byte**:
+Template reformatting is **deliberately deferred to a future version.** In this release the following are preserved **byte-for-byte**:
 
 - `<puzzle-view>` and `<puzzle-skeleton>` template bodies — including `{#raw}` … `{/raw}` blocks, which are never reindented or rewrapped
 - every template expression exactly as written — function calls in text, attributes and props (`title={ truncate(name.trim(), 20) }`), object-literal arguments (`{ t('cart.count', { count: items.length }) }`), arrow-function arguments (`{#for t in todos.filter(t => !t.done)}`), template literals, and their spacing. The plugin does not parse template expressions, so it never respaces `a+b` or rewraps a long call chain

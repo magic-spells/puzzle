@@ -9,7 +9,7 @@ This README doubles as the **reference for building drag-and-drop in any Puzzle 
 Everything below was verified against the compiler and runtime source (paths noted).
 
 ```bash
-# from the repo root
+# from packages/puzzle
 ./puzzle dev examples/kanban --port 3456     # or: go run ./compiler/cmd/puzzle dev examples/kanban
 ```
 
@@ -36,7 +36,7 @@ mouse + touch + pen. Note: Puzzle's event system would support native DnD fine
 | `app/views/Board.pzl` | **All drag logic**: state machine, document listeners, ghost, hit-testing, drop commit |
 | `app/components/TaskCard.pzl` | One card; renders placeholder mode when `task.__placeholder`; forwards `pointerdown` up via callback prop; fades the placeholder in |
 | `app/models/task.js` | `Task` model: `id` (string, primary), `title`, `status: 'todo'\|'doing'\|'done'`, `order` (number) |
-| `app/app.js` | `PuzzleApp` config; seeds 8 tasks after `app.mount()` resolves |
+| `app/app.js` | `PuzzleApp` config; seeds 8 tasks in `beforeMount`, before the first navigation |
 | `app/styles/styles.css` | Theme + `.kanban-card { touch-action:none; user-select:none }`, `.kanban-placeholder`, `.kanban-ghost` |
 
 ## Verified framework facts (the load-bearing ones)
@@ -50,7 +50,8 @@ DnD possible with **zero framework changes**:
    the event name). `@pointerdown`, `@pointercancel`, anything — all work.
 2. **Handlers get the real DOM event, and loop vars pass through.** Two compiled forms
    (`compiler/internal/codegen/lower.go`, `handler`):
-   `@click={ handler }` → `(event) => this.events.handler(event)`, and
+   `@click={ handler }` → `(event) => this.events.handler(event)` (cached once per
+   instance), and
    `@click={ handler(event, task.id) }` → `(event) => this.events.handler(event, task?.id)`
    with `event` in scope. `event.preventDefault()` / `stopPropagation()` work normally.
    Constraint: the callee must be a bare name in the component's `events = {}` class
@@ -58,7 +59,9 @@ DnD possible with **zero framework changes**:
    between them and `null`); the arguments are ordinary template expressions.
 3. **`@name` on a *component* tag is a callback prop, not a listener** (D16). In this
    demo: `<TaskCard @grab={ startDrag(event, task.id) } />` compiles to a prop
-   `grab: (event) => this.events.startDrag(event, task.id)`; TaskCard's own root div has
+   `grab: (event) => this.events.startDrag(event, task.id)` (inside the `{#for}` that
+   closure is cached on the row and reads the current item when it fires, so a
+   re-render does not hand every card a new prop); TaskCard's own root div has
    the real `@pointerdown` and its handler calls `this.props.grab(event)`. That's how a
    card's pointerdown reaches the Board with the task id closed over.
 4. **`findMany(type)` in `data()` subscribes to the whole type.** The subscription key is
@@ -81,8 +84,8 @@ DnD possible with **zero framework changes**:
    synchronously (`beforeUpdate → patch → afterUpdate` in one tick, `PuzzleView._render`)
    and are still the right hooks for measurements the framework does *not* do for you.
    Position-on-reorder is no longer one of them.
-8. **`{#for}` bodies are auto-keyed** — the codegen prepends `key: ViewNode.keyOf(item)`
-   (record primary key, else `item.id`) to the single root, with an explicit
+8. **`{#for}` bodies are auto-keyed** — the codegen keys the single root with
+   `ViewNode.keyOf(item)` (record primary key, else `item.id`), with an explicit
    `key={ … }` on that root as the override. **The body must be exactly ONE root
    element or component**, and `{#if}` may NOT be that root (codegen rejects it — see
    "Placeholder" below for the workaround). Keying is what `flip` animates against: a
@@ -213,7 +216,7 @@ Bonuses of this shape:
 ## FLIP shift animation
 
 One attribute on the row root (v1.51, D85). The options object is built in `data()` —
-template expressions do not admit inline object literals:
+a template expression cannot start with an object literal:
 
 ```html
 {#for task in todoTasks}

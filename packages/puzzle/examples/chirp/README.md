@@ -15,7 +15,7 @@ anywhere — every avatar and banner is a generated CSS gradient with an emoji.
 ## Run it
 
 ```bash
-puzzle dev examples/chirp        # from the repo root: go run ./compiler/cmd/puzzle dev examples/chirp
+puzzle dev examples/chirp        # from packages/puzzle: go run ./compiler/cmd/puzzle dev examples/chirp
 ```
 
 ## What this example demonstrates that the others don't
@@ -42,9 +42,11 @@ persistence of your likes / rechirps / follows / composed chirps.
 ## Inventory
 
 ### App wiring (`app/`)
-- **app.js** — `PuzzleApp` config with four display-only formatters (`timeago`,
-  `compact`, `plural`, `chirpDate`), post-mount seeding via the memoized
-  `seedStore`, and localStorage restore/persist for all local-only state.
+- **app.js** — `PuzzleApp` config with three display-only app functions
+  (`timeago`, which replaces the built-in with Twitter-style stamps, `plural`,
+  `chirpDate`; counts use the standard `compact_number`), `beforeMount`
+  seeding via the memoized `seedStore`, and localStorage restore/persist for
+  all local-only state.
 - **routes.js** — flat routes plus the nested `/u/:handle` profile branch
   (`ProfileShell` renders `Chirps` / `Replies` / `Likes` at its `<Slot/>`).
 - **seed.js** — the memoized `seedStore(store)` that skeleton views await from

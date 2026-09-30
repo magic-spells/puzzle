@@ -91,7 +91,7 @@ the 56px sidebar album covers). Needs network access at boot.
 ## Run it
 
 ```bash
-puzzle dev examples/photo-gallery   # serves on port 3030
+puzzle dev examples/photo-gallery --port 3030
 # or, from this folder: npm run dev
 ```
 

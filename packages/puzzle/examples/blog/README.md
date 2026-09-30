@@ -4,18 +4,21 @@ A small blog built with the Puzzle framework. Where `examples/todos/` is the
 canonical single-view app styled with Tailwind, this example is the second v1
 reference app: it leans into the features todos does not cover — multiple
 models, route params and a catch-all, reusable components with props and
-callbacks, auto-fetching server data, custom formatters — and it styles itself with
-plain per-file `<style>` blocks instead of Tailwind (no `puzzle.config.js`, no
-build-time CSS pipeline).
+callbacks, auto-fetching server data, a custom display function, a lazily
+loaded nested section — and it styles itself with Tailwind utilities over its
+own `@theme` palette in `app/styles/styles.css`.
 
 ## What each file demonstrates
 
 ### App wiring
 - **app/app.js** — `PuzzleApp` config (`target`, `routes`, `models`,
   `formatters`, `apiURL`), the `adapter` capability, and a custom `byline`
-  formatter. There is no seeding step and no loading code anywhere in the app.
-- **app/routes.js** — five routes including a dynamic segment (`/posts/:id`) and
-  the `*` catch-all, each with a `layout` and `meta.title`.
+  function. There is no seeding step and no loading code anywhere in the app.
+- **app/routes.js** — six top-level routes including a dynamic segment
+  (`/posts/:id`), a nested `/settings` section loaded with `lazy()`, and the
+  `*` catch-all, each with a `layout` and `meta.title`.
+- **puzzle.config.js** — the Tailwind pipeline plus `build: { splitting: true }`,
+  so the lazy `/settings` views land in `dist/chunks/`.
 
 ### Models (`app/models/`)
 - **user.js** — string ids, `initials`/`memberSince` getters, adapter endpoint
@@ -31,7 +34,7 @@ build-time CSS pipeline).
 - **Home.pzl** — hero, a `<Button @press>` that navigates, and the three newest
   posts via `<PostCard>` with an `{#if}/{:else}` empty state.
 - **Posts.pzl** — tag-filter tabs using `findMany({ filter })` plus the
-  `setData` + `this.refresh()` derived-list pattern; `pluralize` formatter.
+  `setData` + `this.refresh()` derived-list pattern; the `pluralize` function.
   Also the **`flip` showcase (v1.51, puzzle ≥ 0.2.0)**: the sort control
   (Newest / Oldest / A–Z) reorders the keyed post list, and the bare `flip`
   attribute on the `<PostCard>` row root makes every retained card slide to its
@@ -44,25 +47,27 @@ build-time CSS pipeline).
   a second find on `post.authorId`, deep-linkable into an empty store with no
   loading flag in sight; the post's comments; a comment form (one-way `value={}`
   + manual `@input`, then `createRecord`); `<CommentItem @remove={
-  removeComment(comment) }>`; `byline`/`date`/`timeago` formatters.
-- **About.pzl** — `findMany('user')`, the `capitalize` formatter, and a
+  removeComment(comment) }>`; the `byline`/`date`/`pluralize` functions.
+- **About.pzl** — `findMany('user')`, the `capitalize` function, and a
   `{#for 1...3}` range loop.
 - **NotFound.pzl** — the view rendered by the `*` route.
+- **settings/** — `Settings.pzl`, a shell that stays mounted while its matched
+  child pane (`General`, `Profile`, `Notifications`) swaps through its
+  `<Slot/>`.
 
 ### Components (`app/components/`)
 Reusable components render **inline** (D20): their `<puzzle-view>` carries no
-attributes and wraps a single root element, and class names are prefixed to keep
-the global stylesheet tidy.
+attributes and wraps a single root element.
 - **Button.pzl** — `variant`/`type`/`disabled` props, a `<Slot/>` for the label,
   and a guarded `@press` callback prop.
 - **PostCard.pzl** — an object `post` prop rendered as a real `<a href>` (the
-  router intercepts the click); `truncate`/`timeago` formatters.
-- **CommentItem.pzl** — an object `comment` prop and a `@remove` callback prop
-  (the parent owns the mutation).
+  router intercepts the click); the `truncate`/`timeago` functions.
+- **CommentItem.pzl** — an object `comment` prop, `timeago`, and a `@remove`
+  callback prop (the parent owns the mutation).
 
 ### Layout (`app/layouts/`)
-- **Default.pzl** — nav + `<Slot/>` + footer, and the base `<style>` block for
-  the whole app.
+- **Default.pzl** — nav + `<Slot/>` + footer. The base element styles live in
+  `app/styles/styles.css`.
 
 ## How server data gets here
 
@@ -146,7 +151,7 @@ reads, so browsing from `/posts` into a post issues no request at all.
 
 The model constructor is a plain `Object.assign`, so a JSON `publishedAt` stays
 a string. Getters coerce defensively (`new Date(this.publishedAt)`), and the
-`date`/`timeago` formatters already do the same.
+`date`/`timeago` functions already do the same.
 
 ## Running the example
 

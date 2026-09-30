@@ -11,7 +11,7 @@ it just rendered before reporting a number, because **a benchmark taken over a
 broken render is worse than no benchmark**.
 
 ```bash
-# from the repo root
+# from packages/puzzle
 go run ./compiler/cmd/puzzle dev examples/stress --port 4180
 go run ./compiler/cmd/puzzle build examples/stress --mode development
 ```

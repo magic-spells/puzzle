@@ -19,7 +19,7 @@ routes, and store-driven streaming.
 ## Run it
 
 ```bash
-puzzle dev examples/chat        # from the repo root: go run ./compiler/cmd/puzzle dev examples/chat
+puzzle dev examples/chat        # from packages/puzzle: go run ./compiler/cmd/puzzle dev examples/chat
 ```
 
 Then open the dev server URL. To produce a production bundle instead:
@@ -41,13 +41,14 @@ Every checklist feature maps to a specific file:
 | 5 | **`{#for … , i}` loop counter** (v1.2) | `app/views/Shell.pzl` — the sidebar list; the index drives each `ConversationItem`'s staggered enter-animation delay |
 | 6 | **Nested routes + `<Slot />`** (v1.3) | `app/routes.js` + `app/views/Shell.pzl` — the Shell parent hosts a Welcome index child (`''`) and a Thread child (`c/:id`) at `<Slot />` |
 | 7 | **`animations = { in, out }`** (v1.1) | view transitions in every view; message/list-item enters in `MessageBubble.pzl`, `ConversationItem.pzl`, `TypingIndicator.pzl` |
-| 8 | **Built-in `timeago` + one custom formatter** | `timeago` on `conversation.updatedAt` in `ConversationItem.pzl`; the custom `clock` formatter is registered in `app/app.js` and used on message timestamps in `MessageBubble.pzl` |
-| 9 | **Two-way binding `value={ draft }`** | `app/components/Composer.pzl` |
+| 8 | **Built-in `timeago` + one custom function** | `timeago` on `conversation.updatedAt` in `ConversationItem.pzl`; the custom `clock` function is registered under `formatters` in `app/app.js` and used on message timestamps in `MessageBubble.pzl` |
+| 9 | **Controlled input `value={ draft }` + `@input`** | `app/components/Composer.pzl`; the handler owns the write, so the implicit two-way bind (D147) stays off |
 | 10 | **Store reactivity spanning views** | `app/views/Thread.pzl` — streaming tokens `record.update()` the message *through the store*, which re-renders the thread AND bumps `conversation.updatedAt`, reordering the sidebar (`Shell.pzl` subscribes to the conversation collection) |
 
 ### App wiring
 - **app/app.js** — `PuzzleApp` config (target, routes, models, formatters), the
-  custom `clock` formatter, and a post-mount `seed(store)` call.
+  custom `clock` function, and a `beforeMount` hook that calls `seed(store)`
+  before the first navigation.
 - **app/routes.js** — one top-level route with `children`: `''` → Welcome,
   `c/:id` → Thread. `layout` stays top-level-only; the catch-all is `'*'`.
 - **app/lib/assistant.js** — `streamReply(prompt, { onToken, onDone, model })`
@@ -89,11 +90,12 @@ Every checklist feature maps to a specific file:
 
 ## Pattern: subscribe children to their own records
 
-Store records mutate **in place**, and a child's `data()` re-runs on prop
-change only when props **shallow-differ** (SPEC §4). Pass a record as a prop
-and update it, and the child never sees the change — the reference is equal
-every render. So `MessageBubble` and `ConversationItem` re-query by id inside
-`data()`:
+Store records mutate **in place**, so a record passed as a prop is the same
+reference every render. Since 0.8.0 the prop compare also checks each record's
+render revision, so a child refreshes when the record it was handed is
+updated, but a related record's fields or a computed getter's inputs are still
+invisible to it. `MessageBubble` and `ConversationItem` use the idiom that
+covers every case, re-querying by id inside `data()`:
 
 ```javascript
 data(params, props) {

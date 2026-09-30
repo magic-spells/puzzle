@@ -10,7 +10,7 @@ This README doubles as the **reference for wiring a `<canvas>` animation to Puzz
 datastore**. Everything below was verified against the compiler and runtime source.
 
 ```bash
-# from the repo root
+# from packages/puzzle
 ./puzzle dev examples/orrery --port 3456   # or: go run ./compiler/cmd/puzzle dev examples/orrery
 ```
 
@@ -24,7 +24,7 @@ datastore**. Everything below was verified against the compiler and runtime sour
 | `app/models/body.js` | The `body` model: parameters only — `distance`, `size`, `speed`, `color`, `phase`, `name`. |
 | `app/seed.js` | The default five-planet scene (one retrograde). |
 | `app/util.js` | Color/spawn helpers + `nextPlanetName`. |
-| `app/app.js` | `PuzzleApp` config; seeds the scene after `mount()` if the store is empty. |
+| `app/app.js` | `PuzzleApp` config; seeds the scene in `beforeMount` if the store is empty. |
 
 ## How the canvas is wired to the datastore
 
