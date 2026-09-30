@@ -67,7 +67,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/dialog-panel@^2.0.2"
+        "@magic-spells/dialog-panel@^2.0.3"
       ],
       "targetDir": "app/components/ui"
     },
@@ -161,7 +161,7 @@
       "registryDependencies": [],
       "dependencies": [
         "@magic-spells/bottom-sheet@^2.0.2",
-        "@magic-spells/dialog-panel@^2.0.2"
+        "@magic-spells/dialog-panel@^2.0.3"
       ],
       "targetDir": "app/components/ui"
     },
@@ -315,7 +315,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/dialog-panel@^2.0.2"
+        "@magic-spells/dialog-panel@^2.0.3"
       ],
       "targetDir": "app/components/ui"
     },
@@ -401,7 +401,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/dialog-panel@^2.0.2"
+        "@magic-spells/dialog-panel@^2.0.3"
       ],
       "targetDir": "app/components/ui"
     },
@@ -438,7 +438,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/dropdown-panel@^2.1.0"
+        "@magic-spells/dropdown-panel@^2.1.1"
       ],
       "targetDir": "app/components/ui"
     },
@@ -960,8 +960,8 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/sheet@^0.1.1",
-        "@magic-spells/dialog-panel@^2.0.2"
+        "@magic-spells/sheet@^0.2.0",
+        "@magic-spells/dialog-panel@^2.0.3"
       ],
       "targetDir": "app/components/ui"
     },

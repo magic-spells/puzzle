@@ -12,7 +12,7 @@ import { readFile, access } from 'node:fs/promises';
 const PACKAGE = '@magic-spells/dropdown-panel';
 // The manifest carries the version FLOOR the family was built against (D169);
 // the .pzl still imports the BARE specifier.
-const DEP = `${PACKAGE}@^2.1.0`;
+const DEP = `${PACKAGE}@^2.1.1`;
 const SPECIFIER = PACKAGE.replace('/', '\\/');
 
 const readText = (path) => readFile(new URL(path, import.meta.url), 'utf8');

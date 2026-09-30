@@ -121,7 +121,7 @@
 		}
 	},
 	"devDependencies": {
-		"@magic-spells/morph-engine": "^0.1.1",
+		"@magic-spells/morph-engine": "^0.4.2",
 		"@playwright/test": "^1.61.1",
 		"@tailwindcss/cli": "^4.3.2",
 		"jsdom": "^26.1.0",

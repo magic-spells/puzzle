@@ -3,6 +3,6 @@
   "description": "Command palette with filtered, grouped, keyboard-driven quick actions and snippet-customizable option content; wraps the @magic-spells/dialog-panel web component for the overlay",
   "files": ["Command.pzl"],
   "registryDependencies": [],
-  "dependencies": ["@magic-spells/dialog-panel@^2.0.2"],
+  "dependencies": ["@magic-spells/dialog-panel@^2.0.3"],
   "targetDir": "app/components/ui"
 }
