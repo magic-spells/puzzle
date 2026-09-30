@@ -3,7 +3,7 @@
     {#for item in stack}
       <span key={ item.key } class={ item.wrapperClass } style={ item.style }>
         {#if item.type === 'avatar'}
-          <Avatar src={ item.src } name={ item.name } size={ size }/>
+          <Avatar src={ item.src } name={ item.name } size={ size } class={ item.avatarClass }/>
         {:else}
           <span class={ item.chipClass } aria-label={ item.chipLabel }>{ item.chipText }</span>
         {/if}
@@ -47,35 +47,35 @@ import Avatar from './Avatar.pzl';
 // not transform — the Tailwind v4 translate/scale gotcha (CLAUDE.md) does not
 // apply here.
 //
+// The bite eats the left `overlap + gap` px of a disc, so centred initials and
+// the chip's "+N" are nudged right in bitten items: `shift` is left padding on
+// the border-box root, which moves centred content right by half its value.
+// On an Avatar it rides `not-has-[img]:` so a photo (size-full img) stays
+// centred while a failed image's initials fallback is still corrected. A
+// three-character chip ("+12") still doesn't fully clear the bite at sm.
+//
 // Per size: `d` disc diameter (px, = the size-* class), `overlap` (px, = the
 // -ml-* class), `gap` (px of clear space around the neighbour).
 const SIZES = {
-  sm: { d: 24, overlap: 8, gap: 1.5, box: 'size-6', pull: '-ml-2' },
-  md: { d: 32, overlap: 10, gap: 2, box: 'size-8', pull: '-ml-2.5' },
-  lg: { d: 40, overlap: 12, gap: 2.5, box: 'size-10', pull: '-ml-3' },
+  sm: { d: 24, overlap: 8, gap: 1.5, box: 'size-6', pull: '-ml-2', shift: 'pl-2', faceShift: 'not-has-[img]:pl-2' },
+  md: { d: 32, overlap: 10, gap: 2, box: 'size-8', pull: '-ml-2.5', shift: 'pl-2.5', faceShift: 'not-has-[img]:pl-2.5' },
+  lg: { d: 40, overlap: 12, gap: 2.5, box: 'size-10', pull: '-ml-3', shift: 'pl-3', faceShift: 'not-has-[img]:pl-3' },
 };
 
-// The bitten-circle mask, in a viewBox that is the disc's own px box.
-// Disc: centre (r, r), radius r. Left neighbour's centre sits `c = d - overlap`
-// px to the left, at (r - c, r); the bite is that centre with radius
-// R = r + gap. The two circles cross where x = r - a, y = r ± h, with
-// a = (c² + r² - R²) / 2c and h = √(r² - a²). The path runs the disc's
-// large arc clockwise round the right side from the top crossing to the
-// bottom one, then the bite's small arc back up (counter-clockwise, bulging
-// right into the disc), leaving the crescent. mask-image reads the SVG's
-// alpha, so the filled crescent is what shows.
+// The bite mask, in a viewBox that is the disc's own px box: the full square
+// minus a circle, filled evenodd. The circle is the left neighbour's disc
+// grown by `gap` — centred `d - overlap` px left of this disc's centre, at
+// (overlap - r, r), radius r + gap. The mask only removes the bite; the
+// disc's own rounded-full edge draws its outer rim, so bitten discs
+// anti-alias exactly like the first one. mask-image reads the SVG's alpha.
 function biteMask({ d, overlap, gap }) {
   const r = d / 2;
-  const c = d - overlap;
   const R = r + gap;
-  const a = (c * c + r * r - R * R) / (2 * c);
-  const h = Math.sqrt(r * r - a * a);
   const n = (v) => +v.toFixed(3);
-  const x = n(r - a);
   const svg =
     `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${d} ${d}'>` +
-    `<path d='M${x} ${n(r - h)}A${r} ${r} 0 1 1 ${x} ${n(r + h)}` +
-    `A${R} ${R} 0 0 0 ${x} ${n(r - h)}Z'/></svg>`;
+    `<path fill-rule='evenodd' d='M0 0H${d}V${d}H0Z` +
+    `M${n(overlap - r - R)} ${r}a${R} ${R} 0 1 0 ${2 * R} 0a${R} ${R} 0 1 0 ${-2 * R} 0Z'/></svg>`;
   // Fully percent-encoded (quotes and parens too) so the unquoted url() is
   // safe inside a style attribute however it gets serialized.
   const url =
@@ -103,7 +103,7 @@ const CHIP_SIZE = {
 export default class AvatarGroup extends PuzzleView {
   data(params, props) {
     const size = SIZES[props.size] ? props.size : 'md';
-    const { box, pull } = SIZES[size];
+    const { box, pull, shift, faceShift } = SIZES[size];
     const source = props.avatars || [];
     const max = Number(props.max) > 0 ? Math.floor(Number(props.max)) : 4;
     const visible = source.slice(0, max);
@@ -112,7 +112,7 @@ export default class AvatarGroup extends PuzzleView {
     // Item 0 is a plain circle; every later item pulls left and is bitten.
     const wrap = (i) => ({
       wrapperClass: ['flex shrink-0', box, i === 0 ? '' : pull].filter(Boolean).join(' '),
-      style: i === 0 ? '' : BITE[size],
+      style: i === 0 ? false : BITE[size],
     });
 
     const stack = visible.map((avatar, i) => ({
@@ -123,6 +123,7 @@ export default class AvatarGroup extends PuzzleView {
       chipClass: '',
       chipText: '',
       chipLabel: '',
+      avatarClass: i === 0 ? '' : faceShift,
       ...wrap(i),
     }));
 
@@ -134,7 +135,10 @@ export default class AvatarGroup extends PuzzleView {
         name: '',
         chipText: '+' + overflowCount,
         chipLabel: overflowCount + ' more',
-        chipClass: [CHIP_BASE, CHIP_SIZE[size]].join(' '),
+        avatarClass: '',
+        chipClass: [CHIP_BASE, CHIP_SIZE[size], visible.length === 0 ? '' : shift]
+          .filter(Boolean)
+          .join(' '),
         ...wrap(visible.length),
       });
     }
