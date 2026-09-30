@@ -239,15 +239,19 @@ function resetFixtureSeed(seedValue) {
  * @this {Store}
  * @param {RequestInfo | URL} url
  * @param {RequestInit} init
- * @param {{ type: string, method: string, url: RequestInfo | URL }} context
+ * @param {{ type: string, method: string, url: string }} context
  * @returns {Promise<Response>}
  */
 function mockNetwork(url, init, context) {
 	const modelMock = this.modelFor(context.type).adapter?.mock;
 	const fileMock = activeConfig?.mock?.[context.type];
 	if (modelMock || fileMock) {
-		// @ts-expect-error BUG (reported): an author verb's fetch may pass a URL or Request as `url`, and mockFetch calls url.startsWith; the mock's result is a Response-shaped stand-in, hence the cast
-		return /** @type {Promise<Response>} */ (mockFetch(this, context.type, { ...modelMock, ...fileMock }, url, init));
+		// context.url, not `url`: an author verb may fetch a URL or Request object,
+		// and the mock routes by the string form _fetch already derived. The mock's
+		// result is a Response-shaped stand-in, hence the cast.
+		return /** @type {Promise<Response>} */ (
+			mockFetch(this, context.type, { ...modelMock, ...fileMock }, context.url, init)
+		);
 	}
 	return originalNetwork.call(this, url, init, context);
 }

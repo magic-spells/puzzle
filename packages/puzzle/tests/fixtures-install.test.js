@@ -160,6 +160,27 @@ describe('mock config — model block and fixtures file merge per key', () => {
 		expect(fetchSpy).not.toHaveBeenCalled();
 	});
 
+	it('an author verb that fetches a URL or Request object is served by the mock', async () => {
+		install();
+		const data = [{ id: 't1', text: 'mocked' }];
+		// The enhanced fetch accepts anything global fetch does; the mock must route
+		// by the request's string URL, not call string methods on the raw input.
+		class UrlTodo extends modelWith({ data }) {
+			static adapter = { ...super.adapter, loadMany: (fetch) => fetch(new URL(`${API}/api/todos`)) };
+		}
+		const byUrl = await new Store({ todo: UrlTodo }, { apiURL: API }).loadMany('todo');
+		expect(byUrl.map((r) => r.text)).toEqual(['mocked']);
+
+		class RequestTodo extends modelWith({ data }) {
+			static adapter = {
+				...super.adapter,
+				loadMany: (fetch) => fetch(new Request(`${API}/api/todos`)),
+			};
+		}
+		const byRequest = await new Store({ todo: RequestTodo }, { apiURL: API }).loadMany('todo');
+		expect(byRequest.map((r) => r.text)).toEqual(['mocked']);
+	});
+
 	it('a model block alone still works with no fixtures-file mock', async () => {
 		install();
 		const records = await storeWith({ data: [{ id: 't1', text: 'from the model' }] }).loadMany(

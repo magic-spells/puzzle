@@ -14,7 +14,7 @@ declare module '../../client-runtime/datastore/store.js' {
 		_network?(
 			url: RequestInfo | URL,
 			init: RequestInit,
-			context: { type: string; method: string; url: RequestInfo | URL }
+			context: { type: string; method: string; url: string }
 		): Promise<Response>;
 	}
 }

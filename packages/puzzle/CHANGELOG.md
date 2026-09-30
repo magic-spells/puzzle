@@ -1089,6 +1089,11 @@ checklist sent you.
     gave `undefined`.
   - `installFakeAnimate().animateCalls` records the options argument as it was
     passed: `number | KeyframeAnimationOptions | undefined`.
+- **The fixtures mock serves an adapter verb that fetches a `URL` or
+  `Request`.** With fixtures installed, `loadMany: (fetch) => fetch(new
+  URL('/api/todos', location.origin))` on a mocked model threw
+  `url.startsWith is not a function`; the mock now routes by the request's
+  string URL.
 - **The Prettier plugin honors `endOfLine: "crlf"`.** Under `crlf`, or
   `auto` on a CRLF file, every `<script>` and `<style>` body line ended
   `\r\r\n`: each format changed the file again, and a multi-line template

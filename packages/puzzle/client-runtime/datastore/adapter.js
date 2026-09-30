@@ -1240,7 +1240,7 @@ class AdapterStoreMethods {
 	 * @this {AdapterStore}
 	 * @param {RequestInfo | URL} url the author-supplied or generated request target
 	 * @param {RequestInit} init the fetch init this verb requires
-	 * @param {{ type: string, method: string, url: RequestInfo | URL }} context frozen before the hook sees it
+	 * @param {{ type: string, method: string, url: string }} context frozen before the hook sees it
 	 */
 	_fetch(url, init, context) {
 		const frozenContext = Object.freeze(context);
@@ -1264,7 +1264,7 @@ class AdapterStoreMethods {
 	 * @this {AdapterStore}
 	 * @param {RequestInfo | URL} url
 	 * @param {RequestInit} init
-	 * @param {{ type: string, method: string, url: RequestInfo | URL }} context
+	 * @param {{ type: string, method: string, url: string }} context
 	 * @returns {Promise<Response>}
 	 */
 	_network(url, init, context) {
