@@ -1142,3 +1142,93 @@ describe('replacement cleanup', () => {
 		expect(refClears).toBe(1);
 	});
 });
+
+// The skeleton anti-flash hold (D52) defers the first loaded swap to a timer; a
+// render or afterUpdate throw there still funnels through onError + errorView,
+// reported as `mount`, instead of escaping as an uncaught exception.
+describe('a throw at the end of a skeleton hold', () => {
+	class HoldError extends PuzzleView {
+		render() {
+			return h('section', { class: 'app-error' }, [text('ERR:' + this.props.error.message)]);
+		}
+	}
+	function tagsView(hold, hooks = {}) {
+		class Tags extends PuzzleView {
+			async data() {
+				await new Promise((r) => setTimeout(r, 5));
+				return { tags: hooks.payload ?? ['a'] };
+			}
+			render() {
+				return h('puzzle-view', { class: 'loaded' }, [text(this.getData().tags.join(','))]);
+			}
+			renderSkeleton() {
+				return h('puzzle-view', { class: 'loading' }, [text('Loading')]);
+			}
+		}
+		if (hooks.afterUpdate) Tags.prototype.afterUpdate = hooks.afterUpdate;
+		if (hold) Tags.prototype.skeletonMinDuration = hold;
+		return Tags;
+	}
+	async function run(View, asChild) {
+		const reports = [];
+		const uncaught = [];
+		const onUncaught = (err) => uncaught.push(err.message);
+		process.on('uncaughtException', onUncaught);
+		const root = asChild
+			? class Host extends PuzzleView {
+					render() {
+						return h('puzzle-view', { class: 'host' }, [text('['), comp(View), text(']')]);
+					}
+				}
+			: View;
+		try {
+			const app = await createTestApp({
+				routes: [{ path: '/', view: root }],
+				errorView: HoldError,
+				onError(error, info) {
+					reports.push({ message: error.message, phase: info.phase });
+				},
+			});
+			apps.push(app);
+			for (let i = 0; i < 12; i++) {
+				await new Promise((r) => setTimeout(r, 20));
+				await settled();
+			}
+			return { text: app.container.textContent, reports, uncaught };
+		} finally {
+			process.off('uncaughtException', onUncaught);
+		}
+	}
+	const renderBoom = 'this.getData(...).tags.join is not a function';
+
+	it('a render throw after the hold replaces a child in place, phase mount', async () => {
+		const out = await run(tagsView(80, { payload: 42 }), true);
+		expect(out.uncaught).toEqual([]);
+		expect(out.reports).toEqual([{ message: renderBoom, phase: 'mount' }]);
+		expect(out.text).toBe(`[ERR:${renderBoom}]`);
+	});
+
+	it('a render throw after the hold replaces a routed root, phase mount', async () => {
+		const out = await run(tagsView(80, { payload: 42 }), false);
+		expect(out.uncaught).toEqual([]);
+		expect(out.reports).toEqual([{ message: renderBoom, phase: 'mount' }]);
+		expect(out.text).toBe(`ERR:${renderBoom}`);
+	});
+
+	it('an afterUpdate throw after the hold replaces the child, phase mount', async () => {
+		const afterUpdate = () => {
+			throw new Error('hook boom');
+		};
+		const out = await run(tagsView(80, { afterUpdate }), true);
+		expect(out.uncaught).toEqual([]);
+		expect(out.reports).toEqual([{ message: 'hook boom', phase: 'mount' }]);
+		expect(out.text).toBe('[ERR:hook boom]');
+	});
+
+	it('control: the same throw without a hold', async () => {
+		const out = await run(tagsView(0, { payload: 42 }), true);
+		expect(out.uncaught).toEqual([]);
+		expect(out.reports).toEqual([{ message: renderBoom, phase: 'mount' }]);
+		expect(out.text).toBe(`[ERR:${renderBoom}]`);
+	});
+});
