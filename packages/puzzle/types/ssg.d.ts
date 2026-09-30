@@ -11,7 +11,7 @@
  */
 
 /**
- * The resolved reserved head fields for a route (v1.50, D84 — SPEC §45): each
+ * The resolved reserved head fields for a route (D84 — SPEC §45): each
  * field is the nearest-defined `meta` value walking the chain leaf→root
  * (`undefined` inherits, `null` suppresses), or null when nothing resolves.
  */
@@ -23,7 +23,7 @@ export interface ResolvedRouteHead {
 }
 
 /**
- * What a prerendered page's records cannot say on their own (v1.76, D161): the
+ * What a prerendered page's records cannot say on their own (D161): the
  * adapter read state the build settled, handed to the browser kernel in its own
  * island so `mountStatic` does not refetch what prerender already resolved.
  * Versioned so an older kernel can reject a newer envelope.

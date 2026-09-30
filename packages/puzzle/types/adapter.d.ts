@@ -63,7 +63,7 @@ export interface AdapterDefaults<TRecord extends PuzzleModel = PuzzleModel> {
  */
 export interface AdapterConfig<TRecord extends PuzzleModel = PuzzleModel> {
 	endpoint?: string;
-	/** Development/test mock served in place of the network (v1.57, D95). */
+	/** Development/test mock served in place of the network (D95). */
 	mock?: AdapterMock;
 	loadMany?(
 		fetch: AdapterFetch,
