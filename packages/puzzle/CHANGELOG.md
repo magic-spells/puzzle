@@ -966,6 +966,12 @@ checklist sent you.
 
 ### Fixed
 
+- **A snippet that declares a subset of a marker's arguments no longer warns.**
+  Declaring fewer params than the marker hands over was always legal (D166),
+  but the development shape warning demanded an exact match, so
+  `<Snippet fits="day" date day>` against a marker handing over five values
+  logged "the shapes don't match". It now warns only for a declared param the
+  marker does not hand over.
 - **`puzzle check` types library calls as the public types do.** `t`'s
   variables may be any object or `null` — `t('greeting', user)` with an
   interface-typed or class-instance `user` was rejected for lacking an index

@@ -688,11 +688,10 @@ function warnSnippet(component, issue, message) {
 
 function warnSnippetShape(snippet, args, name, component) {
 	const params = snippet.attrs.params || [];
+	// A snippet may declare a SUBSET of what the marker hands over; only a
+	// declared param the marker does not hand over is a mismatch.
+	if (params.every((param) => Object.prototype.hasOwnProperty.call(args, param))) return;
 	const handed = Object.keys(args);
-	const same =
-		params.length === handed.length &&
-		params.every((param) => Object.prototype.hasOwnProperty.call(args, param));
-	if (same) return;
 	warnSnippet(
 		component,
 		`shape:${name}`,
