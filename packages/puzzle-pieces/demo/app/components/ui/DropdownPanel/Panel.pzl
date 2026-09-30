@@ -76,6 +76,15 @@ function oneOf(value, allowed) {
 const CARD =
   'rounded-lg border border-border bg-surface p-2 shadow-md min-w-48 z-40 text-body';
 
+// The trigger gap. The component's stylesheet pins a downward panel flush at
+// top: 100%, so without this the card's border sits on the trigger's. A flipped
+// panel (bottom: 100%) takes the gap on the other side, and a pointer-placed
+// one — ContextMenu's root, which the component pins with an inline
+// position: fixed — has no trigger to clear, so it drops the gap and opens at
+// the click point. Never on opens="right" (a submenu beside its row) or a wide
+// panel, whose top edge is the bar's, not the trigger's.
+const GAP = 'mt-1.5 [&[flipped]]:mt-0 [&[flipped]]:mb-1.5 [&[style*=fixed]]:mt-0';
+
 // The right-align recipe. `left-auto right-0` is meaningless on a wide panel
 // (it is width: 100% already) and on opens="right" (whose left is the point),
 // so it is only ever applied to a plain downward popover.
@@ -84,10 +93,13 @@ const ALIGN_END = 'left-auto right-0';
 export default class Panel extends PuzzleView {
   data(params, props) {
     const opens = oneOf(props.opens, ['down', 'right']);
-    const alignEnd = props.align === 'end' && !props.wide && opens !== 'right';
+    const down = !props.wide && opens !== 'right';
+    const alignEnd = props.align === 'end' && down;
 
     return {
-      panelClass: [CARD, alignEnd ? ALIGN_END : '', props.class].filter(Boolean).join(' '),
+      panelClass: [CARD, down ? GAP : '', alignEnd ? ALIGN_END : '', props.class]
+        .filter(Boolean)
+        .join(' '),
       // A boolean attribute on a custom element: presence is the whole signal,
       // and the component reads it with hasAttribute().
       wideAttr: props.wide ? true : false,
