@@ -54,7 +54,8 @@ export default class Counter extends PuzzleView {
   }
 
   // Event handlers are a class field of arrow functions so `this` is always the
-  // component instance. Method shorthand (increment() {}) is a compile error.
+  // component instance. Method shorthand (increment() {}) gets the events object
+  // as `this` instead, so it breaks as soon as it touches `this`.
   events = {
     increment: (): void => {
       this.setData('count', this.getData<CounterState>().count + 1);

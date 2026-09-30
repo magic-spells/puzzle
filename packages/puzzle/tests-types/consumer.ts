@@ -178,6 +178,13 @@ const staticResult: ValidationResult = Todo.validate({ title: 'x' });
 const okFlag: boolean = staticResult.valid;
 const firstErr = staticResult.errors[0];
 const errShape: { field: string; rule: string; message: string } | undefined = firstErr;
+// options.fields narrows the check to the named fields (mutable or readonly arrays).
+const partialResult: ValidationResult = Todo.validate({ title: 'x' }, { fields: ['title'] });
+const readonlyFields = ['title'] as const;
+Todo.validate({}, { fields: readonlyFields });
+Todo.validate({}, {});
+// @ts-expect-error fields is a list of field names, not a single name
+Todo.validate({}, { fields: 'title' });
 
 // ---------------------------------------------------------------------------
 // PuzzleView subclass: data / events / animations / memo (§4, §12, §32)
@@ -847,4 +854,5 @@ handle(new PuzzleAdapterError(404, 'Not Found', { detail: 'missing' }));
 
 void okFlag;
 void errShape;
+void partialResult;
 void upcase;

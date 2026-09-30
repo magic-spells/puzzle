@@ -21,7 +21,7 @@ const npmInstallLine = "npm install -D tailwindcss @tailwindcss/cli"
 // canonicalTailwindConfig mirrors examples/todos/puzzle.config.js: an ES module
 // default-exporting the styles.use block. Tabs match the reference file so a
 // freshly written config reads like the hand-authored one.
-const canonicalTailwindConfig = `// Puzzle app configuration (constellation/doc/DOC-DECISIONS.md D12/D26). Read by the
+const canonicalTailwindConfig = `// Puzzle app configuration (D12/D26). Read by the
 // compiler via node — the Go side never parses JS (D3). Declaring the Tailwind
 // pipeline makes ` + "`puzzle build`" + ` / ` + "`puzzle dev`" + ` run the Tailwind CLI and fold
 // its output into dist/styles.css ahead of the collected <style> blocks.

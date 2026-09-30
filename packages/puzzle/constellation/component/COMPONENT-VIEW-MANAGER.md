@@ -22,6 +22,7 @@ those trees down. Satellite modules: `html.js` (live-HTML ranges), `flip.js`,
 
 ## Reconciliation
 
+
 - **Keyed** children reconcile with moves. Identity is the (tag, key) pair compared by
   native SameValueZero through tag-partitioned nested Maps (`oldKeyed`), so `1` vs
   `"1"`, `NaN` and class tags never alias. The dev-only duplicate-key detector
@@ -44,9 +45,20 @@ those trees down. Satellite modules: `html.js` (live-HTML ranges), `flip.js`,
   the SAME object in both trees, so mounting first would let the outgoing unmount destroy
   the new child. The insertion ref (`anchor` + its `nextSibling`) is captured before the
   unmount and resolved after it.
-- **Known limitation:** the keyed move guard dereferences `newChild.el` without a null
-  check, so a paired component vnode whose instance was destroyed out-of-band crashes the
-  patch instead of degrading.
+- **Invariant: `newChild.el` is never null at the keyed move guard**, which is why it
+  reads `el` unchecked. Every child reaches the guard straight out of `patch()` or
+  `mount()`, and both set `el` on every branch. `mount()` creates a node for every
+  non-component kind (element, text, `{#if}` placeholder, Portal placeholder, live-HTML
+  comment), and `unmount()` never clears `el`, so `patch()` can always hand the old
+  node on. A component vnode takes `child.element`. `PuzzleView.mount()` creates that
+  node (its anchor comment) synchronously, before its first await or any user hook, and
+  a live instance keeps `currentTree.el ?? anchor` until `destroy()`. A destroyed
+  instance never reaches `patchComponent`, whether it failed on mount or was destroyed
+  out of band: `patch()` routes it to one of two recovery arms. One remounts a fresh
+  instance. The other adopts the error view's element, and that link is always cleared
+  before the error view is destroyed. `tests/keyed-move-el.test.js` pins this by
+  reordering rows that are pending, behind a skeleton, failed, error-viewed, destroyed
+  out of band, or next to HTML, Portal, placeholder and slot siblings.
 - Controlled `value`/`checked` re-sync from the new value on every patch, including
   browser-drifted values (`syncControl`, the one implementation shared with
   `patchAttrs`/`reassertSelectValue`).

@@ -44,7 +44,7 @@ export interface LazyViewModule {
 }
 
 /**
- * Explicitly mark an async route view/layout loader (v1.77, D163):
+ * Explicitly mark an async route view/layout loader (D163):
  * `view: lazy(() => import('./views/Admin.pzl'))`. A BARE loader function in a
  * `view`/`layout` position is deliberately a type error — the runtime never
  * guesses which kind of function it was handed.
@@ -57,17 +57,17 @@ export declare function lazy(
  * A route definition (constellation/doc/DOC-SPEC.md §9). `view`/`layout` are
  * PuzzleView subclasses (constructors) or `lazy()` markers (D163). `.pzl`
  * default exports and compiled classes are typed `any` by the compiler shim, so
- * they still assign cleanly. Nested via `children` (v1.3, D30).
+ * they still assign cleanly. Nested via `children` (D30).
  */
 export interface Route {
 	path: string;
 	name?: string;
 	view: PuzzleViewConstructor | LazyView;
 	layout?: PuzzleViewConstructor | LazyView;
-	/** Route-entry guard (v1.53, D87), inherited root → leaf and run before views load. */
+	/** Route-entry guard (D87), inherited root → leaf and run before views load. */
 	guard?: GuardFn;
 	/**
-	 * Route metadata. Four RESERVED head fields (v1.50, D84 —
+	 * Route metadata. Four RESERVED head fields (D84 —
 	 * constellation/doc/DOC-SPEC.md §45): each resolves independently,
 	 * nearest-defined walking the destination chain leaf→root; `undefined`
 	 * inherits from a parent, `null` explicitly suppresses an inherited value.
@@ -92,7 +92,7 @@ export interface Route {
 	[key: string]: any;
 }
 
-/** A route guard (v1.53, D87): allow, block, or redirect before navigation loads. */
+/** A route guard (D87): allow, block, or redirect before navigation loads. */
 export type GuardFn = (nav: {
 	to: RouteSnapshot;
 	from: RouteSnapshot | null;
@@ -109,15 +109,15 @@ export interface ScrollPosition {
 export interface RouteSnapshot {
 	/** The raw path-shaped navigation target (base-free), query + hash included. */
 	path: string;
-	/** `path` minus query + hash (v1.49, D83) — base-free, trailing slash kept verbatim. */
+	/** `path` minus query + hash (D83) — base-free, trailing slash kept verbatim. */
 	pathname: string;
 	/**
-	 * The parsed query (v1.49, D83): a frozen, null-prototype object with
+	 * The parsed query (D83): a frozen, null-prototype object with
 	 * URLSearchParams decoding — a single value is a string, a repeated key a
 	 * frozen array in source order, a valueless key (`?debug`) `''`.
 	 */
 	query: Readonly<Record<string, string | readonly string[]>>;
-	/** `''`, or the raw fragment including the leading `#` (v1.49, D83). */
+	/** `''`, or the raw fragment including the leading `#` (D83). */
 	hash: string;
 	route: Route;
 	params: Record<string, string>;
@@ -125,7 +125,7 @@ export interface RouteSnapshot {
 }
 
 /**
- * Custom scroll behavior (v1.5, D33): return a position to scroll to, or a
+ * Custom scroll behavior (D33): return a position to scroll to, or a
  * falsy value to leave scroll alone.
  */
 export type ScrollBehavior = (
@@ -135,7 +135,7 @@ export type ScrollBehavior = (
 ) => ScrollPosition | null | undefined | false;
 
 /**
- * Custom router focus behavior (v1.56, D93): return the element focus should land
+ * Custom router focus behavior (D93): return the element focus should land
  * on after a committed navigation, or a falsy value to leave focus alone for that
  * navigation. Called AFTER the incoming chain is mounted, so it may query the
  * freshly committed DOM; a throw is logged and treated as falsy. The route
@@ -193,7 +193,7 @@ export interface AnimationSpec {
 	easing?: string;
 	delay?: number;
 	/**
-	 * When the enter animation plays (v1.40, D73; constellation/doc/DOC-SPEC.md §39).
+	 * When the enter animation plays (D73; constellation/doc/DOC-SPEC.md §39).
 	 * `'mount'` (default) plays immediately on mount; `'visible'` holds the element
 	 * at its `from` keyframe and reveals it the first time it scrolls into view.
 	 * Only meaningful on the `in` spec — a `trigger` on `out` warns once and is
@@ -201,7 +201,7 @@ export interface AnimationSpec {
 	 */
 	trigger?: 'mount' | 'visible';
 	/**
-	 * With `trigger: 'visible'` (v1.40, D73), the reveal line's distance ABOVE the
+	 * With `trigger: 'visible'` (D73), the reveal line's distance ABOVE the
 	 * viewport's bottom edge: a number is px, a string must match
 	 * `/^\d+(\.\d+)?(px|%)$/` (e.g. `'15%'`). Maps to an IntersectionObserver
 	 * `rootMargin` of `'0px 0px -<offset> 0px'` at threshold 0. Invalid values warn
@@ -209,7 +209,7 @@ export interface AnimationSpec {
 	 */
 	triggerOffset?: number | string;
 	/**
-	 * With `trigger: 'visible'` (v1.40, D73), a CSS selector for an ANCESTOR to
+	 * With `trigger: 'visible'` (D73), a CSS selector for an ANCESTOR to
 	 * observe INSTEAD of the element itself, so a group of instances sharing one
 	 * section reveal together. Resolved once via `element.closest(selector)`
 	 * (ancestors only; a self-match is harmless). `triggerOffset` still composes.
@@ -220,7 +220,7 @@ export interface AnimationSpec {
 	triggerAnchor?: string;
 }
 
-/** Declarative enter/leave animations on a view/component (v1.1, D28). */
+/** Declarative enter/leave animations on a view/component (D28). */
 export interface Animations {
 	in?: AnimationSpec;
 	out?: AnimationSpec;
@@ -241,7 +241,7 @@ export interface FindManyOptions {
 	filter?: (record: any) => boolean;
 }
 
-/** Options for `store.request(type, path, options)` (v1.18, D50). */
+/** Options for `store.request(type, path, options)` (D50). */
 export interface RequestOptions {
 	method?: string;
 	body?: any;
@@ -249,7 +249,7 @@ export interface RequestOptions {
 }
 
 /**
- * The frozen, read-only context handed to `beforeRequest` (v1.55, D91): the model
+ * The frozen, read-only context handed to `beforeRequest` (D91): the model
  * type the request belongs to, the HTTP verb, and the fully built URL.
  */
 export interface AdapterRequestContext {
@@ -259,7 +259,7 @@ export interface AdapterRequestContext {
 }
 
 /**
- * Adapter request hook (v1.55, D91). Called synchronously before every adapter
+ * Adapter request hook (D91). Called synchronously before every adapter
  * fetch — `loadMany`/`loadOne` (D21), `save()`/`delete()` and `request()` (D50).
  * Mutate `init` in place or return a replacement object (a truthy object return
  * wins) to attach auth headers, `credentials`, or an `AbortSignal`. `method` and
@@ -280,7 +280,7 @@ export interface StoreOptions {
 	storageKey?: string;
 	/** Base URL for the server read/write path. */
 	apiURL?: string;
-	/** Adapter request hook (v1.55, D91). */
+	/** Adapter request hook (D91). */
 	beforeRequest?: BeforeRequestHook;
 }
 
@@ -322,7 +322,7 @@ export interface Store {
 // ----------------------------------------------------------------------------
 
 /**
- * The shared-element morph slot (v1.23, D55) — normally filled by
+ * The shared-element morph slot (D55) — normally filled by
  * `enableMorph(app)` from `@magic-spells/puzzle/morph`. The router only knows
  * WHEN: `enter` fires after a committed swap mounts (pre-paint); `leave` fires
  * as an outgoing unit's out phase starts, and a returned promise is awaited
@@ -340,19 +340,19 @@ export interface MorphHandler {
 export interface Router {
 	/** Navigate to a path (push a history entry). */
 	push(path: string): void | Promise<void>;
-	/** Navigate to a path REPLACING the current history entry — no new entry, scroll left alone by default (v1.49, D83). */
+	/** Navigate to a path REPLACING the current history entry — no new entry, scroll left alone by default (D83). */
 	replace(path: string): void | Promise<void>;
-	/** Move `n` entries in history (negative = back). All modes (v1.11, D42). */
+	/** Move `n` entries in history (negative = back). All modes (D42). */
 	go(n: number): void | Promise<void>;
 	/** Go back one entry. */
 	back(): void | Promise<void>;
 	/** Go forward one entry. */
 	forward(): void | Promise<void>;
-	/** Path-shaped route in, mode-encoded href out (`'/x'` path mode, `'#/x'` hash, unchanged memory); strings not starting with `/` pass through (v1.46, D79). */
+	/** Path-shaped route in, mode-encoded href out (`'/x'` path mode, `'#/x'` hash, unchanged memory); strings not starting with `/` pass through (D79). */
 	url(path: string): string;
 	/** The current route snapshot, or null before the first navigation. */
 	readonly current: RouteSnapshot | null;
-	/** Register the shared-element morph handler (v1.23, D55); null unregisters. */
+	/** Register the shared-element morph handler (D55); null unregisters. */
 	setMorphHandler(handler: MorphHandler | null): void;
 	[key: string]: any;
 }
@@ -535,7 +535,7 @@ export declare class PuzzleView {
 
 	/**
 	 * The route snapshot of the navigation delivering this view's params
-	 * (v1.15, D47). Correct inside the pre-commit `data()` gate; null off-router.
+	 * (D47). Correct inside the pre-commit `data()` gate; null off-router.
 	 */
 	readonly route: RouteSnapshot | null;
 
@@ -547,12 +547,12 @@ export declare class PuzzleView {
 	readonly element: Element | Comment | null;
 
 	/**
-	 * Live element refs (v1.39, D72): `ref="name"` in the template exposes the
+	 * Live element refs (D72): `ref="name"` in the template exposes the
 	 * mounted DOM element as `this.refs.name`, and `null` while not mounted.
 	 */
 	readonly refs: Record<string, Element | null>;
 
-	/** Whether the first `data()` result has committed (v1.8, D39). */
+	/** Whether the first `data()` result has committed (D39). */
 	readonly loaded: boolean;
 
 	/** True once `destroy()` has run (constellation/doc/DOC-VIEW-LIFECYCLE.md §3). */
@@ -572,7 +572,7 @@ export declare class PuzzleView {
 	setData(partial: Record<string, any>): void;
 
 	/**
-	 * Reference-stable derived value (v1.29, D64). Per-instance cache keyed by
+	 * Reference-stable derived value (D64). Per-instance cache keyed by
 	 * `key`: returns the cached value while `deps` match the previous call
 	 * positionally by `Object.is` (length change = miss); otherwise runs `factory()`,
 	 * caches, and returns the fresh value. The blessed way to return object/array
@@ -592,7 +592,7 @@ export declare class PuzzleView {
 	 */
 	events: Record<string, (...args: any[]) => void>;
 
-	/** Declarative enter/leave animations (v1.1, D28). */
+	/** Declarative enter/leave animations (D28). */
 	animations?: Animations;
 
 	// ---- lifecycle hooks (all optional to override) ----
@@ -602,7 +602,7 @@ export declare class PuzzleView {
 	afterUpdate(): void;
 	destroyed(): void;
 
-	// ---- enter/leave hooks (v1.1, D28) ----
+	// ---- enter/leave hooks (D28) ----
 	viewWillShow(): void;
 	viewDidShow(): void;
 	viewWillHide(): void;
@@ -617,7 +617,7 @@ export declare class PuzzleView {
 // ----------------------------------------------------------------------------
 
 /**
- * The request handed to an `adapter.mock.handler` (v1.57, D95). `path` is
+ * The request handed to an `adapter.mock.handler` (D95). `path` is
  * relative to `apiURL + endpoint` (`''` for the collection), `body` is the parsed
  * request body, and `collection` is the mock's LIVE state — a `Map` keyed by
  * primary key, so a handler can read and mutate it.
@@ -630,7 +630,7 @@ export interface AdapterMockRequest {
 	collection: Map<any, any>;
 }
 
-/** What an `adapter.mock.handler` returns to serve a request (v1.57, D95). */
+/** What an `adapter.mock.handler` returns to serve a request (D95). */
 export interface AdapterMockResult {
 	/** HTTP status (default 200). */
 	status?: number;
@@ -639,7 +639,7 @@ export interface AdapterMockResult {
 }
 
 /**
- * Development/test mock for a model's adapter (v1.57, D95). Declared on the
+ * Development/test mock for a model's adapter (D95). Declared on the
  * model; served only when `@magic-spells/puzzle/fixtures` is installed (D98),
  * which replaces the Store's one network seam. `loadMany` / `loadOne` / `save()` /
  * `delete()` / `request()` are unchanged and the real read and write paths still
@@ -663,7 +663,7 @@ export interface AdapterMock {
 export interface ModelAdapter {
 	/** Optional REST shorthand; `/adapter` augments this interface with typed verbs. */
 	endpoint?: string;
-	/** Development/test mock served in place of the network (v1.57, D95). */
+	/** Development/test mock served in place of the network (D95). */
 	mock?: AdapterMock;
 	[key: string]: any;
 }
@@ -682,8 +682,15 @@ export declare class PuzzleModel {
 	/** API adapter — per-verb fetch functions, optionally filled by `{ endpoint }` REST shorthand. */
 	static adapter?: ModelAdapter;
 
-	/** Validate a plain data object against the schema (non-throwing). */
-	static validate(data: Record<string, any>): ValidationResult;
+	/**
+	 * Validate a plain data object against the schema (non-throwing).
+	 * `options.fields` limits the check to those declared field names; omitted
+	 * means every declared field.
+	 */
+	static validate(
+		data: Record<string, any>,
+		options?: { fields?: readonly string[] },
+	): ValidationResult;
 
 	/** Merge a patch into the record; notifies the store. Returns the record. */
 	update(patch: Record<string, any>): this;
@@ -725,11 +732,11 @@ export interface SchemaField {
 
 /**
  * A relationship descriptor built by `Puzzle.hasMany`/`Puzzle.belongsTo`
- * (v1.17, D49). Not chainable — a relationship is not a field.
+ * (D49). Not chainable — a relationship is not a field.
  */
 export interface Relationship {}
 
-/** Options for the relationship builders (v1.17, D49). */
+/** Options for the relationship builders (D49). */
 export interface RelationshipOptions {
 	/** Override the by-convention foreign-key field name. */
 	key?: string;
@@ -784,15 +791,15 @@ export interface PuzzleAppConfig {
 	/** Bare or defaults-configured capability from `@magic-spells/puzzle/adapter`. */
 	adapter?: PuzzleAdapterCapability;
 	/**
-	 * Adapter request hook (v1.55, D91): `beforeRequest(init, { type, method, url })`,
+	 * Adapter request hook (D91): `beforeRequest(init, { type, method, url })`,
 	 * called synchronously before every adapter fetch. Mutate `init` or return a
 	 * replacement to attach auth headers, `credentials`, or an `AbortSignal`.
 	 */
 	beforeRequest?: BeforeRequestHook;
-	/** Router scroll handling (v1.5, D33): `false`, or a custom function. */
+	/** Router scroll handling (D33): `false`, or a custom function. */
 	scrollBehavior?: false | ScrollBehavior;
 	/**
-	 * Router focus management + route announcement (v1.56, D93). Omit for the
+	 * Router focus management + route announcement (D93). Omit for the
 	 * default: after every committed navigation focus the leaf view's root
 	 * (`tabindex="-1"` stamped and removed on blur) with `{ preventScroll: true }`,
 	 * and announce the committed `document.title` in a framework-owned
@@ -802,36 +809,36 @@ export interface PuzzleAppConfig {
 	 */
 	focusBehavior?: false | FocusBehavior;
 	/**
-	 * Router URL carrier (v1.6 D34 / v1.11 D42, opt-in imports since D159). Omit
+	 * Router URL carrier (D34 / D42, opt-in imports since D159). Omit
 	 * for path routing (the pathname — the default), or pass a mode object from
 	 * `@magic-spells/puzzle/router-modes`: `hashRouter()` or
 	 * `memoryRouter({ initialPath })`. A mode STRING is a constructor error.
 	 */
 	routerMode?: RouterMode;
-	/** Serve the app under a sub-path (v1.19, D51). */
+	/** Serve the app under a sub-path (D51). */
 	routerBase?: string;
 	/**
-	 * Route transition feel (v1.24, D56): `'sequential'` (default — old `out`
+	 * Route transition feel (D56): `'sequential'` (default — old `out`
 	 * finishes before the new view mounts) or `'overlap'` (old `out` and new `in`
 	 * play concurrently via fixed-pin positioning). Also resolvable per-route
-	 * (routes.js) and per-view/layout (a class field) since v1.30 (D65).
+	 * (routes.js) and per-view/layout (a class field) (D65).
 	 */
 	transitionMode?: 'sequential' | 'overlap';
 	/**
-	 * App lifecycle hook (v1.31, SPEC §34, D66): runs inside `mount()` after the
+	 * App lifecycle hook (SPEC §34, D66): runs inside `mount()` after the
 	 * ctx services (store/router/formatters) are wired but BEFORE navigation #0,
 	 * and is awaited — store seeding here is visible to the first `data()`. A
 	 * throw aborts the mount (`mount()` rejects; `beforeUnmount` is skipped).
 	 */
 	beforeMount?: (this: PuzzleApp, app: PuzzleApp) => void | Promise<void>;
 	/**
-	 * App lifecycle hook (v1.31, SPEC §34, D66): runs after the initial route has
+	 * App lifecycle hook (SPEC §34, D66): runs after the initial route has
 	 * rendered (and the dev HMR state restore, D57). Its errors are logged, never
 	 * wedging a succeeded mount.
 	 */
 	mounted?: (this: PuzzleApp, app: PuzzleApp) => void | Promise<void>;
 	/**
-	 * App lifecycle hook (v1.31, SPEC §34, D66): runs at the top of `unmount()`
+	 * App lifecycle hook (SPEC §34, D66): runs at the top of `unmount()`
 	 * before any teardown, with services still live (persistence can flush).
 	 * Errors are logged; teardown always proceeds.
 	 */
@@ -874,7 +881,7 @@ export declare class PuzzleApp {
 	/** Tear down the app. Idempotent. */
 	unmount(): this;
 	/**
-	 * Register the shared-element morph handler (v1.23, D55) — the app-level
+	 * Register the shared-element morph handler (D55) — the app-level
 	 * face of Router.setMorphHandler, safe to call before OR after mount().
 	 * Called by `enableMorph(app)`; pass null to unregister.
 	 */

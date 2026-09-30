@@ -132,8 +132,8 @@ The call-site `slot="x"` **attribute** is unchanged — only the tags moved. Two
 of the three errors name their replacement outright:
 
 ```
-the default marker is spelled <Children/> since v1.64 (D134)
-named slots are spelled <Slot name="…"/> since v1.64 (D134)
+the default marker is spelled <Children/> (D134)
+named slots are spelled <Slot name="…"/> (D134)
 ```
 
 A bare `<slot>` is the one case the compiler cannot decide for you, because the
@@ -1060,6 +1060,13 @@ checklist sent you.
 - **The development hint for a removed `noescape` says to print a plain `{
   value }`.** It said "use raw", which renders HTML; 0.7's `noescape` printed
   text.
+- **`Model.validate(data, { fields })` is typed.** The static `validate`
+  already took an options bag limiting the check to named fields; the
+  declaration now includes `options?: { fields?: readonly string[] }`.
+- **The lowercase `<children/>` and `<slot name>` errors no longer cite
+  "since v1.64"**, a spec revision that was never a release. They read "the
+  default marker is spelled <Children/> (D134)" and "named slots are spelled
+  <Slot name="…"/> (D134)".
 - **puzzle-pieces:** phone-width overflow in Toolbar, Pagination, the
   DataTable footer and the Code buttons; `split-panel`'s `snap` no longer
   collapses every release to 0.

@@ -1,5 +1,5 @@
 /**
- * Public declarations for @magic-spells/puzzle/testing (v1.58, D94).
+ * Public declarations for @magic-spells/puzzle/testing (D94).
  *
  * These helpers target app-authored DOM tests. They require a DOM environment
  * such as jsdom; no test runner is imported or assumed.

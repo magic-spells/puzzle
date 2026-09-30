@@ -51,7 +51,7 @@ export declare function uninstall(): void;
 declare module './index.js' {
 	interface Store {
 		/**
-		 * Populate the store with schema-generated records (v1.57, D95): a count, or
+		 * Populate the store with schema-generated records (D95): a count, or
 		 * explicit partial shapes whose gaps are generated. `overrides` are fixed on
 		 * every record (an explicit shape wins). Records go through the normal
 		 * `createRecord` path — defaults, validation and pk assignment included.
