@@ -7,7 +7,9 @@
           An overlapping stack of avatars rendered from an array, with a "+N"
           overflow chip once the count exceeds a max. Composes the Avatar
           piece for each disc, so image/initials/glyph fallback behavior
-          matches Avatar exactly.
+          matches Avatar exactly. Each disc after the first is cut out around
+          its left neighbour with an SVG mask, so the gap between them is
+          real transparent space, not a ring painted in the page colour.
         </p>
       </header>
 
@@ -52,6 +54,17 @@
 
         <ExampleBox id="large-team" title="Large team" code={ codeLargeTeam } tall={ false }>
           <AvatarGroup avatars={ largeTeam } max={ 4 } label="16 collaborators"/>
+        </ExampleBox>
+
+        <ExampleBox id="any-background" title="Any background" code={ codeAnyBackground } tall={ false }>
+          <div class="flex flex-wrap gap-4">
+            <div class="rounded-lg bg-brand-tint p-4">
+              <AvatarGroup avatars={ team } max={ 4 } size="lg"/>
+            </div>
+            <div class="rounded-lg bg-brand p-4">
+              <AvatarGroup avatars={ team } max={ 4 } size="lg"/>
+            </div>
+          </div>
         </ExampleBox>
       </div>
     </article>
@@ -104,6 +117,11 @@ const codeSizes = `<AvatarGroup avatars={ team } max={ 4 } size="sm" />
 const codeLargeTeam = `// 16 avatars, max=4 — the chip reads "+12".
 <AvatarGroup avatars={ largeTeam } max={ 4 } label="16 collaborators" />`;
 
+const codeAnyBackground = `// The bite is a mask, not a ring — whatever sits behind shows through the gap.
+<div class="rounded-lg bg-brand-tint p-4">
+  <AvatarGroup avatars={ team } max={ 4 } size="lg" />
+</div>`;
+
 const NAMES = [
   'Ada Lovelace', 'Grace Hopper', 'Alan Turing', 'Katherine Johnson',
   'Linus Torvalds', 'Barbara Liskov', 'Margaret Hamilton', 'Dennis Ritchie',
@@ -122,6 +140,7 @@ export default class AvatarGroupDoc extends PuzzleView {
       codeNoOverflow,
       codeSizes,
       codeLargeTeam,
+      codeAnyBackground,
       team: [
         { name: 'Ada Lovelace' },
         { src: 'https://i.pravatar.cc/80?img=13', name: 'Grace Hopper' },
@@ -141,6 +160,7 @@ export default class AvatarGroupDoc extends PuzzleView {
         { label: 'No overflow', href: '#no-overflow' },
         { label: 'Sizes', href: '#sizes' },
         { label: 'Large team', href: '#large-team' },
+        { label: 'Any background', href: '#any-background' },
       ],
     };
   }
