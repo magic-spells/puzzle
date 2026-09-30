@@ -677,7 +677,10 @@ export class PuzzleApp {
 		this.#store = null; // getter throws again post-unmount (store torn down)
 		this.router = null;
 		this.formatters = null;
-		if (typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) this.i18n = null;
+		if (typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) {
+			this.i18n?.__dispose();
+			this.i18n = null;
+		}
 		this._container = null;
 		this._mounted = false;
 	}

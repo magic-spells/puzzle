@@ -10,6 +10,7 @@ import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { hashRouter, memoryRouter } from '../client-runtime/router/modes.js';
 import { createTestApp, mountView } from '../client-runtime/testing/index.js';
 import { installFakeAnimate } from './helpers/fake-waapi.js';
+import { formatLocale } from '../client-runtime/formatters/locale.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -511,6 +512,36 @@ describe('PuzzleApp + i18n', () => {
 		expect(fetch.mock.calls.filter(([url]) => url.endsWith('es.BBBB.json'))).toHaveLength(1);
 	});
 
+	// The same switch during navigation zero: nothing is committed yet, so the
+	// rebuild waits for the first navigation to land, then re-runs the page's
+	// data() — whose t() strings were computed in the old locale.
+	for (const mode of ['path', 'memory']) {
+		it(`await setLocale inside a root layout data() on the first load rebuilds the page in the new locale (${mode} mode)`, async () => {
+			stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+			class UserLayout extends Layout {
+				async data() {
+					await this.ctx.i18n.setLocale('es');
+					return {};
+				}
+			}
+			const histLen = history.length;
+			const { app, el } = make({
+				routes: [{ path: '/', view: Home, layout: UserLayout }],
+				...(mode === 'memory' ? { routerMode: memoryRouter() } : {}),
+			});
+			await within(app.mount(), 'mount');
+			await settle();
+			expect(app.i18n.locale).toBe('es');
+			expect(el.querySelector('h1').textContent).toBe('Inicio');
+			expect(el.querySelector('header').textContent).toBe('Tienda');
+			expect(el.querySelectorAll('.home')).toHaveLength(1);
+			// Navigation zero, then the one rebuild.
+			expect(dataRuns).toBe(2);
+			expect(history.length).toBe(histLen);
+			expect(app.router.current.path).toBe('/');
+		});
+	}
+
 	it('await setLocale inside a route guard lets the navigation land, in the new locale', async () => {
 		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
 		const guard = vi.fn(async ({ ctx }) => {
@@ -799,6 +830,49 @@ describe('PuzzleApp + i18n', () => {
 		expect(location.pathname).toBe('/about');
 		expect(el.querySelector('h1').textContent).toBe('About');
 		expect(el.querySelectorAll('.home')).toHaveLength(0);
+	});
+
+	// Unmount retires the i18n service: a locale file still in flight from the
+	// old mount must not switch the remounted app's language when it lands.
+	it('a startup load still in flight at unmount never applies after a remount', async () => {
+		let release;
+		const gate = new Promise((r) => (release = r));
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES }, { gates: { 'locales/es.BBBB.json': gate } });
+		localStorage.setItem('__puzzleLocale', 'es');
+		const { app, el } = make({ __i18n: { manifest: MANIFEST } });
+		const first = app.mount();
+		app.unmount();
+		localStorage.setItem('__puzzleLocale', 'en');
+		await within(app.mount(), 'remount');
+		expect(app.i18n.locale).toBe('en');
+		release();
+		await first.catch(() => {});
+		await settle();
+		expect(document.documentElement.lang).toBe('en');
+		expect(formatLocale).toBe('en');
+		expect(app.i18n.locale).toBe('en');
+		expect(el.querySelector('h1').textContent).toBe('Home');
+	});
+
+	it('a setLocale still in flight at unmount never applies after a remount', async () => {
+		let release;
+		const gate = new Promise((r) => (release = r));
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES }, { gates: { 'locales/es.BBBB.json': gate } });
+		const { app, el } = make();
+		await app.mount();
+		const switched = app.i18n.setLocale('es');
+		app.unmount();
+		await within(app.mount(), 'remount');
+		const runs = dataRuns;
+		release();
+		await switched.catch(() => {});
+		await settle();
+		expect(document.documentElement.lang).toBe('en');
+		expect(formatLocale).toBe('en');
+		expect(app.i18n.locale).toBe('en');
+		expect(localStorage.getItem('__puzzleLocale')).not.toBe('es');
+		expect(el.querySelector('h1').textContent).toBe('Home');
+		expect(dataRuns).toBe(runs);
 	});
 
 	it('an app without translations has no i18n on ctx or app', async () => {
