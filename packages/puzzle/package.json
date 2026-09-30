@@ -89,6 +89,8 @@
 		"test:browser": "playwright test",
 		"bench": "node benchmarks/runner.mjs",
 		"bench:update": "node benchmarks/runner.mjs --update-baseline",
+		"bench:history": "node benchmarks/history.mjs",
+		"bench:snapshot": "node benchmarks/history.mjs --snapshot",
 		"test:types": "tsc -p tests-types",
 		"test:runtime-types": "tsc -p tsconfig.runtime.json && tsc -p tests-types/drift",
 		"test:e2e-pack": "node scripts/e2e-pack.mjs",

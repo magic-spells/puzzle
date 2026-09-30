@@ -35,7 +35,7 @@ import path from 'node:path';
 import config from '../playwright.benchmark.config.js';
 import { OPS, groupOps } from './scenarios.mjs';
 import { buildBaseline, compareCounters, formatReport, summarize } from './report.mjs';
-import { ROOT, buildStaged, findDevMarkers, serveStatic, stagedDistDir } from './harness-lib.mjs';
+import { ROOT, buildStaged, findDevMarkers, machineName, serveStatic, stagedDistDir } from './harness-lib.mjs';
 
 const logs = [];
 const log = (line) => logs.push(line);
@@ -650,8 +650,10 @@ async function main() {
 		if (pageErrors.length) exitCode = 1;
 
 		const meta = {
+			version: JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version,
 			builtAt: new Date().toISOString(),
 			platform: `${process.platform}-${process.arch}`,
+			machine: machineName(),
 			nodeVersion: process.version,
 			browserVersion,
 			buildMode: built.mode ?? args.buildMode,

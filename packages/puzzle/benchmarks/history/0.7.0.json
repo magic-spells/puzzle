@@ -1,0 +1,1439 @@
+{
+	"meta": {
+		"version": "0.7.0",
+		"builtAt": "2026-09-30T23:04:32.423Z",
+		"platform": "darwin-arm64",
+		"nodeVersion": "v25.1.0",
+		"browserVersion": "151.0.7922.34",
+		"buildMode": "production",
+		"bundleKb": 229.5,
+		"dirty": false,
+		"machine": "Apple M1 Pro, 10 cores, 32 GB",
+		"commit": "1971d8f3",
+		"retroactive": true,
+		"note": "Measured retroactively on 2026-09-30 with the v0.7.0 tag's own harness (npm run bench in a temporary checkout of v0.7.0, compiler built from that tag), same machine and browser as 0.8.0. The tag's baseline.json was set aside so no op was dropped by a comparison against it. route-churn/navigate-burst/100 is absent: the tag's own scenario declared rcAncestorMutations 500 and the tag measures 700 (the expect was stale at the tag; 0.8.0 declares 700), so the runner recorded it as MISMATCH and wrote no timings for it."
+	},
+	"ops": {
+		"keyed-list/create/1000": {
+			"scenario": "keyed-list",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 23.6,
+			"paintMs": 57.9,
+			"cdpTaskMs": 61.607,
+			"cdpLayoutMs": 16.405,
+			"cdpStyleMs": 7.004,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1001,
+				"records": 1000,
+				"childDataRuns": 1000,
+				"handlers": "inline"
+			}
+		},
+		"keyed-list/update-every-10th/1000": {
+			"scenario": "keyed-list",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 6.6,
+			"paintMs": 15,
+			"cdpTaskMs": 15.769,
+			"cdpLayoutMs": 1.436,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1001,
+				"records": 1000,
+				"childDataRuns": 1000,
+				"handlers": "inline"
+			}
+		},
+		"keyed-list/swap-rows/1000": {
+			"scenario": "keyed-list",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 11.6,
+			"paintMs": 44.9,
+			"cdpTaskMs": 50.239,
+			"cdpLayoutMs": 15.553,
+			"cdpStyleMs": 7.104,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1001,
+				"records": 1000,
+				"childDataRuns": 1000,
+				"handlers": "inline"
+			}
+		},
+		"keyed-list/clear/1000": {
+			"scenario": "keyed-list",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 6.8,
+			"paintMs": 7.7,
+			"cdpTaskMs": 8.75,
+			"cdpLayoutMs": 0.112,
+			"cdpStyleMs": 0.037,
+			"counters": {
+				"mountedNodes": 0,
+				"views": 1,
+				"records": 0,
+				"childDataRuns": 0,
+				"handlers": "inline"
+			}
+		},
+		"keyed-list/create/10000": {
+			"scenario": "keyed-list",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 198.2,
+			"paintMs": 484.1,
+			"cdpTaskMs": 487.535,
+			"cdpLayoutMs": 137.199,
+			"cdpStyleMs": 79.369,
+			"counters": {
+				"mountedNodes": 70000,
+				"views": 10001,
+				"records": 10000,
+				"childDataRuns": 10000,
+				"handlers": "inline"
+			}
+		},
+		"keyed-list/update-every-10th/10000": {
+			"scenario": "keyed-list",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 69.6,
+			"paintMs": 116,
+			"cdpTaskMs": 125.766,
+			"cdpLayoutMs": 17.663,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 70000,
+				"views": 10001,
+				"records": 10000,
+				"childDataRuns": 10000,
+				"handlers": "inline"
+			}
+		},
+		"keyed-list/swap-rows/10000": {
+			"scenario": "keyed-list",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 68.3,
+			"paintMs": 139.2,
+			"cdpTaskMs": 150.563,
+			"cdpLayoutMs": 20.682,
+			"cdpStyleMs": 11.249,
+			"counters": {
+				"mountedNodes": 70000,
+				"views": 10001,
+				"records": 10000,
+				"childDataRuns": 10000,
+				"handlers": "inline"
+			}
+		},
+		"keyed-list/clear/10000": {
+			"scenario": "keyed-list",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 61.2,
+			"paintMs": 62.1,
+			"cdpTaskMs": 63.519,
+			"cdpLayoutMs": 0.112,
+			"cdpStyleMs": 0.037,
+			"counters": {
+				"mountedNodes": 0,
+				"views": 1,
+				"records": 0,
+				"childDataRuns": 0,
+				"handlers": "inline"
+			}
+		},
+		"keyed-list/create/50000": {
+			"scenario": "keyed-list",
+			"size": 50000,
+			"iterations": 15,
+			"scriptMs": 979.6,
+			"paintMs": 2401.5,
+			"cdpTaskMs": 2434.049,
+			"cdpLayoutMs": 666.836,
+			"cdpStyleMs": 395.972,
+			"counters": {
+				"mountedNodes": 350000,
+				"views": 50001,
+				"records": 50000,
+				"childDataRuns": 50000,
+				"handlers": "inline"
+			}
+		},
+		"keyed-list/update-every-10th/50000": {
+			"scenario": "keyed-list",
+			"size": 50000,
+			"iterations": 15,
+			"scriptMs": 366.8,
+			"paintMs": 543.4,
+			"cdpTaskMs": 553.057,
+			"cdpLayoutMs": 75.878,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 350000,
+				"views": 50001,
+				"records": 50000,
+				"childDataRuns": 50000,
+				"handlers": "inline"
+			}
+		},
+		"keyed-list/swap-rows/50000": {
+			"scenario": "keyed-list",
+			"size": 50000,
+			"iterations": 15,
+			"scriptMs": 351.5,
+			"paintMs": 574.5,
+			"cdpTaskMs": 586.371,
+			"cdpLayoutMs": 51.964,
+			"cdpStyleMs": 17.643,
+			"counters": {
+				"mountedNodes": 350000,
+				"views": 50001,
+				"records": 50000,
+				"childDataRuns": 50000,
+				"handlers": "inline"
+			}
+		},
+		"keyed-list/clear/50000": {
+			"scenario": "keyed-list",
+			"size": 50000,
+			"iterations": 15,
+			"scriptMs": 328.9,
+			"paintMs": 329.9,
+			"cdpTaskMs": 338.805,
+			"cdpLayoutMs": 0.134,
+			"cdpStyleMs": 0.04,
+			"counters": {
+				"mountedNodes": 0,
+				"views": 1,
+				"records": 0,
+				"childDataRuns": 0,
+				"handlers": "inline"
+			}
+		},
+		"virtual-list/create/1000": {
+			"scenario": "virtual-list",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 10.9,
+			"paintMs": 12.8,
+			"cdpTaskMs": 13.791,
+			"cdpLayoutMs": 0.435,
+			"cdpStyleMs": 0.26,
+			"counters": {
+				"mountedNodes": 177,
+				"views": 26,
+				"records": 1000
+			}
+		},
+		"virtual-list/update-every-10th/1000": {
+			"scenario": "virtual-list",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 0.7,
+			"paintMs": 1.7,
+			"cdpTaskMs": 2.539,
+			"cdpLayoutMs": 0.125,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 177,
+				"views": 26,
+				"records": 1000
+			}
+		},
+		"virtual-list/swap-rows/1000": {
+			"scenario": "virtual-list",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 0.4,
+			"paintMs": 1.5,
+			"cdpTaskMs": 2.397,
+			"cdpLayoutMs": 0.113,
+			"cdpStyleMs": 0.058,
+			"counters": {
+				"mountedNodes": 177,
+				"views": 26,
+				"records": 1000
+			}
+		},
+		"virtual-list/clear/1000": {
+			"scenario": "virtual-list",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 2.2,
+			"paintMs": 3.1,
+			"cdpTaskMs": 3.974,
+			"cdpLayoutMs": 0.132,
+			"cdpStyleMs": 0.056,
+			"counters": {
+				"mountedNodes": 2,
+				"views": 1,
+				"records": 0
+			}
+		},
+		"virtual-list/create/10000": {
+			"scenario": "virtual-list",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 88,
+			"paintMs": 90,
+			"cdpTaskMs": 94.444,
+			"cdpLayoutMs": 0.436,
+			"cdpStyleMs": 0.254,
+			"counters": {
+				"mountedNodes": 177,
+				"views": 26,
+				"records": 10000
+			}
+		},
+		"virtual-list/update-every-10th/10000": {
+			"scenario": "virtual-list",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 3.8,
+			"paintMs": 5,
+			"cdpTaskMs": 5.825,
+			"cdpLayoutMs": 0.141,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 177,
+				"views": 26,
+				"records": 10000
+			}
+		},
+		"virtual-list/swap-rows/10000": {
+			"scenario": "virtual-list",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 0.6,
+			"paintMs": 1.6,
+			"cdpTaskMs": 2.565,
+			"cdpLayoutMs": 0.116,
+			"cdpStyleMs": 0.06,
+			"counters": {
+				"mountedNodes": 177,
+				"views": 26,
+				"records": 10000
+			}
+		},
+		"virtual-list/clear/10000": {
+			"scenario": "virtual-list",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 20.9,
+			"paintMs": 21.8,
+			"cdpTaskMs": 22.806,
+			"cdpLayoutMs": 0.141,
+			"cdpStyleMs": 0.057,
+			"counters": {
+				"mountedNodes": 2,
+				"views": 1,
+				"records": 0
+			}
+		},
+		"virtual-list/create/50000": {
+			"scenario": "virtual-list",
+			"size": 50000,
+			"iterations": 15,
+			"scriptMs": 430.2,
+			"paintMs": 432.5,
+			"cdpTaskMs": 433.968,
+			"cdpLayoutMs": 0.434,
+			"cdpStyleMs": 0.252,
+			"counters": {
+				"mountedNodes": 177,
+				"views": 26,
+				"records": 50000
+			}
+		},
+		"virtual-list/update-every-10th/50000": {
+			"scenario": "virtual-list",
+			"size": 50000,
+			"iterations": 15,
+			"scriptMs": 15.4,
+			"paintMs": 16.6,
+			"cdpTaskMs": 18.94,
+			"cdpLayoutMs": 0.144,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 177,
+				"views": 26,
+				"records": 50000
+			}
+		},
+		"virtual-list/swap-rows/50000": {
+			"scenario": "virtual-list",
+			"size": 50000,
+			"iterations": 15,
+			"scriptMs": 1.2,
+			"paintMs": 2.4,
+			"cdpTaskMs": 4.93,
+			"cdpLayoutMs": 0.121,
+			"cdpStyleMs": 0.06,
+			"counters": {
+				"mountedNodes": 177,
+				"views": 26,
+				"records": 50000
+			}
+		},
+		"virtual-list/clear/50000": {
+			"scenario": "virtual-list",
+			"size": 50000,
+			"iterations": 15,
+			"scriptMs": 115.9,
+			"paintMs": 116.7,
+			"cdpTaskMs": 122.296,
+			"cdpLayoutMs": 0.136,
+			"cdpStyleMs": 0.056,
+			"counters": {
+				"mountedNodes": 2,
+				"views": 1,
+				"records": 0
+			}
+		},
+		"virtual-list/fast-scroll/50000": {
+			"scenario": "virtual-list",
+			"size": 50000,
+			"iterations": 15,
+			"scriptMs": 72.4,
+			"paintMs": 81,
+			"cdpTaskMs": 29.637,
+			"cdpLayoutMs": 3.951,
+			"cdpStyleMs": 2.256,
+			"counters": {
+				"mountedNodes": 177,
+				"views": 26,
+				"records": 50000
+			}
+		},
+		"virtual-list/native-scroll/50000": {
+			"scenario": "virtual-list",
+			"size": 50000,
+			"iterations": 1,
+			"scriptMs": 71.6,
+			"paintMs": 71.6,
+			"cdpTaskMs": 25.703,
+			"cdpLayoutMs": 3.778,
+			"cdpStyleMs": 2.214,
+			"counters": {
+				"mountedNodes": 177,
+				"views": 26,
+				"records": 50000,
+				"vlGeometryOk": 1,
+				"vlWindowMatchesScroll": 1
+			}
+		},
+		"subscriptions/update-one/precision": {
+			"scenario": "subscriptions",
+			"size": 100,
+			"iterations": 15,
+			"scriptMs": 0.1,
+			"paintMs": 0.3,
+			"cdpTaskMs": 2.041,
+			"cdpLayoutMs": 0.098,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 509,
+				"views": 101,
+				"records": 10000,
+				"notified": 0,
+				"watchers": 100,
+				"expectedNotified": 0
+			}
+		},
+		"subscriptions/update-one/fanout": {
+			"scenario": "subscriptions",
+			"size": 100,
+			"iterations": 15,
+			"scriptMs": 2.8,
+			"paintMs": 4.6,
+			"cdpTaskMs": 6.138,
+			"cdpLayoutMs": 0.587,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 509,
+				"views": 101,
+				"records": 10000,
+				"notified": 100,
+				"watchers": 100,
+				"expectedNotified": 100
+			}
+		},
+		"async-waterfall/remount/20": {
+			"scenario": "async-waterfall",
+			"size": 20,
+			"iterations": 15,
+			"scriptMs": null,
+			"paintMs": 748.6,
+			"cdpTaskMs": 35.492,
+			"cdpLayoutMs": 7.042,
+			"cdpStyleMs": 1.876,
+			"counters": {
+				"mountedNodes": 69,
+				"views": 21,
+				"records": 0,
+				"maxInFlight": 1,
+				"cells": 20,
+				"verdict": "SERIALIZED"
+			}
+		},
+		"handlers-inline/click-select/1000": {
+			"scenario": "keyed-list",
+			"size": 1000,
+			"iterations": 1,
+			"scriptMs": 6.6,
+			"paintMs": 12.5,
+			"cdpTaskMs": 14.154,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0.084,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1001,
+				"records": 1000,
+				"childDataRuns": 1000,
+				"handlers": "inline"
+			}
+		},
+		"handlers-inline/click-remove/1000": {
+			"scenario": "keyed-list",
+			"size": 1000,
+			"iterations": 1,
+			"scriptMs": 6.5,
+			"paintMs": 16.3,
+			"cdpTaskMs": 17.892,
+			"cdpLayoutMs": 0.568,
+			"cdpStyleMs": 0.052,
+			"counters": {
+				"mountedNodes": 6993,
+				"views": 1000,
+				"records": 999,
+				"childDataRuns": 999,
+				"handlers": "inline"
+			}
+		},
+		"handlers-inline/create/1000": {
+			"scenario": "keyed-list",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 22.2,
+			"paintMs": 56,
+			"cdpTaskMs": 60.643,
+			"cdpLayoutMs": 15.844,
+			"cdpStyleMs": 7.179,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1001,
+				"records": 1000,
+				"childDataRuns": 1000,
+				"handlers": "inline"
+			}
+		},
+		"handlers-inline/update-every-10th/1000": {
+			"scenario": "keyed-list",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 6.8,
+			"paintMs": 14.7,
+			"cdpTaskMs": 16.285,
+			"cdpLayoutMs": 1.457,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1001,
+				"records": 1000,
+				"childDataRuns": 1000,
+				"handlers": "inline"
+			}
+		},
+		"handlers-inline/swap-rows/1000": {
+			"scenario": "keyed-list",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 10.6,
+			"paintMs": 44.5,
+			"cdpTaskMs": 50.164,
+			"cdpLayoutMs": 16.159,
+			"cdpStyleMs": 7.162,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1001,
+				"records": 1000,
+				"childDataRuns": 1000,
+				"handlers": "inline"
+			}
+		},
+		"handlers-inline/select-row/1000": {
+			"scenario": "keyed-list",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 6.4,
+			"paintMs": 12.3,
+			"cdpTaskMs": 13.732,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0.036,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1001,
+				"records": 1000,
+				"childDataRuns": 1000,
+				"handlers": "inline"
+			}
+		},
+		"handlers-stable/click-select/1000": {
+			"scenario": "keyed-list",
+			"size": 1000,
+			"iterations": 1,
+			"scriptMs": 2.2,
+			"paintMs": 8,
+			"cdpTaskMs": 8.788,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0.032,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1001,
+				"records": 1000,
+				"childDataRuns": 1,
+				"handlers": "stable"
+			}
+		},
+		"handlers-stable/click-remove/1000": {
+			"scenario": "keyed-list",
+			"size": 1000,
+			"iterations": 1,
+			"scriptMs": 2.1,
+			"paintMs": 11.8,
+			"cdpTaskMs": 12.661,
+			"cdpLayoutMs": 0.541,
+			"cdpStyleMs": 0.032,
+			"counters": {
+				"mountedNodes": 6993,
+				"views": 1000,
+				"records": 999,
+				"childDataRuns": 0,
+				"handlers": "stable"
+			}
+		},
+		"handlers-stable/create/1000": {
+			"scenario": "keyed-list",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 21.9,
+			"paintMs": 56.3,
+			"cdpTaskMs": 61.036,
+			"cdpLayoutMs": 16.01,
+			"cdpStyleMs": 7.093,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1001,
+				"records": 1000,
+				"childDataRuns": 1000,
+				"handlers": "stable"
+			}
+		},
+		"handlers-stable/update-every-10th/1000": {
+			"scenario": "keyed-list",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 3.3,
+			"paintMs": 11.8,
+			"cdpTaskMs": 12.865,
+			"cdpLayoutMs": 1.487,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1001,
+				"records": 1000,
+				"childDataRuns": 100,
+				"handlers": "stable"
+			}
+		},
+		"handlers-stable/swap-rows/1000": {
+			"scenario": "keyed-list",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 5.4,
+			"paintMs": 38.3,
+			"cdpTaskMs": 42.712,
+			"cdpLayoutMs": 15.583,
+			"cdpStyleMs": 7.196,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1001,
+				"records": 1000,
+				"childDataRuns": 0,
+				"handlers": "stable"
+			}
+		},
+		"handlers-stable/select-row/1000": {
+			"scenario": "keyed-list",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 2.2,
+			"paintMs": 8.1,
+			"cdpTaskMs": 9.002,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0.036,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1001,
+				"records": 1000,
+				"childDataRuns": 1,
+				"handlers": "stable"
+			}
+		},
+		"handlers-inline/create/10000": {
+			"scenario": "keyed-list",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 206.6,
+			"paintMs": 498,
+			"cdpTaskMs": 501.445,
+			"cdpLayoutMs": 145.999,
+			"cdpStyleMs": 72.105,
+			"counters": {
+				"mountedNodes": 70000,
+				"views": 10001,
+				"records": 10000,
+				"childDataRuns": 10000,
+				"handlers": "inline"
+			}
+		},
+		"handlers-inline/update-every-10th/10000": {
+			"scenario": "keyed-list",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 62.1,
+			"paintMs": 109.7,
+			"cdpTaskMs": 138.932,
+			"cdpLayoutMs": 16.512,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 70000,
+				"views": 10001,
+				"records": 10000,
+				"childDataRuns": 10000,
+				"handlers": "inline"
+			}
+		},
+		"handlers-inline/swap-rows/10000": {
+			"scenario": "keyed-list",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 62.8,
+			"paintMs": 147.3,
+			"cdpTaskMs": 162.129,
+			"cdpLayoutMs": 29.725,
+			"cdpStyleMs": 8.761,
+			"counters": {
+				"mountedNodes": 70000,
+				"views": 10001,
+				"records": 10000,
+				"childDataRuns": 10000,
+				"handlers": "inline"
+			}
+		},
+		"handlers-inline/select-row/10000": {
+			"scenario": "keyed-list",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 58,
+			"paintMs": 70,
+			"cdpTaskMs": 99.715,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0.036,
+			"counters": {
+				"mountedNodes": 70000,
+				"views": 10001,
+				"records": 10000,
+				"childDataRuns": 10000,
+				"handlers": "inline"
+			}
+		},
+		"handlers-stable/create/10000": {
+			"scenario": "keyed-list",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 204.1,
+			"paintMs": 494.3,
+			"cdpTaskMs": 495.956,
+			"cdpLayoutMs": 141.729,
+			"cdpStyleMs": 74.911,
+			"counters": {
+				"mountedNodes": 70000,
+				"views": 10001,
+				"records": 10000,
+				"childDataRuns": 10000,
+				"handlers": "stable"
+			}
+		},
+		"handlers-stable/update-every-10th/10000": {
+			"scenario": "keyed-list",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 27.1,
+			"paintMs": 62.7,
+			"cdpTaskMs": 63.959,
+			"cdpLayoutMs": 14.667,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 70000,
+				"views": 10001,
+				"records": 10000,
+				"childDataRuns": 1000,
+				"handlers": "stable"
+			}
+		},
+		"handlers-stable/swap-rows/10000": {
+			"scenario": "keyed-list",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 21.8,
+			"paintMs": 91.4,
+			"cdpTaskMs": 107.848,
+			"cdpLayoutMs": 26.91,
+			"cdpStyleMs": 8.593,
+			"counters": {
+				"mountedNodes": 70000,
+				"views": 10001,
+				"records": 10000,
+				"childDataRuns": 0,
+				"handlers": "stable"
+			}
+		},
+		"handlers-stable/select-row/10000": {
+			"scenario": "keyed-list",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 17.6,
+			"paintMs": 28.4,
+			"cdpTaskMs": 29.577,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0.037,
+			"counters": {
+				"mountedNodes": 70000,
+				"views": 10001,
+				"records": 10000,
+				"childDataRuns": 1,
+				"handlers": "stable"
+			}
+		},
+		"deep-nest/update-leaf/1536": {
+			"scenario": "deep-nest",
+			"size": 1536,
+			"iterations": 15,
+			"scriptMs": 0.1,
+			"paintMs": 1.7,
+			"cdpTaskMs": 4.704,
+			"cdpLayoutMs": 0.215,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 4608,
+				"views": 1537,
+				"records": 1537,
+				"nodeDataRuns": 1,
+				"nodes": 1536,
+				"nestDepth": 24,
+				"nestBranches": 64
+			}
+		},
+		"deep-nest/update-branch-root/1536": {
+			"scenario": "deep-nest",
+			"size": 1536,
+			"iterations": 15,
+			"scriptMs": 0.1,
+			"paintMs": 1.7,
+			"cdpTaskMs": 3.546,
+			"cdpLayoutMs": 0.165,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 4608,
+				"views": 1537,
+				"records": 1537,
+				"nodeDataRuns": 1,
+				"nodes": 1536,
+				"nestDepth": 24,
+				"nestBranches": 64
+			}
+		},
+		"deep-nest/update-global/1536": {
+			"scenario": "deep-nest",
+			"size": 1536,
+			"iterations": 15,
+			"scriptMs": 7.9,
+			"paintMs": 16.3,
+			"cdpTaskMs": 18.839,
+			"cdpLayoutMs": 5.501,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 4608,
+				"views": 1537,
+				"records": 1537,
+				"nodeDataRuns": 1536,
+				"nodes": 1536,
+				"nestDepth": 24,
+				"nestBranches": 64
+			}
+		},
+		"write-storm/burst/10000": {
+			"scenario": "write-storm",
+			"size": 5000,
+			"iterations": 15,
+			"scriptMs": 12.4,
+			"paintMs": 17.9,
+			"cdpTaskMs": 14.367,
+			"cdpLayoutMs": 0.115,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 19,
+				"views": 1,
+				"records": 10000,
+				"stormWrites": 5000,
+				"stormFlushes": 1,
+				"stormDirtyFlushes": 1,
+				"stormWakeups": 1,
+				"stormPersistCalls": 0
+			}
+		},
+		"write-storm/burst-persist/10000": {
+			"scenario": "write-storm",
+			"size": 5000,
+			"iterations": 15,
+			"scriptMs": 12.2,
+			"paintMs": 28.4,
+			"cdpTaskMs": 25.936,
+			"cdpLayoutMs": 0.147,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 19,
+				"views": 1,
+				"records": 10000,
+				"stormWrites": 5000,
+				"stormFlushes": 1,
+				"stormDirtyFlushes": 1,
+				"stormWakeups": 1,
+				"stormPersistCalls": 1
+			}
+		},
+		"islands/shell-renders/20000": {
+			"scenario": "islands",
+			"size": 20000,
+			"iterations": 15,
+			"scriptMs": 576.4,
+			"paintMs": 576.4,
+			"cdpTaskMs": 560.98,
+			"cdpLayoutMs": 5.304,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 20100,
+				"views": 1,
+				"records": 0,
+				"islandCount": 100,
+				"islandDescendants": 200,
+				"islandNodes": 20000,
+				"islandViolations": 0,
+				"islandChildVnodesPerRender": 20000,
+				"shellDidMutate": 1
+			}
+		},
+		"formatters/rerender/10000": {
+			"scenario": "formatters",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 45,
+			"paintMs": 45,
+			"cdpTaskMs": 162.34,
+			"cdpLayoutMs": 46.84,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 40000,
+				"views": 1,
+				"records": 10000,
+				"fmtRows": 10000,
+				"fmtFormatted": 1,
+				"fmtDateTimeFormats": 0,
+				"fmtRelativeTimeFormats": 0,
+				"fmtFormatterCalls": 0
+			}
+		},
+		"formatters/rerender-raw/10000": {
+			"scenario": "formatters",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 33,
+			"paintMs": 33,
+			"cdpTaskMs": 136.32,
+			"cdpLayoutMs": 47.577,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 40000,
+				"views": 1,
+				"records": 10000,
+				"fmtRows": 10000,
+				"fmtFormatted": 0,
+				"fmtDateTimeFormats": 0,
+				"fmtRelativeTimeFormats": 0,
+				"fmtFormatterCalls": 0
+			}
+		},
+		"formatters/count-intl/10000": {
+			"scenario": "formatters",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 49.3,
+			"paintMs": 49.3,
+			"cdpTaskMs": 160.837,
+			"cdpLayoutMs": 47.081,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 40000,
+				"views": 1,
+				"records": 10000,
+				"fmtRows": 10000,
+				"fmtFormatted": 1,
+				"fmtDateTimeFormats": 0,
+				"fmtRelativeTimeFormats": 0,
+				"fmtFormatterCalls": 20000
+			}
+		},
+		"route-churn/params-burst/100": {
+			"scenario": "route-churn",
+			"size": 100,
+			"iterations": 15,
+			"scriptMs": null,
+			"paintMs": 18,
+			"cdpTaskMs": 21.443,
+			"cdpLayoutMs": 2.843,
+			"cdpStyleMs": 0.232,
+			"counters": {
+				"mountedNodes": 20,
+				"views": 7,
+				"records": 0,
+				"rcCommits": 100,
+				"rcLeafMounts": 0,
+				"rcLeafDataRuns": 100,
+				"rcLayoutRenders": 100,
+				"rcLayoutDataRuns": 100,
+				"rcAncestorRenders": 2100,
+				"rcAncestorDataRuns": 600,
+				"rcAncestorMutations": 0,
+				"rcChromeMutations": 0,
+				"rcLeafMutations": 200
+			}
+		},
+		"listener-churn/rerender/1000/churn": {
+			"scenario": "listener-churn",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 72.5,
+			"paintMs": 73.1,
+			"cdpTaskMs": 74.031,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1,
+				"records": 0,
+				"handlers": "churn",
+				"lcRows": 1000,
+				"lcRenders": 20
+			}
+		},
+		"listener-churn/rerender/1000/stable": {
+			"scenario": "listener-churn",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 50.4,
+			"paintMs": 50.9,
+			"cdpTaskMs": 56.362,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1,
+				"records": 0,
+				"handlers": "stable",
+				"lcRows": 1000,
+				"lcRenders": 20
+			}
+		},
+		"listener-churn/rerender/1000/none": {
+			"scenario": "listener-churn",
+			"size": 1000,
+			"iterations": 15,
+			"scriptMs": 43.5,
+			"paintMs": 44,
+			"cdpTaskMs": 51.837,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1,
+				"records": 0,
+				"handlers": "none",
+				"lcRows": 1000,
+				"lcRenders": 20
+			}
+		},
+		"listener-churn/rerender/10000/churn": {
+			"scenario": "listener-churn",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 855.1,
+			"paintMs": 861.9,
+			"cdpTaskMs": 866.989,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 70000,
+				"views": 1,
+				"records": 0,
+				"handlers": "churn",
+				"lcRows": 10000,
+				"lcRenders": 20
+			}
+		},
+		"listener-churn/count-listeners/10000/churn": {
+			"scenario": "listener-churn",
+			"size": 10000,
+			"iterations": 3,
+			"scriptMs": 879.9,
+			"paintMs": 886.2,
+			"cdpTaskMs": 890.469,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 70000,
+				"views": 1,
+				"records": 0,
+				"handlers": "churn",
+				"lcRows": 10000,
+				"lcRenders": 20,
+				"lcAddListener": 400000,
+				"lcRemoveListener": 400000,
+				"lcListenerCallsPerRender": 40000
+			}
+		},
+		"listener-churn/rerender/10000/stable": {
+			"scenario": "listener-churn",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 541.9,
+			"paintMs": 542.6,
+			"cdpTaskMs": 545.02,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 70000,
+				"views": 1,
+				"records": 0,
+				"handlers": "stable",
+				"lcRows": 10000,
+				"lcRenders": 20
+			}
+		},
+		"listener-churn/count-listeners/10000/stable": {
+			"scenario": "listener-churn",
+			"size": 10000,
+			"iterations": 3,
+			"scriptMs": 543.4,
+			"paintMs": 544.1,
+			"cdpTaskMs": 545.128,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 70000,
+				"views": 1,
+				"records": 0,
+				"handlers": "stable",
+				"lcRows": 10000,
+				"lcRenders": 20,
+				"lcAddListener": 0,
+				"lcRemoveListener": 0,
+				"lcListenerCallsPerRender": 0
+			}
+		},
+		"listener-churn/rerender/10000/none": {
+			"scenario": "listener-churn",
+			"size": 10000,
+			"iterations": 15,
+			"scriptMs": 505,
+			"paintMs": 506.7,
+			"cdpTaskMs": 535.815,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 70000,
+				"views": 1,
+				"records": 0,
+				"handlers": "none",
+				"lcRows": 10000,
+				"lcRenders": 20
+			}
+		},
+		"listener-churn/count-listeners/10000/none": {
+			"scenario": "listener-churn",
+			"size": 10000,
+			"iterations": 3,
+			"scriptMs": 533.8,
+			"paintMs": 534.5,
+			"cdpTaskMs": 535.65,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 70000,
+				"views": 1,
+				"records": 0,
+				"handlers": "none",
+				"lcRows": 10000,
+				"lcRenders": 20,
+				"lcAddListener": 0,
+				"lcRemoveListener": 0,
+				"lcListenerCallsPerRender": 0
+			}
+		},
+		"listener-churn/click-select/churn": {
+			"scenario": "listener-churn",
+			"size": 1000,
+			"iterations": 1,
+			"scriptMs": 0,
+			"paintMs": 0,
+			"cdpTaskMs": 11.236,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0.03,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1,
+				"records": 0,
+				"handlers": "churn",
+				"lcRows": 1000,
+				"lcRenders": 20
+			}
+		},
+		"listener-churn/click-select/stable": {
+			"scenario": "listener-churn",
+			"size": 1000,
+			"iterations": 1,
+			"scriptMs": 0,
+			"paintMs": 0,
+			"cdpTaskMs": 8.173,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0.032,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1,
+				"records": 0,
+				"handlers": "stable",
+				"lcRows": 1000,
+				"lcRenders": 20
+			}
+		},
+		"listener-churn/click-select/none": {
+			"scenario": "listener-churn",
+			"size": 1000,
+			"iterations": 1,
+			"scriptMs": 0,
+			"paintMs": 0,
+			"cdpTaskMs": 1.154,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 7000,
+				"views": 1,
+				"records": 0,
+				"handlers": "none",
+				"lcRows": 1000,
+				"lcRenders": 20
+			}
+		},
+		"form-state/rerender/200": {
+			"scenario": "form-state",
+			"size": 200,
+			"iterations": 15,
+			"scriptMs": 19.2,
+			"paintMs": 19.8,
+			"cdpTaskMs": 22.024,
+			"cdpLayoutMs": 0,
+			"cdpStyleMs": 0,
+			"counters": {
+				"mountedNodes": 2400,
+				"views": 1,
+				"records": 1,
+				"fsFields": 200,
+				"fsSelectOptions": 8,
+				"fsSchemaFields": 24,
+				"fsKeystrokes": 0,
+				"fsRenders": 20,
+				"fsDataRuns": 20,
+				"fsInputValueWrites": 0,
+				"fsSelectValueWrites": 0,
+				"fsSchemaNormalizations": 0
+			}
+		},
+		"form-state/rerender-dirty/200": {
+			"scenario": "form-state",
+			"size": 200,
+			"iterations": 15,
+			"scriptMs": 24.5,
+			"paintMs": 29.6,
+			"cdpTaskMs": 32.251,
+			"cdpLayoutMs": 1.795,
+			"cdpStyleMs": 1.121,
+			"counters": {
+				"mountedNodes": 2400,
+				"views": 1,
+				"records": 1,
+				"fsFields": 200,
+				"fsSelectOptions": 8,
+				"fsSchemaFields": 24,
+				"fsKeystrokes": 0,
+				"fsRenders": 20,
+				"fsDataRuns": 20,
+				"fsInputValueWrites": 4000,
+				"fsSelectValueWrites": 4000,
+				"fsSchemaNormalizations": 0
+			}
+		},
+		"form-state/type-local/200": {
+			"scenario": "form-state",
+			"size": 200,
+			"iterations": 15,
+			"scriptMs": 140.5,
+			"paintMs": 142.5,
+			"cdpTaskMs": 150.175,
+			"cdpLayoutMs": 0.206,
+			"cdpStyleMs": 0.024,
+			"counters": {
+				"mountedNodes": 2400,
+				"views": 1,
+				"records": 1,
+				"fsFields": 200,
+				"fsSelectOptions": 8,
+				"fsSchemaFields": 24,
+				"fsKeystrokes": 200,
+				"fsRenders": 200,
+				"fsDataRuns": 0,
+				"fsInputValueWrites": 0,
+				"fsSelectValueWrites": 0,
+				"fsSchemaNormalizations": 0
+			}
+		},
+		"form-state/type-store/200": {
+			"scenario": "form-state",
+			"size": 200,
+			"iterations": 15,
+			"scriptMs": 143.3,
+			"paintMs": 145.3,
+			"cdpTaskMs": 152.837,
+			"cdpLayoutMs": 0.207,
+			"cdpStyleMs": 0.02,
+			"counters": {
+				"mountedNodes": 2400,
+				"views": 1,
+				"records": 1,
+				"fsFields": 200,
+				"fsSelectOptions": 8,
+				"fsSchemaFields": 24,
+				"fsKeystrokes": 200,
+				"fsRenders": 200,
+				"fsDataRuns": 200,
+				"fsInputValueWrites": 0,
+				"fsSelectValueWrites": 0,
+				"fsSchemaNormalizations": 600
+			}
+		},
+		"form-state/type-event/200": {
+			"scenario": "form-state",
+			"size": 200,
+			"iterations": 1,
+			"scriptMs": 3.5,
+			"paintMs": 5.8,
+			"cdpTaskMs": 10.448,
+			"cdpLayoutMs": 0.432,
+			"cdpStyleMs": 0.027,
+			"counters": {
+				"mountedNodes": 2400,
+				"views": 1,
+				"records": 1,
+				"fsFields": 200,
+				"fsSelectOptions": 8,
+				"fsSchemaFields": 24,
+				"fsKeystrokes": 2,
+				"fsRenders": 2,
+				"fsDataRuns": 1,
+				"fsInputValueWrites": 0,
+				"fsSelectValueWrites": 0,
+				"fsSchemaNormalizations": 3
+			}
+		},
+		"flip-churn/shuffle/500": {
+			"scenario": "flip-churn",
+			"size": 500,
+			"iterations": 15,
+			"scriptMs": 68.4,
+			"paintMs": 68.4,
+			"cdpTaskMs": 195.281,
+			"cdpLayoutMs": 93.304,
+			"cdpStyleMs": 54.45,
+			"counters": {
+				"mountedNodes": 1500,
+				"views": 1,
+				"records": 0,
+				"flipRows": 500,
+				"flipArm": 1,
+				"flipMeasured": 500,
+				"flipAnimated": 500,
+				"flipSkipped": 0,
+				"flipCancelled": 0
+			}
+		},
+		"flip-churn/shuffle-noflip/500": {
+			"scenario": "flip-churn",
+			"size": 500,
+			"iterations": 15,
+			"scriptMs": 0.9,
+			"paintMs": 0.9,
+			"cdpTaskMs": 6.547,
+			"cdpLayoutMs": 0.332,
+			"cdpStyleMs": 0.064,
+			"counters": {
+				"mountedNodes": 1500,
+				"views": 1,
+				"records": 0,
+				"flipRows": 500,
+				"flipArm": 0,
+				"flipMeasured": 0,
+				"flipAnimated": 0,
+				"flipSkipped": 0,
+				"flipCancelled": 0
+			}
+		},
+		"flip-churn/interrupt/500": {
+			"scenario": "flip-churn",
+			"size": 500,
+			"iterations": 15,
+			"scriptMs": 435.1,
+			"paintMs": 435.1,
+			"cdpTaskMs": 559.631,
+			"cdpLayoutMs": 237.271,
+			"cdpStyleMs": 246.811,
+			"counters": {
+				"mountedNodes": 1500,
+				"views": 1,
+				"records": 0,
+				"flipRows": 500,
+				"flipArm": 1,
+				"flipMeasured": 2000,
+				"flipAnimated": 2000,
+				"flipSkipped": 0,
+				"flipCancelled": 1500
+			}
+		}
+	}
+}
