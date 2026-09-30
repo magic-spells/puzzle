@@ -682,8 +682,15 @@ export declare class PuzzleModel {
 	/** API adapter — per-verb fetch functions, optionally filled by `{ endpoint }` REST shorthand. */
 	static adapter?: ModelAdapter;
 
-	/** Validate a plain data object against the schema (non-throwing). */
-	static validate(data: Record<string, any>): ValidationResult;
+	/**
+	 * Validate a plain data object against the schema (non-throwing).
+	 * `options.fields` limits the check to those declared field names; omitted
+	 * means every declared field.
+	 */
+	static validate(
+		data: Record<string, any>,
+		options?: { fields?: readonly string[] },
+	): ValidationResult;
 
 	/** Merge a patch into the record; notifies the store. Returns the record. */
 	update(patch: Record<string, any>): this;
