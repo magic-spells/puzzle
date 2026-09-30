@@ -1,11 +1,11 @@
 <puzzle-view>
-  <div class={ rootClass } aria-label={ ariaLabel }>
+  <div class={ rootClass } style={ rootStyle } aria-label={ ariaLabel }>
     {#for item in stack}
-      <span key={ item.key } class={ item.wrapperClass } style={ item.style }>
+      <span key={ item.key } class={ item.wrapperClass }>
         {#if item.type === 'avatar'}
           <Avatar src={ item.src } name={ item.name } size={ size } class={ item.avatarClass }/>
         {:else}
-          <span class={ item.chipClass } aria-label={ item.chipLabel }>{ item.chipText }</span>
+          <span class={ item.chipClass } aria-label={ item.chipLabel }><span dir="ltr">{ item.chipText }</span></span>
         {/if}
       </span>
     {/for}
@@ -23,72 +23,130 @@ import Avatar from './Avatar.pzl';
 //
 //   <AvatarGroup avatars={[{ name:'Ada Lovelace' }, { src:'/a.jpg', name:'Grace Hopper' }]} />
 //   <AvatarGroup avatars={ collaborators } max={ 4 } size="lg" label="5 collaborators" />
+//   <AvatarGroup avatars={ collaborators } direction="rtl" />
 //
 // Props:
-//   avatars  [{ src?, name? }] — forwarded straight to Avatar per item.
-//   max      number, default 4 — show the first `max`; the remainder folds
-//            into a single "+N" chip.
-//   size     'sm' | 'md' | 'lg', default 'md' — forwarded to every Avatar and
-//            matched by the overflow chip's own disc size.
-//   label    optional aria-label on the root (e.g. "5 collaborators").
-//   class    appended to the root.
+//   avatars    [{ src?, name? }] — forwarded straight to Avatar per item.
+//   max        number, default 4 — show the first `max`; the remainder folds
+//              into a single "+N" chip.
+//   size       'sm' | 'md' | 'lg', default 'md' — forwarded to every Avatar and
+//              matched by the overflow chip's own disc size.
+//   direction  'ltr' | 'rtl', default 'ltr' — which way the discs stack.
+//              'ltr': the first disc is whole and each later disc tucks under
+//              its predecessor (bitten on its left side). 'rtl': mirrored — the
+//              last disc (the chip, when there is one) is whole and each
+//              earlier disc tucks under its successor (bitten on its right
+//              side). Anything else falls back to 'ltr'. Only the overlap side
+//              changes: DOM and reading order stay avatars-in-array-order, chip
+//              last, in both.
+//   label      optional aria-label on the root (e.g. "5 collaborators").
+//   class      appended to the root.
 //
 // No callbacks — purely presentational.
 //
 // STACKING: every disc (avatar or chip) sits inside a wrapper <span> sized to
-// the disc. Every item after the first pulls left over its neighbour with a
-// negative margin and is CUT OUT around it: the wrapper carries an SVG mask of
-// a circle with a bite out of its left side. The bite is a circle concentric
-// with the left neighbour, `gap` px wider than it, so the neighbour sits in
-// the notch with real transparent space around it — the page background shows
-// through whatever it is (no halo ring faking a cutout in one colour). The
-// first item is a plain circle; the "+N" chip is bitten like any avatar.
-// Nothing overlaps once cut, so there is no z-index. The overlap uses margin,
-// not transform — the Tailwind v4 translate/scale gotcha (CLAUDE.md) does not
-// apply here.
+// the disc. Every item after the first pulls toward its predecessor with a
+// negative margin; the item on the covered side of each overlap is CUT OUT
+// around its neighbour: its wrapper carries an SVG mask of a circle with a bite
+// out of one side. The bite is a circle concentric with the neighbour, `gap` px
+// wider than it, so the neighbour sits in the notch with real transparent space
+// around it — the page background shows through whatever it is (no halo ring
+// faking a cutout in one colour). The unbitten end disc is a plain circle; the
+// "+N" chip is stacked like any avatar. The chip's text sits in an inner
+// dir="ltr" span so bidi doesn't reorder it to "N+" in an RTL page (on the
+// inner span, not the chip, whose ps-*/pe-* must follow the page
+// direction). Nothing overlaps once cut, so there is no z-index. The overlap
+// uses margin, not transform — the Tailwind v4 translate/scale gotcha
+// (CLAUDE.md) does not apply here.
 //
-// The bite eats the left `overlap + gap` px of a disc, so centred initials and
-// the chip's "+N" are nudged right in bitten items: `shift` is left padding on
-// the border-box root, which moves centred content right by half its value.
-// On an Avatar it rides `not-has-[img]:` so a photo (size-full img) stays
-// centred while a failed image's initials fallback is still corrected. A
-// three-character chip ("+12") still doesn't fully clear the bite at sm.
+// WRITING DIRECTION: `direction` is LOGICAL — 'ltr'/'rtl' name the stacking as
+// it reads in a left-to-right page, and the whole group mirrors with the
+// surrounding text. Inside a dir="rtl" ancestor the flex row already runs right
+// to left, so the pull is margin-inline-start (-ms-*), the text nudge is
+// padding-inline-start/end (ps-*/pe-*), and the mask flips with a `:dir(rtl)`
+// variant — a default group in an Arabic or Hebrew page starts whole at the
+// right, as its reading order does. Physical sides were rejected: the flex row
+// reverses in an RTL context anyway, so physical margins and masks would bite
+// the wrong neighbour unless the root forced dir="ltr", which would also flip
+// the base direction of the initials. `[&:dir(rtl)]:` is used, not `rtl:` —
+// Tailwind's `rtl:` also matches `[dir=rtl] *`, which is wrong for a group
+// inside a dir="ltr" island of an RTL page, while `:dir()` follows the real
+// resolved direction exactly as the logical margin and padding do.
+//
+// The two bite masks (hole on the left, hole on the right) are set once as
+// custom properties on the root (`--avatar-bite-l`, `--avatar-bite-r`); each
+// bitten wrapper's classes pick one per writing direction with
+// `mask-(--avatar-bite-…)`; Tailwind's build adds the -webkit- forms.
+//
+// The bite eats `overlap + gap` px off one side of a disc, so centred initials
+// and the chip's "+N" are nudged away from it in bitten items: `shift` is
+// inline padding on the border-box root on the bitten side, which moves
+// centred content over by half its value. On an Avatar it rides
+// `not-has-[img]:` so a photo (size-full img) stays centred while a failed
+// image's initials fallback is still corrected. A three-character chip ("+12")
+// still doesn't fully clear the bite at sm.
 //
 // Per size: `d` disc diameter (px, = the size-* class), `overlap` (px, = the
-// -ml-* class), `gap` (px of clear space around the neighbour).
+// -ms-* class), `gap` (px of clear space around the neighbour). Every class
+// is written out whole so Tailwind's scan sees it.
 const SIZES = {
-  sm: { d: 24, overlap: 8, gap: 1.5, box: 'size-6', pull: '-ml-2', shift: 'pl-2', faceShift: 'not-has-[img]:pl-2' },
-  md: { d: 32, overlap: 10, gap: 2, box: 'size-8', pull: '-ml-2.5', shift: 'pl-2.5', faceShift: 'not-has-[img]:pl-2.5' },
-  lg: { d: 40, overlap: 12, gap: 2.5, box: 'size-10', pull: '-ml-3', shift: 'pl-3', faceShift: 'not-has-[img]:pl-3' },
+  sm: {
+    d: 24, overlap: 8, gap: 1.5, box: 'size-6', pull: '-ms-2',
+    shift: { start: 'ps-2', end: 'pe-2' },
+    faceShift: { start: 'not-has-[img]:ps-2', end: 'not-has-[img]:pe-2' },
+  },
+  md: {
+    d: 32, overlap: 10, gap: 2, box: 'size-8', pull: '-ms-2.5',
+    shift: { start: 'ps-2.5', end: 'pe-2.5' },
+    faceShift: { start: 'not-has-[img]:ps-2.5', end: 'not-has-[img]:pe-2.5' },
+  },
+  lg: {
+    d: 40, overlap: 12, gap: 2.5, box: 'size-10', pull: '-ms-3',
+    shift: { start: 'ps-3', end: 'pe-3' },
+    faceShift: { start: 'not-has-[img]:ps-3', end: 'not-has-[img]:pe-3' },
+  },
 };
 
-// The bite mask, in a viewBox that is the disc's own px box: the full square
-// minus a circle, filled evenodd. The circle is the left neighbour's disc
-// grown by `gap` — centred `d - overlap` px left of this disc's centre, at
-// (overlap - r, r), radius r + gap. The mask only removes the bite; the
-// disc's own rounded-full edge draws its outer rim, so bitten discs
-// anti-alias exactly like the first one. mask-image reads the SVG's alpha.
-function biteMask({ d, overlap, gap }) {
+// A bite mask, in a viewBox that is the disc's own px box: the full square
+// minus a circle, filled evenodd. The circle is the neighbour's disc grown by
+// `gap`, centred `d - overlap` px to the side of this disc's centre — at
+// (overlap - r, r) for a left neighbour, (d - overlap + r, r) for a right
+// one — radius r + gap. The mask only removes the bite; the disc's own
+// rounded-full edge draws its outer rim, so bitten discs anti-alias exactly
+// like the whole one. mask-image reads the SVG's alpha.
+function biteMask({ d, overlap, gap }, side) {
   const r = d / 2;
   const R = r + gap;
+  const cx = side === 'l' ? overlap - r : d - overlap + r;
   const n = (v) => +v.toFixed(3);
   const svg =
-    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${d} ${d}'>` +
+    `<svg xmlns='http://www.w3.org/2000/svg' width='${d}' height='${d}' viewBox='0 0 ${d} ${d}'>` +
     `<path fill-rule='evenodd' d='M0 0H${d}V${d}H0Z` +
-    `M${n(overlap - r - R)} ${r}a${R} ${R} 0 1 0 ${2 * R} 0a${R} ${R} 0 1 0 ${-2 * R} 0Z'/></svg>`;
+    `M${n(cx - R)} ${r}a${R} ${R} 0 1 0 ${2 * R} 0a${R} ${R} 0 1 0 ${-2 * R} 0Z'/></svg>`;
   // Fully percent-encoded (quotes and parens too) so the unquoted url() is
   // safe inside a style attribute however it gets serialized.
-  const url =
+  return (
     'url(data:image/svg+xml,' +
     encodeURIComponent(svg).replace(/['()]/g, (ch) => '%' + ch.charCodeAt(0).toString(16)) +
-    ')';
-  return ['', '-webkit-']
-    .map((p) => `${p}mask-image:${url};${p}mask-size:100% 100%;${p}mask-repeat:no-repeat`)
-    .join(';');
+    ')'
+  );
 }
 
-// Built once per size at module load — identical for every bitten item.
-const BITE = Object.fromEntries(Object.entries(SIZES).map(([k, s]) => [k, biteMask(s)]));
+// Built once per size at module load — both masks as root custom properties,
+// inherited by every bitten wrapper.
+const BITES = Object.fromEntries(
+  Object.entries(SIZES).map(([k, s]) => [
+    k,
+    `--avatar-bite-l:${biteMask(s, 'l')};--avatar-bite-r:${biteMask(s, 'r')}`,
+  ]),
+);
+
+// Which mask a bitten wrapper wears. 'ltr' bites on the inline-start side
+// (left in an LTR page, right in an RTL one); 'rtl' on the inline-end side.
+const BITE_CLASS = {
+  ltr: 'mask-(--avatar-bite-l) [&:dir(rtl)]:mask-(--avatar-bite-r) mask-cover mask-no-repeat',
+  rtl: 'mask-(--avatar-bite-r) [&:dir(rtl)]:mask-(--avatar-bite-l) mask-cover mask-no-repeat',
+};
 
 const CHIP_BASE =
   'inline-flex items-center justify-center rounded-full shrink-0 select-none font-medium ' +
@@ -103,17 +161,23 @@ const CHIP_SIZE = {
 export default class AvatarGroup extends PuzzleView {
   data(params, props) {
     const size = SIZES[props.size] ? props.size : 'md';
+    const direction = props.direction === 'rtl' ? 'rtl' : 'ltr';
     const { box, pull, shift, faceShift } = SIZES[size];
     const source = props.avatars || [];
     const max = Number(props.max) > 0 ? Math.floor(Number(props.max)) : 4;
     const visible = source.slice(0, max);
     const overflowCount = source.length > max ? source.length - max : 0;
+    const count = visible.length + (overflowCount > 0 ? 1 : 0);
 
-    // Item 0 is a plain circle; every later item pulls left and is bitten.
-    const wrap = (i) => ({
-      wrapperClass: ['flex shrink-0', box, i === 0 ? '' : pull].filter(Boolean).join(' '),
-      style: i === 0 ? false : BITE[size],
-    });
+    // Every item after the first pulls toward its predecessor. 'ltr' bites
+    // every item but the first (on its start side); 'rtl' bites every item but
+    // the last (on its end side).
+    const side = direction === 'ltr' ? 'start' : 'end';
+    const bitten = (i) => (direction === 'ltr' ? i > 0 : i < count - 1);
+    const wrapperClass = (i) =>
+      ['flex shrink-0', box, i === 0 ? '' : pull, bitten(i) ? BITE_CLASS[direction] : '']
+        .filter(Boolean)
+        .join(' ');
 
     const stack = visible.map((avatar, i) => ({
       key: 'avatar-' + i,
@@ -123,11 +187,12 @@ export default class AvatarGroup extends PuzzleView {
       chipClass: '',
       chipText: '',
       chipLabel: '',
-      avatarClass: i === 0 ? '' : faceShift,
-      ...wrap(i),
+      avatarClass: bitten(i) ? faceShift[side] : '',
+      wrapperClass: wrapperClass(i),
     }));
 
     if (overflowCount > 0) {
+      const i = visible.length;
       stack.push({
         key: 'overflow',
         type: 'chip',
@@ -136,10 +201,10 @@ export default class AvatarGroup extends PuzzleView {
         chipText: '+' + overflowCount,
         chipLabel: overflowCount + ' more',
         avatarClass: '',
-        chipClass: [CHIP_BASE, CHIP_SIZE[size], visible.length === 0 ? '' : shift]
+        chipClass: [CHIP_BASE, CHIP_SIZE[size], bitten(i) ? shift[side] : '']
           .filter(Boolean)
           .join(' '),
-        ...wrap(visible.length),
+        wrapperClass: wrapperClass(i),
       });
     }
 
@@ -147,6 +212,7 @@ export default class AvatarGroup extends PuzzleView {
       size,
       stack,
       rootClass: ['flex items-center', props.class || ''].filter(Boolean).join(' '),
+      rootStyle: count > 1 ? BITES[size] : false,
       ariaLabel: props.label || false,
     };
   }
