@@ -29,6 +29,9 @@
  *                        the page follows the OS between light and dark.
  *   data-default-scheme  the palette to paint when nothing is stored.
  *
+ * It leaves the three on `window.__puzzleAppearance` for appearance.js, whose
+ * boot() then agrees with this paint (an explicit configure() still wins).
+ *
  * Compatibility: a stored `theme` field is read as `scheme` (Pyramid's shape),
  * and a stored `mixed` mode reads as `medium`. The same two aliases live in
  * appearance.js — CHANGE THEM THERE AND CHANGE THEM HERE.
@@ -41,6 +44,10 @@
 		return script ? script.getAttribute(name) : null;
 	};
 	var key = attr('data-key') || 'puzzle:appearance';
+	// Hand the parameters on: appearance.js seeds its storage key and fallback
+	// from this object, so boot() reads the same key and keeps the same defaults
+	// this snippet painted, without a configure() call repeating them.
+	window.__puzzleAppearance = { key: key, scheme: attr('data-default-scheme'), mode: attr('data-default-mode') };
 	var root = document.documentElement;
 	try {
 		var pick = JSON.parse(localStorage.getItem(key) || 'null') || {};

@@ -30,13 +30,33 @@ function fakeDom({ stored, scriptAttrs = {} } = {}) {
 		documentElement: root,
 		currentScript: { getAttribute: (k) => (k in scriptAttrs ? scriptAttrs[k] : null) },
 	};
-	return { root, attrs, localStorage, document, store };
+	const window = { addEventListener() {}, matchMedia: () => ({ matches: true, addEventListener() {} }) };
+	return { root, attrs, localStorage, document, store, window };
 }
 
 function runPrePaint(opts) {
 	const dom = fakeDom(opts);
-	vm.runInNewContext(prePaint, { document: dom.document, localStorage: dom.localStorage, JSON });
+	vm.runInNewContext(prePaint, { window: dom.window, document: dom.document, localStorage: dom.localStorage, JSON });
 	return dom;
+}
+
+// boot() in a page pre-paint already painted: the SAME document, store and
+// window, with appearance.js imported fresh (its config is read at import time)
+// and no configure() call — the documented setup.
+async function bootAfterPrePaint(dom, tag) {
+	globalThis.document = dom.document;
+	globalThis.localStorage = dom.localStorage;
+	globalThis.window = dom.window;
+	globalThis.__puzzleAppearance = dom.window.__puzzleAppearance;
+	try {
+		const appearance = await import(`../registry/theme/appearance.js?${tag}`);
+		return { appearance, booted: appearance.boot() };
+	} finally {
+		delete globalThis.document;
+		delete globalThis.localStorage;
+		delete globalThis.window;
+		delete globalThis.__puzzleAppearance;
+	}
 }
 
 test('pre-paint: stored mode null (follow OS) paints no mode even with data-default-mode', () => {
@@ -63,6 +83,27 @@ test('pre-paint: mixed reads as medium, legacy { theme } as the scheme, default 
 	const def = runPrePaint({ stored: { scheme: 'default', mode: 'light' } });
 	assert.equal(def.attrs.has('data-scheme'), false);
 	assert.equal(def.attrs.get('data-theme'), 'light');
+});
+
+test('boot() keeps what pre-paint painted from data-default-mode / data-default-scheme on an empty store', async () => {
+	const dom = runPrePaint({ scriptAttrs: { 'data-default-mode': 'dark', 'data-default-scheme': 'warm' } });
+	assert.equal(dom.attrs.get('data-theme'), 'dark');
+	assert.equal(dom.attrs.get('data-scheme'), 'warm');
+	const { booted } = await bootAfterPrePaint(dom, 'seed-defaults');
+	assert.deepEqual(booted, { scheme: 'warm', mode: 'dark' });
+	assert.equal(dom.attrs.get('data-theme'), 'dark', 'boot() stripped the default mode pre-paint painted');
+	assert.equal(dom.attrs.get('data-scheme'), 'warm', 'boot() stripped the default scheme pre-paint painted');
+	assert.equal(dom.root.style.colorScheme, 'dark');
+});
+
+test('boot() reads the custom data-key pre-paint read, without configure()', async () => {
+	const dom = runPrePaint({ stored: { scheme: 'dim', mode: 'light' }, scriptAttrs: { 'data-key': 'app:look' } });
+	assert.equal(dom.attrs.get('data-scheme'), 'dim');
+	const { appearance, booted } = await bootAfterPrePaint(dom, 'seed-key');
+	assert.deepEqual(booted, { scheme: 'dim', mode: 'light' });
+	assert.equal(dom.attrs.get('data-scheme'), 'dim');
+	assert.equal(dom.attrs.get('data-theme'), 'light');
+	assert.equal(appearance.configure().storageKey, 'app:look');
 });
 
 test('appearance.js: read() keeps a stored null mode, apply() removes data-theme, set(null) persists null', async () => {

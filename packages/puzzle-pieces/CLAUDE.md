@@ -180,7 +180,8 @@ CLI — it is unrelated and must not be bumped along with the release.
   `./themes/{dim,warm,void}.css`, `./appearance` (`boot/set/current/subscribe/apply/read`,
   storage key `puzzle:appearance`, JSON `{ scheme, mode }`, legacy `mixed` → `medium`),
   `./pre-paint` (inline in `<head>`, params `data-key`, `data-default-mode`,
-  `data-default-scheme`). `registry.json` carries `modes` and a `themes` array
+  `data-default-scheme` — handed to appearance.js on `window.__puzzleAppearance`, which
+  seeds its key and fallback so `boot()` keeps the painted default; `configure()` wins). `registry.json` carries `modes` and a `themes` array
   (`{ name, file, label, description }`); the Go `Registry` struct ignores both for now.
 - **Contrast:** every palette × mode must pass WCAG 2.2 AA on every declared pair in
   `test/lib/roles.mjs` (4.5 text, 3 non-text; translucent grounds flattened over
