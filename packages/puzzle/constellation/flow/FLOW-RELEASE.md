@@ -18,6 +18,18 @@ connections:
   - RELEASE-V0-3-1
 verified_at: '2026-08-24T21:39:23.520Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: decision
+    text: >-
+      Per-release benchmark snapshot (added 0.8.0, PR #200). Between step 4 (suites) and step 6
+      (release:prep), on a committed clean tree, run `npm run bench:update` then `npm run
+      bench:snapshot` in packages/puzzle, and commit both benchmarks/baseline.json and
+      benchmarks/history/<version>.json. bench:snapshot refuses a baseline measured on a dirty tree.
+      Measure on the same machine and browser as the earlier snapshots, or the history rows are not
+      comparable (`npm run bench:history` warns when meta.machine/browser differ). The history
+      starts with 0.6.0 and 0.7.0, backfilled 2026-09-30 with each tag's own harness. Why: Cory
+      wanted performance tracked across releases. The step is mechanical and costs no agent tokens.
+    sha: b135fde1
 ---
 
 # Release flow
