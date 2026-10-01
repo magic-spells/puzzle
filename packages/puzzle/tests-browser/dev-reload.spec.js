@@ -43,15 +43,11 @@ export default class Home extends PuzzleView {}
 `;
 }
 
-// Edits land at least a second apart: the dev server serves app.js with a
-// Last-Modified validator of one-second resolution, so a rebuild inside the
-// same second as the last one can revalidate as unchanged.
-let lastEdit = 0;
-async function writeHome(source) {
-	const wait = lastEdit + 1100 - Date.now();
-	if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+// Edits may land inside one second: the dev server sends app.js with
+// Cache-Control: no-store, so a reload never revalidates an older bundle
+// against its one-second Last-Modified.
+function writeHome(source) {
 	writeFileSync(join(appDir, 'app/views/Home.pzl'), source);
-	lastEdit = Date.now();
 }
 
 async function waitForServer() {
@@ -105,7 +101,7 @@ app.mount();
 export default app;
 `
 	);
-	await writeHome(home('version 1'));
+	writeHome(home('version 1'));
 
 	const bin = join(binDir, 'puzzle');
 	execFileSync('go', ['build', '-o', bin, './compiler/cmd/puzzle'], {
@@ -179,7 +175,7 @@ test('one SSE stream serves every tab; reloads survive the leader closing', asyn
 	await expect.poll(openStreams).toBe(1);
 
 	// A source edit reloads every tab.
-	await writeHome(home('version 2'));
+	writeHome(home('version 2'));
 	for (const page of pages)
 		await expect(page.locator('h1')).toHaveText('version 2', {
 			timeout: 20_000,
@@ -192,7 +188,7 @@ test('one SSE stream serves every tab; reloads survive the leader closing', asyn
 	await first.close();
 	const rest = pages.filter((p) => p !== first);
 	await expect.poll(openStreams).toBe(1);
-	await writeHome(home('version 3'));
+	writeHome(home('version 3'));
 	for (const page of rest)
 		await expect(page.locator('h1')).toHaveText('version 3', {
 			timeout: 20_000,
@@ -200,7 +196,7 @@ test('one SSE stream serves every tab; reloads survive the leader closing', asyn
 
 	// A build error draws the overlay in a tab that does not hold the stream,
 	// and a tab opened while the build is broken gets it from the leader.
-	await writeHome(home('{ 1 + }'));
+	writeHome(home('{ 1 + }'));
 	const current = await leader();
 	const follower = rest.find((p) => p !== current);
 	await expect(follower.locator('#__puzzle-build-error')).toBeVisible(
@@ -212,7 +208,7 @@ test('one SSE stream serves every tab; reloads survive the leader closing', asyn
 	await expect(late.locator('#__puzzle-build-error')).toBeVisible();
 
 	// Fixing it clears the overlay and reloads everyone.
-	await writeHome(home('version 4'));
+	writeHome(home('version 4'));
 	for (const page of [...rest, late]) {
 		await expect(page.locator('h1')).toHaveText('version 4', {
 			timeout: 20_000,

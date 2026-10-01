@@ -1184,6 +1184,11 @@ checklist sent you.
   over. A page closes its stream before it reloads. Where either API is
   missing (an insecure origin such as a LAN IP), each tab streams directly as
   before. (Pre-existing.)
+- **A `puzzle dev` reload always runs the newest bundle.** The dev server
+  sent `app.js` and the other built files with a one-second `Last-Modified`
+  and no `Cache-Control`, so the browser could keep the older bundle after two
+  rebuilds inside one second. Every response the dev server serves from
+  `dist/` now carries `Cache-Control: no-store`. (Pre-existing.)
 
 ## 0.7.0 — 2026-09-09
 

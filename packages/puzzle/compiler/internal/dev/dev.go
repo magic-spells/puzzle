@@ -867,6 +867,14 @@ func (s *server) reverseProxy(prefix, targetURL string) http.Handler {
 	return proxy
 }
 
+// devCacheControl is sent on every response the dev server builds or serves
+// from dist/. http.ServeFile validates with a one-second Last-Modified, so with
+// a cache the browser could revalidate app.js as 304 Not Modified after two
+// rebuilds inside one second and the reload would run the older bundle. A dev
+// server never wants a cached copy, so nothing is stored and nothing is
+// revalidated.
+const devCacheControl = "no-store"
+
 // serveStatic answers a request against dist/ per the serving mode. serve.Resolve
 // owns the URL→file mapping (SPA history fallback vs static clean URLs + a real
 // 404); this method only decides how the chosen file is written:
@@ -892,6 +900,7 @@ func (s *server) serveStatic(w http.ResponseWriter, r *http.Request) {
 	case res.HTML:
 		s.serveHTMLFile(w, res.File, res.Status)
 	default:
+		w.Header().Set("Cache-Control", devCacheControl)
 		http.ServeFile(w, r, res.File)
 	}
 }
@@ -915,7 +924,7 @@ this is what a static host would answer too.</p>
 </body>
 </html>`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Cache-Control", devCacheControl)
 	w.WriteHeader(http.StatusNotFound)
 	_, _ = w.Write(injectReload([]byte(page)))
 }
@@ -935,7 +944,7 @@ func (s *server) serveIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Cache-Control", devCacheControl)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(injectReload(data))
 }
@@ -958,7 +967,7 @@ func (s *server) serveBuildErrorShell(w http.ResponseWriter, message string) {
 </body>
 </html>`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Cache-Control", devCacheControl)
 	w.WriteHeader(http.StatusServiceUnavailable)
 	_, _ = w.Write(injectReload([]byte(page)))
 }
@@ -983,7 +992,7 @@ func (s *server) serveHTMLFile(w http.ResponseWriter, path string, status int) {
 		data = injectReload(data)
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Cache-Control", devCacheControl)
 	w.WriteHeader(status)
 	_, _ = w.Write(data)
 }

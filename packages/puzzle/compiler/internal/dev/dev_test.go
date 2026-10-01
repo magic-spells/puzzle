@@ -99,6 +99,38 @@ func TestServeTimeInjection(t *testing.T) {
 	}
 }
 
+// TestDevResponsesAreNotStored pins Cache-Control: no-store on what the dev
+// server serves from dist/. http.ServeFile validates app.js with a one-second
+// Last-Modified, so a cached copy could revalidate as 304 after two rebuilds
+// inside one second and the reload would run the older bundle.
+func TestDevResponsesAreNotStored(t *testing.T) {
+	dist := writeDist(t)
+	spa := newTestServer(t, dist)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	static := httptest.NewServer(newServer(dist, serve.ModeStatic, ctx, nil).handler())
+	defer static.Close()
+
+	for _, url := range []string{
+		spa.URL + "/",
+		spa.URL + "/index.html",
+		spa.URL + "/app.js",
+		spa.URL + "/some/route", // SPA history fallback
+		static.URL + "/",
+		static.URL + "/app.js",
+		static.URL + "/missing", // static 404 page
+	} {
+		res, err := http.Get(url)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if got := res.Header.Get("Cache-Control"); got != "no-store" {
+			t.Fatalf("GET %s: Cache-Control = %q, want no-store", url, got)
+		}
+	}
+}
+
 func TestMissingIndexWithRetainedErrorServesBuildErrorShell(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
