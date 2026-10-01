@@ -153,7 +153,7 @@ Pick `<Children/>` if that position received content from the call site, or
 `'static'` now produces a genuinely static site — no router, no `app.js`. This
 one is *not* a compile error; it silently builds a different product.
 
-## 0.8.0 — Unreleased
+## 0.8.0 — 2026-10-01
 
 Puzzle becomes one template language with two hosts (D172): PuzzleKit, the app
 framework in this package, compiles a template to JavaScript, and Magic Spells
