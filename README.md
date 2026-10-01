@@ -360,3 +360,9 @@ npm run build:compiler           # emits ./puzzle, the CLI the other packages bu
 ## License
 
 MIT © Magic Spells
+
+---
+
+<p align="center">
+  Made by <a href="https://github.com/coryschulz">Cory Schulz</a>
+</p>
