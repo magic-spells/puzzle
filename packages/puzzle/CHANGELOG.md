@@ -1167,6 +1167,13 @@ checklist sent you.
   `if`/`while`/`for` (`if (text) /["']/.test(text);` reads the `/` as
   division, so the quote opens a string). The eslint and prettier plugins
   keep their own message. (Pre-existing.)
+- **`puzzle dev` started from a differently-cased path rebuilds Tailwind on
+  stylesheet edits.** On a case-insensitive volume (macOS by default),
+  starting the server from `~/code/app` when the folder is `Code` handed the
+  `tailwindcss --watch` child paths that never matched its file events, so an
+  edit to an `@import`ed CSS file was never picked up. The dev server now
+  spells the app root as the disk stores it before deriving any path or
+  starting any watcher. (Pre-existing.)
 - **`puzzle dev` live reload no longer hangs the browser with many tabs
   open.** Every dev tab held its own reload stream, and a browser allows six
   HTTP/1.1 connections per host, so with about six tabs open every further

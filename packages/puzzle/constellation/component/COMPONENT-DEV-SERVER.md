@@ -13,6 +13,16 @@ connections:
   - DECISION-D154-STATIC-DEV-WARM-REBUILDS
   - DECISION-D155-ROUTE-LEVEL-INVALIDATION
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: gotcha
+    text: >-
+      Serve spells the app root as the disk stores it (fsutil.CanonicalCase) right after
+      filepath.Abs, before any path is derived. On a case-insensitive volume (macOS APFS) a server
+      started from ~/code/app when the folder is Code otherwise hands the `tailwindcss --watch`
+      child lowercase paths while its file events arrive in the real case, so edits to an @imported
+      stylesheet never rebuild. filepath.EvalSymlinks does not fix this on macOS (it keeps the
+      caller's spelling), and symlinks are deliberately left unresolved: a symlinked root already
+      works because Tailwind's watcher resolves it.
 ---
 
 # Dev server (`puzzle dev`)

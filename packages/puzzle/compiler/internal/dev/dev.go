@@ -253,6 +253,11 @@ func Serve(root string, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("resolving app root: %w", err)
 	}
+	// Spell the root the way the disk does before anything derives from it: on
+	// a case-insensitive volume a server started from ~/code/app (folder: Code)
+	// hands the Tailwind child paths that never equal its file events, so edits
+	// to an @imported stylesheet never rebuild.
+	absRoot = fsutil.CanonicalCase(absRoot)
 	if err := build.PreflightRuntime(absRoot); err != nil {
 		return err
 	}
