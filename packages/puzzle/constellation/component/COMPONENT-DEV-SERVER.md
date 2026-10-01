@@ -132,6 +132,14 @@ catch-all. `/__puzzle/reload` uses buffered per-client channels and non-blocking
 broadcasts. Before reloading, the client invokes [[COMPONENT-DEVSTATE]]; the page always
 fully reloads.
 
+**Nothing served from `dist/` is cached.** Every response the dev server builds or
+serves from `dist/` (HTML pages, the shell, the 404 and build-error pages, and
+`http.ServeFile` assets such as `app.js`) sends `Cache-Control: no-store`
+(`devCacheControl`). `http.ServeFile` validates with a one-second `Last-Modified`, so
+a cached `app.js` could revalidate as 304 after two rebuilds inside one second and the
+reload would run the older bundle. The SSE stream keeps `no-cache`; proxied responses
+keep the backend's headers.
+
 **One stream per origin.** A browser allows six HTTP/1.1 connections per host, so a
 stream per tab starved the host once about six dev tabs were open (every further
 request, a reload's own document included, sat pending). The client elects one tab
@@ -146,6 +154,11 @@ LAN IP) or no BroadcastChannel means a direct stream per tab, as before.
 `tests-browser/dev-reload.spec.js` drives eight tabs through edits, a leader close and a
 build error on its own temp app.
 
-Gotcha: `app.js` is served by `http.ServeFile` with a one-second `Last-Modified`
-validator and no `Cache-Control`, so two rebuilds inside one second can revalidate as
-unchanged and a reload shows the older bundle.
+Known gap: the hub replays only the retained build error, never a `reload`. A rebuild
+that lands while the leader is closing and the next tab is still connecting (lock
+handoff plus one localhost connect) reaches no tab; the next edit reloads them.
+
+Terminal: timing, changed paths, TTY color; cbreak `q` quits (`internal/keys`, shared
+with preview); SIGINT/SIGTERM shut down gracefully. `go run` doesn't forward SIGTERM —
+test shutdown against the built binary. `--profile-build` prints stderr phase tables in
+every mode.
