@@ -19,10 +19,12 @@ import (
 // on a case-sensitive filesystem. filepath.EvalSymlinks cannot do this job: on
 // macOS it keeps the caller's spelling, and symlinks are deliberately left
 // unresolved here. A component with no listed match keeps its spelling (a
-// Windows 8.3 short name still resolves); a relative path, or a directory that
-// cannot be listed (including one below a missing component), returns the
-// input unchanged. The volume name (a Windows drive letter or UNC
-// \\server\share prefix) is kept as given.
+// Windows 8.3 short name still resolves). A relative path comes back unchanged;
+// an absolute one is cleaned first, so `.` and `..` are resolved lexically as
+// filepath.Abs would, and comes back cleaned but otherwise unchanged when a
+// directory cannot be listed (including one below a missing component). The
+// volume name (a Windows drive letter or UNC \\server\share prefix) is kept
+// as given.
 func CanonicalCase(path string) string {
 	if !filepath.IsAbs(path) {
 		return path

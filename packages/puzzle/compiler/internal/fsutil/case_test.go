@@ -79,3 +79,43 @@ func TestCanonicalCaseFallsBackUnchanged(t *testing.T) {
 		}
 	}
 }
+
+func TestCanonicalCaseKeepsSymlinks(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "Real", "App"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "Real"), filepath.Join(dir, "Link")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	want := filepath.Join(dir, "Link", "App")
+	if got := CanonicalCase(want); got != want {
+		t.Fatalf("CanonicalCase(%q) = %q, want it unchanged", want, got)
+	}
+	if !caseInsensitive(t, dir) {
+		return
+	}
+	// The link keeps its own name, and the walk continues through it.
+	query := filepath.Join(dir, "link", "app")
+	if got := CanonicalCase(query); got != want {
+		t.Fatalf("CanonicalCase(%q) = %q, want %q", query, got, want)
+	}
+}
+
+func TestCanonicalCaseCleansFirst(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "App"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sep := string(filepath.Separator)
+	query := dir + sep + "x" + sep + ".." + sep + "." + sep + "App" + sep
+	if got, want := CanonicalCase(query), filepath.Join(dir, "App"); got != want {
+		t.Fatalf("CanonicalCase(%q) = %q, want %q", query, got, want)
+	}
+}
