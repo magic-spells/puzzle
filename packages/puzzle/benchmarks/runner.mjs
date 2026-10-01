@@ -4,6 +4,7 @@
  *
  *   npm run bench                  measure, print the table, compare to baseline
  *   npm run bench:update           the same, then rewrite benchmarks/baseline.json
+ *   npm run bench:snapshot         freeze baseline.json as history/<version>.json (history.mjs)
  *
  * Flags: --filter <substr>  --iterations <n>  --no-build  --headed  --list
  *
@@ -11,9 +12,9 @@
  * It builds `examples/stress` in PRODUCTION mode and serves the static output.
  * The dev server ships HMR, the DevTools bridge, per-view dev registration and
  * unminified code; measuring through it tells you about the development
- * experience, not about what users run. (Confirmed empirically: the production
- * bundle is 99 KB to the dev build's 327 KB and contains zero occurrences of
- * the DevTools hook, HMR, devstate or console.log.)
+ * experience, not about what users run. (Confirmed empirically: at 0.8.0 the
+ * production bundle is 238 KB to the dev build's 690 KB and contains zero
+ * occurrences of the DevTools hook, HMR, devstate or console.log.)
  *
  * ── Exit status ────────────────────────────────────────────────────────────
  * Non-zero for a validate() failure, a structural-counter mismatch, an op that

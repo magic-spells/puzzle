@@ -1,9 +1,9 @@
 {
 	"meta": {
 		"version": "0.8.0",
+		"machine": "Apple M1 Pro, 10 cores, 32 GB",
 		"builtAt": "2026-09-30T23:45:42.675Z",
 		"platform": "darwin-arm64",
-		"machine": "Apple M1 Pro, 10 cores, 32 GB",
 		"nodeVersion": "v25.1.0",
 		"browserVersion": "151.0.7922.34",
 		"buildMode": "production",
