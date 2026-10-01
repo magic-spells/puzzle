@@ -26,9 +26,7 @@
 				"views": 1001,
 				"records": 1000,
 				"childDataRuns": 1000,
-				"handlers": "inline",
-				"klDomMutations": 3000,
-				"klRowsTouched": 0
+				"handlers": "inline"
 			}
 		},
 		"keyed-list/update-every-10th/1000": {
@@ -45,9 +43,7 @@
 				"views": 1001,
 				"records": 1000,
 				"childDataRuns": 100,
-				"handlers": "inline",
-				"klDomMutations": 200,
-				"klRowsTouched": 100
+				"handlers": "inline"
 			}
 		},
 		"keyed-list/swap-rows/1000": {
@@ -64,9 +60,7 @@
 				"views": 1001,
 				"records": 1000,
 				"childDataRuns": 0,
-				"handlers": "inline",
-				"klDomMutations": 1994,
-				"klRowsTouched": 0
+				"handlers": "inline"
 			}
 		},
 		"keyed-list/clear/1000": {
@@ -83,9 +77,7 @@
 				"views": 1,
 				"records": 0,
 				"childDataRuns": 0,
-				"handlers": "inline",
-				"klDomMutations": 1000,
-				"klRowsTouched": 0
+				"handlers": "inline"
 			}
 		},
 		"keyed-list/update-one/1000": {
@@ -159,9 +151,7 @@
 				"views": 10001,
 				"records": 10000,
 				"childDataRuns": 10000,
-				"handlers": "inline",
-				"klDomMutations": 30000,
-				"klRowsTouched": 0
+				"handlers": "inline"
 			}
 		},
 		"keyed-list/update-every-10th/10000": {
@@ -178,9 +168,7 @@
 				"views": 10001,
 				"records": 10000,
 				"childDataRuns": 1000,
-				"handlers": "inline",
-				"klDomMutations": 2000,
-				"klRowsTouched": 1000
+				"handlers": "inline"
 			}
 		},
 		"keyed-list/swap-rows/10000": {
@@ -197,9 +185,7 @@
 				"views": 10001,
 				"records": 10000,
 				"childDataRuns": 0,
-				"handlers": "inline",
-				"klDomMutations": 1994,
-				"klRowsTouched": 0
+				"handlers": "inline"
 			}
 		},
 		"keyed-list/clear/10000": {
@@ -216,9 +202,7 @@
 				"views": 1,
 				"records": 0,
 				"childDataRuns": 0,
-				"handlers": "inline",
-				"klDomMutations": 10000,
-				"klRowsTouched": 0
+				"handlers": "inline"
 			}
 		},
 		"keyed-list/create/50000": {
@@ -235,9 +219,7 @@
 				"views": 50001,
 				"records": 50000,
 				"childDataRuns": 50000,
-				"handlers": "inline",
-				"klDomMutations": 150000,
-				"klRowsTouched": 0
+				"handlers": "inline"
 			}
 		},
 		"keyed-list/update-every-10th/50000": {
@@ -254,9 +236,7 @@
 				"views": 50001,
 				"records": 50000,
 				"childDataRuns": 5000,
-				"handlers": "inline",
-				"klDomMutations": 10000,
-				"klRowsTouched": 5000
+				"handlers": "inline"
 			}
 		},
 		"keyed-list/swap-rows/50000": {
@@ -273,9 +253,7 @@
 				"views": 50001,
 				"records": 50000,
 				"childDataRuns": 0,
-				"handlers": "inline",
-				"klDomMutations": 1994,
-				"klRowsTouched": 0
+				"handlers": "inline"
 			}
 		},
 		"keyed-list/clear/50000": {
@@ -292,9 +270,7 @@
 				"views": 1,
 				"records": 0,
 				"childDataRuns": 0,
-				"handlers": "inline",
-				"klDomMutations": 50000,
-				"klRowsTouched": 0
+				"handlers": "inline"
 			}
 		},
 		"virtual-list/create/1000": {
@@ -577,9 +553,7 @@
 				"views": 1001,
 				"records": 1000,
 				"childDataRuns": 1,
-				"handlers": "inline",
-				"klDomMutations": 1,
-				"klRowsTouched": 1
+				"handlers": "inline"
 			}
 		},
 		"handlers-inline/click-remove/1000": {
@@ -596,9 +570,7 @@
 				"views": 1000,
 				"records": 999,
 				"childDataRuns": 0,
-				"handlers": "inline",
-				"klDomMutations": 1,
-				"klRowsTouched": 0
+				"handlers": "inline"
 			}
 		},
 		"handlers-inline/create/1000": {
@@ -615,9 +587,7 @@
 				"views": 1001,
 				"records": 1000,
 				"childDataRuns": 1000,
-				"handlers": "inline",
-				"klDomMutations": 3000,
-				"klRowsTouched": 0
+				"handlers": "inline"
 			}
 		},
 		"handlers-inline/update-every-10th/1000": {
@@ -634,9 +604,7 @@
 				"views": 1001,
 				"records": 1000,
 				"childDataRuns": 100,
-				"handlers": "inline",
-				"klDomMutations": 200,
-				"klRowsTouched": 100
+				"handlers": "inline"
 			}
 		},
 		"handlers-inline/swap-rows/1000": {
@@ -653,9 +621,7 @@
 				"views": 1001,
 				"records": 1000,
 				"childDataRuns": 0,
-				"handlers": "inline",
-				"klDomMutations": 1994,
-				"klRowsTouched": 0
+				"handlers": "inline"
 			}
 		},
 		"handlers-inline/select-row/1000": {
@@ -672,9 +638,7 @@
 				"views": 1001,
 				"records": 1000,
 				"childDataRuns": 1,
-				"handlers": "inline",
-				"klDomMutations": 1,
-				"klRowsTouched": 1
+				"handlers": "inline"
 			}
 		},
 		"handlers-stable/click-select/1000": {
@@ -691,9 +655,7 @@
 				"views": 1001,
 				"records": 1000,
 				"childDataRuns": 1,
-				"handlers": "stable",
-				"klDomMutations": 1,
-				"klRowsTouched": 1
+				"handlers": "stable"
 			}
 		},
 		"handlers-stable/click-remove/1000": {
@@ -710,9 +672,7 @@
 				"views": 1000,
 				"records": 999,
 				"childDataRuns": 0,
-				"handlers": "stable",
-				"klDomMutations": 1,
-				"klRowsTouched": 0
+				"handlers": "stable"
 			}
 		},
 		"handlers-stable/create/1000": {
@@ -729,9 +689,7 @@
 				"views": 1001,
 				"records": 1000,
 				"childDataRuns": 1000,
-				"handlers": "stable",
-				"klDomMutations": 3000,
-				"klRowsTouched": 0
+				"handlers": "stable"
 			}
 		},
 		"handlers-stable/update-every-10th/1000": {
@@ -748,9 +706,7 @@
 				"views": 1001,
 				"records": 1000,
 				"childDataRuns": 100,
-				"handlers": "stable",
-				"klDomMutations": 200,
-				"klRowsTouched": 100
+				"handlers": "stable"
 			}
 		},
 		"handlers-stable/swap-rows/1000": {
@@ -767,9 +723,7 @@
 				"views": 1001,
 				"records": 1000,
 				"childDataRuns": 0,
-				"handlers": "stable",
-				"klDomMutations": 1994,
-				"klRowsTouched": 0
+				"handlers": "stable"
 			}
 		},
 		"handlers-stable/select-row/1000": {
@@ -786,9 +740,7 @@
 				"views": 1001,
 				"records": 1000,
 				"childDataRuns": 1,
-				"handlers": "stable",
-				"klDomMutations": 1,
-				"klRowsTouched": 1
+				"handlers": "stable"
 			}
 		},
 		"handlers-inline/create/10000": {
@@ -805,9 +757,7 @@
 				"views": 10001,
 				"records": 10000,
 				"childDataRuns": 10000,
-				"handlers": "inline",
-				"klDomMutations": 30000,
-				"klRowsTouched": 0
+				"handlers": "inline"
 			}
 		},
 		"handlers-inline/update-every-10th/10000": {
@@ -824,9 +774,7 @@
 				"views": 10001,
 				"records": 10000,
 				"childDataRuns": 1000,
-				"handlers": "inline",
-				"klDomMutations": 2000,
-				"klRowsTouched": 1000
+				"handlers": "inline"
 			}
 		},
 		"handlers-inline/swap-rows/10000": {
@@ -843,9 +791,7 @@
 				"views": 10001,
 				"records": 10000,
 				"childDataRuns": 0,
-				"handlers": "inline",
-				"klDomMutations": 1994,
-				"klRowsTouched": 0
+				"handlers": "inline"
 			}
 		},
 		"handlers-inline/select-row/10000": {
@@ -862,9 +808,7 @@
 				"views": 10001,
 				"records": 10000,
 				"childDataRuns": 1,
-				"handlers": "inline",
-				"klDomMutations": 1,
-				"klRowsTouched": 1
+				"handlers": "inline"
 			}
 		},
 		"handlers-stable/create/10000": {
@@ -881,9 +825,7 @@
 				"views": 10001,
 				"records": 10000,
 				"childDataRuns": 10000,
-				"handlers": "stable",
-				"klDomMutations": 30000,
-				"klRowsTouched": 0
+				"handlers": "stable"
 			}
 		},
 		"handlers-stable/update-every-10th/10000": {
@@ -900,9 +842,7 @@
 				"views": 10001,
 				"records": 10000,
 				"childDataRuns": 1000,
-				"handlers": "stable",
-				"klDomMutations": 2000,
-				"klRowsTouched": 1000
+				"handlers": "stable"
 			}
 		},
 		"handlers-stable/swap-rows/10000": {
@@ -919,9 +859,7 @@
 				"views": 10001,
 				"records": 10000,
 				"childDataRuns": 0,
-				"handlers": "stable",
-				"klDomMutations": 1994,
-				"klRowsTouched": 0
+				"handlers": "stable"
 			}
 		},
 		"handlers-stable/select-row/10000": {
@@ -938,9 +876,7 @@
 				"views": 10001,
 				"records": 10000,
 				"childDataRuns": 1,
-				"handlers": "stable",
-				"klDomMutations": 1,
-				"klRowsTouched": 1
+				"handlers": "stable"
 			}
 		},
 		"deep-nest/update-leaf/1536": {
