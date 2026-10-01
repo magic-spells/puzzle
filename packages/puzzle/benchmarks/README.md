@@ -331,9 +331,9 @@ Chromium 151.0.7922.34, Node v25.1.0, production build (238.5 KB), 15
 iterations, medians. This is the committed `baseline.json` for 0.8.0, frozen as
 `history/0.8.0.json`.
 
-Every `keyed-list` op runs with a `MutationObserver` over the list body inside
-the timed window. It feeds `klRowsTouched`, the D170 gate, and it is new in
-0.8.0's stress example; [What the numbers say](#what-the-numbers-say) prices it.
+Every `keyed-list` op, the handler A/B arms included, runs with a
+`MutationObserver` over the list body inside the timed window. It feeds
+`klRowsTouched`, the D170 gate, and it is new in 0.8.0's stress example; [What the numbers say](#what-the-numbers-say) prices it.
 
 ### keyed-list, every row mounted
 
@@ -451,20 +451,26 @@ this release's full runs, so treat it as real. Against 0.6.0 the 1,000-row
 create is 4.4ms (+21%) slower. Where it comes from:
 
 - **Part is the instrument.** 0.8.0's stress example watches the list body with
-  a `MutationObserver` during every `keyed-list` op, and 0.7.0's did not. An A/B
-  on the 0.8.0 tree with the observer switched off put it at ~70ms of the 50,000
-  create (1114ms to 1044ms) and ~29ms of the 50,000 clear (400ms to 371ms), with
-  ~3% run drift folded in (the windowed create, which has no observer, moved 463ms
-  to 450ms). Against the 0.8.0 steps at 50,000 (+111ms create, +39ms clear), the
-  observer is roughly half of the create step and half or more of the clear
-  step.
-- **The rest is D170's per-row state.** The card lists what a list block keeps
-  for every row: a live scope object, the stored record revision, the cached
-  vnode subtree, per-row static caches and handler slots, plus a `__propRevs`
-  snapshot per child and a render-revision Symbol defined on every record at
-  `_instantiate`. A create builds all of it and a clear tears it down; a later
-  update or swap is where it pays back. The card does not price these costs and
-  this harness does not separate them.
+  a `MutationObserver` during every `keyed-list` op, and 0.7.0's did not. Its
+  cost grows faster than the row count. A bracketed A/B on the 0.8.0 tree
+  (observer on, off, on; `--filter keyed-list/c`) put it at 0.4ms, 3.2ms and
+  69ms of script on the 1,000, 10,000 and 50,000-row creates, and 0.6ms, 5.1ms
+  and 21ms on the clears. Against the 0.7.0-to-0.8.0 steps that is half or more of
+  the clear step at every size (54–75%), but only 16–22% of the create step at
+  1,000 and 10,000 rows; only at 50,000 does it reach about 60%. An earlier
+  unbracketed A/B at 50,000 agreed (1114ms to 1044ms create, 400ms to 371ms
+  clear, ~3% run drift folded in). The observer's callback also lands in
+  `paint`: about 20ms of the 10,000 create and 40ms of the 50,000 clear.
+- **The likely remainder is D170's per-row state.** With the observer taken
+  out, a 1,000 or 10,000-row create is still about 6–9% slower than 0.7.0:
+  inside the single-run band, but repeated at both sizes and in both 0.8.0
+  runs. The card lists what a list block keeps for every row: a live scope
+  object, the stored record revision, the cached vnode subtree, per-row static
+  caches and handler slots, plus a `__propRevs` snapshot per child and a
+  render-revision Symbol defined on every record at `_instantiate`. A create
+  builds all of it and a clear tears it down; a later update or swap is where
+  it pays back. The card does not price these costs and this harness does not
+  separate them.
 - **The 0.7.0 step predates D170** and hit the windowed list as well: its
   `create/50000`, which is mostly store seeding and mounts 26 views, rose from
   373ms to 430ms, and its `clear/50000` from 47.7ms to 116ms. That points at
@@ -616,9 +622,11 @@ second opinion:
 below which [Instrument variance](#instrument-variance) says a delta is not worth
 trusting. In 0.7.0 the stable spelling cut every mutation of a 10,000-row list
 by more than half. In 0.8.0 the two arms are within noise of each other on every
-op, and the inline arm now matches or beats what the stable spelling achieved in
-0.7.0. `create` cannot bail out on first mount in any arm, so it only moves with
-the create cost discussed under [What the numbers say](#what-the-numbers-say).
+op, and in script time the inline arm now matches or beats what the stable
+spelling achieved in 0.7.0. CDP task time does not show that gain:
+`update-every-10th` and `swap-rows` read 10–17% above 0.7.0's stable arm,
+inside the run-to-run band. `create` cannot bail out on first mount in any arm,
+so it only moves with the create cost discussed under [What the numbers say](#what-the-numbers-say).
 
 ### The structural counts: the decisive evidence
 

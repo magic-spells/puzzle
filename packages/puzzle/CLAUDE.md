@@ -361,7 +361,9 @@ enforced, not merely advised.
   `scripts/measure-size.mjs --check` (builds `examples/hello-world` +
   `examples/todos` in production and fails on a stale figure; regenerate with
   `npm run measure:size`) after its banner sat stale through four releases.
-- Snapshot the benchmark on the clean release tree: `npm run bench:update`, then `npm run bench:snapshot` (writes `benchmarks/history/<version>.json`).
+- Snapshot the benchmark on the clean release tree: `npm run bench:update`,
+  then `npm run bench:snapshot` (writes `benchmarks/history/<version>.json`;
+  it refuses a baseline measured on a dirty tree). Commit both.
 
 ## Monorepo layout (D162)
 
