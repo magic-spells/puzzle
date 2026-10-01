@@ -1167,6 +1167,16 @@ checklist sent you.
   `if`/`while`/`for` (`if (text) /["']/.test(text);` reads the `/` as
   division, so the quote opens a string). The eslint and prettier plugins
   keep their own message. (Pre-existing.)
+- **`puzzle dev` live reload no longer hangs the browser with many tabs
+  open.** Every dev tab held its own reload stream, and a browser allows six
+  HTTP/1.1 connections per host, so with about six tabs open every further
+  request queued forever: a reload left the old page frozen and the new one
+  "(pending)". The tabs on one dev server now share one stream. A tab elected
+  with the Web Locks API holds it and relays reloads and build errors to the
+  rest over a `BroadcastChannel`; when that tab closes, the next one takes
+  over. A page closes its stream before it reloads. Where either API is
+  missing (an insecure origin such as a LAN IP), each tab streams directly as
+  before. (Pre-existing.)
 
 ## 0.7.0 — 2026-09-09
 

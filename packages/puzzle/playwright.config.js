@@ -13,6 +13,9 @@ import { defineConfig, devices } from '@playwright/test';
 //     lands on real content). Powers the browser back/forward + scroll-restore
 //     specs (transitions-demo is memory-mode, so it has no URL/window scroll to
 //     assert against).
+//
+// dev-reload.spec.js starts a third `puzzle dev` (:4175) itself, on a temp
+// app it edits, so the shared example servers above stay untouched.
 
 const isCI = !!process.env.CI;
 
