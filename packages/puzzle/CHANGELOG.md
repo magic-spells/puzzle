@@ -1174,6 +1174,21 @@ checklist sent you.
   edit to an `@import`ed CSS file was never picked up. The dev server now
   spells the app root as the disk stores it before deriving any path or
   starting any watcher. (Pre-existing.)
+- **`puzzle dev` live reload no longer hangs the browser with many tabs
+  open.** Every dev tab held its own reload stream, and a browser allows six
+  HTTP/1.1 connections per host, so with about six tabs open every further
+  request queued forever: a reload left the old page frozen and the new one
+  "(pending)". The tabs on one dev server now share one stream. A tab elected
+  with the Web Locks API holds it and relays reloads and build errors to the
+  rest over a `BroadcastChannel`; when that tab closes, the next one takes
+  over. A page closes its stream before it reloads. Where either API is
+  missing (an insecure origin such as a LAN IP), each tab streams directly as
+  before. (Pre-existing.)
+- **A `puzzle dev` reload always runs the newest bundle.** The dev server
+  sent `app.js` and the other built files with a one-second `Last-Modified`
+  and no `Cache-Control`, so the browser could keep the older bundle after two
+  rebuilds inside one second. Every response the dev server serves from
+  `dist/` now carries `Cache-Control: no-store`. (Pre-existing.)
 
 ## 0.7.0 — 2026-09-09
 

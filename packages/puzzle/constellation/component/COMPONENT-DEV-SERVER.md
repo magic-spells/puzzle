@@ -125,12 +125,38 @@ Binds `127.0.0.1` before printing the banner; a busy port scans up to 10 candida
 (`serve.Listen`, shared with `preview`; `--strict-port` = bind-or-fail,
 [[DECISION-D90-DEV-PORT-SCAN]]), and banner/browser-open read the bound port. URL →
 file mapping is the shared mode-aware `serve.Resolve`, so dev and preview can't drift:
-SPA keeps history fallback and injects the EventSource client only into the root index;
+SPA keeps history fallback and injects the reload client only into the root index;
 static resolves clean URLs, answers real 404s, and injects the client into EVERY HTML
 response at serve time (disk stays clean). `dev.proxy` prefixes register before the
 catch-all. `/__puzzle/reload` uses buffered per-client channels and non-blocking
 broadcasts. Before reloading, the client invokes [[COMPONENT-DEVSTATE]]; the page always
 fully reloads.
+
+**Nothing served from `dist/` is cached.** Every response the dev server builds or
+serves from `dist/` (HTML pages, the shell, the 404 and build-error pages, and
+`http.ServeFile` assets such as `app.js`) sends `Cache-Control: no-store`
+(`devCacheControl`). `http.ServeFile` validates with a one-second `Last-Modified`, so
+a cached `app.js` could revalidate as 304 after two rebuilds inside one second and the
+reload would run the older bundle. The SSE stream keeps `no-cache`; proxied responses
+keep the backend's headers.
+
+**One stream per origin.** A browser allows six HTTP/1.1 connections per host, so a
+stream per tab starved the host once about six dev tabs were open (every further
+request, a reload's own document included, sat pending). The client elects one tab
+with the Web Locks API (`puzzle-dev-reload`; lock and channel names are origin-scoped,
+and the origin carries the port) to hold the only EventSource and relay every hub event
+over a BroadcastChannel; each tab still draws its own overlay and runs its own
+snapshot-then-reload. A tab joining while a build is broken asks the leader for the
+retained error (`hello`), since the server's replay reaches only a new stream. A page
+reloading or hiding (`pagehide`) closes its stream and releases the lock first;
+`pageshow` with `persisted` rejoins. No `navigator.locks` (an insecure origin, e.g. a
+LAN IP) or no BroadcastChannel means a direct stream per tab, as before.
+`tests-browser/dev-reload.spec.js` drives eight tabs through edits, a leader close and a
+build error on its own temp app.
+
+Known gap: the hub replays only the retained build error, never a `reload`. A rebuild
+that lands while the leader is closing and the next tab is still connecting (lock
+handoff plus one localhost connect) reaches no tab; the next edit reloads them.
 
 Terminal: timing, changed paths, TTY color; cbreak `q` quits (`internal/keys`, shared
 with preview); SIGINT/SIGTERM shut down gracefully. `go run` doesn't forward SIGTERM —

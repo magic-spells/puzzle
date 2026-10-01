@@ -64,9 +64,27 @@ const debounceInterval = 150 * time.Millisecond
 // like (D92).
 const buildErrorStyle = "position:fixed;inset:0;z-index:2147483647;background:#111;color:#fff;padding:24px;box-sizing:border-box;overflow:auto;font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap"
 
-// reloadScript is injected into served HTML shells (never onto disk). It opens
-// an EventSource to the SSE endpoint, reports build failures in-page (D92), and
+// reloadScript is injected into served HTML shells (never onto disk). It
+// subscribes to the SSE endpoint, reports build failures in-page (D92), and
 // full-page reloads on a `reload` event.
+//
+// One stream per origin. A browser allows six HTTP/1.1 connections per host,
+// and a stream per tab held one each for the tab's whole life, so about six
+// open dev tabs left every further request pending forever (a reload's own
+// document request included). Tabs elect a leader with the Web Locks API: only
+// the leader opens the EventSource, and it relays every hub event to the other
+// tabs over a BroadcastChannel. The browser scopes lock and channel names to
+// the page's origin, and the origin carries the port, so two dev servers never
+// share a leader. When the leader goes, the lock passes to the next waiting
+// tab, which opens the stream and gets the retained build error replayed. A tab
+// that joins while a build is broken asks the leader for that error ("hello"),
+// because the server's replay reaches only a new stream. Each tab still draws
+// its own overlay and runs its own snapshot-then-reload. A page that reloads or
+// leaves (pagehide) closes its stream and releases its lock first, so the
+// connection is free for the next document request; a page restored from the
+// back/forward cache (pageshow persisted) joins again. Without navigator.locks
+// (an insecure origin such as a LAN IP) or BroadcastChannel, the tab opens its
+// own stream as before.
 //
 // Before reloading it asks the running app to snapshot its state to
 // sessionStorage (constellation/doc/DOC-SPEC.md §27, D57): the dev-published
@@ -76,16 +94,18 @@ const buildErrorStyle = "position:fixed;inset:0;z-index:2147483647;background:#1
 // ALWAYS happens even if it throws (a production bundle has no __devSnapshot).
 const reloadScript = `<script>
 (function () {
-  var es = new EventSource("/__puzzle/reload");
+  var NAME = "` + reloadLockName + `";
+  var EVENTS = ["` + reloadEvent + `", "` + buildErrorEvent + `", "` + clearEvent + `"];
   var overlay = document.getElementById("__puzzle-build-error");
+  var es = null, channel = null, release = null, abort = null, lastError = null;
   function clearError() {
     if (!overlay) return;
     overlay.remove();
     overlay = null;
   }
-  es.addEventListener("builderror", function (event) {
+  function showError(data) {
     try {
-      var message = JSON.parse(event.data);
+      var message = JSON.parse(data);
       clearError();
       overlay = document.createElement("div");
       overlay.id = "__puzzle-build-error";
@@ -96,20 +116,77 @@ const reloadScript = `<script>
       overlay.appendChild(document.createTextNode("\n\n" + message));
       document.body.appendChild(overlay);
     } catch (e) {}
-  });
-  es.addEventListener("clear", clearError);
-  document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape") clearError();
-  });
-  es.addEventListener("reload", function () {
+  }
+  function reload() {
     try {
       var a = window.__PUZZLE_APP__;
       if (a && a.__devSnapshot) a.__devSnapshot();
     } catch (e) {}
+    leave();
     location.reload();
+  }
+  function handle(type, data) {
+    if (type === "` + buildErrorEvent + `") showError(data);
+    else if (type === "` + clearEvent + `") clearError();
+    else if (type === "` + reloadEvent + `") reload();
+  }
+  function open() {
+    es = new EventSource("` + reloadPath + `");
+    EVENTS.forEach(function (type) {
+      es.addEventListener(type, function (event) {
+        if (type === "` + buildErrorEvent + `") lastError = event.data;
+        else if (type === "` + clearEvent + `") lastError = null;
+        if (channel) channel.postMessage({ type: type, data: event.data });
+        handle(type, event.data);
+      });
+    });
+  }
+  function join() {
+    if (!navigator.locks || typeof BroadcastChannel !== "function") return open();
+    var mine = (channel = new BroadcastChannel(NAME));
+    mine.onmessage = function (event) {
+      var m = event.data;
+      if (!m || typeof m.type !== "string") return;
+      if (m.type === "hello") {
+        if (es && lastError !== null) mine.postMessage({ type: "` + buildErrorEvent + `", data: lastError });
+      } else if (EVENTS.indexOf(m.type) >= 0) {
+        handle(m.type, m.data);
+      }
+    };
+    var controller = typeof AbortController === "function" ? new AbortController() : null;
+    abort = controller;
+    navigator.locks.request(NAME, controller ? { signal: controller.signal } : {}, function () {
+      if (channel !== mine) return;
+      open();
+      return new Promise(function (resolve) { release = resolve; });
+    }).catch(function () {
+      // Aborted by leave(), or locks refused here: stream directly unless gone.
+      if (channel === mine && !es) open();
+    });
+    mine.postMessage({ type: "hello" });
+  }
+  function leave() {
+    if (es) { es.close(); es = null; }
+    if (channel) { channel.close(); channel = null; }
+    if (release) { release(); release = null; }
+    if (abort) { abort.abort(); abort = null; }
+    lastError = null;
+  }
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") clearError();
   });
+  addEventListener("pagehide", leave);
+  addEventListener("pageshow", function (event) {
+    if (event.persisted && !es && !channel) join();
+  });
+  join();
 })();
 </script>`
+
+// reloadLockName names both the Web Lock that elects the one tab holding the
+// SSE stream and the BroadcastChannel that relays its events. The browser
+// scopes both to the page's origin, port included, so it needs no server part.
+const reloadLockName = "puzzle-dev-reload"
 
 // reloadPath is the SSE endpoint the injected client subscribes to.
 const reloadPath = "/__puzzle/reload"
@@ -790,6 +867,14 @@ func (s *server) reverseProxy(prefix, targetURL string) http.Handler {
 	return proxy
 }
 
+// devCacheControl is sent on every response the dev server builds or serves
+// from dist/. http.ServeFile validates with a one-second Last-Modified, so with
+// a cache the browser could revalidate app.js as 304 Not Modified after two
+// rebuilds inside one second and the reload would run the older bundle. A dev
+// server never wants a cached copy, so nothing is stored and nothing is
+// revalidated.
+const devCacheControl = "no-store"
+
 // serveStatic answers a request against dist/ per the serving mode. serve.Resolve
 // owns the URL→file mapping (SPA history fallback vs static clean URLs + a real
 // 404); this method only decides how the chosen file is written:
@@ -815,6 +900,7 @@ func (s *server) serveStatic(w http.ResponseWriter, r *http.Request) {
 	case res.HTML:
 		s.serveHTMLFile(w, res.File, res.Status)
 	default:
+		w.Header().Set("Cache-Control", devCacheControl)
 		http.ServeFile(w, r, res.File)
 	}
 }
@@ -838,7 +924,7 @@ this is what a static host would answer too.</p>
 </body>
 </html>`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Cache-Control", devCacheControl)
 	w.WriteHeader(http.StatusNotFound)
 	_, _ = w.Write(injectReload([]byte(page)))
 }
@@ -858,7 +944,7 @@ func (s *server) serveIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Cache-Control", devCacheControl)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(injectReload(data))
 }
@@ -881,7 +967,7 @@ func (s *server) serveBuildErrorShell(w http.ResponseWriter, message string) {
 </body>
 </html>`
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Cache-Control", devCacheControl)
 	w.WriteHeader(http.StatusServiceUnavailable)
 	_, _ = w.Write(injectReload([]byte(page)))
 }
@@ -906,7 +992,7 @@ func (s *server) serveHTMLFile(w http.ResponseWriter, path string, status int) {
 		data = injectReload(data)
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Cache-Control", devCacheControl)
 	w.WriteHeader(status)
 	_, _ = w.Write(data)
 }
