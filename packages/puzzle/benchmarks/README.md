@@ -151,7 +151,7 @@ The runner does not trust the `--mode` flag; it greps the emitted bundle for
 run if a production build contains any of them. It also snapshots `dist/` before
 serving, so a rebuild in another terminal cannot change the bytes mid-suite.
 
-For the record, at 0.8.0 the production bundle is **238.5 KB** against the dev
+For the record, at 0.8.0 the production bundle is **238.6 KB** against the dev
 build's **690.4 KB**, and contains zero occurrences of the DevTools hook, HMR,
 devstate, or `console.log`. Both are the whole stress lab (every scenario in one
 app), not a representative app; `npm run measure:size` owns the real-app
@@ -327,60 +327,63 @@ Nothing is truncated silently.
 ## Results
 
 Machine of record: Apple M1 Pro (10 cores, 32 GB), darwin-arm64, headless
-Chromium 151.0.7922.34, Node v25.1.0, production build (238.5 KB), 15
+Chromium 151.0.7922.34, Node v25.1.0, production build (238.6 KB), 15
 iterations, medians. This is the committed `baseline.json` for 0.8.0, frozen as
 `history/0.8.0.json`.
 
-Every `keyed-list` op, the handler A/B arms included, runs with a
-`MutationObserver` over the list body inside the timed window. It feeds
-`klRowsTouched`, the D170 gate, and it is new in 0.8.0's stress example; [What the numbers say](#what-the-numbers-say) prices it.
+Only the three D170 gate ops (`keyed-list/update-one`, `update-all`,
+`reorder`) arm a `MutationObserver` over the list body inside the timed window.
+It feeds `klRowsTouched`, the gate their expects assert. Every other
+`keyed-list` op, the handler A/B arms included, runs unobserved, as it did in
+0.6.0's and 0.7.0's stress example, because an observer inside the timed window
+inflates create and clear ([What the numbers say](#what-the-numbers-say) prices it).
 
 ### keyed-list, every row mounted
 
 | op | script ms | paint ms | layout ms | live nodes | views | records |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `create/1000` | 25.6 | 61.7 | 16.5 | 7,000 | 1,001 | 1,000 |
-| `update-every-10th/1000` | 2.90 | 11.8 | 1.42 | 7,000 | 1,001 | 1,000 |
-| `swap-rows/1000` | 6.20 | 41.9 | 16.0 | 7,000 | 1,001 | 1,000 |
-| `clear/1000` | 7.60 | 8.90 | 0.12 | 0 | 1 | 0 |
-| `create/10000` | **218** | **525** | 140 | 70,000 | 10,001 | 10,000 |
-| `update-every-10th/10000` | 24.2 | 75.4 | 16.4 | 70,000 | 10,001 | 10,000 |
-| `swap-rows/10000` | 16.6 | 102 | 27.7 | 70,000 | 10,001 | 10,000 |
-| `clear/10000` | 68.4 | 73.4 | 0.13 | 0 | 1 | 0 |
-| `create/50000` | 1091 | 2578 | 672 | 350,000 | 50,001 | 50,000 |
-| `update-every-10th/50000` | 116 | 365 | 83.6 | 350,000 | 50,001 | 50,000 |
-| `swap-rows/50000` | 63.2 | 278 | 50.0 | 350,000 | 50,001 | 50,000 |
-| `clear/50000` | 368 | 389 | 0.15 | 0 | 1 | 0 |
+| `create/1000` | 25.6 | 61.2 | 16.6 | 7,000 | 1,001 | 1,000 |
+| `update-every-10th/1000` | 3.00 | 11.6 | 1.45 | 7,000 | 1,001 | 1,000 |
+| `swap-rows/1000` | 5.40 | 38.9 | 15.6 | 7,000 | 1,001 | 1,000 |
+| `clear/1000` | 7.40 | 8.30 | 0.12 | 0 | 1 | 0 |
+| `create/10000` | **216** | **516** | 144 | 70,000 | 10,001 | 10,000 |
+| `update-every-10th/10000` | 23.7 | 59.3 | 15.1 | 70,000 | 10,001 | 10,000 |
+| `swap-rows/10000` | 16.0 | 91.1 | 28.3 | 70,000 | 10,001 | 10,000 |
+| `clear/10000` | 67.1 | 68.1 | 0.13 | 0 | 1 | 0 |
+| `create/50000` | 1023 | 2485 | 673 | 350,000 | 50,001 | 50,000 |
+| `update-every-10th/50000` | 124 | 369 | 84.8 | 350,000 | 50,001 | 50,000 |
+| `swap-rows/50000` | 61.0 | 280 | 50.0 | 350,000 | 50,001 | 50,000 |
+| `clear/50000` | 333 | 334 | 0.13 | 0 | 1 | 0 |
 
 The three D170 gate ops, all at 1,000 rows: `update-one` 1.50ms script (one row
-touched, one child `data()` run), `update-all` 9.70ms (1,000 and 1,000),
-`reorder` 5.90ms (zero rows touched, zero `data()` runs, moves only).
+touched, one child `data()` run), `update-all` 9.90ms (1,000 and 1,000),
+`reorder` 6.10ms (zero rows touched, zero `data()` runs, moves only).
 
 ### virtual-list, same records, same row component, windowed
 
 | op | script ms | paint ms | layout ms | live nodes | views | records |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `create/1000` | 10.9 | 12.9 | 0.44 | 177 | 26 | 1,000 |
-| `update-every-10th/1000` | 0.60 | 1.70 | 0.14 | 177 | 26 | 1,000 |
-| `swap-rows/1000` | 0.40 | 1.30 | 0.13 | 177 | 26 | 1,000 |
-| `clear/1000` | 2.30 | 3.20 | 0.13 | 2 | 1 | 0 |
-| `create/10000` | **90.9** | **92.9** | 0.44 | 177 | 26 | 10,000 |
-| `update-every-10th/10000` | 4.00 | 5.20 | 0.14 | 177 | 26 | 10,000 |
-| `swap-rows/10000` | 0.50 | 1.80 | 0.12 | 177 | 26 | 10,000 |
-| `clear/10000` | 22.6 | 23.6 | 0.15 | 2 | 1 | 0 |
-| `create/50000` | 444 | 447 | 0.46 | 177 | 26 | 50,000 |
-| `update-every-10th/50000` | 16.4 | 17.7 | 0.15 | 177 | 26 | 50,000 |
-| `swap-rows/50000` | 1.20 | 2.40 | 0.13 | 177 | 26 | 50,000 |
-| `clear/50000` | 119 | 120 | 0.14 | 2 | 1 | 0 |
-| `fast-scroll/50000` | 72.3 | 80.8 | 4.09 | 177 | 26 | 50,000 |
+| `create/1000` | 10.8 | 12.8 | 0.45 | 177 | 26 | 1,000 |
+| `update-every-10th/1000` | 0.60 | 1.60 | 0.13 | 177 | 26 | 1,000 |
+| `swap-rows/1000` | 0.30 | 1.40 | 0.11 | 177 | 26 | 1,000 |
+| `clear/1000` | 2.30 | 3.30 | 0.15 | 2 | 1 | 0 |
+| `create/10000` | **85.5** | **87.6** | 0.43 | 177 | 26 | 10,000 |
+| `update-every-10th/10000` | 3.70 | 4.70 | 0.13 | 177 | 26 | 10,000 |
+| `swap-rows/10000` | 0.40 | 1.50 | 0.11 | 177 | 26 | 10,000 |
+| `clear/10000` | 20.7 | 21.5 | 0.13 | 2 | 1 | 0 |
+| `create/50000` | 429 | 431 | 0.43 | 177 | 26 | 50,000 |
+| `update-every-10th/50000` | 15.1 | 16.2 | 0.14 | 177 | 26 | 50,000 |
+| `swap-rows/50000` | 1.10 | 2.20 | 0.12 | 177 | 26 | 50,000 |
+| `clear/50000` | 107 | 108 | 0.13 | 2 | 1 | 0 |
+| `fast-scroll/50000` | 75.0 | 83.3 | 3.71 | 177 | 26 | 50,000 |
 
 ### Behavioural scenarios
 
 | op | script ms | paint ms | counters |
 | --- | ---: | ---: | --- |
-| `subscriptions/update-one/precision` | 0.00 | 0.20 | notified **0** / 100 watchers |
-| `subscriptions/update-one/fanout` | 2.90 | 4.90 | notified **100** / 100 watchers |
-| `async-waterfall/remount/20` | — | 755 | maxInFlight **1** of 20, **SERIALIZED** |
+| `subscriptions/update-one/precision` | 0.10 | 0.20 | notified **0** / 100 watchers |
+| `subscriptions/update-one/fanout` | 2.90 | 4.60 | notified **100** / 100 watchers |
+| `async-waterfall/remount/20` | — | 751 | maxInFlight **1** of 20, **SERIALIZED** |
 
 `async-waterfall` reports no `scriptMs`; the scenario measures wall time and a
 concurrency census, not a synchronous flush.
@@ -395,24 +398,25 @@ browser is a different instrument; `bench:history` prints both per column and
 warns when they disagree.
 
 0.6.0 and 0.7.0 were measured retroactively on 2026-09-30, each by its own tag's
-harness and compiler in a temporary checkout. 0.8.0 is the release baseline.
+harness and compiler in a temporary checkout. 0.8.0 is the release baseline,
+re-measured on 2026-10-01 after the stress observer left the timed window.
 Median script ms / paint ms, full-DOM `keyed-list` unless noted:
 
 | op | 0.6.0 | 0.7.0 | 0.8.0 |
 | --- | ---: | ---: | ---: |
-| `create/1000` | 21.2 / 51.3 | 23.6 / 57.9 | 25.6 / 61.7 |
-| `update-every-10th/1000` | 5.70 / 9.60 | 6.60 / 15.0 | **2.90** / 11.8 |
-| `swap-rows/1000` | 10.0 / 38.0 | 11.6 / 44.9 | **6.20** / 41.9 |
-| `clear/1000` | 6.10 / 6.90 | 6.80 / 7.70 | 7.60 / 8.90 |
-| `create/10000` | 175 / 447 | 198 / 484 | 218 / 525 |
-| `update-every-10th/10000` | 52.8 / 98.5 | 69.6 / 116 | **24.2** / 75.4 |
-| `swap-rows/10000` | 53.3 / 127 | 68.3 / 139 | **16.6** / 102 |
-| `clear/10000` | 49.7 / 50.7 | 61.2 / 62.1 | 68.4 / 73.4 |
-| stress: `create/50000` | 859 / 2248 | 980 / 2402 | 1091 / 2578 |
-| stress: `clear/50000` | 264 / 265 | 329 / 330 | 368 / 389 |
-| stress: windowed `create/50000` | 373 / 375 | 430 / 433 | 444 / 447 |
-| `async-waterfall` census | 1 of 20 in flight, 751ms | 1 of 20, 749ms | 1 of 20, 755ms |
-| stress-lab bundle | 218.7 KB | 229.5 KB | 238.5 KB |
+| `create/1000` | 21.2 / 51.3 | 23.6 / 57.9 | 25.6 / 61.2 |
+| `update-every-10th/1000` | 5.70 / 9.60 | 6.60 / 15.0 | **3.00** / 11.6 |
+| `swap-rows/1000` | 10.0 / 38.0 | 11.6 / 44.9 | **5.40** / 38.9 |
+| `clear/1000` | 6.10 / 6.90 | 6.80 / 7.70 | 7.40 / 8.30 |
+| `create/10000` | 175 / 447 | 198 / 484 | 216 / 516 |
+| `update-every-10th/10000` | 52.8 / 98.5 | 69.6 / 116 | **23.7** / 59.3 |
+| `swap-rows/10000` | 53.3 / 127 | 68.3 / 139 | **16.0** / 91.1 |
+| `clear/10000` | 49.7 / 50.7 | 61.2 / 62.1 | 67.1 / 68.1 |
+| stress: `create/50000` | 859 / 2248 | 980 / 2402 | 1023 / 2485 |
+| stress: `clear/50000` | 264 / 265 | 329 / 330 | 333 / 334 |
+| stress: windowed `create/50000` | 373 / 375 | 430 / 433 | 429 / 431 |
+| `async-waterfall` census | 1 of 20 in flight, 751ms | 1 of 20, 749ms | 1 of 20, 751ms |
+| stress-lab bundle | 218.7 KB | 229.5 KB | 238.6 KB |
 
 Ops per version: 0.6.0 and 0.7.0 run the same 80-op matrix, and each snapshot
 holds 79 of them. `route-churn/navigate-burst/100` is missing from both because
@@ -432,39 +436,40 @@ build:compiler`, `npm ci`, `npm run bench`, and take `benchmarks/.last-run.json`
 ### What the numbers say
 
 **D170 made changing an existing list 2–4x cheaper in script time.** Against
-0.7.0 at 10,000 rows, `update-every-10th` went from 69.6ms to 24.2ms and
-`swap-rows` from 68.3ms to 16.6ms; at 1,000 rows, 6.60ms to 2.90ms and 11.6ms to
-6.20ms. The counters say why: 0.7.0 re-ran all 10,000 child `data()` calls for
+0.7.0 at 10,000 rows, `update-every-10th` went from 69.6ms to 23.7ms and
+`swap-rows` from 68.3ms to 16.0ms; at 1,000 rows, 6.60ms to 3.00ms and 11.6ms to
+5.40ms. The counters say why: 0.7.0 re-ran all 10,000 child `data()` calls for
 either op, 0.8.0 re-runs the 1,000 rows it wrote and none for a swap. An
 untouched row now comes back from its list block as the same cached subtree and
 the patcher short-circuits on identity, and the row's handlers are cached on
 the row scope, so nothing hands the child a fresh prop. Paint improves less
-(116ms to 75.4ms, 139ms to 102ms at 10,000) because layout of the rows that did
+(116ms to 59.3ms, 139ms to 91.1ms at 10,000) because layout of the rows that did
 change is the browser's work and did not move.
 
-**Creating and clearing a list got slower, in both 0.7.0 and 0.8.0.** Against
-0.7.0, a 1,000-row create costs 2.0ms more script (23.6ms to 25.6ms) and a clear
-0.8ms more; at 10,000, create is 20ms slower (198ms to 218ms) and clear 7ms. That
-is +8% to +12% at every size. Each step alone sits inside the ~18% run-to-run
-band below, but it has the same sign and size at 1k, 10k and 50k and in both of
-this release's full runs, so treat it as real. Against 0.6.0 the 1,000-row
-create is 4.4ms (+21%) slower. Where it comes from:
+**Creating and clearing a full-DOM list got slower in 0.7.0, and 0.8.0 reads
+slightly slower again, at the edge of noise.** Against 0.7.0, a 1,000-row create
+costs 2.0ms more script (23.6ms to 25.6ms) and a clear 0.6ms more (6.80ms to
+7.40ms); at 10,000, create is 18ms slower (198ms to 216ms) and clear 5.9ms
+(61.2ms to 67.1ms). That is +8% to +10% at both sizes. At 50,000 the step
+shrinks to +4% on create (980ms to 1023ms) and +1% on clear (329ms to 333ms).
+Every one of these sits inside the ~18% run-to-run band below, so none of them
+is a finding alone. Against 0.6.0 the 1,000-row create is 4.4ms (+21%) slower,
+2.4ms of it the 0.7.0 step.
 
-- **Part is the instrument.** 0.8.0's stress example watches the list body with
-  a `MutationObserver` during every `keyed-list` op, and 0.7.0's did not. Its
-  cost grows faster than the row count. A bracketed A/B on the 0.8.0 tree
-  (observer on, off, on; `--filter keyed-list/c`) put it at 0.4ms, 3.2ms and
-  69ms of script on the 1,000, 10,000 and 50,000-row creates, and 0.6ms, 5.1ms
-  and 21ms on the clears. Against the 0.7.0-to-0.8.0 steps that is half or more of
-  the clear step at every size (54–75%), but only 16–22% of the create step at
-  1,000 and 10,000 rows; only at 50,000 does it reach about 60%. An earlier
-  unbracketed A/B at 50,000 agreed (1114ms to 1044ms create, 400ms to 371ms
-  clear, ~3% run drift folded in). The observer's callback also lands in
-  `paint`: about 20ms of the 10,000 create and 40ms of the 50,000 clear.
-- **The likely remainder is D170's per-row state.** With the observer taken
-  out, a 1,000 or 10,000-row create is still about 6–9% slower than 0.7.0:
-  inside the single-run band, but repeated at both sizes and in both 0.8.0
-  runs. The card lists what a list block keeps for every row: a live scope
+- **The instrument is no longer part of it.** Earlier 0.8.0 runs armed the
+  stress example's `MutationObserver` inside the timed window of every
+  `keyed-list` op, and the 0.6.0 and 0.7.0 stress apps had no observer. A
+  bracketed A/B (observer on, off, on) priced it at 0.4ms, 3.2ms and 69ms of
+  script on the 1,000, 10,000 and 50,000-row creates, and 0.6ms, 5.1ms and 21ms
+  on the clears. It now arms only for the three D170 gate ops that assert its
+  counts, which have no 0.6.0 or 0.7.0 column, so every op in the table above
+  compares like for like.
+- **The remaining step is not stable within one run.** The `handlers-inline`
+  arm runs the same URL and render path as `keyed-list` in the same suite, and
+  its creates read 22.5ms and 202ms at 1,000 and 10,000 rows: level with 0.7.0's
+  same arm (22.2ms and 207ms). Two identical ops disagreeing by 12% in one run
+  is the band at work. If the step is real, the likely cause is D170's per-row
+  state. The card lists what a list block keeps for every row: a live scope
   object, the stored record revision, the cached vnode subtree, per-row static
   caches and handler slots, plus a `__propRevs` snapshot per child and a
   render-revision Symbol defined on every record at `_instantiate`. A create
@@ -477,33 +482,34 @@ create is 4.4ms (+21%) slower. Where it comes from:
   store-side work rather than rendering. No decision card prices it.
 
 **Views that re-render one big template gained nothing and pay the new
-bookkeeping.** Against 0.7.0, `islands/shell-renders` went from 576ms to 657ms
-(+14%), the `formatters` re-renders by 7–12%, and `form-state` typing (200
-controlled fields, a full re-render per keystroke) by 18–28% across the two
-runs. These views have no keyed row list for the cache to skip. The likely cost
+bookkeeping.** Against 0.7.0, `islands/shell-renders` went from 576ms to 629ms
+(+9%), the `formatters` re-renders by 4–9%, and `form-state` typing (200
+controlled fields, a full re-render per keystroke) by 17–18%. Only the typing
+step reaches the edge of the ~18% band, but every one of them points the same
+way, and the two earlier 0.8.0 runs read higher still (+14%, 7–12% and 18–28%). These views have no keyed row list for the cache to skip. The likely cost
 is the machinery D170 gives every view, which the card lists (the `__dirty` root
 mask, static-subtree cache reads, the `__propRevs` compare, `syncControl`
 re-asserting controlled values); this harness does not separate the parts.
-The `listener-churn` churn arm moves the other way (855ms to 570ms at 10,000),
+The `listener-churn` churn arm moves the other way (855ms to 544ms at 10,000),
 because its `@click={ selectRow(row) }` is now cached on the row.
 
 **Windowing removes the DOM cost, not the data cost.** At 10,000 records
-`create` is 218ms full-DOM against 90.9ms windowed, and the windowed list still
-pays those 90.9ms because seeding 10,000 records is shared by both strategies.
+`create` is 216ms full-DOM against 85.5ms windowed, and the windowed list still
+pays those 85.5ms because seeding 10,000 records is shared by both strategies.
 The difference is what 70,000 elements and 10,001 view instances cost. Layout
-makes it stark: 140ms full-DOM against **0.44ms** windowed, flat from 1k to 50k.
+makes it stark: 144ms full-DOM against **0.43ms** windowed, flat from 1k to 50k.
 
 **Paint dominates at scale, and it is the browser's cost, not the
-framework's.** `keyed-list/create/10000` is 218ms of script inside 525ms to the
+framework's.** `keyed-list/create/10000` is 216ms of script inside 516ms to the
 painted frame. A single number would hide that more than half of the wait is
 the engine, and no reconciler tuning would recover it.
 
 **Ops touching only rendered rows are effectively free when windowed.**
-`swap-rows` at 10,000: 16.6ms full-DOM, 0.50ms windowed (at the measurement
-floor). `update-every-10th`: 24.2ms against 4.00ms.
+`swap-rows` at 10,000: 16.0ms full-DOM, 0.40ms windowed (at the measurement
+floor). `update-every-10th`: 23.7ms against 3.70ms.
 
-**`clear` is pure teardown and scales with what is being torn down**: 68.4ms at
-10,000 full-DOM against 22.6ms windowed, with layout at ~0.13ms in both. That is
+**`clear` is pure teardown and scales with what is being torn down**: 67.1ms at
+10,000 full-DOM against 20.7ms windowed, with layout at ~0.13ms in both. That is
 destructor and store work, not rendering.
 
 **Subscription precision holds in production.** One write outside the watched
@@ -599,33 +605,34 @@ Production build, 15 recorded iterations, medians, same machine and Chromium
 
 | op | n | 0.7.0 `inline` | 0.7.0 `stable` | 0.8.0 `inline` | 0.8.0 `stable` |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `create` | 1,000 | 22.2 | 21.9 | 24.5 | 24.1 |
-| `update-every-10th` | 1,000 | 6.80 | 3.30 | 3.00 | 3.00 |
-| `swap-rows` | 1,000 | 10.6 | 5.40 | 5.40 | 5.30 |
-| `select-row` | 1,000 | 6.40 | 2.20 | 1.60 | 1.60 |
-| `create` | 10,000 | 207 | 204 | 225 | 223 |
-| `update-every-10th` | 10,000 | 62.1 | 27.1 | 25.0 | 25.2 |
-| `swap-rows` | 10,000 | 62.8 | 21.8 | 17.5 | 17.2 |
-| `select-row` | 10,000 | 58.0 | 17.6 | 12.4 | 12.9 |
+| `create` | 1,000 | 22.2 | 21.9 | 22.5 | 22.2 |
+| `update-every-10th` | 1,000 | 6.80 | 3.30 | 2.90 | 2.80 |
+| `swap-rows` | 1,000 | 10.6 | 5.40 | 4.50 | 4.40 |
+| `select-row` | 1,000 | 6.40 | 2.20 | 1.40 | 1.50 |
+| `create` | 10,000 | 207 | 204 | 202 | 203 |
+| `update-every-10th` | 10,000 | 62.1 | 27.1 | 22.5 | 22.2 |
+| `swap-rows` | 10,000 | 62.8 | 21.8 | 15.9 | 16.3 |
+| `select-row` | 10,000 | 58.0 | 17.6 | 12.2 | 12.2 |
 
 CDP `task ms` at 10,000 rows, the renderer's own accounting, as the independent
 second opinion:
 
 | op | 0.7.0 `inline` | 0.7.0 `stable` | 0.8.0 `inline` | 0.8.0 `stable` |
 | --- | ---: | ---: | ---: | ---: |
-| `create` | 501 | 496 | 538 | 541 |
-| `update-every-10th` | 139 | 64.0 | 75.0 | 74.2 |
-| `swap-rows` | 162 | 108 | 120 | 120 |
-| `select-row` | 99.7 | 29.6 | 25.6 | 29.5 |
+| `create` | 501 | 496 | 486 | 488 |
+| `update-every-10th` | 139 | 64.0 | 59.4 | 60.1 |
+| `swap-rows` | 162 | 108 | 103 | 103 |
+| `select-row` | 99.7 | 29.6 | 23.6 | 24.5 |
 
 **Read the 10,000-row rows.** At 1,000 rows most figures sit under the 5ms mark
 below which [Instrument variance](#instrument-variance) says a delta is not worth
 trusting. In 0.7.0 the stable spelling cut every mutation of a 10,000-row list
 by more than half. In 0.8.0 the two arms are within noise of each other on every
 op, and in script time the inline arm now matches or beats what the stable
-spelling achieved in 0.7.0. CDP task time does not show that gain:
-`update-every-10th` and `swap-rows` read 10–17% above 0.7.0's stable arm,
-inside the run-to-run band. `create` cannot bail out on first mount in any arm,
+spelling achieved in 0.7.0. CDP task time agrees: at 10,000 rows both 0.8.0
+arms sit at or below 0.7.0's stable arm on every op (the earlier runs, with the
+observer in the window, read `update-every-10th` and `swap-rows` 10–17% above
+it). `create` cannot bail out on first mount in any arm,
 so it only moves with the create cost discussed under [What the numbers say](#what-the-numbers-say).
 
 ### The structural counts: the decisive evidence
@@ -822,7 +829,8 @@ carries a 3-iteration `CAP` (its counts are algorithmic, not statistical).
 
 Same harness, same machine, same headless Chromium 151, 15 iterations,
 `--build-mode development --filter create` against the 0.8.0 production
-baseline. The dev bundle is 690.4 KB with `__PUZZLE_DEVTOOLS_HOOK__` present; the
+baseline as it stood before the stress observer left the timed window. Both
+columns carry the observer, so the pair is matched. The dev bundle is 690.4 KB with `__PUZZLE_DEVTOOLS_HOOK__` present; the
 production one is 238.5 KB with it absent.
 
 | op | mounted views | dev script | prod script | Δ abs | Δ % |
@@ -866,8 +874,9 @@ Non-negotiable for a benchmark: run it twice on an unchanged tree and see
 whether it can tell itself apart from the framework.
 
 For 0.8.0 this was two full suites on the same framework source (the first on
-the release branch head, the second, which is the committed baseline, after a
-harness-only commit that adds `history/`). 83 ops each, 157 comparable medians.
+the release branch head, the second after a harness-only commit that adds
+`history/`). Both predate the observer change; the committed baseline is a
+third run after it. 83 ops each, 157 comparable medians.
 
 | sample group | median abs. delta | p90 | max |
 | --- | ---: | ---: | ---: |
@@ -887,11 +896,12 @@ on a machine that was also running other work, and the worst offenders are
 long single-view ops: `flip-churn/interrupt` (432ms to 512ms), then
 `virtual-list/clear/50000` and a few 10,000-row paint medians at 11–14%. A
 single op's delta under ~18% is not a finding. A delta with the same sign and
-size across sizes and runs, like the create and clear step under
-[What the numbers say](#what-the-numbers-say), is.
+size across sizes and runs, like the 0.6.0-to-0.7.0 create and clear step
+under [What the numbers say](#what-the-numbers-say), is.
 
-Both 0.8.0 suite runs: 83/83 ops `ok`, zero validate failures, zero structural
-mismatches, zero clamp rejections, exit 0. Wall time ~13 minutes per suite.
+Both 0.8.0 suite runs, and the committed baseline run after them: 83/83 ops
+`ok`, zero validate failures, zero structural mismatches, zero clamp
+rejections, exit 0. Wall time ~13 minutes per suite.
 
 ---
 
@@ -927,8 +937,9 @@ mismatches, zero clamp rejections, exit 0. Wall time ~13 minutes per suite.
 - **History is per-harness.** Each snapshot in `history/` was measured by its
   own release's harness and stress example, so a column is that release as its
   own instrument saw it. Where the instrument changed between releases, the
-  table cannot tell it from the framework: 0.8.0's `keyed-list` ops carry a
-  `MutationObserver` that 0.7.0's did not (priced under
+  table cannot tell it from the framework. 0.8.0's stress example adds a
+  `MutationObserver`, but only to the three D170 gate ops, which have no older
+  column, so it stays out of every shared op (priced under
   [What the numbers say](#what-the-numbers-say)). Snapshots start at 0.6.0; the
   harness exists at `v0.5.0` too but was not backfilled.
 - **Two entries are behaviour gates whose timings mean nothing.**

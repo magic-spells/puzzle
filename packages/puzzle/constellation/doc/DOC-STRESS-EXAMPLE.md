@@ -17,6 +17,16 @@ connections:
   - FLOW-REACTIVITY
   - FILE-DEVPERF
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
+notes:
+  - kind: gotcha
+    text: >-
+      `KeyedList.watchRows()` arms only for the D170 gate ops that assert its counts (`WATCHED_OPS`:
+      update-one, update-all, reorder). A MutationObserver inside the timed window inflates create
+      and clear (priced at 0.4/3.2/69ms create and 0.6/5.1/21ms clear at 1k/10k/50k), and the
+      0.6.0/0.7.0 stress apps had none, so arming it everywhere broke the cross-release comparison.
+      Unwatched ops report no klDomMutations/klRowsTouched at all, and baseline.json must not carry
+      them for those ops, or the runner's counter-drift check flags a MISMATCH. Adding a gate that
+      asserts those counters means adding its op to WATCHED_OPS.
 ---
 
 # Puzzle Stress Lab (examples/stress)
