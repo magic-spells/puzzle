@@ -42,7 +42,7 @@ var upgradeCmd = &cobra.Command{
 // running process holds a stale payload, so the install must be re-exec'd; here
 // nothing was upgraded, so the running CLI is the correct source and re-execing
 // anything would be theatre. That is why it is its own path, not a shortcut into
-// runUpgrade (D99).
+// runUpgrade (D78).
 var upgradeSkillsCmd = &cobra.Command{
 	Use:   "skills",
 	Short: "Reinstall this CLI's agent skill wherever one is already installed",
@@ -194,8 +194,13 @@ func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, executable string, ch
 	}
 	switch ctx.kind {
 	case installManual:
-		fmt.Fprintln(stdout, "Install the latest release with:")
-		fmt.Fprintln(stdout, "  go install github.com/magic-spells/puzzle/compiler/cmd/puzzle@latest")
+		// A checkout build, never `go install …@latest`: the module lives in
+		// packages/puzzle, and its go.mod `replace` for puzzle-lang makes
+		// `go install pkg@version` refuse it outright.
+		fmt.Fprintln(stdout, "Build the latest release from source with Go:")
+		fmt.Fprintln(stdout, "  git clone https://github.com/magic-spells/puzzle")
+		fmt.Fprintln(stdout, "  cd puzzle/packages/puzzle/compiler && go build -o puzzle ./cmd/puzzle")
+		fmt.Fprintln(stdout, "  (on Windows use -o puzzle.exe)")
 		return nil
 	case installWorkspace:
 		// Guessing a member would install into a package the user never named,
@@ -267,7 +272,7 @@ func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, executable string, ch
 }
 
 // refreshSkills offers to reinstall the agent skill wherever one is already
-// installed, and only after a version actually changed (D97). The skill payload
+// installed, and only after a version actually changed (D78). The skill payload
 // is go:embed-ed into the binary, so THIS process only holds the OLD skill — the
 // new bytes exist solely in the binary npm just installed. The refresh therefore
 // re-execs that binary, after confirming its --version really is the new one; a

@@ -807,7 +807,7 @@ func TestWatchBuilderAddsUsageThroughSymlinkedRoot(t *testing.T) {
 	// A new, unimported template still contributes under the whole-project scan.
 	added := filepath.Join(real, "app", "views", "Extra.pzl")
 	write(t, added, `<puzzle-view>
-  <Portal><p>{ total | currency }</p></Portal>
+  <Portal><p>{ currency(total) }</p></Portal>
   <List><Snippet item>{ item }</Snippet></List>
 </puzzle-view>
 <script>

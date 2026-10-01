@@ -1,0 +1,56 @@
+<puzzle-view>
+  <div role="group" aria-label={ groupLabel } class={ groupClass }>
+    {#if label}
+      <p aria-hidden="true" class={ headingClass }>{ label }</p>
+    {/if}
+    <Children/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// NavigationMenu.Group — one column of a mega panel: a small uppercase heading
+// over a stack of links. A member of the NavigationMenu family (D167). Pure
+// markup — it composes nothing and knows nothing about the dropdown; it is a
+// Group only because a `wide` Content lays out ONE COLUMN PER CHILD, so each
+// Group is one column.
+//
+//   <NavigationMenu.Content wide>
+//     <NavigationMenu.Group label="Software">
+//       <NavigationMenu.Link href="/web" label="Web apps" description="…"/>
+//       <NavigationMenu.Link href="/mobile" label="Mobile apps"/>
+//     </NavigationMenu.Group>
+//     <NavigationMenu.Group label="Hardware">…</NavigationMenu.Group>
+//   </NavigationMenu.Content>
+//
+// Anything can sit inside it — Links, a nested Item with a submenu, a promo
+// card of your own.
+//
+// Accessibility: the wrapper is role="group" NAMED by `label`, so a screen
+// reader announces "Software, group" as focus enters the column. The visible
+// heading is aria-hidden, because the group name already says it — reading it
+// again as a paragraph would say it twice. It is a <p>, not an <h3>: a nav
+// panel's column labels are not document outline.
+//
+// Props
+//   label  the column heading, also the group's accessible name. Optional —
+//          without it the column is a bare, unnamed stack
+//   class  merged onto the wrapper <div>
+
+const GROUP = 'flex min-w-0 flex-col gap-0.5';
+// Indented to the Links' own px-3 so the heading lines up with their labels.
+const HEADING = 'px-3 pb-1.5 text-xs font-semibold uppercase tracking-widest text-muted';
+
+export default class Group extends PuzzleView {
+  data(params, props) {
+    const label = props.label != null && props.label !== '' ? String(props.label) : '';
+    return {
+      label,
+      groupLabel: label || false,
+      groupClass: [GROUP, props.class].filter(Boolean).join(' '),
+      headingClass: HEADING,
+    };
+  }
+}
+</script>

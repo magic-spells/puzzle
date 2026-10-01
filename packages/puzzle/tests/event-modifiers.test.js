@@ -59,7 +59,7 @@ describe('ViewManager — event modifiers (@event:mod)', () => {
 		expect(onSpace).toHaveBeenCalledTimes(1);
 	});
 
-	it('backspace filter maps to "Backspace" (v1.13, D45)', () => {
+	it('backspace filter maps to "Backspace" (v1.13, D38)', () => {
 		const { container, vm } = setup();
 		const onBksp = vi.fn();
 		vm.render(h('input', { '@keydown:backspace': onBksp }, []));
@@ -70,7 +70,7 @@ describe('ViewManager — event modifiers (@event:mod)', () => {
 		expect(onBksp).toHaveBeenCalledTimes(1); // other keys don't fire
 	});
 
-	it('delete filter maps to "Delete" and preserves native behaviour on other keys (v1.13, D45)', () => {
+	it('delete filter maps to "Delete" and preserves native behaviour on other keys (v1.13, D38)', () => {
 		const { container, vm } = setup();
 		const onDel = vi.fn();
 		vm.render(h('input', { '@keydown:delete:prevent': onDel }, []));

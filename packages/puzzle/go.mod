@@ -10,6 +10,7 @@ require (
 	github.com/charmbracelet/huh v0.6.0
 	github.com/evanw/esbuild v0.28.2
 	github.com/fsnotify/fsnotify v1.7.0
+	github.com/magic-spells/puzzle/packages/puzzle-lang v0.0.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/spf13/cobra v1.8.0
 	golang.org/x/sys v0.25.0
@@ -40,3 +41,9 @@ require (
 	golang.org/x/sync v0.8.0 // indirect
 	golang.org/x/text v0.18.0 // indirect
 )
+
+// puzzle-lang is the Puzzle language module (lexer, section splitter, AST,
+// positioned errors) in the sibling package directory. The replace pins the
+// compiler to the working tree, so the two always build together; the v0.0.0
+// requirement is a placeholder that the replace satisfies.
+replace github.com/magic-spells/puzzle/packages/puzzle-lang => ../puzzle-lang

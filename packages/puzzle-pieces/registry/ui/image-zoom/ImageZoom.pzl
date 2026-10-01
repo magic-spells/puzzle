@@ -1,0 +1,236 @@
+<puzzle-view>
+  <image-zoom
+    ref="host"
+    class={ rootClass }
+    style={ rootStyle }
+    role={ roleAttr }
+    aria-label={ labelAttr }
+    min={ minAttr }
+    max={ maxAttr }><img ref="image" src={ src } alt={ alt } loading={ loadingAttr } decoding="async" draggable="false"/></image-zoom>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// ImageZoom — pinch-to-zoom and pan for a single image. Two-finger pinch and
+// one-finger drag on touch, double-click (or double-tap) to toggle between the
+// minimum and maximum scale everywhere, rubber-band resistance past either end
+// with an animated snap back.
+//
+// THIS PIECE IS A WRAPPER, NOT A PORT. It renders the real <image-zoom> custom
+// element from @magic-spells/image-zoom and binds attributes to it. What is in
+// that package is exactly the kind of code a fork punishes you for: a pointer/
+// touch state machine that has to keep a pinch and a pan from stealing each
+// other's fingers, midpoint-anchored scaling, translate clamping against the
+// contained image box, a sqrt-damped rubber band, a 300ms/20px double-tap
+// discriminator, and a ResizeObserver that doubles as the late-init path for an
+// element that was display:none at connect. None of that is markup, and none of
+// it gets better by being re-translated into Puzzle.
+//
+//   <ImageZoom src={ photo } alt="Walnut lounge chair, three-quarter view"
+//     class="aspect-video rounded-xl bg-surface-sunken" max={ 4 }
+//     @change={ onZoom }/>
+//
+// THE IMAGE IS PIECE-OWNED, NOT SLOTTED — on purpose. The component's markup
+// contract is "exactly one <img> child": connectedCallback runs
+// `querySelector('img')` ONCE, caches that element, and from then on writes the
+// pan/zoom transform straight into its `style.transform` every frame. A slotted
+// image would put two things at risk that a config-first API removes entirely:
+//   * the caller could pass a dynamic `style={ … }` binding on the <img>, and
+//     the patcher rewrites the whole style attribute — it would wipe the
+//     component's per-frame transform (the same rule that applies to morph
+//     elements and to <scroll-stack-item>);
+//   * the caller could put the <img> behind an {#if}, and the cached reference
+//     would outlive the element it points at.
+// So `src`/`alt` are props, the <img> is written here, and nothing binds its
+// style. If you need a <picture> or a srcset, that is a change to this piece
+// (or to the component), not a slot.
+//
+// SWAPPING THE IMAGE. A gallery that flips `src` gets a correct refit: the
+// component caches the image's natural size and the contain-fit base scale at
+// connect time and has no attribute for a new source, so the piece re-attaches
+// the host element when `src` changes (see afterUpdate) — same node, same
+// position, one disconnect/connect pair, which is precisely the lifecycle the
+// component already handles. Zoom resets to `min` on a swap, which is what a
+// gallery wants anyway.
+//
+// Props (min/max map to attributes; unset renders no attribute, so the
+// component's own defaults apply)
+//   src      image URL. Required — the piece is an empty box without it.
+//   alt      alternative text. Always rendered, `''` for a decorative image.
+//   min      minimum scale multiplier (default 1 = the image contain-fits the
+//            box). Values above 1 start the image cropped and pannable.
+//   max      maximum scale multiplier (default 3). Also the target a
+//            double-tap zooms to.
+//   aspect   CSS aspect-ratio for the container, written as
+//            --image-zoom-aspect (the stylesheet's default is 4 / 3). A
+//            Tailwind `aspect-video` / `aspect-square` utility works too and is
+//            the better choice when a token covers what you need.
+//   loading  'lazy' | 'eager' — forwarded to the <img>. Safe either way: the
+//            component fits on the image's `load` event.
+//   label    accessible name for the zoom region. When set, the host is given
+//            `role="group"` with this as its aria-label; when unset neither is
+//            written, because a group with no name is noise.
+//   class    merged onto the host. This is where the box goes — aspect ratio,
+//            rounding, background, border, width.
+//   style    merged after the piece's own custom-property declarations.
+//
+// Callbacks (value-first, per the registry convention)
+//   @change(scale, { translateX, translateY })   any transform update. FIRES
+//            PER FRAME during a gesture — debounce anything expensive.
+//   @zoomStart(scale)  a pinch began, or a double-tap / reset() / zoomTo() is
+//            about to commit. The scale is the one it is leaving.
+//   @zoomEnd(scale)    a gesture settled, or a programmatic change committed.
+//            Fires at commit time, not at the end of the CSS transition.
+//   @ready(element)    the upgraded <image-zoom> element, once its module has
+//            landed. This is the imperative escape hatch: `element.reset()`,
+//            `element.zoomTo(2)`, `element.zoomTo(2, { animate: false })`, and
+//            the `scale` / `min` / `max` / `translateX` / `translateY` getters.
+//
+// NOT A CONTROLLED COMPONENT. Zoom lives in the element, which owns it for the
+// whole duration of a gesture — a `scale` prop would fight every pinch frame
+// the patcher rendered through. Same shape as the wrapped overlays: the
+// component manages its own state and reports it, and you drive it imperatively
+// from @ready when you need to.
+//
+// A11Y. Gestures are pointer-only upstream; there is no keyboard zoom, so this
+// is an enhancement over a normal image, never the only way to see the detail.
+// Keep the alt text meaningful and make sure nothing important is legible only
+// at max scale. The host is not focusable and not a button, so it adds no stop
+// to the tab order that a keyboard user could not use.
+//
+// LOADING. The package registers its custom element at module scope with
+// `class extends HTMLElement`, which is a ReferenceError under Node — a
+// top-level import would crash the prerender pass of any app on static or
+// hybrid output. The import lives in mounted() instead, which never runs
+// server-side. Prerendering is fine either way: the stylesheet already sizes
+// the host and absolutely positions the image, so the page shows the picture
+// before the JS lands and simply becomes zoomable when it arrives.
+//
+// STYLESHEET. This piece needs the component's CSS, which is not part of the
+// copied file. Add it once to your app's style entry:
+//   @import "@magic-spells/image-zoom/css" layer(components);
+// It is required, not cosmetic: the host's `overflow: hidden`, the aspect
+// ratio, the `touch-action` switch that hands a one-finger swipe back to the
+// page while unzoomed, and the absolute `transform-origin: 0 0` image box all
+// live in it — without them the transform lands on an element the container
+// does not clip. The layer is not optional either: the sheet is plain element
+// selectors (`image-zoom`, `image-zoom img`), so an unlayered import would
+// outrank every Tailwind utility on the host and `rounded-xl` or
+// `aspect-video` would silently do nothing.
+
+// A prop that was not passed renders no attribute — `false` is the compiler's
+// omit sentinel, the same one ScrollStack uses.
+function attr(value) {
+  return value === undefined || value === null || value === '' ? false : String(value);
+}
+
+// min/max are numbers the component parses back out of the attribute with
+// parseFloat, so a numeric STRING is just as valid a prop as a number — coerce
+// rather than test, or `max="3"` (or a value that came out of JSON) would
+// render no attribute and silently fall back to the component's own default.
+function scale(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? String(n) : false;
+}
+
+export default class ImageZoom extends PuzzleView {
+  #host = null;
+  #lastSrc = null;
+  #live = false;
+
+  #onChange = (event) => {
+    const { scale: value, translateX, translateY } = event.detail || {};
+    this.props.change?.(value, { translateX, translateY });
+  };
+
+  #onZoomStart = (event) => {
+    this.props.zoomStart?.(event.detail?.scale);
+  };
+
+  #onZoomEnd = (event) => {
+    this.props.zoomEnd?.(event.detail?.scale);
+  };
+
+  data(params, props) {
+    const declarations = [];
+    if (props.aspect) declarations.push(`--image-zoom-aspect:${props.aspect}`);
+    if (props.style) declarations.push(String(props.style));
+
+    const label = attr(props.label);
+
+    return {
+      src: attr(props.src),
+      // never omitted: an <img> with no alt is announced by its filename
+      alt: props.alt === undefined || props.alt === null ? '' : String(props.alt),
+      rootClass: props.class || false,
+      rootStyle: declarations.length ? declarations.join(';') : false,
+      labelAttr: label,
+      roleAttr: label ? 'group' : false,
+      loadingAttr: props.loading === 'eager' || props.loading === 'lazy' ? props.loading : false,
+      minAttr: scale(props.min),
+      maxAttr: scale(props.max),
+    };
+  }
+
+  mounted() {
+    // Browser-only by construction — see LOADING above. The guard is belt and
+    // braces for any host that runs lifecycle hooks outside a document.
+    if (typeof window === 'undefined') return;
+    this.#live = true;
+    this.#host = this.refs.host;
+    this.#lastSrc = this.props.src;
+
+    // Bound before the upgrade on purpose: addEventListener works on an
+    // un-upgraded element, so the first fit's `image-zoom:change` is never
+    // missed in the gap between mount and the module landing.
+    this.#host?.addEventListener('image-zoom:change', this.#onChange);
+    this.#host?.addEventListener('image-zoom:zoomstart', this.#onZoomStart);
+    this.#host?.addEventListener('image-zoom:zoomend', this.#onZoomEnd);
+
+    import('@magic-spells/image-zoom')
+      .then(() => {
+        if (!this.#live) return;
+        this.props.ready?.(this.#host);
+      })
+      .catch((error) => {
+        console.error(
+          '[ImageZoom] failed to load @magic-spells/image-zoom — the image will ' +
+            'render but not zoom.',
+          error
+        );
+      });
+  }
+
+  afterUpdate() {
+    if (!this.#live || !this.#host) return;
+    const src = this.props.src;
+    if (src === this.#lastSrc) return;
+    this.#lastSrc = src;
+
+    // The patcher has already written the new src onto the <img>, but the
+    // component read the natural size and the contain-fit base scale ONCE at
+    // connect and has no attribute that would tell it to read them again. Take
+    // the host out and put it straight back: disconnectedCallback drops the
+    // listeners, connectedCallback re-queries the image and refits it on the
+    // new source's `load`. Same element, same slot in the DOM, so the patcher
+    // keeps its node identity and the listeners bound above survive.
+    const parent = this.#host.parentNode;
+    if (!parent) return;
+    const next = this.#host.nextSibling;
+    parent.removeChild(this.#host);
+    parent.insertBefore(this.#host, next);
+  }
+
+  destroyed() {
+    this.#live = false;
+    this.#host?.removeEventListener('image-zoom:change', this.#onChange);
+    this.#host?.removeEventListener('image-zoom:zoomstart', this.#onZoomStart);
+    this.#host?.removeEventListener('image-zoom:zoomend', this.#onZoomEnd);
+    // Everything else — the window-level pointer listeners and the
+    // ResizeObserver — is released by the element's own disconnectedCallback
+    // when Puzzle removes it.
+    this.#host = null;
+  }
+}
+</script>

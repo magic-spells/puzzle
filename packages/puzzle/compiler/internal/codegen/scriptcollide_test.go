@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // scriptcollide_test.go — the <script>-import collision warning. A template
@@ -108,6 +108,43 @@ export default class T extends PuzzleView {}
 	}
 }
 
+// A non-ASCII data name is one name: `__d.金額` collides with an imported 金額,
+// and `__d.größe` is not read as `__d.gr` (a false warning for an imported gr).
+func TestCollisionForUnicodeDataName(t *testing.T) {
+	res := compileResult(t, `<puzzle-view><span>{ 金額 }</span><span>{ größe }</span></puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { 金額, gr } from './money.js';
+export default class Übersicht extends PuzzleView { data() { return { größe: 4 }; } }
+</script>
+`)
+	if warningFor(res.Warnings, "金額") == nil {
+		t.Errorf("expected a warning naming 金額, got %#v", res.Warnings)
+	}
+	if warningFor(res.Warnings, "gr") != nil {
+		t.Errorf("`größe` must not read as the imported `gr`, got %#v", res.Warnings)
+	}
+}
+
+// tokenizeJS scans a name as one run whatever its letters, and a name holding
+// a non-ASCII letter is no keyword, so a '/' after it is division.
+func TestTokenizeJSUnicodeNames(t *testing.T) {
+	var got []string
+	for _, tok := range tokenizeJS("const Straßenkarte = 概要 / 2 / 1; x\u00a0y; ö__d.z") {
+		switch {
+		case tok.ident != "":
+			got = append(got, tok.ident)
+		case tok.opaque:
+			got = append(got, "<opaque>")
+		}
+	}
+	want := []string{"const", "Straßenkarte", "概要", "x", "y", "ö__d", "z"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("tokenizeJS identifiers = %q, want %q", got, want)
+	}
+}
+
 // TestScriptImportBindings covers the binding-extraction forms directly.
 func TestScriptImportBindings(t *testing.T) {
 	cases := []struct {
@@ -121,6 +158,12 @@ func TestScriptImportBindings(t *testing.T) {
 			scripts: "import Def, { a, b as c } from 'x';\nimport * as ns from 'y';",
 			want:    []string{"Def", "a", "c", "ns"},
 			notWant: []string{"b"}, // b is the exported name, local is c
+		},
+		{
+			name:    "non-ASCII import names",
+			scripts: "import Übersicht, { 金額, a as größe } from 'x';",
+			want:    []string{"Übersicht", "金額", "größe"},
+			notWant: []string{"a", "gr"},
 		},
 		{
 			name:    "bare side-effect import binds nothing",
@@ -228,7 +271,7 @@ export default class T extends PuzzleView {}
 // TestCollisionForDefaultAndRenamedImport proves the warning fires for a default
 // import and a renamed named import, but not for the pre-rename exported name.
 func TestCollisionForDefaultAndRenamedImport(t *testing.T) {
-	res := compileResult(t, `<puzzle-view><span>{ Helper.run() }{ bar }</span></puzzle-view>
+	res := compileResult(t, `<puzzle-view><span>{ Helper.label }{ bar }</span></puzzle-view>
 
 <script>
 import Helper from './helper.js';

@@ -40,7 +40,7 @@ export function seed(store) {
       role: 'assistant',
       model: 'puzzle-core',
       content:
-        "Puzzle is a SPA-first JavaScript framework: single-file .pzl components, a reactive datastore, Liquid-style formatters, and a fast Go compiler that emits a small virtual-DOM runtime. This chat app is a demo of its newer features.",
+        "Puzzle is a SPA-first JavaScript framework: single-file .pzl components, a reactive datastore, JavaScript template expressions, and a fast Go compiler that emits a small virtual-DOM runtime. This chat app is a demo of its newer features.",
       createdAt: new Date(now - 26 * HOUR + 2 * MIN),
     },
     {

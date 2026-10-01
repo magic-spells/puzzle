@@ -21,8 +21,8 @@ PrimitiveForm.prototype.render = function () {
     new ViewNode('input', {
       class: 'len',
       type: 'number',
-      value: __d.title.length,
-      '@change:bind': this.__bind(__d.title, 'length', 'vn'),
+      value: __d.title?.length,
+      '@change:bind': this.__bind(__d.title ?? 0, 'length', 'vn'),
     }, []),
     new ViewNode('p', { class: 'title' }, [
       new ViewNode('text', { value: __s(__d.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'title' : 0) }),

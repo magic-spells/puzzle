@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/magic-spells/puzzle/compiler/internal/codegen"
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // newProject creates a stub Puzzle project (a package.json marker) and returns

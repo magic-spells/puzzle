@@ -9,7 +9,12 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { piecesFallbackNotice, packedBinaryProblem } from '../scripts/release-checks.mjs';
+import {
+	piecesFallbackNotice,
+	packedBinaryProblem,
+	readmeStatusProblem,
+	tagReminderLines,
+} from '../scripts/release-checks.mjs';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -151,5 +156,51 @@ describe('packedBinaryProblem', () => {
 		const packedBinary = entry.files.find((f) => f.path === 'bin/puzzle');
 		if (packedBinary) expect(problem).toBeNull();
 		else expect(problem).toMatch(/no bin\/puzzle/);
+	});
+});
+
+describe('tagReminderLines', () => {
+	// Go resolves a module in a repo subdirectory only through a tag prefixed
+	// with that directory, so the reminder must name the prefixed tag exactly.
+	it('prints the prefixed puzzle-lang tag and push command for the version', () => {
+		const text = tagReminderLines('0.8.0').join('\n');
+		expect(text).toContain('After tagging v0.8.0');
+		expect(text).toContain(
+			'git tag packages/puzzle-lang/v0.8.0 && git push origin packages/puzzle-lang/v0.8.0'
+		);
+	});
+
+	// Cory creates every tag. The summary may print git commands; the script
+	// must never run one that tags or pushes.
+	it('release-prep prints the reminder and never runs git tag or git push', () => {
+		const src = readFileSync(join(repoRoot, 'scripts/release-prep.mjs'), 'utf8');
+		expect(src).toContain('tagReminderLines(version)');
+		expect(src).not.toMatch(/exec\w*\(\s*['"]git['"]/);
+	});
+});
+
+describe('readmeStatusProblem', () => {
+	it('accepts a status line naming the version and reports any other', () => {
+		expect(readmeStatusProblem('> **Status: 0.8.0** — the current release.', '0.8.0')).toBeNull();
+		expect(readmeStatusProblem('> **Status: 0.7.0** — the current release.', '0.8.0')).toBe(
+			'README.md says "Status: 0.7.0", expected "0.8.0"'
+		);
+		expect(readmeStatusProblem('# Puzzle\n', '0.8.0')).toMatch(/no "\*\*Status: <version>\*\*" line/);
+	});
+
+	it('reads the status line out of a full README', () => {
+		const readme = '# Puzzle\n\nIntro.\n\n> **Status: 0.9.0** — the current release. More prose.\n';
+		expect(readmeStatusProblem(readme, '0.9.0')).toBeNull();
+		expect(readmeStatusProblem(readme, '0.10.0')).toBe(
+			'README.md says "Status: 0.9.0", expected "0.10.0"'
+		);
+	});
+
+	// The real README is checked against package.json by release-prep only, like
+	// every other version stamp — a fresh release branch bumps package.json first,
+	// and must not fail `npm test` until the README is edited.
+	it('release-prep runs the check on the real README', () => {
+		const src = readFileSync(join(repoRoot, 'scripts/release-prep.mjs'), 'utf8');
+		expect(src).toMatch(/readmeStatusProblem\(\s*readFileSync\(join\(repoRoot, 'README\.md'\)/);
 	});
 });

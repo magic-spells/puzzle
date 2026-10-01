@@ -17,216 +17,129 @@ connections:
   - FILE-STYLES-WATCH
 verified_at: '2026-08-24T21:11:50.859Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
-notes:
-  - kind: verified
-    text: >-
-      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
-      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
-      one — the path moved, the code did not. No content was re-checked, and none needed to be.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # esbuild plugin and build pipeline
 
-The `.pzl` onLoad plugin reads a file, splits/parses it, generates JavaScript,
-and returns positioned esbuild messages without writing intermediate modules.
-The transform itself is pass-INDEPENDENT — the generated module is a pure
-function of (app root, path, bytes), since platform, dev/prod, defines and
-minification are applied to it afterwards by esbuild — so a one-shot build
-memoizes it in a build-scoped `CompileCache` shared by all three plugin
-instances. A pass that hits the memo still does its own per-pass work:
-registering the file's `<style>` block in ITS collector (never on a failed
-compile) and returning fresh copies of the message/watch-file slices. Codegen's
-out-of-band warnings print from the memo's compute function, so they appear once
-per build rather than once per pass. The SPA watch/dev path attaches no cache, which keeps
-esbuild's own incremental onLoad cache the only memo there; the STATIC dev
-builder holds one for the whole session ([[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]).
-Cross-rebuild reuse is safe because the key carries a content hash — an edited
-file simply misses — but `Evict` still exists, indexed by a path→keys map that
-records both a `.pzl`'s own path and every file it inlines with `{#svg}`: the
-SVG memo nested inside the cache is keyed by PATH, so an edited icon whose
-consuming `.pzl` is byte-identical would otherwise be served from the pre-edit
-scan with nothing able to notice. Both sides of an eviction are symlink-resolved
-(esbuild reports resolved paths, a watcher reports what the user spelled).
-That same `{#svg}` edge is also indexed the OTHER way round, asset → the `.pzl`
-files that inline it (`AssetConsumers`), because an inlined asset is a codegen
-watch file rather than an esbuild input and route-level invalidation
-([[DECISION-D155-ROUTE-LEVEL-INVALIDATION]]) has no metafile that can place it.
-Those entries are never removed: a stale one can only over-report consumers, and
-an over-reported consumer costs one re-render.
+`compiler/internal/plugin` (the `.pzl` onLoad plugin, usage scan, virtual manifests) and
+`compiler/internal/build` (passes, staging, public assets, defines). The build contract
+is [[DOC-SPEC-BUILD]]; the end-to-end order is [[FLOW-BUILD]].
 
-The project usage walk has the same shape of problem: it reads and fully parses
-every `.pzl` to answer the formatter union and three template feature facts
-(`flip`, Portal, and any raw block), and additionally READS — never parses —
-every `.js`/`.ts`-family module for the D163 `lazy()` bit, which a one-shot
-build pays once and a dev session would otherwise pay per rebuild.
-`plugin.UsageScanner` is that walk with a per-file memo keyed by path + mtime +
-size; `ScanUsage` is a one-shot scanner over the same `scanFileUsage`, so the
-two cannot answer differently. Both long-lived builders keep one scanner for the
-session.
-Scripts use JS or TS loader according to `<script lang>`; styles collect in a
-mutex-protected path map; inline SVG dependencies join esbuild's watch set.
+## The `.pzl` transform
 
-[[DECISION-D156-BUILD-PIPELINE-PERFORMANCE]] makes the SPA
-call site honor that incremental shape: startup reuses the constructor scan and
-non-`.pzl` batches do not re-walk the project. The CSS collector carries a
-monotonic revision that changes only when a block is added, changed, or pruned,
-letting the watch builder skip re-joining and re-promoting its committed
-snapshot when an incremental graph rebuild leaves styles identical (the dev
-pipeline still recomposes each rebuild; its byte memo dedupes the disk
-write). The watch builder promotes the working collector to a committed
-snapshot only after full rebuild success; Tailwind callbacks read that snapshot
-so a partially successful esbuild pass cannot leak CSS beside last-good JS.
-Static dev similarly promotes its candidate only after the staging swap, and
-its styles-only path reads the committed snapshot.
+The onLoad plugin splits/parses a file, generates JavaScript and returns positioned
+esbuild messages, writing no intermediate modules. Scripts use the JS or TS loader per
+`<script lang>`; styles collect in a mutex-protected path map; `{#svg}` files join the
+watch set.
 
-Public-only SPA batches mirror assets without rebuilding the browser graph when
-the changed paths were not inputs to the previous successful metafile — a
-comparison made with both sides symlink-resolved, since the metafile carries
-esbuild's resolved spelling and the watcher carries the user's. Public files
-imported by application code remain ordinary graph inputs and rebuild as
-before.
+- **The transform is pass-independent** (a pure function of app root, path, bytes), so a
+  one-shot build memoizes it in a build-scoped `CompileCache` shared by all three plugin
+  instances. A memo hit still does its per-pass work (register the `<style>` in THIS
+  pass's collector, never on a failed compile; fresh message/watch slices). Codegen
+  warnings print from the compute function, once per build. The SPA dev path attaches no
+  cache (esbuild's incremental cache is the memo); the static dev builder holds one per
+  session ([[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]).
+- `Evict` is indexed path → keys for a `.pzl` AND every file it inlines with `{#svg}`,
+  because the nested SVG memo is keyed by PATH; both sides are symlink-resolved.
+  `AssetConsumers` indexes asset → consuming `.pzl` for route-level invalidation
+  ([[DECISION-D155-ROUTE-LEVEL-INVALIDATION]]) — entries are never removed (a stale one only
+  over-reports).
+- Scoped styles wrap via `codegen.ScopedCSS` with the same symlink-normalized
+  app-relative name as codegen.
 
-Build bundles `app/app.js` to staged `dist/app.js`, writes linked source maps
-and composed CSS, then copies public assets. Its three passes' BuildOptions are
-assembled by `newBundleOptions`, `prerenderBundleOptions`, and
-`staticPagesBundleOptions` — extracted so the static dev builder can hold the
-identical passes open as persistent contexts and the shipped bytes cannot depend
-on which driver ran them. The per-page pass anchors `AbsWorkingDir` to its
-output tree: unminified output carries a `// <input path>` comment per module
-resolved against the process cwd, so without the anchor a staging dir's random
-suffix leaks into `_puzzle/*.js` and two dev builds of identical sources produce
-different bytes. Production is unaffected (minification strips the comments). Production targets ES2022,
-minifies, and drops console calls unless `build.dropConsole: false`; development
-keeps readable output and console. Failed builds discard staging and preserve
-the last good dist. Success renames old output aside, installs staging, then
-removes the backup — inline for a one-shot build (the process is about to exit),
-backgrounded for a dev rebuild, where deleting a 150-page tree is ~50ms a
-developer would otherwise wait through after the swap has already succeeded. Path-containment guards protect every swap target.
+## Usage scan and defines
 
-Under D156, one-shot browser bundling and Tailwind generation overlap behind
-deterministic browser-before-Tailwind error collection. Styles compose after
-the browser pass has populated its per-pass CSS collector; public copying and
-prerendering retain their order, so concurrency changes elapsed time rather
-than public collision, user-code execution, or artifact semantics.
+`scanFileUsage` walks first-party sources fail-soft and over-inclusive (D31): unreadable
+or unparseable files are skipped, generated/vendor trees pruned. `.pzl` ASTs yield the
+library functions called (the formatter virtual module), `t` literal keys
+(`Usage.TKeys`, key → files, for the missing-key warning; runtime-built keys skipped), and
+the feature facts behind `__PUZZLE_HAS_FLIP__` (a `flip` attr or prop),
+`__PUZZLE_HAS_PORTAL__`, `__PUZZLE_HAS_RAW_AT__` (any raw block). `__PUZZLE_HAS_LAZY__`
+comes from reading `.js`/`.ts`-family files (and each `.pzl`'s whole source, before its
+parse) as TEXT for a `lazy(`-shaped call or a `lazy` specifier imported from
+`@magic-spells/puzzle` — `lazy()` lives in `routes.js`, where no template parse reaches.
+There is no managed-head gate (managed head tags are build-time only, D84).
 
-Every transient directory a build needs lives under `<root>/.puzzle/tmp/` —
-the staging tree (`staging-*`) and swapOutput's holding dir for the previous
-output (`dist-old-*`). Same filesystem, so the install is still an atomic
-rename; but `<root>/.puzzle` carries a `.gitignore` holding `*`, so a leftover
-from a killed build is invisible to every tool that respects gitignore. That
-matters beyond tidiness: Tailwind v4 walks the project for sources, and a stale
-copy of `dist/` under a name no `dist` ignore rule matches turns a 112ms source
-scan into 14s on the reference site. `Build` and `puzzle dev` both call
-`SweepWorkDirs` at startup, which removes entries under `.puzzle/tmp` — and
-legacy `.dist-staging-*` / `dist.old-*` app-root siblings, so existing projects
-self-heal — matching the exact known prefixes, real directories only (never a
-symlink), untouched for over ten minutes so a concurrently running build
-survives. A running build re-stamps its staging root once a minute so that age
-rule stays true for a long build that writes only into subdirectories.
+- `plugin.UsageScanner` memoizes per file (path + mtime + size); `ScanUsage` is a
+  one-shot over the same function, so they cannot disagree. The scan runs ONCE per
+  `build.Build` and is threaded to every pass through `passContext` — a pass must never
+  start from an unscanned zero `Usage`. Long-lived builders re-scan only on a watched
+  change and replace the context when any bit changes. Esbuild re-runs the formatter
+  module's `OnLoad` every rebuild (`TestFormatterManifestFreshAcrossIncrementalRebuilds`).
+- **i18n** (D175): a second virtual module, `@magic-spells/puzzle/i18n/manifest`;
+  `SetI18n(enabled, manifestJS)` sets `__PUZZLE_HAS_I18N__` and the manifest source
+  (`export default null` when off), re-read on every OnLoad.
+- Build-fact defines: `__PUZZLE_TAKEOVER__` (hybrid, static per-page and dev bundles
+  may adopt prerendered DOM; a plain SPA folds those branches and drops
+  `ssg/preload.js`) and `__PUZZLE_CAPTURE__` (a static per-page entry imports the app
+  entry only to read `app.config`, so `mount()` is inert). Every runtime probe uses
+  `typeof X === 'undefined' || X`, so an absent define means ON (vitest, third-party
+  bundlers).
 
-The SPA pass splits on request ([[DECISION-D160-SPA-CODE-SPLITTING]]):
-`build: { splitting: true }` gives `newBundleOptions` a `Splitting` flag and
-`ChunkNames: "chunks/[name]-[hash]"`, so a dynamic `import()` becomes a lazy
-chunk under `dist/chunks/` instead of being inlined. The entry name is
-untouched, so the shell HTML is unchanged, and ESM splitting emits no
-chunk-loader runtime, so total bytes do not grow. It is a per-pass flag, never a
-shared option: esbuild rejects `Splitting` alongside the prerender pass's
-`Outfile`, and static mode forces it off because its `app.js` is deleted before
-the swap and the chunks would survive as orphans. The dev builder absorbs the
-multi-output shape by writing the pass's outputs itself under `Write: false` and
-deleting the previous rebuild's outputs this one did not produce — a warm
-`dist/` would otherwise accumulate every re-hashed chunk of an edited lazy
-module. Unlike the per-page pass, this one does NOT anchor `AbsWorkingDir`: its
-metafile input keys are resolved against the process cwd by `metafileAllInputs`,
-so anchoring would break dev CSS pruning whenever the app root is not the cwd.
+## Passes and output
 
-Public assets come from `app/public` with a root `public` fallback. Reserved
-generated names (`app.js`, its map, `styles.css`) are rejected case-insensitively
-before pruning or on every dev rebuild; a root-level `chunks/` entry joins them
-for the duration of a splitting build, and belongs to the app again when the
-flag is off. The copier writes differently per
-destination: into the private staging dir a plain write (no reader exists yet,
-so an atomic temp+rename buys nothing), and into the live `dist/` an atomic
-write that also SKIPS any file already matching on size + mtime — normally the
-whole tree on an incremental rebuild. Live-dist copies stamp the source mtime so
-that comparison stays meaningful. Staging deliberately copies rather than
-hardlinks: the prerender passes edit staging's copy of `public/index.html` in
-place, and a shared inode would write through into the app's own source asset. Successful dev rebuilds mirror deleted
-public files and prune CSS for `.pzl` modules no longer in the esbuild metafile;
-an esbuild failure skips that public pass and D156 keeps working CSS private.
-The SPA public mirror writes live: an I/O failure after some successful copies
-can leave those assets updated, but its ownership set does not advance and the
-next public sync retries the full mirror. Full-output atomicity belongs to the
-staged one-shot/static pipelines, not the SPA incremental path.
+The entry (`app/app.ts` or `app/app.js`) bundles to staged `dist/app.js` with linked
+source maps and composed CSS, then public assets are copied. The three passes' options
+come from `newBundleOptions`, `prerenderBundleOptions`, `staticPagesBundleOptions`, so
+the static dev builder holds the identical passes open and bytes can't depend on the
+driver.
 
-JavaScript `puzzle.config.js` loads once through a bounded Node process; Go
-never parses it. Optional scalar keys (`build.dropConsole`, `build.sourceMap`,
-`build.splitting`, `output`) are decoded from `json.RawMessage`, and "was this
-key set?" is a shared `unset()` helper that treats **JSON `null` as unset**, not
-just an absent key. A length check alone is wrong: `null` decodes to a four-byte
-`RawMessage`, and `json.Unmarshal` of `null` into a scalar is a documented no-op
-that returns no error and leaves the zero value — so `dropConsole: null` would
-read as an explicit `false` and silently flip production from strip-console to
-keep-console, while `output: null` would fail with the confusing `output "" is
-not supported`. Styles support the Tailwind-first pipeline. Production runs a
-one-shot CLI; dev maintains a warm watcher. Collected component CSS follows
-Tailwind output, and scoped blocks wrap in `@scope ([data-<path-hash>])` using
-the same symlink-normalized app-relative name as codegen.
+- Production: ES2022, minified, console dropped unless `build.dropConsole: false`.
+- **Per-page pass anchors `AbsWorkingDir`** to its output tree (unminified output carries
+  `// <input path>` comments; otherwise a staging suffix leaks into `_puzzle/*.js`). The
+  SPA pass must NOT anchor it — `metafileAllInputs` resolves against the process cwd, and
+  dev CSS pruning would break when the app root isn't the cwd.
+- Per-page source maps follow the `app.js` policy (dev linked, prod only under
+  `build.sourceMap`), decided before esbuild runs, so chunk hashes describe shipped bytes.
+- **Splitting** ([[DECISION-D160-SPA-CODE-SPLITTING]]): `build.splitting` gives the SPA
+  pass `Splitting` + `ChunkNames: "chunks/[name]-[hash]"` — a per-pass flag only
+  (esbuild rejects it with the prerender pass's `Outfile`; static mode forces it off since
+  its `app.js` is deleted). The dev builder writes outputs itself under `Write: false` and
+  deletes chunks the previous rebuild produced but this one didn't.
+- D156: one-shot browser bundling and Tailwind overlap, with deterministic
+  browser-before-Tailwind error order; styles compose after the browser pass fills its
+  collector.
+- **Staging and swap**: failure discards staging and keeps the last good dist; success
+  renames old output aside, installs staging, removes the backup (inline for one-shot,
+  backgrounded in dev). Path-containment guards every swap target. Transient dirs live
+  under `<root>/.puzzle/tmp/` (`staging-*`, `dist-old-*`) — same filesystem, and the
+  `.puzzle/.gitignore` of `*` hides leftovers from Tailwind v4's source walk (a stale
+  `dist` copy turned a 112 ms scan into 14 s). `SweepWorkDirs` at build/dev start removes
+  known-prefix real directories (also legacy `.dist-staging-*`/`dist.old-*`) older than
+  ten minutes; a running build re-stamps its staging root every minute.
+- Static/hybrid output runs a node-platform bundle and [[COMPONENT-SSG]] before the swap;
+  a timeout or render failure keeps the last good dist and surfaces source-mapped errors.
 
-Resolution aliases the root package plus every published subpath for in-repo
-builds: `/adapter`, `/morph`, `/router-modes`, `/ssg`, `/static`, `/testing`,
-and `/fixtures`. Subpaths have explicit aliases because the
-bare alias resolves to a file and cannot resolve suffixes; longest key wins, so
-the bare specifier stays untouched. `PUZZLE_RUNTIME` overrides both the in-repo
-walk and `node_modules`, and a set-but-wrong value is a hard stop rather than a
-silent fall-through to the installed runtime. Under `--fixtures`
-(D98) the entry point is a
-generated wrapper whose two imports a small resolver plugin pins
-`SideEffects: true` — the package declares `"sideEffects": false`, and without
-the pin esbuild tree-shakes both bare wrapper imports into an empty bundle.
-The zero-config `@` key resolves `@/…` from `app/` in both browser and
-prerender bundles without capturing scoped packages. Relative and
-installed-package resolution remain normal esbuild behavior.
+## Incremental dev details (D156)
 
-Build-time usage tree-shaking walks first-party project sources with the same
-fail-soft, over-inclusive policy as D31: unreadable or unparseable files are
-skipped and generated/vendor trees are pruned. Parsed `.pzl` ASTs seed
-the virtual formatter manifest from observed built-ins, while element attrs or
-component props named `flip`, `*parser.Portal` nodes, and parser-recorded raw
-blocks drive the literal `__PUZZLE_HAS_FLIP__`, `__PUZZLE_HAS_PORTAL__`, and
-`__PUZZLE_HAS_RAW_AT__` esbuild defines. There is no managed-head gate (D111).
-A fourth define, `__PUZZLE_HAS_LAZY__`, gates D163's `router/lazy.js`, and it is
-the one bit a template parse could never answer — `lazy()` is called from
-`routes.js` — so the walk also reads `.js`/`.mjs`/`.cjs`/`.jsx`/`.ts`/`.mts`/
-`.cts`/`.tsx` as TEXT, matching either a `lazy(`-shaped call or a `lazy`
-specifier in an `import`/`export … from '@magic-spells/puzzle'` clause (the
-second rule catches the renamed binding the first cannot see). A `.pzl` runs
-that same text match over its whole source BEFORE the template parse, so a
-`lazy()` call in a `<script>` section counts and a file the parser rejects still
-contributes the bit. The scan runs ONCE per `build.Build`
-and its immutable result is threaded to every pass through a `passContext` —
-the constructor build code uses instead of `plugin.New`, so a pass cannot start
-from an unscanned zero `Usage` and drop a used runtime module. The
-long-lived builders compare the complete feature struct and replace a context
-when any bit changes; they re-scan only when a watched source changed. Esbuild
-re-runs the formatter virtual module's `OnLoad` on every rebuild; this is
-regression-guarded by `TestFormatterManifestFreshAcrossIncrementalRebuilds`.
+- The CSS collector has a monotonic revision (changes only on add/change/prune); the
+  watch builder promotes the working collector to a committed snapshot only after full
+  success, and Tailwind callbacks read the snapshot, so a partial esbuild pass can't leak
+  CSS. Static dev promotes after the staging swap.
+- Public-only batches mirror assets without rebuilding when the changed paths weren't
+  inputs to the last metafile (both sides symlink-resolved).
 
-Two more build facts ride the same define channel rather than the usage scan:
-`__PUZZLE_TAKEOVER__` (hybrid, static per-page, and dev bundles may adopt
-prerendered DOM; a plain SPA bundle folds the router's `data-puzzle-ssg`
-branches and drops `ssg/preload.js` entirely) and `__PUZZLE_CAPTURE__` (a
-static per-page entry may import `app/app.js` only to READ `app.config`, so
-`PuzzleApp.mount()` must be inert there). Every runtime probe uses the
-`typeof … === 'undefined' ||` idiom, so an absent define means the feature is on
-for vitest and third-party bundlers.
+## Public assets
 
-Static output performs a second node-platform bundle and runs
-[[COMPONENT-SSG]] before the staging swap. A timeout or render failure preserves
-the last good dist and surfaces source-mapped user errors. The per-page browser
-bundle pass follows the SAME source-map policy as the main `app.js` pass —
-development linked, production only under `build.sourceMap` — decided BEFORE
-esbuild runs, so nothing is generated to be deleted afterwards. Because a
-chunk's content hash is therefore computed over bytes carrying no
-`sourceMappingURL` comment, the hash actually describes the shipped bytes.
+From `app/public`, falling back to root `public`. Reserved generated names (`app.js`, its
+map, `styles.css`, plus root `chunks/` under splitting) are rejected case-insensitively.
+Staging copies are plain writes (and real copies, never hardlinks — prerender edits
+staging's `index.html` in place); live-`dist/` copies are atomic and skip files matching
+size + mtime (stamped from the source). The SPA mirror writes live: a mid-way I/O failure
+can leave some assets updated, but its ownership set doesn't advance, so the next sync
+retries. Full atomicity belongs to the staged pipelines.
+
+## Config and resolution
+
+- `puzzle.config.js` loads once through a bounded Node process; Go never parses JS.
+  Optional scalars (`build.dropConsole`, `build.sourceMap`, `build.splitting`, `output`)
+  go through `unset()`, which treats **JSON `null` as unset** — `json.Unmarshal` of
+  `null` into a scalar is a silent no-op, so `dropConsole: null` would otherwise read as
+  `false`.
+- Aliases cover the root package and every subpath (`/adapter`, `/morph`,
+  `/router-modes`, `/ssg`, `/static`, `/testing`, `/fixtures`) explicitly — the bare alias
+  resolves to a file and can't take suffixes; longest key wins. `@/…` resolves from
+  `app/` without capturing scoped packages. `PUZZLE_RUNTIME` overrides the in-repo walk
+  and `node_modules`; a wrong value is a hard stop.
+- Under `--fixtures`, a resolver plugin pins the wrapper's two imports `SideEffects: true`
+  — the package declares `"sideEffects": false`, and esbuild would tree-shake both away.

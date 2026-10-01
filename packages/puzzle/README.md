@@ -5,7 +5,7 @@ A SPA-first JavaScript framework with single-file components, reactive data bind
 **[▶ Live demo](https://puzzle-music-demo.vercel.app/)** — the [music example app](examples/music) built with Puzzle.
 
 - **~200 ms production builds** — compile, bundle, Tailwind, and minify, end to end (todos example, Apple Silicon)
-- **Small apps, honestly measured** — a minimal app is 20.8 KB gzip with the router, store, and validation included, not just a view layer; the complete todos example ships at 23.8 KB gzip. Regenerated every release by `npm run measure:size`
+- **Small apps, honestly measured** — a minimal app is 21.9 KB gzip with the router, store, and validation included, not just a view layer; the complete todos example ships at 26.0 KB gzip. Regenerated every release by `npm run measure:size`
 - **Zero JavaScript toolchain** — the CLI is one prebuilt Go binary; no Babel, no bundler config, no postinstall scripts
 
 ## Quick start
@@ -34,7 +34,7 @@ client runtime and the CLI:
 npm install -D @magic-spells/puzzle
 ```
 
-> **Status: 0.7.0** — the current release. The browser runtime, Go
+> **Status: 0.8.0** — the current release. The browser runtime, Go
 > compiler, static generator, and CLI are implemented and covered by Go,
 > Vitest/jsdom, type, package, example, and browser-focused checks.
 >
@@ -43,8 +43,9 @@ npm install -D @magic-spells/puzzle
 > [CHANGELOG.md](CHANGELOG.md#upgrading-across-versions) before upgrading.
 >
 > **[constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) is the canonical, frozen v1
-> contract** — its per-amendment sections (§12–§41) are the source of truth for
-> exactly what shipped when; if anything here conflicts with it, the spec wins.
+> contract** — it indexes the numbered sections (§1–§66) across six domain
+> cards, and they are the source of truth for exactly what ships; if anything
+> here conflicts with it, the spec wins.
 
 ## Features
 
@@ -55,18 +56,19 @@ npm install -D @magic-spells/puzzle
 - **Two-way form binding with no directive** — `value={ draft }` and `checked={ todo.completed }` read *and* write; the compiler synthesizes the handler, so there is no `bind:` prefix and no mirror handler to maintain
 - **Model/store architecture** with adapters, relationships, schema validation, persistence, and read/write server sync — opt-in via the `@magic-spells/puzzle/adapter` subpath (local-only apps ship none of it)
 - **Server data with no loading code** — `findOne`/`findMany` inside a view's `data()` fetch whatever the store is missing and settle before the view commits, so a committed `null` always means "does not exist", never "still loading"
-- **Chainable display formatters** — `{ title | downcase | truncate(40) }`
+- **Template expressions that are JavaScript** — `{ truncate(title.toLowerCase(), 40) }`, `{#for t in todos.filter(t => !t.done)}`: one closed grammar and method table, parsed once and shared with Magic Spells Sites, with display functions called like any function
+- **Translations** — `{ t('cart.title') }` with one `app/locales/<tag>.json` per language: nested files, CLDR plurals through `Intl.PluralRules`, missing keys filled from the default at build time, and only the active locale's hashed file downloaded; `this.ctx.i18n.setLocale('es')` switches in place. Apps without `i18n` configured ship none of it
 - **Raw template blocks** — `{#raw}…{/raw}` turns off template-expression parsing so JSON, JavaScript, CSS, and syntax examples with literal braces compile as-is (HTML inside still renders normally)
-- **Nested routing** with view slots — path routing by default, hash/memory via `hashRouter()`/`memoryRouter()` from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` formatter
+- **Nested routing** with view slots — path routing by default, hash/memory via `hashRouter()`/`memoryRouter()` from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` function
 - **On-demand route views** — `view: lazy(() => import('./views/Admin.pzl'))` in the route table downloads a view or layout the first time a navigation needs it, guards first
-- **Virtual DOM** with efficient diffing and pk-aware list keying
+- **Virtual DOM** with efficient diffing, pk-aware list keying, and `{#for}` rows and static markup cached between renders
 - **Built-in view & component animations** (Web Animations API), including visibility-triggered enters and app lifecycle hooks
 - **Route transitions**: sequential by default; overlapping cross-fades and shared-element morphs *(experimental — see below)*
 - **App-level error handling** — one compiled `errorView` replaces a failed view in place with `{ error, info, retry }`; the `onError` hook funnels every framework-contained error
 - **Go-based compiler** for fast builds and state-preserving live reload (store and JSON-safe local view state survive edits)
 - **Type-checked templates** — `puzzle check` runs the app's own TypeScript over every `.pzl`, so a typo in `{ user.nmae }` is a type error reported at its real line and column
 - **SPA-first output with two optional prerender modes** — `output: 'hybrid'` (prerendered pages the SPA takes over) and `output: 'static'` (true static pages, no router or `app.js`); no request-time SSR server or hydration layer
-- **[Puzzle Pieces](https://github.com/magic-spells/puzzle-pieces) component library** — ready-made `.pzl` components installed with `puzzle add piece <name>` ([browse the catalog](https://magic-spells.github.io/puzzle-pieces/))
+- **[Puzzle Pieces](../puzzle-pieces) component library** — ready-made `.pzl` components installed with `puzzle add piece <name>` ([browse the catalog](https://magicspells.io/puzzle-pieces))
 
 > **Experimental:** overlapping route transitions (`transitionMode:
 > 'overlap'`) and shared-element morph transitions (`@magic-spells/puzzle/morph`)
@@ -115,14 +117,38 @@ npm run dev
 The generated app depends on `@magic-spells/puzzle` locally, so collaborators
 who clone it only need `npm install` — no global CLI required.
 
+For a TypeScript app, answer yes to the TypeScript prompt or pass the flag:
+
+```bash
+puzzle init my-app --typescript
+cd my-app
+npm install
+npm run check   # type-check with puzzle check
+npm run dev
+```
+
+Every component is `<script lang="ts">` with typed `data()`, props, events and
+lifecycle hooks, the modules are `.ts` — the build entry `app/app.ts`,
+`routes.ts`, the todos template's models — and `package.json` adds
+`typescript` plus a `check` script. The build starts from `app/app.ts` when it
+exists, otherwise `app/app.js`, and refuses an app that has both. It strips
+types without checking them; `npm run check` is the type check, under the
+strict `tsconfig.json` the scaffold writes. In an app with that
+`tsconfig.json`, `puzzle generate` writes TypeScript too: `<script lang="ts">`
+stubs, `app/models/<name>.ts`, and an `index.ts` family barrel.
+
 ### Other platforms, or building from source
 
 The prebuilt binaries cover macOS, Linux, and Windows. On any other platform — or
-if you prefer to build the CLI yourself — install it from source with Go:
+if you prefer to build the CLI yourself — build it from a checkout with Go, then
+put the `puzzle` binary on your `PATH`:
 
 ```bash
-go install github.com/magic-spells/puzzle/compiler/cmd/puzzle@latest
+git clone https://github.com/magic-spells/puzzle
+cd puzzle/packages/puzzle/compiler && go build -o puzzle ./cmd/puzzle
 ```
+
+On Windows use `-o puzzle.exe`.
 
 ## Project Structure
 
@@ -148,8 +174,40 @@ my-puzzle-app/
 
 ```html
 <p>{ user.name }</p>
-<h1>{ title | capitalize }</h1>
+<h1>{ capitalize(title) }</h1>
+<p>{ items.length } items, { currency(price * quantity) }</p>
+<p>{ nickname ?? name } · { tags.join(', ') }</p>
+<ul>{#for t in todos.filter(t => !t.done)}<li>{ t.title }</li>{/for}</ul>
 ```
+
+A template expression is JavaScript from a closed table, so it means the same
+thing when PuzzleKit compiles it to JavaScript and when Magic Spells Sites
+evaluates it in Go. The grammar: literals, template literals, arrays and
+objects; `a.b`, `a?.b`, `a[i]`; the operators with JavaScript precedence
+(`+ - * / %`, comparisons, `== != === !==`, `&& || !`, `??`, `?:`); arrow
+functions as call arguments (`items.map(i => i.name)`); and three kinds of
+call — a display function by name (`currency(price)`), a method from the
+table on a string, array or number (`name.trim()`, `items.filter(…)`,
+`n.toFixed(2)`), and the globals `Math.*`, `Number`, `String`, `Boolean`,
+`parseInt`, `parseFloat`, `isNaN`, `isFinite`, `encodeURIComponent`,
+`decodeURIComponent`, `encodeURI`, `decodeURI`, `Array.isArray` and
+`Object.keys/values/entries`. The count is `.length`. No method mutates
+(`toSorted` and `toReversed`, not `sort` and `reverse`), and anything outside
+the table — `new Date()`, `Date.now()`, `JSON.stringify(x)`, `**`, bitwise
+operators, spread, regex literals, and `window`, `document` or `globalThis`
+read as a value — is a compile error at its own line and column that names
+the replacement. Member reads are
+guarded: `{ user.address.city }` prints nothing when `address` is missing.
+
+A template never reaches the view instance: `this` is a compile error in every
+template expression, `@event` handler arguments included. Every value a
+template shows comes through `data()`, and a handler reaches the view through
+its own name (`@click={ save(items.length - 1) }` calls the view's `save`).
+An `@event` value is always such a call (or the handler's bare name); inside
+its arguments `event` is the DOM event and a chain rooted at it is
+unrestricted — `@input={ rename(event.target.value) }`. Work on the event
+itself, such as `event.preventDefault()`, goes inside the handler method or
+through the `:prevent` modifier.
 
 A literal brace is escaped with a backslash — `\{` and `\}` — anywhere an
 expression could appear, attribute values included:
@@ -235,7 +293,7 @@ See [constellation/doc/DOC-TEMPLATE-SYNTAX.md](constellation/doc/DOC-TEMPLATE-SY
 <button @click:once={ claimReward }>Claim</button>
 ```
 
-**Two-way binding** (D147): `value=` and `checked=` on a plain `<input>`, `<textarea>`, or `<select>` bind in both directions when the expression is a bare identifier or a one-member path — the compiler synthesizes the write-back handler. A bare identifier writes local state; a path writes the record through validated `update()`. Opt out with your own `@input`/`@change`, a non-path expression (`value={ String(x) }`), or a static `readonly`. Handlers on other events (`@blur`, `@keydown:enter`) coexist with the bind.
+**Two-way binding** (D147): `value=` and `checked=` on a plain `<input>`, `<textarea>`, or `<select>` bind in both directions when the expression is a bare identifier or a one-member path — the compiler synthesizes the write-back handler. A bare identifier writes local state; a path writes the record through validated `update()`. Opt out with your own `@input`/`@change`, a non-path expression (`value={ x ?? '' }`), or a static `readonly`. Handlers on other events (`@blur`, `@keydown:enter`) coexist with the bind.
 
 **Event modifiers** (`prevent`, `stop`, `once`, and key filters like `:enter`/`:escape`) stack; the canonical order is key-gate → once-spend → preventDefault → stopPropagation → handler. See [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §5.
 
@@ -268,77 +326,147 @@ Reusable components declare default child content with `<Children/>`, and a pair
 </article>
 ```
 
-## Built-in Formatters
+## Display Functions
 
-Formatters transform data for display without modifying the underlying values.
-They chain left to right with `|`, so each one receives the previous result:
+A display function transforms a value for display without modifying the
+underlying data. It is called like any function, and calls nest:
 
 ```html
-{ title | downcase | replace('-', ' ') }
-<!-- "My-Blog-Post" → "my blog post" -->
-{ post.body | trim | truncate(140) | capitalize }
-<!-- Chains can be any length; arguments go in parentheses -->
+{ truncate(capitalize(post.body.trim()), 140) }
+<!-- trim, capitalize, then cut to 140 characters -->
+{ date(post.publishedAt, 'long') }
+<!-- September 24, 2026 -->
 ```
 
-An unregistered formatter name never crashes a render — the value passes
-through that step unchanged and a single `console.error` names the offender.
+What a JavaScript method or `Math` global already says is not a function: use
+`.toUpperCase()`, `.toLowerCase()`, `.trim()`, `.replaceAll(a, b)`,
+`.join(', ')`, `Math.floor()`, `Math.ceil()` and `Math.abs()`. Lists are
+shaped with array methods (`items.filter(…)`, `.toSorted(…)`, `.at(-1)`) or in
+`data()`; counting, arithmetic and fallbacks are `.length`, the operators and
+`??`.
 
-### String Formatters
+The library is the **standard set** — the same names, arguments and meaning
+in PuzzleKit and in Sites — plus the browser-only `link` and `timeago`. An
+app registers its own through the `formatters` config map and calls them the
+same way (`{ specialFormat(product.title) }`); one that reuses a standard name
+wins, with a development warning. An unregistered name never crashes a render —
+the value passes through unchanged and a single `console.error` names the
+offender (and, for a name JavaScript covers, the method to write instead).
+
+### Text
 
 ```html
-{ text | trim }
-<!-- Remove whitespace -->
-{ name | capitalize }
-<!-- First letter uppercase -->
-{ title | upcase }
-<!-- ALL UPPERCASE -->
-{ title | downcase }
-<!-- all lowercase -->
-{ content | truncate(100) }
-<!-- Limit to 100 chars -->
-{ slug | replace('-', ' ') }
-<!-- Replace characters -->
+{ capitalize(name) }
+<!-- First character uppercase, the rest untouched: iPhone → IPhone -->
+{ truncate(content, 100) }
+<!-- At most 100 characters, the … included -->
+{ pluralize(count, 'comment') }
+<!-- 1 comment / 3 comments; irregular: pluralize(n, 'person', 'people') -->
+{ strip_html(post.excerpt) }
+<!-- Tags removed -->
 ```
 
-### Number Formatters
+### Numbers
 
 ```html
-{ price | currency('$', 2) }
-<!-- $19.99 -->
-{ progress | percentage }
-<!-- 75% -->
-{ count | number_with_delimiter }
-<!-- 1,234,567 -->
-{ rating | round(1) }
-<!-- 4.3 -->
+{ currency(price, '$', 2) }
+<!-- $1,219.99 -->
+{ percentage(progress) }
+<!-- 75.4 → 75% (the number as written) -->
+{ number_with_delimiter(count) }
+<!-- 1,234,567 in the viewer's locale; number_with_delimiter(n, ',') forces one -->
+{ compact_number(followers) }
+<!-- 1.2K, 45K, 3.4M -->
+{ round(rating, 1) }
+<!-- 4.3 — half away from zero, a number -->
 ```
 
-### Array Formatters
+### Values
 
 ```html
-{ names | join(', ') }
-<!-- Join with commas -->
+{ json(obj) }
+<!-- JSON with sorted keys -->
 ```
 
-### Date Formatters
+### Markup Functions
+
+Every interpolation is text unless its outermost call is one of these two, and
+both are safe by construction:
 
 ```html
-{ createdAt | date('long') }
-<!-- January 15, 2024 -->
-{ updatedAt | date('short') }
-<!-- 1/15/24 -->
-{ publishedAt | timeago }
+{ raw(post.bodyHtml) }
+<!-- Real HTML, always through an allowlist sanitizer -->
+{ newline_to_br(comment.text) }
+<!-- Escaped text with a real <br> per line break -->
+```
+
+`raw` keeps document markup, links and images, `class` and `id` (DOMPurify's
+defaults; no `id` on `<img>` and none starting with `__`), and
+`target="_blank"` on links (always with `rel="noopener noreferrer"`; any other
+target is dropped). It removes `<script>` (with its contents), `<style>`,
+`<iframe>`, `<object>`, `<embed>`, `<svg>`, forms, every `on*` handler,
+`style`, `name`, and any URL that is not relative or `http(s)` (links also keep
+`mailto:` and `tel:`). Because `class` and `id` survive, sanitized content can
+use your app's CSS and name its elements — for untrusted user HTML that is a
+UI-overlay and naming risk (a `fixed inset-0` block over your page, an `id`
+that shadows an undefined global), not code execution. A markup function must
+be the outermost call of a text interpolation — inside another call, in an
+attribute or a prop it is a compile error — so an app function can never
+inject markup. Apps that never use either function ship none of this code.
+
+### Dates
+
+`date`, `time` and `datetime` take the presets `short`, `medium`, `long` and
+`iso`, in the viewer's locale and time zone. With no preset, `date` is medium,
+`time` is short, and `datetime` is the medium date with the short time. A
+literal preset the standard functions do not know (`time(at, 'shrot')`) is a
+compile-time warning (an app may register its own `time`), and at run time
+an unknown preset renders the default.
+
+```html
+{ date(createdAt) }
+<!-- Sep 24, 2026 -->
+{ date(createdAt, 'long') }
+<!-- September 24, 2026 -->
+{ time(createdAt) }
+<!-- 3:04 PM -->
+{ datetime(updatedAt) }
+<!-- Sep 24, 2026, 3:04 PM -->
+{ datetime(updatedAt, 'iso') }
+<!-- 2026-09-24T15:04:05-04:00 -->
+{ timeago(publishedAt) }
 <!-- 2 hours ago -->
 ```
 
-### Utility Formatters
+### Translations
+
+With `i18n: { locales: ['en', 'es'], defaultLocale: 'en' }` in
+`puzzle.config.js` and one `app/locales/<tag>.json` per locale:
+
+```json
+{
+  "cart": {
+    "title": "Your cart",
+    "items": { "one": "{count} item", "other": "{count} items" }
+  },
+  "greeting": "Hello, {name}!"
+}
+```
 
 ```html
-{ html | raw }
-<!-- Skips entity escaping; still renders as text, not injected HTML -->
-{ obj | json }
-<!-- JSON stringify -->
+{ t('cart.title') }
+<!-- Your cart -->
+{ t('greeting', { name: user.name }) }
+<!-- Hello, Ada! — fills {name} -->
+{ t('cart.items', { count: cart.count }) }
+<!-- 3 items — a numeric `count` picks the plural form -->
 ```
+
+A missing key prints the key itself. Dates and numbers (`date`,
+`number_with_delimiter`, `compact_number`, …) follow the active locale. Switch
+languages with
+`this.ctx.i18n.setLocale('es')`: the new file loads first, then the page
+rebuilds in place and the choice is remembered. See `examples/i18n`.
 
 ## Single-File Components
 
@@ -431,15 +559,20 @@ export default Object.assign(Frame, { Wrapper, Content });
 ```
 
 ```html
-<script>
-  import Frame from '@/components/Frame';
-</script>
+<puzzle-view>
+  <Frame>
+    <Frame.Wrapper>
+      <Frame.Content>…</Frame.Content>
+    </Frame.Wrapper>
+  </Frame>
+</puzzle-view>
 
-<Frame>
-  <Frame.Wrapper>
-    <Frame.Content>…</Frame.Content>
-  </Frame.Wrapper>
-</Frame>
+<script>
+  import { PuzzleView } from '@magic-spells/puzzle';
+  import Frame from '@/components/Frame';
+
+  export default class Page extends PuzzleView {}
+</script>
 ```
 
 A dotted tag is an ordinary member expression resolved against module scope —
@@ -452,6 +585,9 @@ The framework lives at `packages/puzzle` in the `magic-spells/puzzle`
 repository; the repo root is a private shell whose scripts delegate here.
 `packages/` holds everything that releases in lockstep with it:
 
+- [`packages/puzzle-lang`](../puzzle-lang) — the Puzzle template language
+  (lexer, section splitter, AST, expression parser, positioned errors) as its
+  own Go module, which the compiler imports
 - [`packages/puzzle-pieces`](../puzzle-pieces) — the official component
   library (published to npm as `@magic-spells/puzzle-pieces`)
 - [`packages/puzzle-devtools`](../puzzle-devtools) — the Chrome DevTools
@@ -473,7 +609,7 @@ puzzle add piece <name>
 ```
 
 Pieces are fetched from the `@magic-spells/puzzle-pieces` npm package,
-version-matched to your CLI — puzzle 0.7.x pulls the newest pieces 0.7.x — so a
+version-matched to your CLI — puzzle 0.8.x pulls the newest pieces 0.8.x — so a
 piece is always authored for the compiler installing it. `--pieces-version`
 pins an exact release; `--registry` accepts `npm:pkg[@version]`, a local
 directory, or an http(s) URL.
@@ -488,7 +624,7 @@ Preview every piece in the live catalog at
 
 ## Syntax Highlighting
 
-Editor extensions provide full `.pzl` highlighting — native HTML, JavaScript/TypeScript, and CSS per section, plus Puzzle's template expressions, directives, event bindings, and formatter chains:
+Editor extensions provide full `.pzl` highlighting — native HTML, JavaScript/TypeScript, and CSS per section, plus Puzzle's template expressions, directives, and event bindings:
 
 - **[puzzle-vscode](https://github.com/magic-spells/puzzle-vscode)** - Visual Studio Code extension with snippets and completions
 - **[puzzle-sublime](https://github.com/magic-spells/puzzle-sublime)** - Sublime Text 4 syntax package
@@ -570,9 +706,16 @@ rejection reports through `onError` as the `navigation` phase. A rejected import
 is never cached, so the next attempt loads again — and once the client reloads,
 it asks for the chunk names the current build wrote.
 
-On an interactive terminal, `build` and `dev` also use a cached, non-blocking
-daily check to mention newer Puzzle releases. Set `PUZZLE_NO_UPDATE_CHECK=1` to
-disable it; the check is skipped automatically when `CI` is set.
+On an interactive terminal, `build` and `dev` also mention newer Puzzle releases.
+The notice is printed from a cached answer and **never waits on the network** —
+no build pays registry latency, ever. When that answer is more than an hour old
+the command starts a detached background process to refresh it and exits without
+waiting, so a release published since your last check is mentioned on the run
+after the refresh lands rather than on the run that fetched it. A failed refresh
+is not retried for fifteen minutes, so an unreachable registry costs one
+short-lived process every quarter hour rather than one per command. Set
+`PUZZLE_NO_UPDATE_CHECK=1` to disable it; the check is skipped automatically
+when `CI` is set or output is not a terminal.
 
 `puzzle preview` serves a build you already produced, with no watcher, no live
 reload, and no `dev.proxy` — the artifact is checked exactly as it sits on disk.
@@ -624,13 +767,16 @@ The full CLI surface (see [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-
 ```bash
 # Scaffold a project; omitting the name prompts only in an interactive terminal
 puzzle init my-app --template todos
+puzzle init my-app --template todos --typescript
 
-# Generate a stub (component, view, layout, or model)
+# Generate a stub (component, view, layout, or model) — TypeScript stubs in an
+# app with a tsconfig.json
 puzzle generate component UserCard --path components/ui/
 
-# Wire up Tailwind, install a piece (see Puzzle Pieces above), or run diagnostics
+# Wire up Tailwind, install a piece or a palette (see Puzzle Pieces above), or run diagnostics
 puzzle add tailwind
 puzzle add piece <name>
+puzzle add theme <name>
 puzzle add skills
 puzzle doctor
 ```

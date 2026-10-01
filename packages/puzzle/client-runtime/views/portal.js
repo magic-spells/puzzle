@@ -7,15 +7,28 @@
 
 import { devperfMutation } from '../devperf.js';
 
+/** @import { ViewNode } from './ViewNode.js' */
+
+/**
+ * One portal's live range in the outlet, plus the in-tree placeholder it belongs to.
+ * @typedef {{ start: Comment, end: Comment, placeholder: Comment }} PortalRange
+ */
+
+/** @type {Node | null} */
 let portalHost = null;
+/** @type {HTMLDivElement | null} */
 let portalOutlet = null;
 // Both bracket comments of every live range map to their record, so the
 // `outside` containment walk resolves a target to its owner in one backwards
 // sibling scan.
+/** @type {Map<Node, PortalRange>} */
 const portalRanges = new Map();
 let portalCount = 0;
 
-/** Point new portal outlets at the app mount container's parent. */
+/**
+ * Point new portal outlets at the app mount container's parent.
+ * @param {Node | null} el
+ */
 export function setPortalHost(el) {
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 		if (portalRanges.size > 0 && el !== portalHost) {
@@ -57,6 +70,17 @@ function releasePortalOutlet() {
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
 }
 
+/**
+ * @template C, O
+ * @param {ViewNode} vnode the portal vnode
+ * @param {Node} parent
+ * @param {Node | null} ref
+ * @param {C} ctx passed through to `mount`
+ * @param {O} owner passed through to `mount`
+ * @param {(vnode: ViewNode, parent: Node, ref: Node | null, ctx: C, owner: O) => unknown} mount
+ *   ViewManager's recursive mount
+ * @returns {Comment} the in-tree placeholder (`vnode.el`)
+ */
 export function mountPortal(vnode, parent, ref, ctx, owner, mount) {
 	const placeholder = document.createComment('puzzle-portal');
 	vnode.el = placeholder;
@@ -76,15 +100,28 @@ export function mountPortal(vnode, parent, ref, ctx, owner, mount) {
 	return placeholder;
 }
 
+/**
+ * @template C, O
+ * @param {ViewNode} oldVnode
+ * @param {ViewNode} newVnode
+ * @param {C} ctx passed through to `patchChildren`
+ * @param {O} owner passed through to `patchChildren`
+ * @param {(parent: Node, oldChildren: ViewNode[], newChildren: ViewNode[], ctx: C, owner: O,
+ *   tail: Node | null) => unknown} patchChildren ViewManager's children reconciler
+ */
 export function patchPortal(oldVnode, newVnode, ctx, owner, patchChildren) {
 	const range = (newVnode.portal = oldVnode.portal);
 	if (!range) return;
 	range.placeholder = newVnode.el;
 	const outlet = range.end.parentNode;
 	if (!outlet) return;
-	patchChildren(outlet, oldVnode.children, newVnode.children, ctx, owner, range.end);
+	patchChildren(outlet, /** @type {ViewNode[]} */ (oldVnode.children), /** @type {ViewNode[]} */ (newVnode.children), ctx, owner, range.end);
 }
 
+/**
+ * @param {ViewNode} vnode
+ * @param {(vnode: ViewNode) => unknown} unmount ViewManager's recursive unmount
+ */
 export function unmountPortal(vnode, unmount) {
 	for (const child of vnode.children) unmount(child);
 	const range = vnode.portal;
@@ -103,6 +140,10 @@ export function unmountPortal(vnode, unmount) {
 	releasePortalOutlet();
 }
 
+/**
+ * @param {Node | null} target
+ * @returns {Comment | null}
+ */
 function owningPortalPlaceholder(target) {
 	if (!portalOutlet || portalRanges.size === 0 || !target) return null;
 	if (!portalOutlet.contains(target)) return null;
@@ -116,7 +157,11 @@ function owningPortalPlaceholder(target) {
 	return null;
 }
 
-/** Logical containment for @event:outside, including nested portals. */
+/**
+ * Logical containment for @event:outside, including nested portals.
+ * @param {Node} el
+ * @param {Node | null} target
+ */
 export function portalAwareContains(el, target) {
 	let t = target;
 	for (let hops = 0; hops < 32; hops++) {

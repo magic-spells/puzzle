@@ -1,5 +1,5 @@
 ---
-name: "D18 — Event listeners are per-node; document-level delegation rejected for v1"
+name: D18 — Event listeners are per-node; no document-level delegation
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
 connections:
@@ -8,18 +8,12 @@ connections:
   - DOC-EVENTS
 ---
 
-# D18 — Event listeners are per-node; document-level delegation rejected for v1
+# D18 — Event listeners are per-node; no document-level delegation
 
-Settled for v1. See [[DOC-VIEW-LIFECYCLE]] §2. `@event={...}` compiles to a `'@event'` vnode attr; the ViewManager attaches a real per-node listener and swaps/removes it on patch (leak-free, tested).
-
-## Context
-Early docs promised document-level event delegation; the v1 event wiring needed a decision.
+See [[DOC-VIEW-LIFECYCLE]] §2.
 
 ## Decision
-`@event={...}` compiles to a `'@event'` vnode attr; the ViewManager attaches a real listener on that element and swaps/removes it on patch (leak-free, tested).
+`@event={…}` compiles to an `'@event'` vnode attr; the ViewManager attaches a real listener on that element and swaps or removes it on patch (leak-free, tested). Modifiers wrap the listener at runtime ([[DECISION-D38-EVENT-MODIFIERS]]); handler identity is cached per site ([[DECISION-D62-HANDLER-CACHING]]).
 
 ## Alternatives rejected
-- **Document-level delegation** (promised in early docs) — its wins don't materialize at v1 scale, and it costs a target-routing layer plus special cases for non-bubbling events. The component API (`events = {}`, `@event`) is delegation-agnostic, so this is revisitable post-v1 without breaking users.
-
-## Consequences
-Supersedes the "global event listeners at document level" claims in the original knowledge base.
+- **Document-level delegation** — its wins don't show at this scale, and it costs a target-routing layer plus special cases for non-bubbling events. The component API (`events = {}`, `@event`) is delegation-agnostic, so it stays revisitable without breaking users.

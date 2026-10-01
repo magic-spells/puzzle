@@ -4,7 +4,6 @@ status: verified
 connections:
   - COMPONENT-SSG
   - COMPONENT-ROUTER
-  - DECISION-D117-STATIC-OUTPUT-HISTORY-HREFS
   - DOC-SPEC-BUILD
 verified_at: '2026-08-16T04:37:41.221Z'
 verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb

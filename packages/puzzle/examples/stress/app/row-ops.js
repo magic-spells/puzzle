@@ -18,6 +18,11 @@ export const MARK = ' !!!';
 const SWAP_A = 2;
 const SWAP_B = 999;
 const REMOVE_AT = 4;
+/**
+ * The single row `update-one` edits — the D170 gate op. Deliberately NOT row 0:
+ * a list whose caching only worked at the ends would still pass at index 0.
+ */
+const UPDATE_ONE_AT = 500;
 // Alternating, so pressing `select-row` twice always does real work.
 const SELECT_SLOTS = [1, 2];
 
@@ -37,12 +42,18 @@ export class RowOps {
 		this.markedUpTo = 0;
 		this.selectSlot = 0;
 		this.selectedId = null;
+		// `reorder` flips this instead of writing to 1,000 records. A reorder that
+		// mutated every row's `seq` would advance every row's render revision and
+		// rebuild the whole list — measuring "update all" under a reorder's name.
+		// The DISPLAY order is a property of the view, so that is where it lives.
+		this.reversed = false;
 	}
 
 	/** Records sorted into display order. */
 	ordered() {
 		const rows = this.store.findMany(this.type);
 		rows.sort(bySeq);
+		if (this.reversed) rows.reverse();
 		return rows;
 	}
 
@@ -60,6 +71,7 @@ export class RowOps {
 		this.nextSeq = 0;
 		this.lastSwap = null;
 		this.markedUpTo = 0;
+		this.reversed = false;
 		this.appendSeed(count);
 	}
 
@@ -73,6 +85,50 @@ export class RowOps {
 
 	clear() {
 		clearType(this.store, this.type);
+		this.lastSwap = null;
+		this.markedUpTo = 0;
+		this.reversed = false;
+	}
+
+	/**
+	 * Edit exactly ONE record's fields — the D170 single-edit gate
+	 * (`benchmarks/scenarios.mjs`, `list-update-1`).
+	 *
+	 * One `update()` on one record in a list of N. Everything the list block
+	 * claims rests on this op: N-1 rows must come back from the row cache by
+	 * reference and the patcher must short-circuit them, so exactly one row's
+	 * vnodes are rebuilt and exactly one child view re-runs data().
+	 */
+	updateOne(ordered) {
+		if (!ordered.length) return;
+		// Marker assertions describe "every 10th row of the first markedUpTo", which
+		// a single mid-list edit does not satisfy — drop them for this op.
+		this.markedUpTo = 0;
+		const row = ordered[Math.min(UPDATE_ONE_AT, ordered.length - 1)];
+		row.update({ label: row.label + MARK, version: (row.version || 0) + 1 });
+	}
+
+	/** Edit EVERY record — the upper bound of the same measurement. */
+	updateAll(ordered) {
+		for (let i = 0; i < ordered.length; i += 1) {
+			ordered[i].update({ label: ordered[i].label + MARK, version: (ordered[i].version || 0) + 1 });
+		}
+		// Every row is marked, so the every-10th sweep in validate() is a subset.
+		this.markedUpTo = ordered.length;
+	}
+
+	/**
+	 * Reverse the DISPLAY order without touching a single record.
+	 *
+	 * The point of the op is the patcher's move path over CACHED rows: the item
+	 * references and their render revisions are unchanged, so every row must come
+	 * back from the cache and the only work is DOM moves (and FLIP, where a
+	 * scenario declares it). Writing `seq` on every record instead would advance
+	 * every revision and turn this into `update-all` wearing a reorder's name.
+	 */
+	reorder() {
+		this.reversed = !this.reversed;
+		// Both positional assertions describe the pre-reversal order.
 		this.lastSwap = null;
 		this.markedUpTo = 0;
 	}
@@ -150,6 +206,15 @@ export class RowOps {
 				return true;
 			case 'update-every-10th':
 				this.updateEveryTenth(ordered);
+				return true;
+			case 'update-one':
+				this.updateOne(ordered);
+				return true;
+			case 'update-all':
+				this.updateAll(ordered);
+				return true;
+			case 'reorder':
+				this.reorder();
 				return true;
 			case 'select-row':
 				this.selectNth(ordered);

@@ -1,0 +1,327 @@
+package parser
+
+import (
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
+)
+
+// exprs_test.go — every expression position carries a parsed tree at its own
+// file position, an expression error lands on the offending token wherever
+// the expression sits, and `event` is legal exactly where it is bound.
+
+// at returns the 1-based line and byte column where marker first occurs in src.
+func at(t *testing.T, src, marker string) (int, int) {
+	t.Helper()
+	i := strings.Index(src, marker)
+	if i < 0 {
+		t.Fatalf("marker %q not in source", marker)
+	}
+	line := 1 + strings.Count(src[:i], "\n")
+	return line, i - strings.LastIndex(src[:i], "\n")
+}
+
+func wantPos(t *testing.T, what string, n expr.Node, src, marker string) {
+	t.Helper()
+	if n == nil {
+		t.Errorf("%s: no tree", what)
+		return
+	}
+	line, col := at(t, src, marker)
+	if p := n.Pos(); p.Line != line || p.Col != col {
+		t.Errorf("%s: tree at %d:%d, want %d:%d (%q)", what, p.Line, p.Col, line, col, marker)
+	}
+	if p := n.Pos(); src[p.Offset:p.Offset+len(marker)] != marker {
+		t.Errorf("%s: offset %d does not start %q", what, p.Offset, marker)
+	}
+}
+
+func TestEveryExpressionPositionHasATree(t *testing.T) {
+	src := "<puzzle-view class={ rootClass }>\n" +
+		"  <p title={ fmt(t1, a1, x => x.a2) } data-q=\"s {  q1 } {#if   c1 }on{/if}\" @click={ go(event, h1) }>{ pad(i1, a3 ,  a4 ) }</p>\n" +
+		"  {#if  c2 }<b>a</b>{:else if\n    c3 }<b>b</b>{/if}\n" +
+		"  {#unless  (u1) }<b>c</b>{/unless}\n" +
+		"  {#case   s1 }{:when  w1 ,  w2 }<b>d</b>{/case}\n" +
+		"  {#for item in  coll1 , i}<li key={ k1 }>x</li>{/for}\n" +
+		"  {#for  r1 ... r2 }<li>y</li>{/for}\n" +
+		"  <Card n={ p1 }><Children item={ m1 }/></Card>\n" +
+		"</puzzle-view>\n" +
+		"<puzzle-skeleton><p>{ sk1 }</p></puzzle-skeleton>\n<script></script>"
+	sec, err := SplitSections(src, "t.pzl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := ParseTemplate(sec, "t.pzl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPos(t, "view root attribute", root.Attrs[0].(*DynamicAttr).ExprAST, src, "rootClass")
+
+	kids := elementChildren(root.Children)
+	p := kids[0].(*Element)
+	title := p.Attrs[0].(*DynamicAttr)
+	wantPos(t, "attribute", title.ExprAST, src, "fmt(t1")
+	call := title.ExprAST.(*expr.Call)
+	wantPos(t, "attribute call argument", call.Args[1], src, "a1")
+	if _, ok := call.Args[2].(*expr.Arrow); !ok {
+		t.Errorf("a call argument may be an arrow: got %T", call.Args[2])
+	}
+	mixed := p.Attrs[1].(*MixedAttr)
+	wantPos(t, "quoted attribute interpolation", mixed.Parts[1].(*InterpPart).Interp.ExprAST, src, "q1")
+	wantPos(t, "inline {#if}", mixed.Parts[3].(*InlineIfPart).CondAST, src, "c1")
+	wantPos(t, "handler", p.Attrs[2].(*EventAttr).ExprAST, src, "go(event")
+	interp := p.Children[0].(*Interpolation)
+	wantPos(t, "interpolation", interp.ExprAST, src, "pad(i1")
+	icall := interp.ExprAST.(*expr.Call)
+	wantPos(t, "call argument 1", icall.Args[1], src, "a3")
+	wantPos(t, "call argument 2", icall.Args[2], src, "a4")
+
+	ifn := kids[1].(*If)
+	wantPos(t, "{#if}", ifn.CondAST, src, "c2")
+	wantPos(t, "{:else if} on its own line", elementChildren(ifn.Else)[0].(*If).CondAST, src, "c3")
+
+	unless := kids[2].(*If)
+	if unless.Cond != "!((u1))" {
+		t.Errorf("{#unless} keeps its folded Cond string for codegen: %q", unless.Cond)
+	}
+	neg, ok := unless.CondAST.(*expr.Unary)
+	if !ok || neg.Op != "!" || expr.Print(neg) != "(! u1)" {
+		t.Fatalf("{#unless} tree must be a ! over the parsed condition, got %T %v", unless.CondAST, unless.CondAST)
+	}
+	wantPos(t, "{#unless}", neg, src, "(u1)")
+	wantPos(t, "{#unless} operand", neg.Operand, src, "u1")
+
+	cs := kids[3].(*Case)
+	wantPos(t, "{#case}", cs.ExprAST, src, "s1")
+	wantPos(t, "{:when} value 1", cs.Clauses[0].ValuesAST[0], src, "w1")
+	wantPos(t, "{:when} value 2", cs.Clauses[0].ValuesAST[1], src, "w2")
+
+	loop := kids[4].(*For)
+	wantPos(t, "{#for} collection", loop.CollectionAST, src, "coll1")
+	wantPos(t, "key", elementChildren(loop.Body)[0].(*Element).Attrs[0].(*DynamicAttr).ExprAST, src, "k1")
+	rng := kids[5].(*For)
+	wantPos(t, "range start", rng.RangeFromAST, src, "r1")
+	wantPos(t, "range end", rng.RangeToAST, src, "r2")
+
+	card := kids[6].(*Component)
+	wantPos(t, "component prop", card.Props[0].(*DynamicAttr).ExprAST, src, "p1")
+	wantPos(t, "marker argument", card.Children[0].(*Slot).Args[0].(*DynamicAttr).ExprAST, src, "m1")
+
+	skel, err := ParseSkeleton(sec, "t.pzl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPos(t, "skeleton", elementChildren(skel.Children)[0].(*Element).Children[0].(*Interpolation).ExprAST, src, "sk1")
+}
+
+// An expression error is a ParseError on the offending token, wherever the
+// expression sits — including headers the lexer trims, bodies after odd
+// white space, and lines below the construct's opener.
+func TestExpressionErrorsLandOnTheToken(t *testing.T) {
+	for _, body := range []string{
+		"<p>{ a +  b & c }</p>",
+		"<p>{ fmt(a, 1,  b & c) }</p>",
+		"<p title={  b & c }>x</p>",
+		`<p title="x {  b & c } y">x</p>`,
+		`<p class="x {#if   b & c}on{/if}">x</p>`,
+		"<button @click={ go( b & c) }>x</button>",
+		"{#if   b & c}<b>a</b>{/if}",
+		"{#if a}<b>a</b>{:else if    b & c}<b>b</b>{/if}",
+		"{#if a}<b>a</b>{:else if\n      b & c}<b>b</b>{/if}",
+		"{#unless  b & c}<b>a</b>{/unless}",
+		"{#case  b & c}{:when 1}<b>a</b>{/case}",
+		"{#case s}{:when 1,   b & c}<b>a</b>{/case}",
+		"{#for x in   b & c}<b>a</b>{/for}",
+		"{#for x in b & c, i}<b>a</b>{/for}",
+		"{#for 1...  b & c}<b>a</b>{/for}",
+		"{#for\n  b & c ...9}<b>a</b>{/for}",
+		"<Card n={ b & c }/>",
+		"<Card><Children item={ b & c }/></Card>",
+	} {
+		src := "<puzzle-view>\n  " + body + "\n</puzzle-view>"
+		_, err := Parse([]byte(src), "t.pzl")
+		pe, ok := err.(*ParseError)
+		if !ok {
+			t.Errorf("%s: got %v, want a ParseError", body, err)
+			continue
+		}
+		line, col := at(t, src, "& ")
+		if pe.Line != line || pe.Col != col || !strings.HasPrefix(pe.Message, "bitwise operators are not available") {
+			t.Errorf("%s: got %d:%d %s, want %d:%d", body, pe.Line, pe.Col, pe.Message, line, col)
+		}
+	}
+}
+
+// parseErr parses a template body and returns its ParseError, or nil.
+func parseErr(t *testing.T, body string) *ParseError {
+	t.Helper()
+	_, err := Parse([]byte("<puzzle-view>"+body+"</puzzle-view>"), "t.pzl")
+	if err == nil {
+		return nil
+	}
+	pe, ok := err.(*ParseError)
+	if !ok {
+		t.Fatalf("%s: error type %T, want *ParseError", body, err)
+	}
+	return pe
+}
+
+// In an @event handler `event` is the DOM event, and a chain rooted at it is
+// unrestricted. Everywhere else it is an ordinary name that reads the data
+// field or prop of that name, and a template binding named `event` shadows
+// both.
+func TestEventIsTheHandlersDOMEvent(t *testing.T) {
+	for _, body := range []string{
+		"<button @click={ go(event) }>x</button>",
+		"<button @click={ event ? a : null }>x</button>",
+		"<li @click={ pick(event.target.closest('li').dataset.id) }>x</li>",
+		"<button @click={ go(event.preventDefault()) }>x</button>",
+		"<input @change={ load(event.target.files.item(0)) }/>",
+		"{#for row in rows}<li @click={ pick(row, event.currentTarget.getAttribute('data-x')) }>x</li>{/for}",
+		"<p>{ event2 }{ events }</p>",
+		// Outside a handler, the data field or prop named `event`.
+		"<p>{ event }</p>",
+		"<p title={ event.x }>x</p>",
+		"{#if event}<b>a</b>{/if}",
+		"<p>{ { event } }</p>",
+	} {
+		if pe := parseErr(t, body); pe != nil {
+			t.Errorf("%s: %v", body, pe)
+		}
+	}
+	// Outside a handler a chain is data: the method table applies again.
+	if pe := parseErr(t, "<p>{ row.target.closest('li') }</p>"); pe == nil || !strings.Contains(pe.Message, "`.closest()` is not available") {
+		t.Errorf("a data chain must keep the method table: %v", pe)
+	}
+	// A bound `event` — a loop item or counter, a snippet parameter, an arrow
+	// parameter — is a value that shadows the DOM event, as in JavaScript.
+	for _, body := range []string{
+		"{#for event in events}<p title={ event.name }>{ event.id }</p>{/for}",
+		"{#for x in xs, event}<p>{ event }</p>{/for}",
+		"{#for event in events}{#for x in event.items}<p>{ event.id }</p>{/for}{/for}",
+		`<Card><Snippet fits="row" event>{ event.id }</Snippet></Card>`,
+		"<p>{ fmt(items, event => event.id) }</p>",
+		"{#for event in rows}<li @click={ pick(event.id) }>x</li>{/for}",
+		"<li @click={ go(event.target.closest('li'), items.map(event => event.id)) }>x</li>",
+		// The binding ends with its loop: after it, and in its own header,
+		// `event` is the data field again, and a handler's `event` the DOM
+		// event (whose chain skips the method table).
+		"{#for event in events}<b>a</b>{/for}<p>{ event }</p>",
+		"{#for event in event.items}<b>a</b>{/for}",
+		"{#for event in rows}<b>a</b>{/for}<li @click={ go(event.target.closest('li')) }>x</li>",
+	} {
+		if pe := parseErr(t, body); pe != nil {
+			t.Errorf("%s: %v", body, pe)
+		}
+	}
+	// Its chain is data even inside a handler, and the binding ends with its
+	// loop.
+	for _, tc := range []struct{ body, want string }{
+		{"{#for event in rows}<li @click={ pick(event.target.closest('li')) }>x</li>{/for}", "`.closest()` is not available"},
+		{"<li @click={ save(items.map(event => event.closest('li'))) }>x</li>", "`.closest()` is not available"},
+		// Outside a handler the data field's chain keeps the method table.
+		{"<p>{ event.target.closest('li') }</p>", "`.closest()` is not available"},
+	} {
+		if pe := parseErr(t, tc.body); pe == nil || !strings.Contains(pe.Message, tc.want) {
+			t.Errorf("%s: got %v, want %q", tc.body, pe, tc.want)
+		}
+	}
+}
+
+// A data field or prop named `event` works in a view body and as a component
+// prop, and a handler's `event` is still the DOM event.
+func TestEventOutsideAHandlerReadsTheDataField(t *testing.T) {
+	root := parseContent(t, "<h1>{ event.title }</h1>"+
+		"{#for item in events}<EventCard event={ item }/>{/for}"+
+		"<button @click={ save(event) }>x</button>"+
+		"<li @click={ pick(event.target.closest('li')) }>y</li>")
+	kids := elementChildren(root.Children)
+	title := kids[0].(*Element).Children[0].(*Interpolation)
+	if got := expr.Print(title.ExprAST); got != "(. event title)" {
+		t.Errorf("{ event.title }: got %s, want the plain member (. event title)", got)
+	}
+	card := elementChildren(kids[1].(*For).Body)[0].(*Component)
+	prop := card.Props[0].(*DynamicAttr)
+	if prop.Name != "event" || expr.Print(prop.ExprAST) != "item" {
+		t.Errorf("event={ item }: got %s={ %s }", prop.Name, expr.Print(prop.ExprAST))
+	}
+	click := kids[2].(*Element).Attrs[0].(*EventAttr)
+	if got := expr.Print(click.ExprAST); got != "(call save event)" {
+		t.Errorf("@click={ save(event) }: got %s", got)
+	}
+	// Only the DOM event's chain skips the method table, so this parses only
+	// because the handler's `event` is still the DOM event.
+	if pick := kids[3].(*Element).Attrs[0].(*EventAttr); pick.ExprAST == nil {
+		t.Error("@click={ pick(event.target.closest('li')) }: no tree")
+	}
+}
+
+// A template binding is a value: it reads, and it is never called — so the
+// library's `t` stays unreachable through a loop variable named t. A
+// handler's own call names a view handler, so it may share a binding's name.
+func TestBindingsAreNeverCalled(t *testing.T) {
+	for _, tc := range []struct{ body, name string }{
+		{"{#for t in items}<p>{ t('key') }</p>{/for}", "t"},
+		{"{#for x in xs, i}<p>{ i(1) }</p>{/for}", "i"},
+		{`<Card><Snippet fits="row" fmt>{ fmt(1) }</Snippet></Card>`, "fmt"},
+		{"{#for t in items}<p title={ pad(label, t(1)) }>x</p>{/for}", "t"},
+		{"{#for t in items}<button @click={ save(t(1)) }>x</button>{/for}", "t"},
+	} {
+		pe := parseErr(t, tc.body)
+		if pe == nil || pe.Message != "`"+tc.name+"` is a template variable here and cannot be called" {
+			t.Errorf("%s: got %v", tc.body, pe)
+			continue
+		}
+		line, col := at(t, "<puzzle-view>"+tc.body, tc.name+"(")
+		if pe.Line != line || pe.Col != col {
+			t.Errorf("%s: at %d:%d, want %d:%d", tc.body, pe.Line, pe.Col, line, col)
+		}
+	}
+	for _, body := range []string{
+		"{#for t in items}<p>{ t.label }{ fmt(t) }</p>{/for}",
+		"{#for save in saves}<button @click={ save(1) }>x</button>{/for}",
+		"{#for save in saves}<button @click={ ok ? save(1) : null }>x</button>{/for}",
+		"{#for t in items}{/for}<p>{ t('key') }</p>",
+	} {
+		if pe := parseErr(t, body); pe != nil {
+			t.Errorf("%s: %v", body, pe)
+		}
+	}
+}
+
+// Template bindings follow the expression language's identifier rule —
+// Unicode names included — and its exclusions.
+func TestBindingNamesFollowTheLanguageRule(t *testing.T) {
+	for _, body := range []string{
+		"{#for größe in sizes}<p>{ größe }</p>{/for}",
+		"{#for x in xs, zähler}<p>{ zähler }</p>{/for}",
+		"{#for 1...3, 値}<p>{ 値 }</p>{/for}",
+		`<Card><Snippet fits="row" größe>{ größe }</Snippet></Card>`,
+	} {
+		if pe := parseErr(t, body); pe != nil {
+			t.Errorf("%s: %v", body, pe)
+		}
+	}
+	for _, tc := range []struct{ body, want string }{
+		{"{#for NaN in xs}<b>a</b>{/for}", `loop variable "NaN" is a literal value and cannot name a binding`},
+		{"{#for undefined in xs}<b>a</b>{/for}", `loop variable "undefined" is a literal value and cannot name a binding`},
+		{"{#for Math in xs}<b>a</b>{/for}", `loop variable "Math" is a JavaScript global and cannot name a binding`},
+		{"{#for 1...3, Number}<b>a</b>{/for}", `loop variable "Number" is a JavaScript global and cannot name a binding`},
+		{"{#for eval in xs}<b>a</b>{/for}", `loop variable "eval" is not a legal binding identifier in strict-mode JavaScript`},
+		{`<Card><Snippet fits="row" Boolean>x</Snippet></Card>`, `snippet parameter "Boolean" is a JavaScript global and cannot name a binding`},
+		{"{#for grö-ße in xs}<b>a</b>{/for}", `{#for} item must be a valid identifier (got "grö-ße")`},
+	} {
+		pe := parseErr(t, tc.body)
+		if pe == nil || pe.Message != tc.want {
+			t.Errorf("%s: got %v, want %q", tc.body, pe, tc.want)
+		}
+	}
+	// A character that is not a letter, mark, or digit is still an error in a
+	// tag, named as the character, not as one of its bytes.
+	nbsp := string(rune(0xA0))
+	if pe := parseErr(t, "<Card><Snippet fits=\"row\" a"+nbsp+"b>x</Snippet></Card>"); pe == nil || pe.Message != "unexpected character "+strconv.Quote(nbsp)+" in tag" {
+		t.Errorf("NBSP in a tag: got %v", pe)
+	}
+}

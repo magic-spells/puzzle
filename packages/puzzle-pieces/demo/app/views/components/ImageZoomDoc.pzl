@@ -1,0 +1,494 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Image Zoom</h1>
+        <p class="mt-2 text-body">
+          Pinch-to-zoom and pan for a single image. Two fingers pinch, one finger drags once the
+          image is bigger than its box, and a double-tap — or a double-click on a desktop — toggles
+          between the minimum and maximum scale. Pinching past either end is rubber-banded and
+          snaps back when you let go.
+        </p>
+        <p class="mt-3 text-body">
+          This piece is a <strong class="font-medium text-ink">wrapper</strong>, not a port: it
+          renders the real
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">{ '<image-zoom>' }</code>
+          custom element from
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">@magic-spells/image-zoom</code>
+          and binds attributes to it. The gesture state machine that keeps a pinch and a pan from
+          stealing each other's fingers, the midpoint-anchored scaling, the translate clamping and
+          the double-tap discriminator are all behavior, not markup — there is nothing there that a
+          re-translation into Puzzle would improve, and plenty it would break.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          On a trackpad or mouse, double-click to zoom in and double-click again to zoom out; drag
+          to pan while zoomed. Pinch needs a touchscreen (or Chrome DevTools' device toolbar, where
+          Shift-drag simulates one).
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <ImageZoom
+          class="w-full max-w-lg overflow-hidden rounded-xl border border-border bg-surface-sunken aspect-video"
+          src={ heroSrc }
+          alt="Mountain road winding below green cliffs"
+          label="Product photo, zoomable"/>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          It has one runtime dependency — the web component it wraps:
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge its stylesheet into your app's style entry
+          (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">app/styles/styles.css</code>).
+          It is required, not cosmetic: the host's overflow clip, the aspect ratio, the absolutely
+          positioned image box the transform is written into, and the
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">touch-action</code>
+          switch that hands a one-finger swipe back to page scroll while unzoomed all live in it.
+        </p>
+        <CodeBlock code={ installCss }/>
+        <p class="mt-3 text-sm text-muted">
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">layer(components)</code>
+          matters here. The sheet is plain element selectors, so an unlayered import would outrank
+          every Tailwind utility on the host — the
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">rounded-xl</code>,
+          the background and the aspect ratio would all silently do nothing. In the components
+          layer the normal mental model holds: your utilities win, the component's defaults fill in
+          the rest.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-4 text-sm text-body">
+          The image is a <strong class="font-medium text-ink">prop, not a slot</strong>. The
+          component's markup contract is "exactly one
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">{ '<img>' }</code>
+          child": it queries that element once at connect, caches it, and writes the pan/zoom
+          transform straight into its inline style on every frame. A slotted image would let a
+          caller put a dynamic
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">style={ '{ … }' }</code>
+          binding on it — which the patcher rewrites wholesale, wiping the transform — or hide it
+          behind a conditional, leaving the cached reference pointing at a dead node. Config-first
+          removes both failure modes, so
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">src</code>
+          and <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">alt</code>
+          are props and the piece writes the image itself.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          Size the <strong class="font-medium text-ink">host</strong>, not the image: width,
+          aspect ratio, rounding, background and border all go in
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">class</code>.
+          The image inside is absolutely positioned and contain-fitted to whatever box you give it,
+          and scale 1 means exactly that fit.
+        </p>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="max-scale" title="Constrained max scale, with live feedback" code={ codeMax }>
+          <div class="w-full max-w-lg space-y-3">
+            <ImageZoom
+              class="w-full overflow-hidden rounded-xl border border-border bg-surface-sunken aspect-video"
+              src={ detailSrc }
+              alt="Close-up of ripe strawberries"
+              label="Fruit detail, zoomable"
+              min={ 1 }
+              max={ 1.8 }
+              @change={ onZoomChange }
+              @ready={ onZoomReady }/>
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-sm text-body">
+                Scale <span class="font-mono text-ink">{ scaleLabel }</span>
+                <span class="text-muted"> of 1.8 max</span>
+              </p>
+              <Button variant="outline" size="sm" @press={ resetZoom }>Reset</Button>
+            </div>
+            <p class="text-sm text-muted">
+              A gentle <span class="font-medium text-ink">max</span> is the right call for a
+              photo that has no more detail to give — 1.8 here, so a double-tap shows the seeds and the
+              skin without dissolving into pixels. Push past it and the rubber band resists, then snaps
+              back on release.
+            </p>
+            <p class="text-sm text-muted">
+              The readout comes from <span class="font-medium text-ink">@change</span>, which fires
+              on every transform update — once per frame during a gesture. Round it or debounce it
+              before you put it into state, the way this example does. The Reset button uses
+              <span class="font-medium text-ink">@ready</span>, which hands you the upgraded
+              element so you can call
+              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">reset()</code>
+              or <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">zoomTo()</code>
+              yourself.
+            </p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="card" title="Inside a card" code={ codeCard }>
+          <div class="w-full max-w-sm space-y-3">
+            <div class="overflow-hidden rounded-xl border border-border bg-surface">
+              <ImageZoom
+                class="w-full bg-surface-sunken aspect-square"
+                src={ productSrc }
+                alt="Glass coffee brewer and a cup on a table"
+                label="Product photo, zoomable"
+                max={ 3 }/>
+              <div class="space-y-1 p-4">
+                <h3 class="text-base font-semibold text-ink">Pour-over set</h3>
+                <p class="text-sm text-body">Glazed stoneware, 400 ml carafe.</p>
+                <p class="pt-1 text-sm font-medium text-ink">$68</p>
+              </div>
+            </div>
+            <p class="text-sm text-muted">
+              The host is a block element that fills its container's width, so it drops into a card
+              with no wrapper. Give it an aspect ratio —
+              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">aspect-square</code>
+              here — and the card keeps its shape whatever the photo's own proportions are; the
+              image contain-fits inside and the background shows through the letterbox. Put
+              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">overflow-hidden</code>
+              on the card so the rounded corners clip the viewer's top edge.
+            </p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="gallery" title="Swapping the source" code={ codeGallery }>
+          <div class="w-full max-w-lg space-y-3">
+            <ImageZoom
+              class="w-full overflow-hidden rounded-xl border border-border bg-surface-sunken aspect-video"
+              src={ activeShot }
+              alt={ activeAlt }
+              label="Gallery photo, zoomable"
+              max={ 3 }/>
+            <div class="flex gap-2">
+              {#for shot in shots}
+                <button
+                  key={ shot.src }
+                  type="button"
+                  class={ shot.buttonClass }
+                  aria-pressed={ shot.pressed }
+                  @click={ selectShot(shot.src) }>
+                  <img class="h-full w-full object-cover" src={ shot.thumb } alt={ shot.alt }/>
+                </button>
+              {/for}
+            </div>
+            <p class="text-sm text-muted">
+              Flipping <span class="font-medium text-ink">src</span> works. The component measures
+              the image's natural size and its contain-fit base scale once, at connect, and has no
+              attribute for a new source — so the piece re-attaches the host element when
+              <span class="font-medium text-ink">src</span> changes: one disconnect/connect pair on
+              the same node, which is exactly the lifecycle the component already handles. Zoom
+              resets to <span class="font-medium text-ink">min</span> on a swap, which is what a
+              gallery wants anyway.
+            </p>
+          </div>
+        </ExampleBox>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+
+          <h3 class="mb-2 mt-6 text-sm font-semibold text-ink">Props</h3>
+          <div class="text-sm">
+            {#for row in propRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-32 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Callbacks</h3>
+          <p class="mb-2 text-sm text-body">
+            Value-first, like every piece in the registry. The element's own DOM events
+            (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">image-zoom:change</code>
+            and friends) bubble, so you can also listen on an ancestor if that suits you better.
+          </p>
+          <div class="text-sm">
+            {#for row in eventRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-32 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Element API</h3>
+          <p class="mb-2 text-sm text-body">
+            Zoom lives in the element — it owns that state for the whole duration of a gesture, so
+            there is no <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">scale</code>
+            prop to fight it with. Take the element from
+            <span class="font-medium text-ink">@ready</span> and drive it directly:
+          </p>
+          <div class="text-sm">
+            {#for row in apiRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-56 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Custom properties</h3>
+          <p class="mb-2 text-sm text-body">
+            Set by the component's stylesheet. Most of them have a Tailwind utility that does the
+            same job and wins over the sheet — reach for the utility first.
+          </p>
+          <div class="text-sm">
+            {#for row in cssRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-64 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Accessibility</h3>
+          <ul class="space-y-1.5 text-sm text-body">
+            <li>
+              Gestures are pointer-only upstream — there is no keyboard zoom. Treat the viewer as
+              an enhancement, never as the only way to see detail that matters.
+            </li>
+            <li>
+              Write real alt text. The host is not focusable and adds no tab stop, so the image is
+              what assistive technology has to work with.
+            </li>
+            <li>
+              <span class="font-medium text-ink">label</span> names the zoom region
+              (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">role="group"</code>
+              plus an aria-label). Leave it off and neither is written — a group with no name is
+              just noise in the tree.
+            </li>
+          </ul>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ImageZoom from '@/components/ui/ImageZoom.pzl';
+import Button from '@/components/ui/Button.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for ImageZoom — modeled on ScrollStackDoc / MarqueeDoc, the other
+// two wrapper pages. Code samples live as template-literal consts because
+// literal tag names and {#…} tokens would be parsed as template syntax in prose.
+//
+// The photos come from picsum.photos with pinned ids, the same royalty-free
+// placeholder approach the Avatar pages take with i.pravatar.cc: a fixed id
+// always returns the same picture, so the examples do not reshuffle on reload.
+const heroSrc = 'https://picsum.photos/id/1018/1600/900';
+const detailSrc = 'https://picsum.photos/id/1080/1600/900';
+const productSrc = 'https://picsum.photos/id/225/1400/1400';
+
+const SHOTS = [
+  { src: 'https://picsum.photos/id/1015/1600/900', thumb: 'https://picsum.photos/id/1015/200/200', alt: 'Whitewashed coastal town above a blue bay' },
+  { src: 'https://picsum.photos/id/1016/1600/900', thumb: 'https://picsum.photos/id/1016/200/200', alt: 'Red canyon ridge at first light' },
+  { src: 'https://picsum.photos/id/1024/1600/900', thumb: 'https://picsum.photos/id/1024/200/200', alt: 'Eagle gliding with its wings spread' },
+];
+
+const THUMB_BASE =
+  'h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 bg-surface-sunken transition-colors ' +
+  'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2';
+
+// setData() merges into the view's data and does NOT re-run data(), so every
+// value the template reads has to be a key that is actually set — a derived
+// one recomputed here at the same time, never in data() alone.
+const thumbsFor = (activeSrc) =>
+  SHOTS.map((shot) => ({
+    ...shot,
+    pressed: shot.src === activeSrc ? 'true' : 'false',
+    buttonClass: `${THUMB_BASE} ${
+      shot.src === activeSrc ? 'border-brand' : 'border-border hover:border-border-strong'
+    }`,
+  }));
+
+const installCmd = 'puzzle add piece image-zoom';
+const installDep = 'npm install @magic-spells/image-zoom@^0.1.0';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/image-zoom/css" layer(components);`;
+
+const usageImport = `import ImageZoom from '@/components/ui/ImageZoom.pzl';`;
+
+const usageMarkup = `<ImageZoom
+  class="w-full max-w-lg rounded-xl border border-border bg-surface-sunken aspect-video"
+  src={ photo }
+  alt="Mountain road winding below green cliffs"
+  label="Product photo, zoomable"/>`;
+
+const codeHero = `// Size the HOST — width, aspect ratio, rounding, background. The image
+// inside contain-fits that box, and scale 1 means exactly that fit.
+// Defaults: min 1, max 3.
+<ImageZoom
+  class="w-full max-w-lg rounded-xl border border-border bg-surface-sunken aspect-video"
+  src={ photo }
+  alt="Mountain road winding below green cliffs"
+  label="Product photo, zoomable"/>`;
+
+const codeMax = `// max caps the double-tap target and the top of the pinch range.
+// @change fires once per frame during a gesture — round before you commit.
+// @ready hands you the upgraded element for reset() / zoomTo().
+<ImageZoom
+  class="w-full rounded-xl border border-border bg-surface-sunken aspect-video"
+  src={ photo }
+  alt="Close-up of ripe strawberries"
+  min={ 1 }
+  max={ 1.8 }
+  @change={ onZoomChange }
+  @ready={ onZoomReady }/>
+
+// in the view's events = { … } field, which is where a bare handler
+// name in a template resolves. setData() merges into the view's data
+// without re-running data(), so set the key the template reads:
+events = {
+  onZoomChange: (scale) => {
+    const label = (Math.round(scale * 100) / 100).toFixed(2);
+    if (label !== this.getData().scaleLabel) this.setData({ scaleLabel: label });
+  },
+  onZoomReady: (element) => { this.zoomEl = element; },
+  resetZoom: () => this.zoomEl?.reset(),
+};`;
+
+const codeCard = `// A plain block element — it drops straight into a card with no wrapper.
+// overflow-hidden on the CARD is what clips the viewer's top corners.
+// (The Card piece always pads its body, so an edge-to-edge image wants
+// the hand-rolled card markup Card itself is styled to match.)
+<div class="overflow-hidden rounded-xl border border-border bg-surface">
+  <ImageZoom
+    class="w-full bg-surface-sunken aspect-square"
+    src={ photo }
+    alt="Glass coffee brewer and a cup on a table"
+    label="Product photo, zoomable"
+    max={ 3 }/>
+  <div class="p-4">
+    <h3 class="text-base font-semibold text-ink">Pour-over set</h3>
+    <p class="text-sm font-medium text-ink">$68</p>
+  </div>
+</div>`;
+
+const codeGallery = `// Flip src and the piece refits automatically: it re-attaches the host
+// element, so the component re-measures the new image at connect.
+// Zoom returns to min on a swap.
+<ImageZoom
+  class="w-full rounded-xl border border-border bg-surface-sunken aspect-video"
+  src={ activeShot }
+  alt={ activeAlt }
+  max={ 3 }/>
+
+// thumbnails
+{#for shot in shots}
+  <button type="button" aria-pressed={ shot.pressed } @click={ selectShot(shot.src) }>
+    <img src={ shot.thumb } alt={ shot.alt }/>
+  </button>
+{/for}`;
+
+const propRows = [
+  { name: 'src', desc: 'Image URL. Required — the piece is an empty box without it. Changing it re-fits the viewer and resets the zoom.' },
+  { name: 'alt', desc: "Alternative text, always rendered. Pass '' for a decorative image rather than leaving it off." },
+  { name: 'min', desc: 'Minimum scale multiplier, default 1 — the image contain-fits the host. A value above 1 starts the image cropped and pannable.' },
+  { name: 'max', desc: 'Maximum scale multiplier, default 3. Also the target a double-tap zooms to.' },
+  { name: 'aspect', desc: "CSS aspect-ratio for the host, written as --image-zoom-aspect (the sheet's default is 4 / 3). A Tailwind aspect-* utility does the same job and is the better choice when a token covers it." },
+  { name: 'loading', desc: "'lazy' | 'eager', forwarded to the image. Safe either way — the component fits on the image's load event, and its ResizeObserver catches an element that was hidden at connect." },
+  { name: 'label', desc: 'Accessible name for the zoom region. Sets role="group" and aria-label together; omit it and neither is written.' },
+  { name: 'class', desc: 'Merged onto the host. Width, aspect ratio, rounding, background and border all go here.' },
+  { name: 'style', desc: "Appended after the piece's own custom-property declarations." },
+];
+
+const eventRows = [
+  { name: '@change', desc: '(scale, { translateX, translateY }) — any transform update. Fires per frame during a gesture; debounce anything expensive.' },
+  { name: '@zoomStart', desc: '(scale) — a pinch began, or a double-tap / reset() / zoomTo() is about to commit. The scale is the one being left.' },
+  { name: '@zoomEnd', desc: '(scale) — a gesture settled, or a programmatic change committed. Fires at commit time, not when the CSS transition ends.' },
+  { name: '@ready', desc: "(element) — the upgraded element, once its module has landed. The imperative escape hatch." },
+];
+
+const apiRows = [
+  { name: 'element.scale', desc: 'Current scale multiplier.' },
+  { name: 'element.min / element.max', desc: 'The resolved bounds, after the attributes are parsed and ordered.' },
+  { name: 'element.translateX / translateY', desc: 'Current pan offset in pixels.' },
+  { name: 'element.reset(options)', desc: 'Animate back to min, recentered. Pass { animate: false } to jump.' },
+  { name: 'element.zoomTo(scale, options)', desc: 'Animate to a scale, anchored on the container center and clamped into [min, max].' },
+];
+
+const cssRows = [
+  { name: '--image-zoom-aspect', desc: "Host aspect-ratio, default 4 / 3. The aspect prop writes it; a Tailwind aspect-* utility overrides it." },
+  { name: '--image-zoom-bg', desc: 'Letterbox background behind a contain-fitted image, default black. A bg-* utility wins over it — bg-surface-sunken is the token choice.' },
+  { name: '--image-zoom-radius', desc: 'Host border radius, default 0. rounded-* wins over it.' },
+  { name: '--image-zoom-cursor / -cursor-active', desc: 'Idle and gesturing cursors, default grab / grabbing.' },
+  { name: '--image-zoom-transition-duration', desc: 'Snap-back and double-tap animation duration, default 300ms.' },
+  { name: '--image-zoom-transition-easing', desc: 'Easing for that animation, default a soft ease-out curve.' },
+];
+
+export default class ImageZoomDoc extends PuzzleView {
+  data() {
+    return {
+      scaleLabel: '1.00',
+      activeShot: SHOTS[0].src,
+      activeAlt: SHOTS[0].alt,
+      shots: thumbsFor(SHOTS[0].src),
+      heroSrc,
+      detailSrc,
+      productSrc,
+      installCmd,
+      installDep,
+      installCss,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeMax,
+      codeCard,
+      codeGallery,
+      propRows,
+      eventRows,
+      apiRows,
+      cssRows,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Constrained max', href: '#max-scale' },
+        { label: 'Inside a card', href: '#card' },
+        { label: 'Swapping the source', href: '#gallery' },
+        { label: 'Reference', href: '#reference' },
+      ],
+    };
+  }
+
+  events = {
+    // @change fires once per animation frame while a pinch or a drag is live.
+    // Round to two decimals and commit only on a real change, so a gesture
+    // costs a handful of renders instead of one per frame.
+    onZoomChange: (scale) => {
+      const label = (Math.round((scale ?? 1) * 100) / 100).toFixed(2);
+      if (label !== this.getData().scaleLabel) this.setData({ scaleLabel: label });
+    },
+    onZoomReady: (element) => {
+      this.zoomEl = element;
+    },
+    resetZoom: () => this.zoomEl?.reset(),
+    selectShot: (src) => {
+      const shot = SHOTS.find((item) => item.src === src);
+      if (!shot) return;
+      this.setData({
+        activeShot: shot.src,
+        activeAlt: shot.alt,
+        shots: thumbsFor(shot.src),
+        scaleLabel: '1.00',
+      });
+    },
+  };
+}
+</script>

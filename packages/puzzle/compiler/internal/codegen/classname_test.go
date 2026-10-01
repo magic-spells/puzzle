@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 func TestExtractClassName(t *testing.T) {
@@ -165,6 +165,52 @@ func TestExtractClassName(t *testing.T) {
 			scripts: "export default class Foo /* base */ extends PuzzleView {}",
 			want:    "Foo",
 		},
+		{
+			// A class name is a JavaScript identifier, Unicode included — the
+			// same rule template expressions follow (`{ größe }`).
+			name:    "non-ASCII first letter",
+			scripts: "export default class Übersicht extends PuzzleView {}",
+			want:    "Übersicht",
+		},
+		{
+			name:    "CJK class name",
+			scripts: "export default class 概要 extends PuzzleView {}",
+			want:    "概要",
+		},
+		{
+			// An ASCII start must not end the name at its first non-ASCII letter:
+			// `Stra` would compile to a ReferenceError at module load.
+			name:    "non-ASCII letter inside an ASCII-led name",
+			scripts: "export default class Straßenkarte extends PuzzleView {}",
+			want:    "Straßenkarte",
+		},
+		{
+			// A non-ASCII space is not an identifier character, so it still
+			// separates the name from `extends`.
+			name:    "no-break space before extends",
+			scripts: "export default class Foo\u00a0extends PuzzleView {}",
+			want:    "Foo",
+		},
+		{
+			name:    "ideographic space before extends",
+			scripts: "export default class 概要\u3000extends PuzzleView {}",
+			want:    "概要",
+		},
+		{
+			// U+30FB became ID_Continue in Unicode 15.1, after Go's tables: the
+			// scan stops at it, and binding the render tail to `データ` would
+			// crash the module on load.
+			name:    "a letter newer than the Unicode tables",
+			scripts: "export default class データ・一覧 extends PuzzleView {}",
+			wantErr: true,
+			errText: "class name `データ` is followed by a character the compiler cannot read",
+		},
+		{
+			name:    "a \\u escape inside the name",
+			scripts: "export default class Stra\\u00DFe extends PuzzleView {}",
+			wantErr: true,
+			errText: "class name `Stra` is followed by a character the compiler cannot read",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -207,6 +253,12 @@ func TestClassNameFromFilename(t *testing.T) {
 		"default.pzl":         "_default",
 		"await.pzl":           "_await",
 		"arguments.pzl":       "_arguments",
+		"Übersicht.pzl":       "Übersicht",
+		"概要.pzl":              "概要",
+		"Straßenkarte.pzl":    "Straßenkarte",
+		"a–b.pzl":             "a_b",      // an en dash is one rune, one '_'
+		"٣box.pzl":            "_٣box",    // a digit continues a name but cannot start one
+		"\u0301x.pzl":         "_\u0301x", // so can a combining mark
 	}
 	for in, want := range cases {
 		if got := classNameFromFilename(in); got != want {
@@ -228,7 +280,7 @@ func TestCompileScriptlessReservedFilenameProducesValidModule(t *testing.T) {
 				t.Fatalf("compile: %v", err)
 			}
 			className := classNameFromFilename(file)
-			if !strings.Contains(res.JS, "export default class "+className+" extends PuzzleView {}") {
+			if !strings.Contains(res.JS, "export default class "+className+" extends PuzzleView {") {
 				t.Fatalf("missing sanitized class declaration:\n%s", res.JS)
 			}
 			if !strings.Contains(res.JS, className+".prototype.render = function () {") {
@@ -238,6 +290,82 @@ func TestCompileScriptlessReservedFilenameProducesValidModule(t *testing.T) {
 			nodeCheck(t, res.JS)
 		})
 	}
+}
+
+// TestCompileUnicodeClassName compiles a view whose class name is non-ASCII:
+// the render tail binds to the whole name and the module is valid JavaScript.
+func TestCompileUnicodeClassName(t *testing.T) {
+	for _, className := range []string{"Übersicht", "概要", "Straßenkarte"} {
+		t.Run(className, func(t *testing.T) {
+			src := `<puzzle-view><h1>{ größe }</h1></puzzle-view>
+<script>
+  export default class ` + className + ` extends PuzzleView {
+    data() { return { größe: 4 }; }
+  }
+</script>
+`
+			res := compileResult(t, src)
+			if !strings.Contains(res.JS, "\n"+className+".prototype.render = function () {") {
+				t.Fatalf("render tail not bound to %s:\n%s", className, res.JS)
+			}
+			if !strings.Contains(res.JS, "__d.größe") {
+				t.Fatalf("expected the data read __d.größe:\n%s", res.JS)
+			}
+			nodeCheck(t, res.JS)
+		})
+	}
+	t.Run("scriptless Übersicht.pzl", func(t *testing.T) {
+		sec, err := parser.SplitSections(`<puzzle-view><span>ok</span></puzzle-view>`, "Übersicht.pzl")
+		if err != nil {
+			t.Fatalf("split: %v", err)
+		}
+		res, err := Compile(sec, Options{Filename: "Übersicht.pzl", Mode: ModeComponent})
+		if err != nil {
+			t.Fatalf("compile: %v", err)
+		}
+		if !strings.Contains(res.JS, "export default class Übersicht extends PuzzleView {") {
+			t.Fatalf("missing class declaration named from the file:\n%s", res.JS)
+		}
+		nodeCheck(t, res.JS)
+	})
+}
+
+// TestCompileUnicodeComponentTags compiles component tags with non-ASCII names:
+// each emits its full identifier as the ViewNode type, and a lowercase-led
+// custom element with a non-ASCII letter stays an element.
+func TestCompileUnicodeComponentTags(t *testing.T) {
+	res := compileResult(t, `<puzzle-view>
+  <Straßenkarte ort={ titel } />
+  <Übersicht />
+  <概要></概要>
+  <Frame.Übersicht />
+  <ärmel />
+  <straße-karte></straße-karte>
+</puzzle-view>
+<script>
+  import Straßenkarte from '../components/Straßenkarte.pzl';
+  import Übersicht from '../components/Übersicht.pzl';
+  import 概要 from '../components/概要.pzl';
+  import Frame from '../components/Frame.pzl';
+  import ärmel from '../components/ärmel.pzl';
+  export default class Karte extends PuzzleView {
+    data() { return { titel: 'x' }; }
+  }
+</script>
+`)
+	for _, want := range []string{
+		"new ViewNode(Straßenkarte, { ort: __d.titel }, [])",
+		"new ViewNode(Übersicht, {}, [])",
+		"new ViewNode(概要, {}, [])",
+		"new ViewNode(Frame.Übersicht, {}, [])",
+		"new ViewNode(ärmel, {}, [])",
+		"new ViewNode('straße-karte', {}, [])",
+	} {
+		if !strings.Contains(res.JS, want) {
+			t.Errorf("missing %s in:\n%s", want, res.JS)
+		}
+	}
+	nodeCheck(t, res.JS)
 }
 
 // TestCompileScriptless proves <script> is optional: a template-only .pzl
@@ -281,7 +409,14 @@ func TestCompileScriptless(t *testing.T) {
 			if !strings.Contains(out, "import { PuzzleView } from '@magic-spells/puzzle';") {
 				t.Errorf("missing synthesized PuzzleView import:\n%s", out)
 			}
-			if !strings.Contains(out, "export default class "+name+" extends PuzzleView {}") {
+			// A script-less VIEW gets an empty class; a script-less COMPONENT gets
+			// a data() that returns its props, so `{ tone }` reads the prop
+			// (D173 V15).
+			wantClass := "export default class " + name + " extends PuzzleView {}"
+			if tc.mode == ModeComponent {
+				wantClass = "export default class " + name + " extends PuzzleView {\n  data(params, props) {\n    return props;\n  }\n}"
+			}
+			if !strings.Contains(out, wantClass) {
 				t.Errorf("missing synthesized class declaration:\n%s", out)
 			}
 			if !strings.Contains(out, name+".prototype.render = function () {") {

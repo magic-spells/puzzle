@@ -1,5 +1,5 @@
 ---
-name: "D37 — `{#case}` / `{:when}`: Liquid-style multi-branch block (v1.7)"
+name: 'D37 — `{#case}` / `{:when}`: multi-branch block, strict `===`, no fallthrough'
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
 connections:
@@ -8,25 +8,19 @@ connections:
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
   - DOC-SPEC-TEMPLATE
-  - DECISION-D31-FORMATTER-TREESHAKE
 ---
 
-# D37 — `{#case}` / `{:when}`: Liquid-style multi-branch block (v1.7)
+# D37 — `{#case}` / `{:when}`: multi-branch block
 
-Multi-branch conditional shipped as `{#case expr}` + `{:when v1, v2, …}` clauses + optional `{:else}`; strict `===`, first-match-wins, no fallthrough, via a dedicated `Case` AST node. Chosen over `{#switch}`/`{:case}`. Settled (v1.7); additive. See [[DOC-SPEC-TEMPLATE]] §6 and [[DOC-TEMPLATE-SYNTAX]].
-
-## Context
-[[DOC-SPEC-TEMPLATE]] §6 deferred multi-branch conditionals under the name `{#switch}`. D37 ships the feature but **chooses `{#case}` / `{:when}` naming over `{#switch}` / `{:case}`** — Puzzle's formatter heritage is Liquid (whose tag is `{% case %}` / `{% when %}`), and the JS keyword `switch` carries fallthrough/`break` connotations this block deliberately does **not** have.
+See [[DOC-SPEC-TEMPLATE]] §6.
 
 ## Decision
-Syntax: `{#case expr}` + one or more `{:when v1, v2, …}` clauses (top-level commas are **OR** — a splitter that respects nesting and string literals) + an optional trailing `{:else}`. Matching is strict `===`, **first match wins, NO fallthrough**.
+`{#case expr}` + one or more `{:when v1, v2, …}` clauses (top-level commas are OR; the splitter respects nesting and strings) + an optional trailing `{:else}`. Matching is strict `===`, first match wins, **no fallthrough**.
 
-- **Codegen is a dedicated `Case` AST node**, not a desugar. It emits an IIFE that binds the case expression to `__c` **exactly once**, then chains ternaries over the clauses (`__c === v1 || __c === v2 ? … : …`). Desugaring to nested `{#if}`s was **rejected**: it re-evaluates the case expression once per clause, which is wrong for getter-backed or side-effecting expressions — the single `__c` binding is getter-safe. Formatter tree-shaking ([[DECISION-D31-FORMATTER-TREESHAKE]]) walks `case` bodies so branch-only formatters are retained.
-- **Compile errors (positioned, not warnings):** missing case expression; zero `{:when}` clauses; non-whitespace content before the first `{:when}`; a valueless `{:when}`; a `{:when}` after `{:else}`; `{:else if}` inside a case; a `{:when}` outside any case; unclosed / mismatched closers.
+Codegen uses a dedicated `Case` node, not a desugar: an IIFE binds the case expression to a temp **once**, then chains ternaries over the clauses — safe for getter-backed or side-effecting expressions. The usage scan walks `case` bodies like any other.
+
+Positioned compile errors: missing case expression; no `{:when}`; non-whitespace content before the first `{:when}`; a valueless `{:when}`; `{:when}` after `{:else}`; `{:else if}` inside a case; `{:when}` outside a case; unclosed or mismatched closers.
 
 ## Alternatives rejected
-- **`{#switch}`/`{:case}` naming** — wrong dialect signal — implies fallthrough/`break` semantics absent here, and breaks the Liquid lineage.
-- **Desugaring to nested ifs** — per-clause re-evaluation of the case expression, wrong for getter-backed or side-effecting expressions.
-
-## Consequences
-Non-breaking: additive amendment (v1.7).
+- `{#switch}` / `{:case}` naming — implies JavaScript's fallthrough and `break`; the Liquid `case`/`when` pair matches the semantics.
+- Desugaring to nested `{#if}`s — re-evaluates the case expression once per clause.

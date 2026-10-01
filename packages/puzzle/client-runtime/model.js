@@ -17,6 +17,29 @@
 import { parseDateInput } from './dates.js';
 
 /**
+ * One declared validation rule on a field descriptor (§20). `value` is the
+ * bound (min/max), the allowed list (oneOf) or the predicate (custom).
+ * @typedef {{ rule: 'min' | 'max' | 'oneOf' | 'custom', value: any, message?: string }} FieldRule
+ */
+
+/**
+ * The normalized field descriptor a FieldBuilder accumulates — the internal
+ * schema format `normalizedSchema()` returns.
+ * @typedef {{ type: string, validate: FieldRule[], primary?: boolean, required?: boolean,
+ *   explicitRequired?: boolean, requiredMessage?: string, default?: any }} FieldDef
+ */
+
+/**
+ * A relationship descriptor (§21, D49).
+ * @typedef {{ kind: 'belongsTo' | 'hasMany', type: string, key?: string }} RelationshipDef
+ */
+
+/**
+ * One validation failure (§20, D48).
+ * @typedef {{ field: string, rule: string, message: string }} ValidationIssue
+ */
+
+/**
  * Normalize record identity at every index/comparison boundary — never a
  * record's fields (D112).
  *
@@ -32,11 +55,15 @@ import { parseDateInput } from './dates.js';
  * keeps belongsTo's null-FK short-circuit intact and stops String(null) from
  * colliding with a real 'null' string id. Record fields keep whatever type
  * the server sent.
+ * @param {unknown} id
+ * @returns {unknown}
  */
 export const recordKey = (id) => (typeof id === 'number' ? String(id) : id);
 
 class FieldBuilder {
+	/** @param {string} type */
 	constructor(type) {
+		/** @type {FieldDef} */
 		this.def = { type, validate: [] };
 	}
 
@@ -46,6 +73,7 @@ class FieldBuilder {
 		return this;
 	}
 
+	/** @param {string} [message] */
 	required(message) {
 		this.def.required = true;
 		// Record that required was asked for BY THE AUTHOR, distinct from the
@@ -57,26 +85,43 @@ class FieldBuilder {
 		return this;
 	}
 
+	/** @param {any} value a literal, or a factory invoked per record */
 	default(value) {
 		this.def.default = value;
 		return this;
 	}
 
+	/**
+	 * @param {number | Date} value
+	 * @param {string} [message]
+	 */
 	min(value, message) {
 		this.def.validate.push({ rule: 'min', value, message });
 		return this;
 	}
 
+	/**
+	 * @param {number | Date} value
+	 * @param {string} [message]
+	 */
 	max(value, message) {
 		this.def.validate.push({ rule: 'max', value, message });
 		return this;
 	}
 
+	/**
+	 * @param {any[]} values
+	 * @param {string} [message]
+	 */
 	oneOf(values, message) {
 		this.def.validate.push({ rule: 'oneOf', value: values, message });
 		return this;
 	}
 
+	/**
+	 * @param {(value: any) => any} fn truthy return = valid
+	 * @param {string} [message]
+	 */
 	validate(fn, message) {
 		this.def.validate.push({ rule: 'custom', value: fn, message });
 		return this;
@@ -94,7 +139,13 @@ class FieldBuilder {
  * `{ key: 'fieldName' }` to override the by-convention foreign key.
  */
 class RelationshipBuilder {
+	/**
+	 * @param {'belongsTo' | 'hasMany'} kind
+	 * @param {string} type
+	 * @param {{ key?: string }} [options]
+	 */
 	constructor(kind, type, options = {}) {
+		/** @type {RelationshipDef} */
 		this.def = { kind, type };
 		if (options && options.key) this.def.key = options.key;
 	}
@@ -103,7 +154,7 @@ class RelationshipBuilder {
 /**
  * Schema field builders — `Puzzle.string().required().min(1, 'msg')` — plus the
  * relationship builders `belongsTo`/`hasMany` (§21, D49). The only documented
- * way to declare fields (constellation/doc/DOC-DECISIONS.md D5).
+ * way to declare fields (D5).
  */
 export const Puzzle = {
 	string: () => new FieldBuilder('string'),
@@ -115,7 +166,15 @@ export const Puzzle = {
 
 	// Relationships (constellation/doc/DOC-SPEC.md §21, D49) — resolve as lazy
 	// store-backed getters installed by the Store; options is `{ key }` only.
+	/**
+	 * @param {string} type
+	 * @param {{ key?: string }} [options]
+	 */
 	belongsTo: (type, options) => new RelationshipBuilder('belongsTo', type, options),
+	/**
+	 * @param {string} type
+	 * @param {{ key?: string }} [options]
+	 */
 	hasMany: (type, options) => new RelationshipBuilder('hasMany', type, options),
 };
 
@@ -126,6 +185,7 @@ export const Puzzle = {
  * `.message` is the first error's message so a bare `err.message` is useful.
  */
 export class PuzzleValidationError extends Error {
+	/** @param {ValidationIssue[]} [errors] */
 	constructor(errors = []) {
 		super(errors.length ? errors[0].message : 'Validation failed');
 		this.name = 'PuzzleValidationError';
@@ -143,8 +203,13 @@ export class PuzzleValidationError extends Error {
  * what they are given, and an incomparable/NaN-ish comparison is a pass (never
  * a throw). A custom validate(fn) that THROWS is left to propagate (a broken
  * validator is a programming error, not a validation failure).
+ * @param {string} field
+ * @param {FieldDef} def
+ * @param {any} value
+ * @returns {ValidationIssue[]}
  */
 function fieldErrors(field, def, value) {
+	/** @type {ValidationIssue[]} */
 	const errors = [];
 	const missing = value === undefined || value === null || value === '';
 
@@ -182,7 +247,14 @@ function fieldErrors(field, def, value) {
 	return errors;
 }
 
-/** Evaluate one non-required rule; returns an error entry or null (pass). */
+/**
+ * Evaluate one non-required rule; returns an error entry or null (pass).
+ * @param {string} field
+ * @param {FieldDef} def
+ * @param {FieldRule} rule
+ * @param {any} value
+ * @returns {ValidationIssue | null}
+ */
 function checkRule(field, def, rule, value) {
 	switch (rule.rule) {
 		case 'min':
@@ -217,6 +289,11 @@ function checkRule(field, def, rule, value) {
  * mismatch (`"age" must be a number`), reported under the originating rule name.
  * NaN / an invalid Date stays a pass (incomparable). string/array and untyped
  * fields keep the .length semantics unchanged.
+ * @param {string} field
+ * @param {FieldDef} def
+ * @param {FieldRule} rule
+ * @param {any} value
+ * @returns {ValidationIssue | null}
  */
 function checkBound(field, def, rule, value) {
 	if (def.type === 'number' && typeof value !== 'number') {
@@ -260,6 +337,8 @@ function checkBound(field, def, rule, value) {
  * descriptor's single literal (`Puzzle.array().default([])`) is never shared by
  * reference across records — otherwise one record's push() would leak into every
  * other record AND into the schema descriptor. Primitives pass through as-is.
+ * @param {any} value
+ * @returns {any}
  */
 function resolveDefault(value) {
 	if (typeof value === 'function') return value();
@@ -295,11 +374,13 @@ const MERGE_SKIP = new Set([...POLLUTION_SKIP, '_store', '_type', '_synced', '_d
 // fields edited after its request was dispatched. Construction does NOT stamp
 // (see safeAssignTracked), so a record that is never update()d never allocates
 // an entry here at all.
+/** @type {WeakMap<object, { current: number, fields: Map<string, number> }>} */
 const MUTATION_REVISIONS = new WeakMap();
 
 // Warn-once state is allocated lazily inside the development gate below. A
 // production build still must walk descriptors to avoid the strict-mode throw,
 // but it should not allocate diagnostic bookkeeping it can never read.
+/** @type {WeakMap<Function, Set<string>> | undefined} */
 let COLLISION_WARNINGS;
 
 // What a payload key resolved to on the record's prototype chain. 0 = nothing in
@@ -329,6 +410,9 @@ const COLLIDES_RESERVED = 3;
  * warn. Object.prototype's other methods (`hasOwnProperty`, `toLocaleString`,
  * `isPrototypeOf`, `propertyIsEnumerable`) ride along under the one rule rather
  * than an enumerated list that the next Object.prototype addition would outdate.
+ * @param {object} target
+ * @param {string} key
+ * @returns {number} 0 or one of the COLLIDES_* codes
  */
 function resolveCollision(target, key) {
 	let owner = target;
@@ -350,7 +434,12 @@ function resolveCollision(target, key) {
 	return 0;
 }
 
-/** Warn once per (model class, key) that an incoming value was dropped. */
+/**
+ * Warn once per (model class, key) that an incoming value was dropped.
+ * @param {object} target
+ * @param {string} key
+ * @param {number} reason a COLLIDES_* code
+ */
 function warnCollision(target, key, reason) {
 	COLLISION_WARNINGS ||= new WeakMap();
 	const Model = target.constructor;
@@ -379,6 +468,13 @@ function warnCollision(target, key, reason) {
  * reserved-key skip warns in development — a patch is author-written, so a
  * dropped key there is a mistake worth naming, while a server payload carrying a
  * reserved key is routine and stays silent.
+ * @template {Record<string, any>} T
+ * @param {T} target
+ * @param {Record<string, any>} src
+ * @param {Set<string>} skipSet
+ * @param {((key: string) => boolean) | null} [allow]
+ * @param {string[]} [applied]
+ * @returns {T}
  */
 function assignSkipping(target, src, skipSet, allow, applied) {
 	for (const key of Object.keys(src)) {
@@ -406,13 +502,17 @@ function assignSkipping(target, src, skipSet, allow, applied) {
 			}
 			continue;
 		}
-		target[key] = src[key];
+		/** @type {Record<string, any>} */ (target)[key] = src[key];
 		if (applied) applied.push(key);
 	}
 	return target;
 }
 
-/** Stamp one local-assignment revision across the fields accepted from a patch. */
+/**
+ * Stamp one local-assignment revision across the fields accepted from a patch.
+ * @param {object} target
+ * @param {string[]} fields
+ */
 function recordMutation(target, fields) {
 	if (fields.length === 0) return;
 	let state = MUTATION_REVISIONS.get(target);
@@ -443,6 +543,10 @@ function recordMutation(target, fields) {
  * (identical to Object.assign for normal data). A legitimate data field literally
  * named `constructor` therefore cannot be set at construction — intended, and
  * symmetric with safeMerge.
+ * @template {Record<string, any>} T
+ * @param {T} target
+ * @param {Record<string, any>} src
+ * @returns {T}
  */
 function safeAssign(target, src) {
 	return assignSkipping(target, src, POLLUTION_SKIP);
@@ -478,15 +582,24 @@ function safeAssign(target, src) {
  * stamp shifted EVERY revision by the same constant: a field stamped by update k
  * compared `k+1 <= j+1` against a request dispatched after j updates, where it
  * now compares `k <= j`. Same predicate.
+ * @template {Record<string, any>} T
+ * @param {T} target
+ * @param {Record<string, any>} src
+ * @returns {T}
  */
 function safeAssignTracked(target, src) {
+	/** @type {string[]} */
 	const applied = [];
 	assignSkipping(target, src, MERGE_SKIP, null, applied);
 	recordMutation(target, applied);
 	return target;
 }
 
-/** Current local-mutation revision, captured when save() dispatches its body. */
+/**
+ * Current local-mutation revision, captured when save() dispatches its body.
+ * @param {object} record
+ * @returns {number}
+ */
 export function recordMutationRevision(record) {
 	return MUTATION_REVISIONS.get(record)?.current ?? 0;
 }
@@ -513,6 +626,11 @@ export function recordMutationRevision(record) {
  * When `throughRevision` is provided by save reconciliation, a field changed by
  * update() after that request's dispatch revision is skipped. Other merge sites
  * omit it and remain server-authoritative exactly as before.
+ * @template {Record<string, any>} T
+ * @param {T} record
+ * @param {Record<string, any>} src
+ * @param {number} [throughRevision]
+ * @returns {T}
  */
 export function safeMerge(record, src, throughRevision) {
 	if (throughRevision === undefined) return assignSkipping(record, src, MERGE_SKIP);
@@ -534,6 +652,11 @@ export function safeMerge(record, src, throughRevision) {
 // must agree on what "is a method" means. If this one stopped short, such a field
 // would register cleanly and then never hold data — the exact trap this check
 // exists to close.
+/**
+ * @param {object} proto
+ * @param {string} key
+ * @returns {boolean}
+ */
 function resolvesToMethod(proto, key) {
 	let owner = proto;
 	while (owner) {
@@ -569,6 +692,8 @@ function resolvesToMethod(proto, key) {
  *   schema could declare one and register cleanly. `_type` is Sanity's field
  *   convention and `_deleted` is CouchDB/PouchDB's, so this is a name a real
  *   payload arrives with, not a hypothetical.
+ * @param {typeof PuzzleModel} Model
+ * @param {string} type
  */
 export function assertSchemaNames(Model, type) {
 	if (typeof Model !== 'function' || !Model.prototype) return;
@@ -592,8 +717,13 @@ export function assertSchemaNames(Model, type) {
 
 // Per-model list of `date()` field names, computed once. normalizedSchema()
 // rebuilds an object on every call, and hydration runs per record in a loop.
+/** @type {WeakMap<typeof PuzzleModel, string[]>} */
 const DATE_FIELDS = new WeakMap();
 
+/**
+ * @param {typeof PuzzleModel} Model
+ * @returns {string[]}
+ */
 function dateFieldsFor(Model) {
 	let fields = DATE_FIELDS.get(Model);
 	if (!fields) {
@@ -631,6 +761,9 @@ function dateFieldsFor(Model) {
  * calendar date back byte-identically in every zone.
  *
  * Non-destructive — the payload is copied only if something actually changes.
+ * @param {typeof PuzzleModel} Model
+ * @param {any} data a JSON-sourced payload — any shape; non-objects pass through
+ * @returns {any}
  */
 export function coerceJSONDates(Model, data) {
 	if (!data || typeof data !== 'object' || typeof Model?.normalizedSchema !== 'function') {
@@ -694,9 +827,11 @@ export class PuzzleModel {
 	/**
 	 * Normalized descriptor map for this model's schema:
 	 * FieldBuilder values collapse to their .def, plain descriptors pass through.
+	 * @returns {Record<string, FieldDef>}
 	 */
 	static normalizedSchema() {
 		const schema = this.schema || {};
+		/** @type {Record<string, FieldDef>} */
 		const out = {};
 		for (const [field, value] of Object.entries(schema)) {
 			// Relationships are schema entries but NOT fields (constellation/doc/DOC-SPEC.md §21,
@@ -713,9 +848,11 @@ export class PuzzleModel {
 	 * name → `{ kind, type, key? }`. The Store reads this at construction to
 	 * install lazy getters (constellation/doc/DOC-SPEC.md §21, D49). Empty when
 	 * the model declares none.
+	 * @returns {Record<string, RelationshipDef>}
 	 */
 	static relationshipDefs() {
 		const schema = this.schema || {};
+		/** @type {Record<string, RelationshipDef>} */
 		const out = {};
 		for (const [name, value] of Object.entries(schema)) {
 			if (value instanceof RelationshipBuilder) out[name] = value.def;
@@ -723,7 +860,10 @@ export class PuzzleModel {
 		return out;
 	}
 
-	/** The field marked `.primary()`, defaulting to 'id'. */
+	/**
+	 * The field marked `.primary()`, defaulting to 'id'.
+	 * @returns {string}
+	 */
 	static primaryKey() {
 		for (const [field, def] of Object.entries(this.normalizedSchema())) {
 			if (def.primary) return field;
@@ -735,6 +875,8 @@ export class PuzzleModel {
 	 * Apply schema `.default()`s to a data object (non-destructive).
 	 * Function defaults are invoked per record; a non-function object/array
 	 * default is deep-cloned per record (see resolveDefault).
+	 * @param {Record<string, any>} [data]
+	 * @returns {Record<string, any>}
 	 */
 	static applyDefaults(data = {}) {
 		const out = { ...data };
@@ -751,7 +893,9 @@ export class PuzzleModel {
 	 * schema-declaration order (constellation/doc/DOC-SPEC.md §20). `fields`
 	 * limits which fields are checked (the update-patch path passes the patched
 	 * keys); omit it to validate every declared field. Non-throwing.
-	 * @returns {Array<{field:string, rule:string, message:string}>}
+	 * @param {Record<string, any>} [data]
+	 * @param {readonly string[] | null} [fields]
+	 * @returns {ValidationIssue[]}
 	 */
 	static _collectErrors(data = {}, fields = null) {
 		const schema = this.normalizedSchema();
@@ -767,7 +911,9 @@ export class PuzzleModel {
 	 * Validate a data object without throwing — the pre-create form-check surface
 	 * (constellation/doc/DOC-SPEC.md §20, D48). `options.fields` exposes the same
 	 * partial-field machinery used by update(); omitted means every declared field.
-	 * @returns {{ valid: boolean, errors: Array<{field, rule, message}> }}
+	 * @param {object} [data]
+	 * @param {{ fields?: string[] }} [options]
+	 * @returns {{ valid: boolean, errors: ValidationIssue[] }}
 	 */
 	static validate(data = {}, { fields } = {}) {
 		const errors = this._collectErrors(this.applyDefaults(data), fields);
@@ -777,16 +923,17 @@ export class PuzzleModel {
 	/**
 	 * Validate this record's CURRENT field values, without throwing — the
 	 * renderable surface for form UX (constellation/doc/DOC-SPEC.md §20, D48).
-	 * @returns {{ valid: boolean, errors: Array<{field, rule, message}> }}
+	 * @returns {{ valid: boolean, errors: ValidationIssue[] }}
 	 */
 	validate() {
-		return this.constructor.validate(this);
+		return /** @type {typeof PuzzleModel} */ (this.constructor).validate(this);
 	}
 
 	/**
 	 * Merge a patch into the record and notify the owning store (which batches
 	 * and re-runs subscribed components' data()). Returns the record so model
 	 * methods can chain: `toggle() { return this.update({...}) }`.
+	 * @param {Record<string, any>} [patch]
 	 */
 	update(patch = {}) {
 		// Primary keys are immutable once a record is attached to a store: the
@@ -797,7 +944,7 @@ export class PuzzleModel {
 			const pk = this._store.modelFor(this._type).primaryKey();
 			if (
 				Object.prototype.hasOwnProperty.call(patch, pk) &&
-				recordKey(patch[pk]) !== recordKey(this[pk])
+				recordKey(patch[pk]) !== recordKey(/** @type {Record<string, any>} */ (this)[pk])
 			) {
 				throw new Error(
 					`Cannot change primary key "${pk}": primary keys are immutable after creation.`
@@ -812,7 +959,7 @@ export class PuzzleModel {
 		// Applies to store-less records too — the rules live on the class
 		// (constellation/doc/DOC-SPEC.md §20, D48).
 		const patched = Object.keys(patch);
-		const errors = this.constructor._collectErrors(patch, patched);
+		const errors = /** @type {typeof PuzzleModel} */ (this.constructor)._collectErrors(patch, patched);
 		if (errors.length) throw new PuzzleValidationError(errors);
 
 		// Tracked: this is a LOCAL edit, and its revision is what stops an

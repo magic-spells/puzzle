@@ -31,24 +31,41 @@ import { mount } from '../views/viewManager.js';
 import { setPortalHost } from '../views/portal.js';
 import { assembleChain, makeRouteSnapshot, makeRouterStub } from '../ssg/assemble.js';
 import { preloadTakeoverComponents } from '../ssg/preload.js';
+import { createI18n, installTranslate } from '../i18n.js';
+import { normalizeBase } from '../router/router.js';
+
+/** @import { PuzzleView } from '../views/PuzzleView.js' */
+/** @import { FormatterRegistry } from '../formatters.js' */
+/** @import { AdapterCapability } from '../capabilities.js' */
+/** @import { RouterStub } from '../ssg/assemble.js' */
+
+/**
+ * The static page's ctx: the build-time Store + FormatterRegistry, the throwing
+ * router stub, and the translation service once one is installed (D175).
+ * @typedef {{ store: Store, router: RouterStub, formatters: FormatterRegistry,
+ *   i18n?: ReturnType<typeof createI18n> }} StaticContext
+ */
 
 /**
  * Mount a prerendered static page's interactive layer.
  *
- * @param {object} options
- * @param {string} options.target the `'#id'` selector for the mount element (the
+ * @param {object} [options] (`target`, `views` and `route` are required)
+ * @param {string} [options.target] the `'#id'` selector for the mount element (the
  *   same `config.target` the shell surgery keyed on)
- * @param {Function[]} options.views the route chain's view classes, root → leaf,
+ * @param {Function[]} [options.views] the route chain's view classes, root → leaf,
  *   matching `route.chain` order
  * @param {Function|null} [options.layout] the top-level layout class, or null
- * @param {object} options.route the serialized route snapshot from the summary
- *   (`{ path, params, chain: [{ path, name?, meta? }] }`)
+ * @param {{ path: string, params?: Record<string, string>,
+ *   chain: Array<{ path: string, name?: string, meta?: object }> }} [options.route] the
+ *   serialized route snapshot from the summary
  * @param {object} [options.models] the app models map
  * @param {object} [options.formatters] the app custom formatters map
  * @param {string} [options.apiURL] the store's base API URL
- * @param {object} [options.storage] Storage-like persistence object
- * @param {object} [options.adapter] opaque adapter capability
+ * @param {Pick<Storage, 'getItem' | 'setItem'>} [options.storage] Storage-like persistence object
+ * @param {import('../capabilities.js').AdapterCapability} [options.adapter] opaque adapter capability
  * @param {string} [options.routerBase] normalized route URL prefix
+ * @param {object} [options.__i18n] internal test seam, not API: translation service
+ *   options (`{ manifest, tables, locale }`) so nothing is fetched
  * @returns {Promise<void>}
  */
 export async function mountStatic({
@@ -62,6 +79,7 @@ export async function mountStatic({
 	storage,
 	adapter,
 	routerBase,
+	__i18n,
 } = {}) {
 	const targetEl = document.querySelector(target);
 	if (!targetEl) {
@@ -99,6 +117,30 @@ export async function mountStatic({
 	hydrateStore(ctx.store);
 	hydrateReadState(ctx.store, readIsland());
 
+	// Translations (D175): the page's own island answers the build locale with no
+	// request; a viewer whose locale differs fetches it here, BEFORE the mount, so
+	// the prerendered default-language page swaps to theirs exactly once. A switch
+	// re-assembles and re-mounts this page's chain (see remount below).
+	/** @type {(() => Promise<void>) | null} */
+	let remount = null;
+	// A switch that lands before the remount is armed (a mounted() hook calling
+	// setLocale) is replayed once armRemount runs, instead of being dropped.
+	let earlyRefresh = false;
+	if (typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) {
+		const i18n = createI18n({
+			// __i18n is an internal test seam ({ manifest, tables, locale }); a build
+			// reads the manifest module.
+			...__i18n,
+			url: (path) => normalizeBase(routerBase) + '/' + path,
+			refresh: () => (remount ? remount() : void (earlyRefresh = true)),
+		});
+		if (i18n) {
+			ctx.i18n = i18n;
+			installTranslate(ctx.formatters, i18n);
+			await i18n.__ready();
+		}
+	}
+
 	const { topVnode, instances } = await assembleChain(entry, ctx, routeSnapshot);
 
 	// A marked static page is replacing content-complete prerendered DOM. Prepare
@@ -116,11 +158,57 @@ export async function mountStatic({
 	// as the SSG takeover: skipEnter every preloaded instance).
 	for (const instance of instances) instance.skipEnter();
 
+	// A locale switch (D175) rebuilds this page the way the SPA router's
+	// same-location rebuild does: preload a fresh chain — nested components too,
+	// so nothing mounts late or animates in — against the new table, then swap it
+	// in for the mounted one in one step. The old page is destroyed only once the
+	// new one has mounted; a mount that throws is destroyed instead, the old DOM
+	// goes back, and setLocale rejects (the SPA's failed-rebuild contract: the
+	// old page stays, the new locale is already active). Last switch wins.
+	/** @param {PuzzleView} root the mounted top-level instance */
+	const armRemount = (root) => {
+		if (!(typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) || !ctx.i18n) return;
+		let current = root;
+		let token = 0;
+		remount = async () => {
+			const my = ++token;
+			const next = await assembleChain(entry, ctx, routeSnapshot);
+			const nested = await preloadTakeoverComponents(next.topVnode, ctx);
+			if (my !== token) {
+				for (const instance of next.instances) instance.destroy();
+				for (const instance of nested) instance.destroy();
+				return;
+			}
+			for (const instance of next.instances) instance.skipEnter();
+			for (const instance of nested) instance.skipEnter();
+			const previous = [...targetEl.childNodes];
+			targetEl.replaceChildren();
+			const top = next.topVnode;
+			const root = top.instance;
+			top.component = root;
+			try {
+				await root.mount(targetEl, { props: top.props, children: top.children, preloaded: true });
+				top.el = root.element;
+			} catch (err) {
+				root.destroy();
+				targetEl.replaceChildren(...previous);
+				throw err;
+			}
+			current.destroy();
+			current = root;
+		};
+		if (earlyRefresh) {
+			earlyRefresh = false;
+			remount().catch((err) => console.error('[puzzle] locale switch could not rebuild the page:', err));
+		}
+	};
+
 	// An unmarked prerender:false page has no fallback DOM to preserve and keeps the
 	// original mount path byte-for-byte.
 	if (!isTakeover) {
 		targetEl.replaceChildren();
 		mount(topVnode, targetEl, null, ctx);
+		armRemount(topVnode.instance);
 		return;
 	}
 
@@ -148,6 +236,7 @@ export async function mountStatic({
 		);
 		return;
 	}
+	armRemount(root);
 	// Kept OUTSIDE the mount try: a rejected playIn() must never tear down a
 	// component that mounted successfully (mountComponent's two-arg then() rule).
 	// After the skipEnter above this is a no-op today; the guard is for whatever
@@ -162,6 +251,11 @@ export async function mountStatic({
  * the models + apiURL and a FormatterRegistry seeded with the built-ins then the
  * config formatters — EXCEPT `ctx.router` is a throwing stub (no Router import in
  * this module graph). `beforeMount` is NOT run (build-time only in static mode).
+ *
+ * @param {{ models?: object, formatters?: object, apiURL?: string,
+ *   storage?: Pick<Storage, 'getItem' | 'setItem'>, adapter?: AdapterCapability,
+ *   routerBase?: string, route: object }} options
+ * @returns {StaticContext}
  */
 function buildStaticContext({
 	models = {},
@@ -173,6 +267,7 @@ function buildStaticContext({
 	route,
 }) {
 	installAdapterCapability(adapter, 'config.adapter');
+	/** @type {{ apiURL?: string, adapter?: AdapterCapability, storage?: Pick<Storage, 'getItem' | 'setItem'> }} */
 	const storeOptions = { apiURL, adapter };
 	if (storage !== undefined) storeOptions.storage = storage;
 	const store = new Store(models, storeOptions);
@@ -195,6 +290,8 @@ function buildStaticContext({
  * Read the inline JSON data island the shell surgery injected and hydrate the store
  * in REPLACE mode (`_hydrateAll`, shape-validated). Absent or empty → no-op (skip
  * silently): a page that seeded nothing simply mounts against a cold store.
+ *
+ * @param {Store} store
  */
 function hydrateStore(store) {
 	const el = document.querySelector('script[data-puzzle-static-data]');

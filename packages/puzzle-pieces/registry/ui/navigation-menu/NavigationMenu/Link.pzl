@@ -2,7 +2,7 @@
   <a href={ href } aria-current={ currentAttr } class={ linkClass }>
     <span class={ labelClass }>{#if label}{ label }{:else}<Children/>{/if}</span>
     {#if description}
-      <span class="mt-1 block text-sm text-muted line-clamp-2">{ description }</span>
+      <span class="mt-0.5 block text-sm text-muted line-clamp-2">{ description }</span>
     {/if}
   </a>
 </puzzle-view>
@@ -31,27 +31,32 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //                which is how you put an icon or a badge in a link
 //   description  a second line under the label, clamped to two lines. Card
 //                variant only in practice — a bar link has no room for it.
-//   variant      'card' (default) — an in-panel link card
-//                'bar' — a top-level bar link
+//   variant      'card' (default) — an in-panel row (px-3 py-2), label plus
+//                  optional description; stacks under a Group heading
+//                'bar' — a top-level bar link, the same pill as a bar Trigger
 //   current      true → aria-current="page" plus the active treatment
 //   class        merged onto the <a>
 
-const BAR =
-  'inline-flex items-center whitespace-nowrap select-none ' +
-  'rounded-md px-3 py-2 text-sm font-medium transition-colors ' +
-  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
 // The outline COLOR is unconditional (outline-ring) so transition-colors does
 // not flash it in from the default on every focus.
-const LINK_ACTIVE = 'text-ink underline decoration-2 underline-offset-8 decoration-brand';
-const LINK_INACTIVE = 'text-body hover:text-ink';
-
-const CARD_BASE =
-  'block rounded-md p-3 transition-colors hover:bg-surface-sunken ' +
+const FOCUS =
   'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
 
+// A bar link is the same pill as a bar Trigger (px-3 py-2, rounded-lg), with
+// the same brand-tint hover, so links and dropdowns read as one row.
+const BAR =
+  'inline-flex items-center whitespace-nowrap select-none ' +
+  'rounded-lg px-3 py-2 text-sm font-medium transition-colors ' + FOCUS;
+const LINK_ACTIVE =
+  'text-ink underline decoration-2 underline-offset-4 decoration-brand ' +
+  'hover:bg-brand-tint hover:text-brand-on-tint';
+const LINK_INACTIVE = 'text-body hover:bg-brand-tint hover:text-brand-on-tint';
+
+// An in-panel row: a label, optionally a description under it. Compact enough
+// to stack in a mega panel's columns under a Group heading.
+const CARD_BASE = 'block rounded-md px-3 py-2 transition-colors hover:bg-surface-sunken ' + FOCUS;
+
 const CARD_LABEL = 'block text-sm font-medium text-ink';
-// Card labels can't carry underline-offset-8 (it would collide with the
-// description), so the active card gets the same decoration at a tighter offset.
 const CARD_LABEL_ACTIVE = 'underline decoration-2 underline-offset-4 decoration-brand';
 
 export default class Link extends PuzzleView {

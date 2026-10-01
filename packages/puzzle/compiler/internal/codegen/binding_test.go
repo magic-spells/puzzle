@@ -4,17 +4,28 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
+
+// parseBindExpr parses a value expression with scope's names bound, or
+// returns nil for text the expression grammar rejects.
+func parseBindExpr(src string, scope scopeMap) expr.Node {
+	n, err := expr.Parse(src, expr.Pos{Line: 1, Col: 1}, expr.Options{Bindings: bindings(scope)})
+	if err != nil {
+		return nil
+	}
+	return n
+}
 
 func TestClassifyBindExpr(t *testing.T) {
 	t.Parallel()
 
-	scopedTodo := map[string]bool{"todo": true}
+	scopedTodo := scopeMap{"todo": ""}
 	tests := []struct {
 		name   string
 		raw    string
-		scope  map[string]bool
+		scope  scopeMap
 		target string
 		field  string
 		bare   bool
@@ -28,17 +39,21 @@ func TestClassifyBindExpr(t *testing.T) {
 		{name: "deep member", raw: "a.b.c"},
 		{name: "call", raw: "fmt(x)"},
 		{name: "member call", raw: "x.trim()"},
+		{name: "a field named size", raw: "profile.size", target: "profile", field: "size", ok: true},
 		{name: "addition", raw: "a + b"},
 		{name: "nullish", raw: "a ?? ''"},
 		{name: "ternary", raw: "a ? b : c"},
 		{name: "computed member", raw: "todo[k]"},
 		{name: "optional member", raw: "a?.b"},
-		{name: "formatter", raw: "x | money"},
-		{name: "this root", raw: "this.x"},
+		{name: "library call", raw: "money(x)"},
+		{name: "global call", raw: "Number(x)"},
 		{name: "keyword", raw: "true"},
-		{name: "global", raw: "window"},
-		{name: "event member", raw: "event.target"},
-		{name: "scoped event member", raw: "event.detail", scope: map[string]bool{"event": true}, target: "event", field: "detail", ok: true},
+		// A browser global is not a value (`window` alone is a parse error), but
+		// a template binding may own the name.
+		{name: "a binding named window", raw: "window.open", scope: scopeMap{"window": ""}, target: "window", field: "open", ok: true},
+		{name: "scoped event member", raw: "event.detail", scope: scopeMap{"event": ""}, target: "event", field: "detail", ok: true},
+		// Outside a handler `event` is an ordinary data field.
+		{name: "a data field named event", raw: "event.title", target: "event", field: "title", ok: true},
 		{name: "quoted empty", raw: "''"},
 		{name: "object literal", raw: "{ a: 1 }"},
 		{name: "scoped bare", raw: "todo", scope: scopedTodo},
@@ -50,7 +65,11 @@ func TestClassifyBindExpr(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			target, field, bare, ok := classifyBindExpr(tt.raw, tt.scope)
+			n := parseBindExpr(tt.raw, tt.scope)
+			if n == nil {
+				t.Fatalf("%q does not parse", tt.raw)
+			}
+			target, field, bare, ok := classifyBindExpr(n, tt.scope)
 			if target != tt.target || field != tt.field || bare != tt.bare || ok != tt.ok {
 				t.Fatalf(
 					"classifyBindExpr(%q) = (%q, %q, %t, %t), want (%q, %q, %t, %t)",
@@ -65,8 +84,8 @@ func TestClassifyBindExpr(t *testing.T) {
 func TestDetectAutoBind(t *testing.T) {
 	t.Parallel()
 
-	dynamic := func(name, expr string) parser.Attr {
-		return &parser.DynamicAttr{Name: name, Expr: expr}
+	dynamic := func(name, src string) parser.Attr {
+		return &parser.DynamicAttr{Name: name, Expr: src, ExprAST: parseBindExpr(src, scopeMap{"todo": ""})}
 	}
 	static := func(name, value string) parser.Attr {
 		return &parser.StaticAttr{Name: name, Value: value}
@@ -80,13 +99,13 @@ func TestDetectAutoBind(t *testing.T) {
 	want := func(event, target, field, spec string) *autoBind {
 		return &autoBind{event: event, target: target, field: field, spec: spec}
 	}
-	loopScope := map[string]bool{"todo": true}
+	loopScope := scopeMap{"todo": ""}
 
 	tests := []struct {
 		name  string
 		tag   string
 		attrs []parser.Attr
-		scope map[string]bool
+		scope scopeMap
 		want  *autoBind
 	}{
 		{
@@ -214,7 +233,7 @@ func TestDetectAutoBind(t *testing.T) {
 			name  string
 			tag   string
 			attrs []parser.Attr
-			scope map[string]bool
+			scope scopeMap
 			want  *autoBind
 		}{
 			name:  "text-ish " + inputType,
@@ -228,7 +247,7 @@ func TestDetectAutoBind(t *testing.T) {
 			name  string
 			tag   string
 			attrs []parser.Attr
-			scope map[string]bool
+			scope scopeMap
 			want  *autoBind
 		}{
 			name:  "date-ish " + inputType,
@@ -242,7 +261,7 @@ func TestDetectAutoBind(t *testing.T) {
 			name  string
 			tag   string
 			attrs []parser.Attr
-			scope map[string]bool
+			scope scopeMap
 			want  *autoBind
 		}{
 			name:  "excluded type " + inputType,

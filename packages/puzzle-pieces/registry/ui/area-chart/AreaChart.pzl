@@ -60,10 +60,9 @@
         {/if}
       </svg>
 
-      <!-- Axis labels live as HTML overlays, NOT SVG <text>: the Puzzle compiler
-           emits ViewNode('text', …) for its internal text-node marker, so an SVG
-           <text> element collides with it and is silently dropped. Coordinates
-           map 1:1 because the SVG has no viewBox scaling. -->
+      <!-- Axis labels are HTML spans placed over the SVG by choice, not SVG
+           <text> elements. Pixel coordinates map 1:1 because the SVG has no
+           viewBox scaling. -->
       {#if showGrid}
         <div class="pointer-events-none absolute inset-0" aria-hidden="true">
           {#for g in gridLines}

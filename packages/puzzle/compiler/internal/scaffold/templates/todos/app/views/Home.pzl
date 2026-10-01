@@ -15,7 +15,7 @@
         <button
           type="submit"
           class="h-12 px-5 rounded-xl bg-accent text-ink font-semibold tracking-tight hover:bg-accent-2 disabled:bg-elevated disabled:text-faint disabled:cursor-not-allowed transition-colors"
-          disabled={ !newTodoText.trim() } >
+          disabled={ !canAdd } >
           Add
         </button>
       </form>
@@ -128,6 +128,10 @@ export default class TodoHome extends PuzzleView {
       completedTodos,
       filteredTodos,
       newTodoText: localData.newTodoText,
+      // Templates read data, they don't call JavaScript on it, so the
+      // "is there anything to add?" check is computed here, not in the
+      // template's disabled= (constellation/doc/DOC-SPEC.md §6).
+      canAdd: localData.newTodoText.trim() !== '',
       currentFilter: localData.currentFilter,
       hasData: todos.length > 0
     };

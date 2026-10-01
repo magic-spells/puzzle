@@ -30,6 +30,11 @@
 
 import { stateFor } from './state.js';
 
+/** @import { Store } from '../datastore/store.js' */
+/** @import { AdapterMock } from '../../types/index.js' */
+/** @import { Rand } from './generator.js' */
+/** @import { FixtureState, MockCollection } from './state.js' */
+
 // Registry symbol, NOT an import from the adapter: `/fixtures` and `/adapter` are
 // separately bundled subpaths, so a shared module reference would drag one into
 // the other's graph. Symbol.for makes the two agree by key instead.
@@ -37,6 +42,7 @@ const RESPONSE_BRAND = Symbol.for('puzzle.response');
 
 // Only the statuses this module emits; anything else reports an empty text,
 // which is what a Response with an unknown status effectively gives you anyway.
+/** @type {Record<number, string>} */
 const STATUS_TEXT = {
 	200: 'OK',
 	201: 'Created',
@@ -57,6 +63,9 @@ const WARNED = new WeakSet();
  * A minimal Response stand-in: exactly the surface store.js reads. `json()`
  * re-parses the serialized text on every call, so a caller that mutates the
  * parsed body can never reach back into the mock's own collection.
+ *
+ * @param {number} status
+ * @param {unknown} body serialized with JSON.stringify; undefined → empty body
  */
 export function mockResponse(status, body) {
 	const text = body === undefined ? '' : JSON.stringify(body);
@@ -71,6 +80,7 @@ export function mockResponse(status, body) {
 	};
 }
 
+/** @param {string} method @param {string} url */
 const notFound = (method, url) =>
 	mockResponse(404, { error: `[puzzle] mock: no record for ${method} ${url}` });
 
@@ -79,12 +89,19 @@ const notFound = (method, url) =>
  * `data` on first use and then owned by the store's fixture state — a `save()`
  * followed by a `loadMany()` MUST see the new record. Deep-cloned at init so the
  * fixture array a test passes in is never mutated underneath it.
+ *
+ * @param {FixtureState} state
+ * @param {string} type
+ * @param {AdapterMock} config
+ * @param {string} pk
+ * @returns {MockCollection}
  */
 function mockCollection(state, type, config, pk) {
 	if (!state.mockCollections) state.mockCollections = new Map();
 	const existing = state.mockCollections.get(type);
 	if (existing) return existing;
 
+	/** @type {MockCollection} */
 	const collection = new Map();
 	const seedData = Array.isArray(config.data) ? config.data : [];
 	for (const entry of seedData) {
@@ -97,7 +114,12 @@ function mockCollection(state, type, config, pk) {
 	return collection;
 }
 
-/** Server-assigned key for a POST (or a fixture) that arrives without one. */
+/**
+ * Server-assigned key for a POST (or a fixture) that arrives without one.
+ *
+ * @param {FixtureState} state
+ * @returns {string}
+ */
 function nextMockId(state) {
 	state.mockIdN += 1;
 	return `mock-${state.mockIdN}`;
@@ -107,6 +129,10 @@ function nextMockId(state) {
  * Resolve a URL id segment against the collection's real key. URL segments are
  * always strings while a pk is often a number, so `/api/todos/1` has to find the
  * record keyed under `1`.
+ *
+ * @param {MockCollection} collection
+ * @param {string} id
+ * @returns {unknown} the stored key, or undefined
  */
 function resolveKey(collection, id) {
 	if (collection.has(id)) return id;
@@ -115,13 +141,38 @@ function resolveKey(collection, id) {
 	return undefined;
 }
 
-/** The request path relative to `apiURL + endpoint` — '' for the collection. */
+/**
+ * The request path relative to `apiURL + endpoint` — '' for the collection.
+ * A URL spelled differently from that prefix — an absolute URL against the
+ * default relative apiURL, a `URL` or `Request` object's href — is resolved
+ * against the page and routed by pathname (plus query), so it reaches the mock
+ * exactly as the relative spelling does.
+ *
+ * @param {Store} store
+ * @param {string} endpoint
+ * @param {string} url
+ * @returns {string}
+ */
 function requestPath(store, endpoint, url) {
 	const base = store.apiURL + endpoint;
-	return url.startsWith(base) ? url.slice(base.length) : url;
+	if (url.startsWith(base)) return url.slice(base.length);
+	const page = globalThis.location?.href;
+	try {
+		const target = new URL(url, page);
+		const root = new URL(base, page).pathname;
+		if (target.pathname.startsWith(root)) return target.pathname.slice(root.length) + target.search;
+	} catch {
+		// Unresolvable (no page to resolve a relative spelling against): unrouted.
+	}
+	return url;
 }
 
-/** decodeURIComponent, but a malformed escape yields the raw segment (never a throw). */
+/**
+ * decodeURIComponent, but a malformed escape yields the raw segment (never a throw).
+ *
+ * @param {string} segment
+ * @returns {string}
+ */
 function safeDecode(segment) {
 	try {
 		return decodeURIComponent(segment);
@@ -130,7 +181,12 @@ function safeDecode(segment) {
 	}
 }
 
-/** JSON init bodies parse; anything else passes through raw. */
+/**
+ * JSON init bodies parse; anything else passes through raw.
+ *
+ * @param {unknown} raw
+ * @returns {unknown}
+ */
 function parseBody(raw) {
 	if (typeof raw !== 'string') return raw;
 	if (raw === '') return undefined;
@@ -141,11 +197,16 @@ function parseBody(raw) {
 	}
 }
 
+/** @param {unknown} value @returns {value is Record<string, any>} */
 const isPlainObject = (value) => value != null && typeof value === 'object' && !Array.isArray(value);
 
 /**
  * Latency for one request: a number, or a deterministic pick inside `[min, max]`.
  * Drawn from the seeded stream, like everything else, so a run replays exactly.
+ *
+ * @param {AdapterMock} config
+ * @param {Rand} rand
+ * @returns {number}
  */
 function latencyFor(config, rand) {
 	const { latency } = config;
@@ -162,6 +223,9 @@ function latencyFor(config, rand) {
  * path is exercised: POST answers 201 with the stored object (that body is what
  * drives pk adoption and the `_synced` flip), PUT answers the merged object, and
  * DELETE answers a bodiless 204.
+ *
+ * @param {{ method: string, path: string, body: unknown, collection: MockCollection,
+ *   pk: string, state: FixtureState, url: string }} request
  */
 function defaultCrud({ method, path, body, collection, pk, state, url }) {
 	const pathname = path.split('?')[0];
@@ -228,10 +292,10 @@ function defaultCrud({ method, path, body, collection, pk, state, url }) {
  *
  * @param {Store}  store
  * @param {string} type    registry type name (from the frozen request context)
- * @param {object} config  the model's `adapter.mock` block merged with the
+ * @param {AdapterMock} config the model's `adapter.mock` block merged with the
  *   fixtures file's `mock[type]` entry (the file wins per key)
  * @param {string} url     the fully built request URL
- * @param {object} init    the fetch init, post-hook
+ * @param {RequestInit} init the fetch init, post-hook
  * @returns {Promise<object>} a Response-shaped object (ok/status/statusText/text/json)
  */
 export function mockFetch(store, type, config, url, init) {

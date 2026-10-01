@@ -27,12 +27,14 @@ my-app/
 ├── puzzle.config.js       # { styles: { use: ['tailwindcss'] }, output: 'static' | 'hybrid' }
 └── app/
     ├── app.js             # new PuzzleApp({ target: '#app', routes, models, formatters }); MUST `export default app` for prerender modes
+    │                      #   (app.ts in a TypeScript app — the build takes app/app.ts over app/app.js and refuses both)
     ├── routes.js          # route table (see below)
     ├── public/index.html  # the shell: #app mount + <script type="module" src="/app.js">
     ├── styles/styles.css  # global entry; Tailwind v4 via the config's styles pipeline
     ├── layouts/*.pzl      # chrome with <Slot/>
     ├── views/*.pzl        # pages
     ├── components/*.pzl
+    ├── locales/<tag>.json # translations, only with `i18n` in puzzle.config.js (see Translations)
     └── models/*.js
 ```
 
@@ -40,9 +42,14 @@ CLI (bin `puzzle`, installed with `@magic-spells/puzzle`):
 `dev` (SSE live reload, state-preserving full-page refresh), `build` (`--static`,
 `--hybrid`, `--mode production|development`), `check` (run the app-installed
 TypeScript compiler over `.pzl` scripts and template expressions), `preview`
-(serve an existing `dist/` with production-host semantics), `init`, `generate`,
-`add` (tailwind integration, `piece <name…>`, `skills`), `upgrade`, `doctor`,
-`info`.
+(serve an existing `dist/` with production-host semantics), `init` (`--template
+default|todos`; `--typescript` scaffolds `<script lang="ts">` components, `.ts`
+modules with an `app/app.ts` entry, a strict tsconfig and an
+`npm run check` script), `generate` (TypeScript stubs — `<script lang="ts">`,
+`app/models/<name>.ts`, an `index.ts` family barrel — when the project root
+has a `tsconfig.json`),
+`add` (tailwind integration, `piece <name…>`, `theme <name…>`, `skills`),
+`upgrade`, `doctor`, `info`.
 
 - `dev` and `build` both take `--fixtures` (see Fixtures below).
 - `dev` and `build` both take `--profile-build` (or `PUZZLE_PROFILE_BUILD=1`):
@@ -52,8 +59,9 @@ TypeScript compiler over `.pzl` scripts and template expressions), `preview`
   warns when it moved. `--strict-port` restores bind-or-fail.
 - `puzzle upgrade skills` refreshes the installed agent skill from the running
   binary. `puzzle upgrade` also offers the refresh after it installs a new
-  version. Re-running `puzzle add skills` asks before replacing an existing
-  install rather than erroring.
+  version. Re-running `puzzle add skills` skips an install that is already
+  current and asks before replacing an older one (a non-interactive run needs
+  `--overwrite` for that).
 
 Production builds default to ES2022, minification, and **console stripping** —
 set `build: { dropConsole: false }` in puzzle.config.js to keep console calls.
@@ -95,7 +103,7 @@ Template markup + `<script>` (+ optional `<style>`, `scoped` supported):
 
 ```html
 <puzzle-view>
-  <button class={ classes } @click={ increment }>{ count | number }</button>
+  <button class={ classes } @click={ increment }>{ number_with_delimiter(count) }</button>
 </puzzle-view>
 
 <script>
@@ -104,33 +112,238 @@ export default class Counter extends PuzzleView {
   data() { return { count: this.getData()?.count ?? 0 }; }  // runs at render — and under NODE during prerender
   events = {
     increment: () => this.setData('count', this.getData().count + 1),
-  };  // handlers MUST be arrow functions in the `events` class field —
-      // method shorthand is a compile error (`this` would break at fire time)
+  };  // handlers should be arrow functions in the `events` class field so
+      // `this` is the component — method shorthand gets the events object as `this`
+      // (development builds warn when a non-arrow handler uses `this`)
   mounted() { /* browser-only setup: listeners, intervals, DOM */ }
   destroyed() { /* MANDATORY cleanup of window listeners/intervals */ }
 }
 </script>
 ```
 
-Template syntax: `{ expr | formatter }` (formatters are registered display
-helpers — the project term is *formatter*, never *filter*),
+Names starting with `__` belong to the compiler: don't define `__`-prefixed
+fields or methods on a component (`__c`, `__lists`, `__dirty`, `__rgen`,
+`__propRevs`, a static `__roots`, …) or bind them in a `<script>` (`__l`,
+`__e`, `__r`, `__L0`, …; binding one the compiled template also emits,
+such as `__l` beside a `{#for}`, is a compile error).
+
+Template syntax: `{ expr }` — a JavaScript-shaped expression (see *Template
+expressions* below; a display transform is a function call, `{ currency(price) }`),
 `{#if}/{:else if}/{:else}/{/if}`, `{#unless}`, `{#for item in items, i}`
 (trailing `, name` binds the index), `{#case}/{:when}`, `{#raw}…{/raw}` (brace
 grammar off inside — literal braces compile as-is, HTML still parses; no
 nesting, and attribute-value use is a compile error; a single literal brace
 anywhere, attribute values included, is `\{` / `\}` — e.g. `pattern="[0-9]\{5\}"`),
 `@event={ handler }` with modifiers, component imports used as capitalized tags
-(dotted family members too — `<Frame.Wrapper>`).
+(dotted family members too — `<Frame.Wrapper>`). A range loop binds its
+counter after the range: `{#for 1...n, i}`. HTML void elements (`<br>`,
+`<img …>`, `<input …>`) need no `/>`, and a closer such as `</br>` is a
+compile error.
 `<script lang="ts">` for TypeScript (build remains transpile-only; run
 `puzzle check` separately for static checks).
+
+The function library is the standard set shared with Sites plus the
+PuzzleKit-only `link` and `timeago`; a template calls one by name, and calls
+nest (`{ truncate(capitalize(title), 40) }`). Text: `capitalize` (first
+character only — `iPhone` stays `IPhone`), `truncate(s, n, '…')`,
+`strip_html`, `strip_newlines`, `pluralize(n, 'comment')` → `3 comments`
+(prints the count too; irregular `pluralize(n, 'person', 'people')`), `escape`
+(an identity on text). Numbers: `round(v, places)` (half away from zero, a
+number), `currency(v, '$', 2)` → `-$1,234.50`, `percentage(v, places)` (the
+number as written: `12.5` → `13%`), `number_with_delimiter(v)` (viewer locale;
+a second argument forces the delimiter), `compact_number(v)` → `1.2K`. Values:
+`json(v)`. Markup: `raw` and `newline_to_br` (see Rendering HTML below). Dates:
+`date(v, preset)`, `time(v, preset)`, `datetime(v, preset)` with presets
+`short`, `medium`, `long`, `iso` — no preset is `date` medium (`Sep 24, 2026`),
+`time` short (`3:04 PM`), `datetime` medium date + short time;
+`date(v, 'short')` is date-only (`9/24/26`), so a short date-and-time stamp
+is `datetime(v, 'short')`. A literal preset the standard functions do not know
+(`time(at, 'shrot')`) is a build warning, and at run time an unknown preset
+renders the default. `in_timezone(v, 'America/New_York')` re-expresses an
+instant and returns a `Date`, which prints nothing on its own, so format it:
+`date(in_timezone(v, 'America/New_York'))`. `t(key, vars)`
+translates (below); `link(path)` builds an href (Routing). What a JavaScript
+method or `Math` global already says is not a function: write
+`name.toUpperCase()`, `.toLowerCase()`, `.trim()`, `.replaceAll(a, b)`,
+`tags.join(', ')`, `Math.floor(x)` / `ceil` / `abs`. There are **no list
+functions** either — shape a list with array methods (`items.filter(…)`,
+`.toSorted(…)`, `.at(-1)`) or in `data()`. A removed 0.7 name written as a
+call (`upcase(name)`) is NOT a compile error: it passes the value through
+unchanged, with a dev error naming the replacement, so convert an old pipe
+to the method, never to a same-named call. App functions register through the
+`formatters` config map (the key keeps its name) and are called like the
+built-ins: `{ specialFormat(product.title) }`. Don't register one under a
+standard name (it wins, with a dev warning, and changes what the name means).
+Keep an app function a pure function of its arguments: a cached `{#for}` row
+does not re-run its calls, so one that reads the clock or other ambient state
+freezes. Compute such values in `data()`.
+
+### Rendering HTML: `raw` and `newline_to_br` (puzzle ≥ 0.8.0) — security
+
+`{ raw(post.bodyHtml) }` renders a value as real HTML, and it is **always
+sanitized** — there is no unsanitized escape hatch, by design:
+
+```html
+<article class="prose">{ raw(post.bodyHtml) }</article>
+<p>{ newline_to_br(comment.text) }</p>        <!-- escaped text, real <br>s -->
+<div>{ raw(truncate(post.bodyHtml, 300)) }</div>
+```
+
+- **What survives:** paragraphs, headings, lists, tables, `b`/`i`/`em`/
+  `strong`/`code`/`pre`/`blockquote`/`br`/`hr`, `span`/`div`, links
+  (`<a href>`, plus `target` only as `_blank`, which always gets
+  `rel="noopener noreferrer"`) and images (`<img src srcset alt width
+  height>`), plus `class`, `id`, `title`, `lang` and `dir` (DOMPurify's
+  defaults). `id` is kept verbatim for heading anchors and styling — except
+  on `<img>` (it would clobber properties of a `<form>` it lands in) and
+  except an id starting with `__` (framework globals and dev hooks).
+- **What is removed:** `<script>` with its contents; `<style>`, `<iframe>`,
+  `<object>`, `<embed>`, `<svg>`, `<math>`, `<template>`, `<noscript>` with
+  their contents; forms and inputs (their text stays); every `on*` handler;
+  `style`, `name` (never kept — it is what reaches `document.<name>`) and any
+  author `rel`; any `target` other than `_blank` (a named target sets
+  `window.name` in the opened page; `_top`/`_parent` escape a frame); and any
+  `href`/`src`/`srcset` URL that is not relative or `http(s)` (links also
+  keep `mailto:`/`tel:`) — obfuscated `JaVaScRiPt:`, entity-encoded,
+  control-character-prefixed and whitespace-split schemes included.
+- **`class` and `id` survive, so untrusted HTML can reach your CSS and your
+  global names.** For HTML your own editors write, that is the point
+  (Tailwind `prose` tweaks, callouts, `#section` anchors). For untrusted user
+  HTML it is a UI and naming risk, not code execution:
+  - `class` can pull in your overlay utilities — a `fixed inset-0 z-50` block
+    can cover the page or fake a dialog. Render user HTML inside a container
+    that contains it: `contain: layout paint` (plus `relative
+    overflow-hidden`), so fixed/absolute children are clipped to the box.
+  - Every kept `id` becomes a `window[id]` named property when the page has no
+    global of that name: `<a id="CONFIG" href="…">` makes `window.CONFIG` that
+    element for code that reads an optional global (`window.CONFIG ??
+    defaults`). Don't read optional globals by bare name, and expect a user
+    id to collide with your own ids — skip-link targets, `label for`,
+    `aria-labelledby`. (GitHub-style `user-content-` id prefixing would avoid
+    both; PuzzleKit keeps ids verbatim instead, so in-content anchors work.)
+  - Prefer `newline_to_br` (or plain `{ text }`) for user-typed text.
+- **`raw` must be the OUTERMOST call of a TEXT interpolation, with one
+  argument.** Anything else is a compile error: `{ raw(x).trim() }`,
+  `{ escape(raw(x)) }`, `{ raw(x) + 'a' }`, `title={ raw(x) }`,
+  `<Card body={ raw(x) } />`, `raw(a, b)`, or `{ raw(x) }` inside a raw-text
+  element (`<script>`, `<style>`, `<textarea>`, `<title>`, `<noscript>`,
+  `<xmp>`, `<iframe>`, …). Pass markup to a component as a string prop and
+  call `raw` on it inside the component's own template.
+- **App functions can't inject markup.** Registering your own `raw` does
+  nothing for templates (a dev warning says so): the compiler lowers the name
+  itself. Don't try to build HTML strings in a custom function — they print
+  as text.
+- **Still treat it as untrusted-content rendering.** Sanitizing makes the
+  markup inert, not trustworthy: a user can still post links and images.
+  Prefer `newline_to_br` (or plain `{ text }`) for user-typed text, and keep
+  `raw` for CMS/rich-text fields.
+- The output renders as sibling nodes with no wrapper element and prerenders
+  identically in `hybrid`/`static` output. Cost: ~2.3 KB gzip in an app that
+  uses `raw` (the sanitizer), ~0.4 KB in one that only uses `newline_to_br`,
+  nothing otherwise.
 
 Rules that bite:
 
 - **Text is text.** Template text is NOT HTML-entity decoded and interpolations
-  become text nodes — you cannot inject markup through `{ expr }`. The one
-  raw-markup exception is compile-time `{#svg 'path.svg'}` inline SVG.
-  `{#raw}` is not a second one — it only turns the brace lexer off; no runtime
-  value can reach inside it.
+  become text nodes — you cannot inject markup through a plain `{ expr }`. The
+  only ways markup gets in are compile-time `{#svg 'path.svg'}` inline SVG and
+  the sanitized `raw` function (see Rendering HTML above). `{#raw}` is
+  neither — it only turns the brace lexer off; no runtime value can reach
+  inside it.
+- **What prints.** `null`, `undefined`, `NaN`, ±Infinity and objects (a `Date`
+  included — format it with `date(v)`) print nothing; an object also warns in
+  development. A list prints comma-joined in text, but in a brace-only
+  attribute it is a space-joined token list that drops `false` and empty items,
+  so the clsx idiom `class={ [active && 'on', 'btn'] }` writes `class="btn"`;
+  an object in a brace-only attribute omits the attribute, as `false`/`null` do.
+- **Whitespace renders like HTML** (puzzle ≥ 0.8.0). A line break between
+  text and an element (either order) is one space, so prose may wrap around
+  `<code>`, `<a>` or `<b>` freely; a line break between two elements, or at a
+  parent's first/last child, is dropped, so stacked buttons get no gap. To
+  keep text and an inline element touching, write them on one line with no
+  whitespace between. `<pre>` and `<textarea>` bodies keep their bytes exactly
+  (only the newline right after the start tag is dropped), so don't indent
+  their contents with the template — bind them (`<pre>{ code }</pre>`,
+  `value={ text }`) or dedent.
+- **Template expressions are JavaScript, from a closed table** (puzzle ≥
+  0.8.0). One grammar, parsed once and shared with Sites: literals, template
+  literals, arrays and objects; `a.b`, `a?.b`, `a[i]`; the operators with
+  JavaScript precedence (`+ - * / %`, comparisons, `== != === !==`, `&& || !`,
+  `??`, `?:`). Count with `.length` (a string counts UTF-16 units, as in
+  JavaScript); fall back with `??` (not `||`, which swallows `0` and `''`).
+  JavaScript semantics include its sharp edges, which 0.7's coercing
+  formatters hid: a string method throws on a non-string
+  (`{ zip.toUpperCase() }` on a number sends the view to `errorView`), so
+  coerce with `String(zip ?? '')` first; `+` with a string concatenates
+  (`Number(count) + 1`); `.replace()` replaces only the first match
+  (`.replaceAll()`); `.split()` needs its separator; and `.toSorted()`
+  without a comparator compares as text, so pass one
+  (`items.toSorted((a, b) => a - b)`).
+  Calls are three kinds: a **function** by name (`currency(price)`, the library
+  above plus the app's own); a **method** from the table on a string
+  (`trim`, `toUpperCase`, `toLowerCase`, `includes`, `startsWith`, `slice`,
+  `split`, `replace`, `replaceAll`, `padStart`, …), an array (`filter`, `map`,
+  `find`, `some`, `every`, `reduce`, `includes`, `join`, `slice`, `at`,
+  `toSorted`, `toReversed`, `flat`, …) or a number (`toFixed`, `toString`);
+  and the **globals** `Math.*` (`round`, `floor`, `ceil`, `abs`, `min`, `max`,
+  …), `Number(x)`, `String(x)`, `Boolean(x)`, `parseInt`, `parseFloat`,
+  `isNaN`, `isFinite`, `encodeURIComponent`, `decodeURIComponent`,
+  `encodeURI`, `decodeURI`, `Array.isArray(x)`,
+  `Object.keys/values/entries(x)` — not `atob`, `btoa` or `structuredClone`.
+  Arrow functions go only in call arguments:
+  `{#for t in todos.filter(t => !t.done)}`, `{ items.map(i => i.name).join(', ') }`.
+  No method mutates: there is no `push`, `sort`, `reverse` or `splice` — use
+  `toSorted` / `toReversed`. Everything else is a compile error that names the
+  replacement: other methods, `new Date()` and `Date.now()` (dates reach a
+  template from `data()` and print through `date()`), `JSON.stringify(x)`,
+  `**`, bitwise operators, spread, regex literals, comments, assignment,
+  `typeof`/`in`/`instanceof`. Reading `window`, `document` or `globalThis` as
+  a value is a compile error: read what you need in `data()` and return it.
+  Other browser names (`location`, `localStorage`, `console`, …) are ordinary
+  data fields, so `{ location }` prints a `data()` field named `location`. A 0.7 pipe
+  (`{ price | currency }`) is a compile error at the `|` that says to write
+  `currency(price)` — after a removed formatter (`| upcase`) it names the
+  replacement instead; there is no bitwise OR. **`this` is not a template
+  identifier**: a template never reaches the view instance, so `this` in a
+  value, a block header, a function argument, or an `@event` handler's
+  arguments or ternary condition is a compile error. Every value a template
+  shows comes through `data()` — move a getter's body into a `data()` field,
+  and call `this.refresh()` after a `setData()` that field depends on
+  (`setData()` alone does not re-run `data()`).
+  Member access is guarded, so `{ user.address.city }` prints nothing when
+  `address` is missing instead of throwing (`?.` is legal but unnecessary),
+  and a method call on a missing value prints nothing too (dev warning). A
+  bare call names the library, so a data field is never callable; a bare read
+  names `data()`. A missing collection or a non-list loops zero times (dev
+  warns on a non-list; range bounds truncate to whole numbers), so a string's
+  characters are `{#for c in text.split('')}`. `==` keeps its
+  JavaScript meaning; `x == null` is the absence test. Object literals work as
+  function arguments (`{ t('cart.count', { count: n }) }`) but cannot START an
+  expression. A component with no `<script>` reads its props by bare name
+  (`{ tone }`).
+- **Handlers are the one door into the view.** `@click={ save(items.length - 1) }`
+  calls the view's `save` with arguments in the same expression language,
+  evaluated when the event fires. An `@event` value is always a call to a
+  view handler, a handler's bare name (`@click={ save }`), or a ternary
+  choosing one; a bare call there names the view's handler first (a handler
+  sharing a library function's name draws a dev warning). Inside its
+  arguments `event` is the DOM event, and a chain rooted at it is
+  unrestricted — `@input={ rename(event.target.value) }`,
+  `@click={ pick(event.target.closest('li')) }`. Call `event.preventDefault()`
+  inside the handler method (or use `:prevent`), never as the handler value.
+  Calling a template binding (a loop item, a snippet parameter, an arrow
+  parameter) is a compile error. Outside handlers a data field or prop named
+  `event` reads as data (`<EventCard event={ item } />` works), but a template
+  that both reads one and uses `event` inside a handler is a compile error:
+  rename the field or prop.
+- **`puzzle check` types the language.** Methods are checked as the same
+  JavaScript methods, so a wrong method or argument is a real TypeScript error
+  at its line and column, and library calls check against the function
+  signatures (an app function is `any`). The check adds the ES2019–ES2023
+  string and array libs whatever the app's `target`, so `.at()`,
+  `.replaceAll()` and `.toSorted()` type in templates — and in that file's
+  `<script>` too, which can hide a method your `target` lacks from the check
+  (the build is unaffected). `toSorted`/`toReversed` need TypeScript ≥ 5.2.
 - **Three marker tags, four meanings.** `<Children/>` marks where a component's
   default children render; `<Slot name="x"/>` declares a named region (the
   caller routes a direct child in with a static `slot="x"` attribute);
@@ -140,7 +353,14 @@ Rules that bite:
   data attributes, and a snippet declares matching parameters as bare
   attributes; binding is by name. `fits="x"` routes it to `<Slot name="x">`,
   while omitted `fits` targets `<Children>`. Ordinary Children/Slot markers may
-  be paired with fallback content, which supplied content replaces entirely. A
+  be paired with fallback content, which supplied content replaces entirely —
+  and content only counts when it renders something, so a false `{#if}` or an
+  empty `{#for}` at the call site shows the fallback (the empty-state idiom).
+  When siblings follow a marker in the component's template, keep its fallback
+  to ONE root element: a fallback whose node count differs from the content's
+  shifts those siblings on every flip, and the positional patcher remounts
+  them (lost focus, reset child state). One marker per name on any render path: the same `<Children/>` in both
+  branches of an `{#if}/{:else}` is fine, twice on one path is an error. A
   Snippet must be paired and be a direct child of a component call; composition
   markers and `ref=` are forbidden inside its body. Lowercase
   `<children>`/`<slot>`/`<snippet>` steer to the capitalized marker spellings
@@ -152,7 +372,7 @@ Rules that bite:
   </UserList>
 
   <!-- inside UserList.pzl: one marker in the loop produces N stamps -->
-  {#for user in users}<Slot name="row" user={ user } />{/for}
+  {#for user in users}<li key={ user.id }><Slot name="row" user={ user } /></li>{/for}
   ```
 
 - **Component families are dotted tags + a barrel** (puzzle ≥ 0.7.0). A
@@ -198,7 +418,10 @@ Rules that bite:
   `retry()` uses a full same-location navigation for routed failures or the
   parent's normal refresh for component failures, never automatically. There
   is no per-view error member — write error UI as normal template markup, never
-  as hand-built ViewNodes. Event handlers and formatters stay uncaught.
+  as hand-built ViewNodes. Event handlers stay uncaught (browser events are
+  outside the boundary); a template function or method that throws during
+  render fails that view like any other render throw, so `errorView` takes
+  over.
 - **`island` freezes children.** An element with the `island` attribute keeps
   its children untouched by patching after mount (for third-party DOM widgets);
   the element's own attrs/listeners still patch. Components, slots, and view
@@ -208,7 +431,7 @@ Rules that bite:
   list is sorted/filtered/reordered — inserts and removes keep their normal
   enter/leave animations. Options via an object from `data()`:
   `flip={ flipOpts }` with `flipOpts: { duration: 400, easing: '...' }`
-  (inline object literals are not valid template expressions). Respects
+  (an object literal cannot start a template expression). Respects
   reduced motion; never write `flip` on an unkeyed row.
 
 ## Events
@@ -265,9 +488,9 @@ Form controls bind themselves — write NO input handler:
   `validate()` — a bind can never clear a `required()` field.
 - Opting out needs no syntax: write your own `@input`/`@change` (the author
   handler owns the write — nothing is synthesized), use a non-path expression
-  (`value={ String(x) }`), or add static `readonly`. Migration gotcha: a
+  (`value={ x ?? '' }`), or add static `readonly`. Migration gotcha: a
   handler-less `value={ x }` that a `@keydown:enter` handler used to commit
-  is now live-bound — escape with `String(x)` when you need edit-buffer
+  is now live-bound — escape with `x ?? ''` when you need edit-buffer
   semantics (Enter-commit / Escape-cancel).
 - In tests, `await handle.type('input.search', 'hello')` (from
   `@magic-spells/puzzle/testing`) drives a bound control and settles.
@@ -342,12 +565,55 @@ Form controls bind themselves — write NO input handler:
 - Navigation loads before commit: URL, title/head, history, mounted tree, and
   scroll save land atomically together — a failed or superseded navigation
   commits nothing.
-- Write template hrefs **path-shaped through the built-in `link` formatter**:
-  `href="{ '/todos/' + t.id | link }"`. It emits the mode-appropriate href
+- Write template hrefs **path-shaped through the built-in `link` function**:
+  `href="{ link('/todos/' + t.id) }"`. It emits the mode-appropriate href
   (plain path in path mode, base-prefixed under `routerBase`, `#/...` in
   hash mode); strings not starting with `/` pass through (external URLs,
   `mailto:`, `#anchor`). Hand-written `#/...` hrefs still work in hash mode,
-  but piped links are the portable spelling.
+  but `link()` hrefs are the portable spelling.
+
+## Translations (puzzle ≥ 0.8.0)
+
+Configure `i18n: { locales: ['en', 'es'], defaultLocale: 'en' }` in
+`puzzle.config.js` (the key is `defaultLocale`, not `default`) and write one
+`app/locales/<tag>.json` per locale (BCP 47 with `-`: `pt-BR.json`, never
+`pt_BR.json`). Files may nest — `{ "cart": { "title": "…" } }` is the key
+`cart.title`. An object whose keys are ALL CLDR categories (`zero one two few
+many other`) is a plural entry and must have `other`.
+
+- Template: `{ t('cart.title') }`; variables come as ONE object —
+  `{ t('greeting', { name: user.name }) }` fills `{name}`, and a numeric
+  `count` picks the plural form (`{ t('cart.items', { count: cart.count }) }`).
+  A data field or a store record works too (`t('greeting', user)`; a model's
+  getters count).
+  An exact `count` of 0 uses the entry's `zero` form when it has one, even in
+  English — the way to say "Your cart is empty". Brace-only attributes work:
+  `placeholder={ t('search.hint') }`. Runtime-built keys work:
+  `{ t('status.' + order.status) }`.
+- Script: `this.ctx.i18n.t('key', vars)`, `.locale`, `.locales`,
+  `.defaultLocale`, and `this.ctx.i18n.setLocale('es')` — it fetches the file
+  first, then switches, stores the choice, sets `<html lang>` (except in
+  memory mode, which never touches the document), and rebuilds the page at the
+  same location (store records survive; `setData` state does not — keep state
+  that must survive a switch in the store). It resolves once the new strings
+  are active; if a navigation (push, replace or pop) is in flight, that
+  navigation lands first and the page is rebuilt after it. So a root layout's
+  `data()` or a route guard may `await this.ctx.i18n.setLocale(user.locale)`;
+  asking for the locale already active does nothing (unless the last rebuild
+  into it failed — then it retries).
+  `setLocale` rejects if the file fails to load or the rebuild fails, so
+  `.catch()` it in a switcher. `ctx.i18n` exists ONLY when
+  `i18n` is configured.
+- A missing key prints the key itself (dev warns with a did-you-mean). The
+  build fills every locale's missing keys from the default and warns; a
+  literal key missing from the default locale is a build warning too.
+- Output is text: markup in a translation prints literally.
+- With `i18n` configured, `date`/`time`/`datetime`, `number_with_delimiter`,
+  `compact_number`, the `pluralize` count and `timeago` follow the ACTIVE
+  locale (not the browser's); pass an explicit locale to `date(…)` to pin one.
+- Route `meta.title` stays a static string — it is not translated.
+- Prerendered pages (`--hybrid`/`--static`) render in `defaultLocale` and carry
+  its table inline; a viewer in another locale sees one swap after load.
 
 ## Data layer
 
@@ -557,10 +823,14 @@ The reactivity contract — the three methods are not interchangeable:
   It rerenders WITHOUT re-running `data()` and survives it.
 - **`refresh()`** re-runs `data()` — use it when local state feeds
   `data()`-derived values.
-- **Record props carry identity, not liveness.** Records mutate in place, so a
-  child receiving a record prop won't re-render on that record's internal
-  changes. Pass the id and re-query inside the child's own `data()` for a live
-  subscription.
+- **A record prop tracks that record, and only that record.** Records mutate in
+  place, so a record prop is always reference-equal — but it also carries a
+  render revision, so a child receiving `todo={ todo }` DOES re-run `data()`
+  when that record is updated through `update()` or any store path. What it
+  cannot see: a change to a RELATED record (`todo.author.name`), a computed
+  getter's inputs, or a field assigned directly (`todo.title = 'x'`, which
+  notifies nothing and re-renders nothing). For those, pass the id and re-query
+  inside the child's own `data()` for a live subscription.
 
 Persistence: give the app config a `storage` (e.g. localStorage-backed); the
 store hydrates at startup and persists snapshots after changes, fail-soft.
@@ -584,15 +854,18 @@ await app.router.push('/todos/1');
 
 - `mountView(ViewClass, options)` mounts ONE view against a detached container.
   Options: `params`, `props`, `children`, `ref`, `route`, `models`, `store`,
-  `router`, `formatters`, `adapter`, `ctx`. Returns a handle: `instance`, `container`,
+  `router`, `formatters`, `adapter`, `ctx`, `i18n: { locale, strings }` (a
+  translated view with no fetch; `strings` is the flat dotted-key table).
+  Returns a handle: `instance`, `container`,
   `element`, `ctx`, `store`, `router`, `find(sel)`, `findAll(sel)`,
-  `click(target)`, `setProps(props)`, `destroy()`.
+  `click(target)`, `type(target, text)`, `setProps(props)`, `destroy()`.
 - `createTestApp(config)` boots a REAL `PuzzleApp` — `target` and memory
   routing are forced (`routerInitialPath` seeds it), everything else passes
-  through. Handle: `app`, `store`, `router`, `ctx`,
-  `find`, `findAll`, `click`, `destroy()`.
-- `settled()` awaits the framework's pending render/flush work. `click()` and
-  `setProps()` already await it; use it directly after mutating the store.
+  through (`i18n: { locale, strings }` too). Handle: `app`, `store`, `router`, `ctx`,
+  `find`, `findAll`, `click`, `type`, `visit(path)`, `destroy()`.
+- `settled()` awaits the framework's pending render/flush work. `click()`,
+  `type()`, `setProps()` and `visit()` already await it; use it directly after
+  mutating the store.
 - `installFakeAnimate()` / `installFakeObserver()` stub Web Animations and
   IntersectionObserver so animation and `trigger: 'visible'` code paths run
   deterministically under jsdom.
@@ -713,7 +986,12 @@ production-host semantics for any mode (SPA deep-link fallback, static real
 1. **`data()` and `beforeMount` run under Node at build time** (both modes).
    Guard every browser global: `typeof document !== 'undefined'` before touching
    `document`, `window`, `localStorage`, `matchMedia`. DOM behavior belongs in
-   `mounted()`.
+   `mounted()`. The locale-aware functions (`date`, `time`, `datetime`,
+   `timeago`, `number_with_delimiter`, `compact_number`, the `pluralize`
+   count) print in the build machine's locale (`LANG`/`LC_ALL`, or
+   `i18n.defaultLocale` when configured) and time zone (`TZ`), then re-render
+   in the viewer's in the browser. Pin the locale and `TZ` on the build
+   machine for deterministic HTML.
 2. **In static mode `beforeMount` NEVER runs in the browser.** Its store seeds
    (CMS fetches etc.) are serialized into an inline JSON island per page and
    rehydrated before mount — so build-time credentials stay build-side, and
@@ -729,13 +1007,13 @@ production-host semantics for any mode (SPA deep-link fallback, static real
 5. **Static mode has no router and emits only plain path hrefs.** Hash-style
    `#/...` links are an SPA/hybrid concern (`routerMode: hashRouter()`) with no
    meaning on a static site — never hand-write them in templates that build
-   statically; path-shaped `| link` hrefs render as plain paths in static
+   statically; path-shaped `link()` hrefs render as plain paths in static
    output and as `#/...` in a hash-mode SPA, from the same template.
    `ctx.router` methods throw; `push()` calls
-   are a bug — use plain links. Custom formatters must be exported from
-   `app/formatters.js` to exist client-side (formatters only in the app.js
-   config trigger a build warning); models are picked up from
-   `app/models/index.js`. The `link` formatter is absent client-side in static
+   are a bug — use plain links. App functions must be exported from
+   `app/formatters.js` to exist client-side (functions only in the app.js
+   `formatters` config trigger a build warning); models are picked up from
+   `app/models/index.js`. The `link` function is absent client-side in static
    output — its pass-through fallback still yields correct plain-path hrefs.
    A configured adapter (`adapter.defaults(...)`) is best exported from
    `app/adapter.js` and passed to the app from there: each static page then
@@ -758,19 +1036,45 @@ production-host semantics for any mode (SPA deep-link fallback, static real
 
 Tailwind v4 is the supported pipeline (`styles: { use: ['tailwindcss'] }` — the
 CLI folds Tailwind output + collected `<style>` blocks into `dist/styles.css`;
-wire it with `puzzle add tailwind`). For puzzle-pieces apps, merge the registry's
-`theme/pieces.css` after `@import "tailwindcss"` and style ONLY via its semantic
-tokens (`bg-surface`, `text-ink`, `bg-brand`, `border-border`…); dark mode is
-`light-dark()` CSS driven by `data-theme` on `<html>` (set it pre-paint in the
-shell).
+wire it with `puzzle add tailwind`). For puzzle-pieces apps, import the theme after
+`@import "tailwindcss"` — `@import "@magic-spells/puzzle-pieces/themes/default.css"`
+(or the copied `app/styles/pieces.css`) plus any palette you offer
+(`/themes/dim.css`, `/themes/warm.css`, `/themes/void.css`) — and style ONLY via
+its semantic tokens (`bg-surface`, `text-ink`, `bg-brand`, `border-border`,
+shell roles `bg-bar` / `bg-rail` / `bg-surface-panel`…). Two attributes on
+`<html>` drive appearance: `data-scheme` is the palette (`dim | warm | void`;
+absent = default) and `data-theme` is the mode (`light | medium | dark`; absent
+follows the OS — medium is "soft dark"). Tokens are `light-dark()` pairs keyed
+on `color-scheme`, so the same markup is right in every scheme × mode; put both
+attributes on any element to scope a subtree. Copy a palette in with
+`puzzle add theme <name…>` (no name lists them with this app's install state);
+the default lands as `app/styles/pieces.css`, every other as
+`app/styles/themes/<name>.css`, and the `@import` line is printed, never
+written. Persist and apply the choice with
+`@magic-spells/puzzle-pieces/appearance` (`boot()` first thing in app.js,
+`set({ scheme, mode })`, `mode: null` = follow OS) and inline
+`@magic-spells/puzzle-pieces/pre-paint` in `<head>` before the stylesheet so
+the stored choice paints before first paint.
 
 ## puzzle-pieces (component library)
 
-Copy-in registry, shadcn-style: the files land in your app; nothing imports
-the registry package at runtime. Use `puzzle add piece <name…>` (copies each
+Copy-in registry, shadcn-style: the piece files land in your app, and no
+piece imports the registry package (only the optional theme CSS and the
+`appearance`/`pre-paint` helpers under Styling come from it). Use
+`puzzle add piece <name…>` (copies each
 piece + its transitive piece/lib dependencies verbatim, records hashes in
-`pieces.lock`; `--overwrite` to refresh; required npm packages and the theme
-merge are printed as next steps). The default source is the
+`pieces.lock`; refuses to overwrite any existing file unless `--overwrite`;
+never runs npm or edits styles.css: required npm packages and the theme
+merge are printed as next steps). When the app has no theme yet it writes
+`app/styles/pieces.css` and prints the `@import` line. When the app's
+`pieces.css` differs from the registry's, it prints a hint: run
+`puzzle add theme default` for an unmodified older copy (0.8 pieces use
+tokens a 0.7 theme lacks, such as `surface-frame`, `bar-*` and `rail-*`),
+or hand-merge / `--overwrite` an edited one. A piece that needs extra
+palettes prints `puzzle add theme <names…>` for the missing ones. The printed install line carries each
+package's version floor — `npm install @magic-spells/collapsible-content@^1.2.0`
+— so a piece never resolves against an npm `latest` older than the component it
+wraps; run it as printed. The default source is the
 `@magic-spells/puzzle-pieces` npm package, version-locked to the CLI's
 major.minor (falls back to the newest OLDER release with a printed note).
 `--pieces-version` pins a release; `--registry` (or `$PUZZLE_PIECES_REGISTRY`)

@@ -6,13 +6,16 @@
  * about D73 rootMargin sharing and cleanup straightforward.
  */
 
+/** @returns {import('../../types/testing.js').FakeObserverController} */
 export function installFakeObserver() {
 	const descriptor =
 		Object.getOwnPropertyDescriptor(globalThis, 'IntersectionObserver') ?? null;
+	/** @type {FakeIntersectionObserver[]} */
 	const observers = [];
 	let installed = true;
 
 	class FakeIntersectionObserver {
+		/** @param {IntersectionObserverCallback} callback @param {IntersectionObserverInit} [options] */
 		constructor(callback, options = {}) {
 			this.callback = callback;
 			this.options = options;
@@ -21,20 +24,25 @@ export function installFakeObserver() {
 			this.thresholds = Array.isArray(options.threshold)
 				? [...options.threshold]
 				: [options.threshold ?? 0];
+			/** @type {Set<Element>} */
 			this.observed = new Set();
+			/** @type {Array<[Element]>} */
 			this.observeCalls = [];
+			/** @type {Array<[Element]>} */
 			this.unobserveCalls = [];
 			this.disconnectCalls = 0;
 			this.disconnected = false;
 			observers.push(this);
 		}
 
+		/** @param {Element} element */
 		observe(element) {
 			this.observeCalls.push([element]);
 			this.observed.add(element);
 			this.disconnected = false;
 		}
 
+		/** @param {Element} element */
 		unobserve(element) {
 			this.unobserveCalls.push([element]);
 			this.observed.delete(element);
@@ -46,6 +54,7 @@ export function installFakeObserver() {
 			this.disconnected = true;
 		}
 
+		/** @returns {IntersectionObserverEntry[]} */
 		takeRecords() {
 			return [];
 		}
@@ -59,6 +68,7 @@ export function installFakeObserver() {
 
 	return {
 		observers,
+		/** @param {Element} element @param {boolean} [isIntersecting] */
 		trigger(element, isIntersecting = true) {
 			for (const observer of observers) {
 				if (!observer.observed.has(element)) continue;
@@ -74,13 +84,14 @@ export function installFakeObserver() {
 							rootBounds: null,
 						},
 					],
-					observer
+					// A deliberately partial IntersectionObserver (no scrollMargin).
+					/** @type {IntersectionObserver} */ (/** @type {unknown} */ (observer))
 				);
 			}
 		},
 		triggerAll(isIntersecting = true) {
 			for (const observer of observers) {
-				const entries = [...observer.observed].map((element) => ({
+				const entries = [...observer.observed].map(/** @returns {IntersectionObserverEntry} */ (element) => ({
 					target: element,
 					isIntersecting,
 					intersectionRatio: isIntersecting ? 1 : 0,
@@ -89,7 +100,8 @@ export function installFakeObserver() {
 					intersectionRect: emptyRect(),
 					rootBounds: null,
 				}));
-				if (entries.length > 0) observer.callback(entries, observer);
+				// A deliberately partial IntersectionObserver (no scrollMargin).
+				if (entries.length > 0) observer.callback(entries, /** @type {IntersectionObserver} */ (/** @type {unknown} */ (observer)));
 			}
 		},
 		uninstall() {
@@ -105,6 +117,7 @@ export function installFakeObserver() {
 	};
 }
 
+/** @returns {DOMRectReadOnly} */
 function emptyRect() {
 	return {
 		x: 0,

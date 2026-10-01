@@ -27,6 +27,7 @@
 
 // rootMargin string → { io, targets: Map<Element, Set<callback>> }. Module-global
 // so every view shares observers by margin. Entries self-delete when empty.
+/** @type {Map<string, { io: IntersectionObserver, targets: Map<Element, Set<() => void>> }>} */
 const registry = new Map();
 
 /**
@@ -105,7 +106,11 @@ export function observeVisible(el, rootMargin, callback) {
 
 // ---- internals ---------------------------------------------------------------
 
-/** The IO callback for one rootMargin bucket: fire each intersecting target's cbs. */
+/**
+ * The IO callback for one rootMargin bucket: fire each intersecting target's cbs.
+ * @param {string} rootMargin
+ * @returns {IntersectionObserverCallback}
+ */
 function makeHandler(rootMargin) {
 	return (entries) => {
 		const bucket = registry.get(rootMargin);
@@ -133,6 +138,10 @@ function makeHandler(rootMargin) {
  * Remove `callback` from `el`'s Set in `rootMargin`'s bucket; unobserve `el` when
  * its Set empties, and reclaim the IO when the whole bucket empties. Other
  * callbacks anchored to the same `el` stay armed.
+ *
+ * @param {string} rootMargin
+ * @param {Element} el
+ * @param {() => void} callback
  */
 function disarm(rootMargin, el, callback) {
 	const entry = registry.get(rootMargin);

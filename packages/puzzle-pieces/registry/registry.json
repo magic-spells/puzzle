@@ -1,26 +1,35 @@
 {
   "version": 1,
   "theme": "theme/pieces.css",
+  "modes": [
+    "light",
+    "medium",
+    "dark"
+  ],
   "themes": [
     {
       "name": "default",
       "file": "theme/pieces.css",
-      "description": "Balanced cool neutrals with an indigo accent."
-    },
-    {
-      "name": "warm",
-      "file": "theme/warm.css",
-      "description": "Warm greys and ivory with a clay-orange accent."
-    },
-    {
-      "name": "void",
-      "file": "theme/void.css",
-      "description": "Monochrome, borderless surfaces from white to true black."
+      "label": "Default",
+      "description": "Cool near-black with a navy tint and an indigo accent — balanced, classy, premium."
     },
     {
       "name": "dim",
       "file": "theme/dim.css",
-      "description": "Blue-grey mist and medium-dark slate."
+      "label": "Dim",
+      "description": "Blue-grey at half chroma with softer type — the low-contrast palette."
+    },
+    {
+      "name": "warm",
+      "file": "theme/warm.css",
+      "label": "Warm",
+      "description": "Ivory, tan and brown with a clay-orange accent — the Claude palette."
+    },
+    {
+      "name": "void",
+      "file": "theme/void.css",
+      "label": "Void",
+      "description": "Monochrome from white to true black — borderless, high contrast, Vercel-like."
     }
   ],
   "pieces": [
@@ -58,7 +67,22 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/dialog-panel"
+        "@magic-spells/dialog-panel@^2.0.3"
+      ],
+      "targetDir": "app/components/ui"
+    },
+    {
+      "name": "appearance-picker",
+      "description": "Controlled palette + mode picker — theme cards that are live miniatures of the shell painted in each palette (scoped data-scheme), and a Light / Medium / Dark / System radiogroup; fires @change({ scheme, mode }) for the app to persist with the appearance module",
+      "files": [
+        "AppearancePicker.pzl"
+      ],
+      "registryDependencies": [],
+      "dependencies": [],
+      "themes": [
+        "dim",
+        "warm",
+        "void"
       ],
       "targetDir": "app/components/ui"
     },
@@ -136,8 +160,8 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/bottom-sheet",
-        "@magic-spells/dialog-panel"
+        "@magic-spells/bottom-sheet@^2.0.2",
+        "@magic-spells/dialog-panel@^2.0.3"
       ],
       "targetDir": "app/components/ui"
     },
@@ -254,7 +278,7 @@
         "lib/puzzle-lang.js"
       ],
       "dependencies": [
-        "highlight.js"
+        "highlight.js@^11.11.1"
       ],
       "targetDir": "app/components/ui"
     },
@@ -269,7 +293,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/collapsible-content"
+        "@magic-spells/collapsible-content@^1.2.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -285,12 +309,14 @@
     },
     {
       "name": "command",
-      "description": "Command palette with filtered, grouped, keyboard-driven quick actions and snippet-customizable option content",
+      "description": "Command palette with filtered, grouped, keyboard-driven quick actions and snippet-customizable option content; wraps the @magic-spells/dialog-panel web component for the overlay",
       "files": [
         "Command.pzl"
       ],
       "registryDependencies": [],
-      "dependencies": [],
+      "dependencies": [
+        "@magic-spells/dialog-panel@^2.0.3"
+      ],
       "targetDir": "app/components/ui"
     },
     {
@@ -340,7 +366,7 @@
         "lib/date-math.js"
       ],
       "dependencies": [
-        "@magic-spells/morph-engine"
+        "@magic-spells/morph-engine@^0.4.2"
       ],
       "targetDir": "app/components/ui"
     },
@@ -375,7 +401,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/dialog-panel"
+        "@magic-spells/dialog-panel@^2.0.3"
       ],
       "targetDir": "app/components/ui"
     },
@@ -412,7 +438,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/dropdown-panel"
+        "@magic-spells/dropdown-panel@^2.1.1"
       ],
       "targetDir": "app/components/ui"
     },
@@ -439,7 +465,7 @@
         "lib/emoji-keywords.js"
       ],
       "dependencies": [
-        "@magic-spells/morph-engine"
+        "@magic-spells/morph-engine@^0.4.2"
       ],
       "targetDir": "app/components/ui"
     },
@@ -453,7 +479,7 @@
         "lib/emoji-data.js"
       ],
       "dependencies": [
-        "@magic-spells/morph-engine"
+        "@magic-spells/morph-engine@^0.4.2"
       ],
       "targetDir": "app/components/ui"
     },
@@ -490,6 +516,16 @@
       "targetDir": "app/components/ui"
     },
     {
+      "name": "hamburger",
+      "description": "Menu button whose three bars fold into an X — converge or twist, CSS-only two-phase motion on the individual translate/rotate properties, aria-expanded/aria-controls, optional-controlled open, an animate={false} instant swap, and bars in currentColor at sm/md/lg",
+      "files": [
+        "Hamburger.pzl"
+      ],
+      "registryDependencies": [],
+      "dependencies": [],
+      "targetDir": "app/components/ui"
+    },
+    {
       "name": "hover-card",
       "description": "Hover-triggered preview card for link previews and user cards — a compound family over the shared dropdown-panel base, with open/close delays, the package's hover bridge keeping the card hoverable, and optional-controlled open",
       "files": [
@@ -502,6 +538,18 @@
         "dropdown-panel"
       ],
       "dependencies": [],
+      "targetDir": "app/components/ui"
+    },
+    {
+      "name": "image-zoom",
+      "description": "Pinch-to-zoom and pan viewer for a single image — two-finger pinch, drag-to-pan, double-tap/double-click toggle, min/max scale with rubber-band resistance and animated snap-back, and value-first change/zoomStart/zoomEnd callbacks; wraps the @magic-spells/image-zoom web component rather than porting it",
+      "files": [
+        "ImageZoom.pzl"
+      ],
+      "registryDependencies": [],
+      "dependencies": [
+        "@magic-spells/image-zoom@^0.1.0"
+      ],
       "targetDir": "app/components/ui"
     },
     {
@@ -577,7 +625,7 @@
         "lib/markdown-doc.js"
       ],
       "dependencies": [
-        "marked"
+        "marked@^17.0.1"
       ],
       "targetDir": "app/components/ui"
     },
@@ -592,12 +640,12 @@
         "lib/markdown-doc.js"
       ],
       "dependencies": [
-        "@tiptap/core",
-        "@tiptap/pm",
-        "@tiptap/starter-kit",
-        "@tiptap/extension-list",
-        "@tiptap/extension-table",
-        "@tiptap/markdown"
+        "@tiptap/core@^3.30.0",
+        "@tiptap/pm@^3.30.0",
+        "@tiptap/starter-kit@^3.30.0",
+        "@tiptap/extension-list@^3.30.0",
+        "@tiptap/extension-table@^3.30.0",
+        "@tiptap/markdown@^3.30.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -609,7 +657,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/scrolling-content"
+        "@magic-spells/scrolling-content@^2.1.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -666,13 +714,14 @@
     },
     {
       "name": "navigation-menu",
-      "description": "Horizontal site navigation with hover/click flyout panels of link cards — a compound family over the shared dropdown-panel base, with disclosure-pattern semantics, nested submenus, full-width mega panels, and per-link active state",
+      "description": "Horizontal site navigation with hover/click flyout panels of link cards — a compound family over the shared dropdown-panel base, with disclosure-pattern semantics, nested submenus, full-width mega panels with headed columns, and per-link active state",
       "files": [
         "NavigationMenu/NavigationMenu.pzl",
         "NavigationMenu/Item.pzl",
         "NavigationMenu/Trigger.pzl",
         "NavigationMenu/Content.pzl",
         "NavigationMenu/Link.pzl",
+        "NavigationMenu/Group.pzl",
         "NavigationMenu/index.js"
       ],
       "registryDependencies": [
@@ -711,7 +760,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/panel-stack"
+        "@magic-spells/panel-stack@^0.2.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -792,7 +841,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/quantity-input"
+        "@magic-spells/quantity-input@^1.1.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -839,10 +888,10 @@
         "lib/rich-text-doc.js"
       ],
       "dependencies": [
-        "@tiptap/core",
-        "@tiptap/pm",
-        "@tiptap/starter-kit",
-        "@tiptap/extension-text-align"
+        "@tiptap/core@^3.30.0",
+        "@tiptap/pm@^3.30.0",
+        "@tiptap/starter-kit@^3.30.0",
+        "@tiptap/extension-text-align@^3.30.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -864,7 +913,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/scroll-stack"
+        "@magic-spells/scroll-stack@^0.1.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -890,7 +939,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/select-dropdown"
+        "@magic-spells/select-dropdown@^0.3.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -912,14 +961,24 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/sheet",
-        "@magic-spells/dialog-panel"
+        "@magic-spells/sheet@^0.2.0",
+        "@magic-spells/dialog-panel@^2.0.3"
       ],
       "targetDir": "app/components/ui"
     },
     {
+      "name": "shimmer-text",
+      "description": "Pending-state text with an ink shimmer — a wave of full ink passes through muted text, CSS-only, with a slow pulse under reduced motion",
+      "files": [
+        "ShimmerText.pzl"
+      ],
+      "registryDependencies": [],
+      "dependencies": [],
+      "targetDir": "app/components/ui"
+    },
+    {
       "name": "sidebar",
-      "description": "Config-first app-shell navigation rail — grouped links with icons and badges, animated collapsible submenus, active-route highlighting, and an optional-controlled collapsed icon-only mode with header/footer slots",
+      "description": "Config-first app-shell navigation rail — grouped links with icons and badges, animated collapsible submenus, active-route highlighting, an optional-controlled collapsed icon-only mode with header/footer slots, and a `rail` variant that paints it with the shell roles (bg-rail, text-rail-ink) as the frame's rail",
       "files": [
         "Sidebar.pzl"
       ],
@@ -963,7 +1022,7 @@
     },
     {
       "name": "spinner",
-      "description": "Inline rotating-ring loading indicator",
+      "description": "Inline loading indicator in seven CSS-only designs — the rotating ring, stepped activity ticks, a squircle trace, typing dots, Puzzle's snapping tiles, an AI spark and a live heartbeat — each a single role=status span in sm/md/lg",
       "files": [
         "Spinner.pzl"
       ],
@@ -997,7 +1056,19 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/split-panel"
+        "@magic-spells/split-panel@^0.2.0"
+      ],
+      "targetDir": "app/components/ui"
+    },
+    {
+      "name": "split-text",
+      "description": "Text reveal that splits a headline or paragraph into words, characters or detected lines and animates each unit in with a CSS stagger — eight effects, scroll/load/manual triggers, a replay token, and start/complete callbacks; wraps the @magic-spells/split-text web component rather than porting it",
+      "files": [
+        "SplitText.pzl"
+      ],
+      "registryDependencies": [],
+      "dependencies": [
+        "@magic-spells/split-text@^0.2.0"
       ],
       "targetDir": "app/components/ui"
     },
@@ -1045,7 +1116,7 @@
     },
     {
       "name": "tabs",
-      "description": "Accessible tablist family — underline or pill variant, with the roving tabindex, arrow/Home/End keyboard model, disabled-tab skipping and every ARIA attribute coming from the tab-group web component; panels are real members whose bodies take arbitrary markup",
+      "description": "Accessible tablist family — underline, segmented-pill or button variant, with the roving tabindex, arrow/Home/End keyboard model, disabled-tab skipping and every ARIA attribute coming from the tab-group web component; panels are real members whose bodies take arbitrary markup",
       "files": [
         "Tabs/Tabs.pzl",
         "Tabs/List.pzl",
@@ -1055,7 +1126,7 @@
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/tab-group"
+        "@magic-spells/tab-group@^1.2.0"
       ],
       "targetDir": "app/components/ui"
     },

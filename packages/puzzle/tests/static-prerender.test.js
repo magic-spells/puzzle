@@ -369,6 +369,29 @@ describe('static prerender (D81)', () => {
 			expect(byPath['/guide--templates']).toBe('_puzzle/guide--templates-2.js');
 			expect(byPath['*']).toBe('_puzzle/404.js');
 		});
+
+		// A suffixed slug is reserved like a base one, so a route whose own base is
+		// already taken as a suffix (`/index-2`) never shares an entry file.
+		for (const order of [
+			['/', '/index', '/index-2'],
+			['/index-2', '/index', '/'],
+		]) {
+			it(`never reuses a suffixed slug (${order.join(', ')})`, async () => {
+				class P extends PuzzleView {
+					render() {
+						return h('p', {}, [text('p')]);
+					}
+				}
+				stamp(P, 'app/views/P.pzl');
+				const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-slug-'));
+				const shellPath = writeShell(outDir);
+				const cfg = { target: '#app', routes: order.map((p) => ({ path: p, view: P })) };
+				const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+				const entries = summary.written.map((w) => w.entry);
+				expect(entries).toHaveLength(3);
+				expect(new Set(entries).size).toBe(3);
+			});
+		}
 	});
 
 	describe('duplicate output paths', () => {

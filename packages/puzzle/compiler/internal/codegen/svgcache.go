@@ -21,7 +21,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // ScannedSVG is one resolved {#svg} asset: the file's bytes and the result of

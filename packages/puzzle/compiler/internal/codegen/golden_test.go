@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 var update = flag.Bool("update", false, "regenerate golden files")
@@ -80,8 +80,8 @@ func TestGoldens(t *testing.T) {
 func TestFormatterMissingGuard(t *testing.T) {
 	got := compileFile(t, "testdata/formatter_chain.pzl", ModeView)
 	for _, want := range []string{
-		`(__f["join"] || __f.__missing("join"))(__d.tags, ', ')`,
-		`(__f["upcase"] || __f.__missing("upcase"))(`,
+		`(__f["capitalize"] || __f.__missing("capitalize"))(__d.title)`,
+		`(__f["truncate"] || __f.__missing("truncate"))(`,
 		`(__f["currency"] || __f.__missing("currency"))(__d.price, '$', 2)`,
 	} {
 		if !strings.Contains(got, want) {
@@ -101,13 +101,13 @@ func TestFormatterMissingGuard(t *testing.T) {
 // guarded formatter access.
 var formatterAccessRE = regexp.MustCompile(`__f\[`)
 
-// TestFormatterHyphenatedName pins that a hyphenated formatter name (a legitimate
-// runtime registry key) emits bracket access, not dot access. `__f.foo-bar` would
-// have parsed as valid JS subtraction and crashed at runtime before the D43 guard
-// could engage; `__f["foo-bar"]` reads the key and, when absent, hits __missing.
-func TestFormatterHyphenatedName(t *testing.T) {
+// TestFunctionNameIsBracketAccess pins that a library call reads the registry
+// by bracket access with a JSON-quoted key, so any identifier the grammar
+// accepts — a Unicode name, a `$` — is the registry key as written, and a
+// missing one reaches the D43 __missing guard.
+func TestFunctionNameIsBracketAccess(t *testing.T) {
 	got := compileSrc(t, `<puzzle-view>
-  <p>{ x | foo-bar }</p>
+  <p>{ größe(x) } { $fmt(x) }</p>
 </puzzle-view>
 
 <script>
@@ -115,11 +115,13 @@ import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView { data() { return { x: '' }; } }
 </script>
 `)
-	if !strings.Contains(got, `(__f["foo-bar"] || __f.__missing("foo-bar"))`) {
-		t.Errorf("hyphenated formatter must emit bracket access, got:\n%s", got)
-	}
-	if strings.Contains(got, "__f.foo-bar") {
-		t.Errorf("hyphenated formatter must not emit dot access (subtraction hazard):\n%s", got)
+	for _, want := range []string{
+		`(__f["größe"] || __f.__missing("größe"))(__d.x)`,
+		`(__f["$fmt"] || __f.__missing("$fmt"))(__d.x)`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
 	}
 }
 
@@ -162,7 +164,7 @@ func normalizeFixture(s string) string {
 	return strings.Join(kept, "\n")
 }
 
-// TestGoldenHome is golden file #1 (D14): the real examples/todos Home.pzl must
+// TestGoldenHome is golden file #1 (FILE-TESTS-FIXTURES-TODOS-HOME-COMPILED): the real examples/todos Home.pzl must
 // compile to tests/fixtures/todos/Home.compiled.js (modulo the documented
 // normalizations). If this fails, the codegen is wrong — the fixture wins.
 func TestGoldenHome(t *testing.T) {

@@ -7,7 +7,9 @@
           An overlapping stack of avatars rendered from an array, with a "+N"
           overflow chip once the count exceeds a max. Composes the Avatar
           piece for each disc, so image/initials/glyph fallback behavior
-          matches Avatar exactly.
+          matches Avatar exactly. Each tucked disc is cut out around the
+          neighbour covering it with an SVG mask, so the gap between them is
+          real transparent space, not a ring painted in the page colour.
         </p>
       </header>
 
@@ -50,10 +52,58 @@
           </div>
         </ExampleBox>
 
+        <ExampleBox id="direction" title="Direction" code={ codeDirection } tall={ false }>
+          <div class="flex flex-wrap items-center gap-x-10 gap-y-6">
+            <div class="flex flex-col items-start gap-2">
+              <span class="text-xs text-muted">direction="ltr"</span>
+              <AvatarGroup avatars={ team } max={ 4 } size="lg"/>
+            </div>
+            <div class="flex flex-col items-start gap-2">
+              <span class="text-xs text-muted">direction="rtl"</span>
+              <AvatarGroup avatars={ team } max={ 4 } size="lg" direction="rtl"/>
+            </div>
+            <div dir="rtl" class="flex flex-col items-start gap-2">
+              <span class="text-xs text-muted" dir="ltr">inside dir="rtl"</span>
+              <AvatarGroup avatars={ team } max={ 4 } size="lg"/>
+            </div>
+          </div>
+        </ExampleBox>
+
         <ExampleBox id="large-team" title="Large team" code={ codeLargeTeam } tall={ false }>
           <AvatarGroup avatars={ largeTeam } max={ 4 } label="16 collaborators"/>
         </ExampleBox>
+
+        <ExampleBox id="any-background" title="Any background" code={ codeAnyBackground } tall={ false }>
+          <div class="flex flex-wrap gap-4">
+            <div class="rounded-lg bg-brand-tint p-4">
+              <AvatarGroup avatars={ team } max={ 4 } size="lg"/>
+            </div>
+            <div class="rounded-lg bg-brand p-4">
+              <AvatarGroup avatars={ team } max={ 4 } size="lg"/>
+            </div>
+          </div>
+        </ExampleBox>
       </div>
+
+      <section id="props" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Props</h2>
+        <div class="overflow-x-auto rounded-xl border border-border">
+          <table class="w-full text-sm">
+            <thead class="bg-surface-sunken text-left text-xs uppercase tracking-wide text-muted">
+              <tr><th class="px-3 py-2 font-medium">Prop</th><th class="px-3 py-2 font-medium">Type</th><th class="px-3 py-2 font-medium">Notes</th></tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              {#for row in props}
+                <tr key={ row.name }>
+                  <td class="px-3 py-2 font-mono text-code text-ink">{ row.name }</td>
+                  <td class="px-3 py-2 font-mono text-code text-muted">{ row.type }</td>
+                  <td class="px-3 py-2 text-body">{ row.notes }</td>
+                </tr>
+              {/for}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </article>
 
     <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
@@ -104,6 +154,32 @@ const codeSizes = `<AvatarGroup avatars={ team } max={ 4 } size="sm" />
 const codeLargeTeam = `// 16 avatars, max=4 — the chip reads "+12".
 <AvatarGroup avatars={ largeTeam } max={ 4 } label="16 collaborators" />`;
 
+const codeAnyBackground = `// The bite is a mask, not a ring — whatever sits behind shows through the gap.
+<div class="rounded-lg bg-brand-tint p-4">
+  <AvatarGroup avatars={ team } max={ 4 } size="lg" />
+</div>`;
+
+const codeDirection = `// 'ltr' (default): the first disc is whole, each later one tucks under it.
+<AvatarGroup avatars={ team } max={ 4 } size="lg" />
+
+// 'rtl': mirrored — the last disc (here the chip) is whole instead.
+<AvatarGroup avatars={ team } max={ 4 } size="lg" direction="rtl" />
+
+// direction is logical: inside an RTL page the whole stack mirrors
+// with the text, so the default starts whole at the right.
+<div dir="rtl">
+  <AvatarGroup avatars={ team } max={ 4 } size="lg" />
+</div>`;
+
+const PROPS = [
+  { name: 'avatars', type: 'array', notes: '[{ src?, name? }] — forwarded to Avatar per item, in order.' },
+  { name: 'max', type: 'number', notes: 'Show the first max avatars (default 4); the rest fold into one "+N" chip.' },
+  { name: 'size', type: 'string', notes: "'sm' | 'md' | 'lg' (default 'md'), matched by the chip." },
+  { name: 'direction', type: 'string', notes: "'ltr' (default): the first disc is whole and each later one tucks under its predecessor. 'rtl': mirrored, the last disc is whole. Logical — both flip inside an RTL page. DOM and reading order never change." },
+  { name: 'label', type: 'string', notes: 'Optional aria-label on the root, e.g. "5 collaborators".' },
+  { name: 'class', type: 'string', notes: 'Appended to the root.' },
+];
+
 const NAMES = [
   'Ada Lovelace', 'Grace Hopper', 'Alan Turing', 'Katherine Johnson',
   'Linus Torvalds', 'Barbara Liskov', 'Margaret Hamilton', 'Dennis Ritchie',
@@ -122,6 +198,9 @@ export default class AvatarGroupDoc extends PuzzleView {
       codeNoOverflow,
       codeSizes,
       codeLargeTeam,
+      codeAnyBackground,
+      codeDirection,
+      props: PROPS,
       team: [
         { name: 'Ada Lovelace' },
         { src: 'https://i.pravatar.cc/80?img=13', name: 'Grace Hopper' },
@@ -140,7 +219,10 @@ export default class AvatarGroupDoc extends PuzzleView {
         { label: 'Overflow chip', href: '#overflow' },
         { label: 'No overflow', href: '#no-overflow' },
         { label: 'Sizes', href: '#sizes' },
+        { label: 'Direction', href: '#direction' },
         { label: 'Large team', href: '#large-team' },
+        { label: 'Any background', href: '#any-background' },
+        { label: 'Props', href: '#props' },
       ],
     };
   }

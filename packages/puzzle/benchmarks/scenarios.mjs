@@ -212,12 +212,93 @@ function handlerGates(variant) {
 	];
 }
 
+// ───────────────────────────────────────────── the D170 work-count gates ────
+//
+// The D170 gates state the render upgrade's claim as work, not as
+// milliseconds: a single-record edit in a list of 1,000 must rebuild ONE row,
+// and a reorder must rebuild NONE. Timings on a laptop are noise; these
+// counters are not, so they are asserted exactly — the expects below and the
+// measured numbers recorded on DECISION-D170-INCREMENTAL-VDOM-LISTS are the
+// gates themselves.
+//
+// Two counters carry it, both production-visible (see the perf note in
+// examples/stress/app/row-metrics.js — the framework's own `domMutations` lives
+// in the dev-only profiler and cannot be read from the bundle this suite
+// measures):
+//
+//   klRowsTouched   distinct .kl-row elements a real MutationObserver saw
+//                   mutate during the op — KeyedList.watchRows()
+//   childDataRuns   ListRow.data() runs, counted in the row component itself
+//
+// A reorder registers its moves as childList records on the list BODY, whose
+// target is not inside any row, so a cached-row reorder reads 0 rows touched
+// while still reporting the moves in klDomMutations.
+const rowsTouchedInvariant = (want, bound) => (stats) =>
+	keyedInvariant(stats) ??
+	(stats.klDomMutations > bound
+		? `${stats.klDomMutations} DOM mutations for ${want} touched row(s) — more than the ${bound} a ${want}-row pass can account for`
+		: null);
+
+/** A reorder must MOVE something; zero mutations would mean the op did nothing. */
+const reorderInvariant = (stats) =>
+	keyedInvariant(stats) ??
+	(stats.klDomMutations > 0 ? null : 'reorder: zero DOM mutations — the list never actually moved');
+
+function renderWorkOps(size = 1000) {
+	const createOp = size === 1000 ? 'create-1k' : 'create-10k';
+	const common = {
+		scenario: 'keyed-list',
+		params: { n: size },
+		size,
+		prepare: ['clear', createOp],
+		preExpect: { records: size },
+	};
+	return [
+		{
+			...common,
+			id: `keyed-list/update-one/${size}`,
+			label: 'update-one',
+			op: 'update-one',
+			// THE gate. One record edited, N-1 rows returned from the row cache and
+			// short-circuited by patch(): exactly one row mutates in the DOM and
+			// exactly one child view re-runs data(), whatever N is.
+			expect: { records: size, klRowsTouched: 1, childDataRuns: 1 },
+			invariant: rowsTouchedInvariant(1, 20),
+			note: 'update-one is the D170 single-edit gate: one record.update() in a list of 1,000 must touch exactly one row in the DOM and re-run exactly one child data().',
+		},
+		{
+			...common,
+			id: `keyed-list/update-all/${size}`,
+			label: 'update-all',
+			op: 'update-all',
+			// The upper bound of the same measurement: every row dirty, every row
+			// rebuilt ONCE — no duplicates, no row rebuilt twice.
+			expect: { records: size, klRowsTouched: size, childDataRuns: size },
+			invariant: rowsTouchedInvariant(size, size * 20),
+			note: 'update-all edits every record: every row must rebuild exactly once (no row counted twice), which is what bounds klDomMutations.',
+		},
+		{
+			...common,
+			id: `keyed-list/reorder/${size}`,
+			label: 'reorder',
+			op: 'reorder',
+			// A pure display-order flip: no record is written, so every row must come
+			// back from the cache. The only work is the patcher's move path.
+			expect: { records: size, klRowsTouched: 0, childDataRuns: 0 },
+			invariant: reorderInvariant,
+			note: 'reorder reverses the DISPLAY order without writing a single record, so every row must come back cached: zero rows touched, zero child data() runs, and the moves alone in klDomMutations.',
+		},
+	];
+}
+
 export const OPS = [
 	// ── keyed-list: every row mounted ───────────────────────────────────────
 	// The control arm. Above 20,000 rows the view deliberately does not
 	// auto-seed on mount (examples/stress/app/row-ops.js HEAVY_ROW_THRESHOLD),
 	// so selecting n=50000 mounts empty and the prepare builds the list.
 	...listOps('keyed-list', 1000, { invariant: keyedInvariant }),
+	// The D170 work-count gates, at the size the plan states them for.
+	...renderWorkOps(1000),
 	...listOps('keyed-list', 10000, { invariant: keyedInvariant }),
 	...listOps('keyed-list', 50000, { invariant: keyedInvariant }),
 
@@ -392,14 +473,20 @@ export const OPS = [
 			// THE assertion. Not "few", not "hopefully none" — exactly zero DOM
 			// mutations below an island boundary, measured with a MutationObserver.
 			islandViolations: 0,
-			// And the cost of that guarantee: every descendant vnode is still
-			// built on every render before the patcher discards the lot.
+			// And the cost of that guarantee, still paid on every render: an
+			// island's seed is only a compiler cache site when it is STATIC
+			// (D170). A dynamic seed is re-evaluated per render and thrown away
+			// in patch(), because `this.__c[n] ??=` is per view instance while
+			// D44 re-seeds from the template on a key-reset or hide/show
+			// remount — caching it would display the first render's values
+			// forever. Measured by read-counting getters on each descendant
+			// rather than inferred from the source.
 			islandChildVnodesPerRender: 20000,
 			// The control. Zero island mutations means nothing if the shell never
 			// mutated either.
 			shellDidMutate: 1,
 		},
-		note: 'shell-renders re-renders the surrounding view 60 times. islandViolations must be 0 (island holds) while islandChildVnodesPerRender stays at the full 20,000 (the freeze saves patching, not allocation). The 5-second shell-churn arm measures the same thing on a clock and is deliberately not timed here.',
+		note: 'shell-renders re-renders the surrounding view 60 times. islandViolations must be 0 (island holds), and islandChildVnodesPerRender stays at 20,000 — 1,200,000 across this window — because this island\'s seed is DYNAMIC. D170 caches an island children array only when it is static: a cached dynamic seed would survive the remount D44 promises re-seeds from the template, so the key-reset and hide/show arms would show the OLD seed. Winning those allocations back needs the runtime to own the seed\'s lifetime — emit the seed as a per-render thunk the runtime evaluates at mount only, one closure instead of N vnodes, correct on remount. Deferred, not built (D170 deviation note). The 5-second shell-churn arm measures the same thing on a clock and is deliberately not timed here.',
 	},
 
 	// ── formatters: the A/B that prices the built-in registry ───────────────
@@ -488,20 +575,37 @@ export const OPS = [
 			rcLeafMounts: 100,
 			rcLeafDataRuns: 100,
 			// 2 renders per navigation for the reused root layout — the shape the
-			// finding predicted. The nested levels are worse; see rcAncestorRenders.
+			// finding predicted. Since D170 every nested level costs the same 2;
+			// see rcAncestorRenders.
 			rcLayoutRenders: 200,
 			rcLayoutDataRuns: 100,
-			// 27 renders per navigation across layout + 5 levels, against 6 data()
-			// runs. Per level that is 2,3,4,5,6,7: each reused ancestor's refresh
-			// re-renders every descendant that holds slot children, so the reused
-			// prefix costs O(depth^2) renders, not 2 per level.
-			rcAncestorRenders: 2700,
+			// 12 renders per navigation across layout + 5 levels, against 6 data()
+			// runs — 2 per level, which is the shape the cascade was SUPPOSED to
+			// have. It used to be 27 (2,3,4,5,6,7 per level, O(depth^2)): each
+			// reused ancestor's refresh re-rendered every descendant holding slot
+			// children, and every one of those descendants then rebuilt its whole
+			// subtree. D170 stops the cascade at the first ancestor whose props
+			// and records did not move — the record-revision prop compare and the
+			// patch() identity short-circuit both hold — so the reused prefix is
+			// O(depth) again.
+			rcAncestorRenders: 1200,
 			rcAncestorDataRuns: 600,
-			// Every one of those mutations is at the divergence level (5 per
-			// navigation, the leaf swap). Levels 0-4 mutate NOTHING, ever.
-			rcAncestorMutations: 500,
+			// Every one of those mutations is at the divergence level (7 per
+			// navigation, the leaf swap). Levels 0-4 mutate NOTHING, ever, and
+			// that is the assertion — the 7 itself is router bookkeeping, not
+			// render work: 4 childList records (remove the old view, insert the
+			// mount anchor, insert the new view, remove the anchor) plus 3
+			// attribute writes from #focusElement stamping tabindex="-1" and
+			// suppressing the two focus-ring channels on the incoming root. The
+			// matching 3 on the OUTGOING root land in rcChromeMutations, because
+			// by the time the observer delivers them that element is detached.
+			// D170 did not move this number: a release/0.8.0 build measures the
+			// same 700 / 300 pair. The 500 this expect used to carry predates the
+			// focus-ring suppression and was masked by the rcAncestorRenders
+			// mismatch above, which the runner reports first.
+			rcAncestorMutations: 700,
 		},
-		note: 'navigate-burst is the headline: 100 leaf-divergence navigations over a 5-level chain. 27 ancestor renders and 6 data() runs per navigation, 2,200 of the 2,700 renders producing zero DOM mutations. rcAncestorMutations must stay at 500 — all of it at the divergence level.',
+		note: 'navigate-burst is the headline: 100 leaf-divergence navigations over a 5-level chain. 12 ancestor renders and 6 data() runs per navigation — 2 per level, down from 27 before D170, because the record-prop and identity bailouts now stop the reused-ancestor cascade instead of letting it re-render every slot-holding descendant (O(depth), not O(depth^2)). 500 of the 1,200 renders produce zero DOM mutations. rcAncestorMutations must stay at 700 — all of it at the divergence level, and all of it the router swapping and focusing the leaf rather than any ancestor repainting; a release/0.8.0 build measures the same 700.',
 	},
 	{
 		id: 'route-churn/params-burst/100',
@@ -522,13 +626,16 @@ export const OPS = [
 			rcLeafDataRuns: 100,
 			rcLayoutRenders: 100,
 			rcLayoutDataRuns: 100,
-			rcAncestorRenders: 2100,
+			// 6 per navigation — one per reused level — against the same 6 data()
+			// runs. It was 21 before D170; with no applyParentUpdate cascade to
+			// remove, the drop is entirely the bailouts holding inside each level.
+			rcAncestorRenders: 600,
 			rcAncestorDataRuns: 600,
-			// The decisive one: not a single ancestor DOM mutation in 2,100
+			// The decisive one: not a single ancestor DOM mutation in 600
 			// ancestor renders. Only the leaf's own text and data-leaf change.
 			rcAncestorMutations: 0,
 		},
-		note: 'the CONTROL. keep === chain.length, so there is no applyParentUpdate cascade and no post-commit layout re-render: 21 ancestor renders per navigation instead of 27, and ALL 2,100 of them mutate nothing. If this arm also showed the extra renders, the finding would be about something other than the cascade.',
+		note: 'the CONTROL. keep === chain.length, so there is no applyParentUpdate cascade and no post-commit layout re-render: 6 ancestor renders per navigation instead of 12, and ALL 600 of them mutate nothing. Both arms fell by the same factor under D170 (21 → 6 here, 27 → 12 there), which is what keeps this a control: the remaining gap between them is still exactly the cascade.',
 	},
 
 	// ── listener-churn: what does rebinding a DOM listener actually cost? ────
@@ -579,11 +686,19 @@ export const OPS = [
 							? {
 									lcRows: size,
 									lcRenders: 20,
-									// 2 handlers per row, each removed and re-added: 4 calls per
-									// row per render, 40,000 per render at 10,000 rows.
-									lcAddListener: 400000,
-									lcRemoveListener: 400000,
-									lcListenerCallsPerRender: 40000,
+									// EXACTLY zero, same as the other two arms. The churn arm's
+									// handler captures a loop local, which used to compile to a
+									// fresh closure per row per render — 4 listener calls per row
+									// per render, 400,000 across this run. D170 caches that
+									// closure on the row scope (`(s.h0 ??= …)`), so it is
+									// identity-stable and never reaches setAttr; the arm now
+									// compiles to the same shape as `stable` and measures the
+									// same zero. The arm STAYS: its click-select behaviour gate
+									// still proves the handler fires and reads the current row,
+									// which is the thing row-scope caching could have broken.
+									lcAddListener: 0,
+									lcRemoveListener: 0,
+									lcListenerCallsPerRender: 0,
 								}
 							: {
 									lcRows: size,
@@ -595,7 +710,11 @@ export const OPS = [
 									lcRemoveListener: 0,
 									lcListenerCallsPerRender: 0,
 								},
-					note: `count-listeners (${binding}) is instrumented — Element.prototype's addEventListener/removeEventListener are patched by the scenario. Its counts are exact; its milliseconds include the probe and must NOT be compared against rerender. Capped at 3 iterations: the counts are algorithmic, not statistical.`,
+					note:
+						`count-listeners (${binding}) is instrumented — Element.prototype's addEventListener/removeEventListener are patched by the scenario. Its counts are exact; its milliseconds include the probe and must NOT be compared against rerender. Capped at 3 iterations: the counts are algorithmic, not statistical.` +
+						(binding === 'churn'
+							? ' All three arms now read zero: D170 caches a loop-capturing handler on the row scope, so the churn arm is compiled into the same identity-stable shape as stable. The 400,000 it used to report is the pre-D170 figure.'
+							: ''),
 				});
 			}
 			return entries;

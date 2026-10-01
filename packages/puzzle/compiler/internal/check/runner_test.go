@@ -12,7 +12,7 @@ import (
 
 func TestFabricatedTSCOutputRemapsExactly(t *testing.T) {
 	source := []byte(`<puzzle-view>
-  <p>{ person.name.toUpperCase() }</p>
+  <p>{ person.name.upper }</p>
 </puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
@@ -28,18 +28,18 @@ export default class Home extends PuzzleView {
 		t.Fatal(err)
 	}
 	virtual := virtualFileWithExtension(t, files, ".ts")
-	offset := strings.LastIndex(string(virtual.Contents), "toUpperCase")
+	offset := strings.LastIndex(string(virtual.Contents), "upper")
 	if offset < 0 {
-		t.Fatal("generated output missing toUpperCase")
+		t.Fatal("generated output missing upper")
 	}
 	line, column := utf16LineColumn(virtual.Contents, offset)
 	tables := map[string]*SegmentTable{
 		filepath.Join(root, filepath.FromSlash(generatedPath)): virtual.Table,
 	}
-	input := filepath.ToSlash(generatedPath) + "(" + strconv.Itoa(line) + "," + strconv.Itoa(column) + "): error TS2339: Property 'toUpperCase' does not exist on type 'number'.\n" +
+	input := filepath.ToSlash(generatedPath) + "(" + strconv.Itoa(line) + "," + strconv.Itoa(column) + "): error TS2339: Property 'upper' does not exist on type 'number'.\n" +
 		"app/models/user.ts(4,2): error TS2322: Type 'number' is not assignable to type 'string'.\n"
 	got := remapTSCOutput(root, input, tables)
-	want := "app/views/Home.pzl:2:20: Property 'toUpperCase' does not exist on type 'number'.\n" +
+	want := "app/views/Home.pzl:2:20: Property 'upper' does not exist on type 'number'.\n" +
 		"app/models/user.ts(4,2): error TS2322: Type 'number' is not assignable to type 'string'.\n"
 	if got != want {
 		t.Fatalf("remapped output mismatch\nwant:\n%s\ngot:\n%s", want, got)
@@ -106,7 +106,7 @@ func TestRunWithLiveTSC(t *testing.T) {
 	if err := os.MkdirAll(viewDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	source := `<puzzle-view><p>{ value.toUpperCase() }</p></puzzle-view>
+	source := `<puzzle-view><p>{ value.upper }</p></puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView { value = 123; }
@@ -120,7 +120,7 @@ export default class Home extends PuzzleView { value = 123; }
 	if err == nil {
 		t.Fatal("expected template type error")
 	}
-	want := "app/views/Home.pzl:1:25: Property 'toUpperCase' does not exist on type 'number'."
+	want := "app/views/Home.pzl:1:25: Property 'upper' does not exist on type 'number'."
 	if got := err.Error(); got != want {
 		t.Fatalf("live tsc output mismatch\nwant: %s\ngot:  %s", want, got)
 	}
@@ -128,22 +128,41 @@ export default class Home extends PuzzleView { value = 123; }
 
 func TestPlainJSScriptUncheckedByDefault(t *testing.T) {
 	root := liveTSCApp(t)
-	writeLiveView(t, root, plainJSComponent("value.toFixed(0)"))
+	writeLiveView(t, root, plainJSComponent("value + 1"))
 
 	if _, err := Run(root); err != nil {
 		t.Fatalf("type-suspicious legal JavaScript must remain unchecked by default: %v", err)
 	}
 }
 
+// With no app tsconfig the check is not strict. TypeScript 6 and 7 default
+// strict on, and a JavaScript field first assigned in a lifecycle method is
+// inferred as possibly undefined — examples/stress failed with
+// `'__d.stats' is possibly 'undefined'`.
+func TestNoAppTsconfigIsNotStrict(t *testing.T) {
+	root := liveTSCApp(t)
+	writeLiveView(t, root, `<puzzle-view><p>{ stats.count }</p></puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {
+  mounted() { this.stats = { count: 0 }; }
+}
+</script>
+`)
+	if _, err := Run(root); err != nil {
+		t.Fatalf("a plain-JavaScript app with no tsconfig must not be checked strictly: %v", err)
+	}
+}
+
 func TestPlainJSTemplateErrorsAreReported(t *testing.T) {
 	root := liveTSCApp(t)
-	writeLiveView(t, root, plainJSComponent("value.toUpperCase()"))
+	writeLiveView(t, root, plainJSComponent("value.upper"))
 
 	_, err := Run(root)
 	if err == nil {
 		t.Fatal("expected checked template expression to fail")
 	}
-	want := "app/views/Home.pzl:1:25: Property 'toUpperCase' does not exist on type 'number'."
+	want := "app/views/Home.pzl:1:25: Property 'upper' does not exist on type 'number'."
 	if got := err.Error(); got != want {
 		t.Fatalf("plain-JS template diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
 	}
@@ -208,12 +227,12 @@ func TestTSCRunsUnderNodeFromAPathWithSpaces(t *testing.T) {
 	if tool.entry != entry {
 		t.Fatalf("entry = %q, want the typescript package entry %q", tool.entry, entry)
 	}
-	major, err := readTypeScriptMajor(tool)
+	version, err := readTypeScriptVersion(tool)
 	if err != nil {
-		t.Fatalf("readTypeScriptMajor: %v", err)
+		t.Fatalf("readTypeScriptVersion: %v", err)
 	}
-	if major != 5 {
-		t.Fatalf("major = %d, want 5", major)
+	if version != (TypeScriptVersion{5, 7}) {
+		t.Fatalf("version = %+v, want 5.7", version)
 	}
 }
 
@@ -313,6 +332,11 @@ func TestAppTsconfigVariantsDoNotBreakTheCheck(t *testing.T) {
 		// TypeScript 7 rejects all three legacy settings. The generated config
 		// must replace inherited paths as well as clearing baseUrl and node10.
 		{"legacy-resolution", `{"compilerOptions":{"baseUrl":".","module":"CommonJS","moduleResolution":"node","paths":{"@/*":["app/*"],"legacy/*":["app/*"]},"strict":true}}`},
+		// The app's own alias, in a config with a comment and trailing commas:
+		// the generated config writes paths, so it used to drop this one and
+		// report "Cannot find module '~/models/value'".
+		{"app-paths", "{\n  // aliases\n  \"compilerOptions\": {\"paths\": {\"~/*\": [\"./app/*\"],}, \"strict\": true,},\n}"},
+		{"module-nodenext", `{"compilerOptions":{"module":"nodenext","strict":true}}`},
 	}
 	clean := `<puzzle-view><p>{ value }</p></puzzle-view>
 <script lang="ts">
@@ -340,8 +364,11 @@ export default class Home extends PuzzleView { value = value; }
 			view := clean
 			if tc.name == "noUnused" {
 				view = unusedLoopBinding
-			} else if tc.name == "legacy-resolution" {
+			} else if tc.name == "legacy-resolution" || tc.name == "app-paths" {
 				view = aliasImport
+				if tc.name == "app-paths" {
+					view = strings.Replace(view, "'@/models/value'", "'~/models/value'", 1)
+				}
 				models := filepath.Join(root, "app", "models")
 				if err := os.MkdirAll(models, 0o755); err != nil {
 					t.Fatal(err)
@@ -376,7 +403,7 @@ func generateCheckApp(t *testing.T) (string, *Result) {
 		t.Fatal(err)
 	}
 	source := `<puzzle-view>
-  <p>{ person.name.toUpperCase() }</p>
+  <p>{ person.name.upper }</p>
 </puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
@@ -388,7 +415,7 @@ export default class Home extends PuzzleView {
 	if err := os.WriteFile(filepath.Join(viewDir, "Home.pzl"), []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := Generate(root, 7)
+	result, err := Generate(root, TypeScriptVersion{Major: 7})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -396,7 +423,7 @@ export default class Home extends PuzzleView {
 }
 
 // tsTableFor returns the .ts virtual file's table for app/views/Home.pzl out of
-// the run's index, plus the generated line/column of the toUpperCase call.
+// the run's index, plus the generated line/column of the `upper` read.
 func tsTableFor(t *testing.T, root string, result *Result) (*SegmentTable, int, int) {
 	t.Helper()
 	generated := filepath.Join(root, ".puzzle", "check", "src", "views", "Home.pzl.ts")
@@ -404,9 +431,9 @@ func tsTableFor(t *testing.T, root string, result *Result) (*SegmentTable, int, 
 	if table == nil {
 		t.Fatalf("tableIndex has no entry for %s", generated)
 	}
-	offset := strings.LastIndex(string(table.generatedBytes), "toUpperCase")
+	offset := strings.LastIndex(string(table.generatedBytes), "upper")
 	if offset < 0 {
-		t.Fatal("generated output missing toUpperCase")
+		t.Fatal("generated output missing upper")
 	}
 	line, column := utf16LineColumn(table.generatedBytes, offset)
 	return table, line, column
@@ -442,7 +469,7 @@ func TestTableIndexSurvivesSourceEditAfterGenerate(t *testing.T) {
 			if !ok {
 				t.Fatal("Remap failed after the authored file changed on disk")
 			}
-			// toUpperCase in the original source sits on line 2, byte column 20.
+			// `upper` in the original source sits on line 2, byte column 20.
 			if pos.Line != 2 || pos.Column != 20 {
 				t.Fatalf("remapped position = %d:%d, want 2:20 (the authored source, not what is on disk)", pos.Line, pos.Column)
 			}
@@ -470,7 +497,7 @@ func TestTableIndexKeysMatchRemapLookup(t *testing.T) {
 // expression. The negative half runs first so a silently-skipped emission
 // cannot pass this test.
 func TestDottedComponentTagChecksProps(t *testing.T) {
-	bad := `<puzzle-view><Frame.Wrapper label={ value.toUpperCase() }><Frame.Content/></Frame.Wrapper></puzzle-view>
+	bad := `<puzzle-view><Frame.Wrapper label={ value.upper }><Frame.Content/></Frame.Wrapper></puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView { value = 123; }
@@ -482,20 +509,96 @@ export default class Home extends PuzzleView { value = 123; }
 	if err == nil {
 		t.Fatal("expected the prop expression on a dotted component tag to be checked")
 	}
-	want := "app/views/Home.pzl:1:43: Property 'toUpperCase' does not exist on type 'number'."
+	want := "app/views/Home.pzl:1:43: Property 'upper' does not exist on type 'number'."
 	if got := err.Error(); got != want {
 		t.Fatalf("dotted-tag diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
 	}
 
-	good := `<puzzle-view><Frame.Wrapper label={ value.toUpperCase() }><Frame.Content/></Frame.Wrapper></puzzle-view>
+	good := `<puzzle-view><Frame.Wrapper label={ value.upper }><Frame.Content/></Frame.Wrapper></puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
-export default class Home extends PuzzleView { value = 'ok'; }
+export default class Home extends PuzzleView { value = { upper: 'OK' }; }
 </script>
 `
 	clean := liveTSCApp(t)
 	writeLiveView(t, clean, good)
 	if _, err := Run(clean); err != nil {
 		t.Fatalf("a dotted component tag must not be a type error by itself: %v", err)
+	}
+}
+
+// handlerArityComponent is one component whose handlers declare no parameters
+// while the template passes them arguments — the documented
+// `@click={ play(event) }` form, a conditional handler, and a component
+// callback prop. lang is "" for plain JavaScript or ` lang="ts"`.
+func handlerArityComponent(lang, clickArgs string) string {
+	return `<puzzle-view>
+  <button @click={ play(` + clickArgs + `) }>Play</button>
+  <button @click={ open ? close(event) : null }>Close</button>
+  <Row @press={ play(event) } />
+</puzzle-view>
+<script` + lang + `>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {
+  value = 123;
+  open = true;
+  events = {
+    play: () => {},
+    close: () => {},
+  };
+}
+</script>
+`
+}
+
+// A plain-JavaScript component's handler parameters are whatever TypeScript
+// infers from untyped JS (D165), so passing the DOM event to a handler that
+// ignores it — legal JavaScript and the documented form — is not an error.
+// A TypeScript component declares its handlers, so the same calls are.
+func TestJSHandlerArityIsNotChecked(t *testing.T) {
+	root := liveTSCApp(t)
+	writeLiveView(t, root, handlerArityComponent("", "event"))
+	if _, err := Run(root); err != nil {
+		t.Fatalf("a JavaScript handler called with the DOM event must not be an arity error: %v", err)
+	}
+
+	typed := liveTSCApp(t)
+	writeLiveView(t, typed, handlerArityComponent(` lang="ts"`, "event"))
+	_, err := Run(typed)
+	if err == nil {
+		t.Fatal("expected a TypeScript handler's arity to stay checked")
+	}
+	want := "app/views/Home.pzl:2:25: Expected 0 arguments, but got 1.\n" +
+		"app/views/Home.pzl:3:33: Expected 0 arguments, but got 1.\n" +
+		"app/views/Home.pzl:4:22: Expected 0 arguments, but got 1."
+	if got := err.Error(); got != want {
+		t.Fatalf("TypeScript handler diagnostics mismatch\nwant: %s\ngot:  %s", want, got)
+	}
+}
+
+// Relaxing a JavaScript handler's parameters leaves its argument expressions
+// checked as template expressions like any other, and the handler name is now
+// checked against the component's events field — TypeScript reads a JS object
+// literal as open, so a misspelled handler was not reported before.
+func TestJSHandlerArgumentsAndNameAreChecked(t *testing.T) {
+	root := liveTSCApp(t)
+	writeLiveView(t, root, handlerArityComponent("", "value.upper"))
+	_, err := Run(root)
+	if err == nil {
+		t.Fatal("expected a JavaScript handler's argument expression to be checked")
+	}
+	want := "app/views/Home.pzl:2:31: Property 'upper' does not exist on type 'number'."
+	if got := err.Error(); got != want {
+		t.Fatalf("handler argument diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
+	}
+
+	typo := liveTSCApp(t)
+	writeLiveView(t, typo, strings.Replace(handlerArityComponent("", "event"), "@click={ play(", "@click={ plya(", 1))
+	_, err = Run(typo)
+	if err == nil {
+		t.Fatal("expected a misspelled JavaScript handler to be reported")
+	}
+	if got := err.Error(); !strings.HasPrefix(got, "app/views/Home.pzl:2:20: Property 'plya' does not exist on type") {
+		t.Fatalf("handler name diagnostic mismatch: %s", got)
 	}
 }

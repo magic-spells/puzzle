@@ -19,7 +19,9 @@ type Position struct {
 
 // Segment maps one byte-identical emitted range back to its .pzl source range.
 // Ranges are half-open. Generated scaffolding and inserted __d. prefixes have
-// no segment and therefore cannot be mistaken for authored source.
+// no segment and therefore cannot be mistaken for authored source. Every
+// authored token of a template expression — a name, a property, a literal —
+// is written mapped at its AST position (codegen.WriteCheckValue).
 type Segment struct {
 	GeneratedStart Position `json:"generatedStart"`
 	GeneratedEnd   Position `json:"generatedEnd"`
@@ -89,62 +91,6 @@ func (b *mappedBuilder) WriteMapped(s string, sourceOffset int) {
 		SourceStart:    srcStart,
 		SourceEnd:      srcEnd,
 	})
-}
-
-// WriteResolved writes a codegen-resolved expression while mapping every byte
-// copied from the authored expression. ResolveCheckExpr only inserts __d.
-// prefixes; it never deletes or rewrites source bytes.
-func (b *mappedBuilder) WriteResolved(resolved, authored string, sourceOffset int) {
-	si, gi := 0, 0
-	for si < len(authored) && gi < len(resolved) {
-		if authored[si] == resolved[gi] {
-			startS, startG := si, gi
-			for si < len(authored) && gi < len(resolved) && authored[si] == resolved[gi] {
-				si++
-				gi++
-			}
-			b.WriteMapped(resolved[startG:gi], sourceOffset+startS)
-			continue
-		}
-		if strings.HasPrefix(resolved[gi:], "__d.") {
-			b.WriteString("__d.")
-			gi += len("__d.")
-			continue
-		}
-		// ResolveCheckExpr's contract is insertion-only. Keep an unexpected byte
-		// unmapped rather than manufacturing a false source position.
-		b.WriteString(resolved[gi : gi+1])
-		gi++
-	}
-	if gi < len(resolved) {
-		b.WriteString(resolved[gi:])
-	}
-}
-
-// WriteSubsequence is used for codegen's event expression, whose wrapper adds
-// arrows and this.events. It conservatively maps matching authored byte runs in
-// order and leaves all generated event scaffolding unmapped.
-func (b *mappedBuilder) WriteSubsequence(generated, authored string, sourceOffset int) {
-	gi, si := 0, 0
-	for si < len(authored) && gi < len(generated) {
-		idx := strings.IndexByte(generated[gi:], authored[si])
-		if idx < 0 {
-			break
-		}
-		if idx > 0 {
-			b.WriteString(generated[gi : gi+idx])
-			gi += idx
-		}
-		startG, startS := gi, si
-		for gi < len(generated) && si < len(authored) && generated[gi] == authored[si] {
-			gi++
-			si++
-		}
-		b.WriteMapped(generated[startG:gi], sourceOffset+startS)
-	}
-	if gi < len(generated) {
-		b.WriteString(generated[gi:])
-	}
 }
 
 func advanceLineCol(line, col int, data []byte) (int, int) {

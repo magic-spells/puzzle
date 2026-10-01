@@ -9,14 +9,30 @@ live under `packages/` (decision D162):
   **Read `packages/puzzle/CLAUDE.md` before any framework work** — it is the
   operating guide, and the constellation under `packages/puzzle/constellation/`
   is the source of truth (constellation MCP: pass `repo=packages/puzzle`;
-  pieces' own constellation is `repo=packages/puzzle-pieces`).
+  the parser's FILE and test cards live in `repo=packages/puzzle-lang`, and
+  pieces' own constellation is `repo=packages/puzzle-pieces`. These paths
+  resolve against the session's own repo, so they work only from the monorepo
+  root; elsewhere pass a connected name, `repo=puzzle` from
+  `packages/puzzle-pieces` or `repo=puzzle-lang` from `packages/puzzle`, or an
+  absolute path).
+- `packages/puzzle-lang` — the Puzzle language as its own Go module
+  (`github.com/magic-spells/puzzle/packages/puzzle-lang`): the `.pzl` parser
+  (section splitter, lexer, AST, positioned errors), the `expr` expression
+  parser (D176), the shared `conformance` tables, and the `jsident` and
+  `textutil` helpers the compiler shares. The compiler imports it through a
+  `replace => ../puzzle-lang`; outside consumers need a
+  `packages/puzzle-lang/vX.Y.Z` tag, which Cory creates (D172). It has its
+  own constellation root (`repo=packages/puzzle-lang`) holding the parser's
+  code binding — its FILE cards and TEST-COMPILER-PARSER; the parser's
+  contract (COMPONENT-TEMPLATE-PARSER) and every decision card stay in
+  `packages/puzzle`.
 - `packages/puzzle-pieces` — the pieces registry (npm, version == framework).
 - `packages/puzzle-devtools` — the Chrome extension (`private: true`, ships as
   a zip; its framework dep is `file:../puzzle`, so its suite runs against the
   working tree).
 - `packages/puzzle-eslint` / `packages/puzzle-prettier` — the lint/format
-  plugins; both vendor JS ports of the compiler's section splitter/lexer that
-  must track grammar changes.
+  plugins; both vendor JS ports of the section splitter/lexer in
+  `packages/puzzle-lang/parser` that must track grammar changes.
 
 Repo-wide rules that do not move:
 

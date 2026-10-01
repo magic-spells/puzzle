@@ -1,6 +1,6 @@
 // split.js — a JavaScript port of the Puzzle compiler's .pzl section splitter.
 //
-// This mirrors compiler/internal/parser/sections.go (with its helpers in
+// This mirrors packages/puzzle-lang/parser/sections.go (with its helpers in
 // lexskip.go and scan.go) from the @magic-spells/puzzle repository. The Go
 // compiler is the source of truth; on any conflict, sections.go wins. Keep this
 // file a faithful transcription so the ESLint plugin carves a .pzl file into the
@@ -77,8 +77,10 @@ export function posAt(src, off) {
 // Shared lexical-skip scanner (mirror of lexskip.go)
 // ---------------------------------------------------------------------------
 
+// `of` is deliberately absent: it is a contextual word, and a template field
+// named `of` is data.
 const lexRegexPrecedingKeywords = new Set([
-	'return', 'typeof', 'instanceof', 'in', 'of', 'void', 'delete', 'new',
+	'return', 'typeof', 'instanceof', 'in', 'void', 'delete', 'new',
 	'do', 'else', 'yield', 'await', 'case',
 ]);
 
@@ -143,7 +145,9 @@ function lexSkip(s, i, prevEndsExpr) {
 	if (isIdentStart(c)) {
 		let j = i;
 		while (j < s.length && isIdentChar(s[j])) j++;
-		if (lexPrecededByDot(s, i)) {
+		// An ASCII run straight after a non-ASCII unit is the tail of one name
+		// (`価格new`), never a keyword; so is a property name (`.return`).
+		if ((i > 0 && s.charCodeAt(i - 1) >= 0x80) || lexPrecededByDot(s, i)) {
 			return { next: j, pee: true, consumed: true };
 		}
 		return { next: j, pee: !lexRegexPrecedingKeywords.has(s.slice(i, j)), consumed: true };
@@ -168,10 +172,15 @@ function lexScanTemplateLiteral(s, i) {
 	return s.length;
 }
 
+// A digit, a '.', a closing )/]/}, or any code unit >= 0x80 ends an expression:
+// outside a string or comment a non-ASCII character belongs to a name (`café`,
+// `金額`), and a '.' ends a number (`5.`) or leads a property name. Every UTF-16
+// unit of a non-ASCII character (surrogate halves included) is >= 0x80, just as
+// every UTF-8 byte of it is, so this matches lexskip.go one to one.
 function lexPlainEndsExpr(c, prev) {
 	if (isSpaceByte(c)) return prev;
 	if (c === ')' || c === ']' || c === '}') return true;
-	if (c >= '0' && c <= '9') return true;
+	if ((c >= '0' && c <= '9') || c === '.' || c.charCodeAt(0) >= 0x80) return true;
 	return false;
 }
 
@@ -221,23 +230,16 @@ function lexScanRegexLiteral(s, i) {
 
 // blockCloseKeywords mirrors scan.go: the keywords whose {/kw} spelling is a
 // STRUCTURAL block closer rather than a '{' followed by a possible regex
-// literal. `raw` joined the set with D150's {#raw} block.
-//
-// The raw BODY is deliberately NOT scanned anywhere in this file. sections.go's
-// findTemplateClose has no {#raw} case either — it walks a template body with
-// balanced brace groups and the two comment scanners only — because the
-// compiler's raw-body skip lives one stage later, in the LEXER (lexer.go
-// lexBrace → scanBlockRaw). Teaching the splitter about raw bodies would make
-// this plugin accept files the real compiler rejects, which is the one thing a
-// mirror must never do. Recognizing {/raw} as a closer here is enough: a raw
-// body's braces then balance through the ordinary group scan, exactly as they
-// do in Go.
+// literal. `raw` joined the set with D150's {#raw} block. findTemplateClose
+// steps over a whole {#raw} span without scanning it, but a stray {/raw} with
+// no opener still reaches scanBraceGroup, where its '/' must not read as a
+// regex opener.
 const blockCloseKeywords = new Set(['if', 'unless', 'case', 'for', 'svg', 'comment', 'raw']);
 
 // scanBraceGroup is the one shared balanced-brace scan. s[open] must be '{'.
 // Returns { inner, end, err }. err is a message string (never throws) so callers
 // can decide whether a malformed group is fatal or should be skipped.
-function scanBraceGroup(s, open) {
+export function scanBraceGroup(s, open) {
 	if (open >= s.length || s[open] !== '{') {
 		return { inner: '', end: 0, err: "internal error: scanBraceGroup not positioned at '{'" };
 	}
@@ -290,7 +292,7 @@ function isKnownBlockCloserAt(s, open) {
 
 // scanInlineComment scans a {## … } inline comment (D70). Dumb scanner: only
 // tracks brace nesting and honors \{ / \} escapes. Returns { end, err }.
-function scanInlineComment(s, open) {
+export function scanInlineComment(s, open) {
 	let depth = 0;
 	for (let i = open; i < s.length; i++) {
 		const c = s[i];
@@ -308,7 +310,7 @@ function scanInlineComment(s, open) {
 	return { end: 0, err: 'unclosed {## comment' };
 }
 
-function isBlockCommentOpen(s, open) {
+export function isBlockCommentOpen(s, open) {
 	if (open + 2 > s.length || s[open] !== '{' || s[open + 1] !== '#') return false;
 	return firstWord(s.slice(open + 2)) === 'comment';
 }
@@ -328,7 +330,7 @@ function matchCommentCloser(s, open) {
 
 // scanBlockComment scans a {#comment} … {/comment} block (D70) from the opening
 // '{'. Body consumed raw; nested openers counted. Returns { end, err }.
-function scanBlockComment(s, open) {
+export function scanBlockComment(s, open) {
 	let depth = 1;
 	for (let i = open + 1; i < s.length;) {
 		if (s[i] !== '{') {
@@ -352,15 +354,61 @@ function scanBlockComment(s, open) {
 	return { end: 0, err: 'unterminated {#comment} — expected {/comment}' };
 }
 
+// isBlockRawOpen reports whether s[open] begins a {#raw} lex-off block opener
+// (D150). The keyword match is exact; content after it is allowed and ignored,
+// matching {#comment}. Mirrors scan.go isBlockRawOpen.
+export function isBlockRawOpen(s, open) {
+	if (open + 2 > s.length || s[open] !== '{' || s[open + 1] !== '#') return false;
+	return firstWord(s.slice(open + 2)) === 'raw';
+}
+
+// matchRawCloser reports whether s[open] begins a whitespace-tolerant {/raw}
+// closer (D150). Returns { ok, end } with end just past the closing brace.
+// Mirrors scan.go matchRawCloser.
+function matchRawCloser(s, open) {
+	let i = open + 1;
+	if (i >= s.length || s[i] !== '/') return { ok: false, end: 0 };
+	i++;
+	while (i < s.length && isSpaceByte(s[i])) i++;
+	const kw = 'raw';
+	if (i + kw.length > s.length || s.slice(i, i + kw.length) !== kw) return { ok: false, end: 0 };
+	i += kw.length;
+	while (i < s.length && isSpaceByte(s[i])) i++;
+	if (i >= s.length || s[i] !== '}') return { ok: false, end: 0 };
+	return { ok: true, end: i + 1 };
+}
+
+// scanBlockRaw locates a {#raw}…{/raw} block (D150) without inspecting its body
+// as template grammar: the opener runs to its first '}', then the FIRST valid
+// closer wins (raw blocks do not nest). Returns { end, err } with end just past
+// the closer. Mirrors scan.go scanBlockRaw.
+export function scanBlockRaw(s, open) {
+	const openerEnd = s.indexOf('}', open + 2);
+	if (openerEnd < 0) return { end: 0, err: 'unterminated {#raw} — expected {/raw}' };
+	for (let i = openerEnd + 1; i < s.length; i++) {
+		if (s[i] !== '{') continue;
+		const m = matchRawCloser(s, i);
+		if (m.ok) return { end: m.end, err: null };
+	}
+	return { end: 0, err: 'unterminated {#raw} — expected {/raw}' };
+}
+
 // ---------------------------------------------------------------------------
 // Section close-tag scanners (mirror of sections.go)
 // ---------------------------------------------------------------------------
 
 // findTemplateClose scans a template body (<puzzle-view> or <puzzle-skeleton>)
 // for closeTag, skipping HTML comments, escaped braces, template comments, and
-// balanced {…} groups. Returns the close tag's '<' index RELATIVE to `from`, or
-// -1.
+// balanced {…} groups. A D150 {#raw} span is stepped over whole, as the
+// compiler's lexer does: its body is never read, so its braces and quotes are
+// inert and a literal close tag inside it does not end the section. Returns the
+// close tag's '<' index RELATIVE to `from`, or -1.
 function findTemplateClose(s, from, closeTag) {
+	// inRaw is the first close tag seen inside a skipped {#raw} span. It is the
+	// answer only when no close tag follows: a raw block missing its {/raw}
+	// (none at all, or the next one sits in a later section) still splits at the
+	// real close, and the compiler's lexer then reports the unterminated block.
+	let inRaw = -1;
 	for (let i = from; i < s.length;) {
 		if (s.startsWith(closeTag, i)) return i - from;
 		if (s.startsWith('<!--', i)) {
@@ -372,6 +420,12 @@ function findTemplateClose(s, from, closeTag) {
 			i += 4;
 		} else if (s[i] === '\\' && i + 1 < s.length && (s[i + 1] === '{' || s[i + 1] === '}')) {
 			i += 2;
+		} else if (isBlockRawOpen(s, i)) {
+			const raw = scanBlockRaw(s, i);
+			const end = raw.err ? s.length : raw.end; // unterminated: runs to end of input
+			const k = s.slice(i, end).indexOf(closeTag);
+			if (k >= 0 && inRaw < 0) inRaw = i + k - from;
+			i = end;
 		} else if (s[i] === '{') {
 			let res;
 			if (s.startsWith('{##', i)) {
@@ -391,7 +445,7 @@ function findTemplateClose(s, from, closeTag) {
 			i++;
 		}
 	}
-	return -1;
+	return inRaw;
 }
 
 // findScriptClose scans a <script> body for </script>, skipping JS strings,

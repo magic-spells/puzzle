@@ -29,14 +29,18 @@ repo is shaped as a copyable registry.
 ```
 registry/                     # SOURCE OF TRUTH
 ├── registry.json             # aggregated index of every piece manifest
-├── theme/*.css               # @theme design tokens (light + dark): pieces.css default + warm/void/dim alternates
-├── lib/*.js                  # shared plain-JS helpers (date-math.js, panel-stack.js, …)
+├── theme/*.css               # hand-written theme files: pieces.css (default palette, @theme + medium) + dim/warm/void overrides
+├── theme/appearance.js       # runtime: read/persist/apply { scheme, mode } (exported as ./appearance)
+├── theme/pre-paint.js        # inline anti-flash snippet for <head> (exported as ./pre-paint)
+├── lib/*.js                  # shared plain-JS helpers (date-math.js, chart-math.js, …)
 └── ui/<name>/
-    ├── <Name>.pzl            # one or more component files
+    ├── <Name>.pzl            # one or more component files, or a <Name>/ family dir (D167)
     └── piece.json            # per-piece manifest
 demo/                         # Puzzle docs-site app (port 3070) — CONSUMES copies
 ├── app/components/ui/*.pzl   # COPIES of registry pieces (downstream)
-├── app/lib/*.js              # COPIES of registry/lib files
+├── app/lib/*.js              # COPIES of registry/lib files (+ appearance.js copy, demo-only tokenNames.js and contrast.js)
+├── app/styles/styles.css     # imports the four registry/theme/*.css DIRECTLY (not copies)
+├── app/views/themes/*.pzl    # design-system panels: SchemePanel, Compare, Pieces
 ├── app/views/components/*Doc.pzl  # one docs page per piece
 ├── app/docs/nav.js           # sidebar / index / prev-next config (single source list)
 └── app/routes.js             # route table (kebab piece names, alphabetical)
@@ -48,7 +52,7 @@ Rules that follow from this:
   them drift from the registry source.
 - **`registry.json` is generated** by aggregating the `piece.json` manifests. When you add
   or rename a piece, add its manifest and regenerate/extend the index (keep pieces
-  alphabetical; represent lib files the way `date-math.js` / `panel-stack.js` are).
+  alphabetical; represent lib files the way `date-math.js` / `chart-math.js` are).
 - A new piece's demo surface is: the copied file(s), a `*Doc.pzl` page under
   `app/views/components/`, a `nav.js` entry, and a `routes.js` entry. Untracked new files do
   NOT ride along in another session's refactor commits — re-check any new Doc page against
@@ -62,7 +66,7 @@ Rules that follow from this:
   "description": "One-line description (reused as the docs subtitle).",
   "files": ["DatePicker.pzl"],
   "registryDependencies": ["calendar", "lib/date-math.js"],
-  "dependencies": ["@magic-spells/morph-engine"],
+  "dependencies": ["@magic-spells/morph-engine@^0.4.2"],
   "targetDir": "app/components/ui"
 }
 ```
@@ -77,14 +81,34 @@ Rules that follow from this:
 - `registryDependencies` — other registry files pulled in transitively: `lib/*.js` files go
   to `app/lib/`; sibling pieces (e.g. DatePicker → `calendar`) go to their own targetDir.
 - `dependencies` — **real npm packages, plain JS only.** `.pzl` never ships via npm, so it
-  never appears here. Examples: morph pieces (Select, DatePicker) →
+  never appears here. Examples: morph pieces (DatePicker, EmojiPicker, EmojiPickerSimple) →
   `@magic-spells/morph-engine`, `sheet` → `@magic-spells/sheet` +
   `@magic-spells/dialog-panel` (it wraps the web component; the second is its peer, which
   yarn 1 will not install on its own), `bottom-sheet` → `@magic-spells/bottom-sheet` + the
-  same `@magic-spells/dialog-panel` peer (also a wrapper), `dialog` and `alert-dialog` →
-  `@magic-spells/dialog-panel` alone (wrappers over it directly — one dialog-panel copy
-  serves all four overlays), the rich-text/markdown editors → `@tiptap/*`, `code` →
+  same `@magic-spells/dialog-panel` peer (also a wrapper), `dialog`, `alert-dialog` and
+  `command` → `@magic-spells/dialog-panel` alone (wrappers over it directly; one
+  dialog-panel copy serves all five overlays), `dropdown-panel` →
+  `@magic-spells/dropdown-panel` (the families built on it, such as `dropdown-menu`,
+  `popover`, `hover-card`, `menubar` and `navigation-menu`, reach it through
+  `registryDependencies` and declare no npm package of their own), the rich-text/markdown editors → `@tiptap/*`, `code` →
   `highlight.js`, `markdown` → `marked`.
+- **Every entry carries a version FLOOR** (D169) — it is an npm install spec,
+  `"<package>@<range>"`, not a bare name, and the CLI prints it verbatim
+  (`npm install @magic-spells/collapsible-content@^1.2.0`). Without one npm resolves
+  `latest`, which is how 0.7.0's `add piece accordion` installed collapsible-content
+  1.1.1 — no `<collapsible-group>`, no exclusivity. **The floor is the version the piece
+  was built and demoed against**, so it must match `demo/package.json` exactly (the caret
+  form of it for the tiptap packages, which the demo pins); one floor per package across
+  the whole registry, and `test/registry-deps.test.js` fails if any of that drifts. Wrap a
+  component only at a **published** version — an unpublished bump cannot be a floor. When
+  you bump a component in `demo/package.json`, bump the piece manifests with it. The `add`
+  CLI still accepts a bare name (third-party registries) and prints it bare, but nothing
+  in this registry may ship one.
+- `themes` — optional palette names (`registry.json` `themes` entries) the piece needs to be
+  useful; `appearance-picker` lists `dim`, `warm`, `void`. Print-only: `add piece` prints
+  `puzzle add theme <names…>` for the ones the app has neither on disk nor package-imported.
+  Deliberately NOT `registryDependencies` — an older CLI would read the name as a piece.
+  `test/registry-deps.test.js` checks every name is a shipped palette.
 
 ## Versioning
 
@@ -93,7 +117,8 @@ this package is 0.5.0 — there is no independent version line for the registry.
 updating every place the number is written by hand:
 
 - `demo/package.json` `version`
-- the header badge in `demo/app/layouts/Default.pzl` (`{ pieceCount } pieces · v0.5.0`)
+- the `VERSION` constant behind the header badge in `demo/app/layouts/Default.pzl`
+  (`const VERSION = '0.5.0';`, rendered as `{ pieceCount } pieces · v{ version }`)
 - this package's `package.json` `version` — the published `@magic-spells/puzzle-pieces`
   npm package the `add` CLI resolves against
 
@@ -121,11 +146,14 @@ CLI — it is unrelated and must not be bumped along with the release.
   are taken by sibling projects). Browser-smoke interactive pieces in a FOREGROUNDED tab —
   Puzzle's rAF-based view scheduler stalls re-renders in a hidden/backgrounded tab.
 - **Node tests:** `npm test` at the package root runs the DOM-free suites in `test/` against
-  `registry/lib/`: the markdown and rich-text document models, an InputOTP suite, static
-  wiring guards for the `sheet` and `bottom-sheet` wrapper pieces, and parity suites that
-  assert the demo copies are byte-identical to their `registry/` sources. These are
+  `registry/lib/`: the markdown and rich-text document models, the chart and slider math,
+  an InputOTP suite, static wiring guards for the wrapper pieces (`*-wrapper.test.js`), the
+  theme suites (`themes`, `contrast`, `appearance`), the `registry-deps` floor check, and
+  parity suites that assert the demo copies are byte-identical to their `registry/` sources. These are
   repo-internal — nothing under `test/` or the root `package.json` is ever copied to a
-  consumer. Every sheet MOTION suite (engine, drag, snap points, scroll policy, dismissal
+  consumer. `test/puzzle-lang.test.js` loads highlight.js from `demo/node_modules`: it
+  skips locally and THROWS under `CI` when the demo isn't installed, so run the demo's
+  `npm ci` first. Every sheet MOTION suite (engine, drag, snap points, scroll policy, dismissal
   math) is gone with the two ports — that behavior now lives in `@magic-spells/sheet` and
   `@magic-spells/bottom-sheet` and is tested there.
 
@@ -135,6 +163,61 @@ CLI — it is unrelated and must not be bumped along with the release.
   `registry/theme/pieces.css` (`bg-surface`, `text-ink`, `border-border`, `bg-brand`,
   `text-danger`, …). **No hex colors** inside components. `pieces.css` is a registry file —
   editing token VALUES there changes every consumer.
+
+## Themes — four palettes × three modes (2026-09-18)
+
+- **The CSS files are the source of truth.** `registry/theme/pieces.css` (default palette:
+  `@theme` block of `light-dark(light, dark)` pairs + a medium block + a
+  `[data-scheme='default']` restatement) and `dim.css` / `warm.css` / `void.css` (every
+  token restated inside `[data-scheme='x']`, plus that scheme's medium block). Hand-written
+  — there is NO generator, NO JS token source and NO `tokens.json` (Cory, 2026-09-18: "we
+  just need a .css theme file with the css vars in it"). Edit values in the files.
+- **Attributes:** `data-scheme` = palette (`dim | warm | void`; absent or `default` = the
+  `@theme` values), `data-theme` = mode (`light | medium | dark`; absent = follow the OS).
+  The `color-scheme` blocks and every scheme/medium block are deliberately UNANCHORED (not
+  `:root`) so any element can scope a subtree: `<div data-scheme="warm" data-theme="medium">`.
+- **Medium is "soft dark"** — `color-scheme: dark`, grounds lifted to mid grey, type dimmed
+  a stop. A medium block lists ONLY tokens whose value differs from the dark half; the
+  medium frame→panel OKLCH lightness step must be the smallest of the three modes
+  (`test/contrast.test.mjs`). Selectors: `[data-scheme='x'][data-theme='medium'],
+  [data-theme='medium'] [data-scheme='x']:not([data-theme])`; pieces.css additionally
+  `[data-theme='medium']:not([data-scheme])`.
+- **Token NAMES are frozen** — they are what Pyramid and Sites already use (`--color-ink`,
+  `--color-surface-frame`, `--color-bar-*`, `--color-rail-*`, `--shadow-panel`, …). All four
+  files must declare the identical set (`test/themes.test.mjs`); aliases (`--color-bar:
+  var(--color-surface-frame)`, `--color-rail-ink: var(--color-bar-ink)`, …) stay aliases.
+- **Marker line:** line 2 of `pieces.css` must stay ` * puzzle-pieces design tokens
+  (Tailwind v4 @theme).` — the Go CLI keys installed-detection on it.
+- **Exports** (`package.json`): `./themes/default.css` → `registry/theme/pieces.css`,
+  `./themes/{dim,warm,void}.css`, `./appearance` (`boot/set/current/subscribe/apply/read`,
+  storage key `puzzle:appearance`, JSON `{ scheme, mode }`, legacy `mixed` → `medium`),
+  `./pre-paint` (inline in `<head>`, params `data-key`, `data-default-mode`,
+  `data-default-scheme` — handed to appearance.js on `window.__puzzleAppearance`, which
+  seeds its key and fallback so `boot()` keeps the painted default; `configure()` wins). `registry.json` carries `modes` and a `themes` array
+  (`{ name, file, label, description }`); the Go `Registry` struct reads both for
+  `puzzle add theme`.
+- **Contrast:** every palette × mode must pass WCAG 2.2 AA on every declared pair in
+  `test/lib/roles.mjs` (4.5 text, 3 non-text; translucent grounds flattened over
+  `--color-surface`). `border`/`border-strong` are decorative and exempt; `border-dashed`
+  and `ring` are held to 3:1.
+- **Adding a palette:** copy `registry/theme/dim.css` → `x.css`, rename the selectors,
+  retune every value, add `{ name, file, label, description }` to `registry.json.themes`,
+  add it to `SCHEMES` in `appearance.js` AND `pre-paint.js` (they must agree), to
+  `SCHEMES` in `test/lib/parse-theme.mjs` and `demo/app/lib/tokenNames.js`, export it in
+  `package.json`, import it in `demo/app/styles/styles.css`, sync
+  `demo/app/lib/appearance.js` + the inline pre-paint in `demo/app/public/index.html`
+  (byte-equal, tested), run `npm test`.
+- **Demo:** `demo/app/styles/styles.css` imports the four registry files directly (no
+  copies to sync). `demo/app/lib/appearance.js` IS a byte-identical copy (tested) and the
+  inline `<script data-key="puzzle:appearance">` in `public/index.html` must equal
+  `pre-paint.js`. Colour cards read LIVE computed styles over the static name list in
+  `demo/app/lib/tokenNames.js` — no JSON, and the demo never imports `test/`. The docs
+  shell IS the frame/rail/panel composition (Sidebar `variant="rail"`, `bg-bar`,
+  `bg-surface-panel`), with `AppearanceSwitcher` (a non-modal popover over the
+  `appearance-picker` PIECE, wired to `set()`) in the rail foot. The picker piece is
+  controlled — `scheme`, `mode`, `@change({ scheme, mode })` — and carries its own
+  `DEFAULT_SCHEMES`/`DEFAULT_MODES` (tested equal to `appearance.js`) because copied
+  pieces may not import `registry/theme/`.
 - **Wrap @magic-spells web components directly whenever possible; port only when
   wrapping genuinely can't work** (rule set 2026-08-19 as "wrap when simple", strengthened
   2026-08-22 — see `constellation/decision/DECISION-WRAP-WEB-COMPONENTS.md`; `scroll-stack`
@@ -146,7 +229,10 @@ CLI — it is unrelated and must not be bumped along with the release.
   app entry in `layer(components)` (e.g. `@import "@magic-spells/scroll-stack/css"
   layer(components)`) so utilities on the host still win; document it in the piece's
   installation section. A package with a peer that ships its own CSS needs BOTH imports,
-  peer first (`sheet` → `@magic-spells/dialog-panel/css` then `@magic-spells/sheet/css`). Why wrap: a port is a fork — every upstream fix has to be
+  peer first (`sheet` → `@magic-spells/dialog-panel/css` then `@magic-spells/sheet/css`),
+  and a package may ship an optional second sheet (`dropdown-panel` →
+  `@magic-spells/dropdown-panel/css`, required, then `…/css/effects` for the entrance
+  effects and the arrow). Why wrap: a port is a fork — every upstream fix has to be
   re-translated by hand, and the translation is where bugs enter (the 5,600-line sheet
   port vs its 2,100-line upstream is the cautionary case). Wrapped overlays may manage
   their own open/close state and report it (`@show` / `@hide({ result })`); the parent
@@ -163,21 +249,43 @@ CLI — it is unrelated and must not be bumped along with the release.
   inside that root, so scoping would in fact still match, but global keeps the piece
   independent of the stamp). Reach for `<style>` ONLY when class names are machine-
   generated; anything you can express as a utility must stay a utility.
+  **The second sanctioned exception is CSS-only motion** (`spinner`, `shimmer-text`,
+  `hamburger`, 0.8.0): keyframes, per-part stagger from a `--i` custom property, SVG
+  dash maths, clip-paths and per-property transition delays (hamburger's two-phase
+  bars: the closed and open rules swap which of `translate`/`rotate` waits) have no
+  utility form (hamburger also keeps its bar geometry and its hover fill in the block:
+  every offset derives from per-size custom properties, and a hover fill in
+  `@layer components` loses to a caller's `hover:bg-*` where a utility would not), and keyframes in `theme/pieces.css` would never reach
+  an app whose pieces.css predates the piece (the CLI copies the theme only when it is
+  missing). So the block rides in the piece: global, every name prefixed with the piece
+  name, wrapped in `@layer components` (it holds because collected component CSS is
+  appended after Tailwind's output), with `@property` rules outside the layer and a
+  `prefers-reduced-motion` section. Utilities in `class` win except on properties the
+  animation drives. Layout, size and colour stay utilities. New tokens are fine:
+  `puzzle add` never rewrites an existing pieces.css, but `add piece` prints the
+  stale-theme hint (`puzzle add theme default`) when the app's copy differs from the registry's.
   Note `@apply` does NOT work inside `<style>` — Tailwind never processes that text, so
   the rule survives literally into the bundle and the browser silently drops it. Raw
   properties and `var(--…)` are fine.
 - **One exported `PuzzleView` per file**, PascalCase filename, single root element.
-- **Config-first APIs, not compound components** — Puzzle has no cross-component context.
-  `<Select options={…} value={…} @change={…}/>`, not `<SelectTrigger>`+`<SelectContent>`.
-  Presentational structure = named slots or documented Tailwind markup, never coordinating
-  subcomponents.
+- **Config-first APIs for ported pieces, D167 families for wrapped ones** — Puzzle has no
+  cross-component context. A ported piece takes config:
+  `<Combobox options={…} value={…} @change={…}/>`, not `<ComboboxTrigger>`+`<ComboboxContent>`;
+  presentational structure = named slots, snippets or documented Tailwind markup. A wrapped
+  piece whose web component coordinates sibling elements through the DOM (dropdown-panel,
+  select-dropdown, tab-group, collapsible-content, …) is a compound family instead
+  (`<Select><Select.Option>…`), because the coordination lives in the custom element, not
+  in Puzzle. Nested-config props (`items[].children[]`) are the anti-pattern; flat leaf
+  lists (`options`, `steps`, `columns`) stay config (`DECISION-CONFIG-FIRST-API`).
 - **Controlled-component discipline everywhere.** The parent owns `value`/`open` state;
   props in, callbacks out. Callbacks are **value-first** (`this.props.change(value)`).
   Standard vocabulary: `variant`, `size`, `disabled`, `value`, `label`, `placeholder`,
   `class` (merged onto root); callbacks `@change`, `@press`, `@show`, `@hide`, `@ready`.
-- **Native `<dialog>` overlays** preventDefault the `cancel` event and let the parent flip
-  `open` — they never self-close. Never put a bare display utility (`flex`) on a `<dialog>`;
-  it defeats `dialog:not([open]){display:none}` — use the `open:` variant (`open:flex`).
+- **Native `<dialog>` overlays** (dialog, alert-dialog, command, sheet, bottom-sheet) all
+  ride `@magic-spells/dialog-panel`, which owns the `cancel` event: they close themselves
+  and report `@hide`, and the parent flips `open` back. Never put a bare display utility
+  (`flex`) on a `<dialog>`; it defeats `dialog:not([open]){display:none}` — use the `open:`
+  variant (`open:flex`).
 - **`{#for}` bodies need a single element root** — precompute per-row role/class in `data()`,
   or wrap in a `display:contents` element.
 - `inert={ !open }` compiles fine; `aria-hidden` needs the **string** form.
@@ -195,10 +303,11 @@ CLI — it is unrelated and must not be bumped along with the release.
   synthesized write lands in the piece's LOCAL state and the next `data()` commit reverts
   it (dev warns `a data() commit reverted the bound key`). Note `@keydown`/`@blur` do NOT
   suppress — so an edit BUFFER committed on Enter/blur is exactly the shape that silently
-  starts live-binding. Escape with a non-path expression: `value={ String(x) }` plus a
+  starts live-binding. Escape with a non-path expression: `value={ x ?? '' }` plus a
   one-line comment (see NumberField). Verify with the compiler, never by eye: compile the
   `.pzl` and grep the output for `__bind(`.
-- **Morph:** overlay pieces expose an opt-in `morph` prop. Morphable roots must not use
+- **Morph:** the ported picker overlays (DatePicker, EmojiPicker, EmojiPickerSimple) expose
+  an opt-in `morph` prop. Morphable roots must not use
   transform positioning, stylesheet `opacity`, a changing dynamic `style={}` binding, or
   `animations.in/out`. Trigger↔panel morph imports `@magic-spells/morph-engine` (declare it
   in `dependencies`). `prefers-reduced-motion` is respected.
@@ -229,9 +338,8 @@ CLI — it is unrelated and must not be bumped along with the release.
 - **Stock chrome goes in a marker's FALLBACK BODY (D141).** A paired marker's body is
   fallback content: it renders only when nothing fills that position, and call-site
   content replaces it entirely. That is how a piece expresses default chrome —
-  `<Slot name="trigger">…stock chrome…</Slot>` — and it is the shape the six trigger
-  pieces (HoverCard, Popover, Popconfirm, DropdownMenu, EmojiPicker, EmojiPickerSimple)
-  use. A fallback body is ordinary template content (interpolations, `{#if}`/`{#for}`,
+  `<Slot name="trigger">…stock chrome…</Slot>` (EmojiPicker, EmojiPickerSimple) or a
+  paired `<Children>` inside the trigger (Popconfirm, `DropdownMenu.Trigger`). A fallback body is ordinary template content (interpolations, `{#if}`/`{#for}`,
   components, `{#svg}`); the one restriction is that a marker may not appear inside
   another marker's fallback body. Self-closing means no fallback.
   Consequences for piece APIs: **a filled slot WINS over the label prop** (the label
@@ -244,12 +352,11 @@ CLI — it is unrelated and must not be bumped along with the release.
   value prop — a duplicate key where the last one silently wins, breaking controlled
   mode and optional-controlled detection. Name callbacks differently from their value
   props (the `open` + `@show`/`@hide` convention; DataTable uses `sort` + `@sortChange`).
-- **SVG `<text>` elements are silently dropped by the compiler.** Codegen emits
-  `ViewNode('text', …)` as its internal text-node marker, so an SVG `<text>` element
-  collides with it and never reaches the DOM (no error — it just vanishes). Render chart
-  axis labels / in-SVG text as absolutely-positioned HTML spans overlaying the SVG
-  instead; the chart pieces use explicit pixel coordinates (no viewBox scaling) so the
-  positions map 1:1. See LineChart/BarChart/AreaChart for the pattern.
+- **SVG `<text>` renders since puzzle 0.7.0.** Earlier runtimes reserved the tag `text` for
+  their text-node marker, so an authored SVG `<text>` silently vanished. The chart pieces
+  predate the fix and still render axis labels as absolutely-positioned HTML spans over the
+  SVG, with explicit pixel coordinates (no viewBox scaling) so the positions map 1:1 (see
+  LineChart/BarChart/AreaChart). Either approach works now.
 - **The compiler does not decode HTML entities in template prose.** `&amp;`, `&rsquo;`,
   `&nbsp;`, `&lt;`… reach `createTextNode` verbatim and render as the literal source text.
   Write the real character instead (`&`, `’`, `—`, `→`). For angle brackets — which
@@ -273,17 +380,32 @@ with:
   file to its manifest `targetDir` (`app/components/ui/` for pieces, `app/lib/` for lib
   files). **Refuses to overwrite an existing target unless `--overwrite`** (all-or-nothing
   pre-flight). PRINTS — never auto-runs — npm installs for accumulated `dependencies`.
+- The printed line is `npm install <name>@<range> …`, one entry per package, sorted by
+  package name (D169). Specs merge by NAME across the resolved set, so a package two
+  pieces both need is printed once; if their floors disagree the HIGHER one is printed
+  (the app must satisfy every piece it just copied). A floorless bare name loses to any
+  floor and prints bare. The line is unconditional — the CLI never reads the app's
+  package.json to decide whether a dependency is already satisfied; re-running the install
+  with a range npm already satisfies is a no-op, and reading the manifest would trade that
+  for a second source of truth. `pieces.lock` records copied bytes only; floors are the
+  registry's claim, not the app's, so they are deliberately absent from it.
 - A `files` entry with a directory (a compound piece) is copied **path-preserving** under
   `targetDir`, creating intermediate dirs; entries that aren't clean relative slash paths
   are rejected by name before any write, and `pieces.lock` keys nested files by their full
   app-relative path.
 - Theme is copied like a piece: `theme/pieces.css` is written verbatim to
-  `app/styles/pieces.css` when the app has neither the tokens nor the file, and the
+  `app/styles/pieces.css` when the app has neither the tokens, the file nor a
+  `@magic-spells/puzzle-pieces/themes/default.css` import, and the
   one-line `@import './pieces.css';` wiring step is printed (styles.css is user-owned).
+  When an app's pieces.css exists but differs from the registry's, `add piece` prints a
+  stale-theme hint: `puzzle add theme default` for an unmodified older copy (it still
+  matches its `pieces.lock` hash), a hand merge or `--overwrite` for an edited one.
   Detection keys on the `puzzle-pieces design tokens` header comment in `pieces.css` —
   **don't reword that comment without updating the CLI's marker.** `registry.json`'s
-  `themes` array lists the alternates (warm, void, dim) for the docs site; the CLI reads
-  only the singular `theme` key.
+  `themes` array (`{ name, file, label, description }`) and `modes` list the palettes;
+  `puzzle add theme <name…>` copies a non-default one to `app/styles/themes/<name>.css`
+  (recorded in `pieces.lock`), and a registry without `themes` still has the singular
+  `theme` as its one palette.
 - Copies stay **byte-identical** to the registry (no stamped headers); `pieces.lock` at the
   consumer app root records sha256 content hashes per piece/lib so a future `diff`/`update`
   can distinguish upstream-changed from locally-customized.

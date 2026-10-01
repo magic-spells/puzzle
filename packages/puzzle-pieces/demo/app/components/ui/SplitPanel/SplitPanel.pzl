@@ -67,7 +67,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // Props
 //   direction   'horizontal' (default) | 'vertical'
 //   snap        true for the default 0/50/100 travel points, or a string /
-//               number array of 0–100 points; settles on pointer release
+//               number array of 0–100 points; settles on pointer release.
+//               Always written out as an explicit list — see snapPoints().
 //   disabled    locks every divider in the group
 //   id          persists committed sizes at split-panel:<id> in localStorage
 //   sizes       optional controlled percent shares, one per Pane
@@ -148,14 +149,13 @@ export default class SplitPanel extends PuzzleView {
   };
 
   data(params, props) {
-    const snap = props.snap;
     return {
       rootClass: [ROOT, props.class].filter(Boolean).join(' '),
       rootStyle: ROOT_STYLE,
       direction: props.direction === 'vertical' ? 'vertical' : false,
-      // `false` is the compiler's omit sentinel; `true` renders a bare
-      // attribute, which is upstream's 0/50/100 default.
-      snapAttr: snap === true ? '' : Array.isArray(snap) ? snap.join(' ') : snap || false,
+      // `false` is the compiler's omit sentinel. Everything else is normalised
+      // to an explicit point list — NEVER a bare attribute. See snapPoints().
+      snapAttr: snapPoints(props.snap),
       disabled: props.disabled ? true : false,
       id: props.id || false,
     };
@@ -203,6 +203,33 @@ export default class SplitPanel extends PuzzleView {
     this.element?.removeEventListener('split-panel:resize', this.#onResize);
     this.element?.removeEventListener('split-panel:resize-end', this.#onResizeEnd);
   }
+}
+
+// NEVER EMIT A BARE `snap`. Upstream reads the attribute as
+// `raw.split(/[\s,]+/).map(Number).filter(finite && 0..100)` and falls back to
+// 0/50/100 only when that list comes out EMPTY. A bare attribute is the empty
+// string, `''.split(…)` is `['']`, and `Number('')` is 0 — a perfectly valid
+// point — so the fallback never fires and the only snap point is 0. That is why
+// `<SplitPanel snap>` used to slam every release to a fully collapsed first
+// pane. The piece resolves the default itself and always writes real numbers.
+const SNAP_DEFAULT = [0, 50, 100];
+
+function snapPoints(snap) {
+  // Falsy (undefined, false, '', 0) means no snapping at all — omit it.
+  if (!snap) return false;
+  // The empty pieces a leading/trailing separator leaves behind are dropped
+  // BEFORE Number() — `Number('')` is 0, which is the whole bug.
+  const list = Array.isArray(snap)
+    ? snap
+    : String(snap)
+        .split(/[\s,]+/)
+        .filter((part) => part !== '');
+  const points = list
+    .map(Number)
+    .filter((point) => Number.isFinite(point) && point >= 0 && point <= 100);
+  // `true` stringifies to 'true' and nothing survives the filter, which is the
+  // bare-attribute case; an unparseable string lands here too.
+  return (points.length ? points : SNAP_DEFAULT).join(' ');
 }
 
 function round(list) {

@@ -126,8 +126,13 @@ export default class T extends PuzzleView {}
 	if !strings.Contains(got, "keyOf(") {
 		t.Errorf("synthetic {#for} key was suppressed by a literal raw key:\n%s", got)
 	}
-	if strings.Count(got, "key:") != 1 {
-		t.Errorf("expected exactly one emitted `key:` property, got %d:\n%s", strings.Count(got, "key:"), got)
+	// Two `key:` spellings now: the site meta's resolver and the row root's
+	// `key: s.k` (D170). The literal raw key must be neither.
+	if strings.Count(got, "key:") != 2 {
+		t.Errorf("expected the meta key + the row key, got %d:\n%s", strings.Count(got, "key:"), got)
+	}
+	if strings.Contains(got, "key: 'literal'") {
+		t.Errorf("literal raw key reached the vnode directive path:\n%s", got)
 	}
 }
 

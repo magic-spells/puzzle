@@ -19,7 +19,7 @@
       type="number"
       class={ inputClass }
       inputmode="numeric"
-      value={ String(current) }
+      value={ current ?? '' }
       min={ minAttr }
       max={ maxAttr }
       step={ stepAttr }
@@ -81,7 +81,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // and the host reads 3 while the field still shows 1. The field is a controlled
 // input like any other, and this piece and upstream write the same number to it.
 //
-// `String()` and not a bare `current`: it keeps the expression off the
+// `current ?? ''` and not a bare `current`: it keeps the expression off the
 // `ident`/`ident.ident` shape D147 auto-binds. A synthesized bind here would
 // write into this piece's LOCAL state and be reverted by the next data() commit.
 // Same escape NumberField uses. Verify with the compiler, not by eye: compile and

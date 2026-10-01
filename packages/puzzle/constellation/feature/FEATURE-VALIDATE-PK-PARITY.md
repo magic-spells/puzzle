@@ -8,12 +8,7 @@ connections:
   - COMPONENT-PUZZLE-MODEL
   - COMPONENT-STORE
   - DOC-MODELS
-notes:
-  - kind: state
-    text: >-
-      Found by the habit-lab test app (2026-07-22): its create-habit form
-      pre-checked input with Habit.validate() and silently dead-ended on a
-      spurious "id is required" error the form couldn't render.
+  - DOC-SPEC-DATA
 verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 release: RELEASE-V0-1-2
 change: fix
@@ -21,75 +16,31 @@ change: fix
 
 # validate() / createRecord pk parity
 
-## Intent
+`Model.validate(values)` must not reject input `store.createRecord(type, values)`
+would accept; otherwise the "non-throwing pre-check → inline field errors" form
+idiom dead-ends on an `id is required` error the user cannot see or fix.
+Contract: [[DOC-SPEC-DATA]] §20, [[DECISION-D48-SCHEMA-VALIDATION]].
 
-`Model.validate(values)` must not reject input that
-`store.createRecord(type, values)` would accept. A static checker stricter than
-the write path it exists to pre-check turns the documented "non-throwing
-pre-check → inline field errors" form idiom into a footgun: the form dead-ends
-on an `id is required` error for a field the user cannot see or fix.
+## The rule
 
-## The two required-nesses
+- `.primary()` sets `required`, but `createRecord` fills a nullish pk **before**
+  validating (server-assigned-id models rely on this). So a nullish primary key
+  the store would auto-generate is **exempt from the required error — and only
+  that**. `''` still fails: the store only generates for `null`/`undefined`.
+- `.required()` sets a separate `explicitRequired` flag. An explicit-required pk
+  (`slug: string().primary().required()`) reports the required error normally.
+- Both sides honor that flag (`model.js` + `store.js _instantiate`, which cite
+  this card): with validation on (`createRecord`), an explicit-required pk is
+  **not** auto-generated, so D48 throws exactly as `validate()` reports. With
+  validation off (storage hydration, server upserts) it still auto-generates —
+  those paths are fail-soft and must not crash on a missing key. The fixtures
+  generator fills such a pk for the same reason.
+- Static `validate` applies schema `.default()`s before collecting errors (it
+  mirrors what `createRecord` will do), but never invents a pk.
+  `Model.validate(data, { fields })` checks only the listed fields.
 
-`.primary()` sets both `def.primary` and `def.required`, so without further
-distinction the pk looks like any other required field. But the entry points
-see different data:
+Rejected: synthesizing a pk inside `validate()` — a checker must answer "is this
+input valid?", not "would some derived input be valid?".
 
-- `store.createRecord` → `_instantiate` applies defaults and fills a missing pk
-  **before** validating, so a pk-less payload is fine — that is how
-  server-assigned-id models work.
-- `Model.validate(data)` collects errors over the caller's data, which for a
-  create form has no pk yet.
-
-The parity rule is therefore: **a nullish primary key the store would
-auto-generate is exempt from the required error, and only that.** `''` still
-fails, because the Store only auto-generates for `null`/`undefined` — real
-parity, not a broader relaxation of `.primary()`'s contract.
-
-## The explicit-required distinction
-
-The exemption covers the `required` that `.primary()` *implies*, never one the
-author asked for. `.required()` records a separate `explicitRequired` flag, so
-`slug: string().primary().required()` — an author declaring a user-supplied key
-mandatory — reports the required error normally, and a create form's pre-check
-blocks submission.
-
-That distinction is load-bearing on both sides, so the Store honors it too:
-`_instantiate` skips pk auto-generation when the pk descriptor is
-`explicitRequired` **and** validation is on (i.e. `createRecord`), letting the
-D48 validation throw the required error exactly as `validate()` does. Without
-that half, the two surfaces would disagree again in the opposite direction — a
-blank explicit-required pk silently filled with a random id.
-
-Auto-generation is retained where validation is off: storage hydration
-(`_load`) and server upserts are fail-soft and server-authoritative, and must
-not crash on a missing key. Plain `.primary()` auto-generates as always.
-
-`Model.validate(data, { fields })` exposes the same partial-field machinery
-`update()` uses, so a form can check only the fields it edits.
-
-## Why not "apply defaults and a synthetic pk inside validate()"
-
-Mutating or augmenting the caller's data inside a checker blurs its contract —
-"is this input valid?" becomes "would some derived input be valid?" — and
-defaults belong to record construction. Skipping the auto-generatable pk is the
-honest statement: the input *is* valid as an input to `createRecord`. (Static
-`validate` does apply schema `.default()`s before collecting errors, which is a
-different matter: it mirrors what `createRecord` will do to the same payload,
-rather than inventing identity.)
-
-## Blast radius
-
-`save()`'s full-record check is unaffected in practice: any record in the store
-already has a pk, generated or supplied, so the exemption can never mask a real
-missing pk on save. `record.validate()` likewise operates on a constructed
-record.
-
-## Coverage
-
-`tests/validation.test.js` — the "createRecord primary-key parity (SPEC §20,
-D48)" group: an auto-generated pk satisfying required on plain `.primary()`, a
-blank explicit-required primary rejected rather than auto-generated, creation
-succeeding when that key IS supplied, plain `.primary()` still auto-generating,
-hydration still auto-generating a missing explicit-required pk, and the
-pk-immutability check still running ahead of validation.
+`save()` and `record.validate()` are unaffected: a stored record always has a pk.
+Pinned by the "createRecord primary-key parity" group in `tests/validation.test.js`.

@@ -7,77 +7,81 @@ connections:
   - COMPONENT-CODEGEN
   - COMPONENT-VIEW-MANAGER
   - DOC-SPEC-TEMPLATE
-verified_at: '2026-08-24T21:39:15.808Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - DECISION-D170-INCREMENTAL-VDOM-LISTS
+verified_at: '2026-09-27T00:25:55.351Z'
+verified_sha: 3957beaf4eb72e0fe9fb06853a96761b66a209b8
 code_refs:
   - client-runtime/views/viewManager.js
-notes:
-  - kind: verified
-    text: >-
-      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
-      card was found true as written, so nothing changed but the baseline. Bound code was read at
-      this sha; the framework suite is green at 1871 tests.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - client-runtime/ssg/preload.js
+  - compiler/internal/codegen/codegen.go:emitSlot
 ---
 
-Composition markers accept a paired form whose body is fallback content —
-`<Children>…</Children>`, `<Slot name="x">…</Slot>`, `<Slot>…</Slot>`. The
-fallback renders only when nothing fills that position; content supplied by the
-call site (or the router) replaces it entirely. Self-closing markers are the
-empty form — no fallback, render nothing when unfilled — and an empty paired
-body means the same. Markers are capitalized; lowercase spellings are
-positioned compile errors steering to the capitalized forms (D134).
+## Context
 
-## Contract
+Components need default content that a caller can replace — stock trigger
+chrome unless the caller supplies its own (the standard slot contract in Vue,
+web components, Astro, Angular). Prop-conditionals cannot express it when the
+gating prop always has a value (an emoji picker's `label` is its aria-label).
 
-- **Uniform across the one mechanism.** `<Children>` and bare `<Slot>` are the
-  same AST node, so fallback behaves identically in all three positions:
-  component default content, named-slot fallback, and the router outlet — which
-  shows its fallback when no child route occupies it (a parent route rendering
-  as the leaf).
-- **A fallback body is ordinary template content.** Interpolations (including
-  formatter pipes), `{#if}`/`{#for}`/`{#case}` blocks, components, event
-  bindings, refs, and `{#svg}` inline SVG (D46) all parse and compile through
-  the same paths as any element body — the fallback children ride
-  `emitElement`'s child emission; nothing is special-cased. A composition
-  marker inside another marker's fallback body is a positioned compile error
-  (no coherent expansion order; relaxable if a real case appears).
-- **No public is-slot-filled probe.** The runtime's marker expansion knows
-  whether a position was filled, which is all fallback needs. A testable-slots
-  API remains a separate, unclaimed decision.
-- **Implementation surface:** `Slot.Children` in the AST, paired-marker
-  parsing, codegen fallback emission, the runtime `expandChildList` fallback
-  branch, and fallback-content traversal in a11y, refs, and the class scan.
-  Golden churn is acceptable (compiler-over-runtime-bytes: the runtime cost is
-  one branch).
+## Decision
 
-## Rationale
+Paired composition markers carry a fallback body — `<Children>…</Children>`,
+`<Slot name="x">…</Slot>`, `<Slot>…</Slot>`. The fallback renders only when
+nothing fills that position; supplied content (call site or router) replaces it
+entirely. Self-closing markers and empty paired bodies have no fallback.
 
-Component-owned default content — stock chrome unless the caller supplies its
-own — is the standard slot contract (Vue, native web components, Astro,
-Angular 18+), and the registry needs it: six pieces (HoverCard, Popover,
-Popconfirm, DropdownMenu, EmojiPicker, EmojiPickerSimple) carry either/or
-trigger contracts that prop-conditionals cannot express when the gating prop
-always has a value (the emoji pickers' `label` is their aria-label). Fallback
-bodies cover that need with zero new public API.
+- **One mechanism.** `<Children>` and bare `<Slot>` are the same AST node, so
+  fallback works identically for default content, named slots, and the router
+  outlet (shown when no child route occupies it).
+- **"Filled" means rendered.** A position is filled only when its content
+  renders at least one node that is not whitespace-only text
+  ([[DECISION-D173-CORE-SEMANTICS]] V14). A false `{#if}` or empty `{#for}` at
+  the call site shows the fallback. The same test applies per snippet stamp and
+  to forwarded positions.
+- **Lazy.** Codegen (`emitSlot`) emits the body as a thunk,
+  `attrs.fallback: () => [ … ]`, compiled in the enclosing scope; the runtime
+  `fill` in `expandChildList` calls it only for an unfilled position. A filled
+  position never evaluates its fallback's expressions or dev diagnostics and
+  never allocates its vnodes. The thunk runs at most once per marker vnode: the
+  result moves into the marker's `children` and the thunk is cleared after it
+  returns (a throwing body retries next render), so a reused marker (a clean
+  [[DECISION-D170-INCREMENTAL-VDOM-LISTS]] row) hands back the same vnodes. A
+  hand-built marker may carry an eager fallback as `children`. Hybrid and
+  static prerender share `expandSlots`.
+- **A fallback that builds nothing is no fallback.** The marker then passes the
+  supplied nodes through, arity placeholders included, so a toggling call-site
+  `{#if}` never shifts later siblings.
+- **Expansion failures are render failures.** Every caller keeps slot
+  expansion inside its render error boundary: a view's render span (D145), the
+  SSG serializer, and the takeover preload, where a throwing fallback marks
+  that component `takeoverFailed` and degrades it to a placeholder.
+- **A fallback body is ordinary template content** — interpolations, blocks,
+  components, events, refs, `{#svg}`. A composition marker (or `<Portal>`)
+  inside a fallback body is a positioned compile error.
+- **Marker spelling.** Markers are capitalized; lowercase `<children>`,
+  `<slot>`, `<portal>` outside `{#raw}` are positioned steering errors.
+- Pinned by `tests/lazy-slot-fallback.test.js` (fixtures in
+  `tests/fixtures/lazy-fallback/`) and the `marker_fallbacks` codegen golden.
+
+## Alternatives
+
+- Prop-opt-in defaults only — cannot express icon-as-default when the gating
+  prop always has a value.
+- A public is-slot-filled probe — more API for the same need; still unclaimed.
+- Fallback on named slots only — would split the one Slot/Children mechanism
+  and lose the empty-outlet case.
+- Eager fallback (body as the marker's children) — evaluated on every render,
+  and its value-printing warnings fired for snippet-filled VirtualList rows
+  whose fallback never renders. Lazy: snippet-filled rows ~17% faster,
+  fallback-showing rows ~5% slower (1,000-row build+expand).
+- Silencing diagnostics during fallback construction — keeps the wasted work
+  and hides real warnings when the fallback does render.
 
 ## Consequences
 
-- The six trigger pieces (registry + demo + docs-site copies, kept in
-  lockstep as mirrors) express their stock trigger chrome as declarative
-  fallback; filled slot content wins over any label prop.
-- The docs-site Templates "Default content" section teaches fallback bodies,
-  with the prop-conditional as an alternative pattern.
-- Ships in the first minor after 0.4.0. The SPEC §24 amendment lands when
-  this builds.
-
-## Alternatives rejected
-
-- **Prop-opt-in defaults as the permanent answer** — cannot express
-  icon-as-default when the gating prop always has a value; pushes a
-  framework-shaped problem onto every component author.
-- **A public is-slot-filled probe instead of fallback bodies** — more API
-  surface for the same need.
-- **Fallback on named slots only (outlet excluded)** — would enforce a
-  Slot/Children split the compiler keeps as one mechanism, and discards the
-  empty-outlet case.
+- Keep a fallback to one root element when siblings follow the marker: the
+  unkeyed patcher pairs by position, so a node-count mismatch shifts and
+  remounts later siblings on each flip. The runtime does not pad (+32 B gzip,
+  rejected).
+- Registry pieces (Popconfirm, EmojiPicker, DropdownMenu trigger, Dialog, …)
+  express stock chrome as fallback; filled content wins over any label prop.

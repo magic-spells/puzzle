@@ -40,7 +40,7 @@ const wall = (d) =>
 				String(d.getMinutes()).padStart(2, '0'),
 		  ].join('-');
 
-const shown = (v, tz) => date(in_timezone(v, tz), 'date', 'en-US');
+const shown = (v, tz) => date(in_timezone(v, tz), 'short', 'en-US');
 
 process.stdout.write(
 	JSON.stringify({
@@ -64,7 +64,7 @@ process.stdout.write(
 			'2026-07-24 @ Asia/Tokyo': wall(in_timezone('2026-07-24', 'Asia/Tokyo')),
 			'2026-07-24 @ Pacific/Honolulu': wall(in_timezone('2026-07-24', 'Pacific/Honolulu')),
 		},
-		calendarDatetime: datetime(in_timezone('2026-07-24', 'Asia/Tokyo'), 'datetime', 'en-US'),
+		calendarDatetime: datetime(in_timezone('2026-07-24', 'Asia/Tokyo'), 'short', 'en-US'),
 
 		// A full ISO INSTANT names a moment, so it MUST still be re-expressed.
 		instant: {
@@ -87,10 +87,12 @@ process.stdout.write(
 		// The plain date/timeago path D114 already fixed — pinned here too so a
 		// regression shows up under a foreign zone rather than only in the wild.
 		plain: {
-			date: date('2026-07-24', 'date', 'en-US'),
+			date: date('2026-07-24', 'short', 'en-US'),
 			long: date('2026-01-01', 'long', 'en-US'),
 			iso: date('2026-07-24', 'iso'),
 			isoInstant: date('2026-07-24T12:00:00Z', 'iso'),
+			// RFC 3339 in the process zone (D174): the offset is the viewer's.
+			isoDatetime: datetime('2026-07-24T12:00:00Z', 'iso'),
 		},
 	})
 );
@@ -122,18 +124,18 @@ describe('date formatters under a foreign process time zone (D114)', () => {
 			// purpose — an expectation built from a local `new Date` would drift
 			// with the process zone and never fail.
 			expect(results[tz].calendar).toEqual({
-				'2026-07-24 @ Asia/Tokyo': '07/24/2026',
-				'2026-03-01 @ America/New_York': '03/01/2026',
-				'2026-07-24 @ America/New_York': '07/24/2026',
+				'2026-07-24 @ Asia/Tokyo': '7/24/26',
+				'2026-03-01 @ America/New_York': '3/1/26',
+				'2026-07-24 @ America/New_York': '7/24/26',
 				// Honolulu (-10) is west of every zone in ZONES, so a day-shifting
 				// in_timezone breaks this one in EVERY process zone.
-				'2026-07-24 @ Pacific/Honolulu': '07/24/2026',
+				'2026-07-24 @ Pacific/Honolulu': '7/24/26',
 				// Kiritimati (+14) is east of every zone, covering the other direction.
-				'2026-07-24 @ Pacific/Kiritimati': '07/24/2026',
-				'2026-07-24 @ UTC': '07/24/2026',
+				'2026-07-24 @ Pacific/Kiritimati': '7/24/26',
+				'2026-07-24 @ UTC': '7/24/26',
 				// Year boundaries are where a one-day slip is most visible.
-				'2026-01-01 @ Pacific/Honolulu': '01/01/2026',
-				'2026-12-31 @ Pacific/Kiritimati': '12/31/2026',
+				'2026-01-01 @ Pacific/Honolulu': '1/1/26',
+				'2026-12-31 @ Pacific/Kiritimati': '12/31/26',
 			});
 		});
 
@@ -142,7 +144,7 @@ describe('date formatters under a foreign process time zone (D114)', () => {
 				'2026-07-24 @ Asia/Tokyo': '2026-07-24-00-00',
 				'2026-07-24 @ Pacific/Honolulu': '2026-07-24-00-00',
 			});
-			expect(results[tz].calendarDatetime).toBe('07/24/2026, 12:00 AM');
+			expect(results[tz].calendarDatetime).toBe('7/24/26, 12:00 AM');
 		});
 
 		it('still re-expresses a real instant in the target zone', () => {
@@ -176,10 +178,17 @@ describe('date formatters under a foreign process time zone (D114)', () => {
 
 		it('renders plain calendar dates as written', () => {
 			expect(results[tz].plain).toEqual({
-				date: '07/24/2026',
-				long: 'January 01, 2026',
+				date: '7/24/26',
+				long: 'January 1, 2026',
 				iso: '2026-07-24',
-				isoInstant: '2026-07-24T12:00:00.000Z',
+				// A date-only iso of an instant is its day in the viewer's zone.
+				isoInstant: '2026-07-24',
+				isoDatetime: {
+					UTC: '2026-07-24T12:00:00Z',
+					'America/Los_Angeles': '2026-07-24T05:00:00-07:00',
+					'Asia/Tokyo': '2026-07-24T21:00:00+09:00',
+					'America/New_York': '2026-07-24T08:00:00-04:00',
+				}[tz],
 			});
 		});
 	});

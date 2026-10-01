@@ -21,7 +21,7 @@ pretending to be the real thing.
 puzzle dev                       # watch + rebuild + live-reload dev server
 puzzle build                     # production build → dist/
 
-# From the repo root (drives the in-tree compiler):
+# From packages/puzzle (drives the in-tree compiler):
 ./puzzle dev examples/music      # equivalently: go run ./compiler/cmd/puzzle dev examples/music
 ./puzzle build examples/music
 ```
@@ -36,7 +36,7 @@ serves `index.html` and the flat seed JSON next to it.
 | Feature in the app | Framework surface |
 | --- | --- |
 | Route in `location.hash`, static-host friendly | **Hash routing** — `routerMode: hashRouter()`, imported from `@magic-spells/puzzle/router-modes` (SPEC §15, D34/D159) |
-| Links are written path-shaped (`{ '/album/' + album.id \| link }`) and the formatter emits the mode-appropriate href, so switching `routerMode` needs no template changes | **Built-in `link` formatter** (D79) |
+| Links are written path-shaped (`{ link('/album/' + album.id) }`) and the function emits the mode-appropriate href, so switching `routerMode` needs no template changes | **Built-in `link` function** (D79) |
 | Home / Artist / Album paint a skeleton, then swap in real data | **Skeleton loading** — `<puzzle-skeleton>` + async `data()` (SPEC §16, D39); the store itself is seeded in the app's `beforeMount` hook (SPEC §30, D60) |
 | Icon set picks its glyph by name; repeat button picks its icon by mode | **`{#case}` / `{:when}`** multi-branch (D37) |
 | Time-of-day greeting on Home (night / morning / afternoon / evening) | **`{:else if}` chaining** (D40) |
@@ -48,7 +48,7 @@ serves `index.html` and the flat seed JSON next to it.
 | `{#for track in tracks, i}`, `{#for 1...5, i}` | **Loop counters** (D29) |
 | Player, toast, and playlists live only in the store (never fetched) | **Local-only store records** — no adapter, created at boot |
 | Liking a song anywhere lights it up in Liked Songs and the row instantly | **Reactive store subscriptions** — `findMany({ filter })` re-runs `data()` |
-| `m:ss` durations, compacted play counts, pluralized labels | **Formatters** with args (`duration`, `compact`, `plural`) |
+| `m:ss` durations, compacted play counts, pluralized labels | **App functions** with args (`duration`, `plural`) plus the built-in `compact_number` |
 | Scroll resets to top on nav, restores on back/forward | **Router scroll behavior** (default; D33) |
 | Likes / playlists / session snapshot survive reloads | **localStorage persistence pattern** — one key, saved on `visibilitychange` / `beforeunload` |
 | Spotify-style accent bleed at the top of album / artist / playlist / liked / player pages | Per-record `accent` gradient (`Puzzle.object()`) → low-alpha header glow computed in `data()` |
@@ -115,7 +115,7 @@ dependency — an app that imports none of these paths bundles none of it.
 ```
 app/
 ├── app.js              # PuzzleApp config (hash mode, formatters) + parallel seed in beforeMount (D60)
-├── routes.js           # 8 flat routes across two layouts (AppLayout vs PlayerLayout)
+├── routes.js           # 8 top-level routes across two layouts (AppLayout vs PlayerLayout); /artist/:id nests the info overlay
 ├── storage.js          # localStorage load/save (one key: puzzle-sounds/v1)
 ├── models/
 │   ├── index.js        # model registry
@@ -148,7 +148,7 @@ app/
 │   ├── QueueDialog.pzl # centered modal queue; morphs out of the MiniPlayer's Queue button
 │   ├── Toast.pzl       # global pill, nonce-keyed auto-dismiss
 │   ├── EqualizerBars.pzl# now-playing visualizer, rippling bars
-│   └── Button.pzl      # reusable pill button, label via <Slot/>
+│   └── Button.pzl      # reusable pill button, label via <Children/>
 └── public/
     ├── index.html      # mount target
     └── artists.json / albums.json / tracks.json   # flat seed data (D21 read path)

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 // Static guards for the overlay WRAPPER pieces — `sheet`, `bottom-sheet`,
-// `dialog` and `alert-dialog`. There is nothing left to unit test in this repo
+// `dialog`, `alert-dialog` and `command`. There is nothing left to unit test in this repo
 // for any of them: the motion, the gestures, the snap policy and the
 // open/close state machine all live in @magic-spells/sheet,
 // @magic-spells/bottom-sheet and @magic-spells/dialog-panel now, and are
@@ -17,8 +17,15 @@ const readJSON = async (path) =>
 
 // Every wrapper here also declares @magic-spells/dialog-panel: the two sheets
 // wrap a package that only PEERs on it, and yarn 1 will not install a peer on
-// its own; the two dialogs wrap dialog-panel itself.
+// its own; the two dialogs and the command palette wrap dialog-panel itself.
 const DIALOG_PANEL = '@magic-spells/dialog-panel';
+
+// A dependency entry is "<name>@<range>" (D169); the last @ separates, so a
+// scoped package keeps its leading one.
+const packageNameOf = (spec) => {
+	const at = spec.lastIndexOf('@');
+	return at > 0 ? spec.slice(0, at) : spec;
+};
 const WRAPPERS = [
 	{
 		piece: 'sheet',
@@ -48,6 +55,13 @@ const WRAPPERS = [
 		source: '../registry/ui/alert-dialog/AlertDialog.pzl',
 		package: DIALOG_PANEL,
 	},
+	{
+		piece: 'command',
+		file: 'Command.pzl',
+		manifest: '../registry/ui/command/piece.json',
+		source: '../registry/ui/command/Command.pzl',
+		package: DIALOG_PANEL,
+	},
 ];
 
 for (const wrapper of WRAPPERS) {
@@ -56,9 +70,13 @@ for (const wrapper of WRAPPERS) {
 
 		assert.deepEqual(piece.files, [wrapper.file]);
 		assert.deepEqual(piece.registryDependencies, []);
+		// Each dependency is an install spec "<name>@<floor>" (D169), so compare
+		// on the package name — the floors themselves are pinned by
+		// registry-deps.test.js.
+		const declared = new Set(piece.dependencies.map(packageNameOf));
 		for (const pkg of new Set([wrapper.package, DIALOG_PANEL])) {
 			assert.ok(
-				piece.dependencies.includes(pkg),
+				declared.has(pkg),
 				`piece.json must declare ${pkg} — dialog-panel is a peer that yarn 1 will not install on its own`
 			);
 		}

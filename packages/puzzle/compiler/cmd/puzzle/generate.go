@@ -30,6 +30,12 @@ one unit and invoke with dot notation:
 writes app/components/Frame/{Frame,Wrapper,Content}.pzl plus an index.js barrel,
 so one import makes <Frame>, <Frame.Wrapper>, and <Frame.Content> resolve.
 
+In a TypeScript app — one with a tsconfig.json at the project root, as
+` + "`puzzle init --typescript`" + ` writes — every stub is TypeScript: components,
+views and layouts use <script lang="ts"> with typed props and data(), a model
+is app/models/<name>.ts with a typed fields interface, and a family's barrel is
+index.ts. The model hint then points at app/models/index.ts.
+
 The output directory can be overridden with --path (relative to the project
 root; a family's directory is created inside it). Existing files are never
 overwritten unless --force is given.`,
@@ -95,6 +101,6 @@ overwritten unless --force is given.`,
 func init() {
 	generateCmd.Flags().String("path", "", "Output directory, relative to the project root (overrides the default)")
 	generateCmd.Flags().Bool("force", false, "Overwrite an existing file")
-	generateCmd.Flags().String("family", "", "Comma-separated family members — scaffolds a component directory + index.js barrel (component only)")
+	generateCmd.Flags().String("family", "", "Comma-separated family members — scaffolds a component directory + index.js barrel (index.ts in a TypeScript app; component only)")
 	rootCmd.AddCommand(generateCmd)
 }

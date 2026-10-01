@@ -54,10 +54,9 @@
         {/if}
       </svg>
 
-      <!-- Axis labels live as HTML overlays, NOT SVG <text>: the Puzzle compiler
-           emits ViewNode('text', …) for its internal text-node marker, so an SVG
-           <text> element collides with it and is silently dropped. Coordinates
-           map 1:1 because the SVG has no viewBox scaling. -->
+      <!-- Axis labels are HTML spans placed over the SVG by choice, not SVG
+           <text> elements. Pixel coordinates map 1:1 because the SVG has no
+           viewBox scaling. -->
       {#if showGrid}
         <div class="pointer-events-none absolute inset-0" aria-hidden="true">
           {#for g in gridLines}
@@ -120,8 +119,8 @@ import { extent, niceDomain, linearScale, bandScale, linePath, formatTick } from
 // Everything geometric (scales, path strings, per-point cx/cy, gridlines, the
 // hover crosshair + tooltip) is precomputed in data() so the template stays a
 // dumb walk of arrays with single-element {#for} roots. Axis labels render as
-// HTML overlay spans, never SVG text — the compiler's internal text-node marker
-// is ViewNode('text', …), so an SVG text element collides and is dropped.
+// HTML spans over the SVG by choice, not SVG text elements; the SVG has no
+// viewBox scaling, so their pixel coordinates map 1:1.
 //
 //   const data = [{ month: 'Jan', revenue: 4200, target: 4000 }, …];
 //   <LineChart

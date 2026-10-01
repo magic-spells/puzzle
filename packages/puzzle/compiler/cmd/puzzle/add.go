@@ -21,7 +21,7 @@ const npmInstallLine = "npm install -D tailwindcss @tailwindcss/cli"
 // canonicalTailwindConfig mirrors examples/todos/puzzle.config.js: an ES module
 // default-exporting the styles.use block. Tabs match the reference file so a
 // freshly written config reads like the hand-authored one.
-const canonicalTailwindConfig = `// Puzzle app configuration (constellation/doc/DOC-DECISIONS.md D12/D26). Read by the
+const canonicalTailwindConfig = `// Puzzle app configuration (D12/D26). Read by the
 // compiler via node — the Go side never parses JS (D3). Declaring the Tailwind
 // pipeline makes ` + "`puzzle build`" + ` / ` + "`puzzle dev`" + ` run the Tailwind CLI and fold
 // its output into dist/styles.css ahead of the collected <style> blocks.
@@ -55,10 +55,10 @@ const tailwindStylesCSS = `@import "tailwindcss";
 `
 
 var addCmd = &cobra.Command{
-	Use:   "add <integration|piece|skills> [name…]",
-	Short: "Add an integration, UI pieces, or the Puzzle agent skill",
-	Long: `Wire an official integration into the current app, copy UI pieces in, or
-install the Puzzle agent skill for supported coding tools.
+	Use:   "add <integration|piece|theme|skills> [name…]",
+	Short: "Add an integration, UI pieces, a theme, or the Puzzle agent skill",
+	Long: `Wire an official integration into the current app, copy UI pieces or a
+palette in, or install the Puzzle agent skill for supported coding tools.
 
 Integrations (v1: tailwind):
   puzzle add tailwind          declares the Tailwind pipeline in puzzle.config.js
@@ -71,9 +71,28 @@ Pieces (copy-in components):
                                lib dependencies) from a registry into the app,
                                verbatim, and records hashes in pieces.lock. It never
                                runs npm and never edits styles.css — required npm
-                               packages and the theme merge are printed as next
+                               packages, the theme merge, the palettes a piece
+                               needs, and a hint when app/styles/pieces.css is
+                               older than the registry's are printed as next
                                steps (D3). Refuses to overwrite existing files
                                unless --overwrite is given.
+
+Themes (palettes):
+  puzzle add theme             lists the registry's palettes with this app's
+                               install state for each.
+  puzzle add theme <name…>     copies each named palette into the app and records
+                               it in pieces.lock. The default palette is the one
+                               "add piece" already copies (app/styles/pieces.css);
+                               every other lands in app/styles/themes/<name>.css.
+                               A palette already imported from
+                               @magic-spells/puzzle-pieces/themes/<name>.css by
+                               app/styles/styles.css is reported and skipped. Like
+                               "add piece" it never edits styles.css — the @import
+                               and the data-scheme switch are printed (D3). An
+                               unmodified copy of an older registry version (it
+                               still matches its pieces.lock hash) is refreshed; a
+                               locally modified copy is refused unless --overwrite
+                               is given.
 
 Agent skill:
   puzzle add skills            installs the CLI's embedded Puzzle skill into every
@@ -121,7 +140,7 @@ directory, or an http(s) URL; --pieces-version pins the npm release exactly.`,
 func init() {
 	addCmd.Flags().String("registry", "", "Piece registry source: npm:<package>[@version], a local directory, or an http(s) URL (default: $PUZZLE_PIECES_REGISTRY or the @magic-spells/puzzle-pieces npm package)")
 	addCmd.Flags().String("pieces-version", "", "Exact @magic-spells/puzzle-pieces release to fetch (default: the newest release matching this CLI's major.minor)")
-	addCmd.Flags().Bool("overwrite", false, "Overwrite existing destination files when adding pieces or skills")
+	addCmd.Flags().Bool("overwrite", false, "Overwrite existing destination files when adding pieces, themes, or skills")
 	addCmd.Flags().String("dir", "", "App root to add pieces into (default: walk up from the current directory for package.json/puzzle.config.js)")
 	addCmd.Flags().StringArray("skill-root", nil, "Config dir to install the skill into (repeatable); skips detection and the target prompt")
 	rootCmd.AddCommand(addCmd)
@@ -147,10 +166,12 @@ func runAddWithEnvironment(w io.Writer, out *ui.Printer, dir string, args []stri
 		return addTailwind(w, out, dir)
 	case "piece":
 		return addPieces(w, out, dir, registry, piecesVersion, overwrite, args[1:])
+	case "theme", "themes":
+		return addThemes(w, out, dir, registry, piecesVersion, overwrite, args[1:])
 	case "skills", "skill":
 		return addSkills(w, out, overwrite, env)
 	default:
-		return fmt.Errorf("unknown integration %q (supported: tailwind, piece, skills)", args[0])
+		return fmt.Errorf("unknown integration %q (supported: tailwind, piece, theme, skills)", args[0])
 	}
 }
 
@@ -196,6 +217,57 @@ func addPieces(w io.Writer, out *ui.Printer, dir, registry, piecesVersion string
 	}
 	pieces.RenderSummary(w, out, res)
 	return nil
+}
+
+// addThemes is `add theme`: the same thin cmd layer as addPieces (app-root
+// walk-up, source selection, the optional --pieces-version pin, presentation),
+// with all resolve/copy/lock logic in internal/pieces. With no names it lists the
+// registry's palettes instead of copying one.
+func addThemes(w io.Writer, out *ui.Printer, dir, registry, piecesVersion string, overwrite bool, names []string) error {
+	start, err := filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
+	root, err := generate.FindProjectRoot(start)
+	if err != nil {
+		return err
+	}
+	source, err := themeSource(registry, piecesVersion)
+	if err != nil {
+		return err
+	}
+	opts := pieces.ThemeOptions{
+		AppRoot:   root,
+		Names:     names,
+		Fetcher:   pieces.NewFetcher(source),
+		Overwrite: overwrite,
+	}
+	if len(names) == 0 {
+		listing, err := pieces.ListThemes(opts)
+		if err != nil {
+			return err
+		}
+		pieces.RenderThemeListing(w, out, listing)
+		return nil
+	}
+	res, err := pieces.AddThemes(opts)
+	if err != nil {
+		return err
+	}
+	pieces.RenderThemeSummary(w, out, res)
+	return nil
+}
+
+// themeSource resolves the registry source and applies the --pieces-version pin,
+// exactly as addPieces does.
+func themeSource(registry, piecesVersion string) (string, error) {
+	source := pieces.ResolveSource(registry)
+	// Trim like ResolveSource trims --registry: a padded flag value must never
+	// become part of the pinned spec, and an all-blank one reads as unset.
+	if v := strings.TrimSpace(piecesVersion); v != "" {
+		return pieces.PinNpmSource(source, v)
+	}
+	return source, nil
 }
 
 // addTailwind wires the Tailwind pipeline. When no puzzle.config.js exists it

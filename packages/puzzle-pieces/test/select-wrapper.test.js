@@ -10,6 +10,9 @@ import { readFile, access } from 'node:fs/promises';
 // piece has to keep.
 
 const PACKAGE = '@magic-spells/select-dropdown';
+// The manifest carries the version FLOOR the wrapper was built against (D169);
+// the .pzl still imports the BARE specifier.
+const DEP = `${PACKAGE}@^0.3.0`;
 const SPECIFIER = PACKAGE.replace('/', '\\/');
 
 const readText = (path) => readFile(new URL(path, import.meta.url), 'utf8');
@@ -31,7 +34,7 @@ test('the select manifest declares its files and dependencies', async () => {
 	assert.deepEqual(piece.files, FILES);
 	assert.deepEqual(piece.registryDependencies, []);
 	// morph-engine is GONE: the morph prop went with the port.
-	assert.deepEqual(piece.dependencies, [PACKAGE]);
+	assert.deepEqual(piece.dependencies, [DEP]);
 	assert.equal(piece.targetDir, 'app/components/ui');
 });
 

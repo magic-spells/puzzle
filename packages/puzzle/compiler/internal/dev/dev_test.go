@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -95,6 +96,38 @@ func TestServeTimeInjection(t *testing.T) {
 	}
 	if strings.Contains(string(onDisk), "EventSource") {
 		t.Fatalf("dist/index.html on disk was mutated with the reload client")
+	}
+}
+
+// TestDevResponsesAreNotStored pins Cache-Control: no-store on what the dev
+// server serves from dist/. http.ServeFile validates app.js with a one-second
+// Last-Modified, so a cached copy could revalidate as 304 after two rebuilds
+// inside one second and the reload would run the older bundle.
+func TestDevResponsesAreNotStored(t *testing.T) {
+	dist := writeDist(t)
+	spa := newTestServer(t, dist)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	static := httptest.NewServer(newServer(dist, serve.ModeStatic, ctx, nil).handler())
+	defer static.Close()
+
+	for _, url := range []string{
+		spa.URL + "/",
+		spa.URL + "/index.html",
+		spa.URL + "/app.js",
+		spa.URL + "/some/route", // SPA history fallback
+		static.URL + "/",
+		static.URL + "/app.js",
+		static.URL + "/missing", // static 404 page
+	} {
+		res, err := http.Get(url)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if got := res.Header.Get("Cache-Control"); got != "no-store" {
+			t.Fatalf("GET %s: Cache-Control = %q, want no-store", url, got)
+		}
 	}
 }
 
@@ -383,8 +416,9 @@ func TestReloadClientSnapshotsBeforeReload(t *testing.T) {
 	}
 
 	for _, marker := range []string{
-		`addEventListener("builderror"`,
-		"JSON.parse(event.data)",
+		`if (type === "builderror") showError(data);`,
+		`else if (type === "clear") clearError();`,
+		"JSON.parse(data)",
 		`document.getElementById("__puzzle-build-error")`,
 		"Puzzle build error",
 		"position:fixed",
@@ -392,11 +426,63 @@ func TestReloadClientSnapshotsBeforeReload(t *testing.T) {
 		"overflow:auto",
 		"white-space:pre-wrap",
 		`event.key === "Escape"`,
-		`addEventListener("clear"`,
 	} {
 		if !strings.Contains(body, marker) {
 			t.Fatalf("injected reload client missing build-error overlay behavior %q; body=%q", marker, body)
 		}
+	}
+}
+
+// TestReloadClientSharesOneStreamPerOrigin pins the shape of the shared-stream
+// client: a browser allows six HTTP/1.1 connections per host, so one SSE
+// stream per tab starved every further request once about six dev tabs were
+// open. One elected tab (Web Locks) holds the only EventSource and relays every
+// hub event over a BroadcastChannel; a tab without either API streams directly.
+func TestReloadClientSharesOneStreamPerOrigin(t *testing.T) {
+	s := reloadScript
+	if n := strings.Count(s, "new EventSource("); n != 1 {
+		t.Fatalf("want one EventSource constructor (leader and fallback share open()), got %d", n)
+	}
+	for _, marker := range []string{
+		`var NAME = "` + reloadLockName + `";`,
+		`navigator.locks.request(NAME,`,
+		`new BroadcastChannel(NAME)`,
+		// Every event type the hub sends must be relayed, or followers miss it.
+		`var EVENTS = ["` + reloadEvent + `", "` + buildErrorEvent + `", "` + clearEvent + `"];`,
+		`if (channel) channel.postMessage({ type: type, data: event.data });`,
+		// A tab joining a broken build asks the leader for the retained error.
+		`mine.postMessage({ type: "hello" });`,
+		// No locks (insecure origin) or no BroadcastChannel: stream directly.
+		`if (!navigator.locks || typeof BroadcastChannel !== "function") return open();`,
+		`addEventListener("pagehide", leave);`,
+		`event.persisted`,
+		`new EventSource("` + reloadPath + `")`,
+	} {
+		if !strings.Contains(s, marker) {
+			t.Fatalf("reload client missing %q", marker)
+		}
+	}
+	// A reloading tab frees its stream before its own document request.
+	reload := s[strings.Index(s, "function reload()"):]
+	if iLeave, iReload := strings.Index(reload, "leave();"), strings.Index(reload, "location.reload()"); iLeave < 0 || iReload < iLeave {
+		t.Fatalf("reload() must leave() before location.reload(); got %q", reload[:iReload+20])
+	}
+}
+
+// TestReloadClientIsValidJavaScript syntax-checks the injected client with
+// node, since the Go side only ever sees it as a string.
+func TestReloadClientIsValidJavaScript(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not on PATH")
+	}
+	body := strings.TrimSuffix(strings.TrimPrefix(reloadScript, "<script>"), "</script>")
+	file := filepath.Join(t.TempDir(), "reload-client.js")
+	if err := os.WriteFile(file, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command(node, "--check", file).CombinedOutput(); err != nil {
+		t.Fatalf("reload client is not valid JavaScript: %v\n%s", err, out)
 	}
 }
 

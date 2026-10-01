@@ -1,0 +1,4 @@
+Register it in app/models/index.js:
+    import User from './user.js';
+    // then add to the registry object:
+    user: User

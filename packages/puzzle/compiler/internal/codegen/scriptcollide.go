@@ -4,14 +4,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/magic-spells/puzzle/compiler/internal/jsident"
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/jsident"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // scriptcollide.go — the <script>-import collision WARNING (v0.1 hardening).
 //
-// A template expression can only read data() fields: resolveExpr rewrites every
-// non-scope, non-global, non-keyword identifier ROOT to `__d.<name>` (expr.go).
+// A template expression can only read data() fields: the lowering (lower.go)
+// compiles every name that is not a template binding, an arrow parameter, or a
+// handler's DOM event to `__d.<name>`.
 // So a name that is actually an IMPORT in <script> — `{ count > MAX }` with MAX
 // imported — silently becomes `__d.MAX` → undefined at render, with no
 // diagnostic. This pass detects that collision and emits a Warning (out-of-band:
@@ -28,8 +29,9 @@ import (
 //     matched (the Go compiler still never truly parses the opaque <script>).
 
 // jsTok is one lexical token of the opaque <script> body for the import scan:
-// an identifier run, a single punctuation byte, or an opaque unit (string,
-// template literal, comment, or regex literal — content irrelevant here).
+// an identifier run (Unicode, by jsident's ID_Start/ID_Continue rule), a single
+// punctuation byte, or an opaque unit (string, template literal, comment, or
+// regex literal — content irrelevant here).
 type jsTok struct {
 	ident  string // non-empty for an identifier token
 	ch     byte   // non-zero for a punctuation token
@@ -59,11 +61,24 @@ func tokenizeJS(s string) []jsTok {
 		c := s[i]
 		if next, pee, consumed := parser.LexSkip(s, i, prevEndsExpr); consumed {
 			if isIdentStart(c) {
+				// LexSkip's run stops at the first non-ASCII byte, but the name goes
+				// on through it (`Straßenkarte`) — and a name holding one is no
+				// keyword, so a '/' after it is division.
+				if end := identRunEnd(s, next); end > next {
+					next, pee = end, true
+				}
 				toks = append(toks, jsTok{ident: s[i:next], off: i})
 			} else {
 				toks = append(toks, jsTok{opaque: true, comment: isCommentStart(s, i), off: i})
 			}
 			prevEndsExpr = pee
+			i = next
+			continue
+		}
+		if startsNonASCIIIdent(s, i) {
+			next := identRunEnd(s, i)
+			toks = append(toks, jsTok{ident: s[i:next], off: i})
+			prevEndsExpr = true
 			i = next
 			continue
 		}
@@ -389,34 +404,44 @@ func checkReservedScriptBindings(scripts string, toks []jsTok, emitted []string,
 			continue
 		}
 		pos := scriptsPos.Advance(scripts[:off])
-		what, why := reservedBindingImport(name)
+		verb, what, why := reservedBindingEmission(name)
 		return &parser.ParseError{
 			File: file, Line: pos.Line, Col: pos.Col,
 			Message: fmt.Sprintf(
-				"<script> binds %q at module scope, a name reserved by the compiler: it imports %s after the <script> (%s), so the two declarations collide — rename the <script> binding",
-				name, what, why),
+				"<script> binds %q at module scope, a name reserved by the compiler: it %s %s after the <script> (%s), so the two declarations collide — rename the <script> binding",
+				name, verb, what, why),
 		}
 	}
 	return nil
 }
 
-// reservedBindingImport names what the compiler imports as `name` and why THIS
-// file imports it, so the error explains a reservation the .pzl cannot see.
-func reservedBindingImport(name string) (what, why string) {
+// reservedBindingEmission names what the compiler emits as `name`, how (an
+// import or a declaration), and why THIS file emits it, so the error explains a
+// reservation the .pzl cannot see.
+func reservedBindingEmission(name string) (verb, what, why string) {
 	switch name {
 	case "ViewNode":
-		return "ViewNode", "every compiled module builds its render tree with it"
+		return "imports", "ViewNode", "every compiled module builds its render tree with it"
 	case "SLOT_TAG":
-		return "SLOT_TAG", "this template contains a slot"
+		return "imports", "SLOT_TAG", "this template contains a slot"
 	case "SNIPPET_TAG":
-		return "SNIPPET_TAG", "this template contains a <Snippet>"
+		return "imports", "SNIPPET_TAG", "this template contains a <Snippet>"
 	case "PORTAL_TAG":
-		return "PORTAL_TAG", "this template contains a <Portal>"
+		return "imports", "PORTAL_TAG", "this template contains a <Portal>"
 	case "__s":
-		return "the display helper as __s", "this template coerces an interpolation for display"
-	default:
-		return name, "the shared module for a {#svg} asset in this template"
+		return "imports", "the display helper as __s", "this template coerces an interpolation for display"
+	case "__l":
+		return "imports", "listRows as __l", "this template has an item-form {#for} lowered to a persistent list block"
+	case "__e":
+		return "imports", "loopItems as __e", "this template has an item-form {#for} that keeps `.map`, whose collection it guards"
+	case "__r":
+		return "imports", "loopRange as __r", "this template has a range {#for}"
 	}
+	if strings.HasPrefix(name, "__L") {
+		// D170: one module-scope meta const per item-form {#for} site.
+		return "declares", name, "this template has an item-form {#for}, whose list-block meta is hoisted to module scope"
+	}
+	return "imports", name, "the shared module for a {#svg} asset in this template"
 }
 
 // importLocalName returns the local binding a named-import specifier introduces
@@ -441,23 +466,31 @@ func collectDataCollisions(emitted string, imports, seen map[string]bool, out *[
 	for i := 0; i < len(s); {
 		c := s[i]
 		if next, pee, consumed := parser.LexSkip(s, i, prevEndsExpr); consumed {
-			// The `__d` identifier run followed immediately by ".<name>" is a data
-			// member read emitted by resolveExpr (LexSkip stops the run at the '.').
-			if isIdentStart(c) && s[i:next] == "__d" && next < len(s) && s[next] == '.' {
-				k := next + 1
-				start := k
-				for k < len(s) && isIdentChar(s[k]) {
-					k++
+			if isIdentStart(c) {
+				if end := identRunEnd(s, next); end > next {
+					next, pee = end, true
 				}
-				if k > start {
-					if name := s[start:k]; imports[name] && !seen[name] {
-						seen[name] = true
-						*out = append(*out, name)
+				// The `__d` identifier run followed immediately by ".<name>" is a
+				// data root read the lowering emitted (the run stops at the '.').
+				// The name may be non-ASCII (`__d.金額`).
+				if s[i:next] == "__d" && next < len(s) && s[next] == '.' {
+					start := next + 1
+					if k := identRunEnd(s, start); k > start {
+						if name := s[start:k]; imports[name] && !seen[name] {
+							seen[name] = true
+							*out = append(*out, name)
+						}
 					}
 				}
 			}
 			prevEndsExpr = pee
 			i = next
+			continue
+		}
+		if startsNonASCIIIdent(s, i) {
+			// One run, so the tail of a name like `ö__d` is never read as `__d`.
+			i = identRunEnd(s, i)
+			prevEndsExpr = true
 			continue
 		}
 		prevEndsExpr = parser.LexPlainEndsExpr(s[i], prevEndsExpr)

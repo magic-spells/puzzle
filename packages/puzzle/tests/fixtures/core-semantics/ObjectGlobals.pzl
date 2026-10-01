@@ -1,0 +1,24 @@
+<puzzle-view class="object-globals">
+  <p class="keys">{ Object.keys(settings).length }</p>
+  <p class="values">{ Object.values(settings).length }</p>
+  <p class="entries">{ Object.entries(user.prefs).length }</p>
+  <p class="present">{ Object.keys(filters).join(',') }</p>
+  <p class="string">{ Object.keys(word).length }</p>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// D173 V4 through the Object globals: a missing argument is `{}`, so the count
+// is 0 instead of a TypeError — see tests/core-semantics.test.js.
+export default class ObjectGlobals extends PuzzleView {
+  data() {
+    return {
+      settings: undefined,
+      user: null,
+      filters: { a: 1, b: 2 },
+      word: 'abc',
+    };
+  }
+}
+</script>

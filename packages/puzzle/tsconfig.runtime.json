@@ -1,0 +1,39 @@
+// Type-checks the plain-JavaScript client runtime (`npm run test:runtime-types`).
+// The runtime stays JavaScript with no build step: types come from its JSDoc,
+// plus two type-only files under tests-types/runtime/ (build-flag globals and the
+// members other modules install on the core classes). Nothing here emits or ships.
+// The published types/*.d.ts are guarded separately by tests-types/drift.
+{
+  "compilerOptions": {
+    // The runtime's browser baseline: production bundles are built for ES2022.
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": [],
+
+    // Every strict-family flag the runtime passes on JSDoc alone. Still off:
+    // strictNullChecks — see DOC-TESTING for why.
+    "strict": false,
+    "noImplicitAny": true,
+    "alwaysStrict": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictBuiltinIteratorReturn": true,
+    "noImplicitThis": true,
+    "useUnknownInCatchVariables": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": [
+    "client-runtime/**/*.js",
+    "tests-types/runtime/env.d.ts",
+    "tests-types/runtime/augment.d.ts",
+    "tests-types/runtime/installed.d.ts"
+  ]
+}

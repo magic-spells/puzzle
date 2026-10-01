@@ -3,7 +3,8 @@ package codegen
 import (
 	"strings"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 type autoBind struct {
@@ -13,44 +14,37 @@ type autoBind struct {
 	spec   string // "v" | "vn" | "c"
 }
 
-// classifyBindExpr reports whether raw is exactly `ident` or `ident.ident`.
+// classifyBindExpr reports whether an expression is exactly `ident` or
+// `ident.ident` — a data field the edit can be written back to.
 // bare==true  => field is the local key ("draft"), target is "".
-// bare==false => target is the ROOT segment (unresolved), field the second.
-// Roots in jsKeywords/jsGlobals never classify. A bare root present in scope
-// (a {#for} variable) never classifies. A scoped root of a member path does.
-func classifyBindExpr(raw string, scope map[string]bool) (target, field string, bare, ok bool) {
-	parts := strings.Split(strings.TrimSpace(raw), ".")
-	if len(parts) < 1 || len(parts) > 2 {
-		return "", "", false, false
-	}
-
-	root := parts[0]
-	if !isJSIdentifier(root) || jsKeywords[root] || jsGlobals[root] {
-		return "", "", false, false
-	}
-	// `event` is the reserved handler identifier (evScope); unless a scope
-	// explicitly names it, a path rooted on it is never a bindable data path.
-	if root == "event" && !scope[root] {
-		return "", "", false, false
-	}
-
-	if len(parts) == 1 {
-		if scope[root] {
+// bare==false => target is the ROOT name (unresolved), field the member.
+// A literal, a global, a call, an operator, a computed or optional step, or a
+// deeper path never classifies. A bare root that is a template binding (a
+// {#for} variable) never classifies; a binding's member does.
+func classifyBindExpr(n expr.Node, scope scopeMap) (target, field string, bare, ok bool) {
+	switch n := n.(type) {
+	case *expr.Identifier:
+		if _, bound := scope[n.Name]; bound || n.Name == "this" {
 			return "", "", false, false
 		}
-		return "", root, true, true
+		return "", n.Name, true, true
+	case *expr.Member:
+		root, isIdent := n.Object.(*expr.Identifier)
+		if !isIdent || n.Computed || n.Optional || root.Name == "this" {
+			return "", "", false, false
+		}
+		// `x.size` classifies like any field: on an object it IS the field
+		// (`product.size`). A `.length` count is a field read too; binding one
+		// is meaningless and is not special-cased.
+		return root.Name, n.Property, false, true
 	}
-
-	if !isJSIdentifier(parts[1]) {
-		return "", "", false, false
-	}
-	return root, parts[1], false, true
+	return "", "", false, false
 }
 
 // detectAutoBind inspects the whole element (conditions are sibling-aware) and
 // returns nil when nothing binds. Pure; safe to call from both the width trial
 // and the real pass. Consumes no compiler state.
-func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *autoBind {
+func detectAutoBind(tag string, attrs []parser.Attr, scope scopeMap) *autoBind {
 	tag = strings.ToLower(tag)
 	if tag != "input" && tag != "textarea" && tag != "select" {
 		return nil
@@ -141,7 +135,7 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
 		if !ok || at.Name != attrName {
 			continue
 		}
-		target, field, _, ok := classifyBindExpr(at.Expr, scope)
+		target, field, _, ok := classifyBindExpr(at.ExprAST, scope)
 		if !ok {
 			return nil
 		}
@@ -153,13 +147,22 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
 // autoBindKV emits the synthesized listener without touching compiler state.
 // Member roots resolve exactly like template expressions: loop bindings stay
 // bare, while data roots read through __d.
-func autoBindKV(bind *autoBind, scope map[string]bool) string {
+func autoBindKV(bind *autoBind, scope scopeMap) string {
 	target := "null"
 	if bind.target != "" {
 		target = "__d." + bind.target
-		if scope[bind.target] {
-			target = bind.target
+		if local, ok := scopeRef(scope, bind.target); ok {
+			// A {#for} local resolves through its scope map entry, so a row
+			// inside a lowered list block binds `s.item` (D170 emission contract).
+			target = local
 		}
+		// A member-path bind whose root is missing must stay inert, not fall into
+		// __bind's `target == null` branch, which belongs to the bare-local form
+		// and would write the field as a stray top-level local. Coalescing to a
+		// primitive routes it to INERT_BIND — the same one-way display a
+		// primitive-rooted path gets — and the guarded value read (D173 V4) shows
+		// nothing. The next render with a real root binds normally.
+		target += " ?? 0"
 	}
 	return jsKey("@"+bind.event+":bind") + ": this.__bind(" +
 		target + ", " + jsString(bind.field) + ", " + jsString(bind.spec) + ")"

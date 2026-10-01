@@ -1,0 +1,22 @@
+import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
+
+export default class User extends PuzzleModel {
+  // Schema definition — see constellation/doc/DOC-SPEC.md §7
+  static schema = {
+    id:        Puzzle.string().primary(),
+    name:      Puzzle.string().required(),
+    createdAt: Puzzle.date().default(() => new Date()),
+    updatedAt: Puzzle.date().default(() => new Date())
+  };
+
+  // Computed properties — plain getters (constellation/doc/DOC-SPEC.md §7)
+  get displayName() {
+    return this.name;
+  }
+
+  // Server location (D21/D157). To enable loadMany/loadOne/save/delete, import
+  // the adapter capability in app.js and pass it once to PuzzleApp.
+  static adapter = {
+    endpoint: '/api/users',
+  };
+}

@@ -1,6 +1,6 @@
 <puzzle-view class="form">
   <input type="text" value={ name } autofocus />
-  <button disabled={ !name.trim() }>Go</button>
+  <button disabled={ name.length === 0 }>Go</button>
 </puzzle-view>
 
 <script>

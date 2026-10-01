@@ -504,7 +504,7 @@ func TestAddSkillsOverwriteRefusalAndSuccess(t *testing.T) {
 	if err := os.WriteFile(skillPath, custom, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Drop the stamp so the install reads as stale, the way a pre-D99 CLI wrote it.
+	// Drop the stamp so the install reads as stale, the way a pre-stamp CLI wrote it.
 	// A stamp matching this binary would be "up to date" and never reach the refusal.
 	if err := os.Remove(filepath.Join(home, ".claude", "skills", "puzzle", skillVersionFile)); err != nil {
 		t.Fatal(err)
@@ -833,7 +833,7 @@ func TestAddSkillsSkipsSymlinkedDestination(t *testing.T) {
 	}
 }
 
-// --overwrite still writes through a symlink: explicit intent, and D97's upgrade
+// --overwrite still writes through a symlink: explicit intent, and the D78 upgrade
 // re-exec depends on this shape. It must merge rather than prune, or the link
 // would be replaced by a real directory.
 func TestAddSkillsOverwriteWritesThroughSymlink(t *testing.T) {
@@ -1008,5 +1008,119 @@ func TestAddPiecesVersionRequiresNpmSource(t *testing.T) {
 	err := runAddWithEnvironment(&buf, plainPrinter(), app, []string{"piece", "button"}, "/some/dir", "0.6.2", false, addEnvironment{})
 	if err == nil || !strings.Contains(err.Error(), "only applies to an npm registry source") {
 		t.Fatalf("want the PinNpmSource error, got %v", err)
+	}
+}
+
+// writeThemeFixtureRegistry is writeCmdFixtureRegistry plus the `themes` array
+// the CLI's `add theme` reads.
+func writeThemeFixtureRegistry(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	writeFixtureFile(t, root, "registry.json", `{"version":1,"theme":"theme/pieces.css",`+
+		`"modes":["light","medium","dark"],"themes":[`+
+		`{"name":"default","file":"theme/pieces.css","label":"Default","description":"The default palette."},`+
+		`{"name":"dim","file":"theme/dim.css","label":"Dim","description":"The low-contrast palette."}],`+
+		`"pieces":[]}`)
+	writeFixtureFile(t, root, "theme/pieces.css", "/* puzzle-pieces design tokens */\n")
+	writeFixtureFile(t, root, "theme/dim.css", "/* dim */\n")
+	return root
+}
+
+// newThemeApp is an app root the walk-up finds, with an unwired styles.css.
+func newThemeApp(t *testing.T) string {
+	t.Helper()
+	app := t.TempDir()
+	if err := os.WriteFile(filepath.Join(app, "package.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(app, "app", "styles"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(app, "app", "styles", "styles.css"), []byte("@import \"tailwindcss\";\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return app
+}
+
+// TestAddThemeDispatchCopies drives the full cmd path: theme dispatch →
+// app-root walk-up → copy → lock → summary.
+func TestAddThemeDispatchCopies(t *testing.T) {
+	reg := writeThemeFixtureRegistry(t)
+	app := newThemeApp(t)
+
+	var buf bytes.Buffer
+	if err := runAdd(&buf, plainPrinter(), app, []string{"theme", "dim"}, reg, false); err != nil {
+		t.Fatalf("add theme: %v", err)
+	}
+	if !fsFileExists(filepath.Join(app, "app", "styles", "themes", "dim.css")) {
+		t.Error("expected dim.css copied into app/styles/themes")
+	}
+	if !fsFileExists(filepath.Join(app, "pieces.lock")) {
+		t.Error("expected pieces.lock written")
+	}
+	out := buf.String()
+	if !strings.Contains(out, "@import './themes/dim.css';") || !strings.Contains(out, `data-scheme="dim"`) {
+		t.Errorf("summary should print both manual steps, got:\n%s", out)
+	}
+}
+
+// The plural selector is accepted too.
+func TestAddThemesAliasAccepted(t *testing.T) {
+	reg := writeThemeFixtureRegistry(t)
+	app := newThemeApp(t)
+	var buf bytes.Buffer
+	if err := runAdd(&buf, plainPrinter(), app, []string{"themes", "dim"}, reg, false); err != nil {
+		t.Fatalf("add themes: %v", err)
+	}
+	if !fsFileExists(filepath.Join(app, "app", "styles", "themes", "dim.css")) {
+		t.Error("expected the themes alias to copy dim.css")
+	}
+}
+
+// `add theme` with no name lists the registry's palettes and writes nothing.
+func TestAddThemeWithoutNameLists(t *testing.T) {
+	reg := writeThemeFixtureRegistry(t)
+	app := newThemeApp(t)
+
+	var buf bytes.Buffer
+	if err := runAdd(&buf, plainPrinter(), app, []string{"theme"}, reg, false); err != nil {
+		t.Fatalf("add theme listing: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{"default", "dim", "The low-contrast palette.", "puzzle add theme <name…>", `data-theme="light|medium|dark"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("listing missing %q, got:\n%s", want, out)
+		}
+	}
+	if fsFileExists(filepath.Join(app, "pieces.lock")) {
+		t.Error("listing must not write pieces.lock")
+	}
+}
+
+func TestAddThemeUnknownNameSurfacesAvailable(t *testing.T) {
+	reg := writeThemeFixtureRegistry(t)
+	var buf bytes.Buffer
+	err := runAdd(&buf, plainPrinter(), newThemeApp(t), []string{"theme", "nope"}, reg, false)
+	if err == nil || !strings.Contains(err.Error(), "available: default, dim") {
+		t.Fatalf("expected the available list in the error, got: %v", err)
+	}
+}
+
+func TestAddUnknownIntegrationListsTheme(t *testing.T) {
+	var buf bytes.Buffer
+	err := runAdd(&buf, plainPrinter(), t.TempDir(), []string{"sass"}, "", false)
+	if err == nil || !strings.Contains(err.Error(), "theme") {
+		t.Fatalf("expected supported set to include theme, got: %v", err)
+	}
+}
+
+// TestAddOverwriteHelpNamesThemes: --overwrite applies to `add theme` too, and
+// its help line says so.
+func TestAddOverwriteHelpNamesThemes(t *testing.T) {
+	usage := addCmd.Flags().Lookup("overwrite").Usage
+	for _, want := range []string{"pieces", "themes", "skills"} {
+		if !strings.Contains(usage, want) {
+			t.Errorf("--overwrite help %q does not mention %s", usage, want)
+		}
 	}
 }

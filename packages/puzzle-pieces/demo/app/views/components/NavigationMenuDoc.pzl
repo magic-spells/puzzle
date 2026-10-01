@@ -4,7 +4,8 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Navigation Menu</h1>
         <p class="mt-2 text-body">
-          A horizontal site-header bar with hover or click flyout panels of link cards. It is a
+          A site-header bar with hover or click flyout panels — popover dropdowns, submenus that open
+          to the side, and full-width mega panels laid out in headed columns. It is a
           compound <strong class="font-medium text-ink">family</strong> composed over the shared
           <a class="text-brand underline underline-offset-2" href="#/components/dropdown-panel">Dropdown Panel</a>
           base, so hover intent, the hover bridge, one-open-at-a-time arbitration, outside-press
@@ -38,28 +39,66 @@
       </header>
 
       <ExampleBox code={ codeHero }>
-        <div class="flex w-full max-w-2xl items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
-          <span class="text-sm font-semibold text-ink">Acme</span>
-          <NavigationMenu label="Main">
+        <!-- self-start + pb-96: the header sits at the top of the stage with
+             room below it for the mega panel, instead of centred over it. -->
+        <div class="w-full max-w-4xl self-start pb-96">
+          <NavigationMenu label="Main" class="w-full">
+            <li class="mr-3 flex items-center gap-2 pl-2">
+              <span class="size-5 rounded-md bg-brand" aria-hidden="true"></span>
+              <span class="text-sm font-semibold text-ink">Acme</span>
+            </li>
+
             <NavigationMenu.Item>
               <NavigationMenu.Trigger>Products</NavigationMenu.Trigger>
-              <NavigationMenu.Content columns={ 2 } align="end" class="w-max max-w-lg">
-                {#for row in products}
-                  <NavigationMenu.Link key={ row.href } href={ row.href } label={ row.label } description={ row.description }/>
+              <NavigationMenu.Content wide={ true }>
+                {#for group in productGroups}
+                  <NavigationMenu.Group key={ group.label } label={ group.label }>
+                    {#for row in group.links}
+                      <NavigationMenu.Link key={ row.href } href={ row.href } label={ row.label } description={ row.description }/>
+                    {/for}
+                  </NavigationMenu.Group>
                 {/for}
+                <div class="flex flex-col justify-between gap-4 rounded-lg bg-surface-sunken p-4">
+                  <div>
+                    <Badge variant="brand">New</Badge>
+                    <p class="mt-3 text-sm font-medium text-ink">Workflows 2.0</p>
+                    <p class="mt-1 text-sm text-muted">Branching, retries and approvals, on every plan.</p>
+                  </div>
+                  <a href="#workflows" class="text-sm font-medium text-ink underline decoration-brand decoration-2 underline-offset-4">Launch post →</a>
+                </div>
+              </NavigationMenu.Content>
+            </NavigationMenu.Item>
+
+            <NavigationMenu.Item>
+              <NavigationMenu.Trigger>Solutions</NavigationMenu.Trigger>
+              <NavigationMenu.Content class="w-60">
+                {#for row in solutions}
+                  <NavigationMenu.Link key={ row.href } href={ row.href } label={ row.label }/>
+                {/for}
+
+                <NavigationMenu.Item>
+                  <NavigationMenu.Trigger variant="card">By industry</NavigationMenu.Trigger>
+                  <NavigationMenu.Content opens="right" class="w-52">
+                    {#for row in industries}
+                      <NavigationMenu.Link key={ row.href } href={ row.href } label={ row.label }/>
+                    {/for}
+                  </NavigationMenu.Content>
+                </NavigationMenu.Item>
               </NavigationMenu.Content>
             </NavigationMenu.Item>
 
             <NavigationMenu.Item>
               <NavigationMenu.Trigger>Resources</NavigationMenu.Trigger>
-              <NavigationMenu.Content align="end" class="w-max max-w-sm">
+              <NavigationMenu.Content class="w-72">
                 {#for row in resources}
                   <NavigationMenu.Link key={ row.href } href={ row.href } label={ row.label } description={ row.description }/>
                 {/for}
               </NavigationMenu.Content>
             </NavigationMenu.Item>
 
-            <li><NavigationMenu.Link variant="bar" href="#pricing" label="Pricing"/></li>
+            <li><NavigationMenu.Link variant="bar" href="#pricing" label="Pricing" current={ true }/></li>
+            <li><NavigationMenu.Link variant="bar" href="#docs" label="Docs"/></li>
+            <li class="ml-auto"><Button variant="outline" size="sm">Sign in</Button></li>
           </NavigationMenu>
         </div>
       </ExampleBox>
@@ -77,9 +116,11 @@
         </p>
         <CodeBlock code={ installDep }/>
         <p class="mb-3 mt-4 text-sm text-body">
-          Then merge its stylesheets into your app's style entry. The first is required; the second
-          draws the trigger arrow and the entrance effects, and the stock trigger already carries
-          the arrow hook:
+          Then merge its stylesheets into your app's style entry. The first is required: it
+          positions the panels and carries the <span class="font-medium text-ink">hover bridge</span>
+          that keeps a menu open while the pointer crosses the gap to its panel — without it a
+          hover-opened panel closes under the cursor. The second draws the trigger arrow and the
+          entrance effects, and the stock trigger already carries the arrow hook:
         </p>
         <CodeBlock code={ installCss }/>
         <p class="mt-3 text-sm text-muted">
@@ -96,7 +137,10 @@
           is <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">relative</code>
           and that is load-bearing: a <span class="font-medium text-ink">wide</span> mega panel's
           host goes <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">position: static</code>
-          so the panel spans the nearest positioned ancestor, and this element is it.
+          so the panel spans the nearest positioned ancestor, and this element is it. That is why
+          the example above puts the logo and the sign-in button in the bar as bare
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<li>' }</code>s: the whole header is the
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<nav>' }</code>, so a mega panel spans all of it.
         </p>
         <p class="mt-3 text-sm text-muted">
           <span class="font-medium text-ink">Item</span> is the
@@ -112,47 +156,55 @@
       </section>
 
       <div class="mt-12 space-y-12">
-        <ExampleBox id="mega" title="Mega panel" code={ codeMega }>
-          <div class="flex w-full flex-col items-stretch gap-3">
-            <div class="flex w-full max-w-3xl items-center gap-6 rounded-xl border border-border bg-surface px-4 py-3">
-              <span class="text-sm font-semibold text-ink">Acme</span>
-              <NavigationMenu class="flex-1">
-                <NavigationMenu.Item>
-                  <NavigationMenu.Trigger>Platform</NavigationMenu.Trigger>
-                  <NavigationMenu.Content wide={ true } columns={ 2 } effect="slide">
-                    {#for row in platform}
-                      <NavigationMenu.Link key={ row.href } href={ row.href } label={ row.label } description={ row.description }/>
-                    {/for}
-                  </NavigationMenu.Content>
-                </NavigationMenu.Item>
+        <section id="mega" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Mega panels</h2>
+          <p class="text-sm text-body">
+            <span class="font-medium text-ink">wide</span> makes a Content span the whole
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<nav>' }</code> and switches it to the mega layout: generous
+            padding, wide gutters, and one equal column per child from
+            <span class="font-medium text-ink">md</span> up (two per row from
+            <span class="font-medium text-ink">sm</span>, stacked below). Give it one
+            <span class="font-medium text-ink">NavigationMenu.Group</span> per column — a small
+            uppercase heading over a stack of links — and the column count takes care of itself.
+            Anything else can be a column too, like the promo card in the Products panel above.
+          </p>
+          <CodeBlock code={ codeMega } class="mt-4"/>
+          <p class="mt-3 text-sm text-muted">
+            Each Group is a <span class="font-medium text-ink">role="group"</span> named by its
+            label, so a screen reader announces the column as focus enters it.
+          </p>
+        </section>
 
-                <li><NavigationMenu.Link variant="bar" href="#pricing" label="Pricing" current={ true }/></li>
-              </NavigationMenu>
-            </div>
-            <p class="mt-3 w-full max-w-3xl text-sm text-muted">
-              <span class="font-medium text-ink">wide</span> makes the panel span the whole
-              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<nav>' }</code>
-              rather than hang off its trigger — that element is the positioned ancestor, so give it
-              the width you want the panel to have (here <span class="font-medium text-ink">flex-1</span>). The Pricing link is
-              <span class="font-medium text-ink">current</span>, which is the per-link replacement for
-              the old bar-wide <span class="font-medium text-ink">activePath</span>.
-            </p>
+        <ExampleBox id="columns" title="Wide panel with explicit columns" code={ codeColumns }>
+          <div class="w-full max-w-3xl self-start pb-72">
+            <NavigationMenu class="w-full">
+              <NavigationMenu.Item>
+                <NavigationMenu.Trigger>Platform</NavigationMenu.Trigger>
+                <NavigationMenu.Content wide={ true } columns={ 3 } effect="slide">
+                  {#for row in platform}
+                    <NavigationMenu.Link key={ row.href } href={ row.href } label={ row.label } description={ row.description }/>
+                  {/for}
+                </NavigationMenu.Content>
+              </NavigationMenu.Item>
+
+              <li><NavigationMenu.Link variant="bar" href="#pricing" label="Pricing"/></li>
+            </NavigationMenu>
           </div>
         </ExampleBox>
 
         <ExampleBox id="submenu" title="Nested submenu and right alignment" code={ codeSubmenu }>
-          <div class="flex w-full flex-col items-stretch gap-3">
-            <div class="flex w-full max-w-2xl items-center justify-end rounded-xl border border-border bg-surface px-4 py-3">
+          <div class="flex w-full flex-col items-stretch gap-3 self-start pb-56">
+            <div class="flex w-full max-w-2xl justify-end">
               <NavigationMenu>
                 <NavigationMenu.Item>
                   <NavigationMenu.Trigger>Company</NavigationMenu.Trigger>
-                  <NavigationMenu.Content align="end" class="w-max max-w-xs">
+                  <NavigationMenu.Content align="end" class="w-56">
                     <NavigationMenu.Link href="#about" label="About"/>
                     <NavigationMenu.Link href="#careers" label="Careers"/>
 
                     <NavigationMenu.Item>
                       <NavigationMenu.Trigger variant="card">Support</NavigationMenu.Trigger>
-                      <NavigationMenu.Content opens="right" class="w-max max-w-xs">
+                      <NavigationMenu.Content opens="right" class="w-48">
                         <NavigationMenu.Link href="#contact" label="Contact us"/>
                         <NavigationMenu.Link href="#help" label="Help center"/>
                       </NavigationMenu.Content>
@@ -161,15 +213,42 @@
                 </NavigationMenu.Item>
               </NavigationMenu>
             </div>
-            <p class="mt-3 w-full max-w-2xl text-sm text-muted">
+            <p class="w-full max-w-2xl text-sm text-muted">
               A submenu is an Item nested inside a Content with
               <span class="font-medium text-ink">opens="right"</span>. Escape closes one level at a
               time, and the left arrow returns from a submenu to its trigger. The outer panel is
               <span class="font-medium text-ink">align="end"</span>, which hugs the right edge with
-              two utilities instead of the measuring pass the old piece ran every open.
+              two utilities instead of a measuring pass.
             </p>
           </div>
         </ExampleBox>
+
+        <section id="spacing" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Spacing and the hover bridge</h2>
+          <p class="text-sm text-body">
+            Every panel opens 8px clear of what opened it: below its trigger, below the bar for a
+            wide panel, and beside its row for a submenu, lifted so the submenu's first link lines
+            up with that row. A hover-opened panel would close the moment the pointer left the
+            trigger for that gap, so the core stylesheet draws an invisible, hit-testable wedge —
+            the <span class="font-medium text-ink">hover bridge</span> — under a downward trigger and
+            beside a submenu's, which keeps the pointer inside the menu on the way across.
+          </p>
+          <p class="mt-3 text-sm text-body">
+            The wedge covers a straight or steep crossing. A wide panel sits further away — the
+            bar's padding and border plus the gap — and runs the whole bar, so a shallow diagonal
+            to a far column leaves the wedge; so does a slant down to a submenu's lower rows. So
+            every Item also carries a short
+            <span class="font-medium text-ink">closeDelay</span> (200ms by default): a pointer that
+            reaches the panel inside that window cancels the close. Hover-opened panels only; a
+            clicked one stays until it is dismissed.
+          </p>
+          <p class="mt-3 text-sm text-muted">
+            The bridge is the trigger's
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">::before</code>. Never style that pseudo-element or put
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">overflow-hidden</code> anywhere up the chain — draw arrows and
+            decorations with real child elements.
+          </p>
+        </section>
 
         <section id="keyboard" class="scroll-mt-20">
           <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
@@ -229,6 +308,16 @@
             {/for}
           </div>
 
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">NavigationMenu.Group</h3>
+          <div class="text-sm">
+            {#for row in groupRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
           <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">NavigationMenu.Link</h3>
           <div class="text-sm">
             {#for row in linkRows}
@@ -252,12 +341,14 @@ import NavigationMenu from '@/components/ui/NavigationMenu/index.js';
 import ExampleBox from '@/components/docs/ExampleBox.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
+import Button from '@/components/ui/Button.pzl';
+import Badge from '@/components/ui/Badge.pzl';
 
 // Docs page for the NavigationMenu family. Code samples live as
 // template-literal consts because literal tag names and {#…} tokens would be
 // parsed as template syntax in prose.
 const installCmd = 'puzzle add piece navigation-menu';
-const installDep = 'npm install @magic-spells/dropdown-panel';
+const installDep = 'npm install @magic-spells/dropdown-panel@^2.1.1';
 const installCss = `/* app/styles/styles.css */
 @import "tailwindcss";
 @import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
@@ -277,41 +368,73 @@ const usageMarkup = `<NavigationMenu label="Main">
   <li><NavigationMenu.Link variant="bar" href="/pricing" label="Pricing" /></li>
 </NavigationMenu>`;
 
-const codeHero = `// Two flyouts and a plain bar link. columns={ 2 } is explicit now —
-// the old piece counted children and guessed.
-<NavigationMenu label="Main">
+const codeHero = `// A whole site header. The logo and the sign-in button are bare <li>s, so
+// the header IS the <nav> — and a wide panel spans all of it.
+<NavigationMenu label="Main" class="w-full">
+  <li class="mr-3 flex items-center gap-2 pl-2">…logo…</li>
+
   <NavigationMenu.Item>
     <NavigationMenu.Trigger>Products</NavigationMenu.Trigger>
-    <NavigationMenu.Content columns={ 2 } class="w-max max-w-lg">
-      <NavigationMenu.Link href="/analytics" label="Analytics" description="…" />
-      …
+    <NavigationMenu.Content wide>
+      <NavigationMenu.Group label="Analyze">
+        <NavigationMenu.Link href="/analytics" label="Analytics" description="Traffic, funnels and retention." />
+        …
+      </NavigationMenu.Group>
+      <NavigationMenu.Group label="Automate">…</NavigationMenu.Group>
+      <NavigationMenu.Group label="Connect">…</NavigationMenu.Group>
+      <div class="rounded-lg bg-surface-sunken p-4">…promo…</div>
     </NavigationMenu.Content>
   </NavigationMenu.Item>
 
-  <li><NavigationMenu.Link variant="bar" href="/pricing" label="Pricing" /></li>
+  <NavigationMenu.Item>
+    <NavigationMenu.Trigger>Solutions</NavigationMenu.Trigger>
+    <NavigationMenu.Content class="w-60">
+      <NavigationMenu.Link href="/startups" label="For startups" />
+      …
+      <NavigationMenu.Item>
+        <NavigationMenu.Trigger variant="card">By industry</NavigationMenu.Trigger>
+        <NavigationMenu.Content opens="right" class="w-52">
+          <NavigationMenu.Link href="/retail" label="Retail" />
+          …
+        </NavigationMenu.Content>
+      </NavigationMenu.Item>
+    </NavigationMenu.Content>
+  </NavigationMenu.Item>
+
+  <li><NavigationMenu.Link variant="bar" href="/pricing" label="Pricing" current={ true } /></li>
+  <li><NavigationMenu.Link variant="bar" href="/docs" label="Docs" /></li>
+  <li class="ml-auto"><Button variant="outline" size="sm">Sign in</Button></li>
 </NavigationMenu>`;
 
-const codeMega = `// wide spans the whole bar. It works because NavigationMenu's <nav>
-// is position: relative — a wide panel's own host goes static.
+const codeMega = `// One column per child from md up — each Group is a column.
+<NavigationMenu.Content wide>
+  <NavigationMenu.Group label="Software">
+    <NavigationMenu.Link href="/web" label="Web apps" description="…" />
+    <NavigationMenu.Link href="/mobile" label="Mobile apps" />
+  </NavigationMenu.Group>
+  <NavigationMenu.Group label="Hardware">…</NavigationMenu.Group>
+  <NavigationMenu.Group label="Services">…</NavigationMenu.Group>
+</NavigationMenu.Content>`;
+
+const codeColumns = `// A flat run of links in a wide panel takes an explicit column count:
+// 3 is one column on phones, two from sm, three from lg.
 <NavigationMenu.Item>
   <NavigationMenu.Trigger>Platform</NavigationMenu.Trigger>
-  <NavigationMenu.Content wide={ true } columns={ 2 } effect="slide">
-    …links…
+  <NavigationMenu.Content wide columns={ 3 } effect="slide">
+    <NavigationMenu.Link href="/pipeline" label="Data pipeline" description="…" />
+    …
   </NavigationMenu.Content>
-</NavigationMenu.Item>
-
-// Active state is per link, replacing the old bar-wide activePath:
-<NavigationMenu.Link variant="bar" href="/pricing" label="Pricing" current={ true } />`;
+</NavigationMenu.Item>`;
 
 const codeSubmenu = `// A submenu is just an Item nested in a Content with opens="right",
 // which moves the panel beside its trigger and rotates the hover
 // bridge onto the horizontal axis.
-<NavigationMenu.Content align="end" class="w-max max-w-xs">
+<NavigationMenu.Content align="end" class="w-56">
   <NavigationMenu.Link href="/about" label="About" />
 
   <NavigationMenu.Item>
     <NavigationMenu.Trigger variant="card">Support</NavigationMenu.Trigger>
-    <NavigationMenu.Content opens="right" class="w-max max-w-xs">
+    <NavigationMenu.Content opens="right" class="w-48">
       <NavigationMenu.Link href="/contact" label="Contact us" />
     </NavigationMenu.Content>
   </NavigationMenu.Item>
@@ -328,31 +451,38 @@ const keyRows = [
 
 const rootRows = [
   { name: 'label', desc: 'aria-label for the <nav>. Defaults to "Main".' },
-  { name: 'gap', desc: 'Tailwind gap utility for the bar. Defaults to gap-1.' },
-  { name: 'class', desc: 'Merged onto <nav>, after the load-bearing `relative`.' },
+  { name: 'gap', desc: 'Tailwind gap utility for the bar. Defaults to gap-0.5.' },
+  { name: 'class', desc: 'Merged onto <nav>, after the bar chrome and the load-bearing `relative`.' },
 ];
 
 const itemRows = [
   { name: 'trigger', desc: "'hover' | 'click' | 'both' (default), forwarded to the base." },
   { name: 'arrow', desc: "'flip' (default) | 'static' | 'none', forwarded to the base." },
   { name: 'open', desc: 'Optional-controlled and edge-triggered, forwarded. Omit it and the component owns its own state.' },
+  { name: 'openDelay', desc: 'ms of hover intent before a hover-opened panel shows, forwarded.' },
+  { name: 'closeDelay', desc: 'ms of grace after the pointer leaves before a hover-opened panel hides. Defaults to 200, so a diagonal trip to a wide panel survives leaving the bridge.' },
   { name: '@show / @hide', desc: "Fired when THIS item's panel opens or closes; a nested submenu's events are filtered out." },
   { name: 'class', desc: 'Merged onto the <li>.' },
 ];
 
 const triggerRows = [
-  { name: 'variant', desc: "'bar' (default) for top-level chrome, 'card' for an in-panel submenu trigger — a full-width row with the arrow at the trailing edge." },
+  { name: 'variant', desc: "'bar' (default) for a rounded pill in the bar, brand-tinted on hover and while its panel is open; 'card' for an in-panel submenu trigger — a full-width row with the arrow at the trailing edge." },
   { name: 'arrow', desc: 'true (default) renders the [data-dropdown-arrow] hook the effects stylesheet draws into. false drops it.' },
   { name: 'class', desc: 'Merged onto <dropdown-trigger>, after the variant chrome.' },
 ];
 
 const contentRows = [
-  { name: 'columns', desc: '1 (default) or 2. Two columns is one column below md and two from md up.' },
-  { name: 'wide', desc: 'A full-width mega panel spanning the <nav>.' },
+  { name: 'columns', desc: '1 (default), 2, 3 or 4. 2 is two from md up; 3 and 4 are two from sm and three or four from lg. Unset on a wide panel: one column per child from md up.' },
+  { name: 'wide', desc: 'A full-width mega panel spanning the <nav>, with mega padding and gutters.' },
   { name: 'opens', desc: "'down' (default) | 'right' for a submenu." },
   { name: 'align', desc: "'start' (default) | 'end'. end is left-auto right-0 — pure CSS, no measuring." },
   { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
   { name: 'class', desc: 'Merged onto <dropdown-panel>, after the layout classes. Never overflow-hidden.' },
+];
+
+const groupRows = [
+  { name: 'label', desc: 'The column heading — small, uppercase, tracked — and the group\'s accessible name. Optional.' },
+  { name: 'class', desc: 'Merged onto the wrapper <div>.' },
 ];
 
 const linkRows = [
@@ -364,11 +494,45 @@ const linkRows = [
   { name: 'class', desc: 'Merged onto the <a>.' },
 ];
 
-const PRODUCTS = [
-  { label: 'Analytics', href: '#analytics', description: 'Traffic, funnels and retention in one place.' },
-  { label: 'Billing', href: '#billing', description: 'Plans, invoices and usage-based pricing.' },
-  { label: 'Automations', href: '#automations', description: 'Trigger work from any event in your account.' },
-  { label: 'Directory', href: '#directory', description: 'People, teams and roles, synced from your IdP.' },
+const PRODUCT_GROUPS = [
+  {
+    label: 'Analyze',
+    links: [
+      { label: 'Analytics', href: '#analytics', description: 'Traffic, funnels and retention.' },
+      { label: 'Warehouse', href: '#warehouse', description: 'Query everything you collect.' },
+      { label: 'Dashboards', href: '#dashboards', description: 'Share live numbers with the team.' },
+    ],
+  },
+  {
+    label: 'Automate',
+    links: [
+      { label: 'Workflows', href: '#workflows', description: 'Trigger work from any event.' },
+      { label: 'Billing', href: '#billing', description: 'Plans, invoices and usage.' },
+      { label: 'Alerts', href: '#alerts', description: 'Page the right person, once.' },
+    ],
+  },
+  {
+    label: 'Connect',
+    links: [
+      { label: 'Integrations', href: '#integrations', description: '' },
+      { label: 'API reference', href: '#api', description: '' },
+      { label: 'Webhooks', href: '#webhooks', description: '' },
+      { label: 'Identity & SSO', href: '#identity', description: '' },
+    ],
+  },
+];
+
+const SOLUTIONS = [
+  { label: 'For startups', href: '#startups' },
+  { label: 'For enterprise', href: '#enterprise' },
+  { label: 'For agencies', href: '#agencies' },
+];
+
+const INDUSTRIES = [
+  { label: 'Retail', href: '#retail' },
+  { label: 'Healthcare', href: '#healthcare' },
+  { label: 'Fintech', href: '#fintech' },
+  { label: 'Education', href: '#education' },
 ];
 
 const RESOURCES = [
@@ -389,7 +553,9 @@ const PLATFORM = [
 export default class NavigationMenuDoc extends PuzzleView {
   data() {
     return {
-      products: PRODUCTS,
+      productGroups: PRODUCT_GROUPS,
+      solutions: SOLUTIONS,
+      industries: INDUSTRIES,
       resources: RESOURCES,
       platform: PLATFORM,
       installCmd,
@@ -399,18 +565,22 @@ export default class NavigationMenuDoc extends PuzzleView {
       usageMarkup,
       codeHero,
       codeMega,
+      codeColumns,
       codeSubmenu,
       keyRows,
       rootRows,
       itemRows,
       triggerRows,
       contentRows,
+      groupRows,
       linkRows,
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
-        { label: 'Mega panel', href: '#mega' },
+        { label: 'Mega panels', href: '#mega' },
+        { label: 'Explicit columns', href: '#columns' },
         { label: 'Nested submenu', href: '#submenu' },
+        { label: 'Spacing and bridge', href: '#spacing' },
         { label: 'Keyboard', href: '#keyboard' },
         { label: 'Reference', href: '#reference' },
       ],

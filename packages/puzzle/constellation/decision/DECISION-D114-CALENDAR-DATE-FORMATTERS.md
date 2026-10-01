@@ -1,7 +1,7 @@
 ---
 name: >-
-  D114 — a bare YYYY-MM-DD is a calendar date: date formatters parse it as local, so it displays as
-  written in every timezone
+  D114 — A bare YYYY-MM-DD is a calendar date: parsed as local midnight, tagged CalendarDate,
+  written back as a day
 status: verified
 connections:
   - COMPONENT-FORMATTERS
@@ -9,118 +9,62 @@ connections:
   - DECISION-D112-STORE-ID-KEY-NORMALIZATION
 verified_at: '2026-08-24T02:50:57.337Z'
 verified_sha: d275a508b1281f6bae1cf4c8da979d0042f5cfc0
-notes:
-  - kind: verified
-    text: >-
-      in_timezone passes calendar dates through unshifted; rationale rewritten to match; absolute
-      multi-process-zone tests (subprocess per TZ) pin the output
-    sha: 47b929360bc00d6c19b4b39113a4b502e7957952
-  - kind: verified
-    text: >-
-      Re-verified after the 0.7.0 review round. The decision was always right; the CODE only now
-      implements it. Two claims — "the `iso` preset is idempotent on calendar dates" and
-      "`in_timezone` is a no-op on calendar dates" — held only for a RAW `YYYY-MM-DD` string and
-      silently failed after store hydration: `coerceJSONDates` revived the value to local midnight
-      (correct for this card's display rule) as a plain Date, and every downstream consumer tested
-      `typeof v === 'string'`, so both took the instant path. Round-tripping
-      `{publishedOn:'2026-08-23'}` through save() wrote `2026-08-22T22:00:00.000Z` in Berlin and
-      `…T15:00:00.000Z` in Tokyo — the previous day for every user east of UTC. Fixed with a
-      `CalendarDate extends Date` that carries the day/instant claim on the VALUE rather than its
-      string form: `instanceof Date` still holds (validation gate, Intl, min/max unchanged), still
-      local midnight, and its `toJSON` writes the calendar date back. Instants are byte-identical.
-      Known limit, pinned in a test: a plain `new Date(2026,7,23)` built by app code carries no
-      calendar claim and still saves as an instant — the framework cannot read intent off a plain
-      Date, so only values ARRIVING as `YYYY-MM-DD` are tagged. Verified by
-      tests/model-calendar-date-roundtrip.test.js (43 tests, subprocess-per-zone across 6 zones —
-      in-process assertions built from a local `new Date` move with the process zone and cannot
-      catch this).
-    sha: d275a508b1281f6bae1cf4c8da979d0042f5cfc0
+code_refs:
+  - client-runtime/dates.js
+  - client-runtime/formatters/builtins.js
+  - client-runtime/model.js
 ---
 
-The built-in date formatters (`date`, and through it `time`/`datetime`, plus
-`timeago` and `in_timezone`) treat a bare `YYYY-MM-DD` string as a **calendar
-date**: `date`/`timeago` parse it as local midnight instead of letting
-`new Date(v)` apply the ES spec's UTC-midnight rule, and `in_timezone` passes
-it through untouched — a day names no instant, so there is nothing to
-re-express in another zone. `{ post.publishedAt | date }` of `"2026-07-24"`
-now renders `07/24/2026` for every reader; before, anyone west of UTC saw
-`07/23/2026`. Everything that carries its own time or zone — Date instances,
-timestamps, full ISO datetimes — is untouched.
+# D114 — A bare `YYYY-MM-DD` is a calendar date
 
-## Context
-
-The ES spec parses date-only ISO forms as UTC midnight, while
-`Intl.DateTimeFormat` renders in the viewer's zone. A date-only value is
-almost always a *calendar* fact (a birthday, a due date, a publish date) —
-the author means "this day", not "this instant" — so the UTC round trip
-showed the previous day to half the planet. The failure is quiet, data-shaped
-(`"2026-07-24"` is exactly what JSON APIs and `<input type="date">` produce),
-and invisible to anyone testing east of UTC.
+A date-only string is almost always a *day* (birthday, due date, publish date),
+not an instant. The ES spec parses it as UTC midnight while `Intl` renders in the
+viewer's zone, so everyone west of UTC saw the previous day. Puzzle treats a
+bare `YYYY-MM-DD` as a calendar date everywhere — in the date functions and
+across the store's JSON boundary. Instants (Dates, timestamps, full ISO
+datetimes) are unaffected.
 
 ## Decision
 
-- One `parseDateInput(v)` helper: a string matching `^\d{4}-\d{2}-\d{2}$`
-  constructs `new Date(y, m-1, d)` — local midnight — with a
-  **round-trip check** (`getFullYear/getMonth/getDate` must echo the parsed
-  components). A mismatch means the components name a day that doesn't exist;
-  it is **coerced to an Invalid Date** so the callers' existing fail-soft
-  returns the raw value. Deliberately not a `new Date(v)` fallback: the ES
-  grammar accepts any day ≤ 31, so `"2026-02-31"` would silently roll into
-  March — TZ-dependently — while `"2026-13-01"` (which fails the grammar)
-  returned raw; coercion makes every invalid component behave the same.
-  Every other input passes straight to `new Date(v)`.
-- Used by `date()`, `timeago()`, and `in_timezone()` — one parse rule for the
-  whole family (`time`/`datetime` delegate to `date`). The same
-  one-identity-rule principle as [[DECISION-D112-STORE-ID-KEY-NORMALIZATION]].
-- **`in_timezone` is a no-op on calendar dates.** Its contract is "take an
-  instant, re-express its wall clock in a named zone" — a calendar date has no
-  instant, so it returns the parsed local-midnight Date unchanged. Shifting
-  from ANY midnight anchor (local or UTC) makes the rendered day a function of
-  the viewer's zone — the exact property this decision exists to eliminate.
-- **`iso` preset is idempotent on calendar dates**: `date('2026-07-24',
-  'iso')` returns `'2026-07-24'` unchanged. `toISOString()` of local midnight
-  would emit a timezone-dependent instant — the ISO form of a calendar date
-  is itself.
-- Strict match only: no trimming, no `2026-7-24` single-digit forms — those
-  fall through to the engine's legacy parsing exactly as before.
-
-## Alternatives rejected
-
-- **Format date-only values in UTC instead** (keep UTC parse, add
-  `timeZone: 'UTC'` to the Intl options for them): `date` would render
-  correctly, but `timeago` would measure from UTC midnight instead of the day
-  the author named in the reader's frame, and it forks the Intl options object
-  per input shape. (`in_timezone` is no argument for either anchor: it must
-  not shift a calendar date at all, so the anchor debate never reaches it —
-  the first shipped cut of this decision got that backwards and shifted local
-  midnight, which made its output viewer-dependent.)
-- **A `utc` preset/flag the author opts into** — the default is the bug; an
-  opt-out nobody discovers fixes nobody.
-- **Timezone-shifting all output to a configured app zone** — a much bigger
-  feature (per-app zone config), orthogonal to the calendar-date semantics,
-  and `in_timezone` already exists for explicit shifts.
+- **One parse rule** (`client-runtime/dates.js`, shared by the date functions and
+  the datastore — which must not import the formatter graph): a string matching
+  `^\d{4}-\d{2}-\d{2}$` becomes local midnight `new Date(y, m-1, d)`, with a
+  round-trip check. A day that doesn't exist (`2026-02-31`) becomes an Invalid
+  Date, so callers fail soft to the raw string — never `new Date(v)`, whose
+  grammar would roll it into March, TZ-dependently. Strict match only (no
+  trimming, no single-digit parts).
+- **`CalendarDate extends Date`** carries the "this is a day" claim on the value,
+  because the store revives `date()` fields at hydration and every consumer
+  downstream sees a Date. `instanceof Date` still holds (validation, Intl,
+  comparisons); `toJSON` writes the `YYYY-MM-DD` back, so a save round-trips the
+  day instead of a UTC instant that names the previous day east of UTC.
+  `isCalendarDate(v)` is the test.
+- **Consumers:** `date`/`time`/`datetime`/`timeago` use `parseDateInput`, so a
+  calendar date renders as written and `timeago` measures from the day in the
+  reader's frame. The `iso` preset returns the day itself for a calendar date
+  (and for `date()`). `in_timezone` returns a calendar date **unshifted** — a
+  day has no instant to re-express; shifting any midnight anchor makes output
+  viewer-dependent.
+- Absent values (`null`, `undefined`, `''`, booleans — `noDate`) render nothing
+  in every preset; numeric 0 is a real epoch timestamp.
 
 ## Consequences
 
-- Date-only strings display as written everywhere; `timeago('2026-07-24')`
-  measures from local midnight (the day the author named); `in_timezone`
-  returns a calendar date unshifted, so
-  `'2026-07-24' | in_timezone: <any zone> | date` renders `07/24/2026` for
-  every viewer.
-- The `iso` preset's output for date-only input changes from
-  `'2026-07-24T00:00:00.000Z'` to `'2026-07-24'` — deterministic and
-  round-trippable where the old form was a UTC-midnight artifact.
-- Behavior for Date instances, timestamps, and full ISO datetimes is
-  byte-identical (pinned by tests against the pre-D114 construction).
-- `"2026-02-31"` previously rendered as a rolled March date (TZ-dependent);
-  it now fails soft to the raw string — the one deliberate behavior change
-  beyond date-only display itself.
-- Tests pin **absolute output under explicit process zones**
-  (`tests/formatters-timezone.test.js`: one Node subprocess per zone — Node
-  caches the zone in ICU at startup, so mid-process `TZ` stubbing is not
-  trustworthy). A formatter-vs-locally-built-`Date` comparison moves with the
-  process zone on BOTH sides and passes even while output is viewer-dependent
-  — exactly how the original `in_timezone` cut slipped through. The zone list
-  includes `Pacific/Honolulu`, west of every listed process zone, so a
-  day-shifting `in_timezone` fails in ALL of them, not just some.
-- SPEC §6's Formatters bullet documents the calendar-date rule.
+- Known limit (pinned): a plain `new Date(2026, 7, 23)` built by app code has no
+  calendar claim and saves as an instant; only values *arriving* as
+  `YYYY-MM-DD` are tagged.
+- Tests assert **absolute output under explicit process zones**, one Node
+  subprocess per zone (Node caches the zone at startup): `formatters-timezone`
+  and `model-calendar-date-roundtrip`. Comparing against a locally built
+  `new Date` moves with the zone on both sides and passes while broken; the
+  zone list includes `Pacific/Honolulu` so a day shift fails everywhere.
+
+## Alternatives
+
+- **Keep UTC parse, render date-only values with `timeZone: 'UTC'`** — `timeago`
+  would measure from UTC midnight, and it forks Intl options per input shape.
+- **An opt-in `utc` flag** — the default is the bug.
+- **A configured app timezone** — a bigger, orthogonal feature; `in_timezone`
+  covers explicit shifts.
+- **A flag property instead of a subclass** — lost to spreads and copies;
+  `toJSON` on the class is the one hook every write path consults.

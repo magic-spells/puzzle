@@ -35,7 +35,7 @@
       <button
         class="h-12 px-5 rounded-xl bg-ink text-paper font-medium hover:bg-accent transition-colors"
         @click={ increment }>
-        Clicked { count } { count | plural('time') }
+        Clicked { count } { plural(count, 'time') }
       </button>
       <button
         class="h-12 px-4 rounded-xl border border-line text-muted hover:text-ink hover:bg-surface-2 transition-colors"

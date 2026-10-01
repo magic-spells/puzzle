@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // compileWithSVGCache compiles a template against an assets dir with a memo

@@ -55,7 +55,9 @@ describe.skipIf(!hasCorpus)('corpus sweep over examples/**/*.pzl', () => {
 
 	it('every corpus file lints through the ESLint API without crashing', async () => {
 		const eslint = new ESLint({
-			cwd: process.cwd(),
+			// The corpus root, not this package: ESLint ignores (with only a
+			// warning) any file outside its cwd, which would lint nothing.
+			cwd: CORPUS_DIR,
 			overrideConfigFile: true,
 			overrideConfig: [
 				...plugin.configs.recommended,
@@ -66,15 +68,21 @@ describe.skipIf(!hasCorpus)('corpus sweep over examples/**/*.pzl', () => {
 		});
 
 		let scanned = 0;
+		const fatals = [];
 		for (const f of files) {
 			const src = readFileSync(f, 'utf8');
 			// A crash here (splitter throw, processor throw) rejects the promise
-			// and fails the test; rule findings and even fatal TS parse errors on
-			// lang="ts" blocks (no TS parser configured) are acceptable.
+			// and fails the test; rule findings are acceptable. Fatal parse
+			// errors are not: `recommended` leaves lang="ts" blocks alone when no
+			// TS parser is configured, so nothing hands TS to espree.
 			const results = await eslint.lintText(src, { filePath: f });
 			expect(Array.isArray(results)).toBe(true);
+			for (const m of results[0].messages) {
+				if (m.fatal || m.message.startsWith('File ignored')) fatals.push(`${f}:${m.line}: ${m.message}`);
+			}
 			scanned++;
 		}
 		expect(scanned).toBe(files.length);
+		expect(fatals).toEqual([]);
 	});
 });

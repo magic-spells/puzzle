@@ -22,12 +22,15 @@ npm run build           # production: minified, console-stripped
 The build prints raw and gzip sizes per file, e.g.:
 
 ```
-dist/app.js      66.7 KB │ 21.7 KB gzip
+dist/app.js      66.9 KB │ 22.0 KB gzip
 ```
 
 The `app.js` line is the framework size. `styles.css` is empty by design — this
 app has no CSS, so nothing but the runtime is being weighed. The exact number
-tracks whichever `@magic-spells/puzzle` version is installed.
+tracks whichever `@magic-spells/puzzle` version is installed. The CLI's gzip
+figure runs slightly high: both gzip at level 9, but the framework's
+`npm run measure:size` uses Node's zlib, which packs a little tighter, and
+reports 21.9 KB for this 0.8.0 bundle, the figure the CHANGELOG cites.
 
 ## Files
 

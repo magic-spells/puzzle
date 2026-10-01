@@ -1,5 +1,5 @@
 // Package build drives a full `puzzle build` (constellation/doc/DOC-COMPILER-DESIGN.md §b): one
-// esbuild api.Build pass over app/app.js with the .pzl plugin registered, then
+// esbuild api.Build pass over the app entry (app/app.ts or app/app.js) with the .pzl plugin registered, then
 // the collected global CSS and the static public/ assets are written next to
 // the bundle. It replaces the Phase 1 prototype orchestrator (internal/compiler,
 // deleted): no intermediate files, no runtime concatenation — the runtime is a
@@ -17,6 +17,7 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
+	"github.com/magic-spells/puzzle/compiler/internal/locales"
 	"github.com/magic-spells/puzzle/compiler/internal/styles"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
@@ -75,7 +76,8 @@ type Options struct {
 	Profiler *PhaseProfile
 }
 
-// Build compiles the app rooted at root (the directory containing app/app.js)
+// Build compiles the app rooted at root (the directory containing the app/app.ts
+// or app/app.js entry — see ResolveEntry)
 // into root/dist. It returns a formatted error if esbuild reports any errors.
 func Build(root string, opts Options) error {
 	prof := opts.Profiler
@@ -95,9 +97,9 @@ func Build(root string, opts Options) error {
 	// rule matches turned a 112ms source scan into 14s on the reference site.
 	SweepWorkDirs(absRoot)
 
-	entry := filepath.Join(absRoot, "app", "app.js")
-	if _, err := os.Stat(entry); err != nil {
-		return fmt.Errorf("entry point not found: %s (expected app/app.js under %s)", entry, absRoot)
+	entry, err := ResolveEntry(absRoot)
+	if err != nil {
+		return err
 	}
 	outdir := filepath.Join(absRoot, "dist")
 
@@ -138,7 +140,7 @@ func Build(root string, opts Options) error {
 	var fixtures fixturesWrapper
 	if opts.Fixtures {
 		var ferr error
-		fixtures, ferr = prepareFixtures(absRoot, mode)
+		fixtures, ferr = prepareFixtures(absRoot, entry, mode)
 		// The scratch dir is removed on failure as well as success, so a rejected
 		// build leaves the app tree exactly as it found it.
 		defer cleanupFixturesWorkDir(absRoot, fixtures.CreatedWorkDir)
@@ -155,9 +157,22 @@ func Build(root string, opts Options) error {
 	// is a reserved output name for this build.
 	splitting := cfg.Splitting() && mode != "static"
 
+	// Translations (D175): read, validate, flatten, and fill every locale up
+	// front, so a broken locale file fails the build before dist/ is touched and
+	// every esbuild pass below serves the same manifest. nil without i18n.
+	var localeRes *locales.Result
+	if cfg.I18nEnabled() {
+		endLocales := prof.phase("locales")
+		localeRes, err = loadLocales(absRoot, cfg)
+		endLocales()
+		if err != nil {
+			return err
+		}
+	}
+
 	// Reject a public/ tree that would clobber compiler output BEFORE touching
 	// dist/ — a config error must never destroy the last good build.
-	if err := ValidatePublic(absRoot, splitting); err != nil {
+	if err := ValidatePublic(absRoot, splitting, cfg.I18nEnabled()); err != nil {
 		return err
 	}
 
@@ -212,6 +227,16 @@ func Build(root string, opts Options) error {
 	endScan()
 	if scanErr != nil {
 		return scanErr
+	}
+	pc.i18n = cfg.I18nEnabled()
+	pc.locales = localeRes
+	printI18nWarnings(os.Stderr, i18nWarnings(absRoot, cfg, pc.usage, localeRes))
+	// The hashed locale files go into staging before any pass runs: the prerender
+	// (both output modes) reads the default table from staging/locales/.
+	if localeRes != nil {
+		if err := localeRes.WriteTo(staging, false); err != nil {
+			return err
+		}
 	}
 	pl := pc.plugin(absRoot)
 
@@ -318,7 +343,7 @@ func Build(root string, opts Options) error {
 	switch mode {
 	case "hybrid":
 		endHybrid := prof.phase("prerender (hybrid)")
-		hybridErr := prerenderHybrid(absRoot, staging, publicFiles, pc)
+		hybridErr := prerenderHybrid(absRoot, entry, staging, publicFiles, pc)
 		endHybrid()
 		if hybridErr != nil {
 			return hybridErr
@@ -326,7 +351,7 @@ func Build(root string, opts Options) error {
 	case "static":
 		// The per-page pass decides its own source-map mode from cfg + dev
 		// (staticPagesSourcemap), so there is no generate-then-delete pass here.
-		if err := prerenderStaticPages(absRoot, staging, publicFiles, cfg, opts.Development, prof, pc); err != nil {
+		if err := prerenderStaticPages(absRoot, entry, staging, publicFiles, cfg, opts.Development, prof, pc); err != nil {
 			return err
 		}
 	}
@@ -549,7 +574,10 @@ func publicDir(root string) string {
 // directory), which the SPA pass owns only while build.splitting is on — the
 // same class of collision the static pass rejects for _puzzle
 // (prerender_pages.go). Off, that name belongs to the app again.
-func ValidatePublic(root string, splitting bool) error {
+//
+// i18n does the same for the root-level locales/ entry, which the build owns
+// while puzzle.config.js configures translations (D175).
+func ValidatePublic(root string, splitting, i18n bool) error {
 	src := publicDir(root)
 	if src == "" {
 		return nil
@@ -564,6 +592,12 @@ func ValidatePublic(root string, splitting bool) error {
 			return fmt.Errorf(
 				"public asset %s would overwrite compiler output dist/%s (a reserved output name while build.splitting is on); rename or remove it",
 				filepath.Join(src, name), chunksDirName,
+			)
+		}
+		if i18n && strings.EqualFold(name, locales.OutDirName) {
+			return fmt.Errorf(
+				"public asset %s would overwrite compiler output dist/%s (a reserved output name while i18n is configured); rename or remove it",
+				filepath.Join(src, name), locales.OutDirName,
 			)
 		}
 		if e.IsDir() {

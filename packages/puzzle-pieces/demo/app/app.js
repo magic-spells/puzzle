@@ -1,6 +1,12 @@
 import { PuzzleApp } from '@magic-spells/puzzle';
 import { hashRouter } from '@magic-spells/puzzle/router-modes';
 import routes from './routes.js';
+import { boot as bootAppearance } from './lib/appearance.js';
+
+// Appearance first: pre-paint.js (inline in public/index.html) has already
+// painted the stored scheme + mode; boot() makes the module agree with the
+// document before any view reads current().
+bootAppearance();
 
 // Create and configure the Puzzle app. The v1 config surface is intentionally
 // small: target, routes, models, formatters, apiURL.

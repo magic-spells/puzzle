@@ -1,34 +1,18 @@
 ---
-name: "D55 — Shared-element morph route transitions: data-puzzle-morph pairing + a single router morph-handler slot (v1.23)"
+name: >-
+  D55 — Shared-element morph route transitions: `data-puzzle-morph` pairing + one router
+  morph-handler slot
 status: verified
 verified_at: '2026-08-24T21:39:23.520Z'
 connections:
   - DECISION-D19-NAVIGATION-COMMIT
   - DECISION-D28-ANIMATIONS
   - DECISION-D30-NESTED-ROUTES
+  - DECISION-D68-CROSS-VIEW-MORPH
+  - DECISION-D69-MORPH-ROLES
   - COMPONENT-ROUTER
-  - FEATURE-MORPH-TRANSITIONS
   - DOC-ROUTER
   - DOC-SPEC
-notes:
-  - kind: state
-    text: >-
-      Morph handler re-arm across a remount (2026-07-24). enableMorph's teardown `dispose()`
-      (removes the capture-phase document click listener, sets disposed=true) had no inverse, so
-      after app.unmount() a later app.mount() re-applied the SAME handler to the new router but its
-      click-pin machinery stayed dead. Added a symmetric `arm()` (re-attaches the listener, clears
-      disposed, re-registers in the installedMorphs WeakMap) carried on the handler object;
-      PuzzleApp.mount() calls `this.#morphHandler.arm?.()` when re-applying the stashed handler.
-      arm() is idempotent (no-op while still armed → never stacks a second listener); dispose()
-      still clears all other state so re-arming starts clean. Net: mount→unmount→remount leaves
-      exactly ONE live listener with working morphs. Tests: tests/morph-teardown.test.js.
-    sha: d9591d6
-  - kind: verified
-    text: >-
-      Re-verified against current code and corrected: at least one claim on this card no longer
-      matched the runtime, and the card was rewritten to state what the code actually does. Verified
-      at this sha with the framework suite green at 1871 tests.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 code_refs:
   - client-runtime/morph.js
@@ -36,89 +20,23 @@ code_refs:
   - client-runtime/app.js
 ---
 
-# D55 — Shared-element morph route transitions: `data-puzzle-morph` pairing + a single router morph-handler slot (v1.23)
+# D55 — Shared-element morph route transitions
 
-Puzzle owns the shared-element transition **convention**; the spring mechanics
-stay in `@magic-spells/morph-engine` (an optional peer). Two elements carrying
-the same `data-puzzle-morph` value are the same logical surface; when a
-navigation swaps one in or out, the router morphs between them. Apps opt in
-with one line — `enableMorph(app)` from `@magic-spells/puzzle/morph`.
-
-## Context
-
-The morph engine (spring-driven container-transform blob) needs both elements
-as live DOM at flight time, and needs the outgoing dialog to SURVIVE until the
-reverse flight lands. Hand-wired integration takes four per-view touchpoints
-(arm on click, show in `mounted()`, `await hide()` before `push()`, `stop()` in
-`destroyed()`) and the browser back button closes instantly — the router
-destroys route-mounted views with no out animation. But the router already has
-both seams: the [[DECISION-D28-ANIMATIONS]] sequential OUT phase awaits before
-destroy, and the IN commit block mounts synchronously pre-paint. What the
-standalone wiring reconstructs badly (which navigation is happening, when
-views mount and die), the router simply knows.
+Puzzle owns the pairing **convention**; the spring mechanics live in `@magic-spells/morph-engine`, an optional peer dependency. Two elements carrying the same `data-puzzle-morph` value are one logical surface, and a navigation that swaps one in or out morphs between them. Apps opt in with `enableMorph(app)` from `@magic-spells/puzzle/morph`. Later refinements: [[DECISION-D68-CROSS-VIEW-MORPH]], [[DECISION-D69-MORPH-ROLES]].
 
 ## Decision
+- **Identity-based pairing** (the `view-transition-name` model): the attribute names the surface; navigation direction picks the flight. A plain `data-puzzle-morph` element both launches and receives; `-trigger` (launch-only) and `-target` (receive-only) are opt-in roles.
+- **The router has exactly one morph-agnostic slot:** `setMorphHandler({ enter(el, { initial }), leave(el): Promise | null })`. In `#swap`, `leave(oldAnimator.element)` starts with the out phase and a returned promise is awaited (with `playOut()`) before `destroy()`; `enter(animatorElement, { initial: !cur })` fires synchronously post-commit, **pre-paint**, so a pairing hides its elements before the plain mount paints. Handler errors are logged and swallowed. No handler ⇒ the router is unchanged.
+- **All pairing logic lives in `client-runtime/morph.js`:** scan the mounted animator subtree for the first `[data-puzzle-morph]`, find a measurable counterpart outside it, `engine.show(from, to)`. On leave, fly back only when the round trip is intact — target still in the leaving subtree, attribute value unchanged since show (a params-only switch re-points content with no swap), source still connected outside the leaving subtree; otherwise `engine.stop()`. Every enter starts from a clean engine.
+- **Navigation #0 never morphs** (`initial`), and `prefers-reduced-motion` disables morphing entirely.
+- **Remount:** `enableMorph`'s `dispose()` has an inverse, `arm()` (idempotent), which `PuzzleApp.mount()` calls when re-applying a stashed handler — so mount → unmount → mount leaves exactly one live click listener.
+- The core bundle is unaffected unless the app imports the subpath. In-repo builds need an explicit esbuild alias for `@magic-spells/puzzle/morph` (the bare alias points at a file, so prefix substitution breaks subpaths).
 
-- **Pairing is identity-based** (the `view-transition-name` / Hero-tag /
-  layoutId model): `data-puzzle-morph="<shared-id>"` on both elements. The
-  attribute names the surface; the navigation direction picks which way to fly.
-  A plain `data-puzzle-morph` element both launches and receives; the explicit
-  `-trigger` (launch-only) and `-target` (receive-only) roles are the opt-in
-  refinement over that default.
-- **The router grows exactly ONE morph-agnostic slot**:
-  `setMorphHandler({ enter(el, {initial}), leave(el): Promise|null })`. Two
-  call sites in `#swap`: `leave(oldAnimator.element)` starts as the out phase
-  starts and a returned promise is awaited (alongside `playOut()`) **before**
-  `destroy()`; `enter(animatorElement, { initial: !cur })` fires synchronously
-  post-commit, PRE-PAINT, so a pairing hides its elements before the plain
-  mount ever paints. Handler errors are logged and swallowed — navigation
-  never wedges. Null handler ⇒ byte-identical router.
-- **All pairing/guard logic lives in `client-runtime/morph.js`**
-  (`@magic-spells/puzzle/morph` subpath export): scan the mounted animator
-  subtree for the first `[data-puzzle-morph]`, find a measurable counterpart
-  OUTSIDE it, `engine.show(from, to)`. On leave, fly back only when the round
-  trip is intact — target still in the leaving subtree, attribute value
-  unchanged since show (a params-only task switch re-points content with NO
-  swap, so the hooks never fire and the stale id must refuse the reverse
-  flight), source still connected outside the leaving subtree (a whole-chain
-  teardown takes the counterpart with it) — otherwise `engine.stop()`, instant
-  close. Every enter starts from a clean engine (interrupted transitions can
-  strand a run via the skipped-out path).
-- **`initial: !cur` is the deep-link rule**: navigation #0 never morphs.
-  `prefers-reduced-motion` disables morphing entirely (engine never engaged —
-  distinct from [[DECISION-D28-ANIMATIONS]]'s zero-duration WAAPI, which still
-  runs the hook sequence).
-- **Dependency posture**: `@magic-spells/morph-engine` is an optional
-  peerDependency (+ devDependency for in-repo examples); the core bundle is
-  unaffected unless the app imports the subpath. In-repo builds get an explicit
-  esbuild alias entry for `@magic-spells/puzzle/morph` (the bare alias points
-  at index.js, a FILE — prefix substitution would break subpaths).
+One morph pair per transition. Morph views should not also declare `animations.in/out` (documented, not enforced).
 
-## Rejected alternatives
-
-- **Per-view glue API** (arm/show/hide/stop calls in app code): four
-  touchpoints per dialog, and back button can't morph — the exact wart this
-  kills.
-- **ViewManager-level pairing** (would cover `{#if}` toggles too): a patch
-  removes elements synchronously; holding removed DOM for a leave animation is
-  a full Vue-style transition system. Route-mounted dialogs are the real use
-  case and the router has await points on both sides. `{#if}` morphs stay
-  manual via the raw engine.
-- **Promise-valued `animations.out`**: generalizes the wrong thing — the morph
-  isn't a per-view animation, it's a cross-view pairing; a view field can't see
-  the counterpart, and the enter side still needs the pre-paint scan.
-- **`PuzzleApp` config flag** (`morph: true`): the core can't import the
-  engine without bundling it for every app; the subpath import IS the
-  tree-shaking boundary.
-- **`router.push(path, { morphFrom })` disambiguator** for duplicate ids:
-  deferred — document order + measurability picks the counterpart in v1.
-
-## Consequences
-
-Adding the effect to an app is: the attribute on both elements +
-`enableMorph(app)`. Open, close, and browser back/forward all morph; deep
-links and params-only switches never do. One morph pair per transition (one
-engine); morph views should not also declare `animations.in/out`
-(documented, not enforced). Verified by `tests/router-morph.test.js` (stub
-handler: enter/initial semantics, leave-before-destroy ordering, params-only
-silence, throw survival) and the `examples/kanban-morph` demo end-to-end.
+## Alternatives rejected
+- Per-view glue calls (arm/show/hide/stop) — four touchpoints per dialog, and the back button cannot morph.
+- ViewManager-level pairing (covering `{#if}` toggles) — holding removed DOM for a leave is a full transition system; `{#if}` morphs stay manual with the raw engine.
+- A promise-valued `animations.out` — a view field cannot see the counterpart, and the enter side still needs the pre-paint scan.
+- A `morph: true` app config flag — the core cannot import the engine without bundling it for everyone; the subpath is the tree-shaking boundary.
+- `router.push(path, { morphFrom })` to disambiguate duplicate ids — document order plus measurability picks the counterpart.

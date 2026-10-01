@@ -26,8 +26,8 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
-	"github.com/magic-spells/puzzle/compiler/internal/textutil"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/textutil"
 )
 
 // prerenderSentinel prefixes the JSON summary the prerender entry writes to
@@ -102,8 +102,9 @@ type ssgSummary struct {
 // build dir before the atomic swap). staging/index.html is the SPA shell
 // copyPublic just produced — it is the injection template. On any failure the
 // returned error surfaces node's stderr/stdout and staging is discarded by
-// Build's defer, so the previous dist/ is untouched.
-func prerenderHybrid(absRoot, staging string, publicFiles map[string]bool, pc *passContext) error {
+// Build's defer, so the previous dist/ is untouched. appEntry is the entry
+// Build resolved (ResolveEntry); the generated module imports it by path.
+func prerenderHybrid(absRoot, appEntry, staging string, publicFiles map[string]bool, pc *passContext) error {
 	// A public/ asset copied to staging/.puzzle-prerender would be overwritten by
 	// the prerender bundle and then deleted with it — reject it before any of that
 	// happens. copyPublic has already run, so the collision is observable here.
@@ -117,7 +118,7 @@ func prerenderHybrid(absRoot, staging string, publicFiles map[string]bool, pc *p
 	// is also the JS default), and print the JSON summary behind the sentinel.
 	// The app entry path is JSON-encoded so a root with spaces/quotes stays a
 	// valid JS string literal.
-	entry, err := json.Marshal(appEntryPath(absRoot))
+	entry, err := json.Marshal(filepath.ToSlash(appEntry))
 	if err != nil {
 		return fmt.Errorf("encoding prerender entry path: %w", err)
 	}
@@ -207,12 +208,6 @@ func checkPrerenderCollision(absRoot, staging string, publicOwners map[string]st
 			"at dist/%s; rename the public asset or remove the route output",
 		routePath, filepath.ToSlash(publicPath), rel,
 	)
-}
-
-// appEntryPath is the app's default-export entry (app/app.js under absRoot),
-// forward-slashed for embedding in a generated JS import.
-func appEntryPath(absRoot string) string {
-	return filepath.ToSlash(filepath.Join(absRoot, "app", "app.js"))
 }
 
 // bundlePrerenderEntry runs the node-platform esbuild pass over the generated

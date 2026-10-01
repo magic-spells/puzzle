@@ -3,14 +3,14 @@
 // injected runtime import and an appended `Name.prototype.render = function
 // () {…}` (constellation/doc/DOC-COMPILER-DESIGN.md §d, constellation/doc/DOC-APP-ANATOMY.md §1). The correctness
 // anchor is the Phase 1 hand-written fixture
-// tests/fixtures/todos/Home.compiled.js (D14): this codegen reproduces its
+// tests/fixtures/todos/Home.compiled.js (FILE-TESTS-FIXTURES-TODOS-HOME-COMPILED): this codegen reproduces its
 // render function mechanically.
 //
 // Formatting is byte-exact against the fixture; the golden-file harness
 // (golden_test.go) is a byte-compare. The idioms are documented inline where
 // they are emitted.
 //
-// # Whitespace / text policy (derived from Home.pzl vs Home.compiled.js)
+// # Whitespace / text policy (D168, the core rule of D173 V10)
 //
 // Applied to template Text nodes only (never to attribute values, which keep
 // their bytes). For each Text node:
@@ -20,24 +20,33 @@
 //     likewise;
 //   - if the result is empty, drop the node.
 //
-// So "\n        Made with " → "Made with " (indentation gone, the space before
-// the next inline element kept) and pure inter-element indentation
-// ("</h2>\n      <form>") drops entirely. Consecutive Text/Interpolation
-// siblings coalesce into ONE text vnode whose value is the `+`-concatenation of
-// quoted literals and shared display-coercion calls.
+// Consecutive Text/Interpolation siblings coalesce into ONE text vnode whose
+// value is the `+`-concatenation of quoted literals and shared display-coercion
+// calls.
 //
-// Stripping is an ELEMENT-boundary rule, so it applies only at the edges of such
-// a run. Inside one run, a stripped edge that borders another run member (an
-// interpolation, or a text segment across a dropped whitespace-only node) gets
-// exactly one space back — a newline between "new" and "{ n }" separates words,
-// as it does in HTML, Vue and Svelte. `{ a }{ b }` with no whitespace between
-// them stays adjacent.
+// Stripping is a PARENT-EDGE rule. A stripped edge gets exactly one space back
+// whenever it borders anything other than the parent's edge:
+//   - another member of the same run (an interpolation, or a text segment
+//     across a dropped whitespace-only node): `{ first }\n{ last }` renders
+//     "John Doe";
+//   - a sibling element, component, marker, portal, snippet or {#svg}:
+//     `tokens —\n<code>a</code>,\n<code>b</code>\nand more` renders
+//     "tokens — a, b and more", as a browser renders the same markup;
+//   - a sibling control-flow block ({#if}, {#for}, {#case}): the space lands
+//     outside the block, so it renders whether or not the branch does.
 //
-// A control-flow block ({#if}, {#for}, {#case}) breaks the run without ending
-// the line of prose, so a run edge that borders one — on either side — is
-// padded the same way: `you have { n } new\n{#if x}message{/if}` renders
-// "new message". Elements, components, markers and {#svg} are NOT control flow;
-// the element-boundary strip stands at those edges (D168).
+// A run edge that is the first or last child of its parent (an element, a
+// component's children, a marker fallback, a snippet body, or a control
+// block's own body) keeps the strip: it is indentation. Whitespace-only text
+// with a newline between two non-text siblings drops entirely, so stacked
+// buttons and stacked conditionals get no gap. Nothing is invented where the
+// source had no whitespace: `{ a }{ b }` and `<b>x</b>{ y }` stay adjacent.
+//
+// A <pre> or <textarea> body is preserved exactly: every Text node in its
+// subtree is emitted byte for byte, whitespace-only nodes included, except the
+// one newline directly after the start tag, which HTML's parser drops too. A
+// {#for} body's own children still drop their whitespace there, because a loop
+// body is a single root element and cannot hold text.
 package codegen
 
 import (
@@ -48,7 +57,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // ScopeID derives the stable per-file scope id for <style scoped> (v1.27, D59):
@@ -77,7 +87,7 @@ func ScopedCSS(filename, styles string) string {
 	return "@scope ([data-" + ScopeID(filename) + "]) {\n" + styles + "\n}"
 }
 
-// EmissionMode selects the render root shape (constellation/doc/DOC-DECISIONS.md D20).
+// EmissionMode selects the render root shape (D20).
 type EmissionMode int
 
 const (
@@ -140,7 +150,7 @@ type Result struct {
 	JS           string
 	InlinedFiles []string
 	// Warnings are non-fatal codegen diagnostics (v0.1 hardening): a template
-	// expression that references a <script> import, which resolveExpr rewrites to
+	// expression that references a <script> import, which the lowering compiles to
 	// __d.<name> → undefined at render (SPEC §6). Out-of-band — the generated JS is
 	// unaffected, so goldens never move. The plugin/pzlc print them to stderr.
 	Warnings []Warning
@@ -202,8 +212,16 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	var className string
 	if strings.TrimSpace(scripts) == "" {
 		className = classNameFromFilename(opts.Filename)
+		// A script-less COMPONENT reads its props by name (D173 V15): the
+		// synthesized data() returns them, so `{ tone }` renders the `tone` prop
+		// as it does in Sites. A component with a script keeps PuzzleKit's rule —
+		// its own data() decides — and views and layouts have no props.
+		body := ""
+		if opts.Mode == ModeComponent {
+			body = "\n  data(params, props) {\n    return props;\n  }\n"
+		}
 		scripts = "import { PuzzleView } from '@magic-spells/puzzle';\n" +
-			"export default class " + className + " extends PuzzleView {}\n"
+			"export default class " + className + " extends PuzzleView {" + body + "}\n"
 	} else {
 		className, err = extractClassName(scripts, scriptToks, opts.Filename, sec.ScriptsPos)
 		if err != nil {
@@ -212,12 +230,22 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	}
 
 	c := &compiler{
+		src:                   sec.Source,
 		file:                  opts.Filename,
 		svgDedup:              opts.SVGDedup,
 		svgCache:              opts.SVGCache,
 		assetReadsUnavailable: opts.AssetReadsUnavailable,
+		warnings:              warnings,
 	}
-	scope := map[string]bool{}
+	scope := scopeMap{}
+
+	// The markup functions (D174) may only be the outermost call of a text
+	// interpolation; every other placement is a positioned error before
+	// anything is emitted, as is a `this` the parser let through. The root
+	// itself goes through the check so its <puzzle-view> attributes are covered.
+	if err := c.checkTemplateExprs([]parser.Node{root}, ""); err != nil {
+		return "", err
+	}
 
 	// Resolve {#svg} nodes (v1.14, D46): read each referenced file and splice an
 	// <svg> element carrying its attrs + raw inner markup, BEFORE emit. Run on the
@@ -266,6 +294,9 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		return "", err
 	}
 	if skel != nil {
+		if err := c.checkTemplateExprs(skel.Children, ""); err != nil {
+			return "", err
+		}
 		collectA11yWarnings(skel.Children, opts.Filename, warnings)
 		if err := c.resolveInlineSVG(skel.Children, opts.AssetsDir, inlined); err != nil {
 			return "", err
@@ -277,6 +308,10 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		if err != nil {
 			return "", err
 		}
+	}
+
+	if err := c.checkEventUses(); err != nil {
+		return "", err
 	}
 
 	// <script>-import collision warnings (out-of-band; goldens unaffected). Scan
@@ -312,6 +347,21 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	if c.usesDisplayValue {
 		imports = append(imports, "displayValue as __s")
 	}
+	// The list block is imported ONLY by a module that lowered at least one
+	// item-form {#for} (D170), exactly as displayValue is imported only by a
+	// module that emits a display coercion: a loop-free app must not pay for
+	// views/listBlock.js in its bundle.
+	if len(c.listSites) > 0 {
+		imports = append(imports, "listRows as __l")
+	}
+	// The loop guards (D173 V12) follow the same rule: a `.map` loop imports
+	// loopItems, a range loop loopRange, and a file with neither imports nothing.
+	if c.usesLoopItems {
+		imports = append(imports, "loopItems as __e")
+	}
+	if c.usesLoopRange {
+		imports = append(imports, "loopRange as __r")
+	}
 	importLine := "import { " + strings.Join(imports, ", ") + " } from '@magic-spells/puzzle';"
 
 	// Reserved module-scope names: everything the import line above binds locally,
@@ -320,13 +370,17 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	// module, so it is a positioned compile error here rather than an esbuild error
 	// against the injected line (see checkReservedScriptBindings). The list is
 	// built from what THIS file emits — nothing is reserved unconditionally.
-	emitted := make([]string, 0, len(imports)+len(c.svgOrder))
+	emitted := make([]string, 0, len(imports)+len(c.svgOrder)+len(c.listSites))
 	for _, spec := range imports {
 		emitted = append(emitted, importLocalName(spec))
 	}
 	for _, src := range c.svgOrder {
 		emitted = append(emitted, c.svgIdent[src])
 	}
+	// One `const __L<n>` per lowered {#for} site (D170) — module-scope
+	// declarations exactly like the import locals, so the same collision rule
+	// applies and only the names THIS file emits are reserved.
+	emitted = append(emitted, c.listMetaNames()...)
 	if err := checkReservedScriptBindings(sec.Scripts, scriptToks, emitted, opts.Filename, sec.ScriptsPos); err != nil {
 		return "", err
 	}
@@ -344,13 +398,22 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	//     after the ViewNode import, in first-seen order; empty in inline mode.
 	b.WriteString(c.emitSVGImports())
 	b.WriteString("\n")
+	// 2c. per-site list-block meta consts (D170), one per lowered item-form
+	//     {#for} in source order, set off by a blank line on each side. The
+	//     facts in them are compile-time static, so they are hoisted out of
+	//     render() and shared by every instance of the class.
+	if metas := c.emitListMetaConsts(); metas != "" {
+		b.WriteString(metas)
+		b.WriteString("\n")
+	}
 	// 3. render tail, attached by prototype assignment (D10).
 	b.WriteString(className)
 	b.WriteString(".prototype.render = function () {\n")
 	b.WriteString("  const __d = this.getData();\n")
-	// The formatter registry is read only by a formatter chain, so the binding is
-	// emitted only when one was compiled (usesFormatters, set by applyFormatters).
-	// rootExpr and skelExpr are both fully built above, so the flag is final here.
+	// The function registry is read only by a library call, so the binding is
+	// emitted only when one was compiled
+	// (usesFormatters, set by absorbFlags). rootExpr and skelExpr are both fully
+	// built above, so the flag is final here.
 	if c.usesFormatters {
 		b.WriteString("  const __f = this.ctx.formatters.getAll();\n")
 	}
@@ -367,6 +430,11 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	b.WriteString(".__pzlModule = ")
 	b.WriteString(jsString(moduleStampPath(opts)))
 	b.WriteString(";\n")
+	// 3c. root dirty-mask names (D170, root dirty mask): the parent data roots some
+	//     loop body reads, indexed by the `roots` bit each site meta carries.
+	//     Absent when no site carries a mask, which is the common case — a view
+	//     with no `__roots` skips the mask computation entirely.
+	b.WriteString(c.emitRootsStamp(className))
 	// 4. skeleton tail (v1.8, D39), same prototype-assignment idiom as render().
 	if skel != nil {
 		b.WriteString("\n")
@@ -435,13 +503,32 @@ type compiler struct {
 	// values remain raw vnode attrs do not pay for an unused import.
 	usesDisplayValue bool
 
-	// Set when an emitted interpolation carries a non-empty formatter chain, which
-	// is the only thing that reads __f. It gates the `const __f =
-	// this.ctx.formatters.getAll()` line in BOTH render() and renderSkeleton() —
-	// module-wide, so a formatter in either body emits the line in both. A third
-	// tracker of the same signal is internal/plugin/scan.go collectFormatterCalls
-	// (the built-in tree-shaking allow-list); the two are kept in sync by
-	// plugin_test.go's built-in sync tests.
+	// eventData and eventDOM are the first places the template reads `event`
+	// as data and uses it as a handler's DOM event (noteEvent); a template
+	// with both is an error (checkEventUses). Line 0 means none.
+	eventData, eventDOM expr.Pos
+
+	// src is the whole .pzl file (parser.Sections.Source), which every node
+	// Position.Offset indexes. Empty when the Sections did not come from
+	// SplitSections.
+	src string
+	// warnings collects out-of-band diagnostics (Result.Warnings); nil in a
+	// compile that does not report them.
+	warnings *[]Warning
+
+	// Set when a `.map` item loop (usesLoopItems) or a range loop
+	// (usesLoopRange) is emitted, so the runtime loop guards (D173 V12) are
+	// imported only by a module that calls them.
+	usesLoopItems bool
+	usesLoopRange bool
+
+	// Set when an emitted expression calls a library function, which is the
+	// only thing that reads __f. It gates
+	// the `const __f = this.ctx.formatters.getAll()` line in BOTH render() and
+	// renderSkeleton() — module-wide, so a call in either body emits the line in
+	// both. A third tracker of the same signal is internal/plugin/scan.go
+	// collectUsage (the built-in tree-shaking allow-list); the two are kept in
+	// sync by plugin_test.go's built-in sync tests.
 	usesFormatters bool
 
 	// SVG-dedup emission state (v1.14 D46 amendment). svgDedup selects the
@@ -451,6 +538,48 @@ type compiler struct {
 	svgDedup bool
 	svgOrder []string
 	svgIdent map[string]string
+
+	// --- persistent list blocks + static subtree caches (D170 emission contract) ---
+
+	// loops is the stack of LOWERED {#for} sites being emitted, innermost last.
+	// Range loops and loops inside a <Snippet> body never push.
+	loops []*loopSite
+	// listSites holds every lowered site in source order; compile() emits one
+	// `const __L<id> = {…};` per entry after the injected import line.
+	listSites []*loopSite
+	// viewCacheSites is the per-file `this.__c[n]` counter for view-level static
+	// subtree caches. render() and renderSkeleton() share it, like `__h`.
+	viewCacheSites int
+	// rootOrder/rootIndex are the file-level `__roots` array: the parent data
+	// roots some loop body reads, in first-read order.
+	rootOrder []string
+	rootIndex map[string]int
+	// analyzing > 0 during a look-ahead pass (conditional arity, {#for} body
+	// root extraction). Those passes resolve expressions in a scope that is not
+	// the one they will be emitted in and throw the text away, so their facts
+	// must never reach a site.
+	analyzing int
+	// preserveWS > 0 inside a <pre> or <textarea> body, where every Text node is
+	// emitted byte for byte (D168 rule 6). Every walker that descends into an
+	// element's children and calls processChildren — emitElement and the static
+	// subtree analysis — raises it for those two tags, so the look-ahead passes
+	// count the same text vnodes emission produces.
+	preserveWS int
+	// snippetDepth > 0 inside a <Snippet> body: stamped fresh per expansion, so
+	// it owns no cache — loops keep `.map`, and neither static subtrees nor row
+	// handlers are cached there.
+	snippetDepth int
+	// staticCacheDepth > 0 while emitting inside an already-wrapped static
+	// subtree, so only the MAXIMAL qualifying subtree gets a wrapper.
+	staticCacheDepth int
+	// mapDepth > 0 inside a NON-LOWERED loop body — a range {#for}, or an
+	// item-form loop that fell back to `.map` because its explicit key reads
+	// render scope. Such a body owns no row scope, and it is emitted ONCE but
+	// evaluated per iteration, so anything inside it that keys off a site id or
+	// a cache slot would be shared by every iteration: one static vnode mounted
+	// at N DOM positions, or one list block serving N lists. Nothing inside one
+	// is cached, and no loop inside one is lowered, at any nesting depth.
+	mapDepth int
 }
 
 // item is a processed child: either a coalesced text run (textOK), a structural
@@ -468,11 +597,40 @@ func (c *compiler) cgErr(pos parser.Position, msg string) error {
 	return &parser.ParseError{File: c.file, Line: pos.Line, Col: pos.Col, Message: msg}
 }
 
+// noteEvent records the first place the template reads `event` as data (a
+// field or prop) and the first place a handler uses it as the DOM event. A
+// template binding or an arrow parameter named `event` is neither.
+func (c *compiler) noteEvent(kind refKind, p expr.Pos) {
+	at := &c.eventData
+	switch kind {
+	case refData:
+	case refEvent:
+		at = &c.eventDOM
+	default:
+		return
+	}
+	if at.Line == 0 || p.Offset < at.Offset {
+		*at = p
+	}
+}
+
+// checkEventUses rejects a template that reads a field or prop named `event`
+// and also uses `event` inside an @event handler, where it is always the DOM
+// event: the handler would silently get the event, not the data.
+func (c *compiler) checkEventUses() error {
+	if c.eventData.Line == 0 || c.eventDOM.Line == 0 {
+		return nil
+	}
+	return c.cgErr(exprPos(c.eventDOM), fmt.Sprintf(
+		"`event` here is the DOM event, but this template also reads `event` as data at %d:%d — rename the field or prop (inside @event handlers `event` is always the DOM event)",
+		c.eventData.Line, c.eventData.Col))
+}
+
 // emitComponentRoot enforces the D20 component-mode rules and emits the single
 // inline root element. scopeStamp (v1.27, D59), when non-nil, is appended to that
 // root element's attrs so a scoped component's rendered root carries the
 // data-<scopeId> attribute the plugin's @scope rule targets.
-func (c *compiler) emitComponentRoot(root *parser.Element, startCol int, scope map[string]bool, scopeStamp *parser.StaticAttr) (string, error) {
+func (c *compiler) emitComponentRoot(root *parser.Element, startCol int, scope scopeMap, scopeStamp *parser.StaticAttr) (string, error) {
 	if len(root.Attrs) > 0 {
 		return "", c.cgErr(root.Pos, "components render inline — put attributes on your root element")
 	}
@@ -525,7 +683,7 @@ func (c *compiler) emitComponentRoot(root *parser.Element, startCol int, scope m
 // patching in place; keep the skeleton's root tag equal to the template's for
 // the smoothest swap.
 func (c *compiler) emitSkeletonRoot(skel *parser.Element, viewAttrs []parser.Attr, mode EmissionMode, startCol int, scopeStamp *parser.StaticAttr) (string, error) {
-	scope := map[string]bool{}
+	scope := scopeMap{}
 	if mode == ModeView {
 		// viewAttrs already carries the scoped stamp (D59) — the skeleton's
 		// <puzzle-view> root matches the same @scope selector as the loaded render.
@@ -566,14 +724,20 @@ func (c *compiler) emitSkeletonRoot(skel *parser.Element, viewAttrs []parser.Att
 // is the layout indent (children align at ind+2, closers at ind); startCol is
 // the column the first line actually starts at, used only for the print-width
 // decision (the root sits after "return ", so startCol > ind there).
-func (c *compiler) emitElement(tagStr string, attrs []parser.Attr, children []parser.Node, ind, startCol int, isComponent bool, scope map[string]bool) (string, error) {
-	processed, err := c.processChildren(children, scope)
-	if err != nil {
-		return "", err
-	}
+func (c *compiler) emitElement(tagStr string, attrs []parser.Attr, children []parser.Node, ind, startCol int, isComponent bool, scope scopeMap) (string, error) {
 	tag := ""
 	if !isComponent && len(tagStr) >= 2 && tagStr[0] == '\'' && tagStr[len(tagStr)-1] == '\'' {
 		tag = tagStr[1 : len(tagStr)-1]
+	}
+	if preservesWhitespace(tag) {
+		// The whole subtree, descendants included, keeps its bytes (D168).
+		children = preservedBody(children)
+		c.preserveWS++
+		defer func() { c.preserveWS-- }()
+	}
+	processed, err := c.processChildren(children, scope)
+	if err != nil {
+		return "", err
 	}
 	multiline, err := c.attrsMultiline(tag, attrs, tagStr, startCol, len(processed) == 0, scope, isComponent)
 	if err != nil {
@@ -584,7 +748,7 @@ func (c *compiler) emitElement(tagStr string, attrs []parser.Attr, children []pa
 		return "", err
 	}
 
-	// Sole-{#for} child: pass the .map() array directly as the children
+	// Sole-{#for} child: pass the .map()/list array directly as the children
 	// argument (no [] wrapper), matching the fixture's list <div>.
 	if len(processed) == 1 && processed[0].node != nil {
 		if f, ok := processed[0].node.(*parser.For); ok {
@@ -597,16 +761,29 @@ func (c *compiler) emitElement(tagStr string, attrs []parser.Attr, children []pa
 		}
 	}
 
+	// A STATIC island children array is cached as a unit at any size (D44 +
+	// D170): the element's own attrs and listeners still patch, but a seed that
+	// is identical on every mount need only be allocated once.
+	islandCache := c.islandChildrenCache(attrs, children, isComponent, scope)
+	if islandCache != "" {
+		c.staticCacheDepth++
+	}
 	childrenArr, err := c.emitArray(processed, ind+2, scope)
+	if islandCache != "" {
+		c.staticCacheDepth--
+	}
 	if err != nil {
 		return "", err
+	}
+	if islandCache != "" {
+		childrenArr = islandCache + childrenArr + ")"
 	}
 	return "new ViewNode(" + tagStr + ", " + attrsSeg + ", " + childrenArr + ")", nil
 }
 
 // emitArray emits a children array `[…]` with each element at elemIndent and
 // the closing bracket at elemIndent-2. Empty → "[]".
-func (c *compiler) emitArray(items []item, elemIndent int, scope map[string]bool) (string, error) {
+func (c *compiler) emitArray(items []item, elemIndent int, scope scopeMap) (string, error) {
 	if len(items) == 0 {
 		return "[]", nil
 	}
@@ -626,7 +803,7 @@ func (c *compiler) emitArray(items []item, elemIndent int, scope map[string]bool
 	return b.String(), nil
 }
 
-func (c *compiler) emitItem(it item, ind int, scope map[string]bool) (string, error) {
+func (c *compiler) emitItem(it item, ind int, scope scopeMap) (string, error) {
 	if it.placeholder {
 		// Arity-padding placeholder: an empty comment vnode holding a stable index
 		// slot so a conditional's branches stay the same length (see padItems).
@@ -639,6 +816,19 @@ func (c *compiler) emitItem(it item, ind int, scope map[string]bool) (string, er
 	case *parser.Element:
 		if n.RawInner != nil { // resolved {#svg} (D46): string children, island seed
 			return c.emitRawSVG(n, ind, ind, scope)
+		}
+		// A maximal static subtree is built once per owner and returned by
+		// reference afterwards (D170, static subtree caches). The wrapper is a prefix, so the
+		// element's own layout is untouched apart from the width decision, which
+		// sees the prefix through startCol.
+		if prefix := c.staticCachePrefix(n, scope); prefix != "" {
+			c.staticCacheDepth++
+			out, err := c.emitElement("'"+n.Tag+"'", n.Attrs, n.Children, ind, ind+len(prefix), false, scope)
+			c.staticCacheDepth--
+			if err != nil {
+				return "", err
+			}
+			return prefix + out + ")", nil
 		}
 		return c.emitElement("'"+n.Tag+"'", n.Attrs, n.Children, ind, ind, false, scope)
 	case *parser.Component:
@@ -662,6 +852,9 @@ func (c *compiler) emitItem(it item, ind int, scope map[string]bool) (string, er
 			return "", err
 		}
 		return "..." + m, nil
+	case *parser.Interpolation:
+		// Only a markup interpolation is kept as a node (processChildren).
+		return c.emitMarkup(n, scope)
 	case *parser.InlineSVG:
 		// Every {#svg} is replaced by resolveInlineSVG before emit; one surviving
 		// here is a compiler bug, not a user error.
@@ -673,7 +866,7 @@ func (c *compiler) emitItem(it item, ind int, scope map[string]bool) (string, er
 
 // emitSlot extends the existing marker shapes with a fresh args object while
 // keeping every no-args spelling byte-identical to its pre-D166 output.
-func (c *compiler) emitSlot(n *parser.Slot, ind int, scope map[string]bool) (string, error) {
+func (c *compiler) emitSlot(n *parser.Slot, ind int, scope scopeMap) (string, error) {
 	if n.Name == "" && len(n.Args) == 0 && len(n.Children) == 0 {
 		return "new ViewNode(SLOT_TAG)", nil
 	}
@@ -693,45 +886,67 @@ func (c *compiler) emitSlot(n *parser.Slot, ind int, scope map[string]bool) (str
 		}
 		attrs = append(attrs, "args: { "+strings.Join(kvs, ", ")+" }")
 	}
+	if len(n.Children) > 0 {
+		// The fallback body (D141) is emitted as a thunk, never as the marker's
+		// children: it renders only when nothing fills the position, so it must not
+		// be evaluated or built otherwise. Built eagerly, a snippet-filled marker
+		// still ran every fallback expression — one per row in a loop — and its
+		// value-printing diagnostics (D173 V6) fired for content that never
+		// renders. The runtime's fill() calls it at most once per marker vnode. The
+		// body is compiled in the enclosing scope exactly as before (row scopes,
+		// handler and static caches, list-block read tracking), only deferred.
+		items, err := c.processChildren(n.Children, scope)
+		if err != nil {
+			return "", err
+		}
+		body, err := c.emitArray(items, ind+2, scope)
+		if err != nil {
+			return "", err
+		}
+		attrs = append(attrs, "fallback: () => "+body)
+	}
 	attrsExpr := "{}"
 	if len(attrs) > 0 {
 		attrsExpr = "{ " + strings.Join(attrs, ", ") + " }"
 	}
-	if len(n.Children) == 0 {
-		return "new ViewNode(SLOT_TAG, " + attrsExpr + ")", nil
-	}
-	items, err := c.processChildren(n.Children, scope)
-	if err != nil {
-		return "", err
-	}
-	children, err := c.emitArray(items, ind+2, scope)
-	if err != nil {
-		return "", err
-	}
-	return "new ViewNode(SLOT_TAG, " + attrsExpr + ", " + children + ")", nil
+	return "new ViewNode(SLOT_TAG, " + attrsExpr + ")", nil
 }
 
 // emitSnippet emits the pinned D166 caller-side contract. The arrow receives
 // one destructured object and closes over the caller's render scope; every
 // declared parameter is added to the body scope and shadows outer bindings.
-func (c *compiler) emitSnippet(n *parser.Snippet, ind int, scope map[string]bool) (string, error) {
+func (c *compiler) emitSnippet(n *parser.Snippet, ind int, scope scopeMap) (string, error) {
 	bodyScope := scope
-	for _, param := range n.Params {
-		bodyScope = scopeAdd(bodyScope, param)
+	// A parameter is destructured by its AUTHORED name (the marker-argument
+	// contract), but the identifier it binds locally is mangled when it would
+	// shadow an enclosing row scope object — `<Snippet s>` inside a lowered row.
+	decls := make([]string, len(n.Params))
+	for i, param := range n.Params {
+		var local string
+		bodyScope, local = c.bareBinding(bodyScope, param)
+		decls[i] = param
+		if local != param {
+			decls[i] = param + ": " + local
+		}
 	}
+	// A snippet body is stamped fresh at every expansion, so it owns no cache to
+	// key by site id: loops inside keep today's `.map(…)`, static subtrees are
+	// not wrapped, and a row handler is not cached on the enclosing row scope
+	// (D170 emission contract). The surrounding depth is restored after the body.
+	c.snippetDepth++
 	items, err := c.processChildren(n.Body, bodyScope)
 	if err != nil {
+		c.snippetDepth--
 		return "", err
 	}
 	body, err := c.emitArray(items, ind+6, bodyScope)
+	c.snippetDepth--
 	if err != nil {
 		return "", err
 	}
 	params := make([]string, len(n.Params))
-	decls := make([]string, len(n.Params))
 	for i, param := range n.Params {
 		params[i] = jsString(param)
-		decls[i] = param
 	}
 	destructure := "{}"
 	if len(decls) > 0 {
@@ -751,8 +966,11 @@ func (c *compiler) emitSnippet(n *parser.Snippet, ind int, scope map[string]bool
 // ViewNode.keyOf rows) and slot markers (0..N expansion) make occupancy unstable;
 // an unstable conditional emits both branches unpadded, byte-identically to the
 // pre-padding form. Nested conditionals make this decision independently.
-func (c *compiler) emitIf(n *parser.If, ind int, scope map[string]bool) (string, error) {
-	cond := resolveExpr(n.Cond, scope)
+func (c *compiler) emitIf(n *parser.If, ind int, scope scopeMap) (string, error) {
+	// A condition is a value position for guarded access.
+	f := c.factSink()
+	cond := c.cond(n.CondAST, scope, f)
+	c.absorb(f, scope)
 	thenItems, err := c.processChildren(n.Then, scope)
 	if err != nil {
 		return "", err
@@ -812,7 +1030,7 @@ func padItems(items []item, n int) []item {
 // explicit body-root key: generated range keys never resolve null, while
 // item-form ViewNode.keyOf rows and author key expressions can. Slot markers are
 // unstable because the runtime expands them to 0..N nodes.
-func (c *compiler) condStaticLen(items []item, scope map[string]bool) (int, bool, error) {
+func (c *compiler) condStaticLen(items []item, scope scopeMap) (int, bool, error) {
 	n := 0
 	stable := true
 	for _, it := range items {
@@ -861,7 +1079,11 @@ func (c *compiler) condStaticLen(items []item, scope map[string]bool) (int, bool
 
 // ifStaticLen reports a nested `{#if}`'s max branch length and whether every
 // branch is stable, matching emitIf's padding gate.
-func (c *compiler) ifStaticLen(n *parser.If, scope map[string]bool) (int, bool, error) {
+func (c *compiler) ifStaticLen(n *parser.If, scope scopeMap) (int, bool, error) {
+	// Arity analysis only: this pass re-processes children whose emitted form is
+	// produced later by emitIf, so its facts are suppressed (see forBodyRoot).
+	c.analyzing++
+	defer func() { c.analyzing-- }()
 	thenItems, err := c.processChildren(n.Then, scope)
 	if err != nil {
 		return 0, false, err
@@ -891,7 +1113,10 @@ func (c *compiler) ifStaticLen(n *parser.If, scope map[string]bool) (int, bool, 
 
 // caseStaticLen reports a nested `{#case}`'s max branch length and whether every
 // clause plus the optional/implicit else is stable, matching emitCase's gate.
-func (c *compiler) caseStaticLen(n *parser.Case, scope map[string]bool) (int, bool, error) {
+func (c *compiler) caseStaticLen(n *parser.Case, scope scopeMap) (int, bool, error) {
+	// Arity analysis only; see ifStaticLen.
+	c.analyzing++
+	defer func() { c.analyzing-- }()
 	maxLen := 0
 	stable := true
 	for _, cl := range n.Clauses {
@@ -933,8 +1158,8 @@ func (c *compiler) caseStaticLen(n *parser.Case, scope map[string]bool) (int, bo
 // single read, which matters if the data value is a getter. `__c` shadows
 // cleanly in nested cases: user expressions never resolve to it, and each arm
 // only ever compares its own `__c`.
-func (c *compiler) emitCase(n *parser.Case, ind int, scope map[string]bool) (string, error) {
-	caseExpr := resolveExpr(n.Expr, scope)
+func (c *compiler) emitCase(n *parser.Case, ind int, scope scopeMap) (string, error) {
+	caseExpr := c.value(n.ExprAST, scope)
 
 	// Pre-process every clause body + the else and compute the max static arity.
 	// Padding applies only when every branch has provably fixed occupancy; an
@@ -980,9 +1205,9 @@ func (c *compiler) emitCase(n *parser.Case, ind int, scope map[string]bool) (str
 	var b strings.Builder
 	b.WriteString("...(((__c) =>\n")
 	for i, cl := range n.Clauses {
-		conds := make([]string, len(cl.Values))
-		for k, v := range cl.Values {
-			conds[k] = "__c === (" + resolveExpr(v, scope) + ")"
+		conds := make([]string, len(cl.ValuesAST))
+		for k, v := range cl.ValuesAST {
+			conds[k] = "__c === (" + c.value(v, scope) + ")"
 		}
 		condStr := strings.Join(conds, " || ")
 		items := clauseItems[i]
@@ -1011,63 +1236,144 @@ func (c *compiler) emitCase(n *parser.Case, ind int, scope map[string]bool) (str
 	return b.String(), nil
 }
 
-// emitFor compiles a {#for}. Named form → `<coll>.map((item) => <body>)` with
-// `key: ViewNode.keyOf(item)` prepended to the body's root element (pk-aware
-// auto-key, D58). Range form → `Array.from(…, (_, __i) => <body>)` keyed by the
-// generated VALUE (`<from> + __i`), never by __i: the range bounds are data, so
-// sliding the window (`5...7` → `6...8`) must not re-hand keys 0,1,2 to different
-// numbers and let the reconciler patch stale rows in place (D58 — range keys are
-// the generated numbers, unique by construction).
+// emitFor compiles a {#for}. Named form → `__e(<coll>).map((item) => <body>)`
+// with `key: ViewNode.keyOf(item)` prepended to the body's root element
+// (pk-aware auto-key, D58) — or, far more often, a lowered list block (see
+// emitListCall). `__e` (the runtime's loopItems) hands back the collection when
+// it is an array and an empty list otherwise, so a missing collection loops
+// zero times and any other non-list does too, with a development warning
+// (D173 V12). Range form → `__r(<from>, <to>).map((__i) => <body>)`: `__r` (the
+// runtime's loopRange) builds the whole numbers from..to with both bounds
+// truncated toward zero, and a missing or non-finite bound runs the range zero
+// times. Rows are keyed by the generated VALUE, never by its position: the range
+// bounds are data, so sliding the window (`5...7` → `6...8`) must not re-hand
+// keys 0,1,2 to different numbers and let the reconciler patch stale rows in
+// place (D58 — range keys are the generated numbers, unique by construction).
 // An explicit `key` attr on the body root suppresses the prepend (forBody).
 // An optional trailing counter binds the 0-based index (item form) or the
-// current number (range form): the item form adds the second .map parameter; the
-// range form maps the generated values (`… (_, __i) => <from> + __i).map((n) =>`)
-// so the body sees the number, keyed by it (range values are unique).
-func (c *compiler) emitFor(f *parser.For, ind int, scope map[string]bool) (string, error) {
+// current number (range form): the item form adds the second .map parameter;
+// the range form names the value parameter after the counter.
+// literalRange constant-folds a range whose bounds are both integer literals
+// (`{#for 1...3}`, `{#for -1...1}`): nothing can be missing or fractional, so
+// the loop needs no `loopRange` guard or import. A short range emits its
+// numbers as an array literal; a long one generates them. It reports false for
+// any other bound.
+func literalRange(from, to expr.Node) (string, bool) {
+	lo, okLo := intLiteral(from)
+	hi, okHi := intLiteral(to)
+	if !okLo || !okHi {
+		return "", false
+	}
+	n := hi - lo + 1
+	switch {
+	case n <= 0:
+		return "[]", true
+	case n <= 16:
+		nums := make([]string, n)
+		for i := range nums {
+			nums[i] = strconv.Itoa(lo + i)
+		}
+		return "[" + strings.Join(nums, ", ") + "]", true
+	default:
+		return "Array.from({ length: " + strconv.Itoa(n) + " }, (_, __k) => __k + " + strconv.Itoa(lo) + ")", true
+	}
+}
+
+// intLiteral reports the value of a range bound written as an integer literal
+// of at most nine digits, optionally negated (`-1`) — and nothing else: `+1`,
+// `1.5`, `1e3` and every non-literal are left to the loopRange guard.
+func intLiteral(n expr.Node) (int, bool) {
+	neg := false
+	if u, ok := n.(*expr.Unary); ok && u.Op == "-" {
+		neg, n = true, u.Operand
+	}
+	lit, ok := n.(*expr.Literal)
+	if !ok || lit.Kind != expr.LitNumber || lit.Raw == "" || len(lit.Raw) > 9 {
+		return 0, false
+	}
+	for i := 0; i < len(lit.Raw); i++ {
+		if lit.Raw[i] < '0' || lit.Raw[i] > '9' {
+			return 0, false
+		}
+	}
+	v, err := strconv.Atoi(lit.Raw)
+	if err != nil {
+		return 0, false
+	}
+	if neg {
+		v = -v
+	}
+	return v, true
+}
+
+func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, error) {
 	if f.IsRange {
-		// Parenthesize both bounds: they are spliced textually, so a composite
-		// from/to (e.g. `start + 1`, `a || b`, a ternary) would otherwise bind
-		// wrong — left-associative minus does not distribute over `to - from`,
-		// and `from + __i` would mis-associate too.
-		from := "(" + resolveExpr(f.RangeFrom, scope) + ")"
-		to := "(" + resolveExpr(f.RangeTo, scope) + ")"
-		gen := "Array.from({ length: " + to + " - " + from + " + 1 }, (_, __i) =>"
+		gen, folded := literalRange(f.RangeFromAST, f.RangeToAST)
+		if !folded {
+			c.usesLoopRange = true
+			gen = "__r(" + c.value(f.RangeFromAST, scope) + ", " + c.value(f.RangeToAST, scope) + ")"
+		}
+		gen += ".map(("
 		if f.Counter != "" {
-			body, err := c.forBody(f, scopeAdd(scope, f.Counter), f.Counter, ind+2)
+			bodyScope, counter := c.bareBinding(scope, f.Counter)
+			c.mapDepth++
+			body, err := c.forBody(f, bodyScope, identNode(f.Counter), ind+2, nil)
+			c.mapDepth--
 			if err != nil {
 				return "", err
 			}
-			return gen + " " + from + " + __i).map((" + f.Counter + ") =>\n" +
+			return gen + counter + ") =>\n" +
 				sp(ind+2) + body + "\n" + sp(ind) + ")", nil
 		}
-		// Counterless range: key by the generated VALUE, not the 0-based __i. The
-		// key expression is the RAW from-bound source — forBody hands it to the
-		// attribute emitter, which runs resolveExpr on it exactly once (resolving a
-		// second time would produce `__d.__d.x`), so it lands as the same
-		// `(<from>) + __i` the counter form emits as its value.
-		body, err := c.forBody(f, scopeAdd(scope, "__i"), "("+f.RangeFrom+") + __i", ind+2)
+		// Counterless range: the generated value binds as the compiler-private
+		// `__i` and keys the row.
+		c.mapDepth++
+		body, err := c.forBody(f, scopeAdd(scope, "__i"), identNode("__i"), ind+2, nil)
+		c.mapDepth--
 		if err != nil {
 			return "", err
 		}
-		return gen + "\n" +
+		return gen + "__i) =>\n" +
 			sp(ind+2) + body + "\n" + sp(ind) + ")", nil
 	}
-	coll := resolveExpr(f.Collection, scope)
-	params := f.Item
-	bodyScope := scopeAdd(scope, f.Item)
+	// Item form lowers to a persistent list block (D170, list blocks) unless the
+	// site cannot own one: a <Snippet> body is stamped fresh per expansion, a
+	// non-lowered loop body is emitted once and evaluated per iteration (so one
+	// block would serve every iteration's list), and an explicit key that reads
+	// render-scope state cannot become a module-scope arrow. All three keep
+	// today's `.map(…)`.
+	if c.snippetDepth == 0 && c.mapDepth == 0 {
+		keyArrow, lowerable, err := c.listKeyArrow(f, scope)
+		if err != nil {
+			return "", err
+		}
+		if lowerable {
+			return c.emitListCall(f, ind, scope, keyArrow)
+		}
+	}
+
+	coll := c.value(f.CollectionAST, scope)
+	bodyScope, itemParam := c.bareBinding(scope, f.Item)
+	params := itemParam
 	if f.Counter != "" {
-		params += ", " + f.Counter
-		bodyScope = scopeAdd(bodyScope, f.Counter)
+		var counterParam string
+		bodyScope, counterParam = c.bareBinding(bodyScope, f.Counter)
+		params += ", " + counterParam
 	}
 	// The synthetic auto-key is `ViewNode.keyOf(<item>)`; ViewNode is a module
 	// identifier (always imported), so mark it in-scope to keep the expression
 	// resolver from rewriting it to `__d.ViewNode` (D58).
 	bodyScope = scopeAdd(bodyScope, "ViewNode")
-	body, err := c.forBody(f, bodyScope, "ViewNode.keyOf("+f.Item+")", ind+2)
+	// This body is NOT lowered: nothing inside it may take a site id or a cache
+	// slot, because the one it took would be shared by every iteration.
+	c.mapDepth++
+	body, err := c.forBody(f, bodyScope, keyOfNode(f.Item), ind+2, nil)
+	c.mapDepth--
 	if err != nil {
 		return "", err
 	}
-	return coll + ".map((" + params + ") =>\n" +
+	c.usesLoopItems = true
+	return "__e(" + coll + ").map((" + params + ") =>\n" +
 		sp(ind+2) + body + "\n" + sp(ind) + ")", nil
 }
 
@@ -1075,15 +1381,26 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope map[string]bool) (strin
 // synthetic `key` attribute — UNLESS the root already carries an explicit `key`
 // (static or dynamic), in which case the author's attribute stands and the
 // synthetic prepend is skipped entirely (D58), in both item and range forms.
-func (c *compiler) forBody(f *parser.For, scope map[string]bool, keyExpr string, ind int) (string, error) {
+//
+// A LOWERED site (site != nil) inverts that: the row's key is always the
+// block's resolved `key: s.k`, because an explicit key has already moved into
+// the site meta's key function, so the author's attribute is dropped from the
+// root instead of suppressing the prepend (D170 emission contract).
+func (c *compiler) forBody(f *parser.For, scope scopeMap, keyExpr expr.Node, ind int, site *loopSite) (string, error) {
 	only, explicitKey, err := c.forBodyRoot(f, scope)
 	if err != nil {
 		return "", err
 	}
-	key := &parser.DynamicAttr{Name: "key", Expr: keyExpr}
+	if site != nil {
+		explicitKey = false
+	}
+	key := &parser.DynamicAttr{Name: "key", Expr: "key", ExprAST: keyExpr}
 	switch n := only.(type) {
 	case *parser.Element:
 		attrs := n.Attrs
+		if site != nil {
+			attrs = dropKeyAttrs(attrs)
+		}
 		if !explicitKey {
 			attrs = append([]parser.Attr{key}, attrs...)
 		}
@@ -1094,6 +1411,9 @@ func (c *compiler) forBody(f *parser.For, scope map[string]bool, keyExpr string,
 		return c.emitElement("'"+n.Tag+"'", attrs, n.Children, ind, ind, false, scope)
 	case *parser.Component:
 		props := n.Props
+		if site != nil {
+			props = dropKeyAttrs(props)
+		}
 		if !explicitKey {
 			props = append([]parser.Attr{key}, props...)
 		}
@@ -1105,7 +1425,7 @@ func (c *compiler) forBody(f *parser.For, scope map[string]bool, keyExpr string,
 // forRowsProvablyKeyed reports whether every row emitted by a loop is known to
 // have a non-null key. Item-form keyOf calls and explicit author keys may resolve
 // null; only a range loop using the generated __i/counter key is provable.
-func (c *compiler) forRowsProvablyKeyed(f *parser.For, scope map[string]bool) (bool, error) {
+func (c *compiler) forRowsProvablyKeyed(f *parser.For, scope scopeMap) (bool, error) {
 	if !f.IsRange {
 		return false, nil
 	}
@@ -1119,8 +1439,21 @@ func (c *compiler) forRowsProvablyKeyed(f *parser.For, scope map[string]bool) (b
 // forBodyRoot extracts and validates the single element/component root shared by
 // loop emission and conditional-stability analysis, and reports whether that root
 // carries an explicit key override.
-func (c *compiler) forBodyRoot(f *parser.For, scope map[string]bool) (parser.Node, bool, error) {
+func (c *compiler) forBodyRoot(f *parser.For, scope scopeMap) (parser.Node, bool, error) {
+	// A look-ahead: the body is processed in the ENCLOSING scope (its own loop
+	// locals are not bound yet) and every emitted byte is discarded — only the
+	// root node and the explicit-key verdict are used. Facts collected here
+	// would register the loop's own locals as parent data roots.
+	//
+	// Inside a <pre>/<textarea> the body's own whitespace still drops: a loop
+	// body is one root element and cannot hold text. Only this one children
+	// list is exempt; the root's descendants are preserved as usual.
+	c.analyzing++
+	preserve := c.preserveWS
+	c.preserveWS = 0
 	items, err := c.processChildren(f.Body, scope)
+	c.preserveWS = preserve
+	c.analyzing--
 	if err != nil {
 		return nil, false, err
 	}
@@ -1222,7 +1555,7 @@ const printWidth = 120
 // lines: always when there are ≥2 attributes or any mixed (template-literal)
 // value; for a single simple attribute, only when the inline first line would
 // exceed printWidth.
-func (c *compiler) attrsMultiline(tag string, attrs []parser.Attr, tagStr string, startCol int, emptyChildren bool, scope map[string]bool, isComponent bool) (bool, error) {
+func (c *compiler) attrsMultiline(tag string, attrs []parser.Attr, tagStr string, startCol int, emptyChildren bool, scope scopeMap, isComponent bool) (bool, error) {
 	attrs = dropReservedLiteralAttrs(attrs)
 	bind := detectAutoBind(tag, attrs, scope)
 	attrCount := len(attrs)
@@ -1249,7 +1582,7 @@ func (c *compiler) attrsMultiline(tag string, attrs []parser.Attr, tagStr string
 
 // emitAttrs emits the attribute object either inline `{ k: v }` or multi-line
 // (one attribute per line, trailing comma), per the precomputed decision.
-func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline bool, scope map[string]bool, isComponent bool) (string, error) {
+func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline bool, scope scopeMap, isComponent bool) (string, error) {
 	attrs = dropReservedLiteralAttrs(attrs)
 	bind := detectAutoBind(tag, attrs, scope)
 	attrCount := len(attrs)
@@ -1299,7 +1632,7 @@ func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline
 // trial: only the real pass advances the D62 handler-cache counter, so the trial
 // reads the SAME site index the real emission will use (matching bytes for the
 // width decision) without consuming it.
-func (c *compiler) attrKV(a parser.Attr, scope map[string]bool, isComponent bool, emit bool) (string, error) {
+func (c *compiler) attrKV(a parser.Attr, scope scopeMap, isComponent bool, emit bool) (string, error) {
 	switch at := a.(type) {
 	case *parser.StaticAttr:
 		// LiteralName means the name came from authored-literal markup rather than
@@ -1331,14 +1664,20 @@ func (c *compiler) attrKV(a parser.Attr, scope map[string]bool, isComponent bool
 		if startsWithObjectLiteral(at.Expr) {
 			return "", c.cgErr(at.Pos, objectLiteralMsg)
 		}
-		return jsKey(at.Name) + ": " + resolveExpr(at.Expr, scope), nil
+		return jsKey(at.Name) + ": " + c.value(at.ExprAST, scope), nil
 	case *parser.MixedAttr:
 		return jsKey(at.Name) + ": " + c.emitMixed(at.Parts, scope), nil
 	case *parser.EventAttr:
-		val, cacheable, err := compileEventValue(at.Expr, scope)
+		facts := c.factSink()
+		ev, err := c.compileEvent(at, scope, facts)
 		if err != nil {
 			return "", c.cgErr(at.Pos, err.Error())
 		}
+		// A row handler's arguments are part of the loop body: the roots they
+		// read must dirty the row, because a fresh closure over `__d` is exactly
+		// what keeps them correct (D170 emission contract).
+		c.absorb(facts, scope)
+		val, cacheable := ev.js, ev.cacheable
 		// A data-independent handler is the same function object on every render, so
 		// wrap it in the per-instance cache (v1.29, D62 / SPEC §31). Done BEFORE the
 		// isComponent split so both DOM listeners and component callback props share
@@ -1352,9 +1691,23 @@ func (c *compiler) attrKV(a parser.Attr, scope map[string]bool, isComponent bool
 			if emit {
 				c.handlerSites++
 			}
+		} else if ev.rowCacheable && c.rowStableRefs(ev.refs, scope) {
+			// A handler capturing ONLY loop locals is identity-stable for the
+			// life of the row once the locals are read off the row scope at fire
+			// time, so it caches there instead of being rebuilt per render
+			// (D62 amended by D170, stable loop handlers). Numbering is per loop site, an
+			// independent counter from `__h`. Component callback props ride the
+			// same path — that is what stops a row's child re-running data() on
+			// every parent render.
+			if site := c.rowScope(); site != nil {
+				val = fmt.Sprintf("(%s.h%d ??= %s)", site.scope, site.handlerSites, val)
+				if emit {
+					site.handlerSites++
+				}
+			}
 		}
 		// DOM listener → '@name' key; component callback prop → bare `name`
-		// (constellation/doc/DOC-DECISIONS.md D16, constellation/doc/DOC-APP-ANATOMY.md §1).
+		// (D16, constellation/doc/DOC-APP-ANATOMY.md §1).
 		if isComponent {
 			if len(at.Modifiers) > 0 {
 				return "", c.cgErr(at.Pos, "event modifiers are not allowed on component callback props")
@@ -1375,7 +1728,17 @@ func (c *compiler) attrKV(a parser.Attr, scope map[string]bool, isComponent bool
 
 // emitMixed compiles a mixed attribute value (constellation/doc/DOC-COMPILER-DESIGN.md §c) to a
 // template literal; inline `{#if}` parts become `${cond ? '…' : ”}` ternaries.
-func (c *compiler) emitMixed(parts []parser.Part, scope map[string]bool) string {
+func (c *compiler) emitMixed(parts []parser.Part, scope scopeMap) string {
+	f := c.factSink()
+	out := c.emitMixedFacts(parts, scope, f)
+	c.absorb(f, scope)
+	return out
+}
+
+// emitMixedFacts is emitMixed's body with an explicit fact collector, so the
+// site-meta key arrow can classify a mixed `key="row-{ item.id }"` without its
+// reads landing on an enclosing loop site.
+func (c *compiler) emitMixedFacts(parts []parser.Part, scope scopeMap, facts *exprFacts) string {
 	var b strings.Builder
 	b.WriteByte('`')
 	for _, p := range parts {
@@ -1383,16 +1746,16 @@ func (c *compiler) emitMixed(parts []parser.Part, scope map[string]bool) string 
 		case *parser.StaticPart:
 			b.WriteString(tplEscape(pp.Text))
 		case *parser.InterpPart:
-			expr := c.applyFormatters(resolveExpr(pp.Interp.Expr, scope), pp.Interp.Formatters, scope)
+			js := c.valueInto(pp.Interp.ExprAST, scope, facts)
 			b.WriteString("${")
-			b.WriteString(c.displayValue(expr, pp.Interp.Expr))
+			b.WriteString(c.displayValue(js, pp.Interp.Expr))
 			b.WriteString("}")
 		case *parser.InlineIfPart:
-			cond := resolveExpr(pp.Cond, scope)
-			thenS := c.branchToStr(pp.Then, scope)
+			cond := c.cond(pp.CondAST, scope, facts)
+			thenS := c.branchToStr(pp.Then, scope, facts)
 			elseS := "''"
 			if pp.Else != nil {
-				elseS = c.branchToStr(pp.Else, scope)
+				elseS = c.branchToStr(pp.Else, scope, facts)
 			}
 			b.WriteString("${")
 			b.WriteString(cond)
@@ -1409,21 +1772,21 @@ func (c *compiler) emitMixed(parts []parser.Part, scope map[string]bool) string 
 
 // branchToStr compiles an inline-if branch (static/interp/nested-if parts only)
 // to a single string-valued JS expression.
-func (c *compiler) branchToStr(parts []parser.Part, scope map[string]bool) string {
+func (c *compiler) branchToStr(parts []parser.Part, scope scopeMap, facts *exprFacts) string {
 	var segs []string
 	for _, p := range parts {
 		switch pp := p.(type) {
 		case *parser.StaticPart:
 			segs = append(segs, jsString(pp.Text))
 		case *parser.InterpPart:
-			expr := c.applyFormatters(resolveExpr(pp.Interp.Expr, scope), pp.Interp.Formatters, scope)
-			segs = append(segs, c.displayValue(expr, pp.Interp.Expr))
+			js := c.valueInto(pp.Interp.ExprAST, scope, facts)
+			segs = append(segs, c.displayValue(js, pp.Interp.Expr))
 		case *parser.InlineIfPart:
-			cond := resolveExpr(pp.Cond, scope)
-			thenS := c.branchToStr(pp.Then, scope)
+			cond := c.cond(pp.CondAST, scope, facts)
+			thenS := c.branchToStr(pp.Then, scope, facts)
 			elseS := "''"
 			if pp.Else != nil {
-				elseS = c.branchToStr(pp.Else, scope)
+				elseS = c.branchToStr(pp.Else, scope, facts)
 			}
 			segs = append(segs, "("+cond+" ? "+thenS+" : "+elseS+")")
 		}
@@ -1435,19 +1798,20 @@ func (c *compiler) branchToStr(parts []parser.Part, scope map[string]bool) strin
 }
 
 // processChildren applies the whitespace policy, coalesces text runs, and drops
-// pure inter-element whitespace, returning items in source order.
-func (c *compiler) processChildren(children []parser.Node, scope map[string]bool) ([]item, error) {
+// pure inter-element whitespace, returning items in source order. It classifies
+// one children list only; descendants are processed as they are emitted.
+func (c *compiler) processChildren(children []parser.Node, scope scopeMap) ([]item, error) {
 	var items []item
 	var run []parser.Node
-	// leftBlock: the sibling immediately before the run being collected is a
-	// control-flow block, so the run's leading edge is a word boundary rather
-	// than an element boundary (see the package doc).
-	leftBlock := false
-	flush := func(rightBlock bool) error {
+	// leftSibling: a sibling node, not the parent's edge, sits immediately
+	// before the run being collected, so a stripped leading edge is a word
+	// boundary rather than indentation (see the package doc).
+	leftSibling := false
+	flush := func(rightSibling bool) error {
 		if len(run) == 0 {
 			return nil
 		}
-		val, ok, err := c.buildTextRun(run, scope, leftBlock, rightBlock)
+		val, ok, err := c.buildTextRun(run, scope, leftSibling, rightSibling)
 		run = run[:0]
 		if err != nil {
 			return err
@@ -1458,16 +1822,26 @@ func (c *compiler) processChildren(children []parser.Node, scope map[string]bool
 		return nil
 	}
 	for _, ch := range children {
+		// A markup interpolation (D174) renders as its own live-HTML vnode: a
+		// non-text sibling, so it ends the text run exactly as an element does
+		// and the text on either side keeps its one space (D168).
+		if isMarkupInterp(ch) {
+			if err := flush(true); err != nil {
+				return nil, err
+			}
+			items = append(items, item{node: ch})
+			leftSibling = true
+			continue
+		}
 		switch ch.(type) {
 		case *parser.Text, *parser.Interpolation:
 			run = append(run, ch)
 		default:
-			block := isControlFlow(ch)
-			if err := flush(block); err != nil {
+			if err := flush(true); err != nil {
 				return nil, err
 			}
 			items = append(items, item{node: ch})
-			leftBlock = block
+			leftSibling = true
 		}
 	}
 	if err := flush(false); err != nil {
@@ -1476,28 +1850,62 @@ func (c *compiler) processChildren(children []parser.Node, scope map[string]bool
 	return items, nil
 }
 
-// isControlFlow reports whether n is a control-flow block — `{#if}` (which
-// `{#unless}` desugars to), `{#for}`, or `{#case}`. Such a node breaks the
-// coalesced text run, but the break is a word boundary, not an element
-// boundary: a newline between a run and an adjacent control-flow sibling
-// separates words exactly as a run-internal newline does. Elements,
-// components, markers, and `{#svg}` are deliberately NOT control flow — the
-// element-boundary strip stands there (D168).
-func isControlFlow(n parser.Node) bool {
-	switch n.(type) {
-	case *parser.If, *parser.For, *parser.Case:
-		return true
+// normalizeNewlines turns CRLF and a lone CR into LF, the HTML input-stream
+// rule, for text whose bytes are otherwise kept.
+func normalizeNewlines(s string) string {
+	if !strings.Contains(s, "\r") {
+		return s
 	}
-	return false
+	return strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
+}
+
+// preservesWhitespace reports whether an element's body keeps its source
+// whitespace byte for byte (D168 rule 6).
+func preservesWhitespace(tag string) bool {
+	return tag == "pre" || tag == "textarea"
+}
+
+// preservedBody returns a <pre>/<textarea> body without the one newline that
+// HTML's parser drops directly after the start tag, so `<pre>` + newline +
+// `code` renders the same in the browser runtime as the same markup parsed.
+// Only a first-child Text node can carry that newline, and a {#raw} body's text
+// never does: `<pre>{#raw}` + newline keeps its bytes (D150), since the newline
+// does not follow the start tag in the source.
+func preservedBody(children []parser.Node) []parser.Node {
+	if len(children) == 0 {
+		return children
+	}
+	t, ok := children[0].(*parser.Text)
+	if !ok || t.Raw {
+		return children
+	}
+	v := t.Value
+	switch {
+	case strings.HasPrefix(v, "\r\n"):
+		v = v[2:]
+	case strings.HasPrefix(v, "\n"), strings.HasPrefix(v, "\r"):
+		v = v[1:]
+	default:
+		return children
+	}
+	if v == "" {
+		return children[1:]
+	}
+	out := make([]parser.Node, len(children))
+	copy(out, children)
+	out[0] = &parser.Text{Value: v, Raw: t.Raw, Pos: t.Pos}
+	return out
 }
 
 // buildTextRun coalesces a run of Text/Interpolation siblings into a single
 // text-vnode value expression. Returns ("", false, nil) when the run reduces to
 // nothing (pure whitespace); a positioned error when an interpolation is an
-// object literal (SPEC §6). leftBlock/rightBlock report that the run is bounded
-// by a control-flow sibling, which makes that edge a run-INTERNAL boundary for
-// padding purposes.
-func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool, leftBlock, rightBlock bool) (string, bool, error) {
+// object literal (SPEC §6). leftSibling/rightSibling report that the run is
+// bounded by a sibling node rather than the parent's edge, which makes that
+// edge a word boundary for padding purposes (D168).
+func (c *compiler) buildTextRun(run []parser.Node, scope scopeMap, leftSibling, rightSibling bool) (string, bool, error) {
+	facts := c.factSink()
+	defer func() { c.absorb(facts, scope) }()
 	type seg struct {
 		js         string // non-static segments
 		text       string // static segments, quoted at join time
@@ -1512,8 +1920,13 @@ func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool, leftBl
 	for _, n := range run {
 		switch t := n.(type) {
 		case *parser.Text:
-			if t.Raw {
-				segs = append(segs, seg{text: t.Value, static: true})
+			if t.Raw || c.preserveWS > 0 {
+				// {#raw} bytes, and every Text node inside a <pre>/<textarea>
+				// body, are emitted as authored (D150, D168) — except line
+				// endings, which normalize to LF as HTML's input stream does, so
+				// a CRLF checkout emits the same bundle and the mounted text
+				// matches the prerendered page.
+				segs = append(segs, seg{text: normalizeNewlines(t.Value), static: true})
 				continue
 			}
 			s, keep, padL, padR := processText(t.Value)
@@ -1533,8 +1946,8 @@ func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool, leftBl
 			if startsWithObjectLiteral(t.Expr) {
 				return "", false, c.cgErr(t.Pos, objectLiteralMsg)
 			}
-			expr := c.applyFormatters(resolveExpr(t.Expr, scope), t.Formatters, scope)
-			segs = append(segs, seg{js: c.displayValue(expr, t.Expr), static: false})
+			js := c.valueInto(t.ExprAST, scope, facts)
+			segs = append(segs, seg{js: c.displayValue(js, t.Expr), static: false})
 		}
 	}
 	if len(segs) == 0 {
@@ -1555,18 +1968,18 @@ func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool, leftBl
 			segs[i].gap = true
 		}
 	}
-	// A control-flow sibling breaks the run without ending the line of prose,
-	// so a stripped edge that borders one is padded exactly like an internal
-	// boundary. Element boundaries keep the strip.
+	// A sibling node breaks the run without ending the line of prose, so a
+	// stripped edge that borders one is padded exactly like an internal
+	// boundary. Only the parent's edges keep the strip.
 	trailGap := false
-	if leftBlock && (leadPad || segs[0].padL) {
+	if leftSibling && (leadPad || segs[0].padL) {
 		if segs[0].static {
 			segs[0].text = " " + segs[0].text
 		} else {
 			segs[0].gap = true
 		}
 	}
-	if rightBlock && segs[len(segs)-1].padR {
+	if rightSibling && segs[len(segs)-1].padR {
 		last := len(segs) - 1
 		if segs[last].static {
 			segs[last].text += " "
@@ -1599,48 +2012,6 @@ func (c *compiler) displayValue(expr, source string) string {
 	c.usesDisplayValue = true
 	label := jsString(strings.TrimSpace(source))
 	return "__s(" + expr + ", typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? " + label + " : 0)"
-}
-
-// applyFormatters nests a formatter chain as calls into the raw formatter map:
-// `{ x | a | b(c) }` → `(__f["b"] || __f.__missing("b"))((__f["a"] || __f.__missing("a"))(x), c)`.
-// Access is BRACKETED with a JSON-quoted name, uniformly for every formatter —
-// matching the runtime registry, whose keys are arbitrary strings (so a
-// hyphenated `foo-bar` is a legitimate name). Dot access (`__f.foo-bar`) would
-// have parsed as subtraction: valid JS, silent at build, then a runtime
-// ReferenceError before the D43 guard could engage. Every call is wrapped in the
-// __missing typo-guard (v1.12, D43 — supersedes the D25 bare-call deferral): a
-// name absent from the runtime registry resolves to __f.__missing(name), a
-// factory that warns once (naming the offender, with a did-you-mean) and returns
-// a pass-through formatter, so a typo'd formatter renders the raw value instead
-// of crashing the view. The name is passed as a JS string literal so the runtime
-// error can identify it. See DOC-SPEC §6.
-//
-// An empty chain returns base untouched and records nothing: c.usesFormatters
-// gates the `const __f` line, so only a real formatter call pays for the
-// registry read.
-func (c *compiler) applyFormatters(base string, fmts []parser.FormatterCall, scope map[string]bool) string {
-	if len(fmts) == 0 {
-		return base
-	}
-	c.usesFormatters = true
-	out := base
-	for _, fc := range fmts {
-		name := strconv.Quote(fc.Name)
-		var b strings.Builder
-		b.WriteString("(__f[")
-		b.WriteString(name)
-		b.WriteString("] || __f.__missing(")
-		b.WriteString(name)
-		b.WriteString("))(")
-		b.WriteString(out)
-		for _, a := range fc.Args {
-			b.WriteString(", ")
-			b.WriteString(resolveExpr(a, scope))
-		}
-		b.WriteString(")")
-		out = b.String()
-	}
-	return out
 }
 
 var wsRun = regexp.MustCompile(`[ \t\r\n]+`)
@@ -1893,12 +2264,37 @@ func tplEscape(s string) string {
 	return b.String()
 }
 
-func scopeAdd(scope map[string]bool, name string) map[string]bool {
+// scopeAdd binds name as an ordinary lexical name (emitted bare).
+func scopeAdd(scope scopeMap, name string) scopeMap {
+	return scopeAddAs(scope, name, "")
+}
+
+// scopeAddAs binds name to the JS it resolves to — "" for an ordinary binding,
+// or a rewrite such as "s.item" for a lowered {#for} row local (the D170
+// emission contract).
+func scopeAddAs(scope scopeMap, name, js string) scopeMap {
 	out := cloneScope(scope)
 	if name != "" {
-		out[name] = true
+		out[name] = js
 	}
 	return out
+}
+
+// identNode is a synthetic Identifier for a name the compiler itself reads —
+// a loop's generated key (`__i`, a range counter, the row block's key
+// sentinel). It has no source position; the render target never maps one.
+func identNode(name string) *expr.Identifier {
+	return &expr.Identifier{Name: name}
+}
+
+// keyOfNode is the synthetic `ViewNode.keyOf(<item>)` key of a `.map` loop
+// row (D58). ViewNode is in the body scope, and a chain off it is never
+// guarded.
+func keyOfNode(item string) expr.Node {
+	return &expr.Call{
+		Callee: &expr.Member{Object: identNode("ViewNode"), Property: "keyOf"},
+		Args:   []expr.Node{identNode(item)},
+	}
 }
 
 var spaces = strings.Repeat(" ", 256)

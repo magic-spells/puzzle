@@ -30,6 +30,19 @@ describe('SSG serializer (M1)', () => {
 		});
 	});
 
+	describe('pre/textarea leading newline (D168)', () => {
+		it('doubles a leading newline so the HTML parser keeps one', async () => {
+			expect(await serialize(h('pre', {}, [text('\nx')]))).toBe('<pre>\n\nx</pre>');
+			expect(await serialize(h('textarea', {}, [text('\nx')]))).toBe('<textarea>\n\nx</textarea>');
+			expect(await serialize(h('textarea', { value: '\nx' }))).toBe('<textarea>\n\nx</textarea>');
+		});
+
+		it('leaves other bodies and other tags alone', async () => {
+			expect(await serialize(h('pre', {}, [text('  x\n')]))).toBe('<pre>  x\n</pre>');
+			expect(await serialize(h('div', {}, [text('\nx')]))).toBe('<div>\nx</div>');
+		});
+	});
+
 	describe('void elements', () => {
 		it('self-closes without a closing tag or children', async () => {
 			expect(await serialize(h('img', { src: 'x.png', alt: 'X' }))).toBe('<img src="x.png" alt="X">');

@@ -1,0 +1,23 @@
+<puzzle-view class="Profile">
+  <h1>{ title }</h1>
+  <p>{ message }</p>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Profile extends PuzzleView {
+  data(params, props) {
+    return {
+      title: 'Profile',
+      message: 'This view was scaffolded by puzzle generate.'
+    };
+  }
+}
+</script>
+
+<style>
+.Profile {
+  display: block;
+}
+</style>

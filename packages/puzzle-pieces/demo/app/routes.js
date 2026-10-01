@@ -2,8 +2,12 @@ import DefaultLayout from './layouts/Default.pzl';
 import Introduction from './views/Introduction.pzl';
 import ComponentsIndex from './views/ComponentsIndex.pzl';
 import Theming from './views/Theming.pzl';
+import SchemePanel from './views/themes/SchemePanel.pzl';
+import Compare from './views/themes/Compare.pzl';
+import Pieces from './views/themes/Pieces.pzl';
 import AccordionDoc from './views/components/AccordionDoc.pzl';
 import AlertDoc from './views/components/AlertDoc.pzl';
+import AppearancePickerDoc from './views/components/AppearancePickerDoc.pzl';
 import AlertDialogDoc from './views/components/AlertDialogDoc.pzl';
 import AreaChartDoc from './views/components/AreaChartDoc.pzl';
 import AspectRatioDoc from './views/components/AspectRatioDoc.pzl';
@@ -41,7 +45,9 @@ import EmojiPickerSimpleDoc from './views/components/EmojiPickerSimpleDoc.pzl';
 import EmptyDoc from './views/components/EmptyDoc.pzl';
 import FaderDoc from './views/components/FaderDoc.pzl';
 import FieldDoc from './views/components/FieldDoc.pzl';
+import HamburgerDoc from './views/components/HamburgerDoc.pzl';
 import HoverCardDoc from './views/components/HoverCardDoc.pzl';
+import ImageZoomDoc from './views/components/ImageZoomDoc.pzl';
 import InputGroupDoc from './views/components/InputGroupDoc.pzl';
 import InputOtpDoc from './views/components/InputOtpDoc.pzl';
 import KanbanDoc from './views/components/KanbanDoc.pzl';
@@ -76,6 +82,7 @@ import SearchFieldDoc from './views/components/SearchFieldDoc.pzl';
 import SelectDoc from './views/components/SelectDoc.pzl';
 import SeparatorDoc from './views/components/SeparatorDoc.pzl';
 import SheetDoc from './views/components/SheetDoc.pzl';
+import ShimmerTextDoc from './views/components/ShimmerTextDoc.pzl';
 import SidebarDoc from './views/components/SidebarDoc.pzl';
 import SkeletonDoc from './views/components/SkeletonDoc.pzl';
 import SliderDoc from './views/components/SliderDoc.pzl';
@@ -83,6 +90,7 @@ import SparklineDoc from './views/components/SparklineDoc.pzl';
 import SpinnerDoc from './views/components/SpinnerDoc.pzl';
 import SplitButtonDoc from './views/components/SplitButtonDoc.pzl';
 import SplitPanelDoc from './views/components/SplitPanelDoc.pzl';
+import SplitTextDoc from './views/components/SplitTextDoc.pzl';
 import StatCardDoc from './views/components/StatCardDoc.pzl';
 import StepperDoc from './views/components/StepperDoc.pzl';
 import SwitchDoc from './views/components/SwitchDoc.pzl';
@@ -122,6 +130,29 @@ export default [
 		layout: DefaultLayout,
 		meta: { title: 'Theming & tokens — Puzzle Pieces' },
 	},
+	// Design-system panels (FEATURE-THEMES). Static paths first so the router
+	// never reads `compare` / `pieces` as a scheme name.
+	{
+		path: '/themes/compare',
+		name: 'themes-compare',
+		view: Compare,
+		layout: DefaultLayout,
+		meta: { title: 'Compare schemes × modes — Puzzle Pieces' },
+	},
+	{
+		path: '/themes/pieces',
+		name: 'themes-pieces',
+		view: Pieces,
+		layout: DefaultLayout,
+		meta: { title: 'Pieces in the current theme — Puzzle Pieces' },
+	},
+	{
+		path: '/themes/:scheme',
+		name: 'themes-scheme',
+		view: SchemePanel,
+		layout: DefaultLayout,
+		meta: { title: 'Scheme tokens — Puzzle Pieces' },
+	},
 	{
 		path: '/components/accordion',
 		name: 'accordion',
@@ -142,6 +173,13 @@ export default [
 		view: AlertDialogDoc,
 		layout: DefaultLayout,
 		meta: { title: 'Alert Dialog — Puzzle Pieces' },
+	},
+	{
+		path: '/components/appearance-picker',
+		name: 'appearance-picker',
+		view: AppearancePickerDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Appearance Picker — Puzzle Pieces' },
 	},
 	{
 		path: '/components/area-chart',
@@ -396,11 +434,25 @@ export default [
 		meta: { title: 'Field — Puzzle Pieces' },
 	},
 	{
+		path: '/components/hamburger',
+		name: 'hamburger',
+		view: HamburgerDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Hamburger — Puzzle Pieces' },
+	},
+	{
 		path: '/components/hover-card',
 		name: 'hover-card',
 		view: HoverCardDoc,
 		layout: DefaultLayout,
 		meta: { title: 'Hover Card — Puzzle Pieces' },
+	},
+	{
+		path: '/components/image-zoom',
+		name: 'image-zoom',
+		view: ImageZoomDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Image Zoom — Puzzle Pieces' },
 	},
 	{
 		path: '/components/input-group',
@@ -641,6 +693,13 @@ export default [
 		meta: { title: 'Sheet — Puzzle Pieces' },
 	},
 	{
+		path: '/components/shimmer-text',
+		name: 'shimmer-text',
+		view: ShimmerTextDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Shimmer Text — Puzzle Pieces' },
+	},
+	{
 		path: '/components/sidebar',
 		name: 'sidebar',
 		view: SidebarDoc,
@@ -688,6 +747,13 @@ export default [
 		view: SplitPanelDoc,
 		layout: DefaultLayout,
 		meta: { title: 'Split Panel — Puzzle Pieces' },
+	},
+	{
+		path: '/components/split-text',
+		name: 'split-text',
+		view: SplitTextDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Split Text — Puzzle Pieces' },
 	},
 	{
 		path: '/components/stat-card',

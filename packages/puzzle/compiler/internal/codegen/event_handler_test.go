@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // compileEventPZL compiles an in-memory .pzl view and syntax-checks the emitted
@@ -23,14 +23,17 @@ func TestEventHandlerLoopItemNamedEvent(t *testing.T) {
 			"    <button @click={ select(event) }>select</button>\n"+
 			"  {/for}",
 	)
-	if !strings.Contains(got, "__d.events.map((event) =>") {
-		t.Fatalf("loop item event was not emitted as the row binding:\n%s", got)
+	if !strings.Contains(got, "__l(this, this, 0, __d.events, (s) =>") {
+		t.Fatalf("loop item event was not lowered to a list block:\n%s", got)
 	}
-	if !strings.Contains(got, "'@click': (__ev) => this.events.select(event)") {
+	// The loop item reads off the row scope; the DOM parameter still renames to
+	// __ev so it cannot shadow it (D170 moves WHERE the item is read, not which
+	// binding wins).
+	if !strings.Contains(got, "'@click': (s.h0 ??= (__ev) => this.events.select(s.item))") {
 		t.Errorf("DOM event parameter must not shadow the loop item:\n%s", got)
 	}
 	if strings.Contains(got, "this.__h") {
-		t.Errorf("handler capturing the loop item event must not be cached:\n%s", got)
+		t.Errorf("handler capturing the loop item must not use the per-instance cache:\n%s", got)
 	}
 }
 
@@ -40,14 +43,14 @@ func TestEventHandlerLoopCounterNamedEvent(t *testing.T) {
 			"    <button @click={ select(event) }>select</button>\n"+
 			"  {/for}",
 	)
-	if !strings.Contains(got, "__d.items.map((item, event) =>") {
-		t.Fatalf("loop counter event was not emitted as the row binding:\n%s", got)
+	if !strings.Contains(got, "__l(this, this, 0, __d.items, (s) =>") {
+		t.Fatalf("loop counter event was not lowered to a list block:\n%s", got)
 	}
-	if !strings.Contains(got, "'@click': (__ev) => this.events.select(event)") {
+	if !strings.Contains(got, "'@click': (s.h0 ??= (__ev) => this.events.select(s.i))") {
 		t.Errorf("DOM event parameter must not shadow the loop counter:\n%s", got)
 	}
 	if strings.Contains(got, "this.__h") {
-		t.Errorf("handler capturing the loop counter event must not be cached:\n%s", got)
+		t.Errorf("handler capturing the loop counter must not use the per-instance cache:\n%s", got)
 	}
 }
 
@@ -57,14 +60,16 @@ func TestEventHandlerGlobalNamedLoopVarNotCached(t *testing.T) {
 			"    <button @click={ open(document) }>open</button>\n"+
 			"  {/for}",
 	)
-	if !strings.Contains(got, "__d.documents.map((document) =>") {
-		t.Fatalf("document loop item was not emitted as the row binding:\n%s", got)
+	if !strings.Contains(got, "__l(this, this, 0, __d.documents, (s) =>") {
+		t.Fatalf("document loop item was not lowered to a list block:\n%s", got)
 	}
-	if !strings.Contains(got, "'@click': (event) => this.events.open(document)") {
-		t.Errorf("each row must emit a fresh closure over its own document value:\n%s", got)
+	// A loop binding owns its name: the handler must read the row's item, never
+	// window.document (and never the data field `document` either).
+	if !strings.Contains(got, "'@click': (s.h0 ??= (event) => this.events.open(s.item))") {
+		t.Errorf("a loop item named like a browser global must resolve to the row scope:\n%s", got)
 	}
 	if strings.Contains(got, "this.__h") {
-		t.Errorf("handler capturing a jsGlobals-named loop item must not be cached:\n%s", got)
+		t.Errorf("handler capturing a loop item named like a browser global must not use the per-instance cache:\n%s", got)
 	}
 }
 
@@ -74,11 +79,11 @@ func TestEventHandlerLoopEventMemberAccess(t *testing.T) {
 			"    <button @click={ pick(event.id) }>pick</button>\n"+
 			"  {/for}",
 	)
-	if !strings.Contains(got, "'@click': (__ev) => this.events.pick(event.id)") {
+	if !strings.Contains(got, "'@click': (s.h0 ??= (__ev) => this.events.pick(s.item?.id))") {
 		t.Errorf("member access must resolve against the loop item, not the DOM event:\n%s", got)
 	}
 	if strings.Contains(got, "this.__h") {
-		t.Errorf("handler capturing event.id must not be cached:\n%s", got)
+		t.Errorf("handler capturing the loop item must not use the per-instance cache:\n%s", got)
 	}
 }
 
@@ -105,6 +110,25 @@ func TestOutsideNullToggleCompiles(t *testing.T) {
 	}
 }
 
+// The condition of a handler-valued conditional is evaluated during render, so
+// it is a value position: member steps are guarded (D173 V4) and a missing
+// `user` binds no handler instead of throwing. The branches' arguments are the
+// same expression language, guarded the same way.
+func TestEventHandlerConditionalConditionIsGuarded(t *testing.T) {
+	got := compileEventPZL(t,
+		"  <button @click={ user.profile.admin ? promote(user.profile.id) : null }>go</button>\n"+
+			"  {#for todo in todos}<li @click={ todo.done ? undo(todo.meta.id) : null }>x</li>{/for}",
+	)
+	for _, want := range []string{
+		"'@click': (__d.user?.profile?.admin) ? (event) => this.events.promote(__d.user?.profile?.id) : null",
+		"'@click': (s.item?.done) ? (event) => this.events.undo(s.item?.meta?.id) : null",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestEventHandlerRejectedFormsRemainPositionedErrors(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -112,8 +136,9 @@ func TestEventHandlerRejectedFormsRemainPositionedErrors(t *testing.T) {
 		message string
 	}{
 		{"binary expression", "a + b", "event handler must be a bare method name or a single call expression"},
-		{"arrow function", "(e) => close(e)", "event handler callee must be a plain method name"},
-		{"this member", "this.close", "event handler must be a bare method name or a single call expression"},
+		// Rejected by the expression grammar while parsing, at the arrow.
+		{"arrow function", "(e) => close(e)", "arrow functions are only available as a call argument"},
+		{"this member", "this.close", "`this` is not available in template expressions"},
 		{"member expression", "handlers.close", "event handler must be a bare method name or a single call expression"},
 	}
 	for _, tc := range cases {

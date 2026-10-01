@@ -11,7 +11,7 @@
  * description/canonical/social metadata crawlers must see without running JS)
  * into the app shell. The router takes over on load (see router.js #swap SSG
  * branch) so subsequent navigation stays SPA. It does NOT touch the managed
- * tags after that (D111): the browser only syncs <title>, so the values baked
+ * tags after that (D84): the browser only syncs <title>, so the values baked
  * here are the ones every crawler reads — they are never re-derived at runtime.
  *
  * This module runs under Node only (it reads/writes files via node:fs). The Go
@@ -49,6 +49,107 @@ import { assembleChain, makeRouteSnapshot, makeRouterStub } from './assemble.js'
 import { isLazyView, resolveRouteViews } from '../router/lazy.js';
 import { resolveHead } from '../head.js';
 import { MANAGED_TAGS } from '../headTags.js';
+import i18nManifest from '@magic-spells/puzzle/i18n/manifest';
+import { createI18n, installTranslate } from '../i18n.js';
+
+/** @import { FormatterRegistry } from '../formatters.js' */
+/** @import { AdapterCapability, ReadStateEnvelope } from '../capabilities.js' */
+/** @import { RouterStub } from './assemble.js' */
+
+/**
+ * A route definition as the prerender reads it (author data: `view`/`layout`
+ * are classes or lazy() markers, plus any custom fields).
+ * @typedef {{ path: string, meta?: Record<string, any> | null, children?: RouteDef[],
+ *   [field: string]: any }} RouteDef
+ */
+/**
+ * One enumerated leaf (enumerateRoutes): its composed path, the root→leaf defs,
+ * and the top-level route's layout (a class, a lazy() marker, or null).
+ * @typedef {{ fullPath: string, chain: RouteDef[], layout: any }} RouteEntry
+ */
+/** @typedef {ReturnType<typeof resolveHead>} ResolvedHead */
+/** @typedef {{ views: string[], layout: string | null }} ChainModules */
+/** @typedef {ReturnType<typeof serializeRouteJSON>} RouteJSON */
+/**
+ * One prerendered page (see prerender's @returns).
+ * @typedef {{ path: string, html: string | null, title: string | null,
+ *   head: ResolvedHead | null, reused?: boolean, prerender?: boolean,
+ *   data?: Record<string, any[]>, readState?: ReadStateEnvelope, modules?: ChainModules,
+ *   route?: RouteJSON }} Page
+ */
+/** @typedef {{ path: string, reason: string, modules?: ChainModules }} SkippedRoute */
+/**
+ * The build's translation state: the locale manifest plus the default locale's
+ * filled table (D175).
+ * @typedef {{ manifest: { defaultLocale: string, locales: Record<string, string>, base?: string },
+ *   table: Record<string, any> }} BuildI18n
+ */
+/**
+ * @typedef {{ mode?: 'hybrid'|'static', routeRouter?: Router, i18n?: BuildI18n | null,
+ *   only?: string[] }} PrerenderOptions
+ */
+/**
+ * The per-page build-time ctx (buildContext): the services PuzzleApp.mount()
+ * wires, over the page's router facade.
+ * @typedef {{ store: Store, router: Router | RouterStub, formatters: FormatterRegistry,
+ *   i18n?: ReturnType<typeof createI18n> }} PrerenderContext
+ */
+
+// ---- translations (D175) ----------------------------------------------------
+
+/**
+ * The build's translation state for the prerender: the manifest plus the
+ * default locale's filled table, read from the staged `locales/` file the Go
+ * build wrote before this pass (no fetch). null without i18n. Every page renders
+ * in the default locale — Node has no navigator or storage to choose another.
+ * `override` ({ manifest, table }) is an internal seam for tests.
+ *
+ * @param {string} outDir
+ * @param {BuildI18n} [override]
+ * @returns {BuildI18n | null}
+ */
+function loadBuildI18n(outDir, override) {
+	if (override) return override;
+	if (!(typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) || !i18nManifest) return null;
+	const file = path.join(outDir, i18nManifest.locales[i18nManifest.defaultLocale]);
+	return { manifest: i18nManifest, table: JSON.parse(fs.readFileSync(file, 'utf8')) };
+}
+
+/**
+ * The island every prerendered page carries so the default locale's first load
+ * makes no request: the table as JSON in a `data-puzzle-locale` script, escaped
+ * by the shared JSON-in-script rule (D113) so a `</script>` inside a string can
+ * never close it.
+ *
+ * @param {BuildI18n | null} i18n
+ * @returns {string}
+ */
+function localeIsland(i18n) {
+	if (!i18n) return '';
+	const tag = i18n.manifest.defaultLocale;
+	return `<script type="application/json" data-puzzle-locale="${escapeAttr(tag)}">${escapeScriptJson(
+		JSON.stringify(i18n.table)
+	)}</script>`;
+}
+
+/**
+ * The shell with `<html lang>` set to the build locale, so a prerendered page
+ * declares the language it is written in before any script runs (the runtime
+ * keeps it in step on every switch). Replaces an existing `lang`, adds one
+ * otherwise; a shell without an `<html>` tag is returned unchanged.
+ *
+ * @param {string} shell
+ * @param {BuildI18n | null} i18n
+ * @returns {string}
+ */
+function withHtmlLang(shell, i18n) {
+	if (!i18n) return shell;
+	const lang = ` lang="${escapeAttr(i18n.manifest.defaultLocale)}"`;
+	return shell.replace(
+		/<html\b([^>]*)>/i,
+		(_, attrs) => `<html${attrs.replace(/\slang\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/i, '')}${lang}>`
+	);
+}
 
 // ---- build-time reads -------------------------------------------------------
 
@@ -81,6 +182,7 @@ import { MANAGED_TAGS } from '../headTags.js';
 // Save/restore is depth-counted because prerenderToDir calls prerender: the
 // inner install must not swap the wrapper back out from under the outer one.
 let fetchPatchDepth = 0;
+/** @type {typeof fetch | null} */
 let nativeFetch = null;
 
 /**
@@ -88,6 +190,9 @@ let nativeFetch = null;
  * with no scheme is exactly the case `new URL()` cannot parse on its own; a
  * Request or URL object already carries an absolute URL (constructing one from
  * a relative string is what threw in the first place), so both pass through.
+ *
+ * @param {unknown} input
+ * @returns {input is string}
  */
 function isAppRelative(input) {
 	if (typeof input !== 'string') return false;
@@ -99,15 +204,19 @@ function isAppRelative(input) {
 	}
 }
 
-/** The diagnostic that replaces `TypeError: Failed to parse URL from …`. */
+/**
+ * The diagnostic that replaces `TypeError: Failed to parse URL from …`.
+ * @param {string} url
+ * @returns {Error}
+ */
 function unresolvableEndpointError(url) {
 	return new Error(
 		`[puzzle] prerender cannot fetch "${url}" — a prerender read runs at build ` +
 			`time in Node, which has no page origin to resolve an app-relative URL ` +
 			`against (a browser resolves it against the page it is on; Node cannot).\n` +
 			`  Have an API? Give the app an absolute origin — ` +
-			`apiURL: 'https://api.example.com' in app/app.js — so the build fetches it ` +
-			`for real.\n` +
+			`apiURL: 'https://api.example.com' in the app entry (app/app.ts or app/app.js) — ` +
+			`so the build fetches it for real.\n` +
 			`  No API? Remove \`endpoint\` from the model's \`static adapter\` — a model ` +
 			`with no endpoint and no read verb never fetches — and seed the store in ` +
 			`\`beforeMount({ store })\`.`
@@ -137,7 +246,7 @@ function restoreBuildFetch() {
 /**
  * Prerender every static route in `config` to an HTML content string + title.
  *
- * @param {object} config the PuzzleApp config (the default-exported app's
+ * @param {Record<string, any>} config the PuzzleApp config (the default-exported app's
  *   `app.config`, or a bare config object) — { target, routes, models,
  *   formatters, apiURL, beforeMount, … }
  * @param {object} [opts]
@@ -149,6 +258,8 @@ function restoreBuildFetch() {
  * @param {Router} [opts.routeRouter] INTERNAL — an already-constructed memory
  *   Router over `config.routes`, so prerenderToDir's up-front route validation and
  *   this pass share one compiled matcher table instead of building it twice.
+ * @param {BuildI18n | null} [opts.i18n] the build's translation
+ *   manifest + default-locale table (prerenderToDir loads it); absent = no i18n
  * @param {string[]} [opts.only] STATIC MODE ONLY — the subset of route paths to
  *   actually render. Every other reachable route still produces a page object
  *   (so route enumeration, skip/duplicate detection, slug assignment and the
@@ -163,8 +274,8 @@ function restoreBuildFetch() {
  *     head: { title: string|null, description: string|null, canonical: string|null,
  *       socialImage: string|null } | null,
  *     prerender?: boolean,
- *     data?: object, readState?: object, modules?: { views: string[], layout: string|null },
- *     route?: object }>,
+ *     data?: Record<string, any[]>, readState?: ReadStateEnvelope, modules?: { views: string[], layout: string|null },
+ *     route?: RouteJSON }>,
  *   skipped: Array<{ path: string, reason: string }>,
  *   warnings: string[]
  * }>} `html`/`title`/`head` are null for a `prerender: false` page (the shell is
@@ -186,6 +297,11 @@ export async function prerender(config, opts = {}) {
 	}
 }
 
+/**
+ * @param {Record<string, any>} config
+ * @param {PrerenderOptions} [opts]
+ * @returns {Promise<{ pages: Page[], skipped: SkippedRoute[], warnings: string[] }>}
+ */
 async function prerenderPass(config, opts = {}) {
 	const mode = opts.mode ?? 'hybrid';
 	const isStatic = mode === 'static';
@@ -228,7 +344,9 @@ async function prerenderPass(config, opts = {}) {
 	// nothing needs a subset render there.
 	const only = isStatic && opts.only ? new Set(opts.only) : null;
 
+	/** @type {Page[]} */
 	const pages = [];
+	/** @type {SkippedRoute[]} */
 	const skipped = [];
 	// A skipped route reports its chain modules in static mode (D155): it is never
 	// rendered, but its views still hang off the route table in the prerender
@@ -236,7 +354,13 @@ async function prerenderPass(config, opts = {}) {
 	// descends THROUGH the skipped route, marking every component it shares with a
 	// rendered page render-wide — which turns one component edit into a full
 	// re-render of the site. `/blog` beside `/blog/:id` is the everyday shape.
+	/**
+	 * @param {string} routePath
+	 * @param {string} reason
+	 * @param {RouteEntry} [entry]
+	 */
 	const skip = (routePath, reason, entry) => {
+		/** @type {SkippedRoute} */
 		const record = { path: routePath, reason };
 		if (isStatic && entry) record.modules = collectSkippedModules(entry);
 		skipped.push(record);
@@ -287,6 +411,20 @@ async function prerenderPass(config, opts = {}) {
 		return routeRouter;
 	};
 
+	// One build-wide i18n service over the default locale's filled table (D175):
+	// every page renders in the default locale, and nothing is fetched.
+	let i18n = null;
+	if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && opts.i18n) {
+		const { manifest, table } = opts.i18n;
+		i18n = createI18n({
+			manifest,
+			tables: { [manifest.defaultLocale]: table },
+			locale: manifest.defaultLocale,
+		});
+		await i18n.__ready();
+	}
+
+	/** @param {RouteEntry} [entry] absent for the beforeMount-only fallback */
 	const createPageContext = async (entry) => {
 		builtContext = true;
 		// Both modes thread the page's route snapshot into their prerender router:
@@ -312,7 +450,7 @@ async function prerenderPass(config, opts = {}) {
 				});
 			}
 		}
-		return buildContext(config, { router });
+		return buildContext(config, { router, i18n });
 	};
 
 	for (const entry of entries) {
@@ -376,6 +514,7 @@ async function prerenderPass(config, opts = {}) {
 		// per-page entry module is byte-identical either way; `data` is deliberately
 		// absent, because a page with no fresh island must not be written.
 		if (only && !only.has(fullPath)) {
+			/** @type {Page} */
 			const page = { path: fullPath, html: null, title: null, head: null, reused: true };
 			if (chain.some((route) => route.prerender === false)) page.prerender = false;
 			page.modules = await collectModules(entry);
@@ -391,6 +530,7 @@ async function prerenderPass(config, opts = {}) {
 		// into the empty target — html stays null (CONTRACT 3).
 		if (chain.some((route) => route.prerender === false)) {
 			const ctx = await createPageContext(entry);
+			/** @type {Page} */
 			const page = { path: fullPath, html: null, title: null, head: null, prerender: false };
 			if (isStatic) await attachStaticFields(page, entry, ctx);
 			pages.push(page);
@@ -413,12 +553,13 @@ async function prerenderPass(config, opts = {}) {
 		let rendered;
 		try {
 			rendered = await renderRoute(entry, ctx);
-		} catch (err) {
+		} catch (/** @type {any} */ err) {
 			// A data() rejection must fail loudly, naming the route (DOC plan risk).
 			throw new Error(`[puzzle] prerender failed for route "${fullPath}": ${err.message}`, {
 				cause: err,
 			});
 		}
+		/** @type {Page} */
 		const page = { path: fullPath, html: rendered.html, title: rendered.title, head: rendered.head };
 		if (isStatic) await attachStaticFields(page, entry, ctx);
 		pages.push(page);
@@ -455,10 +596,12 @@ async function prerenderPass(config, opts = {}) {
  * index.html`, `/components/panel-stack` → `outDir/components/panel-stack/
  * index.html` (parent dirs created as needed).
  *
- * @param {object} config the PuzzleApp config (see prerender)
- * @param {object} options
- * @param {string} options.outDir directory to write the per-route files into
- * @param {string} options.shellPath the app shell HTML (the built index.html)
+ * @param {Record<string, any>} config the PuzzleApp config (see prerender)
+ * @param {object} [options] (`outDir` and `shellPath` are required; a missing one throws)
+ * @param {string} [options.outDir] directory to write the per-route files into
+ * @param {string} [options.shellPath] the app shell HTML (the built index.html)
+ * @param {BuildI18n} [options.i18n] internal test seam: the
+ *   translation manifest + default-locale table, read from `outDir` when absent
  * @param {'hybrid'|'static'} [options.mode] `'hybrid'` (default) is the current
  *   router-takeover output, byte-identical to before D81. `'static'` emits true
  *   static pages: the `/app.js` bundle tag is stripped, each page carries a
@@ -473,8 +616,8 @@ async function prerenderPass(config, opts = {}) {
  *   exists so the summary can report whether it IS `config.adapter`. Present but
  *   `undefined` is a real answer (a module that exports no default); the KEY's
  *   absence is what means "no such module".
- * @returns {Promise<{ outDir: string, written: Array<object>, skipped: Array<{path,reason}>,
- *   warnings: string[], count: number, mode?: string, target?: string,
+ * @returns {Promise<{ outDir: string, written: import('../../types/ssg.js').WrittenPage[], skipped: SkippedRoute[],
+ *   warnings: string[], count: number, mode?: 'static', target?: string,
  *   apiURL?: string|null, hasFormatters?: boolean, hasAdapter?: boolean,
  *   adapterConfigured?: boolean, adapterModuleMatches?: boolean|null }>}
  */
@@ -492,8 +635,11 @@ export async function prerenderToDir(config, options = {}) {
 	const routeRouter = new Router(config.routes ?? [], { mode: memoryRouter() });
 
 	const targetId = parseTargetId(config.target);
-	const shell = fs.readFileSync(shellPath, 'utf8');
-	const { pages, skipped, warnings } = await prerender(config, { mode, routeRouter, only });
+	const i18n = loadBuildI18n(outDir, options.i18n);
+	const shell = withHtmlLang(fs.readFileSync(shellPath, 'utf8'), i18n);
+	const { pages, skipped, warnings } = await prerender(config, { mode, routeRouter, only, i18n });
+	// Built once: every page carries the same default-locale table (D175).
+	const island = localeIsland(i18n);
 
 	if (mode === 'static') {
 		return writeStaticDir({
@@ -504,6 +650,7 @@ export async function prerenderToDir(config, options = {}) {
 			pages,
 			skipped,
 			warnings,
+			island,
 			adapterModuleMatches:
 				'adapterModule' in options ? options.adapterModule === config.adapter : null,
 		});
@@ -537,6 +684,7 @@ export async function prerenderToDir(config, options = {}) {
 							content: page.html,
 							title: page.title,
 							head: page.head,
+							island,
 						});
 			yield { outPath, html };
 		}
@@ -568,8 +716,13 @@ export async function prerenderToDir(config, options = {}) {
  */
 const WRITE_CONCURRENCY = 16;
 
+/**
+ * @param {Iterator<{ outPath: string, html: string }>} files
+ * @returns {Promise<void>}
+ */
 async function writeFiles(files) {
 	const madeDirs = new Set();
+	/** @type {unknown} */
 	let failure = null;
 
 	const worker = async () => {
@@ -612,6 +765,10 @@ async function writeFiles(files) {
  * and its slug exactly as it would have, and is reported in `written` with
  * `reused: true` — but no file is produced for it. Everything order-dependent
  * therefore lands identically to a full render; only the writes differ.
+ *
+ * @param {{ config: Record<string, any>, outDir: string, shell: string, targetId: string,
+ *   pages: Page[], skipped: SkippedRoute[], warnings: string[], island?: string,
+ *   adapterModuleMatches?: boolean | null }} options
  */
 async function writeStaticDir({
 	config,
@@ -621,6 +778,7 @@ async function writeStaticDir({
 	pages,
 	skipped,
 	warnings,
+	island = '',
 	adapterModuleMatches = null,
 }) {
 	// The app-bundle tag is stripped once (the shell is identical for every page) so
@@ -651,7 +809,7 @@ async function writeStaticDir({
 	// the client stub validate it, so a malformed base fails the build here.
 	const base = normalizeBase(config.routerBase);
 
-	const slugCounts = new Map();
+	const usedSlugs = new Set();
 	// outPath → the route path that already claimed it. Two routes can declare the
 	// SAME path, or two paths that normalize to one file (`/caf%C3%A9` and `/café`
 	// decode identically). Slugs are collision-suffixed but the output file is
@@ -662,6 +820,10 @@ async function writeStaticDir({
 	// itself refuses the second claim — the emitted HTML then belongs to the first
 	// route in reachable order and no dead second bundle is generated.
 	const claimedPaths = new Map();
+	/**
+	 * @type {Array<{ path: string, file: string, prerender: boolean, entry: string,
+	 *   modules: ChainModules, route: Page['route'], reused?: boolean }>}
+	 */
 	const written = [];
 	// The pool pulls pages through this generator, so only its window of injected
 	// HTML is alive at once — collecting every page's HTML first held a second copy
@@ -682,10 +844,10 @@ async function writeStaticDir({
 			claimedPaths.set(outPath, page.path);
 
 			// The slug is assigned BEFORE the reuse check on purpose: slugs are
-			// order-dependent (uniqueSlug's collision counter walks the page list), so a
+			// order-dependent (uniqueSlug's used set accumulates over the page list), so a
 			// subset render has to consume them for every page a full render would, or
 			// the surviving pages' `_puzzle/<slug>.js` URLs would renumber.
-			const slug = uniqueSlug(computeSlug(page.path), slugCounts);
+			const slug = uniqueSlug(computeSlug(page.path), usedSlugs);
 			if (page.reused) {
 				written.push({
 					path: page.path,
@@ -707,6 +869,7 @@ async function writeStaticDir({
 				slug,
 				data: page.data ?? {},
 				readState: page.readState ?? null,
+				island,
 			});
 			written.push({
 				path: page.path,
@@ -727,7 +890,7 @@ async function writeStaticDir({
 		skipped,
 		warnings,
 		count: written.length,
-		mode: 'static',
+		mode: /** @type {'static'} */ ('static'),
 		target: targetId,
 		apiURL: config.apiURL ?? null,
 		routerBase: config.routerBase,
@@ -759,7 +922,7 @@ async function writeStaticDir({
  * In STATIC it is a per-page makeRouterStub over the same snapshot — the SAME stub
  * the browser kernel (static/index.js buildStaticContext) wires, and it encodes
  * history-style too, or router.url()/current would differ between the prerendered
- * HTML and the client re-render for any based app (the `{ path | link }` formatter
+ * HTML and the client re-render for any based app (the `{ link(path) }` function
  * reads router.url; a view may read router.current). Static pages ship no router
  * and no click interception, so a hash-shaped href (`#/about`) would be a dead link
  * on a page that physically lives at /about/index.html; the file layout is
@@ -769,11 +932,19 @@ async function writeStaticDir({
  *
  * `config.beforeMount` is awaited with a `{ store, config }` facade (not a real
  * PuzzleApp — documented) so a build-time store seed lands before the first data().
+ *
+ * @param {Record<string, any>} config
+ * @param {{ router: Router | RouterStub, i18n?: ReturnType<typeof createI18n> | null }} services
+ * @returns {Promise<PrerenderContext>}
  */
-async function buildContext(config, { router }) {
+async function buildContext(config, { router, i18n = null }) {
 	const { models = {}, formatters = {}, apiURL, storage, adapter, beforeRequest } = config;
 
 	installAdapterCapability(adapter, 'config.adapter');
+	/**
+	 * @type {{ apiURL?: string, adapter?: AdapterCapability,
+	 *   storage?: Pick<Storage, 'getItem' | 'setItem'> | null, beforeRequest?: Function }}
+	 */
 	const storeOptions = { apiURL, adapter };
 	if (storage !== undefined) storeOptions.storage = storage;
 	// The adapter request hook rides along (v1.55, D91) so a build-time beforeMount
@@ -784,7 +955,14 @@ async function buildContext(config, { router }) {
 	const store = new Store(models, storeOptions);
 	const registry = makeFormatterRegistry(formatters, (path) => router.url(path));
 
+	/** @type {PrerenderContext} */
 	const ctx = { store, router, formatters: registry };
+	// The build's i18n service (D175), exactly as PuzzleApp wires it: ctx.i18n plus
+	// the service-bound `t` formatter, which an app `t` still overrides.
+	if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && i18n) {
+		ctx.i18n = i18n;
+		installTranslate(registry, i18n);
+	}
 
 	// Receiver parity with the browser mount (app.js: beforeMount.call(app, app)):
 	// the function-form hook sees the `{ store, config }` facade as BOTH its receiver
@@ -808,9 +986,18 @@ async function buildContext(config, { router }) {
  * composed path. The SSG-only bit is what each leaf carries: `{ fullPath, chain
  * (root→leaf defs), layout }`, where the layout is the top-level route's `layout`
  * (children inherit it). Exported for the drift-guard test.
+ *
+ * @param {RouteDef[]} routes
+ * @returns {RouteEntry[]}
  */
 export function enumerateRoutes(routes) {
+	/** @type {RouteEntry[]} */
 	const entries = [];
+	/**
+	 * @param {RouteDef[]} chain
+	 * @param {string[]} fullPaths
+	 * @returns {RouteEntry}
+	 */
 	const makeLeaf = (chain, fullPaths) => ({
 		fullPath: fullPaths[fullPaths.length - 1],
 		chain,
@@ -827,13 +1014,20 @@ export function enumerateRoutes(routes) {
  * opaque, but the factories tag their descriptor with a `name` for exactly this;
  * a leftover mode STRING (which the Router itself now rejects) is quoted as-is,
  * so an app mid-migration reads a message about the value it actually wrote.
+ *
+ * @param {string | { name?: string } | null} mode
+ * @returns {string}
  */
 function describeRouterMode(mode) {
 	if (typeof mode === 'string') return `the string "${mode}"`;
 	return mode?.name ? `${mode.name} routing` : 'a non-path mode';
 }
 
-/** Whether any route definition at any depth declares a guard. */
+/**
+ * Whether any route definition at any depth declares a guard.
+ * @param {RouteDef[]} routes
+ * @returns {boolean}
+ */
 function hasGuard(routes) {
 	return routes.some(
 		(route) => typeof route.guard === 'function' || (route.children && hasGuard(route.children))
@@ -850,6 +1044,10 @@ function hasGuard(routes) {
  * ONE resolveHead walk feeds both `head` and the compatibility `title`
  * (=== head.title), so this path and the router's #syncHead can never diverge
  * on resolution semantics.
+ *
+ * @param {RouteEntry} entry
+ * @param {PrerenderContext} ctx
+ * @returns {Promise<{ html: string, title: string | null, head: ResolvedHead }>}
  */
 async function renderRoute(entry, ctx) {
 	const { chain } = entry;
@@ -871,6 +1069,11 @@ async function renderRoute(entry, ctx) {
  * snapshot (`data`, the same wire shape the HMR path uses — `_serializeAll()`), the
  * chain's `__pzlModule` stamps (`modules`), and a plain-JSON `route` snapshot the
  * browser kernel zips its view classes onto. Mutates `page` in place.
+ *
+ * @param {Page} page
+ * @param {RouteEntry} entry
+ * @param {PrerenderContext} ctx
+ * @returns {Promise<void>}
  */
 async function attachStaticFields(page, entry, ctx) {
 	page.data = ctx.store._serializeAll();
@@ -890,6 +1093,9 @@ async function attachStaticFields(page, entry, ctx) {
  * that codegen did not emit (a hand-written PuzzleView subclass) — static output
  * cannot ship a per-page module for it, so this is a build error naming the route
  * and class.
+ *
+ * @param {RouteEntry} entry
+ * @returns {Promise<ChainModules>}
  */
 
 async function collectModules(entry) {
@@ -910,6 +1116,9 @@ async function collectModules(entry) {
  * than thrown on. The static dev builder reads these as extra chain roots, so a
  * root it never learns about only costs conservatism (the walk descends past it
  * and marks more of the graph render-wide), never correctness.
+ *
+ * @param {RouteEntry} entry
+ * @returns {ChainModules}
  */
 function collectSkippedModules(entry) {
 	const views = [];
@@ -925,6 +1134,12 @@ function collectSkippedModules(entry) {
 	return { views, layout };
 }
 
+/**
+ * @param {Function & { __pzlModule?: unknown }} Class a resolved view/layout class
+ * @param {string} routePath
+ * @param {string} kind `view` or `layout`, for the error
+ * @returns {string}
+ */
 function requireStamp(Class, routePath, kind) {
 	const stamp = Class?.__pzlModule;
 	if (typeof stamp !== 'string') {
@@ -944,12 +1159,16 @@ function requireStamp(Class, routePath, kind) {
  * params, chain }` shape by zipping the page's view classes back on and handing the
  * entry to the shared assembleChain (which derives pathname/query/hash there, D83 —
  * they are constants of a static path, so this summary never needs to carry them).
+ *
+ * @param {RouteEntry} entry
+ * @returns {{ path: string, params: {}, chain: Array<{ path: string, name?: string, meta?: object }> }}
  */
 function serializeRouteJSON(entry) {
 	return {
 		path: entry.fullPath,
 		params: {},
 		chain: entry.chain.map((def) => {
+			/** @type {{ path: string, name?: string, meta?: object }} */
 			const out = { path: def.path };
 			if (def.name != null) out.name = def.name;
 			if (def.meta != null) out.meta = def.meta;
@@ -971,8 +1190,13 @@ function serializeRouteJSON(entry) {
  * per-shell plan compiled ONCE per build (getShellPlan, D151), so a page costs
  * one splice over precomputed offsets rather than a document-wide rescan. A
  * missing or non-empty target element is a descriptive throw.
+ *
+ * @param {string} shell
+ * @param {{ targetId: string, content: string, title?: string | null,
+ *   head?: ResolvedHead | null, island?: string }} page
+ * @returns {string}
  */
-export function injectShell(shell, { targetId, content, title, head }) {
+export function injectShell(shell, { targetId, content, title, head, island = '' }) {
 	const plan = getShellPlan(shell);
 	const target = findTarget(shell, plan, targetId);
 	if (!target) {
@@ -991,6 +1215,11 @@ export function injectShell(shell, { targetId, content, title, head }) {
 	];
 	const headOp = headOperation(shell, plan, { head, title });
 	if (headOp) ops.push(headOp);
+	// The locale island (D175) rides at the SHELL's `</body>` anchor, the same
+	// fixed offset the static data island uses (D151); appended when there is none.
+	if (!island) return spliceShell(shell, ops);
+	if (plan.bodyCloseIndex < 0) return spliceShell(shell, ops) + island;
+	ops.push({ start: plan.bodyCloseIndex, end: plan.bodyCloseIndex, text: island });
 	return spliceShell(shell, ops);
 }
 
@@ -1002,7 +1231,11 @@ export function injectShell(shell, { targetId, content, title, head }) {
 // attrs after src (type/defer/etc.) up to the tag close.
 const APP_BUNDLE_RE = /<script\b[^>]*\bsrc=["']\/?app\.js["'][^>]*><\/script>\s*/i;
 
-/** Strip the app-bundle `<script>` from the shell. `found` is false if none matched. */
+/**
+ * Strip the app-bundle `<script>` from the shell. `found` is false if none matched.
+ * @param {string} shell
+ * @returns {{ shell: string, found: boolean }}
+ */
 function stripAppBundle(shell) {
 	const match = APP_BUNDLE_RE.exec(shell);
 	if (!match) return { shell, found: false };
@@ -1026,10 +1259,16 @@ function stripAppBundle(shell) {
  *    the managed D84 tags; bare `title` → the pre-D84 title-only path), scoped
  *    to the shell's head region (D151).
  * The caller has already stripped the app-bundle tag from `shell`.
+ *
+ * @param {string} shell
+ * @param {{ targetId: string, content: string | null, title?: string | null,
+ *   head?: ResolvedHead | null, slug: string, data?: object,
+ *   readState?: Partial<ReadStateEnvelope> | null, base?: string, island?: string }} page
+ * @returns {string}
  */
 export function injectStaticShell(
 	shell,
-	{ targetId, content, title, head, slug, data, readState = null, base = '' }
+	{ targetId, content, title, head, slug, data, readState = null, base = '', island = '' }
 ) {
 	const plan = getShellPlan(shell);
 	const ops = [];
@@ -1064,9 +1303,12 @@ export function injectStaticShell(
 				JSON.stringify(readState)
 			)}</script>`
 		: '';
+	// The locale island (D175) — prerender:false pages carry it too, so no static
+	// page's first load in the default locale makes a request.
 	const scripts =
 		`<script type="application/json" data-puzzle-static-data>${json}</script>` +
 		readIsland +
+		island +
 		`<script type="module" src="${base}/_puzzle/${slug}.js"></script>`;
 	// The island rides before the SHELL's `</body>` — a fixed offset from the plan, so
 	// rendered content can never move the anchor (a `</body>` inside a raw <script>
@@ -1094,8 +1336,14 @@ export function injectStaticShell(
 // payload itself, compared for exact equality: it cannot serve a stale island,
 // because a payload that differs by a single byte misses the cache. Only the
 // escape is skipped — the store snapshot is still serialized fresh per page.
+/** @type {string | null} */
 let lastIslandInput = null;
+/** @type {string | null} */
 let lastIslandOutput = null;
+/**
+ * @param {unknown} data
+ * @returns {string}
+ */
 function islandJson(data) {
 	const json = JSON.stringify(data ?? {});
 	if (json !== lastIslandInput) {
@@ -1109,6 +1357,9 @@ function islandJson(data) {
  * Compute a page's entry slug from its route path (CONTRACT 3): `'/'` → `index`,
  * `'*'` → `404`, otherwise strip leading/trailing `/` and replace each remaining
  * `/` with `--` (`/guide/templates` → `guide--templates`).
+ *
+ * @param {string} routePath
+ * @returns {string}
  */
 function computeSlug(routePath) {
 	if (routePath === '/') return 'index';
@@ -1118,13 +1369,20 @@ function computeSlug(routePath) {
 
 /**
  * Deduplicate a slug within one build: the first occurrence keeps the base, later
- * collisions get `-2`, `-3`, … in enumeration order (CONTRACT 3). `counts` tracks
- * how many times each base has been requested across the run.
+ * collisions get the first free `-2`, `-3`, … in enumeration order (CONTRACT 3).
+ * `used` holds every slug already assigned in the run, suffixed ones included, so
+ * a route whose own base is a taken suffix (`/index-2` after `/` and `/index`)
+ * is suffixed too rather than sharing an entry file.
+ *
+ * @param {string} base
+ * @param {Set<string>} used
+ * @returns {string}
  */
-function uniqueSlug(base, counts) {
-	const n = (counts.get(base) ?? 0) + 1;
-	counts.set(base, n);
-	return n === 1 ? base : `${base}-${n}`;
+function uniqueSlug(base, used) {
+	let slug = base;
+	for (let n = 2; used.has(slug); n++) slug = `${base}-${n}`;
+	used.add(slug);
+	return slug;
 }
 
 /**
@@ -1136,7 +1394,12 @@ function uniqueSlug(base, counts) {
  * Compiled once per distinct target id (ids are config constants, so this is a
  * one-entry map in every real build).
  */
+/** @type {Map<string, RegExp>} */
 const targetRes = new Map();
+/**
+ * @param {string} targetId
+ * @returns {RegExp}
+ */
 function targetElementRe(targetId) {
 	let re = targetRes.get(targetId);
 	if (!re) {
@@ -1166,7 +1429,10 @@ const HEAD_OPEN_RE = /<head\b[^>]*>/i;
 const HEAD_CLOSE_RE = /<\/head>/i;
 const TITLE_ELEMENT_RE = /<title>[\s\S]*?<\/title>/;
 const TITLE_CLOSE_RE = /<\/title>/i;
-const BODY_CLOSE_RE = /<\/body>/i;
+// Global: the plan anchors on the LAST `</body>`, so the text `</body>` in a
+// shell comment or an inline script string before the real one can never
+// swallow the injected islands and page module.
+const BODY_CLOSE_RE = /<\/body>/gi;
 
 /**
  * One compiled marker matcher per managed tag. `spec.id` values are framework
@@ -1178,8 +1444,26 @@ const MANAGED_TAG_RES = MANAGED_TAGS.map((spec) => managedTagRe(spec.id));
 // app-bundle-stripped shell), and a long-lived process could see a few more
 // across builds, so the map is bounded and evicts oldest-first.
 const MAX_SHELL_PLANS = 4;
+/** @type {Map<string, ShellPlan>} */
 const shellPlans = new Map();
 
+/**
+ * @typedef {{ start: number, end: number, tag: string, attrs: string }} ShellTarget
+ */
+/**
+ * The per-shell offsets compileShellPlan computes once per build (D151).
+ * @typedef {{ headStart: number, headEnd: number, hasAnchor: boolean,
+ *   titleSpan: { start: number, end: number } | null,
+ *   edits: Array<{ start: number, end: number, spec: number, first: boolean }>,
+ *   markerCounts: number[], bodyCloseIndex: number,
+ *   targets: Map<string, ShellTarget | null> }} ShellPlan
+ */
+/** @typedef {{ start: number, end: number, text: string }} SpliceOp */
+
+/**
+ * @param {string} shell
+ * @returns {ShellPlan}
+ */
 function getShellPlan(shell) {
 	let plan = shellPlans.get(shell);
 	if (plan) return plan;
@@ -1197,6 +1481,9 @@ function getShellPlan(shell) {
  * — degrades exactly as it always has: the region becomes the prefix ending after
  * the first `</title>`, so managed tags ride after the title; with neither anchor
  * there is no region at all and inserts warn + skip rather than throw.
+ *
+ * @param {string} shell
+ * @returns {ShellPlan}
  */
 function compileShellPlan(shell) {
 	let headStart = 0;
@@ -1249,7 +1536,8 @@ function compileShellPlan(shell) {
 	}
 	edits.sort((a, b) => a.start - b.start);
 
-	const bodyClose = BODY_CLOSE_RE.exec(shell);
+	let bodyCloseIndex = -1;
+	for (const m of shell.matchAll(BODY_CLOSE_RE)) bodyCloseIndex = m.index;
 
 	return {
 		headStart,
@@ -1258,12 +1546,18 @@ function compileShellPlan(shell) {
 		titleSpan,
 		edits,
 		markerCounts,
-		bodyCloseIndex: bodyClose ? bodyClose.index : -1,
+		bodyCloseIndex,
 		targets: new Map(),
 	};
 }
 
-/** The shell's empty target element span + tag/attrs, memoized on the plan. */
+/**
+ * The shell's empty target element span + tag/attrs, memoized on the plan.
+ * @param {string} shell
+ * @param {ShellPlan} plan
+ * @param {string} targetId
+ * @returns {ShellTarget | null}
+ */
 function findTarget(shell, plan, targetId) {
 	let target = plan.targets.get(targetId);
 	if (target === undefined) {
@@ -1282,6 +1576,10 @@ function findTarget(shell, plan, targetId) {
  * they are sorted here, and an op overlapping an earlier one is dropped — only
  * reachable for a pathological shell (a target element nested inside `<head>`),
  * where the pre-D151 sequential-replace path produced garbage anyway.
+ *
+ * @param {string} shell
+ * @param {SpliceOp[]} ops
+ * @returns {string}
  */
 function spliceShell(shell, ops) {
 	if (ops.length > 1) ops.sort((a, b) => a.start - b.start);
@@ -1304,6 +1602,11 @@ function spliceShell(shell, ops) {
  * `<title>` element is replaced — no managed tags, byte-compatible. Either way the
  * op is confined to the SHELL HEAD: a `<title>` or `data-puzzle-head` attribute in
  * rendered body markup is view output and is never touched (D151).
+ *
+ * @param {string} shell
+ * @param {ShellPlan} plan
+ * @param {{ head?: ResolvedHead | null, title?: string | null }} page
+ * @returns {SpliceOp | null}
  */
 function headOperation(shell, plan, { head, title }) {
 	if (head) {
@@ -1325,7 +1628,7 @@ function headOperation(shell, plan, { head, title }) {
  * The `<title>` element is replaced for a NON-NULL head.title (null or
  * never-resolved keeps the shell's title — the same leave-alone posture the SPA
  * applies to document.title). Then per managed tag identity (headTags.js
- * MANAGED_TAGS — since D111 this is the table's ONLY consumer; the runtime
+ * MANAGED_TAGS — this is the table's ONLY consumer; the runtime
  * syncTags that once shared it is deleted):
  *  - same-identity `data-puzzle-head` tags already in the shell head are
  *    collapsed: the first is REPLACED in place and every stale duplicate removed;
@@ -1339,6 +1642,12 @@ function headOperation(shell, plan, { head, title }) {
  *    worth writing.
  * All values are attribute-escaped (escapeAttr) so hostile metadata — quotes,
  * `</head>`, `<script>` — cannot break out of the generated tag.
+ *
+ * @param {string} shell
+ * @param {ShellPlan} plan
+ * @param {ResolvedHead & Record<string, string | null>} head resolved fields, read
+ *   by name and by each managed tag's `field`
+ * @returns {string}
  */
 function renderHeadRegion(shell, plan, head) {
 	const { headStart, headEnd, edits, markerCounts } = plan;
@@ -1385,10 +1694,14 @@ function renderHeadRegion(shell, plan, head) {
 }
 
 /**
- * One managed tag as an HTML string. Since D111 this is the only place managed
+ * One managed tag as an HTML string. This is the only place managed
  * tags are ever built — there is no DOM twin at runtime to stay in step with.
  * `spec.id`/`spec.attr`/`spec.name` are framework constants (MANAGED_TAGS) and
  * need no escaping; the VALUE is author/route data and always escapes.
+ *
+ * @param {(typeof MANAGED_TAGS)[number]} spec
+ * @param {string} value
+ * @returns {string}
  */
 function buildHeadTag(spec, value) {
 	// twitter:card is a constant flag of "a social image exists", not a value carrier.
@@ -1403,6 +1716,9 @@ function buildHeadTag(spec, value) {
  * Match every element open tag by its `data-puzzle-head` identity. The lookbehind
  * mirrors targetElementRe's id= handling: a plain \b would let a hypothetical
  * `x-data-puzzle-head=` attribute satisfy the match.
+ *
+ * @param {string} id
+ * @returns {RegExp}
  */
 function managedTagRe(id) {
 	return new RegExp(
@@ -1419,6 +1735,10 @@ function managedTagRe(id) {
  * escaped URI delimiters such as `%2F`. Malformed percent text keeps its current
  * literal-directory behavior. The bare catch-all (`path: '*'`) is the exception
  * — it writes `outDir/404.html`, the filename static hosts serve for unknown URLs.
+ *
+ * @param {string} outDir
+ * @param {string} routePath
+ * @returns {string}
  */
 function pageOutputPath(outDir, routePath) {
 	let outPath;
@@ -1451,6 +1771,9 @@ function pageOutputPath(outDir, routePath) {
 /**
  * Validate + extract the id from a `config.target` — v1 supports `#id` CSS
  * selectors only (the shell surgery keys on the id). Anything else is a throw.
+ *
+ * @param {unknown} target
+ * @returns {string}
  */
 function parseTargetId(target) {
 	if (typeof target !== 'string' || !/^#[\w-]+$/.test(target)) {
@@ -1461,7 +1784,11 @@ function parseTargetId(target) {
 	return target.slice(1);
 }
 
-/** Escape every regex metacharacter so an id matches literally in the shell regex. */
+/**
+ * Escape every regex metacharacter so an id matches literally in the shell regex.
+ * @param {string} str
+ * @returns {string}
+ */
 function escapeRegExp(str) {
 	return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

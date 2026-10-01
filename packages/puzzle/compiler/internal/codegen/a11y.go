@@ -23,7 +23,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // collectA11yWarnings walks nodes recursively — descending into If/For/Case

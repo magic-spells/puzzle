@@ -65,7 +65,7 @@ Each hop, and why it exists:
 
 | File                | World / context     | Job |
 | ------------------- | ------------------- | --- |
-| `page-hook.js`      | page, MAIN world    | Installs `window.__PUZZLE_DEVTOOLS_HOOK__` at `document_start`. Buffers up to 500 events until the panel attaches, then streams. Relays requests to the bridge's handler and posts the answer back. |
+| `page-hook.js`      | page, MAIN world    | Installs `window.__PUZZLE_DEVTOOLS_HOOK__` at `document_start`. Buffers up to 500 events until the panel attaches, then streams; the latest `hello` and app-mounted/unmounted are kept outside that ring and re-sent on every attach, so a late or reopened panel still connects. Relays requests to the bridge's handler and posts the answer back. |
 | `content-script.js` | page, ISOLATED      | Dumb relay: `window.postMessage` ↔ `chrome.runtime` port. Reconnects when the service worker is recycled. |
 | `background.js`     | service worker      | Pairs a content-script port (`sender.tab.id`) with a panel port (`puzzle-devtools-panel:<tabId>`) and routes between them. Stateless — the maps are rebuilt from live ports. |
 | `devtools.js`       | devtools page       | `chrome.devtools.panels.create('Puzzle', …, 'panel.html')`. |

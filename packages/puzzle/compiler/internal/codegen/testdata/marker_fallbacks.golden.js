@@ -19,12 +19,12 @@ MarkerFallbacks.prototype.render = function () {
   const __f = this.ctx.formatters.getAll();
 
   return new ViewNode('puzzle-view', { class: 'fallbacks' }, [
-    new ViewNode(SLOT_TAG, {}, [
+    new ViewNode(SLOT_TAG, { fallback: () => [
       new ViewNode('p', { class: 'pzl-test-fallback' }, [
-        new ViewNode('text', { value: __s((__f["number"] || __f.__missing("number"))(__d.n), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'n' : 0) }),
+        new ViewNode('text', { value: __s((__f["number"] || __f.__missing("number"))(__d.n), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'number(n)' : 0) }),
       ]),
-    ]),
-    new ViewNode(SLOT_TAG, { name: 'control' }, [
+    ] }),
+    new ViewNode(SLOT_TAG, { name: 'control', fallback: () => [
       ...(__d.show
         ? [
             new ViewNode('button', {
@@ -39,17 +39,17 @@ MarkerFallbacks.prototype.render = function () {
               new ViewNode('text', { value: 'Waiting' }),
             ]),
           ]),
-    ]),
-    new ViewNode(SLOT_TAG, { name: 'component' }, [
+    ] }),
+    new ViewNode(SLOT_TAG, { name: 'component', fallback: () => [
       new ViewNode(Badge, { label: __d.label }, []),
-    ]),
-    new ViewNode(SLOT_TAG, { name: 'icon' }, [
+    ] }),
+    new ViewNode(SLOT_TAG, { name: 'icon', fallback: () => [
       new ViewNode('svg', {
         xmlns: 'http://www.w3.org/2000/svg',
         viewBox: '0 0 24 24',
         fill: 'currentColor',
       }, '<path d="M12 21l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.18L12 21z"/>'),
-    ]),
+    ] }),
     new ViewNode(SLOT_TAG, { name: 'empty' }),
   ]);
 };

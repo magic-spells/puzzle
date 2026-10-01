@@ -1,112 +1,94 @@
 ---
-name: 'D78 — Agent-skill distribution: embedded skill + `puzzle add skills` (v1.45)'
+name: 'D78 — Agent-skill distribution: embedded skill, puzzle add skills, and refresh on upgrade'
 status: verified
 connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
   - DOC-SPEC-BUILD
+  - DECISION-D76-CLI-UPGRADE
   - DECISION-D77-INIT-PROMPTS
   - DECISION-D32-CLI-TOOLING
   - FILE-CLI-ADD
+  - TEST-CLI-COMMANDS
 verified_at: '2026-08-24T21:11:50.859Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
-notes:
-  - kind: verified
-    text: >-
-      Merged to main in PR #9. Verified end-to-end: install/refusal/--overwrite/no-target paths
-      against a fake HOME with the real huh dependency; full Go + JS suites green.
-    sha: 1c2f4b6fef8106cbf3d0a433bfb6186ef89fcc73
-  - kind: verified
-    text: >-
-      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
-      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
-      one — the path moved, the code did not. No content was re-checked, and none needed to be.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
+code_refs:
+  - compiler/cmd/puzzle/add.go
+  - compiler/cmd/puzzle/add_skills.go
+  - compiler/cmd/puzzle/upgrade.go
+  - skills/embed.go
 ---
 
-# D78 — Agent-skill distribution: embedded skill + `puzzle add skills` (v1.45)
+# D78 — Agent-skill distribution: embedded skill, `puzzle add skills`, refresh on upgrade
 
-The repo ships a distilled AI-agent skill for building Puzzle apps
-(`skills/puzzle/SKILL.md`, cross-agent SKILL.md format), and the CLI installs it:
-`puzzle add skills` (alias `skill`) copies the embedded skill into every detected
-agent config dir. See [[DOC-SPEC-BUILD]] §13.
+The repo ships an AI-agent skill for building Puzzle apps
+(`skills/puzzle/SKILL.md`, cross-agent SKILL.md layout). It is `go:embed`-ed
+into the CLI (`skills/embed.go`), so the skill a user installs always matches the
+CLI that wrote it. Spec: [[DOC-SPEC-BUILD]] §13 and §41.
 
-## Context
+## Install: `puzzle add skills` (alias `skill`)
 
-An app-builder skill (grammar, lifecycle, SSG footguns, pieces conventions) had
-proven itself as a private `~/.claude/skills/puzzle` file, but it hard-coded
-owner-local paths and had no distribution or versioning story. The skill's
-content drifts with the framework (CLI surface, SSG rules), so the copy a user
-has must match the framework version they run. Claude Code, Codex, and Cursor
-all consume the same `<root>/skills/<name>/SKILL.md` layout, and Cursor
-additionally reads Claude's and Codex's dirs for compatibility.
-
-## Decision
-
-**The skill lives in-repo at `skills/puzzle/` (portable links only), is embedded
-into the binary via a root-level `go:embed` package (`skills/embed.go`), and
-`puzzle add skills` installs it.**
-
-- Target detection: a target is offered iff the tool's root config dir exists —
-  `~/.claude` (Claude Code), `~/.codex` (Codex), `~/.cursor` (Cursor).
-  Destination `<root>/skills/puzzle/` is created as needed (Cursor typically
-  lacks `skills/`). `--skill-root <dir>` (repeatable) names the config dirs
-  outright instead, and skips detection and the target prompt — explicit roots
-  are explicit intent.
-- On a TTY: a `charmbracelet/huh` multi-select checkbox list, all detected
-  targets pre-selected (space toggles, enter confirms). Deselecting all
-  installs nothing, exit 0.
-- Non-TTY: installs to ALL detected targets silently — the never-prompt,
-  never-hang convention from D32/D77.
-- An existing `<root>/skills/puzzle/` is a refresh case rather than an error;
-  which installs are current, which are asked about, and which are refused
-  belongs to [[DECISION-D99-SKILL-REFRESH-PROMPT]]. `--overwrite` is the
-  unconditional write, and the only way through a symlinked destination.
-- Copy is recursive, so a future `references/` folder ships without CLI changes.
-- Embedding at build time is the versioning story: the installed skill always
-  matches the CLI that wrote it.
-
-## Alternatives rejected
-
-- **Scaffold-only distribution (`puzzle init` writes `.claude/skills/`)**: only
-  reaches new apps; existing apps and global installs get nothing. Still a
-  candidate as a complement, tracked as an open follow-up.
-- **npm-package payload users copy by hand**: manual step, no target detection,
-  and the npm `files` allowlist would grow non-runtime content.
-- **A plugin marketplace / skills-registry publish**: a second artifact to keep
-  in lockstep; can layer on later once content stabilizes.
-- **Zero-dep numbered prompt instead of huh**: matches D77's plain-text stance,
-  but a multi-toggle selection is a genuinely different interaction than D77's
-  two sequential one-answer questions; the owner chose real checkboxes. This
-  narrows D77's "no bubbletea/huh" rejection to *sequential* prompts — the
-  dependency now exists, and migrating init's prompts to huh is an open idea,
-  not a commitment.
-
-## Consequences
-
-- First TUI dependency: `github.com/charmbracelet/huh` (+ bubbletea/lipgloss
-  tree). Compile-time only for non-`add skills` paths.
-- `ui.IsTerminal` does a real isatty check (`mattn/go-isatty`, already in the
-  graph) rather than a `ModeCharDevice` heuristic — `/dev/null` is a char device
-  and would otherwise count as a TTY, making huh block forever under cron/CI
-  stdin. `init`/`main` gates inherit the stricter check.
-- The D3 no-JS-rewriting rule is untouched (the command writes only skill
-  files under tool config dirs, never project JavaScript).
-- The skill file is release-checklist surface: its content must be re-verified
-  against the docs whenever the public surface changes. **Nothing in the build
-  enforces this, and it has drifted** — `SKILL.md` sat stale past
-  D91/D93/D94/D95/D98/D100 before anyone noticed. `constellation/plan.md`'s
-  release checklist carries it as an explicit numbered item.
+- **Targets:** offered iff the tool's config dir exists — `~/.claude`,
+  `~/.codex`, `~/.cursor`; destination `<root>/skills/puzzle/` is created as
+  needed. `--skill-root <dir>` (repeatable) names roots outright and skips
+  detection and the target prompt; the root must already exist.
+- On a TTY a `huh` multi-select with all detected targets pre-selected;
+  deselecting all installs nothing. Non-TTY installs to every detected target
+  without prompting.
+- Every install writes `<dest>/.puzzle-skill-version` (the CLI version, plain
+  text). Missing/blank reads as *unknown*, which sorts with stale.
+- Each selected target is **missing** (install), **current** (stamp matches —
+  skip), **stale/unstamped** (TTY: ask; non-TTY: refuse without `--overwrite`) or
+  a **symlink** (report and skip — it is a dev checkout link). Declining skips
+  only the conflicts; the rest still install. Current installs are not
+  conflicts, so the command is idempotent in CI.
+- `--overwrite` is the unconditional write and the only way through a symlink.
+- `installSkillTree` removes a real destination before copying, so files a newer
+  payload dropped cannot linger. A symlinked destination is written through and
+  never removed (`os.RemoveAll` would delete the link itself).
+- Copy is recursive, so a `references/` folder needs no CLI change.
 
 ## Refresh
 
-Re-running the install IS the refresh mechanism, and two follow-ons make it
-something other than a manual step nobody remembers:
+- **After `puzzle upgrade` installs a new version** (never on `--check`,
+  already-current, or the manual/`go install` branch), it offers to refresh
+  existing installs only — real `<root>/skills/puzzle/` dirs under detected
+  roots; symlinks are reported and skipped. The running process holds the *old*
+  embedded skill, so the refresh **re-execs the newly installed binary**
+  (`add skills --overwrite --skill-root …`). Candidates in install-shape order —
+  project: `node_modules/@magic-spells/puzzle-<platform>/bin/puzzle`, then
+  `node_modules/.bin/puzzle`; global: `exec.LookPath("puzzle")`, then the
+  running executable — must each answer `--version` with exactly the target
+  (whole-field equality, so 0.2.10 never satisfies 0.2.1). No verified candidate
+  → print the manual command. Non-TTY prints a hint and never writes. Nothing
+  here can fail the upgrade; problems print one `!` line.
+- **`puzzle upgrade skills`** refreshes existing installs from the running
+  binary — no registry fetch, no re-exec — and installs on a non-TTY without
+  prompting (the command names the clobber).
+- `confirmSkillUpdate` is the single test seam for the confirm prompt.
 
-- [[DECISION-D97-UPGRADE-SKILL-REFRESH]] — `puzzle upgrade` offers the refresh
-  after a version actually changes, and must **re-exec the newly installed
-  binary** to do it, because the payload is `go:embed`-ed and the running
-  process still holds the old one.
-- [[DECISION-D99-SKILL-REFRESH-PROMPT]] — an existing install asks instead of
-  aborting, and installs carry a `.puzzle-skill-version` stamp that turns "is
-  this current?" from an inference into a fact. Adds `puzzle upgrade skills`.
+## Alternatives
+
+- **Scaffold-only distribution** (`puzzle init` writes `.claude/skills/`) —
+  reaches only new apps; still a possible complement.
+- **Ship `skills/` in the npm tarball** — grows the `files` allowlist with
+  non-runtime content and adds a second payload copy.
+- **Refresh from the running binary after upgrade** — silently installs the
+  previous release's skill; the reason re-exec exists.
+- **Offer every detected config dir on upgrade** — turns an upgrade into a
+  first-time installer for tools the user never chose.
+- **Prompt for symlinked destinations** — a "yes" from an older binary would
+  revert the checkout's canonical skill.
+- **Read `version:` from SKILL.md frontmatter** — tracks the author's number,
+  not the installing CLI.
+
+## Consequences
+
+- `huh` (bubbletea/lipgloss) is a CLI dependency. `ui.IsTerminal` is a real
+  isatty check (`mattn/go-isatty`) — `/dev/null` is a char device and would
+  otherwise hang huh under cron/CI.
+- Nothing in the build checks the skill's content: it is release-checklist
+  surface and must be re-verified against the public surface whenever that
+  changes (it has drifted before).
+- `.puzzle-skill-version` lands inside the tree, so `--overwrite` through a
+  checkout symlink drops one untracked file (gitignored in this repo).

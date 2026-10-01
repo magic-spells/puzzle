@@ -1,0 +1,4 @@
+Import the family as one unit:
+    import Frame from '@/components/Frame';
+    // then invoke members with dot notation:
+    <Frame><Frame.Wrapper>…</Frame.Wrapper></Frame>

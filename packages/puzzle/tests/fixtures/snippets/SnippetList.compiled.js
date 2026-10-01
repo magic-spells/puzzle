@@ -16,30 +16,32 @@ export default class SnippetList extends PuzzleView {
   };
 }
 
-import { ViewNode, SLOT_TAG, displayValue as __s } from '@magic-spells/puzzle';
+import { ViewNode, SLOT_TAG, displayValue as __s, listRows as __l } from '@magic-spells/puzzle';
+
+const __L0 = { key: (user) => user?.id, roots: 1, fields: ['name'] };
 
 SnippetList.prototype.render = function () {
   const __d = this.getData();
 
   return new ViewNode('section', { class: 'snippet-list' }, [
     new ViewNode('h2', { class: 'snippet-heading' }, [
-      new ViewNode(SLOT_TAG, { name: 'heading', args: { group: __d.group } }, [
+      new ViewNode(SLOT_TAG, { name: 'heading', args: { group: __d.group }, fallback: () => [
         new ViewNode('text', { value: 'Fallback heading' }),
-      ]),
+      ] }),
     ]),
     new ViewNode('ul', {},
-      __d.users.map((user) =>
-        new ViewNode('li', { key: user.id }, [
-          new ViewNode(SLOT_TAG, { name: 'row', args: { user: user, group: __d.group } }, [
-            new ViewNode('text', { value: __s(user.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) }),
-          ]),
+      __l(this, this, 0, __d.users, (s) =>
+        new ViewNode('li', { key: s.k }, [
+          new ViewNode(SLOT_TAG, { name: 'row', args: { user: s.item, group: __d.group }, fallback: () => [
+            new ViewNode('text', { value: __s(s.item?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) }),
+          ] }),
         ])
-      )
+      , __L0)
     ),
     new ViewNode('p', { class: 'snippet-default' }, [
-      new ViewNode(SLOT_TAG, { args: { group: __d.group } }, [
+      new ViewNode(SLOT_TAG, { args: { group: __d.group }, fallback: () => [
         new ViewNode('text', { value: 'Fallback default' }),
-      ]),
+      ] }),
     ]),
     new ViewNode('button', {
       class: 'component-update',
@@ -50,3 +52,4 @@ SnippetList.prototype.render = function () {
   ]);
 };
 SnippetList.__pzlModule = 'SnippetList.pzl';
+SnippetList.__roots = ['group'];

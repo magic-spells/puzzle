@@ -6,7 +6,10 @@
         <p class="mt-2 text-body">
           A command palette — filtered, grouped, keyboard-driven quick actions in a
           modal on the native dialog element. The parent owns the open flag and decides
-          what each selection does.
+          what each selection does. The overlay rides
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@magic-spells/dialog-panel</code>,
+          the same web component behind Dialog, Alert Dialog, Sheet and Bottom Sheet — one
+          scrim, one fade in and out, one open/close machine across the family.
         </p>
       </header>
 
@@ -25,6 +28,26 @@
           Copy the piece into your app — it compiles with your build and the code is yours:
         </p>
         <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Like Dialog, Alert Dialog, Sheet and Bottom Sheet, this piece has a runtime
+          dependency: the web component it wraps. If you use any of those it is installed
+          once and shared.
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge the component's stylesheet into your app's style entry
+          (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">app/styles/styles.css</code>).
+          It owns the overlay transport — the state-driven fade of both the scrim and the
+          panel, the backdrop element, and the page scroll lock. Without it the palette is
+          an unstyled native dialog with no animation and no scrim:
+        </p>
+        <CodeBlock code={ installCss }/>
+        <p class="mt-3 text-sm text-muted">
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">layer(components)</code>
+          is not optional cosmetics: the stylesheet uses plain element selectors, and an unlayered
+          import would outrank every Tailwind utility on the panel — including the width cap and
+          the surface color this piece sets.
+        </p>
         <p class="mt-3 text-sm text-muted">
           Requires the pieces.css tokens merged into your app styles (see Introduction).
         </p>
@@ -51,6 +74,11 @@
             Cmd/Ctrl+K in a layout and flip the open flag there. Command never binds a
             page-wide shortcut itself.
           </p>
+          <p class="mt-3 text-sm text-muted">
+            Escape and a click on the scrim close the palette themselves and report through
+            @close once the exit fade has finished — flip the open flag false there. A close
+            the parent asks for, by flipping open after a selection, is never reported back.
+          </p>
         </section>
       </div>
     </article>
@@ -69,6 +97,10 @@ import Toc from '@/components/docs/Toc.pzl';
 import { toast } from '@/components/ui/toast.js';
 
 const installCmd = 'puzzle add piece command';
+const installDep = 'npm install @magic-spells/dialog-panel';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dialog-panel/css" layer(components);`;
 const usageImport = `import Command from '@/components/ui/Command.pzl';`;
 const usageMarkup = `<Command open={ commandOpen } items={ commandItems } @select={ runCommand } @close={ closeCommand } />`;
 const optionSnippet = `// The option element, ARIA, and handlers stay owned by Command.
@@ -107,6 +139,8 @@ export default class CommandDoc extends PuzzleView {
     return {
       ...this.getData(),
       installCmd,
+      installDep,
+      installCss,
       usageImport,
       usageMarkup,
       optionSnippet,

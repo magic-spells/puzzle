@@ -8,6 +8,9 @@ import { readFile, access } from 'node:fs/promises';
 // is the wiring.
 
 const PACKAGE = '@magic-spells/scrolling-content';
+// The manifest carries the version FLOOR the wrapper was built against (D169);
+// the .pzl still imports the BARE specifier.
+const DEP = `${PACKAGE}@^2.1.0`;
 const SPECIFIER = PACKAGE.replace('/', '\\/');
 const FILE = '../registry/ui/marquee/Marquee.pzl';
 
@@ -18,7 +21,7 @@ test('the marquee manifest declares its file and dependency', async () => {
 	const piece = await readJSON('../registry/ui/marquee/piece.json');
 	assert.deepEqual(piece.files, ['Marquee.pzl']);
 	assert.deepEqual(piece.registryDependencies, []);
-	assert.deepEqual(piece.dependencies, [PACKAGE]);
+	assert.deepEqual(piece.dependencies, [DEP]);
 	assert.equal(piece.targetDir, 'app/components/ui');
 	await access(new URL(FILE, import.meta.url));
 });

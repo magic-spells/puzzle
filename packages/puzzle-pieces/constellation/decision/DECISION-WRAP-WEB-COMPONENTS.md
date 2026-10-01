@@ -138,6 +138,19 @@ notes:
       demo is `@magic-spells/puzzle: file:../../puzzle`, which is deliberate. Practical effect: CI
       and any fresh clone can build the demo; a wrapper can no longer go green against an
       unpublished local checkout.
+  - kind: state
+    text: >-
+      2026-09-09 (0.7.1): the PUBLISHED UPSTREAM gotcha's remaining gap is closed. It said an
+      unpublished component cannot be wrapped, but nothing said WHICH published version an app would
+      get — and it bit: on the 0.7.0 registry `puzzle add piece accordion` printed `npm install
+      @magic-spells/collapsible-content`, npm resolved latest (1.1.1, no `<collapsible-group>`), and
+      the accordion lost exclusivity with no error. Every `dependencies` entry now carries a semver
+      floor — `"@magic-spells/collapsible-content@^1.2.0"` — and the CLI prints the spec verbatim
+      (framework D169). The floor must equal what `demo/package.json` installs, one floor per
+      package registry-wide; `test/registry-deps.test.js` fails on a bare entry, on two pieces
+      disagreeing, or on drift from the demo. Practical consequence for the next wrapper: publish
+      the component first, then wrap it at that version — and when you bump a component in the demo,
+      bump the manifests in the same commit.
 ---
 
 # Wrap @magic-spells web components; port only when wrapping can't work

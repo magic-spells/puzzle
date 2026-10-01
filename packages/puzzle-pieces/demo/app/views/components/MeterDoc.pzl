@@ -4,13 +4,13 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Meter</h1>
         <p class="mt-2 text-body">
-          A semantic gauge (
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">role="meter"</code>
-          ) for a measured value within a range, colored by sentiment against
+          A semantic gauge
+          (<code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">role="meter"</code>)
+          for a measured value within a range, colored by sentiment against
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">low</code>/<code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">high</code>
           thresholds. Distinct from
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">Progress</code>
-          , which reports task completion rather than a measurement.
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">Progress</code>,
+          which reports task completion rather than a measurement.
         </p>
       </header>
 

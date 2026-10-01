@@ -1,0 +1,67 @@
+<puzzle-view class="core">
+  <p class="deep">{ user.profile.name }</p>
+  <p class="index">{ rows[0].label }</p>
+  <p class="title" title={ money(price) }>t</p>
+  <p class="label">{ t('cart.count', { count: n, unit }) }</p>
+  <p class="nested">{ echo('x', { outer: { inner: n }, 'quoted-key': unit }) }</p>
+  {#if tags.length || flagged}<p class="has-tags">tags</p>{:else}<p class="no-tags">none</p>{/if}
+  {#unless tags.length || flagged}<p class="unless">empty</p>{/unless}
+  {#case status || 'none'}{:when 'open'}<p class="case">open</p>{:else}<p class="case">other</p>{/case}
+  <p class="eq">{ one == '1' ? 'loose' : 'strict' }</p>
+  {#if mode === 'edit' ? canEdit : canView}<p class="tern">yes</p>{:else}<p class="tern">no</p>{/if}
+  <p class="tern-attr {#if mode === 'edit' ? canEdit : canView}on{/if}">t</p>
+  <ul class="string-loop">{#for ch in word}<li>{ ch }</li>{/for}</ul>
+  <ul class="missing-loop">{#for m in missing}<li>{ m }</li>{/for}</ul>
+  <ul class="range">{#for 1...count, k}<li>{ k }</li>{/for}</ul>
+  {#for 1...1}<div class="mapped">{#for ch in word}<b>{ ch }</b>{/for}</div>{/for}
+  <Chip tone="warm" />
+  <input class="missing-bind" value={ profile.name } />
+  <p class="prose">
+    tokens —
+    <code>a</code>,
+    <code>b</code>
+    and { unit }
+    <b>{ n }</b>
+  </p>
+  <div class="stack">
+    <button>One</button>
+    <button>Two</button>
+  </div>
+  <pre class="pre">
+  indented
+    more { n }
+</pre>
+  <textarea class="ta">
+  keep
+    this</textarea>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Chip from './Chip.compiled.js';
+
+// D173 group (b): every construct here is one the compiled output must render
+// without throwing — see tests/core-semantics.test.js.
+export default class CoreHost extends PuzzleView {
+  data() {
+    return {
+      user: undefined,
+      rows: undefined,
+      price: 5,
+      n: 3,
+      unit: 'items',
+      tags: [],
+      flagged: false,
+      status: 'open',
+      one: 1,
+      word: 'abc',
+      missing: null,
+      count: 2.7,
+      profile: null,
+      mode: 'view',
+      canEdit: true,
+      canView: false,
+    };
+  }
+}
+</script>

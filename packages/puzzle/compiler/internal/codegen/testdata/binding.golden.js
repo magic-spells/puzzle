@@ -34,7 +34,9 @@ export default class Binding extends PuzzleView {
   };
 }
 
-import { ViewNode } from '@magic-spells/puzzle';
+import { ViewNode, listRows as __l } from '@magic-spells/puzzle';
+
+const __L0 = { key: (todo) => ViewNode.keyOf(todo), ctrl: true, fields: ['completed'] };
 
 Binding.prototype.render = function () {
   const __d = this.getData();
@@ -55,14 +57,14 @@ Binding.prototype.render = function () {
       '@input:bind': this.__bind(null, 'volume', 'vn'),
     }, []),
     new ViewNode('ul', {},
-      __d.todos.map((todo) =>
+      __l(this, this, 0, __d.todos, (s) =>
         new ViewNode('input', {
-          key: ViewNode.keyOf(todo),
+          key: s.k,
           type: 'checkbox',
-          checked: todo.completed,
-          '@change:bind': this.__bind(todo, 'completed', 'c'),
+          checked: s.item?.completed,
+          '@change:bind': this.__bind(s.item ?? 0, 'completed', 'c'),
         }, [])
-      )
+      , __L0)
     ),
     new ViewNode('select', {
       value: __d.sort,
@@ -78,8 +80,8 @@ Binding.prototype.render = function () {
     }, []),
     new ViewNode('input', {
       type: 'date',
-      value: __d.profile.birthday,
-      '@change:bind': this.__bind(__d.profile, 'birthday', 'v'),
+      value: __d.profile?.birthday,
+      '@change:bind': this.__bind(__d.profile ?? 0, 'birthday', 'v'),
     }, []),
     new ViewNode('input', {
       value: __d.inputOwned,
@@ -124,7 +126,7 @@ Binding.prototype.render = function () {
       multiple: true,
     }, []),
     new ViewNode(Foo, { value: __d.x }, []),
-    new ViewNode('input', { value: __d.x.trim() }, []),
+    new ViewNode('input', { value: __d.x?.a?.b }, []),
   ]);
 };
 Binding.__pzlModule = 'binding.pzl';

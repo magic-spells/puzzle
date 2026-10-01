@@ -1,233 +1,377 @@
-// Built-in template formatters. Keep this module side-effect-free so bundlers
-// can tree-shake unused named exports from compiler-generated manifests.
+// The built-in half of the function library (D176 §4): the functions a template
+// calls as `name(value, …args)`, which compiled code reaches through the
+// registry's raw map (`__f`, formatters.js). Keep this module side-effect-free
+// so bundlers can tree-shake unused named exports from compiler-generated
+// manifests.
+//
+// The names split into the STANDARD set (D174, D176 §4), which Sites implements
+// too with the same arguments and meaning, and two PuzzleKit-only names: `link`
+// (built by the registry, not here) and `timeago`. The identical-output part of
+// the standard set is pinned by the shared conformance table,
+// packages/puzzle-lang/conformance/functions.json.
+// What a JavaScript method or `Math` global already says is not a function
+// here: `.toUpperCase()`, `.toLowerCase()`, `.trim()`, `.replaceAll()`,
+// `.join()`, `Math.abs()`, `Math.ceil()`, `Math.floor()`. Lists are shaped and
+// counted with array methods and `.length`, arithmetic is the operators and a
+// fallback is `??`, so there are no functions for those either. `round` stays:
+// `.toFixed()` returns a padded string, so nothing in JavaScript rounds half
+// away from zero to a number in one call.
 
 import { calendarISO, isCalendarDate, noDate, parseDateInput } from '../dates.js';
+import { formatLocale, localeNumber } from './locale.js';
+import { sanitizeHtml, newlineToBr } from '../sanitize.js';
 
 // null/undefined render as empty string, never the literal "null"/"undefined"
+/** @param {unknown} v @returns {string} */
 const str = (v) => (v == null ? '' : String(v));
 
-// Normalize a `decimals` argument to a digit count toFixed/Intl accept: coerce to
-// an integer and clamp to the valid 0–100 range. A non-numeric, NaN, or Infinite
-// argument falls back to `dflt` (the formatter's own default) so a bad argument
-// fails soft instead of throwing RangeError. Shared by round/currency/percentage.
+// A number read from a display value, or NaN. A missing value (and '' and a
+// boolean) is NaN rather than Number()'s 0, so `{ currency(unset) }` prints
+// nothing instead of "$0.00".
+/** @param {unknown} v @returns {number} */
+const num = (v) => (v == null || v === '' || typeof v === 'boolean' ? NaN : Number(v));
+
+// What a text-producing number formatter prints for input that is not a finite
+// number: nothing for a NaN or ±Infinity NUMBER (`{ currency(total / count) }`
+// on an empty list), exactly as the bare value prints (D173 V6); anything else —
+// a missing value, a non-numeric string — prints as text (D174 deviation 2).
+/** @param {unknown} v @returns {string} */
+const notFinite = (v) => (typeof v === 'number' ? '' : str(v));
+
+// Normalize a `places` argument to a digit count toFixed accepts: coerce to an
+// integer and clamp to 0–100. A non-numeric, NaN, or infinite argument falls back
+// to `dflt` so a bad argument fails soft instead of throwing RangeError. Shared by
+// currency/percentage (round takes negative places too, with its own clamp).
+/** @param {unknown} decimals @param {number} dflt @returns {number} */
 const normDecimals = (decimals, dflt) => {
 	const n = Math.trunc(Number(decimals));
 	if (!Number.isFinite(n)) return dflt;
 	return Math.min(100, Math.max(0, n));
 };
 
+// n × 10^p computed on the DECIMAL digits, not in binary: `1.005` shifted by 2 is
+// exactly 100.5 here, where `1.005 * 100` is 100.49999999999999. Handles the
+// exponent form String() uses outside 1e-6 … 1e21.
+/** @param {number} n @param {number} p @returns {number} */
+const shift = (n, p) => {
+	const [m, e = 0] = String(n).split('e');
+	return Number(`${m}e${Number(e) + p}`);
+};
+
+// Round half away from zero on the decimal value (D174 F19). Negative places
+// round to tens, hundreds, …. A value too large to scale is returned unchanged.
+/** @param {number} n @param {number} p @returns {number} */
+function roundHalfAway(n, p) {
+	if (!Number.isFinite(n)) return n;
+	const scaled = shift(Math.abs(n), p);
+	if (!Number.isFinite(scaled)) return n;
+	const r = shift(Math.round(scaled), -p);
+	return n < 0 ? -r : r;
+}
+
+// Group the digits of a whole-number string in threes. A function replacement,
+// so a delimiter containing `$` is inserted literally.
+/** @param {string} whole @param {string} delimiter @returns {string} */
+const group = (whole, delimiter) => whole.replace(/\B(?=(\d{3})+(?!\d))/g, () => delimiter);
+
+// Locale-rendered numbers (`localeNumber`, formatters/locale.js) use the
+// viewer's locale — Intl's default — or, when the app configures translations,
+// the active locale (D175). The date family, `compact_number` and `timeago` read
+// the same slot, each behind the inline `__PUZZLE_HAS_I18N__` probe.
+
+// ── Markup ────────────────────────────────────────────────────────────────────
+
+// A text interpolation already escapes (it becomes a text node), so `escape` is an
+// identity: the page shows the value's characters, `<b>` as `<b>` — never the
+// double-escaped `&lt;b&gt;` (D174 F8).
+/** @param {unknown} v @returns {string} */
 export function escape(v) {
-	return str(v)
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
-		.replace(/"/g, '&quot;')
-		.replace(/'/g, '&#39;');
+	return str(v);
 }
 
+// The two markup functions (D174 group e, kept by D176 §4). A template never
+// calls these: codegen lowers a text interpolation whose outermost call is
+// either name to the live-HTML node (views/html.js), which runs the same
+// sanitizer, and anywhere else either name is a compile error. So an app
+// function registered under `raw` can never inject markup. The functions return
+// the markup strings the node renders — for script code, and for the shared
+// conformance table.
+/** @param {unknown} v @returns {string} */
 export function raw(v) {
-	return str(v);
+	return sanitizeHtml(str(v));
 }
 
-export function noescape(v) {
-	return str(v);
+/** @param {unknown} v @returns {string} */
+export function newline_to_br(v) {
+	return newlineToBr(str(v));
 }
 
-export function trim(v) {
-	return str(v).trim();
-}
+// ── Text ──────────────────────────────────────────────────────────────────────
 
-export function downcase(v) {
-	return str(v).toLowerCase();
-}
-
-export function upcase(v) {
-	return str(v).toUpperCase();
-}
-
+// Upper-cases the first character and leaves the rest alone, so `iPhone` and
+// `NASA` survive (D174 F1). The old behavior is `capitalize(s.toLowerCase())`.
+/** @param {unknown} v @returns {string} */
 export function capitalize(v) {
 	const s = str(v);
-	return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+	if (s === '') return s;
+	const first = String.fromCodePoint(s.codePointAt(0));
+	return first.toUpperCase() + s.slice(first.length);
 }
 
-export function truncate(v, n = 100, ell = '…') {
+// Counts code points, and the result is never longer than `length`: an ellipsis
+// longer than the limit is clipped (D174 F25).
+/** @param {unknown} v @param {unknown} [length] @param {unknown} [ellipsis] @returns {string} */
+export function truncate(v, length = 100, ellipsis = '…') {
 	const s = str(v);
-	return s.length > n ? s.slice(0, Math.max(0, n - String(ell).length)) + ell : s;
+	let n = Math.trunc(Number(length));
+	if (Number.isNaN(n)) n = 100;
+	n = Math.max(0, n);
+	// UTF-16 length bounds the code-point count from above, so a string this
+	// short needs no code-point walk.
+	if (s.length <= n) return s;
+	const chars = [...s];
+	if (chars.length <= n) return s;
+	const ell = [...str(ellipsis)].slice(0, n);
+	return chars.slice(0, n - ell.length).join('') + ell.join('');
 }
 
-export function replace(v, search, replace = '') {
-	const s = str(v);
-	// string search replaces ALL occurrences (Liquid semantics);
-	// a RegExp is applied as given
-	return typeof search === 'string' ? s.split(search).join(replace) : s.replace(search, replace);
+// Scan to the `>` closing a tag that starts at `start`, skipping quoted attribute
+// values; -1 when the tag never closes.
+/** @param {string} s @param {number} start @returns {number} */
+function tagEnd(s, start) {
+	let quote = '';
+	for (let i = start; i < s.length; i++) {
+		const c = s[i];
+		if (quote) {
+			if (c === quote) quote = '';
+		} else if (c === '"' || c === "'") {
+			quote = c;
+		} else if (c === '>') {
+			return i;
+		}
+	}
+	return -1;
 }
 
-export function split(v, separator = ',') {
-	return str(v).split(separator);
+// tagEnd for EVERY start at once, in one right-to-left pass: ends[i] is
+// tagEnd(s, i). Tracking the answer for each quote state at i + 1 is what makes
+// it exact — a scan from a later `<` is not simply the tail of an earlier one,
+// because it starts outside any quote.
+/** @param {string} s @returns {Int32Array} */
+function tagEnds(s) {
+	const ends = new Int32Array(s.length + 1);
+	let open = -1; // from i + 1, outside a quote
+	let single = -1; // from i + 1, inside '…'
+	let double = -1; // from i + 1, inside "…"
+	ends[s.length] = -1;
+	for (let i = s.length - 1; i >= 0; i--) {
+		const c = s[i];
+		const here = c === '>' ? i : c === '"' ? double : c === "'" ? single : open;
+		if (c === "'") single = open;
+		if (c === '"') double = open;
+		open = ends[i] = here;
+	}
+	return ends;
 }
 
-export function strip(v) {
-	return str(v).replace(/^\s+|\s+$/g, '');
-}
-
+// Removes tags and comments, quote-aware, without decoding entities. A `<` not
+// followed by a tag name, and unfinished markup, stay as text (D174 F23 — the
+// same scanner as Sites' stripHTML).
+//
+// Linear: a tag scan that runs off the end would otherwise repeat from every
+// later `<` (`'<a'.repeat(40000)` took seconds), so the first failure switches
+// to the precomputed tagEnds table, and a comment with no `-->` means no later
+// one has one either.
+/** @param {unknown} v @returns {string} */
 export function strip_html(v) {
-	return str(v).replace(/<[^>]*>/g, '');
+	const s = str(v);
+	let out = '';
+	let i = 0;
+	let ends = null;
+	let commentsClose = true;
+	while (i < s.length) {
+		if (s.startsWith('<!--', i)) {
+			const end = commentsClose ? s.indexOf('-->', i + 4) : -1;
+			if (end >= 0) {
+				i = end + 3;
+				continue;
+			}
+			commentsClose = false;
+		} else if (s[i] === '<' && i + 1 < s.length) {
+			let start = i + 1;
+			if (s[start] === '/' && start + 1 < s.length) start++;
+			const c = s[start];
+			if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c === '!' || c === '?') {
+				let end;
+				if (ends !== null) end = ends[start + 1];
+				else if ((end = tagEnd(s, start + 1)) < 0) ends = tagEnds(s);
+				if (end >= 0) {
+					i = end + 1;
+					continue;
+				}
+			}
+		}
+		out += s[i];
+		i++;
+	}
+	return out;
 }
 
+/** @param {unknown} v @returns {string} */
 export function strip_newlines(v) {
-	return str(v).replace(/\n/g, '');
+	return str(v).replace(/[\r\n]/g, '');
 }
 
-export function newline_to_br(v) {
-	return str(v).replace(/\n/g, '<br>');
-}
-
+// Prints the count AND the word: `1 comment`, `3 comments`, `2 men`. The word is
+// `singular` only for exactly 1; the count is formatted in the viewer's locale,
+// like number_with_delimiter (D174 F15).
+/** @param {unknown} count @param {unknown} singular @param {unknown} [plural] @returns {string} */
 export function pluralize(count, singular, plural) {
-	return Number(count) === 1 ? singular : (plural || singular + 's');
+	const n = num(count);
+	if (!Number.isFinite(n)) return notFinite(count);
+	const word = n === 1 ? str(singular) : plural == null ? str(singular) + 's' : str(plural);
+	return localeNumber(n) + ' ' + word;
 }
 
-export function plus(v, n) {
-	return Number(v) + Number(n);
+// ── Numbers ───────────────────────────────────────────────────────────────────
+
+// Rounds half away from zero on the decimal value — `round(1.005, 2)` is 1.01,
+// `round(2.5)` is 3 — and negative places round to tens and hundreds (D174
+// F19). Returns a number, so another function can keep formatting it as one.
+// Stays in the library (D176 §4): `Math.round` takes no places, and
+// `.toFixed()` rounds the binary value and returns a padded string.
+/** @param {unknown} v @param {unknown} [places] @returns {number} */
+export function round(v, places = 0) {
+	let p = Math.trunc(Number(places));
+	if (!Number.isFinite(p)) p = 0;
+	return roundHalfAway(Number(v), Math.min(100, Math.max(-100, p)));
 }
 
-export function minus(v, n) {
-	return Number(v) - Number(n);
+// Groups thousands with `,`, puts the sign before the symbol (`-$1,234.50`), and
+// rounds by round's rule (D174 F3). An amount that rounds to zero is unsigned.
+/** @param {unknown} v @param {unknown} [symbol] @param {unknown} [places] @returns {string} */
+export function currency(v, symbol = '$', places = 2) {
+	const n = num(v);
+	if (!Number.isFinite(n)) return notFinite(v);
+	const p = normDecimals(places, 2);
+	const rounded = roundHalfAway(n, p);
+	const [whole, frac] = Math.abs(rounded).toFixed(p).split('.');
+	return (rounded < 0 ? '-' : '') + str(symbol) + group(whole, ',') + (frac ? '.' + frac : '');
 }
 
-export function times(v, n) {
-	return Number(v) * Number(n);
+// Takes the number as written: `percentage(12.5, 1)` is `12.5%`. A ratio is
+// `percentage(ratio * 100)` (D174 F14, D176).
+/** @param {unknown} v @param {unknown} [places] @returns {string} */
+export function percentage(v, places = 0) {
+	const n = num(v);
+	if (!Number.isFinite(n)) return notFinite(v);
+	const p = normDecimals(places, 0);
+	return roundHalfAway(n, p).toFixed(p) + '%';
 }
 
-export function divided_by(v, n) {
-	return Number(v) / Number(n);
+// Groups the whole part and keeps the decimals as given. With no argument it
+// follows the viewer's locale (`1.234,5` in de-DE); an explicit delimiter forces
+// it, groups in threes and keeps `.` as the decimal point.
+/** @param {unknown} v @param {unknown} [delimiter] @returns {string} */
+export function number_with_delimiter(v, delimiter) {
+	const n = num(v);
+	if (!Number.isFinite(n)) return notFinite(v);
+	if (delimiter == null) return localeNumber(n);
+	const [whole, frac] = String(n).split('.');
+	return group(whole, str(delimiter)) + (frac === undefined ? '' : '.' + frac);
 }
 
-export function modulo(v, n) {
-	return Number(v) % Number(n);
-}
-
-export function round(v, decimals = 0) {
-	// normDecimals clamps to toFixed's valid 0–100 range and integer-coerces, so a
-	// negative (round(5, -1)), oversized (round(5, 101)), or non-numeric decimals
-	// fails soft (falls back to 0) instead of throwing RangeError.
-	return Number(Number(v).toFixed(normDecimals(decimals, 0)));
-}
-
-export function floor(v) {
-	return Math.floor(Number(v));
-}
-
-export function ceil(v) {
-	return Math.ceil(Number(v));
-}
-
-export function abs(v) {
-	return Math.abs(Number(v));
-}
-
-export function first(arr) {
-	return Array.isArray(arr) ? arr[0] : arr;
-}
-
-export function last(arr) {
-	return Array.isArray(arr) ? arr[arr.length - 1] : arr;
-}
-
-export function size(v) {
-	if (Array.isArray(v)) return v.length;
-	if (typeof v === 'string') return v.length;
-	if (v && typeof v === 'object') return Object.keys(v).length;
-	return 0;
-}
-
-export function join(arr, sep = ', ') {
-	return Array.isArray(arr) ? arr.join(sep) : str(arr);
-}
-
-export function reverse(v) {
-	if (Array.isArray(v)) return [...v].reverse();
-	// Spread iterates by code POINT, not UTF-16 code unit — `split('')` would tear
-	// a surrogate pair (emoji) into two lone surrogates and reorder them wrong.
-	if (typeof v === 'string') return [...v].reverse().join('');
-	return v;
-}
-
-// Comparator shared by keyed/keyless sort. Two Dates (CalendarDate included, it
-// extends Date) compare CHRONOLOGICALLY by timestamp — not by the weekday-first
-// string form — and an Invalid Date times out to NaN, so it rides the numeric
-// NaN rule below to the end. Two numbers compare NUMERICALLY (so [2,10,1] →
-// [1,2,10], not the lexicographic [1,10,2] a bare Array.sort gives), with NaN
-// pushed to the end (NaN vs NaN is equal). Any other type pair — or a
-// number/non-number mix — falls back to string comparison, preserving the prior
-// keyless default() behavior for non-numeric data.
-function compareValues(a, b) {
-	if (a instanceof Date && b instanceof Date) {
-		a = a.getTime();
-		b = b.getTime();
+// Shortens a large number with a localized suffix: `1.2K`, `45K`, `3.4M` in en.
+// One cached formatter, rebuilt when the formatter locale moves (D175).
+/** @type {Intl.NumberFormat | undefined} */
+let compactFormatter;
+/** @type {string | undefined} */
+let compactLocale;
+/** @param {unknown} v @returns {string} */
+export function compact_number(v) {
+	const n = num(v);
+	if (!Number.isFinite(n)) return notFinite(v);
+	if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && compactLocale !== formatLocale) {
+		compactLocale = formatLocale;
+		compactFormatter = undefined;
 	}
-	if (typeof a === 'number' && typeof b === 'number') {
-		if (Number.isNaN(a)) return Number.isNaN(b) ? 0 : 1;
-		if (Number.isNaN(b)) return -1;
-		return a < b ? -1 : a > b ? 1 : 0;
-	}
-	const as = String(a);
-	const bs = String(b);
-	return as < bs ? -1 : as > bs ? 1 : 0;
+	compactFormatter ??= new Intl.NumberFormat(
+		typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__ ? formatLocale : undefined,
+		{ notation: 'compact' },
+	);
+	// Intl prints -0 as "-0"; V6 prints it as 0.
+	return compactFormatter.format(n === 0 ? 0 : n);
 }
 
-export function sort(arr, key) {
-	if (!Array.isArray(arr)) return arr;
-	// Copy first — never mutate the caller's array (a formatter is display-only).
-	const sorted = [...arr];
-	if (key) {
-		sorted.sort((a, b) => compareValues(a[key], b[key]));
+// ── Values ────────────────────────────────────────────────────────────────────
+
+// Compare two strings by Unicode code point (UTF-8 byte order, which is what Go's
+// map-key sort uses). UTF-16 code-unit order differs only when a surrogate meets
+// U+E000–U+FFFF, so remap those two ranges before comparing.
+/** @param {string} a @param {string} b @returns {number} */
+function compareCodePoints(a, b) {
+	const len = Math.min(a.length, b.length);
+	for (let i = 0; i < len; i++) {
+		let x = a.charCodeAt(i);
+		let y = b.charCodeAt(i);
+		if (x === y) continue;
+		if (x >= 0xd800) x += x < 0xe000 ? 0x2000 : -0x800;
+		if (y >= 0xd800) y += y < 0xe000 ? 0x2000 : -0x800;
+		return x - y;
+	}
+	return a.length - b.length;
+}
+
+// JSON with object keys sorted by code point; a missing value, NaN and ±Infinity
+// give `null` (D174 F9). Written out rather than JSON.stringify with a replacer:
+// a JS object always enumerates integer-like keys first, so no rebuilt object can
+// carry code-point order. A cycle serializes as `null` rather than throwing.
+// The output is NOT HTML-escaped — the text node it lands in handles that.
+/**
+ * @param {any} v any value; its own `toJSON` is honored
+ * @param {unknown[]} stack the containers being serialized, for cycle detection
+ * @returns {string | undefined} undefined for a function or symbol
+ */
+function toJSON(v, stack) {
+	if (v != null && typeof v.toJSON === 'function') v = v.toJSON();
+	if (v == null) return 'null';
+	switch (typeof v) {
+		case 'number':
+			return Number.isFinite(v) ? JSON.stringify(v) : 'null';
+		case 'string':
+			return JSON.stringify(v);
+		case 'boolean':
+			return String(v);
+		case 'bigint':
+			return String(v);
+		case 'object':
+			break;
+		default:
+			return undefined; // function / symbol: omitted from objects, null in lists
+	}
+	if (stack.includes(v)) return 'null';
+	stack.push(v);
+	let out;
+	if (Array.isArray(v)) {
+		out = '[' + Array.from(v, (item) => toJSON(item, stack) ?? 'null').join(',') + ']';
 	} else {
-		sorted.sort(compareValues);
+		const parts = [];
+		for (const key of Object.keys(v).sort(compareCodePoints)) {
+			const item = toJSON(v[key], stack);
+			if (item !== undefined) parts.push(JSON.stringify(key) + ':' + item);
+		}
+		out = '{' + parts.join(',') + '}';
 	}
-	return sorted;
+	stack.pop();
+	return out;
 }
 
-export function uniq(arr) {
-	if (!Array.isArray(arr)) return arr;
-	return [...new Set(arr)];
-}
-
-export function compact(arr) {
-	if (!Array.isArray(arr)) return arr;
-	return arr.filter(v => v != null && v !== '');
-}
-
-export function map(arr, key) {
-	if (!Array.isArray(arr)) return arr;
-	return arr.map(item => item[key]);
-}
-
-export function where(arr, key, value) {
-	if (!Array.isArray(arr)) return arr;
-	return arr.filter(item => item[key] === value);
-}
-
+/** @param {unknown} v @returns {string} */
 export function json(v) {
-	return JSON.stringify(v);
+	return toJSON(v, []) ?? 'null';
 }
 
-export function currency(v, sym = '$', decimals = 2) {
-	const num = Number(v);
-	return Number.isFinite(num) ? sym + num.toFixed(normDecimals(decimals, 2)) : str(v);
-}
-
-export function percentage(v, decimals = 0) {
-	const num = Number(v) * 100;
-	return Number.isFinite(num) ? num.toFixed(normDecimals(decimals, 0)) + '%' : str(v);
-}
-
-export function number_with_delimiter(v, delimiter = ',') {
-	const num = Number(v);
-	if (!Number.isFinite(num)) return str(v);
-	const parts = String(num).split('.');
-	parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, delimiter);
-	return parts.join('.');
-}
+// ── Dates ─────────────────────────────────────────────────────────────────────
 
 // The calendar-date parse rule (D114) — noDate, parseDateInput, and the
 // CalendarDate tag its `isCalendarDate`/`calendarISO` pair reads — is shared with
@@ -239,24 +383,172 @@ export function number_with_delimiter(v, delimiter = ',') {
 // 'string'`. By the time a value reaches a template it has usually been through
 // the store, which revives a `date()` field to a Date on the way in — a
 // string-shaped test sees an instant there and silently takes the wrong branch.
-const DATE_FORMATS = {
-	date:     { year: 'numeric', month: '2-digit', day: '2-digit' },
-	time:     { hour: '2-digit', minute: '2-digit' },
-	short:    { year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' },
-	long:     { year: 'numeric', month: 'long', day: '2-digit' },
-	datetime: { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }
+//
+// `date`, `time` and `datetime` share the presets `short`, `medium`, `long` and
+// `iso` (D174 F4–F6). The first three are Intl styles in the viewer's locale and
+// time zone; `iso` is locale-free and uses the viewer's zone.
+//
+// What each function renders with no preset (D176 §4): `date` the medium date
+// (`Sep 24, 2026`), `time` the short time (`3:04 PM`), and `datetime` the medium
+// date with the short time (`Sep 24, 2026, 3:04 PM`) — a pairing no named preset
+// spells, so it has its own options. An unknown preset renders the default too.
+// The options objects double as the formatter cache keys, so a default and the
+// preset it equals share one formatter. The shared objects are bindings, never
+// `DATE_PRESETS.date.medium`: a property read at module level is a side effect
+// to the bundler, which would then keep both tables in apps with no dates.
+/** @typedef {'date' | 'time' | 'datetime'} DateKind */
+/** @type {Intl.DateTimeFormatOptions} */
+const MEDIUM_DATE = { dateStyle: 'medium' };
+/** @type {Intl.DateTimeFormatOptions} */
+const SHORT_TIME = { timeStyle: 'short' };
+/** @type {Record<DateKind, Record<string, Intl.DateTimeFormatOptions>>} */
+const DATE_PRESETS = {
+	date: {
+		short: { dateStyle: 'short' },
+		medium: MEDIUM_DATE,
+		long: { dateStyle: 'long' },
+	},
+	time: {
+		short: SHORT_TIME,
+		medium: { timeStyle: 'medium' },
+		long: { timeStyle: 'long' },
+	},
+	datetime: {
+		short: { dateStyle: 'short', timeStyle: 'short' },
+		medium: { dateStyle: 'medium', timeStyle: 'medium' },
+		long: { dateStyle: 'long', timeStyle: 'long' },
+	},
+};
+/** @type {Record<DateKind, Intl.DateTimeFormatOptions>} */
+const DATE_DEFAULTS = {
+	date: MEDIUM_DATE,
+	time: SHORT_TIME,
+	datetime: { dateStyle: 'medium', timeStyle: 'short' },
 };
 
+// Keyed by locale (only undefined and string locales are stored), then by the
+// options object.
+/** @type {Map<Intl.LocalesArgument, Map<Intl.DateTimeFormatOptions, Intl.DateTimeFormat>>} */
 const DATE_FORMATTERS = new Map();
+/** @type {Map<string, Intl.DateTimeFormat>} */
 const TIMEZONE_FORMATTERS = new Map();
 // `timeago` takes no locale, so there is exactly one formatter to cache — built
 // on first use so importing the module never constructs an Intl object.
+/** @type {Intl.RelativeTimeFormat | undefined} */
 let relativeTimeFormatter;
+/** @type {string | undefined} */
+let relativeLocale;
+// Dev-only warn-once ledger for unknown presets and time zones; production never
+// touches it.
+/** @type {Set<string> | undefined} */
+let warnedPresets;
 
+/** @param {number} n @returns {string} */
+const pad2 = (n) => String(n).padStart(2, '0');
+
+// RFC 3339 pieces in the Date's local zone: `15:04:05` plus `Z` or `±hh:mm`.
+/** @param {Date} d @returns {string} */
+function isoTime(d) {
+	const offset = -d.getTimezoneOffset();
+	const abs = Math.abs(offset);
+	const zone =
+		offset === 0 ? 'Z' : (offset < 0 ? '-' : '+') + pad2(Math.trunc(abs / 60)) + ':' + pad2(abs % 60);
+	return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) + zone;
+}
+
+/**
+ * @param {DateKind} kind
+ * @param {unknown} v
+ * @param {string} [preset]
+ * @param {Intl.LocalesArgument} [locale]
+ * @returns {string}
+ */
+function formatDate(kind, v, preset, locale) {
+	// An absent value renders NOTHING, in every preset (`iso` included). The invalid
+	// -date fall-through below already does that for null/undefined/'' via str(), but
+	// not for a boolean — 'false' is not a date worth echoing back — so the empty
+	// path is explicit.
+	if (noDate(v)) return '';
+	const d = parseDateInput(v);
+	if (isNaN(d.getTime())) return str(v);
+	// An explicit locale argument wins; otherwise the formatter locale (D175).
+	if (typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) locale ??= formatLocale;
+
+	if (preset === 'iso') {
+		// A calendar date names a day, not an instant: its ISO form is the day
+		// itself, whichever formatter asked (D114).
+		if (isCalendarDate(d) || kind === 'date') return calendarISO(d);
+		return kind === 'time' ? isoTime(d) : calendarISO(d) + 'T' + isoTime(d);
+	}
+
+	// The Intl options are the cache key: a module constant per preset, so a typo
+	// can never mint a cache entry.
+	let options = DATE_DEFAULTS[kind];
+	if (preset !== undefined) {
+		const presets = DATE_PRESETS[kind];
+		if (Object.hasOwn(presets, preset)) {
+			options = presets[preset];
+		} else if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			// An unknown preset is a development error, reported once per name, and
+			// renders the default.
+			warnedPresets ??= new Set();
+			const key = kind + ':' + preset;
+			if (!warnedPresets.has(key)) {
+				warnedPresets.add(key);
+				// The retired preset names `date`/`time`/`datetime` are functions now.
+				const retired =
+					preset !== kind && Object.hasOwn(DATE_PRESETS, preset) ? ` — use ${preset}() instead` : '';
+				console.error(
+					`[puzzle] unknown ${kind} preset "${preset}"${retired}; the presets are short, medium, long and iso (rendered as the default)`,
+				);
+			}
+		}
+	}
+	// Only undefined and string locales are cache KEYS. Intl also accepts a locale
+	// LIST (and an Intl.Locale), and a call site that builds one inline hands over a
+	// fresh object every render — identity keying would miss the Map every time AND
+	// insert, growing it without bound. Those construct a formatter per call instead.
+	const cacheable = locale === undefined || typeof locale === 'string';
+	// An invalid locale throws RangeError at DateTimeFormat construction — fail
+	// soft to the raw value like the invalid-date guard above.
+	try {
+		const localeFormatters = cacheable ? DATE_FORMATTERS.get(locale) : undefined;
+		let formatter = localeFormatters?.get(options);
+		if (!formatter) {
+			formatter = new Intl.DateTimeFormat(locale, options);
+			if (localeFormatters) {
+				localeFormatters.set(options, formatter);
+			} else if (cacheable) {
+				DATE_FORMATTERS.set(locale, new Map([[options, formatter]]));
+			}
+		}
+		return formatter.format(d);
+	} catch {
+		return str(v);
+	}
+}
+
+// `preset` is optional in all three; leaving it out renders DATE_DEFAULTS.
+/** @param {unknown} v @param {string} [preset] @param {Intl.LocalesArgument} [locale] @returns {string} */
+export function date(v, preset, locale) {
+	return formatDate('date', v, preset, locale);
+}
+
+/** @param {unknown} v @param {string} [preset] @param {Intl.LocalesArgument} [locale] @returns {string} */
+export function time(v, preset, locale) {
+	return formatDate('time', v, preset, locale);
+}
+
+/** @param {unknown} v @param {string} [preset] @param {Intl.LocalesArgument} [locale] @returns {string} */
+export function datetime(v, preset, locale) {
+	return formatDate('datetime', v, preset, locale);
+}
+
+/** @param {unknown} v @param {string} [tz] IANA zone id @returns {Date | ''} */
 export function in_timezone(v, tz = 'UTC') {
 	// An absent value has no instant to re-express, and the fail-soft below would
-	// hand the next formatter in the pipe an Invalid Date — `{ x | in_timezone:'UTC'
-	// | date }` then rendered the literal text "Invalid Date" for an unset field.
+	// hand the outer function an Invalid Date — `{ date(in_timezone(x, 'UTC')) }`
+	// then rendered the literal text "Invalid Date" for an unset field.
 	// Same empty answer as date()/timeago(), for the same reason.
 	if (noDate(v)) return '';
 	const d = parseDateInput(v);
@@ -267,11 +559,13 @@ export function in_timezone(v, tz = 'UTC') {
 	// offset differs, making a calendar date render differently per viewer — the
 	// exact TZ dependence D114 removed from `date`/`timeago`.
 	if (isCalendarDate(d)) return d;
+	// No zone (an unset `user.timezone`) is not a typo: nothing to re-express.
+	if (tz == null || tz === '') return d;
 	// An unknown time-zone identifier throws RangeError at DateTimeFormat
 	// construction, and formatToParts throws on an invalid date — fail soft to the
 	// un-shifted date so a bad tz/date never crashes the render.
+	let formatter = TIMEZONE_FORMATTERS.get(tz);
 	try {
-		let formatter = TIMEZONE_FORMATTERS.get(tz);
 		if (!formatter) {
 			formatter = new Intl.DateTimeFormat('en-CA', {
 				timeZone: tz,
@@ -282,71 +576,45 @@ export function in_timezone(v, tz = 'UTC') {
 			TIMEZONE_FORMATTERS.set(tz, formatter);
 		}
 		const parts = formatter.formatToParts(d);
+		/** @param {Intl.DateTimeFormatPartTypes} t */
 		const get = t => parts.find(p => p.type === t)?.value;
 		const iso = `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`;
 		return new Date(iso);
 	} catch {
+		// No formatter means Intl rejected the zone itself (a typo such as
+		// 'America/New_Yrok' passes the compile-time shape check): a development
+		// error, reported once per zone, like an unknown date preset.
+		if (!formatter && (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)) {
+			warnedPresets ??= new Set();
+			const zone = String(tz);
+			if (!warnedPresets.has('in_timezone:' + zone)) {
+				warnedPresets.add('in_timezone:' + zone);
+				console.error(
+					`[puzzle] unknown in_timezone time zone "${zone}"; use an IANA zone id such as "America/New_York" (rendered un-shifted)`,
+				);
+			}
+		}
 		return d;
 	}
 }
 
-export function date(v, preset = 'date', locale = undefined) {
-	// An absent value renders NOTHING, in every preset (`iso` included). The invalid
-	// -date fall-through below already does that for null/undefined/'' via str(), but
-	// not for a boolean — 'false' is not a date worth echoing back — so the empty
-	// path is explicit.
-	if (noDate(v)) return '';
-	const d = parseDateInput(v);
-	if (isNaN(d.getTime())) return str(v);
-
-	// The ISO form of a calendar date is the calendar date itself — toISOString() on
-	// its local midnight would emit a time-zone-dependent instant.
-	if (preset === 'iso') return isCalendarDate(d) ? calendarISO(d) : d.toISOString();
-
-	const resolvedPreset = Object.hasOwn(DATE_FORMATS, preset) ? preset : 'date';
-	const options = DATE_FORMATS[resolvedPreset];
-	// Only undefined and string locales are cache KEYS. Intl also accepts a locale
-	// LIST (and an Intl.Locale), and a call site that builds one inline hands over a
-	// fresh object every render — identity keying would miss the Map every time AND
-	// insert, growing it without bound. Those construct a formatter per call instead.
-	const cacheable = locale === undefined || typeof locale === 'string';
-	// An invalid locale throws RangeError at DateTimeFormat construction — fail
-	// soft to the raw value like the invalid-date guard above.
-	try {
-		const localeFormatters = cacheable ? DATE_FORMATTERS.get(locale) : undefined;
-		let formatter = localeFormatters?.get(resolvedPreset);
-		if (!formatter) {
-			formatter = new Intl.DateTimeFormat(locale, options);
-			if (localeFormatters) {
-				localeFormatters.set(resolvedPreset, formatter);
-			} else if (cacheable) {
-				DATE_FORMATTERS.set(locale, new Map([[resolvedPreset, formatter]]));
-			}
-		}
-		return formatter.format(d);
-	} catch {
-		return str(v);
-	}
-}
-
-export function time(v, preset = 'time', locale = undefined) {
-	return date(v, preset, locale);
-}
-
-export function datetime(v, preset = 'datetime', locale = undefined) {
-	return date(v, preset, locale);
-}
-
+/** @param {unknown} v @returns {string} */
 export function timeago(v) {
-	// `{ todo.completedAt | timeago }` on an incomplete todo: nothing to say.
+	// `{ timeago(todo.completedAt) }` on an incomplete todo: nothing to say.
 	if (noDate(v)) return '';
 	const then = parseDateInput(v).getTime();
 	if (isNaN(then)) return str(v);
 
-	const rtf = (relativeTimeFormatter ??= new Intl.RelativeTimeFormat(undefined, {
-		numeric: 'auto',
-	}));
+	if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && relativeLocale !== formatLocale) {
+		relativeLocale = formatLocale;
+		relativeTimeFormatter = undefined;
+	}
+	const rtf = (relativeTimeFormatter ??= new Intl.RelativeTimeFormat(
+		typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__ ? formatLocale : undefined,
+		{ numeric: 'auto' },
+	));
 	const diff = Math.round((then - Date.now()) / 1000);
+	/** @type {Array<[Intl.RelativeTimeFormatUnit, number]>} */
 	const units = [
 		['year', 31536000],
 		['month', 2592000],

@@ -8,20 +8,18 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-TEMPLATE
   - DECISION-D38-EVENT-MODIFIERS
+  - DECISION-D16-COMPOSITION-SLOTS-CALLBACKS
 ---
 
-# D4 — Event handler convention: bare identifier vs call expression
+# D4 — Event handler convention: bare name vs call expression
 
-Settled per [[DOC-SPEC-TEMPLATE]] §5. A bare `@click={ handler }` invokes `handler(event)`; a call expression `@click={ handler(todo) }` compiles to `(event) => handler(todo)`.
-
-## Context
-Event handler syntax needs a clear rule for when the written expression is the handler versus a call made at event time. Early examples used a curried pattern.
+Enforced by [[DOC-SPEC-TEMPLATE]] §5.
 
 ## Decision
-`@click={ handler }` (bare) invokes `handler(event)`. `@click={ handler(todo) }` (call) is compiled to `(event) => handler(todo)` — evaluated at event time, `event` in scope, handler receives exactly the written arguments.
+- `@click={ handler }` (bare name) invokes the component's `events.handler(event)`.
+- `@click={ handler(todo) }` (call) compiles to `(event) => this.events.handler(todo)` — evaluated at event time, `event` in scope, the handler receives exactly the written arguments.
+
+Modifiers (`@keydown:enter`) are [[DECISION-D38-EVENT-MODIFIERS]]; the same wrapper serves callback props on component tags ([[DECISION-D16-COMPOSITION-SLOTS-CALLBACKS]]).
 
 ## Alternatives rejected
-- The curried pattern from early examples (`(todo) => () => {...}`) — removed.
-
-## Consequences
-Event modifiers (`@keydown:enter`) are deferred (later shipped in v1.7, see [[DECISION-D38-EVENT-MODIFIERS]]).
+- Curried handlers (`(todo) => () => {…}`) — one closure per render and a confusing shape.

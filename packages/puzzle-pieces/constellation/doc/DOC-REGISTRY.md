@@ -9,6 +9,62 @@ connections:
   - DECISION-REGISTRY-SHAPED-REPO
   - DECISION-WRAP-WEB-COMPONENTS
   - DECISION-CONFIG-FIRST-API
+notes:
+  - kind: state
+    text: >-
+      0.8.0, feat/piece-image-zoom: new `image-zoom` piece — a WRAPPER over @magic-spells/image-zoom
+      (floor ^0.1.0, the only published release), see COMPONENT-IMAGE-ZOOM. Registry manifest +
+      registry.json row, demo copy, ImageZoomDoc page, nav/routes entries, `@import
+      "@magic-spells/image-zoom/css" layer(components)` in demo/app/styles/styles.css, and
+      test/image-zoom-wrapper.test.js (wired into all.test.js). The image is a PROP, not a slot —
+      the component caches its single `<img>` child at connect and writes the transform into its
+      inline style, so the piece owns that element; a `src` change re-attaches the host so the
+      component re-measures.
+  - kind: state
+    text: >-
+      0.8.0 (feat/piece-split-text): new piece `split-text` — a wrapper over
+      @magic-spells/split-text, floor ^0.2.0, one file (SplitText.pzl), no registry deps. Adds the
+      `@magic-spells/split-text/css` import to demo/app/styles/styles.css and a docs page at
+      /components/split-text. See COMPONENT-SPLIT-TEXT: replay is a `play` TOKEN prop
+      (edge-triggered in afterUpdate → element.split(), plus reveal() for trigger="manual"), which
+      is also the only way a changed attribute is applied since the element observes none; the host
+      binds no `style` (the element writes the timing custom properties there itself).
+  - kind: state
+    text: >-
+      2026-09-21 (0.8.0, chore/morph-engine-0.4.2): the `@magic-spells/morph-engine` floor moved
+      ^0.1.2 → ^0.4.2 in `demo/package.json` and in the three manifests that declare it
+      (date-picker, emoji-picker, emoji-picker-simple) plus their `registry.json` rows — one floor
+      per package, so all four had to move together. Nothing in 0.2–0.4 was removed or renamed, so
+      the pieces' surface (`new MorphEngine({ revealAt, lockScroll })`, `show({ from, to, display
+      })`, `hide()`, `on('shown'|'hidden'|'reveal'|'unreveal')`, `state`, `destroy()`) is untouched;
+      the new options (`cloneFit`, `handoff`, `container`) are all opt-in. Two 0.4.x fixes are why
+      the floor is worth raising for this registry: 0.4.1 normalizes computed colors to `rgba()` at
+      capture, which fixes the blob painting an opaque WHITE HAIRLINE border for the whole flight
+      whenever a source uses a Tailwind v4 opacity modifier (`border-border/60` serializes as
+      `oklab(L a b / α)`) on a dark theme — every morph piece styles its panel that way, so every
+      dark-mode flight was affected; it also makes `parseShadow` take the first VISIBLE OUTER shadow
+      instead of Tailwind's leading transparent placeholder rings. 0.4.2 adds a `container` option
+      so a blob flying into an open `showModal()` dialog is appended inside that dialog's subtree
+      rather than painted under the browser top layer. NOT adopted here and not needed today:
+      DatePicker and both emoji pickers morph into popovers, the docs SearchDialog's blob lands in
+      `document.body` at z-index 9999 and stays visible for the whole flight, and the Dialog piece
+      does not use morph-engine at all (its "Morphing dialogs" docs section points at Sheet, which
+      owns that flight internally). Revisit `container` only if a piece ever morphs into a real
+      `showModal()` dialog. Smoked on 3074 in light and dark: blob visible mid-flight with a
+      correctly themed dark border, no console errors.
+  - kind: state
+    text: >-
+      0.8.0 (feat/spinner-variants): `spinner` gains a `variant` prop (ring default + ticks, trace,
+      dots, snap, spark, heartbeat) and a new piece `shimmer-text` lands (101 pieces). Both are
+      CSS-only and carry their keyframes in their own `<style>` block — the pieces guide's second
+      sanctioned `<style>` exception, see DECISION-CSS-ONLY-MOTION. Manifests, registry.json rows,
+      demo copies, SpinnerDoc rewrite, new ShimmerTextDoc + nav/routes, README count, and
+      test/loading-pieces.test.js (wired into all.test.js). COMPONENT-SPINNER and
+      COMPONENT-SHIMMER-TEXT hold the per-design notes.
+  - kind: state
+    text: >-
+      0.8.0 adds `hamburger` (PR #148) — registry now 102 pieces; README count bumped. See
+      [[COMPONENT-HAMBURGER]].
 ---
 
 # The registry — source of truth
@@ -31,17 +87,24 @@ The manifest schema and per-field meaning live in CLAUDE.md; the load-bearing ru
 - `files` copy to `targetDir` (default `app/components/ui/`).
 - `registryDependencies` are resolved **transitively**: `lib/*.js` → `app/lib/`, sibling pieces (e.g. `date-picker` → `calendar`) → their own `targetDir`.
 - `dependencies` are **real npm packages, plain JS only** — `.pzl` never appears there. Morph pieces (Select, Dialog, DatePicker) list `@magic-spells/morph-engine`.
+- Each `dependencies` entry is an npm INSTALL SPEC carrying a semver **floor**, not a bare package name: `"@magic-spells/collapsible-content@^1.2.0"`. The floor is the version the piece was built and demoed against, so it must equal what `demo/package.json` installs; one floor per package registry-wide. `puzzle add piece` prints the spec verbatim, which is what stops a wrapper from resolving against an npm `latest` older than the element it wraps (D169 in the framework plan — 0.7.0's `add piece accordion` installed collapsible-content 1.1.1 and lost `<collapsible-group>`). The CLI still accepts a bare name so third-party registries keep working; nothing here may ship one, and `test/registry-deps.test.js` enforces both that and the demo agreement.
 - `description` is reused verbatim as the docs subtitle, so it must read as one clean sentence.
 
 ## registry.json is generated
 
 
-
-`registry.json` is not hand-maintained per entry — it is the aggregation of all `piece.json` manifests, pieces alphabetical, with a top-level `theme` pointer and `version`. **Regenerate it whenever a piece is added or renamed** (re-run the aggregation; lib files are represented via their consumers' `registryDependencies`, e.g. `lib/date-math.js`). Current count: **97 pieces** — keep the README and the demo shell (`Introduction.pzl`, `ComponentsIndex.pzl`) count in sync when it changes.
+`registry.json` is not hand-maintained per entry — it is the aggregation of all `piece.json` manifests, pieces alphabetical, with a top-level `theme` pointer and `version`. **Regenerate it whenever a piece is added or renamed** (re-run the aggregation; lib files are represented via their consumers' `registryDependencies`, e.g. `lib/date-math.js`). Current count: **102 pieces** — keep the README count in sync when it changes (the demo shell's `Introduction.pzl`, `ComponentsIndex.pzl` and header badge compute `pieceCount`, so they follow on their own).
 
 ## theme/pieces.css is the token source
 
-Every piece styles itself exclusively through the semantic utilities these `@theme` tokens generate (`bg-surface`, `text-ink`, `border-border`, `bg-brand`, `text-danger`, …) — no hex inside components. `pieces.css` is a **registry file**: editing token *values* here changes every consumer. It carries a light block plus a `prefers-color-scheme: dark` block (re-tuned to near-black — page `#09090b` — during the docs refactor; that dark re-tune reached every consumer). Consumers merge it into `app/styles/styles.css` after `@import "tailwindcss"`.
+
+Every piece styles itself exclusively through the semantic utilities the `@theme` tokens generate (`bg-surface`, `text-ink`, `border-border`, `bg-brand`, `text-danger`, shell roles `bg-bar` / `bg-rail` / `bg-surface-panel`, …) — no hex inside components. Since 2026-09-18 ([[DECISION-THEMES-IN-PIECES]], [[FEATURE-THEMES]]) `registry/theme/` holds **four hand-written palette files and the runtime**:
+
+- `pieces.css` — the default palette: `:root { color-scheme: light dark }` + `[data-theme]` color-scheme blocks, the Tailwind v4 `@theme` block where every token is a `light-dark(light, dark)` pair, a `[data-theme='medium']` block (only the tokens that differ from dark), and a `[data-scheme='default']` restatement. Line 2 is the CLI's installed-detection marker — do not reword it.
+- `dim.css`, `warm.css`, `void.css` — every token restated inside `[data-scheme='x']`, plus that scheme's medium block. Inert until `data-scheme` selects them.
+- `appearance.js` (export `./appearance`) and `pre-paint.js` (export `./pre-paint`); `registry.json` lists `themes` (`{ name, file, label, description }`) and `modes`.
+
+Two attributes drive it: `data-scheme` = palette, `data-theme` = mode (`light | medium | dark`). Selectors are unanchored so any element can scope a subtree. The files ARE the source of truth (no generator, no JSON); `test/themes.test.mjs` holds the four to one identical token set and `test/contrast.test.mjs` holds every palette × mode to WCAG 2.2 AA over the pairs in `test/lib/roles.mjs`. Token NAMES are what Pyramid and Sites already use and are frozen. Consumers import the package exports (or copy the files) after `@import "tailwindcss"`.
 
 ## lib/ convention
 

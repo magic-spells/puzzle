@@ -17,9 +17,9 @@ export default class ViewScope extends PuzzleView {
 void function (this: InstanceType<typeof ViewScope> & Record<string, any>): void {
   const __d = this;
   void (__d.classes);
-  void (__puzzle_check_formatter("upper", __d.name));
+  void (__puzzle_app_fn("upper")(__d.name));
   if (__d.user) {
-    void (__puzzle_check_formatter("fallback", __d.user.name, 'friend'));
+    void (__puzzle_app_fn("fallback")(__d.user.name, 'friend'));
   } else {
     if (__d.loading) {
       void (__d.status);

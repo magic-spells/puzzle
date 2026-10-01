@@ -1,6 +1,6 @@
 <puzzle-view>
   <nav aria-label="Pagination" class={ rootClass }>
-    <ul class="flex items-center gap-1">
+    <ul class="flex flex-wrap items-center gap-1">
       {#for item in items}
         <li key={ item.key }>
           {#if item.kind === 'prev'}
@@ -72,6 +72,11 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   @change(page, event)  fired on a page/prev/next click; NEVER called with the
 //                         current page or an out-of-range page (the click is
 //                         guarded and prev/next disable at the ends).
+//
+// The row WRAPS: the widest window (prev, first, …, three siblings, …, last,
+// next) is nine 36px cells, 356px — wider than a phone-width container. A wrap
+// keeps every cell reachable instead of running past the edge; wherever the row
+// fits, nothing changes.
 //
 // Windowing is a pure function (`paginate`, below): boundaryCount = 1,
 // siblingCount = 1. It emits a FLAT list of entries — { kind: 'prev' } , a run of

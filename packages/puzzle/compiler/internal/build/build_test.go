@@ -197,6 +197,9 @@ func TestBuildDevDefineDCE(t *testing.T) {
 	if !strings.Contains(string(devJS), profileRequestSentinel) {
 		t.Errorf("dev bundle should retain the profiler bridge request %q (__PUZZLE_DEV__ define = true)", profileRequestSentinel)
 	}
+	if !strings.Contains(string(devJS), thisHandlerSentinel) {
+		t.Errorf("dev bundle should retain the non-arrow handler warning (__PUZZLE_DEV__ define = true)")
+	}
 
 	// Production: DCE strips every DEV-guarded branch — no __puzzleHMR reaches
 	// the bundle (zero production cost).
@@ -238,6 +241,11 @@ func TestBuildDevDefineDCE(t *testing.T) {
 	if strings.Contains(string(prodJS), profileRequestSentinel) {
 		t.Errorf("production bundle must DCE the profiler bridge — found the %q request present", profileRequestSentinel)
 	}
+	// The non-arrow `events` handler check (D03) runs from mount() behind the
+	// same inline probe; its function and message must leave with it.
+	if strings.Contains(string(prodJS), thisHandlerSentinel) {
+		t.Errorf("production bundle must DCE the non-arrow handler warning — found %q present", thisHandlerSentinel)
+	}
 	if bytes := metafileBytesInOutput(t, prodMetafile, "client-runtime/devperf.js"); bytes != 0 {
 		t.Errorf("production devperf.js bytesInOutput = %d, want 0", bytes)
 	}
@@ -248,6 +256,10 @@ func TestBuildDevDefineDCE(t *testing.T) {
 
 // devperfSentinel is a minification-proof literal unique to devperf.js.
 const devperfSentinel = "__PUZZLE_PERF__"
+
+// thisHandlerSentinel is a literal unique to PuzzleView's development warning
+// for an `events` handler that is not an arrow and uses `this` (D03).
+const thisHandlerSentinel = "is not an arrow function"
 
 // profileRequestSentinel is a minification-proof literal unique to the profiler
 // half of the DevTools bridge (devtools.js, D121) — a request type, so minifying
@@ -433,6 +445,10 @@ type definesFixture struct {
 	portal   bool
 	raw      bool
 	snippets bool
+	// rawHTML renders a value through the D174 `raw` function; newlineToBr
+	// through `newline_to_br` only.
+	rawHTML     bool
+	newlineToBr bool
 	// lazy adds a second route whose view is a D163 lazy() marker, declared in
 	// the routes module named by lazyRoutesExt (".js" when empty) so the same
 	// fixture can prove the usage scan reads TypeScript route tables too.
@@ -493,6 +509,12 @@ export default app;
 	}
 	if fx.raw {
 		featureMarkup += "  {#raw}<span @x=\"y\">literal</span>{/raw}\n"
+	}
+	if fx.rawHTML {
+		featureMarkup += "  <div>{ raw(items.join(', ')) }</div>\n"
+	}
+	if fx.newlineToBr {
+		featureMarkup += "  <div>{ newline_to_br(items.join(', ')) }</div>\n"
 	}
 	if fx.snippets {
 		featureMarkup += `  <ScopedList items={ items }>
@@ -606,6 +628,12 @@ const lazyResolverMarker = "lazy() loader must return a promise"
 // failure an unscanned marker gets instead of silently mounting as a view class.
 const lazyCompiledOutMarker = "lazy() support was compiled out"
 
+// sanitizerMarker is a literal from client-runtime/sanitize.js's DROP_NESTED
+// list — a string that survives minification and lives nowhere else in the
+// browser runtime, so its absence proves the sanitizer and the live-HTML node
+// tree-shook away (D174).
+const sanitizerMarker = "template object applet svg math select head frameset"
+
 // headTagMarker is the `data-puzzle-head` attribute the SSG stamps on every
 // managed tag — the same kind of minification-proof literal as flipEasing. It
 // must appear in PRERENDERED HTML and never in a browser bundle.
@@ -623,7 +651,7 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, marker := range []string{flipEasing, portalMarker, rawAtEscape, lazyResolverMarker, snippetsMarker, snippetForwardingMarker} {
+	for _, marker := range []string{flipEasing, portalMarker, rawAtEscape, lazyResolverMarker, snippetsMarker, snippetForwardingMarker, sanitizerMarker} {
 		if strings.Contains(string(withoutJS), marker) {
 			t.Errorf("bundle without feature usage retained %q", marker)
 		}
@@ -664,6 +692,28 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 		t.Errorf("bundle with {#raw} should retain the %q literal-attribute shim", rawAtEscape)
 	}
 
+	withRawHTML := writeDefinesFixture(t, definesFixture{rawHTML: true})
+	if err := Build(withRawHTML, Options{Development: false}); err != nil {
+		t.Fatalf("Build with raw function usage failed: %v", err)
+	}
+	rawHTMLJS := readFile(t, filepath.Join(withRawHTML, "dist", "app.js"))
+	if !strings.Contains(rawHTMLJS, sanitizerMarker) {
+		t.Errorf("bundle with `raw()` should retain the sanitizer (%q)", sanitizerMarker)
+	}
+
+	// newline_to_br alone keeps the live-HTML node but not the sanitizer.
+	withBr := writeDefinesFixture(t, definesFixture{newlineToBr: true})
+	if err := Build(withBr, Options{Development: false}); err != nil {
+		t.Fatalf("Build with newline_to_br usage failed: %v", err)
+	}
+	brJS := readFile(t, filepath.Join(withBr, "dist", "app.js"))
+	if strings.Contains(brJS, sanitizerMarker) {
+		t.Errorf("bundle with only `newline_to_br()` retained the sanitizer (%q)", sanitizerMarker)
+	}
+	if !strings.Contains(brJS, "<br>") {
+		t.Errorf("bundle with `newline_to_br()` lost the <br> helper")
+	}
+
 	withSnippets := writeDefinesFixture(t, definesFixture{snippets: true})
 	if err := Build(withSnippets, Options{Development: false}); err != nil {
 		t.Fatalf("Build with snippet usage failed: %v", err)
@@ -680,7 +730,7 @@ func TestBuildUsageThroughSymlinkedRoot(t *testing.T) {
 	real := writeDefinesFixture(t, definesFixture{portal: true, snippets: true})
 	home := filepath.Join(real, "app", "views", "Home.pzl")
 	write(t, home, strings.ReplaceAll(readFile(t, home), "{ item.label }",
-		"{ item.label | upcase } { item.id | currency }")+"\n<style scoped>ul { color: red; }</style>\n")
+		"{ capitalize(item.label) } { currency(item.id) }")+"\n<style scoped>ul { color: red; }</style>\n")
 	link := filepath.Join(t.TempDir(), "app-root")
 	if err := os.Symlink(real, link); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
@@ -689,7 +739,7 @@ func TestBuildUsageThroughSymlinkedRoot(t *testing.T) {
 	t.Setenv("PUZZLE_RUNTIME", repoRoot(t))
 	want := plugin.Usage{
 		HasPortal: true, HasSnippets: true,
-		Formatters: map[string]bool{"currency": true, "upcase": true},
+		Formatters: map[string]bool{"currency": true, "capitalize": true},
 	}
 	var realDefines map[string]string
 	for _, root := range []string{real, link} {
@@ -793,7 +843,7 @@ func assertNoHeadTagMachinery(t *testing.T, label, js string) {
 	}
 }
 
-// TestBuildNeverBundlesHeadTagMachinery pins D111 (amending D89): the managed
+// TestBuildNeverBundlesHeadTagMachinery pins D84 (amending D89): the managed
 // og:/twitter:/description/canonical tags are a BUILD-TIME product only. No
 // browser bundle, in ANY output mode, contains headTags.js — while the
 // prerendered HTML carries each page's own tags, which is the only place they
@@ -1976,7 +2026,7 @@ func TestValidatePublicReservedNamesCaseInsensitive(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(publicDir, name), []byte("USER ASSET"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			err := ValidatePublic(root, false)
+			err := ValidatePublic(root, false, false)
 			if err == nil {
 				t.Fatalf("expected %q to be rejected as a reserved output name", name)
 			}

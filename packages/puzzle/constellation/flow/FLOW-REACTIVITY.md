@@ -15,94 +15,66 @@ connections:
   - DECISION-D62-HANDLER-CACHING
   - DECISION-D161-AUTO-FETCHING-FINDS
 verified_at: '2026-08-24T21:39:15.808Z'
-notes:
-  - kind: gotcha
-    text: >-
-      Record-as-prop defeats prop reactivity: records mutate IN PLACE, so a record passed as a
-      component prop is always reference-equal and patchComponent's shallowEqual skip means the
-      child's data() never re-runs on record updates (streamed content, flag flips are invisible to
-      it). The child renders fresh only when some OTHER prop differs or it is remounted. Idiomatic
-      fix (see DOC-CHAT-EXAMPLE): the child re-queries findOne(type, props.record.id) inside data(),
-      subscribing itself to the record key — updates then re-render exactly that child. Props carry
-      identity; the store carries live data. If a framework-level answer is ever wanted
-      (always-refresh children, or record versioning), it needs a D-number — SPEC §4's
-      shallow-differ rule is the documented contract.
-  - kind: verified
-    text: >-
-      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
-      card was found true as written, so nothing changed but the baseline. Bound code was read at
-      this sha; the framework suite is green at 1871 tests.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Reactivity flow
 
-Puzzle has two intentionally asymmetric update paths:
+Two intentionally asymmetric update paths:
 
-1. A store notification, prop change, or route-param change reruns
-   `data(params, props)`. The successful, settled result replaces the
-   component's model layer, then the component renders and patches. A
-   notification landing while a D161 settle window is open folds into the
-   settling run as one more pass (`_settleDirty`) rather than starting a
-   competing refresh.
-2. `setData()` mutates the persistent local layer and renders immediately. It
-   does not rerun `data()`; call `refresh()` when derived model data must be
-   recomputed.
+1. **Model path**: a store notification, prop change or route-param change reruns
+   `data(params, props)`. The settled result REPLACES the model layer, then the component
+   renders and patches. A notification during an open D161 settle window folds into that
+   run as one more pass (`_settleDirty`).
+2. **Local path**: `setData()` writes the persistent local layer and renders immediately
+   without rerunning `data()`; call `refresh()` when derived model data must recompute.
 
-Implicit two-way binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]) feeds
-both paths without adding a third: a bound form control's synthesized handler
-writes local state through `setData` + `refresh` (path 2 plus the rerun, so
-`data()`-derived values track typing) or writes a record through validated
-`update()`, which re-enters as an ordinary store notification (path 1). The
-controlled-property echo compares against the live DOM, so the keystroke that
-caused the write patches nothing back into the input.
+Implicit two-way binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]) uses both: a bound
+local writes through `setData` + `refresh`; a bound record writes through validated
+`update()`, which re-enters as a store notification. The controlled-property echo
+compares against the live DOM, so the keystroke patches nothing back.
 
-Queries made inside `data()` register the evaluating component with
-[[COMPONENT-STORE]]. With the adapter capability installed, a tracked miss
-also queues a fetch and the evaluation re-runs until it settles — only the
-final warm pass's subscriptions commit; every provisional pass's registrations
-are unwound first ([[DECISION-D161-AUTO-FETCHING-FINDS]]). Record and
-collection keys are batched into one flush, each subscriber is isolated from
-failures, and subscriptions are replaced on reevaluation and removed on
-destroy.
+## Steps
 
-Async `data()` is last-wins: an older promise cannot commit after a newer
-evaluation. A previously-synchronous `data()` returns a promise as soon as a
-tracked find misses — only a sync, hit-only first pass stays synchronous, which
-is what decides whether a skeleton shows. While a component is suspended,
-optional skeleton content follows the first-load and minimum-duration rules
-described by [[COMPONENT-PUZZLE-VIEW]].
+1. Queries inside `data()` register the view with [[COMPONENT-STORE]]. With the adapter
+   capability, a tracked miss queues a fetch and the evaluation re-runs until it settles;
+   only the final warm pass's subscriptions commit ([[DECISION-D161-AUTO-FETCHING-FINDS]]).
+2. A mutation (`createRecord`, `update()`, adapter upsert, removal) notifies record and
+   collection keys and stamps the record's render revision; keys batch into one flush.
+3. `flush()` delivers each subscriber once, isolated from failures. Async `data()` is
+   last-wins; a `data()` whose tracked find misses returns a promise (a sync hit-only first
+   pass stays sync, which decides whether a skeleton shows — [[COMPONENT-PUZZLE-VIEW]]).
+4. Render → diff → keyed patch in [[COMPONENT-VIEW-MANAGER]]. Children with equal props
+   bail out; list blocks return cached rows whose inputs didn't change; conditional
+   placeholders keep child arity stable.
 
-The DOM path is render → diff → keyed patch in [[COMPONENT-VIEW-MANAGER]].
-Conditional placeholders stabilize child arity so toggling a branch does not
-remount unrelated trailing siblings.
+**One flush, one `data()` run**: a child that both receives a record prop and queries it
+would be woken twice (parent's `applyParentUpdate` + its own `onStoreChange`). A refresh
+started inside delivery stamps the batch sequence on `_settleMark`, and the child's own
+notification takes the `seq <= _settleMark` early return
+([[DECISION-D170-INCREMENTAL-VDOM-LISTS]]).
 
-Durable caveat: model records mutate in place. Passing a record as a prop alone
-does not defeat shallow prop equality; a child that needs live record changes
-should receive identity and query that record inside its own `data()`.
+## What a record prop and a row cache observe
 
-## Measured: propagation is O(1) in depth and in forest size
+Records mutate in place, so a record prop compares by **render revision** as well as
+reference: `<TodoItem todo={todo}/>` refreshes when that record changes through `update()`
+or any store path. NOT covered: a related record's fields, a computed getter's inputs, a
+deep path, or a direct field assignment (`todo.title = 'x'` — which the store never
+observed anyway). For those, pass identity and re-query in the child's own `data()`.
 
-A standing worry — that one update walks the whole view forest, or costs one
-`data()` per level of nesting — is **refuted**. [[DOC-STRESS-EXAMPLE]]'s
-`deep-nest` scenario mounts 64 branches × 24 genuinely nested levels = **1,536
-real view instances** and counts node `data()` executions per op:
+`{#for}` row caching follows the same boundary:
 
-| op | nodes that ran `data()` |
-| --- | ---: |
-| update the deepest node of one branch | **1 / 1,536** |
-| update the shallowest node of one branch | **1 / 1,536** |
-| update the record every node also queries (control) | 1,536 / 1,536 |
+- Record rows cache on reference + revision (+ index if the body reads the counter, + any
+  parent `data()` roots the body reads).
+- Plain objects and arrays never cache (no revision to compare).
+- Conservative sites (a relation, computed getter or deeper path in the body) never cache
+  record rows; the block checks the read fields once per model class against the schema
+  and a dev counter reports it.
 
-One view re-evaluates and re-renders; its child receives shallow-equal props and
-takes the component bailout, so propagation stops dead at the node that changed.
-A branch-root update is also 1, not 24 — depth costs nothing unless the data
-being threaded down actually changes. The third row is the control that makes the
-other two worth anything: a scenario with quietly broken subscriptions would
-report a very impressive `1` and mean nothing.
+## Measured
 
-Two costs are *not* bounded this way and are recorded on the cards that own them:
-async `data()` evaluations serialize store-wide ([[COMPONENT-STORE]]), and a
-callback prop that captures loop data defeats the bailout above for every row in
-a list ([[DECISION-D62-HANDLER-CACHING]]).
+Propagation is O(1) in depth and forest size ([[DOC-STRESS-EXAMPLE]] `deep-nest`, 1,536
+nested views): updating the deepest or shallowest node of a branch runs `data()` on 1 of
+1,536 views (the child bails out on equal props); the control — a record every node
+queries — runs 1,536. The unbounded cost is async `data()` serializing store-wide
+([[COMPONENT-STORE]]).

@@ -39,8 +39,8 @@ const app = new PuzzleApp({
   apiURL: '',
 
   // Display-only formatters (logic belongs in data(), per SPEC §8). These only
-  // shape values for presentation — relative/absolute times, big counts, and
-  // word forms. ChirpCard/NotificationRow/PostDetail lean on these heavily.
+  // shape values for presentation — relative/absolute times and word forms.
+  // Big counts use the built-in compact_number (847 -> "847", 3.4M). ChirpCard/NotificationRow/PostDetail lean on these heavily.
   formatters: {
     // Twitter-style relative time. 'now' (<60s), '5m', '2h', '3d' (<7d), then
     // 'Jul 3' for older-this-year, and 'Jul 3, 2025' when the year differs.
@@ -57,15 +57,6 @@ const app = new PuzzleApp({
       return d.getFullYear() === new Date().getFullYear()
         ? label
         : `${label}, ${d.getFullYear()}`;
-    },
-
-    // Shorten big counts: 847 -> "847", 1200 -> "1.2K", 3_400_000 -> "3.4M".
-    // Copied from examples/stays so both demos read counts identically.
-    compact: (n) => {
-      const num = Number(n) || 0;
-      if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(num >= 10_000_000 ? 0 : 1)}M`;
-      if (num >= 1_000) return `${(num / 1_000).toFixed(num >= 10_000 ? 0 : 1)}K`;
-      return String(num);
     },
 
     // Pick a word form: plural(1,'reply') -> 'reply', plural(3,'reply') -> 'replies'.

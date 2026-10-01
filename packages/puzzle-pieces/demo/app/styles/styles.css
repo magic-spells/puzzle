@@ -113,6 +113,31 @@
 @import "@magic-spells/scrolling-content/css" layer(components);
 
 /*
+ * The ImageZoom piece wraps @magic-spells/image-zoom. REQUIRED: the host's
+ * overflow clip and aspect ratio, the absolutely-positioned `transform-origin:
+ * 0 0` image box the gesture transform is written into, and the `touch-action`
+ * switch that hands a one-finger swipe back to page scroll while unzoomed all
+ * live here — without them the transform lands on an element nothing clips.
+ * `layer(components)` for the usual reason: plain element selectors
+ * (`image-zoom`, `image-zoom img`), so an unlayered import would outrank the
+ * `aspect-*`, `rounded-*` and `bg-*` utilities the piece expects on the host.
+ */
+@import "@magic-spells/image-zoom/css" layer(components);
+
+/*
+ * The SplitText piece wraps @magic-spells/split-text. REQUIRED: the masked
+ * word/char wrappers, the resting transforms, every effect's keyframes, the
+ * shared delay/stagger/duration plumbing and the post-reveal `display: contents`
+ * collapse all live here — without it the piece renders plain, unanimated text.
+ * It also carries `split-text:not(:defined) { visibility: hidden }`, which is
+ * what stops a prerendered headline flashing in its finished pose before the
+ * module lands and drops it back to animate. `layer(components)` for the usual
+ * reason: plain element selectors (`split-text`, `.split-text-word`) would
+ * otherwise outrank the Tailwind type utilities the piece puts on the element.
+ */
+@import "@magic-spells/split-text/css" layer(components);
+
+/*
  * The QuantityInput piece wraps @magic-spells/quantity-input and deliberately
  * imports NOTHING: that package's optional stylesheet carries hex colours and
  * fixed control sizing, which is what this registry replaces with tokens, and the
@@ -138,6 +163,46 @@
  * source alone. Requires Tailwind >= 4.1 (this project is on 4.3).
  */
 @source not "../../dist/**";
+
+/* Docs-site type scale — the four sizes the docs chrome uses below Tailwind's
+   `xs`, plus the shell's brand size, as tokens so no view reaches for a raw
+   pixel value (test/demo-theme-guard.test.mjs bans `text-[…]` in the themes
+   files). Component docs pages predate this and still carry `text-[13px]`. */
+@theme {
+  --text-2xs: 0.625rem;              /* 10px — tile captions */
+  --text-2xs--line-height: 0.875rem;
+  --text-micro: 0.6875rem;           /* 11px — eyebrows, chip text */
+  --text-micro--line-height: 1rem;
+  --text-code: 0.8125rem;            /* 13px — inline code, token names */
+  --text-code--line-height: 1.25rem;
+  --text-brand: 0.9375rem;           /* 15px — the shell's wordmark */
+  --text-brand--line-height: 1.25rem;
+  /* A corner popover may never outgrow the window: viewport minus the corner
+     insets, so it scrolls inside instead of losing its bottom edge. */
+  --spacing-popover: calc(100dvh - 1.5rem);
+  /* The floating docs pill below lg: `bottom-dock` seats it 1rem above the
+     safe-area inset; `dock-clear` is the room content (the panel's last line,
+     the toast stack) keeps free beneath it — the pill's 2.75rem plus the dock
+     offset plus a 1rem breath. */
+  --spacing-dock: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+  --spacing-dock-clear: calc(env(safe-area-inset-bottom, 0px) + 4.75rem);
+  /* `shadow-dock`: the pill floats over live content, so it takes a step past
+     shadow-popover — a tighter drop for the edge plus a wider, softer one for
+     lift. Built from the theme's shadow colours, so it deepens in dark and
+     medium the way every other shadow does. */
+  --shadow-dock:
+    inset 0 1px 0 var(--color-edge-highlight),
+    0 2px 6px -1px var(--color-shadow-drop),
+    0 10px 24px -6px var(--color-shadow-drop),
+    0 28px 64px -12px var(--color-shadow-popover);
+  /* Demo-local grain tile, served from app/public at the site root. The PNG
+     is authored at 2x (200×200) and painted at 100×100 so it stays crisp on
+     retina displays; both land on every <dialog-backdrop> through the rule
+     below the family imports. Deliberately NOT in registry/theme/pieces.css —
+     the asset ships with the docs site, not with the registry. */
+  --background-image-noise: url('/bg-noise-dark-20.png');
+  --background-size-noise: 100px 100px;
+}
 
 /* Gutter system (Luna-theme pattern, same as magic-spells-puzzle-site): one
    responsive variable drives side padding via Tailwind utilities (px-gutter). */
@@ -166,79 +231,79 @@
 }
 
 /*
- * puzzle-pieces design tokens — merged from registry/theme/pieces.css, exactly
- * the way a consuming app would. Every piece styles itself through the semantic
- * utilities these generate (bg-surface, text-ink, border-border, bg-brand, …).
+ * puzzle-pieces design tokens — imported straight from the registry, the way a
+ * consuming app imports them from the package
+ * (`@import "@magic-spells/puzzle-pieces/themes/default.css"`). pieces.css is
+ * the default palette's `@theme` block plus the three mode blocks; the other
+ * three files are `[data-scheme]` overrides, imported AFTER it so their
+ * unlayered rules win. The registry files are the source of truth — there is
+ * no demo-side copy to keep in step.
  *
- * Dark mode: every token is a `light-dark(light, dark)` pair resolved by
- * `color-scheme`. No data-theme attribute → follow the OS; the header switcher
- * sets data-theme="light"/"dark" on <html> (persisted in localStorage, applied
- * pre-paint by an inline script in public/index.html).
+ * Modes: data-theme="light" | "medium" | "dark" on <html>; absent = follow the
+ * OS. Palettes: data-scheme="dim" | "warm" | "void"; absent = default. Both are
+ * set pre-paint by the inline script in public/index.html and at runtime by
+ * app/lib/appearance.js.
  */
+@import "../../../registry/theme/pieces.css";
+@import "../../../registry/theme/dim.css";
+@import "../../../registry/theme/warm.css";
+@import "../../../registry/theme/void.css";
 
-:root {
-  color-scheme: light dark;
-}
-:root[data-theme='light'] {
-  color-scheme: light;
-}
-:root[data-theme='dark'] {
-  color-scheme: dark;
-}
-
-@theme {
-  /* Text — darkest to faintest. */
-  --color-ink: light-dark(#1f2933, #f4f4f5);
-  --color-body: light-dark(#52606d, #b4b4bb);
-  --color-muted: light-dark(#7b8794, #7f7f88);
-  --color-faint: light-dark(#cbd2d9, #46464e);
-
-  /* Surfaces. */
-  --color-page: light-dark(#f5f7fa, #09090b);
-  --color-surface: light-dark(#ffffff, #101013);
-  --color-surface-sunken: light-dark(#eef1f6, #18181c);
-
-  /* Brand. */
-  --color-brand: light-dark(#4c6ef5, #5c7cfa);
-  --color-brand-dark: light-dark(#3b5bdb, #748ffc);
-  --color-brand-tint: light-dark(#eef2ff, #1d2440);
-  --color-brand-ink: #ffffff;
-
-  /* Danger. */
-  --color-danger: light-dark(#e03131, #fa5252);
-  --color-danger-dark: light-dark(#c92a2a, #ff6b6b);
-  --color-danger-tint: light-dark(#fff5f5, #271417);
-  --color-danger-ink: #ffffff;
-
-  /* Success — positive deltas, "up is good" indicators (counterpart to danger). */
-  --color-success: light-dark(#006300, #0ca30c);
-  --color-success-tint: light-dark(#ebf7eb, #122616); /* soft positive backgrounds */
-
-  /* Warning — caution band between success and danger (meters, gauges, alerts). */
-  --color-warning: light-dark(#b45309, #f59e0b);
-  --color-warning-tint: light-dark(#fff8eb, #2a1c07); /* soft caution backgrounds */
-
-  /* Charts — categorical series palette, assigned in fixed slot order (1→8), never cycled.
-     Validated for colorblind safety + lightness/chroma bands in both modes
-     (dataviz six-checks validator, 2026-07-17). Light slots 3/4/5 sit below 3:1
-     contrast on white by design — chart pieces mitigate with legends, tooltips,
-     and their built-in accessible table views. */
-  --color-chart-1: light-dark(#2a78d6, #3987e5);
-  --color-chart-2: #008300;
-  --color-chart-3: light-dark(#e87ba4, #d55181);
-  --color-chart-4: light-dark(#eda100, #c98500);
-  --color-chart-5: light-dark(#1baf7a, #199e70);
-  --color-chart-6: light-dark(#eb6834, #d95926);
-  --color-chart-7: light-dark(#4a3aa7, #9085e9);
-  --color-chart-8: light-dark(#e34948, #e66767);
-
-  /* Lines & focus. */
-  --color-border: light-dark(#e4e9f0, #1f1f23);
-  --color-border-strong: light-dark(#c3cfe6, #2e2e35);
-  --color-ring: light-dark(#4c6ef5, #5c7cfa);
+/*
+ * Overlay grain.
+ *
+ * <dialog-backdrop> is THE overlay surface across the @magic-spells overlay
+ * family — Dialog, AlertDialog, Sheet and the docs SearchDialog all paint their
+ * scrim on it (BottomSheet is the one exception: its stylesheet hides the
+ * element and paints the native ::backdrop instead). The colour and blur stay
+ * where each piece puts them (`bg-black/50 backdrop-blur-sm`); this adds the
+ * site's texture on top, once, so every overlay on the docs site matches.
+ *
+ * Unlayered on purpose: sheet.css sets the scrim with the `background`
+ * SHORTHAND (which resets background-image) from inside layer(components) at
+ * a higher specificity, so a layered rule here would lose on the Sheet and win
+ * on the Dialog. The registry pieces are untouched — a consuming app that wants
+ * grain adds the same three lines.
+ */
+dialog-backdrop {
+  background-image: var(--background-image-noise);
+  background-repeat: repeat;
+  background-size: var(--background-size-noise);
 }
 
-@import './schemes.css';
+/*
+ * Morph endpoints: LITERAL radii, a sanctioned exception to "tokens only".
+ *
+ * The morph engine reads each end's computed per-corner radii and lerps
+ * between them. Tailwind v4's `rounded-full` is `calc(infinity * 1px)`, which
+ * computes to ~1.68e7px, so a pill → panel morph stayed a stadium for the
+ * whole flight and snapped square at the reveal. Both ends of each shell
+ * morph therefore carry the SAME finite radius, so it never tweens:
+ *   - the mobile docs pill (22px = half its h-11 height, i.e. fully round)
+ *     and the Sheet card it morphs into. sheet.css paints the card's corners
+ *     from --sheet-card-border-radius inside layer(components); this rule is
+ *     unlayered, so it wins.
+ *   - the lg search field and the SearchDialog panel it morphs into, 12px —
+ *     rounded corners, not a pill (sm+ only: below sm the dialog is
+ *     full-screen and does not morph). Below lg the trigger is an icon button
+ *     and keeps its rounded-md.
+ */
+[data-docs-pill],
+dialog-panel:has([data-docs-drawer]) > dialog {
+  border-radius: 22px;
+}
+
+@media (min-width: 40rem) {
+  [data-search-dialog] {
+    border-radius: 12px;
+  }
+}
+
+@media (min-width: 64rem) {
+  [data-search-open] {
+    border-radius: 12px;
+  }
+}
 
 @layer base {
   body {

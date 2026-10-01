@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// Nested routes & nested view slots (constellation/doc/DOC-DECISIONS.md D30, v1.3). Exercises the
+// Nested routes & nested view slots (D30, v1.3). Exercises the
 // chain-prefix navigation pipeline: relative-path composition, index children,
 // bare-parent no-match, merged params at every level, fail-fast route config
 // throws, deep composition through nested <Slot/>s, prefix REUSE (ancestor kept +

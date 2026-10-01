@@ -1,0 +1,174 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Appearance Picker</h1>
+        <p class="mt-2 text-body">
+          A controlled palette + mode picker. Each theme card is a live miniature of the app
+          shell painted in the palette it offers — a real surface scoped with
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">data-scheme</code>,
+          not a picture — beside a Light / Medium / Dark / System radiogroup. It owns no state:
+          pass the current choice and hear
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">@change</code>.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full max-w-md">
+          <AppearancePicker scheme={ scheme } mode={ mode } @change={ applyLive }/>
+        </div>
+      </ExampleBox>
+      <p class="mt-3 text-sm text-muted">
+        This one is wired to the site's appearance module, so picking here repaints the docs
+        shell — the same thing the rail's footer button opens in a popover.
+      </p>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the theme files (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">themes/default.css</code>
+          plus any palette you offer) and, to persist the choice, the
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">appearance</code>
+          export — see <a href="#/theming" class="text-brand underline-offset-2 hover:underline">Theming</a>.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          The piece is the form, not the popover. Put it on a settings page, or in a popover
+          parked in a corner the way the docs shell does — non-modal, so the app repaints in
+          view as you click.
+        </p>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="controlled" title="Controlled, without persisting" code={ codeControlled }>
+          <div class="w-full max-w-md">
+            <AppearancePicker scheme={ localScheme } mode={ localMode } @change={ applyLocal }/>
+            <p class="mt-3 font-mono text-code text-muted">{ localSummary }</p>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="subset" title="A subset of palettes, no System segment" code={ codeSubset }>
+          <div class="w-full max-w-md">
+            <AppearancePicker scheme={ localScheme } mode={ localMode } schemes={ twoSchemes } system={ false } @change={ applyLocal }/>
+          </div>
+        </ExampleBox>
+      </div>
+
+      <section id="props" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Props</h2>
+        <div class="overflow-x-auto rounded-xl border border-border">
+          <table class="w-full text-sm">
+            <thead class="bg-surface-sunken text-left text-xs uppercase tracking-wide text-muted">
+              <tr><th class="px-3 py-2 font-medium">Prop</th><th class="px-3 py-2 font-medium">Type</th><th class="px-3 py-2 font-medium">Notes</th></tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              {#for row in props}
+                <tr key={ row.name }>
+                  <td class="px-3 py-2 font-mono text-code text-ink">{ row.name }</td>
+                  <td class="px-3 py-2 font-mono text-code text-muted">{ row.type }</td>
+                  <td class="px-3 py-2 text-body">{ row.notes }</td>
+                </tr>
+              {/for}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </article>
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import AppearancePicker from '@/components/ui/AppearancePicker.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+import { SCHEMES, current, set, subscribe } from '@/lib/appearance.js';
+
+const installCmd = 'puzzle add piece appearance-picker';
+const usageImport = `import AppearancePicker from '@/components/ui/AppearancePicker.pzl';
+import { current, set } from '@magic-spells/puzzle-pieces/appearance';`;
+const usageMarkup = `<AppearancePicker scheme={ scheme } mode={ mode } @change={ apply }/>
+
+// data():   const { scheme, mode } = current();
+// events:   apply: (choice) => set(choice)   // { scheme, mode } — mode null = follow the OS`;
+const codeHero = `<AppearancePicker scheme={ scheme } mode={ mode } @change={ apply }/>`;
+const codeControlled = `<AppearancePicker scheme={ draft.scheme } mode={ draft.mode } @change={ setDraft }/>
+<!-- nothing is persisted or painted until you decide to call set(draft) -->`;
+const codeSubset = `<AppearancePicker
+  scheme={ scheme } mode={ mode }
+  schemes={ [{ value: 'default', label: 'Default' }, { value: 'warm', label: 'Warm' }] }
+  system={ false }
+  @change={ apply }/>`;
+
+const twoSchemes = SCHEMES.filter((s) => s.value === 'default' || s.value === 'warm');
+
+const props = [
+  { name: 'scheme', type: 'string', notes: "The current palette value ('default' | 'dim' | 'warm' | 'void', or any value in `schemes`)." },
+  { name: 'mode', type: 'string | null', notes: "'light' | 'medium' | 'dark'; null means follow the operating system and selects the System segment." },
+  { name: 'schemes', type: 'array', notes: '[{ value, label, description? }] — the cards. Defaults to the four bundled palettes.' },
+  { name: 'modes', type: 'array', notes: '[{ value, label, description? }] — defaults to light, medium, dark.' },
+  { name: 'system', type: 'boolean', notes: 'Show the System segment (default true). Picking it fires @change with mode: null.' },
+  { name: 'schemeLegend / modeLegend', type: 'string', notes: "Group headings (default 'Theme' / 'Mode')." },
+  { name: '@change', type: '({ scheme, mode }) => void', notes: 'Fires on every pick with the full choice, value-first.' },
+];
+
+const toc = [
+  { label: 'Installation', href: '#installation' },
+  { label: 'Usage', href: '#usage' },
+  { label: 'Controlled', href: '#controlled' },
+  { label: 'Subset', href: '#subset' },
+  { label: 'Props', href: '#props' },
+];
+
+export default class AppearancePickerDoc extends PuzzleView {
+  data() {
+    const live = current();
+    const state = this.getData() || {};
+    const localScheme = state.localScheme || 'warm';
+    const localMode = state.localMode === undefined ? 'medium' : state.localMode;
+    return {
+      scheme: live.scheme,
+      mode: live.mode,
+      localScheme,
+      localMode,
+      localSummary: `{ scheme: '${localScheme}', mode: ${localMode === null ? 'null' : `'${localMode}'`} }`,
+      twoSchemes,
+      props,
+      toc,
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeControlled,
+      codeSubset,
+    };
+  }
+
+  events = {
+    applyLive: (choice) => set(choice),
+    applyLocal: (choice) => {
+      this.setData({ localScheme: choice.scheme, localMode: choice.mode });
+      this.refresh();
+    },
+  };
+
+  mounted() {
+    this._unsubscribe = subscribe(() => this.refresh());
+  }
+
+  destroyed() {
+    if (this._unsubscribe) this._unsubscribe();
+  }
+}
+</script>

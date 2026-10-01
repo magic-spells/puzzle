@@ -1,6 +1,6 @@
 /**
  * ViewNode — one node in the virtual tree (constellation/doc/DOC-RUNTIME-KERNEL.md,
- * constellation/doc/DOC-APP-ANATOMY.md §4, constellation/doc/DOC-DECISIONS.md D20).
+ * constellation/doc/DOC-APP-ANATOMY.md §4, D20).
  *
  * Pure data: the ViewManager owns all DOM creation and patching. Compiled
  * render functions build these trees:
@@ -10,7 +10,7 @@
  *     new ViewNode('button', { '@click': (e) => this.events.remove(todo) }, [...]),
  *   ])
  *
- * Three node kinds share this shape:
+ * These node kinds share this shape (plus the reserved '#'-prefixed tags below):
  * - Element/text — `tag` is a string. `'text'` WITH a `value` attr is a text
  *   node, its content is attrs.value; `'text'` without one is the authored SVG
  *   `<text>` element, and any other string is an HTML/SVG element name.
@@ -27,7 +27,7 @@
  * - attrs starting with '@' are event listeners (mirrors template syntax).
  * - attrs.key drives keyed reconciliation in lists.
  * - `el` links to the live DOM node the ViewManager transfers across renders
- *   (the prototype failed to — constellation/doc/DOC-CODE-REVIEW.md §2.4); for a component vnode
+ *   (the prototype failed to); for a component vnode
  *   it tracks the child's current root so sibling insertion refs stay valid.
  * - `component` holds the child PuzzleView instance (component vnodes only),
  *   the way element vnodes hold `el`.
@@ -61,6 +61,14 @@ export const PLACEHOLDER_TAG = '#';
 // `children` are the teleported subtree.
 export const PORTAL_TAG = 'portal';
 
+// Reserved tag marking live HTML (D174): an interpolation whose chain ends in
+// `raw` (`attrs.value` is sanitized) or `newline_to_br` (`attrs.br` is set; the
+// value is escaped and its newlines become `<br>`). The ViewManager holds the
+// position with a comment and owns the parsed nodes after it (views/html.js);
+// the patcher never reconciles inside them. Codegen emits the literal
+// `new ViewNode('#html', { value })`.
+export const HTML_TAG = '#html';
+
 /**
  * The one diagnostic for a reserved '#'-prefixed metadata tag that reached a
  * rendering path (D89 boundary). Every such tag is consumed by expansion before
@@ -78,12 +86,17 @@ export const PORTAL_TAG = 'portal';
  * probe into a module const stops esbuild folding it — see build_test.go) and
  * production keeps a short line naming the tag. Development is where anyone
  * reads the long form anyway. Both are built only on the throw path.
+ *
+ * @param {string} tag the reserved '#'-prefixed tag that reached a rendering path
+ * @returns {Error}
  */
 export function metadataTagError(tag) {
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 		return new Error(
 			`[puzzle] vnode tag "${tag}" reached the DOM — it is framework metadata; ` +
-				'snippet support was compiled out of this build (__PUZZLE_HAS_SNIPPETS__ is false). ' +
+				(tag === HTML_TAG
+					? '`raw`/`newline_to_br` support was compiled out of this build (__PUZZLE_HAS_RAW_HTML__ is false). '
+					: 'snippet support was compiled out of this build (__PUZZLE_HAS_SNIPPETS__ is false). ') +
 				'Compiled component packages are not scanned for feature usage; use source pieces ' +
 				'or force the feature on.'
 		);
@@ -96,6 +109,7 @@ export function metadataTagError(tag) {
 // global, like viewManager's warnDuplicateKey and animate.js's malformed-spec
 // warning — so a loop of keyless rows stays quiet after the first.
 let warnedNullKey = false;
+/** @param {unknown} item the keyless {#for} row value */
 function warnNullKey(item) {
 	if (warnedNullKey) return;
 	warnedNullKey = true;
@@ -107,6 +121,13 @@ function warnNullKey(item) {
 }
 
 export class ViewNode {
+	/**
+	 * @param {any} tag an element/text tag name, a reserved tag, or a PuzzleView
+	 *   subclass (component vnode)
+	 * @param {Record<string, any>} [attrs] attributes, listeners, or a component's props
+	 * @param {any[] | string} [children] child vnodes, or a raw HTML string for an
+	 *   island-frozen subtree
+	 */
 	constructor(tag, attrs = {}, children = []) {
 		this.tag = tag;
 		this.attrs = attrs || {};
@@ -166,8 +187,13 @@ export class ViewNode {
 	// its model's primaryKey() (so `.primary()` and template keying agree), any
 	// other value keys by `.id` (v1 behavior). A null/undefined result warns once
 	// and returns null (positional fallback, now diagnosed instead of silent).
+	/**
+	 * @param {any} item the row value (author data)
+	 * @returns {any} the row's key, or null
+	 */
 	static keyOf(item) {
-		if (item instanceof PuzzleModel) return item[item.constructor.primaryKey()];
+		if (item instanceof PuzzleModel)
+			return /** @type {Record<string, any>} */ (item)[/** @type {typeof PuzzleModel} */ (item.constructor).primaryKey()];
 		const key = item?.id;
 		if (key == null) {
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) warnNullKey(item);

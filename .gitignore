@@ -90,6 +90,9 @@ typings/
 .nuxt
 dist
 
+# Puzzle build scratch and the puzzle check workspace
+.puzzle/
+
 # Gatsby files
 .cache/
 # Comment in the public line in if your project uses Gatsby and *not* Next.js
@@ -113,3 +116,7 @@ dist
 
 # Playwright MCP session artifacts
 .playwright-mcp/
+
+# Constellation working memory (local scratchpad; the rules file is committed)
+.constellation/*
+!.constellation/CLAUDE.md

@@ -1,5 +1,5 @@
 /**
- * Declarations for the `@magic-spells/puzzle/morph` subpath (v1.23 D55; v1.35 D68).
+ * Declarations for the `@magic-spells/puzzle/morph` subpath (D55; D68).
  *
  * One export: `enableMorph(app)`, which creates a MorphEngine and registers it
  * as the app router's morph handler, returning the engine for live tuning.

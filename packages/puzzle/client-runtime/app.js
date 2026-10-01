@@ -27,12 +27,31 @@
 import { isAdapterCapability } from './capabilities.js';
 import { Store } from './datastore/store.js';
 import { makeFormatterRegistry } from './formatters.js';
-import { Router } from './router/router.js';
+import { createI18n, installTranslate } from './i18n.js';
+import { Router, normalizeBase } from './router/router.js';
 import { snapshotToStorage, restoreStoreFromStorage, restoreViewsFromStorage } from './devstate.js';
 import { devtoolsAppMounted, devtoolsAppUnmounted } from './devtools.js';
 import { reportError, setErrorConfig } from './errors.js';
 import { PuzzleView } from './views/PuzzleView.js';
 import { setPortalHost, teardownPortals } from './views/portal.js';
+
+/** @import { FormatterRegistry } from './formatters.js' */
+
+/**
+ * The router's shared-element morph slot (Router.setMorphHandler), plus the
+ * `arm`/`dispose` pair morph.js carries so unmount()/mount() can tear it down
+ * and re-arm it (the router itself only reads enter/leave).
+ * @typedef {{ enter(el: Element|null, meta: { initial: boolean }): void,
+ *   leave(el: Element|null): Promise<unknown>|null,
+ *   arm?: () => void, dispose?: () => void }} MorphHandler
+ */
+
+/**
+ * The ctx injected into every view: the three services, plus `i18n` when
+ * translations are configured (D175).
+ * @typedef {{ store: Store, router: Router, formatters: FormatterRegistry,
+ *   i18n?: import('./i18n.js').I18nService }} AppContext
+ */
 
 // Dev HMR guard (constellation/doc/DOC-SPEC.md §27, D57): gates the state-preserving reload
 // hooks on the __PUZZLE_DEV__ build define — "false" in production, where
@@ -50,6 +69,7 @@ export class PuzzleApp {
 	// (and again after unmount()); the getter throws while unset so glue code that
 	// reads app.store before mount() fails loudly at the cause instead of silently
 	// capturing undefined (the pyramid-puzzle wire-before-mount trap).
+	/** @type {Store | null} */
 	#store = null;
 
 	// Morph handler stash (v1.23, D55): the Router is only constructed inside
@@ -57,6 +77,7 @@ export class PuzzleApp {
 	// `new PuzzleApp(...)` — can't reach app.router yet. setMorphHandler()
 	// stashes here pre-mount and mount() forwards it when the router exists;
 	// re-mounts re-apply it (unmount() drops the router, not the stash).
+	/** @type {MorphHandler | null} */
 	#morphHandler = null;
 
 	// pagehide → Store.flush() listener (bound per mount, removed in #teardown).
@@ -65,6 +86,7 @@ export class PuzzleApp {
 	// navigation inside that window would unload before the write lands. pagehide
 	// is the last reliable lifecycle signal (fires on unload AND bfcache entry,
 	// where beforeunload is unreliable on mobile), so it forces the write out.
+	/** @type {(() => void) | null} */
 	#pageHideFlush = null;
 
 	// Mount generation (v1.31 lifecycle, D66). mount() is async, so every
@@ -87,17 +109,20 @@ export class PuzzleApp {
 	// settlement. `_mounted` is claimed before the awaited router.start(), so a
 	// second call during the initial navigation would otherwise take the
 	// already-mounted early-out and resolve before the route had rendered.
+	/** @type {Promise<PuzzleApp> | null} */
 	#mountPromise = null;
 
 	/**
 	 * @param {object} config the frozen v1 surface (SPEC §2)
-	 * @param {string|Element} config.target CSS selector or Element to mount into
-	 * @param {Array} [config.routes] route definitions
+	 * @param {string|Element} [config.target] CSS selector or Element to mount into
+	 *   (required — mount() rejects a missing or unusable target)
+	 * @param {any[]} [config.routes] route definitions (the published `Route`
+	 *   shape; author data handed to the Router as-is)
 	 * @param {object} [config.models] type name → model class registry
 	 * @param {object} [config.formatters] app-level template formatters (override built-ins)
 	 * @param {string} [config.apiURL] base URL for the D21 server read path
-	 * @param {object} [config.storage] Storage-like object for persistence (opt-in)
-	 * @param {object} [config.adapter] capability imported from
+	 * @param {Pick<Storage, 'getItem' | 'setItem'>} [config.storage] Storage-like object for persistence (opt-in)
+	 * @param {import('./capabilities.js').AdapterCapability} [config.adapter] capability imported from
 	 *   `@magic-spells/puzzle/adapter`; installs the optional server sync surface
 	 * @param {Function} [config.beforeRequest] adapter request hook (v1.55, D91):
 	 *   `beforeRequest(init, { type, method, url })`, called SYNCHRONOUSLY before
@@ -121,7 +146,7 @@ export class PuzzleApp {
 	 *   new content is mounted so it may query the committed DOM (a falsy return
 	 *   skips focusing for that navigation, a throw is logged and treated as
 	 *   falsy). Inert in memory mode, like `scrollBehavior`
-	 * @param {object} [config.routerMode] router URL carrier (v1.6, D34; v1.11,
+	 * @param {import('../types/router-modes.js').RouterMode} [config.routerMode] router URL carrier (v1.6, D34; v1.11,
 	 *   D42; opt-in imports since D159): omit for path routing (the pathname —
 	 *   the default), or pass `hashRouter()` for `location.hash` routing on static
 	 *   hosts / `memoryRouter({ initialPath })` for URL-less routing in router
@@ -152,9 +177,12 @@ export class PuzzleApp {
 	 * @param {Function} [config.onError] app error hook:
 	 *   `onError(error, { phase, view, route })`, called for framework-contained
 	 *   application errors. A throwing/rejecting hook is logged and swallowed
-	 * @param {typeof PuzzleView} [config.errorView] ordinary compiled PuzzleView
+	 * @param {import('../types/index.js').PuzzleViewConstructor} [config.errorView] ordinary compiled PuzzleView
 	 *   constructor mounted at a failed view's position with
 	 *   `{ error, info, retry }` props
+	 * @param {object} [config.__i18n] internal seam, not API: translation service
+	 *   options (`{ manifest, tables, locale }`) the testing utilities and the static
+	 *   kernel pass so nothing is fetched
 	 */
 	constructor(config = {}) {
 		if (config.adapter && !isAdapterCapability(config.adapter)) {
@@ -171,6 +199,7 @@ export class PuzzleApp {
 			throw new Error('[puzzle] config.errorView must be a PuzzleView constructor when set');
 		}
 		this.config = config;
+		/** @type {AppContext | null} */
 		this.ctx = null;
 		this.router = null;
 		this.formatters = null;
@@ -202,6 +231,9 @@ export class PuzzleApp {
 	 * (pre-mount it is stashed and applied when mount() constructs the router).
 	 * Called by enableMorph(app) from @magic-spells/puzzle/morph; pass null to
 	 * unregister.
+	 *
+	 * @param {MorphHandler | null} handler
+	 * @returns {this}
 	 */
 	setMorphHandler(handler) {
 		this.#morphHandler = handler ?? null;
@@ -259,7 +291,7 @@ export class PuzzleApp {
 		// any other non-function value is a mount()-time throw (the constructor
 		// stays a side-effect-free config store, SPEC §2, so the check lives here,
 		// not in the constructor).
-		for (const name of ['beforeMount', 'mounted', 'beforeUnmount', 'onError']) {
+		for (const name of /** @type {const} */ (['beforeMount', 'mounted', 'beforeUnmount', 'onError'])) {
 			const hook = this.config[name];
 			if (hook != null && typeof hook !== 'function') {
 				throw new Error(`[puzzle] config.${name} must be a function when set`);
@@ -310,23 +342,51 @@ export class PuzzleApp {
 		}
 		this.#store = new Store(models, { storage, beforeRequest, apiURL, adapter });
 
+		// Translations (D175): the service picks the locale and STARTS loading its
+		// strings now, while the other services are wired, so the fetch overlaps
+		// beforeMount; mount() awaits it below, before navigation #0. Manifest paths
+		// are dist-relative: path routing resolves them under routerBase, while the
+		// hash and memory modes resolve them next to the entry module — the manifest's
+		// `base`, the folder the build's app.js was served from — so a script embed
+		// on another site's page still finds them (the document is only the fallback
+		// for a manifest without one). Memory mode takes no document-level side
+		// effects, so it leaves <html lang> alone. A switch re-runs the committed
+		// location as a same-location rebuild (router __failedView(null, true)).
+		// Every reference spells the inline probe, so an app without i18n ships none
+		// of this.
+		if (typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) {
+			this.i18n = createI18n({
+				...this.config.__i18n,
+				url: (path, base) =>
+					routerMode
+						? new URL(path, base ?? document.baseURI).href
+						: normalizeBase(routerBase) + '/' + path,
+				lang: routerMode?.name !== 'memory',
+				refresh: () => this.router?.__failedView(null, true),
+			});
+		}
+
 		// 3. Formatters: shared built-in/custom wiring plus the live-router-backed
 		//    `link` encoder. The closure reads this.router lazily so a re-mount never
 		//    keeps a stale Router, and a custom `link` formatter still wins.
 		this.formatters = makeFormatterRegistry(formatters, (path) =>
 			this.router ? this.router.url(path) : path
 		);
+		// The service-bound `t` formatter (D175); an app `t` still wins.
+		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n)
+			installTranslate(this.formatters, this.i18n);
 
 		// 4. Router + the shared context object injected into every view. Pass
 		//    `mode` through only when routerMode is set, so the Router's own default
 		//    (path routing, inline) stands otherwise — mirroring how `storage` is
 		//    conditionally passed to the Store above (D34/D159).
+		/** @type {NonNullable<ConstructorParameters<typeof Router>[1]>} */
 		const routerOptions = { scrollBehavior };
 		// focusBehavior → Router `focusBehavior`, passed through ONLY when set so the
 		// Router's own default (focus the committed leaf root + announce the title)
 		// stands otherwise (v1.56, D93) — mirroring the conditional passthroughs below.
 		if (focusBehavior !== undefined) routerOptions.focusBehavior = focusBehavior;
-		if (routerMode !== undefined) routerOptions.mode = routerMode;
+		if (routerMode !== undefined) routerOptions.mode = /** @type {import('./router/modes.js').RouterModeDescriptor} */ (routerMode);
 		// routerBase → Router `base`, passed through ONLY when set so the Router's own
 		// default ('' — no base) stands otherwise (v1.19, D51) — mirroring the
 		// routerMode conditional passthrough.
@@ -345,7 +405,13 @@ export class PuzzleApp {
 		}
 
 		this.ctx = { store: this.#store, router: this.router, formatters: this.formatters };
-		setErrorConfig(this.ctx, onError, errorView);
+		// ctx gains `i18n` only when translations are configured (D175) — beside the
+		// store and router, reached as this.ctx.i18n.
+		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n)
+			this.ctx.i18n = this.i18n;
+		// errorView arrives typed by the published PuzzleViewConstructor; at runtime
+		// it is a subclass of this runtime's PuzzleView.
+		setErrorConfig(this.ctx, onError, /** @type {any} */ (errorView));
 
 		// Claim mounted BEFORE the async start(): the initial navigation may await a
 		// slow data(), and an unmount() during that window must actually tear down.
@@ -410,6 +476,21 @@ export class PuzzleApp {
 		// `!this._mounted` read stays as the plain torn-down case it always covered.
 		if (this.#mountEpoch !== epoch || !this._mounted) return this;
 
+		// The first render has its strings (D175): navigation #0 — its guards, its
+		// data(), its commit — never runs without the table. __ready follows any
+		// setLocale() beforeMount made, and rejects only when neither the active
+		// locale nor the default could load; that aborts the mount exactly like a
+		// rejected beforeMount.
+		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n) {
+			try {
+				await this.i18n.__ready();
+			} catch (err) {
+				if (this.#mountEpoch === epoch && this._mounted) this.#teardown();
+				throw err;
+			}
+			if (this.#mountEpoch !== epoch || !this._mounted) return this;
+		}
+
 		// Dev HMR restore, phase 1 (§27, D57; Change D): consume the one-shot blob
 		// and transplant its STORE records BEFORE navigation #0, so nav #0's data()
 		// queries see the restored records (the old single-phase restore ran after
@@ -454,7 +535,7 @@ export class PuzzleApp {
 			try {
 				const ret = mounted.call(this, this);
 				if (ret != null && typeof ret.then === 'function') {
-					ret.catch((err) =>
+					ret.catch((/** @type {unknown} */ err) =>
 						reportError(
 							errorCtx,
 							err,
@@ -517,7 +598,7 @@ export class PuzzleApp {
 				// posture as the mounted hook. The sync throw is caught below.
 				const ret = beforeUnmount.call(this, this);
 				if (ret != null && typeof ret.then === 'function') {
-					ret.catch((err) =>
+					ret.catch((/** @type {unknown} */ err) =>
 						reportError(
 							errorCtx,
 							err,
@@ -596,11 +677,19 @@ export class PuzzleApp {
 		this.#store = null; // getter throws again post-unmount (store torn down)
 		this.router = null;
 		this.formatters = null;
+		if (typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) {
+			this.i18n?.__dispose();
+			this.i18n = null;
+		}
 		this._container = null;
 		this._mounted = false;
 	}
 
-	/** Resolve a CSS selector or Element to the mount node; throw if it's missing. */
+	/**
+	 * Resolve a CSS selector or Element to the mount node; throw if it's missing.
+	 * @param {string|Element} [target]
+	 * @returns {Element}
+	 */
 	#resolveTarget(target) {
 		if (target && typeof target === 'object' && target.nodeType === 1) {
 			return target; // already an Element

@@ -1,6 +1,6 @@
 {
   "name": "puzzle-pieces-demo",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Dev harness + showcase app for the puzzle-pieces component library",
   "private": true,
   "type": "module",
@@ -11,10 +11,11 @@
   "dependencies": {
     "@magic-spells/bottom-sheet": "^2.0.2",
     "@magic-spells/collapsible-content": "^1.2.0",
-    "@magic-spells/dialog-panel": "^2.0.1",
-    "@magic-spells/dropdown-panel": "^2.1.0",
+    "@magic-spells/dialog-panel": "^2.0.3",
+    "@magic-spells/dropdown-panel": "^2.1.1",
     "@magic-spells/frame-engine": "^1.0.1",
-    "@magic-spells/morph-engine": "^0.1.2",
+    "@magic-spells/image-zoom": "^0.1.0",
+    "@magic-spells/morph-engine": "^0.4.2",
     "@magic-spells/panel-stack": "^0.2.0",
     "@magic-spells/physics-engine": "^1.0.1",
     "@magic-spells/puzzle": "file:../../puzzle",
@@ -22,8 +23,9 @@
     "@magic-spells/scroll-stack": "^0.1.0",
     "@magic-spells/scrolling-content": "^2.1.0",
     "@magic-spells/select-dropdown": "^0.3.0",
-    "@magic-spells/sheet": "^0.1.1",
+    "@magic-spells/sheet": "^0.2.0",
     "@magic-spells/split-panel": "^0.2.0",
+    "@magic-spells/split-text": "^0.2.0",
     "@magic-spells/tab-group": "^1.2.0",
     "@tiptap/core": "3.30.0",
     "@tiptap/extension-list": "3.30.0",
@@ -37,6 +39,7 @@
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.14",
-    "tailwindcss": "^4.1.14"
+    "tailwindcss": "^4.1.14",
+    "typescript": "^7.0.2"
   }
 }

@@ -10,6 +10,9 @@ import { readFile, access } from 'node:fs/promises';
 // barrels, and the four rules a wrapper piece has to keep.
 
 const PACKAGE = '@magic-spells/dropdown-panel';
+// The manifest carries the version FLOOR the family was built against (D169);
+// the .pzl still imports the BARE specifier.
+const DEP = `${PACKAGE}@^2.1.1`;
 const SPECIFIER = PACKAGE.replace('/', '\\/');
 
 const readText = (path) => readFile(new URL(path, import.meta.url), 'utf8');
@@ -27,6 +30,7 @@ const NAV_FILES = [
 	'NavigationMenu/Trigger.pzl',
 	'NavigationMenu/Content.pzl',
 	'NavigationMenu/Link.pzl',
+	'NavigationMenu/Group.pzl',
 	'NavigationMenu/index.js',
 ];
 
@@ -86,7 +90,7 @@ const PIECES = [
 		manifest: '../registry/ui/dropdown-panel/piece.json',
 		files: BASE_FILES,
 		registryDependencies: [],
-		dependencies: [PACKAGE],
+		dependencies: [DEP],
 	},
 	{
 		piece: 'navigation-menu',
@@ -287,9 +291,9 @@ test('both barrels export the D167 Object.assign family shape', async () => {
 	const nav = await readText('../registry/ui/navigation-menu/NavigationMenu/index.js');
 	assert.match(
 		nav,
-		/export default Object\.assign\(NavigationMenu, \{ Item, Trigger, Content, Link \}\)/
+		/export default Object\.assign\(NavigationMenu, \{ Item, Trigger, Content, Link, Group \}\)/
 	);
-	assert.match(nav, /export \{ NavigationMenu, Item, Trigger, Content, Link \}/);
+	assert.match(nav, /export \{ NavigationMenu, Item, Trigger, Content, Link, Group \}/);
 });
 
 test('navigation-menu composes the base rather than re-exporting it', async () => {

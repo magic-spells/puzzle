@@ -36,11 +36,11 @@ func Run(appRoot string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	typescriptMajor, err := readTypeScriptMajor(tool)
+	typescriptVersion, err := readTypeScriptVersion(tool)
 	if err != nil {
 		return 0, err
 	}
-	result, err := Generate(root, typescriptMajor)
+	result, err := Generate(root, typescriptVersion)
 	if err != nil {
 		return 0, err
 	}
@@ -70,16 +70,34 @@ func Run(appRoot string) (int, error) {
 	return result.Files, errors.New(formatted)
 }
 
-func readTypeScriptMajor(tool tscTool) (int, error) {
+// TypeScriptVersion is the app's TypeScript compiler version, major.minor —
+// what decides the tsconfig puzzle check writes and the lib files its shim
+// references.
+type TypeScriptVersion struct {
+	Major, Minor int
+}
+
+// AtLeast reports whether v is min or later.
+func (v TypeScriptVersion) AtLeast(min TypeScriptVersion) bool {
+	return v.Major > min.Major || v.Major == min.Major && v.Minor >= min.Minor
+}
+
+func readTypeScriptVersion(tool tscTool) (TypeScriptVersion, error) {
 	output, err := tool.command("--version").CombinedOutput()
 	if err != nil {
-		return 0, fmt.Errorf("read TypeScript version: %w", err)
+		return TypeScriptVersion{}, fmt.Errorf("read TypeScript version: %w", err)
 	}
-	var major int
-	if _, err := fmt.Sscanf(strings.TrimSpace(string(output)), "Version %d.", &major); err != nil || major < 1 {
-		return 0, fmt.Errorf("read TypeScript version: unexpected output %q", strings.TrimSpace(string(output)))
+	return parseTypeScriptVersion(string(output))
+}
+
+// parseTypeScriptVersion reads `tsc --version` output, `Version 5.2.2` (a
+// prerelease suffix such as `5.3.0-beta` included).
+func parseTypeScriptVersion(output string) (TypeScriptVersion, error) {
+	var v TypeScriptVersion
+	if _, err := fmt.Sscanf(strings.TrimSpace(output), "Version %d.%d", &v.Major, &v.Minor); err != nil || v.Major < 1 || v.Minor < 0 {
+		return TypeScriptVersion{}, fmt.Errorf("read TypeScript version: unexpected output %q", strings.TrimSpace(output))
 	}
-	return major, nil
+	return v, nil
 }
 
 // tscTool is the app's TypeScript compiler entry point plus the node binary that

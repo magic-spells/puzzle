@@ -12,7 +12,7 @@
         <button
           type="submit"
           class="h-11 px-5 rounded-xl bg-sky-500 text-white font-semibold hover:bg-sky-400 disabled:opacity-40 disabled:cursor-not-allowed"
-          disabled={ !newTodoText.trim() }>
+          disabled={ !canAdd }>
           Add
         </button>
       </form>
@@ -53,6 +53,7 @@ interface HomeModel {
   todos: TodoRecord[];
   activeCount: number;
   newTodoText: string;
+  canAdd: boolean;
 }
 
 export default class TypedHome extends PuzzleView {
@@ -73,6 +74,10 @@ export default class TypedHome extends PuzzleView {
       todos,
       activeCount: todos.filter((t) => !t.completed).length,
       newTodoText: local.newTodoText,
+      // Templates read data, they don't call JavaScript on it, so the
+      // "is there anything to add?" check is computed here, not in the
+      // template's disabled=.
+      canAdd: local.newTodoText.trim() !== '',
     };
   }
 
@@ -80,6 +85,9 @@ export default class TypedHome extends PuzzleView {
     updateNewTodoText: (event: Event): void => {
       const input = event.target as HTMLInputElement;
       this.setData('newTodoText', input.value);
+      // canAdd is derived in data(); setData() alone does not re-run data(),
+      // so refresh() recomputes it from the just-updated draft.
+      this.refresh();
     },
 
     addTodo: (event: Event): void => {

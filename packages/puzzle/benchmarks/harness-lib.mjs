@@ -21,6 +21,7 @@
 import { createServer } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -47,6 +48,13 @@ export const DEV_MARKERS = ['__PUZZLE_DEVTOOLS_HOOK__', 'import.meta.hot', 'puzz
 
 /** Which dev markers `source` carries (empty for a genuine production bundle). */
 export const findDevMarkers = (source) => DEV_MARKERS.filter((m) => source.includes(m));
+
+/**
+ * The machine a run was measured on, recorded in the baseline meta. Timings
+ * from two machines are not comparable, so history/ has to be able to tell.
+ */
+export const machineName = () =>
+	`${os.cpus()[0]?.model ?? 'unknown cpu'}, ${os.cpus().length} cores, ${Math.round(os.totalmem() / 2 ** 30)} GB`;
 
 // ──────────────────────────────────────────────────────────────── build ────
 

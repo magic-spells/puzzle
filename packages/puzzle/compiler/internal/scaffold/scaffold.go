@@ -8,6 +8,14 @@
 // (all: so dotfiles like .gitignore are included). Adding a template is a matter
 // of dropping a new subtree in; no Go changes are needed beyond registering its
 // name in Templates.
+//
+// templates/<name>/ is the plain-JavaScript app, written as-is. Its TypeScript
+// variant (`puzzle init --typescript`, D54) is that same tree with the overlay
+// templates/<name>-ts/ laid over it: an overlay file replaces the base file at
+// the same path, and an overlay `x.ts` also drops the base `x.js` it ports.
+// The overlay holds only what a TypeScript app writes differently — every
+// script, package.json, README — so styles, public/ and puzzle.config.js stay
+// single-sourced.
 package scaffold
 
 import (
@@ -37,6 +45,11 @@ var Templates = []string{"default", "todos"}
 
 // DefaultTemplate is used when --template is not given.
 const DefaultTemplate = "default"
+
+// typeScriptOverlaySuffix names a template's TypeScript overlay directory,
+// templates/<name>-ts/. It is never a template name of its own: Templates, not
+// the directory listing, decides what --template accepts.
+const typeScriptOverlaySuffix = "-ts"
 
 // appNamePattern constrains the app name: it becomes an npm package name, so it
 // is lowercase letters, digits and hyphens, and must start with a letter.
@@ -80,7 +93,9 @@ func ValidTemplate(name string) bool {
 //   - The target dir may not exist, or exist and be empty; a non-empty target
 //     is refused.
 //   - appName is validated (npm package name); template must be known.
-func Create(parentDir, appName, template string) (*Result, error) {
+//   - typescript writes the template's TypeScript variant (its -ts overlay);
+//     false writes templates/<name>/ exactly.
+func Create(parentDir, appName, template string, typescript bool) (*Result, error) {
 	if err := ValidateName(appName); err != nil {
 		return nil, err
 	}
@@ -104,52 +119,77 @@ func Create(parentDir, appName, template string) (*Result, error) {
 		return nil, err
 	}
 
-	sub, err := fs.Sub(templatesFS, "templates/"+template)
+	files, err := readTree("templates/" + template)
 	if err != nil {
 		return nil, fmt.Errorf("loading template %q: %w", template, err)
 	}
-
-	var written []string
-	walkErr := fs.WalkDir(sub, ".", func(p string, d fs.DirEntry, err error) error {
+	if typescript {
+		overlay, err := readTree("templates/" + template + typeScriptOverlaySuffix)
 		if err != nil {
-			return err
+			return nil, fmt.Errorf("loading the TypeScript variant of template %q: %w", template, err)
 		}
-		if p == "." {
-			return nil
+		for p := range overlay {
+			if stem, ok := strings.CutSuffix(p, ".ts"); ok {
+				delete(files, stem+".js")
+			}
 		}
+		for p, data := range overlay {
+			files[p] = data
+		}
+	}
+
+	written := make([]string, 0, len(files))
+	for p := range files {
+		written = append(written, p)
+	}
+	sort.Strings(written)
+	for _, p := range written {
 		dest := filepath.Join(target, filepath.FromSlash(p))
-		if d.IsDir() {
-			return os.MkdirAll(dest, 0o755)
+		data := []byte(strings.ReplaceAll(string(files[p]), placeholder, appName))
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			return nil, fmt.Errorf("scaffolding %q: %w", template, err)
+		}
+		if err := fsutil.WriteFileAtomic(dest, data, 0o644); err != nil {
+			return nil, fmt.Errorf("scaffolding %q: %w", template, err)
+		}
+	}
+
+	return &Result{Dir: target, Files: written}, nil
+}
+
+// readTree reads every file under root in the embedded templates, keyed by its
+// slash path relative to root.
+func readTree(root string) (map[string][]byte, error) {
+	sub, err := fs.Sub(templatesFS, root)
+	if err != nil {
+		return nil, err
+	}
+	files := map[string][]byte{}
+	err = fs.WalkDir(sub, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
 		}
 		data, err := fs.ReadFile(sub, p)
 		if err != nil {
 			return err
 		}
-		data = []byte(strings.ReplaceAll(string(data), placeholder, appName))
-		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-			return err
-		}
-		if err := fsutil.WriteFileAtomic(dest, data, 0o644); err != nil {
-			return err
-		}
-		written = append(written, filepath.ToSlash(p))
+		files[p] = data
 		return nil
 	})
-	if walkErr != nil {
-		return nil, fmt.Errorf("scaffolding %q: %w", template, walkErr)
+	if err != nil {
+		return nil, err
 	}
-
-	sort.Strings(written)
-	return &Result{Dir: target, Files: written}, nil
+	return files, nil
 }
 
-// tsconfigJSON is the strict, noEmit tsconfig written by --typescript (v1.22,
-// D54). It drives editor type-checking of the app's .ts/.js files only: the
-// Puzzle build never runs tsc, and the `include` globs can't reach a .pzl's
-// `<script>` body, so those bodies stay transpile-only (D54 never type-checks
-// them). `include` picks up the package's shipped `puzzle-env.d.ts` shim so
-// `import X from './views/X.pzl'` resolves to a PuzzleView subclass (typed .pzl
-// imports), and `paths` mirrors the build's '@' app alias (SPEC §40, D75) so
+// tsconfigJSON is the strict, noEmit tsconfig written by --typescript (D54).
+// The Puzzle build never runs tsc; this config serves two readers. An editor's
+// TypeScript reads it directly for the app's .ts/.js files, where `include`
+// picks up the package's shipped `puzzle-env.d.ts` shim so `import X from
+// './views/X.pzl'` resolves to a PuzzleView subclass. `puzzle check` (the
+// scaffold's `npm run check`, D165) extends it, so its strictness is what the
+// .pzl scripts, template expressions and .ts modules are checked against.
+// `paths` mirrors the build's '@' app alias (SPEC §40, D75) so
 // '@/models/user.js' type-checks. moduleResolution "bundler" resolves `paths`
 // without a `baseUrl`.
 const tsconfigJSON = `{
@@ -204,10 +244,10 @@ func WriteJSConfig(dir string) ([]string, error) {
 }
 
 // WriteTypeScriptConfig writes a strict/noEmit tsconfig.json into an already
-// scaffolded app directory (v1.22, D54), backing `puzzle init --typescript`. It
-// returns the created files as slash paths relative to dir, and is a no-op-safe
-// add-on: it never rewrites user JS, only drops the config. It refuses to
-// overwrite an existing tsconfig.json.
+// scaffolded app directory (D54), completing `puzzle init --typescript` after
+// Create has written the template's TypeScript variant. It returns the created
+// files as slash paths relative to dir, and refuses to overwrite an existing
+// tsconfig.json.
 func WriteTypeScriptConfig(dir string) ([]string, error) {
 	return writeConfigFile(dir, "tsconfig.json", tsconfigJSON)
 }

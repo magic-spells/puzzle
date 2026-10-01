@@ -1,0 +1,35 @@
+<puzzle-view>
+  <section title="<InAttr/>" data-x='<InSingle/>'>
+    <!-- <InHtmlComment/> -->
+    {#comment}
+      <InBlockComment/>
+    {/comment}
+    {## <InInlineComment/> }
+    {#raw}<InRaw/>{/raw}
+    <p>{ '<InString/>' } and { `<InTemplate/>` }</p>
+    <p>Don't stop: <Real label={ '<InProp/>' } /></p>
+    <Family.Part></Family.Part>
+    <div title="{ q ? '"' : '' }"><Quoted/></div>
+    <span class="{ on ? "a" : "b" }"></span>
+    <Other title="z"/><After/>
+  </section>
+</puzzle-view>
+
+<script>
+import InAttr from './InAttr.pzl';
+import InSingle from './InSingle.pzl';
+import InHtmlComment from './InHtmlComment.pzl';
+import InBlockComment from './InBlockComment.pzl';
+import InInlineComment from './InInlineComment.pzl';
+import InRaw from './InRaw.pzl';
+import InString from './InString.pzl';
+import InTemplate from './InTemplate.pzl';
+import InProp from './InProp.pzl';
+import Real from './Real.pzl';
+import Family from './Family.pzl';
+import Quoted from './Quoted.pzl';
+import Other from './Other.pzl';
+import After from './After.pzl';
+
+export default {};
+</script>

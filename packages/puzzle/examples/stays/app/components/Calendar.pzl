@@ -54,7 +54,7 @@
     <div class="mt-5 pt-4 border-t border-line text-sm">
       {#if hasRange}
         <div class="flex items-center justify-between gap-3">
-          <span class="text-fg font-medium">{ nights } { nights | plural('night','nights') } · { checkIn | monthDay } – { checkOut | monthDay }</span>
+          <span class="text-fg font-medium">{ nights } { plural(nights, 'night', 'nights') } · { monthDay(checkIn) } – { monthDay(checkOut) }</span>
           <button type="button" class="text-fg underline hover:text-accent" @click={ clear }>Clear dates</button>
         </div>
       {:else}

@@ -125,6 +125,7 @@ func TestStaticEntrySourceFull(t *testing.T) {
 	s := cannedSummary()
 	src, err := staticEntrySource(
 		root,
+		root+"/app/app.js",
 		s.Written[0],
 		s,
 		"app/models/index.ts",
@@ -257,7 +258,7 @@ func TestStaticEntrySourceAdapterTiers(t *testing.T) {
 			s := cannedSummary()
 			s.AdapterConfigured = tt.configured
 			s.AdapterModuleMatches = tt.matches
-			src, err := staticEntrySource(root, s.Written[0], s, "", "", tt.module)
+			src, err := staticEntrySource(root, root+"/app/app.js", s.Written[0], s, "", "", tt.module)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -300,7 +301,7 @@ func TestStaticCapturedIgnoresAdapterlessApps(t *testing.T) {
 func TestStaticPrerenderStdinImportsTheAdapterModule(t *testing.T) {
 	root := filepath.FromSlash("/abs/app-root")
 
-	without, err := staticPrerenderStdin(root, "")
+	without, err := staticPrerenderStdin(root, filepath.Join(root, "app", "app.js"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +309,7 @@ func TestStaticPrerenderStdinImportsTheAdapterModule(t *testing.T) {
 		t.Errorf("no app/adapter module on disk, but the prerender entry names one:\n%s", without)
 	}
 
-	with, err := staticPrerenderStdin(root, "app/adapter.js")
+	with, err := staticPrerenderStdin(root, filepath.Join(root, "app", "app.js"), "app/adapter.js")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +333,7 @@ func TestStaticEntrySourceMinimal(t *testing.T) {
 	s.APIURL = nil
 	s.RouterBase = nil
 	s.HasAdapter = false
-	src, err := staticEntrySource(root, page, s, "", "", "")
+	src, err := staticEntrySource(root, root+"/app/app.js", page, s, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -374,7 +375,7 @@ func TestStaticEntrySourceMinimal(t *testing.T) {
 func TestStaticEntrySourceObservesMountRejection(t *testing.T) {
 	s := cannedSummary()
 	for _, page := range s.Written {
-		src, err := staticEntrySource("/abs/app-root", page, s, "", "", "")
+		src, err := staticEntrySource("/abs/app-root", "/abs/app-root/app/app.js", page, s, "", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -400,7 +401,7 @@ func TestStaticEntrySourceObservesMountRejection(t *testing.T) {
 // A bare console.error handler compiles to `.catch(() => {})` there.
 func TestStaticEntrySourceMountFailureSurvivesConsoleStripping(t *testing.T) {
 	s := cannedSummary()
-	src, err := staticEntrySource("/abs/app-root", s.Written[0], s, "", "", "")
+	src, err := staticEntrySource("/abs/app-root", "/abs/app-root/app/app.js", s.Written[0], s, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -662,7 +663,7 @@ func TestBuildStaticShipsTheConfiguredAdapter(t *testing.T) {
 		t.Fatalf("a static build with an inline adapter must succeed, got: %v", buildErr)
 	}
 	// The build says what the shape costs, and does not fail over it.
-	if !strings.Contains(string(captured), "each static page imports app/app.js") {
+	if !strings.Contains(string(captured), "each static page imports the entry") {
 		t.Errorf("static build did not note the capture tier's page weight, got:\n%s", captured)
 	}
 

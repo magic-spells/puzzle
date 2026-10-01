@@ -1,5 +1,5 @@
 ---
-name: "D39 — `<puzzle-skeleton>`: declarative loading template, auto-swapped (v1.8)"
+name: 'D39 — `<puzzle-skeleton>`: declarative first-load template, auto-swapped'
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
 connections:
@@ -11,29 +11,24 @@ connections:
   - DOC-SPEC-VIEW
   - DOC-PUZZLE-FILE
   - DECISION-D19-NAVIGATION-COMMIT
+  - DECISION-D52-SKELETON-ANTIFLASH
 code_refs:
   - client-runtime/views/PuzzleView.js
   - client-runtime/router/router.js
 ---
 
-# D39 — `<puzzle-skeleton>`: declarative loading template, auto-swapped (v1.8)
+# D39 — `<puzzle-skeleton>`: declarative first-load template, auto-swapped
 
-An optional fourth `.pzl` section `<puzzle-skeleton>` renders while the first `data()` is pending, then swaps for the real template; routed views declaring one commit navigation immediately instead of gating on `data()`. Settled (v1.8); additive. See [[DOC-SPEC-VIEW]] §16 and [[DOC-PUZZLE-FILE]].
-
-## Context
-[[DOC-SPEC]] deferred "`<puzzle-skeleton>` auto-swap, skeleton loading management". D39 ships it: an optional fourth `.pzl` section, `<puzzle-skeleton>…</puzzle-skeleton>`, whose content renders while the component's **first `data()` is pending**, then swaps for the real template when it commits. Presence-driven — no config, no API; delete the section and the old await-everything behavior returns.
+An optional `.pzl` section whose content renders while the component's **first** `data()` is pending, then swaps for the real template. Presence-driven: no config, no API. See [[DOC-SPEC-VIEW]] §16 and [[DOC-PUZZLE-FILE]].
 
 ## Decision
-- **Grammar.** At most one per file; the tag itself takes **no attributes** (compile error). The body uses the FULL template grammar (one parser, one emitter — the range `{#for}` covers repeated placeholder rows), but only `created()`-seeded state is readable during the skeleton render (`data()` hasn't resolved). In **view mode** the skeleton's children are re-parented under the SAME `<puzzle-view>` root and attributes as the real template, so the swap patches children only; in **component mode** the skeleton needs a **single plain-element root** (a component root is a compile error) — keep its tag equal to the template root's for an in-place patch.
-- **Codegen.** A second prototype-assigned method, `Name.prototype.renderSkeleton`, byte-shaped like `render()`. No new runtime imports; SLOT_TAG detection covers both trees.
-- **Runtime.** `PuzzleView` tracks `#loaded` (false until the first `data()` commit; public `loaded` getter). While `!loaded` and `renderSkeleton` exists, renders draw the skeleton. A non-preloaded `mount()` with async `data()` + skeleton renders the skeleton immediately, fires `mounted()` against it, and **resolves the mount promise without waiting for data** — so a child component's auto-chained `playIn()` animates the skeleton in, and `beforeUpdate`/`afterUpdate` bracket the loaded swap like any update. `loaded` never resets: later refreshes keep current content up (a skeleton is a FIRST-load affordance, not a spinner).
-- **Router (the one [[DECISION-D19-NAVIGATION-COMMIT]] narrowing).** A FRESH routed instance (view or layout) declaring `renderSkeleton` **does not gate the commit**: its `preload()` starts but is not awaited; URL + title move immediately; the preloaded mount renders the skeleton and the real render patches in when `data()` commits. That is the point of a skeleton — navigation feels instant, and the URL points at a page that IS there (its declared loading state). The narrowed guarantee: a skeleton view's `data()` rejection lands AFTER the URL moved (logged `[puzzle] skeleton view data() failed:`; the skeleton stays up — surfacing load errors is the view's job). **Reused ancestors always gate** — content on screen never regresses mid-navigation. Skeleton-less views keep byte-identical D19 semantics. `#warnMissingSlots` skips a parent that isn't `loaded` yet (its `<Slot/>` legitimately arrives with the real template).
+- **Grammar.** At most one per file. Its only legal attribute is `min-duration` ([[DECISION-D52-SKELETON-ANTIFLASH]]). The body uses the full template grammar (a range `{#for}` makes placeholder rows), but only `created()`-seeded state is readable. In a **view**, the skeleton's children sit under the same `<puzzle-view>` root and attributes as the real template, so the swap patches children only. In a **component**, the skeleton needs a single plain-element root (a component root is a compile error); matching the template root's tag gives an in-place patch.
+- **Codegen** emits `Name.prototype.renderSkeleton`, shaped like `render()`.
+- **Runtime.** `PuzzleView` tracks `loaded` (false until the first `data()` commit). While not loaded and `renderSkeleton` exists, renders draw the skeleton. A non-preloaded `mount()` with async `data()` renders the skeleton at once, fires `mounted()` against it, and resolves the mount without waiting for data; `beforeUpdate`/`afterUpdate` bracket the swap like any update. `loaded` never resets — a skeleton is a first-load affordance, not a spinner.
+- **Router — the one narrowing of [[DECISION-D19-NAVIGATION-COMMIT]].** A **fresh** routed view or layout with `renderSkeleton` does not gate the commit: its `preload()` starts unawaited, the URL and title move immediately, and the real render patches in when `data()` commits. A skeleton view's `data()` rejection therefore lands after the URL moved; it is logged (`[puzzle] skeleton view data() failed:`) and the skeleton stays up — surfacing the error is the view's job. **Reused ancestors always gate.** The missing-outlet warning skips a parent that is not `loaded` yet.
 
 ## Alternatives rejected
-- **Auto-showing the skeleton on every refresh** — flashes placeholders over real content on store changes; last-wins refresh already handles updates.
-- **Keeping the D19 gate and rendering skeletons only for nested components** — routed views are where loading states matter most; the roadmap's PostDetail case would never show one.
-- **A `loading` slot/prop API instead of a section** — the section keeps loading markup out of the data-dependent template, needs no grammar change, and compiles to plain vdom.
-- **Allowing a component root inside a skeleton** — would mount a live child before data resolves and swap the root node instead of patching in place.
-
-## Consequences
-Non-breaking: additive amendment (v1.8) — files without the section compile and behave byte-identically.
+- Showing the skeleton on every refresh — flashes placeholders over real content.
+- Keeping the D19 gate and using skeletons only for nested components — routed views are where loading states matter most.
+- A `loading` slot/prop API — the section keeps loading markup out of the data-dependent template and compiles to plain vdom.
+- A component root inside a skeleton — mounts a live child before data resolves and swaps the root instead of patching.

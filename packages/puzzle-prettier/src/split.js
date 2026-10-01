@@ -1,5 +1,5 @@
 // split.js — a faithful JavaScript port of the Puzzle compiler's .pzl section
-// splitter (compiler/internal/parser/sections.go). It carves a .pzl file into its
+// splitter (packages/puzzle-lang/parser/sections.go). It carves a .pzl file into its
 // <puzzle-view> (required, exactly one), optional <puzzle-skeleton>, optional
 // <script>, and optional <style> sections, tolerant of whitespace, order, and
 // top-level HTML comments. The <script>/<style> close scans are language-aware
@@ -16,6 +16,8 @@ import {
 	scanInlineComment,
 	scanBlockComment,
 	isBlockCommentOpen,
+	isBlockRawOpen,
+	scanBlockRaw,
 } from './lex.js';
 
 const SECTION_NAMES = ['puzzle-view', 'puzzle-skeleton', 'script', 'style'];
@@ -184,14 +186,17 @@ function findStyleClose(s, from) {
 // HTML comments, template comments, and \{ \} escapes. Returns the close tag's
 // '<' index RELATIVE to `from`, or -1. Mirrors findTemplateClose.
 //
-// There is deliberately NO {#raw} case here: sections.go has none either. Section
-// splitting is byte-naive about a raw body (D150 lex-off is a LEXER concern, and
-// this port has no template lexer), so a literal close tag written inside a
-// {#raw} body ends the section in the compiler and must end it here too. What a
-// raw block DOES need is `raw` in lex.js's BLOCK_CLOSE_KEYWORDS: without it the
-// '/' in {/raw} reads as a regex opener and the brace scan runs away past the
-// section's real close tag.
+// A D150 {#raw} span is stepped over whole, as the compiler's lexer does: its
+// body is never read, so its braces, quotes, and `//` are inert and a literal
+// close tag inside it does not end the section. `raw` stays in lex.js's
+// BLOCK_CLOSE_KEYWORDS all the same: a stray {/raw} with no opener still reaches
+// scanBraceGroup, where its '/' must not read as a regex opener.
 function findTemplateClose(s, from, closeTag) {
+	// inRaw is the first close tag seen inside a skipped {#raw} span. It is the
+	// answer only when no close tag follows: a raw block missing its {/raw}
+	// (none at all, or the next one sits in a later section) still splits at the
+	// real close, and the compiler's lexer then reports the unterminated block.
+	let inRaw = -1;
 	for (let i = from; i < s.length; ) {
 		if (s.startsWith(closeTag, i)) return i - from;
 		if (s.startsWith('<!--', i)) {
@@ -205,6 +210,14 @@ function findTemplateClose(s, from, closeTag) {
 		}
 		if (s[i] === '\\' && i + 1 < s.length && (s[i + 1] === '{' || s[i + 1] === '}')) {
 			i += 2;
+			continue;
+		}
+		if (isBlockRawOpen(s, i)) {
+			const r = scanBlockRaw(s, i);
+			const end = r.ok ? r.end : s.length; // unterminated: runs to end of input
+			const k = s.slice(i, end).indexOf(closeTag);
+			if (k >= 0 && inRaw < 0) inRaw = i + k - from;
+			i = end;
 			continue;
 		}
 		if (s[i] === '{') {
@@ -221,7 +234,7 @@ function findTemplateClose(s, from, closeTag) {
 		}
 		i++;
 	}
-	return -1;
+	return inRaw;
 }
 
 // scriptLangParser extracts the <script> `lang` attribute and maps it to a

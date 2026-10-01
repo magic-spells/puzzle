@@ -1,29 +1,403 @@
 <puzzle-view>
-  <span
-    class="inline-block animate-spin rounded-full border-2 border-border border-t-brand { sizeClass } { extraClass }"
-    role="status"
-    aria-label={ label }></span>
+  <span class={ rootClass } role="status" aria-label={ label }>
+    {#if variant === 'ticks'}
+      {#for t in ticks}
+        <span class="absolute inset-0 spinner-tick-arm" style={ t.style } aria-hidden="true"><span class={ tickClass }></span></span>
+      {/for}
+    {:else if variant === 'trace'}
+      <svg class="block size-full overflow-visible" viewBox="0 0 24 24" fill="none" stroke-width={ traceStroke } stroke-linecap="round" aria-hidden="true">
+        <path class="stroke-border-strong" d="M12 2H15C19.06 2 22 4.94 22 9V15C22 19.06 19.06 22 15 22H9C4.94 22 2 19.06 2 15V9C2 4.94 4.94 2 9 2Z"/>
+        <path class="stroke-brand spinner-trace-seg" pathLength="100" d="M12 2H15C19.06 2 22 4.94 22 9V15C22 19.06 19.06 22 15 22H9C4.94 22 2 19.06 2 15V9C2 4.94 4.94 2 9 2Z"/>
+      </svg>
+    {:else if variant === 'dots'}
+      {#for d in dots}
+        <span class={ dotClass } style={ d.style } aria-hidden="true"></span>
+      {/for}
+    {:else if variant === 'snap'}
+      {#for p in pieces}
+        <span class={ p.class } style={ p.style } aria-hidden="true"></span>
+      {/for}
+    {:else if variant === 'spark'}
+      <span class="absolute inset-0 m-auto size-11/20 bg-linear-to-br from-brand/60 to-brand spinner-spark-star spinner-spark-main" aria-hidden="true"></span>
+      <span class="absolute inset-0 spinner-spark-orbit" aria-hidden="true"><span class="absolute left-1/2 top-0 size-1/5 -translate-x-1/2 bg-brand spinner-spark-star spinner-spark-sat"></span></span>
+    {:else if variant === 'heartbeat'}
+      <span class={ ringClass } aria-hidden="true"></span>
+      <span class={ beatClass } aria-hidden="true"></span>
+    {/if}
+  </span>
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
-// Rotating-ring spinner: a border-border ring with its top edge tinted brand,
-// spun by Tailwind's animate-spin. Renders as a single inline <span>, so it
-// drops straight into the parent's flow with no wrapper.
+// Spinner — an inline loading indicator in seven designs. Every variant is one
+// inline <span role="status"> carrying the label, so it drops straight into the
+// parent's flow; the moving parts inside it are aria-hidden decoration.
 //
-//   <Spinner/>                          medium, "Loading" label
-//   <Spinner size="sm" label="Saving"/>
-//   <Spinner class="border-current/30 border-t-current"/>  inherit text color
+//   <Spinner/>                              ring, medium, "Loading"
+//   <Spinner variant="ticks" size="sm"/>
+//   <Spinner variant="dots" label="Ada is typing"/>
+//   <Spinner variant="spark" size="lg" label="Thinking"/>
+//
+// Variants
+//   ring       (default) a border-border ring with its top edge brand, spun by
+//              Tailwind's animate-spin. Renders as the pre-0.8 piece did; the
+//              only addition is the reduced-motion pulse.
+//   ticks      eight pill ticks in currentColor. The head steps from tick to
+//              tick like the native activity indicator, and the trail tapers
+//              in BOTH opacity and length — each tick shrinks toward the centre
+//              as it fades.
+//   trace      a squircle outline in the border token with a brand segment
+//              running around it. The segment eases along each side (fast on
+//              the straights, slow through the corners) and its tail lags the
+//              head, so it stretches on the runs and bunches in the corners.
+//              The stroke is 2px at every size: the outline is drawn in a
+//              24-unit viewBox and `stroke-width` is 48 / pixel size, so it
+//              cancels the scale. (vector-effect: non-scaling-stroke would
+//              say the same thing, but Chromium then lays the dash pattern
+//              out in screen space and ignores pathLength — the segment
+//              splits in two at sm and lg.)
+//   dots       three currentColor dots written left to right, a short hold,
+//              then all three fade together — a typing indicator.
+//   snap       Puzzle's own: a 2×2 of rounded tiles drift apart, click back
+//              together with a small inward overshoot, and the block turns a
+//              quarter. One tile is full strength so the turn reads.
+//   spark      a brand four-point star that twinkles, with a small satellite
+//              star orbiting it and fading in and out. For AI states.
+//   heartbeat  a currentColor dot on a lub-dub rhythm; the second beat sends out
+//              one faint ring, then it rests. For live / connecting status.
+//
+// COLOR. ring and trace use the theme tokens (border track + brand). ticks, dots,
+// snap and heartbeat paint in currentColor, so they inherit a button's text
+// colour or whatever `text-*` you pass in `class`. spark is brand-tinted.
+//
+// MOTION IS CSS ONLY. The <style> block at the bottom holds the keyframes and
+// the few properties no utility can express (per-part rotation and stagger from
+// a `--i` custom property, the SVG dash maths, the star clip-path). It rides with
+// this file on purpose: `puzzle add piece spinner` then brings its animations
+// with it, even into an app whose pieces.css predates this piece. The rules sit
+// in `@layer components`, so a utility you pass in `class` wins — except on a
+// property the animation drives (the dots root's opacity, the snap root's
+// rotate), which the running animation owns. Every colour class here uses a
+// token the 0.7 theme already had, so an older pieces.css renders it fully.
+// All roots are `align-middle`, so every variant sits on the same line in text.
+// Under prefers-reduced-motion every variant (ring included) drops its motion
+// for Tailwind's slow opacity pulse and holds a static, still-busy pose.
+//
+// Props
+//   variant  'ring' (default) | 'ticks' | 'trace' | 'dots' | 'snap' | 'spark' | 'heartbeat'
+//   size     'sm' | 'md' (default) | 'lg' — 16 / 24 / 40px tall; dots is wider
+//   label    accessible name, default 'Loading'
+//   class    merged onto the root <span>
+const VARIANTS = ['ring', 'ticks', 'trace', 'dots', 'snap', 'spark', 'heartbeat'];
 const SIZE = { sm: 'size-4', md: 'size-6', lg: 'size-10' };
+
+// ring — the classes the piece shipped before variants existed, plus
+// align-middle and the reduced-motion pulse.
+const RING = 'inline-block align-middle animate-spin rounded-full border-2 border-border border-t-brand motion-reduce:animate-pulse';
+
+const TICKS = 'relative inline-block align-middle motion-reduce:animate-pulse';
+const TICK = 'absolute left-1/2 top-0 h-3/10 w-1/8 -translate-x-1/2 origin-bottom rounded-full bg-current spinner-tick';
+
+const TRACE = 'inline-block align-middle motion-reduce:animate-pulse';
+// user units per 2px: the 24-unit viewBox drawn at 16 / 24 / 40px
+const TRACE_STROKE = { sm: 3, md: 2, lg: 1.2 };
+
+const DOTS = 'inline-flex align-middle items-center justify-center spinner-dots motion-reduce:animate-pulse';
+const DOTS_SIZE = { sm: 'h-4 gap-0.5', md: 'h-6 gap-1', lg: 'h-10 gap-1.5' };
+const DOT_SIZE = { sm: 'size-1', md: 'size-1.5', lg: 'size-2.5' };
+
+const SNAP = 'inline-grid align-middle grid-cols-2 spinner-snap motion-reduce:animate-pulse';
+const SNAP_SIZE = { sm: 'gap-px p-0.5', md: 'gap-0.5 p-1', lg: 'gap-1 p-1.5' };
+const TILE_ROUND = { sm: 'rounded-xs', md: 'rounded-xs', lg: 'rounded-sm' };
+
+const SPARK = 'relative inline-block align-middle motion-reduce:animate-pulse';
+
+const BEAT = 'relative inline-grid align-middle place-items-center motion-reduce:animate-pulse';
+const BEAT_DOT = { sm: 'size-1.5', md: 'size-2.5', lg: 'size-4' };
+
+// --i drives every stagger in the <style> block; --x/--y point each snap tile
+// away from the centre.
+const TICK_PARTS = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => ({ style: `--i:${i}` }));
+const DOT_PARTS = [0, 1, 2].map((i) => ({ style: `--i:${i}` }));
+const TILE_DIRS = [
+  [-1, -1],
+  [1, -1],
+  [-1, 1],
+  [1, 1],
+];
 
 export default class Spinner extends PuzzleView {
   data(params, props) {
-    return {
-      sizeClass: SIZE[props.size] || SIZE.md,
-      label: props.label || 'Loading',
-      extraClass: props.class || '',
-    };
+    const variant = VARIANTS.includes(props.variant) ? props.variant : 'ring';
+    const size = SIZE[props.size] ? props.size : 'md';
+    const extra = props.class || '';
+    const out = { variant, label: props.label || 'Loading' };
+
+    if (variant === 'ring') {
+      out.rootClass = `${RING} ${SIZE[size]} ${extra}`;
+    } else if (variant === 'ticks') {
+      out.rootClass = `${TICKS} ${SIZE[size]} ${extra}`;
+      out.tickClass = TICK;
+      out.ticks = TICK_PARTS;
+    } else if (variant === 'trace') {
+      out.rootClass = `${TRACE} ${SIZE[size]} ${extra}`;
+      out.traceStroke = TRACE_STROKE[size];
+    } else if (variant === 'dots') {
+      out.rootClass = `${DOTS} ${DOTS_SIZE[size]} ${extra}`;
+      out.dotClass = `${DOT_SIZE[size]} rounded-full bg-current spinner-dot`;
+      out.dots = DOT_PARTS;
+    } else if (variant === 'snap') {
+      out.rootClass = `${SNAP} ${SIZE[size]} ${SNAP_SIZE[size]} ${extra}`;
+      out.pieces = TILE_DIRS.map(([x, y], i) => ({
+        class: `${TILE_ROUND[size]} bg-current spinner-snap-tile ${i === 0 ? '' : 'opacity-40'}`,
+        style: `--x:${x};--y:${y}`,
+      }));
+    } else if (variant === 'spark') {
+      out.rootClass = `${SPARK} ${SIZE[size]} ${extra}`;
+    } else {
+      out.rootClass = `${BEAT} ${SIZE[size]} ${extra}`;
+      out.beatClass = `col-start-1 row-start-1 ${BEAT_DOT[size]} rounded-full bg-current spinner-beat-dot`;
+      out.ringClass = `col-start-1 row-start-1 ${BEAT_DOT[size]} rounded-full border border-current spinner-beat-ring`;
+    }
+    return out;
   }
 }
 </script>
+
+<style>
+/*
+ * Spinner motion. Global on purpose (not `scoped`): every name is prefixed
+ * `spinner-`, and a global block needs no per-component stamp. Only what no
+ * Tailwind utility can say lives here — keyframes, per-part stagger/rotation
+ * from `--i`, SVG dash maths, the star clip-path, and the reduced-motion pose.
+ * The rules sit in `@layer components` (the build appends this block after
+ * Tailwind's output, which declares that layer below utilities), so utilities
+ * in `class` win — except on a property a running animation drives.
+ */
+
+/* trace: the segment's head and tail are two animated numbers along the
+ * pathLength-100 outline. @property registers them so they interpolate. */
+@property --spinner-trace-head {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+@property --spinner-trace-tail {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@layer components {
+  /* ── ticks ──────────────────────────────────────────────────────────── */
+  .spinner-tick-arm {
+    rotate: calc(var(--i) * -45deg);
+  }
+  .spinner-tick {
+    animation: spinner-tick 800ms steps(8, end) infinite;
+    animation-delay: calc(var(--i) * -100ms);
+  }
+  @keyframes spinner-tick {
+    from {
+      opacity: 1;
+      scale: 1 1;
+    }
+    to {
+      opacity: 0.12;
+      scale: 1 0.4;
+    }
+  }
+
+  /* ── trace ──────────────────────────────────────────────────────────── */
+  /* Static fallback: a browser without CSS mod() shows a parked segment, not
+     a finished-looking full outline. */
+  .spinner-trace-seg {
+    stroke-dasharray: 16 84;
+  }
+  @supports (width: mod(1px, 1px)) {
+    .spinner-trace-seg {
+      /* head − tail, plus 7 so the segment never shrinks below a short dash
+         in the corners; the dash starts 7 behind the tail to match. */
+      --spinner-trace-len: calc(mod(var(--spinner-trace-head) - var(--spinner-trace-tail) + 100, 100) + 7);
+      stroke-dasharray: calc(var(--spinner-trace-len)) calc(100 - var(--spinner-trace-len));
+      stroke-dashoffset: calc(7 - var(--spinner-trace-tail));
+      /* one keyframe interval per side, eased: quick on the straights, slow
+         in the corners. The tail runs the same curve a beat behind the head. */
+      animation:
+        spinner-trace-head 2400ms cubic-bezier(0.65, 0, 0.35, 1) -260ms infinite,
+        spinner-trace-tail 2400ms cubic-bezier(0.65, 0, 0.35, 1) infinite;
+    }
+  }
+  /* The path starts at the top centre and runs clockwise, so 12.5 / 37.5 /
+     62.5 / 87.5 are the four corner midpoints. */
+  @keyframes spinner-trace-head {
+    0% { --spinner-trace-head: 12.5; }
+    25% { --spinner-trace-head: 37.5; }
+    50% { --spinner-trace-head: 62.5; }
+    75% { --spinner-trace-head: 87.5; }
+    100% { --spinner-trace-head: 112.5; }
+  }
+  @keyframes spinner-trace-tail {
+    0% { --spinner-trace-tail: 12.5; }
+    25% { --spinner-trace-tail: 37.5; }
+    50% { --spinner-trace-tail: 62.5; }
+    75% { --spinner-trace-tail: 87.5; }
+    100% { --spinner-trace-tail: 112.5; }
+  }
+
+  /* ── dots ───────────────────────────────────────────────────────────── */
+  /* The row fades all three together; each dot writes itself in on its own
+     stagger. A dot resets (82%) only while the row is already invisible. */
+  .spinner-dots {
+    animation: spinner-dots 1600ms ease-in-out infinite;
+  }
+  .spinner-dot {
+    animation: spinner-dot 1600ms cubic-bezier(0.3, 1.6, 0.5, 1) infinite backwards;
+    animation-delay: calc(var(--i) * 120ms);
+  }
+  @keyframes spinner-dots {
+    0%, 62% { opacity: 1; }
+    78%, 100% { opacity: 0; }
+  }
+  @keyframes spinner-dot {
+    0% {
+      opacity: 0;
+      scale: 0;
+    }
+    14%, 81.9% {
+      opacity: 1;
+      scale: 1;
+    }
+    82%, 100% {
+      opacity: 0;
+      scale: 0;
+    }
+  }
+
+  /* ── snap ───────────────────────────────────────────────────────────── */
+  /* Tiles: drift apart, snap home with a small inward overshoot, rest while
+     the block turns. The block's four quarter-turns span four tile cycles, so
+     the full-strength tile walks the corners and the loop closes at 360°. */
+  .spinner-snap {
+    animation: spinner-snap 4800ms cubic-bezier(0.3, 1.45, 0.5, 1) infinite;
+  }
+  .spinner-snap-tile {
+    animation: spinner-snap-tile 1200ms infinite;
+  }
+  @keyframes spinner-snap-tile {
+    0% {
+      translate: 0 0;
+      animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1);
+    }
+    30% {
+      translate: calc(var(--x) * 24%) calc(var(--y) * 24%);
+      animation-timing-function: ease-in-out;
+    }
+    38% {
+      translate: calc(var(--x) * 27%) calc(var(--y) * 27%);
+      animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.4);
+    }
+    48% {
+      translate: 0 0;
+      animation-timing-function: ease-out;
+    }
+    53% {
+      translate: calc(var(--x) * -7%) calc(var(--y) * -7%);
+      animation-timing-function: ease-in-out;
+    }
+    60%, 100% {
+      translate: 0 0;
+    }
+  }
+  @keyframes spinner-snap {
+    0%, 16% { rotate: 0deg; }
+    23%, 41% { rotate: 90deg; }
+    48%, 66% { rotate: 180deg; }
+    73%, 91% { rotate: 270deg; }
+    98%, 100% { rotate: 360deg; }
+  }
+
+  /* ── spark ──────────────────────────────────────────────────────────── */
+  .spinner-spark-star {
+    clip-path: polygon(100% 50%, 95.4% 48.9%, 83.4% 42.8%, 68.9% 31.1%, 57.2% 16.6%, 51.1% 4.6%, 50% 0%, 48.9% 4.6%, 42.8% 16.6%, 31.1% 31.1%, 16.6% 42.8%, 4.6% 48.9%, 0% 50%, 4.6% 51.1%, 16.6% 57.2%, 31.1% 68.9%, 42.8% 83.4%, 48.9% 95.4%, 50% 100%, 51.1% 95.4%, 57.2% 83.4%, 68.9% 68.9%, 83.4% 57.2%, 95.4% 51.1%);
+  }
+  .spinner-spark-main {
+    animation: spinner-spark-main 2400ms ease-in-out infinite;
+  }
+  .spinner-spark-orbit {
+    animation: spinner-spark-orbit 2400ms linear infinite;
+  }
+  .spinner-spark-sat {
+    animation: spinner-spark-sat 2400ms ease-in-out infinite;
+  }
+  @keyframes spinner-spark-main {
+    0% { scale: 0.78; rotate: 0deg; opacity: 0.8; }
+    25% { scale: 1; rotate: 22.5deg; opacity: 1; }
+    50% { scale: 0.78; rotate: 45deg; opacity: 0.8; }
+    75% { scale: 1; rotate: 67.5deg; opacity: 1; }
+    100% { scale: 0.78; rotate: 90deg; opacity: 0.8; }
+  }
+  @keyframes spinner-spark-orbit {
+    to { rotate: 360deg; }
+  }
+  @keyframes spinner-spark-sat {
+    0%, 100% { opacity: 0; scale: 0.4; }
+    35%, 55% { opacity: 1; scale: 1; }
+  }
+
+  /* ── heartbeat ──────────────────────────────────────────────────────── */
+  .spinner-beat-dot {
+    animation: spinner-beat-dot 1300ms ease-in-out infinite;
+  }
+  .spinner-beat-ring {
+    animation: spinner-beat-ring 1300ms cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+  @keyframes spinner-beat-dot {
+    0% { scale: 1; }
+    7% { scale: 1.34; }
+    14% { scale: 0.94; }
+    22% { scale: 1.22; }
+    34%, 100% { scale: 1; }
+  }
+  @keyframes spinner-beat-ring {
+    0%, 20% { scale: 1; opacity: 0; }
+    23% { scale: 1.15; opacity: 0.5; }
+    75%, 100% { scale: 2.5; opacity: 0; }
+  }
+
+  /* ── reduced motion ─────────────────────────────────────────────────── */
+  /* The root pulses (motion-reduce:animate-pulse in the markup — a utility,
+     so it outranks this layer's root animations); the parts stop and hold a
+     pose that still reads as busy. */
+  @media (prefers-reduced-motion: reduce) {
+    .spinner-tick,
+    .spinner-trace-seg,
+    .spinner-dots,
+    .spinner-dot,
+    .spinner-snap,
+    .spinner-snap-tile,
+    .spinner-spark-main,
+    .spinner-spark-orbit,
+    .spinner-spark-sat,
+    .spinner-beat-dot,
+    .spinner-beat-ring {
+      animation: none;
+    }
+    .spinner-tick {
+      opacity: calc(1 - var(--i) * 0.11);
+      scale: 1 calc(1 - var(--i) * 0.075);
+    }
+    .spinner-trace-seg {
+      stroke-dasharray: 16 84;
+      stroke-dashoffset: -4;
+    }
+    .spinner-spark-sat {
+      opacity: 0.7;
+    }
+    .spinner-beat-ring {
+      opacity: 0;
+    }
+  }
+}
+</style>

@@ -6,11 +6,11 @@
       {/for}
     </div>
     <h3 class="mb-1.5 text-[1.2rem] text-ink">{ post.title }</h3>
-    <p class="mb-3 text-body">{ post.body | truncate(140) }</p>
+    <p class="mb-3 text-body">{ truncate(post.body, 140) }</p>
     <div class="flex items-center gap-2 text-[0.8rem] text-muted">
       <span>{ post.readingTime } min read</span>
       <span class="text-faint">·</span>
-      <span>{ post.publishedAt | timeago }</span>
+      <span>{ timeago(post.publishedAt) }</span>
     </div>
   </a>
 </puzzle-view>
@@ -27,9 +27,11 @@ export default class PostCard extends PuzzleView {
     };
   }
 
-  // Staggered enter + leave animations (constellation/doc/DOC-SPEC.md §12). v1's
-  // {#for} exposes no loop index, so the parent view threads each card's position
-  // in as an `index` prop; here that becomes a per-card `delay` so the list
+  // Staggered enter + leave animations (constellation/doc/DOC-SPEC.md §12). The
+  // parent loop hands each card its position as an `index` prop, straight from
+  // the loop counter (`{#for post in recentPosts, i}` → `index={ i }`); a child
+  // cannot see its parent's loop, so the prop is how the counter crosses the
+  // component boundary. Here it becomes a per-card `delay` so the list
   // cascades in instead of all appearing at once. `animations` is a GETTER (not a
   // static field) because the delay is per-instance — it's read at mount time,
   // after props are set (and again at unmount, when the ViewManager checks for

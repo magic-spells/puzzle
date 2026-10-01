@@ -114,7 +114,7 @@
             <section class="rounded border border-accent-soft">
               <h2 class="m-0 px-2 py-1 text-[11px] font-semibold text-ink">
                 State layers
-                <span class="ml-1.5 font-normal text-[10px] text-muted">
+                <span class="ml-1 font-normal text-[10px] text-muted">
                   a later setData() wins until the next data() commit replaces the model layer
                 </span>
               </h2>

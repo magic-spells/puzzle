@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 // reserved_bindings_test.go — the module-scope collision between a <script>
@@ -32,6 +32,8 @@ func TestReservedModuleScopeScriptBindings(t *testing.T) {
 	const slotted = "<puzzle-view>\n  <Slot/>\n</puzzle-view>"
 	const portaled = "<puzzle-view>\n  <Portal><p>x</p></Portal>\n</puzzle-view>"
 	const withSnippet = "<puzzle-view>\n  <List><Snippet item>{ item }</Snippet></List>\n</puzzle-view>"
+	// An item-form {#for} emits one module-scope `const __L<n>` per site (D170).
+	const looping = "<puzzle-view>\n  {#for row in rows}<li>{ row.n }</li>{/for}\n</puzzle-view>"
 
 	tests := []struct {
 		name     string
@@ -83,9 +85,50 @@ func TestReservedModuleScopeScriptBindings(t *testing.T) {
 			script:    "const SNIPPET_TAG = 1;",
 			wantIdent: "SNIPPET_TAG",
 		},
+		{
+			name:      "declared __L0 with a lowered {#for}",
+			template:  looping,
+			script:    "const __L0 = 1;",
+			wantIdent: "__L0",
+		},
+		// `listRows as __l` joins the injected import line exactly the way
+		// `displayValue as __s` does — only for a file that lowers a loop.
+		{
+			name:      "declared __l with a lowered {#for}",
+			template:  looping,
+			script:    "const __l = 1;",
+			wantIdent: "__l",
+		},
+		{
+			name:      "imported __l with a lowered {#for}",
+			template:  looping,
+			script:    "import { x as __l } from './x.js';",
+			wantIdent: "__l",
+		},
+		{
+			name:      "imported __L0 with a lowered {#for}",
+			template:  looping,
+			script:    "import { x as __L0 } from './x.js';",
+			wantIdent: "__L0",
+		},
+		// `.size` is an ordinary field read, so `__z` is an ordinary name.
+		{name: "declared __z with a .size read", template: "<puzzle-view>\n  <p>{ items.size }</p>\n</puzzle-view>", script: "const __z = 1;"},
+		// Only the site indices this file actually emits are reserved: one loop
+		// emits __L0, never __L1.
+		{name: "declared __L1 with a single loop", template: looping, script: "const __L1 = 1;"},
+		{name: "declared __L0 with no loop", template: coercing, script: "const __L0 = 1;"},
 		// Negatives: the name is only reserved when this file emits it.
 		{name: "declared __s without a coercing interpolation", template: raw, script: "const __s = 1;"},
+		{name: "declared __l without a lowered {#for}", template: coercing, script: "const __l = 1;"},
 		{name: "declared __f", template: coercing, script: "const __f = 1;"},
+		// D170's other reserved names are INSTANCE/CLASS properties (`this.__c`,
+		// `this.__lists`, `this.__dirty`, `this.__propRevs`, `Class.__roots`),
+		// never module-scope declarations — exactly like `__h`/`__d`/`__f`. A
+		// module-scope binding of the same spelling cannot collide, so it stays
+		// legal.
+		{name: "declared __c", template: looping, script: "const __c = 1;"},
+		{name: "declared __lists", template: looping, script: "const __lists = 1;"},
+		{name: "declared __roots", template: looping, script: "const __roots = 1;"},
 		{name: "declared SLOT_TAG without a slot", template: coercing, script: "const SLOT_TAG = 1;"},
 		{name: "declared PORTAL_TAG without a portal", template: coercing, script: "const PORTAL_TAG = 1;"},
 		{name: "declared SNIPPET_TAG without a snippet", template: coercing, script: "const SNIPPET_TAG = 1;"},
@@ -124,6 +167,37 @@ func TestReservedModuleScopeScriptBindings(t *testing.T) {
 			}
 			if pe.File != "T.pzl" || pe.Line <= 0 || pe.Col <= 0 {
 				t.Errorf("error must be positioned in the .pzl, got %s:%d:%d", pe.File, pe.Line, pe.Col)
+			}
+		})
+	}
+}
+
+// TestReservedLoopHelperExplanations pins the explanation for each loop
+// helper's import local (D170 `__l`, D173 V12 `__e`/`__r`): the error names
+// the runtime export the compiler imports, never the {#svg} fallback.
+func TestReservedLoopHelperExplanations(t *testing.T) {
+	for _, tc := range []struct {
+		name, template, script, want string
+	}{
+		{"__l", "<puzzle-view>\n  {#for row in rows}<li>{ row.n }</li>{/for}\n</puzzle-view>", "const __l = 1;", "listRows as __l"},
+		// A loop inside a range keeps `.map`, which guards its collection with __e.
+		{"__e", "<puzzle-view>\n  <ul>{#for 1...2, n}<li>{#for row in rows}<b>{ row.n }</b>{/for}</li>{/for}</ul>\n</puzzle-view>", "const __e = 1;", "loopItems as __e"},
+		// A literal range folds to an array; a data bound goes through __r.
+		{"__r", "<puzzle-view>\n  {#for 1...count, n}<li>{ n }</li>{/for}\n</puzzle-view>", "const __r = 1;", "loopRange as __r"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := tc.template + "\n\n<script>\nimport { PuzzleView } from '@magic-spells/puzzle';\n" +
+				tc.script + "\nexport default class T extends PuzzleView {}\n</script>\n"
+			_, err := compileSrcOpts(t, src, Options{Mode: ModeView})
+			if err == nil {
+				t.Fatalf("expected a reserved module-scope binding error for %q", tc.name)
+			}
+			msg := err.Error()
+			if !strings.Contains(msg, `"`+tc.name+`"`) || !strings.Contains(msg, tc.want) {
+				t.Errorf("error %q should name %q and explain it as %q", msg, tc.name, tc.want)
+			}
+			if strings.Contains(msg, "{#svg}") {
+				t.Errorf("error %q must not explain a loop helper as a {#svg} asset", msg)
 			}
 		})
 	}

@@ -1,6 +1,7 @@
 package build
 
 import (
+	"github.com/magic-spells/puzzle/compiler/internal/locales"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 )
 
@@ -27,6 +28,12 @@ type passContext struct {
 	// passes compile each file once between them instead of three times. Its
 	// lifetime is this struct's, which is this Build call's.
 	cache *plugin.CompileCache
+
+	// i18n and locales are the build's D175 translation state: whether the config
+	// turns i18n on (the __PUZZLE_HAS_I18N__ define) and the loaded locale files
+	// whose manifest every pass serves. locales is nil without i18n.
+	i18n    bool
+	locales *locales.Result
 }
 
 // newPassContext runs the once-per-build source scans.
@@ -45,5 +52,6 @@ func (pc *passContext) plugin(absRoot string) *plugin.Plugin {
 	pl := plugin.New(absRoot)
 	pl.SetUsage(pc.usage)
 	pl.SetCompileCache(pc.cache)
+	applyI18n(pl, pc.i18n, pc.locales)
 	return pl
 }

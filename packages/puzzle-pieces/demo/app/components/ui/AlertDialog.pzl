@@ -139,14 +139,15 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // default this piece is meant to override.
 //
 // KNOWN GAPS, all upstream:
-//   * A KEYBOARD activation of either button closes the prompt but reports
-//     result null, so a confirm answered with Tab + Enter is indistinguishable
-//     from Escape. A pointerless click carries coordinates of 0,0, which
-//     dialog-panel's outside-click check reads as a backdrop tap before the
-//     delegated handler runs. The piece watches for that click in the capture
-//     phase so the button still CLOSES against the inert backdrop; recovering
-//     the result belongs upstream. Until it lands, do the irreversible work in
-//     a handler that treats a null result as a cancel.
+//   * CLOSED in dialog-panel 2.0.2: a KEYBOARD activation of either button
+//     used to report result null, so a confirm answered with Tab + Enter was
+//     indistinguishable from Escape. Its pointerless click carries coordinates
+//     of 0,0, which the rect-only outside-click check read as a backdrop tap
+//     before the delegated handler ran. The check now also requires the click
+//     to target the <dialog> itself, so the button's click bubbles through and
+//     carries its result. The capture-phase watch stays as belt-and-braces
+//     against an older installed dialog-panel; a handler that treats a null
+//     result as a cancel is still the safe shape for irreversible work.
 //   * The `hidden` detail carries no reason, which is why Escape needs the
 //     capture-phase flag described above.
 let uid = 0;
@@ -236,10 +237,11 @@ export default class AlertDialog extends PuzzleView {
     }, 0);
   };
 
-  // Capture phase, on the root — see KNOWN GAPS. A keyboard-activated button
-  // arrives at (0,0) and is read as a backdrop tap upstream, so this is the
-  // only place the intent is still legible, and without it the inert backdrop
-  // would swallow a keyboard answer entirely.
+  // Capture phase, on the root — see KNOWN GAPS. Against a dialog-panel older
+  // than 2.0.2 a keyboard-activated button arrives at (0,0) and is read as a
+  // backdrop tap upstream, so this is the only place the intent is still
+  // legible, and without it the inert backdrop would swallow a keyboard
+  // answer entirely.
   #onClickCapture = (event) => {
     if (!event.target?.closest?.('[data-action-hide-dialog]')) return;
     this.#buttonHide = true;

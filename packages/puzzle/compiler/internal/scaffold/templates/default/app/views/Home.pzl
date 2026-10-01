@@ -10,8 +10,9 @@
 
     <Counter label={ counterLabel } />
 
-    <div class="rounded-xl border border-gray-200 dark:border-gray-800 p-5 text-sm text-gray-500">
-      Edit <code class="font-mono text-gray-700 dark:text-gray-300">app/views/Home.pzl</code> and save — the dev server live-reloads.
+    <div class="space-y-2 rounded-xl border border-gray-200 dark:border-gray-800 p-5 text-sm text-gray-500">
+      <p>Edit <code class="font-mono text-gray-700 dark:text-gray-300">app/views/Home.pzl</code> and save — the dev server live-reloads.</p>
+      <p>Functions you register under <code class="font-mono text-gray-700 dark:text-gray-300">formatters</code> in the app entry are called by name in any template: <code class="font-mono text-gray-700 dark:text-gray-300">shout('hello')</code> → { shout('hello') }</p>
     </div>
   </div>
 </puzzle-view>

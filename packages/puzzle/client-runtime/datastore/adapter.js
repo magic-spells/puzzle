@@ -18,6 +18,35 @@ import {
 	safeMerge,
 } from '../model.js';
 
+/** @import { AdapterCapability, ReadStateEnvelope } from '../capabilities.js' */
+/** @import { HandleCtx, StoreRecord, Subscriber } from './store.js' */
+/** @import { AdapterFetch, AdapterLoadManyOptions } from '../../types/adapter.js' */
+/** @import { FindManyOptions } from '../../types/index.js' */
+
+/**
+ * A tracked evaluation's request map (D161): diagnostic key ("type id" for a
+ * record, the type for a collection) → the in-flight fetch it waits on.
+ * @typedef {Map<string, Promise<unknown>>} RequestMap
+ */
+
+/**
+ * The adapter's per-Store read bookkeeping (D161) — see readStateFor.
+ * @typedef {{
+ *   one: Map<string, Promise<void>>,
+ *   many: Map<string, Promise<void>>,
+ *   absent: Map<string, number>,
+ *   loaded: Set<string>,
+ *   complete: Set<string>,
+ *   seq: number,
+ * }} ReadState
+ */
+
+/**
+ * A raw Store or a per-view store handle, which answers STORE_RAW with the
+ * Store it forwards to.
+ * @typedef {Store & { [STORE_RAW]?: Store }} StoreOrHandle
+ */
+
 const DELETED_SAVE_MESSAGE = '[puzzle] cannot save a deleted record';
 const ADAPTER_VERBS = ['loadMany', 'loadOne', 'create', 'update', 'delete'];
 // The 0.6 spelling of loadMany. Every site that could accept it as an ordinary
@@ -32,11 +61,13 @@ const LEGACY_LOAD_ALL = 'loadAll';
 const MAX_SETTLE_ROUNDS = 10;
 
 const noop = () => {};
+/** @type {WeakMap<object, WeakMap<object, Promise<any>>>} */
 const writeChainsByStore = new WeakMap();
 // D161: subscriber → its store handle. One entry per subscriber, matching the
 // one HANDLE_CTX slot a subscriber carries: a subscriber belongs to exactly one
 // store, which is what a PuzzleView is — `this.ctx.store` is minted once, in its
 // constructor, and never re-pointed.
+/** @type {WeakMap<object, AdapterStore>} */
 const handleBySubscriber = new WeakMap();
 // A handle's raw Store, for the consumer that needs the true identity, and the
 // marker naming the app ctx a per-view ctx derives from. Declared here rather
@@ -44,8 +75,10 @@ const handleBySubscriber = new WeakMap();
 // ctx, so a no-adapter bundle carries neither symbol.
 export const STORE_RAW = Symbol('puzzleRawStore');
 const CTX_BASE = Symbol('puzzleCtxBase');
+/** @type {WeakMap<object, Map<string, Record<string, any>>>} */
 const adapterBindingsByStore = new WeakMap();
 const warnedAdapterConfigs = new WeakSet();
+/** @type {WeakMap<object, Set<string>>} */
 const warnedTrackedLoads = new WeakMap();
 let installed = false;
 
@@ -57,6 +90,11 @@ const baseRemoveRecord = Store.prototype.removeRecord;
 const baseHydrateAll = Store.prototype._hydrateAll;
 const baseInstallRelationships = Store.prototype._installRelationships;
 
+/**
+ * @param {string} type
+ * @param {typeof PuzzleModel} Model
+ * @param {unknown} config the model's declared `static adapter`, unvalidated
+ */
 function validateAdapterConfig(type, Model, config) {
 	if (!config || typeof config !== 'object' || Array.isArray(config)) return;
 	const invalid = Object.entries(config)
@@ -71,14 +109,21 @@ function validateAdapterConfig(type, Model, config) {
 	);
 }
 
-/** The one migration message, so every guard site reads identically. */
+/**
+ * The one migration message, so every guard site reads identically.
+ * @param {string} where
+ * @returns {Error}
+ */
 function legacyLoadAllError(where) {
 	return new Error(
 		`[puzzle] ${where} — the adapter verb 'loadAll' was renamed 'loadMany' in 0.7.0; rename it (and store.loadAll() → store.loadMany())`
 	);
 }
 
-/** Fail at Store construction, before any navigation, on an unrenamed verb. */
+/**
+ * Fail at Store construction, before any navigation, on an unrenamed verb.
+ * @param {Record<string, typeof PuzzleModel>} models
+ */
 function assertRenamedVerbs(models) {
 	for (const [type, Model] of Object.entries(models)) {
 		const config = Model?.adapter;
@@ -105,6 +150,10 @@ function assertRenamedVerbs(models) {
  * `data()`, so a click handler or a timer calling `store.loadMany()` in that
  * window warned about a run it has nothing to do with, and the warn-once latch
  * then hid the genuine case for the rest of the session.
+ * @param {AdapterStore} store
+ * @param {HandleCtx} hctx
+ * @param {string} verb
+ * @param {string} replacement
  */
 function warnTrackedLoad(store, hctx, verb, replacement) {
 	if (!hctx.requests) return;
@@ -117,6 +166,7 @@ function warnTrackedLoad(store, hctx, verb, replacement) {
 	);
 }
 
+/** @param {unknown} verbs the app's `adapter.defaults()` argument, unvalidated */
 function validateAdapterDefaults(verbs) {
 	if (!verbs || typeof verbs !== 'object' || Array.isArray(verbs)) {
 		console.warn(
@@ -139,6 +189,11 @@ function validateAdapterDefaults(verbs) {
  * Thrown by adapter write verbs when the server responds non-OK.
  */
 export class PuzzleAdapterError extends Error {
+	/**
+	 * @param {number} status
+	 * @param {string} statusText
+	 * @param {any} body the parsed JSON body, its raw text, or undefined
+	 */
 	constructor(status, statusText, body) {
 		super(`[puzzle] adapter request failed: ${status} ${statusText || ''}`.trimEnd());
 		this.name = 'PuzzleAdapterError';
@@ -148,7 +203,11 @@ export class PuzzleAdapterError extends Error {
 	}
 }
 
-/** Read a Response body once, preferring JSON and preserving non-JSON text. */
+/**
+ * Read a Response body once, preferring JSON and preserving non-JSON text.
+ * @param {Response} res
+ * @returns {Promise<any>}
+ */
 async function readBody(res) {
 	let text;
 	try {
@@ -164,6 +223,11 @@ async function readBody(res) {
 	}
 }
 
+/**
+ * @param {string} url
+ * @param {AdapterLoadManyOptions | null | undefined} options
+ * @returns {string}
+ */
 function queryURL(url, options) {
 	if (options == null) return url;
 	const search = new URLSearchParams();
@@ -174,6 +238,10 @@ function queryURL(url, options) {
 	return query ? url + (url.includes('?') ? '&' : '?') + query : url;
 }
 
+/**
+ * @param {Response} response
+ * @returns {Promise<any>}
+ */
 async function responseData(response) {
 	if (!response.ok) {
 		throw new PuzzleAdapterError(
@@ -190,11 +258,22 @@ async function responseData(response) {
 // A brand, not a duck-type on ok/status: a plain payload could carry those keys.
 const RESPONSE_BRAND = Symbol.for('puzzle.response');
 
+/**
+ * @param {unknown} value
+ * @returns {value is Response}
+ */
 function isResponse(value) {
 	if (typeof Response !== 'undefined' && value instanceof Response) return true;
-	return value != null && typeof value === 'object' && value[RESPONSE_BRAND] === true;
+	return value != null && typeof value === 'object' && /** @type {{ [RESPONSE_BRAND]?: unknown }} */ (value)[RESPONSE_BRAND] === true;
 }
 
+/**
+ * @param {string} url
+ * @param {string} verb
+ * @param {AdapterFetch} fetch
+ * @param {any} arg per verb: the loadMany options, the loadOne id, or the record
+ * @returns {Promise<any>}
+ */
 async function generatedTransport(url, verb, fetch, arg) {
 	let method;
 	let body;
@@ -212,6 +291,7 @@ async function generatedTransport(url, verb, fetch, arg) {
 		}
 		if (verb !== 'delete') body = JSON.stringify(arg.toJSON());
 	}
+	/** @type {RequestInit} */
 	const init = { method };
 	if (body !== undefined) {
 		init.headers = { 'Content-Type': 'application/json' };
@@ -225,6 +305,10 @@ async function generatedTransport(url, verb, fetch, arg) {
 	return responseData(response);
 }
 
+/**
+ * @param {object} store
+ * @returns {WeakMap<object, Promise<any>>}
+ */
 function writeChainsFor(store) {
 	let chains = writeChainsByStore.get(store);
 	if (!chains) {
@@ -240,9 +324,11 @@ function writeChainsFor(store) {
 // keyed by Store in a module WeakMap, never as Store fields: a no-adapter app
 // imports none of this file, so it must ship none of this state (D157).
 
+/** @type {WeakMap<object, ReadState>} */
 const readStateByStore = new WeakMap();
 // record → the highest read/removal generation that has landed on it. Keyed by the
 // record itself so the entry dies with it: no pruning, no serialization.
+/** @type {WeakMap<object, number>} */
 const LOAD_GENERATIONS = new WeakMap();
 // Bounded so a page that walks user-supplied ids cannot grow the negative cache
 // without limit. No TTL: an identity the server 404s is absent until something
@@ -250,6 +336,10 @@ const LOAD_GENERATIONS = new WeakMap();
 const MAX_ABSENT = 1000;
 const REC_SEP = ' '; // matches Store's record-key convention: a type name has no space
 
+/**
+ * @param {object} store
+ * @returns {ReadState}
+ */
 function readStateFor(store) {
 	let state = readStateByStore.get(store);
 	if (!state) {
@@ -278,12 +368,20 @@ function readStateFor(store) {
  * '01' and 1 do not; anything else (an object used as an id) is unkeyable, and
  * an absence we cannot record is one we must never fetch for — otherwise the
  * settle loop would re-request it every round until the cap.
+ * @param {string} type
+ * @param {unknown} id
+ * @returns {string | null}
  */
 function identityKey(type, id) {
 	const key = recordKey(id);
 	return typeof key === 'string' ? type + REC_SEP + key : null;
 }
 
+/**
+ * @param {ReadState} state
+ * @param {string} key
+ * @param {number} [gen]
+ */
 function markAbsent(state, key, gen = state.seq) {
 	state.absent.delete(key); // re-insert so the eviction order is true LRU
 	state.absent.set(key, gen);
@@ -292,13 +390,23 @@ function markAbsent(state, key, gen = state.seq) {
 	}
 }
 
+/**
+ * @param {ReadState} state
+ * @param {string} key
+ * @returns {boolean}
+ */
 function isAbsent(state, key) {
 	if (!state.absent.has(key)) return false;
 	markAbsent(state, key, state.absent.get(key)); // touch without changing its generation
 	return true;
 }
 
-/** Drop the negative entry for one identity — it just became present. */
+/**
+ * Drop the negative entry for one identity — it just became present.
+ * @param {object} store
+ * @param {string} type
+ * @param {unknown} id
+ */
 function clearAbsent(store, type, id) {
 	const state = readStateByStore.get(store);
 	if (!state || state.absent.size === 0) return;
@@ -306,7 +414,10 @@ function clearAbsent(store, type, id) {
 	if (key !== null) state.absent.delete(key);
 }
 
-/** Drop every negative entry whose record is now in the store (bulk inserts). */
+/**
+ * Drop every negative entry whose record is now in the store (bulk inserts).
+ * @param {Store} store
+ */
 function sweepAbsent(store) {
 	const state = readStateByStore.get(store);
 	if (!state || state.absent.size === 0) return;
@@ -322,6 +433,8 @@ function sweepAbsent(store) {
  * travel in the existing data island; this is what the island cannot infer from
  * them — which collections are known complete and which identities are known
  * absent. Versioned so an older kernel can reject a newer envelope.
+ * @param {StoreOrHandle} store
+ * @returns {ReadStateEnvelope}
  */
 export function serializeReadState(store) {
 	// Read state is keyed by the RAW Store, so unwrap a per-view handle first: a
@@ -345,6 +458,8 @@ export function serializeReadState(store) {
  * whose record is present is dropped rather than trusted, so a build that 404'd
  * an id another page later supplied cannot suppress a live read. In-flight work
  * is never transferred — an unresolved miss simply refetches.
+ * @param {StoreOrHandle} handleOrStore
+ * @param {Partial<ReadStateEnvelope> | null | undefined} envelope untrusted (a page island, an HMR blob)
  */
 export function hydrateReadState(handleOrStore, envelope) {
 	if (!envelope || envelope.v !== 1) return;
@@ -389,6 +504,10 @@ registerReadState({ serialize: serializeReadState, hydrate: hydrateReadState });
  * Only the AUTOMATIC path is gated: an explicit store.loadOne/loadMany still
  * dispatches through the app-default tier for a model with no endpoint, which
  * is what a type-derived dialect relies on (D158).
+ * @param {AdapterStore} store
+ * @param {string} type
+ * @param {string} verb
+ * @returns {((...args: any[]) => any) | null}
  */
 function faultVerb(store, type, verb) {
 	const declared = store.modelFor(type).adapter;
@@ -408,6 +527,10 @@ function faultVerb(store, type, verb) {
  * REST transport), rather than an author or an app-wide dialect? Only then can
  * the framework make claims about what a response means beyond the records it
  * carried — see the `loaded` / `complete` split in readStateFor (D161/D158).
+ * @param {AdapterStore} store
+ * @param {string} type
+ * @param {string} verb
+ * @returns {boolean}
  */
 function isGeneratedVerb(store, type, verb) {
 	const declared = store.modelFor(type).adapter;
@@ -418,15 +541,36 @@ function isGeneratedVerb(store, type, verb) {
 	return typeof store._a?.d?.[verb] !== 'function';
 }
 
+/**
+ * The Store once installAdapter() has copied these methods onto its prototype —
+ * the `this` every method below runs with.
+ * @typedef {Store & AdapterStoreMethods} AdapterStore
+ */
+
+/**
+ * What installAdapter() adds to Store.prototype, as a type (the drift guard,
+ * tests-types/drift, declares it on Store once the adapter is installed).
+ * @typedef {AdapterStoreMethods} AdapterStoreInstalled
+ */
+
 class AdapterStoreMethods {
 	// ---- wrapped core methods (D161 read-state invalidation) --
 
-	/** Store init is where an unrenamed adapter verb has to be caught (D161). */
+	/**
+	 * Store init is where an unrenamed adapter verb has to be caught (D161).
+	 * @this {AdapterStore}
+	 */
 	_installRelationships() {
 		assertRenamedVerbs(this.models);
 		baseInstallRelationships.call(this);
 	}
 
+	/**
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @param {Record<string, any>} [data]
+	 * @returns {StoreRecord}
+	 */
 	createRecord(type, data) {
 		const record = baseCreateRecord.call(this, type, data);
 		const id = record[this.modelFor(type).primaryKey()];
@@ -444,6 +588,8 @@ class AdapterStoreMethods {
 	 * straight back in (D161). Anything that brings the id back clears the entry:
 	 * createRecord, _upsert via loadOne/loadMany/upsert, and the hydration sweep.
 	 * `loadOne` is the explicit refresh.
+	 * @this {AdapterStore}
+	 * @param {StoreRecord} record
 	 */
 	removeRecord(record) {
 		const type = record._type;
@@ -457,6 +603,11 @@ class AdapterStoreMethods {
 		}
 	}
 
+	/**
+	 * @this {AdapterStore}
+	 * @param {unknown} data
+	 * @param {{ replace?: boolean }} [options]
+	 */
 	_hydrateAll(data, options) {
 		baseHydrateAll.call(this, data, options);
 		sweepAbsent(this); // storage / static-island / HMR restore all land here
@@ -468,6 +619,11 @@ class AdapterStoreMethods {
 	 * Return the model adapter with every author function bound to this model's
 	 * enhanced fetch. Standard verbs resolve model function → app default →
 	 * endpoint-generated REST transport. Stable per store+type.
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @template {import('../../types/adapter.js').AdapterConfig<any>} [TConfig=import('../../types/adapter.js').AdapterConfig]
+	 *   the caller's view of the model's adapter (unchecked, as published)
+	 * @returns {import('../../types/adapter.js').BoundAdapterConfig<TConfig>}
 	 */
 	adapter(type) {
 		let bindings = adapterBindingsByStore.get(this);
@@ -475,7 +631,7 @@ class AdapterStoreMethods {
 			bindings = new Map();
 			adapterBindingsByStore.set(this, bindings);
 		}
-		if (bindings.has(type)) return bindings.get(type);
+		if (bindings.has(type)) return /** @type {any} */ (bindings.get(type));
 
 		const Model = this.modelFor(type);
 		const declared = Model.adapter;
@@ -485,6 +641,7 @@ class AdapterStoreMethods {
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			validateAdapterConfig(type, Model, declared);
 		}
+		/** @type {AdapterFetch} */
 		const fetch = (input, init) => {
 			const requestInit = init && typeof init === 'object' ? { ...init } : {};
 			const request = typeof Request !== 'undefined' && input instanceof Request ? input : null;
@@ -492,6 +649,7 @@ class AdapterStoreMethods {
 			requestInit.method = method;
 			return this._fetch(input, requestInit, { type, method, url: request?.url || String(input) });
 		};
+		/** @type {Record<string, any>} */
 		const bound = {};
 		for (const [key, value] of Object.entries(config)) {
 			// Rejected BEFORE the custom-verb branch below (D161): an unrenamed
@@ -500,23 +658,29 @@ class AdapterStoreMethods {
 			if (key === LEGACY_LOAD_ALL) {
 				throw legacyLoadAllError(`model '${type}' declares adapter.loadAll`);
 			}
-			bound[key] = typeof value === 'function' ? (...args) => value(fetch, ...args) : value;
+			bound[key] = typeof value === 'function' ? /** @param {...any} args */ (...args) => value(fetch, ...args) : value;
 		}
 		const defaultContext = { type, endpoint: config.endpoint };
 		const url = config.endpoint && this.apiURL + config.endpoint;
 		for (const verb of ADAPTER_VERBS) {
 			if (typeof bound[verb] !== 'function') {
 				if (typeof defaults?.[verb] === 'function') {
-					bound[verb] = (...args) => defaults[verb](fetch, ...args, defaultContext);
+					bound[verb] = /** @param {...any} args */ (...args) => defaults[verb](fetch, ...args, defaultContext);
 				} else if (config.endpoint) {
-					bound[verb] = (arg) => generatedTransport(url, verb, fetch, arg);
+					bound[verb] = /** @param {any} arg */ (arg) => generatedTransport(url, verb, fetch, arg);
 				}
 			}
 		}
 		bindings.set(type, bound);
-		return bound;
+		return /** @type {any} */ (bound);
 	}
 
+	/**
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @param {string} verb
+	 * @returns {(...args: any[]) => any}
+	 */
 	_adapterVerb(type, verb) {
 		const fn = this.adapter(type)[verb];
 		if (typeof fn === 'function') return fn;
@@ -533,6 +697,7 @@ class AdapterStoreMethods {
 	 * The 0.6 spelling. Kept as a trap rather than an alias: an app that keeps
 	 * calling it would otherwise look migrated while its models never renamed
 	 * their verb (D161).
+	 * @this {AdapterStore}
 	 */
 	loadAll() {
 		throw legacyLoadAllError('store.loadAll() no longer exists');
@@ -549,11 +714,19 @@ class AdapterStoreMethods {
 	 * loaded — and exhaustive too when the generated transport made the request
 	 * (see _loadMany). An options-bearing call — `{}` included — is a partial,
 	 * accumulating load and marks nothing (D161).
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @param {AdapterLoadManyOptions} [options]
 	 */
 	loadMany(type, options) {
 		return this._loadMany(type, options);
 	}
 
+	/**
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @param {AdapterLoadManyOptions} [options] absent = a whole-collection load (see loadMany)
+	 */
 	async _loadMany(type, options) {
 		const pk = this.modelFor(type).primaryKey();
 		// Dispatch order, so a response that lost the race cannot overwrite a newer
@@ -614,11 +787,20 @@ class AdapterStoreMethods {
 	 * upserted, so a lookup by a non-primary key — `loadOne('post', 'my-slug')`
 	 * against a slug-resolving endpoint — works. Only the automatic fault path is
 	 * strict (see _loadOne).
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @param {unknown} id
 	 */
 	loadOne(type, id) {
 		return this._loadOne(type, id);
 	}
 
+	/**
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @param {unknown} id
+	 * @param {boolean} [strict] the fault path: the response must be the requested record
+	 */
 	async _loadOne(type, id, strict = false) {
 		const existing = this._typeMap(type).get(recordKey(id));
 		const revisionAtDispatch = existing ? recordMutationRevision(existing) : undefined;
@@ -681,6 +863,9 @@ class AdapterStoreMethods {
 	 * guard is load-bearing: private _upsert would otherwise generate an id and mark
 	 * the phantom record synced, making its next save() PUT to a nonsense URL. Arrays
 	 * preflight every element before mutation, then persist once for the whole batch.
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @param {Record<string, any> | Record<string, any>[]} objectOrArray
 	 */
 	upsert(type, objectOrArray) {
 		const isArray = Array.isArray(objectOrArray);
@@ -716,6 +901,10 @@ class AdapterStoreMethods {
 	 * is the whole point. A null map is a local read, whoever is mid-evaluation
 	 * elsewhere. Core's public `findOne`/`findMany` are the plain local reads and
 	 * do not route through these, so a no-adapter bundle carries neither.
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @param {unknown} id
+	 * @param {RequestMap | null} requests
 	 */
 	_findOneTracked(type, id, requests) {
 		const record = this._findOneLocal(type, id);
@@ -723,6 +912,12 @@ class AdapterStoreMethods {
 		return record;
 	}
 
+	/**
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @param {FindManyOptions | undefined} options
+	 * @param {RequestMap | null} requests
+	 */
 	_findManyTracked(type, options, requests) {
 		// The collection, not the filter, is what can be missing: a filter is always
 		// applied locally and is never serialized into a request.
@@ -746,6 +941,9 @@ class AdapterStoreMethods {
 	 * Returns null for a store with no adapter capability, which is what keeps an
 	 * adapter-free app on the raw store with its `ctx.store === app.store`
 	 * identity intact (D157).
+	 * @this {AdapterStore}
+	 * @param {Subscriber} subscriber
+	 * @returns {AdapterStore | null}
 	 */
 	_handleFor(subscriber) {
 		if (!this._a || !subscriber) return null;
@@ -753,15 +951,26 @@ class AdapterStoreMethods {
 		if (cached) return cached;
 
 		const store = this;
+		/** @type {HandleCtx} */
 		const hctx = { requests: null };
+		/**
+		 * @param {string} type
+		 * @param {unknown} id
+		 */
 		const findOne = (type, id) => store._findOneTracked(type, id, hctx.requests);
+		/**
+		 * @param {string} type
+		 * @param {FindManyOptions} [options]
+		 */
 		const findMany = (type, options) => store._findManyTracked(type, options, hctx.requests);
 		// The dev nudge's call seam (D161). It lives HERE, not on Store.loadMany /
 		// Store.loadOne, because that is where the identity is: a forwarded handle
 		// method is bound to the raw store, so by the time the verb runs there is
 		// nothing left to say which reference the caller held. Built only in dev,
 		// so production keeps the plain forwarding path.
+		/** @type {((type: string, options?: AdapterLoadManyOptions) => Promise<StoreRecord[]>) | undefined} */
 		let trackedLoadMany;
+		/** @type {((type: string, id: unknown) => Promise<StoreRecord | null>) | undefined} */
 		let trackedLoadOne;
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			trackedLoadMany = (type, options) => {
@@ -776,6 +985,7 @@ class AdapterStoreMethods {
 		// Bound methods are memoized per key, re-bound only if the underlying
 		// function changes — installFixtures() swaps `_network` on the prototype
 		// mid-session, so a permanently cached binding would outlive its source.
+		/** @type {Map<string | symbol, { raw: Function, fn: Function }>} */
 		const bound = new Map();
 		const handle = new Proxy(store, {
 			get(target, key) {
@@ -794,7 +1004,7 @@ class AdapterStoreMethods {
 				return fn;
 			},
 			set(target, key, value) {
-				target[key] = value;
+				/** @type {Record<string | symbol, any>} */ (target)[key] = value;
 				return true;
 			},
 		});
@@ -819,11 +1029,16 @@ class AdapterStoreMethods {
 	 *
 	 * Returns undefined for a store with no capability, so core's call site falls
 	 * back to the app ctx itself — identity and all.
+	 * @template {object} C
+	 * @this {AdapterStore}
+	 * @param {C} ctx the app ctx, or a ctx this method already derived
+	 * @param {Subscriber} view
+	 * @returns {C | undefined}
 	 */
 	_deriveCtx(ctx, view) {
 		const handle = this._handleFor(view);
 		if (!handle) return undefined;
-		const base = ctx[CTX_BASE] ?? ctx;
+		const base = /** @type {{ [CTX_BASE]?: C }} */ (ctx)[CTX_BASE] ?? ctx;
 		return Object.create(base, {
 			store: { value: handle, enumerable: true },
 			[CTX_BASE]: { value: base },
@@ -840,6 +1055,10 @@ class AdapterStoreMethods {
 	 * model declares no loadOne of its own and no endpoint (see faultVerb — an app-wide dialect
 	 * alone never makes a local model fault). A pending identical request is
 	 * joined rather than reissued.
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @param {unknown} id
+	 * @param {RequestMap} requests
 	 */
 	_faultOne(type, id, requests) {
 		if (id == null) return;
@@ -884,6 +1103,9 @@ class AdapterStoreMethods {
 	 * local. This half asks only "has the collection request run?" — an authored
 	 * loadMany answers that as well as a generated one, which is what keeps a
 	 * paginated adapter from re-requesting page one on every settle pass.
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @param {RequestMap} requests
 	 */
 	_faultMany(type, requests) {
 		const state = readStateFor(this);
@@ -909,6 +1131,11 @@ class AdapterStoreMethods {
 		requests.set(type, request);
 	}
 
+	/**
+	 * @this {AdapterStore}
+	 * @param {unknown} result a verb's return: a payload, a Response, or a promise of either
+	 * @returns {Promise<any>}
+	 */
 	async _adapterResult(result) {
 		const value = await result;
 		return isResponse(value) ? responseData(value) : value;
@@ -917,7 +1144,7 @@ class AdapterStoreMethods {
 	/**
 	 * Create or update-in-place by primary key; notifies either way.
 	 * @param {string} type
-	 * @param {object} data
+	 * @param {Record<string, any>} data
 	 * @param {number} [throughRevision] D138 load-response revision boundary.
 	 * Public callers use upsert(), which deliberately leaves this undefined.
 	 * @param {number} [gen] D138 read-dispatch generation. Only loadOne/loadMany
@@ -926,6 +1153,7 @@ class AdapterStoreMethods {
 	 * deliberately leave it undefined. Save reconciliation does not land here at
 	 * all — it stamps the record's generation directly (see _saveRecordNow), so
 	 * an older in-flight read cannot roll back an acknowledged write.
+	 * @this {AdapterStore}
 	 */
 	_upsert(type, data, throughRevision, gen) {
 		const Model = this.modelFor(type);
@@ -961,7 +1189,12 @@ class AdapterStoreMethods {
 
 	// ---- server write path (constellation/doc/DOC-SPEC.md §22, D50) ------------
 
-	/** Resolve the endpoint used by the unchanged store.request() escape hatch. */
+	/**
+	 * Resolve the endpoint used by the unchanged store.request() escape hatch.
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @returns {string}
+	 */
 	_requireEndpoint(type) {
 		const endpoint = this.modelFor(type).adapter?.endpoint;
 		if (!endpoint) {
@@ -1004,9 +1237,10 @@ class AdapterStoreMethods {
 	 * tooling can intercept a request AFTER the hook has run without this method
 	 * — or any verb above it — knowing such tooling exists.
 	 *
+	 * @this {AdapterStore}
 	 * @param {RequestInfo | URL} url the author-supplied or generated request target
-	 * @param {object} init     the fetch init this verb requires
-	 * @param {object} context  { type, method, url } — frozen before the hook sees it
+	 * @param {RequestInit} init the fetch init this verb requires
+	 * @param {{ type: string, method: string, url: string }} context frozen before the hook sees it
 	 */
 	_fetch(url, init, context) {
 		const frozenContext = Object.freeze(context);
@@ -1027,6 +1261,11 @@ class AdapterStoreMethods {
 	 * Dev/test tooling replaces this method to serve requests from memory.
 	 * `context` is the same frozen { type, method, url } _fetch built, so a
 	 * replacement can dispatch per model type without re-deriving anything.
+	 * @this {AdapterStore}
+	 * @param {RequestInfo | URL} url
+	 * @param {RequestInit} init
+	 * @param {{ type: string, method: string, url: string }} context
+	 * @returns {Promise<Response>}
 	 */
 	_network(url, init, context) {
 		return fetch(url, init);
@@ -1053,6 +1292,9 @@ class AdapterStoreMethods {
 	 * A save that finds its record already removed when its turn comes sends
 	 * nothing and rejects with the same message record.save() gives at call time —
 	 * no write may create or revive a row for a record the app has discarded.
+	 * @this {AdapterStore}
+	 * @param {StoreRecord} record
+	 * @returns {Promise<StoreRecord>}
 	 */
 	saveRecord(record) {
 		return this._chain(record, () => this._saveRecordNow(record));
@@ -1075,6 +1317,11 @@ class AdapterStoreMethods {
 	 * still observes it (they hold that promise). This holds ACROSS verbs: a
 	 * queued delete does not inherit a failed save's rejection, and vice versa.
 	 * Every caller observes exactly its own outcome.
+	 * @template T
+	 * @this {AdapterStore}
+	 * @param {object} record
+	 * @param {() => Promise<T>} fn
+	 * @returns {Promise<T>}
 	 */
 	_chain(record, fn) {
 		const chains = writeChainsFor(this);
@@ -1088,7 +1335,12 @@ class AdapterStoreMethods {
 		return run;
 	}
 
-	/** The actual save (network + merge); serialized per record by saveRecord(). */
+	/**
+	 * The actual save (network + merge); serialized per record by saveRecord().
+	 * @this {AdapterStore}
+	 * @param {StoreRecord} record
+	 * @returns {Promise<StoreRecord>}
+	 */
 	async _saveRecordNow(record) {
 		// Removal check at RUN time, not call time: model.js's save() already
 		// rejects a record that was gone when save() was called, but a queued save
@@ -1239,12 +1491,20 @@ class AdapterStoreMethods {
 	 * comes (idempotent), and a NEVER-SYNCED record, which the server has no row
 	 * for — that one is removed locally, so a `delete()` on a freshly created
 	 * record is a local removal, not a doomed DELETE that can reject.
+	 * @this {AdapterStore}
+	 * @param {StoreRecord} record
+	 * @returns {Promise<StoreRecord>}
 	 */
 	deleteRecord(record) {
 		return this._chain(record, () => this._deleteRecordNow(record));
 	}
 
-	/** The actual delete (network + removal); serialized per record by deleteRecord(). */
+	/**
+	 * The actual delete (network + removal); serialized per record by deleteRecord().
+	 * @this {AdapterStore}
+	 * @param {StoreRecord} record
+	 * @returns {Promise<StoreRecord>}
+	 */
 	async _deleteRecordNow(record) {
 		// a. already gone when this link reaches the front — a second delete, or a
 		// destroy()/delete() that landed while this one waited. Resolve idempotently
@@ -1293,9 +1553,12 @@ class AdapterStoreMethods {
 	 * Content-Type added, caller headers merged) and JSON out. Non-OK rejects with
 	 * PuzzleAdapterError; 204/empty resolves null; otherwise resolves the parsed
 	 * body. The documented idiom wraps this in model instance methods.
+	 * @type {(this: AdapterStore, type: string, path?: string,
+	 *   options?: import('../../types/index.js').RequestOptions) => Promise<any>}
 	 */
 	async request(type, path = '', { method = 'GET', body, headers } = {}) {
 		const endpoint = this._requireEndpoint(type);
+		/** @type {RequestInit & { headers: Record<string, string> }} */
 		const init = { method, headers: { ...(headers || {}) } };
 		if (body !== undefined) {
 			init.body = JSON.stringify(body);
@@ -1311,6 +1574,12 @@ class AdapterStoreMethods {
 	}
 }
 
+/**
+ * What installAdapter() adds to PuzzleModel.prototype, as a type: optional in
+ * the runtime check, present in the drift guard (each has an installed.d.ts).
+ * @typedef {AdapterModelMethods} AdapterModelInstalled
+ */
+
 class AdapterModelMethods {
 	/**
 	 * Sync this record to the server (constellation/doc/DOC-SPEC.md §22, D50). The
@@ -1320,6 +1589,7 @@ class AdapterModelMethods {
 	 * verb; any other store-less record has nowhere to sync. Both reject asynchronously
 	 * (never a sync throw) so callers only ever `await`.
 	 * @returns {Promise<PuzzleModel>}
+	 * @this {PuzzleModel & { _store: AdapterStore | null }}
 	 */
 	save() {
 		if (this._deleted) {
@@ -1338,6 +1608,7 @@ class AdapterModelMethods {
 	 * local remove on ack. Distinct from destroy() (local-only). A removed instance
 	 * resolves idempotently; a never-added instance still rejects asynchronously.
 	 * @returns {Promise<PuzzleModel>}
+	 * @this {PuzzleModel & { _store: AdapterStore | null }}
 	 */
 	delete() {
 		if (this._deleted) return Promise.resolve(this);
@@ -1374,17 +1645,21 @@ class AdapterViewMethods {
 	 * Returns the model synchronously when the FIRST pass is synchronous and clean,
 	 * which is what keeps a hit-only data() free of a skeleton (D39).
 	 *
-	 * @param {function(): any} run             the data() invocation, re-runnable
-	 * @param {function(): boolean} isStale     stop without committing (destroyed,
+	 * @param {Store} store           the raw store the view reads through
+	 * @param {() => any} run         the data() invocation, re-runnable
+	 * @param {boolean} expectsAsync  caller's hint that data() is async
+	 * @param {() => boolean} isStale stop without committing (destroyed,
 	 *   leaving, or superseded by a newer run) — shared in-flight requests are
 	 *   deliberately NOT aborted; other consumers may still need them
-	 * @param {?object} parked  D146 held-eval channel; when given, the final pass's
+	 * @param {?{ reconcile?: (committed: boolean) => void }} parked D146 held-eval channel; when given, the final pass's
 	 *   reconcile is parked on it for the caller's commit/discard decision
 	 * @param {number} [token]  the refresh run this loop belongs to. Opens the
 	 *   settle window (`_settlingToken`) for its lifetime, so a store notification
 	 *   arriving mid-run sets the dirty flag instead of starting a competing
 	 *   refresh. A PREPARED run passes none: while the D146 gate is open the
 	 *   ancestor still shows its committed route and must keep taking live updates.
+	 * @this {PuzzleView}
+	 * @returns {any} the committed model, or a promise of it
 	 */
 	_settleData(store, run, expectsAsync, isStale, parked, token) {
 		let rounds = 0;
@@ -1399,6 +1674,7 @@ class AdapterViewMethods {
 		// notification, and clearing it drops that update until an unrelated later
 		// write. Every write to the flag below is gated on this, exactly as close() is.
 		const ownsWindow = () => owns && this._settlingToken === token;
+		/** @param {any} [value] */
 		const close = (value) => {
 			if (ownsWindow()) {
 				this._settlingToken = 0;
@@ -1417,6 +1693,13 @@ class AdapterViewMethods {
 			return value;
 		};
 
+		/**
+		 * @param {any} model
+		 * @param {RequestMap} requests
+		 * @param {{ reconcile?: (committed: boolean) => void }} channel
+		 * @param {number} mark
+		 * @returns {any}
+		 */
 		const afterPass = (model, requests, channel, mark) => {
 			if (isStale()) {
 				channel.reconcile?.(false);
@@ -1464,6 +1747,7 @@ class AdapterViewMethods {
 					if (ownsWindow()) this._settleDirty = false;
 					return pass();
 				},
+				/** @returns {undefined} */
 				(err) => {
 					channel.reconcile?.(false);
 					if (isStale()) return undefined;
@@ -1472,8 +1756,11 @@ class AdapterViewMethods {
 			);
 		};
 
+		/** @returns {any} */
 		const pass = () => {
+			/** @type {RequestMap} */
 			const requests = new Map();
+			/** @type {{ reconcile?: (committed: boolean) => void }} */
 			const channel = {};
 			// The store's notification sequence as this pass begins (see the commit
 			// branch in afterPass). Read before data() runs, so it can only be
@@ -1491,7 +1778,7 @@ class AdapterViewMethods {
 				requests
 			);
 			return result && typeof result.then === 'function'
-				? result.then((model) => afterPass(model, requests, channel, mark))
+				? /** @type {Promise<any>} */ (result).then((model) => afterPass(model, requests, channel, mark))
 				: afterPass(result, requests, channel, mark);
 		};
 
@@ -1503,7 +1790,7 @@ class AdapterViewMethods {
 			throw err;
 		}
 		return out && typeof out.then === 'function'
-			? out.then(close, (err) => {
+			? /** @type {Promise<any>} */ (out).then(close, (err) => {
 					close();
 					throw err;
 				})
@@ -1511,6 +1798,10 @@ class AdapterViewMethods {
 	}
 }
 
+/**
+ * @param {Function} target the class whose prototype receives the methods
+ * @param {Function} source the class whose prototype methods are copied
+ */
 function installMethods(target, source) {
 	const descriptors = Object.getOwnPropertyDescriptors(source.prototype);
 	delete descriptors.constructor;
@@ -1525,6 +1816,10 @@ function installAdapter() {
 	installed = true;
 }
 
+/**
+ * @param {object} [verbs] app-wide verb implementations, unvalidated
+ * @returns {AdapterCapability}
+ */
 function createDefaultsCapability(verbs = {}) {
 	// Unconditional, production included: an app-wide loadAll default silently
 	// covers every model, so a missed rename would look like a working app whose
@@ -1535,11 +1830,17 @@ function createDefaultsCapability(verbs = {}) {
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 		validateAdapterDefaults(verbs);
 	}
-	return createAdapterCapability({ install: installAdapter, d: verbs });
+	return createAdapterCapability({ install: installAdapter, d: /** @type {Record<string, Function>} */ (verbs) });
 }
 
-/** Opaque app-config capability; its internal install is idempotent. */
-export const adapter = createAdapterCapability({
+/**
+ * Opaque app-config capability; its internal install is idempotent. Typed as
+ * both halves it is: the runtime shape the framework calls (`install`), and the
+ * published shape apps see — whose brand is type-only, so no runtime value can
+ * spell it and the cast is the one honest bridge.
+ * @type {AdapterCapability & import('../../types/adapter.js').AdapterFactoryCapability}
+ */
+export const adapter = /** @type {any} */ (createAdapterCapability({
 	install: installAdapter,
 	defaults: createDefaultsCapability,
-});
+}));

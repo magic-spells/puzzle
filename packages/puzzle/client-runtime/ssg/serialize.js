@@ -15,18 +15,22 @@
  * - attribute handling mirrors setAttr(): `key`/`island`/`ref`/`flip`/`@event`
  *   directives are dropped, controlled value is emitted as real HTML for each form element
  *   (`input value`, `textarea` text, selected `<option>`), truthy boolean props
- *   and `true` become bare attrs, `false`/null/undefined omit, everything else is
- *   an escaped string;
+ *   and `true` become bare attrs, `false`/null/undefined and an object omit, a
+ *   list joins with spaces (D173 V9), everything else is an escaped string;
  * - a component vnode renders inline with NO wrapper element (D20), adopting a
  *   pinned `instance` or constructing + preloading a fresh one;
  * - slot markers are expanded via the shared expandSlots() (viewManager.js), so
  *   named/default slots and unfilled-marker omission behave identically;
  * - string children (an inlined `{#svg}` island seed, v1.14 D46) are emitted
  *   verbatim — they map to innerHTML seeding in the browser;
+ * - a live-HTML vnode (`raw` / `newline_to_br`, D174) emits the sanitized markup
+ *   views/html.js parses in the browser — the same htmlOf() call;
  * - `<script>`/`<style>` are RAWTEXT: their text is emitted unescaped (a JSON-typed
  *   script gets the `\u003c` data-island escape instead), and content that would
  *   end — or refuse to end — the element in the parser is a build error;
- * - void elements self-close without children.
+ * - void elements self-close without children;
+ * - a `<pre>`/`<textarea>` body that starts with a newline is emitted with one
+ *   more, which HTML's parser drops, so the mounted text keeps it (D168).
  *
  * Principled differences from a jsdom mount of the same tree (documented, tested
  * for in the equivalence suite): controlled form values are serialized as their
@@ -39,10 +43,21 @@ import {
 	SLOT_TAG,
 	PLACEHOLDER_TAG,
 	PORTAL_TAG,
+	HTML_TAG,
 	metadataTagError,
 } from '../views/ViewNode.js';
 import { expandSlots } from '../views/viewManager.js';
+import { htmlOf } from '../views/html.js';
 import { displayValue as stringify } from '../display.js';
+
+/** @import { ViewNode } from '../views/ViewNode.js' */
+/** @import { PuzzleView } from '../views/PuzzleView.js' */
+
+/**
+ * The enclosing controlled `<select>`'s value while its options serialize; the
+ * first matching option flips `matched` (single-select semantics).
+ * @typedef {{ value: string, matched: boolean } | null} SelectState
+ */
 
 // Void elements (HTML spec): self-closing, never carry children.
 const VOID_ELEMENTS = new Set([
@@ -54,7 +69,11 @@ const VOID_ELEMENTS = new Set([
 // (mirrors viewManager.js PROPS, minus `value`, which is handled on its own).
 const BOOLEAN_PROPS = new Set(['checked', 'disabled', 'selected', 'muted']);
 
-/** Escape a text node's content: the three characters that would break HTML text. */
+/**
+ * Escape a text node's content: the three characters that would break HTML text.
+ * @param {string} s
+ * @returns {string}
+ */
 export function escapeText(s) {
 	return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -64,12 +83,19 @@ export function escapeText(s) {
  * (ssg/index.js). Replacing `<` with the `\u003c` escape is JSON-transparent — a
  * parser decodes it back to the same string — and makes a literal `</script>`
  * impossible to emit, so content can never end the RAWTEXT element early.
+ *
+ * @param {string} s
+ * @returns {string}
  */
 export function escapeScriptJson(s) {
 	return s.replace(/</g, '\\u003c');
 }
 
-/** Escape a double-quoted attribute value (adds the quote characters over text). */
+/**
+ * Escape a double-quoted attribute value (adds the quote characters over text).
+ * @param {string} s
+ * @returns {string}
+ */
 export function escapeAttr(s) {
 	return s
 		.replace(/&/g, '&amp;')
@@ -85,6 +111,11 @@ export function escapeAttr(s) {
  * markup. Controlled `select`/`textarea` values are represented by
  * descendants/text instead of a dead value attr; other values keep the normal
  * setAttr-compatible emission.
+ *
+ * @param {string} tag
+ * @param {Record<string, any>} attrs
+ * @param {{ selected?: boolean, controlledSelect?: boolean }} [options]
+ * @returns {string}
  */
 function serializeAttrs(tag, attrs, { selected = false, controlledSelect = false } = {}) {
 	let out = '';
@@ -104,20 +135,25 @@ function serializeAttrs(tag, attrs, { selected = false, controlledSelect = false
 		if (name === 'value' && (tag === 'select' || tag === 'textarea')) continue;
 		if (name === 'selected' && controlledSelect && tag === 'option') continue;
 		if (name === 'value') {
-			out += ` value="${escapeAttr(stringify(value))}"`;
+			out += ` value="${escapeAttr(stringify(value, 0, ' '))}"`;
 		} else if (BOOLEAN_PROPS.has(name)) {
 			if (value) out += ` ${name}`;
-		} else if (value === false || value == null) {
-			// Omitted to mirror ViewManager attribute semantics, but an undefined
-			// binding still gets its development diagnostic — the result is
-			// discarded, the call is only there for the warning. The attribute NAME is
-			// the dedup label (display.js keys warned-once by it); without it every
-			// unlabeled undefined collapsed into one '' key and only the first warned.
-			if (value === undefined) stringify(value, name);
+		} else if (
+			value === false ||
+			value == null ||
+			(typeof value === 'object' && !Array.isArray(value))
+		) {
+			// Omitted to mirror ViewManager attribute semantics (an object omits too,
+			// D173 V9), but an undefined or object binding still gets its development
+			// diagnostic — the result is discarded, the call is only there for the
+			// warning. The attribute NAME is the dedup label (display.js keys
+			// warned-once by it); without it every unlabeled undefined collapsed into
+			// one '' key and only the first warned.
+			if (value !== false && value !== null) stringify(value, name);
 		} else if (value === true) {
 			out += ` ${name}`;
 		} else {
-			out += ` ${name}="${escapeAttr(stringify(value))}"`;
+			out += ` ${name}="${escapeAttr(stringify(value, 0, ' '))}"`;
 		}
 	}
 	if (selected) out += ' selected';
@@ -147,13 +183,19 @@ export async function serialize(vnode, { ctx = {} } = {}) {
 	return serializeNode(vnode, ctx, null);
 }
 
+/**
+ * @param {ViewNode|string|null} vnode
+ * @param {Record<string, any>} ctx
+ * @param {SelectState} selectState
+ * @returns {Promise<string>}
+ */
 async function serializeNode(vnode, ctx, selectState) {
 	if (vnode == null) return '';
 	// A raw string child is verbatim compile-time markup (an inlined `{#svg}` seed)
 	// — emitted as-is, the way ViewManager drops it in via innerHTML (D46).
 	if (typeof vnode === 'string') return vnode;
 
-	if (vnode.isText) return escapeText(stringify(vnode.attrs.value));
+	if (vnode.isText) return escapeText(stringify(/** @type {Record<string, any>} */ (vnode.attrs).value));
 
 	// Placeholder (codegen arity-padding for conditionals): the browser mounts an
 	// empty comment node here, which contributes no visible markup — serialize to
@@ -170,9 +212,15 @@ async function serializeNode(vnode, ctx, selectState) {
 	// portaled markup appears at takeover, never in the static output.
 	if (vnode.tag === PORTAL_TAG) return '';
 
+	// Live HTML (D174): the same sanitized (or newline_to_br-escaped) markup the
+	// browser parses into the node's range — one function, so the prerendered page
+	// and the mounted one agree byte for byte. The browser's position comment is
+	// not emitted: takeover re-mounts the tree, it never adopts these nodes.
+	if (vnode.tag === HTML_TAG) return htmlOf(vnode);
+
 	if (vnode.isComponent) return serializeComponent(vnode, ctx, selectState);
 
-	const tag = vnode.tag;
+	const tag = /** @type {string} */ (vnode.tag);
 	// The prerender half of the browser's metadata-tag guard (D89 boundary): a
 	// reserved '#'-prefixed tag that no expansion pass consumed is a build the scan
 	// could not see through, not markup. The placeholder returned above; anything
@@ -182,7 +230,7 @@ async function serializeNode(vnode, ctx, selectState) {
 	if (tag === 'select' && 'value' in vnode.attrs) {
 		// Single-select semantics: the first matching option wins. multiple-select
 		// array matching is deliberately out of scope for the D67 SSG pass.
-		childSelectState = { value: stringify(vnode.attrs.value), matched: false };
+		childSelectState = { value: stringify(vnode.attrs.value, 0, ' '), matched: false };
 	}
 
 	let selected = false;
@@ -202,7 +250,7 @@ async function serializeNode(vnode, ctx, selectState) {
 	if (tag === 'textarea' && 'value' in vnode.attrs) {
 		// Pathological template case: if a textarea has both value={...} and
 		// children, the browser's value property wins, so SSG replaces the children.
-		return `${open}${escapeText(stringify(vnode.attrs.value))}</${tag}>`;
+		return `${open}${guardLeadingNewline(tag, escapeText(stringify(vnode.attrs.value, 0, ' ')))}</${tag}>`;
 	}
 
 	if (tag === 'script' || tag === 'style') {
@@ -217,10 +265,30 @@ async function serializeNode(vnode, ctx, selectState) {
 		typeof vnode.children === 'string'
 			? vnode.children
 			: await serializeChildren(vnode.children, ctx, childSelectState);
-	return `${open}${inner}</${tag}>`;
+	return `${open}${guardLeadingNewline(tag, inner)}</${tag}>`;
 }
 
-/** Serialize and concatenate a child vnode list in order. */
+// HTML's parser drops one newline directly after a <pre>, <textarea> or
+// <listing> start tag. A body that really starts with one (D168 keeps these
+// bodies' bytes) gets a second newline for the parser to eat, so the prerendered
+// page shows the same text the browser runtime mounts.
+const LEADING_NEWLINE_TAGS = new Set(['pre', 'textarea', 'listing']);
+/**
+ * @param {string} tag
+ * @param {string} inner
+ * @returns {string}
+ */
+function guardLeadingNewline(tag, inner) {
+	return LEADING_NEWLINE_TAGS.has(tag) && inner.startsWith('\n') ? `\n${inner}` : inner;
+}
+
+/**
+ * Serialize and concatenate a child vnode list in order.
+ * @param {Array<ViewNode|string>} children
+ * @param {Record<string, any>} ctx
+ * @param {SelectState} selectState
+ * @returns {Promise<string>}
+ */
 async function serializeChildren(children, ctx, selectState) {
 	let out = '';
 	for (const child of children) {
@@ -229,13 +297,21 @@ async function serializeChildren(children, ctx, selectState) {
 	return out;
 }
 
+/**
+ * @param {ViewNode} vnode an `<option>` element vnode
+ * @returns {string}
+ */
 function optionValue(vnode) {
 	if (Object.prototype.hasOwnProperty.call(vnode.attrs, 'value')) {
-		return stringify(vnode.attrs.value);
+		return stringify(/** @type {Record<string, any>} */ (vnode.attrs).value, 0, ' ');
 	}
 	return collectTextContent(vnode.children);
 }
 
+/**
+ * @param {Array<ViewNode|string>|string|null} children
+ * @returns {string}
+ */
 function collectTextContent(children) {
 	if (!children) return '';
 	if (typeof children === 'string') return children;
@@ -244,7 +320,7 @@ function collectTextContent(children) {
 		if (typeof child === 'string') {
 			out += child;
 		} else if (child?.isText) {
-			out += stringify(child.attrs.value);
+			out += stringify(/** @type {Record<string, any>} */ (child.attrs).value);
 		} else if (child && !child.isComponent) {
 			out += collectTextContent(child.children);
 		}
@@ -259,6 +335,11 @@ function collectTextContent(children) {
  * content cannot reach the parser's end-of-RAWTEXT (or double-escape) states, so
  * those cases throw at build time instead — a failed build keeps the last good
  * dist/ via the atomic swap.
+ *
+ * @param {string} tag `script` or `style`
+ * @param {Record<string, any>} attrs
+ * @param {string} text
+ * @returns {string}
  */
 function rawtextContent(tag, attrs, text) {
 	if (tag === 'style') {
@@ -310,15 +391,21 @@ function rawtextContent(tag, attrs, text) {
  * mounted()/animations (PuzzleView.preload, DOC-APP-ANATOMY §5). The resolved
  * render() tree is slot-expanded against the call-site children and serialized.
  * Always render(), never renderSkeleton() — a build has real data.
+ *
+ * @param {ViewNode} vnode
+ * @param {Record<string, any>} ctx
+ * @param {SelectState} selectState
+ * @returns {Promise<string>}
  */
 async function serializeComponent(vnode, ctx, selectState) {
-	const instance = vnode.instance ?? new vnode.tag(ctx);
+	/** @type {PuzzleView} */
+	const instance = vnode.instance ?? new (/** @type {typeof PuzzleView} */ (vnode.tag))(ctx);
 	if (vnode.instance == null) {
 		await instance.preload({ params: {}, props: vnode.attrs, route: null });
 	}
 	const rendered = instance.render();
 	if (rendered == null) return '';
-	const tree = expandSlots(rendered, vnode.children, vnode.tag);
+	const tree = expandSlots(rendered, /** @type {ViewNode[]} */ (vnode.children), vnode.tag);
 	return serializeNode(tree, ctx, selectState);
 }
 

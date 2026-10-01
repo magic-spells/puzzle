@@ -1,12 +1,13 @@
 {
   "name": "navigation-menu",
-  "description": "Horizontal site navigation with hover/click flyout panels of link cards — a compound family over the shared dropdown-panel base, with disclosure-pattern semantics, nested submenus, full-width mega panels, and per-link active state",
+  "description": "Horizontal site navigation with hover/click flyout panels of link cards — a compound family over the shared dropdown-panel base, with disclosure-pattern semantics, nested submenus, full-width mega panels with headed columns, and per-link active state",
   "files": [
     "NavigationMenu/NavigationMenu.pzl",
     "NavigationMenu/Item.pzl",
     "NavigationMenu/Trigger.pzl",
     "NavigationMenu/Content.pzl",
     "NavigationMenu/Link.pzl",
+    "NavigationMenu/Group.pzl",
     "NavigationMenu/index.js"
   ],
   "registryDependencies": [

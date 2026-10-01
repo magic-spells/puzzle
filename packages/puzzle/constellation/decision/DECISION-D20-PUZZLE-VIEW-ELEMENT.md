@@ -11,19 +11,13 @@ code_refs:
   - client-runtime/ssg/serialize.js
 ---
 
-# D20 — `<puzzle-view>` element for views/layouts only; reusable components render inline
-
-Settled. Router-mounted views and layouts compile to a real `<puzzle-view>` DOM element; reusable components render **inline** with no wrapper element.
-
-## Context
-The framework needed to decide whether every `.pzl` component emits a wrapper element or renders its content inline.
+# D20 — `<puzzle-view>` element for views/layouts only; components render inline
 
 ## Decision
-- Router-mounted **views and layouts** compile to a **real `<puzzle-view>` DOM element** (with the tag's attributes) — the view boundary that navigation swaps, `this.element` anchors, and post-v1 animations target.
-- **Reusable components render inline**: the compiler emits the template's contents with no wrapper element, so `<CustomButton/>` renders as its `<button>`.
+- Every `.pzl` template is delimited by `<puzzle-view>`. The emission mode comes from the directory: `app/views/**` and `app/layouts/**` compile as **views** (`codegen.ModeForPath`), everything else as a **component**.
+- A view or layout renders a real `<puzzle-view>` DOM element carrying the tag's attributes — the boundary navigation swaps, `this.element` anchors, and route animations target.
+- A component renders **inline**, with no wrapper: `<CustomButton/>` renders as its `<button>`. Attributes on a component's `<puzzle-view>` are a compile error ("components render inline — put attributes on your root element"), and a component template needs exactly one root element.
+- The framework ships no base stylesheet, so `<puzzle-view>` (an unregistered custom element) is `display: inline` until the app styles it; the examples set it in their own CSS.
 
 ## Alternatives rejected
-- **A forced wrapper element per component** — breaks real layouts (the wrapper becomes the flex/grid child instead of the content) and stacks absurdly: a view wrapping `<TodoItem>` wrapping `<Checkbox>` + `<DeleteButton>` would emit four wrapper layers per list row. Inline rendering matches Vue/Svelte behavior.
-
-## Consequences
-Mechanics: one file anatomy for all `.pzl` files (`<puzzle-view>` stays as the template delimiter); emission mode is decided by directory convention (`app/views/**`, `app/layouts/**` → element; everything else → inline). For components, attributes on `<puzzle-view>` are a compile error ("components render inline — put attributes on your root element") and the template requires a single root element in v1 (fragments deferred). The base stylesheet ships `puzzle-view { display: block }` (unknown elements default to inline).
+- A forced wrapper element per component — the wrapper becomes the flex/grid child instead of the content, and nested components stack wrapper layers in every list row.

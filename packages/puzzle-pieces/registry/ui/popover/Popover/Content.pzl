@@ -32,7 +32,14 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //   wide    full-width panel spanning the nearest positioned ancestor
 //   opens   'down' (default) | 'right' for a nested submenu
 //   effect  'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
-//   class   merged onto <dropdown-panel>, after the padding
+//   class   merged onto <dropdown-panel>.
+//           Merging is not precedence: a utility of yours on a property the
+//           stock chrome already sets wins only if Tailwind emits it LATER in
+//           the stylesheet (mt-1 or mt-1.5 cannot beat mt-2, ml-2 cannot beat
+//           ml-3). Add the ! suffix (mt-1!) to force it.
+//           An opens="right" panel inherits the base's submenu offset
+//           (ml-3 -mt-2.25), tuned to line a p-2 MENU row up with its trigger;
+//           pass mt-0! to cancel the lift.
 
 // The base Panel already carries the card chrome (border, surface, shadow,
 // rounding, min-w-48, z-40). A popover holds prose rather than menu rows, so it

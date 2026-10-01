@@ -15,6 +15,10 @@
  */
 
 declare const puzzleRouterModeBrand: unique symbol;
+// Without an export statement every top-level declaration in a .d.ts module is
+// implicitly exported — the brand above included, which would let an app import
+// a value that does not exist at runtime. This keeps it module-private.
+export {};
 
 /**
  * A router mode, produced by `hashRouter()` or `memoryRouter()` and passed as
@@ -38,7 +42,7 @@ export interface RouterMode {
 }
 
 /**
- * Hash routing (v1.6, D34): carry the route in `location.hash` (`/#/user/123`)
+ * Hash routing (D34): carry the route in `location.hash` (`/#/user/123`)
  * instead of the pathname, for static hosts with no server-side rewrite. The
  * app-facing API stays path-shaped — `push('/user/123')`, `current.path` — and a
  * `routerBase` rides inside the fragment.
@@ -46,7 +50,7 @@ export interface RouterMode {
 export declare function hashRouter(): RouterMode;
 
 /**
- * Memory routing (v1.11, D42): keep the route entirely in router state, never
+ * Memory routing (D42): keep the route entirely in router state, never
  * reading or writing `location`/`history`. For tests and embedded apps that must
  * not touch the host page's URL, scroll, focus, or title. There is no URL to
  * read, so navigation #0 goes to `initialPath` (default `'/'`).

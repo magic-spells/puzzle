@@ -35,7 +35,7 @@ SnippetsHost.prototype.render = function () {
         fits: 'heading',
         params: ['group'],
         fn: ({ group }) => ([
-            new ViewNode('text', { value: __s(group.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) + ' / ' + __s(__d.suffix, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'suffix' : 0) }),
+            new ViewNode('text', { value: __s(group?.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) + ' / ' + __s(__d.suffix, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'suffix' : 0) }),
           ]),
       }),
       new ViewNode(SNIPPET_TAG, {
@@ -44,9 +44,9 @@ SnippetsHost.prototype.render = function () {
         fn: ({ user, group }) => ([
             new ViewNode('button', {
               class: 'person',
-              '@click': (event) => this.events.rename(user.id),
+              '@click': (event) => this.events.rename(user?.id),
             }, [
-              new ViewNode('text', { value: __s(group.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) + ':' + __s(user.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) + ':' + __s(__d.suffix, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'suffix' : 0) }),
+              new ViewNode('text', { value: __s(group?.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) + ':' + __s(user?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) + ':' + __s(__d.suffix, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'suffix' : 0) }),
             ]),
           ]),
       }),
@@ -54,7 +54,7 @@ SnippetsHost.prototype.render = function () {
         fits: '',
         params: ['group'],
         fn: ({ group }) => ([
-            new ViewNode('text', { value: 'default:' + __s(group.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) + ':' + __s(__d.suffix, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'suffix' : 0) }),
+            new ViewNode('text', { value: 'default:' + __s(group?.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'group.title' : 0) + ':' + __s(__d.suffix, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'suffix' : 0) }),
           ]),
       }),
     ]),

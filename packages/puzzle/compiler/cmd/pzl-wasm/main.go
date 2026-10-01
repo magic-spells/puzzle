@@ -61,8 +61,8 @@ import (
 	"syscall/js"
 
 	"github.com/magic-spells/puzzle/compiler/internal/codegen"
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
 	"github.com/magic-spells/puzzle/compiler/internal/version"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 const (

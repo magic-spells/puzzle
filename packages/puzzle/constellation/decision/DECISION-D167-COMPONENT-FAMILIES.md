@@ -1,6 +1,6 @@
 ---
-name: 'D167 — component families: dotted component tags + the family barrel convention (v1.80)'
-status: built
+name: 'D167 — component families: dotted component tags + the family barrel convention'
+status: verified
 connections:
   - DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS
   - COMPONENT-TEMPLATE-PARSER
@@ -8,113 +8,92 @@ connections:
   - DOC-SPEC-TEMPLATE
   - DOC-TEMPLATE-SYNTAX
   - DOC-PUZZLE-FILE
-  - FILE-PARSER
   - FILE-CODEGEN
-notes:
-  - kind: deviation
-    text: >-
-      Built as specified (PR #104) with three refinements found during the build and review: (1)
-      family stubs use a composition-shaped template (`<div class={ classes }>` with `<Children/>`
-      and a caller `class` override) rather than the stock closed `<button>` component stub —
-      nesting `<Frame.Wrapper/>` inside `<Frame>` would otherwise silently drop every member; plain
-      `generate component` output is byte-identical to before. (2) Family member names validate as
-      PascalCase, stricter than the grammar's `[A-Za-z_][A-Za-z0-9_]*` segment rule — a member
-      becomes a class name and a filename, and `generate component wrapper` was already rejected.
-      (3) The reserved-marker guard also landed on plain `generate component` (pre-existing gap:
-      `generate component Slot` scaffolded a component unreachable from templates); views stay
-      exempt, being routed by class. Also: the printed import hint follows `--path` — a family dir
-      under `app/` prints the `@` alias form, anything else the project-relative path.
-  - kind: state
-    text: >-
-      Editor grammar sweep done (2026-08-31), stacked as `feat/0.7.0-grammar` on each repo's pending
-      `feat/0.6.0-grammar` branch: puzzle-vscode PR #2 (component open/close regexes accept
-      `(?:\.Ident)*`; the marker lookahead also had to exclude `.` so `<Slot.Custom>` reads as a
-      component), puzzle-sublime PR #2 (`puzzle_component_name` accepts dotted segments; HTML's
-      `tag_name_break` already stops markers at a `.`), puzzle-zed PR #2 (no grammar change —
-      `tag_name` already accepts dots — corpus test + highlight comment only). Sublime syntax tests
-      can only run inside Sublime Text; the others ran green. None of the grammars flag invalid
-      dotted names (`<Frame.>`, `<Frame-x>`) — the framework's positioned errors are the backstop.
+  - DECISION-D176-EXPRESSION-LANGUAGE
+verified_at: '2026-09-25T10:41:55.889Z'
+verified_sha: a602784a9822fa3ff63123e597f72624b3c9ffff
 ---
 
-# D167 — component families: dotted component tags + the family barrel convention (v1.80)
+# D167 — component families: dotted component tags + the family barrel convention
 
 Related components import as one unit and invoke with dot notation:
 
-```js
-import Frame from '@/components/Frame';
-```
-
 ```html
+<!-- import Frame from '@/components/Frame'; -->
 <Frame>
-  <Frame.Wrapper>
-    <Frame.Content>…</Frame.Content>
-  </Frame.Wrapper>
+  <Frame.Wrapper><Frame.Content>…</Frame.Content></Frame.Wrapper>
 </Frame>
 ```
 
-Two halves: the **grammar** makes dotted component tags official (validated,
-tested), and the **convention** groups a family in a directory with a plain JS
-barrel. `.pzl` stays strictly one class per file.
+The **grammar** makes dotted component tags official and validated; the
+**convention** groups a family in a directory with a plain JS barrel. `.pzl`
+stays one class per file.
 
 ## Context
 
-Compound-component ergonomics (`<Tabs.List>`, Radix-style) are standard in
-React, and both Vue (`<script setup>` "namespaced components") and Svelte
-officially support dot-notation component tags backed by namespace imports —
-neither supports multi-component SFC files. Puzzle's codegen already emitted a
-component tag's text verbatim as a JS expression, so `<Frame.Wrapper>`
-*accidentally* compiled to `new ViewNode(Frame.Wrapper, …)` — but nothing
-validated component names at all: a capitalized `Frame-x` or `Frame.`
-compiled cleanly into syntactically broken JS. Meanwhile a Frame/Wrapper/
-Content family cost three import lines.
+Compound components (`<Tabs.List>`) are standard in React, and Vue and Svelte
+both support dot-notation tags backed by namespace imports — neither supports
+multi-component files. Codegen emits a component tag's text verbatim as a JS
+expression, so without validation a tag like `<Frame-x>` or `<Frame.>`
+compiled into broken JS.
 
 ## Decision
 
-- **Dotted component tags are official grammar.** A capitalized tag name must
-  be a valid member path: `Ident('.'Ident)*`, each segment
-  `[A-Za-z_][A-Za-z0-9_]*`. Any other capitalized name (`-`, `:`, empty
-  segment, trailing dot) is a positioned compile error — closing the
-  broken-JS emission hole. Lowercase tags (HTML elements, custom elements
-  with dashes) are untouched.
-- **Reserved roots stay reserved.** A dotted name whose first segment is
-  `Children`, `Slot`, `Snippet`, or `Portal` is a positioned error steering
-  away from the marker names (extends D134's "capitalization means the
-  framework resolves it": markers are exact-match, and a marker name cannot
-  be a component root).
-- **Codegen is unchanged.** The tag text is emitted verbatim as the ViewNode
-  tag expression; `Frame.Wrapper` resolves lexically against module scope at
-  runtime, exactly like a plain `Frame`. No registry, no import inspection.
-- **The family convention is a directory + plain JS barrel** — convention
-  over mechanism, documented not enforced:
+- **A component tag is any tag whose first character is not ASCII `a`–`z`**
+  (the only characters that begin an HTML element name). `<Card>`,
+  `<Übersicht>`, `<概要>`, `<_foo>` are components; `<straße-karte>` is a custom
+  element.
+- **Tag names follow JavaScript identifier rules past ASCII**: start with
+  `A`–`Z`, `a`–`z`, `_` or a non-ASCII `ID_Start` letter, continue with ASCII
+  name characters (letters, digits, `_`, `-`, `:`) or `ID_Continue` runes, plus
+  the `.` separator — the shared `jsident` rule (D176), so a tag takes any name
+  its `<script>` can import. `$` never belongs to a tag name (`<$50` is text).
+  In text, `<` followed by a letter of any script opens a tag; `<` + space is
+  text.
+- **A component name must be `Ident('.'Ident)*`**, each segment a `$`-free JS
+  identifier. Anything else (`-`, `:`, empty segment, trailing dot, digit-led
+  segment) is a positioned compile error. Lowercase tags (HTML, custom
+  elements, namespaced SVG) are untouched.
+- **Attribute and prop names may be non-ASCII**: `<Card größe={ 3 }>` →
+  `props.größe`.
+- **Marker names cannot be a family root**: `Children.X`, `Slot.X`,
+  `Snippet.X`, `Portal.X` are errors ([[DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS]]);
+  markers match exactly, never dotted.
+- **Codegen is unchanged**: `<Frame.Wrapper>` emits
+  `new ViewNode(Frame.Wrapper, …)`, resolved lexically like `Frame`. No
+  registry, no import inspection. The `component_family` golden pins it.
+- **Family convention (documented, not enforced)**:
   `app/components/Frame/{Frame,Wrapper,Content}.pzl` + `index.js` with
   `export default Object.assign(Frame, { Wrapper, Content })` plus named
-  exports, so both `import Frame` and `import { Frame, Wrapper }` work.
-- **`puzzle generate component Frame --family Wrapper,Content`** scaffolds
-  the directory, one `.pzl` per member, and the barrel. Member names are
-  validated as identifiers. Without `--family`, `generate component` is
-  unchanged.
+  exports, so `import Frame` and `import { Frame, Wrapper }` both work.
+- **`puzzle generate component Frame --family Wrapper,Content`** scaffolds the
+  directory, one `.pzl` per member and the barrel. Root and member names must
+  be PascalCase and not a marker name (the marker guard applies to plain
+  `generate component` too; views are exempt). Family stubs use a
+  composition-shaped template (`<div class={ classes }>` + `<Children/>` + a
+  caller `class` override) so nesting members doesn't drop content. The
+  printed import hint follows `--path` (`@` alias under `app/`, else the
+  project-relative path).
 
 ## Alternatives
 
-- **Native multi-component `.pzl` files** — rejected to keep the format
-  simple: multiple templates per file need class-association syntax,
-  multi-class extraction, per-class mode decisions, and a grammar change
-  sweeping eslint/prettier/editor grammars. Vue and Svelte both declined the
-  same feature; snippets (D166) already cover in-file sub-pieces.
-- **Compiler auto-barrel** (synthesize a virtual namespace module for a
-  directory of `.pzl` files) — rejected: implicit root selection and
-  filename→property rules, collides with Node directory resolution the
-  moment a real `index.js` appears, invisible to TS, and breaks the "imports
-  are real JS that esbuild resolves with zero framework opinions" property.
+- **Multi-component `.pzl` files** — needs class-association syntax,
+  multi-class extraction and a grammar sweep; Vue and Svelte declined it too,
+  and snippets (D166) cover in-file sub-pieces.
+- **Compiler auto-barrel for a directory** — implicit root selection, collides
+  with a real `index.js`, invisible to TS, breaks "imports are plain JS
+  esbuild resolves".
+- **Capitalization as the component test with ASCII segments** — a `<script>`
+  class may carry any JS identifier; an ASCII lexer read `<Straßenkarte …/>` as
+  `<Stra>` + attribute `ßenkarte`.
 
 ## Consequences
 
-- Parser gains component-name validation (component branch of parseElement);
-  goldens pin the member-expression emission; error tests pin the rejects.
-- `puzzle-eslint` / `puzzle-prettier` need no change — their vendored lexers
-  already accept `.` and neither classifies tags. Editor grammar repos
-  (vscode/sublime/zed): verify component-tag highlighting accepts dots.
-- `puzzle check` (D165) must type the member-expression tag like any emitted
-  expression — verified as part of the build.
-- Docs sweep: SPEC template section, DOC-TEMPLATE-SYNTAX, PUZZLE_FILE, the
-  agent skill, README.
+- Validation lives in `packages/puzzle-lang/parser/parser.go`
+  (`checkComponentName`); error tests pin the rejects.
+- puzzle-eslint / puzzle-prettier need nothing (template bodies are opaque to
+  them). The editor grammars must accept dotted tags and non-`a`–`z` component
+  starts; they do not flag invalid dotted names — the compiler's positioned
+  errors are the backstop.
+- `puzzle check` (D165) types the member-expression tag like any emitted
+  expression.

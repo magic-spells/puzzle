@@ -7,6 +7,8 @@ connections:
   - COMPONENT-CODEGEN
   - FILE-CODEGEN
   - FILE-CODEGEN-EXPRESSIONS
+  - FILE-CODEGEN-LOWER
+  - FILE-CODEGEN-PRESETS
   - FILE-PZLC
   - FILE-TESTS-FIXTURES-TODOS-HOME-COMPILED
   - FILE-TESTS-FIXTURES-TODOS-DEFAULT-COMPILED
@@ -23,45 +25,42 @@ connections:
   - DECISION-D144-PORTAL
   - DECISION-D147-IMPLICIT-TWO-WAY-BINDING
   - DECISION-D150-RAW-TEMPLATE-BLOCK
+  - DECISION-D176-EXPRESSION-LANGUAGE
   - DOC-COMPILATION-FLOW
   - DOC-TESTING
   - TEST-TODOS-INTEGRATION
 verified_at: '2026-08-24T21:11:50.859Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
-notes:
-  - kind: verified
-    text: >-
-      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
-      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
-      one — the path moved, the code did not. No content was re-checked, and none needed to be.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Codegen emission and golden files
 
-The byte-level emission contract. Per-construct golden pairs live in
-`compiler/internal/codegen/testdata` as a `.pzl` input beside its expected
-JavaScript, compiled and byte-compared.
+The byte-level emission contract, in `compiler/internal/codegen`. Run from
+`packages/puzzle` with `go test ./compiler/internal/codegen`.
 
-Beyond the goldens, focused tests cover expression scoping, event handler
-emission and handler caching, class-name extraction, empty and boolean
-attributes, conditional arity stabilization, loop item identifiers and range
-parens, list keys, inline SVG with its cache and dedup, scoped styles, script
-name collisions, module stamping, refs, reserved script bindings, skeleton
-minimum duration, the raw block, display coercion, Portal at a component root,
-template comments, and a11y warnings.
+- **Golden pairs** in `codegen/testdata`: a `.pzl` input beside its expected
+  JavaScript, compiled and byte-compared. Expression lowering
+  ([[DECISION-D176-EXPRESSION-LANGUAGE]]) is pinned by `expr_methods`,
+  `expr_handlers` and `formatter_chain` (nested library calls).
+- **Focused tests:** `expr_test.go` (name resolution from the tree, arrow
+  parameters, handler lowering, the `this` safety net, the handler/library
+  collision warning); `core_semantics_test.go` (member guards, loose equality, a
+  library call in every value position, `|` as a compile error in every header,
+  one-way transformed form values, `.size` as an ordinary member);
+  `row_facts_test.go` (D170 row facts); `markup_test.go`/`markup_call_test.go`
+  (`raw`/`newline_to_br` placement); `presets_test.go` (literal date presets and
+  zones, handler arguments included). Others cover handler caching, class-name
+  extraction, attributes, conditional arity, loop identifiers and keys, list
+  blocks and static caching, inline SVG, scoped styles, script collisions,
+  module stamps, refs, reserved bindings, skeleton min-duration, raw blocks,
+  display coercion, text-run whitespace, Portal roots, comments, and a11y.
 
-**The two suites are coupled here.** The golden tests also compile the real
-`examples/todos/app` sources and compare them against the committed JavaScript
-fixtures under `tests/fixtures/todos/` — the same fixtures the vitest todos
-suite mounts. A codegen change that alters todos emission fails the Go suite
-until the JS fixture is updated, which is the intended coupling: it closes the
-loop between compiler output and the runtime calling convention.
+**The Go and JS suites are coupled here.** The golden tests also compile the real
+`examples/todos/app` sources and compare them with the committed fixtures under
+`tests/fixtures/todos/` — the ones the vitest todos suite mounts
+([[TEST-TODOS-INTEGRATION]]). A codegen change that alters todos emission fails
+Go until the JS fixture is updated; that closes the loop between compiler output
+and the runtime calling convention.
 
-Regenerate goldens only deliberately and review the diff:
-
-```sh
-go test ./internal/codegen -update
-```
-
-Covers 25 `*_test.go` files under `compiler/internal/codegen`.
+Regenerate goldens only deliberately, and review the diff:
+`go test ./compiler/internal/codegen -update`.

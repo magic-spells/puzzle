@@ -29,24 +29,33 @@ map.
 
 ## Required verification
 
-Before claiming success, run both suites:
+Before claiming success, run the suites:
 
 ```bash
 npx vitest run
-cd compiler && go test ./...
+npm run test:runtime-types             # runtime JSDoc + published .d.ts drift
+(cd compiler && go test ./...)
+(cd ../puzzle-lang && go test ./...)   # the parser is its own Go module
 ```
+
+`test:runtime-types` type-checks the plain-JavaScript `client-runtime/` from
+its JSDoc (`tsconfig.runtime.json`) and holds `types/*.d.ts` to what each
+package export actually exports (`tests-types/drift`). A runtime edit stays
+JavaScript: when it trips the check, fix the JSDoc (or `types/*.d.ts`, if the
+export's contract changed) — never by changing code to please the checker.
 
 Run focused checks as well when appropriate: `npm run test:types`,
 `npm run verify:pack`, example builds, or browser tests. Report anything not
 run.
 
 CI exists (`.github/workflows/ci.yml`: Go vet/build/test, `npm test`,
-`verify:pack`, `test:types`, `test:e2e-pack`, and a Playwright browser smoke),
+`verify:pack`, `test:types`, `test:runtime-types`, `test:e2e-pack`, and a
+Playwright browser smoke),
 so do not describe this repo as having none — what it has no job for is
 *publishing*. Run the suites locally anyway: CI is a backstop, not a substitute
 for verifying your own change.
 
-Two footguns in the scripts: `npm run build` at the repo root is aliased to
+Two footguns in the scripts: `npm run build` in this package is aliased to
 `node scripts/release-prep.mjs`, so it runs the whole release preparation —
 cross-compiling five Go binaries and packing a tarball — not a framework build.
 And `release:prep` hard-fails on the `@magic-spells/puzzle` ranges in the
@@ -58,11 +67,13 @@ enforced, not merely advised.
 - Published: `0.1.0` (2026-07-21), `0.1.1` (2026-07-22, D77 init prompts),
   `0.1.2` (the embedded agent skill + `puzzle add skills`, D78/v1.45), `0.2.0`
   (2026-07-24), `0.3.0` (2026-07-25), `0.3.1` (2026-07-25), `0.4.0`
-  (2026-07-28), and **`0.5.0` (2026-08-07, the current `latest`)** are live on
-  npm (all five packages, MIT, manual publish via
+  (2026-07-28), `0.5.0` (2026-08-07), `0.6.0` (2026-08-15), and **`0.7.0`
+  (2026-09-09, the current `latest`)** are live on
+  npm (six packages since 0.7.0 — the root plus five platform binaries — MIT,
+  manual publish via
   `npm run release:prep` — there is no CI publish). Everything from D88 onward
   shipped in `0.3.0` — minor, not patch: two new export subpaths (`./testing`,
-  `./fixtures`) plus breaking changes in D110/D111/D112. **`0.3.0` is published
+  `./fixtures`) plus breaking changes in D110, D112 and build-time-only managed head tags (D84). **`0.3.0` is published
   but BROKEN and deprecated** — its registry metadata carries no
   `optionalDependencies`, so it installs the CLI shim with no platform binary
   and `puzzle` exits 1 on every machine (D120). `0.3.1` is the same feature set,
@@ -81,11 +92,11 @@ enforced, not merely advised.
   route field (D87/v1.53) — and the dev-server port scan (D90/v1.54). Then the
   framework-gap round (D91-D98: adapter `beforeRequest`, dev build errors in
   the browser, router focus + route announcement, `/testing`, `/fixtures` +
-  mock adapter), agent-skill upgrade ergonomics (D97/D99), the DevTools
+  mock adapter), agent-skill upgrade ergonomics (D78), the DevTools
   runtime bridge (D100 — the extension's v1 is built and smoke-verified in its
   separate public repo `magic-spells/puzzle-devtools`), and a deep-review
   hardening round (D110 `dev.proxy` prefix
-  validation, D111 managed head tags build-time only).
+  validation, managed head tags build-time only per D84).
 - `0.4.0` (2026-07-28): the perf round (D121/D122 profiler + DevTools
   protocol), the Grok review rounds (D132/D133), D134 capitalized composition
   markers + ecosystem migration, and D135–D143 (marker fallback bodies, hybrid
@@ -108,11 +119,10 @@ enforced, not merely advised.
   (wrap `<Portal>` in a root element; documented in D144), and the D76 change
   that points `puzzle upgrade` at the running CLI rather than the cwd. Cards
   truthed through D149.
-- **`0.6.0` (2026-08-15, published and `verify:published`-clean — the current
-  `latest`;** registry metadata pins all four platform packages, a temp-dir
+- **`0.6.0` (2026-08-15, published and `verify:published`-clean;** registry
+  metadata pins all four platform packages, a temp-dir
   install runs `puzzle version 0.6.0`, and a fresh-app `puzzle add piece`
-  resolves `npm:@magic-spells/puzzle-pieces@0.6.0`; the `main` merge and tag
-  are pending — Cory does both): D150 `{#raw}` static raw template
+  resolves `npm:@magic-spells/puzzle-pieces@0.6.0`): D150 `{#raw}` static raw template
   block; the pieces npm transport (a D32 amendment, not a new card — default
   registry is `npm:@magic-spells/puzzle-pieces` resolved to the CLI's
   major.minor, older-only fallback with a printed notice, `--pieces-version`
@@ -155,8 +165,15 @@ enforced, not merely advised.
   profile pointing at the pieces registry — now
   `packages/puzzle-pieces/registry` in this monorepo; unset it when smoke-testing
   the npm transport.
-- **`0.7.0` (in progress on `release/0.7.0`, NOT yet published — Cory tags and
-  publishes):** D161 auto-fetching finds (BREAKING — a tracked
+- **`0.7.0` (2026-09-09, published and `verify:published`-clean — the current
+  `latest`;** registry metadata pins all five platform packages including the
+  NEW `@magic-spells/puzzle-win32-x64` — the first Windows release — a temp-dir
+  install runs `puzzle version 0.7.0`, and a fresh-app `puzzle add piece`
+  resolves `npm:@magic-spells/puzzle-pieces@0.7.0`. A fresh-app smoke went
+  further: `puzzle init` + `add piece accordion` +
+  `@magic-spells/collapsible-content` 1.2.0 builds with the component bundled.
+  Tagged `v0.7.0`, `release/0.7.0` merged to `main` via PR #130, GitHub release
+  notes posted): D161 auto-fetching finds (BREAKING — a tracked
   `findOne`/`findMany` inside `data()` fetches what the store is missing and the
   view settles across fetch rounds; `store.loadAll` and the `loadAll` adapter
   verb are `loadMany` and every old spelling throws; generated read failures are
@@ -183,14 +200,89 @@ enforced, not merely advised.
   funnel in `PuzzleView`, and title-only head sync per navigation (the other
   three head fields stay SSG-only) — take production sizes to hello-world
   **20.8 KB gzip**, todos **23.8 KB gzip**; the README banner matches (the size
-  scripts only check the banner; the README line is edited by hand). Cards
-  truthed through D168; the next free decision number is D169.
-- Product line: v1 through v1.80 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
+  scripts only check the banner; the README line is edited by hand). The sizes
+  are unchanged by the four late fixes that landed after the review round: the
+  router guard self-redirect hang and D168 completed at control-flow boundaries
+  (PR #127), the Tailwind stderr diagnostic (#128), and the pieces demo's npm
+  dependencies (#129).
+  **Publish prerequisite, learned the hard way:** eight upstream web components
+  had to be published to npm *before* 0.7.0 could ship, because the D167
+  families were built against unpublished local versions and the pieces
+  registry declares bare dependency names that resolve to npm `latest` —
+  collapsible-content 1.2.0, dropdown-panel 2.1.0, tab-group 1.2.0,
+  select-dropdown 0.3.0, split-panel 0.2.0, panel-stack 0.2.0,
+  scrolling-content 2.1.0, and quantity-input 1.1.0. The pieces demo now
+  installs them from npm rather than local `file:` paths (PR #129). A registry
+  version-floor mechanism closes the gap as D169 (0.8.0): each piece manifest
+  now pins the floor it needs, so the gate becomes "every floor a manifest
+  declares is published on npm".
+- **`0.8.0` (in progress on `release/0.8.0`, NOT yet published — Cory tags
+  and publishes; `0.7.1` was never published and is folded in):** D170
+  incremental rendering (persistent `{#for}` row blocks, static-subtree
+  caching, record render revisions); D171 `puzzle add theme` and the pieces
+  theme system (four palettes × three modes, `appearance-picker`, 102 pieces);
+  D172 one language, two dialects, with the template parser extracted into the
+  `packages/puzzle-lang` Go module (tagged `packages/puzzle-lang/vX.Y.Z` beside
+  each `vX.Y.Z`); D173 core semantics (`?.` member guarding on every step,
+  loop domain, slot-filled rule, value printing, script-less components);
+  D174 the function library (19 standard functions plus PuzzleKit's `link`
+  and `timeago`; nine 0.7 formatter names dropped for the JS methods they
+  duplicated; the list formatters and `noescape` removed; sanitized `raw`;
+  apps still register under the `formatters` config key); D175 translations
+  (`t`, `ctx.i18n`); D176 the expression language — a closed
+  JavaScript-shaped grammar parsed once in `packages/puzzle-lang/expr` (a
+  Pratt parser with a method table as the boundary), functions instead of `|`
+  pipes, `.length` not `.size`, no `this`; it landed across PRs #164 (parser),
+  #167 (codegen lowering), #168 (runtime library) and #171 (corpus migration
+  and pipe removal), so the branch compiles only the new language, with the
+  `|` steer naming each removed formatter's replacement. PR #172 (P1b) then
+  made the section splitter skip `{#raw}` spans, made HTML void elements legal
+  without a closer, and fixed the second-`{:else}` position and the `{#svg}`
+  BOM; PR #173 ported the splitter change to the eslint/prettier plugins. The
+  final pre-tag review then landed #174 (the brace scanner no longer misreads
+  `/` after a non-ASCII name as a regex; `event` reads as data outside
+  handlers, with a compile error when one template also uses the DOM `event`)
+  and #175 (`Object.keys` on a missing value yields nothing, `puzzle check`
+  app calls type-check under `noUncheckedIndexedAccess`, a typo'd
+  `in_timezone` zone logs in development), then #176 (the plugin ports of the
+  scanner rule) and #177 (a component class or tag may carry any JavaScript
+  identifier name — `Übersicht`, `概要`, `Straßenkarte` — with a compile error
+  where the scanner cannot read a class name to its end). Then #178 (`puzzle
+  check` signatures match LibraryFunctions; TS 6, app paths, no-tsconfig
+  strict), #179 (locale switch waits for replace/pop, embed locale URLs,
+  locale BOM, `noescape` hint, nested-key event), #180 (release a nested
+  cached vnode's outgoing copy, D170), #181 (`await setLocale` inside `data()`
+  or a guard no longer deadlocks), #182 (stop checking a JavaScript handler's
+  inferred arity), #183 (`init --typescript` scaffolds a real TypeScript app,
+  D54), #184 (CI runs the live-tsc check and scaffold tests), #185
+  (`app/app.ts` build entry and TypeScript stubs from `puzzle generate`, D54),
+  #186 (constellation compacted), #187 (final polish: events comment, validate
+  options type, parser error text, keyed-move invariant), #188 (dev warning
+  for a non-arrow `events` handler that uses `this`), #189 (prettier applies
+  endOfLine once to script/style bodies), #190 (eslint template-tag imports,
+  BOM autofix, TS blocks in recommended), #191 (devtools panel connects after
+  a >500-event burst and on DevTools reopen), #192 (pieces review round:
+  appearance boot, stale theme hint, picker palettes, doc examples, snippet
+  subset, CI order), #193 (checkJs on the JS runtime, published `.d.ts`
+  guarded), #194 (review fixes F1–F6), and the pieces PRs #195 and #198
+  (avatar-group bite-mask cutout, `direction` prop), #196 (navigation-menu
+  mega panels, upstream bar look, 8px trigger gap) and #197 (tabs list/panel
+  gap, buttons variant, boxed panels). The three editor
+  grammars are swept for the 0.8.0 grammar (`0.4.0` on each repo's
+  `release/0.4.0`); the Go evaluator in Sites (P6) comes after the tag
+  (see DECISION-D176-EXPRESSION-LANGUAGE); D168 rewritten as the merged whitespace rule; plus D169 registry
+  version floors, the D76 background update notice, and the runtime preflight.
+  Heavily BREAKING for templates — the CHANGELOG opens the entry with an
+  "Upgrading from 0.7" checklist. Production sizes: hello-world **21.9 KB
+  gzip**, todos **26.0 KB gzip** (measured after the review-fix PR; the README banner
+  matches). Cards truthed through D176; the next free
+  decision number is **D177**.
+- Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
   amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74, D160 = v1.75,
-  D161 = v1.76, D163 = v1.77, D165 = v1.78, D166 = v1.79, D167 = v1.80;
-  D146, D162, D164, and D168 are correctness or infrastructure decisions with
-  no product-line entry),
+  D161 = v1.76, D163 = v1.77, D165 = v1.78, D166 = v1.79, D167 = v1.80,
+  D175 = v1.81; D146, D162, D164, D168, D170–D174 and D176 have no product-line
+  entry),
   plus the July
   21 pre-release correctness/performance hardening pass and the July 24
   deep-review round. The `constellation/decision/` cards are the authoritative
@@ -199,7 +291,8 @@ enforced, not merely advised.
   its numbered card only, never in two spots.)
 - Public package: `@magic-spells/puzzle`, with root, `./adapter`, `./morph`,
   `./router-modes`, `./ssg`, `./static`, `./testing`, `./fixtures`, and
-  `./puzzle-env` exports
+  `./puzzle-env` exports (plus the build-served `./formatters/manifest` and
+  `./i18n/manifest`, which a Puzzle build replaces at bundle time)
   plus a `puzzle` binary shim and five
   optional platform binary packages (macOS/Linux arm64/x64, Windows x64 —
   Windows-on-ARM runs the x64 binary under emulation, so there is no
@@ -231,10 +324,16 @@ enforced, not merely advised.
   `prepublishOnly` now refuses a directory publish outright. After publishing,
   run `npm run verify:published` — it is the only check that inspects the
   registry metadata npm actually resolves against.
+- Every framework tag `vX.Y.Z` needs a companion `packages/puzzle-lang/vX.Y.Z`
+  tag, pushed with it (`git tag packages/puzzle-lang/vX.Y.Z && git push origin
+  packages/puzzle-lang/vX.Y.Z`): Go finds a subdirectory module's versions only
+  through directory-prefixed tags, so Sites and other `go get` consumers cannot
+  resolve the language module without it. The `release:prep` summary prints the
+  reminder; it creates no tags — Cory tags both.
 - Before every release, sweep the `@magic-spells/puzzle` dependency ranges that
   are NOT bumped by the version scripts and point them at the version being
   published:
-  - `compiler/internal/scaffold/templates/{default,todos}/package.json` — these
+  - `compiler/internal/scaffold/templates/{default,todos}{,-ts}/package.json` — these
     are `go:embed`ed into the binary, so a stale range ships a broken
     `puzzle init`: caret ranges do not cross 0.x minors, so `^0.1.0` installs
     `0.1.x` into an app scaffolded by a `0.3.0` binary. Fixing this requires
@@ -262,6 +361,9 @@ enforced, not merely advised.
   `scripts/measure-size.mjs --check` (builds `examples/hello-world` +
   `examples/todos` in production and fails on a stale figure; regenerate with
   `npm run measure:size`) after its banner sat stale through four releases.
+- Snapshot the benchmark on the clean release tree: `npm run bench:update`,
+  then `npm run bench:snapshot` (writes `benchmarks/history/<version>.json`;
+  it refuses a baseline measured on a dirty tree). Commit both.
 
 ## Monorepo layout (D162)
 
@@ -270,6 +372,26 @@ This package IS the framework, and it lives at `packages/puzzle` inside the
 plain `puzzle`) whose scripts delegate here. Everything
 that versions in lockstep with the framework is a sibling under `packages/`:
 
+- `../puzzle-lang` — the Puzzle language as its own Go module,
+  `github.com/magic-spells/puzzle/packages/puzzle-lang` (D172): `parser`
+  (section splitter, lexer, AST, template grammar, positioned errors), `expr`
+  (the D176 expression parser and method table), `conformance` (the shared
+  tables both hosts run), plus the `jsident` and `textutil` helpers codegen,
+  build, and pieces share. It is
+  outside `internal/` so other hosts (Magic Spells Sites) can import it. This
+  package's `go.mod` requires it at `v0.0.0` with
+  `replace ... => ../puzzle-lang`, so the compiler always builds against the
+  working tree; `go test ./...` here does NOT run its tests — run them inside
+  `../puzzle-lang` (CI does both). Outside consumers resolve it through a
+  `packages/puzzle-lang/vX.Y.Z` tag, which Cory creates alongside `vX.Y.Z`.
+  It has its own constellation root (connected repo `puzzle-lang`; pass
+  `repo=puzzle-lang` from here, `repo=packages/puzzle-lang` from the monorepo
+  root) holding the parser's code binding: FILE-PARSER, FILE-PARSER-SECTIONS,
+  FILE-PARSER-SCANNER, FILE-PARSER-SLOT, FILE-PARSER-EXPRS, the FILE-EXPR-*
+  cards, and TEST-COMPILER-PARSER, with paths relative to that module.
+  COMPONENT-TEMPLATE-PARSER and every decision card stay in this plan — plans
+  cannot connect cards across repos, and ~60 cards here connect to the
+  component.
 - `../puzzle-pieces` — the `@magic-spells/puzzle-pieces` npm transport
   (registry + demo + its own constellation root). Version must equal this
   package's exactly (the D32 major.minor lock); `release:prep` asserts it and
@@ -279,16 +401,23 @@ that versions in lockstep with the framework is a sibling under `packages/`:
   vitest suite always runs against the working tree, and CI runs it on every
   push — a framework breaking change fails the build the day it lands.
 - `../puzzle-eslint` / `../puzzle-prettier` — the .pzl lint/format plugins.
-  Both vendor JS ports of this compiler's section splitter/lexer
-  (`compiler/internal/parser`), so grammar changes must land there too — CI
+  Both vendor JS ports of the section splitter/lexer in
+  `../puzzle-lang/parser`, so grammar changes must land there too — CI
   runs their suites on every push. Train-versioned, not yet published.
 
 Each package keeps its own npm install and lockfile — there are deliberately
 no npm workspaces (editing any package's dependencies means regenerating its
-lockfile, or `npm ci` hard-fails). The editor grammars
-(puzzle-vscode/sublime/zed) stay in separate repos — their distribution
-channels are repo-shaped — so when the template grammar changes, sweep them
-as part of the release checklist. The absorbed puzzle-pieces and
+lockfile, or `npm ci` hard-fails). The three editor grammars
+(puzzle-vscode/sublime/zed) stay in separate repos and are **not part of the
+npm release train**: each is **dev-install only** — cloned and linked into the
+editor by hand, never published to a marketplace — and each is **versioned
+independently** of the framework (all three are stamped `0.4.0`, the 0.8.0
+grammar, on their own `release/0.4.0` branches; each is tagged `v0.3.0`, the
+0.7.0 grammar). Because they carry their own copy of the template grammar,
+sweep all three whenever the grammar changes, as a PR into a new
+`release/x.y.z` in each repo; the 0.7.0 sweep added dotted tags, `<Snippet>`,
+and the `\{` / `\}` brace escape in text and attribute values, and the 0.8.0
+sweep added the expression language. The absorbed puzzle-pieces and
 puzzle-devtools repos are archived on GitHub, never deleted.
 
 ## Architecture at a glance
@@ -304,13 +433,26 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   lifecycle, refs, memoization, skeletons, animation hooks.
 - `views/ViewNode.js` + `views/viewManager.js`: vnode representation, DOM
   mount/patch, keyed reconciliation, components, slots, islands, refs, events.
+- `views/listBlock.js`: one persistent row state per key for an item-form
+  `{#for}` site — the row's item, index, stored record revision, live handler
+  scope, cached vnode subtree and nested blocks; returns the cached subtree for
+  a row whose inputs did not change (D170). Reached through the package root's
+  `listRows` compiler-support export, which a compiled module imports as `__l`
+  only when it lowers a loop — `PuzzleView` must never import it, or a loop-free
+  app pays for the module.
+- `renderRev.js`: the `RENDER_REV` Symbol alone, with no imports — `store.js`
+  stamps a record's last notification sequence onto it, `views/` compares
+  against it, and neither side may import the other.
 - `views/animate.js` + `views/visibility.js`: WAAPI animation normalization and
   shared IntersectionObserver scheduling for visible-trigger enters.
 - `datastore/store.js` + `model.js`: core records, schema builders, validation,
   relationships, subscriptions, and persistence; `datastore/adapter.js` is the
   opt-in server read/write sync runtime.
-- `formatters*`: display formatter registry, missing-name guard, built-in
-  tree-shaking.
+- `formatters*`: the function library registry (the standard functions plus
+  the app's own), missing-name guard, built-in tree-shaking.
+- `display.js`: the one value-printing rule (D173 V6). `sanitize.js`: the
+  allowlist sanitizer behind `raw` (D174), shared by the browser and prerender.
+- `i18n.js`: the translations service behind `t` and `ctx.i18n` (D175).
 - `devstate.js`: development-only state snapshot/restore across full reloads;
   also owns the live-view registry and its single observer slot.
 - `devtools.js`: development-only bridge to the DevTools extension hook (D100,
@@ -318,7 +460,7 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   removes the module entirely.
 - `head.js` / `headTags.js`: route head resolution. `head.js` resolves the four
   reserved `meta` fields and syncs `document.title`; `headTags.js` is
-  build-time only — the SSG injector is its sole consumer (D111).
+  build-time only — the SSG injector is its sole consumer (D84).
 - `morph.js`: optional morph-engine integration.
 - `ssg/`: route prerender orchestration, ViewNode-to-HTML serialization, and the
   shared DOM-free chain assembly used by both prerender modes.
@@ -328,8 +470,10 @@ puzzle-devtools repos are archived on GitHub, never deleted.
 
 ### Go compiler and CLI (`compiler/`)
 
-- `internal/parser`: `.pzl` section splitting, lexer, AST, template grammar,
-  positioned errors.
+- The parser is not here: `.pzl` section splitting, lexer, AST, template
+  grammar, and positioned errors live in `../puzzle-lang/parser` (imported as
+  `github.com/magic-spells/puzzle/packages/puzzle-lang/parser`), and the
+  expression parser in `../puzzle-lang/expr`.
 - `internal/codegen`: render-function emission, expression scoping, handlers,
   keys, inline SVG, conditional arity stabilization, golden files.
 - `internal/plugin` + `internal/build`: esbuild integration, aliases, CSS
@@ -354,9 +498,11 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   local state feeds `data()`-derived values.
 - Store queries inside `data()` auto-subscribe, and on an adapter-backed model a
   tracked `findOne`/`findMany` that misses queues a fetch and re-runs the pass
-  rather than committing (D161). Reads outside `data()` never fetch. Record
-  props carry identity; children that need live record data should re-query by
-  id.
+  rather than committing (D161). Reads outside `data()` never fetch. A record
+  prop carries identity **and a render revision**, so a child refreshes on that
+  record's own mutations through `update()` or any store path (D170); a related
+  record's fields, a computed getter's inputs, and a direct field assignment
+  advance no revision, so a child that needs those must still re-query by id.
 - Navigation loads before commit. URL/title/history, mounted tree, route
   snapshot, outgoing scroll save, and reused-ancestor state (params, snapshot,
   data, subscriptions — D146) commit together. Failed or superseded pushes do
@@ -367,13 +513,19 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   the position (D141) — and any lowercase `<slot>`/`<children>` is a
   positioned compile error steering to the capitalized form (D134). A
   `<Snippet>` body is a composition **leaf** — no `<Children>`, `<Slot>`, nested
-  `<Snippet>`, or `ref=` inside one (D166). A capitalized tag name is validated
-  as `Ident('.'Ident)*`, so the dotted family form `<Frame.Wrapper>` is legal
-  and `<Frame-x>`, `<Frame:Wrapper>`, and `<Slot.Foo>` are not (D167).
+  `<Snippet>`, or `ref=` inside one (D166). A tag is a component when its
+  first character is anything but an ASCII lowercase letter — the only
+  characters that can begin an HTML element name — so `<Card>`, `<Übersicht>`
+  and `<概要>` are components and `<straße-karte>` is a custom element; a
+  component name is validated as `Ident('.'Ident)*` with JavaScript
+  identifier rules, so the dotted family form `<Frame.Wrapper>` is legal and
+  `<Frame-x>`, `<Frame:Wrapper>`, and `<Slot.Foo>` are not (D167).
 - DOM listeners are per-node and patch-managed. Component `@event` bindings
   are callback props, not custom DOM events; there is no `$emit`.
 - Template text is not HTML-entity decoded and interpolations become text
-  nodes. `{#svg}` is the explicit compile-time raw-markup exception.
+  nodes. `{#svg}` is the explicit compile-time raw-markup exception, and
+  `raw()` (sanitized) and `newline_to_br()` (escaped) are the runtime ones,
+  legal only as the outermost call of a text interpolation (D174).
 - `island` freezes an element's children after mount; its own attrs/listeners
   still patch. Components, slots, and view roots cannot be islands.
 - Production defaults to ES2022, minification, and console stripping. Set
@@ -390,7 +542,10 @@ puzzle-devtools repos are archived on GitHub, never deleted.
 - `examples/todos` and scaffolded todos templates should stay aligned with the
   grammar and public docs.
 - Generated `.pzl` templates must remain compiler-tested.
-- Formatter is the project term; never call it a filter.
+- Function is the project term for the template library (`round`, `date`,
+  `t`, …); never call one a filter or a pipe. `formatter` survives only as the
+  `formatters` config key apps register under and in the registry's code
+  names.
 - Future or rejected features must be clearly labeled. Do not describe them as
   shipped.
 - Update current-state prose in card bodies. Keep only durable, surprising

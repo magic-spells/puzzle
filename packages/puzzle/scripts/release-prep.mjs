@@ -20,6 +20,8 @@
 //   2.5. README size banner — scripts/measure-size.mjs --check builds the two
 //      reference apps (hello-world, todos) and fails if the README's gzip
 //      figures no longer match the measurement.
+//   2.6. Published types — `npm run test:runtime-types` type-checks the runtime
+//      from its JSDoc and fails when types/*.d.ts drifted from its exports.
 //   3. Cross-compile the per-platform CLI binaries into npm/<pkg>/bin/puzzle
 //      (puzzle.exe on windows), version-stamped via -ldflags.
 //   4. Copy LICENSE.txt (MIT) into each platform package dir.
@@ -35,7 +37,9 @@
 //      carries every platform pin (D120 — the root package must be published
 //      as this .tgz, never as a directory; see the note on step 7).
 //   7. Summary — print the exact `npm publish` commands in the REQUIRED order
-//      (platform packages first, root LAST so its optionalDependencies resolve).
+//      (platform packages first, root LAST so its optionalDependencies resolve),
+//      and remind Cory that the `vX.Y.Z` tag needs a companion
+//      `packages/puzzle-lang/vX.Y.Z` tag. The script never tags or pushes.
 //
 // Node builtins only. Any failure exits non-zero with a clear message.
 
@@ -43,7 +47,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, copyFileSync, chmodSync, statSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { packedBinaryProblem } from './release-checks.mjs';
+import { packedBinaryProblem, readmeStatusProblem, tagReminderLines } from './release-checks.mjs';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -144,6 +148,11 @@ if (dtMatch[1] !== version) {
 }
 console.log(`  OK  client-runtime/devtools.js FRAMEWORK_VERSION = ${dtMatch[1]}`);
 
+// The README ships in the tarball and names the release in its status line.
+const readmeProblem = readmeStatusProblem(readFileSync(join(repoRoot, 'README.md'), 'utf8'), version);
+if (readmeProblem) fail(readmeProblem);
+console.log(`  OK  README.md Status = ${version}`);
+
 // Each platform manifest must pin the same version.
 for (const { pkg } of MATRIX) {
 	const manifest = readJSON(`npm/${pkg}/package.json`);
@@ -153,8 +162,9 @@ for (const { pkg } of MATRIX) {
 	console.log(`  OK  npm/${pkg}/package.json version = ${manifest.version}`);
 }
 
-// The `@magic-spells/puzzle` dependency RANGES no version field carries. The two
-// scaffold manifests are go:embed-ed into the CLI binary, so a stale range ships
+// The `@magic-spells/puzzle` dependency RANGES no version field carries. The
+// scaffold manifests (each template plus its TypeScript overlay, `<name>-ts`)
+// are go:embed-ed into the CLI binary, so a stale range ships
 // a broken `puzzle init`: caret ranges do not cross a 0.x minor, so "^0.3.1"
 // installs 0.3.x into an app scaffolded by a 0.4.0 binary. It cannot be fixed by
 // republishing the JS — the platform binaries have to be rebuilt. Same
@@ -162,6 +172,8 @@ for (const { pkg } of MATRIX) {
 const SCAFFOLD_TEMPLATES = [
 	'compiler/internal/scaffold/templates/default/package.json',
 	'compiler/internal/scaffold/templates/todos/package.json',
+	'compiler/internal/scaffold/templates/default-ts/package.json',
+	'compiler/internal/scaffold/templates/todos-ts/package.json',
 ];
 
 // A range "resolves to" the release when its base version IS the release:
@@ -241,8 +253,14 @@ for (const rel of SCAFFOLD_TEMPLATES) {
 
 	const badgeRel = '../puzzle-pieces/demo/app/layouts/Default.pzl';
 	const badge = readFileSync(join(repoRoot, badgeRel), 'utf8');
-	const badgeMatch = badge.match(/pieces · v(\d+\.\d+\.\d+)/);
-	if (!badgeMatch) fail(`could not find the "pieces · v<version>" header badge in ${badgeRel}`);
+	// The badge renders `pieces · v{ version }` from a VERSION constant; an older
+	// layout carried the literal, so accept either spelling.
+	const badgeMatch =
+		badge.match(/pieces · v(\d+\.\d+\.\d+)/) ??
+		badge.match(/^const VERSION = '(\d+\.\d+\.\d+)';$/m);
+	if (!badgeMatch) {
+		fail(`could not find the header badge version (literal or \`const VERSION\`) in ${badgeRel}`);
+	}
 	if (badgeMatch[1] !== version) {
 		fail(`${badgeRel} header badge says v${badgeMatch[1]}, expected v${version}`);
 	}
@@ -277,6 +295,15 @@ try {
 	execFileSync('node', ['scripts/measure-size.mjs', '--check'], { cwd: repoRoot, stdio: 'inherit' });
 } catch {
 	fail('measure-size.mjs --check failed — the README size banner is stale (see output above)');
+}
+
+// --- 2.6 Published types match the runtime ----------------------------------
+// The declarations ship in the tarball; a drifted one is a published bug.
+console.log('\nrelease-prep: checking the runtime types and the published .d.ts (npm run test:runtime-types)...');
+try {
+	execFileSync('npm', ['run', 'test:runtime-types'], { cwd: repoRoot, stdio: 'inherit' });
+} catch {
+	fail('test:runtime-types failed — the runtime JSDoc or the published types/*.d.ts drifted (see output above)');
 }
 
 // --- 3. Cross-compile the per-platform CLI binaries -------------------------
@@ -466,6 +493,7 @@ console.log('own major.minor. The devtools zip is separate and unhurried:');
 console.log('  npm run build:compiler && cd ../puzzle-devtools && npm run build:zip\n');
 console.log('Then confirm the registry actually got the pins:');
 console.log('  npm run verify:published\n');
+console.log(tagReminderLines(version).join('\n') + '\n');
 console.log('Reminder: run the full suites first if you have not already:');
 console.log('  npm test');
 console.log('  cd compiler && go test ./...\n');

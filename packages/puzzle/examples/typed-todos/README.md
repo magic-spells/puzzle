@@ -18,15 +18,19 @@ Puzzle is **transpile-only** for TypeScript, exactly like Vite: the compiler
 threads `lang="ts"` through to esbuild, which strips the types during the build.
 The Go compiler never parses TypeScript — `<script>` stays an opaque string.
 There is no type-checking in the build. `npm run typecheck` (plain `tsc`) checks
-the app's `.ts`/`.js` files and declarations, but neither it nor an editor
-type-checks the `<script>` bodies inside `.pzl` files; those stay transpile-only.
+the app's `.ts`/`.js` files and declarations, but not the `<script>` bodies
+inside `.pzl` files. `npx puzzle check` (D165) covers those as well: it
+type-checks the `.ts` modules, every `.pzl` script, and the template
+expressions, using the app's own TypeScript.
 
 ```bash
 npm install
 npm run dev        # dev server with live reload
 npm run build      # production build (types stripped)
 npm run typecheck  # tsc --noEmit (strict) — .ts/.js files and declarations
+npx puzzle check   # .ts modules, .pzl scripts and template expressions
 ```
 
-The app entry stays `app/app.js` (the build resolves that exact path); it imports
-the extensionless `.ts` modules, which esbuild resolves natively.
+The app entry is `app/app.ts` — the build starts from `app/app.ts` when it
+exists, otherwise `app/app.js`, and refuses an app that has both. It imports the
+extensionless `.ts` modules, which esbuild resolves natively.

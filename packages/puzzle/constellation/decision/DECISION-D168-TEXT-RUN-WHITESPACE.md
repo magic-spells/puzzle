@@ -1,139 +1,99 @@
 ---
-name: 'D168 — text-run whitespace: one space at run and control-flow boundaries'
+name: 'D168 — Template whitespace: one merged rule for both hosts'
 status: built
 connections:
   - COMPONENT-CODEGEN
   - DOC-SPEC-TEMPLATE
   - DOC-TEMPLATE-SYNTAX
   - FILE-CODEGEN
-notes:
-  - kind: decision
-    sha: 513d834
-    text: >-
-      Control-flow boundaries are padded (0.7.0 final review). `processChildren` classifies each
-      run's neighbours (`isControlFlow` — If, For, Case only) and passes `leftBlock`/`rightBlock`
-      into `buildTextRun`, which also tracks a leading strip carried by no segment (a
-      whitespace-only node dropped before anything else in the run). The other way out — document
-      the limit and tell authors to keep the conditional on the same line — was rejected. Element
-      boundaries deliberately stay unpadded, and so does a whitespace-only gap between two blocks
-      (no run to pad; padding it would add a text vnode wherever conditionals stack). Incremental
-      corpus check over the run-internal rule: 4 of 657 `.pzl` files move (music, chirp, todos,
-      scaffold todos), and the hand-written golden `tests/fixtures/todos/Home.compiled.js` gains a
-      trailing space in three button labels — the first time a D168 change moved a golden.
+  - DOC-LANGUAGE-CORE
+  - DECISION-D173-CORE-SEMANTICS
+  - DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS
 ---
 
-# D168 — text-run whitespace: one space at run and control-flow boundaries
+# D168 — Template whitespace: one merged rule for both hosts
 
-A line break between a word and `{ expr }`, between two interpolations, or
-between a text run and an adjacent `{#if}` / `{#for}` / `{#case}` block renders
-as one space — as it does in HTML, Vue and Svelte. Element-boundary indentation
-is still dropped. Found and fixed in the 0.7.0 final review (2026-09-06).
+How source whitespace becomes rendered text. The rule is core
+([[DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS]], V10 on
+[[DECISION-D173-CORE-SEMANTICS]]): whitespace collapses to one space, and
+newline-bearing whitespace (indentation) is dropped only at a parent's edges and
+between two non-text siblings, so wrapped prose renders the way HTML renders it.
 
 ## Context
 
-The template whitespace policy lived only in the codegen package doc: collapse
-every whitespace run to one space, strip a leading/trailing space whose run
-held a newline (it was source indentation), drop a whitespace-only node that
-held a newline. `buildTextRun` then coalesces adjacent text and interpolation
-siblings into ONE text vnode by concatenation. The strip ran at every text-node
-edge, including the boundaries between members of one run, so
-
-```html
-<p>{ user.first }
-   { user.last }</p>
-<p>— you have { count } new
-    { count === 1 ? 'message' : 'messages' }.</p>
-```
-
-rendered "JohnDoe" and "newmessages", and `examples/stays`' listing summary
-shipped as "4 guests ·2 bedrooms ·2 beds ·1 bath". A control-flow block breaks
-the coalesced run, so the same strip glued a word to a following block:
-`you have { n } new\n  {#if x}message{/if}` rendered "newmessage". A browser
-collapses those newlines to a single space; Vue's default `condense` and Svelte
-keep them too. No user-facing card documented the policy, so an author had
-nothing to consult.
+Indentation must not reach the page as stray spaces, but prose wraps across
+lines around interpolations, inline elements and conditionals, and a browser
+renders each of those breaks as a space. Stripping too much glues words
+(`tokens —a,band more`); stripping too little puts gaps between inline-block
+siblings such as buttons.
 
 ## Decision
 
-The strip is an **element-boundary** rule. A boundary that is not an element
-boundary — inside a coalesced text run, or between a run and an adjacent
-control-flow block — keeps exactly one space when the source had whitespace
-there.
+1. **Whitespace with no newline collapses to one space.**
+2. **Newline-bearing whitespace at a parent's first/last-child edge is
+   dropped.** A parent is an element, a component's children, a marker's
+   fallback body, a snippet body, or a control block's own body (a `{#for}`
+   body's edges strip on every iteration).
+3. **Newline-bearing whitespace between two non-text siblings is dropped.**
+   Non-text: elements, components, markers, `<Portal>`, `<Snippet>`, `{#svg}`
+   and control blocks (`{#if}`, `{#unless}`, `{#for}`, `{#case}`). A
+   whitespace-only gap between two stacked blocks stays dropped.
+4. **Between text/interpolation and an element (either order),
+   newline-bearing whitespace becomes one space.** "Element" = rule 3's set
+   minus control blocks. Punctuation that must touch an element goes on the
+   element's line: `(<code>x</code>)`, not `(` + newline + `<code>x</code>` +
+   newline + `)`, which renders `( x )` as the same HTML does.
+5. **Between text/interpolation and a control block, one space is kept**,
+   outside the block, so it renders whether or not the branch does.
+6. **`<pre>` and `<textarea>` bodies are preserved exactly** — every
+   descendant and interpolation included — except that a single newline
+   directly after the start tag is dropped, as HTML's parser does.
 
-- **Run-internal.** A stripped edge that borders another run member (an
-  interpolation, or a text segment across a dropped whitespace-only node) gets
-  one space back, folded into the neighbouring static literal when there is
-  one, otherwise emitted as a `' '` segment. `processText` reports whether it
-  stripped each edge; `buildTextRun` carries per-segment pad flags (a dropped
-  whitespace-only newline node pads the previous segment) and re-inserts the
-  space in one pass over internal boundaries.
-- **Control-flow.** `{#if}` (and its `{#unless}` desugaring), `{#for}` and
-  `{#case}` break the run without ending the line of prose, so a stripped run
-  EDGE that borders one — on either side — is padded the same way.
-  `processChildren` tells `buildTextRun` whether the run's left and right
-  neighbours are control flow; `buildTextRun` also tracks a leading strip that
-  no segment carries (a whitespace-only node dropped before anything else in
-  the run). The pad lands outside the block, so it renders whether or not the
-  branch does — the same place the space sits in the source.
-- Elements, components, markers and `{#svg}` are NOT control flow: the strip
-  stands at those edges (see Consequences).
-- `{ a }{ b }` and `{#if x}a{/if}{ b }` with nothing between stay adjacent —
-  only a stripped edge is padded, so nothing is invented at an element edge.
-- A block's own body edges are element boundaries: `{#if x}\n  b\n{/if}` still
-  emits `'b'`, and a `{#for}` body's first/last text keeps its strip on every
-  iteration.
-- Raw (`{#raw}`) segments participate as static segments; a neighbouring
-  stripped edge's pad may prepend into the raw literal, byte-identical to a
-  separate `' '` segment.
-- Compiled across all 657 `.pzl` files in the monorepo (examples, fixtures,
-  scaffold templates, the pieces registry), five change:
-  `examples/stays/app/views/Listing.pzl` (`' ·'` → `' · '`, three times),
-  `examples/music/app/views/Album.pzl` (a leading space after an `{#if}`),
-  `examples/chirp/app/layouts/MainLayout.pzl` (`'🔔'` → `'🔔 '`, twice, before
-  an `{#if}` unread badge — inert at a flex-item line end),
-  and the todos filter buttons in `examples/todos` + the scaffold template
-  (`'All'` → `'All '` before an absolutely-positioned underline). The
-  hand-written golden `tests/fixtures/todos/Home.compiled.js` carries those
-  three button labels.
+Inside a run of text and interpolations a newline is one space
+(`{ a }`↵`{ b }` → `a b`). Nothing is invented where the source had no
+whitespace: `{ a }{ b }`, `<b>x</b>{ y }`, `{#if x}a{/if}{ b }` stay adjacent.
+Edges of rule 6: a `{#raw}` body keeps its bytes (`<pre>{#raw}`↵ keeps that
+newline); a `{#for}` body inside `<pre>` still applies rules 2–3 (a loop body
+is one root element); CRLF and lone CR in preserved or `{#raw}` bodies
+normalize to LF, as HTML's input stream does.
 
-Pinned by `compiler/internal/codegen/text_run_space_test.go`
-(`TestTextRunInternalNewlineKeepsOneSpace`,
-`TestTextRunControlFlowBoundaryKeepsOneSpace`).
+**PuzzleKit implementation** (`compiler/internal/codegen/codegen.go`):
+`processText` collapses and reports stripped edges; `buildTextRun` coalesces
+a run into one text vnode and re-pads stripped edges that border another run
+member, told by `processChildren` whether each edge borders a sibling
+(`leftSibling`/`rightSibling`) or the parent edge. Rule 6 is the `preserveWS`
+flag raised by `emitElement` and `staticcache.go` for `pre`/`textarea`;
+`preservedBody` drops the leading newline; `forBodyRoot` clears the flag for a
+loop body. The SSG serializer (`client-runtime/ssg/serialize.js`) emits one
+extra newline when a `pre`/`textarea`/`listing` body starts with one, so
+prerendered and mounted text match. Pinned by
+`codegen/text_run_space_test.go`, the serializer suite, and the V10 case in
+`tests/core-semantics.test.js`.
+
+**Sites** implements rules 1, 2, 4 and 6; rules 3 and 5 and its `<pre>`
+first-newline check are on D173's Sites list.
 
 ## Alternatives
 
-- **Vue-style condense** (a text node with content keeps a single leading /
-  trailing space regardless of newlines) — also fixes the element-boundary
-  case below, but changes output for every indented block-level text in every
-  template, churns goldens and bundle bytes right before a release. Rejected
-  for 0.7.0; run-internal plus control-flow boundaries is the narrowest change
-  that makes prose templates render as authored.
-- **Stop at the text run and document the limit** — telling authors to keep a
-  conditional word on the same line. Rejected: text followed by a conditional
-  word on the next line is ordinary markup, and padding one boundary but not
-  the other is harder to explain than either uniform rule.
-- **Leave the policy and document it** — rejected: the gluing is silent,
-  HTML-surprising, and already visible in a shipped example.
+- **Strip at every element edge** — glues wrapped prose; authors would write
+  `{ ' ' }` at every inline wrap.
+- **Strip only at parent edges** — indentation becomes gaps between
+  inline-block siblings.
+- **Vue's `condense` mode** — keeps a space at a parent's edge (rule 2 drops
+  it) and has no control-block or `<pre>` handling.
+- **Tell authors to keep conditionals/inline elements on one line** — the
+  gluing is silent and the markup is ordinary.
+- **Pad between stacked control blocks** — a text vnode between every pair of
+  conditionals for a gap nobody wants.
+- **Keep `<pre>`'s first newline** — mounted text would disagree with the
+  browser and the prerendered page.
+- **Preserve only `<pre>`'s own text children** — `<pre><code>` is the common
+  shape and `white-space: pre` covers descendants.
 
 ## Consequences
 
-- `<b>{ user.name }</b>\n({ user.email })` still renders "John(j@x)": the text
-  node after the element starts a NEW run, and an element boundary is not a
-  word boundary. Same for a component, a marker, and `{#svg}`. Documented
-  non-goal; write it on one line or accept Vue-style condense as a future
-  decision.
-- Two control-flow blocks separated only by a newline stay adjacent — the
-  whitespace-only node between them is dropped and there is no run to pad.
-  Padding it would insert a text vnode between two blocks in every template
-  that stacks conditionals, which is the element-boundary churn this decision
-  declined.
-- A pad before a block renders even when the block does not
-  (`'All ' + (cond ? … : nothing)`), because the space is outside the block in
-  the source too. Three shipped templates gain such a trailing space before an
-  absolutely-positioned decoration; visually inert.
-- `<pre>a { x }\nb</pre>` gains the space (`'a ' + x + ' b'`). `<pre>` already
-  lost its newlines under the policy — there is no `<pre>` special case — so
-  this is a step toward correctness, not a regression.
-- Emitted output changes for existing templates that wrapped a text run across
-  lines, or that put text on the line above or below a control-flow block; each
-  such change is a visible-text fix or an inert trailing space.
+- A space before a block renders even when the block does not.
+- An indented `<pre>`/`<textarea>` body renders its indentation.
+- `puzzle-prettier` preserves template bodies byte for byte (pinned by a
+  test); any future template formatter must keep every line break next to text
+  and leave `<pre>`/`<textarea>` bodies alone.

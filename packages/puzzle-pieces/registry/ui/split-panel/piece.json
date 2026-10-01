@@ -9,7 +9,7 @@
   ],
   "registryDependencies": [],
   "dependencies": [
-    "@magic-spells/split-panel"
+    "@magic-spells/split-panel@^0.2.0"
   ],
   "targetDir": "app/components/ui"
 }

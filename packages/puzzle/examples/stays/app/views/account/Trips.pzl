@@ -19,8 +19,8 @@
                     <span class="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-accent text-accent-ink">Upcoming</span>
                   </div>
                   <div class="text-sm text-muted truncate">{ row.listing.title }</div>
-                  <div class="text-sm text-muted mt-1">{ row.trip.checkIn | dateRange(row.trip.checkOut) }</div>
-                  <div class="text-xs text-faint mt-0.5">{ row.trip.nights } { row.trip.nights | plural('night', 'nights') }</div>
+                  <div class="text-sm text-muted mt-1">{ dateRange(row.trip.checkIn, row.trip.checkOut) }</div>
+                  <div class="text-xs text-faint mt-0.5">{ row.trip.nights } { plural(row.trip.nights, 'night', 'nights') }</div>
                 </div>
               </a>
             {/for}
@@ -40,7 +40,7 @@
                   style="background:{ row.listing.cover }">{ row.icon }</div>
                 <div class="min-w-0 flex-1">
                   <div class="text-sm font-semibold text-fg truncate">{ row.listing.location }</div>
-                  <div class="text-xs text-muted truncate">{ row.listing.title } · { row.trip.checkIn | dateRange(row.trip.checkOut) }</div>
+                  <div class="text-xs text-muted truncate">{ row.listing.title } · { dateRange(row.trip.checkIn, row.trip.checkOut) }</div>
                 </div>
                 <span class="shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full bg-surface-2 text-muted">Completed</span>
               </a>

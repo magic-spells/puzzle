@@ -16,12 +16,36 @@
 
 import { describeValue, isViewClass } from './viewClass.js';
 
+/** @import { PuzzleView } from '../views/PuzzleView.js' */
+
+/**
+ * One marker's loader and memoized outcome.
+ * @typedef {{ loader: () => unknown, modulePath: string | null,
+ *   value: typeof PuzzleView | null, pending: Promise<typeof PuzzleView> | null }} LazyState
+ */
+
+/**
+ * The slice of a matched entry the resolver reads — the Router's compiled Entry
+ * or the SSG pass's leaf (`fullPath` or `fullPaths` names the matched path).
+ * @typedef {{ chain: ReadonlyArray<{ path?: string, view?: unknown }>, layout?: unknown,
+ *   fullPath?: string, fullPaths?: string[] }} LazyRouteEntry
+ */
+
+/**
+ * The class list for every view position plus the layout (null when absent).
+ * @typedef {{ views: Array<typeof PuzzleView>, layout: typeof PuzzleView | null }} ResolvedRouteViews
+ */
+
+/** @type {WeakMap<object, LazyState>} */
 const lazyViews = new WeakMap();
 
 /**
  * Mark a zero-argument async loader for use in a route `view` or `layout`.
  * Fulfillment is memoized for the marker's lifetime; rejection clears the
  * in-flight slot so an explicit retry calls the loader again.
+ *
+ * @param {() => unknown} loader returns a promise of the view module or class
+ * @returns {import('../../types/index.js').LazyView} the opaque marker (its brand is type-only)
  */
 export function lazy(loader) {
 	// Config-time throws are plain Errors, matching the route-shape validators
@@ -39,15 +63,22 @@ export function lazy(loader) {
 		value: null,
 		pending: null,
 	});
-	return marker;
+	return /** @type {import('../../types/index.js').LazyView} */ (marker);
 }
 
-/** Whether a route value is an opaque marker produced by lazy(). */
+/**
+ * Whether a route value is an opaque marker produced by lazy().
+ * @param {unknown} value
+ * @returns {value is object}
+ */
 export function isLazyView(value) {
 	return value != null && typeof value === 'object' && lazyViews.has(value);
 }
 
-/** Whether any class position in an entry is lazy. */
+/**
+ * Whether any class position in an entry is lazy.
+ * @param {LazyRouteEntry} entry
+ */
 export function hasLazyRouteViews(entry) {
 	return entry.chain.some((node) => isLazyView(node.view)) || isLazyView(entry.layout);
 }
@@ -61,7 +92,8 @@ export function hasLazyRouteViews(entry) {
  * Each position's diagnostic label is a THUNK: it names the route and chain
  * index, and only a failing load ever pays to build that string.
  *
- * @returns {{ views: Function[], layout: Function|null }|Promise<{ views: Function[], layout: Function|null }>}
+ * @param {LazyRouteEntry} entry
+ * @returns {ResolvedRouteViews | Promise<ResolvedRouteViews>}
  */
 export function resolveRouteViews(entry) {
 	const chain = entry.chain;
@@ -89,25 +121,42 @@ export function resolveRouteViews(entry) {
 	return Promise.all(resolved).then(splitResolved);
 }
 
-/** The matched leaf path, however the caller's entry shape spells it. */
+/**
+ * The matched leaf path, however the caller's entry shape spells it.
+ * @param {LazyRouteEntry} entry
+ */
 function entryPath(entry) {
 	return entry.fullPath ?? entry.fullPaths?.[entry.fullPaths.length - 1] ?? '(unknown)';
 }
 
+/**
+ * @param {LazyRouteEntry} entry
+ * @param {number} index
+ */
 function viewLabel(entry, index) {
 	const path = entryPath(entry);
 	const declared = entry.chain[index].path ?? path;
 	return `view on route ${JSON.stringify(declared)} (matched ${JSON.stringify(path)}, chain index ${index})`;
 }
 
+/** @param {LazyRouteEntry} entry */
 function layoutLabel(entry) {
 	return `layout for route ${JSON.stringify(entryPath(entry))}`;
 }
 
+/**
+ * @param {Array<typeof PuzzleView | null>} resolved the view positions, then the layout
+ * @returns {ResolvedRouteViews}
+ */
 function splitResolved(resolved) {
 	return { views: resolved.slice(0, -1), layout: resolved[resolved.length - 1] };
 }
 
+/**
+ * @param {object} marker a lazy() marker
+ * @param {() => string} label diagnostic label thunk
+ * @returns {typeof PuzzleView | Promise<typeof PuzzleView>}
+ */
 function resolveLazyView(marker, label) {
 	const state = lazyViews.get(marker);
 	if (state.value) return state.value;
@@ -140,6 +189,12 @@ function resolveLazyView(marker, label) {
 	return state.pending;
 }
 
+/**
+ * @param {unknown} loaded what the loader's promise fulfilled with
+ * @param {string | null} modulePath
+ * @param {() => string} label diagnostic label thunk
+ * @returns {typeof PuzzleView}
+ */
 function normalizeLoadedView(loaded, modulePath, label) {
 	let ViewClass = loaded;
 	if (loaded != null && typeof loaded === 'object') {
@@ -150,7 +205,7 @@ function normalizeLoadedView(loaded, modulePath, label) {
 					'export the PuzzleView class as default'
 			);
 		}
-		ViewClass = loaded.default;
+		ViewClass = /** @type {{ default: unknown }} */ (loaded).default;
 	}
 
 	if (!isViewClass(ViewClass)) {
@@ -163,11 +218,19 @@ function normalizeLoadedView(loaded, modulePath, label) {
 	return ViewClass;
 }
 
+/**
+ * @param {any} value
+ * @returns {value is PromiseLike<any>}
+ */
 function isPromiseLike(value) {
 	return value != null && typeof value.then === 'function';
 }
 
-/** Extract a literal import path for the missing-default diagnostic when available. */
+/**
+ * Extract a literal import path for the missing-default diagnostic when available.
+ * @param {Function} loader
+ * @returns {string | null}
+ */
 function importSpecifier(loader) {
 	let source;
 	try {

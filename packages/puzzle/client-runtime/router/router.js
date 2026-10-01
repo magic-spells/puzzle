@@ -1,7 +1,7 @@
 /**
  * Router — client-side navigation for Puzzle SPAs (nested routes, v1.3 / D30).
  *
- * Implements the D19 navigation state machine (constellation/doc/DOC-DECISIONS.md D19/D28/D30,
+ * Implements the D19 navigation state machine (D19/D28/D30,
  * constellation/doc/DOC-VIEW-LIFECYCLE.md §4, constellation/doc/DOC-APP-ANATOMY.md §5) generalized from a
  * flat "one view + optional layout" model to a **route CHAIN of arbitrary depth**.
  *
@@ -296,6 +296,82 @@ import { devtoolsRouteCommit } from '../devtools.js';
 import { preloadTakeoverComponents } from '../ssg/preload.js';
 import { reportError } from '../errors.js';
 
+/** @import { PuzzleView } from '../views/PuzzleView.js' */
+/** @import { RouterModeDescriptor, RouterModeInstance } from './modes.js' */
+/** @import { Route, RouteSnapshot, GuardFn, ScrollPosition, PuzzleContext } from '../../types/index.js' */
+
+/**
+ * A compiled route leaf (makeEntry), or the synthetic catch-all entry.
+ * @typedef {object} RouteEntry
+ * @property {Route[]} chain root→leaf route definitions
+ * @property {string[]} fullPaths the composed path pattern at each level
+ * @property {string} fullPath the leaf's path pattern (declared trailing slash stripped)
+ * @property {string} [matchPath] the normalized pathname the shadow check tests
+ *   (absent on the catch-all)
+ * @property {RegExp | null} regex the matcher (null on the catch-all)
+ * @property {string[]} paramNames
+ * @property {Route['layout'] | null} layout the root's layout class or lazy() marker
+ * @property {GuardFn[]} guards the inherited guards, root→leaf
+ * @property {boolean} [hasLazy] set by finishEntry
+ * @property {Array<typeof PuzzleView>} [viewClasses] set by finishEntry on a lazy-free entry
+ */
+
+/**
+ * A reused ancestor's prepared (run but not committed) refresh — D146.
+ * @typedef {{ ready: Promise<void>, commit: () => void, discard: () => void }} PreparedRefresh
+ */
+
+/**
+ * A committing navigation's scroll landing: a position, or an `#anchor` resolved after mount.
+ * @typedef {{ x: number, y: number, anchor?: undefined } | { anchor: string, x?: undefined, y?: undefined }} ScrollSpec
+ */
+
+/**
+ * A layout position's class: a view class or a lazy() marker (resolved to a
+ * class by resolveRouteViews), or null when the route has no layout.
+ * @typedef {Route['layout'] | typeof PuzzleView | null} LayoutClassValue
+ */
+
+/** @typedef {{ to: RouteSnapshot, from: RouteSnapshot | null }} FocusSpec */
+
+/**
+ * The parsed query of a route snapshot (D83).
+ * @typedef {Readonly<Record<string, string | readonly string[]>>} RouteQuery
+ */
+
+/**
+ * Everything #navigate resolved for one navigation, handed to #swap to commit.
+ * @typedef {{ rawPath: string, pathname: string, query: RouteQuery, hash: string, entry: RouteEntry,
+ *   params: Record<string, string>, views: PuzzleView[], keys: string[], layout: PuzzleView | null,
+ *   layoutClass: LayoutClassValue, reuseLayout: boolean, keep: number, rootVnode: ViewNode,
+ *   scroll: ScrollSpec | null, focus: FocusSpec | null, to: RouteSnapshot,
+ *   prepared: PreparedRefresh[], push: boolean, replace?: boolean,
+ *   memoryIndex: ?number, departScroll: ?{x: number, y: number} }} SwapInput
+ */
+
+/**
+ * What #commitState records: a SwapInput, or the params-only subset #navigate
+ * builds when the whole chain is reused.
+ * @typedef {{ rawPath: string, pathname: string, query: RouteQuery, hash: string, entry: RouteEntry,
+ *   params: Record<string, string>, views: PuzzleView[], keys: string[], layout: PuzzleView | null,
+ *   layoutClass: LayoutClassValue, scroll: ScrollSpec | null, focus: FocusSpec | null,
+ *   prepared?: PreparedRefresh[], layoutInvalid?: boolean, chainInvalid?: boolean }} CommitInput
+ */
+
+/**
+ * The committed navigation (#state).
+ * @typedef {{ path: string, pathname: string, query: RouteQuery, hash: string, entry: RouteEntry,
+ *   params: Record<string, string>, views: PuzzleView[], keys: string[], layout: PuzzleView | null,
+ *   layoutClass: LayoutClassValue, chainInvalid: boolean, layoutInvalid: boolean }} RouterState
+ */
+
+/**
+ * The shared-element morph slot (D55) — the router reads only enter/leave. The
+ * node is a view's root (PuzzleView.element), which may be a comment placeholder.
+ * @typedef {{ enter(el: Node|null, meta: { initial: boolean }): void,
+ *   leave(el: Node|null): Promise<unknown>|null }} RouterMorphHandler
+ */
+
 // sessionStorage mirror of the scroll-position map (v1.10, D41). One JSON blob of
 // { entryKey: {x,y} } under a single key; capped so a long session can't grow it
 // without bound. All access is fail-soft (see #persistPositions / #hydratePositions).
@@ -303,11 +379,16 @@ const SCROLL_STORE_KEY = '__puzzleScroll';
 const SCROLL_MAX_ENTRIES = 50;
 
 export class Router {
+	/** @type {RouteEntry[]} */
 	#routes = []; // compiled leaf Entries, in declaration order (depth-first)
+	/** @type {RouteEntry | null} */
 	#catchAll = null; // synthetic single-node Entry for path:'*' (matched last)
+	/** @type {Element | null} */
 	#container = null;
+	/** @type {Record<string, any> | null} */
 	#ctx = null;
 	// { path, entry, params, views: [v0..vN], layout, layoutClass } | null
+	/** @type {RouterState | null} */
 	#state = null;
 	#token = 0;
 	// The rawPath of the navigation that currently owns the token and has NOT yet
@@ -318,15 +399,19 @@ export class Router {
 	// #navigate's token bump, cleared at #commitState (commit) and in
 	// #recoverFailedNavigation (block/failure); a newer navigation to a DIFFERENT path
 	// overwrites it and still supersedes normally.
+	/** @type {string | null} */
 	#pendingNavPath = null;
-	// The #navigate promise of the navigation #pendingNavPath names — the two move
-	// together at every set/clear point, so whenever the path slot is non-null this
-	// holds the promise for THAT navigation. push()'s double-click no-op returns it
-	// instead of a fresh resolved promise, so the second caller settles when the
-	// in-flight navigation does. Written by push() (the only caller that can leave
-	// #pendingNavPath non-null, and the only place the promise object exists);
-	// cleared alongside the path in #navigate, #commitState, #recoverFailedNavigation
-	// and stop().
+	// The #navigate promise of the in-flight push, replace or pop (null when idle).
+	// Every clear point of #pendingNavPath clears it too, but it is set more widely:
+	// the path slot names pushes only, while this slot is written by push() (paired
+	// with its path, so whenever the path slot is non-null this holds the promise
+	// for THAT navigation) and by replace(), go() and the popstate handler through
+	// #trackNav. push()'s double-click no-op returns it instead of a fresh resolved
+	// promise, so the second caller settles when the in-flight navigation does; a
+	// locale rebuild (__failedView(null, true), D175) waits on it, so a replace or a
+	// Back pop still loading lands before the committed location is rebuilt.
+	// Cleared in #navigate, #commitState, #recoverFailedNavigation and stop().
+	/** @type {Promise<void> | null} */
 	#pendingNavPromise = null;
 	// Guard redirects re-enter the normal pipeline through push()/replace() — the
 	// redirect inherits the denied navigation's verb — so every destination gets its
@@ -354,10 +439,12 @@ export class Router {
 	// #navigate always bumps #token. A LATER, unrelated chain installs its own box
 	// here, which is exactly why the continuation keeps its own reference instead
 	// of reading this slot again.
+	/** @type {{ token: number } | null} */
 	#guardChain = null;
 	// The instance an in-flight transition is currently animating OUT (or null).
 	// A newer navigation reads this to cancel the running out and proceed
 	// immediately (constellation/doc/DOC-SPEC.md §12 interruption rule).
+	/** @type {PuzzleView | null} */
 	#pendingOut = null;
 
 	// ---- shared-element morph handler (v1.23, D55) ---------------------------
@@ -368,6 +455,7 @@ export class Router {
 	// starts and may return a promise the router awaits (alongside playOut)
 	// BEFORE destroying that unit. Null ⇒ every code path is byte-identical to
 	// the handler-less router.
+	/** @type {RouterMorphHandler | null} */
 	#morphHandler = null;
 
 	// ---- commit-window guard (redirect-from-mounted) ------------------------
@@ -385,6 +473,7 @@ export class Router {
 	// can land while the flag is set; one arriving during the async LOAD or
 	// out-animation phases (flag off) keeps today's interruption semantics.
 	#committing = false;
+	/** @type {{ kind: 'push' | 'replace', path: string } | { kind: 'go', n: number } | null} */
 	#pendingPush = null;
 
 	#onClick;
@@ -397,6 +486,7 @@ export class Router {
 	// consulted only at the seams where that mode deviates. Only the
 	// read/write/interceptor seams differ — the path-shaped API (push,
 	// current.path) is mode-agnostic across all modes.
+	/** @type {RouterModeInstance | null} */
 	#mode = null;
 
 	// ---- transition mode (v1.24, D56; per-route/per-view override v1.30, D65) ----
@@ -412,6 +502,7 @@ export class Router {
 	// (D65): the card coming in always controls the transition. Gates ONLY the
 	// #swap out/in sequencing — every other path (matching, commit, interruption,
 	// failure recovery) is shared.
+	/** @type {'sequential' | 'overlap'} */
 	#defaultTransitionMode = 'sequential';
 	// ---- base path (v1.19, D51) ---------------------------------------------
 	// Serve the app under a sub-path. Normalized to '' (no base) or a leading-'/'
@@ -436,9 +527,12 @@ export class Router {
 	// a full reload — the per-entry key in history.state, which itself survives
 	// reloads, is what makes the restore line up (D41).
 	#scrollBehavior;
+	/** @type {Map<string, ScrollPosition>} */
 	#positions = new Map(); // entry key → { x, y }
+	/** @type {string | null} */
 	#scrollKey = null; // key of the entry the window currently shows
 	#keySeq = 0;
+	/** @type {ScrollRestoration | null} */
 	#prevScrollRestoration = null;
 
 	// ---- focus + route announcement (v1.56, D93) ----------------------------
@@ -450,16 +544,18 @@ export class Router {
 	#focusBehavior;
 	// The single framework-owned polite live region, appended to <body> in start()
 	// and removed in stop(). Null when focus management is off (or before start).
+	/** @type {HTMLDivElement | null} */
 	#liveRegion = null;
 	// document.title as it stood at the LAST route announcement — seeded in start()
 	// with the pre-navigation title, cleared with the region in stop().
 	// #announceRoute compares against it to tell a title this route actually
 	// resolved from the previous route's leftover one — the D84 no-meta.title case,
 	// which must not be announced again (and, unchanged, would be silent).
+	/** @type {string | null} */
 	#announcedTitle = null;
 
 	/**
-	 * @param {Array<{path,name,view,layout,meta,guard,transitionMode,children}>} routes route definitions
+	 * @param {Route[]} [routes] route definitions
 	 * @param {object} [options]
 	 * @param {false|Function} [options.scrollBehavior] `false` to leave scroll
 	 *   alone; `(to, from, savedPosition) => {x,y}|null` to customize; omit for
@@ -471,7 +567,7 @@ export class Router {
 	 *   disable both (no live region is created); `(to, from) => Element|null|false`
 	 *   to choose the target — called after mount, falsy = skip focusing for that
 	 *   navigation, a throw is logged and treated as falsy. Inert in memory mode.
-	 * @param {object} [options.mode] URL carrier (D34/D42, restructured by D159):
+	 * @param {RouterModeDescriptor | null} [options.mode] URL carrier (D34/D42, restructured by D159):
 	 *   omit for path routing (the pathname — the default), or pass the object
 	 *   an imported factory produced — `hashRouter()` / `memoryRouter(options)`
 	 *   from `@magic-spells/puzzle/router-modes`. A MODE STRING is a throw.
@@ -572,7 +668,7 @@ export class Router {
 			warnShadowedPaths(findShadowedPaths(this.#routes));
 		}
 		// Bind once so start()/stop() add and remove the SAME reference — the
-		// prototype bound at addEventListener time and leaked (CODE_REVIEW §2.5).
+		// prototype bound at addEventListener time and leaked.
 		this.#onClick = this.#handleClick.bind(this);
 		this.#onPopState = this.#handlePopState.bind(this);
 	}
@@ -580,6 +676,9 @@ export class Router {
 	/**
 	 * Begin routing: register listeners and run navigation #0 from the current
 	 * URL (initial paint is just a navigation with no pushState — APP_ANATOMY §3).
+	 *
+	 * @param {Element} container the app mount element
+	 * @param {Record<string, any>} ctx the app ctx injected into every routed view
 	 */
 	async start(container, ctx) {
 		this.#container = container;
@@ -633,13 +732,13 @@ export class Router {
 		// entry, no extra push). #scrollEnabled() is false above, so none of the
 		// scroll/storage/scrollRestoration setup ran.
 		if (this.#mode?.urlless) {
-			await this.#navigate(this.#mode.start(), { push: false });
+			await this.#trackNav(this.#token, this.#navigate(this.#mode.start(), { push: false }));
 			return this;
 		}
 
 		// Initial nav reads the current URL for our mode; a hash-mode app loaded at
 		// a non-route fragment (or none) routes '/' (#currentPath → null).
-		await this.#navigate(this.#currentPath() ?? '/', { push: false });
+		await this.#trackNav(this.#token, this.#navigate(this.#currentPath() ?? '/', { push: false }));
 		return this;
 	}
 
@@ -792,6 +891,9 @@ export class Router {
 	 * A push arriving inside the commit window (e.g. from a view's mounted()) is
 	 * DEFERRED to run right after the in-flight commit — see #committing; it
 	 * returns a resolved promise since the deferred nav has not started yet.
+	 *
+	 * @param {string} path
+	 * @returns {Promise<void>}
 	 */
 	push(path) {
 		path = normalizeRoutePath(path);
@@ -871,6 +973,9 @@ export class Router {
 	 * same-path no-op (byte-identical query+hash, trailing-slash-insensitive
 	 * pathname) and the commit-window deferral (a replace from a mounted() hook
 	 * — the auth-redirect case that must not leave the aborted page in history).
+	 *
+	 * @param {string} path
+	 * @returns {Promise<void>}
 	 */
 	replace(path) {
 		path = normalizeRoutePath(path);
@@ -883,7 +988,24 @@ export class Router {
 		if (this.#state && sameNavKey(path) === sameNavKey(this.#state.path)) {
 			return Promise.resolve();
 		}
-		return this.#navigate(path, { push: false, replace: true });
+		return this.#trackNav(this.#token, this.#navigate(path, { push: false, replace: true }));
+	}
+
+	/**
+	 * Record a replace/pop navigation's promise in #pendingNavPromise (push() pairs
+	 * its own). `token` is #token read BEFORE the #navigate call (arguments evaluate
+	 * left to right): #navigate runs synchronously to its token bump, so an
+	 * unchanged token means it never took ownership (an unmatched path) and there is
+	 * nothing in flight to record, and a filled slot means a re-entrant navigation
+	 * fired inside that stretch claimed it — its own record must stand.
+	 *
+	 * @param {number} token
+	 * @param {Promise<void>} nav
+	 * @returns {Promise<void>}
+	 */
+	#trackNav(token, nav) {
+		if (this.#token !== token && this.#pendingNavPromise == null) this.#pendingNavPromise = nav;
+		return nav;
 	}
 
 	/**
@@ -923,6 +1045,9 @@ export class Router {
 	 * superseded pop leaves it put (D19). Out-of-range `n`, and a `n` that lands on
 	 * the entry already targeted, are a silent no-op (browser `history.go`
 	 * semantics; before start()/after stop() there is likewise nothing to move).
+	 *
+	 * @param {number} n
+	 * @returns {Promise<void> | void}
 	 */
 	go(n) {
 		const mode = this.#mode;
@@ -939,7 +1064,10 @@ export class Router {
 		}
 		const target = mode.go(n);
 		if (!target) return;
-		return this.#navigate(target.path, { push: false, pop: true, memoryIndex: target.index });
+		return this.#trackNav(
+			this.#token,
+			this.#navigate(target.path, { push: false, pop: true, memoryIndex: target.index })
+		);
 	}
 
 	/** Go back one entry (v1.11, D42). Equivalent to go(-1). */
@@ -962,6 +1090,9 @@ export class Router {
 	 * `'#/x'`, and `''`. Non-ASCII text in a path-shaped value is percent-encoded
 	 * idempotently before the mode/base prefix is applied; query strings and
 	 * `#anchor` suffixes ride through the same normalization.
+	 *
+	 * @param {string} path
+	 * @returns {string}
 	 */
 	url(path) {
 		return encodeURL(path, this.#mode, this.#base);
@@ -1007,12 +1138,16 @@ export class Router {
 	 *
 	 * @returns {Promise<true|false|string|null>} allow, block/failure, redirect,
 	 *   or superseded (`null`)
+	 * @param {RouteEntry} entry
+	 * @param {RouteSnapshot} to
+	 * @param {RouteSnapshot | null} from
+	 * @param {number} token
 	 */
 	async #runGuards(entry, to, from, token) {
 		for (const guard of entry.guards) {
 			let verdict;
 			try {
-				verdict = await guard({ to, from, ctx: this.#ctx });
+				verdict = await guard({ to, from, ctx: /** @type {PuzzleContext} */ (this.#ctx) });
 			} catch (err) {
 				// Rejection is still the completion of an await: a newer
 				// navigation makes it stale and therefore silent.
@@ -1054,6 +1189,8 @@ export class Router {
 	 * transition it superseded and clear a memory-pop target, exactly like the
 	 * data()-failure path. Guard blocks/failures use this before any fresh view
 	 * exists; data failures call it after destroying their fresh instances.
+	 *
+	 * @param {number} token
 	 */
 	#recoverFailedNavigation(token) {
 		if (token !== this.#token) return;
@@ -1093,6 +1230,8 @@ export class Router {
 	 * on it. A urlless mode has no browser URL (and no popstate listener); its index
 	 * already stayed on the committed entry (the blocked pop cleared the pending pop
 	 * target without moving the index), so there is nothing to repair.
+	 *
+	 * @param {string} path
 	 */
 	#restoreCommittedUrl(path) {
 		if (this.#mode?.urlless) return;
@@ -1104,11 +1243,22 @@ export class Router {
 	 * every other mode owns the whole encoding (hash returns `'#' + base + path`,
 	 * D34 — modes.js). Every writer (#commitLocation, #restoreCommittedUrl) must
 	 * go through here so committed and restored URLs stay byte-identical.
+	 *
+	 * @param {string} path
+	 * @returns {string}
 	 */
 	#encodedUrl(path) {
 		return this.#mode ? this.#mode.encode(path, this.#base) : this.#base + path;
 	}
 
+	/**
+	 * @param {string} rawPath
+	 * @param {{ push: boolean, pop?: boolean, replace?: boolean,
+	 *   savedPosition?: ScrollPosition | null, memoryIndex?: number | null,
+	 *   retryView?: PuzzleView | { __retryErrorView?: undefined } | null }} options the verb flags;
+	 *   `retryView` is the failed view whose error view pressed retry, or the REBUILD marker
+	 * @returns {Promise<void>}
+	 */
 	async #navigate(
 		rawPath,
 		{
@@ -1121,6 +1271,11 @@ export class Router {
 			// every ordinary navigation. Read ONLY by the load-failure catch below, which
 			// refreshes that position's held face — #navigate returns undefined on success
 			// and failure alike, so the retry closure cannot detect the failure itself.
+			// A same-location rebuild (__failedView(null, true), D175) passes the REBUILD
+			// marker here instead of a view: every test of it sits behind the inline
+			// __PUZZLE_HAS_I18N__ probe, so an app without translations ships none of
+			// it, and the failure catches' `retryView.__retryErrorView?.()` is a no-op
+			// on the marker.
 			retryView = null,
 		}
 	) {
@@ -1154,8 +1309,8 @@ export class Router {
 		// index move), a real navigation despite the shared path. A pop/replace/initial
 		// nav starting here clears the slot for that reason.
 		//
-		// The paired promise is always cleared here and re-attached by push() the
-		// moment this call returns (see push()): the promise object does not exist
+		// The promise is always cleared here and re-attached by push() or #trackNav
+		// the moment this call returns (see push()): the promise object does not exist
 		// yet inside #navigate, and leaving the PREVIOUS navigation's promise
 		// standing next to a fresh target would hand a re-entrant same-path push a
 		// promise for a navigation that is already over.
@@ -1314,6 +1469,7 @@ export class Router {
 		// cannot fold, so without the probe the resolveRouteViews reference here
 		// would keep lazy.js in every bundle.
 		let viewClasses = entry.viewClasses;
+		/** @type {LayoutClassValue} */
 		let LayoutClass = entry.layout;
 		if ((typeof __PUZZLE_HAS_LAZY__ === 'undefined' || __PUZZLE_HAS_LAZY__) && entry.hasLazy) {
 			let resolvedViews;
@@ -1402,7 +1558,7 @@ export class Router {
 			for (let i = keep; i < entry.chain.length; i++) {
 				freshViews.push(new viewClasses[i](this.#ctx));
 			}
-			layout = reuseLayout ? cur.layout : LayoutClass ? new LayoutClass(this.#ctx) : null;
+			layout = reuseLayout ? cur.layout : LayoutClass ? new /** @type {typeof PuzzleView} */ (LayoutClass)(this.#ctx) : null;
 		} catch (err) {
 			const info = reportError(
 				this.#ctx,
@@ -1466,17 +1622,22 @@ export class Router {
 		// the load phase below, committed inside #commitState (the synchronous
 		// #committing window, atomically with #commitLocation + mount), and discarded
 		// on every path that does not reach a commit.
+		/** @type {PreparedRefresh[]} */
 		const prepared = [];
 		const discardPrepared = () => {
 			for (const p of prepared) p.discard();
 			prepared.length = 0;
 		};
 
+		// A same-location rebuild (D175, the REBUILD marker) takes the same exemption-off path:
+		// the page is already on screen in the old language, so a skeleton would be a
+		// flash. Its probe folds to `false || false` without translations.
 		const isSSGTakeover =
-			(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) &&
-			!cur &&
-			this.#container != null &&
-			this.#container.hasAttribute('data-puzzle-ssg');
+			((typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) &&
+				!cur &&
+				this.#container != null &&
+				this.#container.hasAttribute('data-puzzle-ssg')) ||
+			((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && retryView === REBUILD);
 		// EXCEPTION-SAFE handle sweep (D146). Every prepared handle is idempotent via
 		// its own `settled` flag, so discarding unconditionally on the way out is free
 		// on the success path (#commitState already committed them) and is the only
@@ -1487,12 +1648,14 @@ export class Router {
 		try {
 			try {
 				const loads = [];
+				/** @param {PuzzleView} v */
 				const hasSkeleton = (v) =>
 					!isSSGTakeover && typeof v.renderSkeleton === 'function';
+				/** @param {PuzzleView} v */
 				const start = (v) => {
 					const p = v.preload({ params, props: {}, route: to });
 					if (hasSkeleton(v)) {
-						p.catch((err) => {
+						p.catch((/** @type {unknown} */ err) => {
 							const info = reportError(
 								this.#ctx,
 								err,
@@ -1609,7 +1772,12 @@ export class Router {
 			// on the pushed path refines the default landing (D41): read off the fragment
 			// parseLocation already split (D83 — stripPath dropped it for matching).
 			const anchor = loc.hash ? loc.hash.slice(1) : null;
-			const scroll = this.#resolveScroll({ to, from, push, pop, replace, savedPosition, anchor });
+			// A same-location rebuild (D175, the REBUILD marker) lands nowhere: the
+			// window stays where it is, and a custom scrollBehavior is not consulted.
+			const scroll =
+				(typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && retryView === REBUILD
+					? null
+					: this.#resolveScroll({ to, from, push, pop, replace, savedPosition, anchor });
 
 			// Whether this navigation moves focus + announces (v1.56, D93). Only the
 			// GATE is decided here — memory mode, `focusBehavior: false`, and nav #0 all
@@ -1619,7 +1787,23 @@ export class Router {
 			// just carries the snapshots #commitState hands back to that function —
 			// the same pre-commit-sentinel/post-mount-resolution split D41's { anchor }
 			// scroll landing uses.
-			const focus = this.#resolveFocus({ to, from, push, pop, replace });
+			// Nor does a rebuild move focus or announce (D175).
+			const focus =
+				(typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && retryView === REBUILD
+					? null
+					: this.#resolveFocus({ to, from, push, pop, replace });
+
+			// A same-location rebuild (D175 — a locale switch) changes the words on the
+			// page and nothing else — and nothing animates. Every fresh level
+			// skips its enter, and the outgoing unit is parked as #pendingOut so #swap
+			// destroys it without playing its out (its existing interrupted-transition
+			// path). keep is 0 here, so the outgoing unit is the old layout, else the
+			// old root view — the one #swap would have animated.
+			if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && retryView === REBUILD) {
+				for (const v of freshViews) v.skipEnter();
+				layout?.skipEnter();
+				this.#pendingOut ??= cur.layout ?? cur.views[0];
+			}
 
 			// Params-only degenerate case: keep === chain length ⇒ no fresh views, the
 			// whole chain was refreshed pre-commit. Just record state + refresh the
@@ -1783,7 +1967,7 @@ export class Router {
 	 * __puzzleScrollKey) preserved, or a memory-mode stack overwrite. No position
 	 * save, no new entry key, no stack growth or index move.
 	 *
-	 * @param {{ rawPath: string, entry: object, push: boolean, replace?: boolean, memoryIndex: ?number, departScroll: ?{x:number,y:number} }} next
+	 * @param {{ rawPath: string, entry: RouteEntry, push: boolean, replace?: boolean, memoryIndex: ?number, departScroll: ?{x:number,y:number} }} next
 	 */
 	#commitLocation(next) {
 		const { rawPath, entry, push, replace, memoryIndex } = next;
@@ -1840,8 +2024,8 @@ export class Router {
 	 * runs concurrently and the leaver tears down on its own out-settle.
 	 *
 	 * @param {number} token this navigation's monotonic token
-	 * @param {object|null} cur the previous committed #state
-	 * @param {object} next { rawPath, entry, params, views, layout, reuseLayout, keep, rootVnode, scroll, to, push, memoryIndex }
+	 * @param {?Record<string, any>} cur the previous committed #state
+	 * @param {SwapInput} next
 	 */
 	async #swap(token, cur, next) {
 		const { entry, params, views, layout, reuseLayout, keep, rootVnode } = next;
@@ -1991,7 +2175,7 @@ export class Router {
 						// router plays it in as the animator.
 						const restoreTakeover = this.#takeoverSSG(topView);
 						this.#observeMount(
-							topView.mount(this.#container, { children: rootVnode.children, preloaded: true }),
+							topView.mount(this.#container, { children: /** @type {ViewNode[]} */ (rootVnode.children), preloaded: true }),
 							topView,
 							next.to,
 							restoreTakeover
@@ -2004,7 +2188,7 @@ export class Router {
 						// match their committed key (children pushed through, no data() rerun),
 						// the divergence level swaps and adopts topView, whose playIn
 						// auto-chains (topView is the animator).
-						views[0].applyParentUpdate({ children: rootVnode.children });
+						views[0].applyParentUpdate({ children: /** @type {ViewNode[]} */ (rootVnode.children) });
 						this.#commitState(next);
 					}
 				} else if (reuseLayout) {
@@ -2095,14 +2279,72 @@ export class Router {
 		}
 	}
 
-	/** INTERNAL — mark a routed failure, or retry it through the normal rebuild. */
+	/**
+	 * INTERNAL — mark a routed failure, or retry it through the normal rebuild.
+	 *
+	 * `__failedView(null, true)` is the same-location REBUILD a locale switch
+	 * drives (D175): the committed location re-runs with keep = 0 — every routed
+	 * view and the layout constructed fresh, data() re-run, one commit — in replace
+	 * mode, with no animation, scroll change, or focus move (the REBUILD marker in
+	 * #navigate). It rides on this existing entry, behind the inline
+	 * __PUZZLE_HAS_I18N__ probe, because a new class member would ship in every
+	 * app: esbuild never removes class members.
+	 *
+	 * @param {PuzzleView | null} view the failed routed view, or null for the D175 rebuild
+	 * @param {boolean} [retry]
+	 * @returns {Promise<void> | null | void}
+	 */
 	__failedView(view, retry = false) {
 		const st = this.#state;
+		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && view === null) {
+			// Invalidating the committed chain is what forces keep = 0 and a fresh
+			// layout. It is left set if this navigation is superseded or fails, so the
+			// next navigation rebuilds every level too — no view keeps stale strings.
+			// Nothing is committed yet during navigation zero (start() tracks it, so
+			// the rebuild below is queued behind it).
+			if (st) st.chainInvalid = st.layoutInvalid = true;
+			// A push, replace or pop still loading owns where the app is going:
+			// rebuilding the committed location now would supersede it and strand the
+			// app on the old page (and a pop's entry under the old URL). Let it land
+			// (or fail), then rebuild wherever the app ended up. setLocale does NOT wait
+			// for that: the switch may come from inside the loading navigation (a
+			// layout data() or a guard awaiting setLocale), which would then wait on
+			// itself forever. Its new views render in the new strings; the rebuild
+			// re-renders the levels it kept. A failed rebuild is already reported
+			// through onError, so the scheduled one's rejection is swallowed here.
+			const pending = this.#pendingNavPromise;
+			if (pending) {
+				const again = () => this.__failedView(null, true);
+				pending.then(again, again).catch(() => {});
+				return null;
+			}
+			if (!st) return null;
+			// Resolves once the rebuilt chain commits (or a newer navigation takes over);
+			// rejects when the rebuild itself failed and the old chain is still on
+			// screen (a data() failure, already reported through onError), so
+			// setLocale's caller learns the page was not rebuilt.
+			// Tracked like a replace, so a switch made from inside this rebuild (its
+			// data() or guard asking for another locale) waits for it instead of
+			// starting a second rebuild that this one's data() would wait on.
+			const nav = this.#trackNav(
+				this.#token,
+				this.#navigate(st.path, { push: false, replace: true, retryView: REBUILD })
+			);
+			const token = this.#token;
+			return nav.then(() => {
+				if (this.#token === token && this.#state === st) {
+					throw new Error('[puzzle] the page could not be rebuilt in the new locale');
+				}
+			});
+		}
 		if (!st) return retry ? null : undefined;
 		const routed = st.layout === view || st.views.includes(view);
 		if (retry) {
 			return routed
-				? this.#navigate(st.path, { push: false, replace: true, retryView: view })
+				? this.#trackNav(
+						this.#token,
+						this.#navigate(st.path, { push: false, replace: true, retryView: view })
+					)
 				: null;
 		}
 		if (st.layout === view) {
@@ -2130,6 +2372,10 @@ export class Router {
 	 * (Child views mounted through the ViewManager's keyed patch are already observed
 	 * there; this covers the three mounts the router drives directly: bare root view,
 	 * layout swap, initial-nav layout.)
+	 * @param {Promise<unknown>} p the mount() promise
+	 * @param {PuzzleView} view
+	 * @param {RouteSnapshot} route
+	 * @param {(() => void) | void | null} [restoreTakeover] #takeoverSSG's restore, when one ran
 	 */
 	#observeMount(p, view, route, restoreTakeover = null) {
 		Promise.resolve(p).catch(async (err) => {
@@ -2141,7 +2387,7 @@ export class Router {
 				err
 			);
 			const shown = await view.__showErrorView?.(err, info);
-			if (!shown) restoreTakeover?.();
+			if (!shown) /** @type {(() => void) | null} */ (restoreTakeover)?.();
 		});
 	}
 
@@ -2168,6 +2414,8 @@ export class Router {
 	 * as an empty method — the two call sites stay, calling nothing. (Deleting the
 	 * method instead would change the class shape, exactly as __devSnapshot does
 	 * under __PUZZLE_DEV__.)
+	 * @param {import('../views/PuzzleView.js').PuzzleView} topView
+	 * @returns {(() => void) | void} the restore function, when a takeover ran
 	 */
 	#takeoverSSG(topView) {
 		if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
@@ -2207,6 +2455,9 @@ export class Router {
 	 * destroyAnimated() teardown. Morph-leave keeps its D55 contract: the returned
 	 * promise is awaited alongside playOut before the leaver is removed; a throwing
 	 * handler is logged and never wedges navigation.
+	 *
+	 * @param {PuzzleView} oldAnimator
+	 * @param {RouteSnapshot} route
 	 */
 	#startOverlapLeave(oldAnimator, route) {
 		this.#pendingOut = oldAnimator;
@@ -2269,6 +2520,8 @@ export class Router {
 	 * must keep the container chain transform/filter/contain-free — the §26
 	 * containing-block constraint). Measured BEFORE the incoming mount reflows the
 	 * container. A missing element / getBoundingClientRect degrades to a no-op.
+	 *
+	 * @param {Partial<HTMLElement> | null} el the leaver's root (a comment placeholder is skipped)
 	 */
 	#pinLeaver(el) {
 		if (!el || el.nodeType !== 1 /* ELEMENT_NODE */ || !el.style) return;
@@ -2292,6 +2545,8 @@ export class Router {
 	 * Fire an instance's enter sequence without blocking the navigation, logging
 	 * (never throwing) a user-hook error — mirrors the ViewManager's auto-chained
 	 * slot-child playIn() so router-mounted animators behave identically.
+	 *
+	 * @param {PuzzleView} instance
 	 */
 	#playInLogged(instance) {
 		Promise.resolve(instance.playIn()).catch((err) =>
@@ -2305,7 +2560,10 @@ export class Router {
 		);
 	}
 
-	/** Record the freshly-mounted navigation as the current committed state. */
+	/**
+	 * Record the freshly-mounted navigation as the current committed state.
+	 * @param {CommitInput} next
+	 */
 	#commitState(next) {
 		const layoutInvalid = !!next.layoutInvalid || !!next.layout?.isDestroyed;
 		this.#state = {
@@ -2383,6 +2641,9 @@ export class Router {
 	 * committed DOM — a skeleton view whose target hasn't rendered lands at top and
 	 * is never re-scrolled when the real template patches in. A malformed
 	 * `decodeURIComponent` is treated as "no such element" (→ top).
+	 *
+	 * @param {string} anchor the fragment without its '#'
+	 * @returns {ScrollPosition}
 	 */
 	#resolveAnchorPosition(anchor) {
 		let el = null;
@@ -2419,6 +2680,10 @@ export class Router {
 	 * scrollBehavior(to, from, savedPosition) overrides the defaults — including
 	 * the anchor, which still rides in to.path; a falsy return leaves scroll
 	 * alone; errors are logged and treated as falsy.
+	 *
+	 * @param {{ to: RouteSnapshot, from: RouteSnapshot | null, push: boolean, pop: boolean,
+	 *   replace: boolean, savedPosition: ScrollPosition | null, anchor: string | null }} nav
+	 * @returns {ScrollSpec | null}
 	 */
 	#resolveScroll({ to, from, push, pop, replace, savedPosition, anchor }) {
 		if (!this.#scrollEnabled()) return null;
@@ -2459,6 +2724,8 @@ export class Router {
 	 * collapsed the page — reading window live at commit time yields a clamped
 	 * {0,0} in real browsers. The argless form (popstate save) still reads live:
 	 * there the page is intact when it runs.
+	 *
+	 * @param {ScrollPosition | null} [captured]
 	 */
 	#savePosition(captured = null) {
 		if (this.#scrollKey == null) return;
@@ -2479,6 +2746,7 @@ export class Router {
 	 */
 	#persistPositions() {
 		try {
+			/** @type {Record<string, ScrollPosition>} */
 			const obj = {};
 			for (const [k, v] of this.#positions) obj[k] = v;
 			sessionStorage.setItem(SCROLL_STORE_KEY, JSON.stringify(obj));
@@ -2550,6 +2818,10 @@ export class Router {
 	 * committed, push, replace and pop all pass: browsers never restore focus for a
 	 * client-side history move, so back/forward needs focus management just as much
 	 * as a forward push.
+	 *
+	 * @param {{ to: RouteSnapshot, from: RouteSnapshot | null, push: boolean, pop: boolean,
+	 *   replace: boolean }} nav
+	 * @returns {FocusSpec | null}
 	 */
 	#resolveFocus({ to, from, push, pop, replace }) {
 		if (!this.#focusEnabled()) return null;
@@ -2572,6 +2844,9 @@ export class Router {
 	 * assistive tech's speech queue), while one issued after is spoken behind the
 	 * focus announcement. A navigation with no focusable target — or a custom
 	 * focusBehavior that declined — still announces: the route DID change.
+	 *
+	 * @param {FocusSpec} spec
+	 * @param {PuzzleView[]} views
 	 */
 	#applyFocus(spec, views) {
 		const target = this.#resolveFocusTarget(spec, views);
@@ -2591,6 +2866,10 @@ export class Router {
 	 * routed child and then has nowhere to put it, the exact case warnMissingSlots
 	 * reports — so walk back UP the chain to the nearest live root, and return null
 	 * (never throw) when no level has one.
+	 *
+	 * @param {FocusSpec} spec
+	 * @param {PuzzleView[]} views
+	 * @returns {HTMLElement | null}
 	 */
 	#resolveFocusTarget(spec, views) {
 		if (typeof this.#focusBehavior === 'function') {
@@ -2610,8 +2889,9 @@ export class Router {
 			return el && typeof el.focus === 'function' ? el : null;
 		}
 		for (let i = views.length - 1; i >= 0; i--) {
+			/** @type {Partial<HTMLElement> | null} */
 			const el = views[i]?.element;
-			if (el && typeof el.focus === 'function') return el;
+			if (el && typeof el.focus === 'function') return /** @type {HTMLElement} */ (el);
 		}
 		return null;
 	}
@@ -2636,6 +2916,8 @@ export class Router {
 	 * draw). Inline + !important so no app stylesheet can re-draw either, and
 	 * undone on the SAME blur that lifts the tabindex — a pre-existing inline
 	 * value is put back exactly as found, everything else is removed outright.
+	 *
+	 * @param {HTMLElement} el
 	 */
 	#focusElement(el) {
 		if (!el.hasAttribute('tabindex')) {
@@ -2737,6 +3019,8 @@ export class Router {
 	 * put on screen — the fresh sub-chain (views[keep..]) and a fresh layout. Reused
 	 * ancestors and a reused layout belong to the surviving state and are never
 	 * destroyed; the outgoing element is left for the winning navigation.
+	 *
+	 * @param {SwapInput} next
 	 */
 	#abandon(next) {
 		for (let i = next.keep; i < next.views.length; i++) next.views[i]?.destroy();
@@ -2747,6 +3031,10 @@ export class Router {
 		if (next.prepared) for (const p of next.prepared) p.discard();
 	}
 
+	/**
+	 * @param {string} pathname
+	 * @returns {{ entry: RouteEntry, params: Record<string, string> } | null}
+	 */
 	#match(pathname) {
 		// A single trailing '/' is not significant: '/docs/' matches the '/docs'
 		// route (and a ':param' capture never swallows it). Static hosts serve the
@@ -2759,6 +3047,7 @@ export class Router {
 			// Guard the param decode: a malformed capture (`/%zz` → URIError) makes
 			// this entry a NON-MATCH so a later entry / the catch-all can still take
 			// the URL, instead of throwing out of the whole navigation.
+			/** @type {Record<string, string>} */
 			const params = {};
 			let ok = true;
 			for (let i = 0; i < entry.paramNames.length; i++) {
@@ -2780,12 +3069,16 @@ export class Router {
 	 * Post-commit refresh whose failure must not escape the pipeline — the view is
 	 * already committed; a layout data() error is logged, never thrown into an
 	 * un-awaited push() (e.g. from the click interceptor).
+	 *
+	 * @param {PuzzleView} view
+	 * @param {Record<string, string>} params
+	 * @param {RouteSnapshot} route
 	 */
 	#refreshLogged(view, params, route) {
 		try {
 			const p = view.refresh({ params, route });
 			if (p && typeof p.catch === 'function') {
-				p.catch((err) => {
+				p.catch((/** @type {unknown} */ err) => {
 					const info = reportError(
 						this.#ctx,
 						err,
@@ -2820,6 +3113,10 @@ export class Router {
 	 * A bad value at tier 2 (a view/layout field outside the two known values)
 	 * warns once per offending class and falls through rather than throwing —
 	 * route-level values are already validated at construction (validateTransitionMode).
+	 *
+	 * @param {RouteEntry} entry
+	 * @param {(PuzzleView & { transitionMode?: unknown }) | null} newAnimator
+	 * @returns {'sequential' | 'overlap'}
 	 */
 	#resolveTransitionMode(entry, newAnimator) {
 		for (let i = entry.chain.length - 1; i >= 0; i--) {
@@ -2844,7 +3141,7 @@ export class Router {
 	 * from the destination chain — head.js resolveHeadField, the same
 	 * nearest-defined leaf→root walk #setTitle performed for meta.title alone —
 	 * and assign document.title. ONLY `title` is resolved here: the other three
-	 * reserved fields are build-time only (D111 below), so the browser walks the
+	 * reserved fields are build-time only (D84 below), so the browser walks the
 	 * chain once, not four times, and resolveHead/HEAD_FIELDS stay behind in the
 	 * SSG's half of head.js. Runs inside #commitLocation, so D61
 	 * atomicity covers it exactly as it covered the title: a failed or superseded
@@ -2853,12 +3150,14 @@ export class Router {
 	 * note on explicit null).
 	 *
 	 * The managed og:/twitter:/description/canonical tags are deliberately NOT
-	 * synced here, in any output mode (D111, amending D89). Crawlers and unfurlers
+	 * synced here, in any output mode (D84, amending D89). Crawlers and unfurlers
 	 * fetch each URL fresh from the server and never client-navigate, so the tags
 	 * the prerender baked into that page's HTML are always the ones they read; a
 	 * client-side rewrite would only ever be observed by something reading
 	 * document.head after an in-page navigation, which is explicitly out of scope.
 	 * headTags.js is therefore build-time only and never enters a browser bundle.
+	 *
+	 * @param {RouteEntry} entry
 	 */
 	#syncHead(entry) {
 		// A urlless mode performs NO document work (D42): an embedded widget must not
@@ -2909,7 +3208,7 @@ export class Router {
 			this.#applyFragmentPop(path, savedPosition);
 			return;
 		}
-		this.#navigate(path, { push: false, pop: true, savedPosition });
+		this.#trackNav(this.#token, this.#navigate(path, { push: false, pop: true, savedPosition }));
 	}
 
 	/**
@@ -2935,6 +3234,9 @@ export class Router {
 	 *    anchor scroll is the correct landing; overriding it with {0,0} is the bug
 	 *    this guard exists to remove. #scrollKey bookkeeping already ran in the
 	 *    caller and is untouched, so ordinary back/forward still restores.
+	 *
+	 * @param {string} rawPath
+	 * @param {ScrollPosition | null} savedPosition
 	 */
 	#applyFragmentPop(rawPath, savedPosition) {
 		const loc = parseLocation(rawPath);
@@ -2949,6 +3251,8 @@ export class Router {
 	/**
 	 * Intercept in-app <a> clicks. Falls through to the browser for anything that
 	 * isn't a plain left-click on a same-origin navigational link (D19).
+	 *
+	 * @param {MouseEvent} e
 	 */
 	#handleClick(e) {
 		if (e.defaultPrevented) return;
@@ -3031,13 +3335,20 @@ export class Router {
  * browser navigations. closest() stays as the fallback for synthetic events
  * carrying no composedPath.
  */
-/** Whether a `target` names THIS frame: absent, empty, or '_self' (any case). */
+/**
+ * Whether a `target` names THIS frame: absent, empty, or '_self' (any case).
+ * @param {string | null} target
+ */
 function isSelfTarget(target) {
 	if (target == null) return true;
 	const t = target.trim().toLowerCase();
 	return t === '' || t === '_self';
 }
 
+/**
+ * @param {MouseEvent} e
+ * @returns {HTMLAnchorElement | null}
+ */
 function findAnchor(e) {
 	const path = typeof e.composedPath === 'function' ? e.composedPath() : null;
 	if (path) {
@@ -3045,13 +3356,13 @@ function findAnchor(e) {
 			// localName, not nodeName: SVG's <a> is lowercase 'a' where HTML's is 'A',
 			// and both are links. This matches what closest('a') below already does —
 			// CSS type selectors ignore the namespace.
-			if (node?.localName === 'a') return node;
+			if (/** @type {Partial<Element>} */ (node)?.localName === 'a') return /** @type {HTMLAnchorElement} */ (node);
 			// Stop at the boundary: past the document the path holds only window,
 			// and nothing above it can be the clicked link.
 			if (node === document) break;
 		}
 	}
-	return (e.target?.closest && e.target.closest('a')) || null;
+	return (/** @type {Partial<Element> | null} */ (e.target)?.closest && /** @type {Element} */ (e.target).closest('a')) || null;
 }
 
 // ---- route compilation (nested → flat leaf Entries) -------------------------
@@ -3071,6 +3382,10 @@ function findAnchor(e) {
  *
  * Build a leaf Entry: validate the chain, then compile the leaf's full path to a
  * matcher + merged params.
+ *
+ * @param {Route[]} chain
+ * @param {string[]} fullPaths
+ * @returns {RouteEntry}
  */
 function makeEntry(chain, fullPaths) {
 	// Validate every node in the chain (index 0 is the root — the only node the
@@ -3113,6 +3428,7 @@ function makeEntry(chain, fullPaths) {
 	// would have a regex nothing could ever reach. Strip it once here (never from the
 	// root '/') so the declaration and the matcher agree.
 	const leafPath = stripTrailingSlash(fullPaths[fullPaths.length - 1]);
+	/** @type {string[]} */
 	const paramNames = [];
 	// Compile ONE '/'-segment at a time: a segment that is a complete `:name`
 	// becomes a single-segment capture group; EVERY other segment first normalizes
@@ -3158,12 +3474,16 @@ function makeEntry(chain, fullPaths) {
  * #navigate never allocates one per navigation. A lazy entry leaves it undefined —
  * resolveRouteViews builds the array each time, since a marker's fulfillment can
  * arrive after this runs.
+ *
+ * @param {RouteEntry} entry
  */
 function finishEntry(entry) {
 	entry.hasLazy =
 		(typeof __PUZZLE_HAS_LAZY__ === 'undefined' || __PUZZLE_HAS_LAZY__) &&
 		hasLazyRouteViews(entry);
-	entry.viewClasses = entry.hasLazy ? undefined : entry.chain.map((node) => node.view);
+	// The public Route types `view` with the published PuzzleView class; the runtime
+	// class is the same value, so bridge the two declarations through unknown.
+	entry.viewClasses = entry.hasLazy ? undefined : /** @type {Array<typeof PuzzleView>} */ (/** @type {unknown} */ (entry.chain.map((node) => node.view)));
 }
 
 /**
@@ -3177,6 +3497,9 @@ function finishEntry(entry) {
  * routes — the same blind spot the D89 scan has for flip) is not silently
  * mistaken for a view class: it falls through to the throw below, which names
  * the compiled-out gate.
+ *
+ * @param {unknown} value
+ * @param {string} label
  */
 function validateRouteView(value, label) {
 	if (isViewClass(value)) return;
@@ -3220,6 +3543,9 @@ function validateRouteView(value, label) {
 
 /** Warn once per shadow pair even when SSG builds several memory routers. */
 const warnedShadowedPaths = new Set();
+/**
+ * @param {ReturnType<typeof findShadowedPaths>} shadowedPaths
+ */
 function warnShadowedPaths(shadowedPaths) {
 	for (const { path, shadowedBy } of shadowedPaths) {
 		const key = shadowedBy + '\0' + path;
@@ -3234,6 +3560,10 @@ function warnShadowedPaths(shadowedPaths) {
 
 /** One-shot "loaded outside the configured base" warning (D51). */
 let warnedOutsideBase = false;
+/**
+ * @param {string} pathname
+ * @param {string} base
+ */
 function warnOutsideBaseOnce(pathname, base) {
 	if (warnedOutsideBase) return;
 	warnedOutsideBase = true;
@@ -3249,6 +3579,8 @@ function warnOutsideBaseOnce(pathname, base) {
  * still showing its skeleton (v1.8, D39 — not `loaded` yet) is skipped: its
  * child legitimately mounts later, when the real template (and its <Slot/>)
  * lands.
+ *
+ * @param {PuzzleView[]} views
  */
 function warnMissingSlots(views) {
 	for (let i = 0; i < views.length - 1; i++) {
@@ -3267,6 +3599,10 @@ function warnMissingSlots(views) {
  * tier rather than throwing, so one misconfigured view can't crash navigation.
  */
 const warnedBadViewTransitionMode = new Set();
+/**
+ * @param {PuzzleView} newAnimator
+ * @param {unknown} viewMode
+ */
 function warnBadViewTransitionMode(newAnimator, viewMode) {
 	const label = newAnimator.constructor?.name ?? '(anonymous view)';
 	if (warnedBadViewTransitionMode.has(label)) return;
@@ -3276,12 +3612,20 @@ function warnBadViewTransitionMode(newAnimator, viewMode) {
 	);
 }
 
-/** Escape every regex metacharacter so a static path segment matches literally. */
+/**
+ * Escape every regex metacharacter so a static path segment matches literally.
+ * @param {string} str
+ * @returns {string}
+ */
 function escapeRegExp(str) {
 	return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Fail fast (D65) on a route-level transitionMode outside the two known values. */
+/**
+ * Fail fast (D65) on a route-level transitionMode outside the two known values.
+ * @param {unknown} value
+ * @param {string} label
+ */
 function validateTransitionMode(value, label) {
 	if (value != null && value !== 'sequential' && value !== 'overlap') {
 		throw new Error(
@@ -3290,7 +3634,11 @@ function validateTransitionMode(value, label) {
 	}
 }
 
-/** Fail fast (D87) when an optional route guard is present but not callable. */
+/**
+ * Fail fast (D87) when an optional route guard is present but not callable.
+ * @param {unknown} value
+ * @param {string} label
+ */
 function validateGuard(value, label) {
 	if (value != null && typeof value !== 'function') {
 		throw new Error(`[puzzle] guard on ${label} must be a function (got ${typeof value})`);
@@ -3306,6 +3654,9 @@ function validateGuard(value, label) {
  * the same idempotent path normalizer used by routes. A base containing `'#'` or
  * `'?'` is a constructor throw (config-error posture, like an unknown mode) —
  * those characters would corrupt the mode-specific URL encoding.
+ *
+ * @param {string} [base]
+ * @returns {string}
  */
 export function normalizeBase(base) {
 	if (!base) return '';
@@ -3326,6 +3677,11 @@ export function normalizeBase(base) {
  * an ALREADY-normalized base (normalizeBase above); `mode` is a Router mode
  * instance (router/modes.js) or null/undefined for path encoding — the SSG
  * callers are path-only by construction and pass nothing.
+ *
+ * @param {string} path
+ * @param {RouterModeInstance | null | undefined} mode
+ * @param {string} base
+ * @returns {string}
  */
 export function encodeURL(path, mode, base) {
 	if (typeof path !== 'string') {
@@ -3336,7 +3692,11 @@ export function encodeURL(path, mode, base) {
 	return mode ? mode.encode(path, base) : base + path;
 }
 
-/** Reduce a full path to the pathname used for matching (drop query + hash). */
+/**
+ * Reduce a full path to the pathname used for matching (drop query + hash).
+ * @param {string} rawPath
+ * @returns {string}
+ */
 function stripPath(rawPath) {
 	const path = rawPath.split('?')[0].split('#')[0];
 	return path || '/';
@@ -3358,6 +3718,9 @@ function stripPath(rawPath) {
  * (it leaves undecodable bytes verbatim), so navigation can never fail here.
  * The null prototype keeps `'toString' in query` false for absent keys — and
  * makes a hostile `?__proto__=x` key an ordinary own property.
+ *
+ * @param {string} rawPath
+ * @returns {{ pathname: string, query: RouteQuery, hash: string }}
  */
 function parseLocation(rawPath) {
 	const hashIdx = rawPath.indexOf('#');
@@ -3389,6 +3752,9 @@ function parseLocation(rawPath) {
  * #match (so SSG directory URLs like '/docs/' match the '/docs' route) and the
  * push() same-path no-op guard (via sameNavKey), so both agree on when a
  * trailing slash is insignificant (D67 / v1.33).
+ *
+ * @param {string} pathname
+ * @returns {string}
  */
 function stripTrailingSlash(pathname) {
 	return pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
@@ -3402,6 +3768,9 @@ function stripTrailingSlash(pathname) {
  * stripTrailingSlash rule #match applies, so a nav link push('/docs') is a
  * no-op on a page loaded at the SSG directory URL '/docs/' (which #state.path
  * keeps verbatim) instead of piling a duplicate history entry.
+ *
+ * @param {string} rawPath
+ * @returns {string}
  */
 function sameNavKey(rawPath) {
 	const cut = rawPath.search(/[?#]/);
@@ -3417,8 +3786,19 @@ function sameNavKey(rawPath) {
  * `?q=` is a real navigation, not an in-page anchor move. Reuses sameNavKey's
  * trailing-slash rule so the guard agrees with #match and push() about when a
  * trailing slash is insignificant.
+ *
+ * @param {string} rawPath
+ * @returns {string}
  */
 function sameDocKey(rawPath) {
 	const cut = rawPath.indexOf('#');
 	return sameNavKey(cut === -1 ? rawPath : rawPath.slice(0, cut));
 }
+
+// The same-location rebuild marker (D175): #navigate's `retryView` when a locale
+// switch re-runs the committed location quietly (no animation, scroll, or focus
+// change). Referenced only behind the __PUZZLE_HAS_I18N__ probe. It sits at the
+// end of the module on purpose: a dropped declaration between two others splits
+// the minifier's merged `var` statement and moves the bytes of apps that never
+// use it.
+const REBUILD = {};

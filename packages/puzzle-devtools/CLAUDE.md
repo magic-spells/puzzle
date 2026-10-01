@@ -77,8 +77,10 @@ build it once with `npm run build:compiler` (repo root delegates into `packages/
 - **Never import `pieces.css`.** The registry theme declares `--color-surface`/`--ink`/
   `--border`, which collide head-on with this panel's own `@theme inline` block and would
   fight the `data-theme` switch panel-glue sets. Alias the pieces' token utilities onto
-  `--dt-*` in `styles.css` instead. The `puzzle add piece` installer prints the import as
-  an unconditional next step — ignore it here.
+  `--dt-*` in `styles.css` instead. The `puzzle add piece` installer may advise the
+  `@import`, and since 0.8.0 it prints a stale-theme hint (`puzzle add theme default`)
+  because the unimported `app/styles/pieces.css` predates the registry theme — ignore
+  both here.
 - **Pieces `class` props lose to Tailwind's layer ordering.** Compaction needs `!`
   (`py-8!`, `text-[9px]!`). Not author-order — stylesheet order.
 - **Flex key/value rows: the value cell needs `flex-1 min-w-0`.** Flexbox's

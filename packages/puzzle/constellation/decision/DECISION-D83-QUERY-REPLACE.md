@@ -1,5 +1,5 @@
 ---
-name: 'D83 — Router query snapshot + `router.replace()` (v1.49)'
+name: D83 — Router query snapshot + router.replace()
 status: verified
 connections:
   - COMPONENT-ROUTER
@@ -13,88 +13,51 @@ connections:
   - DECISION-D33-ROUTER-SCROLL
   - FILE-ROUTER
   - FILE-SSG-ASSEMBLE
-  - FEATURE-V1-49-QUERY-REPLACE
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
-notes:
-  - kind: verified
-    text: >-
-      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
-      card was found true as written, so nothing changed but the baseline. Bound code was read at
-      this sha; the framework suite is green at 1871 tests.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
-# D83 — Router query snapshot + `router.replace()` (v1.49)
+# D83 — Router query snapshot + `router.replace()`
 
-The route snapshot gains parsed URL state — `pathname`, `query`, `hash` — and
-the router gains `replace(path)`, the no-history-entry sibling of `push()`.
-Together they make URL-backed transient UI state (filters, tabs, search,
-pagination) first-class. See [[DOC-SPEC-ROUTER]] §44.
-
-## Context
-
-The router recognizes URLs carrying query strings (`#currentPath` reads
-`location.search`; matching strips it) but never parses them: the D47 snapshot
-is `{ path, route, params, chain }` with the raw query riding un-parsed inside
-`path`. SPEC §19 itself warns users off string-comparing `path` *because* of
-query noise. Apps that want `?q=term&sort=date` state have no read surface and
-— worse — no way to update the URL without minting a history entry per
-keystroke. The static kernel's router stub already listed `replace` among the
-"public surface" methods it stubs: the gap was anticipated. Ember and Vue
-Router both treat query state as part of routing; Puzzle borrows the readable
-part without Ember's controller-backed serialization or sticky params.
+The route snapshot carries parsed URL state — `pathname`, `query`, `hash` — and
+`router.replace(path)` is the no-history-entry sibling of `push()`. Together
+they make URL-backed transient UI state (filters, tabs, search, pagination)
+first-class. Spec: [[DOC-SPEC-ROUTER]] §44.
 
 ## Decision
 
-**Additive snapshot fields + a push-mirroring `replace()`, threaded as one
-boolean through the existing navigation options — explicitly NOT a refactor
-of the router's internal flags.**
+- **Snapshot fields:** `pathname` (path minus query/hash), `query` (frozen,
+  null-prototype; `URLSearchParams` decoding; one value → string, repeated keys
+  → frozen array in source order, valueless key → `''`), `hash` (`''` or the raw
+  leading-`#` fragment). `path` stays raw (base-free, query+hash included).
+  Query never merges into `params`; views read `this.route.query`. Parsed once
+  per navigation and stored on the committed state. Prerender and static
+  snapshots carry the same fields (empty query/hash, pathname = the page path).
+- **`replace(path)`** runs the same match/load/cancellation/atomic-commit
+  pipeline as `push()`, including the same-path no-op and the commit-window
+  deferral slot. At commit: path/hash mode `history.replaceState` with the same
+  encoding, **keeping the current scroll-entry key**; memory mode overwrites
+  `stack[index]` in place. A failed or superseded replace commits nothing (D61).
+- **Replace leaves scroll alone by default** (transient state like typing a
+  filter) unless the target carries an explicit `#anchor`; a custom D33
+  `scrollBehavior` still runs and may override.
+- **Same-path push settlement:** a `push()` to the path already committed
+  resolves immediately. A `push()` to the path *still in flight* (a
+  double-click) returns that navigation's own promise (`#pendingNavPromise`,
+  set and cleared with `#pendingNavPath`), so the second caller settles exactly
+  when the first navigation commits, fails or is superseded. A push to a
+  different path mid-flight supersedes. (Guard redirects bypass this guard —
+  D87.)
+- Query changes on the same route re-run the params-only refresh, so
+  `router.replace(router.current.pathname + '?q=' + …)` composes with no new
+  machinery.
 
-- **Snapshot:** `pathname` (path minus query/hash), `query` (frozen,
-  null-prototype; `URLSearchParams` decoding; single value → string, repeated
-  keys → frozen array in source order, valueless key → `''`), `hash` (`''` or
-  the raw leading-`#` fragment). `path` is unchanged (raw, base-free,
-  query+hash included) — full back-compat. Query never merges into `params`;
-  `data(params)` signatures are untouched — views read `this.route.query`.
-  Parsed ONCE per navigation (one helper shared with the D41 anchor split) and
-  stored on the committed state, so `current` never reparses.
-- **`replace(path)`** runs the identical match/load/cancellation/atomic-commit
-  pipeline as `push()`, including the same-path no-op guard and the
-  commit-window deferral slot. At the D61 commit point: history/hash mode
-  `history.replaceState` (same base/mode encoding as push), **keeping the
-  current scroll-entry key** — the entry is the same entry; memory mode
-  overwrites `stack[index]` in place (no truncate, no append, no index move).
-  A failed or superseded replace commits nothing, inherited from D61.
-- **Replace never touches scroll by default.** The whole point is transient
-  state (typing a filter); a scroll-to-top per keystroke would be absurd. A
-  custom D33 `scrollBehavior` still runs and may override.
-- **No action-enum refactor.** The proposal that prompted this decision wanted
-  the internal `{push, pop}` flags restructured into
-  `'initial'|'push'|'replace'|'pop'`. The router is the D19/D42/D61 state
-  machine — its flag plumbing is load-bearing and heavily reasoned; a
-  cosmetic restructure risks subtle regressions for zero behavior. One added
-  `replace` boolean is the whole internal delta. **Rejected.**
+## Alternatives
 
-SSG/static parity: the prerender snapshot ([[FILE-SSG-ASSEMBLE]]) and the
-static kernel's rebuilt snapshot carry the same three fields (empty query,
-empty hash, pathname = the enumerated path).
-
-## Consequences
-
-- Filters/tabs/search/pagination get shareable URLs and sane Back behavior:
-  read `this.route.query`, write `router.replace(router.current.pathname +
-  '?q=' + …)` — query changes on the same route already re-run the
-  params-only refresh, so reactivity composes with zero new machinery.
-- The snapshot shape change is visible to every view (`this.route`) but purely
-  additive; frozen/null-proto keeps it tamper-proof and prototype-clean.
-- `types/index.d.ts` `RouteSnapshot`/`Router` extend accordingly.
-
-## Alternatives rejected
-
-- Ember-style sticky query serialization / controller state — heavyweight,
-  implicit, and the part of Ember queries nobody misses.
-- Merging query values into `params` — collides with `:param` names and
-  muddies the matching contract; a separate read surface is honest.
-- Reactive query-object mutation (`route.query.q = …` writes the URL) —
-  magic writes to a frozen snapshot invert the router's one-way data flow.
+- **Restructure the router's internal flags into an action enum** — rejected:
+  the D19/D42/D61 state machine is load-bearing; one `replace` boolean is the
+  whole delta.
+- **Merge query into `params`** — rejected: collides with `:param` names.
+- **Ember-style sticky/serialized query state** — rejected: heavyweight and
+  implicit.
+- **Writable `route.query`** — rejected: inverts the router's one-way flow.

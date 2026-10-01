@@ -1,5 +1,5 @@
 // Package config loads puzzle.config.js — the app's optional configuration file
-// (constellation/doc/DOC-DECISIONS.md D12). The Go side must never parse JavaScript (D3), so the
+// (D12). The Go side must never parse JavaScript (D3), so the
 // config is read by executing node: it imports the ES module and prints its
 // default export as JSON, which Go then unmarshals. No config file present means
 // zero-config defaults and no node invocation at all.
@@ -45,6 +45,23 @@ type Config struct {
 	// SPA runtime takes over on load — the mode formerly spelled 'static'). Any
 	// other value is rejected by validate with a message naming both.
 	Output string
+	// I18n is the `i18n` block (D175): nil when absent, which is the zero-cost
+	// state — no locale files are emitted, __PUZZLE_HAS_I18N__ is false, and the
+	// bundles stay byte-identical to an app that never heard of translations.
+	I18n *I18n
+}
+
+// I18n mirrors the `i18n` block of puzzle.config.js (D175). The compiler owns the
+// locale files end to end (app/locales/<tag>.json → dist/locales/<tag>.<hash>.json),
+// which is why the locale list lives here rather than in the PuzzleApp config.
+type I18n struct {
+	// Locales are the configured BCP 47 tags, in config order. Order matters at
+	// runtime: a viewer whose language matches only by base (`pt`) gets the FIRST
+	// configured tag with that base (`pt-BR`).
+	Locales []string
+	// DefaultLocale is one of Locales. Its table fills every other locale's missing
+	// keys at build time, and the prerender renders in it.
+	DefaultLocale string
 }
 
 // Styles mirrors the `styles` block of puzzle.config.js.
@@ -98,6 +115,11 @@ func (c Config) DropConsole() bool {
 	return *c.Build.DropConsole
 }
 
+// I18nEnabled reports whether the app configured translations (D175).
+func (c Config) I18nEnabled() bool {
+	return c.I18n != nil
+}
+
 // Splitting reports whether the SPA browser bundle should be built with esbuild
 // code splitting, so a dynamic import() emits a lazy chunk under dist/chunks/
 // instead of being inlined into app.js. Default is off; enable with
@@ -123,6 +145,8 @@ type rawConfig struct {
 	// Output is kept raw so a non-string or unsupported value can be named
 	// precisely in the rejection message (parallel to build.dropConsole).
 	Output json.RawMessage `json:"output"`
+	// I18n is kept raw for the same reason: every shape error names its key.
+	I18n json.RawMessage `json:"i18n"`
 }
 
 // LoadConfig loads and validates puzzle.config.js from appRoot.
@@ -378,5 +402,159 @@ func validate(raw rawConfig) (Config, error) {
 		cfg.Output = out
 	}
 
+	if !unset(raw.I18n) {
+		i18n, err := validateI18n(raw.I18n)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.I18n = i18n
+	}
+
 	return cfg, nil
+}
+
+// ValidLocaleTag reports whether tag is a well-formed locale tag, and when it is
+// not, a message naming the problem. Shared with the locale-file loader, which
+// applies the same rule to file names (and the same '_' → '-' suggestion).
+//
+// The rule is the BCP 47 langtag structure the browser's Intl constructors
+// accept, since the runtime hands the tag straight to them and a tag they throw
+// on breaks rendering: a 2–3 letter language, an optional 4-letter script, an
+// optional 2-letter or 3-digit region, then variants (5–8 alphanumerics, or a
+// digit and 3 alphanumerics), none repeated. It is a subset of what Intl takes:
+// the 5–8 letter language form is refused because no registered language uses
+// it and "english" is far likelier a mistake, and extensions, private use and
+// grandfathered tags are out — the tag also names a file
+// (app/locales/<tag>.json) and a URL segment. It is deliberately a SHAPE check,
+// not a registry lookup.
+func ValidLocaleTag(tag string) (bool, string) {
+	if strings.Contains(tag, "_") {
+		fixed := strings.ReplaceAll(tag, "_", "-")
+		if ok, _ := ValidLocaleTag(fixed); ok {
+			return false, fmt.Sprintf("%q is not a BCP 47 locale tag — use %q (a hyphen, not an underscore)", tag, fixed)
+		}
+	}
+	generic := fmt.Sprintf("%q is not a BCP 47 locale tag (expected a language code like 'en', 'es' or 'pt-BR')", tag)
+	subtags := strings.Split(tag, "-")
+	lang := subtags[0]
+	if !isAlpha(lang) || len(lang) < 2 || len(lang) > 3 {
+		if lang != "" && isAlnum(lang) {
+			return false, fmt.Sprintf("%q is not a BCP 47 locale tag: the language %q must be 2–3 letters (like 'en')", tag, lang)
+		}
+		return false, generic
+	}
+	// stage: 0 = script next, 1 = region next, 2 = variants only.
+	stage := 0
+	seen := map[string]bool{}
+	for i, sub := range subtags[1:] {
+		if sub == "" || !isAlnum(sub) {
+			return false, generic
+		}
+		key := strings.ToLower(sub)
+		switch {
+		case stage == 0 && len(sub) == 4 && isAlpha(sub):
+			stage = 1
+			continue
+		case stage <= 1 && (len(sub) == 2 && isAlpha(sub) || len(sub) == 3 && isDigit(sub)):
+			stage = 2
+			continue
+		case len(sub) >= 5 && len(sub) <= 8 || len(sub) == 4 && isDigit(sub[:1]):
+			if !seen[key] {
+				seen[key] = true
+				stage = 2
+				continue
+			}
+		}
+		for _, prev := range subtags[:i+1] {
+			if strings.EqualFold(prev, sub) {
+				return false, fmt.Sprintf("%q is not a BCP 47 locale tag: %q appears twice", tag, sub)
+			}
+		}
+		return false, fmt.Sprintf("%q is not a BCP 47 locale tag: %q is not a script (4 letters, like 'Hant'), region (2 letters or 3 digits, like 'BR' or '419') or variant (5–8 characters) in that position", tag, sub)
+	}
+	return true, ""
+}
+
+func isAlpha(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if c := s[i] | 0x20; c < 'a' || c > 'z' {
+			return false
+		}
+	}
+	return true
+}
+
+func isDigit(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func isAlnum(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if !isAlpha(s[i:i+1]) && !isDigit(s[i:i+1]) {
+			return false
+		}
+	}
+	return true
+}
+
+// validateI18n checks the `i18n` block: an object with a non-empty `locales`
+// array of well-formed, distinct tags and a `defaultLocale` that is one of them.
+func validateI18n(raw json.RawMessage) (*I18n, error) {
+	var block map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &block); err != nil {
+		return nil, fmt.Errorf(
+			"%s: i18n must be an object like { locales: ['en', 'es'], defaultLocale: 'en' }; got %s",
+			ConfigFileName, strings.TrimSpace(string(raw)),
+		)
+	}
+	var locales []string
+	rawLocales, ok := block["locales"]
+	if !ok || unset(rawLocales) {
+		return nil, fmt.Errorf("%s: i18n.locales is required — list every locale the app ships, e.g. locales: ['en', 'es']", ConfigFileName)
+	}
+	if err := json.Unmarshal(rawLocales, &locales); err != nil {
+		return nil, fmt.Errorf("%s: i18n.locales must be an array of locale tags; got %s", ConfigFileName, strings.TrimSpace(string(rawLocales)))
+	}
+	if len(locales) == 0 {
+		return nil, fmt.Errorf("%s: i18n.locales must list at least one locale", ConfigFileName)
+	}
+	seen := map[string]string{}
+	for _, tag := range locales {
+		if ok, msg := ValidLocaleTag(tag); !ok {
+			return nil, fmt.Errorf("%s: i18n.locales: %s", ConfigFileName, msg)
+		}
+		// Tags compare case-insensitively (BCP 47), and on macOS/Windows the two
+		// spellings would also name one file.
+		fold := strings.ToLower(tag)
+		if first, dup := seen[fold]; dup {
+			return nil, fmt.Errorf("%s: i18n.locales lists %q and %q, which are the same locale", ConfigFileName, first, tag)
+		}
+		seen[fold] = tag
+	}
+
+	rawDefault, ok := block["defaultLocale"]
+	if !ok || unset(rawDefault) {
+		hint := ""
+		if _, wrote := block["default"]; wrote {
+			// `default` is a reserved word — `const { default } = config.i18n` is a
+			// syntax error — which is why the key is spelled defaultLocale.
+			hint = " (the key is defaultLocale, not default)"
+		}
+		return nil, fmt.Errorf("%s: i18n.defaultLocale is required%s — name the locale the others fall back to, e.g. defaultLocale: '%s'", ConfigFileName, hint, locales[0])
+	}
+	var def string
+	if err := json.Unmarshal(rawDefault, &def); err != nil {
+		return nil, fmt.Errorf("%s: i18n.defaultLocale must be a string; got %s", ConfigFileName, strings.TrimSpace(string(rawDefault)))
+	}
+	for _, tag := range locales {
+		if tag == def {
+			return &I18n{Locales: locales, DefaultLocale: def}, nil
+		}
+	}
+	return nil, fmt.Errorf("%s: i18n.defaultLocale %q is not in i18n.locales (%s)", ConfigFileName, def, strings.Join(locales, ", "))
 }

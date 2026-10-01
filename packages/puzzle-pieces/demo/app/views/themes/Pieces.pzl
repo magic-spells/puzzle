@@ -1,0 +1,272 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Pieces</h1>
+        <p class="mt-2 text-body">
+          The registry rendered in the appearance currently in force — no scoping wrapper anywhere on
+          this page, so switching the scheme or the mode repaints every piece below from the tokens.
+        </p>
+        <p class="mt-3 font-mono text-code text-muted">{ scheme } · { mode }</p>
+      </header>
+
+      <section id="buttons" class="mt-12 scroll-mt-20">
+        <h2 class="text-xl font-semibold tracking-tight text-ink">Buttons</h2>
+        <div class="mt-4 rounded-xl border border-border bg-surface-card p-6 shadow-card">
+          <div class="flex flex-wrap items-center gap-3">
+            <Button variant="primary">Primary</Button>
+            <Button variant="secondary">Secondary</Button>
+            <Button variant="outline">Outline</Button>
+            <Button variant="ghost">Ghost</Button>
+            <Button variant="destructive">Destructive</Button>
+          </div>
+          <div class="mt-6 flex flex-wrap items-center gap-3">
+            <Button size="sm">Small</Button>
+            <Button size="md">Medium</Button>
+            <Button size="lg">Large</Button>
+          </div>
+          <div class="mt-6 flex flex-wrap items-center gap-3">
+            <Button variant="primary" loading={ true }>Saving</Button>
+            <Button variant="outline" loading={ true }>Saving</Button>
+            <Button disabled>Disabled</Button>
+            <Button variant="destructive" disabled>Disabled</Button>
+          </div>
+        </div>
+      </section>
+
+      <section id="chips" class="mt-12 scroll-mt-20">
+        <h2 class="text-xl font-semibold tracking-tight text-ink">Badges</h2>
+        <div class="mt-4 rounded-xl border border-border bg-surface-card p-6 shadow-card">
+          <div class="flex flex-wrap items-center gap-3">
+            <Badge>Draft</Badge>
+            <Badge variant="brand">New</Badge>
+            <Badge variant="danger">Overdue</Badge>
+            <Badge variant="outline">v1.2</Badge>
+          </div>
+        </div>
+      </section>
+
+      <section id="inputs" class="mt-12 scroll-mt-20">
+        <h2 class="text-xl font-semibold tracking-tight text-ink">Inputs</h2>
+        <div class="mt-4 rounded-xl border border-border bg-surface-card p-6 shadow-card">
+          <div class="grid gap-6 sm:grid-cols-2">
+            <Field
+              label="Workspace name"
+              placeholder="Acme"
+              hint="Shown on every invoice."
+              value={ name }
+              @change={ setName }/>
+            <Field
+              label="Email"
+              type="email"
+              value={ email }
+              error="That address is already taken."
+              @change={ setEmail }/>
+          </div>
+          <Textarea
+            class="mt-6"
+            label="Release notes"
+            rows={ 4 }
+            hint="Markdown supported."
+            value={ notes }
+            @change={ setNotes }/>
+          <div class="mt-6 space-y-4">
+            <Checkbox
+              label="Email me a weekly digest"
+              hint="Sent on Mondays."
+              checked={ digest }
+              @change={ setDigest }/>
+            <Switch
+              label="Reduce motion"
+              hint="Skips the panel and dialog transitions."
+              checked={ calm }
+              @change={ setCalm }/>
+          </div>
+        </div>
+      </section>
+
+      <section id="status" class="mt-12 scroll-mt-20">
+        <h2 class="text-xl font-semibold tracking-tight text-ink">Feedback</h2>
+        <div class="mt-4 rounded-xl border border-border bg-surface-card p-6 shadow-card">
+          <div class="space-y-3">
+            <Alert>Your changes were saved.</Alert>
+            <Alert variant="brand" title="Heads up">A new version of the registry is available.</Alert>
+            <Alert variant="danger" title="Payment failed">Update your card to continue.</Alert>
+          </div>
+          <div class="mt-6">
+            <Button variant="outline" @press={ fireToast }>Show a toast</Button>
+          </div>
+          <Progress class="mt-6" value={ 62 } label="Uploading" showValue/>
+          <div class="mt-6 flex items-center gap-4">
+            <Skeleton variant="circle" class="size-10"/>
+            <div class="flex-1 space-y-2">
+              <Skeleton variant="text" class="w-48"/>
+              <Skeleton variant="text" class="w-2/3"/>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="overlays" class="mt-12 scroll-mt-20">
+        <h2 class="text-xl font-semibold tracking-tight text-ink">Overlays</h2>
+        <div class="mt-4 rounded-xl border border-border bg-surface-card p-6 shadow-card">
+          <Button variant="outline" @press={ openDialog }>Open a dialog</Button>
+          <p class="mt-3 text-sm text-muted">
+            The panel is a card on the top layer: surface, border, radius and the popover shadow all
+            come from the same tokens as this page.
+          </p>
+          <Dialog
+            open={ dialogOpen }
+            title="Delete project?"
+            description="This permanently removes the project and all of its data."
+            @hide={ closeDialog }>
+            <p class="text-sm text-body">
+              Escape, a backdrop click and the footer buttons all close it; the page only has to flip
+              open back to false.
+            </p>
+            <div slot="footer" class="flex gap-2">
+              <Button variant="outline" @press={ closeDialog }>Cancel</Button>
+              <Button variant="destructive" @press={ closeDialog }>Delete project</Button>
+            </div>
+          </Dialog>
+        </div>
+      </section>
+
+      <section id="navigation" class="mt-12 scroll-mt-20">
+        <h2 class="text-xl font-semibold tracking-tight text-ink">Navigation</h2>
+        <div class="mt-4 rounded-xl border border-border bg-surface-card p-6 shadow-card">
+          <div class="flex h-80 overflow-hidden rounded-xl border border-border">
+            <Sidebar items={ navItems } activePath="#/inbox" label="Surface"/>
+            <Sidebar variant="rail" items={ navItems } activePath="#/inbox" label="Rail"/>
+          </div>
+          <p class="mt-3 text-sm text-muted">
+            The two rails are the same config. <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">variant="rail"</code>
+            paints the piece with the app-shell roles — bg-rail and text-rail-ink — instead of the
+            content-level surface roles, which is why it reads as chrome rather than as a card.
+          </p>
+        </div>
+      </section>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { current, subscribe } from '@/lib/appearance.js';
+import Button from '@/components/ui/Button.pzl';
+import Badge from '@/components/ui/Badge.pzl';
+import Field from '@/components/ui/Field.pzl';
+import Textarea from '@/components/ui/Textarea.pzl';
+import Checkbox from '@/components/ui/Checkbox.pzl';
+import Switch from '@/components/ui/Switch.pzl';
+import Alert from '@/components/ui/Alert.pzl';
+import Progress from '@/components/ui/Progress.pzl';
+import Skeleton from '@/components/ui/Skeleton.pzl';
+import Dialog from '@/components/ui/Dialog.pzl';
+import Sidebar from '@/components/ui/Sidebar.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+import { toast } from '@/components/ui/toast.js';
+
+// Pieces — the gallery page of the themes section. Unlike Compare and Shell it
+// renders NOTHING scoped: every piece below inherits the live data-scheme /
+// data-theme from <html>, so the page itself is the demo. Switching the
+// appearance in the shell's switcher repaints it, which is why the view
+// subscribes rather than reading the appearance once.
+
+// Sidebar icons are SVG path `d` strings on a 24×24 stroked grid (the piece's
+// icon contract), not markup.
+const NAV_ITEMS = [
+	{ group: 'Workspace' },
+	{ label: 'Home', href: '#/home', icon: 'M3 12l9-7 9 7M5 10v10h14V10' },
+	{ label: 'Inbox', href: '#/inbox', icon: 'M3 12h5l2 3h4l2-3h5M3 12l3-7h12l3 7v7H3v-7Z', badge: '12' },
+	{ label: 'Reports', href: '#/reports', icon: 'M4 20V10M10 20V4M16 20v-8M22 20H2' },
+	{
+		label: 'Settings',
+		href: '#/settings',
+		icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM4 12h2m12 0h2M12 4v2m0 12v2',
+		children: [
+			{ label: 'General', href: '#/settings/general' },
+			{ label: 'Members', href: '#/settings/members' },
+		],
+	},
+];
+
+const TOC = [
+	{ label: 'Buttons', href: '#buttons' },
+	{ label: 'Badges', href: '#chips' },
+	{ label: 'Inputs', href: '#inputs' },
+	{ label: 'Feedback', href: '#status' },
+	{ label: 'Overlays', href: '#overlays' },
+	{ label: 'Navigation', href: '#navigation' },
+];
+
+export default class Pieces extends PuzzleView {
+	created() {
+		this.setData({
+			name: 'Acme',
+			email: 'ada@example.com',
+			notes: 'Adds the medium mode to every palette.',
+			digest: true,
+			calm: false,
+			dialogOpen: false,
+		});
+	}
+
+	data(params, props) {
+		const live = current();
+		// A null mode follows the OS; resolve it so the line can name a mode.
+		// Guarded, because data() also runs under Node during prerender.
+		const prefersDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+		return {
+			...this.getData(),
+			scheme: live.scheme || 'default',
+			mode: live.mode || (prefersDark ? 'dark' : 'light'),
+			navItems: NAV_ITEMS,
+			toc: TOC,
+		};
+	}
+
+	mounted() {
+		this._unsubscribe = subscribe(() => this.refresh());
+	}
+
+	destroyed() {
+		if (this._unsubscribe) this._unsubscribe();
+	}
+
+	events = {
+		setName: (value) => {
+			this.setData({ name: value });
+			this.refresh();
+		},
+		setEmail: (value) => {
+			this.setData({ email: value });
+			this.refresh();
+		},
+		setNotes: (value) => {
+			this.setData({ notes: value });
+			this.refresh();
+		},
+		setDigest: (value) => {
+			this.setData({ digest: value });
+			this.refresh();
+		},
+		setCalm: (value) => {
+			this.setData({ calm: value });
+			this.refresh();
+		},
+		fireToast: () => toast({ title: 'Published', message: 'The post is now live.', variant: 'success' }),
+		openDialog: () => {
+			this.setData({ dialogOpen: true });
+			this.refresh();
+		},
+		closeDialog: () => {
+			this.setData({ dialogOpen: false });
+			this.refresh();
+		},
+	};
+}
+</script>

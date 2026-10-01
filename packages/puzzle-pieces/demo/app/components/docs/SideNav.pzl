@@ -4,7 +4,7 @@
     <ul class="space-y-0.5">
       {#for item in started}
         <li key={ item.path }>
-          <a href="#{ item.path }" class={ item.class }>{ item.title }</a>
+          <a href="#{ item.path }" class={ item.class } aria-current={ item.current }>{ item.title }</a>
         </li>
       {/for}
     </ul>
@@ -15,7 +15,7 @@
         <ul class="space-y-0.5">
           {#for item in section.items}
             <li key={ item.path }>
-              <a href="#{ item.path }" class={ item.class }>{ item.title }</a>
+              <a href="#{ item.path }" class={ item.class } aria-current={ item.current }>{ item.title }</a>
             </li>
           {/for}
         </ul>
@@ -26,7 +26,7 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import { GETTING_STARTED, SECTIONS } from '../../docs/nav.js';
+import { GETTING_STARTED, SECTIONS, SCHEME_PANELS, THEMES } from '../../docs/nav.js';
 
 // SideNav — the left component navigation (docs-only). Reads the generated
 // nav.js config: a "Getting started" block, then one labeled section per
@@ -34,6 +34,11 @@ import { GETTING_STARTED, SECTIONS } from '../../docs/nav.js';
 // are text-ink so the groups read at a glance; the entry matching the current
 // path (passed by the layout) gets the active pill. Links are plain <a href>
 // so the SPA router handles them.
+//
+// This is the phone/tablet drawer's nav (the lg rail is the Sidebar piece), so
+// it carries every destination the rail does — the Themes group (the scheme
+// panels, then Compare / Shell / Pieces) sits between Getting started and the
+// component sections, in the rail's order.
 //
 //   <SideNav path={ path }/>
 const LINK =
@@ -50,10 +55,15 @@ export default class SideNav extends PuzzleView {
       items.map((item) => ({
         ...item,
         class: isActive(item) ? ACTIVE : IDLE,
+        // `false` omits the attribute; the layout scrolls to the page one.
+        current: isActive(item) ? 'page' : false,
       }));
     return {
       started: mark(GETTING_STARTED),
-      sections: SECTIONS.map((s) => ({ label: s.label, items: mark(s.items) })),
+      sections: [{ label: 'Themes', items: [...SCHEME_PANELS, ...THEMES] }, ...SECTIONS].map((s) => ({
+        label: s.label,
+        items: mark(s.items),
+      })),
       rootClass: props.class || '',
     };
   }

@@ -1,0 +1,29 @@
+{
+  "brand": "Puzzle Market",
+  "nav": {
+    "home": "Home",
+    "about": "About"
+  },
+  "language": "Language",
+  "home": {
+    "greeting": "Welcome back, {name}!",
+    "intro": "Every string on this page comes from app/locales. Switch the language above — the page rebuilds in place, and your choice is remembered.",
+    "cart": {
+      "title": "Your cart",
+      "items": {
+        "zero": "Your cart is empty",
+        "one": "{count} item",
+        "other": "{count} items"
+      },
+      "add": "Add one",
+      "remove": "Remove one",
+      "total": "Order total",
+      "updated": "Prices as of"
+    }
+  },
+  "about": {
+    "title": "About this example",
+    "body": "Pages prerender in English. Every page carries the English table inline, so an English visitor makes no extra request; any other language loads one small file."
+  },
+  "notFound": "This page does not exist."
+}

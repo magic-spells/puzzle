@@ -1,175 +1,139 @@
 ---
 name: Testing strategy
-status: verified
-verified_at: '2026-08-24T21:11:50.859Z'
+status: built
 connections:
   - DOC-DEVELOPMENT
-  - DOC-BUILD-PLAN
   - DOC-SPEC
   - FLOW-BUILD
   - FLOW-REACTIVITY
   - TEST-TODOS-INTEGRATION
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
-notes:
-  - kind: verified
-    text: >-
-      Baseline re-stamped after the monorepo move (290e4b7) relocated the framework to
-      packages/puzzle. Every bound file is byte-identical between the prior verified_sha and this
-      one — the path moved, the code did not. No content was re-checked, and none needed to be.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
 # Testing strategy
 
-Puzzle verifies contracts at the narrowest useful layer, then repeats critical
-paths end to end. Avoid fixed test counts in documentation; the suite output is
-the source of truth.
+Puzzle verifies each contract at the narrowest useful layer, then repeats
+critical paths end to end. Never quote test counts; the suite output is the
+truth. Two audiences: the framework's own suites (below), and the shipped
+`/testing` surface for app authors (last section). Never point app authors at
+`tests/helpers/` — it is internal.
 
-**Two audiences.** Everything below covers testing **the framework** — the
-suites a contributor runs before claiming work complete. Testing **an app built
-with Puzzle** is a separate, shipped surface (see the last section). Never point
-app authors at `tests/helpers/`; those are internal and unpublished.
-
-## Required release suites
+## Required suites
 
 ```sh
 npx vitest run
-cd compiler
-go test ./...
+npm run test:runtime-types             # runtime JSDoc + published .d.ts drift
+(cd compiler && go test ./...)
+(cd ../puzzle-lang && go test ./...)   # the parser is its own Go module
 ```
 
-Both must pass before claiming repository work complete.
+All four pass before any work is called complete. `npm test` adds a pretest
+that compiles the generated fixtures and smoke-builds the example apps it
+depends on; use it when a change touches build integration or examples.
 
-## JavaScript coverage
+- **Vitest/jsdom** covers app lifecycle, view state, patching, events,
+  functions, store/model, routing, transitions, scroll, animations, morph,
+  i18n, dev-state transfer and the static serializer. The todos behavior suite
+  runs against both handwritten fixtures and modules compiled by the real Go
+  compiler, which catches compiler/runtime calling-convention drift.
+- **Go** table tests cover section splitting, parsing, the expression
+  grammar, codegen, plugin resolution, config/styles, staged builds, public
+  assets, watching, CLI commands, scaffolds/generators/pieces, and prerender.
+  Golden files pair `.pzl` input with expected JavaScript; regenerate only
+  deliberately with `go test ./internal/codegen -update` (from `compiler/`)
+  and review the diff.
+- **Runtime types** (`test:runtime-types`, CI's JS job, and `release:prep`
+  step 2.6). The runtime stays plain JavaScript with no build step; TypeScript
+  7 checks it from its JSDoc and the published `types/*.d.ts` are held to it.
+  Two programs:
+  - `tsconfig.runtime.json` — `allowJs` + `checkJs` over `client-runtime/`,
+    with `noImplicitAny` and every other strict-family flag except
+    `strictNullChecks` (~180 errors, nearly all "possibly null" reads guarded
+    by runtime invariants; clearing them would take a JSDoc cast per site for
+    little signal). Type-only support lives in `tests-types/runtime/`:
+    `env.d.ts` (the `__PUZZLE_*__` build flags, `window` hooks, two `node:`
+    shims for the SSG, the untyped morph-engine peer), `augment.d.ts` (members
+    installed by `defineProperty`, stamped on by another module, or declared
+    by the author's subclass) and `installed.d.ts` (the adapter/fixtures Store
+    members, OPTIONAL so core code cannot assume them).
+  - `tests-types/drift` — strict, `allowJs` without `checkJs`. For every
+    package export it fails on a runtime value export the `.d.ts` does not
+    declare, a declared value the runtime does not export, and a runtime value
+    not ASSIGNABLE to its declaration (one way: a declaration may be narrower —
+    generics, literal unions, brands — never promise more). Parameters compare
+    bivariantly (`strictFunctionTypes` off) because runtime classes carry `#`
+    private fields and are nominal; arity and returns stay strict. It models
+    everything installed (`drift/installed.d.ts`), matching the published
+    augmentations. Deliberate gaps are named with a reason in `drift.ts`:
+    the adapter module's test seams (`STORE_RAW`, `serializeReadState`,
+    `hydrateReadState`) and `mountView`'s shape (its generic constraint names
+    the published vs the runtime `PuzzleView`).
+  A runtime edit that trips either program is fixed in JSDoc (or in
+  `types/*.d.ts` when the contract changed) — never by changing code.
+  Production bundles are unaffected by JSDoc (esbuild strips comments when
+  minifying); development bundles keep some inline `/** @type */` comments.
 
-Vitest/jsdom covers application lifecycle, component state, vnode patching,
-events, formatters, store/model behavior, routing/transitions/scroll,
-animations, morph integration, development-state transfer, and the static
-serializer.
-
-The todos behavior suite runs against both handwritten fixtures and modules
-compiled by the real Go compiler. This detects mismatches between compiler
-emission and runtime calling conventions.
-
-`npm test` is the broader local workflow: its pretest compiles generated
-fixtures and smoke-builds representative example apps before Vitest. Use it
-when changes touch build integration or examples.
-
-## Go coverage
-
-Table-driven tests cover section scanning, template parsing, expression/code
-generation, plugin resolution, config/styles, build staging, public assets,
-watch behavior, CLI commands, scaffolds/generators/pieces, and prerender
-orchestration.
-
-Golden tests pair `.pzl` input with expected JavaScript. Update them only with
-the explicit flag and review the generated diff:
-
-```sh
-go test ./internal/codegen -update
-```
-
-## Additional release checks
-
-```sh
-npm run test:types
-npm run verify:pack
-npm run test:e2e-pack
-npm run test:browser
-```
-
-- Type tests protect the public declaration surface.
-- Pack verification checks root/platform tarball contents and metadata.
-- E2E pack testing installs the packed artifacts into a clean consumer project.
-- Playwright covers behavior that requires a real browser.
-
-Run these in proportion to the changed surface and all of them for the final
-release candidate.
+Also, in proportion to the change and all of them for a release candidate:
+`npm run test:types` (public declarations against a strict consumer),
+`npm run verify:pack` (tarball contents and metadata), `npm run test:e2e-pack`
+(packed install into a clean consumer), `npm run test:browser` (Playwright).
 
 ## Test design rules
 
-- Test public behavior and durable internal invariants, not implementation
-  trivia.
+- Test public behavior and durable invariants, not implementation trivia.
 - Keep parser/codegen positions and error text actionable.
 - Every shipped grammar construct needs parser and emission proof.
-- Every reactive fix needs at least one test that crosses the actual
-  subscription/render boundary.
-- Failure-path tests must assert last-good output/state remains intact where the
-  contract promises atomicity.
-- Rejected features may have negative boundary tests; do not accidentally
-  implement a second spec in tests.
-- Generated fixtures are build products, never hand-edited expectations.
+- Every reactive fix needs a test that crosses the real subscription/render
+  boundary.
+- Failure-path tests assert last-good output/state survives where the contract
+  promises atomicity.
+- Rejected features may have negative boundary tests; never implement a second
+  spec in tests.
+- Generated fixtures are build products, never hand-edited.
 
 ## Testing a Puzzle app (the shipped surface)
 
-
-
-App authors do **not** use anything in `tests/helpers/`. They import
-`@magic-spells/puzzle/testing` (D94, SPEC §53):
+App authors import `@magic-spells/puzzle/testing` (D94):
 
 ```js
-import {
-  mountView,
-  createTestApp,
-  settled,
-  type,
-  measureRenders,
-  installFakeAnimate,
-  installFakeObserver,
-}
+import { mountView, createTestApp, settled, type, measureRenders,
+  installFakeAnimate, installFakeObserver, installFixtures }
   from '@magic-spells/puzzle/testing';
 
 const view = await mountView(TodoList, { props: { filter: 'open' }, store });
 await view.click('.toggle');
 await view.type('.title', 'walk the dog');
 
-const app = await createTestApp({ routes, models });
-await app.visit('/todos/42');
+const app = await createTestApp({ routes, models, routerInitialPath: '/todos/42' });
 await settled();
-
-const profile = await measureRenders(view, () => view.click('.toggle'));
 ```
 
-- `mountView` mounts one view against a detached container; the handle exposes
-  `element`/`find`/`findAll`/`click`/`type`/`setProps`/`destroy`.
-- `createTestApp` runs a real app in memory mode, so `visit()` drives the real
-  load-then-commit pipeline, guards, and lifecycle. It imports the D159
-  `memoryRouter()` factory itself, so a test never wires a router mode; a
-  `routerInitialPath` in the config is consumed by the helper.
-- **`settled()` is the piece that matters.** It drains stores, rAF-scheduled
-  `setData` renders, and last-wins `data()`/navigation promises to a fixed point.
-  It is bounded (`settled({ maxPasses })`) and **throws** naming the churn source
-  rather than hanging, so a `data()` → store-write → `data()` cycle is diagnosed
-  instead of surfacing as a runner timeout.
-- **Know its non-guarantees** — it does not advance user timers or skeleton
-  `min-duration` holds, resolve promises `data()` never awaited, fire
-  IntersectionObserver callbacks, or finish fire-and-forget enter animations.
-- `type(target, text)` sets the value and dispatches the bubbling `input` and
-  `change` events a real edit-then-leave produces, then settles — the way to
-  drive D147 two-way bindings from a test. It takes a selector or an element
-  (the mounted handles expose it as `handle.type(...)`) and **throws** on a
-  checkbox or radio, which have no text value; toggle those with `click()`.
-- `measureRenders(handle, callback)` temporarily observes actual
-  `ViewManager.render` entries, awaits the callback and `settled()`, and returns
-  a deeply frozen report covering useful/wasted renders, DOM mutations,
-  per-view/cause counts, recursive depth, and Store notifications. It is
-  runner-neutral and counts no coalesced-away `refresh()` request as a render.
+- `mountView` mounts one view into a detached container; the handle has
+  `element`, `find`, `findAll`, `click`, `type`, `setProps`, `destroy`.
+- `createTestApp` boots a real app in memory routing (it imports
+  `memoryRouter()` itself and consumes `routerInitialPath`), so `visit()`
+  drives the real load-then-commit pipeline, guards and lifecycle. An `i18n`
+  option wires translations over an in-memory table and restores the locale
+  afterwards.
+- `settled()` drains stores, scheduled `setData` renders and last-wins
+  `data()`/navigation promises to a fixed point. It is bounded
+  (`{ maxPasses }`) and throws naming the churn source instead of hanging. It
+  does not advance user timers or skeleton `min-duration`, resolve promises
+  `data()` never awaited, fire IntersectionObserver callbacks, or finish
+  fire-and-forget enter animations.
+- `type(target, text)` sets the value, dispatches `input` and `change`, then
+  settles — the way to drive two-way bindings. It throws on a checkbox or
+  radio; use `click()`.
+- `measureRenders(handle, fn)` returns a frozen report of useful/wasted
+  renders, DOM mutations, per-view causes, depth and store notifications.
 - `installFakeAnimate` / `installFakeObserver` supply the WAAPI and
   IntersectionObserver jsdom lacks; each returns `uninstall()`.
+- `installFixtures({ seed })` (D98) attaches `store.seed(type, n)` and the mock
+  adapter, which serves adapter verbs offline from a model's
+  `static adapter = { endpoint, mock: { latency, failRate, fail } }` or the
+  install config; latency and failure knobs are how skeleton timing and
+  `data()` rejection get exercised. In a running app `--fixtures` wires the
+  same module from `app/fixtures.js`; without the flag none of it is bundled.
 
-For data, install the self-contained fixtures module first (D98, SPEC §52) —
-`const uninstall = installFixtures({ seed })` in setup, `uninstall()` in
-teardown (it is re-exported from `/testing`). Installing attaches
-`store.seed(type, n)` (schema-derived fixtures) and the mock adapter, which
-serves the adapter verbs offline from
-`static adapter = { endpoint, mock: { latency, failRate, fail } }`
-and/or the install config's per-type `mock` entries — the
-latency and failure knobs are how skeleton timing and `data()`-rejection paths
-get exercised at all. In a running app the same module is wired by `puzzle dev
---fixtures` / `puzzle build --fixtures` from `app/fixtures.js` (SPEC §54);
-without the flag none of it is bundled.
-
-**The framework's own suite dogfoods this surface.** `tests/testing-todos.test.js`
-ports canonical todos behavior onto the public helpers; keep it that way, because
-it is the only thing that catches the public API rotting relative to the
-internal one.
+`tests/testing-todos.test.js` ports canonical todos behavior onto these public
+helpers. Keep it that way — it is what catches the public API rotting relative
+to the internal one.

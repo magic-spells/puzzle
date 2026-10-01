@@ -48,7 +48,7 @@ export interface MountStaticOptions {
 	adapter?: PuzzleAppConfig['adapter'];
 	/**
 	 * Normalized route URL prefix. The app's `routerMode` is deliberately NOT
-	 * carried into a static page (D117/D159): static output has no router and its
+	 * carried into a static page (D81/D159): static output has no router and its
 	 * files are path-shaped on disk, so `ctx.router.url()` (and therefore the
 	 * `link` formatter) always emits history-style hrefs — but a sub-path deploy
 	 * still wants them prefixed.
@@ -59,7 +59,7 @@ export interface MountStaticOptions {
 /**
  * Mount a prerendered static page's interactive layer: wire the build-time ctx
  * (Store + FormatterRegistry, plus the D79 link-capable router stub — `url()` and
- * `current` work so `{ path | link }` and `router.current` resolve, while every
+ * `current` work so `{ link(path) }` and `router.current` resolve, while every
  * navigation method throws), rehydrate the inline data island, assemble + preload
  * the route chain, and mount it over the prerendered markup (flash-free,
  * replace-on-commit). `beforeMount` is not run (build-time only).

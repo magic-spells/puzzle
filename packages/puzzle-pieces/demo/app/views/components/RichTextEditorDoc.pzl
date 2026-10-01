@@ -40,7 +40,7 @@
 
       <div class="mt-12 space-y-12">
         <ExampleBox id="live-document" title="Live document" code={ codeLive }>
-          <div class="grid w-full gap-6 lg:grid-cols-2">
+          <div class="grid w-full grid-cols-1 gap-6 lg:grid-cols-2">
             <RichTextEditor label="Editor" value={ doc } @change={ setDoc } />
             <div>
               <div class="mb-1.5 text-sm font-medium text-ink">Rendered with RichText</div>

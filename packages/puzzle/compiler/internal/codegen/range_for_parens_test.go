@@ -5,16 +5,16 @@ import (
 	"testing"
 )
 
-// range_for_parens_test.go — range {#for} bounds are spliced textually into the
-// emitted `Array.from({ length: <to> - <from> + 1 }, …)` and `<from> + __i`, so a
-// composite from/to must be parenthesized. Without parens, `start + 1 ... end`
-// would emit `end - start + 1 + 1` (length off by the `+ 1`) and `start + 1 + __i`
-// binds fine but `a - 2 ... b` would emit `b - a - 2 + 1` — left-associative minus
-// does not distribute. Parens make each bound a single operand.
+// range_for_parens_test.go — range {#for} bounds are ARGUMENTS to the runtime's
+// loopRange (`__r(<from>, <to>)`, D173 V12), so a composite from/to
+// (`start + 1`, `a || b`, a ternary) binds as one operand without the
+// parenthesization the old textual `Array.from({ length: <to> - <from> + 1 })`
+// splice needed — left-associative minus does not distribute, and that splice
+// once miscounted `a - 2 ... b`.
 
 func TestRangeForParenthesizesBounds(t *testing.T) {
 	got := compileSrc(t, `<puzzle-view>
-  {#for start + 1...end, n}
+  {#for start + 1...end - 2, n}
     <span>{ n }</span>
   {/for}
 </puzzle-view>
@@ -26,12 +26,10 @@ export default class T extends PuzzleView {
 }
 </script>
 `)
-	// length: (end) - (start + 1) + 1
-	if !strings.Contains(got, "Array.from({ length: (__d.end) - (__d.start + 1) + 1 }") {
-		t.Errorf("range length must parenthesize both bounds:\n%s", got)
+	if !strings.Contains(got, "__r(__d.start + 1, __d.end - 2).map((n) =>") {
+		t.Errorf("composite range bounds must reach loopRange as whole arguments:\n%s", got)
 	}
-	// loop value: (start + 1) + __i
-	if !strings.Contains(got, "(__d.start + 1) + __i") {
-		t.Errorf("range loop value must parenthesize the from bound:\n%s", got)
+	if !strings.Contains(got, "loopRange as __r") {
+		t.Errorf("a range loop must import loopRange:\n%s", got)
 	}
 }

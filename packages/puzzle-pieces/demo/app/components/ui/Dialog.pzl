@@ -118,6 +118,12 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // backdrop click, a click on the dialog's own margin — is refused, and the
 // dialog stays open with no event fired.
 //
+// WHAT COUNTS AS A BACKDROP CLICK (dialog-panel ≥ 2.0.2): a click whose target
+// is the <dialog> itself, landing outside its box. A click on a DESCENDANT that
+// paints outside the box — a fixed-position child, a nested full-screen
+// overlay such as a photo lightbox, a popover anchored past the edge — is not
+// a backdrop click and never dismisses the dialog.
+//
 // MARKUP CONTRACT. The header slot's fallback body is the `title` / `description`
 // block, so a FILLED header slot replaces it entirely and must bring its own
 // heading plus a matching `labelledby` (there is no is-slot-filled probe).
@@ -171,13 +177,14 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   * The `hidden` detail carries no reason, so @hide cannot tell Escape from a
 //     backdrop click. Only a [data-action-hide-dialog] close is distinguishable,
 //     through `result`.
-//   * A KEYBOARD activation of a [data-action-hide-dialog] button closes the
-//     dialog but reports result null. A pointerless click carries coordinates
-//     of 0,0, which dialog-panel's outside-click check reads as a backdrop tap
-//     before the delegated handler runs — so the button never gets to pass its
-//     own element along. The piece watches for that click in the capture phase
-//     so dismissible={ false } still lets the button through; recovering the
-//     result belongs upstream.
+//   * CLOSED in dialog-panel 2.0.2: a KEYBOARD activation of a
+//     [data-action-hide-dialog] button used to report result null. Its
+//     pointerless click carries coordinates of 0,0, which the rect-only
+//     outside-click check read as a backdrop tap before the delegated handler
+//     ran. The check now also requires the click to target the <dialog>
+//     itself, so the button's click bubbles through and carries its result.
+//     The capture-phase watch below stays as belt-and-braces for
+//     dismissible={ false } against an older installed dialog-panel.
 //   * dialog-panel's drawer `position` attribute is deliberately not exposed.
 //     Its rules re-position the <dialog> and take over the transform, which
 //     collides with the size cap here — and an edge-anchored panel is what
@@ -273,9 +280,9 @@ export default class Dialog extends PuzzleView {
   // Capture phase, on the root: it runs before dialog-panel's own handlers no
   // matter which listener was registered first (the element may already be
   // upgraded by the time this view mounts, if another overlay loaded the
-  // module). A keyboard-activated close button arrives at (0,0) and is read as
-  // a backdrop tap upstream, so this is the only place the intent is still
-  // legible — see KNOWN GAPS.
+  // module). Against a dialog-panel older than 2.0.2 a keyboard-activated
+  // close button arrives at (0,0) and is read as a backdrop tap upstream, so
+  // this is the only place the intent is still legible — see KNOWN GAPS.
   #onClickCapture = (event) => {
     if (!event.target?.closest?.('[data-action-hide-dialog]')) return;
     this.#buttonHide = true;

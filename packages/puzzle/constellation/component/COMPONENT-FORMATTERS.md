@@ -1,98 +1,95 @@
 ---
-name: Formatter registry
+name: Function library (the formatter registry)
 status: verified
-verified_at: '2026-08-24T21:39:23.520Z'
+verified_at: '2026-09-25T10:47:50.423Z'
 connections:
   - COMPONENT-PUZZLE-APP
   - COMPONENT-CODEGEN
   - COMPONENT-ESBUILD-PLUGIN
   - DECISION-D31-FORMATTER-TREESHAKE
   - DECISION-D43-FORMATTER-MISSING-GUARD
+  - DECISION-D174-STANDARD-FORMATTERS
   - FILE-FORMATTER-REGISTRY
   - FILE-FORMATTER-BUILTINS
   - FILE-FORMATTER-ALL
-notes:
-  - kind: state
-    text: >-
-      Dev-only did-you-mean machinery is now tree-shaken from prod (2026-07-24). The D43 __missing
-      typo-guard computed its Levenshtein suggestion OUTSIDE the (dropConsole-stripped)
-      console.error, so ~0.5 KB of dead code shipped in production. editDistance + the nearest-match
-      search (now a module-level `nearestFormatter` function, no longer a class method) plus the
-      whole warn block are wrapped in `if (typeof __PUZZLE_DEV__ === 'undefined' ||
-      __PUZZLE_DEV__)`; production folds __PUZZLE_DEV__ to false, DCEs the branch, and tree-shakes
-      both functions out. Verified: the "did you mean"/"unknown formatter" strings and the DP loop
-      are ABSENT from a prod examples/todos app.js. Dev/test behavior (warn-once with suggestion)
-      unchanged. Does NOT touch D31 manifest tree-shaking or the D43 pass-through contract.
-    sha: d9591d6
-  - kind: gotcha
-    text: >-
-      Intl objects in the date family are CACHED in module-level Maps and reused for the app's
-      lifetime — `date` keyed on (locale, resolved preset), `in_timezone` on the tz argument, and
-      `timeago` — which takes no locale — held in a single lazily-built module-level slot.
-      Constructing them per call cost ~37us each; measured against the real exported date(), 100k
-      calls went 3725ms -> 122ms (~30x). Anything added here must stay stateless for reuse:
-      Intl.DateTimeFormat/RelativeTimeFormat are safe because format()/formatToParts() carry no
-      per-call state. Do not cache anything that does.
-
-
-      Two non-obvious constraints hold the design together. (1) It must be a keyed Map, NOT a
-      single-slot last-used memo. A single slot benchmarks ~7% faster on a uniform workload and then
-      collapses to worse-than-uncached the moment a page renders two presets — measured 85ms vs
-      3450ms on an alternating workload, which is as ordinary as a table with a short date column
-      and a long date in its header. (2) The `.set()` must sit AFTER the constructor inside the
-      existing try, because an invalid locale (`en_US`, `!!`, `e`) and an unknown time zone both
-      throw at CONSTRUCTION. Insert-after-success is what keeps a throwing tag from poisoning the
-      entry and stops repeated bad tags from growing the Map unbounded; the surrounding catch still
-      fails soft to str(v). Note `not-a-locale` is a structurally valid BCP-47 tag and does NOT
-      throw — it resolves to the default locale, so it is useless as a negative test.
-
-
-      Preset resolution uses Object.hasOwn before the lookup, so an unknown preset name collapses
-      onto the `date` entry instead of minting one per typo.
-  - kind: verified
-    text: >-
-      Re-verified against current code and corrected: at least one claim on this card no longer
-      matched the runtime, and the card was rewritten to state what the code actually does. Verified
-      at this sha with the framework suite green at 1871 tests.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 ---
 
-# Formatter registry
+# Function library (the formatter registry)
 
+The runtime half of the template function library
+([[DECISION-D174-STANDARD-FORMATTERS]] owns each function's contract;
+[[DECISION-D176-EXPRESSION-LANGUAGE]] rule 4 the call form). Code keeps the
+`formatters` names (`client-runtime/formatters.js`, `client-runtime/formatters/`,
+the `@magic-spells/puzzle/formatters/manifest` alias, the app's `formatters` config
+key) because the compiler and package exports address them by those paths; everywhere
+else they are "functions".
 
+## Wiring
 
-Liquid-style, display-only transformations used by compiled template chains. The registry seeds built-ins, applies user registrations last (user overrides win), exposes the raw function map to render functions, and supports arbitrary string keys through bracket access.
+- Codegen writes `(__f["name"] || __f.__missing("name"))(…)`; render functions receive
+  `registry.getAll()`, never the registry.
+- **Name lists** (dev-only, tree-shaken): `STANDARD_FORMATTERS` (19, including `t`) and
+  `PUZZLEKIT_FORMATTERS` (`link`, `timeago`). The same 21 names must match
+  `codegen.LibraryFunctionNames`, `puzzle check`'s signatures and `LibraryFunctions` in
+  `types/index.d.ts` (see [[COMPONENT-CODEGEN]]).
+- **Built-ins** are pure named exports of `formatters/builtins.js`;
+  `formatters/builtins.json` lists them (18 standard + `timeago`) and is embedded in Go
+  (`builtins_embed.go`). The usage scan (`plugin/scan.go`) finds bare calls in every
+  expression position except an `@event` value's own calls and serves a virtual module
+  importing only those ([[DECISION-D31-FORMATTER-TREESHAKE]]); it errs toward inclusion,
+  and `escape` is always seeded. `builtins-all.js` (full map for raw/test imports)
+  namespace-imports `builtins.js`, so **any helper exported from builtins.js becomes a
+  library function** — shared helpers (`localeNumber`, the `formatLocale` slot) live in
+  `formatters/locale.js`; calendar-date parsing lives in `client-runtime/dates.js`.
+- **`makeFormatterRegistry(custom, url)`** builds every registry: built-ins, then app
+  functions, then `link` unless the app supplied one. `link` delegates to `router.url()`
+  through a closure reading `this.router` lazily (re-mount safe); the static kernel builds
+  the same registry over its page stub. `t` is installed afterwards by
+  `installTranslate(registry, i18n)` (i18n.js) only when `i18n` is configured and the app
+  has no `t`, so formatters.js never imports i18n. Neither enters the manifest; the scan
+  records `t` literal keys separately (`Usage.TKeys`) for the missing-key warning.
+- **`register(name, fn)` throws** on a bad name or non-function — silently skipping would
+  disguise broken config as a typo. App functions win over built-ins; dev warns when one
+  shadows a standard name, and specially for `raw`/`newline_to_br` (templates lower
+  those to the live-HTML node, so an app override is unreachable from a template).
+- **Handler shadows**: in dev, `PuzzleView.mount()` calls `warnHandlerShadows(view)` —
+  once per view and name, for each `events` key naming a library or app function (the
+  compiler warns too, `checkHandler`).
+- **Unknown names** hit `__missing(name)`: dev reports once per registry + name with a
+  did-you-mean (`nearestFormatter`, edit distance ≤ 2, reused by i18n), or the
+  replacement from `REMOVED_FORMATTERS`, or the i18n hint for `t`; it returns a
+  pass-through so the view still renders. All of it sits behind `__PUZZLE_DEV__`.
 
-`register(name, fn)` validates both arguments and **throws** on a non-empty-string name or a non-function value. This closes the one gap in an otherwise established config-validation pattern — `PuzzleApp` already throws for non-function lifecycle hooks and the router for non-function guards. It throws rather than warning because a non-function formatter is a deterministic config error, and skipping it silently would fall through to `__missing` and disguise the broken config as a typo. Note the asymmetry with the paragraph below, which is deliberate: a bad *name* is a typo and renders through, a bad *value* is a config error and stops.
+## Implementation gotchas
 
-An unknown formatter calls `__missing(name)`: warn once per registry, include a did-you-mean suggestion at edit distance at most two, and return a pass-through function. A typo therefore renders the original value instead of crashing the view.
+- **Rounding**: `round`, `currency`, `percentage` share one helper that shifts the
+  decimal string (`1.005` → `100.5`) and rounds half away from zero.
+- `truncate`/`capitalize` work on code points. `json` is hand-written (code-point key
+  order, NaN/±Infinity/missing/cycle → `null`) because `JSON.stringify` can't carry
+  sorted integer-like keys.
+- **Locale**: the `formatLocale` slot is set only by the i18n service's
+  `setFormatLocale` and read behind `__PUZZLE_HAS_I18N__`; `date`/`time`/`datetime` take
+  `locale ??= formatLocale`. `currency` is locale-independent.
+- **Intl caching**: date-family formatters live in module-level keyed Maps
+  (locale + options object; `in_timezone` by zone; `timeago` one lazy slot) — ~30×
+  faster. It must be a keyed Map, not a last-used slot (two presets alternating is worse
+  than uncached). `.set()` goes AFTER the constructor inside the try — invalid locales and
+  zones throw at construction. Only `undefined`/string locales are keys. Options objects
+  are module-constant bindings (`MEDIUM_DATE`, `DATE_DEFAULTS`, …), never
+  `DATE_PRESETS.date.medium`, since a module-level property read keeps both tables alive
+  in date-free apps. Note `not-a-locale` is valid BCP-47 and does not throw.
+- **Dates** ([[DECISION-D114-CALENDAR-DATE-FORMATTERS]]): a bare `YYYY-MM-DD` is local
+  midnight (round-trip checked); `in_timezone` passes it through unshifted. Unknown
+  runtime presets log once per (function, preset) and render the default; literal ones
+  are compile warnings (`codegen/presets.go`).
+- **Known limitation**: `datetime(in_timezone(ts, zone), 'iso')` prints the target
+  zone's wall clock with the VIEWER's offset, because `in_timezone` returns a shifted
+  local Date, not a zoned value.
 
-Built-ins are pure named exports. A JSON name manifest is embedded by the Go build scanner, which serves a virtual module importing only formatters observed in project templates. The scan deliberately errs toward inclusion; `escape`, `raw`, and `noescape` remain safety defaults. Raw/test imports use the full built-in map.
+## Conformance
 
-One built-in is not a pure export: `link` (D79) needs the live router. Every
-registry is therefore built by one shared `makeFormatterRegistry(custom, url)`
-helper — built-ins, then the app's custom formatters, then `link` only when the
-app did not supply its own, so a user `link` from config wins. `PuzzleApp`
-constructs its registry alongside the Store and passes a closure that reads
-`this.router` lazily, so a re-mount can never capture a stale Router; the static
-kernel builds the same registry against its per-page router. `link` delegates to
-`router.url()` (nullish → `''`, non-strings coerced, non-`/` strings pass
-through). The tree-shake scanner ignores the name (not on the allowlist), the
-same handling as any custom formatter.
-
-All built-ins fail soft on nullish or invalid display input. Numeric precision normalizes to an integer in the `toFixed` range; date/locale/time-zone failures fall back to a string; sort copies before comparing, treats numeric arrays numerically and Date keys (CalendarDate included) chronologically by timestamp — NaN and Invalid Dates sort last, every other type pair still compares as strings (before the Date branch a `date()` field sorted by its weekday-first string form). `raw`/`noescape` only skip formatter escaping—they do not inject HTML into text vnodes. `reverse` iterates strings by code POINT (`[...v]`, since 0.3.0), not UTF-16 code unit — `split('')` tore surrogate pairs, so emoji/astral text reversed into lone-surrogate garbage; a user-visible output change for such strings.
-
-Those value-level runtime formatters are unrelated to D150's
-`{#raw}…{/raw}` source block, which disables brace lexing before any formatter
-could run.
-
-The date family (`date`/`time`/`datetime`/`timeago`/`in_timezone`) treats a
-bare `YYYY-MM-DD` string as a **calendar date**
-([[DECISION-D114-CALENDAR-DATE-FORMATTERS]]): one shared `parseDateInput`
-constructs it as local midnight so it displays as written in every timezone,
-with a round-trip check that sends rollover components back to the
-Invalid-Date fail-soft path, and `in_timezone` passes it through UNSHIFTED —
-a day names no instant to re-express. The `iso` preset is idempotent on such
-inputs; Date instances, timestamps, and full ISO datetimes parse exactly as
-before.
+`packages/puzzle-lang/conformance/functions.json` holds the identical-output rows
+(`zone` runs a case under that `TZ`, `locale` sets the function locale). The Go
+`conformance` package embeds it beside `expressions-parse.json` so Sites runs the same
+rows; PuzzleKit's vitest suite imports the JSON directly.

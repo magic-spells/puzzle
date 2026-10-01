@@ -14,16 +14,16 @@ Light theme on purpose: white surfaces, near-black text, and one pink accent
 ## Run it
 
 ```bash
-puzzle dev examples/stays        # from the repo root: go run ./compiler/cmd/puzzle dev examples/stays
+puzzle dev examples/stays        # from packages/puzzle: go run ./compiler/cmd/puzzle dev examples/stays
 ```
 
 ## What each piece demonstrates
 
 ### App wiring
-- **app/app.js** — `PuzzleApp` config with seven display-only formatters
-  (`currency`, `rating`, `plural`, `compact`, `monthDay`, `monthYear`,
-  `dateRange`), an up-front `store.loadMany` for five models so the persisted
-  state can be restored onto them at boot, and
+- **app/app.js** — `PuzzleApp` config with five display-only app functions
+  (`rating`, `plural`, `monthDay`, `monthYear`, `dateRange`; prices use the
+  standard `currency(v, '$', 0)`), an up-front `store.loadMany` for five
+  models so the persisted state can be restored onto them at boot, and
   localStorage persistence for wishlist hearts + locally-created trips.
 - **app/routes.js** — flat routes plus a **nested `/account` branch**: the
   `AccountShell` view renders its matched child (`''` | `trips` | `wishlist`)
@@ -57,7 +57,7 @@ puzzle dev examples/stays        # from the repo root: go run ./compiler/cmd/puz
   `checkIn`/`checkOut` state that survives `data()` re-runs, and the
   reserve flow: create a trip record, `router.push('/account/trips')`.
 - **account/AccountShell.pzl** — the nested-route shell: identity strip, tab
-  nav computed from the pathname, `<Slot/>` for the child.
+  nav computed from `this.route` (D47), `<Slot/>` for the child.
 - **account/Profile.pzl** — the travel-stamp passport wall.
 - **account/Trips.pzl** — upcoming/completed split with map joins.
 - **account/Wishlist.pzl** — `findMany('listing', { filter })` subscription:
@@ -81,6 +81,6 @@ puzzle dev examples/stays        # from the repo root: go run ./compiler/cmd/puz
 
 Nested routes + `<Slot/>` chains, route params, the catch-all, callback props
 (`@select`, `@reserve`), per-node DOM events, `{#for}` loop counters (D29),
-formatter pipes with arguments, `get animations()` for per-instance staggered
+display functions with arguments, `get animations()` for per-instance staggered
 entrances, view in/out transitions, store filters as live subscriptions, and
 schema defaults/getters on five models.

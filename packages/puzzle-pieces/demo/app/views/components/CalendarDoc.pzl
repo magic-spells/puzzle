@@ -62,7 +62,7 @@
               <Snippet fits="day" date day selected>
                 <span class="flex size-full flex-col items-center justify-center leading-none">
                   <span>{ day }</span>
-                  {#if eventDates.has(date)}
+                  {#if eventDates[date]}
                     <span
                       class="mt-0.5 size-1 rounded-full { selected ? 'bg-brand-ink' : 'bg-brand' }"
                       aria-hidden="true"></span>
@@ -152,7 +152,9 @@ const weekends = (iso, date) => {
 };
 
 // Stable module reference — the day snippet closes over the caller's render data.
-const eventDates = new Set(['2026-07-14', '2026-07-21', '2026-07-28']);
+// A plain object, not a Set: the template reads `eventDates[date]`, because a
+// template reads data and never calls methods like `.has()` on it.
+const eventDates = { '2026-07-14': true, '2026-07-21': true, '2026-07-28': true };
 
 const KEY_CLASS =
   'inline-flex min-w-[1.75rem] items-center justify-center rounded border border-border ' +
@@ -179,13 +181,13 @@ const codeFirstDay = `<!-- firstDayOfWeek: 0 = Sunday (default) … 6 = Saturday
 <Calendar value={ date } firstDayOfWeek={ 1 } @change={ setDate } />`;
 
 // Mirror of the live day-snippet example above — keep the two in sync.
-const codeSnippet = `const eventDates = new Set(['2026-07-14', '2026-07-21', '2026-07-28']);
+const codeSnippet = `const eventDates = { '2026-07-14': true, '2026-07-21': true, '2026-07-28': true };
 
 <Calendar value={ date } @change={ setDate }>
   <Snippet fits="day" date day selected>
     <span class="flex size-full flex-col items-center justify-center leading-none">
       <span>{ day }</span>
-      {#if eventDates.has(date)}
+      {#if eventDates[date]}
         <span
           class="mt-0.5 size-1 rounded-full { selected ? 'bg-brand-ink' : 'bg-brand' }"
           aria-hidden="true"></span>

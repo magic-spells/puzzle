@@ -1,5 +1,5 @@
 ---
-name: 'D138 — background loads respect in-flight edits (D125 parity, v1.64)'
+name: D138 — background loads respect in-flight edits and dispatch order
 status: verified
 connections:
   - DECISION-D125-SAVE-RECONCILE-REVISION
@@ -11,91 +11,58 @@ connections:
   - FILE-ADAPTER
 verified_at: '2026-08-24T21:39:15.808Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
-notes:
-  - kind: verified
-    text: >-
-      Re-verified against current code in the post-monorepo sweep: every checkable claim on this
-      card was found true as written, so nothing changed but the baseline. Bound code was read at
-      this sha; the framework suite is green at 1871 tests.
-    sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
 
-# D138 — background loads respect in-flight edits (D125 parity, v1.64)
-
-`loadMany`/`loadOne` merge through the same per-field revision gate `save()`
-responses use (D125): before the fetch dispatches, the loader snapshots each
-EXISTING record's `recordMutationRevision`; at merge time `_upsert` passes
-that snapshot as `safeMerge`'s `throughRevision`, so a field the user edited
-WHILE the request was in flight keeps its local value while every other
-field takes the server's. A background poll can no longer wipe the keystroke
-typed during its own round trip.
+# D138 — background loads respect in-flight edits and dispatch order
 
 ## Context
 
-The read-path merge was fully server-authoritative: `_upsert` called
-`safeMerge(existing, data)` with no revision, so the D125 shield — carefully
-built so a save response cannot overwrite a newer local edit — was bypassed
-by any concurrent `loadMany`. Found as I11 of the 2026-07-27 pass-2 review;
-semantics decided by the framework's owner: loads respect dirty edits "like
-save responses do".
+`save()` responses already merge through D125's per-field revision gate so a
+response cannot overwrite a newer local edit. Load merges (`loadMany`,
+`loadOne`, and the D161 automatic fault that runs the same loaders) need the
+same shield, plus ordering: two reads of one identity can land out of order.
 
 ## Decision
 
+**Revision gate (D125 parity).** Before its GET, `loadMany(type)` snapshots
+`recordKey → recordMutationRevision(record)` for the type's existing records;
+`loadOne` snapshots its one record if present. `_upsert` (in `adapter.js`)
+passes the snapshot to `safeMerge` as `throughRevision`: a field edited while
+the request was in flight keeps its local value; every other field takes the
+server's.
+- A field edited BEFORE dispatch takes the server value — the protected window
+  is the request's own flight, not open-ended dirtiness.
+- Records that did not exist at dispatch (including a local create colliding on
+  pk) merge server-wins.
+- Public `upsert()` and `request()` merges are ungated: explicit calls whose
+  payload is meant to land.
+- `_synced = true` flips on every load merge (D50).
 
-Exact D125 parity — the protected window is the request's OWN flight, per
-field, not open-ended dirtiness:
+**Dispatch order.** Every `_loadOne`/`_loadMany` takes a monotonic generation
+from the store's read state and hands it to `_upsert`. The module `WeakMap`
+`LOAD_GENERATIONS` records the highest generation landed per record; a lower
+one is dropped for that record — no merge, no `_notify`, `_synced` untouched.
+`clearAbsent` and the collection-complete mark still run, since a stale
+response still proves the identity or collection exists.
+- `_saveRecordNow` takes a generation from the same counter and stamps the
+  record on success (never lowering it), so a read dispatched before the save
+  cannot roll back the acknowledged body and the next save cannot PUT the
+  stale row. It does not route through `_upsert`.
+- Public `upsert()` passes no generation; its precedence against reads is
+  undefined.
+- Removals share the counter: D161 stamps the absence from `delete()`/
+  `destroy()` ahead of every read already dispatched, so a stale response for
+  that identity is dropped, including its `clearAbsent`. The absence-cache
+  rules live on [[DECISION-D161-AUTO-FETCHING-FINDS]]; this card owns the
+  counter.
 
-- `loadMany(type)` snapshots `recordKey → recordMutationRevision(record)` for
-  the type's existing records immediately before its GET; `loadOne` snapshots
-  the one record (when it exists). The snapshot rides to `_upsert`, which
-  forwards it as `safeMerge`'s `throughRevision`.
-- A field edited BEFORE the fetch dispatched still takes the server value —
-  the server is authoritative over everything except edits it could not have
-  seen. Open-ended "unsaved edits always win" was REJECTED: it needs a new
-  synced-through dirtiness concept, lets abandoned edits shadow the server
-  forever, and is not what "like save responses do" means.
-- Records the server returns that did not exist at dispatch (including a
-  concurrent local create colliding on pk) merge server-wins, exactly as
-  today — no snapshot, no revision. Documented edge, same posture as D125's
-  unconditional pk adoption.
-- Public `upsert()` and `request()` response merges are UNCHANGED: those are
-  explicit imperative calls whose callers intend the payload to land.
-- `_synced = true` still flips on every load merge (provenance, D50).
+## Alternatives
 
-Reads also carry ORDER, not just an edit boundary. The revision snapshot says
-nothing about two loads of the same identity racing each other, so before this
-the last response to arrive won and a slow request could roll a newer one back
-— including an explicit `loadOne` racing the D161 automatic fault, which routes
-through the same loader. Every `_loadOne`/`_loadMany` call now takes a
-monotonic dispatch generation from the store's read state and hands it to
-`_upsert`; a module-level `WeakMap` records the highest generation that has
-landed on each record, and a response whose generation is lower is dropped for
-that record — no merge, no `_notify`, `_synced` untouched. `clearAbsent` and
-the collection-complete mark still run, because a stale response still proves
-the identity or collection exists. The public `upsert()` passes no generation
-and is deliberately outside this ordering: its precedence against reads is
-unchanged and undefined. Save reconciliation IS ordered, through a different
-seam: `_saveRecordNow` takes a dispatch generation from the same counter beside
-its revision snapshot and stamps the record on each success path — never
-lowering an existing stamp, so a read that landed after the save keeps its
-precedence — so a read dispatched before the save cannot roll back the body
-the server acknowledged, and the next `save()` cannot PUT the rolled-back row
-back. It never routes through `_upsert`, so it passes no `gen` there. (Before
-the stamp, an edit → slow `loadMany` → fast PUT sequence reverted the
-acknowledged field on screen with `_synced` still true, and the following save
-wrote the stale value to the server.)
+- Unsaved edits always win — needs a synced-through dirtiness concept and lets
+  abandoned edits shadow the server forever.
+- Last response wins — a slow request rolls back a newer one.
 
-REMOVALS are ordered on the same counter, and that is the one case where a
-stale response proves nothing about the identity:
-[[DECISION-D161-AUTO-FETCHING-FINDS]] stamps the absence recorded by a
-`delete()`/`destroy()` one step ahead of every read already dispatched, so a
-response for that identity from a read dispatched before the removal is dropped
-when it lands — including the `clearAbsent` a merely-out-of-order read still
-performs. What the removal does not retract is what the response proves about
-the COLLECTION: a stale `loadMany` keeps its other rows and still marks the type
-loaded. That rule lives on D161 with the rest of the absence cache; this card
-owns only the generation counter both use.
+## Consequences
 
-Amends the §8 read path (D21/D137) with the §22/D125 merge gate. The
-[[DECISION-D161-AUTO-FETCHING-FINDS]] implicit fault path runs these same
-loaders, so tracked fault-ins inherit the gate unchanged.
+A background poll never wipes a keystroke typed during its round trip. Amends
+the §8 read path (D21/D137) with the §22/D125 merge gate.

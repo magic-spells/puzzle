@@ -1,0 +1,465 @@
+/**
+ * The i18n service (D175) — `this.ctx.i18n` in every view and `app.i18n`.
+ *
+ * The build owns the locale files end to end: it flattens nesting, fills every
+ * locale's missing keys from the default locale, and emits one hashed JSON file
+ * per locale. So the runtime here is small on purpose: pick a locale, fetch ONE
+ * flat, already-filled table (or read it from the prerendered page's island),
+ * look keys up, fill `{name}` placeholders in one pass, and choose a plural form
+ * with the browser's own `Intl.PluralRules`. No runtime fallback, no merging, no
+ * message parser.
+ *
+ * Every importer (app.js, static/index.js, ssg/index.js) reaches this module only
+ * behind the inline `__PUZZLE_HAS_I18N__` probe, so an app without `i18n` in its
+ * puzzle.config.js ships none of it.
+ */
+
+import manifestData from '@magic-spells/puzzle/i18n/manifest';
+import { displayValue } from './display.js';
+import { nearestFormatter } from './formatters.js';
+import { localeNumber, setFormatLocale } from './formatters/locale.js';
+
+/** @import { FormatterRegistry } from './formatters.js' */
+/** @import { PuzzleI18n } from '../types/index.js' */
+
+/**
+ * One locale's flat, build-filled table: key → string, or a plural entry
+ * (CLDR category, plus an optional exact-zero `zero`, → string).
+ * @typedef {Record<string, string | Record<string, string>>} LocaleTable
+ */
+
+/**
+ * The build's locale manifest (D175).
+ * @typedef {object} I18nManifest
+ * @property {string} defaultLocale
+ * @property {Record<string, string>} locales tag → dist-relative table path
+ * @property {string} [base] URL of the folder the build's entry module was served from
+ */
+
+/**
+ * The service createI18n returns (`ctx.i18n`, `app.i18n`).
+ * @typedef {NonNullable<ReturnType<typeof createI18n>>} I18nService
+ */
+
+/** The localStorage key that remembers a viewer's explicit setLocale() choice. */
+export const LOCALE_STORAGE_KEY = '__puzzleLocale';
+
+/**
+ * Pick the active locale (D175 Locale selection): the stored choice when it is
+ * still configured, then each of the viewer's languages in order — the exact tag
+ * (case-insensitively), its base language (`es-CO` → `es`), then the first
+ * configured tag with the same base (`pt` → `pt-BR`) — then the default.
+ *
+ * @param {string[]} tags configured locales, in config order
+ * @param {string} defaultLocale
+ * @param {?string} stored the remembered choice, if any
+ * @param {readonly string[]} [languages] the viewer's preferred languages (navigator.languages)
+ * @returns {string} a configured tag
+ */
+export function selectLocale(tags, defaultLocale, stored, languages = []) {
+	/** @param {string} tag */
+	const find = (tag) => tags.find((t) => t.toLowerCase() === tag.toLowerCase());
+	/** @param {string} tag */
+	const baseOf = (tag) => tag.split('-')[0].toLowerCase();
+	if (typeof stored === 'string' && stored) {
+		const hit = find(stored);
+		if (hit) return hit;
+	}
+	for (const lang of languages) {
+		if (typeof lang !== 'string' || !lang) continue;
+		const base = baseOf(lang);
+		const hit = find(lang) ?? find(base) ?? tags.find((t) => baseOf(t) === base);
+		if (hit) return hit;
+	}
+	return defaultLocale;
+}
+
+function readStoredLocale() {
+	try {
+		return localStorage.getItem(LOCALE_STORAGE_KEY);
+	} catch {
+		return null;
+	}
+}
+
+/** @param {string} tag */
+function storeLocale(tag) {
+	try {
+		localStorage.setItem(LOCALE_STORAGE_KEY, tag);
+	} catch {
+		// Private mode, blocked storage, no DOM — the choice just is not remembered.
+	}
+}
+
+function viewerLanguages() {
+	if (typeof navigator === 'undefined') return [];
+	return navigator.languages?.length ? navigator.languages : [navigator.language];
+}
+
+/**
+ * The table a prerendered page carries for its build locale
+ * (`<script type="application/json" data-puzzle-locale="en">`), or null when the
+ * page has none or it is for a different locale.
+ *
+ * @param {string} tag
+ * @returns {LocaleTable | null}
+ */
+function readIsland(tag) {
+	if (typeof document === 'undefined') return null;
+	const el = document.querySelector('script[data-puzzle-locale]');
+	if (!el || el.getAttribute('data-puzzle-locale') !== tag) return null;
+	try {
+		return JSON.parse(el.textContent);
+	} catch {
+		return null;
+	}
+}
+
+// Plural rules, keyed by locale. Module-level: they hold nothing app-specific.
+/** @type {Map<string, Intl.PluralRules>} */
+const pluralRules = new Map();
+
+/**
+ * @param {string} locale
+ * @param {number} count
+ * @returns {Intl.LDMLPluralRule}
+ */
+function pluralCategory(locale, count) {
+	let rules = pluralRules.get(locale);
+	if (!rules) {
+		// A configured tag Intl rejects (`en_US`) throws RangeError here, mid-render;
+		// fall back to the viewer's rules like the formatter locale does.
+		try {
+			rules = new Intl.PluralRules(locale);
+		} catch {
+			rules = new Intl.PluralRules();
+		}
+		pluralRules.set(locale, rules);
+	}
+	return rules.select(count);
+}
+
+/**
+ * Fill `{name}` placeholders in ONE left-to-right pass, so text that was inserted
+ * is never substituted again. The name is the exact text between `{` and `}`. A
+ * name missing from `vars` stays visible as written; a present name with a
+ * missing value prints nothing (D173 V6, via displayValue). A finite-number
+ * `count` prints in the formatter locale's number format — the helper
+ * `number_with_delimiter` and `pluralize` share, which the service points at the
+ * active locale. A `{` with no closing `}` is literal text.
+ *
+ * @param {string} text
+ * @param {Record<string, unknown>} vars
+ * @returns {string}
+ */
+export function fillPlaceholders(text, vars) {
+	let out = '';
+	let i = 0;
+	for (;;) {
+		const open = text.indexOf('{', i);
+		if (open < 0) break;
+		const close = text.indexOf('}', open + 1);
+		if (close < 0) break;
+		const name = text.slice(open + 1, close);
+		out += text.slice(i, open);
+		// Own properties, and ones a model record inherits from its class (computed
+		// getters, relationships) — but never Object.prototype's (`{constructor}`
+		// stays literal text).
+		if (Object.hasOwn(vars, name) || (name in vars && !(name in Object.prototype))) {
+			const value = vars[name];
+			out +=
+				name === 'count' && typeof value === 'number' && isFinite(value)
+					? localeNumber(value)
+					: displayValue(value);
+		} else {
+			out += text.slice(open, close + 1);
+		}
+		i = close + 1;
+	}
+	return out + text.slice(i);
+}
+
+/**
+ * Create the i18n service over the build's locale manifest. Returns null when the
+ * build configured no translations (the manifest module exports null).
+ *
+ * Loading starts immediately: the host creates the service while it wires its
+ * other services, so the fetch overlaps `beforeMount`, and awaits `__ready()`
+ * before its first render.
+ *
+ * @param {object} [options]
+ * @param {I18nManifest} [options.manifest] `{ defaultLocale, locales: { tag: path },
+ *   base }` — `base` is the URL of the folder the build's entry module was served
+ *   from; defaults to the build's manifest module
+ * @param {(path: string, base?: string) => string} [options.url] resolves a
+ *   dist-relative manifest path (and the manifest's base) to a fetchable URL
+ * @param {boolean} [options.lang] false leaves `<html lang>` alone (memory mode)
+ * @param {Record<string, LocaleTable>} [options.tables] preloaded tables by tag — the
+ *   prerender and the testing utilities pass these so nothing is fetched
+ * @param {string} [options.locale] a forced starting locale (the prerender always
+ *   renders the default); skips storage and navigator
+ * @param {() => unknown} [options.refresh] re-renders the host after a switch
+ * @returns the service (its type is inferred), or null without translations
+ */
+export function createI18n(options = {}) {
+	const manifest = options.manifest ?? manifestData;
+	if (!manifest) return null;
+	const tags = Object.keys(manifest.locales);
+	const defaultLocale = manifest.defaultLocale;
+	const { tables, url = (path) => path, refresh, lang = true } = options;
+
+	/** @type {LocaleTable | null} */
+	let table = null;
+	let locale = defaultLocale;
+	let token = 0;
+	/** @type {Promise<unknown> | null} */
+	let pending = null;
+	// The last re-render into the active locale failed, so the page may still show
+	// the old strings: a setLocale of that same locale re-renders instead of no-oping.
+	let stale = false;
+	/** @type {Set<string> | undefined} */
+	let warned;
+
+	// Development-only, warn-once. Every CALL sits behind the inline
+	// `__PUZZLE_DEV__` probe too, so production drops the message strings with it.
+	/** @param {string} key @param {string} message */
+	const warnOnce = (key, message) => {
+		if ((warned ??= new Set()).has(key)) return;
+		warned.add(key);
+		console.warn(message);
+	};
+
+	/** @param {string} tag @returns {Promise<LocaleTable>} */
+	const load = (tag) => {
+		const preloaded = tables?.[tag] ?? readIsland(tag);
+		if (preloaded) return Promise.resolve(preloaded);
+		return fetch(url(manifest.locales[tag], manifest.base)).then((res) => {
+			if (!res.ok) throw new Error(`[puzzle] locale "${tag}" failed to load (HTTP ${res.status})`);
+			return res.json();
+		});
+	};
+
+	// The table, the locale, the formatter locale and <html lang> switch together
+	// (not <html lang> in memory mode, which touches nothing document-wide).
+	/** @param {string} tag @param {LocaleTable} strings */
+	const apply = (tag, strings) => {
+		table = strings;
+		locale = tag;
+		setFormatLocale(tag);
+		if (lang && typeof document !== 'undefined') document.documentElement.lang = tag;
+	};
+
+	// The startup load: the active locale, falling back ONCE to the default when
+	// that file fails. Only a failure of the default too rejects.
+	/** @param {string} tag */
+	const begin = (tag) => {
+		const my = ++token;
+		const p = load(tag)
+			.catch((err) => {
+				if (tag === defaultLocale) throw err;
+				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+					console.warn(`[puzzle] locale "${tag}" failed to load — falling back to "${defaultLocale}"`, err);
+				}
+				tag = defaultLocale;
+				return load(tag);
+			})
+			.then((strings) => {
+				if (my === token) apply(tag, strings);
+			});
+		// The failure is reported through __ready(); nothing else may observe it.
+		p.catch(() => {});
+		pending = p;
+		return p;
+	};
+
+	/** @param {unknown} tag @returns {string | undefined} */
+	const canonical = (tag) =>
+		typeof tag === 'string' ? tags.find((t) => t.toLowerCase() === tag.toLowerCase()) : undefined;
+
+	const initial =
+		canonical(options.locale) ??
+		selectLocale(tags, defaultLocale, readStoredLocale(), viewerLanguages());
+
+	const service = {
+		/** The active locale tag. */
+		get locale() {
+			return locale;
+		},
+		/** Every configured locale, in config order. */
+		locales: tags,
+		defaultLocale,
+
+		/**
+		 * Look `key` up in the active table. A missing key prints the key itself;
+		 * `vars` fill `{name}` placeholders, and a `count` picks a plural form.
+		 * A number or boolean key is converted to a string and looked up (D175); an
+		 * object, list or function is no key at all — usually the variables passed
+		 * first, `t({ count: n }, 'key')` — so it prints what the key rule prints
+		 * for it, which for an object is nothing (D173 V6), and warns.
+		 *
+		 * @param {string | number | boolean | object | null | undefined} key any value;
+		 *   only a string, number or boolean is a key
+		 * @param {any} [vars] the template's variables object; anything else is ignored
+		 * @returns {string}
+		 */
+		t(key, vars) {
+			if (key == null) return '';
+			if (typeof key === 'object' || typeof key === 'function') {
+				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+					const got = Array.isArray(key) ? 'a list' : typeof key === 'function' ? 'a function' : 'an object';
+					warnOnce(
+						'\0nonstring',
+						`[puzzle] t() takes the key first, as a string — got ${got}, so it prints nothing; call it as t('key', { name: value })`
+					);
+				}
+				return '';
+			}
+			key = String(key);
+			if (!table) {
+				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+					warnOnce(
+						'\0' + key,
+						`[puzzle] t("${key}") ran before the translations loaded — printing the key`
+					);
+				}
+				return key;
+			}
+			if (!Object.hasOwn(table, key)) {
+				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+					// The suggestion walks the whole table, so only a warning that will
+					// actually print pays for it — not every render of a missing key.
+					const once = locale + '\0' + key;
+					if (!warned?.has(once)) {
+						const near = nearestFormatter(table, key);
+						warnOnce(
+							once,
+							`[puzzle] translation "${key}" is missing from "${locale}" — printing the key` +
+								(near ? ` (did you mean "${near}"?)` : '')
+						);
+					}
+				}
+				return key;
+			}
+			const hasVars = vars !== null && typeof vars === 'object' && !Array.isArray(vars);
+			if ((typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) && vars != null && !hasVars) {
+				warnOnce(
+					'\0vars' + key,
+					`[puzzle] t("${key}"): variables must be an object like { name: value } — ignoring them`
+				);
+			}
+			let text = table[key];
+			if (typeof text === 'object') {
+				const count = hasVars ? vars.count : undefined;
+				if (count == null) {
+					if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+						warnOnce(
+							'\0count' + key,
+							`[puzzle] translation "${key}" is a plural entry, but no count was passed — using its "other" form`
+						);
+					}
+					text = text.other;
+				} else {
+					// An exact 0 takes the entry's `zero` form when it has one, even where
+					// CLDR never selects `zero` (en) — the Rails/Shopify rule, so "No items"
+					// needs no template branch. Otherwise CLDR picks; a missing category
+					// falls back to `other`.
+					const n = Number(count);
+					text = (n === 0 ? text.zero : undefined) ?? text[pluralCategory(locale, n)] ?? text.other;
+				}
+			}
+			return hasVars ? fillPlaceholders(text, vars) : text;
+		},
+
+		/**
+		 * Switch to a configured locale. The new table is fetched FIRST; only once it
+		 * arrives does anything change, and then the app re-renders once. A failed
+		 * fetch rejects and changes nothing. Overlapping calls resolve last-wins: a
+		 * call a later one overtook settles with the LATER call's outcome, so it
+		 * never reports a switch that did not happen. An unconfigured tag throws a
+		 * RangeError.
+		 *
+		 * @param {string} tag
+		 * @returns {Promise<void>} settles once the switch and its re-render are done
+		 */
+		setLocale(tag) {
+			const match = canonical(tag);
+			if (!match) {
+				throw new RangeError(
+					`[puzzle] setLocale(${JSON.stringify(tag)}): not a configured locale (${tags.join(', ')})`
+				);
+			}
+			const my = ++token;
+			// Already the active locale: nothing to fetch or re-render (unless the last
+			// re-render into it failed). The token bump still overtakes a switch in
+			// flight (last-wins). This is also what ends a switch made from inside
+			// data() or a guard: the rebuild re-runs that code, and its setLocale of
+			// the now-active locale must not rebuild again.
+			if (match === locale && table && !stale) {
+				storeLocale(match);
+				return (pending = Promise.resolve());
+			}
+			const p = load(match).then(
+				(strings) => {
+					// Overtaken: this table is dropped, so follow whatever is now the latest
+					// load — which follows its own successor the same way.
+					if (my !== token) return pending;
+					apply(match, strings);
+					storeLocale(match);
+					stale = false;
+					return Promise.resolve(refresh?.()).catch((err) => {
+						// Keyed on the locale, not the token: a same-locale no-op made during
+						// the rebuild (that data() re-asking, a double-click) bumps the token
+						// but leaves the page just as un-rebuilt.
+						if (locale === match) stale = true;
+						throw err;
+					});
+				},
+				(err) => {
+					// A switch that superseded the startup load and then failed would leave
+					// no table at all: restart the startup load behind it.
+					if (my === token && !table) begin(initial);
+					throw err;
+				}
+			);
+			pending = p;
+			return /** @type {Promise<void>} */ (p);
+		},
+
+		/** INTERNAL — app teardown retires the service: no load in flight applies. */
+		__dispose() {
+			token++;
+			pending = null;
+		},
+
+		/**
+		 * INTERNAL — settles once the latest load has, following any setLocale()
+		 * that superseded the startup load. Rejects only when no table could be
+		 * loaded at all (the active locale and the default both failed).
+		 */
+		async __ready() {
+			let p;
+			while (p !== pending) {
+				p = pending;
+				try {
+					await p;
+				} catch (err) {
+					if (p === pending && !table) throw err;
+				}
+			}
+		},
+	};
+
+	begin(initial);
+	return service;
+}
+
+/**
+ * Register the service-bound `t(key, vars)` library function (D175, D176 §4)
+ * unless the app registered its own — an app `t` wins, like an app `link` does.
+ *
+ * @param {FormatterRegistry} registry
+ * @param {Pick<PuzzleI18n, 't'>} i18n
+ */
+export function installTranslate(registry, i18n) {
+	if (!registry.getAll().t) registry.register('t', (key, vars) => i18n.t(key, vars));
+}

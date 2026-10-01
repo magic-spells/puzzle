@@ -7,7 +7,7 @@
     <h1 class="font-display text-3xl font-bold text-fg">
       {#if hour < 5}Night owl session{:else if hour < 12}Good morning{:else if hour < 18}Good afternoon{:else}Good evening{/if}
     </h1>
-    <p class="text-muted mt-1">{ artists.length } { artists.length | plural('artist', 'artists') } · { albums.length } albums in your library</p>
+    <p class="text-muted mt-1">{ artists.length } { plural(artists.length, 'artist', 'artists') } · { albums.length } albums in your library</p>
   </header>
 
   <!-- Quick picks — Spotify-style wide tiles: a small square gradient tile + a
@@ -15,12 +15,12 @@
        tile per playlist. -->
   <section class="mb-10">
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-      <a href="{ '/liked' | link }" class="group flex items-center gap-3 h-14 rounded-lg bg-surface hover:bg-surface-2 hover:no-underline overflow-hidden transition-colors">
+      <a href="{ link('/liked') }" class="group flex items-center gap-3 h-14 rounded-lg bg-surface hover:bg-surface-2 hover:no-underline overflow-hidden transition-colors">
         <span class="w-14 h-14 shrink-0 flex items-center justify-center text-white/90" style="background:linear-gradient(135deg,#7c5cff,#c86dd7)"><Icon name="heart-filled" size={ 20 } /></span>
         <span class="font-semibold text-fg truncate pr-3">Liked Songs</span>
       </a>
       {#for p in playlists, i}
-        <a href="{ '/playlist/' + p.id | link }" class="group flex items-center gap-3 h-14 rounded-lg bg-surface hover:bg-surface-2 hover:no-underline overflow-hidden transition-colors">
+        <a href="{ link('/playlist/' + p.id) }" class="group flex items-center gap-3 h-14 rounded-lg bg-surface hover:bg-surface-2 hover:no-underline overflow-hidden transition-colors">
           <span class="w-14 h-14 shrink-0" style="background:{ p.artwork }"></span>
           <span class="font-semibold text-fg truncate pr-3">{ p.name }</span>
         </a>

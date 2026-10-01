@@ -3,7 +3,7 @@
     <div class="overflow-hidden py-4 px-5 bg-surface border border-border rounded-[10px]">
       <div class="flex items-baseline justify-between gap-3 mb-1.5">
         <span class="font-semibold text-ink">{ comment.author }</span>
-        <span class="text-[0.78rem] text-muted">{ comment.createdAt | timeago }</span>
+        <span class="text-[0.78rem] text-muted">{ timeago(comment.createdAt) }</span>
       </div>
       <p class="mb-2.5 text-slate">{ comment.text }</p>
       <button class="border-0 bg-transparent text-danger text-[0.8rem] font-semibold cursor-pointer p-0 hover:underline" type="button" @click={ handleRemove }>Delete</button>

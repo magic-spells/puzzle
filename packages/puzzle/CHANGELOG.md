@@ -11,13 +11,24 @@ numbered `Dnn` cards, referenced below.
 
 ## Upgrading across versions
 
-Eight breaking changes are easy to miss on a multi-version jump. Most fail
-loudly — a compile error, a constructor throw, an unresolvable import. Four are
-quiet: `output: 'static'` (renamed, 0.2.0) and `errorContent()` (removed, 0.6.0)
+Nine breaking changes are easy to miss on a multi-version jump. Most fail
+loudly — a compile error, a constructor throw, an unresolvable import. Five are
+quiet: the 0.8.0 template semantics change output without an error;
+`output: 'static'` (renamed, 0.2.0) and `errorContent()` (removed, 0.6.0)
 are greppable; the stricter write-response guard (0.6.0) is not — it depends on
 what your server returns, so it surfaces at runtime on the first save — and
 neither is the behavior change under auto-fetching finds (0.7.0), which turns
 some reads that used to be local into requests.
+
+**Template expressions change syntax, and templates print differently (0.8.0,
+D176, D168, D173, D174).** The syntax half is loud: a formatter pipe is a
+compile error (`{ price | currency }` is `{ currency(price) }` now), and so is
+`this` or anything outside the expression table, each with a message that
+names the fix. The printing half is quiet: templates keep compiling and render
+something different — built-in functions changed output, `raw` renders
+sanitized HTML, bare objects print nothing, and whitespace next to inline
+elements renders. The 0.8.0 entry opens with an **Upgrading from 0.7**
+checklist; work through it item by item.
 
 **Tracked `findOne`/`findMany` fetch what is missing (0.7.0, D161).** The
 rename half is loud: `store.loadAll` and the `loadAll` adapter verb are
@@ -121,8 +132,8 @@ The call-site `slot="x"` **attribute** is unchanged — only the tags moved. Two
 of the three errors name their replacement outright:
 
 ```
-the default marker is spelled <Children/> since v1.64 (D134)
-named slots are spelled <Slot name="…"/> since v1.64 (D134)
+the default marker is spelled <Children/> (D134)
+named slots are spelled <Slot name="…"/> (D134)
 ```
 
 A bare `<slot>` is the one case the compiler cannot decide for you, because the
@@ -142,7 +153,1044 @@ Pick `<Children/>` if that position received content from the call site, or
 `'static'` now produces a genuinely static site — no router, no `app.js`. This
 one is *not* a compile error; it silently builds a different product.
 
-## 0.7.0 — Unreleased
+## 0.8.0 — 2026-10-01
+
+Puzzle becomes one template language with two hosts (D172): PuzzleKit, the app
+framework in this package, compiles a template to JavaScript, and Magic Spells
+Sites renders the same template in Go. What sits between a template's braces is
+now a JavaScript expression from a closed table (D176): literals, paths,
+operators, arrow functions as call arguments, a method table for strings,
+arrays and numbers, a short list of JavaScript globals, and a library of
+display functions called by name — `{ currency(price) }`, `{ name.trim() }`,
+`{#for t in todos.filter(t => !t.done)}`. One parser in the new
+`packages/puzzle-lang` module reads it for both hosts, and one conformance
+table pins what every expression means. There are no formatter pipes. The
+constructs both hosts have mean the same thing in both (D173), and the
+function library is one standard set (D174). Moving from 0.7 is one change of
+expression syntax plus a set of printing changes, so this release has more
+breaking edges than usual: the syntax ones fail loudly at compile time, the
+printing ones are quiet. **Read "Upgrading from 0.7" below before you bump the
+range.**
+
+Also in this release: incremental rendering (D170): `{#for}` rows and static
+markup are cached between renders, and a record prop refreshes its child.
+Also translations (`t`, D175), sanitized `raw`, the pieces theme system with
+`puzzle add theme`, and 102 pieces. The never-published 0.7.1 notes (registry
+version floors, the background update notice) are folded in here.
+
+Production sizes: hello-world **21.9 KB gzip**, todos **26.0 KB gzip** (from
+20.8 / 23.8 in 0.7.0). Apps that configure no translations and use no `raw`
+pay nothing for either.
+
+### Upgrading from 0.7
+
+Change the range to `^0.8.0` (caret ranges do not cross a 0.x minor). Then
+work through this list. No codemod ships; the syntax items are compile errors
+that name the fix, so a build lists every place to change. The full detail
+for each item is below: the expression-language items (1, 2, 4, 7, 8 and 9)
+under Added, *Template expressions are JavaScript from a closed table*, and
+Removed, *formatter pipes*; the rest under Changed or Removed, where every
+breaking entry is marked **BREAKING**. Item 15 is a new warning, not a break.
+The *Traps* after this list are the rewrites that compile but mean something
+different.
+
+1. **Pipes are function calls.** There is no `|` in a template expression: a
+   0.7 pipe is a positioned compile error at the `|` that reads "`| name`
+   pipes were removed — write `name(value)`; bitwise OR is not available", or,
+   after a formatter that is gone (`| upcase`, `| sort`), names the JavaScript
+   that replaces it. The value becomes the first argument, a chain nests outward, and a transform
+   JavaScript already has is its method or `Math` global:
+
+   | 0.7 | 0.8 |
+   |---|---|
+   | `{ x \| f }` | `{ f(x) }` |
+   | `{ x \| f(a, b) }` | `{ f(x, a, b) }` |
+   | `{ x \| f(a) \| g }` | `{ g(f(x, a)) }` |
+   | `{ 'cart.title' \| t }` | `{ t('cart.title') }` |
+   | `{ 'greeting' \| t({ name }) }` | `{ t('greeting', { name }) }` |
+   | `{ post.body \| raw }` | `{ raw(post.body) }` |
+   | `{ '/todos/' + id \| link }` | `{ link('/todos/' + id) }` |
+   | `{ at \| date('long') }` | `{ date(at, 'long') }` |
+   | `{ n \| round(2) }` | `{ round(n, 2) }` |
+   | `{ s \| upcase }`, `{ s \| downcase }` | `{ s.toUpperCase() }`, `{ s.toLowerCase() }` |
+   | `{ s \| trim }`, `{ s \| strip }` | `{ s.trim() }` |
+   | `{ s \| replace('-', ' ') }` | `{ s.replaceAll('-', ' ') }` |
+   | `{ list \| join }` | `{ list.join(', ') }` |
+   | `{ list \| join(' / ') }` | `{ list.join(' / ') }` |
+   | `{ n \| abs }`, `ceil`, `floor` | `{ Math.abs(n) }`, `Math.ceil(n)`, `Math.floor(n)` |
+
+   A method on anything but a name, a path or a call takes parentheses:
+   `{ (first + ' ' + last).trim() }`. `.replaceAll()` matches the old
+   `replace` for a non-empty string search and a replacement with no `$`;
+   otherwise write `s.split(a).join(b ?? '')`, which is what `replace` did (a
+   missing replacement was `''`, while `.join()` alone joins with `','`). The old `join` joined with `', '`, while
+   `.join()` with no argument joins with `','`, so pass the separator. A pipe
+   in a condition, a loop header or an attribute is the same error — an
+   attribute pipe was a bitwise OR in 0.7 — and `||` is still logical OR.
+2. **`this` is not available in a template.** A template never reaches the
+   view instance: `this` in any template expression — a value, a block header,
+   a function argument, an `@event` handler's arguments or ternary condition —
+   is a positioned compile error at the `this` token (`{ this.ago(x) }`,
+   `disabled={ !this.canAdd }`, `@click={ save(this.x) }`). Return the value
+   from `data()` — move a getter's body into a field — or use a function for a
+   display transform (`timeago(at)`). A field derived from `setData()` state
+   needs a `refresh()` after the write, because `setData()` alone does not
+   re-run `data()`. A handler still reaches the view through its own name:
+   `@click={ save(x) }` calls the view's `save`.
+3. **The function library is 19 standard functions plus the PuzzleKit-only
+   `link` and `timeago`.** The list
+   functions `sort`, `where`, `map`, `uniq`, `reverse`, `compact`, `first` and
+   `last` are gone: shape a list with array methods (`items.filter(i =>
+   i.done)`, `items.toSorted((a, b) => a.rank - b.rank)`, `items.at(-1)`) or in
+   `data()`. `noescape`, `size`, `plus`, `minus`, `times`, `divided_by`,
+   `modulo`, `default` and `split` are gone: print a plain value, and use
+   `.length`, the operators, `??` and `.split()`. `upcase`, `downcase`,
+   `trim`, `strip`, `replace`, `join`, `abs`, `ceil` and `floor` are gone
+   because a JavaScript method or `Math` global says each one (item 1).
+   `round(v, places)` stays: `.toFixed()` returns a padded string, and nothing
+   in JavaScript rounds half away from zero to a number in one call. A call to
+   a removed name passes the value through unchanged, and development logs
+   what replaces it. Several built-ins also print differently — check each
+   use of `pluralize` (prints the count too: delete a separate `{ n }` in
+   front of `pluralize(n, 'comment')`), `capitalize` (leaves the rest of the
+   string alone), `currency` (groups thousands, sign first), `percentage`
+   (takes the number as written; a ratio is `percentage(ratio * 100)`),
+   `round` (half away from zero), `number_with_delimiter` (follows the
+   viewer's locale), `escape`, `json` and `truncate`. The number functions
+   print nothing for a missing value instead of `$0.00` or `0`.
+4. **The count is `.length`, as in JavaScript.** A list's `.length` is its
+   items and a string's is its UTF-16 units. Member reads are guarded, so
+   `{ items.length }` prints nothing for a missing list instead of throwing. A
+   Map's or a Set's `size` and a field named `size` are ordinary reads.
+5. **Date presets and defaults.** `date`, `time` and `datetime` share the
+   presets `short`, `medium`, `long` and `iso`, and all three defaults
+   changed (US English shown): `date(v)` printed `09/24/2026` and is now the
+   medium date, `Sep 24, 2026`; `time(v)` printed `03:04 PM` and is now the
+   short time, `3:04 PM`; `datetime(v)` printed `09/24/2026, 03:04 PM` and is
+   now the medium date with the short time, `Sep 24, 2026, 3:04 PM`.
+   `date(v, 'short')` is date-only — use `datetime(v, 'short')` for the old
+   date-and-time stamp. The presets `'date'`, `'time'` and `'datetime'` are
+   retired. A literal preset the standard functions do not know
+   (`time(at, 'shrot')`) is a compile-time warning — not an error, because an
+   app may register its own `time` — and at run time any unknown preset
+   renders the default with a development error. `iso` is RFC 3339 in the
+   viewer's zone, not UTC `toISOString()`.
+6. **Some values print nothing, and `-0` prints `0`.** `NaN`, ±Infinity, a
+   bare `Date` and any other object (including one with its own `toString`,
+   such as a `URL` or a Decimal) print nothing, and development logs a warning
+   that names the expression; the number functions print nothing for `NaN` and
+   ±Infinity too. Negative zero prints `0` everywhere. Format a date with
+   `date()`, `datetime()` or `time()`, and print a field of an object.
+7. **Handler arguments are the expression language, and more is a compile
+   error.** An `@event` value is a call to one of the view's handlers (or a
+   handler's bare name, or a ternary choosing one), and its arguments use the
+   same grammar as every other expression, evaluated when the event fires,
+   with one extension: `event` is the DOM event there, and a chain rooted at it
+   is unrestricted — `@input={ rename(event.target.value) }`,
+   `@click={ pick(event.target.closest('li')) }`. Anything that acts on the
+   event, such as `event.preventDefault()`, belongs inside the handler method
+   (or use the `:prevent` modifier), not as the handler value. New positioned
+   compile errors an upgrader can hit: a method outside the table; calling a
+   template binding (a loop item, a snippet parameter, an arrow parameter);
+   reading the browser's global objects `window`, `document` or `globalThis`
+   (read what you need in `data()`; other browser globals such as `location`
+   or `localStorage` are ordinary data names, as they were in 0.7); `new Date()`
+   and `Date.now()`; `JSON.stringify(x)`; regex literals; `**` (use
+   `Math.pow`); bitwise operators; spread; comments inside an expression;
+   assignment and `++`/`--`; `typeof`, `in` and `instanceof`; and
+   `constructor`, `prototype` or `__proto__` as a member name or object key;
+   and a template that reads a field or prop named `event` and also uses
+   `event` inside a handler, where it is always the DOM event (rename the field
+   or prop). Each message names what to write instead. `encodeURIComponent`,
+   `decodeURIComponent`, `encodeURI` and `decodeURI` stay callable, so an
+   `href="/search?q={ encodeURIComponent(q) }"` keeps working.
+8. **Identifiers are Unicode.** A data field, a loop variable or a snippet
+   parameter may be any JavaScript identifier (`{#for größe in sizes}`,
+   `{ größe }`); 0.7's resolver mis-prefixed them. A strict-mode reserved
+   word, `NaN`, `Infinity`, `undefined` and the global names the language uses
+   (`Math`, `Number`, …) cannot be bound.
+9. **`puzzle check` types methods and library calls.** A method is checked as
+   the same JavaScript method, so a wrong method or argument is a real
+   TypeScript error at its line and column, and a library call checks against
+   the function's signature (an app function is `any`). The check references
+   the ES2019–ES2023 string and array libs whatever the app's `target`, so
+   `.at()`, `.replaceAll()` and `.toSorted()` type in templates — and in that
+   file's `<script>` too, where a method your `target` lacks can pass the
+   check (the build is unaffected). `toSorted` and `toReversed` need
+   TypeScript ≥ 5.2 to type.
+10. **`raw` renders sanitized HTML, and only as the outermost call of a text
+    interpolation.** `{ raw(html) }` renders the HTML through an allowlist
+    sanitizer (0.7's `| raw` printed markup as text), and `newline_to_br`
+    renders real `<br>`s. Either one inside another call, as an operand, in an
+    attribute or prop, with other than one argument, or inside `<script>`,
+    `<style>`, `<textarea>` or `<title>` is a compile error. An app function
+    registered as `raw` is never called from a template.
+11. **Whitespace next to inline elements renders, and `<pre>`/`<textarea>` are
+    preserved.** A line break between text and an element now renders one
+    space, as in HTML. Where you added a margin to fake the missing space, drop
+    it. Where two things must touch, put them on one line with no whitespace.
+    A `<pre>` or `<textarea>` body indented with the template now shows that
+    indentation, so dedent it or bind it (`{ code }`, `value={ text }`).
+12. **A loop over something that is not a list runs zero times.** A `{#for}`
+    over a string no longer iterates its characters: write
+    `{#for c in text.split('')}`.
+13. **A list or object in a brace-only attribute.** A list is a space-joined
+    token list with `false` and empty items dropped, and an object omits the
+    attribute.
+14. **A false `{#if}` passed to a marker shows the marker's fallback.** A
+    `<Children>`, `<Slot name>` or snippet position counts as filled only when
+    its content renders a node. A caller whose content can render nothing,
+    passed to a marker with a fallback body, now shows the fallback. If you do
+    not want it, remove the fallback body.
+15. **New development warnings for shadowed names.** An app function that
+    shadows a standard name still wins, with a warning: rename it, or delete it
+    if the standard function now does the job (the examples dropped their own
+    `pluralize`, `compact` and `currency`). A view handler named like a library
+    function warns too, because inside `@event` the name calls the handler and
+    everywhere else the function.
+16. **New reserved names.** A component must not define `__lists`, `__c`,
+    `__dirty`, `__rgen` or `__propRevs`, nor a static `__roots`. A `<script>`
+    must not bind `__l`, `__e`, `__r` or `__L0`, `__L1`, and so on. Binding one
+    of the script names is a compile error.
+17. **HTML void elements take no closing tag.** `<br>`, `<hr>`, `<input …>`,
+    `<img …>` and the rest of the void set (`area base br col embed hr img
+    input link meta source track wbr`) are legal without `/>`, and the
+    self-closed spelling still compiles to the same output. A closer such as
+    `</br>` or `</input>`, which 0.7 accepted, is a compile error naming the
+    void element: delete the closer.
+18. **Refresh the pieces theme before adding 0.8 pieces.** New pieces style
+    themselves with tokens a 0.7 `app/styles/pieces.css` lacks
+    (`surface-frame`, `surface-panel`, `bar-*`, `rail-*`, `shadow-panel`, …),
+    and `puzzle add piece` never rewrites that file, so run
+    `puzzle add theme default`: an unmodified 0.7 copy is refreshed in place;
+    one you edited needs a hand merge or `--overwrite`. `add piece` prints this
+    hint whenever the file differs from the registry's.
+
+Two contracts that row caching makes visible, though neither is new: assign a
+record's fields through `update()` or a store path, never `todo.title = 'x'`,
+and keep app functions pure functions of their input.
+
+### Traps when upgrading from 0.7
+
+These rewrites compile, and print something different. Check each place the
+checklist sent you.
+
+- **The string methods throw on a value that is not a string.** A formatter
+  coerced its input, so `{ zip | upcase }` on a number printed `12345`;
+  `{ zip.toUpperCase() }` throws on a number and sends the view to
+  `errorView`. Coerce first where the value may not be a string:
+  `{ String(zip ?? '').toUpperCase() }` — a bare `String(zip)` turns a
+  `null` into the text `null` and prints `NULL`, where `| upcase` printed
+  nothing.
+- **`.length` is not `| size`.** It prints nothing for `null` or an object
+  where `| size` gave `0` or the object's key count. Write
+  `Object.keys(obj).length` for the key count; it counts `0` when `obj` is
+  missing, as `| size` did.
+- **`+` concatenates strings.** `| plus` coerced both sides to numbers;
+  `{ count + 1 }` with a string `count` of `'2'` prints `21`. Convert first:
+  `{ Number(count) + 1 }`.
+- **`.replace()` replaces only the first match.** `| replace` replaced every
+  occurrence: use `.replaceAll(a, b)`, or `.split(a).join(b ?? '')`.
+- **`.split()` has no default separator.** `| split` split on `,`;
+  `.split()` with no argument returns the whole string in a one-item list.
+  Write `.split(',')`.
+- **`.toSorted()` sorts as strings.** `| sort` compared numbers and dates by
+  value; `.toSorted()` without a comparator compares their text, so `10`
+  sorts before `9`. Pass one: `items.toSorted((a, b) => a - b)`.
+- **`atob`, `btoa` and `structuredClone` are not available.** Only
+  `encodeURIComponent`, `decodeURIComponent`, `encodeURI` and `decodeURI` of
+  the browser's functions are callable; decode or clone in `data()`.
+- **A removed formatter written as a call is not an error at compile time.**
+  `{ upcase(name) }` compiles to a library lookup that finds nothing: a
+  development error that names `.toUpperCase()`, and in production the value
+  passes through unchanged. The `|` form (`{ name | upcase }`) fails the build
+  with the replacement, so convert pipes rather than rename them.
+- **Prerendered pages format numbers and dates on the build machine.**
+  `output: 'static'` and `output: 'hybrid'` pages print
+  `number_with_delimiter`, `pluralize`, `compact_number`, `date`, `time`,
+  `datetime` and `timeago` in the build machine's locale (`LANG`, or
+  `LC_ALL` when set) and time zone (`TZ`) — the locale is `i18n.defaultLocale`
+  instead when the app configures `i18n`, but the time zone still follows
+  `TZ` — and the browser then re-renders them in the viewer's. The dates
+  behaved this way in 0.7; the three number functions follow the locale only
+  since 0.8 (0.7's `| number_with_delimiter` always used `,`). For
+  deterministic HTML, pin the locale and `TZ` on the build machine.
+
+### Added
+
+- **Template expressions are JavaScript from a closed table (D176).** Every
+  expression position — text, attribute values, component props and marker
+  arguments, `key=`, block headers and `{:when}` values, and `@event` handler
+  arguments — is one expression in a JavaScript-shaped grammar that PuzzleKit
+  and Sites share: literals (strings with JavaScript escapes, decimal numbers,
+  template literals, arrays, objects with name, quoted and shorthand keys);
+  `a.b`, `a?.b`, `a[i]`, `a?.[i]`; the operators with JavaScript precedence
+  (`! - +`, `* / %`, `+ -`, comparisons, `== != === !==`, `&&`, `||`, `??`,
+  `?:`, with `??` never mixed with `&&`/`||` unparenthesized); arrow functions
+  (`x => e`, `(x, i) => e`) as call arguments only; and three kinds of call.
+  A **function** is called by name from the library or the app's own
+  registrations (a data field is never callable). A **method** comes from the
+  table for its receiver — strings: `at`, `charAt`, `includes`, `startsWith`,
+  `endsWith`, `indexOf`, `lastIndexOf`, `slice`, `substring`, `split`,
+  `replace`, `replaceAll`, `trim`, `trimStart`, `trimEnd`, `toUpperCase`,
+  `toLowerCase`, `padStart`, `padEnd`, `repeat`, `concat`; arrays: `at`,
+  `includes`, `indexOf`, `lastIndexOf`, `slice`, `concat`, `join`, `flat`,
+  `find`, `findIndex`, `findLast`, `filter`, `map`, `some`, `every`, `reduce`,
+  `toSorted`, `toReversed` (a callback receives `(item, index)`); numbers:
+  `toFixed`, `toString`. No method mutates its receiver. The **globals** are
+  `Math.abs/ceil/floor/round/trunc/max/min/sign/pow/sqrt`, `Math.PI`,
+  `Math.E`, `Number`, `String`, `Boolean`, `parseInt`, `parseFloat`, `isNaN`,
+  `isFinite`, `encodeURIComponent`, `decodeURIComponent`, `encodeURI`,
+  `decodeURI`, `Array.isArray` and `Object.keys/values/entries`. Everything has
+  JavaScript semantics — loose `==`, `+` concatenation, number printing — with
+  two deviations both hosts implement: a member read or a method call on a
+  missing value never throws (it prints nothing; a method call also warns in
+  development), and printing follows one rule (D173 V6). Dates reach a
+  template from `data()` and print through `date()`, `time()`, `datetime()`
+  and `timeago()`; they compare with `<` and `>`.
+  - **One parser, one table.** The `expr` package in `packages/puzzle-lang`
+    parses every expression into a positioned tree; codegen lowers the tree,
+    so an arrow parameter or a Unicode identifier is never mis-prefixed, and
+    an error reports the same line and column in both hosts. The shared
+    conformance lives in `packages/puzzle-lang/conformance` (embedded with
+    `go:embed`, so Sites pins it at the language tag): `expressions-parse.json`
+    pins the grammar in 443 cases — every accepted tree with its node
+    positions, every error with its message and position — and
+    `functions.json` pins the library in 204 rows.
+  - **Errors that steer.** Everything outside the table is a positioned
+    compile error that names the construct and what to write instead: a 0.7
+    pipe (after a removed formatter, its JavaScript replacement), a method
+    outside the table (`items.sort()` → `toSorted()`, `s.substr()` →
+    `slice()`), `new Date()` (→ `date()`), `window`, `document` or
+    `globalThis` read as a value (→ `data()`), `this` (→ `data()` or a
+    function), a regex literal (→ `includes()`), and the rest. Inside a
+    `{:when}` a `|` says to list alternatives with commas.
+  - **Literal presets are checked.** A string-literal preset the standard
+    `date`/`time`/`datetime` does not know, or an `in_timezone` zone that
+    cannot be a zone id, is a compile-time warning naming the valid presets;
+    at run time a typo silently rendered the default. It warns rather than
+    fails because an app function may shadow the standard name (D6).
+  - **`puzzle check` emits TypeScript from the same tree.** A method is the
+    same JavaScript method, typed by `lib.d.ts`; a library call is checked
+    against its signature; a method whose arguments hold an arrow gives the
+    arrow's parameters a type when the receiver is untyped data.
+  - **Handlers.** `@click={ save(items.length - 1) }` calls the view's handler
+    with arguments in the same language. Inside an `@event` value a bare call
+    names the view's handler first, `event` is the DOM event with an
+    unrestricted chain (`@input={ rename(event.target.value) }`), and a
+    handler that shares a library function's name draws a development
+    warning.
+  - **Changed: a data field or prop named `event` reads as data outside
+    handlers**, as it did in 0.7 (the interim 0.8 branch rejected it), so
+    `<EventCard event={ item }>` and its `{ event.title }` work. Inside an
+    `@event` handler `event` is always the DOM event. A template that does
+    both is a compile error at the handler's `event` that names the data read,
+    because the handler would silently get the DOM event: rename the field or
+    prop. `value={ event.x }` now two-way binds like any other field.
+- **Translations: `{ t('cart.title') }` (D175).** Add
+  `i18n: { locales: ['en', 'es'], defaultLocale: 'en' }` to `puzzle.config.js`
+  and one `app/locales/<tag>.json` per locale. Files may nest (flattened to
+  dotted keys); an object whose keys are all CLDR categories is a plural entry
+  and must have `other`. The compiler validates every file (positioned errors
+  for bad types, collisions, a missing `other`, an `en_US`-style name), fills
+  each locale's missing keys from the default with a one-line warning, and
+  emits `dist/locales/<tag>.<hash>.json`; the browser fetches only the active
+  one. `t` looks the key up, prints the key itself on a miss, fills `{name}`
+  placeholders in one pass, and with a numeric `count` picks the plural form
+  through `Intl.PluralRules` and prints `{count}` in the locale's number
+  format; an exact 0 uses the entry's `zero` form when it has one, even in
+  English. Variables are one object — `t('greeting', { name: user.name })`, a
+  data field or a store record. `this.ctx.i18n` / `app.i18n` carry
+  `t(key, vars)`, `locale`, `locales`, `defaultLocale` and `setLocale(tag)`,
+  which fetches first, then switches, remembers the choice
+  (`localStorage.__puzzleLocale`), sets `<html lang>` and rebuilds the page at
+  the same location — no history entry, no scroll jump, no animations. A push,
+  replace or Back still loading when the switch lands finishes first, and a
+  failed rebuild rejects `setLocale`. Memory routing leaves `<html lang>`
+  alone, and hash and memory routing fetch the locale files from the folder
+  `app.js` was served from, so a script embed works on another site's page.
+  The startup locale is the stored choice, then `navigator.languages` (exact
+  tag, base language, then a configured tag with the same base), then the
+  default; the first render always has its strings.
+  `--hybrid` and `--static` pages prerender in the default locale and carry its
+  table inline and `<html lang>` set to it, so a default-locale visitor makes
+  no extra request. With translations configured, `date`, `time`, `datetime`,
+  `number_with_delimiter`, `compact_number`, the `pluralize` count and
+  `timeago` render in the active locale instead of the viewer's (an explicit
+  `locale` argument still wins; `currency` is unchanged). `t` is a standard
+  function. `/testing`'s `mountView` and `createTestApp` take
+  `i18n: { locale, strings }`. Without `i18n` configured nothing ships:
+  hello-world and todos are byte-identical in raw size. See `examples/i18n`
+  (en, es, pl).
+- **`compact_number` (D174).** `{ compact_number(followers) }` shortens a large
+  number with a localized suffix through
+  `Intl.NumberFormat(locale, { notation: 'compact' })` — `1.2K`, `45K`, `3.4M`
+  in English.
+- **Object literals as call arguments (D173 V8).**
+  `{ t('cart.count', { count: n, unit }) }`, `{ fmt(x, { digits: 2 }) }` (an app
+  function) and `@click={ save({ id: todo.id }) }` compile, with name, quoted
+  and shorthand keys: values resolve as template expressions and keys stay
+  keys. An expression still cannot *start* with an object literal
+  (`{ {a: 1} }` is ambiguous with the interpolation braces), and the error
+  says to pass it as an argument or build it in `data()`.
+- **A component without a `<script>` reads its props by name (D173 V15).** The
+  compiler gives it a `data(params, props)` that returns its props, so
+  `<Chip tone="warn"/>` with a template of `<span class={ tone }>…` works with
+  no boilerplate. A component with a script is unchanged: its own `data()`
+  decides.
+- **Two default markers in exclusive branches compile (D173 V13).** The
+  "duplicate default marker" check counts per render path:
+  `{#if compact}<div><Children/></div>{:else}<section><Children/></section>{/if}`
+  is legal, as are markers in separate `{:else if}`/`{#case}` branches, and the
+  same holds for a `<Slot name="x">`. Two markers that can render together — one
+  before or after the block, two in one branch, two in one loop body, or two
+  separate `{#if}`s — are still an error.
+- **The `packages/puzzle-lang` Go module (D172).** The template parser and the
+  expression parser, with `jsident` and `textutil`, live in their own module,
+  `github.com/magic-spells/puzzle/packages/puzzle-lang`, so Magic Spells Sites
+  and other Go tools import the same parser the compiler uses. It versions
+  with the framework and is tagged `packages/puzzle-lang/vX.Y.Z` beside each
+  `vX.Y.Z`.
+- **`puzzle add theme <name…>`.** The CLI can now copy any of the registry's
+  palettes, not just the default one — the gap that had apps hand-copying
+  `dim.css` and drifting from it. The default palette is the `app/styles/
+  pieces.css` `add piece` already writes (the two stay idempotent with each
+  other); every other lands in `app/styles/themes/<name>.css`, recorded in
+  `pieces.lock` under its registry path. Names resolve before anything is
+  fetched, so an unknown one writes nothing and lists what is available; a
+  locally modified copy is refused unless `--overwrite` is given; and a palette
+  your `styles.css` already imports from the package
+  (`@magic-spells/puzzle-pieces/themes/<name>.css`) is reported as wired and
+  skipped — which also stops `add piece` copying `pieces.css` beside such an
+  import. `puzzle add theme` with no name lists the palettes with per-theme
+  install state, marking a copy that differs from the registry's
+  `installed · outdated`. styles.css is still never edited: the `@import` and the
+  `data-scheme` switch are printed (D3, D171). `add piece` prints a stale-theme
+  hint when an existing `pieces.css` differs from the registry's, and a piece
+  manifest may name the palettes it needs (`themes`) — `add piece` prints
+  `puzzle add theme <names…>` for the ones the app has neither copied nor
+  imported from the package.
+- **Registry dependencies carry a version floor (D169).** A piece manifest's
+  `dependencies` entry is now an npm install spec — `"@magic-spells/collapsible-content@^1.2.0"` —
+  and `puzzle add piece` prints `npm install <name>@<range> …` instead of a bare
+  package name, so a fresh app installs a component version that actually has
+  the attributes the piece wraps. When two resolved pieces share a dependency at
+  different floors the higher one wins and the package prints once. A bare name
+  still parses and prints bare, so third-party registries on the old shape are
+  unaffected; neither `registry.json`'s schema version nor `pieces.lock` changed.
+  Every bundled piece manifest now pins the floor it needs.
+- **puzzle-pieces: four palettes × three modes, shipped as CSS.** The theme
+  files in `packages/puzzle-pieces/registry/theme/` are the single source of
+  colour for every Puzzle app: `pieces.css` (the default palette — cool
+  near-black with a navy tint and an indigo accent) plus `dim.css`, `warm.css`
+  and `void.css`, each restating every token inside `[data-scheme='…']`. A
+  third mode, **medium** ("soft dark": `color-scheme: dark`, grounds lifted to
+  mid grey, type dimmed a stop), joins light and dark; `data-scheme` picks the
+  palette and `data-theme` the mode, and both are unanchored so any element can
+  scope a subtree. New package exports: `@magic-spells/puzzle-pieces/themes/
+  {default,dim,warm,void}.css`, `…/appearance` (read / persist / apply
+  `{ scheme, mode }`, `mode: null` follows the OS, legacy `mixed` reads as
+  `medium`) and `…/pre-paint` (the inline anti-flash `<head>` snippet, whose
+  `data-key` / `data-default-mode` / `data-default-scheme` also seed
+  `appearance`'s storage key and fallback, so `boot()` keeps what it painted
+  without a `configure()` call repeating them).
+  `registry.json` gains `modes` and a `themes` array. Every palette × mode is
+  held to WCAG 2.2 AA on every declared pair by `test/contrast.test.mjs`, and
+  the four files are held to one identical token set by `test/themes.test.mjs`.
+  The Sidebar piece gains `variant="rail"` (the shell roles `bg-rail`,
+  `text-rail-ink`, `bg-rail-active`, `border-rail-edge`; the default `surface`
+  variant is unchanged), and the pieces docs site is rebuilt as a frame / rail /
+  panel shell with a live scheme × mode switcher and `/themes/*` panels (per-
+  scheme colour cards from live computed styles, a 4 × 3 compare grid, a
+  labelled shell mock and a pieces gallery). Token NAMES are unchanged from
+  what Pyramid and Sites use today; adopting the package there is a follow-up.
+- **puzzle-pieces: `appearance-picker` piece.** The palette + mode picker
+  Pyramid and Sites each carried a copy of, as one controlled piece: theme
+  cards that are live miniatures of the shell painted in each palette (scoped
+  `data-scheme`), a Light / Medium / Dark / System radiogroup, and
+  `@change({ scheme, mode })` for the app to persist through the `appearance`
+  export. Its manifest names the palettes its cards offer, so
+  `puzzle add piece appearance-picker` prints `puzzle add theme dim warm void`
+  for the ones not yet installed. The pieces docs shell opens it from the rail's foot as a non-modal
+  popover.
+- **`puzzle init --typescript` scaffolds a TypeScript app (D54).** Answering
+  yes to the TypeScript prompt, or passing the flag, used to add only a
+  `tsconfig.json` to the JavaScript starter. Both templates now have a
+  TypeScript variant: every component is `<script lang="ts">` with typed
+  `data()`, props, events and lifecycle hooks; the modules are `.ts` — the
+  `app/app.ts` entry, `routes.ts`, and the todos template's models; and
+  `package.json` adds `typescript` `^7` plus a `check` script that runs
+  `puzzle check`. Both variants pass `puzzle check` clean under the strict
+  tsconfig on TypeScript 6 and 7. The JavaScript scaffold is unchanged byte
+  for byte.
+- **`app/app.ts` is a build entry.** `puzzle build`, `puzzle dev`, both
+  prerender modes, `--fixtures` and `puzzle doctor` start from `app/app.ts`
+  when it exists, otherwise `app/app.js`. An app with both fails with an error
+  naming both files rather than picking one, and a `puzzle dev` session asks
+  for a restart if its entry is renamed mid-session. `puzzle.config.js` stays
+  JavaScript. The output is still `dist/app.js`.
+- **`puzzle generate` writes TypeScript in a TypeScript app.** In a project
+  with a `tsconfig.json` at its root, component, view and layout stubs are
+  `<script lang="ts">` with typed props and a typed `data()` model, a model is
+  `app/models/<name>.ts` with a typed fields interface and record type, a
+  family's barrel is `index.ts`, and the model hint points at
+  `app/models/index.ts`. A JavaScript app's stubs are unchanged byte for byte.
+- **puzzle-pieces: 102 pieces.** New: `image-zoom` (a wrapper over
+  `@magic-spells/image-zoom`), `split-text`, `hamburger` (a menu button with
+  converge, twist and slide motion), and CSS-only loading motion — `spinner`
+  variants and `shimmer-text`. The Sidebar piece gains a `collapsible` prop,
+  and the command palette rides `dialog-panel`, so its scrim and panel fade
+  both ways. The pieces docs site gains a mobile shell: a page pill that
+  morphs into a bottom sheet.
+- **A development warning for an `events` handler that gets the wrong `this`
+  (D03).** The runtime calls every handler as `this.events.name(…)`, so a
+  method-shorthand (`play() { … }`) or `function` handler runs with the events
+  object as `this`: it compiled, then broke when the event fired. A view's first
+  mount now warns, once per view class, for each such handler that uses `this`,
+  naming the view and handler and the fix — write it as an arrow function,
+  `play: () => { … }`. A shorthand handler that never touches `this` works and
+  stays quiet. JavaScript and `<script lang="ts">` alike; production builds
+  carry none of it.
+
+### Changed
+
+- **BREAKING: the display functions are the standard set (D174).** The
+  functions PuzzleKit and Sites share mean the same thing in both — the same
+  names, arguments and output — which changes what several built-ins print
+  (the removals are under Removed):
+  - `pluralize` prints the count **and** the word, the count in the viewer's
+    locale: `{ pluralize(n, 'comment') }` → `3 comments`; the three-argument
+    form stays for irregular plurals (`pluralize(n, 'person', 'people')`).
+    Delete the separate `{ n }` in front of it.
+  - `number_with_delimiter` follows the viewer's locale (`1.234,5` in de-DE);
+    an explicit delimiter still forces one.
+  - `date`, `time` and `datetime` share the presets `short`, `medium`, `long`
+    and `iso`. With no preset, `date` is the medium date, `time` the short
+    time and `datetime` the medium date with the short time.
+    `date(v, 'short')` is date-only (`9/24/26`) — use `datetime(v, 'short')`
+    for the old date-and-time stamp. The preset names `date`, `time` and
+    `datetime` are retired; a literal unknown preset is a compile-time
+    warning, and any unknown preset renders the default with a development
+    error at run time. `iso` is RFC
+    3339 in the viewer's zone (`2026-09-24`, `15:04:05-04:00`,
+    `2026-09-24T15:04:05-04:00`), no longer a UTC `toISOString()`.
+  - `capitalize` leaves the rest of the string alone (`iPhone` → `IPhone`);
+    the old behavior is `capitalize(s.toLowerCase())`.
+  - `currency` groups thousands and puts the sign first: `-$1,234.50`.
+  - `percentage` takes the number as written (`percentage(12.5, 1)` →
+    `12.5%`); a ratio is `percentage(ratio * 100)`.
+  - `round` rounds half away from zero on the decimal value
+    (`round(1.005, 2)` → `1.01`) and takes negative places
+    (`round(1250, -2)` → `1300`); `currency` and `percentage` round the same
+    way.
+  - `escape` is an identity on text — the page shows `<b>`, not `&lt;b&gt;`.
+  - `json` sorts object keys and prints `null` for a missing value, `NaN` and
+    ±Infinity.
+  - `truncate` counts code points, so an emoji is one, and its result never
+    exceeds its length, ellipsis included.
+  - `strip_html` is a quote-aware scanner that keeps a bare `<` (`1 <2`);
+    `strip_newlines` removes `\r` as well as `\n`.
+  - `currency`, `percentage`, `number_with_delimiter`, `compact_number` and
+    `pluralize` print nothing for a missing value, `NaN` or ±Infinity, not
+    `$0.00`, `0`, `NaN` or `Infinity`, and print negative zero as `0`.
+  - `in_timezone` is standard: nothing in the expression language re-expresses
+    an instant in another zone.
+
+  The library is 19 standard functions both hosts ship — `escape`, `raw`,
+  `newline_to_br`, `capitalize`, `truncate`, `strip_html`, `strip_newlines`,
+  `pluralize`, `round`, `currency`, `percentage`, `number_with_delimiter`,
+  `compact_number`, `json`, `date`, `time`, `datetime`, `in_timezone` and `t`
+  (translations) — plus two PuzzleKit-only ones, `link` (the router) and
+  `timeago` (it reads the clock at render).
+  Apps register their own through the `formatters` config map, which keeps
+  its name, and call them the same way. An app function registered under a
+  standard name still wins, now with a development warning. The examples moved
+  with it: blog's `pluralize`, chirp's and music's own `compact` →
+  `compact_number`, stays' own `currency` → `currency(v, '$', 0)`, and todos,
+  the scaffold todos template and stress → `datetime(v, 'short')`;
+  typed-todos and the scaffold todos app drop their now-shadowing
+  `pluralize`, and the DevTools panel its unused `json`. Scaffolded todos apps
+  get the change with the next binary.
+- **BREAKING: `raw` renders sanitized HTML, and `newline_to_br` renders real
+  `<br>`s (D174).** `{ raw(post.bodyHtml) }` injects the value as HTML (0.7's
+  `| raw` printed it as text), always through an allowlist sanitizer that
+  runs identically in the browser and in `--hybrid`/`--static` prerender.
+  Document markup, links and images are kept. `<script>` (with its contents),
+  `<style>`, `<iframe>`, `<object>`, `<embed>`, `<svg>`, `<math>`,
+  `<template>` and `<noscript>` are dropped, forms and unknown tags are
+  unwrapped to their text, every `on*` handler and every `style` and `name`
+  attribute is removed, and an `href`/`src`/`srcset` URL survives only when
+  relative or `http(s)` (links also keep `mailto:`/`tel:`), with
+  entity-encoded, mixed-case, control-character-prefixed and whitespace-split
+  schemes caught. As in DOMPurify's defaults, `class` and `id` are kept — `id`
+  verbatim, except on `<img>` (it would clobber properties of a `<form>` it
+  lands in) and except one starting with `__` — and a link keeps
+  `target="_blank"` (no other target), always with
+  `rel="noopener noreferrer"`. `name` is never kept. Because `class` and `id`
+  survive, content can use the app's CSS and can shadow an undefined global by
+  id: for untrusted user HTML that is a UI-overlay and naming risk, not code
+  execution (the agent skill describes the containment).
+  `{ newline_to_br(note) }` escapes the value and emits a `<br>` for each CR
+  LF, CR and LF. Each must be the **outermost call** of a **text**
+  interpolation, with one argument: inside another call or a method chain, as
+  an operand, in an attribute value, a component prop or a marker argument, or
+  inside a raw-text element (`<script>`, `<style>`, `<textarea>`, `<title>`,
+  `<noscript>`, `<xmp>`, `<iframe>`, …), the template does not compile (a
+  positioned error). The compiler lowers the pair itself, so an app function
+  registered as `raw` is never called from a template (a development warning
+  says so) and no app function can inject markup. The markup renders as
+  sibling nodes with no wrapper element and splits a run of text the way an
+  element does. The node ships only in apps that use either function
+  (`__PUZZLE_HAS_RAW_HTML__`), and the sanitizer only in apps that use `raw`
+  (`__PUZZLE_HAS_RAW_SANITIZE__`): hello-world and todos did not grow, a
+  `raw`-using app pays 2,318 bytes gzip, and a `newline_to_br`-only app 374.
+  The shared conformance table carries the allowlist as 99 `raw` rows — rich
+  text that must survive and an XSS corpus that must come out inert — plus 6
+  `newline_to_br` rows, for Sites to run too.
+- **Member access in a template never throws (D173 V4).** Every `.` and `[`
+  step in a value expression — text, attributes and props, `{#if}`/`{#case}`
+  headers, function and handler arguments, loop collections and keys —
+  compiles to `?.`,
+  so `{ user.address.city }` prints nothing when `address` is missing instead
+  of sending the view to `errorView`. A path that exists evaluates exactly as
+  before; writing `?.` yourself stays legal. A chain rooted at a handler's
+  DOM `event` and `puzzle check` keep the author's spelling. A method call
+  on a missing value is guarded the same way and prints nothing, with a
+  development warning. A two-way bound
+  `value={ profile.name }` whose `profile` is missing is inert until the record
+  exists (it used to be reachable only by throwing): it never writes a stray
+  top-level `name`. Cost: +34 B gzip on the todos example, nothing on
+  hello-world.
+- **`Object.keys` over a missing value, app functions in `puzzle check`,
+  and a mistyped time zone.** `Object.keys(x)`, `Object.values(x)` and
+  `Object.entries(x)` with `x` missing return `[]` instead of failing the
+  view with a `TypeError` — the compiler passes `x ?? {}`, so any other value
+  reaches them unchanged — and `{ Object.keys(settings).length }` prints `0`;
+  `puzzle check` types an app function through a call rather than an index
+  signature, so `{ myFn(x) }` no longer fails under
+  `noUncheckedIndexedAccess` ("Cannot invoke an object which is possibly
+  'undefined'") while the standard functions keep their signatures; and an
+  `in_timezone` zone `Intl` rejects (`'America/New_Yrok'`, which passes the
+  compile-time shape check) is a development error, once per zone, and
+  still renders the date un-shifted.
+- **BREAKING: a loop over something that is not a list runs zero times (D173
+  V12).** A missing collection (`null`/`undefined`) loops zero times silently;
+  any other non-array (a string, an object, a number) loops zero times with a
+  development warning — so a `{#for}` over a string's characters stops
+  iterating (loop over `text.split('')` instead). Range bounds truncate to whole numbers (with a development warning
+  for a non-integer; a numeric string such as a route param's `'5'` is fine),
+  and a missing or non-finite bound runs the range zero times. A range with two
+  integer-literal bounds (`{#for 1...3}`) is folded at compile time. `loopItems`
+  and `loopRange` are exported from the package root as compiler support,
+  beside `listRows`.
+- **BREAKING (edge case): one value-printing rule (D173 V6).** `NaN` and
+  ±Infinity now print nothing instead of `NaN`/`Infinity`, and an object prints
+  nothing instead of `[object Object]` — with a development warning naming the
+  expression. That includes a `Date` — its development warning names `date()`,
+  `datetime()` and `time()` — and any object with its own `toString` (a `URL`,
+  a Decimal, a Temporal or Luxon value): format it or print a field instead.
+  Negative zero prints `0`, in a plain interpolation and through every number
+  function. Numbers otherwise print as JavaScript prints them, and a list still
+  prints its items joined with `,`.
+- **BREAKING (edge case): a list or object in a brace-only attribute (D173
+  V9).** A list in a brace-only attribute is now a space-joined token list (it
+  joined with commas) that drops `false` and every item that prints nothing
+  (`null`, `undefined`, `''`, …), so the clsx idiom
+  `class={ [active && 'on', 'btn'] }` writes `class="btn"` rather than
+  `class="false btn"`. An object value omits the attribute with a development
+  warning instead of writing `[object Object]`. A controlled `value={ list }`
+  prints the same way. Text and quoted attributes keep the plain comma join, and
+  a list passed as a component prop stays a list.
+- **BREAKING (edge case): a slot is filled only when its content renders
+  something (D173 V14).** A composition position — `<Children>`, `<Slot name>`,
+  or a snippet stamp — now counts as filled only when the content supplied for
+  it renders at least one node that is not whitespace-only text. A call-site
+  `{#if}` that is false now shows the marker's fallback body, the way an empty
+  `{#for}` already did, which gives the empty-state pattern for free:
+  `<List>{#for …}…{/for}</List>` with `<Children>Nothing here yet</Children>`
+  in `List`. A snippet stamp that renders nothing shows the fallback for that
+  stamp, and a wrapper forwarding an unfilled position hands on its own
+  fallback. Prerendered (`hybrid`/`static`) output matches. Only a caller whose
+  content can render nothing, passed to a marker with a fallback, sees a
+  change: a marker without a fallback passes its content through untouched, so
+  siblings after it keep their DOM and state. When siblings follow a marker,
+  keep its fallback to one root element — a fallback with a different node
+  count than the content shifts those siblings, and they remount on each flip.
+- **BREAKING: template whitespace follows one merged rule (D168, D173 V10).**
+  A line break between text (or an interpolation) and an element now renders
+  one space, in either order, as it does in HTML. Before, it was dropped, so
+  prose wrapped around inline elements glued together: `tokens —` + newline +
+  `<code>a</code>,` + newline + `<code>b</code>` + newline + `and more`
+  rendered `tokens —a,band more` and now renders `tokens — a, b and more`.
+  Indentation between two elements is still dropped, so stacked buttons and
+  badges get no gap, and a parent's first- and last-child indentation is still
+  dropped. `<pre>` and `<textarea>` bodies are now preserved exactly,
+  descendants and interpolations included, instead of collapsed; the one
+  newline directly after the start tag is dropped, as HTML's parser drops it,
+  and prerendered pages print the same text the browser runtime mounts.
+  **Upgrading:** a flex or grid item ignores the new leading or trailing space,
+  so an icon + newline + label inside a flex button looks the same. In inline
+  flow, the space is now visible; where an author added a margin to fake the
+  missing space, drop the margin, or put the two on one line with no
+  whitespace between them to keep them touching. A `<pre>` or `<textarea>`
+  whose body was indented with the template now shows that indentation:
+  dedent the body, or bind it (`{ code }`, `value={ text }`). Across the
+  0.8.0 corpus (612 files), 131 files gained a space in 830 text runs, none
+  lost one, and no `<pre>`/`<textarea>` body changed.
+- **A record prop now refreshes its child when that record changes.** Records
+  mutate in place, so a record passed as a prop was always reference-equal and a
+  child displaying it only re-rendered when some *other* prop happened to differ.
+  Every record now carries a render revision — the store's notification sequence
+  for its last mutation — and a component's prop compare checks it against the
+  snapshot the child stored when its props were last applied. `<TodoItem
+  todo={todo}/>` refreshes on `todo.update(…)`, and on nothing else. The
+  documented re-query idiom is unchanged and is still the answer for a *related*
+  record's fields or a computed getter's inputs, which no revision can cover.
+- **A `{#for}` row's event handler is identity-stable.** A handler capturing a
+  loop variable (`@remove={ deleteTodo(todo) }`) used to compile to a fresh
+  closure per row per render, which defeated the prop bailout for every child in
+  the list. It now caches on the row and reads the current item when it fires, so
+  one record edit in a 1,000-row list wakes one child instead of all of them.
+  Handlers that read `data()` values keep their fresh closures — their captures
+  genuinely change.
+- **`{#for}` rows are cached between renders.** Each item-form loop keeps one row
+  state per key and returns the row's previous vnode subtree unless that row's
+  inputs changed; the patcher skips a returned-by-reference subtree outright.
+  Keys, the shared sibling key namespace, mixed keyed/unkeyed pairing, leaving
+  rows, out animations and FLIP all behave exactly as before. Range loops and
+  loops inside a `<Snippet>` body are unchanged. A loop that did not run in a
+  render — its `{#if}` was false, or its enclosing row was cached — rebuilds
+  every row the next time it does, since the per-render root mask it consults
+  says nothing about the renders it sat out; an `errorView` retry forces the same
+  rebuild, so a failed child sitting under an untouched row is reached and
+  remounted rather than left as a blank position. Controlled `value`/`checked`
+  inside a cached row re-assert through `<Portal>` content and stop at an
+  `island` element's children (the patcher never reconciles those, so replaying
+  into one would reset a widget's own input), and a cached control reached
+  through an ordinary patch — slot expansion clones the row vnode around it —
+  re-asserts itself. Because one vnode object can now appear in both the
+  outgoing and the incoming tree, a replaced position unmounts before it mounts,
+  which leaves placement during a leave animation exactly where it was.
+- **Static markup is allocated once.** A template subtree that cannot change is
+  built once per view instance (or once per loop row) instead of on every render
+  — except inside a `<Snippet>` body or a non-lowered loop body (a range
+  `{#for}`, or an item loop whose explicit `key=` reads render state and so kept
+  `.map`). Those own no row scope, so a cached subtree there would be one vnode
+  shared by every iteration and mounted at N DOM positions; for the same reason
+  no loop nested inside one is lowered to a list block either.
+  An `island` element's **static** children array goes a little further: because
+  D44 seeds it once at mount and the seed is identical on every mount, the whole
+  array is built once at any size, with no three-vnode threshold. A DYNAMIC
+  island seed is still rebuilt every render — `??=` is per view instance, while
+  D44 re-seeds an island from the template on a key-reset or hide/show remount,
+  so caching one would display the first render's values forever.
+- **Contract worth knowing: assigning a field directly on a record
+  (`todo.title = 'x'`) is not observed.** It never notified anything before
+  either — nothing re-rendered for it — but row caching now makes that explicit.
+  Mutate records through `update()` or a store path. Plain objects and arrays are
+  never cached (they can be mutated in place, so their rows rebuild every render
+  as before), and a loop body that reads a relation, a computed getter, or a path
+  deeper than one level off the item never caches its record rows.
+- **An app function must be a pure function of its input.** Row caching
+  relies on it: a cached row does not re-run its calls, so a function that
+  reads the clock or any other ambient value would freeze its output. The
+  built-ins that do (`timeago` today) are known to the compiler and make the
+  site re-evaluate every render; an app function is pure by contract. A
+  template reaches no mutable global and cannot reach the view through `this`,
+  so a relative time is `timeago(at)` and any other ambient value is computed
+  in `data()`.
+- **BREAKING (edge case): new reserved names.** A compiled view uses
+  `__lists`, `__c`, `__dirty`, `__rgen` and `__propRevs` on the instance and
+  `__roots` on the class; a template with an item-form `{#for}` also declares `__L0`, `__L1`, … at module scope and imports
+  the list runtime as `__l`. Binding `__l` or one of the `__L<n>` names in a
+  `<script>` is a positioned compile error, the way binding `ViewNode` already
+  is. The instance names join `__h`/`__ref`/`__bind` as names a component must
+  not define. A file that emits a `.map` item loop or a range loop also imports
+  the loop guards as `__e` / `__r` (D173 V12), which are reserved the same way.
+- **The update notice never waits on the network (D76).** `puzzle build` and
+  `puzzle dev` print "a newer version is available" from a cached answer and
+  never fetch in-process. When the cache is over an hour old, the CLI re-execs
+  itself as a detached background helper that refreshes it with a 3 s budget, so
+  a new release shows up on the next run after it lands rather than a day later,
+  and a slow or offline registry cannot add a millisecond to a build. A failed
+  refresh backs off for 15 minutes; cache writes are atomic so parallel builds
+  cannot corrupt each other. The gates are unchanged: TTY only, skipped under
+  `CI` and `PUZZLE_NO_UPDATE_CHECK`, registry overridable with `PUZZLE_REGISTRY`.
+- **puzzle-pieces: the `@magic-spells/morph-engine` floor is `^0.4.2`** for
+  date-picker, emoji-picker and emoji-picker-simple (D169). 0.4.1 stops the
+  morph blob painting a white hairline border on dark themes.
+- **puzzle-pieces: `tabs` owns the gap between the strip and the panel.** The
+  Tabs root is now a flex column with a default `gap-4` in every variant; it
+  has zero specificity, so any `gap-*` on the root replaces it. `<tab-panel>`
+  is an inline custom element, so the old docs' `pt-4` on each panel never
+  moved it — now that panels lay out as blocks it would, so drop `pt-*` from
+  panels copied from older docs. A side-by-side (vertical) layout adds
+  `flex-row` to the root. New `variant="buttons"`: separate outline buttons,
+  the active one filled brand. The underline focus ring is now inset, so the
+  list's `overflow-y: hidden` no longer clips it.
+- **Docs: the Quick Start is `npm install -g @magic-spells/puzzle` then
+  `puzzle init`.** The unpublished `create-puzzle-app` wrapper is retired
+  (D77).
+- **`{#raw}` bodies no longer break section splitting.** The section splitter
+  skips a `{#raw}…{/raw}` span the way it skips comments, so a raw body whose
+  braces do not balance and whose text holds an apostrophe or backtick (a code
+  sample with `// it's`) no longer fails with "missing `</puzzle-view>`", a
+  literal `</puzzle-view>` inside a raw body is legal, and a 40 KB raw block
+  splits in under a millisecond instead of seconds. Alongside it: HTML void
+  elements need no closing tag (checklist item 17), a second `{:else}` is
+  reported at the stray one rather than at the block, and a `{#svg}` file may
+  start with a UTF-8 byte-order mark.
+
+### Removed
+
+- **BREAKING: formatter pipes (D176).** A template expression has no `|`: the
+  value is a function's first argument (`{ currency(price) }`), a chain nests
+  (`{ truncate(capitalize(title), 40) }`), and a `|` anywhere is a positioned
+  compile error at the pipe that says to write `name(value)`. There is no
+  bitwise OR either; `||` is logical OR. The table in Upgrading from 0.7
+  (item 1) maps every 0.7 spelling.
+- **BREAKING: the list functions `sort`, `where`, `map`, `uniq`, `reverse`,
+  `compact`, `first` and `last` (D174).** Shape a list with array methods —
+  `items.toSorted((a, b) => a.rank - b.rank)`, `items.filter(i => i.done)`,
+  `items.map(i => i.name)`, `items.at(0)`, `items.at(-1)` — or in `data()`.
+  For a short count, `compact_number` replaces `compact`. A call that still
+  names one passes the value through and, in development, logs what replaces
+  it. (Sites keeps list functions as a Sites-only addition.)
+- **BREAKING: `noescape` (D174).** Print the value with a plain interpolation,
+  or use `raw` for HTML you mean to render. Development logs the replacement.
+- **BREAKING: `size`, `plus`, `minus`, `times`, `divided_by`, `modulo`,
+  `default` and `split` (D176).** Each duplicated something the expression
+  language has: a count is `.length`, arithmetic is `+ - * / %`
+  (`{ currency(price * qty) }`), a fallback is `??` (`{ name ?? 'Anonymous' }`),
+  and a string splits with `.split()`. A call that still names one passes the
+  value through and, in development, logs the replacement.
+- **BREAKING: `upcase`, `downcase`, `trim`, `strip`, `replace`, `join`, `abs`,
+  `ceil` and `floor` (D176).** A JavaScript method or `Math` global says each:
+  `.toUpperCase()`, `.toLowerCase()`, `.trim()` (for both `trim` and `strip`),
+  `.replaceAll(a, b)` (or `.split(a).join(b ?? '')`, which is what `replace`
+  did — `.join()` with no argument joins with `','`), `.join(', ')` (the old default separator; `.join()` alone joins with
+  `','`), `Math.abs()`, `Math.ceil()`, `Math.floor()`. `round(v, places)`
+  stays. A call to one reaches the unknown-name guard, which names the method
+  in development, and the names are gone from `LibraryFunctions` in the types.
+
+### Fixed
+
+- **A snippet that declares a subset of a marker's arguments no longer warns.**
+  Declaring fewer params than the marker hands over was always legal (D166),
+  but the development shape warning demanded an exact match, so
+  `<Snippet fits="day" date day>` against a marker handing over five values
+  logged "the shapes don't match". It now warns only for a declared param the
+  marker does not hand over.
+- **`puzzle check` types library calls as the public types do.** `t`'s
+  variables may be any object or `null` — `t('greeting', user)` with an
+  interface-typed or class-instance `user` was rejected for lacking an index
+  signature — and `date`, `time` and `datetime` take a list of locales and
+  only the four presets. A test now fails if the check's signatures and
+  `LibraryFunctions` in `types/index.d.ts` disagree.
+- **`puzzle check` supports TypeScript 6**, which rejected the generated config's `baseUrl` and `node` resolution as
+  deprecated. On TypeScript 6 and 7, an app with no `tsconfig.json` is no
+  longer checked with `strict` on by default (`'__d.stats' is possibly
+  'undefined'` in a plain-JavaScript app). On TypeScript before 6, an app
+  tsconfig with `module: "nodenext"` or `"node16"` no longer fails with
+  TS5109.
+- **`puzzle check` keeps the app's `paths` aliases.** An import through an
+  alias from the app's `tsconfig.json` (`~/*`) reported "Cannot find module";
+  the app's own entries are now merged beside `@/*`, with comments and
+  trailing commas in the config tolerated. `@/*` always points at `app/`, as
+  it does in the build. Aliases inherited through `extends` are still not
+  read.
+- **`puzzle check` no longer reports an arity error on a JavaScript
+  handler.** `@click={ play(event) }` against `play: () => {}` in a
+  plain-JavaScript component reported "Expected 0 arguments, but got 1" —
+  on DOM events and component callback props alike — though the call is
+  legal JavaScript and the documented form. A JavaScript component's
+  handlers now take any arguments, and handler names are now checked: a
+  misspelled one is reported, where before it passed. A JavaScript
+  component's template handlers must therefore be declared in its `events`
+  field — one attached at runtime (`this.events.play = …` in the
+  constructor or `created()`) is reported. Argument expressions are still
+  checked, and a `lang="ts"` component's handler calls stay fully checked.
+- **A component class may have a non-ASCII name.** `export default class
+  Übersicht`, `class 概要` and `class Straßenkarte` now compile, and a file
+  named `Übersicht.pzl` derives that class name. The script scanner that finds
+  the class was ASCII-only: a name starting with a non-ASCII letter was
+  reported as an anonymous class, and a name with a non-ASCII letter after an
+  ASCII start (`Straßenkarte`) was silently truncated to `Stra`, so the
+  compiled module crashed on load; `puzzle check` misread the same names. The
+  `__d.` collision scan and the expression lexer now share one set of
+  JavaScript identifier rules (`jsident.IsIDStart` / `IsIDContinue`).
+  Component tags take the same names (`<Straßenkarte/>`, `<概要/>`,
+  `<Frame.Übersicht/>` — any tag not starting with an ASCII lowercase letter
+  is a component), and a class name the compiler cannot read whole (a `\u`
+  escape, or a letter newer than its Unicode tables, like the `・` in
+  `データ・一覧`) is a compile error instead of a truncated name.
+- **An `errorView` retry remounts a failed child under a reused element.** A
+  failed child inside an element the parent reused (`<Card><div><Widget/></div></Card>`,
+  or `<li><Widget/></li>` in a cached row) stayed blank after a retry, because
+  the patcher short-circuited the unchanged subtree; the retry now walks it.
+- **The number functions print nothing for `NaN` and ±Infinity.** `currency`,
+  `percentage`, `number_with_delimiter`, `compact_number` and `pluralize`
+  printed `NaN` or `Infinity` for `0 / 0` or `120 / 0`.
+- **Negative zero prints `0`.** `pluralize(-0, 'day')` printed `-0 days`, and
+  the locale number path printed `-0`.
+- **`/testing` i18n handles restore the formatter locale and `<html lang>`.** A
+  `mountView` or `createTestApp` with an `i18n` option leaked its locale into
+  the next test; `destroy()`/`unmount()` now restore both.
+- **The usage scan prunes `dist`, `build` and `vendor` only at the project
+  root.** A first-party `app/components/vendor/` folder was skipped, which
+  compiled `raw`, its sanitizer and its functions out of a component the app
+  renders.
+- **A slot's fallback body is built only when the slot is empty (D141).** A paired
+  marker's fallback used to be evaluated on every render, even when a snippet
+  or call-site content filled the position, so its expressions ran for nothing
+  and the 0.8 value-printing check warned about content that never showed —
+  a VirtualList whose rows a `<Snippet>` stamped logged
+  `object template value for "row.item"`. The fallback now compiles to a lazy
+  body that runs only when the position is unfilled, in the browser and in
+  prerendered output, and a filled slot now renders faster. What a slot shows
+  is unchanged. The one visible difference is that a fallback's side effects
+  (a function call, a development warning) no longer happen while the slot is
+  filled. Fallback code now runs during slot expansion, not in `render()`, but a
+  throwing fallback still fails only its own component.
+- **Prerendered pages anchor their injected scripts on the shell's last
+  `</body>`.** A `</body>` inside a shell comment or an inline script string
+  used to capture the static data island and the page module (and, with
+  translations, the locale island), so the page never booted.
+- **A project with no installed runtime gets a clear error.** `puzzle build`
+  and `puzzle dev` check for `@magic-spells/puzzle` before bundling and print
+  the install command for the nearest lockfile (`npm install`, `pnpm install`,
+  `yarn install` or `bun install`; a monorepo's workspace-root lockfile
+  counts), instead of an esbuild resolver error. This matters for a globally
+  installed CLI run in a fresh checkout.
+- **An `{#if}` condition that is itself a ternary works** (broken since the first release).
+  `{#if mode === 'edit' ? canEdit : canView}` crashed the render in block form
+  and printed `class="x true"` inline.
+- **`\{` and `\}` work in a quoted attribute value** (broken since 0.7.0). A
+  lone `title="\{"` failed to compile, and `title="\{" data-x="}"` swallowed
+  the next attribute.
+- **Division after a non-ASCII name, a trailing-dot number or a field named
+  `of` works** (broken since 0.7.0, which had the same scanner).
+  `{ 金額 / 2 }`, `{ café / 2 }`, `{ 5. / 2 }` and `{ of / 2 }` failed with
+  "unclosed '{'" in every template position: text, attribute values, block
+  headers, arrow bodies and call arguments. A `<script>` holding
+  `const half = 金額 / 2; const s = "it's";` failed with "missing </script>".
+  The brace scanner took the `/` for the start of a regular expression and read
+  past the closing brace.
+- **A static page keeps a locale switch made from `mounted()`.** The switch
+  was dropped, leaving the prerendered language on screen under the new locale.
+- **A static locale switch that fails no longer leaks views.** Every view
+  already built for the new page is destroyed, store subscriptions included.
+- **Static entry slugs never collide.** Routes such as `/`, `/index` and
+  `/index-2` shared an entry file, so a page mounted the wrong view.
+- **A plural category defined twice in a locale file fails the build**, like
+  any other duplicate key, instead of silently dropping the later value.
+- **A locale file saved with a UTF-8 byte order mark loads.** Windows editors
+  write one, and the build rejected the file as invalid JSON.
+- **`setLocale` no longer drops an in-flight `replace()` or Back.** A switch
+  landing while one loaded rebuilt the old page over it: `setLocale('es');
+  router.replace('/about')` ended on the old page. The rebuild now waits for
+  any navigation still loading, as it already did for a push.
+- **A script embed finds its locale files.** Hash and memory routing resolved
+  them against the host page (a 404, so `mount()` rejected); they now resolve
+  next to `app.js`, with or without `build.splitting`. Memory routing no
+  longer writes `<html lang>`, since it takes no document-level side effects.
+- **An inner `{#for}` key reading an outer loop variable named `event`
+  compiles.** `{#for event in events}…{#for a in event.attendees}<li key={
+  `${event.id}-${a.id}` }>` failed with the `event`-as-data error whenever a
+  handler in the template used the DOM `event`.
+- **The development hint for a removed `noescape` says to print a plain `{
+  value }`.** It said "use raw", which renders HTML; 0.7's `noescape` printed
+  text.
+- **`Model.validate(data, { fields })` is typed.** The static `validate`
+  already took an options bag limiting the check to named fields; the
+  declaration now includes `options?: { fields?: readonly string[] }`.
+- **The lowercase `<children/>` and `<slot name>` errors no longer cite
+  "since v1.64"**, a spec revision that was never a release. They read "the
+  default marker is spelled <Children/> (D134)" and "named slots are spelled
+  <Slot name="…"/> (D134)".
+- **The published types match what the runtime exports.** A new check
+  (`npm run test:runtime-types`, in CI and `release:prep`) type-checks the
+  JavaScript runtime from its JSDoc and compares every package export with its
+  declaration. It found three declarations that promised more than the runtime
+  gives:
+  - `PuzzleView.events` is optional: the base class has none, so a view that
+    declares no handlers has no `events`. `puzzle check` now reports a template
+    handler on such a view, which would throw when the event fired.
+  - `@magic-spells/puzzle/router-modes` no longer declares a
+    `puzzleRouterModeBrand` export. It is a type-only brand, and importing it
+    gave `undefined`.
+  - `installFakeAnimate().animateCalls` records the options argument as it was
+    passed: `number | KeyframeAnimationOptions | undefined`.
+- **The fixtures mock serves an adapter verb that fetches an absolute URL, a
+  `URL` or a `Request`.** With fixtures installed, `loadMany: (fetch) =>
+  fetch(new URL('/api/todos', location.origin))` on a mocked model threw
+  `url.startsWith is not a function`, and an absolute URL string got a 404
+  under the default relative `apiURL`. The mock now resolves the request
+  against the page and routes it by path, like the relative spelling.
+- **The Prettier plugin honors `endOfLine: "crlf"`.** Under `crlf`, or
+  `auto` on a CRLF file, every `<script>` and `<style>` body line ended
+  `\r\r\n`: each format changed the file again, and a multi-line template
+  literal's value changed. The bodies now get the line ending once, like
+  the rest of the file; `lf` output is unchanged.
+- **puzzle-pieces:** phone-width overflow in Toolbar, Pagination, the
+  DataTable footer and the Code buttons; `split-panel`'s `snap` no longer
+  collapses every release to 0.
+- **puzzle-devtools:** the panel connects when DevTools is opened after more
+  than 500 events (a 1,000-row list) or closed and reopened on the same page.
+  Both showed "No Puzzle app detected" until a reload; the page hook now keeps
+  the latest `hello` and app-mounted/unmounted outside its ring and re-sends
+  them on every attach.
+- **eslint-plugin-puzzle: an import used only as a template tag is no longer
+  reported unused.** The new `puzzle/uses-template-components` rule, on in
+  `recommended`, marks every component tag (`<Card>`, `<Élan>`, the root
+  `Frame` of `<Frame.Header>`) used, like `react/jsx-uses-vars`. Only markup
+  counts: a tag inside a comment, `{#raw}`, attribute value or string is not a
+  use. A `const` read only inside `{ … }` is still reported: template
+  expressions read view data, not `<script>` bindings.
+- **eslint-plugin-puzzle: autofix no longer corrupts a file that starts with a
+  byte-order mark.** Every fix landed one character early.
+- **eslint-plugin-puzzle: `recommended` no longer parses `<script lang="ts">`
+  as JavaScript** (a fatal parse error on every TS file). TS blocks are linted
+  when a TypeScript parser covers them; the new `puzzle.configs.typescript`,
+  added after `tseslint.configs.recommended`, gives them the setup the JS
+  blocks get. The README's "extra rules" example targeted `**/*.pzl`, which
+  never reaches the `<script>` body; it now uses `**/*.pzl/*_scripts.js`.
+- **A render or `afterUpdate` throw at the end of a skeleton `min-duration`
+  hold reaches `onError` and the error view.** The held swap runs on a timer,
+  so the throw escaped as an uncaught exception and left the skeleton on
+  screen. It now reports as phase `mount` and the error view replaces the view
+  in place, as it does without a hold. (Pre-existing since before 0.7.0.)
+- **A `<script>` whose string or regex runs past `</script>` points at where
+  it starts.** The compiler reported "missing `</script>` for `<script>`" at
+  the tag. It now reports the line and column where the string or regex
+  began, and says to brace the body when a regex follows an unbraced
+  `if`/`while`/`for` (`if (text) /["']/.test(text);` reads the `/` as
+  division, so the quote opens a string). The eslint and prettier plugins
+  keep their own message. (Pre-existing.)
+- **`puzzle dev` started from a differently-cased path rebuilds Tailwind on
+  stylesheet edits.** On a case-insensitive volume (macOS by default),
+  starting the server from `~/code/app` when the folder is `Code` handed the
+  `tailwindcss --watch` child paths that never matched its file events, so an
+  edit to an `@import`ed CSS file was never picked up. The dev server now
+  spells the app root as the disk stores it before deriving any path or
+  starting any watcher. (Pre-existing.)
+- **`puzzle dev` live reload no longer hangs the browser with many tabs
+  open.** Every dev tab held its own reload stream, and a browser allows six
+  HTTP/1.1 connections per host, so with about six tabs open every further
+  request queued forever: a reload left the old page frozen and the new one
+  "(pending)". The tabs on one dev server now share one stream. A tab elected
+  with the Web Locks API holds it and relays reloads and build errors to the
+  rest over a `BroadcastChannel`; when that tab closes, the next one takes
+  over. A page closes its stream before it reloads. Where either API is
+  missing (an insecure origin such as a LAN IP), each tab streams directly as
+  before. (Pre-existing.)
+- **A `puzzle dev` reload always runs the newest bundle.** The dev server
+  sent `app.js` and the other built files with a one-second `Last-Modified`
+  and no `Cache-Control`, so the browser could keep the older bundle after two
+  rebuilds inside one second. Every response the dev server serves from
+  `dist/` now carries `Cache-Control: no-store`. (Pre-existing.)
+
+## 0.7.0 — 2026-09-09
 
 ### Added
 

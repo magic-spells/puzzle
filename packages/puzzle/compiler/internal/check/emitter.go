@@ -4,10 +4,12 @@
 package check
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -15,11 +17,12 @@ import (
 
 	"github.com/magic-spells/puzzle/compiler/internal/codegen"
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 const shim = `/// <reference types="@magic-spells/puzzle/puzzle-env" />
-
+__LANGUAGE_LIBS__
 import type { PuzzleView } from '@magic-spells/puzzle';
 
 declare global {
@@ -57,17 +60,122 @@ declare global {
     visit: (value: number) => void,
   ): void;
 
-  function __puzzle_check_formatter(
-    name: string,
-    value: any,
-    ...args: any[]
-  ): any;
+  // A bare call names the function library: the standard functions typed
+  // below, and any app-registered function, untyped — its arguments and its
+  // result are any, as an untyped data() value is. An app function is reached
+  // through __puzzle_app_fn rather than an index signature on this interface,
+  // which noUncheckedIndexedAccess would type as possibly undefined (and
+  // noPropertyAccessFromIndexSignature would reject as a dotted read).
+  interface __PuzzleFunctions {
+__LIBRARY_SIGNATURES__
+  }
+  const __puzzle_fn: __PuzzleFunctions;
+  function __puzzle_app_fn(name: string): (...args: any[]) => any;
+
+  // A method call whose arguments hold an arrow function takes its receiver
+  // through here. An untyped data value (any) becomes any[], so the arrow's
+  // parameters are typed any instead of an implicit-any error under strict; a
+  // typed receiver passes through unchanged and keeps its own checking.
+  function __puzzle_check_list<T>(value: T): 0 extends (1 & T) ? any[] : T;
 
   type __PuzzleCheckView = PuzzleView;
+
+  // A plain-JavaScript component's handlers have no declared parameters, so
+  // their types are what TypeScript infers from untyped JS: play: () => {}
+  // takes nothing, and the documented @click={ play(event) } would be an
+  // arity error on legal code. The check wrapper sees such a component through
+  // this type, which lets every handler take any arguments and closes the set
+  // of handler NAMES to the keys of its events field: TypeScript reads a JS
+  // object literal as open, so a misspelled handler was never reported until
+  // this type made it one. A handler attached at runtime rather than declared
+  // in events (this.events.play = … in the constructor or created()) is
+  // reported too. The argument expressions are still checked where they are
+  // written. A TypeScript component is never wrapped, so its handler calls
+  // stay fully checked.
+  type __PuzzleCheckJSView<V> = V extends { events: infer E }
+    ? Omit<V, 'events'> & { events: { [K in keyof E]: (...args: any[]) => any } }
+    : V;
 }
 
 export {};
 `
+
+// libraryFunctionSignatures are the TypeScript signatures of the standard
+// function library (codegen.LibraryFunctionNames, DESIGN-expr-v2 §4), declared
+// on __PuzzleFunctions in the shim. They are types/index.d.ts's
+// LibraryFunctions with its aliases (TranslationVars, DatePreset,
+// LocaleArgument) spelled out: TestLibrarySignaturesMatchPublicTypes fails
+// when the two disagree, and TestLibrarySignaturesMatchCodegen keeps this
+// table and the compiler's name list identical. Values are `unknown` because
+// every function accepts any template value and prints nothing for a missing
+// one — `t`'s key too, which the public type narrows to the primitives.
+var libraryFunctionSignatures = []struct{ name, signature string }{
+	{"link", "(path: unknown): string"},
+	{"t", "(key: unknown, vars?: object | null): string"},
+	{"currency", "(value: unknown, symbol?: string, places?: number): string"},
+	{"percentage", "(value: unknown, places?: number): string"},
+	{"number_with_delimiter", "(value: unknown, delimiter?: string): string"},
+	{"compact_number", "(value: unknown): string"},
+	{"pluralize", "(count: unknown, singular: string, plural?: string): string"},
+	{"round", "(value: unknown, places?: number): number"},
+	{"date", "(value: unknown, preset?: 'short' | 'medium' | 'long' | 'iso', locale?: string | readonly string[]): string"},
+	{"time", "(value: unknown, preset?: 'short' | 'medium' | 'long' | 'iso', locale?: string | readonly string[]): string"},
+	{"datetime", "(value: unknown, preset?: 'short' | 'medium' | 'long' | 'iso', locale?: string | readonly string[]): string"},
+	{"timeago", "(value: unknown): string"},
+	{"in_timezone", "(value: unknown, timeZone?: string): Date | ''"},
+	{"truncate", "(value: unknown, length?: number, ellipsis?: string): string"},
+	{"capitalize", "(value: unknown): string"},
+	{"strip_html", "(value: unknown): string"},
+	{"strip_newlines", "(value: unknown): string"},
+	{"escape", "(value: unknown): string"},
+	{"raw", "(html: unknown): string"},
+	{"newline_to_br", "(value: unknown): string"},
+	{"json", "(value: unknown): string"},
+}
+
+// languageLibs are the lib.d.ts files that type the expression language's
+// method table (puzzle-lang expr.StringMethods/ArrayMethods, DESIGN-expr-v2
+// §3) and its Object globals. A template method is checked as the same
+// JavaScript method, so its declaration must be in the program whatever the
+// app's own target: an app on `target: ES2020` would otherwise see `.at()`,
+// `.replaceAll()`, and `.toSorted()` reported as missing. A `/// <reference
+// lib>` adds a file without replacing the app's `lib` list. es2023.array
+// first ships with TypeScript 5.0, typing findLast, so it is referenced from
+// 5.0 on; toSorted and toReversed join that file only in 5.2, so on 5.0 and
+// 5.1 no lib reference can type them and they report as missing, as they
+// would in the app's own code. Every other file exists in 4.9, the oldest
+// compiler puzzle check supports.
+var languageLibs = []struct {
+	lib string
+	min TypeScriptVersion
+}{
+	{"es2016.array.include", TypeScriptVersion{}}, // includes
+	{"es2017.object", TypeScriptVersion{}},        // Object.values, Object.entries
+	{"es2017.string", TypeScriptVersion{}},        // padStart, padEnd
+	{"es2019.array", TypeScriptVersion{}},         // flat
+	{"es2019.string", TypeScriptVersion{}},        // trimStart, trimEnd
+	{"es2021.string", TypeScriptVersion{}},        // replaceAll
+	{"es2022.array", TypeScriptVersion{}},         // at
+	{"es2022.string", TypeScriptVersion{}},        // at
+	{"es2023.array", TypeScriptVersion{5, 0}},     // findLast; toSorted, toReversed from 5.2
+}
+
+// shimSource is the shim for the app's TypeScript version, with the method
+// table's lib files and the library signatures filled in.
+func shimSource(ts TypeScriptVersion) string {
+	var libs strings.Builder
+	for _, l := range languageLibs {
+		if ts.AtLeast(l.min) {
+			libs.WriteString("/// <reference lib=\"" + l.lib + "\" />\n")
+		}
+	}
+	var sigs strings.Builder
+	for _, fn := range libraryFunctionSignatures {
+		sigs.WriteString("    " + fn.name + fn.signature + ";\n")
+	}
+	out := strings.Replace(shim, "__LANGUAGE_LIBS__", libs.String(), 1)
+	return strings.Replace(out, "__LIBRARY_SIGNATURES__\n", sigs.String(), 1)
+}
 
 // Result describes the generated check workspace.
 type Result struct {
@@ -112,8 +220,9 @@ func sourceDir(root string) (string, error) {
 	return dir, nil
 }
 
-// Generate rebuilds <appRoot>/.puzzle/check from the .pzl files under app/.
-func Generate(appRoot string, typescriptMajor int) (*Result, error) {
+// Generate rebuilds <appRoot>/.puzzle/check from the .pzl files under app/
+// for the app's TypeScript compiler version.
+func Generate(appRoot string, ts TypeScriptVersion) (*Result, error) {
 	root, err := filepath.Abs(appRoot)
 	if err != nil {
 		return nil, err
@@ -182,10 +291,10 @@ func Generate(appRoot string, typescriptMajor int) (*Result, error) {
 		}
 	}
 
-	if err := os.WriteFile(filepath.Join(checkDir, "puzzle-check.d.ts"), []byte(shim), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(checkDir, "puzzle-check.d.ts"), []byte(shimSource(ts)), 0o644); err != nil {
 		return nil, err
 	}
-	config, err := tsconfig(root, typescriptMajor)
+	config, err := tsconfig(root, ts.Major)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +305,7 @@ func Generate(appRoot string, typescriptMajor int) (*Result, error) {
 }
 
 func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
-	_, err := os.Stat(filepath.Join(appRoot, "tsconfig.json"))
+	appConfig, err := os.ReadFile(filepath.Join(appRoot, "tsconfig.json"))
 	hasAppConfig := err == nil
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
@@ -245,29 +354,54 @@ func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
 		"exclude": []string{},
 	}
 	opts := config["compilerOptions"].(map[string]any)
-	if typescriptMajor >= 7 {
+	// Paths is always written here, never inherited: an inherited target is
+	// relative to the app's baseUrl or tsconfig, not to this config, and may be
+	// non-relative, which is illegal once baseUrl is cleared. The app's own
+	// entries are merged in with their targets rewritten from here — `prefix`
+	// is where the app root sits relative to the directory targets resolve from
+	// — and the @ alias is written over them last.
+	var aliasTarget, prefix string
+	if typescriptMajor >= 6 {
 		// JSON null deliberately clears either setting inherited from the app.
-		// TypeScript 7 removed baseUrl and node10/node module resolution. Paths is
-		// replaced too because targets inherited from a baseUrl config may be
-		// non-relative, which is illegal once baseUrl is cleared.
+		// TypeScript 7 removed baseUrl and node10/node module resolution, and
+		// TypeScript 6 deprecates both (an error unless the app silences it).
+		// With no baseUrl, a target resolves from this config's directory.
 		opts["baseUrl"] = nil
 		opts["moduleResolution"] = nil
-		opts["paths"] = map[string]any{"@/*": []string{"../../app/*"}}
+		aliasTarget, prefix = "../../app/*", "../.."
 	} else {
-		// Before TypeScript 7, module: ESNext defaults to classic resolution. Keep
+		// Before TypeScript 6, module: ESNext defaults to classic resolution. Keep
 		// the proven node/baseUrl pair so package imports and the @ alias resolve
-		// under the oldest supported compiler (4.9).
+		// under the oldest supported compiler (4.9). Module is pinned with it: an
+		// app's node16/nodenext module rejects node resolution (TS5109). Pinning
+		// it drops the default-import interop node16/nodenext imply, so a default
+		// import of an `export =` package would be TS1259; the check emits
+		// nothing, and esbuild interops those imports, so allow them.
 		opts["baseUrl"] = "../.."
 		opts["moduleResolution"] = "node"
-		opts["paths"] = map[string]any{"@/*": []string{"app/*"}}
+		opts["module"] = "ESNext"
+		opts["allowSyntheticDefaultImports"] = true
+		aliasTarget = "app/*"
 	}
+	paths := map[string]any{}
 	if hasAppConfig {
 		config["extends"] = "../../tsconfig.json"
+		for key, targets := range appPaths(appConfig, prefix) {
+			paths[key] = targets
+		}
 	} else {
+		// TypeScript 6 and 7 turn strict on by default; a plain-JavaScript app
+		// with no tsconfig gets the lenient checking it had before, as it does
+		// for noImplicitAny.
 		opts["target"] = "ES2020"
 		opts["module"] = "ESNext"
+		opts["strict"] = false
 		opts["noImplicitAny"] = false
 	}
+	// Written after the app's entries: the build aliases @ to app/ in esbuild,
+	// which wins over tsconfig paths, so the check must resolve it the same way.
+	paths["@/*"] = []string{aliasTarget}
+	opts["paths"] = paths
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return nil, err
@@ -275,15 +409,92 @@ func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
 	return append(data, '\n'), nil
 }
 
-type emitter struct {
-	b         *mappedBuilder
-	source    string
-	eventSite int
+// appPaths reads the app tsconfig's own compilerOptions.paths, each target
+// rewritten to resolve from the generated config: joined onto the app's
+// baseUrl (a target is relative to it when set, to the app root otherwise) and
+// then onto prefix. Only the app's tsconfig.json itself is read: `extends`
+// chains are not followed, so paths the app inherits from another config do
+// not reach the check, and neither does a baseUrl it inherits. A config this
+// cannot parse contributes nothing, leaving the @ alias.
+func appPaths(data []byte, prefix string) map[string][]string {
+	var config struct {
+		CompilerOptions struct {
+			BaseURL string              `json:"baseUrl"`
+			Paths   map[string][]string `json:"paths"`
+		} `json:"compilerOptions"`
+	}
+	if json.Unmarshal(stripJSONC(data), &config) != nil {
+		return nil
+	}
+	base := filepath.ToSlash(config.CompilerOptions.BaseURL)
+	if path.IsAbs(base) || filepath.IsAbs(base) {
+		prefix = ""
+	}
+	paths := make(map[string][]string, len(config.CompilerOptions.Paths))
+	for key, targets := range config.CompilerOptions.Paths {
+		rewritten := make([]string, len(targets))
+		for i, target := range targets {
+			if path.IsAbs(target) || filepath.IsAbs(target) {
+				rewritten[i] = target
+			} else {
+				rewritten[i] = path.Join(prefix, base, target)
+			}
+		}
+		paths[key] = rewritten
+	}
+	return paths
 }
 
-type sourceExpr struct {
-	text   string
-	offset int
+// stripJSONC removes what tsconfig.json allows beyond JSON — a byte-order
+// mark, // and /* */ comments, and trailing commas — leaving string contents
+// alone. The first pass drops comments, so the second sees a trailing comma
+// directly before its closing bracket, whitespace aside.
+func stripJSONC(data []byte) []byte {
+	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
+	for pass := 0; pass < 2; pass++ {
+		out := make([]byte, 0, len(data))
+		for i := 0; i < len(data); i++ {
+			c := data[i]
+			switch {
+			case c == '"':
+				j := i + 1
+				for j < len(data) && data[j] != '"' {
+					if data[j] == '\\' {
+						j++
+					}
+					j++
+				}
+				j = min(j+1, len(data))
+				out = append(out, data[i:j]...)
+				i = j - 1
+			case pass == 0 && c == '/' && i+1 < len(data) && data[i+1] == '/':
+				for i+1 < len(data) && data[i+1] != '\n' {
+					i++
+				}
+			case pass == 0 && c == '/' && i+1 < len(data) && data[i+1] == '*':
+				end := bytes.Index(data[i+2:], []byte("*/"))
+				if end < 0 {
+					i = len(data)
+				} else {
+					i += end + 3
+				}
+			case pass == 1 && c == ',':
+				if next := bytes.TrimLeft(data[i+1:], " \t\r\n"); len(next) > 0 && (next[0] == '}' || next[0] == ']') {
+					continue
+				}
+				out = append(out, c)
+			default:
+				out = append(out, c)
+			}
+		}
+		data = out
+	}
+	return data
+}
+
+type emitter struct {
+	b         *mappedBuilder
+	eventSite int
 }
 
 func emitFiles(source []byte, sourcePath, generatedBase, assetsDir string) ([]virtualFile, error) {
@@ -374,10 +585,17 @@ func emitCheckedFile(
 	if includeScript && strings.TrimSpace(sec.Scripts) == "" {
 		b.WriteString("declare const " + className + ": typeof import('@magic-spells/puzzle').PuzzleView;\n")
 	}
-	b.WriteString("void function (this: InstanceType<typeof " + className + "> & Record<string, any>): void {\n")
+	view := "InstanceType<typeof " + className + ">"
+	if !includeScript {
+		// A plain-JavaScript component: its handlers take any arguments and
+		// must be declared in its events field (the shim's __PuzzleCheckJSView
+		// says why).
+		view = "__PuzzleCheckJSView<" + view + ">"
+	}
+	b.WriteString("void function (this: " + view + " & Record<string, any>): void {\n")
 	b.WriteString("  const __d = this;\n")
 
-	e := &emitter{b: b, source: string(source)}
+	e := &emitter{b: b}
 	// The <puzzle-view> tag's own attributes are real bindings (they become the
 	// root ViewNode's attributes), so they are checked like any other element's.
 	if err := e.emitAttrs(root.Attrs, map[string]bool{}, 2); err != nil {
@@ -414,8 +632,11 @@ func compiledClassName(js string) (string, error) {
 	return js[j:i], nil
 }
 
+// isIdentByte reports whether c can belong to the class name codegen wrote
+// before the render tail. Any byte >= 0x80 does: the name is a valid
+// identifier (`Übersicht`, `概要`) and the byte before it is a newline.
 func isIdentByte(c byte) bool {
-	return c == '_' || c == '$' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
+	return c == '_' || c == '$' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c >= 0x80
 }
 
 func (e *emitter) emitNodes(nodes []parser.Node, scope map[string]bool, indent int) error {
@@ -455,9 +676,7 @@ func (e *emitter) emitNodes(nodes []parser.Node, scope map[string]bool, indent i
 				return err
 			}
 		case *parser.Interpolation:
-			if err := e.emitInterpolation(n, scope, indent); err != nil {
-				return err
-			}
+			e.emitVoid(n.ExprAST, scope, indent)
 		case *parser.If:
 			if err := e.emitIf(n, scope, indent); err != nil {
 				return err
@@ -481,104 +700,56 @@ func (e *emitter) emitAttrs(attrs []parser.Attr, scope map[string]bool, indent i
 	for _, attr := range attrs {
 		switch a := attr.(type) {
 		case *parser.DynamicAttr:
-			span, err := e.attrExpr(a.Pos.Offset, a.Expr)
-			if err != nil {
-				return err
-			}
-			e.emitVoid(span, scope, indent)
+			e.emitVoid(a.ExprAST, scope, indent)
 		case *parser.EventAttr:
-			span, err := e.attrExpr(a.Pos.Offset, a.Expr)
-			if err != nil {
-				return err
-			}
-			resolved, err := codegen.ResolveCheckEvent(a.Expr, scope)
-			if err != nil {
-				return err
-			}
 			name := fmt.Sprintf("__puzzle_check_event_%d", e.eventSite)
 			e.eventSite++
 			e.b.WriteString(spaces(indent) + "const " + name + ": ((event: any) => any) | null = ")
-			e.b.WriteSubsequence(resolved, span.text, span.offset)
-			e.b.WriteString(";\n" + spaces(indent) + "void " + name + ";\n")
-		case *parser.MixedAttr:
-			if err := e.emitParts(a.Parts, scope, indent); err != nil {
+			if err := codegen.WriteCheckEvent(e.b, a.ExprAST, a.Expr, scope); err != nil {
 				return err
 			}
+			e.b.WriteString(";\n" + spaces(indent) + "void " + name + ";\n")
+		case *parser.MixedAttr:
+			e.emitParts(a.Parts, scope, indent)
 		}
 	}
 	return nil
 }
 
-func (e *emitter) emitParts(parts []parser.Part, scope map[string]bool, indent int) error {
+func (e *emitter) emitParts(parts []parser.Part, scope map[string]bool, indent int) {
 	for _, part := range parts {
 		switch p := part.(type) {
 		case *parser.InterpPart:
-			if err := e.emitInterpolation(p.Interp, scope, indent); err != nil {
-				return err
-			}
+			e.emitVoid(p.Interp.ExprAST, scope, indent)
 		case *parser.InlineIfPart:
-			span, _, err := e.conditionExpr(p.Pos.Offset, p.Cond)
-			if err != nil {
-				return err
-			}
 			e.b.WriteString(spaces(indent) + "if (")
-			e.writeResolved(span, scope)
+			codegen.WriteCheckValue(e.b, p.CondAST, scope)
 			e.b.WriteString(") {\n")
-			if err := e.emitParts(p.Then, scope, indent+2); err != nil {
-				return err
-			}
+			e.emitParts(p.Then, scope, indent+2)
 			if len(p.Else) > 0 {
 				e.b.WriteString(spaces(indent) + "} else {\n")
-				if err := e.emitParts(p.Else, scope, indent+2); err != nil {
-					return err
-				}
+				e.emitParts(p.Else, scope, indent+2)
 			}
 			e.b.WriteString(spaces(indent) + "}\n")
 		}
 	}
-	return nil
 }
 
-func (e *emitter) emitInterpolation(n *parser.Interpolation, scope map[string]bool, indent int) error {
-	spans, err := e.interpolationExprs(n)
-	if err != nil {
-		return err
-	}
-	// The parentheses are load-bearing: `void` binds tighter than every binary
-	// operator, so an unparenthesized `void a + 1` type-checks `undefined + 1`
-	// and reports "Object is possibly 'undefined'" on a correct template under
-	// strictNullChecks — while checking nothing about `a + 1` itself.
+// emitVoid checks one value position as an expression statement. The
+// parentheses are load-bearing: `void` binds tighter than every binary
+// operator, so an unparenthesized `void a + 1` type-checks `undefined + 1` and
+// reports "Object is possibly 'undefined'" on a correct template under
+// strictNullChecks — while checking nothing about `a + 1` itself.
+func (e *emitter) emitVoid(n expr.Node, scope map[string]bool, indent int) {
 	e.b.WriteString(spaces(indent) + "void (")
-	for i := len(n.Formatters) - 1; i >= 0; i-- {
-		e.b.WriteString("__puzzle_check_formatter(" + strconv.Quote(n.Formatters[i].Name) + ", ")
-	}
-	e.writeResolved(spans[0], scope)
-	spanIndex := 1
-	for _, formatter := range n.Formatters {
-		for range formatter.Args {
-			e.b.WriteString(", ")
-			e.writeResolved(spans[spanIndex], scope)
-			spanIndex++
-		}
-		e.b.WriteString(")")
-	}
+	codegen.WriteCheckValue(e.b, n, scope)
 	e.b.WriteString(");\n")
-	return nil
 }
 
 func (e *emitter) emitIf(n *parser.If, scope map[string]bool, indent int) error {
-	span, negate, err := e.conditionExpr(n.Pos.Offset, n.Cond)
-	if err != nil {
-		return err
-	}
+	// An {#unless} condition is already `!(…)` in the tree.
 	e.b.WriteString(spaces(indent) + "if (")
-	if negate {
-		e.b.WriteString("!(")
-	}
-	e.writeResolved(span, scope)
-	if negate {
-		e.b.WriteString(")")
-	}
+	codegen.WriteCheckValue(e.b, n.CondAST, scope)
 	e.b.WriteString(") {\n")
 	if err := e.emitNodes(n.Then, scope, indent+2); err != nil {
 		return err
@@ -594,15 +765,11 @@ func (e *emitter) emitIf(n *parser.If, scope map[string]bool, indent int) error 
 }
 
 func (e *emitter) emitFor(n *parser.For, scope map[string]bool, indent int) error {
-	spans, err := e.forExprs(n)
-	if err != nil {
-		return err
-	}
 	if n.IsRange {
 		e.b.WriteString(spaces(indent) + "__puzzle_check_range(")
-		e.writeResolved(spans[0], scope)
+		codegen.WriteCheckValue(e.b, n.RangeFromAST, scope)
 		e.b.WriteString(", ")
-		e.writeResolved(spans[1], scope)
+		codegen.WriteCheckValue(e.b, n.RangeToAST, scope)
 		param := "__puzzle_check_value"
 		if n.Counter != "" {
 			param = n.Counter
@@ -620,7 +787,7 @@ func (e *emitter) emitFor(n *parser.For, scope map[string]bool, indent int) erro
 	}
 
 	e.b.WriteString(spaces(indent) + "__puzzle_check_each(")
-	e.writeResolved(spans[0], scope)
+	codegen.WriteCheckValue(e.b, n.CollectionAST, scope)
 	e.b.WriteString(", (" + n.Item)
 	if n.Counter != "" {
 		e.b.WriteString(", " + n.Counter)
@@ -663,21 +830,13 @@ func (e *emitter) emitSnippet(n *parser.Snippet, scope map[string]bool, indent i
 }
 
 func (e *emitter) emitCase(n *parser.Case, scope map[string]bool, indent int) error {
-	caseSpan, err := e.directiveExpr(n.Pos.Offset, "case", n.Expr)
-	if err != nil {
-		return err
-	}
 	e.b.WriteString(spaces(indent) + "switch (")
-	e.writeResolved(caseSpan, scope)
+	codegen.WriteCheckValue(e.b, n.ExprAST, scope)
 	e.b.WriteString(") {\n")
 	for _, clause := range n.Clauses {
-		values, err := e.whenExprs(clause.Pos.Offset, clause.Values)
-		if err != nil {
-			return err
-		}
-		for _, value := range values {
+		for _, value := range clause.ValuesAST {
 			e.b.WriteString(spaces(indent+2) + "case ")
-			e.writeResolved(value, scope)
+			codegen.WriteCheckValue(e.b, value, scope)
 			e.b.WriteString(":\n")
 		}
 		if err := e.emitNodes(clause.Body, scope, indent+4); err != nil {
@@ -695,17 +854,6 @@ func (e *emitter) emitCase(n *parser.Case, scope map[string]bool, indent int) er
 	return nil
 }
 
-func (e *emitter) emitVoid(span sourceExpr, scope map[string]bool, indent int) {
-	e.b.WriteString(spaces(indent) + "void (")
-	e.writeResolved(span, scope)
-	e.b.WriteString(");\n")
-}
-
-func (e *emitter) writeResolved(span sourceExpr, scope map[string]bool) {
-	resolved := codegen.ResolveCheckExpr(span.text, scope)
-	e.b.WriteResolved(resolved, span.text, span.offset)
-}
-
 func cloneScope(scope map[string]bool) map[string]bool {
 	out := make(map[string]bool, len(scope)+2)
 	for name := range scope {
@@ -715,194 +863,3 @@ func cloneScope(scope map[string]bool) map[string]bool {
 }
 
 func spaces(n int) string { return strings.Repeat(" ", n) }
-
-func (e *emitter) interpolationExprs(n *parser.Interpolation) ([]sourceExpr, error) {
-	inner, start, _, err := braceInner(e.source, n.Pos.Offset)
-	if err != nil {
-		return nil, err
-	}
-	baseAt := strings.Index(inner, n.Expr)
-	if baseAt < 0 {
-		return nil, fmt.Errorf("cannot locate template expression %q", n.Expr)
-	}
-	spans := []sourceExpr{{text: n.Expr, offset: start + baseAt}}
-	cursor := baseAt + len(n.Expr)
-	for _, formatter := range n.Formatters {
-		nameAt := strings.Index(inner[cursor:], formatter.Name)
-		if nameAt < 0 {
-			return nil, fmt.Errorf("cannot locate formatter %q", formatter.Name)
-		}
-		cursor += nameAt + len(formatter.Name)
-		if len(formatter.Args) == 0 {
-			continue
-		}
-		open := strings.IndexByte(inner[cursor:], '(')
-		if open < 0 {
-			return nil, fmt.Errorf("cannot locate arguments for formatter %q", formatter.Name)
-		}
-		cursor += open + 1
-		args, err := locateSequential(inner[cursor:], start+cursor, formatter.Args)
-		if err != nil {
-			return nil, err
-		}
-		spans = append(spans, args...)
-		last := args[len(args)-1]
-		cursor = last.offset - start + len(last.text)
-	}
-	return spans, nil
-}
-
-func (e *emitter) attrExpr(anchor int, expr string) (sourceExpr, error) {
-	open := strings.IndexByte(e.source[anchor:], '{')
-	if open < 0 {
-		return sourceExpr{}, fmt.Errorf("cannot locate attribute expression %q", expr)
-	}
-	inner, start, _, err := braceInner(e.source, anchor+open)
-	if err != nil {
-		return sourceExpr{}, err
-	}
-	trimmed := strings.TrimSpace(inner)
-	if trimmed != expr {
-		return sourceExpr{}, fmt.Errorf("attribute expression mismatch: parsed %q, source %q", expr, trimmed)
-	}
-	leading := len(inner) - len(strings.TrimLeft(inner, " \t\r\n"))
-	return sourceExpr{text: expr, offset: start + leading}, nil
-}
-
-func (e *emitter) conditionExpr(anchor int, parsed string) (sourceExpr, bool, error) {
-	inner, start, _, err := braceInner(e.source, anchor)
-	if err != nil {
-		return sourceExpr{}, false, err
-	}
-	trimmed := strings.TrimSpace(inner)
-	prefixes := []struct {
-		prefix string
-		negate bool
-	}{
-		{"#unless", true},
-		{"#if", false},
-		{":else if", false},
-	}
-	for _, item := range prefixes {
-		if strings.HasPrefix(trimmed, item.prefix) {
-			rest := trimmed[len(item.prefix):]
-			expr := strings.TrimSpace(rest)
-			leadingInner := len(inner) - len(strings.TrimLeft(inner, " \t\r\n"))
-			leadingRest := len(rest) - len(strings.TrimLeft(rest, " \t\r\n"))
-			offset := start + leadingInner + len(item.prefix) + leadingRest
-			return sourceExpr{text: expr, offset: offset}, item.negate, nil
-		}
-	}
-	spans, err := locateSequential(inner, start, []string{parsed})
-	if err != nil {
-		return sourceExpr{}, false, err
-	}
-	return spans[0], false, nil
-}
-
-func (e *emitter) directiveExpr(anchor int, keyword, expr string) (sourceExpr, error) {
-	inner, start, _, err := braceInner(e.source, anchor)
-	if err != nil {
-		return sourceExpr{}, err
-	}
-	prefix := "#" + keyword
-	trimmed := strings.TrimSpace(inner)
-	if !strings.HasPrefix(trimmed, prefix) {
-		return sourceExpr{}, fmt.Errorf("expected {%s} at byte %d", prefix, anchor)
-	}
-	rest := trimmed[len(prefix):]
-	if strings.TrimSpace(rest) != expr {
-		return sourceExpr{}, fmt.Errorf("directive expression mismatch: parsed %q, source %q", expr, strings.TrimSpace(rest))
-	}
-	leadingInner := len(inner) - len(strings.TrimLeft(inner, " \t\r\n"))
-	leadingRest := len(rest) - len(strings.TrimLeft(rest, " \t\r\n"))
-	return sourceExpr{text: expr, offset: start + leadingInner + len(prefix) + leadingRest}, nil
-}
-
-func (e *emitter) forExprs(n *parser.For) ([]sourceExpr, error) {
-	inner, start, _, err := braceInner(e.source, n.Pos.Offset)
-	if err != nil {
-		return nil, err
-	}
-	// Search past the `#for` keyword: a one-letter loop variable or range bound
-	// would otherwise match a letter of the keyword itself and map the expression
-	// to the wrong column.
-	if lead := strings.Index(inner, "#for"); lead >= 0 {
-		skip := lead + len("#for")
-		inner, start = inner[skip:], start+skip
-	}
-	if n.IsRange {
-		return locateSequential(inner, start, []string{n.RangeFrom, n.RangeTo})
-	}
-	itemAt := strings.Index(inner, n.Item)
-	if itemAt < 0 {
-		return nil, fmt.Errorf("cannot locate loop item %q", n.Item)
-	}
-	afterItem := itemAt + len(n.Item)
-	collectionAt := strings.Index(inner[afterItem:], n.Collection)
-	if collectionAt < 0 {
-		return nil, fmt.Errorf("cannot locate loop collection %q", n.Collection)
-	}
-	return []sourceExpr{{text: n.Collection, offset: start + afterItem + collectionAt}}, nil
-}
-
-func (e *emitter) whenExprs(anchor int, values []string) ([]sourceExpr, error) {
-	inner, start, _, err := braceInner(e.source, anchor)
-	if err != nil {
-		return nil, err
-	}
-	trimmed := strings.TrimSpace(inner)
-	const prefix = ":when"
-	if !strings.HasPrefix(trimmed, prefix) {
-		return nil, fmt.Errorf("expected {%s} at byte %d", prefix, anchor)
-	}
-	leadingInner := len(inner) - len(strings.TrimLeft(inner, " \t\r\n"))
-	rest := trimmed[len(prefix):]
-	return locateSequential(rest, start+leadingInner+len(prefix), values)
-}
-
-func locateSequential(container string, base int, texts []string) ([]sourceExpr, error) {
-	spans := make([]sourceExpr, 0, len(texts))
-	cursor := 0
-	for _, text := range texts {
-		i := strings.Index(container[cursor:], text)
-		if i < 0 {
-			return nil, fmt.Errorf("cannot locate template expression %q", text)
-		}
-		i += cursor
-		spans = append(spans, sourceExpr{text: text, offset: base + i})
-		cursor = i + len(text)
-	}
-	return spans, nil
-}
-
-// braceInner returns the bytes inside the balanced template brace at open and
-// their absolute source offset. The public LexSkip seam keeps JS literals,
-// regexes, comments, and nested template literals opaque exactly as the parser
-// and codegen do.
-func braceInner(source string, open int) (string, int, int, error) {
-	if open < 0 || open >= len(source) || source[open] != '{' {
-		return "", 0, 0, fmt.Errorf("expected '{' at byte %d", open)
-	}
-	depth := 0
-	prevEndsExpr := false
-	for i := open; i < len(source); {
-		if next, pee, consumed := parser.LexSkip(source, i, prevEndsExpr); consumed {
-			prevEndsExpr = pee
-			i = next
-			continue
-		}
-		switch source[i] {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				return source[open+1 : i], open + 1, i, nil
-			}
-		}
-		prevEndsExpr = parser.LexPlainEndsExpr(source[i], prevEndsExpr)
-		i++
-	}
-	return "", 0, 0, fmt.Errorf("unclosed '{' at byte %d", open)
-}

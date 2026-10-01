@@ -16,7 +16,26 @@ import (
 const (
 	defaultRegistry = "https://registry.npmjs.org"
 	cacheFileName   = "update-check.json"
-	cacheTTL        = 24 * time.Hour
+	// cacheTTL is how long a recorded answer is reused before a background
+	// refresh is started. Nothing ever waits on that refresh, so the TTL is
+	// short: it only decides how many runs a newly published release stays
+	// unmentioned, not how long any command takes.
+	cacheTTL = time.Hour
+
+	// refreshTimeout is the detached helper's fetch budget. It can afford to be
+	// generous — the command that started it has already exited.
+	refreshTimeout = 3 * time.Second
+	// failureBackoff is how long a failed refresh suppresses the next one, so an
+	// unreachable registry is contacted four times an hour rather than once per
+	// command. A failed fetch writes no `checked_at`, so without the stamp the
+	// cache would never stop being stale.
+	failureBackoff = 15 * time.Minute
+
+	// renameAttempts / renameRetryDelay bound the atomic write's retry loop.
+	// See renameWithRetry: this exists for Windows, where a rename over a file
+	// another process has open is a sharing violation rather than a no-op.
+	renameAttempts   = 5
+	renameRetryDelay = 20 * time.Millisecond
 )
 
 // CacheDir overrides the directory containing update-check.json. When empty,
@@ -29,9 +48,12 @@ type Cache struct {
 	Latest    string
 }
 
+// cacheFile is the on-disk shape. failed_at is optional and was added after
+// the first release, so a file written without it still loads.
 type cacheFile struct {
 	CheckedAt string `json:"checked_at"`
 	Latest    string `json:"latest"`
+	FailedAt  string `json:"failed_at,omitempty"`
 }
 
 // FetchLatest fetches the latest published @magic-spells/puzzle version.
@@ -158,26 +180,55 @@ func comparePrerelease(a, b string) int {
 
 // ReadCache reads the cached registry result.
 func ReadCache() (Cache, error) {
-	path, err := cachePath()
+	disk, err := readCacheFile()
 	if err != nil {
 		return Cache{}, err
+	}
+	return disk.result()
+}
+
+// readCacheFile reads the raw cache file without validating the recorded
+// check, so a file holding only a failure stamp still yields that stamp.
+func readCacheFile() (cacheFile, error) {
+	path, err := cachePath()
+	if err != nil {
+		return cacheFile{}, err
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return Cache{}, err
+		return cacheFile{}, err
 	}
 	var disk cacheFile
 	if err := json.Unmarshal(data, &disk); err != nil {
-		return Cache{}, err
+		return cacheFile{}, err
 	}
-	checkedAt, err := time.Parse(time.RFC3339, disk.CheckedAt)
+	return disk, nil
+}
+
+// result validates the recorded check. A file carrying only a failure stamp
+// has no answer to give and reports an error, exactly like no file at all.
+func (f cacheFile) result() (Cache, error) {
+	checkedAt, err := time.Parse(time.RFC3339, f.CheckedAt)
 	if err != nil {
 		return Cache{}, err
 	}
-	if _, err := parseVersion(disk.Latest); err != nil {
+	if _, err := parseVersion(f.Latest); err != nil {
 		return Cache{}, err
 	}
-	return Cache{CheckedAt: checkedAt, Latest: disk.Latest}, nil
+	return Cache{CheckedAt: checkedAt, Latest: f.Latest}, nil
+}
+
+// backoffUntil reports when the recorded failure stops suppressing fetches. An
+// absent or unparseable stamp suppresses nothing.
+func (f cacheFile) backoffUntil() (time.Time, bool) {
+	if f.FailedAt == "" {
+		return time.Time{}, false
+	}
+	failedAt, err := time.Parse(time.RFC3339, f.FailedAt)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return failedAt.Add(failureBackoff), true
 }
 
 // WriteCache records a successful registry check.
@@ -192,17 +243,89 @@ func WriteCache(latest string, checkedAt time.Time) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	data, err := json.Marshal(cacheFile{
+	// No FailedAt: a successful check clears any recorded failure.
+	return writeCacheFile(cacheFile{
 		CheckedAt: checkedAt.UTC().Format(time.RFC3339),
 		Latest:    latest,
 	})
+}
+
+// writeFailure records a failed refresh. The recorded answer is left exactly as
+// it was — only the failure stamp moves — so a stale-but-usable latest keeps
+// answering while the backoff runs.
+func writeFailure(at time.Time) error {
+	// A missing or corrupt file yields the zero value, which is what we want:
+	// a stamp with no answer behind it.
+	disk, _ := readCacheFile()
+	disk.FailedAt = at.UTC().Format(time.RFC3339)
+	return writeCacheFile(disk)
+}
+
+// writeCacheFile replaces the cache file atomically: a temp file in the same
+// directory, then a rename. Two commands started at once each spawn their own
+// helper, so concurrent writers are normal — and a reader must never catch a
+// half-written file and decide the cache is corrupt.
+func writeCacheFile(disk cacheFile) error {
+	path, err := cachePath()
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	data, err := json.Marshal(disk)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, cacheFileName+".*")
+	if err != nil {
+		return err
+	}
+	// Harmless once the rename lands; the cleanup that matters is the one after
+	// a failed write partway through.
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	// CreateTemp makes the file 0600; the cache is not a secret.
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
+		return err
+	}
+	return renameWithRetry(tmp.Name(), path)
 }
 
-// Stale reports whether the cached check is at least 24 hours old.
+// renameWithRetry replaces the cache file, retrying briefly.
+//
+// On unix a rename over an open file always succeeds. On Windows it does not:
+// replacing a file another process holds open fails with a sharing violation,
+// and two `puzzle` commands started at once — each with its own helper, one
+// renaming while the other reads — is the normal case here, not an exotic one.
+// The window is a single small read, so a handful of short sleeps is the whole
+// of what is needed; anything still failing after that is a real error (a
+// read-only or vanished cache dir), and losing a refresh to it is silent by
+// design. The 80 ms worst case is charged either to the detached helper, which
+// has no one waiting on it, or to the last step of `puzzle upgrade`, which has
+// just spent seconds running a package manager. Never to `build` or `dev`:
+// CheckPassive only ever reads.
+func renameWithRetry(from, to string) error {
+	var err error
+	for attempt := 0; attempt < renameAttempts; attempt++ {
+		if attempt > 0 {
+			time.Sleep(renameRetryDelay)
+		}
+		if err = os.Rename(from, to); err == nil {
+			return nil
+		}
+	}
+	return err
+}
+
+// Stale reports whether the cached check is at least cacheTTL old.
 func (c Cache) Stale(now time.Time) bool {
 	return !now.Before(c.CheckedAt.Add(cacheTTL))
 }
@@ -219,29 +342,61 @@ func cachePath() (string, error) {
 	return filepath.Join(dir, cacheFileName), nil
 }
 
-// CheckPassive returns a newer cached version, when one exists, and refreshes
-// stale cache data in the background. It never blocks on or reports registry
-// errors.
+// CheckPassive returns a newer published version when one exists, answering
+// from the cache alone. It never contacts the registry and never waits.
+//
+// When the recorded answer is older than cacheTTL — or there is none — a
+// detached helper is started to refresh it for the NEXT run. The notice for a
+// freshly published release therefore appears one run late, which is the price
+// of never charging a build for the network. A failed refresh is stamped by the
+// helper and suppresses the next spawn for failureBackoff.
+//
+// Registry errors are never surfaced, and a helper that cannot be spawned fails
+// silently: the notice is a courtesy, not a feature anything depends on.
 func CheckPassive(current string) (string, bool) {
 	now := time.Now()
-	cached, err := ReadCache()
-	available := ""
-	if err == nil {
-		if cmp, compareErr := Compare(cached.Latest, current); compareErr == nil && cmp > 0 {
-			available = cached.Latest
+	disk, _ := readCacheFile()
+	cached, cacheErr := disk.result()
+
+	answer := func() (string, bool) {
+		if cacheErr != nil {
+			return "", false
 		}
+		return newerThan(cached.Latest, current)
 	}
-	if err != nil || cached.Stale(now) {
-		refreshAsync()
+
+	if cacheErr == nil && !cached.Stale(now) {
+		return answer()
 	}
-	return available, available != ""
+	if until, backing := disk.backoffUntil(); backing && now.Before(until) {
+		return answer()
+	}
+	_ = spawnRefresh()
+	return answer()
 }
 
-func refreshAsync() {
-	go func() {
-		latest, fetchErr := FetchLatest(3 * time.Second)
-		if fetchErr == nil {
-			_ = WriteCache(latest, time.Now())
-		}
-	}()
+// Refresh performs the registry check the detached helper exists to run: fetch,
+// then record either the answer or the failure. It is the whole body of the
+// hidden `puzzle update-check` subcommand.
+//
+// The gates are re-evaluated here rather than trusted from the parent, because
+// the subcommand is reachable directly from a shell.
+func Refresh() {
+	if os.Getenv("CI") != "" || os.Getenv("PUZZLE_NO_UPDATE_CHECK") != "" {
+		return
+	}
+	latest, err := FetchLatest(refreshTimeout)
+	if err != nil {
+		_ = writeFailure(time.Now())
+		return
+	}
+	_ = WriteCache(latest, time.Now())
+}
+
+// newerThan reports latest when it is strictly newer than current.
+func newerThan(latest, current string) (string, bool) {
+	if cmp, err := Compare(latest, current); err == nil && cmp > 0 {
+		return latest, true
+	}
+	return "", false
 }

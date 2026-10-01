@@ -23,10 +23,10 @@ CaseWhen.prototype.render = function () {
         : __c === ('shipped')
         ? [
             new ViewNode('div', { class: 'track' }, [
-              ...(__d.order.tracking
+              ...(__d.order?.tracking
                 ? [
                     new ViewNode('a', { href: '/t' }, [
-                      new ViewNode('text', { value: __s(__d.order.tracking, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'order.tracking' : 0) }),
+                      new ViewNode('text', { value: __s(__d.order?.tracking, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'order.tracking' : 0) }),
                     ]),
                   ]
                 : [
@@ -40,7 +40,7 @@ CaseWhen.prototype.render = function () {
             new ViewNode('p', { class: 'unknown' }, [
               new ViewNode('text', { value: 'Unknown status' }),
             ]),
-          ])(__d.order.status)),
+          ])(__d.order?.status)),
   ]);
 };
 CaseWhen.__pzlModule = 'case_when.pzl';

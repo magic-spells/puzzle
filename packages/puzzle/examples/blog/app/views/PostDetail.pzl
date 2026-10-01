@@ -9,10 +9,10 @@
       <h1 class="mb-2.5 text-[2rem] text-ink">{ post.title }</h1>
       <div class="flex flex-wrap items-center gap-2 text-muted text-[0.85rem] mb-6">
         {#if author}
-          <span class="font-semibold text-body">{ author.name | byline }</span>
+          <span class="font-semibold text-body">{ byline(author.name) }</span>
           <span class="text-faint">·</span>
         {/if}
-        <span>{ post.publishedAt | date('long') }</span>
+        <span>{ date(post.publishedAt, 'long') }</span>
         <span class="text-faint">·</span>
         <span>{ post.readingTime } min read</span>
       </div>
@@ -21,7 +21,7 @@
 
     <section class="mt-10 border-t border-border pt-6">
       <h2 class="text-[1.2rem] text-ink mb-4">
-        { comments.length } { comments.length | pluralize('comment', 'comments') }
+        { pluralize(comments.length, 'comment') }
       </h2>
 
       {#if comments.length > 0}
@@ -46,7 +46,7 @@
           placeholder="Write a comment…"
           value={ commentText }
           @input={ updateCommentText(event) }></textarea>
-        <button class="inline-block self-start px-5 py-2.5 rounded-lg text-[0.95rem] font-semibold cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-brand text-white hover:bg-brand-dark" type="submit" disabled={ !commentText.trim() }>
+        <button class="inline-block self-start px-5 py-2.5 rounded-lg text-[0.95rem] font-semibold cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-brand text-white hover:bg-brand-dark" type="submit" disabled={ !canComment }>
           Add comment
         </button>
       </form>
@@ -105,6 +105,9 @@ export default class PostDetailView extends PuzzleView {
       author,
       comments,
       commentText: local.commentText,
+      // Computed here so the template stays a plain read; the template
+      // could also write disabled={ !commentText.trim() } itself.
+      canComment: (local.commentText ?? '').trim() !== '',
       authorName: local.authorName
     };
   }
@@ -116,6 +119,9 @@ export default class PostDetailView extends PuzzleView {
 
     updateCommentText: (event) => {
       this.setData('commentText', event.target.value);
+      // canComment is derived in data(); setData() alone does not re-run
+      // data(), so refresh() recomputes it from the just-updated text.
+      this.refresh();
     },
 
     addComment: (event) => {

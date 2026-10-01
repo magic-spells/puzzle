@@ -11,14 +11,32 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/magic-spells/puzzle/compiler/internal/textutil"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/textutil"
 )
 
 // Registry is the parsed registry.json index.
 type Registry struct {
-	Version int     `json:"version"`
-	Theme   string  `json:"theme"`
-	Pieces  []Piece `json:"pieces"`
+	Version int    `json:"version"`
+	Theme   string `json:"theme"`
+	// Modes are the appearance modes every theme file implements
+	// (data-theme="light|medium|dark"); empty means the built-in three.
+	Modes []string `json:"modes"`
+	// Themes are the selectable palettes `puzzle add theme` copies. The entry
+	// whose File equals Theme IS the default one `add piece` already copies to
+	// app/styles/pieces.css. A registry predating this field still has that one
+	// theme (see registryThemes).
+	Themes []Theme `json:"themes"`
+	Pieces []Piece `json:"pieces"`
+}
+
+// Theme is one selectable palette in the registry's `themes` array. File is a
+// registry-relative path, validated like every other manifest path before it is
+// fetched or turned into a destination.
+type Theme struct {
+	Name        string `json:"name"`
+	File        string `json:"file"`
+	Label       string `json:"label"`
+	Description string `json:"description"`
 }
 
 // Piece is one registry entry.
@@ -30,9 +48,19 @@ type Piece struct {
 	// PIECE; a "lib/…"-prefixed value ("lib/date-math.js") is a shared JS util
 	// copied to app/lib/. The prefix is the ONLY discriminator (see resolveAll).
 	RegistryDependencies []string `json:"registryDependencies"`
-	// Dependencies are npm package names the piece needs at runtime. We never run
-	// npm (D3) — they are accumulated and printed as a next step.
+	// Dependencies are the npm packages the piece needs at runtime, each an
+	// install spec "<name>[@<range>]" whose range is the semver FLOOR the piece
+	// was built against (D169) — "@magic-spells/collapsible-content@^1.2.0".
+	// A bare name still means "any version" so a third-party registry written
+	// against the older schema keeps working. We never run npm (D3) — the specs
+	// are accumulated (see collectNpmDeps) and printed as a next step.
 	Dependencies []string `json:"dependencies"`
+	// Themes names the palettes (registry `themes` entries) the piece needs to be
+	// useful — the appearance picker offers dim/warm/void cards. Like
+	// Dependencies it is print-only: `add piece` prints the `puzzle add theme`
+	// line for the ones the app lacks (see missingThemes), never copies them (D3).
+	// Not a registryDependency: an older CLI would read the name as a piece.
+	Themes []string `json:"themes"`
 	// TargetDir is the app-relative destination for this piece's files; empty
 	// means the default (app/components/ui).
 	TargetDir string `json:"targetDir"`

@@ -1,9 +1,15 @@
 // Package generate scaffolds Puzzle source files — components, views, layouts,
 // and models — from frozen-grammar stub templates (constellation/doc/DOC-SPEC.md
 // §6, §7, §11). It never parses or rewrites JavaScript (decision D3): the model
-// registry (app/models/index.js) is left untouched and the caller prints a hint
-// instead. All generated .pzl output is exercised by the repo's own
-// parser+codegen in generate_test.go, so a scaffold is guaranteed to compile.
+// registry (app/models/index.js, or index.ts) is left untouched and the caller
+// prints a hint instead. All generated .pzl output is exercised by the repo's
+// own parser+codegen in generate_test.go, so a scaffold is guaranteed to
+// compile.
+//
+// In a TypeScript app (IsTypeScriptApp: a tsconfig.json at the project root,
+// the D54 marker `puzzle init --typescript` writes) every stub is TypeScript:
+// `<script lang="ts">` components, `app/models/<name>.ts`, and an index.ts
+// family barrel. A JavaScript app gets exactly the JavaScript stubs.
 package generate
 
 import (
@@ -71,8 +77,17 @@ type Options struct {
 	Force bool
 	// Family, when non-empty, scaffolds a component FAMILY (D167): a directory
 	// named after Name holding Name.pzl, one .pzl per member, and an index.js
-	// barrel. Component kind only.
+	// barrel (index.ts in a TypeScript app). Component kind only.
 	Family []string
+}
+
+// IsTypeScriptApp reports whether the project at root is a TypeScript app: one
+// with a tsconfig.json at its root, the marker `puzzle init --typescript`
+// writes (D54; a JavaScript scaffold gets jsconfig.json instead). It is the one
+// rule generate uses to choose TypeScript stubs.
+func IsTypeScriptApp(root string) bool {
+	info, err := os.Stat(filepath.Join(root, "tsconfig.json"))
+	return err == nil && !info.IsDir()
 }
 
 // Result reports what Generate produced.
@@ -84,7 +99,7 @@ type Result struct {
 	Rel string
 	// Files lists every written file relative to the project root, in write
 	// order. A single-file scaffold writes exactly one; a family writes the root
-	// .pzl, each member .pzl, then index.js.
+	// .pzl, each member .pzl, then the index.js (or index.ts) barrel.
 	Files []string
 	// Hint is a non-empty, multi-line instruction when the user must take a
 	// manual follow-up step (model registration) or an invocation example (a
@@ -98,11 +113,12 @@ func Generate(opts Options) (*Result, error) {
 	if opts.Root == "" {
 		return nil, fmt.Errorf("no project root")
 	}
+	ts := IsTypeScriptApp(opts.Root)
 	if len(opts.Family) > 0 {
-		return generateFamily(opts)
+		return generateFamily(opts, ts)
 	}
 
-	content, filename, err := render(opts.Kind, opts.Name)
+	content, filename, err := render(opts.Kind, opts.Name, ts)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +160,7 @@ func Generate(opts Options) (*Result, error) {
 	rel := relOrAbs(opts.Root, dest)
 	res := &Result{Path: dest, Rel: rel, Files: []string{rel}}
 	if opts.Kind == KindModel {
-		res.Hint = modelHint(opts.Name)
+		res.Hint = modelHint(opts.Name, ts)
 	}
 	return res, nil
 }
@@ -173,8 +189,8 @@ func isMarkerName(s string) bool {
 // first byte is written, so a refused family leaves nothing behind. --force
 // overwrites the family's OWN files and never removes anything else already in
 // the directory (a hand-written Frame.css or a second family member survives a
-// re-scaffold).
-func generateFamily(opts Options) (*Result, error) {
+// re-scaffold). ts selects the TypeScript members and an index.ts barrel.
+func generateFamily(opts Options, ts bool) (*Result, error) {
 	if opts.Kind != KindComponent {
 		return nil, fmt.Errorf("--family is only valid for a component (got %s)", opts.Kind)
 	}
@@ -219,11 +235,15 @@ func generateFamily(opts Options) (*Result, error) {
 		path    string
 		content string
 	}
-	files := []pending{{filepath.Join(familyDir, opts.Name+".pzl"), fill(familyTemplate, opts.Name, "")}}
-	for _, member := range opts.Family {
-		files = append(files, pending{filepath.Join(familyDir, member+".pzl"), fill(familyTemplate, member, "")})
+	tmpl, barrel := familyTemplate, "index.js"
+	if ts {
+		tmpl, barrel = familyTemplateTS, "index.ts"
 	}
-	files = append(files, pending{filepath.Join(familyDir, "index.js"), familyBarrel(opts.Name, opts.Family)})
+	files := []pending{{filepath.Join(familyDir, opts.Name+".pzl"), fill(tmpl, opts.Name, "")}}
+	for _, member := range opts.Family {
+		files = append(files, pending{filepath.Join(familyDir, member+".pzl"), fill(tmpl, member, "")})
+	}
+	files = append(files, pending{filepath.Join(familyDir, barrel), familyBarrel(opts.Name, opts.Family)})
 
 	// Pre-flight: containment and collisions for EVERY destination before any
 	// write, so a refusal never leaves a half-scaffolded family behind.
@@ -260,9 +280,10 @@ func generateFamily(opts Options) (*Result, error) {
 	}, nil
 }
 
-// familyBarrel renders the plain-JS index.js that makes the family one import
-// (D167). It is ordinary JavaScript the bundler resolves with no framework
-// opinions — no registry, no compiler magic.
+// familyBarrel renders the barrel that makes the family one import (D167). It
+// is ordinary JavaScript the bundler resolves with no framework opinions — no
+// registry, no compiler magic — and the same bytes are valid TypeScript, so a
+// TypeScript app's index.ts carries them unchanged.
 func familyBarrel(root string, members []string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "import %s from './%s.pzl';\n", root, root)
@@ -311,8 +332,8 @@ func familyImportSpecifier(projectRoot, familyDir string) (spec string, aliased 
 }
 
 // render returns the file body and base filename for a kind+name, validating the
-// name shape for that kind.
-func render(kind Kind, name string) (content, filename string, err error) {
+// name shape for that kind. ts selects the TypeScript stubs.
+func render(kind Kind, name string, ts bool) (content, filename string, err error) {
 	switch kind {
 	case KindComponent, KindView, KindLayout:
 		if !pascalCase.MatchString(name) {
@@ -331,10 +352,20 @@ func render(kind Kind, name string) (content, filename string, err error) {
 			KindView:      viewTemplate,
 			KindLayout:    layoutTemplate,
 		}[kind]
+		if ts {
+			tmpl = map[Kind]string{
+				KindComponent: componentTemplateTS,
+				KindView:      viewTemplateTS,
+				KindLayout:    layoutTemplateTS,
+			}[kind]
+		}
 		return fill(tmpl, name, ""), name + ".pzl", nil
 	case KindModel:
 		if !modelName.MatchString(name) {
 			return "", "", fmt.Errorf("model name %q must be lower-case and start with a letter (e.g. user)", name)
+		}
+		if ts {
+			return fill(modelTemplateTS, pascal(name), name), name + ".ts", nil
 		}
 		return fill(modelTemplate, pascal(name), name), name + ".js", nil
 	default:
@@ -360,8 +391,16 @@ func pascal(s string) string {
 
 // modelHint is the follow-up instruction printed after a model is scaffolded:
 // the Go side never edits app/models/index.js (D3), so the user wires it up.
-func modelHint(name string) string {
+// A TypeScript app's registry is app/models/index.ts, importing extensionless
+// the way the TypeScript scaffold's does.
+func modelHint(name string, ts bool) string {
 	cls := pascal(name)
+	if ts {
+		return "Register it in app/models/index.ts:\n" +
+			fmt.Sprintf("    import %s from './%s';\n", cls, name) +
+			"    // then add to the registry object:\n" +
+			fmt.Sprintf("    %s: %s", name, cls)
+	}
 	return "Register it in app/models/index.js:\n" +
 		fmt.Sprintf("    import %s from './%s.js';\n", cls, name) +
 		"    // then add to the registry object:\n" +

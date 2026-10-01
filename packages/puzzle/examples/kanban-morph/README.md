@@ -14,7 +14,7 @@ app** (v1.23, D55 — see `constellation/decision/DECISION-D55-MORPH-TRANSITIONS
 # one-time: the morph engine is an npm dependency of this example
 cd examples/kanban-morph && npm install
 
-# from the repo root
+# from packages/puzzle
 ./puzzle dev examples/kanban-morph --port 3021
 ```
 
@@ -32,13 +32,13 @@ whose radius/background/border/shadow you want captured (here the styled card bo
 not the unstyled wrapper):
 
 ```html
-<article class="kanban-card-body" data-puzzle-morph="task-{ task.id }">
+<button type="button" class="kanban-card-body ..." data-puzzle-morph="task-{ task.id }">
 ```
 
 **3. Mark the dialog shell** (`views/TaskDialog.pzl`) with the **same value**:
 
 ```html
-<div class="task-dialog ..." data-puzzle-morph="task-{ taskId }">
+<dialog class="task-dialog ..." open="open" data-puzzle-morph="task-{ taskId }">
 ```
 
 That's it. The click handler just navigates (`router.push('/task/' + id)`), the close

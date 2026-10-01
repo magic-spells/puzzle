@@ -12,17 +12,28 @@
 
 import { expandSlots } from '../views/viewManager.js';
 
+/** @import { ViewNode } from '../views/ViewNode.js' */
+/** @import { PuzzleView } from '../views/PuzzleView.js' */
+
 /**
  * @param {import('../views/ViewNode.js').ViewNode|string|null} vnode
- * @param {object} ctx
- * @returns {Promise<object[]>} successfully preloaded non-routed instances
+ * @param {Record<string, any>} ctx
+ * @returns {Promise<import('../views/PuzzleView.js').PuzzleView[]>} successfully preloaded
+ *   non-routed instances
  */
 export async function preloadTakeoverComponents(vnode, ctx) {
+	/** @type {PuzzleView[]} */
 	const instances = [];
 	await preloadNode(vnode, ctx, instances);
 	return instances;
 }
 
+/**
+ * @param {ViewNode|string|null} vnode
+ * @param {Record<string, any>} ctx
+ * @param {PuzzleView[]} instances collects each freshly preloaded nested instance
+ * @returns {Promise<void>}
+ */
 async function preloadNode(vnode, ctx, instances) {
 	if (
 		vnode == null ||
@@ -44,11 +55,12 @@ async function preloadNode(vnode, ctx, instances) {
 	// explicit body) would otherwise abort the whole takeover instead of degrading to
 	// this one component's placeholder.
 	const nested = vnode.instance == null;
+	/** @type {PuzzleView | null} */
 	let instance = vnode.instance;
 
 	if (nested) {
 		try {
-			instance = new vnode.tag(ctx);
+			instance = new (/** @type {typeof PuzzleView} */ (vnode.tag))(ctx);
 			await instance.preload({ params: {}, props: vnode.attrs, route: null });
 		} catch (err) {
 			// Match mountComponent's existing fail-soft posture: log the failed child,
@@ -62,9 +74,14 @@ async function preloadNode(vnode, ctx, instances) {
 		}
 	}
 
-	let tree;
+	// Slot expansion sits inside the same fail-soft try as render(): a marker's
+	// fallback body is built lazily during expansion (D141), so a fallback that
+	// throws must degrade this one component exactly as a throwing render() does,
+	// not reject the whole takeover.
+	let expanded;
 	try {
-		tree = instance.render();
+		const tree = instance.render();
+		expanded = tree == null ? tree : expandSlots(tree, /** @type {ViewNode[]} */ (vnode.children), vnode.tag);
 	} catch (err) {
 		if (!nested) return;
 		console.error('[puzzle] child mount failed:', err);
@@ -79,7 +96,6 @@ async function preloadNode(vnode, ctx, instances) {
 		instances.push(instance);
 	}
 
-	const expanded = tree == null ? tree : expandSlots(tree, vnode.children, vnode.tag);
 	instance.__takeoverTree = expanded;
 	await preloadNode(expanded, ctx, instances);
 }

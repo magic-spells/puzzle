@@ -11,13 +11,24 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // The list must be a DIRECT child of <Tabs>, and the buttons direct children of
 // this list: upstream resolves them with `:scope > tab-list > tab-button`.
 //
-// Both variants live here and switch on the root's `data-variant` stamp — a
+// Every variant lives here and switches on the root's `data-variant` stamp — a
 // descendant attribute selector, because Puzzle has no cross-component context
 // to hand the variant down as a prop. Underline is the unconditional default;
-// the pills rules outrank it on specificity.
+// the pills and buttons rules outrank it on specificity.
+//
+// The gap to the panel below is NOT here — it is the root's flex gap (see
+// Tabs.pzl), so a `mb-*` on this list adds to it rather than fighting it.
+//
+// `buttons` WRAPS instead of scrolling: upstream gives <tab-list>
+// `overflow-x: auto; overflow-y: hidden` (layer components), which would clip
+// the active button's glow and the focus ring, so that variant resets it to
+// visible and lets a narrow row break onto a second line.
 //
 // Props
-//   class  merged onto <tab-list>, after the chrome
+//   class  merged onto <tab-list>, after the chrome. Under pills/buttons the
+//          variant rules are (0,2,1)+ specificity, so a plain utility loses on
+//          any property the variant sets — use the `!` suffix (`gap-4!`) or the
+//          same `[tab-group[data-variant=…]_&]:` prefix.
 
 const LIST =
   'items-stretch gap-4 border-b border-border ' +
@@ -28,7 +39,11 @@ const LIST =
   '[tab-group[data-variant=pills]_&]:rounded-lg ' +
   '[tab-group[data-variant=pills]_&]:border-b-0 ' +
   '[tab-group[data-variant=pills]_&]:bg-surface-sunken ' +
-  '[tab-group[data-variant=pills]_&]:p-1';
+  '[tab-group[data-variant=pills]_&]:p-1 ' +
+  '[tab-group[data-variant=buttons]_&]:flex-wrap ' +
+  '[tab-group[data-variant=buttons]_&]:gap-2 ' +
+  '[tab-group[data-variant=buttons]_&]:overflow-visible ' +
+  '[tab-group[data-variant=buttons]_&]:border-b-0';
 
 export default class TabsList extends PuzzleView {
   data(params, props) {

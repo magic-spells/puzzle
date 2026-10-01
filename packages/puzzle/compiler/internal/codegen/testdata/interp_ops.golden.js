@@ -23,7 +23,7 @@ InterpOps.prototype.render = function () {
       new ViewNode('text', { value: __s(!__d.ready, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? '!ready' : 0) }),
     ]),
     new ViewNode('p', { class: 'chain' }, [
-      new ViewNode('text', { value: __s(__d.user.profile?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.profile?.name' : 0) }),
+      new ViewNode('text', { value: __s(__d.user?.profile?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.profile?.name' : 0) }),
     ]),
   ]);
 };

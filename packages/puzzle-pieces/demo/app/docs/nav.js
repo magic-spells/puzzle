@@ -7,6 +7,45 @@ export const GETTING_STARTED = [
 	{ title: 'Theming', path: '/theming' },
 ];
 
+// The design-system panels (hand-maintained — not generated from the registry).
+// /theming is the written model; the rest are the live panels the brief asks
+// for: one scheme panel per palette, the 4×3 compare grid, the labelled shell
+// mock and the pieces gallery. SCHEME_PANELS is derived from the appearance
+// helper's SCHEMES so a fifth palette lands here on its own.
+import { SCHEMES } from '../lib/appearance.js';
+
+export const SCHEME_PANELS = SCHEMES.map((s) => ({
+	title: s.label,
+	path: `/themes/${s.value}`,
+	scheme: s.value,
+	description: s.description,
+}));
+
+export const THEMES = [
+	{ title: 'Compare', path: '/themes/compare', description: 'All four schemes × three modes as mini shells, one screen.' },
+	{ title: 'Pieces', path: '/themes/pieces', description: 'The registry pieces in the current scheme and mode.' },
+];
+
+// SVG path `d` strings on a 24×24 stroked grid — the Sidebar piece's icon
+// contract (see registry/ui/sidebar/Sidebar.pzl). One per rail entry so the
+// collapsed rail still reads.
+export const ICONS = {
+	introduction: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v15H6.5A2.5 2.5 0 0 0 4 19.5z',
+	components: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+	theming: 'M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-1.2a2 2 0 0 1-1.8-2.8l.4-.9A2.4 2.4 0 0 0 14.2 3H12zM8.5 7.5h.01M13.5 6.5h.01M17.5 11.5h.01',
+	schemes: 'M12 22a10 10 0 1 0 0-20v20zM2 12h10',
+	compare: 'M3 5h7v14H3zM14 5h7v6h-7zM14 13h7v6h-7z',
+	shell: 'M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 9h18M9 9v12',
+	pieces: 'M14 7h4a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h3V9a2 2 0 0 1 2-2h1V5a2 2 0 1 1 2 0z',
+	Forms: 'M4 6h16M4 12h10M4 18h16M20 10l-3 3-2-2',
+	Overlays: 'M3 7h13v13H3zM8 3h13v13',
+	Feedback: 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
+	Charts: 'M3 3v18h18M7 15l4-5 4 3 5-7',
+	Chat: 'M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z',
+	Content: 'M4 4h16v16H4zM8 9h8M8 13h8M8 17h5',
+	Layouts: 'M3 3h18v18H3zM3 9h18M9 9v12',
+};
+
 export const SECTIONS = [
 	{
 		label: "Forms",
@@ -98,6 +137,8 @@ export const SECTIONS = [
 			description: "Hover-triggered preview card for link previews and user cards — a compound family over the shared dropdown-panel base, with open/close delays, the package's hover bridge keeping the card hoverable, and optional-controlled open" },
 		{ name: "menubar", title: "Menubar", path: "/components/menubar",
 			description: "Desktop-app-style horizontal menu bar — a compound family over the shared dropdown-panel base, with hover-switching menus, nested submenus, shortcut hints, separators, labels, link rows, and disabled and danger items" },
+		{ name: "navigation-menu", title: "Navigation Menu", path: "/components/navigation-menu",
+			description: "Horizontal site navigation with hover/click flyout panels of link cards — a compound family over the shared dropdown-panel base, with disclosure-pattern semantics, nested submenus, full-width mega panels, and per-link active state" },
 		{ name: "popconfirm", title: "Popconfirm", path: "/components/popconfirm",
 			description: "Inline confirmation bubble anchored to a trigger — title, optional description, confirm/cancel actions and a danger variant, over the shared dropdown-panel base; wraps the @magic-spells/dropdown-panel web component rather than porting it" },
 		{ name: "popover", title: "Popover", path: "/components/popover",
@@ -123,10 +164,12 @@ export const SECTIONS = [
 			description: "Semantic gauge (role=meter) showing a value within low/optimum/high bands with sentiment color, a label, and a formatted value" },
 		{ name: "progress", title: "Progress", path: "/components/progress",
 			description: "Determinate or indeterminate progress bar with optional label and percentage, in two sizes" },
+		{ name: "shimmer-text", title: "Shimmer Text", path: "/components/shimmer-text",
+			description: "Pending-state text with an ink shimmer — a wave of full ink passes through muted text, CSS-only, with a slow pulse under reduced motion" },
 		{ name: "skeleton", title: "Skeleton", path: "/components/skeleton",
 			description: "Pulsing loading placeholder with text/circle/block shapes" },
 		{ name: "spinner", title: "Spinner", path: "/components/spinner",
-			description: "Inline rotating-ring loading indicator" },
+			description: "Inline loading indicator in seven CSS-only designs — the rotating ring, stepped activity ticks, a squircle trace, typing dots, Puzzle's snapping tiles, an AI spark and a live heartbeat — each a single role=status span in sm/md/lg" },
 		{ name: "toast", title: "Toast", path: "/components/toast",
 			description: "Imperative toast() API with a Toaster host — variants, pausable auto-dismiss, corner positioning" },
 		],
@@ -184,6 +227,10 @@ export const SECTIONS = [
 			description: "Semantic key-value description list (<dl>/<dt>/<dd>) rendered from an items array, for detail panels, summaries, and spec sheets — stacked or inline two-column layout, optional row dividers, two sizes" },
 		{ name: "empty", title: "Empty", path: "/components/empty",
 			description: "Empty-state block for no-results moments — optional icon slot, title, description, and action slot in a centered muted column" },
+		{ name: "hamburger", title: "Hamburger", path: "/components/hamburger",
+			description: "Menu button whose three bars fold into an X — converge or twist, CSS-only two-phase motion on the individual translate/rotate properties, aria-expanded/aria-controls, optional-controlled open, an animate={false} instant swap, and bars in currentColor at sm/md/lg" },
+		{ name: "image-zoom", title: "Image Zoom", path: "/components/image-zoom",
+			description: "Pinch-to-zoom and pan viewer for a single image — two-finger pinch, drag-to-pan, double-tap/double-click toggle, min/max scale with rubber-band resistance and animated snap-back, and value-first change/zoomStart/zoomEnd callbacks; wraps the @magic-spells/image-zoom web component rather than porting it" },
 		{ name: "kanban", title: "Kanban", path: "/components/kanban",
 			description: "Config-first controlled Kanban board — pointer and keyboard card movement, insertion placeholders, aria-live announcements, a value-first @move intent, and caller-owned card and column-header snippets that preserve piece-owned drag mechanics" },
 		{ name: "kbd", title: "Kbd", path: "/components/kbd",
@@ -192,8 +239,6 @@ export const SECTIONS = [
 			description: "Renders a markdown string as semantic HTML — a marked-lexer token walker building DOM with createElement/createTextNode, so markdown can never inject markup; CommonMark plus GFM tables, task lists, and strikethrough" },
 		{ name: "marquee", title: "Marquee", path: "/components/marquee",
 			description: "Continuously scrolling ticker of slot content — seamless rAF loop with pause-on-hover, drag-to-scrub, direction, speed, gap and edge-fade props, and prefers-reduced-motion respect; wraps the @magic-spells/scrolling-content web component rather than porting it" },
-		{ name: "navigation-menu", title: "Navigation Menu", path: "/components/navigation-menu",
-			description: "Horizontal site navigation with hover/click flyout panels of link cards — a compound family over the shared dropdown-panel base, with disclosure-pattern semantics, nested submenus, full-width mega panels, and per-link active state" },
 		{ name: "pagination", title: "Pagination", path: "/components/pagination",
 			description: "Controlled page navigator — windowed page numbers with first/last, ellipses, and disabled-at-the-ends prev/next icon buttons" },
 		{ name: "panel-stack", title: "Panel Stack", path: "/components/panel-stack",
@@ -207,13 +252,15 @@ export const SECTIONS = [
 		{ name: "separator", title: "Separator", path: "/components/separator",
 			description: "Hairline divider in horizontal or vertical orientation" },
 		{ name: "sidebar", title: "Sidebar", path: "/components/sidebar",
-			description: "Config-first app-shell navigation rail — grouped links with icons and badges, animated collapsible submenus, active-route highlighting, and an optional-controlled collapsed icon-only mode with header/footer slots" },
+			description: "Config-first app-shell navigation rail — grouped links with icons and badges, animated collapsible submenus, active-route highlighting, an optional-controlled collapsed icon-only mode with header/footer slots, and a `rail` variant that paints it with the shell roles (bg-rail, text-rail-ink) as the frame's rail" },
+		{ name: "split-text", title: "Split Text", path: "/components/split-text",
+			description: "Text reveal that splits a headline or paragraph into words, characters or detected lines and animates each unit in with a CSS stagger — eight effects, scroll/load/manual triggers, a replay token, and start/complete callbacks; wraps the @magic-spells/split-text web component rather than porting it" },
 		{ name: "stepper", title: "Stepper", path: "/components/stepper",
 			description: "Numbered step-progress indicator — horizontal or vertical, complete/current/upcoming states, optional clickable steps" },
 		{ name: "table", title: "Table", path: "/components/table",
 			description: "Config-first styled semantic table rendered from a columns schema and an array of row objects, with per-column alignment, an optional caption, and an empty state — the presentational tier, not a data grid (no sorting, selection, or virtualization)" },
 		{ name: "tabs", title: "Tabs", path: "/components/tabs",
-			description: "Accessible tablist family — underline or pill variant, with the roving tabindex, arrow/Home/End keyboard model, disabled-tab skipping and every ARIA attribute coming from the tab-group web component; panels are real members whose bodies take arbitrary markup" },
+			description: "Accessible tablist family — underline, segmented-pill or button variant, with the roving tabindex, arrow/Home/End keyboard model, disabled-tab skipping and every ARIA attribute coming from the tab-group web component; panels are real members whose bodies take arbitrary markup" },
 		{ name: "timeline", title: "Timeline", path: "/components/timeline",
 			description: "Vertical event timeline from an items array — dot/connector rail with per-item title, time, description, optional status color, and optional icon or step-number markers" },
 		{ name: "toggle", title: "Toggle", path: "/components/toggle",
@@ -231,6 +278,8 @@ export const SECTIONS = [
 	{
 		label: "Layouts",
 		items: [
+		{ name: "appearance-picker", title: "Appearance Picker", path: "/components/appearance-picker",
+			description: "Controlled palette + mode picker — theme cards that are live miniatures of the shell painted in each palette (scoped data-scheme), and a Light / Medium / Dark / System radiogroup; fires @change({ scheme, mode }) for the app to persist with the appearance module" },
 		{ name: "masonry", title: "Masonry", path: "/components/masonry",
 			description: "Responsive CSS-columns masonry/gallery grid — slot children flow into a responsive column count with a gap prop" },
 		{ name: "split-panel", title: "Split Panel", path: "/components/split-panel",

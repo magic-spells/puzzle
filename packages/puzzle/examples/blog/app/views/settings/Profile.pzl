@@ -2,7 +2,7 @@
   <div class="settings-pane-profile bg-surface border border-border rounded-xl p-5">
     <h2 class="text-[1.35rem] text-ink mb-2">Profile</h2>
     {#if author}
-      <p class="text-body">Signed in as <strong class="text-ink">{ author.name }</strong> — { author.role | capitalize }.</p>
+      <p class="text-body">Signed in as <strong class="text-ink">{ author.name }</strong> — { capitalize(author.role) }.</p>
     {:else}
       <p class="text-muted">Loading profile…</p>
     {/if}

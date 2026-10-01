@@ -15,7 +15,7 @@ anywhere — every avatar and banner is a generated CSS gradient with an emoji.
 ## Run it
 
 ```bash
-puzzle dev examples/chirp        # from the repo root: go run ./compiler/cmd/puzzle dev examples/chirp
+puzzle dev examples/chirp        # from packages/puzzle: go run ./compiler/cmd/puzzle dev examples/chirp
 ```
 
 ## What this example demonstrates that the others don't
@@ -36,15 +36,17 @@ puzzle dev examples/chirp        # from the repo root: go run ./compiler/cmd/puz
   instantly, with no event plumbing between views.
 
 Plus the established Puzzle goodies: nested profile routes with `<Slot/>`,
-`{#for … , i}` staggered card entrances, formatter pipes, and localStorage
+`{#for … , i}` staggered card entrances, display functions, and localStorage
 persistence of your likes / rechirps / follows / composed chirps.
 
 ## Inventory
 
 ### App wiring (`app/`)
-- **app.js** — `PuzzleApp` config with four display-only formatters (`timeago`,
-  `compact`, `plural`, `chirpDate`), post-mount seeding via the memoized
-  `seedStore`, and localStorage restore/persist for all local-only state.
+- **app.js** — `PuzzleApp` config with three display-only app functions
+  (`timeago`, which replaces the built-in with Twitter-style stamps, `plural`,
+  `chirpDate`; counts use the standard `compact_number`), `beforeMount`
+  seeding via the memoized `seedStore`, and localStorage restore/persist for
+  all local-only state.
 - **routes.js** — flat routes plus the nested `/u/:handle` profile branch
   (`ProfileShell` renders `Chirps` / `Replies` / `Likes` at its `<Slot/>`).
 - **seed.js** — the memoized `seedStore(store)` that skeleton views await from
@@ -99,5 +101,5 @@ persistence of your likes / rechirps / follows / composed chirps.
 `:enter`), nested routes + `<Slot/>` chains, route params and the catch-all,
 `{#for}` loop counters (D29), per-instance `get animations()` staggered
 entrances, view in/out transitions, store filters as live cross-page
-subscriptions, formatter pipes with arguments, and schema defaults / getters /
+subscriptions, display functions with arguments, and schema defaults / getters /
 methods across three models.

@@ -175,7 +175,7 @@ import Toc from '@/components/docs/Toc.pzl';
 // consts because literal tag names and {#…} tokens would be parsed as template
 // syntax in prose.
 const installCmd = 'puzzle add piece menubar';
-const installDep = 'npm install @magic-spells/dropdown-panel';
+const installDep = 'npm install @magic-spells/dropdown-panel@^2.1.1';
 const installCss = `/* app/styles/styles.css */
 @import "tailwindcss";
 @import "@magic-spells/dropdown-panel/css" layer(components);         /* required */

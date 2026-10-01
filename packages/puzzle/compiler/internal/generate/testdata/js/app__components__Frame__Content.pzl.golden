@@ -1,0 +1,25 @@
+<puzzle-view>
+  <div class={ classes }>
+    <Children/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Content extends PuzzleView {
+  // Family members compose: <Children/> above renders whatever the caller
+  // nests inside <Content>. `class` is the usual caller override prop.
+  data(params, props) {
+    return {
+      classes: ['Content', props.class].filter(Boolean).join(' ')
+    };
+  }
+}
+</script>
+
+<style>
+.Content {
+  display: block;
+}
+</style>

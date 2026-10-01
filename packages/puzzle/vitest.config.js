@@ -40,6 +40,7 @@ export default defineConfig({
 		// output) import '@magic-spells/puzzle' the same way a real app would.
 		alias: {
 			'@magic-spells/puzzle/formatters/manifest': fileURLToPath(new URL('./client-runtime/formatters/builtins-all.js', import.meta.url)),
+			'@magic-spells/puzzle/i18n/manifest': fileURLToPath(new URL('./client-runtime/i18n-manifest.js', import.meta.url)),
 			'@magic-spells/puzzle': fileURLToPath(new URL('./client-runtime/index.js', import.meta.url)),
 		},
 	},

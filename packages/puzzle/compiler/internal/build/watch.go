@@ -9,7 +9,9 @@ import (
 	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
+	"github.com/magic-spells/puzzle/compiler/internal/locales"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
@@ -28,9 +30,16 @@ import (
 type WatchBuilder struct {
 	root   string
 	outdir string
-	entry  string // app/app.js, or the generated --fixtures wrapper (D98)
-	pl     *plugin.Plugin
-	ctx    api.BuildContext
+	entry  string // the app entry, or the generated --fixtures wrapper (D98)
+	// appEntry is the app entry ResolveEntry chose at construction (app/app.ts
+	// or app/app.js). The esbuild context is frozen over it, so every rebuild
+	// re-resolves and refuses to go on once the answer changes.
+	appEntry string
+	// refused holds the changed paths of rebuilds the entry check turned away,
+	// replayed into the next rebuild.
+	refused []string
+	pl      *plugin.Plugin
+	ctx     api.BuildContext
 
 	// fixtures is the generated --fixtures wrapper, zero when the flag is off. Its
 	// resolver plugin has to be re-registered every time a fresh esbuild context is
@@ -83,6 +92,23 @@ type WatchBuilder struct {
 	// scanner memoizes the project usage walk per file so an unchanged .pzl is
 	// not re-parsed on every rebuild.
 	scanner *plugin.UsageScanner
+	// usage is the most recent scan, kept for the translation warnings.
+	usage plugin.Usage
+
+	// i18n is the session's translation config (D175), nil without i18n. locales
+	// is the last successful locale load; a rebuild reloads it on the first pass,
+	// whenever the batch touches app/locales/, and on every pass after a failed
+	// load (localesFailed) — a later unrelated save must keep failing until the
+	// broken file is fixed, not land on the last good tables. localeFiles is the
+	// set of dist-relative locale files the last successful rebuild served, so a
+	// string edit's superseded hashed file is pruned once the bundle naming its
+	// replacement has landed. lastI18nWarnings de-duplicates the warning print.
+	i18n             *config.I18n
+	locales          *locales.Result
+	nextLocales      *locales.Result
+	localesFailed    bool
+	localeFiles      map[string]bool
+	lastI18nWarnings string
 
 	// Esbuild contexts freeze Define values when they are created. Track the
 	// usage bits baked into ctx so refreshUsage can replace the context only when a
@@ -118,16 +144,20 @@ type WatchOptions struct {
 	// field for why.
 	Splitting bool
 	// Fixtures bundles the generated `--fixtures` wrapper entry instead of
-	// app/app.js (D98), installing the fixtures/mock module before the app boots.
+	// the app entry (D98), installing the fixtures/mock module before the app boots.
 	// The wrapper is generated ONCE here, at construction, and left in place for
 	// the process lifetime — it lives under <root>/.puzzle/, which is outside every
 	// watched directory and pruned from the usage scan, so writing it can never
 	// trigger a rebuild.
 	Fixtures bool
+	// I18n is the config's translation block (D175), nil without i18n. It turns
+	// __PUZZLE_HAS_I18N__ on for the session and makes app/locales/ edits
+	// re-emit the locale files before the rebuild that serves them.
+	I18n *config.I18n
 }
 
 // NewWatchBuilder creates the incremental builder for the app rooted at root
-// (the directory containing app/app.js). It validates the entry point and
+// (the directory containing the app/app.ts or app/app.js entry). It validates the entry point and
 // constructs (but does not yet run) the esbuild context. Always development
 // mode: readable, unminified output.
 func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
@@ -135,15 +165,16 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolving app root: %w", err)
 	}
-	entry := filepath.Join(absRoot, "app", "app.js")
-	if _, err := os.Stat(entry); err != nil {
-		return nil, fmt.Errorf("entry point not found: %s (expected app/app.js under %s)", entry, absRoot)
+	entry, err := ResolveEntry(absRoot)
+	if err != nil {
+		return nil, err
 	}
+	appEntry := entry
 	var fixtures fixturesWrapper
 	if opts.Fixtures {
 		// `puzzle dev` has no prerender mode, so the only --fixtures precondition
 		// left to check is the config file itself.
-		fixtures, err = prepareFixtures(absRoot, "")
+		fixtures, err = prepareFixtures(absRoot, appEntry, "")
 		if err != nil {
 			return nil, err
 		}
@@ -155,10 +186,14 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 	}
 
 	pl := plugin.New(absRoot)
+	// The define is frozen into the context below, so the i18n bit is set now;
+	// the manifest itself arrives with the first rebuild's locale load.
+	pl.SetI18n(opts.I18n != nil, "")
 	// One scanner for the session: the usage walk parses every .pzl in the
 	// project, and a dev rebuild changes one of them (plugin.UsageScanner).
 	scanner := plugin.NewUsageScanner()
-	if _, err := scanUsage(absRoot, pl, scanner); err != nil {
+	usage, err := scanUsage(absRoot, pl, scanner)
+	if err != nil {
 		return nil, err
 	}
 
@@ -175,10 +210,13 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 		root:        absRoot,
 		outdir:      outdir,
 		entry:       entry,
+		appEntry:    appEntry,
 		pl:          pl,
 		ctx:         ctx,
 		defined:     pl.Features(),
 		scanner:     scanner,
+		usage:       usage,
+		i18n:        opts.I18n,
 		fixtures:    fixtures,
 		useFixtures: opts.Fixtures,
 		splitting:   opts.Splitting,
@@ -226,6 +264,15 @@ func (b *WatchBuilder) RebuildProfile(changed []string, prof *PhaseProfile) (Reb
 
 func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildResult, error) {
 	var out RebuildResult
+	// A batch the entry check refuses is carried into the next rebuild rather
+	// than dropped: the usage scan, locale reload and public sync below all key
+	// off `changed`, and the rebuild after the fix must still see those paths.
+	changed = append(b.refused, changed...)
+	if err := entryUnchanged(b.root, b.appEntry); err != nil {
+		b.refused = changed
+		return out, err
+	}
+	b.refused = nil
 	currentPublic := publicDir(b.root)
 	syncPublic := !b.landed || currentPublic != b.publicSource ||
 		pathsTouchDir(changed, currentPublic) || pathsTouchDir(changed, b.publicSource)
@@ -242,6 +289,34 @@ func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildRes
 		}
 		endScan()
 	}
+
+	// Translations (D175): on the first pass and on any app/locales/ edit, reload
+	// and re-emit the locale files, then point the manifest at them — BEFORE the
+	// bundle below, which bakes the manifest's hashed names into app.js. A broken
+	// locale file fails the rebuild with the last good files still served.
+	if b.i18n != nil && ((b.locales == nil && b.nextLocales == nil) || b.localesFailed || localesChanged(b.root, changed)) {
+		endLocales := prof.Phase("locales")
+		res, err := locales.Load(b.root, b.i18n)
+		if err == nil {
+			err = res.WriteTo(b.outdir, true)
+		}
+		endLocales()
+		if err != nil {
+			b.localesFailed = true
+			return out, err
+		}
+		b.localesFailed = false
+		b.pl.SetI18n(true, res.Manifest.JS())
+		// Committed (and the superseded files pruned) only once a bundle naming
+		// these files has landed — see commitLocales. A still-uncommitted earlier
+		// load is superseded now, and its files are already in the live dist.
+		b.dropNextLocales(res)
+		b.nextLocales = res
+		// A locale edit is not a scan input, and a public-only shortcut would skip
+		// the bundle that has to pick up the new manifest.
+		publicOnly = false
+	}
+	b.printI18nWarnings()
 
 	var result api.BuildResult
 	if !publicOnly {
@@ -320,9 +395,78 @@ func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildRes
 		out.CSSChanged = b.commitCSS(!metafilePruned)
 		endCSS()
 		b.pendingBundleCommit = false
+		b.commitLocales()
 	}
 	b.landed = true
 	return out, nil
+}
+
+// commitLocales adopts the locale load the bundle that just landed was built
+// against, and deletes the locale files the previous one served but this one
+// does not — the old hash of an edited locale. Only paths this builder wrote
+// are ever candidates, so a public asset can never be touched.
+func (b *WatchBuilder) commitLocales() {
+	if b.nextLocales == nil {
+		return
+	}
+	if b.localeFiles == nil {
+		// The first landing: dist/ is warm from whatever built it last (a one-shot
+		// build, an earlier session), and dist/locales/ is compiler-owned while
+		// i18n is on (ValidatePublic reserves it), so every file there that this
+		// load did not produce is a stale hash.
+		b.localeFiles = map[string]bool{}
+		if entries, err := os.ReadDir(filepath.Join(b.outdir, locales.OutDirName)); err == nil {
+			for _, e := range entries {
+				if !e.IsDir() {
+					b.localeFiles[locales.OutDirName+"/"+e.Name()] = true
+				}
+			}
+		}
+	}
+	for rel := range b.localeFiles {
+		if _, keep := b.nextLocales.Files[rel]; !keep {
+			_ = os.Remove(filepath.Join(b.outdir, filepath.FromSlash(rel)))
+		}
+	}
+	b.localeFiles = make(map[string]bool, len(b.nextLocales.Files))
+	for rel := range b.nextLocales.Files {
+		b.localeFiles[rel] = true
+	}
+	b.locales = b.nextLocales
+	b.nextLocales = nil
+}
+
+// dropNextLocales deletes the files of an uncommitted locale load that res
+// replaces: no landed bundle names them, and commitLocales only prunes what
+// the last COMMITTED load served. A file the served bundle (localeFiles) or res
+// itself names stays. Before the first landing localeFiles is nil and nothing
+// is dropped here — commitLocales' directory sweep catches it then.
+func (b *WatchBuilder) dropNextLocales(res *locales.Result) {
+	if b.nextLocales == nil || b.localeFiles == nil {
+		return
+	}
+	for rel := range b.nextLocales.Files {
+		if _, keep := res.Files[rel]; keep || b.localeFiles[rel] {
+			continue
+		}
+		_ = os.Remove(filepath.Join(b.outdir, filepath.FromSlash(rel)))
+	}
+}
+
+// printI18nWarnings prints the translation warnings when they differ from the
+// last set printed, so a dev session repeats nothing on an unrelated save.
+func (b *WatchBuilder) printI18nWarnings() {
+	res := b.nextLocales
+	if res == nil {
+		res = b.locales
+	}
+	warnings := i18nWarnings(b.root, config.Config{I18n: b.i18n}, b.usage, res)
+	joined := strings.Join(warnings, "\n")
+	if joined == b.lastI18nWarnings {
+		return
+	}
+	b.lastI18nWarnings = joined
+	printI18nWarnings(os.Stderr, warnings)
 }
 
 // writeSplitOutputs materializes a splitting rebuild's outputs into the warm
@@ -490,17 +634,19 @@ func metafileAllInputs(metafileJSON string) (map[string]bool, error) {
 // into an esbuild context, so replace that context only when one of the booleans
 // changes; ordinary rebuilds keep the incremental graph warm.
 func (b *WatchBuilder) refreshUsage() error {
-	if _, err := scanUsage(b.root, b.pl, b.scanner); err != nil {
+	usage, err := scanUsage(b.root, b.pl, b.scanner)
+	if err != nil {
 		return err
 	}
+	b.usage = usage
 	features := b.pl.Features()
 	if features == b.defined {
 		return nil
 	}
 
-	next, err := api.Context(watchBundleOptions(b.root, b.entry, b.outdir, b.pl, b.splitting, b.useFixtures, b.fixtures))
-	if err != nil {
-		return fmt.Errorf("puzzle dev: refreshing esbuild context: %s", err.Error())
+	next, ctxErr := api.Context(watchBundleOptions(b.root, b.entry, b.outdir, b.pl, b.splitting, b.useFixtures, b.fixtures))
+	if ctxErr != nil {
+		return fmt.Errorf("puzzle dev: refreshing esbuild context: %s", ctxErr.Error())
 	}
 	if b.ctx != nil {
 		b.ctx.Dispose()

@@ -4,17 +4,24 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Spinner</h1>
         <p class="mt-2 text-body">
-          An inline rotating-ring loading indicator. Renders as a single
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">span</code>,
+          An inline loading indicator in seven designs, all animated with CSS alone. Every variant
+          renders as a single
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">span</code>
+          with <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">role="status"</code>,
           so it drops straight into the parent's flow with no wrapper.
         </p>
       </header>
 
-      <ExampleBox code={ codeHero } tall={ false }>
-        <div class="flex items-center gap-8">
-          <Spinner size="sm" />
-          <Spinner size="md" />
-          <Spinner size="lg" />
+      <ExampleBox code={ codeHero }>
+        <div class="grid w-full max-w-2xl grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-4 lg:grid-cols-7">
+          {#for v in variants}
+            <div class="flex flex-col items-center gap-3">
+              <div class="flex h-10 items-center text-ink">
+                <Spinner variant={ v.name } size="lg" label={ v.label }/>
+              </div>
+              <span class="font-mono text-code text-muted">{ v.name }</span>
+            </div>
+          {/for}
         </div>
       </ExampleBox>
 
@@ -25,7 +32,8 @@
         </p>
         <CodeBlock code={ installCmd }/>
         <p class="mt-3 text-sm text-muted">
-          Requires the pieces.css tokens merged into your app styles (see Introduction).
+          Requires the pieces.css tokens merged into your app styles (see Introduction). The
+          keyframes travel inside the piece's own style block, so there is no stylesheet to import.
         </p>
       </section>
 
@@ -35,14 +43,106 @@
         <CodeBlock code={ usageMarkup } class="mt-3"/>
       </section>
 
+      <section id="variants" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Variants</h2>
+        <dl class="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+          {#for v in variants}
+            <div class="flex gap-4">
+              <dt class="flex w-10 shrink-0 justify-center pt-0.5 text-ink">
+                <Spinner variant={ v.name } label={ v.label }/>
+              </dt>
+              <dd class="text-sm text-body">
+                <span class="font-mono text-code text-ink">{ v.name }</span>
+                <span class="text-muted"> — </span>{ v.blurb }
+              </dd>
+            </div>
+          {/for}
+        </dl>
+      </section>
+
       <div class="mt-12 space-y-12">
+        <ExampleBox id="sizes" title="Sizes" code={ codeSizes } tall={ false }>
+          <div class="grid w-full max-w-md grid-cols-4 items-center gap-x-6 gap-y-5">
+            <span></span>
+            <span class="text-center font-mono text-code text-muted">sm</span>
+            <span class="text-center font-mono text-code text-muted">md</span>
+            <span class="text-center font-mono text-code text-muted">lg</span>
+            {#for row in sizeRows}
+              <div class="contents">
+                <span class="font-mono text-code text-muted">{ row.name }</span>
+                <div class="flex justify-center text-ink"><Spinner variant={ row.name } size="sm" label={ row.label }/></div>
+                <div class="flex justify-center text-ink"><Spinner variant={ row.name } size="md" label={ row.label }/></div>
+                <div class="flex justify-center text-ink"><Spinner variant={ row.name } size="lg" label={ row.label }/></div>
+              </div>
+            {/for}
+          </div>
+        </ExampleBox>
+
         <ExampleBox id="in-button" title="Inside a button" code={ codeInButton } tall={ false }>
           <div class="flex flex-wrap items-center justify-center gap-3">
             <Button variant="primary" loading={ loading }>Saving</Button>
-            <Button variant="outline" @press={ toggleLoading }>Toggle loading</Button>
+            <Button variant="primary"><Spinner variant="ticks" size="sm" label="Saving"/>Saving</Button>
+            <Button variant="outline"><Spinner variant="dots" size="sm" label="Sending"/>Sending</Button>
+            <Button variant="secondary"><Spinner variant="snap" size="sm" label="Syncing"/>Syncing</Button>
+            <Button variant="ghost" @press={ toggleLoading }>Toggle loading</Button>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="typing" title="Typing indicator" code={ codeTyping } tall={ false }>
+          <div class="flex w-full max-w-sm flex-col gap-3">
+            <div class="flex items-end gap-2">
+              <span class="flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-tint text-micro font-semibold text-brand-on-tint">AL</span>
+              <div class="rounded-2xl rounded-bl-sm bg-surface-sunken px-3.5 py-2 text-sm text-body">Did the build go green?</div>
+            </div>
+            <div class="flex items-end justify-end gap-2">
+              <div class="rounded-2xl rounded-br-sm bg-brand px-3.5 py-2 text-sm text-brand-ink">Checking now</div>
+            </div>
+            <div class="flex items-end gap-2">
+              <span class="flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-tint text-micro font-semibold text-brand-on-tint">AL</span>
+              <div class="rounded-2xl rounded-bl-sm bg-surface-sunken px-3.5 py-1 text-muted">
+                <Spinner variant="dots" label="Ada is typing"/>
+              </div>
+            </div>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="color" title="Color" code={ codeColor } tall={ false }>
+          <div class="flex flex-wrap items-center justify-center gap-8">
+            <span class="inline-flex items-center gap-2 text-sm text-success">
+              <Spinner variant="heartbeat" size="sm" label="Live"/>Live
+            </span>
+            <span class="inline-flex items-center gap-2 text-sm text-warning">
+              <Spinner variant="heartbeat" size="sm" label="Reconnecting"/>Reconnecting
+            </span>
+            <span class="inline-flex items-center gap-2 text-sm text-muted">
+              <Spinner variant="ticks" size="sm" label="Loading"/>Loading
+            </span>
+            <span class="inline-flex items-center gap-2 text-sm text-brand">
+              <Spinner variant="snap" size="sm" label="Building"/>Building
+            </span>
+            <span class="inline-flex items-center gap-2 text-sm text-body">
+              <Spinner variant="spark" size="sm" label="Thinking"/>Thinking
+            </span>
           </div>
         </ExampleBox>
       </div>
+
+      <section id="accessibility" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Accessibility and motion</h2>
+        <p class="mb-3 text-sm text-body">
+          The root carries <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">role="status"</code>
+          and the <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">label</code> prop as its
+          accessible name (default “Loading”); every moving part inside it is
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">aria-hidden</code>. Give the label
+          the real task — “Saving draft”, “Ada is typing” — rather than the default.
+        </p>
+        <p class="text-sm text-body">
+          Under <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">prefers-reduced-motion: reduce</code>
+          every variant, the ring included, stops moving and takes a slow opacity pulse instead, holding a
+          pose that still reads as busy: the ticks keep their tapered trail, the trace keeps its segment,
+          the dots stay written.
+        </p>
+      </section>
     </article>
 
     <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
@@ -61,20 +161,59 @@ import Toc from '@/components/docs/Toc.pzl';
 // ExampleBox → Installation → titled example sections → Toc).
 const installCmd = 'puzzle add piece spinner';
 const usageImport = `import Spinner from '@/components/ui/Spinner.pzl';`;
-const usageMarkup = `<Spinner size="sm" />`;
+const usageMarkup = `<Spinner/>
+<Spinner variant="ticks" size="sm" label="Saving"/>`;
 
-const codeHero = `<Spinner size="sm" />
-<Spinner size="md" />
-<Spinner size="lg" />`;
+const VARIANTS = [
+  { name: 'ring', label: 'Loading', blurb: 'the default: a border ring with a brand top edge, spinning.' },
+  { name: 'ticks', label: 'Loading', blurb: 'eight pill ticks in currentColor. The head steps round like a native activity indicator, and each tick shortens toward the centre as it fades.' },
+  { name: 'trace', label: 'Loading', blurb: 'a brand segment running round a squircle. It hurries down each side and slows through the corners, stretching and bunching as it goes.' },
+  { name: 'dots', label: 'Typing', blurb: 'three dots written in left to right, held, then faded together. A typing indicator.' },
+  { name: 'snap', label: 'Loading', blurb: 'Puzzle’s own. Four tiles drift apart, click back together, and the block turns a quarter.' },
+  { name: 'spark', label: 'Thinking', blurb: 'a twinkling brand star with a small satellite star circling it. For AI states.' },
+  { name: 'heartbeat', label: 'Connecting', blurb: 'a lub-dub dot that sends out one faint ring on the second beat. For live or connecting status.' },
+];
+
+const codeHero = `<Spinner/>                          <!-- ring -->
+<Spinner variant="ticks"/>
+<Spinner variant="trace"/>
+<Spinner variant="dots" label="Typing"/>
+<Spinner variant="snap"/>
+<Spinner variant="spark" label="Thinking"/>
+<Spinner variant="heartbeat" label="Connecting"/>`;
+
+const codeSizes = `<Spinner variant="snap" size="sm"/>   <!-- 16px -->
+<Spinner variant="snap" size="md"/>   <!-- 24px, the default -->
+<Spinner variant="snap" size="lg"/>   <!-- 40px -->
+
+<!-- dots keeps the height and runs wider -->
+<Spinner variant="dots" size="lg"/>`;
 
 const codeInButton = `<Button variant="primary" loading={ saving }>Saving</Button>
 
-// Button ships its own loading spinner. To build a custom busy
-// state, drop a Spinner into any element and inherit its color:
-<button class="inline-flex items-center gap-2 ...">
-  <Spinner size="sm" class="border-current/30 border-t-current" />
-  Loading
-</button>`;
+// Button ships its own loading ring. For another design, put a
+// currentColor variant in the button — it takes the button's text colour:
+<Button variant="primary">
+  <Spinner variant="ticks" size="sm" label="Saving"/>
+  Saving
+</Button>
+<Button variant="outline">
+  <Spinner variant="dots" size="sm" label="Sending"/>
+  Sending
+</Button>`;
+
+const codeTyping = `<div class="rounded-2xl rounded-bl-sm bg-surface-sunken px-3.5 py-1 text-muted">
+  <Spinner variant="dots" label="Ada is typing"/>
+</div>`;
+
+const codeColor = `<!-- ticks, dots, snap and heartbeat paint in currentColor -->
+<span class="inline-flex items-center gap-2 text-success">
+  <Spinner variant="heartbeat" size="sm" label="Live"/>
+  Live
+</span>
+
+<!-- or colour the spinner itself -->
+<Spinner variant="ticks" class="text-muted"/>`;
 
 export default class SpinnerDoc extends PuzzleView {
   created() {
@@ -88,11 +227,21 @@ export default class SpinnerDoc extends PuzzleView {
       usageImport,
       usageMarkup,
       codeHero,
+      codeSizes,
       codeInButton,
+      codeTyping,
+      codeColor,
+      variants: VARIANTS,
+      sizeRows: VARIANTS,
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
+        { label: 'Variants', href: '#variants' },
+        { label: 'Sizes', href: '#sizes' },
         { label: 'Inside a button', href: '#in-button' },
+        { label: 'Typing indicator', href: '#typing' },
+        { label: 'Color', href: '#color' },
+        { label: 'Accessibility and motion', href: '#accessibility' },
       ],
     };
   }

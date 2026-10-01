@@ -39,6 +39,10 @@ export default class TodoHome extends PuzzleView {
       completedTodos,
       filteredTodos,
       newTodoText: localData.newTodoText,
+      // Templates read data, they don't call JavaScript on it, so the
+      // "is there anything to add?" check is computed here, not in the
+      // template's disabled= (constellation/doc/DOC-SPEC.md §6).
+      canAdd: localData.newTodoText.trim() !== '',
       currentFilter: localData.currentFilter,
       hasData: todos.length > 0
     };
@@ -115,7 +119,9 @@ export default class TodoHome extends PuzzleView {
   }
 }
 
-import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
+import { ViewNode, displayValue as __s, listRows as __l } from '@magic-spells/puzzle';
+
+const __L0 = { key: (todo) => ViewNode.keyOf(todo) };
 
 TodoHome.prototype.render = function () {
   const __d = this.getData();
@@ -140,18 +146,18 @@ TodoHome.prototype.render = function () {
           new ViewNode('button', {
             type: 'submit',
             class: 'h-12 px-5 rounded-xl bg-accent text-ink font-semibold tracking-tight hover:bg-accent-2 disabled:bg-elevated disabled:text-faint disabled:cursor-not-allowed transition-colors',
-            disabled: !__d.newTodoText.trim(),
+            disabled: !__d.canAdd,
           }, [
             new ViewNode('text', { value: 'Add' }),
           ]),
         ]),
       ]),
-      ...(__d.todos.length > 0
+      ...(__d.todos?.length > 0
         ? [
             new ViewNode('div', { class: 'grid grid-cols-3 divide-x divide-line border-b border-line' }, [
               new ViewNode('div', { class: 'py-5 text-center' }, [
                 new ViewNode('div', { class: 'font-mono text-2xl tabular-nums text-fg' }, [
-                  new ViewNode('text', { value: __s(__d.activeTodos.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'activeTodos.length' : 0) }),
+                  new ViewNode('text', { value: __s(__d.activeTodos?.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'activeTodos.length' : 0) }),
                 ]),
                 new ViewNode('div', { class: 'mt-1 text-[10px] uppercase tracking-[0.22em] text-faint' }, [
                   new ViewNode('text', { value: 'active' }),
@@ -159,7 +165,7 @@ TodoHome.prototype.render = function () {
               ]),
               new ViewNode('div', { class: 'py-5 text-center' }, [
                 new ViewNode('div', { class: 'font-mono text-2xl tabular-nums text-fg' }, [
-                  new ViewNode('text', { value: __s(__d.completedTodos.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'completedTodos.length' : 0) }),
+                  new ViewNode('text', { value: __s(__d.completedTodos?.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'completedTodos.length' : 0) }),
                 ]),
                 new ViewNode('div', { class: 'mt-1 text-[10px] uppercase tracking-[0.22em] text-faint' }, [
                   new ViewNode('text', { value: 'done' }),
@@ -167,7 +173,7 @@ TodoHome.prototype.render = function () {
               ]),
               new ViewNode('div', { class: 'py-5 text-center' }, [
                 new ViewNode('div', { class: 'font-mono text-2xl tabular-nums text-fg' }, [
-                  new ViewNode('text', { value: __s(__d.todos.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'todos.length' : 0) }),
+                  new ViewNode('text', { value: __s(__d.todos?.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'todos.length' : 0) }),
                 ]),
                 new ViewNode('div', { class: 'mt-1 text-[10px] uppercase tracking-[0.22em] text-faint' }, [
                   new ViewNode('text', { value: 'total' }),
@@ -216,28 +222,28 @@ TodoHome.prototype.render = function () {
               ]),
             ]),
             new ViewNode('div', { class: 'max-h-96 overflow-y-auto' },
-              __d.filteredTodos.map((todo) =>
+              __l(this, this, 0, __d.filteredTodos, (s) =>
                 new ViewNode(TodoItem, {
-                  key: ViewNode.keyOf(todo),
-                  todo: todo,
-                  remove: (event) => this.events.deleteTodo(todo),
+                  key: s.k,
+                  todo: s.item,
+                  remove: (s.h0 ??= (event) => this.events.deleteTodo(s.item)),
                 }, [])
-              )
+              , __L0)
             ),
             new ViewNode('div', { class: 'p-5 flex flex-col sm:flex-row gap-2.5 justify-center' }, [
-              ...(__d.completedTodos.length > 0
+              ...(__d.completedTodos?.length > 0
                 ? [
                     new ViewNode('button', {
                       class: 'px-4 py-2.5 rounded-xl border border-hairline text-muted hover:text-fg hover:border-white/20 text-sm font-medium transition-colors',
                       '@click': ((this.__h ??= {})[4] ??= (event) => this.events.clearCompleted(event)),
                     }, [
-                      new ViewNode('text', { value: 'Clear completed (' + __s(__d.completedTodos.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'completedTodos.length' : 0) + ')' }),
+                      new ViewNode('text', { value: 'Clear completed (' + __s(__d.completedTodos?.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'completedTodos.length' : 0) + ')' }),
                     ]),
                   ]
                 : [
                     new ViewNode('#'),
                   ]),
-              ...(__d.activeTodos.length > 0
+              ...(__d.activeTodos?.length > 0
                 ? [
                     new ViewNode('button', {
                       class: 'px-4 py-2.5 rounded-xl border border-accent/40 text-accent hover:bg-accent/10 text-sm font-medium transition-colors',
@@ -252,7 +258,7 @@ TodoHome.prototype.render = function () {
             ]),
           ]
         : [
-            new ViewNode('div', { class: 'py-16 px-8 text-center' }, [
+            (this.__c[0] ??= new ViewNode('div', { class: 'py-16 px-8 text-center' }, [
               new ViewNode('div', { class: 'text-4xl mb-4 opacity-40 grayscale' }, [
                 new ViewNode('text', { value: '📝' }),
               ]),
@@ -262,7 +268,7 @@ TodoHome.prototype.render = function () {
               new ViewNode('p', { class: 'text-sm text-muted' }, [
                 new ViewNode('text', { value: 'Add your first todo above to get started.' }),
               ]),
-            ]),
+            ])),
             new ViewNode('#'),
             new ViewNode('#'),
             new ViewNode('#'),

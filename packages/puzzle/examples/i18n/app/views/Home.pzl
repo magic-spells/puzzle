@@ -1,0 +1,54 @@
+<puzzle-view class="space-y-8">
+  <div class="space-y-3">
+    <h1 class="text-3xl font-semibold">{ t('home.greeting', { name: user.name }) }</h1>
+    <p class="text-muted leading-relaxed">{ t('home.intro') }</p>
+  </div>
+
+  <section class="rounded-xl border border-line bg-surface p-6 space-y-5">
+    <div class="flex items-center justify-between">
+      <h2 class="text-lg font-semibold">{ t('home.cart.title') }</h2>
+      <!-- A plural entry: `count` picks the form through Intl.PluralRules
+           (pl has one/few/many/other), an exact 0 uses the entry's `zero`
+           form, and {count} prints in the locale's number format. -->
+      <p class="count tabular-nums">{ t('home.cart.items', { count: cart.count }) }</p>
+    </div>
+    <div class="flex gap-2">
+      <button class="px-3 py-1.5 rounded-md border border-line hover:bg-page" @click={ change(-1) }>{ t('home.cart.remove') }</button>
+      <button class="px-3 py-1.5 rounded-md bg-brand text-white hover:bg-brand-dark" @click={ change(1) }>{ t('home.cart.add') }</button>
+    </div>
+    <dl class="grid grid-cols-2 gap-y-2 text-sm">
+      <dt class="text-muted">{ t('home.cart.total') }</dt>
+      <dd class="text-right tabular-nums">{ number_with_delimiter(cart.count * 12495.75) }</dd>
+      <dt class="text-muted">{ t('home.cart.updated') }</dt>
+      <dd class="text-right">{ date(updated, 'long') }</dd>
+    </dl>
+  </section>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// The cart is a store record, so it survives a language switch (which rebuilds
+// every routed view — local setData() state does not survive it).
+export default class Home extends PuzzleView {
+  created() {
+    const { store } = this.ctx;
+    if (!store.findOne('cart', 'mine')) store.createRecord('cart', { id: 'mine' });
+  }
+
+  data() {
+    return {
+      user: { name: 'Ada' },
+      cart: this.ctx.store.findOne('cart', 'mine'),
+      updated: '2026-09-25',
+    };
+  }
+
+  events = {
+    change: (step) => {
+      const cart = this.ctx.store.findOne('cart', 'mine');
+      cart.update({ count: Math.max(0, cart.count + step) });
+    },
+  };
+}
+</script>

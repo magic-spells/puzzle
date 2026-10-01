@@ -1,5 +1,5 @@
 /**
- * Public declarations for @magic-spells/puzzle/testing (v1.58, D94).
+ * Public declarations for @magic-spells/puzzle/testing (D94).
  *
  * These helpers target app-authored DOM tests. They require a DOM environment
  * such as jsdom; no test runner is imported or assumed.
@@ -37,6 +37,17 @@ export interface MountViewOptions {
 	formatters?: Record<string, Formatter>;
 	/** Install and retain the adapter capability before constructing the default Store. */
 	adapter?: PuzzleAppConfig['adapter'];
+	/**
+	 * Render translated views with no fetch (D175): `strings` is the flat table a
+	 * build emits for `locale` (dotted keys; plural entries stay objects).
+	 */
+	i18n?: TestI18nOptions;
+}
+
+export interface TestI18nOptions {
+	/** The active (and default) locale. Default `'en'`. */
+	locale?: string;
+	strings?: Record<string, string | Partial<Record<'zero' | 'one' | 'two' | 'few' | 'many' | 'other', string>>>;
 }
 
 export interface MountedView<T extends PuzzleView = PuzzleView> {
@@ -62,6 +73,8 @@ export type TestAppConfig = Omit<PuzzleAppConfig, 'target' | 'routerMode'> & {
 	 * `routerMode`, which is forced.
 	 */
 	routerInitialPath?: string;
+	/** Translations for the app's i18n service, with no fetch (D175). */
+	i18n?: TestI18nOptions;
 };
 
 export interface TestApp {
@@ -176,7 +189,8 @@ export interface FakeAnimation {
 
 export interface FakeAnimateController {
 	readonly animations: FakeAnimation[];
-	readonly animateCalls: Array<[Element, any, KeyframeAnimationOptions]>;
+	/** Every `element.animate(keyframes, options)` call, arguments as passed. */
+	readonly animateCalls: Array<[Element, any, number | KeyframeAnimationOptions | undefined]>;
 	finishAll(): void;
 	uninstall(): void;
 }

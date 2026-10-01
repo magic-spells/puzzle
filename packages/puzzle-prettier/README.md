@@ -13,12 +13,16 @@ Both bodies honor your Prettier options (`singleQuote`, `useTabs`, `tabWidth`, `
 
 ## What it preserves verbatim (for now)
 
-Template reformatting is **deliberately deferred to a future version.** In this v1 release the following are preserved **byte-for-byte**:
+Template reformatting is **deliberately deferred to a future version.** In this release the following are preserved **byte-for-byte**:
 
 - `<puzzle-view>` and `<puzzle-skeleton>` template bodies — including `{#raw}` … `{/raw}` blocks, which are never reindented or rewrapped
-- the 0.7.0 grammar additions: D167 dotted family tags (`<Frame.Header>`), the `\{` / `\}` brace escape, and both `{#for}` range spellings. A capitalized name the compiler rejects (`<Frame-x>`, `<Slot.Foo>`) still formats — a formatter is not a validator
+- every template expression exactly as written — function calls in text, attributes and props (`title={ truncate(name.trim(), 20) }`), object-literal arguments (`{ t('cart.count', { count: items.length }) }`), arrow-function arguments (`{#for t in todos.filter(t => !t.done)}`), template literals, and their spacing. The plugin does not parse template expressions, so it never respaces `a+b` or rewraps a long call chain
+- dotted family tags (`<Frame.Header>`), the `\{` / `\}` brace escape, and both `{#for}` range spellings
+- template code the compiler rejects — a method outside the method table, `this`, `new` or a bitwise `|` in a template expression (D176), a name like `<Frame-x>` or `<Slot.Foo>` — still formats, untouched. A formatter is not a validator; `puzzle build` reports those with positions
 - every section's opening/closing tags and attributes
 - top-level HTML comments and all inter-section whitespace
+
+Template line breaks are layout, not style. Under the template whitespace rule (decision D168), a line break between text and an inline element renders as one space, one between two elements renders nothing, and a `<pre>` or `<textarea>` body renders exactly as written. Joining, splitting or reindenting template lines would change the page, so any future template formatter must keep every line break that sits next to text, and must leave `<pre>`/`<textarea>` bodies alone.
 
 The only guaranteed changes are: the `<script>` and `<style>` bodies are reformatted, and the file is normalized to end with exactly one trailing newline.
 
@@ -48,9 +52,9 @@ Prettier automatically routes `.pzl` files through this plugin.
 
 ## How the splitter works
 
-Reprinting the right bytes requires splitting a `.pzl` file into its sections exactly the way the compiler does. The splitter in `src/split.js` (and its lexical helpers in `src/lex.js`) is a faithful JavaScript port of the compiler's canonical splitter, [`compiler/internal/parser/sections.go`](https://github.com/magic-spells/puzzle), including its language-aware close-tag scans. This means a literal `</script>` inside a JS string, template literal, comment, or regex — or a literal `</style>` inside a CSS comment or string — never truncates a body, and template brace groups / HTML comments inside `<puzzle-view>` are skipped correctly. The block-closer table is kept in step with the compiler's (`{/if}`, `{/unless}`, `{/case}`, `{/for}`, `{/svg}`, `{/comment}`, `{/raw}`), because that table is what tells the brace scanner a `/` right after a `{` is structural rather than the start of a regex literal.
+Reprinting the right bytes requires splitting a `.pzl` file into its sections exactly the way the compiler does. The splitter in `src/split.js` (and its lexical helpers in `src/lex.js`) is a faithful JavaScript port of the compiler's canonical splitter, [`packages/puzzle-lang/parser/sections.go`](https://github.com/magic-spells/puzzle), including its language-aware close-tag scans. This means a literal `</script>` inside a JS string, template literal, comment, or regex — or a literal `</style>` inside a CSS comment or string — never truncates a body, and template brace groups / HTML comments inside `<puzzle-view>` are skipped correctly. The block-closer table is kept in step with the compiler's (`{/if}`, `{/unless}`, `{/case}`, `{/for}`, `{/svg}`, `{/comment}`, `{/raw}`), because that table is what tells the brace scanner a `/` right after a `{` is structural rather than the start of a regex literal.
 
-Files that fail to split — missing `<puzzle-view>`, a duplicated section, stray top-level content, or an unterminated tag — throw a positioned error (surfaced by Prettier with line/column) rather than silently mangling output.
+Files that fail to split — missing `<puzzle-view>`, a duplicated section, stray top-level content, or an unterminated tag — throw a positioned error (surfaced by Prettier with line/column) rather than silently mangling output. The column counts UTF-16 code units, while the compiler's splitter counts UTF-8 bytes, so on a line holding non-ASCII text (`café`, `金額`, an emoji) the same error names the same line but a different column than `puzzle build` does.
 
 ## License
 

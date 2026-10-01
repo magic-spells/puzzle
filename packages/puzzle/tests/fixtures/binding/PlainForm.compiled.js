@@ -28,19 +28,19 @@ PlainForm.prototype.render = function () {
   return new ViewNode('puzzle-view', { class: 'plain-form' }, [
     new ViewNode('input', {
       class: 'hue',
-      value: __d.profile.hue,
-      '@input:bind': this.__bind(__d.profile, 'hue', 'v'),
+      value: __d.profile?.hue,
+      '@input:bind': this.__bind(__d.profile ?? 0, 'hue', 'v'),
     }, []),
     new ViewNode('input', {
       class: 'size',
       type: 'number',
-      value: __d.profile.size,
-      '@change:bind': this.__bind(__d.profile, 'size', 'vn'),
+      value: __d.profile?.size,
+      '@change:bind': this.__bind(__d.profile ?? 0, 'size', 'vn'),
     }, []),
     new ViewNode('input', {
       class: 'ducky',
-      value: __d.ducky.label,
-      '@input:bind': this.__bind(__d.ducky, 'label', 'v'),
+      value: __d.ducky?.label,
+      '@input:bind': this.__bind(__d.ducky ?? 0, 'label', 'v'),
     }, []),
   ]);
 };

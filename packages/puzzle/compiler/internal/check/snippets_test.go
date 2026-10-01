@@ -143,19 +143,19 @@ export default class Home extends PuzzleView { count = 1; }
 	}
 
 	// …and the added parentheses must not disturb the remap of a real error.
-	bad := `<puzzle-view><p>{ count.toUpperCase() + 1 }</p></puzzle-view>
+	bad := `<puzzle-view><p>{ count.upper + 1 }</p></puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView { count = 1; }
 </script>
 `
 	writeLiveView(t, root, bad)
-	line, col := pzlPosition(t, bad, "toUpperCase")
+	line, col := pzlPosition(t, bad, "upper")
 	_, err := Run(root)
 	if err == nil {
 		t.Fatal("expected a type error inside the interpolation")
 	}
-	want := fmt.Sprintf("app/views/Home.pzl:%d:%d: Property 'toUpperCase' does not exist on type 'number'.", line, col)
+	want := fmt.Sprintf("app/views/Home.pzl:%d:%d: Property 'upper' does not exist on type 'number'.", line, col)
 	if got := err.Error(); got != want {
 		t.Fatalf("interpolation diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
 	}
@@ -165,7 +165,7 @@ export default class Home extends PuzzleView { count = 1; }
 // positioned on the .pzl expression, not on the generated wrapper.
 func TestLiveTSCPositionsAMarkerArgumentError(t *testing.T) {
 	root := liveTSCApp(t)
-	source := `<puzzle-view><Slot name="heading" total={ value.toUpperCase() }>Team</Slot></puzzle-view>
+	source := `<puzzle-view><Slot name="heading" total={ value.upper }>Team</Slot></puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView { value = 123; }
@@ -177,8 +177,8 @@ export default class Home extends PuzzleView { value = 123; }
 	if err == nil {
 		t.Fatal("expected a type error for the marker argument expression")
 	}
-	line, col := pzlPosition(t, source, "toUpperCase")
-	want := fmt.Sprintf("app/views/Home.pzl:%d:%d: Property 'toUpperCase' does not exist on type 'number'.", line, col)
+	line, col := pzlPosition(t, source, "upper")
+	want := fmt.Sprintf("app/views/Home.pzl:%d:%d: Property 'upper' does not exist on type 'number'.", line, col)
 	if got := err.Error(); got != want {
 		t.Fatalf("marker-argument diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
 	}
@@ -191,7 +191,7 @@ func TestLiveTSCPositionsASnippetBodyError(t *testing.T) {
   <Roster>
     <Snippet member>
       <span>{ member.name }</span>
-      <span>{ value.toUpperCase() }</span>
+      <span>{ value.upper }</span>
     </Snippet>
   </Roster>
 </puzzle-view>
@@ -207,8 +207,8 @@ export default class Home extends PuzzleView { value = 123; }
 	if err == nil {
 		t.Fatal("expected a type error for the snippet body expression")
 	}
-	line, col := pzlPosition(t, source, "toUpperCase")
-	want := fmt.Sprintf("app/views/Home.pzl:%d:%d: Property 'toUpperCase' does not exist on type 'number'.", line, col)
+	line, col := pzlPosition(t, source, "upper")
+	want := fmt.Sprintf("app/views/Home.pzl:%d:%d: Property 'upper' does not exist on type 'number'.", line, col)
 	if got := err.Error(); got != want {
 		t.Fatalf("snippet-body diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
 	}

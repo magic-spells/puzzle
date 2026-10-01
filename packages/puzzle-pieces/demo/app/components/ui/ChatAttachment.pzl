@@ -56,7 +56,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   <ChatAttachment name="proposal.pdf" size="2.4 MB" />
 //   <ChatAttachment name="hero.png" size="840 KB" href="/files/hero.png" />
 //   <ChatAttachment name="assets.zip" size="18 MB" removable
-//                   @remove={ (fileName) => drop(fileName) } />
+//                   @remove={ drop } />
 //
 // Props:
 //   name       filename — shown text-sm, truncated with a native title tooltip
@@ -71,8 +71,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // Callback:
 //   @remove(name, event)  fired from the × button with the filename first
 //
-// The leading glyphs are inline stroke-current SVG PATHS only (never <text>,
-// which the compiler drops) tinted text-muted. The href/no-href branches repeat
+// The leading glyphs are inline stroke-current SVG PATHS only (no <text>)
+// tinted text-muted. The href/no-href branches repeat
 // the icon+label block because a single root can't swap only its tag name; the
 // shared class strings keep the two arms identical.
 

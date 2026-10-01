@@ -1,5 +1,5 @@
 // lex.js — a faithful JavaScript port of the Puzzle compiler's shared lexical-skip
-// helpers (compiler/internal/parser/lexskip.go and scan.go). These back the
+// helpers (packages/puzzle-lang/parser/lexskip.go and scan.go). These back the
 // close-tag scanners in split.js so a literal section-close sentinel hidden
 // inside a JS string, template literal, regex, comment, or template brace group
 // never truncates a section body. The port operates on JS strings by code unit;
@@ -8,8 +8,10 @@
 
 // Identifier keywords that CANNOT end an expression, so a '/' immediately after
 // one opens a regex literal (not division). Mirrors lexRegexPrecedingKeywords.
+// `of` is deliberately absent: it is a contextual word, and a template field
+// named `of` is data.
 const REGEX_PRECEDING_KEYWORDS = new Set([
-	'return', 'typeof', 'instanceof', 'in', 'of', 'void', 'delete', 'new',
+	'return', 'typeof', 'instanceof', 'in', 'void', 'delete', 'new',
 	'do', 'else', 'yield', 'await', 'case',
 ]);
 
@@ -44,11 +46,16 @@ function firstWord(s) {
 }
 
 // LexPlainEndsExpr folds a single plain byte (one LexSkip did not consume) into
-// prevEndsExpr. Mirrors lexskip.go.
+// prevEndsExpr. Mirrors lexskip.go. A digit, a '.', a closing )/]/}, or any
+// code unit >= 0x80 ends an expression — outside a string or comment a
+// non-ASCII character belongs to a name (`café`, `金額`), and a '.' ends a
+// number (`5.`) or leads a property name. Every UTF-16 unit of a non-ASCII
+// character (both halves of a surrogate pair included) is >= 0x80, just as
+// every UTF-8 byte of it is, so this matches Go one to one.
 export function lexPlainEndsExpr(c, prev) {
 	if (isSpaceByte(c)) return prev;
 	if (c === ')' || c === ']' || c === '}') return true;
-	if (c >= '0' && c <= '9') return true;
+	if ((c >= '0' && c <= '9') || c === '.' || c.charCodeAt(0) >= 0x80) return true;
 	return false;
 }
 
@@ -171,7 +178,9 @@ export function lexSkip(s, i, prevEndsExpr) {
 	if (isIdentStart(c)) {
 		let j = i;
 		while (j < s.length && isIdentChar(s[j])) j++;
-		if (lexPrecededByDot(s, i)) return { next: j, pee: true, consumed: true };
+		// An ASCII run straight after a non-ASCII unit is the tail of one name
+		// (`価格new`), never a keyword; so is a property name (`.return`).
+		if ((i > 0 && s.charCodeAt(i - 1) >= 0x80) || lexPrecededByDot(s, i)) return { next: j, pee: true, consumed: true };
 		return { next: j, pee: !REGEX_PRECEDING_KEYWORDS.has(s.slice(i, j)), consumed: true };
 	}
 	return { next: i, pee: prevEndsExpr, consumed: false };
@@ -303,6 +312,44 @@ export function scanBlockComment(s, open) {
 			continue;
 		}
 		i++;
+	}
+	return { ok: false };
+}
+
+// isBlockRawOpen reports whether s[open] begins a {#raw} lex-off block opener
+// (D150). The keyword match is exact; content after it is allowed and ignored,
+// matching {#comment}. Mirrors isBlockRawOpen.
+export function isBlockRawOpen(s, open) {
+	if (open + 2 > s.length || s[open] !== '{' || s[open + 1] !== '#') return false;
+	return firstWord(s.slice(open + 2)) === 'raw';
+}
+
+// matchRawCloser reports whether s[open] begins a whitespace-tolerant {/raw}
+// closer (D150). Mirrors matchRawCloser. Returns { ok, end }.
+function matchRawCloser(s, open) {
+	let i = open + 1;
+	if (i >= s.length || s[i] !== '/') return { ok: false };
+	i++;
+	while (i < s.length && isSpaceByte(s[i])) i++;
+	const kw = 'raw';
+	if (i + kw.length > s.length || s.slice(i, i + kw.length) !== kw) return { ok: false };
+	i += kw.length;
+	while (i < s.length && isSpaceByte(s[i])) i++;
+	if (i >= s.length || s[i] !== '}') return { ok: false };
+	return { ok: true, end: i + 1 };
+}
+
+// scanBlockRaw locates a {#raw} … {/raw} block (D150) from the opening '{'
+// without inspecting its body as template grammar: the opener runs to its first
+// '}', then the FIRST valid closer wins (raw blocks do not nest). Mirrors
+// scanBlockRaw. Returns { ok, end } with end just past the closer.
+export function scanBlockRaw(s, open) {
+	const openerEnd = s.indexOf('}', open + 2);
+	if (openerEnd < 0) return { ok: false };
+	for (let i = openerEnd + 1; i < s.length; i++) {
+		if (s[i] !== '{') continue;
+		const m = matchRawCloser(s, i);
+		if (m.ok) return { ok: true, end: m.end };
 	}
 	return { ok: false };
 }

@@ -5,13 +5,13 @@
       <div class="flex justify-end">
         <div class="max-w-[80%] rounded-2xl rounded-br-md bg-accent text-white px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap">{ message.content }</div>
       </div>
-      <div class="mt-1 pr-1 text-right text-[11px] text-faint">{ message.createdAt | clock }</div>
+      <div class="mt-1 pr-1 text-right text-[11px] text-faint">{ clock(message.createdAt) }</div>
     {:when 'assistant'}
       <div class="flex gap-3">
         <div class="shrink-0 w-8 h-8 grid place-items-center rounded-full bg-accent/20 text-accent text-sm font-semibold ring-1 ring-accent/30">◆</div>
         <div class="min-w-0">
           <div class="max-w-[80%] rounded-2xl rounded-tl-md bg-surface-2 text-fg px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap">{ message.content }{#if message.pending}<span class="pz-caret">▍</span>{/if}</div>
-          <div class="mt-1 pl-1 text-[11px] text-faint">{#if message.model}{ message.model } · {/if}{ message.createdAt | clock }</div>
+          <div class="mt-1 pl-1 text-[11px] text-faint">{#if message.model}{ message.model } · {/if}{ clock(message.createdAt) }</div>
         </div>
       </div>
     {:when 'system'}
@@ -34,11 +34,12 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // message while it is still streaming (message.pending).
 export default class MessageBubble extends PuzzleView {
   data(params, props) {
-    // Re-query by id instead of returning props.message directly: records
-    // mutate IN PLACE, so the parent's prop is always reference-equal and
-    // prop-diffing can't see a streamed token or the pending flip. The findOne
-    // subscribes this bubble to ITS OWN record key — every update() re-renders
-    // exactly this bubble.
+    // The prop alone would keep this bubble current: a record carries a render
+    // revision (D170), so a streamed token or the pending flip counts as a
+    // changed prop the next time Thread re-renders. The findOne additionally
+    // subscribes this bubble to ITS OWN record key, so every update() re-renders
+    // it directly; receiving and querying the same record still costs one
+    // data() run per store flush.
     return {
       message: this.ctx.store.findOne('message', props.message.id) ?? props.message,
     };

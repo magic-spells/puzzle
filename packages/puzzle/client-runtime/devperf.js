@@ -7,6 +7,88 @@
  * it). Undefined means true for unbundled tests.
  */
 
+/** @import { PuzzleView } from './views/PuzzleView.js' */
+/** @import { Store } from './datastore/store.js' */
+
+/**
+ * One event delivered to a sink: `type` plus that event's own flat fields
+ * (see each emit() call). Frozen.
+ * @typedef {{ readonly type: string, readonly [field: string]: any }} PerfEvent
+ */
+
+/**
+ * A perf sink: the event, and the instance it is about (a view or a store
+ * subscriber), or null.
+ * @typedef {(event: PerfEvent, subject: object | null) => void} PerfSink
+ */
+
+/**
+ * One causal chain: every render/data/store execution one trigger sets off.
+ * @typedef {{
+ *   id: number,
+ *   executions: Map<number, number>,
+ *   blockedViews: Set<number>,
+ *   pendingStores: Set<Store>,
+ *   pendingViews: Set<number>,
+ *   pendingData: number,
+ *   pendingAsync: number,
+ *   active: number,
+ *   version: number,
+ *   quiescent: boolean,
+ * }} Chain
+ */
+
+/**
+ * @typedef {{ timestamp: number, wasted: boolean, animated: boolean }} RenderWindowEntry
+ */
+
+/**
+ * Per-view instrumentation state, keyed by the view instance.
+ * @typedef {{
+ *   id: number,
+ *   name: string,
+ *   pendingChain: Chain | null,
+ *   pendingCauses: Set<string>,
+ *   dataExecutionChain: Chain | null,
+ *   activeDataChain: Chain | null,
+ *   dataRuns: number,
+ *   renderWindow: RenderWindowEntry[],
+ *   runawayUntil: number,
+ * }} ViewState
+ */
+
+/**
+ * One open render span.
+ * @typedef {{
+ *   view: PuzzleView,
+ *   state: ViewState,
+ *   chain: Chain,
+ *   causes: string[],
+ *   scope: Scope | null,
+ *   treeStartedAt: number,
+ *   treeDuration: number,
+ *   patchStartedAt: number,
+ *   mutations: number,
+ *   depth: number,
+ *   entered: boolean,
+ *   ended: boolean,
+ * }} RenderMark
+ */
+
+/** @typedef {{ chain: Chain, render: RenderMark | null }} Scope */
+
+/**
+ * A data() run claimed by prepareDataImpl, consumed by runDataImpl.
+ * @typedef {{ view: PuzzleView, state: ViewState, chain: Chain, cause: string, depth: number,
+ *   started: boolean }} PreparedData
+ */
+
+/**
+ * One open store flush span.
+ * @typedef {{ store: Store, chain: Chain, scope: Scope, startedAt: number, keys: number,
+ *   notified: number }} StoreFlushMark
+ */
+
 const DEV = typeof __PUZZLE_DEV__ === 'undefined' ? true : __PUZZLE_DEV__;
 const PERF_SENTINEL = '__PUZZLE_PERF__';
 const RECURSION_LIMIT = 100;
@@ -14,8 +96,11 @@ const RUNAWAY_WINDOW_MS = 1000;
 const RUNAWAY_RENDER_LIMIT = 60;
 const RUNAWAY_WASTED_RATIO = 0.9;
 
+/** @type {Set<PerfSink>} */
 const sinks = new Set();
+/** @type {WeakMap<object, ViewState>} */
 const viewStates = new WeakMap();
+/** @type {WeakMap<PuzzleView, PreparedData[]>} */
 const preparedData = new WeakMap();
 // view → the LIFO stack of its in-flight render marks. A render span is
 // reentrant: user code inside it (a `ref` callback fired mid-patch, a
@@ -23,13 +108,17 @@ const preparedData = new WeakMap();
 // sync data() renders synchronously. A single slot would let the inner render's
 // end pop the OUTER mark — leaving the outer scope on activeScopes forever, so
 // its chain could never quiesce.
+/** @type {WeakMap<PuzzleView, RenderMark[]>} */
 const activeRenders = new WeakMap();
+/** @type {WeakMap<Store, Chain>} */
 const storeChains = new WeakMap();
 // store → the LIFO stack of its in-flight flush marks. flush() is reentrant: a
 // subscriber may call store.flush() synchronously during delivery, and a single
 // slot would let the inner call's end pop the OUTER mark — leaving the outer
 // scope on activeScopes forever, so its chain could never quiesce.
+/** @type {WeakMap<Store, StoreFlushMark[]>} */
 const activeStoreFlushes = new WeakMap();
+/** @type {Scope[]} */
 const activeScopes = [];
 
 const totals = {
@@ -42,6 +131,19 @@ const totals = {
 	storeNotifications: 0,
 	componentPropBailouts: 0,
 	componentPropReruns: 0,
+	// List blocks (D170): rows returned from the row cache, rows rebuilt, and the
+	// passes over a site that could not cache its record rows at all — a relation,
+	// a computed getter or a deep path in the body (see listBlock.isConservative).
+	// The last one is the answer to "why is this list still rebuilding every row?".
+	listRowsCached: 0,
+	listRowsBuilt: 0,
+	listSitesConservative: 0,
+	// Static subtrees (D170 §3.3) newly allocated into a view's `__c`. A template
+	// whose cached sites are working reports these on the FIRST render of an
+	// instance and zero on every render after it — the counterpart to the island
+	// measurement on COMPONENT-VIEW-MANAGER, which recorded 20,000 child vnodes
+	// rebuilt per render before this existed.
+	staticSitesBuilt: 0,
 	slotRenders: 0,
 	memoHits: 0,
 	memoMisses: 0,
@@ -76,6 +178,10 @@ if (DEV && typeof globalThis !== 'undefined') {
 // guard as a cheap one-line belt-and-braces. devperfInstallSink is the export
 // that genuinely needs one: /testing's measureRenders calls it UNGATED.
 
+/**
+ * @param {PerfSink} sink
+ * @returns {() => void} detach
+ */
 export function devperfInstallSink(sink) {
 	if (DEV) return installSinkImpl(sink);
 	return () => {};
@@ -85,42 +191,70 @@ export function devperfSnapshot() {
 	return snapshotImpl();
 }
 
+/**
+ * @param {PuzzleView} view
+ * @param {string} [cause]
+ * @returns {true | null} null when the recursion guard blocked this run
+ */
 export function devperfPrepareData(view, cause) {
 	return prepareDataImpl(view, cause);
 }
 
+/**
+ * @param {PuzzleView} view
+ * @param {Record<string, any>} params
+ * @param {Record<string, any>} props
+ * @returns {any} whatever the view's data() returned
+ */
 export function devperfRunData(view, params, props) {
 	return runDataImpl(view, params, props);
 }
 
+/**
+ * @param {PuzzleView} view
+ * @param {string} [cause]
+ */
 export function devperfRenderScheduled(view, cause) {
 	if (DEV) renderScheduledImpl(view, cause);
 }
 
+/**
+ * @param {PuzzleView} view
+ * @param {string} cause
+ */
 export function devperfMarkCause(view, cause) {
 	if (DEV) markCauseImpl(view, cause);
 }
 
+/**
+ * @param {PuzzleView} view
+ * @returns {boolean}
+ */
 export function devperfCanRender(view) {
 	return canRenderImpl(view);
 }
 
+/** @param {PuzzleView} view */
 export function devperfRenderPrepare(view) {
 	return renderPrepareImpl(view);
 }
 
+/** @param {PuzzleView} view */
 export function devperfRenderTreeBuilt(view) {
 	if (DEV) renderTreeBuiltImpl(view);
 }
 
+/** @param {PuzzleView} view */
 export function devperfRenderStart(view) {
 	if (DEV) renderStartImpl(view);
 }
 
+/** @param {PuzzleView} view */
 export function devperfRenderEnd(view) {
 	if (DEV) renderEndImpl(view);
 }
 
+/** @param {PuzzleView} view */
 export function devperfRenderCancel(view) {
 	if (DEV) renderCancelImpl(view);
 }
@@ -129,40 +263,92 @@ export function devperfMutation(count = 1) {
 	if (DEV) mutationImpl(count);
 }
 
+/**
+ * @param {PuzzleView} view
+ * @param {boolean} bailedOut
+ */
 export function devperfComponentPatch(view, bailedOut) {
 	if (DEV) componentPatchImpl(view, bailedOut);
 }
 
+/** @param {PuzzleView} view */
 export function devperfSlotRender(view) {
 	if (DEV) slotRenderImpl(view);
 }
 
+/**
+ * @param {PuzzleView} view
+ * @param {number} cached
+ * @param {number} built
+ * @param {number} conservative 1 when the site could not cache its rows, else 0
+ */
+export function devperfListRows(view, cached, built, conservative) {
+	if (DEV) listRowsImpl(view, cached, built, conservative);
+}
+
+/**
+ * @param {PuzzleView} view
+ * @param {number} built
+ * @param {number} held
+ */
+export function devperfStaticCache(view, built, held) {
+	if (DEV) staticCacheImpl(view, built, held);
+}
+
+/**
+ * @param {PuzzleView} view
+ * @param {string} key
+ * @param {boolean} hit
+ */
 export function devperfMemo(view, key, hit) {
 	if (DEV) memoImpl(view, key, hit);
 }
 
+/**
+ * @param {Store} store
+ * @param {unknown} subscriber the store's current tracking subscriber, if any
+ */
 export function devperfStoreNotify(store, subscriber) {
 	if (DEV) storeNotifyImpl(store, subscriber);
 }
 
+/** @param {Store} store */
 export function devperfStoreFlushStart(store) {
 	if (DEV) storeFlushStartImpl(store);
 }
 
+/**
+ * @param {Store} store
+ * @param {unknown[]} keys
+ * @param {Set<unknown>} notified
+ */
 export function devperfStoreFlushNotifications(store, keys, notified) {
 	if (DEV) storeFlushNotificationsImpl(store, keys, notified);
 }
 
+/** @param {Store} store */
 export function devperfStoreFlushEnd(store) {
 	if (DEV) storeFlushEndImpl(store);
 }
 
+/**
+ * @template T
+ * @param {unknown} subscriber
+ * @param {Promise<unknown>} pending
+ * @param {() => T} retry
+ * @param {string} kind
+ * @returns {Promise<T>}
+ */
 export function devperfTrackingDeferred(subscriber, pending, retry, kind) {
 	return trackingDeferredImpl(subscriber, pending, retry, kind);
 }
 
 // ---- sink/global snapshots -------------------------------------------------
 
+/**
+ * @param {PerfSink} sink
+ * @returns {() => void}
+ */
 function installSinkImpl(sink) {
 	if (typeof sink !== 'function') {
 		throw new TypeError('[puzzle perf] sink must be a function');
@@ -190,6 +376,10 @@ function snapshotImpl() {
  * different identity (the DevTools bridge numbers views for the extension) can
  * only derive it from the instance. Sinks that do not care simply ignore the
  * second argument.
+ *
+ * @param {string} type
+ * @param {Record<string, unknown>} payload
+ * @param {object | null} [subject]
  */
 function emit(type, payload, subject = null) {
 	const event = Object.freeze({ type, ...payload });
@@ -204,6 +394,7 @@ function emit(type, payload, subject = null) {
 
 // ---- causal chains ---------------------------------------------------------
 
+/** @returns {Chain} */
 function newChain() {
 	return {
 		id: nextChainId++,
@@ -219,6 +410,7 @@ function newChain() {
 	};
 }
 
+/** @returns {Chain | null} */
 function currentChain() {
 	for (let i = activeScopes.length - 1; i >= 0; i--) {
 		const chain = activeScopes[i].chain;
@@ -227,6 +419,10 @@ function currentChain() {
 	return null;
 }
 
+/**
+ * @param {object} view a view, or an object-shaped store subscriber
+ * @returns {ViewState}
+ */
 function viewState(view) {
 	let state = viewStates.get(view);
 	if (state) return state;
@@ -246,6 +442,10 @@ function viewState(view) {
 	return state;
 }
 
+/**
+ * @param {ViewState} state
+ * @returns {Chain}
+ */
 function chainForView(state) {
 	const active = currentChain();
 	if (active) return active;
@@ -253,10 +453,16 @@ function chainForView(state) {
 	return newChain();
 }
 
+/** @param {Chain} chain */
 function touch(chain) {
 	chain.version++;
 }
 
+/**
+ * @param {Chain} chain
+ * @param {RenderMark | null} [render]
+ * @returns {Scope}
+ */
 function pushScope(chain, render = null) {
 	chain.active++;
 	touch(chain);
@@ -265,6 +471,7 @@ function pushScope(chain, render = null) {
 	return scope;
 }
 
+/** @param {Scope} scope */
 function popScope(scope) {
 	const index = activeScopes.lastIndexOf(scope);
 	if (index !== -1) activeScopes.splice(index, 1);
@@ -273,6 +480,7 @@ function popScope(scope) {
 	maybeQuiesce(scope.chain);
 }
 
+/** @param {Chain} chain */
 function maybeQuiesce(chain) {
 	if (
 		chain.quiescent ||
@@ -303,6 +511,12 @@ function maybeQuiesce(chain) {
 	});
 }
 
+/**
+ * @param {ViewState} state
+ * @param {Chain} chain
+ * @param {object} view
+ * @returns {number} the new depth, or 0 when the view is blocked
+ */
 function claimExecution(state, chain, view) {
 	if (chain.blockedViews.has(state.id)) return 0;
 	const depth = (chain.executions.get(state.id) ?? 0) + 1;
@@ -332,6 +546,11 @@ function claimExecution(state, chain, view) {
 
 // ---- data / render ---------------------------------------------------------
 
+/**
+ * @param {PuzzleView} view
+ * @param {string} [cause]
+ * @returns {true | null}
+ */
 function prepareDataImpl(view, cause) {
 	const state = viewState(view);
 	const chain = chainForView(state);
@@ -359,6 +578,12 @@ function prepareDataImpl(view, cause) {
 	return true;
 }
 
+/**
+ * @param {PuzzleView} view
+ * @param {Record<string, any>} params
+ * @param {Record<string, any>} props
+ * @returns {any}
+ */
 function runDataImpl(view, params, props) {
 	const queue = preparedData.get(view);
 	const prepared = queue?.shift();
@@ -373,6 +598,7 @@ function runDataImpl(view, params, props) {
 	totals.dataRuns++;
 	const startedAt = now();
 	const scope = pushScope(chain);
+	/** @type {any} the author's data() result: a plain object or a promise of one */
 	let result;
 	try {
 		result = view.data(params, props);
@@ -388,6 +614,7 @@ function runDataImpl(view, params, props) {
 		chain.pendingAsync++;
 		touch(chain);
 		state.activeDataChain = chain;
+		/** @param {boolean} failed */
 		const finish = (failed) => {
 			recordData(prepared, startedAt, true, failed);
 			chain.pendingAsync = Math.max(0, chain.pendingAsync - 1);
@@ -406,6 +633,12 @@ function runDataImpl(view, params, props) {
 	return result;
 }
 
+/**
+ * @param {PreparedData} prepared
+ * @param {number} startedAt
+ * @param {boolean} async
+ * @param {boolean} failed
+ */
 function recordData(prepared, startedAt, async, failed) {
 	emit(
 		'data',
@@ -423,6 +656,10 @@ function recordData(prepared, startedAt, async, failed) {
 	prepared.state.pendingCauses.add(prepared.cause);
 }
 
+/**
+ * @param {PuzzleView} view
+ * @param {string} [cause]
+ */
 function renderScheduledImpl(view, cause) {
 	const state = viewState(view);
 	const chain = chainForView(state);
@@ -432,6 +669,10 @@ function renderScheduledImpl(view, cause) {
 	touch(chain);
 }
 
+/**
+ * @param {PuzzleView} view
+ * @param {string} cause
+ */
 function markCauseImpl(view, cause) {
 	const state = viewState(view);
 	const chain = chainForView(state);
@@ -453,6 +694,9 @@ function markCauseImpl(view, cause) {
  * it re-rendering its <Slot/>, the routed child never mounted, and the app broke
  * in front of the developer. A dev-only instrument must not change what the app
  * does, so the cross-frame case warns and nothing more.
+ *
+ * @param {PuzzleView} view
+ * @returns {boolean}
  */
 function canRenderImpl(view) {
 	const state = viewState(view);
@@ -467,6 +711,7 @@ function canRenderImpl(view) {
 	return false;
 }
 
+/** @param {PuzzleView} view */
 function renderPrepareImpl(view) {
 	const state = viewState(view);
 	const chain = chainForView(state);
@@ -475,6 +720,7 @@ function renderPrepareImpl(view) {
 	const causes = state.pendingCauses.size > 0 ? [...state.pendingCauses] : ['render'];
 	state.pendingCauses.clear();
 	touch(chain);
+	/** @type {RenderMark} */
 	const mark = {
 		view,
 		state,
@@ -498,18 +744,24 @@ function renderPrepareImpl(view) {
 	stack.push(mark);
 }
 
-/** The INNERMOST open render mark for a view — the span its callers are inside. */
+/**
+ * The INNERMOST open render mark for a view — the span its callers are inside.
+ * @param {PuzzleView} view
+ * @returns {RenderMark | null}
+ */
 function currentRender(view) {
 	const stack = activeRenders.get(view);
 	return stack?.[stack.length - 1] ?? null;
 }
 
+/** @param {PuzzleView} view */
 function renderTreeBuiltImpl(view) {
 	const mark = currentRender(view);
 	if (!mark || mark.ended) return;
 	mark.treeDuration = now() - mark.treeStartedAt;
 }
 
+/** @param {PuzzleView} view */
 function renderStartImpl(view) {
 	const mark = currentRender(view);
 	if (!mark || mark.ended) return;
@@ -523,6 +775,7 @@ function renderStartImpl(view) {
 	mark.patchStartedAt = now();
 }
 
+/** @param {PuzzleView} view */
 function renderEndImpl(view) {
 	const stack = activeRenders.get(view);
 	const mark = stack?.[stack.length - 1];
@@ -558,10 +811,12 @@ function renderEndImpl(view) {
 	popScope(mark.scope);
 }
 
+/** @param {PuzzleView} view */
 function renderCancelImpl(view) {
 	renderEndImpl(view);
 }
 
+/** @param {number} count */
 function mutationImpl(count) {
 	for (let i = activeScopes.length - 1; i >= 0; i--) {
 		const mark = activeScopes[i].render;
@@ -578,6 +833,10 @@ function mutationImpl(count) {
  *
  * `runawayUntil` is purely the re-warn throttle: one warning per rolling window
  * instead of one per frame.
+ *
+ * @param {RenderMark} mark
+ * @param {number} timestamp
+ * @param {boolean} wasted
  */
 function checkRunaway(mark, timestamp, wasted) {
 	const window = mark.state.renderWindow;
@@ -613,6 +872,10 @@ function checkRunaway(mark, timestamp, wasted) {
 
 // ---- secondary view metrics ------------------------------------------------
 
+/**
+ * @param {PuzzleView} view
+ * @param {boolean} bailedOut
+ */
 function componentPatchImpl(view, bailedOut) {
 	if (bailedOut) totals.componentPropBailouts++;
 	else totals.componentPropReruns++;
@@ -628,6 +891,7 @@ function componentPatchImpl(view, bailedOut) {
 	);
 }
 
+/** @param {PuzzleView} view */
 function slotRenderImpl(view) {
 	totals.slotRenders++;
 	markCauseImpl(view, 'slots');
@@ -635,6 +899,57 @@ function slotRenderImpl(view) {
 	emit('slot-render', { viewId: state.id, viewName: state.name }, view);
 }
 
+/**
+ * One list site's pass (D170). Totals are cumulative like every other counter
+ * here; the event carries the per-pass numbers so a sink can attribute a
+ * rebuild storm to the view that owns the loop.
+ *
+ * @param {PuzzleView} view
+ * @param {number} cached
+ * @param {number} built
+ * @param {number} conservative
+ */
+function listRowsImpl(view, cached, built, conservative) {
+	totals.listRowsCached += cached;
+	totals.listRowsBuilt += built;
+	totals.listSitesConservative += conservative;
+	const state = viewState(view);
+	emit(
+		'list-rows',
+		{
+			viewId: state.id,
+			viewName: state.name,
+			cached,
+			built,
+			conservative,
+		},
+		view
+	);
+}
+
+/**
+ * One render's share of a view's static cache (D170): how many `__c` sites this
+ * render ALLOCATED, and how many the instance already held when it began.
+ * Deliberately not phrased as "hits": the compiler emits a bare `(this.__c[n]
+ * ??= …)`, so the runtime never sees which sites a render actually visited —
+ * only which ones it had to build. Zero built on a steady-state render is the
+ * claim worth watching.
+ *
+ * @param {PuzzleView} view
+ * @param {number} built
+ * @param {number} held
+ */
+function staticCacheImpl(view, built, held) {
+	totals.staticSitesBuilt += built;
+	const state = viewState(view);
+	emit('static-cache', { viewId: state.id, viewName: state.name, built, held }, view);
+}
+
+/**
+ * @param {PuzzleView} view
+ * @param {string} key
+ * @param {boolean} hit
+ */
 function memoImpl(view, key, hit) {
 	if (hit) totals.memoHits++;
 	else totals.memoMisses++;
@@ -653,6 +968,10 @@ function memoImpl(view, key, hit) {
 
 // ---- Store metrics / propagation ------------------------------------------
 
+/**
+ * @param {Store} store
+ * @param {unknown} subscriber
+ */
 function storeNotifyImpl(store, subscriber) {
 	const state = subscriber && typeof subscriber === 'object' ? viewStates.get(subscriber) : null;
 	const chain =
@@ -666,6 +985,10 @@ function storeNotifyImpl(store, subscriber) {
 	touch(chain);
 }
 
+/**
+ * @param {Store} store
+ * @returns {StoreFlushMark}
+ */
 function storeFlushStartImpl(store) {
 	const chain =
 		(storeChains.get(store)?.quiescent ? null : storeChains.get(store)) ||
@@ -691,6 +1014,11 @@ function storeFlushStartImpl(store) {
 	return mark;
 }
 
+/**
+ * @param {Store} store
+ * @param {unknown[]} keys
+ * @param {Set<unknown>} notified
+ */
 function storeFlushNotificationsImpl(store, keys, notified) {
 	// Delivery belongs to the INNERMOST open flush — the one whose _deliverNotifications
 	// is running — so the counters land on the top of the stack.
@@ -701,6 +1029,7 @@ function storeFlushNotificationsImpl(store, keys, notified) {
 	mark.notified = notified.size;
 }
 
+/** @param {Store} store */
 function storeFlushEndImpl(store) {
 	const stack = activeStoreFlushes.get(store);
 	const mark = stack?.pop();
@@ -719,6 +1048,14 @@ function storeFlushEndImpl(store) {
 	maybeQuiesce(mark.chain);
 }
 
+/**
+ * @template T
+ * @param {unknown} subscriber
+ * @param {Promise<unknown>} pending
+ * @param {() => T} retry
+ * @param {string} kind
+ * @returns {Promise<T>}
+ */
 function trackingDeferredImpl(subscriber, pending, retry, kind) {
 	const state = subscriber && typeof subscriber === 'object' ? viewState(subscriber) : null;
 	const chain = state ? chainForView(state) : currentChain() || newChain();
@@ -742,7 +1079,7 @@ function trackingDeferredImpl(subscriber, pending, retry, kind) {
 				count: totals.asyncTrackingDeferrals,
 				totalDuration: totals.asyncTrackingDeferredMs,
 			},
-			state ? subscriber : null
+			state ? /** @type {object} */ (subscriber) : null
 		);
 		maybeQuiesce(chain);
 		return retry();

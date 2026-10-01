@@ -31,14 +31,14 @@
               <Tabs.Tab value="password">Password</Tabs.Tab>
               <Tabs.Tab value="team">Team</Tabs.Tab>
             </Tabs.List>
-            <Tabs.Panel value="account" class="pt-4 text-sm text-body">
+            <Tabs.Panel value="account" class="text-sm text-body">
               Update your display name and the address we send receipts to. The body is real
               markup — this paragraph, a form, or any other piece.
             </Tabs.Panel>
-            <Tabs.Panel value="password" class="pt-4 text-sm text-body">
+            <Tabs.Panel value="password" class="text-sm text-body">
               Change your password. We will sign every other session out when you do.
             </Tabs.Panel>
-            <Tabs.Panel value="team" class="pt-4 text-sm text-body">
+            <Tabs.Panel value="team" class="text-sm text-body">
               Invite teammates and choose what each of them can see.
             </Tabs.Panel>
           </Tabs>
@@ -79,23 +79,125 @@
           sequences diverge. If both come from a loop, drive both from the same array so the
           counts can never disagree mid-patch.
         </p>
+        <p class="mt-3 text-sm text-body">
+          The space between the strip and the panel belongs to the piece: the root is a flex column
+          with a
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">gap-4</code>,
+          in every variant. That default carries zero specificity, so any
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">gap-*</code>
+          you pass in the root's
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">class</code>
+          replaces it —
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">gap-0</code>
+          included.
+        </p>
       </section>
 
       <div class="mt-12 space-y-12">
-        <ExampleBox id="pills" title="Pill variant" code={ codePills }>
-          <div class="w-full max-w-2xl py-2">
-            <Tabs variant="pills" defaultValue="week">
-              <Tabs.List>
-                <Tabs.Tab value="day">Day</Tabs.Tab>
-                <Tabs.Tab value="week">Week</Tabs.Tab>
-                <Tabs.Tab value="month">Month</Tabs.Tab>
-              </Tabs.List>
-              <Tabs.Panel value="day" class="pt-4 text-sm text-body">1,284 sessions today.</Tabs.Panel>
-              <Tabs.Panel value="week" class="pt-4 text-sm text-body">9,120 sessions this week.</Tabs.Panel>
-              <Tabs.Panel value="month" class="pt-4 text-sm text-body">38,447 sessions this month.</Tabs.Panel>
-            </Tabs>
-          </div>
-        </ExampleBox>
+        <section id="styles" class="scroll-mt-20">
+          <h2 class="mb-2 text-xl font-semibold tracking-tight text-ink">Styles</h2>
+          <p class="mb-8 text-sm text-body">
+            Three looks, chosen with
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">variant</code>
+            on the root. The panel below the strip is unstyled in all three — it is yours to dress,
+            and a bordered box is one class string on each panel.
+          </p>
+
+          <h3 id="underline" class="mb-2 scroll-mt-20 text-base font-semibold text-ink">Underline</h3>
+          <p class="mb-4 text-sm text-body">The default: text tabs on a hairline, a brand underline under the active one.</p>
+          <ExampleBox code={ codeUnderline }>
+            <div class="w-full max-w-2xl py-2">
+              <Tabs defaultValue="overview">
+                <Tabs.List>
+                  <Tabs.Tab value="overview">Overview</Tabs.Tab>
+                  <Tabs.Tab value="activity">Activity</Tabs.Tab>
+                  <Tabs.Tab value="settings">Settings</Tabs.Tab>
+                </Tabs.List>
+                <Tabs.Panel value="overview">
+                  <h4 class="text-base font-semibold text-ink">Overview</h4>
+                  <p class="mt-1 text-sm text-body">Everything that happened on the project this week, at a glance.</p>
+                </Tabs.Panel>
+                <Tabs.Panel value="activity">
+                  <h4 class="text-base font-semibold text-ink">Activity</h4>
+                  <p class="mt-1 text-sm text-body">Every commit, comment and deploy, newest first.</p>
+                </Tabs.Panel>
+                <Tabs.Panel value="settings">
+                  <h4 class="text-base font-semibold text-ink">Settings</h4>
+                  <p class="mt-1 text-sm text-body">Rename the project, move it, or archive it.</p>
+                </Tabs.Panel>
+              </Tabs>
+            </div>
+          </ExampleBox>
+
+          <h3 id="pills" class="mb-2 mt-10 scroll-mt-20 text-base font-semibold text-ink">Segmented pills</h3>
+          <p class="mb-4 text-sm text-body">
+            A segmented control: the tabs sit in a sunken track and the active one is raised. Here
+            each panel is boxed — the same border, radius and padding on every panel.
+          </p>
+          <ExampleBox code={ codePills }>
+            <div class="w-full max-w-2xl py-2">
+              <Tabs variant="pills" defaultValue="week">
+                <Tabs.List>
+                  <Tabs.Tab value="day">Day</Tabs.Tab>
+                  <Tabs.Tab value="week">Week</Tabs.Tab>
+                  <Tabs.Tab value="month">Month</Tabs.Tab>
+                </Tabs.List>
+                <Tabs.Panel value="day" class={ box }>
+                  <p class="text-sm text-muted">Sessions today</p>
+                  <p class="mt-1 text-2xl font-semibold tracking-tight text-ink">1,284</p>
+                  <p class="mt-2 text-sm text-body">Up 4% on yesterday, most of it from the newsletter.</p>
+                </Tabs.Panel>
+                <Tabs.Panel value="week" class={ box }>
+                  <p class="text-sm text-muted">Sessions this week</p>
+                  <p class="mt-1 text-2xl font-semibold tracking-tight text-ink">9,120</p>
+                  <p class="mt-2 text-sm text-body">Steady. Tuesday was the busiest day by a wide margin.</p>
+                </Tabs.Panel>
+                <Tabs.Panel value="month" class={ box }>
+                  <p class="text-sm text-muted">Sessions this month</p>
+                  <p class="mt-1 text-2xl font-semibold tracking-tight text-ink">38,447</p>
+                  <p class="mt-2 text-sm text-body">A record month — the launch post is still bringing people in.</p>
+                </Tabs.Panel>
+              </Tabs>
+            </div>
+          </ExampleBox>
+
+          <h3 id="buttons" class="mb-2 mt-10 scroll-mt-20 text-base font-semibold text-ink">Buttons</h3>
+          <p class="mb-4 text-sm text-body">
+            Separate outline buttons with a gap between them; the active one is filled with the brand
+            colour. The row wraps instead of scrolling when it runs out of room.
+          </p>
+          <ExampleBox code={ codeButtons }>
+            <div class="w-full max-w-2xl py-2">
+              <Tabs variant="buttons" defaultValue="design">
+                <Tabs.List>
+                  <Tabs.Tab value="design">Design</Tabs.Tab>
+                  <Tabs.Tab value="develop">Develop</Tabs.Tab>
+                  <Tabs.Tab value="deploy">Deploy</Tabs.Tab>
+                </Tabs.List>
+                <Tabs.Panel value="design">
+                  <h4 class="text-lg font-semibold text-ink">Start with the markup</h4>
+                  <p class="mt-2 text-sm leading-relaxed text-body">
+                    Sketch the page in plain HTML first. Every piece is a copy in your own app, so
+                    you style it with the same utilities as everything around it.
+                  </p>
+                </Tabs.Panel>
+                <Tabs.Panel value="develop">
+                  <h4 class="text-lg font-semibold text-ink">Wire up the state</h4>
+                  <p class="mt-2 text-sm leading-relaxed text-body">
+                    The parent owns the value and the piece reports changes. Keyboard support and
+                    every aria attribute come from the web component.
+                  </p>
+                </Tabs.Panel>
+                <Tabs.Panel value="deploy">
+                  <h4 class="text-lg font-semibold text-ink">Ship it</h4>
+                  <p class="mt-2 text-sm leading-relaxed text-body">
+                    Build once and serve the output anywhere static files go.
+                  </p>
+                </Tabs.Panel>
+              </Tabs>
+            </div>
+          </ExampleBox>
+        </section>
 
         <ExampleBox id="disabled" title="Disabled tab" code={ codeDisabled }>
           <div class="w-full max-w-2xl py-2">
@@ -105,11 +207,11 @@
                 <Tabs.Tab value="billing" disabled>Billing</Tabs.Tab>
                 <Tabs.Tab value="advanced">Advanced</Tabs.Tab>
               </Tabs.List>
-              <Tabs.Panel value="general" class="pt-4 text-sm text-body">
+              <Tabs.Panel value="general" class="text-sm text-body">
                 Arrow keys skip Billing entirely — it is not clickable and not reachable.
               </Tabs.Panel>
-              <Tabs.Panel value="billing" class="pt-4 text-sm text-body">Unreachable.</Tabs.Panel>
-              <Tabs.Panel value="advanced" class="pt-4 text-sm text-body">
+              <Tabs.Panel value="billing" class="text-sm text-body">Unreachable.</Tabs.Panel>
+              <Tabs.Panel value="advanced" class="text-sm text-body">
                 Danger zone. Nothing here is reversible.
               </Tabs.Panel>
             </Tabs>
@@ -124,9 +226,9 @@
                 <Tabs.Tab value="two">Two</Tabs.Tab>
                 <Tabs.Tab value="three">Three</Tabs.Tab>
               </Tabs.List>
-              <Tabs.Panel value="one" class="pt-4 text-sm text-body">First panel.</Tabs.Panel>
-              <Tabs.Panel value="two" class="pt-4 text-sm text-body">Second panel.</Tabs.Panel>
-              <Tabs.Panel value="three" class="pt-4 text-sm text-body">Third panel.</Tabs.Panel>
+              <Tabs.Panel value="one" class="text-sm text-body">First panel.</Tabs.Panel>
+              <Tabs.Panel value="two" class="text-sm text-body">Second panel.</Tabs.Panel>
+              <Tabs.Panel value="three" class="text-sm text-body">Third panel.</Tabs.Panel>
             </Tabs>
             <div class="flex flex-wrap items-center gap-3">
               <Button variant="outline" size="sm" @press={ cycle }>Advance from outside</Button>
@@ -152,7 +254,7 @@
                 {/for}
               </Tabs.List>
               {#for doc in docs}
-                <Tabs.Panel key={ doc.id } value={ doc.id } class="pt-4 text-sm text-body">
+                <Tabs.Panel key={ doc.id } value={ doc.id } class="text-sm text-body">
                   { doc.body }
                 </Tabs.Panel>
               {/for}
@@ -171,21 +273,21 @@
                 <Tabs.Tab value="outer-a">Overview</Tabs.Tab>
                 <Tabs.Tab value="outer-b">Details</Tabs.Tab>
               </Tabs.List>
-              <Tabs.Panel value="outer-a" class="pt-4">
+              <Tabs.Panel value="outer-a">
                 <Tabs variant="pills" defaultValue="inner-b">
                   <Tabs.List>
                     <Tabs.Tab value="inner-a">Inner one</Tabs.Tab>
                     <Tabs.Tab value="inner-b">Inner two</Tabs.Tab>
                   </Tabs.List>
-                  <Tabs.Panel value="inner-a" class="pt-4 text-sm text-body">
+                  <Tabs.Panel value="inner-a" class="text-sm text-body">
                     The inner group's tabchange is filtered out of the outer root by target.
                   </Tabs.Panel>
-                  <Tabs.Panel value="inner-b" class="pt-4 text-sm text-body">
+                  <Tabs.Panel value="inner-b" class="text-sm text-body">
                     And the outer group's lookup is scoped, so it never sees these buttons.
                   </Tabs.Panel>
                 </Tabs>
               </Tabs.Panel>
-              <Tabs.Panel value="outer-b" class="pt-4 text-sm text-body">
+              <Tabs.Panel value="outer-b" class="text-sm text-body">
                 Nothing nested here.
               </Tabs.Panel>
             </Tabs>
@@ -241,9 +343,13 @@
             on the root and read by the members through a descendant selector, because Puzzle has
             no cross-component context to pass it down as a prop. One consequence: a nested Tabs
             with a <em>different</em> variant collides, since the match has equal specificity at
-            both depths. Give the inner members their own
+            both depths. The same specificity means a plain utility in a List’s or Tab’s
             <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">class</code>
-            to escape it.
+            loses on any property a pills or buttons rule sets — override it with the
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">!</code>
+            suffix or the same
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ variantPrefix }</code>
+            prefix.
           </p>
         </section>
       </div>
@@ -292,15 +398,59 @@ const codeHero = `// The panel body takes anything — paragraphs, forms, other 
     <Tabs.Tab value="password">Password</Tabs.Tab>
     <Tabs.Tab value="team">Team</Tabs.Tab>
   </Tabs.List>
-  <Tabs.Panel value="account" class="pt-4">…</Tabs.Panel>
-  <Tabs.Panel value="password" class="pt-4">…</Tabs.Panel>
-  <Tabs.Panel value="team" class="pt-4">…</Tabs.Panel>
+  <Tabs.Panel value="account">…</Tabs.Panel>
+  <Tabs.Panel value="password">…</Tabs.Panel>
+  <Tabs.Panel value="team">…</Tabs.Panel>
 </Tabs>`;
 
-const codePills = `// defaultValue seeds an UNCONTROLLED group: the component owns
-// the selection from there on and reports through @change.
+const codeUnderline = `// No variant needed — underline is the default. The gap under the
+// strip comes from the root, so the panel needs no top padding.
+<Tabs defaultValue="overview">
+  <Tabs.List>
+    <Tabs.Tab value="overview">Overview</Tabs.Tab>
+    <Tabs.Tab value="activity">Activity</Tabs.Tab>
+    <Tabs.Tab value="settings">Settings</Tabs.Tab>
+  </Tabs.List>
+  <Tabs.Panel value="overview">
+    <h4 class="text-base font-semibold text-ink">Overview</h4>
+    <p class="mt-1 text-sm text-body">…</p>
+  </Tabs.Panel>
+  …
+</Tabs>`;
+
+const codePills = `// defaultValue seeds an UNCONTROLLED group: the component owns the
+// selection from there on and reports through @change.
+//
+// The box is call-site chrome — one class string, repeated on each
+// panel. Panels must be DIRECT children of Tabs (upstream only finds
+// those), so there is no wrapper element to put it on instead.
 <Tabs variant="pills" defaultValue="week">
-  <Tabs.List>…</Tabs.List>
+  <Tabs.List>
+    <Tabs.Tab value="day">Day</Tabs.Tab>
+    <Tabs.Tab value="week">Week</Tabs.Tab>
+    <Tabs.Tab value="month">Month</Tabs.Tab>
+  </Tabs.List>
+  <Tabs.Panel value="day" class="rounded-xl border border-border bg-surface p-5">
+    …
+  </Tabs.Panel>
+  <Tabs.Panel value="week" class="rounded-xl border border-border bg-surface p-5">
+    …
+  </Tabs.Panel>
+  <Tabs.Panel value="month" class="rounded-xl border border-border bg-surface p-5">
+    …
+  </Tabs.Panel>
+</Tabs>`;
+
+const codeButtons = `<Tabs variant="buttons" defaultValue="design">
+  <Tabs.List>
+    <Tabs.Tab value="design">Design</Tabs.Tab>
+    <Tabs.Tab value="develop">Develop</Tabs.Tab>
+    <Tabs.Tab value="deploy">Deploy</Tabs.Tab>
+  </Tabs.List>
+  <Tabs.Panel value="design">
+    <h4 class="text-lg font-semibold text-ink">Start with the markup</h4>
+    <p class="mt-2 text-sm leading-relaxed text-body">…</p>
+  </Tabs.Panel>
   …
 </Tabs>`;
 
@@ -345,30 +495,33 @@ const codeNested = `// The root's lookup is ':scope > tab-list > tab-button', an
 const rootRows = [
   { name: 'value', desc: 'Controlled: the active tab’s value string. Edge-triggered, and re-applied when the tab set changes.' },
   { name: 'defaultValue', desc: 'Uncontrolled seed, applied once at mount — before the upgrade, so the first paint has no flash.' },
-  { name: 'variant', desc: "'underline' (default) | 'pills'. Stamped as data-variant for the members to read." },
-  { name: 'class', desc: 'Merged onto the tab-group host.' },
+  { name: 'variant', desc: "'underline' (default) | 'pills' | 'buttons'. Stamped as data-variant for the members to read." },
+  { name: 'class', desc: 'Merged onto the tab-group host, a flex column. A gap-* here replaces the default gap-4 between the list and the panel.' },
   { name: '@change(value)', desc: "Value-first, once per activation. A nested group’s bubbling tabchange is filtered out by target." },
 ];
 
 const listRows = [
-  { name: 'class', desc: 'Merged onto tab-list, after the chrome. Must be a direct child of Tabs, with the tabs as its direct children.' },
+  { name: 'class', desc: 'Merged onto tab-list, after the chrome. Must be a direct child of Tabs, with the tabs as its direct children. Under pills and buttons a plain utility loses on any property the variant sets — use the ! suffix (gap-4!) or the same [tab-group[data-variant=…]_&]: prefix.' },
 ];
 
 const tabRows = [
   { name: 'value', desc: 'Required. Carried as data-value; the root maps it to the index upstream works in.' },
   { name: 'disabled', desc: 'Not clickable and skipped by arrow-key roving. Driving `value` to a disabled tab is refused, with a console warning.' },
-  { name: 'class', desc: 'Merged onto tab-button, after the chrome. The selected look hangs off the component’s own aria-selected.' },
+  { name: 'class', desc: 'Merged onto tab-button, after the chrome. The selected look hangs off the component’s own aria-selected. Under pills and buttons a plain utility loses on any property the variant sets — use the ! suffix (px-6!) or the same [tab-group[data-variant=…]_&]: prefix.' },
 ];
 
 const panelRows = [
   { name: 'value', desc: 'Required, and must match the Tabs.Tab at the same position — upstream pairs them positionally.' },
-  { name: 'class', desc: 'Rendered on tab-panel. Never a display utility: it would outrank tab-panel[hidden] and leave every panel visible.' },
+  { name: 'class', desc: 'Rendered on tab-panel, which lays out as a block. Padding, border and background all work — that is how a boxed panel is made. Never a display utility: it would outrank tab-panel[hidden] and leave every panel visible.' },
 ];
 
 const SEED = [
   { id: 'brief', title: 'Brief', body: 'The one-page summary everyone actually reads.' },
   { id: 'specs', title: 'Specs', body: 'Numbers, tolerances and the things that break.' },
 ];
+
+// The boxed-panel chrome for the segmented example, shared by its three panels.
+const BOX = 'rounded-xl border border-border bg-surface p-5';
 
 let added = 0;
 
@@ -395,7 +548,11 @@ export default class TabsDoc extends PuzzleView {
       usageImport,
       usageMarkup,
       codeHero,
+      codeUnderline,
       codePills,
+      codeButtons,
+      box: BOX,
+      variantPrefix: '[tab-group[data-variant=…]_&]:',
       codeDisabled,
       codeControlled,
       codeDynamic,
@@ -407,7 +564,7 @@ export default class TabsDoc extends PuzzleView {
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
-        { label: 'Pill variant', href: '#pills' },
+        { label: 'Styles', href: '#styles' },
         { label: 'Disabled tab', href: '#disabled' },
         { label: 'Controlled value', href: '#controlled' },
         { label: 'Tabs from a loop', href: '#dynamic' },

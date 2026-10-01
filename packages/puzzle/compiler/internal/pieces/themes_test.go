@@ -1,0 +1,1158 @@
+package pieces
+
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+)
+
+// --- fixtures -----------------------------------------------------------------
+
+// multiThemeRegistry mirrors the shape puzzle-pieces ships: one default palette
+// (the entry whose file IS registry.theme) plus alternates, and the mode set.
+const multiThemeRegistry = `{
+  "version": 1,
+  "theme": "theme/pieces.css",
+  "modes": ["light", "medium", "dark"],
+  "themes": [
+    {"name":"default","file":"theme/pieces.css","label":"Default","description":"The default palette."},
+    {"name":"dim","file":"theme/dim.css","label":"Dim","description":"The low-contrast palette."},
+    {"name":"void","file":"theme/void.css","label":"Void","description":"The monochrome palette."}
+  ],
+  "pieces": [
+    {"name":"button","description":"A button","files":["Button.pzl"],"registryDependencies":[],"dependencies":[],"targetDir":"app/components/ui"}
+  ]
+}`
+
+const (
+	defaultThemeCSS = "/* puzzle-pieces design tokens */\n:root { --brand: #000; }\n"
+	dimThemeCSS     = "/* dim */\n:root { --brand: #123; }\n"
+	voidThemeCSS    = "/* void */\n:root { --brand: #fff; }\n"
+)
+
+// multiThemeFixture is the registry every theme test copies from.
+func multiThemeFixture(t *testing.T) string {
+	t.Helper()
+	return buildRegistry(t, multiThemeRegistry,
+		fixtureFile{"ui/button/Button.pzl", "x\n"},
+		fixtureFile{"theme/pieces.css", defaultThemeCSS},
+		fixtureFile{"theme/dim.css", dimThemeCSS},
+		fixtureFile{"theme/void.css", voidThemeCSS},
+	)
+}
+
+// themeOpts is the standard ThemeOptions for a fixture registry and app.
+func themeOpts(reg, app string, names ...string) ThemeOptions {
+	return ThemeOptions{AppRoot: app, Names: names, Fetcher: NewFetcher(reg)}
+}
+
+func renderThemes(res *ThemeResult) string {
+	var buf bytes.Buffer
+	RenderThemeSummary(&buf, plainPrinter(), res)
+	return buf.String()
+}
+
+func renderListing(l *ThemeListing) string {
+	var buf bytes.Buffer
+	RenderThemeListing(&buf, plainPrinter(), l)
+	return buf.String()
+}
+
+// writeStyles replaces the app's styles.css with the given body.
+func writeStyles(t *testing.T, app, css string) {
+	t.Helper()
+	write(t, app, "app/styles/styles.css", css)
+}
+
+// themeState returns the outcome recorded for one theme name.
+func themeState(t *testing.T, res *ThemeResult, name string) ThemeOutcome {
+	t.Helper()
+	for _, o := range res.Themes {
+		if o.Name == name {
+			return o
+		}
+	}
+	t.Fatalf("no outcome for theme %q in %+v", name, res.Themes)
+	return ThemeOutcome{}
+}
+
+// --- happy path ----------------------------------------------------------------
+
+func TestAddThemeCopiesAndLocksNamedTheme(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+
+	res, err := AddThemes(themeOpts(reg, app, "dim"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(app, "app", "styles", "themes", "dim.css"))
+	if err != nil {
+		t.Fatalf("dim.css not written: %v", err)
+	}
+	if string(got) != dimThemeCSS {
+		t.Errorf("dim.css = %q, want a verbatim copy", got)
+	}
+	if st := themeState(t, res, "dim").State; st != ThemeCopied {
+		t.Errorf("state = %q, want %q", st, ThemeCopied)
+	}
+
+	// Locked as a unit keyed by its REGISTRY path, same shape as the default.
+	lock := readLockFile(t, app)
+	entry, ok := lock.Pieces["theme/dim.css"]
+	if !ok {
+		t.Fatalf("lock should carry a theme/dim.css entry, got %+v", lock.Pieces)
+	}
+	if h := entry.Files["app/styles/themes/dim.css"]; h != sha(dimThemeCSS) {
+		t.Errorf("lock hash = %q, want %q", h, sha(dimThemeCSS))
+	}
+
+	out := renderThemes(res)
+	for _, want := range []string{
+		"app/styles/themes/dim.css",
+		"add `@import './themes/dim.css';` to app/styles/styles.css (after `@import './pieces.css';`)",
+		`switch with data-scheme="dim" on <html>; modes: data-theme="light|medium|dark"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("summary missing %q, got:\n%s", want, out)
+		}
+	}
+}
+
+func TestAddThemeCopiesTwoAndPrintsOneSwitchLine(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+
+	res, err := AddThemes(themeOpts(reg, app, "dim", "void"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"dim", "void"} {
+		if !fileExists(filepath.Join(app, "app", "styles", "themes", name+".css")) {
+			t.Errorf("%s.css not written", name)
+		}
+	}
+	out := renderThemes(res)
+	// The switch advisory is printed once for the run, not per palette.
+	if n := strings.Count(out, "switch with data-scheme="); n != 1 {
+		t.Errorf("switch advisory printed %d times, want 1:\n%s", n, out)
+	}
+	if !strings.Contains(out, `data-scheme="<name>"`) {
+		t.Errorf("multi-theme run should keep the name a placeholder, got:\n%s", out)
+	}
+	if !strings.Contains(out, "./themes/dim.css") || !strings.Contains(out, "./themes/void.css") {
+		t.Errorf("both import lines should be printed, got:\n%s", out)
+	}
+}
+
+// A repeated name is copied once, not twice.
+func TestAddThemeDedupesRepeatedName(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	res, err := AddThemes(themeOpts(reg, app, "dim", "dim"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Themes) != 1 {
+		t.Errorf("outcomes = %d, want 1: %+v", len(res.Themes), res.Themes)
+	}
+}
+
+// --- default-theme parity with `add piece` --------------------------------------
+
+func TestAddThemeDefaultMatchesAddPiece(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+
+	res, err := AddThemes(themeOpts(reg, app, "default"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	piecesCSS := filepath.Join(app, "app", "styles", "pieces.css")
+	got, err := os.ReadFile(piecesCSS)
+	if err != nil {
+		t.Fatalf("pieces.css not written: %v", err)
+	}
+	if string(got) != defaultThemeCSS {
+		t.Errorf("pieces.css = %q, want the default theme verbatim", got)
+	}
+	if rel := themeState(t, res, "default").Rel; rel != "app/styles/pieces.css" {
+		t.Errorf("default destination = %q, want app/styles/pieces.css", rel)
+	}
+	if lock := readLockFile(t, app); lock.Pieces["theme/pieces.css"].Files["app/styles/pieces.css"] != sha(defaultThemeCSS) {
+		t.Errorf("default theme lock entry missing/wrong: %+v", lock.Pieces)
+	}
+
+	// `add piece` afterwards must be a no-op on the same file — the two commands
+	// converge on one pieces.css and one lock key.
+	if _, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(piecesCSS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != defaultThemeCSS {
+		t.Errorf("add piece rewrote pieces.css: %q", after)
+	}
+	lock := readLockFile(t, app)
+	if _, ok := lock.Pieces["theme/pieces.css"]; !ok {
+		t.Errorf("lock lost the theme entry: %+v", lock.Pieces)
+	}
+	if len(lock.Pieces) != 2 { // the theme and "button"
+		t.Errorf("lock keys = %+v, want exactly the theme and the piece", lock.Pieces)
+	}
+}
+
+// The other direction: `add piece` first, then `add theme default` finds it
+// already installed and only repeats the import advisory.
+func TestAddThemeDefaultAfterAddPieceIsUpToDate(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	if _, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := AddThemes(themeOpts(reg, app, "default"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "default").State; st != ThemeUpToDate {
+		t.Errorf("state = %q, want %q", st, ThemeUpToDate)
+	}
+	if out := renderThemes(res); !strings.Contains(out, "@import './pieces.css';") {
+		t.Errorf("the import advisory should still be printed, got:\n%s", out)
+	}
+}
+
+// styles.css carrying the tokens (the hand-merge marker) means there is nothing
+// to do for the default palette at all.
+func TestAddThemeDefaultQuietWhenMarkerPresent(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, true) // styles.css carries the marker
+	res, err := AddThemes(themeOpts(reg, app, "default"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "default").State; st != ThemeWired {
+		t.Errorf("state = %q, want %q", st, ThemeWired)
+	}
+	if fileExists(filepath.Join(app, "app", "styles", "pieces.css")) {
+		t.Error("a wired app should not get a pieces.css copy")
+	}
+	if len(res.NextSteps) != 0 {
+		t.Errorf("nothing to wire, got next steps %+v", res.NextSteps)
+	}
+}
+
+// --- the default palette behind its own `@import './pieces.css'` -------------------
+//
+// The standard wiring — the line the advisory prints — says the app USES
+// pieces.css, not that styles.css carries the tokens. `add theme default` must
+// then treat the file like any other palette: refresh an unmodified older copy,
+// refuse a modified one unless --overwrite, and re-copy a deleted one. Only the
+// hand-merge marker and the package import mean "wired". (`add piece` still never
+// rewrites pieces.css — TestAddThemeQuietWhenStylesImportsPiecesCss.)
+
+const piecesImportStyles = "@import \"tailwindcss\";\n@import './pieces.css';\n"
+
+func TestAddThemeDefaultImportedRefreshesUnmodifiedOlderCopy(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	if _, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)}); err != nil {
+		t.Fatal(err)
+	}
+	writeStyles(t, app, piecesImportStyles)
+	// The registry moved on (0.8 added tokens and a mode to the default palette).
+	const newer = "/* puzzle-pieces design tokens v2 */\n:root { --brand: #111; --rail: #222; }\n"
+	write(t, reg, "theme/pieces.css", newer)
+
+	res, err := AddThemes(themeOpts(reg, app, "default"))
+	if err != nil {
+		t.Fatalf("an unmodified older pieces.css must not be refused: %v", err)
+	}
+	if st := themeState(t, res, "default").State; st != ThemeUpdated {
+		t.Errorf("state = %q, want %q", st, ThemeUpdated)
+	}
+	dest := filepath.Join(app, "app", "styles", "pieces.css")
+	if got, _ := os.ReadFile(dest); string(got) != newer {
+		t.Errorf("pieces.css was not refreshed, got %q", got)
+	}
+	if got := readLockFile(t, app).Pieces["theme/pieces.css"].Files["app/styles/pieces.css"]; got != sha(newer) {
+		t.Errorf("pieces.lock still records %q", got)
+	}
+	// Already imported: no import line to print.
+	if len(res.NextSteps) != 0 {
+		t.Errorf("a refresh needs no next steps; got %+v", res.NextSteps)
+	}
+}
+
+func TestAddThemeDefaultImportedModifiedRefusesThenOverwrites(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	if _, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)}); err != nil {
+		t.Fatal(err)
+	}
+	writeStyles(t, app, piecesImportStyles)
+	const mine = "/* puzzle-pieces design tokens, my edit */\n:root { --brand: #f00; }\n"
+	dest := filepath.Join(app, "app", "styles", "pieces.css")
+	write(t, app, "app/styles/pieces.css", mine)
+
+	_, err := AddThemes(themeOpts(reg, app, "default"))
+	if err == nil {
+		t.Fatal("expected a refusal for a locally modified, imported pieces.css")
+	}
+	if !strings.Contains(err.Error(), "app/styles/pieces.css") || !strings.Contains(err.Error(), "--overwrite") {
+		t.Errorf("refusal should name the file and --overwrite, got: %v", err)
+	}
+	if got, _ := os.ReadFile(dest); string(got) != mine {
+		t.Errorf("the refused run must not touch pieces.css, got %q", got)
+	}
+
+	opts := themeOpts(reg, app, "default")
+	opts.Overwrite = true
+	res, err := AddThemes(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "default").State; st != ThemeCopied {
+		t.Errorf("state = %q, want %q", st, ThemeCopied)
+	}
+	if got, _ := os.ReadFile(dest); string(got) != defaultThemeCSS {
+		t.Errorf("--overwrite should restore the registry copy, got %q", got)
+	}
+}
+
+func TestAddThemeDefaultImportedButDeletedIsRecopied(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	writeStyles(t, app, piecesImportStyles)
+
+	res, err := AddThemes(themeOpts(reg, app, "default"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "default").State; st != ThemeCopied {
+		t.Errorf("state = %q, want %q", st, ThemeCopied)
+	}
+	if got, _ := os.ReadFile(filepath.Join(app, "app", "styles", "pieces.css")); string(got) != defaultThemeCSS {
+		t.Errorf("pieces.css should be copied behind the dangling import, got %q", got)
+	}
+	if out := renderThemes(res); strings.Contains(out, "add `@import './pieces.css';`") {
+		t.Errorf("the import already exists, so it must not be advised again:\n%s", out)
+	}
+}
+
+// A MENTION of pieces.css is not an import: a comment, or an import commented
+// out, leaves the default palette unwired, so `add theme default` copies it and
+// prints the import line — what it does for an app that never mentions it.
+func TestAddThemeDefaultCommentMentionIsNotWired(t *testing.T) {
+	for _, tc := range []struct{ name, styles string }{
+		{"commented-out import", "@import \"tailwindcss\";\n/* @import './pieces.css'; */\n"},
+		{"prose comment", "@import \"tailwindcss\";\n/* tokens used to live in pieces.css */\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := multiThemeFixture(t)
+			app := newApp(t, false)
+			writeStyles(t, app, tc.styles)
+
+			res, err := AddThemes(themeOpts(reg, app, "default"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if st := themeState(t, res, "default").State; st != ThemeCopied {
+				t.Errorf("state = %q, want %q", st, ThemeCopied)
+			}
+			if !fileExists(filepath.Join(app, "app", "styles", "pieces.css")) {
+				t.Error("pieces.css should have been copied")
+			}
+			if out := renderThemes(res); !strings.Contains(out, "add `@import './pieces.css';`") {
+				t.Errorf("an unwired palette must print the import line:\n%s", out)
+			}
+		})
+	}
+}
+
+// Only a live @import statement whose target is ./pieces.css counts as wiring.
+func TestPiecesCssImported(t *testing.T) {
+	for _, tc := range []struct {
+		css  string
+		want bool
+	}{
+		{`@import './pieces.css';`, true},
+		{`@import "./pieces.css" layer(tokens);`, true},
+		{`@import url(./pieces.css);`, true},
+		{`@import url("./pieces.css");`, true},
+		{`@import 'pieces.css';`, true},
+		{`/* @import './pieces.css'; */`, false},
+		{`/* the tokens live in pieces.css */`, false},
+		{`@import './themes/pieces.css';`, false},
+		{`@import './pieces.css.bak';`, false},
+		{`.a { content: "./pieces.css"; }`, false},
+	} {
+		if got := piecesCssImported(tc.css); got != tc.want {
+			t.Errorf("piecesCssImported(%q) = %v, want %v", tc.css, got, tc.want)
+		}
+	}
+}
+
+// The hand-merge marker still means the tokens live in styles.css itself, even
+// beside a pieces.css import.
+func TestAddThemeDefaultMarkerBesideImportIsWired(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	writeStyles(t, app, piecesImportStyles+"/* puzzle-pieces design tokens */\n")
+	write(t, app, "app/styles/pieces.css", "/* whatever the app keeps */\n")
+
+	res, err := AddThemes(themeOpts(reg, app, "default"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "default").State; st != ThemeWired {
+		t.Errorf("state = %q, want %q", st, ThemeWired)
+	}
+	if got, _ := os.ReadFile(filepath.Join(app, "app", "styles", "pieces.css")); string(got) != "/* whatever the app keeps */\n" {
+		t.Errorf("a wired app's pieces.css must be left alone, got %q", got)
+	}
+}
+
+// --- unknown names --------------------------------------------------------------
+
+func TestAddThemeUnknownNameWritesNothing(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+
+	// "dim" is valid and comes FIRST: the run must still write nothing.
+	_, err := AddThemes(themeOpts(reg, app, "dim", "nope"))
+	if err == nil {
+		t.Fatal("expected an error for an unknown theme")
+	}
+	for _, want := range []string{`unknown theme "nope"`, "default, dim, void"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q should contain %q", err, want)
+		}
+	}
+	if fileExists(filepath.Join(app, "app", "styles", "themes", "dim.css")) {
+		t.Error("an unknown name must leave the valid ones unwritten")
+	}
+	if fileExists(filepath.Join(app, LockFileName)) {
+		t.Error("an unknown name must not write pieces.lock")
+	}
+}
+
+func TestAddThemeUnknownNameSuggestsDidYouMean(t *testing.T) {
+	reg := multiThemeFixture(t)
+	_, err := AddThemes(themeOpts(reg, newApp(t, false), "dimm"))
+	if err == nil || !strings.Contains(err.Error(), `did you mean "dim"?`) {
+		t.Fatalf("expected a did-you-mean, got: %v", err)
+	}
+}
+
+// Names are exact and case-sensitive — "Dim" is not "dim".
+func TestAddThemeNamesAreCaseSensitive(t *testing.T) {
+	reg := multiThemeFixture(t)
+	_, err := AddThemes(themeOpts(reg, newApp(t, false), "Dim"))
+	if err == nil || !strings.Contains(err.Error(), `unknown theme "Dim"`) {
+		t.Fatalf("expected an unknown-theme error, got: %v", err)
+	}
+}
+
+// --- already installed ------------------------------------------------------------
+
+func TestAddThemeUpToDateSkipsSecondRun(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	if _, err := AddThemes(themeOpts(reg, app, "dim")); err != nil {
+		t.Fatal(err)
+	}
+	res, err := AddThemes(themeOpts(reg, app, "dim"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "dim").State; st != ThemeUpToDate {
+		t.Errorf("state = %q, want %q", st, ThemeUpToDate)
+	}
+	if len(res.NextSteps) != 0 {
+		t.Errorf("nothing copied, so no next steps; got %+v", res.NextSteps)
+	}
+}
+
+func TestAddThemeDivergedRefusesThenOverwrites(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	if _, err := AddThemes(themeOpts(reg, app, "dim")); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(app, "app", "styles", "themes", "dim.css")
+	if err := os.WriteFile(dest, []byte("/* my edit */\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := AddThemes(themeOpts(reg, app, "dim"))
+	if err == nil {
+		t.Fatal("expected a refusal for a locally modified theme")
+	}
+	if !strings.Contains(err.Error(), "--overwrite") || !strings.Contains(err.Error(), "app/styles/themes/dim.css") {
+		t.Errorf("refusal should name the file and --overwrite, got: %v", err)
+	}
+	if got, _ := os.ReadFile(dest); string(got) != "/* my edit */\n" {
+		t.Errorf("the refused run must not touch the file, got %q", got)
+	}
+
+	opts := themeOpts(reg, app, "dim")
+	opts.Overwrite = true
+	if _, err := AddThemes(opts); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(dest); string(got) != dimThemeCSS {
+		t.Errorf("--overwrite should restore the registry copy, got %q", got)
+	}
+}
+
+// An unmodified copy of an OLDER registry palette (it still matches the hash
+// pieces.lock recorded, but not the file the registry serves now) is not "up to
+// date": nothing local would be lost, so it is refreshed and re-locked.
+func TestAddThemeRefreshesUnmodifiedOlderCopy(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	if _, err := AddThemes(themeOpts(reg, app, "dim")); err != nil {
+		t.Fatal(err)
+	}
+	const newer = "/* dim v2 */\n:root { --brand: #456; }\n"
+	write(t, reg, "theme/dim.css", newer)
+
+	res, err := AddThemes(themeOpts(reg, app, "dim"))
+	if err != nil {
+		t.Fatalf("an unmodified older copy must not be refused: %v", err)
+	}
+	if st := themeState(t, res, "dim").State; st != ThemeUpdated {
+		t.Errorf("state = %q, want %q", st, ThemeUpdated)
+	}
+	dest := filepath.Join(app, "app", "styles", "themes", "dim.css")
+	if got, _ := os.ReadFile(dest); string(got) != newer {
+		t.Errorf("the older copy was not refreshed, got %q", got)
+	}
+	lock, err := readLock(filepath.Join(app, LockFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := lock.Pieces["theme/dim.css"].Files["app/styles/themes/dim.css"]; got != hashBytes([]byte(newer)) {
+		t.Errorf("pieces.lock still records the old hash %q", got)
+	}
+	// Already wired, so no import line or switch advisory is repeated.
+	if len(res.NextSteps) != 0 {
+		t.Errorf("a refresh needs no next steps; got %+v", res.NextSteps)
+	}
+	if out := renderThemes(res); !strings.Contains(out, "updated · app/styles/themes/dim.css") {
+		t.Errorf("summary should report the refresh:\n%s", out)
+	}
+
+	// A second run is now genuinely up to date.
+	res, err = AddThemes(themeOpts(reg, app, "dim"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "dim").State; st != ThemeUpToDate {
+		t.Errorf("state = %q, want %q", st, ThemeUpToDate)
+	}
+}
+
+// One refused palette refuses the whole run — the other is not written either.
+func TestAddThemeRefusalIsAllOrNothing(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	write(t, app, "app/styles/themes/dim.css", "/* mine */\n")
+
+	if _, err := AddThemes(themeOpts(reg, app, "dim", "void")); err == nil {
+		t.Fatal("expected a refusal")
+	}
+	if fileExists(filepath.Join(app, "app", "styles", "themes", "void.css")) {
+		t.Error("a refusal must leave the other palettes unwritten")
+	}
+}
+
+func TestAddThemeSymlinkedDestinationRefused(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation needs elevation on Windows")
+	}
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	target := filepath.Join(app, "shared-dim.css")
+	if err := os.WriteFile(target, []byte("/* linked */\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(app, "app", "styles", "themes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(app, "app", "styles", "themes", "dim.css")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := AddThemes(themeOpts(reg, app, "dim"))
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("expected a symlink refusal, got: %v", err)
+	}
+	if got, _ := os.ReadFile(target); string(got) != "/* linked */\n" {
+		t.Errorf("the link target must be untouched, got %q", got)
+	}
+
+	// --overwrite is explicit intent: write THROUGH the link, never replace it.
+	opts := themeOpts(reg, app, "dim")
+	opts.Overwrite = true
+	if _, err := AddThemes(opts); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Error("--overwrite replaced the symlink instead of writing through it")
+	}
+	if got, _ := os.ReadFile(target); string(got) != dimThemeCSS {
+		t.Errorf("link target = %q, want the registry copy", got)
+	}
+}
+
+// --- wired via the package import ---------------------------------------------------
+
+func TestAddThemeSkipsWhenImportedFromPackage(t *testing.T) {
+	for _, tc := range []struct{ name, quote string }{
+		{"double quotes", `"`},
+		{"single quotes", `'`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := multiThemeFixture(t)
+			app := newApp(t, false)
+			writeStyles(t, app, "@import \"tailwindcss\";\n@import "+
+				tc.quote+"@magic-spells/puzzle-pieces/themes/dim.css"+tc.quote+";\n")
+
+			res, err := AddThemes(themeOpts(reg, app, "dim"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if st := themeState(t, res, "dim").State; st != ThemeWiredViaPackage {
+				t.Errorf("state = %q, want %q", st, ThemeWiredViaPackage)
+			}
+			if fileExists(filepath.Join(app, "app", "styles", "themes", "dim.css")) {
+				t.Error("a package-imported palette must not be copied")
+			}
+			if len(res.NextSteps) != 0 {
+				t.Errorf("nothing to wire, got %+v", res.NextSteps)
+			}
+		})
+	}
+}
+
+// The same rule for the DEFAULT palette, through `add piece`: an app importing
+// themes/default.css from the package must stop getting a pieces.css copy.
+func TestAddPieceSkipsThemeWhenDefaultImportedFromPackage(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	writeStyles(t, app, "@import \"tailwindcss\";\n@import '@magic-spells/puzzle-pieces/themes/default.css';\n")
+
+	res, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fileExists(filepath.Join(app, "app", "styles", "pieces.css")) {
+		t.Error("add piece should not copy pieces.css beside the package import")
+	}
+	if res.Theme != "" {
+		t.Errorf("no advisory expected, got %q", res.Theme)
+	}
+}
+
+func TestAddThemeDefaultReportsPackageWiring(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	writeStyles(t, app, "@import \"tailwindcss\";\n@import \"@magic-spells/puzzle-pieces/themes/default.css\";\n")
+
+	res, err := AddThemes(themeOpts(reg, app, "default"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "default").State; st != ThemeWiredViaPackage {
+		t.Errorf("state = %q, want %q", st, ThemeWiredViaPackage)
+	}
+}
+
+// --- manifest validation -------------------------------------------------------------
+
+func TestAddThemeRejectsUnsafeThemeFile(t *testing.T) {
+	for _, bad := range []string{"../../.env", "/etc/passwd", "theme/../../x.css", `theme\dim.css`} {
+		t.Run(bad, func(t *testing.T) {
+			regJSON := `{"version":1,"theme":"theme/pieces.css","themes":[` +
+				`{"name":"dim","file":"` + strings.ReplaceAll(bad, `\`, `\\`) + `","label":"Dim","description":""}],"pieces":[]}`
+			reg := buildRegistry(t, regJSON, fixtureFile{"theme/pieces.css", defaultThemeCSS})
+			app := newApp(t, false)
+			_, err := AddThemes(themeOpts(reg, app, "dim"))
+			if err == nil || !strings.Contains(err.Error(), "themes[].file") {
+				t.Fatalf("expected a themes[].file rejection, got: %v", err)
+			}
+			if fileExists(filepath.Join(app, LockFileName)) {
+				t.Error("a rejected manifest must write nothing")
+			}
+		})
+	}
+}
+
+// A name is one path SEGMENT — it can never carry a directory.
+func TestAddThemeRejectsUnsafeThemeName(t *testing.T) {
+	for _, bad := range []string{"../evil", "sub/dim", ""} {
+		t.Run(bad, func(t *testing.T) {
+			regJSON := `{"version":1,"theme":"theme/pieces.css","themes":[` +
+				`{"name":"` + bad + `","file":"theme/dim.css","label":"","description":""}],"pieces":[]}`
+			reg := buildRegistry(t, regJSON, fixtureFile{"theme/dim.css", dimThemeCSS})
+			if _, err := AddThemes(themeOpts(reg, newApp(t, false), "dim")); err == nil ||
+				!strings.Contains(err.Error(), "invalid theme name") {
+				t.Fatalf("expected a theme-name rejection, got: %v", err)
+			}
+		})
+	}
+}
+
+// A registry predating the `themes` array still offers its single default one.
+func TestAddThemeFallsBackToRegistryThemeWhenNoThemesArray(t *testing.T) {
+	reg := buildRegistry(t, singlePieceRegistry,
+		fixtureFile{"theme/pieces.css", defaultThemeCSS},
+	)
+	app := newApp(t, false)
+	res, err := AddThemes(themeOpts(reg, app, "default"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "default").State; st != ThemeCopied {
+		t.Errorf("state = %q, want %q", st, ThemeCopied)
+	}
+	if !fileExists(filepath.Join(app, "app", "styles", "pieces.css")) {
+		t.Error("the synthesized default should still copy pieces.css")
+	}
+}
+
+// --- listing -----------------------------------------------------------------------
+
+func TestListThemesReportsStatePerTheme(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	// dim installed, void imported from the package, default untouched.
+	write(t, app, "app/styles/themes/dim.css", dimThemeCSS)
+	writeStyles(t, app, "@import \"tailwindcss\";\n@import \"@magic-spells/puzzle-pieces/themes/void.css\";\n")
+
+	listing, err := ListThemes(themeOpts(reg, app))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]ThemeState{
+		"default": ThemeAbsent,
+		"dim":     ThemeInstalled,
+		"void":    ThemeWiredViaPackage,
+	}
+	if len(listing.Themes) != len(want) {
+		t.Fatalf("listed %d themes, want %d", len(listing.Themes), len(want))
+	}
+	for _, o := range listing.Themes {
+		if o.State != want[o.Name] {
+			t.Errorf("%s state = %q, want %q", o.Name, o.State, want[o.Name])
+		}
+	}
+
+	got := renderListing(listing)
+	expected := "puzzle add theme · " + reg + `
+  default Default · —
+          The default palette.
+  dim     Dim · installed
+          The low-contrast palette.
+  void    Void · wired via package
+          The monochrome palette.
+
+  Install · puzzle add theme <name…>
+  Modes · data-theme="light|medium|dark"
+`
+	if got != expected {
+		t.Errorf("listing output:\n%s\nwant:\n%s", got, expected)
+	}
+}
+
+// The default palette hand-merged into styles.css reads as wired, not absent.
+func TestListThemesReportsHandMergedDefaultAsWired(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, true) // styles.css carries the token marker
+	listing, err := ListThemes(themeOpts(reg, app))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range listing.Themes {
+		if o.Name == "default" && o.State != ThemeWired {
+			t.Errorf("default state = %q, want %q", o.State, ThemeWired)
+		}
+	}
+}
+
+// A registry omitting `modes` still prints the three modes the themes implement.
+func TestListThemesFallsBackToDefaultModes(t *testing.T) {
+	reg := buildRegistry(t, singlePieceRegistry, fixtureFile{"theme/pieces.css", defaultThemeCSS})
+	listing, err := ListThemes(themeOpts(reg, newApp(t, false)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(listing.Modes, "|") != "light|medium|dark" {
+		t.Errorf("modes = %v, want the built-in three", listing.Modes)
+	}
+}
+
+// --- the default palette obeys the same already-installed rules -------------------
+
+// planTheme state (c) — pieces.css present but unwired — used to report "up to
+// date" without ever hashing it, so a locally edited pieces.css read as current
+// and --overwrite did nothing. `add theme default` now behaves like `add theme
+// dim`: refuse the modified copy, replace it under --overwrite.
+func TestAddThemeDefaultModifiedRefusesThenOverwrites(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	write(t, app, "app/styles/pieces.css", "/* my tokens */\n")
+
+	_, err := AddThemes(themeOpts(reg, app, "default"))
+	if err == nil {
+		t.Fatal("expected a refusal for a modified pieces.css")
+	}
+	if !strings.Contains(err.Error(), "app/styles/pieces.css") || !strings.Contains(err.Error(), "--overwrite") {
+		t.Errorf("refusal should name the file and --overwrite, got: %v", err)
+	}
+	dest := filepath.Join(app, "app", "styles", "pieces.css")
+	if got, _ := os.ReadFile(dest); string(got) != "/* my tokens */\n" {
+		t.Errorf("the refused run must not touch pieces.css, got %q", got)
+	}
+
+	opts := themeOpts(reg, app, "default")
+	opts.Overwrite = true
+	res, err := AddThemes(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(dest); string(got) != defaultThemeCSS {
+		t.Errorf("--overwrite should restore the registry copy, got %q", got)
+	}
+	if st := themeState(t, res, "default").State; st != ThemeCopied {
+		t.Errorf("state = %q, want %q", st, ThemeCopied)
+	}
+	// The replacement is locked like any other copy.
+	if lock := readLockFile(t, app); lock.Pieces["theme/pieces.css"].Files["app/styles/pieces.css"] != sha(defaultThemeCSS) {
+		t.Errorf("lock not updated after --overwrite: %+v", lock.Pieces)
+	}
+}
+
+// A hand-copied pieces.css that happens to be byte-identical is up to date even
+// with no lock entry to vouch for it — there is nothing to write and nothing of
+// the user's to lose.
+func TestAddThemeDefaultIdenticalWithoutLockIsUpToDate(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	write(t, app, "app/styles/pieces.css", defaultThemeCSS)
+
+	res, err := AddThemes(themeOpts(reg, app, "default"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "default").State; st != ThemeUpToDate {
+		t.Errorf("state = %q, want %q", st, ThemeUpToDate)
+	}
+	if fileExists(filepath.Join(app, LockFileName)) {
+		t.Error("nothing was copied, so nothing should have been locked")
+	}
+	if out := renderThemes(res); !strings.Contains(out, "@import './pieces.css';") {
+		t.Errorf("an unwired pieces.css should still be advised, got:\n%s", out)
+	}
+}
+
+// The same for a named palette: identical bytes, no lock entry, no refusal.
+func TestAddThemeNamedIdenticalWithoutLockIsUpToDate(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	write(t, app, "app/styles/themes/dim.css", dimThemeCSS)
+
+	res, err := AddThemes(themeOpts(reg, app, "dim"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "dim").State; st != ThemeUpToDate {
+		t.Errorf("state = %q, want %q", st, ThemeUpToDate)
+	}
+}
+
+// --- a commented-out import is not wiring -------------------------------------------
+
+func TestAddThemeCommentedOutImportIsNotWired(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	writeStyles(t, app, "@import \"tailwindcss\";\n"+
+		"/* @import \"@magic-spells/puzzle-pieces/themes/dim.css\"; */\n")
+
+	res, err := AddThemes(themeOpts(reg, app, "dim"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := themeState(t, res, "dim").State; st != ThemeCopied {
+		t.Errorf("state = %q, want %q — a commented-out import is turned off", st, ThemeCopied)
+	}
+	if !fileExists(filepath.Join(app, "app", "styles", "themes", "dim.css")) {
+		t.Error("the palette should have been copied")
+	}
+}
+
+// The same for the DEFAULT palette, through `add piece`: a commented-out package
+// import must not suppress the pieces.css copy.
+func TestAddPieceCommentedOutDefaultImportStillCopiesTheme(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	writeStyles(t, app, "@import \"tailwindcss\";\n"+
+		"/* @import '@magic-spells/puzzle-pieces/themes/default.css'; */\n")
+
+	res, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fileExists(filepath.Join(app, "app", "styles", "pieces.css")) {
+		t.Error("a commented-out import should not suppress the pieces.css copy")
+	}
+	if res.Theme == "" {
+		t.Error("expected the import advisory")
+	}
+}
+
+// A mention outside an @import statement is not wiring either.
+func TestThemeImportedFromPackageRequiresAnImportStatement(t *testing.T) {
+	spec := "@magic-spells/puzzle-pieces/themes/dim.css"
+	for _, tc := range []struct {
+		name  string
+		css   string
+		wired bool
+	}{
+		{"double quotes", `@import "` + spec + `";`, true},
+		{"single quotes", `@import '` + spec + `';`, true},
+		{"layered import", `@import "` + spec + `" layer(theme);`, true},
+		{"block comment", `/* @import "` + spec + `"; */`, false},
+		{"multi-line comment", "/*\n@import \"" + spec + "\";\n*/", false},
+		{"bare mention", `.a { content: "` + spec + `"; }`, false},
+		{"unterminated comment", `/* @import "` + spec + `";`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := themeImportedFromPackage(tc.css, "dim"); got != tc.wired {
+				t.Errorf("themeImportedFromPackage(%q) = %v, want %v", tc.css, got, tc.wired)
+			}
+		})
+	}
+}
+
+// --- add piece: stale-theme hint and palette next step -----------------------------
+
+// olderThemeApp is an app wired to a pieces.css from an EARLIER registry release:
+// styles.css imports it, and pieces.lock still holds lockedCSS's hash. The
+// registry's current pieces.css has since grown tokens that copy lacks.
+func olderThemeApp(t *testing.T, piecesCSS, lockedCSS string) string {
+	t.Helper()
+	app := newApp(t, false)
+	writeStyles(t, app, "@import \"tailwindcss\";\n@import './pieces.css';\n")
+	write(t, app, "app/styles/pieces.css", piecesCSS)
+	lock := &Lock{Version: 1, Registry: "old", Pieces: map[string]LockEntry{
+		"theme/pieces.css": {Files: map[string]string{"app/styles/pieces.css": sha(lockedCSS)}},
+	}}
+	if err := writeLock(filepath.Join(app, LockFileName), lock); err != nil {
+		t.Fatal(err)
+	}
+	return app
+}
+
+const olderDefaultThemeCSS = "/* puzzle-pieces design tokens */\n:root { --old: 1; }\n"
+
+func TestAddPieceHintsOlderRegistryTheme(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := olderThemeApp(t, olderDefaultThemeCSS, olderDefaultThemeCSS)
+	res, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.ThemeHint, "older registry theme") || !strings.Contains(res.ThemeHint, "puzzle add theme default") {
+		t.Errorf("expected the stale-theme hint, got %q", res.ThemeHint)
+	}
+	if strings.Contains(res.ThemeHint, "--overwrite") {
+		t.Errorf("an unmodified older copy refreshes without --overwrite, got %q", res.ThemeHint)
+	}
+	if !strings.Contains(render(res), res.ThemeHint) {
+		t.Errorf("summary should print the hint, got:\n%s", render(res))
+	}
+	if got, _ := os.ReadFile(filepath.Join(app, "app", "styles", "pieces.css")); string(got) != olderDefaultThemeCSS {
+		t.Errorf("add piece must never rewrite pieces.css, got %q", got)
+	}
+}
+
+func TestAddPieceHintsModifiedThemeNeedsOverwrite(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := olderThemeApp(t, "/* my edited tokens */\n", olderDefaultThemeCSS)
+	res, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.ThemeHint, "--overwrite") || !strings.Contains(res.ThemeHint, "by hand") {
+		t.Errorf("a copy matching neither lock nor registry needs the overwrite/merge wording, got %q", res.ThemeHint)
+	}
+}
+
+func TestAddPieceNoThemeHintWhenCurrent(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := olderThemeApp(t, defaultThemeCSS, olderDefaultThemeCSS)
+	res, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ThemeHint != "" {
+		t.Errorf("an up-to-date pieces.css needs no hint, got %q", res.ThemeHint)
+	}
+}
+
+func TestListThemesMarksOutdatedCopy(t *testing.T) {
+	reg := multiThemeFixture(t)
+	app := newApp(t, false)
+	write(t, app, "app/styles/pieces.css", olderDefaultThemeCSS)
+	write(t, app, "app/styles/themes/dim.css", dimThemeCSS)
+	listing, err := ListThemes(themeOpts(reg, app))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]ThemeState{"default": ThemeOutdated, "dim": ThemeInstalled, "void": ThemeAbsent}
+	for _, o := range listing.Themes {
+		if o.State != want[o.Name] {
+			t.Errorf("%s state = %q, want %q", o.Name, o.State, want[o.Name])
+		}
+	}
+	if got := renderListing(listing); !strings.Contains(got, "default Default · installed · outdated") {
+		t.Errorf("listing should mark the default outdated, got:\n%s", got)
+	}
+}
+
+// pickerRegistry has pieces that NEED palettes to be useful (an appearance
+// picker offering dim/void cards), one pulling the other in.
+const pickerRegistry = `{
+  "version": 1,
+  "theme": "theme/pieces.css",
+  "themes": [
+    {"name":"default","file":"theme/pieces.css","label":"Default","description":""},
+    {"name":"dim","file":"theme/dim.css","label":"Dim","description":""},
+    {"name":"void","file":"theme/void.css","label":"Void","description":""}
+  ],
+  "pieces": [
+    {"name":"picker","files":["Picker.pzl"],"themes":["dim","void"]},
+    {"name":"shell","files":["Shell.pzl"],"registryDependencies":["picker"],"themes":["void"]}
+  ]
+}`
+
+func pickerFixture(t *testing.T) string {
+	t.Helper()
+	return buildRegistry(t, pickerRegistry,
+		fixtureFile{"ui/picker/Picker.pzl", "x\n"},
+		fixtureFile{"ui/shell/Shell.pzl", "y\n"},
+		fixtureFile{"theme/pieces.css", defaultThemeCSS},
+		fixtureFile{"theme/dim.css", dimThemeCSS},
+		fixtureFile{"theme/void.css", voidThemeCSS},
+	)
+}
+
+func TestAddPiecePrintsItsPalettes(t *testing.T) {
+	reg := pickerFixture(t)
+	app := newApp(t, false)
+	res, err := Add(Options{AppRoot: app, Names: []string{"shell"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(res.Themes, " ") != "void dim" {
+		t.Errorf("palettes = %v, want [void dim] (deduped, first-seen order)", res.Themes)
+	}
+	if out := render(res); !strings.Contains(out, "$ puzzle add theme void dim") {
+		t.Errorf("summary should print the add theme step, got:\n%s", out)
+	}
+	if fileExists(filepath.Join(app, "app", "styles", "themes", "dim.css")) {
+		t.Error("palettes are print-only (D3) — add piece must not copy them")
+	}
+}
+
+func TestAddPieceSkipsPalettesAlreadyThere(t *testing.T) {
+	reg := pickerFixture(t)
+	app := newApp(t, false)
+	write(t, app, "app/styles/themes/dim.css", dimThemeCSS)
+	writeStyles(t, app, "@import \"tailwindcss\";\n@import \"@magic-spells/puzzle-pieces/themes/void.css\";\n")
+	res, err := Add(Options{AppRoot: app, Names: []string{"picker"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Themes) != 0 {
+		t.Errorf("dim is on disk and void package-imported — nothing to print, got %v", res.Themes)
+	}
+	if strings.Contains(render(res), "puzzle add theme") {
+		t.Errorf("no add theme step expected, got:\n%s", render(res))
+	}
+}
+
+// A Windows checkout (core.autocrlf=true) turns the LF registry theme into CRLF
+// on disk. Theme hashes fold CRLF to LF, so that copy is the same theme: no
+// stale hint, plain "installed", and `add theme default` sees it unmodified.
+func TestCRLFThemeCopyCountsAsUnmodified(t *testing.T) {
+	crlf := func(s string) string { return strings.ReplaceAll(s, "\n", "\r\n") }
+	reg := multiThemeFixture(t)
+
+	// Current registry bytes, checked out as CRLF.
+	app := olderThemeApp(t, crlf(defaultThemeCSS), defaultThemeCSS)
+	res, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ThemeHint != "" {
+		t.Errorf("a CRLF copy of the current theme needs no hint, got %q", res.ThemeHint)
+	}
+	listing, err := ListThemes(themeOpts(reg, app))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := stateOf(t, listing.Themes, "default"); st != ThemeInstalled {
+		t.Errorf("default state = %q, want %q", st, ThemeInstalled)
+	}
+	themes, err := AddThemes(themeOpts(reg, app, "default"))
+	if err != nil {
+		t.Fatalf("a CRLF copy of the current theme must not be refused: %v", err)
+	}
+	if st := stateOf(t, themes.Themes, "default"); st != ThemeUpToDate {
+		t.Errorf("add theme default state = %q, want %q", st, ThemeUpToDate)
+	}
+
+	// An OLDER registry copy, checked out as CRLF, still matches its LF lock
+	// hash: the hint says refresh (no --overwrite), and add theme refreshes it.
+	older := olderThemeApp(t, crlf(olderDefaultThemeCSS), olderDefaultThemeCSS)
+	res, err = Add(Options{AppRoot: older, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ThemeHint != staleThemeHintLine {
+		t.Errorf("CRLF older copy: hint = %q, want the refresh line", res.ThemeHint)
+	}
+	themes, err = AddThemes(themeOpts(reg, older, "default"))
+	if err != nil {
+		t.Fatalf("an unmodified CRLF older copy must refresh without --overwrite: %v", err)
+	}
+	if st := stateOf(t, themes.Themes, "default"); st != ThemeUpdated {
+		t.Errorf("add theme default state = %q, want %q", st, ThemeUpdated)
+	}
+}
+
+func stateOf(t *testing.T, outcomes []ThemeOutcome, name string) ThemeState {
+	t.Helper()
+	for _, o := range outcomes {
+		if o.Name == name {
+			return o.State
+		}
+	}
+	t.Fatalf("no outcome for theme %q in %+v", name, outcomes)
+	return ""
+}

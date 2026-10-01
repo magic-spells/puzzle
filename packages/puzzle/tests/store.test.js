@@ -78,7 +78,7 @@ describe('Store — records & models (SPEC §8)', () => {
 
 		todo.destroy();
 		store.flush();
-		expect(seenDuringNotify).toBe(0); // removal happened first (CODE_REVIEW fix)
+		expect(seenDuringNotify).toBe(0); // removal happened first
 		expect(store.findOne('todo', 't1')).toBeNull();
 	});
 });

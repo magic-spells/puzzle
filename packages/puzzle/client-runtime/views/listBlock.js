@@ -1,0 +1,487 @@
+/**
+ * Persistent list blocks — the incremental half of the virtual DOM
+ * (DECISION-D170-INCREMENTAL-VDOM-LISTS).
+ *
+ * An item-form `{#for}` no longer compiles to `items.map(item => new ViewNode(…))`.
+ * It compiles to one call into a per-site block that keeps ONE row state per key
+ * across renders and returns the SAME vnode subtree for a row whose inputs did
+ * not change:
+ *
+ *   import { ViewNode, listRows as __l } from '@magic-spells/puzzle';
+ *   const __L0 = { key: (todo) => ViewNode.keyOf(todo) };
+ *   …
+ *   __l(this, this, 0, __d.filteredTodos, (s) =>
+ *     new ViewNode(TodoItem, { key: s.k, todo: s.item,
+ *       remove: (s.h0 ??= (event) => this.events.deleteTodo(s.item)) }, [])
+ *   , __L0)
+ *
+ * The import is injected only by a module that actually lowers a loop, exactly
+ * the way `displayValue as __s` is — so a loop-free app never pulls this module
+ * into its bundle.
+ *
+ * The returned array is spliced exactly where the `.map()` result was, so keyed
+ * reconciliation, mixed keyed/unkeyed pairing, leaving rows, FLIP and the shared
+ * sibling key namespace all behave as they do today (D58, D85). The block only
+ * decides WHICH vnode objects appear in that array — cached or freshly built —
+ * and `patch()`'s identity short-circuit makes the cached ones free.
+ *
+ * The row state IS the scope object the factory receives, so a rebuilt row keeps
+ * its handlers (`s.h0…`), its static subtrees (`s.c`) and its nested blocks
+ * (`s.__lists`). Handlers are identity-stable and read `s.item` at FIRE time,
+ * which is what stops a list's callback props from waking every child on every
+ * parent render (D62's measured cost, now removed at the source).
+ */
+
+import { RENDER_REV } from '../renderRev.js';
+import { devperfListRows } from '../devperf.js';
+
+/** @import { ViewNode } from './ViewNode.js' */
+
+/**
+ * One row's persistent state — the scope object the compiled row factory
+ * receives (it adds its own `h0…` handler slots on first use).
+ *
+ * @typedef {{ k: any, item: any, i: number, rev: number, vnode: any,
+ *   controls: ViewNode[] | null, gen: number, c: any[], __lists: any[] | undefined }} ListRow
+ */
+
+/**
+ * One loop site's block: the row states by key plus the per-class verdicts.
+ *
+ * @typedef {{ rows: Map<any, ListRow>, gen: number, seen: number,
+ *   verdicts: Map<Function, boolean> | null }} ListBlock
+ */
+
+/**
+ * Render one loop site.
+ *
+ * @param {import('./PuzzleView.js').PuzzleView} view the PuzzleView whose render() is running — the owner of
+ *   the `__dirty` root mask (§3.6) and the reporter of the dev counters
+ * @param {{ __lists?: any[] }} owner where this site's block lives: the view for a top-level
+ *   loop, the enclosing ROW STATE for a nested one, so inner blocks are keyed
+ *   per outer row and die with it
+ * @param {number} id the site id (per file, shared with the `__h`/`__c` counters)
+ * @param {any} items the loop's items (any value: a non-list loops zero times, D173 V12)
+ * @param {(row: object) => import('./ViewNode.js').ViewNode} factory the compiled row body
+ * @param {{ key: (item: any, index: number) => any, counter?: boolean, ctrl?: boolean,
+ *   roots?: number, fields?: string[], deep?: boolean, volatile?: boolean }} meta the
+ *   site's static facts: `key` (always), plus `counter`, `ctrl`, `roots`, `fields`,
+ *   `deep`, `volatile` when non-default
+ * @returns {import('./ViewNode.js').ViewNode[]} the row vnodes, in order
+ */
+export function listRows(view, owner, id, items, factory, meta) {
+	// A missing collection loops zero times, and so does any other non-list
+	// (D173 V12) — this is the one place a lowered site's collection is read.
+	items = loopItems(items);
+	const blocks = (owner.__lists ??= []);
+	const block = (blocks[id] ??= { rows: new Map(), gen: 0, seen: 0, verdicts: null });
+	const rows = block.rows;
+	const gen = ++block.gen;
+
+	// A block that MISSED a render cannot trust the root mask (D170). `view.__dirty`
+	// is a per-render DELTA: a site whose `{#if}` was false — or whose enclosing row
+	// was cached, which is exactly "not invoked" for a nested block — never sees the
+	// bits that flipped while it was away, and by the time it runs again the mask is
+	// clean and its rows would hand back stale vnodes. So if this view rendered more
+	// than once since this block last ran, every row is dirty for this pass; the row
+	// STATE survives, so handlers and nested blocks stay stable. A view that renders
+	// outside the counter (prerender, takeover) leaves `__rgen` at 0 and this false.
+	const rgen = view.__rgen;
+	const missedRender = rgen - block.seen > 1;
+	block.seen = rgen;
+
+	const key = meta.key;
+	const counter = meta.counter === true;
+	const ctrl = meta.ctrl === true;
+	const roots = meta.roots || 0;
+	// A body reading a parent root the render changed (`selectedId === todo.id`)
+	// dirties every row of this site, once, for the whole pass (§3.6).
+	const rootsDirty = roots !== 0 && (view.__dirty & roots) !== 0;
+	// `volatile` is the compiler's "I could not analyse this body" flag: a
+	// body reading the clock (`timeago(…)`) depends on state no root mask and
+	// no record revision covers, so the site gives up caching exactly as a
+	// plain-object row does.
+	const volatile = meta.volatile === true;
+	// A `deep` site is conservative for every class, so it needs no schema check
+	// at all; a site with `fields` needs one verdict per model class (cached on
+	// the block). A site with neither — the common one, and the shape the todos
+	// loop compiles to — decides both with this pair of booleans and never
+	// touches the schema.
+	const deep = meta.deep === true;
+	const fields = meta.fields;
+	const checkFields = !deep && fields !== undefined && fields.length > 0;
+
+	const out = new Array(items.length);
+	// Rows reached through the key map this pass. When it equals the map's size
+	// nothing was dropped, and the sweep below is skipped entirely.
+	let seen = 0;
+	let cached = 0;
+	let built = 0;
+
+	for (let i = 0; i < items.length; i++) {
+		const item = items[i];
+		const k = key(item, i);
+		let row = k == null ? undefined : rows.get(k);
+
+		// Two uncached shapes, both of which keep today's semantics exactly:
+		//
+		// - a NULL key drops this row to positional diffing (D58). ViewNode.keyOf
+		//   has already warned through its own once-guard, so nothing is said here.
+		// - a DUPLICATE key within one render would alias two logical rows onto one
+		//   row state (and one DOM node). The keyed patcher warns about the vnodes;
+		//   this warns about the caching, because the row that loses the race would
+		//   otherwise silently render its neighbour's item.
+		if (k == null || (row !== undefined && row.gen === gen)) {
+			if (
+				k != null &&
+				(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+			) {
+				warnDuplicateListKey(k);
+			}
+			out[i] = factory(newRow(k, item, i, gen, revisionOf(item)));
+			built++;
+			continue;
+		}
+
+		const rev = revisionOf(item);
+		let dirty;
+		seen++;
+		if (row === undefined) {
+			// A brand-new row stores the item's CURRENT revision, not 0: it is about
+			// to be built against exactly this state, and the next pass compares
+			// against what this build saw.
+			row = newRow(k, item, i, gen, rev);
+			rows.set(k, row);
+			dirty = true;
+		} else {
+			// §3.2's dirtiness rules, in the order they are cheapest to decide:
+			//
+			// - a different item object (a replacement record, a new plain object);
+			// - a RECORD whose stored revision advanced — the reference is identical,
+			//   so this is the only thing that can say its data changed;
+			// - anything else object-shaped (plain object, array, function): it can be
+			//   mutated in place with no revision to observe, so it is always dirty,
+			//   exactly as today. Primitive items cache on `!==` alone;
+			// - the index, when the body reads the counter;
+			// - a parent root the body reads, or an unanalysable body;
+			// - a row with no vnode: its last build threw (see below).
+			dirty =
+				row.vnode === null ||
+				row.item !== item ||
+				(rev >= 0
+					? rev !== row.rev || deep || (checkFields && isConservative(block, item, fields))
+					: rev === NOT_CACHEABLE) ||
+				(counter && row.i !== i) ||
+				rootsDirty ||
+				missedRender ||
+				volatile;
+			row.item = item;
+			row.i = i;
+			row.rev = rev >= 0 ? rev : 0;
+			row.gen = gen;
+		}
+
+		if (dirty) {
+			built++;
+			// The row's item, index and revision are already committed above, so a
+			// factory that THROWS must not leave the previous vnode (or a new row's
+			// null) looking clean: cleared first, the row stays dirty until a build
+			// completes. Only a view that renders the same instance again after a
+			// throw (the hybrid/static takeover) ever sees the difference.
+			row.vnode = null;
+			row.vnode = factory(row);
+			// Controlled form values inside a CACHED row are re-asserted from this
+			// list by patch()'s identity short-circuit, which is the contract
+			// patchAttrs/reassertSelectValue carry for every other subtree (§3.2).
+			// Collected once per build, walked once per clean pass: O(controls).
+			if (ctrl) {
+				const controls = collectControls(row.vnode);
+				row.controls = controls;
+				if (controls) row.vnode.controls = controls;
+			}
+		} else {
+			cached++;
+		}
+		out[i] = row.vnode;
+	}
+
+	// Rows the pass never visited have left the list: their vnodes are gone from
+	// the returned array, so the patcher unmounts them through its ordinary leave
+	// path. One pass, and only when something actually went missing.
+	if (seen !== rows.size) {
+		for (const [k, row] of rows) {
+			if (row.gen !== gen) rows.delete(k);
+		}
+	}
+
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		devperfListRows(view, cached, built, deep || isConservativeSite(block) ? 1 : 0);
+	}
+	return out;
+}
+
+/** @type {unknown[]} */
+const EMPTY = [];
+
+/**
+ * The loop domain of `{#for item in collection}` (D173 V12): a list iterates,
+ * a missing collection (`null`/`undefined`) loops zero times silently, and any
+ * other value — a string, an object, a number, a Set — loops zero times with a
+ * development warning. Called by listRows for a lowered site and imported as
+ * `__e` by a module whose item loop keeps `.map` (a snippet body, a loop nested
+ * in a range, an explicit key that reads render state), so both shapes share one
+ * rule. Returns the collection itself when it is an array.
+ *
+ * @param {unknown} value the loop's collection expression
+ * @returns {unknown[]}
+ */
+export function loopItems(value) {
+	if (Array.isArray(value)) return value;
+	if (value != null && (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)) {
+		warnLoopOnce(
+			'{#for} collection is not a list (got ' + describe(value) + '); the loop runs zero times'
+		);
+	}
+	return EMPTY;
+}
+
+/**
+ * The whole numbers `from…to` of a range `{#for}` (D173 V12), imported as `__r`
+ * by a module with a range loop. Both bounds are truncated toward zero, with a
+ * development warning when one was not an integer; a missing (`null`/
+ * `undefined`) or non-finite bound runs the range zero times, as does an end
+ * below its start.
+ *
+ * @param {unknown} from the first number
+ * @param {unknown} to the last number, inclusive
+ * @returns {number[]}
+ */
+export function loopRange(from, to) {
+	const a = rangeBound(from);
+	const b = rangeBound(to);
+	const out = [];
+	for (let n = a; n <= b; n++) out.push(n);
+	return out;
+}
+
+/**
+ * @param {any} value a range bound as authored (a number, a numeric string, …)
+ * @returns {number}
+ */
+function rangeBound(value) {
+	if (value == null) return NaN;
+	const n = Math.trunc(value);
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		if (!Number.isFinite(n)) {
+			warnLoopOnce(
+				'{#for} range bound is not a finite number (got ' + describe(value) + '); the range runs zero times'
+			);
+		} else if (n !== Number(value)) {
+			// Compared as a number, so a numeric string from a route param ('5')
+			// is an integer bound, not a truncation.
+			warnLoopOnce(
+				'{#for} range bound ' + describe(value) + ' is not an integer; it is truncated to ' + n
+			);
+		}
+	}
+	return Number.isFinite(n) ? n : NaN;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
+function describe(value) {
+	if (typeof value === 'string') return JSON.stringify(value);
+	if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+	return Object.prototype.toString.call(value).slice(8, -1);
+}
+
+// One warning per distinct message per session, dev-only behind the inline
+// probe like warnDuplicateListKey, so production tree-shakes the helpers and
+// their once-state away.
+/** @type {Set<string> | undefined} */
+let warnedLoop;
+/** @param {string} message */
+function warnLoopOnce(message) {
+	const seen = (warnedLoop ??= new Set());
+	if (seen.has(message)) return;
+	seen.add(message);
+	console.warn('[puzzle] ' + message);
+}
+
+/**
+ * A fresh row state. The shape is fixed here — every field present from the
+ * start, so a row keeps one hidden class for its whole life — while the compiled
+ * body adds its own cached handlers as `s.h0`, `s.h1`, … on first use. `c` is
+ * the row's static-subtree cache (`(s.c[0] ??= …)`) and `__lists` holds nested
+ * blocks, allocated by listRows only if a nested site is actually visited.
+ *
+ * @param {any} k
+ * @param {any} item
+ * @param {number} i
+ * @param {number} gen
+ * @param {number} rev
+ * @returns {ListRow}
+ */
+function newRow(k, item, i, gen, rev) {
+	return {
+		k,
+		item,
+		i,
+		rev: rev >= 0 ? rev : 0,
+		vnode: null,
+		controls: null,
+		gen,
+		c: [],
+		__lists: undefined,
+	};
+}
+
+// Sentinel for "object-shaped but carries no revision" — a plain object, array
+// or function, which can be mutated in place and therefore never caches.
+const NOT_CACHEABLE = -1;
+// Sentinel for a primitive item: nothing to mutate in place, so `!==` on the
+// item itself is the whole test.
+const PRIMITIVE = -2;
+
+/**
+ * A record's stored render revision, or one of the two sentinels above.
+ *
+ * @param {any} item a loop item (any author value)
+ * @returns {number}
+ */
+function revisionOf(item) {
+	if (item === null || (typeof item !== 'object' && typeof item !== 'function')) {
+		return PRIMITIVE;
+	}
+	const rev = item[RENDER_REV];
+	return typeof rev === 'number' ? rev : NOT_CACHEABLE;
+}
+
+/**
+ * Is this site conservative for this item's model class (§3.2)?
+ *
+ * A record's revision covers its OWN fields. A body reading `todo.author.name`
+ * (a relation), a computed getter, or any deeper path depends on data the
+ * revision does not describe, so such a site must treat its record rows as
+ * always dirty — the row cache is an optimisation and may never hide a
+ * legitimate update.
+ *
+ * The compiler reports, per site, the item members read at depth one (`fields`)
+ * and a `deep` flag for anything deeper or any call. `deep` is decided by the
+ * caller (it holds for every class); here every field is checked against the
+ * model's own schema and relationship names, ONCE per (block, constructor) — the
+ * verdict is a property of the class, not of the record, and a list of 1,000
+ * todos must not pay 1,000 schema walks. Formatters are display-pure by SPEC
+ * contract and do not count.
+ *
+ * @param {ListBlock} block
+ * @param {any} item a record (model instance) row item
+ * @param {string[]} fields
+ * @returns {boolean}
+ */
+function isConservative(block, item, fields) {
+	const Model = item.constructor;
+	const verdicts = (block.verdicts ??= new Map());
+	let verdict = verdicts.get(Model);
+	if (verdict === undefined) {
+		verdict = false;
+		const schema =
+			typeof Model.normalizedSchema === 'function' ? Model.normalizedSchema() : null;
+		const rels =
+			typeof Model.relationshipDefs === 'function' ? Model.relationshipDefs() : null;
+		for (let i = 0; i < fields.length; i++) {
+			const field = fields[i];
+			// A relationship resolves through the RELATED collection, and a field that
+			// is not in the schema at all is a computed getter over who-knows-what.
+			if ((rels !== null && field in rels) || schema === null || !(field in schema)) {
+				verdict = true;
+				break;
+			}
+		}
+		verdicts.set(Model, verdict);
+	}
+	return verdict;
+}
+
+/**
+ * Dev-only: has this site decided it must be conservative about any model class
+ * it has seen? Reported as a counter so an author can see WHY a list is still
+ * rebuilding every row (the dev-counter half of §12's risk mitigation) — a
+ * conservative site is the one shape that keeps paying full price.
+ *
+ * @param {ListBlock} block
+ * @returns {boolean}
+ */
+function isConservativeSite(block) {
+	const verdicts = block.verdicts;
+	if (!verdicts) return false;
+	for (const verdict of verdicts.values()) if (verdict) return true;
+	return false;
+}
+
+/**
+ * Collect the controlled form vnodes inside a freshly built row (§3.2).
+ * Returns null when there are none, so the common row stores nothing and
+ * `patch()`'s `newVnode.controls` test reads undefined.
+ *
+ * A COMPONENT vnode is walked through, never checked itself: its children are the
+ * parent's slot content, which the child places by reference, and a cached row
+ * stops the patch at the component — no applyParentUpdate, no re-render — so this
+ * list is the only thing that reaches them. The child's OWN template is not in
+ * these children; it re-asserts its controls whenever it patches.
+ *
+ * Skipped: string children (an inline-SVG seed is verbatim
+ * markup, never vnodes), and an ISLAND element's children — the D44 contract is
+ * that the patcher never reconciles them after the seed, so replaying identity
+ * into one would reset a user-edited input inside a third-party widget back to
+ * its mount-time value. The island ELEMENT's own `value`/`checked` still counts.
+ *
+ * PORTALS are walked through: their children are reconciled by patchPortal only
+ * when the patch actually reaches the portal vnode, and a cached ancestor returns
+ * before that ever happens. The portaled vnodes keep usable `el` links (they live
+ * in the outlet), so re-asserting from here is the same work patchAttrs would do.
+ *
+ * @param {ViewNode} vnode
+ * @returns {ViewNode[] | null}
+ */
+function collectControls(vnode) {
+	/** @type {ViewNode[]} */
+	const out = [];
+	collectInto(vnode, out);
+	return out.length > 0 ? out : null;
+}
+
+/**
+ * @param {ViewNode} vnode
+ * @param {ViewNode[]} out
+ */
+function collectInto(vnode, out) {
+	const tag = vnode.tag;
+	const attrs = vnode.attrs;
+	if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+		if ('value' in attrs || 'checked' in attrs) out.push(vnode);
+	}
+	if ('island' in attrs) return;
+	const children = vnode.children;
+	if (typeof children === 'string') return;
+	for (let i = 0; i < children.length; i++) collectInto(children[i], out);
+}
+
+// Two rows sharing a key within one render would share one row state: the second
+// would overwrite the first's item and both positions would render the same row.
+// The block builds both uncached instead (today's semantics, unchanged), and says
+// so once per session — dev-only, behind the inline probe, exactly like
+// viewManager's warnDuplicateKey, so production tree-shakes the helper and its
+// once-state away.
+let warnedDuplicateListKey = false;
+/** @param {unknown} key */
+function warnDuplicateListKey(key) {
+	if (warnedDuplicateListKey) return;
+	warnedDuplicateListKey = true;
+	console.warn(
+		`[puzzle] duplicate key ${JSON.stringify(key)} in one {#for} pass — keys must be unique ` +
+			'within a list; the duplicate rows render uncached and reconcile positionally.'
+	);
+}

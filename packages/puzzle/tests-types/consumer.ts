@@ -44,6 +44,9 @@ import type {
 	PuzzleErrorViewProps,
 	LazyView,
 	PuzzleViewConstructor,
+	PuzzleI18n,
+	LibraryFunctions,
+	DatePreset,
 } from '@magic-spells/puzzle';
 import { adapter, PuzzleAdapterError } from '@magic-spells/puzzle/adapter';
 import type {
@@ -80,6 +83,8 @@ import type { RenderProfile } from '@magic-spells/puzzle/testing';
 
 const renderedNull: string = displayValue(null);
 const renderedNamedValue: string = displayValue(0, 'count');
+// A list prints its items joined by `sep` (the attribute-value path).
+const renderedList: string = displayValue(['a', false, 'b'], 0, ' ');
 const generatedSnippetNode = new ViewNode(SNIPPET_TAG, {
 	fits: 'row',
 	params: ['item'],
@@ -89,6 +94,7 @@ const snippetTag: string = SNIPPET_TAG;
 const isGeneratedSnippet: boolean = generatedSnippetNode.isSnippet;
 void renderedNull;
 void renderedNamedValue;
+void renderedList;
 void snippetTag;
 void isGeneratedSnippet;
 
@@ -172,6 +178,13 @@ const staticResult: ValidationResult = Todo.validate({ title: 'x' });
 const okFlag: boolean = staticResult.valid;
 const firstErr = staticResult.errors[0];
 const errShape: { field: string; rule: string; message: string } | undefined = firstErr;
+// options.fields narrows the check to the named fields (mutable or readonly arrays).
+const partialResult: ValidationResult = Todo.validate({ title: 'x' }, { fields: ['title'] });
+const readonlyFields = ['title'] as const;
+Todo.validate({}, { fields: readonlyFields });
+Todo.validate({}, {});
+// @ts-expect-error fields is a list of field names, not a single name
+Todo.validate({}, { fields: 'title' });
 
 // ---------------------------------------------------------------------------
 // PuzzleView subclass: data / events / animations / memo (§4, §12, §32)
@@ -205,6 +218,8 @@ class TodoListView extends PuzzleView {
 			this.setData('draft', '');
 		},
 		selectAll: () => this.setData({ filter: 'all', selectedId: null }),
+		// `@click={ rename(todo.id, draft) }`: a handler takes the call's arguments.
+		rename: (id: string, title: string) => this.ctx.store.findOne('todo', id)?.update({ title }),
 	};
 
 	async data(params?: Record<string, string>, props?: any): Promise<object> {
@@ -569,6 +584,8 @@ prerender(config).then((result: PrerenderResult) => {
 		content: page.html ?? '',
 		title: page.title,
 		head,
+		// The build's locale island (D175), inserted before `</body>`.
+		island: '',
 	});
 });
 
@@ -609,6 +626,7 @@ prerender(config, { mode: 'static' }).then((result: PrerenderResult) => {
 		slug: 'index',
 		data: islandData ?? {},
 		base: '/app',
+		island: '',
 	});
 });
 
@@ -636,7 +654,7 @@ const staticOptions: MountStaticOptions = {
 	apiURL: '',
 	adapter,
 	// The three options the kernel destructures beyond the summary basics. (A static
-	// page carries no `routerMode` at all — D117/D159.)
+	// page carries no `routerMode` at all — D81/D159.)
 	storage: window.localStorage,
 	routerBase: '/app',
 };
@@ -690,6 +708,133 @@ async function profileRenders(): Promise<void> {
 void profileRenders;
 
 // ---------------------------------------------------------------------------
+// Translations (D175)
+// ---------------------------------------------------------------------------
+
+// Translation variables are any object value — a data field, a store record, a
+// value typed by an interface (which carries no index signature).
+interface Profile {
+	name: string;
+	count: number;
+}
+declare const profile: Profile;
+
+class LocaleSwitcher extends PuzzleView {
+	data() {
+		const i18n: PuzzleI18n | undefined = this.ctx.i18n;
+		const label: string = i18n ? i18n.t('cart.items', { count: 3 }) : '';
+		const welcome: string = i18n ? i18n.t('welcome', profile) : '';
+		void welcome;
+		const tags: readonly string[] = i18n?.locales ?? [];
+		return { label, tags, current: i18n?.locale, fallback: i18n?.defaultLocale };
+	}
+	choose(tag: string): Promise<void> | undefined {
+		return this.ctx.i18n?.setLocale(tag);
+	}
+}
+
+async function translatedTests(): Promise<void> {
+	const strings = { 'cart.items': { one: '{count} item', other: '{count} items' }, greeting: 'Hi' };
+	const view = await mountView(LocaleSwitcher, { i18n: { locale: 'en', strings } });
+	const app = await createTestApp({
+		routes: [{ path: '/', view: LocaleSwitcher }],
+		i18n: { locale: 'es', strings: { greeting: 'Hola' } },
+	});
+	const active: string | undefined = app.app.i18n?.locale;
+	void view;
+	void active;
+}
+void translatedTests;
+
+// ---------------------------------------------------------------------------
+// Library signatures (D176 §4): each function with the arity it takes, and
+// with one argument too many or a required argument missing.
+// ---------------------------------------------------------------------------
+
+function libraryCalls(lib: LibraryFunctions, price: number, when: Date, tags: string[]): void {
+	const texts: string[] = [
+		lib.link('/about'),
+		lib.t('cart.title'),
+		lib.t('cart.items', { count: tags.length }),
+		lib.t(404, null),
+		// A boolean key converts and looks up, like a number (D175).
+		lib.t(true),
+		lib.currency(price),
+		lib.currency(price, '€', 0),
+		lib.percentage(12.5, 1),
+		lib.number_with_delimiter(1234.5),
+		lib.number_with_delimiter(1234.5, ' '),
+		lib.compact_number(3400000),
+		lib.pluralize(tags.length, 'tag'),
+		lib.pluralize(2, 'person', 'people'),
+		lib.date(when),
+		lib.date(when, 'long', 'en-US'),
+		lib.time(when),
+		lib.time(when, 'iso'),
+		lib.datetime(when),
+		lib.datetime(when, 'short', ['de-DE', 'en']),
+		lib.timeago(when),
+		lib.truncate('long text', 4),
+		lib.truncate('long text', 4, '...'),
+		lib.capitalize('iPhone'),
+		lib.strip_html('<b>x</b>'),
+		lib.strip_newlines('a\nb'),
+		lib.escape('<b>'),
+		lib.raw('<b>x</b>'),
+		lib.newline_to_br('a\nb'),
+		lib.json({ b: 1, a: 2 }),
+	];
+	const numbers: number[] = [lib.round(1.005, 2), lib.round(2.5)];
+	const shifted: Date | '' = lib.in_timezone(when, 'Asia/Tokyo');
+	const preset: DatePreset = 'medium';
+	lib.date(when, preset);
+
+	// @ts-expect-error currency takes (value, symbol?, places?) — four is one too many.
+	lib.currency(price, '$', 2, 'extra');
+	// @ts-expect-error currency needs the value.
+	lib.currency();
+	// @ts-expect-error pluralize needs the singular word.
+	lib.pluralize(3);
+	// @ts-expect-error capitalize takes one argument.
+	lib.capitalize('a', 'b');
+	// @ts-expect-error truncate takes (value, length?, ellipsis?).
+	lib.truncate('a', 1, '…', true);
+	// @ts-expect-error an unknown preset.
+	lib.date(when, 'fancy');
+	// @ts-expect-error time takes (value, preset?, locale?).
+	lib.time(when, 'short', 'en', 'extra');
+	// @ts-expect-error t takes the key first; the variables are the second argument.
+	lib.t({ count: 2 });
+	// @ts-expect-error t takes (key, vars?).
+	lib.t('key', {}, 'extra');
+	// @ts-expect-error round takes (value, places?).
+	lib.round(1.5, 0, 'extra');
+	// @ts-expect-error round returns a number, not text.
+	const roundedText: string = lib.round(1.5);
+	// @ts-expect-error json takes one argument.
+	lib.json({}, 2);
+	// @ts-expect-error link takes one argument.
+	lib.link('/a', '/b');
+	// @ts-expect-error raw takes one argument.
+	lib.raw('<b>', true);
+	// @ts-expect-error timeago takes one argument.
+	lib.timeago(when, 'short');
+	// @ts-expect-error not a library function: sort left with the list formatters.
+	lib.sort(tags);
+	// @ts-expect-error not a library function: `.toUpperCase()` says it (D176 §4).
+	lib.upcase('a');
+	// @ts-expect-error not a library function: `.join(', ')` says it (D176 §4).
+	lib.join(tags);
+	// @ts-expect-error not a library function: `Math.floor()` says it (D176 §4).
+	lib.floor(1.8);
+	void texts;
+	void numbers;
+	void shifted;
+	void roundedText;
+}
+void libraryCalls;
+
+// ---------------------------------------------------------------------------
 // Error shapes (§20, §22)
 // ---------------------------------------------------------------------------
 
@@ -709,4 +854,5 @@ handle(new PuzzleAdapterError(404, 'Not Found', { detail: 'missing' }));
 
 void okFlag;
 void errShape;
+void partialResult;
 void upcase;

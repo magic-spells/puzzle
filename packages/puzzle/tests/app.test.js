@@ -36,7 +36,7 @@ class FormatView extends PuzzleView {
 		const f = this.ctx.formatters.getAll();
 		return h('puzzle-view', { class: 'fmt' }, [
 			text(f.shout('hi')), // custom formatter
-			text(f.upcase('ab')), // built-in, possibly overridden
+			text(f.timeago('ab')), // built-in, possibly overridden
 		]);
 	}
 }
@@ -227,7 +227,7 @@ describe('PuzzleApp — formatters', () => {
 			routes: [{ path: '/', name: 'fmt', view: FormatView, layout: DefaultLayout }],
 			formatters: {
 				shout: (s) => String(s).toUpperCase() + '!',
-				upcase: () => 'OVERRIDDEN', // shadows the built-in upcase
+				timeago: () => 'OVERRIDDEN', // shadows the built-in timeago
 			},
 		});
 		await app.mount();
@@ -235,7 +235,7 @@ describe('PuzzleApp — formatters', () => {
 		// registry resolves the custom formatter...
 		expect(app.formatters.get('shout')('hi')).toBe('HI!');
 		// ...and the override wins over the built-in of the same name
-		expect(app.formatters.get('upcase')('ab')).toBe('OVERRIDDEN');
+		expect(app.formatters.get('timeago')('ab')).toBe('OVERRIDDEN');
 
 		// and both reach the rendered DOM via ctx.formatters
 		expect(el.textContent).toContain('HI!');

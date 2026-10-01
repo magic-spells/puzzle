@@ -18,13 +18,22 @@ import { ViewNode } from '../views/ViewNode.js';
 import { encodeURL, normalizeBase } from '../router/router.js';
 import { normalizeRoutePath } from '../router/routePath.js';
 
+/** @import { PuzzleView } from '../views/PuzzleView.js' */
+
+/**
+ * The static router facade makeRouterStub returns: `url()` and a read-only
+ * `current`, plus every Router navigation method (each throws).
+ * @typedef {{ url: (path: string) => string, readonly current: object, [method: string]: any }} RouterStub
+ */
+
 /**
  * Instantiate + preload the layout+view chain for one route and assemble it into
  * a nested component vnode tree.
  *
- * @param {object} entry an enumerated route entry — { fullPath, chain (root→leaf
- *   route defs, each with a `.view` class), layout (LayoutClass|null) }
- * @param {object} ctx the { store, router, formatters } passed to every preload
+ * @param {{ fullPath: string, chain: Array<Record<string, any>>, layout?: Function | null }} entry
+ *   an enumerated route entry — { fullPath, chain (root→leaf route defs, each
+ *   with a `.view` class), layout (LayoutClass|null) }
+ * @param {Record<string, any>} ctx the { store, router, formatters } passed to every preload
  * @param {object} [route] an already-built static route snapshot. The static
  *   browser kernel supplies this so `ctx.router.current` and `this.route` share
  *   the exact same object during preload.
@@ -35,7 +44,7 @@ import { normalizeRoutePath } from '../router/routePath.js';
  *   page bundle (the static browser kernel zips real classes onto its route JSON,
  *   so a marker can never reach it).
  * @returns {Promise<{ topVnode: import('../views/ViewNode.js').ViewNode,
- *   route: object, instances: object[] }>} `topVnode` is the assembled tree (the
+ *   route: object, instances: PuzzleView[] }>} `topVnode` is the assembled tree (the
  *   layout vnode when a layout wraps the chain, else the root view vnode);
  *   `route` is the frozen snapshot threaded to every preload; `instances` are the
  *   preloaded view/layout instances (root→leaf, layout last) so the caller can
@@ -46,35 +55,42 @@ export async function assembleChain(entry, ctx, route = makeRouteSnapshot(entry)
 	const viewClasses = resolved ? resolved.views : chain.map((node) => node.view);
 	const LayoutClass = resolved ? resolved.layout : entry.layout;
 
-	// Preload each chain level's view (root → leaf), then the layout.
+	// Preload each chain level's view (root → leaf), then the layout. Each instance
+	// is recorded before its preload, so a rejection destroys every one constructed
+	// so far (their store subscriptions included) — the router's partial-chain rule.
 	const instances = [];
-	for (let i = 0; i < chain.length; i++) {
-		const view = new viewClasses[i](ctx);
-		await view.preload({ params: {}, props: {}, route });
-		instances.push(view);
-	}
+	try {
+		for (let i = 0; i < chain.length; i++) {
+			const view = new viewClasses[i](ctx);
+			instances.push(view);
+			await view.preload({ params: {}, props: {}, route });
+		}
 
-	// Assemble the chain leaf-up into nested component vnodes, each adopting its
-	// preloaded instance (mirrors router.js #navigate ~945-958).
-	let childVnode = null;
-	for (let i = chain.length - 1; i >= 0; i--) {
-		const vnode = new ViewNode(viewClasses[i], {}, childVnode ? [childVnode] : []);
-		vnode.instance = instances[i];
-		childVnode = vnode;
-	}
-	let topVnode = childVnode;
+		// Assemble the chain leaf-up into nested component vnodes, each adopting its
+		// preloaded instance (mirrors router.js #navigate ~945-958).
+		let childVnode = null;
+		for (let i = chain.length - 1; i >= 0; i--) {
+			const vnode = new ViewNode(viewClasses[i], {}, childVnode ? [childVnode] : []);
+			vnode.instance = instances[i];
+			childVnode = vnode;
+		}
+		let topVnode = childVnode;
 
-	// A top-level layout wraps the whole chain, hosting it at its <Slot/>.
-	if (LayoutClass) {
-		const layout = new LayoutClass(ctx);
-		await layout.preload({ params: {}, props: {}, route });
-		const layoutVnode = new ViewNode(LayoutClass, {}, [topVnode]);
-		layoutVnode.instance = layout;
-		instances.push(layout);
-		topVnode = layoutVnode;
-	}
+		// A top-level layout wraps the whole chain, hosting it at its <Slot/>.
+		if (LayoutClass) {
+			const layout = new (/** @type {typeof PuzzleView} */ (LayoutClass))(ctx);
+			instances.push(layout);
+			await layout.preload({ params: {}, props: {}, route });
+			const layoutVnode = new ViewNode(LayoutClass, {}, [topVnode]);
+			layoutVnode.instance = layout;
+			topVnode = layoutVnode;
+		}
 
-	return { topVnode, route, instances };
+		return { topVnode, route, instances };
+	} catch (err) {
+		for (const instance of instances) instance.destroy();
+		throw err;
+	}
 }
 
 /**
@@ -87,6 +103,10 @@ export async function assembleChain(entry, ctx, route = makeRouteSnapshot(entry)
  * `this.route.path` differ between the prerender and the takeover/mount that
  * replaces it. Both prerender modes build the snapshot here, so normalizing
  * once keeps every side in the same spelling (the operation is idempotent).
+ *
+ * @param {{ chain: Array<Record<string, any>>, fullPath: string }} entry an
+ *   enumerated route entry
+ * @returns {Readonly<Record<string, any>>} the frozen route snapshot
  */
 export function makeRouteSnapshot({ chain, fullPath }) {
 	const path = normalizeRoutePath(fullPath);
@@ -120,11 +140,11 @@ const ROUTER_METHODS = ['push', 'replace', 'back', 'forward', 'go', 'start', 'st
  *
  * @param {object} route the D83 route snapshot (makeRouteSnapshot output)
  * @param {{ base?: string }} [opts]
- * @returns {object} a `{ url, current, push, replace, … }` router facade
+ * @returns {RouterStub} a `{ url, current, push, replace, … }` router facade
  */
 export function makeRouterStub(route, { base = '' } = {}) {
 	const normalizedBase = normalizeBase(base);
-	const stub = {};
+	const stub = /** @type {RouterStub} */ ({});
 	const throwNoRouter = () => {
 		throw new Error('[puzzle] static output has no router — use plain links');
 	};

@@ -10,14 +10,21 @@
 
 import { PuzzleView } from '../views/PuzzleView.js';
 
-/** Whether a value is the PuzzleView base class or a subclass of it. */
+/**
+ * Whether a value is the PuzzleView base class or a subclass of it.
+ * @param {unknown} value
+ * @returns {value is typeof PuzzleView}
+ */
 export function isViewClass(value) {
 	return (
 		typeof value === 'function' && (value === PuzzleView || value.prototype instanceof PuzzleView)
 	);
 }
 
-/** A short, allocation-free description of a rejected value for diagnostics. */
+/**
+ * A short, allocation-free description of a rejected value for diagnostics.
+ * @param {unknown} value
+ */
 export function describeValue(value) {
 	if (value === null) return 'null';
 	if (value === undefined) return 'undefined';

@@ -1,13 +1,13 @@
 ---
-name: "D47 — Per-navigation route snapshot: `this.route` through the D19 gate (v1.15)"
+name: 'D47 — Per-navigation route snapshot: `this.route` rides the D19 gate'
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
 connections:
   - DECISION-D19-NAVIGATION-COMMIT
   - DECISION-D30-NESTED-ROUTES
+  - DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-VIEW
-  - FEATURE-V1-15-ROUTE-SNAPSHOT
   - DOC-ROUTER
   - DOC-SPEC
 code_refs:
@@ -15,32 +15,20 @@ code_refs:
   - client-runtime/views/PuzzleView.js
 ---
 
-# D47 — Per-navigation route snapshot: `this.route` through the D19 gate (v1.15)
+# D47 — Per-navigation route snapshot: `this.route`
 
-The router builds one frozen `{ path, route, params, chain }` snapshot per navigation (the shape of `router.current`) and threads it through every gated `preload()`/`refresh()`; `PuzzleView` stores it and exposes `get route()`. A gating `data()` finally has a route source that describes **the navigation it is gating**. Plus one reorder: a reused root layout's post-commit refresh now runs after `#commitState`.
-
-## Context
-
-The Stays account tabs (Profile/Trips/Wishlist — nested routes under a reused `AccountShell`) computed the active underline from `window.location.pathname` in `data()`. Per [[DECISION-D19-NAVIGATION-COMMIT]]/[[DECISION-D30-NESTED-ROUTES]], a reused ancestor's `data()` re-runs as the **pre-commit gate** — before `pushState` and before `#commitState` advances `router.current`. So the shell's only `data()` run of the navigation saw the OLD route (via both `location` and `router.current`) and never re-rendered post-commit: the underline lagged one navigation behind, "fixed" by a second click. Deeper gap: **no** route source was correct inside the gate, so the active-nav pattern — table stakes for any nav UI — could not be built at all (`location.pathname` is additionally wrong in hash mode and meaningless in memory mode). Same latent bug in the chirp/music/mission-control examples.
+A gating `data()` needs a route source that describes **the navigation it is gating**. Reused ancestors re-run `data()` before the commit ([[DECISION-D19-NAVIGATION-COMMIT]], [[DECISION-D30-NESTED-ROUTES]]), so `router.current` and `location` still show the old route there — an active-tab underline computed from them lags one navigation (and `location.pathname` is wrong in hash mode and meaningless in memory mode).
 
 ## Decision
-
-- One frozen `to = { path, route (leaf node), params, chain }` per navigation, built **before** the load phase, passed to every gated `preload({params, props, route})` / `refresh({params, route})` (fresh views AND reused ancestors), the params-only branch, and the reused layout's post-commit `#refreshLogged`.
-- `PuzzleView` gains `#route` + `get route()`; the snapshot is stored only when a call passes one, so a store-change `refresh()` (argless) retains it. `null` off-router — non-routed components take route state as props.
-- It rides the **same channel as params**: snapshot and params always describe the same navigation, in all modes, on push/pop/initial alike. Per-call state — no global "pending route", nothing to clear on failure.
-- **Reorder:** `#swap`'s reuseLayout branch now runs `applyParentUpdate → #commitState → #refreshLogged` (matching the params-only branch), so a layout's post-commit `data()` reads a fresh `router.current`. Safe: the DOM was patched by `applyParentUpdate`, so `#commitState`'s mount-first invariant (D33 scroll) holds.
-- Matching idiom: route **names** (`this.route.route.name`, `chain[0].name`), not path string-compares — immune to query/`#anchor` (D41)/mode differences.
+- The router builds one frozen `to = { path, route (leaf node), params, chain }` per navigation, before the load phase, and passes it to every gated `preload({ params, props, route })` / `refresh({ params, route })` — fresh views, reused ancestors, the params-only branch, and a reused layout's post-commit refresh.
+- `PuzzleView` stores it and exposes `get route()`. An argless `refresh()` (a store change) keeps the stored snapshot. Off-router it is `null`; non-routed components take route state as props.
+- It rides the **same channel as params**, so snapshot and params always describe the same navigation, in every mode, on push, pop and initial load. Per-call state — nothing global to clear on failure. A reused ancestor whose sibling's load rejects keeps its committed params and snapshot ([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]).
+- A reused layout's branch runs `applyParentUpdate → #commitState → refresh`, so its post-commit `data()` reads a fresh `router.current`.
+- **Idiom:** match on route **names** (`this.route.route.name`, `this.route.chain[0].name`), not path strings — immune to query, `#anchor` and mode differences.
 
 ## Alternatives rejected
-
-- **Reactive `router.current`** (reading it in `data()` subscribes via a store `trackKey`/`notifyKey` seam; commit notifies). The generalizing fix — route obeys the same law as records — but costs a second `data()` run per navigation for route-readers (double-fetch footgun for async `data()`), new public store machinery, a sync flush inside the commit path, and the highlight flips only after the out-animation instead of at click. May layer on later as its own decision; `this.route` doesn't preclude it.
-- **Global pending-target / `router.isActive(path)` consulting an in-flight nav.** Global mutable pending state: an unrelated store-change refresh during a pending nav reads the uncommitted target and paints it — and a failed nav leaves it painted with no correction mechanism (a *persistent* version of this very bug). Needs clearing at every failure/supersede/stop exit. `isActive()` as pure sugar over `this.route` stays open — deferred until real demand.
-- **Reserved key merged into `params`** (`params.$route`). Pollutes the params contract (§9: params = your `:segment` captures — they get spread, iterated, compared) and collides with a literal `$route` param name.
-- **Reorders only** (commit `#state` earlier / next to `pushState`). Cannot fix the gate: reused-ancestor and fresh-view `data()` MUST stay pre-commit (D19). And `#state` must keep meaning "the mounted on-screen chain" — interruption planning (`keep` computed from `cur = #state`), `stop()` teardown, and D33 scroll timing all depend on it; an early commit lets a second navigation "reuse" never-mounted instances (the corpse-adoption bug class the D30 clamp exists for). Only the small reuseLayout reorder survives, as a complement.
-- **Post-commit second refresh of reused ancestors.** Double `data()` runs (fetches, flicker) and the old tab would still show through the whole out-animation.
-
-## Consequences
-
-- Additive: `data(params, props)` unchanged; views that never read `this.route` behave byte-identically.
-- Failure semantics inherited, not widened: a reused ancestor whose sibling's load rejects keeps its committed params *and* snapshot — the snapshot rides the same transactional channel as `params` ([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]), visible as the destination inside the gated `data()` run and swapped only when the navigation commits.
-- The examples' `location.pathname` active-nav idiom is retired everywhere (it was the bug); DOC-ROUTER now prescribes `this.route` + route names.
+- A reactive `router.current` — a second `data()` run per navigation (double-fetch footgun), new store machinery, and the highlight flips only after the out animation. It could layer on later.
+- A global pending target / `router.isActive(path)` reading the in-flight navigation — an unrelated refresh paints the uncommitted target, and a failed navigation leaves it painted. `isActive()` as sugar over `this.route` stays open.
+- A reserved `params.$route` — pollutes params and collides with a literal `$route` param.
+- Committing `#state` earlier — reused and fresh `data()` must stay pre-commit, and `#state` must keep meaning "the mounted chain" (interruption planning, `stop()`, scroll timing).
+- A second post-commit refresh of reused ancestors — double `data()` runs and the old tab shows through the out animation.

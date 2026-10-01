@@ -9,7 +9,9 @@ import (
 	"sync"
 
 	runtimeformatters "github.com/magic-spells/puzzle/client-runtime/formatters"
-	"github.com/magic-spells/puzzle/compiler/internal/parser"
+	"github.com/magic-spells/puzzle/compiler/internal/codegen"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
 var (
@@ -50,10 +52,26 @@ type Usage struct {
 	HasPortal   bool
 	HasRawAt    bool
 	HasSnippets bool
+	// HasRawHTML: a template calls `raw` or `newline_to_br` (D174) as a text
+	// interpolation's outermost call, which keeps the live-HTML node and the
+	// sanitizer in the bundle.
+	HasRawHTML bool
+	// HasRawSanitize: one of those is `raw` itself, which keeps the sanitizer;
+	// an app that only uses `newline_to_br` does not ship it.
+	HasRawSanitize bool
 	// HasLazy is the one bit that does NOT come from a template: lazy() route
 	// views (D163) are declared in the app's JavaScript/TypeScript, so the walk
 	// reads those files too (see scanScriptUsage).
 	HasLazy bool
+	// TKeys maps each string-literal key handed straight to `t` (D175) —
+	// `t('cart.title')` — to the app-relative files that use it, for the build's missing-key warning. It
+	// is diagnostics only and never feeds a define.
+	TKeys map[string][]string
+}
+
+// UsesT reports whether any template calls the `t` function.
+func (u Usage) UsesT() bool {
+	return u.Formatters[TranslateFormatter]
 }
 
 // Features are the build-wide DCE bits — one boolean per gated runtime module —
@@ -61,11 +79,13 @@ type Usage struct {
 // WatchBuilder can decide with one == whether the Define set frozen into its
 // esbuild context went stale.
 type Features struct {
-	Flip     bool
-	Portal   bool
-	RawAt    bool
-	Lazy     bool
-	Snippets bool
+	Flip        bool
+	Portal      bool
+	RawAt       bool
+	Lazy        bool
+	Snippets    bool
+	RawHTML     bool
+	RawSanitize bool
 }
 
 // Features projects the scan result onto the define bits. It is exported for
@@ -73,19 +93,21 @@ type Features struct {
 // whether the Defines frozen into an esbuild context went stale.
 func (u Usage) Features() Features {
 	return Features{
-		Flip:     u.HasFlip,
-		Portal:   u.HasPortal,
-		RawAt:    u.HasRawAt,
-		Lazy:     u.HasLazy,
-		Snippets: u.HasSnippets,
+		Flip:        u.HasFlip,
+		Portal:      u.HasPortal,
+		RawAt:       u.HasRawAt,
+		Lazy:        u.HasLazy,
+		Snippets:    u.HasSnippets,
+		RawHTML:     u.HasRawHTML,
+		RawSanitize: u.HasRawSanitize,
 	}
 }
 
 // ScanUsage walks scanRoot for first-party source usage that controls runtime
 // tree-shaking. Two kinds of file contribute:
 //
-//   - .pzl templates are fully parsed for formatter chains, flip attributes,
-//     Portal nodes, and raw blocks — all TEMPLATE facts.
+//   - .pzl templates are fully parsed for library function calls, flip
+//     attributes, Portal nodes, and raw blocks — all TEMPLATE facts.
 //   - .js/.mjs/.cjs/.jsx/.ts/.mts/.cts/.tsx modules are read as TEXT and pattern-
 //     matched for lazy() route views (D163). That is a SCRIPT fact — `lazy()` is
 //     called from routes.js, never from a template — so it is the one bit a
@@ -206,13 +228,19 @@ func scanScriptUsage(src string, usage *fileUsage) {
 }
 
 // skipScanDir reports whether a directory should be pruned from the usage scan:
-// build output, VCS/vendor trees, and dot-directories hold no first-party source
-// worth scanning (installed .pzl component packages are out of scope for v1 —
-// see ScanUsage).
-func skipScanDir(name string) bool {
+// installed packages, build output, vendor trees, and dot-directories hold no
+// first-party source worth scanning (installed .pzl component packages are out
+// of scope for v1 — see ScanUsage). node_modules and dot-directories are pruned
+// at any depth; `dist`, `build` and `vendor` only directly under the scan root
+// (atRoot), because deeper down a folder of that name is the app's own source —
+// pruning app/components/vendor/ compiled `raw` and its formatters out of a
+// component the app renders.
+func skipScanDir(name string, atRoot bool) bool {
 	switch name {
-	case "node_modules", "dist", "build", "vendor":
+	case "node_modules":
 		return true
+	case "dist", "build", "vendor":
+		return atRoot
 	}
 	return strings.HasPrefix(name, ".")
 }
@@ -229,7 +257,7 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 		if hasFlipAttr(node.Attrs) {
 			usage.HasFlip = true
 		}
-		collectAttrFormatters(node.Attrs, usage.Formatters, allow)
+		collectAttrCalls(node.Attrs, usage, allow)
 		for _, child := range node.Children {
 			collectUsage(child, usage, allow)
 		}
@@ -244,17 +272,17 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 		if hasFlipAttr(node.Props) {
 			usage.HasFlip = true
 		}
-		collectAttrFormatters(node.Props, usage.Formatters, allow)
+		collectAttrCalls(node.Props, usage, allow)
 		for _, child := range node.Children {
 			collectUsage(child, usage, allow)
 		}
 	case *parser.Slot:
 		if len(node.Args) > 0 {
 			usage.HasSnippets = true
-			collectAttrFormatters(node.Args, usage.Formatters, allow)
+			collectAttrCalls(node.Args, usage, allow)
 		}
 		// Fallback bodies compile through the ordinary child-emission path, so
-		// build-wide formatter/feature discovery must descend into them too.
+		// build-wide function/feature discovery must descend into them too.
 		for _, child := range node.Children {
 			collectUsage(child, usage, allow)
 		}
@@ -270,8 +298,9 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 			collectUsage(child, usage, allow)
 		}
 	case *parser.Interpolation:
-		collectFormatterCalls(node.Formatters, usage.Formatters, allow)
+		collectExprCalls(node.ExprAST, nil, usage, allow)
 	case *parser.If:
+		collectExprCalls(node.CondAST, nil, usage, allow)
 		for _, child := range node.Then {
 			collectUsage(child, usage, allow)
 		}
@@ -279,7 +308,11 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 			collectUsage(child, usage, allow)
 		}
 	case *parser.Case:
+		collectExprCalls(node.ExprAST, nil, usage, allow)
 		for _, clause := range node.Clauses {
+			for _, v := range clause.ValuesAST {
+				collectExprCalls(v, nil, usage, allow)
+			}
 			for _, child := range clause.Body {
 				collectUsage(child, usage, allow)
 			}
@@ -288,6 +321,9 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 			collectUsage(child, usage, allow)
 		}
 	case *parser.For:
+		for _, e := range []expr.Node{node.CollectionAST, node.RangeFromAST, node.RangeToAST} {
+			collectExprCalls(e, nil, usage, allow)
+		}
 		for _, child := range node.Body {
 			collectUsage(child, usage, allow)
 		}
@@ -318,32 +354,187 @@ func hasFlipAttr(attrs []parser.Attr) bool {
 	return false
 }
 
-func collectAttrFormatters(attrs []parser.Attr, used, allow map[string]bool) {
+func collectAttrCalls(attrs []parser.Attr, usage *Usage, allow map[string]bool) {
 	for _, attr := range attrs {
-		if mixed, ok := attr.(*parser.MixedAttr); ok {
-			collectPartFormatters(mixed.Parts, used, allow)
+		switch a := attr.(type) {
+		case *parser.MixedAttr:
+			collectPartCalls(a.Parts, usage, allow)
+		case *parser.DynamicAttr:
+			// A brace-only attribute, prop or marker argument.
+			collectExprCalls(a.ExprAST, nil, usage, allow)
+		case *parser.EventAttr:
+			// The handler's own call names a view handler, never the library
+			// (§9 c); calls inside its arguments and its condition are library
+			// calls, compiled into render().
+			collectExprCalls(a.ExprAST, handlerOwnCalls(a.ExprAST), usage, allow)
 		}
 	}
 }
 
-func collectPartFormatters(parts []parser.Part, used, allow map[string]bool) {
+// handlerOwnCalls returns the calls of an @event value that name a view
+// handler: the calls among its handler forms (codegen.HandlerForms).
+func handlerOwnCalls(n expr.Node) map[*expr.Call]bool {
+	own := map[*expr.Call]bool{}
+	for _, f := range codegen.HandlerForms(n) {
+		if call, ok := f.(*expr.Call); ok {
+			own[call] = true
+		}
+	}
+	return own
+}
+
+func collectPartCalls(parts []parser.Part, usage *Usage, allow map[string]bool) {
 	for _, part := range parts {
 		switch p := part.(type) {
 		case *parser.InterpPart:
 			if p.Interp != nil {
-				collectFormatterCalls(p.Interp.Formatters, used, allow)
+				collectExprCalls(p.Interp.ExprAST, nil, usage, allow)
 			}
 		case *parser.InlineIfPart:
-			collectPartFormatters(p.Then, used, allow)
-			collectPartFormatters(p.Else, used, allow)
+			collectExprCalls(p.CondAST, nil, usage, allow)
+			collectPartCalls(p.Then, usage, allow)
+			collectPartCalls(p.Else, usage, allow)
 		}
 	}
 }
 
-func collectFormatterCalls(calls []parser.FormatterCall, used, allow map[string]bool) {
-	for _, call := range calls {
-		if allow[call.Name] {
-			used[call.Name] = true
+// collectExprCalls records every library function a tree calls — a Call whose
+// callee is a bare name, skipping the calls in skip (an event handler's own
+// call). A markup function anywhere keeps the live-HTML runtime (D174): codegen
+// rejects every placement but the outermost call of a text interpolation, so
+// only a file that fails to compile can over-include here.
+func collectExprCalls(n expr.Node, skip map[*expr.Call]bool, usage *Usage, allow map[string]bool) {
+	if n == nil {
+		return
+	}
+	expr.Walk(n, func(n expr.Node) bool {
+		call, ok := n.(*expr.Call)
+		if !ok || skip[call] {
+			return true
+		}
+		if id, ok := call.Callee.(*expr.Identifier); ok {
+			noteFunction(id.Name, usage, allow)
+		}
+		return true
+	})
+}
+
+// noteFunction records one library function name.
+func noteFunction(name string, usage *Usage, allow map[string]bool) {
+	// The markup pair never reaches the registry: codegen lowers it to the
+	// live-HTML node (D174), so it has no place in the function manifest.
+	if codegen.IsMarkupFormatter(name) {
+		usage.HasRawHTML = true
+		if name == "raw" {
+			usage.HasRawSanitize = true
+		}
+		return
+	}
+	// `t` is service-bound (D175), never a manifest builtin, but the build
+	// still needs to know it is used: `t` without i18n configured is a build
+	// warning. The manifest only ever emits allowlisted names, so recording it
+	// is inert there.
+	if allow[name] || name == TranslateFormatter {
+		usage.Formatters[name] = true
+	}
+}
+
+// TranslateFormatter is the D175 translation function's name.
+const TranslateFormatter = "t"
+
+// collectTKeys records every STRING-LITERAL key handed straight to `t` —
+// `t('cart.title')` — for the build's "key missing from the default locale"
+// warning (D175). Runtime-built keys
+// (`t('status.' + s)`) are not checkable and are skipped. It is its own walk
+// rather than a thread through collectUsage so the function-union walk keeps
+// its narrow shape.
+func collectTKeys(nodes []parser.Node, keys map[string]bool) {
+	for _, n := range nodes {
+		switch node := n.(type) {
+		case *parser.Element:
+			collectAttrTKeys(node.Attrs, keys)
+			collectTKeys(node.Children, keys)
+		case *parser.Component:
+			collectAttrTKeys(node.Props, keys)
+			collectTKeys(node.Children, keys)
+		case *parser.Slot:
+			collectAttrTKeys(node.Args, keys)
+			collectTKeys(node.Children, keys)
+		case *parser.Snippet:
+			collectTKeys(node.Body, keys)
+		case *parser.Portal:
+			collectTKeys(node.Children, keys)
+		case *parser.Interpolation:
+			exprTKeys(node.ExprAST, keys)
+		case *parser.If:
+			exprTKeys(node.CondAST, keys)
+			collectTKeys(node.Then, keys)
+			collectTKeys(node.Else, keys)
+		case *parser.Case:
+			exprTKeys(node.ExprAST, keys)
+			for _, clause := range node.Clauses {
+				for _, v := range clause.ValuesAST {
+					exprTKeys(v, keys)
+				}
+				collectTKeys(clause.Body, keys)
+			}
+			collectTKeys(node.Else, keys)
+		case *parser.For:
+			for _, e := range []expr.Node{node.CollectionAST, node.RangeFromAST, node.RangeToAST} {
+				exprTKeys(e, keys)
+			}
+			collectTKeys(node.Body, keys)
 		}
 	}
+}
+
+func collectAttrTKeys(attrs []parser.Attr, keys map[string]bool) {
+	for _, attr := range attrs {
+		switch a := attr.(type) {
+		case *parser.MixedAttr:
+			collectPartTKeys(a.Parts, keys)
+		case *parser.DynamicAttr:
+			exprTKeys(a.ExprAST, keys)
+		case *parser.EventAttr:
+			exprTKeysSkipping(a.ExprAST, handlerOwnCalls(a.ExprAST), keys)
+		}
+	}
+}
+
+func collectPartTKeys(parts []parser.Part, keys map[string]bool) {
+	for _, part := range parts {
+		switch p := part.(type) {
+		case *parser.InterpPart:
+			if p.Interp != nil {
+				exprTKeys(p.Interp.ExprAST, keys)
+			}
+		case *parser.InlineIfPart:
+			exprTKeys(p.CondAST, keys)
+			collectPartTKeys(p.Then, keys)
+			collectPartTKeys(p.Else, keys)
+		}
+	}
+}
+
+func exprTKeys(n expr.Node, keys map[string]bool) { exprTKeysSkipping(n, nil, keys) }
+
+// exprTKeysSkipping records the string-literal first argument of every `t`
+// call in n, skipping the calls in skip (an event handler's own call).
+func exprTKeysSkipping(n expr.Node, skip map[*expr.Call]bool, keys map[string]bool) {
+	if n == nil {
+		return
+	}
+	expr.Walk(n, func(n expr.Node) bool {
+		call, ok := n.(*expr.Call)
+		if !ok || skip[call] || len(call.Args) == 0 {
+			return true
+		}
+		if id, ok := call.Callee.(*expr.Identifier); !ok || id.Name != TranslateFormatter {
+			return true
+		}
+		if lit, ok := call.Args[0].(*expr.Literal); ok && lit.Kind == expr.LitString {
+			keys[lit.Str] = true
+		}
+		return true
+	})
 }
