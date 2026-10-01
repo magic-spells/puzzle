@@ -5,6 +5,8 @@ The instrument that measures what users actually ship.
 ```bash
 npm run bench            # measure, print the table, compare against baseline.json
 npm run bench:update     # the same, then rewrite baseline.json
+npm run bench:snapshot   # copy baseline.json to history/<version>.json
+npm run bench:history    # the headline ops across every release snapshot
 ```
 
 Every performance number this project had before this harness came from a
@@ -15,10 +17,11 @@ the static output, and drives it through `window.__STRESS__`.
 
 The gap is not hypothetical. Measured through this same harness (see
 [Production versus development](#production-versus-development)), the dev build
-adds roughly **3–4 microseconds per mounted view** — **+190ms** on a 50k
-full-DOM create against **+3ms** on the windowed one. It does not merely shift
-the numbers, it distorts the comparison *between* rendering strategies, which is
-the comparison the stress lab exists to make.
+adds roughly **3–4 microseconds per mounted view**: **+40ms** on a 10k
+full-DOM create, while the windowed create at the same size runs **13ms faster**
+in dev than it ships. It does not merely shift the numbers, it distorts the
+comparison *between* rendering strategies, which is the comparison the stress
+lab exists to make.
 
 ---
 
@@ -32,6 +35,8 @@ the comparison the stress lab exists to make.
 | `harness-lib.mjs` | the staging/build and static-server plumbing `runner.mjs` and `probe.mjs` share. Each driver keeps its OWN assertion about the bundle (no dev markers vs. a `__PUZZLE_PERF__` sentinel); everything mechanical lives here once. |
 | `report.mjs` | medians, MAD, clamp detection, baseline delta, table rendering |
 | `baseline.json` | committed reference numbers. Structural counters are asserted against it; timings are informational. |
+| `history/<version>.json` | `baseline.json` frozen at each release, same shape. See [Across releases](#across-releases). |
+| `history.mjs` | `--snapshot` writes the current baseline into `history/`; with no flag it prints the headline ops across every snapshot (`--all` for every op they share). |
 | `probe.mjs` | the mirror image of `runner.mjs`: builds the same staged copy in **development** mode and hands the page to an arbitrary probe script. Counters only — see below. |
 | `probe-route-churn.mjs` | per-level render / `data()` / mutation counters for `route-churn`, plus a hard failure if the D121 detector fired |
 | `probe-listener-churn.mjs` | exact listener-call counts per arm, and the micro decomposition that prices the invoker pattern |
@@ -45,7 +50,8 @@ the comparison the stress lab exists to make.
 | `benchmarks/.build/stress-src/` | a scratch copy of the example's source (`app/`, `public/`, `puzzle.config.js`, `package.json`) **and its `dist/`** — the bundle actually served |
 | `benchmarks/.last-run.json` | the most recent run, so a failed run can still be diffed by hand |
 
-Plus `benchmarks/baseline.json`, but only under `npm run bench:update`.
+Plus `benchmarks/baseline.json`, but only under `npm run bench:update`, and
+`benchmarks/history/<version>.json`, but only under `npm run bench:snapshot`.
 
 **It never writes to `examples/stress/dist/`.** That directory belongs to
 whoever is running `puzzle dev`, and the benchmark stays out of it. This is not
@@ -145,9 +151,11 @@ The runner does not trust the `--mode` flag; it greps the emitted bundle for
 run if a production build contains any of them. It also snapshots `dist/` before
 serving, so a rebuild in another terminal cannot change the bytes mid-suite.
 
-For the record, the production bundle is **99.4 KB** against the dev build's
-**327 KB**, and contains zero occurrences of the DevTools hook, HMR, devstate,
-or `console.log`.
+For the record, at 0.8.0 the production bundle is **238.6 KB** against the dev
+build's **690.4 KB**, and contains zero occurrences of the DevTools hook, HMR,
+devstate, or `console.log`. Both are the whole stress lab (every scenario in one
+app), not a representative app; `npm run measure:size` owns the real-app
+figures.
 
 ### 2. Warmup, then 15 recorded iterations, reported as medians
 
@@ -318,87 +326,199 @@ Nothing is truncated silently.
 
 ## Results
 
-Machine of record: darwin-arm64, headless Chromium 149.0.7827.55, Node v25.1.0,
-production build (99.4 KB), 15 iterations, medians. Reproduced from
-`baseline.json` as it stood before D170 (0.8.0) changed the renderer. The
-committed `baseline.json` has since been regenerated on the D170 renderer
-(Chromium 151), so its numbers differ from these tables; read current figures
-from it or from `npm run bench`.
+Machine of record: Apple M1 Pro (10 cores, 32 GB), darwin-arm64, headless
+Chromium 151.0.7922.34, Node v25.1.0, production build (238.6 KB), 15
+iterations, medians. This is the committed `baseline.json` for 0.8.0, frozen as
+`history/0.8.0.json`.
 
-### keyed-list — every row mounted
+Only the three D170 gate ops (`keyed-list/update-one`, `update-all`,
+`reorder`) arm a `MutationObserver` over the list body inside the timed window.
+It feeds `klRowsTouched`, the gate their expects assert. Every other
+`keyed-list` op, the handler A/B arms included, runs unobserved, as it did in
+0.6.0's and 0.7.0's stress example, because an observer inside the timed window
+inflates create and clear ([What the numbers say](#what-the-numbers-say) prices it).
 
-| op | script ms | paint ms | layout ms | live nodes | views | records |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `create/1000` | 19.3 | 49.7 | 17.0 | 7,000 | 1,001 | 1,000 |
-| `update-every-10th/1000` | 5.30 | 8.90 | 1.36 | 7,000 | 1,001 | 1,000 |
-| `swap-rows/1000` | 9.70 | 38.3 | 15.8 | 7,000 | 1,001 | 1,000 |
-| `clear/1000` | 6.00 | 6.80 | 0.12 | 0 | 1 | 0 |
-| `create/10000` | 171 | 472 | 148 | 70,000 | 10,001 | 10,000 |
-| `update-every-10th/10000` | 49.0 | 101 | 20.0 | 70,000 | 10,001 | 10,000 |
-| `swap-rows/10000` | 49.3 | 130 | 29.3 | 70,000 | 10,001 | 10,000 |
-| `clear/10000` | 48.0 | 49.0 | 0.11 | 0 | 1 | 0 |
-| `create/50000` | **798** | **2198** | 674 | 350,000 | 50,001 | 50,000 |
-| `update-every-10th/50000` | 297 | 492 | 72.5 | 350,000 | 50,001 | 50,000 |
-| `swap-rows/50000` | 280 | 509 | 50.1 | 350,000 | 50,001 | 50,000 |
-| `clear/50000` | 230 | 231 | 0.13 | 0 | 1 | 0 |
-
-### virtual-list — same records, same row component, windowed
+### keyed-list, every row mounted
 
 | op | script ms | paint ms | layout ms | live nodes | views | records |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `create/1000` | 8.50 | 10.3 | 0.47 | 177 | 26 | 1,000 |
-| `update-every-10th/1000` | 0.60 | 1.40 | 0.14 | 177 | 26 | 1,000 |
-| `swap-rows/1000` | 0.40 | 1.30 | 0.12 | 177 | 26 | 1,000 |
-| `clear/1000` | 1.30 | 2.10 | 0.13 | 2 | 1 | 0 |
-| `create/10000` | 68.3 | 70.0 | 0.45 | 177 | 26 | 10,000 |
-| `update-every-10th/10000` | 3.10 | 3.90 | 0.13 | 177 | 26 | 10,000 |
-| `swap-rows/10000` | 0.50 | 1.30 | 0.11 | 177 | 26 | 10,000 |
-| `clear/10000` | 8.50 | 9.20 | 0.13 | 2 | 1 | 0 |
-| `create/50000` | **338** | **340** | 0.45 | 177 | 26 | 50,000 |
-| `update-every-10th/50000` | 12.6 | 13.4 | 0.13 | 177 | 26 | 50,000 |
-| `swap-rows/50000` | 1.10 | 2.00 | 0.12 | 177 | 26 | 50,000 |
-| `clear/50000` | 41.2 | 42.2 | 0.14 | 2 | 1 | 0 |
-| `fast-scroll/50000` | 73.5 | 82.2 | 3.90 | 177 | 26 | 50,000 |
+| `create/1000` | 25.6 | 61.2 | 16.6 | 7,000 | 1,001 | 1,000 |
+| `update-every-10th/1000` | 3.00 | 11.6 | 1.45 | 7,000 | 1,001 | 1,000 |
+| `swap-rows/1000` | 5.40 | 38.9 | 15.6 | 7,000 | 1,001 | 1,000 |
+| `clear/1000` | 7.40 | 8.30 | 0.12 | 0 | 1 | 0 |
+| `create/10000` | **216** | **516** | 144 | 70,000 | 10,001 | 10,000 |
+| `update-every-10th/10000` | 23.7 | 59.3 | 15.1 | 70,000 | 10,001 | 10,000 |
+| `swap-rows/10000` | 16.0 | 91.1 | 28.3 | 70,000 | 10,001 | 10,000 |
+| `clear/10000` | 67.1 | 68.1 | 0.13 | 0 | 1 | 0 |
+| `create/50000` | 1023 | 2485 | 673 | 350,000 | 50,001 | 50,000 |
+| `update-every-10th/50000` | 124 | 369 | 84.8 | 350,000 | 50,001 | 50,000 |
+| `swap-rows/50000` | 61.0 | 280 | 50.0 | 350,000 | 50,001 | 50,000 |
+| `clear/50000` | 333 | 334 | 0.13 | 0 | 1 | 0 |
+
+The three D170 gate ops, all at 1,000 rows: `update-one` 1.50ms script (one row
+touched, one child `data()` run), `update-all` 9.90ms (1,000 and 1,000),
+`reorder` 6.10ms (zero rows touched, zero `data()` runs, moves only).
+
+### virtual-list, same records, same row component, windowed
+
+| op | script ms | paint ms | layout ms | live nodes | views | records |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `create/1000` | 10.8 | 12.8 | 0.45 | 177 | 26 | 1,000 |
+| `update-every-10th/1000` | 0.60 | 1.60 | 0.13 | 177 | 26 | 1,000 |
+| `swap-rows/1000` | 0.30 | 1.40 | 0.11 | 177 | 26 | 1,000 |
+| `clear/1000` | 2.30 | 3.30 | 0.15 | 2 | 1 | 0 |
+| `create/10000` | **85.5** | **87.6** | 0.43 | 177 | 26 | 10,000 |
+| `update-every-10th/10000` | 3.70 | 4.70 | 0.13 | 177 | 26 | 10,000 |
+| `swap-rows/10000` | 0.40 | 1.50 | 0.11 | 177 | 26 | 10,000 |
+| `clear/10000` | 20.7 | 21.5 | 0.13 | 2 | 1 | 0 |
+| `create/50000` | 429 | 431 | 0.43 | 177 | 26 | 50,000 |
+| `update-every-10th/50000` | 15.1 | 16.2 | 0.14 | 177 | 26 | 50,000 |
+| `swap-rows/50000` | 1.10 | 2.20 | 0.12 | 177 | 26 | 50,000 |
+| `clear/50000` | 107 | 108 | 0.13 | 2 | 1 | 0 |
+| `fast-scroll/50000` | 75.0 | 83.3 | 3.71 | 177 | 26 | 50,000 |
 
 ### Behavioural scenarios
 
 | op | script ms | paint ms | counters |
 | --- | ---: | ---: | --- |
 | `subscriptions/update-one/precision` | 0.10 | 0.20 | notified **0** / 100 watchers |
-| `subscriptions/update-one/fanout` | 2.70 | 4.30 | notified **100** / 100 watchers |
-| `async-waterfall/remount/20` | — | 759 | maxInFlight **1** of 20 — **SERIALIZED** |
+| `subscriptions/update-one/fanout` | 2.90 | 4.60 | notified **100** / 100 watchers |
+| `async-waterfall/remount/20` | — | 751 | maxInFlight **1** of 20, **SERIALIZED** |
 
 `async-waterfall` reports no `scriptMs`; the scenario measures wall time and a
 concurrency census, not a synchronous flush.
 
+### Across releases
+
+`benchmarks/history/` holds one snapshot per release, and `npm run
+bench:history` prints this table from them. **The columns are comparable only
+because every snapshot was measured on the same machine (Apple M1 Pro) and the
+same headless Chromium (151.0.7922.34).** A snapshot from another machine or
+browser is a different instrument; `bench:history` prints both per column and
+warns when they disagree.
+
+0.6.0 and 0.7.0 were measured retroactively on 2026-09-30, each by its own tag's
+harness and compiler in a temporary checkout. 0.8.0 is the release baseline,
+re-measured on 2026-10-01 after the stress observer left the timed window.
+Median script ms / paint ms, full-DOM `keyed-list` unless noted:
+
+| op | 0.6.0 | 0.7.0 | 0.8.0 |
+| --- | ---: | ---: | ---: |
+| `create/1000` | 21.2 / 51.3 | 23.6 / 57.9 | 25.6 / 61.2 |
+| `update-every-10th/1000` | 5.70 / 9.60 | 6.60 / 15.0 | **3.00** / 11.6 |
+| `swap-rows/1000` | 10.0 / 38.0 | 11.6 / 44.9 | **5.40** / 38.9 |
+| `clear/1000` | 6.10 / 6.90 | 6.80 / 7.70 | 7.40 / 8.30 |
+| `create/10000` | 175 / 447 | 198 / 484 | 216 / 516 |
+| `update-every-10th/10000` | 52.8 / 98.5 | 69.6 / 116 | **23.7** / 59.3 |
+| `swap-rows/10000` | 53.3 / 127 | 68.3 / 139 | **16.0** / 91.1 |
+| `clear/10000` | 49.7 / 50.7 | 61.2 / 62.1 | 67.1 / 68.1 |
+| stress: `create/50000` | 859 / 2248 | 980 / 2402 | 1023 / 2485 |
+| stress: `clear/50000` | 264 / 265 | 329 / 330 | 333 / 334 |
+| stress: windowed `create/50000` | 373 / 375 | 430 / 433 | 429 / 431 |
+| `async-waterfall` census | 1 of 20 in flight, 751ms | 1 of 20, 749ms | 1 of 20, 751ms |
+| stress-lab bundle | 218.7 KB | 229.5 KB | 238.6 KB |
+
+Ops per version: 0.6.0 and 0.7.0 run the same 80-op matrix, and each snapshot
+holds 79 of them. `route-churn/navigate-burst/100` is missing from both because
+the tag's own scenario declares `rcAncestorMutations: 500` while the tag measures
+700; the expect was stale at both tags (0.8.0 declares 700), and the runner
+records no timings for a mismatched op. 0.8.0 adds the three D170 gate ops
+(`keyed-list/update-one`, `update-all`, `reorder`) for 83. Every counter the two
+old runs did record matches its tag's own `baseline.json`.
+
+**At each release,** on the clean release tree: `npm run bench:update`, then
+`npm run bench:snapshot`. The snapshot refuses a baseline measured over
+uncommitted changes. Only compare a new column with the old ones if it was
+measured on this machine and browser; otherwise re-measure the old tags with
+their own harnesses (a temporary `git worktree` per tag, `npm run
+build:compiler`, `npm ci`, `npm run bench`, and take `benchmarks/.last-run.json`).
+
 ### What the numbers say
 
-**Windowing removes the DOM cost, not the data cost.** At 50k records, `create`
-is 798ms full-DOM against 338ms windowed — but the windowed list still pays
-338ms, because seeding 50,000 records is a cost both strategies share. The
-~460ms difference is what 350,000 elements and 50,001 view instances cost.
-`layout` makes this unusually stark: 674ms full-DOM versus **0.45ms** windowed,
-flat from 1k to 50k.
+**D170 made changing an existing list 2–4x cheaper in script time.** Against
+0.7.0 at 10,000 rows, `update-every-10th` went from 69.6ms to 23.7ms and
+`swap-rows` from 68.3ms to 16.0ms; at 1,000 rows, 6.60ms to 3.00ms and 11.6ms to
+5.40ms. The counters say why: 0.7.0 re-ran all 10,000 child `data()` calls for
+either op, 0.8.0 re-runs the 1,000 rows it wrote and none for a swap. An
+untouched row now comes back from its list block as the same cached subtree and
+the patcher short-circuits on identity, and the row's handlers are cached on
+the row scope, so nothing hands the child a fresh prop. Paint improves less
+(116ms to 59.3ms, 139ms to 91.1ms at 10,000) because layout of the rows that did
+change is the browser's work and did not move.
 
-**Paint dominates at scale, and it is the browser's cost, not the framework's.**
-`keyed-list/create/50000` is 798ms of script inside 2198ms to the painted frame.
-Reporting a single number would hide that roughly two-thirds of the wait is the
-engine, and that no amount of reconciler tuning would recover it.
+**Creating and clearing a full-DOM list got slower in 0.7.0, and 0.8.0 reads
+slightly slower again, at the edge of noise.** Against 0.7.0, a 1,000-row create
+costs 2.0ms more script (23.6ms to 25.6ms) and a clear 0.6ms more (6.80ms to
+7.40ms); at 10,000, create is 18ms slower (198ms to 216ms) and clear 5.9ms
+(61.2ms to 67.1ms). That is +8% to +10% at both sizes. At 50,000 the step
+shrinks to +4% on create (980ms to 1023ms) and +1% on clear (329ms to 333ms).
+Every one of these sits inside the ~18% run-to-run band below, so none of them
+is a finding alone. Against 0.6.0 the 1,000-row create is 4.4ms (+21%) slower,
+2.4ms of it the 0.7.0 step.
+
+- **The instrument is no longer part of it.** Earlier 0.8.0 runs armed the
+  stress example's `MutationObserver` inside the timed window of every
+  `keyed-list` op, and the 0.6.0 and 0.7.0 stress apps had no observer. A
+  bracketed A/B (observer on, off, on) priced it at 0.4ms, 3.2ms and 69ms of
+  script on the 1,000, 10,000 and 50,000-row creates, and 0.6ms, 5.1ms and 21ms
+  on the clears. It now arms only for the three D170 gate ops that assert its
+  counts, which have no 0.6.0 or 0.7.0 column, so every op in the table above
+  compares like for like.
+- **The remaining step is not stable within one run.** The `handlers-inline`
+  arm runs the same URL and render path as `keyed-list` in the same suite, and
+  its creates read 22.5ms and 202ms at 1,000 and 10,000 rows: level with 0.7.0's
+  same arm (22.2ms and 207ms). Two identical ops disagreeing by 12% in one run
+  is the band at work. If the step is real, the likely cause is D170's per-row
+  state. The card lists what a list block keeps for every row: a live scope
+  object, the stored record revision, the cached vnode subtree, per-row static
+  caches and handler slots, plus a `__propRevs` snapshot per child and a
+  render-revision Symbol defined on every record at `_instantiate`. A create
+  builds all of it and a clear tears it down; a later update or swap is where
+  it pays back. The card does not price these costs and this harness does not
+  separate them.
+- **The 0.7.0 step predates D170** and hit the windowed list as well: its
+  `create/50000`, which is mostly store seeding and mounts 26 views, rose from
+  373ms to 430ms, and its `clear/50000` from 47.7ms to 116ms. That points at
+  store-side work rather than rendering. No decision card prices it.
+
+**Views that re-render one big template gained nothing and pay the new
+bookkeeping.** Against 0.7.0, `islands/shell-renders` went from 576ms to 629ms
+(+9%), the `formatters` re-renders by 4–9%, and `form-state` typing (200
+controlled fields, a full re-render per keystroke) by 17–18%. Only the typing
+step reaches the edge of the ~18% band, but every one of them points the same
+way, and the two earlier 0.8.0 runs read higher still (+14%, 7–12% and 18–28%). These views have no keyed row list for the cache to skip. The likely cost
+is the machinery D170 gives every view, which the card lists (the `__dirty` root
+mask, static-subtree cache reads, the `__propRevs` compare, `syncControl`
+re-asserting controlled values); this harness does not separate the parts.
+The `listener-churn` churn arm moves the other way (855ms to 544ms at 10,000),
+because its `@click={ selectRow(row) }` is now cached on the row.
+
+**Windowing removes the DOM cost, not the data cost.** At 10,000 records
+`create` is 216ms full-DOM against 85.5ms windowed, and the windowed list still
+pays those 85.5ms because seeding 10,000 records is shared by both strategies.
+The difference is what 70,000 elements and 10,001 view instances cost. Layout
+makes it stark: 144ms full-DOM against **0.43ms** windowed, flat from 1k to 50k.
+
+**Paint dominates at scale, and it is the browser's cost, not the
+framework's.** `keyed-list/create/10000` is 216ms of script inside 516ms to the
+painted frame. A single number would hide that more than half of the wait is
+the engine, and no reconciler tuning would recover it.
 
 **Ops touching only rendered rows are effectively free when windowed.**
-`swap-rows` at 50k: 280ms full-DOM, 1.10ms windowed — ~255x. `update-every-10th`:
-297ms against 12.6ms.
+`swap-rows` at 10,000: 16.0ms full-DOM, 0.40ms windowed (at the measurement
+floor). `update-every-10th`: 23.7ms against 3.70ms.
 
-**`clear` is pure teardown and scales with what is being torn down** — 230ms at
-50k full-DOM versus 41.2ms windowed, with layout at ~0.13ms in both. That is
+**`clear` is pure teardown and scales with what is being torn down**: 67.1ms at
+10,000 full-DOM against 20.7ms windowed, with layout at ~0.13ms in both. That is
 destructor and store work, not rendering.
 
 **Subscription precision holds in production.** One write outside the watched
 window wakes 0 of 100 precision watchers and 100 of 100 fan-out watchers. The
-0.10ms precision figure is at the measurement floor, not a real value.
+precision timing is at the measurement floor, not a real value.
 
-**The async `data()` serialization is real in production too.** 20 independent
-async `data()` evaluations, nothing shared, nothing queried: `maxInFlight` is 1.
+**The async `data()` serialization is real in production, in every release
+measured.** 20 independent async `data()` evaluations, nothing shared, nothing
+queried: `maxInFlight` is 1 in 0.6.0, 0.7.0 and 0.8.0.
 `Store.withTracking`'s single store-wide `_asyncTrackingChain` defers each
 known-async evaluation behind the one in flight. This is a census result, not a
 timing inference.
@@ -414,39 +534,39 @@ Both arms run the same scenario, the same records, the same row component and
 the same ops. The only difference is how `KeyedList` spells its two callback
 props.
 
-- **`inline`** — the default, and what `baseline.json` was recorded from —
-  passes data-capturing props: `@select={ selectRow(row) }`. `row` is a loop
-  variable, so codegen cannot cache the closure (D62, the caching verdict of
-  `handler` in `compiler/internal/codegen/lower.go`) and mints a fresh
-  arrow per row per parent render. Those arrows are component **props**, so they
-  take part in `patchComponent`'s `shallowEqual(oldProps, newProps)` bailout
-  (`client-runtime/views/viewManager.js`) — and a fresh function object never
-  compares equal. Every mounted row therefore re-runs `data()` and re-renders on
+- **`inline`**, the default and what `baseline.json` is recorded from, passes
+  data-capturing props: `@select={ selectRow(row) }`. Before D170, `row` being a
+  loop variable meant codegen could not cache the closure (D62) and minted a
+  fresh arrow per row per parent render. Those arrows are component **props**,
+  so they take part in `patchComponent`'s `shallowEqual(oldProps, newProps)`
+  bailout (`client-runtime/views/viewManager.js`), and a fresh function object
+  never compares equal. Every mounted row re-ran `data()` and re-rendered on
   every parent render, however little changed.
 - **`stable`** passes bare method references: `@select={ selectById }`. Those
-  *are* cacheable, so codegen emits `((this.__h ??= {})[N] ??= ...)` — one
+  *are* cacheable, so codegen emits `((this.__h ??= {})[N] ??= ...)`: one
   function object per site per view instance, identical across renders. An
   untouched row's props then compare fully equal and `applyParentUpdate()`
   returns without running `data()` and without rendering.
 
-> **Since D170 (0.8.0) the `inline` arm no longer mints fresh arrows.** A
-> handler whose arguments capture only loop locals is cached on the row scope
-> (`s.h0 ??= (event) => this.events.selectRow(s.item)`) and reads the row's
-> current item when it fires, so both arms now hand the patcher a stable
-> identity. The tables in this section are the pre-D170 measurement, kept
-> because they are what priced the problem.
+**Since D170 (0.8.0) the `inline` arm no longer mints fresh arrows.** A handler
+whose arguments capture only loop locals is cached on the row scope
+(`s.h0 ??= (event) => this.events.selectRow(s.item)`) and reads the row's
+current item when it fires, and an untouched row comes back from the list block
+as the same cached subtree, so the patcher never compares its props at all. The
+cascade the A/B was built to price is gone from both spellings; the measurements
+below show that, next to 0.7.0's, which still priced it.
 
 The row capture has to go somewhere, and in `stable` it moves **into the child**:
 `ListRow` calls `props.select?.(props.id)` and the parent re-queries by id. That
 is the entire difference. `ListRow` is shared with `virtual-list`, which is
-unaffected — the inline closure simply ignores the extra id argument.
+unaffected; the inline closure simply ignores the extra id argument.
 
 ### Running it
 
 `--filter handlers-` runs only this comparison: 20 entries appended to the end of
 `OPS`, with ids `handlers-inline/*` and `handlers-stable/*`. The existing
 `keyed-list/*` and `virtual-list/*` ids and params are untouched, and the
-`inline` arm deliberately does **not** pass `handlers=inline` — it is the
+`inline` arm deliberately does **not** pass `handlers=inline`. It is the
 default, so that arm's URL, render path and counters are identical to the plain
 `keyed-list/*` entries the committed baseline came from.
 
@@ -460,7 +580,7 @@ the default production build. The structural counters come from
 `propReruns` and `domMutations` are produced by `client-runtime/devperf.js`,
 which production compiles out; the RENDER STRUCTURE table prints them as `—`
 rather than `0` in a production run, because a fabricated zero and a measured
-zero mean opposite things here. `childDataRuns` is the exception — it is a plain
+zero mean opposite things here. `childDataRuns` is the exception: it is a plain
 integer in `examples/stress/app/row-metrics.js`, incremented at the top of
 `ListRow.data()`, so it survives into the shipped bundle and is present in every
 build. The table's `handlers` column is reported by the scenario itself, so an
@@ -472,62 +592,71 @@ A variant that is faster because it quietly stopped working is worthless, so eac
 arm must prove it still works before any of its numbers are believed.
 `click-select` and `click-remove` are **behaviour gates, not measurements**: they
 dispatch a real DOM click at the first rendered row and throw unless the
-selection actually flipped — in the store *and* in the DOM — and unless that
+selection actually flipped (in the store *and* in the DOM) and unless that
 exact record left both the store and the DOM. They run first within each arm, at
 one iteration with no warmup; a throw is reported as `ERROR` and fails the run.
-Their milliseconds mean nothing. **Both arms pass.**
+Their milliseconds mean nothing. **Both arms pass, in 0.7.0 and in 0.8.0.**
 
 ### The timings
 
-Production build, 15 recorded iterations, medians, darwin-arm64, headless
-Chromium 149.0.7827.55, bundle 103.8 KB — larger than the 99.4 KB quoted above
-because the example now carries both arms. MAD ran 1–6%, against the ~13%
-detection threshold established under
-[Instrument variance](#instrument-variance).
+Production build, 15 recorded iterations, medians, same machine and Chromium
+151 for both releases: 0.7.0 from its retroactive run (`history/0.7.0.json`),
+0.8.0 from the committed baseline. Median in-page `script ms`:
 
-Median in-page `script ms`:
+| op | n | 0.7.0 `inline` | 0.7.0 `stable` | 0.8.0 `inline` | 0.8.0 `stable` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `create` | 1,000 | 22.2 | 21.9 | 22.5 | 22.2 |
+| `update-every-10th` | 1,000 | 6.80 | 3.30 | 2.90 | 2.80 |
+| `swap-rows` | 1,000 | 10.6 | 5.40 | 4.50 | 4.40 |
+| `select-row` | 1,000 | 6.40 | 2.20 | 1.40 | 1.50 |
+| `create` | 10,000 | 207 | 204 | 202 | 203 |
+| `update-every-10th` | 10,000 | 62.1 | 27.1 | 22.5 | 22.2 |
+| `swap-rows` | 10,000 | 62.8 | 21.8 | 15.9 | 16.3 |
+| `select-row` | 10,000 | 58.0 | 17.6 | 12.2 | 12.2 |
 
-| op | n | `inline` | `stable` |
-| --- | ---: | ---: | ---: |
-| `create` | 1,000 | 19.7 | 19.1 |
-| `update-every-10th` | 1,000 | 4.90 | 2.60 |
-| `swap-rows` | 1,000 | 8.90 | 5.10 |
-| `select-row` | 1,000 | 4.50 | 1.70 |
-| `create` | 10,000 | 164 | 162 |
-| `update-every-10th` | 10,000 | 46.7 | 22.2 |
-| `swap-rows` | 10,000 | 47.0 | 18.5 |
-| `select-row` | 10,000 | 42.3 | 14.3 |
-
-CDP `task ms` at 10,000 rows — the renderer's own accounting, as the independent
+CDP `task ms` at 10,000 rows, the renderer's own accounting, as the independent
 second opinion:
 
-| op | `inline` | `stable` |
-| --- | ---: | ---: |
-| `create` | 439 | 439 |
-| `update-every-10th` | 116 | 53.8 |
-| `swap-rows` | 135 | 92.3 |
-| `select-row` | 78.3 | 21.4 |
+| op | 0.7.0 `inline` | 0.7.0 `stable` | 0.8.0 `inline` | 0.8.0 `stable` |
+| --- | ---: | ---: | ---: | ---: |
+| `create` | 501 | 496 | 486 | 488 |
+| `update-every-10th` | 139 | 64.0 | 59.4 | 60.1 |
+| `swap-rows` | 162 | 108 | 103 | 103 |
+| `select-row` | 99.7 | 29.6 | 23.6 | 24.5 |
 
-**Read the 10,000-row rows.** At 1,000 rows most of the `stable` arm lands under
-the 5ms mark below which [Instrument variance](#instrument-variance) says a
-delta is not worth trusting; the direction agrees there, the magnitude is not
-readable. `create` is unchanged in both arms and at
-both sizes — nothing can bail out on first mount, so there is nothing for the
-stable spelling to save. Every op that mutates an existing 10,000-row list is cut
-by more than half in script time. The renderer's `task` totals agree, though less
-sharply on `swap-rows` — the DOM work there is identical in both arms (see below)
-and is a larger share of the total.
+**Read the 10,000-row rows.** At 1,000 rows most figures sit under the 5ms mark
+below which [Instrument variance](#instrument-variance) says a delta is not worth
+trusting. In 0.7.0 the stable spelling cut every mutation of a 10,000-row list
+by more than half. In 0.8.0 the two arms are within noise of each other on every
+op, and in script time the inline arm now matches or beats what the stable
+spelling achieved in 0.7.0. CDP task time agrees: at 10,000 rows both 0.8.0
+arms sit at or below 0.7.0's stable arm on every op (the earlier runs, with the
+observer in the window, read `update-every-10th` and `swap-rows` 10–17% above
+it). `create` cannot bail out on first mount in any arm,
+so it only moves with the create cost discussed under [What the numbers say](#what-the-numbers-say).
 
-### The structural counts — the decisive evidence
+### The structural counts: the decisive evidence
 
 Development build, n=10,000. These are exact counts, not medians: they are
-properties of the render algorithm, not of the machine, so a difference between
-the two arms is a real difference.
+properties of the render algorithm, not of the machine.
+
+At 0.8.0:
 
 | op | arm | childDataRuns | renders | wastedRenders | propBailouts | propReruns | domMutations |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `create` | `inline` | 10,000 | 10,001 | 0 | 0 | 0 | 220,004 |
-| `create` | `stable` | 10,000 | 10,002 | 0 | 1 | 0 | 220,009 |
+| `create` | `stable` | 10,000 | 10,001 | 0 | 0 | 0 | 220,004 |
+| `update-every-10th` | `inline` | 1,000 | 1,001 | 1 | 0 | 1,000 | 2,000 |
+| `update-every-10th` | `stable` | 1,000 | 1,002 | 1 | 1 | 1,000 | 2,005 |
+| `swap-rows` | `inline` | 0 | 1 | 0 | 2 | 0 | 997 |
+| `swap-rows` | `stable` | 0 | 1 | 0 | 2 | 0 | 997 |
+| `select-row` | `inline` | 1 | 2 | 1 | 0 | 1 | 1 |
+| `select-row` | `stable` | 1 | 2 | 1 | 0 | 1 | 1 |
+
+Measured before D170 (exact counts, so the machine does not matter):
+
+| op | arm | childDataRuns | renders | wastedRenders | propBailouts | propReruns | domMutations |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `update-every-10th` | `inline` | 10,000 | 10,001 | 9,001 | 0 | 10,000 | 2,000 |
 | `update-every-10th` | `stable` | 1,000 | 1,001 | 1 | 9,000 | 1,000 | 2,000 |
 | `swap-rows` | `inline` | 10,000 | 10,001 | 10,000 | 0 | 10,000 | 997 |
@@ -535,43 +664,37 @@ the two arms is a real difference.
 | `select-row` | `inline` | 10,000 | 10,001 | 10,000 | 0 | 10,000 | 1 |
 | `select-row` | `stable` | 1 | 2 | 1 | 9,999 | 1 | 1 |
 
-**The DOM work is identical, and that is the whole point.** `domMutations`
-matches exactly on all three mutation ops — 2,000 for `update-every-10th`, 997
-for `swap-rows`, 1 for `select-row`. The `stable` arm is not skipping work the
-user can see. It patches precisely the same nodes; it just stops waking the rows
-that had nothing to do.
+**The DOM work is identical in every row of both tables.** `domMutations` is
+2,000 for `update-every-10th`, 997 for `swap-rows` and 1 for `select-row`,
+whichever arm, whichever release. No arm is skipping work the user can see.
 
-On `create` the two arms differ by one render and five mutations out of 220,004.
-That is the control panel, not the list: `Home` polls `scenarioStats()` on a 1s
-interval and suppresses it only while its OWN buttons are driving an op, so a
-harness-driven op can have the poll land inside the measured window and repaint
-the four stat readouts. It is not row-proportional, it lands on whichever arm
-happens to straddle a tick, and it cannot touch `childDataRuns`, which counts
-only `ListRow.data()`. Treat the framework counters as exact to within about one
-render for this reason; `childDataRuns` is exact, full stop.
+**Before D170 the inline idiom defeated the bailout**: 10,000 child `data()`
+runs, ~10,000 wasted renders and zero bailouts on every op, whether it touched
+1,000 rows or one, while the stable arm bailed out of every untouched row.
+**At 0.8.0 both arms do only the work the op asked for**: 1,000 child `data()`
+runs for 1,000 written rows, none for a swap, one for a select. `propBailouts`
+also falls from ~10,000 to ~0 in the stable arm. The rows are no longer bailing
+out of a prop comparison; they are never compared, because the list block hands
+back the cached subtree and `patch()` short-circuits on identity.
 
-**The bailout works.** `swap-rows` on the `stable` arm is the cleanest read in
-the suite: **0** child `data()` runs, **1** render, **10,000** prop bailouts —
-and the same 997 DOM mutations as the arm that re-rendered all 10,000 rows.
-`select-row` is the same shape with one row genuinely affected: 1 child `data()`
-run against 9,999 bailouts. `update-every-10th` writes 1,000 records and runs the
-child `data()` exactly 1,000 times.
+A stray render or a few mutations of difference between arms (`update-every-10th`
+above: 1,002 against 1,001, 2,005 against 2,000) is the control panel, not the
+list: `Home` polls `scenarioStats()` on a 1s interval and suppresses it only
+while its OWN buttons are driving an op, so a harness-driven op can have the
+poll land inside the measured window and repaint the stat readouts. Treat the
+framework counters as exact to within about one render for this reason;
+`childDataRuns` counts only `ListRow.data()` and is exact, full stop.
 
-**The inline idiom defeats it.** The same three ops on the `inline` arm: 10,000
-child `data()` runs, ~10,000 wasted renders, 10,000 prop re-runs and **zero**
-bailouts, every time, whether the op touched 1,000 rows or one.
-
-So the cascade is not a framework defect. `patchComponent`'s `shallowEqual` prop
-bailout is correct and, given stable props, extremely effective; the canonical
-Puzzle list idiom — the shape `examples/todos` uses — is what disarms it, by
-handing the patcher a brand-new function object per row per render.
-
-It does not overturn the windowing result either: `create`, the op windowing wins
-hardest on, is the one op the stable spelling cannot help.
+So the cascade was never a defect in the bailout. `patchComponent`'s
+`shallowEqual` was correct and, given stable props, effective; the canonical list
+idiom disarmed it by handing the patcher a new function object per row per
+render, and D170 fixed that in the compiler rather than in the idiom. It does not
+overturn the windowing result either: `create`, the op windowing wins hardest
+on, is the one op no handler spelling can help.
 
 ---
 
-## Route churn — what a committed navigation costs a reused ancestor
+## Route churn: what a committed navigation costs a reused ancestor
 
 Two ops, `route-churn/navigate-burst/100` and `route-churn/params-burst/100`.
 The full derivation, the per-level table and the mechanism live in
@@ -582,39 +705,47 @@ rather than a stylistic one.** `route-churn`'s other ops run at a fixed
 navigations-per-second, so their duration is an input; worse, a 100-navigation
 op at 5/sec lands on 20,000ms, and guard 4 (whole-second clustering) would
 rightly reject it. The paced arms exist because a **development** build's D121
-runaway-render detector fires on fast navigation over a deep route tree —
-production has no detector, so the burst arms are both safe and honest here.
+runaway-render detector fires on fast navigation over a deep route tree.
+Production has no detector, so the burst arms are both safe and honest here.
+
+0.8.0, production, 15 iterations:
 
 | op | script ms | paint ms | task | other | live nodes | views |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `navigate-burst/100` | — | **25.2** | 27.3 | 22.0 | 20 | 7 |
-| `params-burst/100` | — | **17.1** | 20.2 | 16.7 | 20 | 7 |
+| `navigate-burst/100` | — | **27.6** | 30.3 | 24.5 | 20 | 7 |
+| `params-burst/100` | — | **16.3** | 20.0 | 16.7 | 20 | 7 |
 
 Both report no `scriptMs`: a navigation is not a synchronous flush, so the
 scenario measures wall time around the whole loop, exactly as `async-waterfall`
-does. MAD was 2–3% across 15 iterations.
+does. 0.7.0 on the same machine and browser measured `params-burst` at 18.0ms;
+its `navigate-burst` has no timing (see [Across releases](#across-releases)).
 
-0.25ms per leaf-divergence navigation against 0.17ms for the params-only
-control. **Read that next to the counters, not instead of them:** 27 ancestor
-renders inside 0.25ms means each render is ~9µs, because these ancestors render
-one span and a `<Slot/>`. The finding is a multiplier on whatever a real app's
-layouts do per render.
+That is 0.28ms per leaf-divergence navigation against 0.16ms for the params-only
+control. The ancestors here render one span and a `<Slot/>`, so the time says
+little on its own; the counters are the finding, and a real app's layouts
+multiply them by whatever they do per render.
 
-The asserted counters are the payload, and they are exact rather than
-statistical — properties of the router, not of the machine:
+The asserted counters are exact rather than statistical, properties of the
+router and not of the machine:
 
-| counter | `navigate-burst` | `params-burst` |
-| --- | ---: | ---: |
-| `rcAncestorRenders` | **2,700** (27/nav) | **2,100** (21/nav) |
-| `rcAncestorDataRuns` | 600 (6/nav) | 600 (6/nav) |
-| `rcAncestorMutations` | 500 — all at the divergence level | **0** |
-| `rcLayoutRenders` | 200 (2/nav) | 100 (1/nav) |
-| `rcLeafMounts` | 100 | **0** — the leaf instance is reused |
+| counter | `navigate-burst` | `params-burst` | before D170 |
+| --- | ---: | ---: | --- |
+| `rcAncestorRenders` | **1,200** (12/nav) | **600** (6/nav) | 2,700 / 2,100 |
+| `rcAncestorDataRuns` | 600 (6/nav) | 600 (6/nav) | unchanged |
+| `rcAncestorMutations` | 700, all at the divergence level | **0** | unchanged |
+| `rcLayoutRenders` | 200 (2/nav) | 100 (1/nav) | unchanged |
+| `rcLeafMounts` | 100 | **0**, the leaf instance is reused | unchanged |
+
+D170 took the reused-ancestor cascade from 27 renders per navigation to 12,
+O(depth) instead of O(depth²): the record-prop and identity bailouts now stop it
+instead of letting it re-render every slot-holding descendant. `rcAncestorMutations` is 700 in 0.6.0, 0.7.0
+and 0.8.0 alike; the 500 this README used to quote was a stale expect in
+`scenarios.mjs`, not a measurement.
 
 `rcLeafMounts` is the assertion that keeps the control honest: if the
 params-only arm ever remounted its leaf it would not be a params-only arm.
 
-## Listener churn — pricing the invoker pattern
+## Listener churn: pricing the invoker pattern
 
 Three arms over identical DOM: `churn`, `stable`, `none`. `rerender` is the
 uninstrumented timing arm; `count-listeners` is the same 20 renders with
@@ -623,107 +754,115 @@ scenario**, so its counts are exact and its milliseconds carry the probe. The
 two must never be compared across, the same split `formatters` uses for
 `count-intl`.
 
-Production medians of 15, 20 renders per op, uninstrumented arm:
+Production medians of 15, 20 renders per op, uninstrumented arm, same machine
+and Chromium 151 for both releases:
 
-| n | `churn` | `stable` | `none` | churn − stable |
-| ---: | ---: | ---: | ---: | ---: |
-| 1,000 | 74.4 | 40.2 | 45.7 | **34.2ms (46.0%)** |
-| 10,000 | 651 | 443 | 413 | **208ms (32.0%)** |
+| n | release | `churn` | `stable` | `none` | churn − stable |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 1,000 | 0.7.0 | 72.5 | 50.4 | 43.5 | **22.1ms (30.5%)** |
+| 10,000 | 0.7.0 | 855 | 542 | 505 | **313ms (36.6%)** |
+| 1,000 | 0.8.0 | 51.8 | 51.2 | 51.0 | 0.6ms, noise |
+| 10,000 | 0.8.0 | 570 | 564 | 583 | 6ms, noise |
 
-`stable` and `none` are within noise of each other; at 1,000 rows `stable` reads
-lower than `none`, which is an instrument artefact (MAD 11%) rather than a
-result. Only the `churn` gap is readable.
+Structural counts over 20 renders of 10,000 rows:
 
-Structural counts over 20 renders of 10,000 rows, and they are the finding:
+| arm | before D170: add / remove | 0.8.0: add / remove |
+| --- | ---: | ---: |
+| `churn` | 400,000 / 400,000 (40,000 per render) | **0** / **0** |
+| `stable` | **0** / **0** | **0** / **0** |
+| `none` | **0** / **0** | **0** / **0** |
 
-| arm | `addEventListener` | `removeEventListener` | per render |
-| --- | ---: | ---: | ---: |
-| `churn` | 400,000 | 400,000 | 40,000 |
-| `stable` | **0** | **0** | **0** |
-| `none` | **0** | **0** | **0** |
+The committed baseline gates on the zeros. Since D170 the `churn` arm's
+`@click={ selectRow(row) }` is cached on the row scope, so all three arms
+rebind nothing and time the same; `none` reading a little slower than the other
+two at 10,000 is inside the run-to-run band.
 
-Those are the pre-D170 counts. Since D170 (0.8.0) the `churn` arm's
-`@click={ selectRow(row) }` is cached on the row scope too, and all three arms
-count **0** (the committed baseline gates on it).
-
-**Zero. The canonical Puzzle handler spelling rebinds nothing**, because
+**The canonical Puzzle handler spelling rebinds nothing**, and it never did:
 `@click={ onSelect }` compiles to a per-instance cached arrow and never fails
-`patchAttrs`'s identity check. The invoker pattern's saving in idiomatic code is
-therefore exactly 0%.
+`patchAttrs`'s identity check. Since D170 neither does the loop spelling. The
+invoker pattern's saving in idiomatic code is therefore exactly 0%.
 
 `probe-listener-churn.mjs` confirms that on `keyed-list` itself, by patching
-`Element.prototype` from the driver so no app change is needed:
+`Element.prototype` from the driver so no app change is needed (0.8.0):
 
 | `keyed-list/update-every-10th` | child `data()` runs | add | remove |
 | --- | ---: | ---: | ---: |
-| n=10,000 `handlers=inline` | 10,000 | **0** | **0** |
+| n=10,000 `handlers=inline` | 1,000 | **0** | **0** |
 | n=10,000 `handlers=stable` | 1,000 | **0** | **0** |
 
-All 10,000 rows re-evaluating and re-rendering, and not one listener rebound.
+Before D170 the inline row re-ran all 10,000 child `data()` calls here and still
+rebound no listener.
 
 `micro-listener-cost` prices the parts over the real rendered elements,
 batch-timed (per-round timing put the invoker arm under the `performance.now()`
-clamp, where it reported a flat 0.0ns — a floor artefact shaped like a result):
+clamp, where it reported a flat 0.0ns, a floor artefact shaped like a result).
+0.8.0 probe run, 10,000 elements:
 
 | operation | per handler |
 | --- | ---: |
-| `removeEventListener` + `addEventListener` | ~200ns |
-| invoker property write | **~1.5ns** |
-| arrow allocation | ~4ns *(likely understated — escape analysis)* |
+| `removeEventListener` + `addEventListener` | ~215–245ns |
+| invoker property write | **~1.2–1.7ns** |
+| arrow allocation | ~4ns *(likely understated: escape analysis)* |
 
-So of the 208ms `churn` penalty at 10,000 rows, the DOM API is ~80ms — **~12% of
-that arm's render time and only ~38% of its own penalty**. The rest is the
-remainder of `setAttr`'s per-call work (it re-parses the event name on every
-call, walks the `LISTENERS` map, stores the handler) plus the closure allocation.
-**An invoker removes none of that** — `setAttr` is still entered whenever the
-handler identity changes; only the remove/add pair becomes a property write.
+So of the 313ms `churn` penalty 0.7.0 paid at 10,000 rows, the DOM API is
+~90ms (400,000 remove/add pairs at ~230ns): **~11% of that arm's render time
+and under a third of its own penalty**. The rest is the remainder of `setAttr`'s
+per-call work (it re-parses the event name on every call, walks the `LISTENERS`
+map, stores the handler) plus the closure allocation. **An invoker removes none
+of that**: `setAttr` is still entered whenever the handler identity changes;
+only the remove/add pair becomes a property write.
 
-**The answer is that it is not worth adopting.** Not because the effect is
-invisible, but because it is absent from the code people actually write, and
-because the shape that does pay is fixed better and more cheaply by spelling the
-handler cacheably — that recovers the whole 32% against the invoker's ~12%, with
-no framework change and no regression risk.
+**The answer is that it is not worth adopting**, and D170 settled it: the shape
+that paid is now compiled to a stable identity, which recovers the whole
+penalty, where an invoker would have recovered about a third of it.
 
 `rerender` runs **20** renders, not 30. At 30 the churn arm landed at ~1,095ms
-and guard 4 rejected the sample set — 8 of 8 samples within 60ms of a whole
-second is indistinguishable from a throttled renderer. 20 puts it at ~650ms.
-This is the second time that guard has moved an op's parameters rather than its
-verdict; `async-waterfall`'s delay=35 was the first. `count-listeners` carries a
-3-iteration `CAP` (its counts are algorithmic, not statistical).
+and guard 4 rejected the sample set: 8 of 8 samples within 60ms of a whole
+second is indistinguishable from a throttled renderer. 20 puts it under a
+second. This is the second time that guard has moved an op's parameters rather
+than its verdict; `async-waterfall`'s delay=35 was the first. `count-listeners`
+carries a 3-iteration `CAP` (its counts are algorithmic, not statistical).
 
 ---
 
 ## Production versus development
 
-Same harness, same machine, same headless Chromium, 15 iterations,
-`--build-mode development` against the production baseline. The dev bundle is
-319.2 KB with `__PUZZLE_DEVTOOLS_HOOK__` present; the production one is 99.4 KB
-with it absent.
+Same harness, same machine, same headless Chromium 151, 15 iterations,
+`--build-mode development --filter create` against the 0.8.0 production
+baseline as it stood before the stress observer left the timed window. Both
+columns carry the observer, so the pair is matched. The dev bundle is 690.4 KB with `__PUZZLE_DEVTOOLS_HOOK__` present; the
+production one is 238.5 KB with it absent.
 
 | op | mounted views | dev script | prod script | Δ abs | Δ % |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `keyed-list/create/1000` | 1,001 | 23.5 | 19.3 | +4.2ms | +21.8% |
-| `keyed-list/create/10000` | 10,001 | 203 | 171 | +32ms | +18.7% |
-| `keyed-list/create/50000` | 50,001 | 988 | 798 | **+190ms** | +23.9% |
-| `virtual-list/create/1000` | 26 | 10.3 | 8.50 | +1.8ms | +21.2% |
-| `virtual-list/create/10000` | 26 | 69.5 | 68.3 | +1.2ms | +1.8% |
-| `virtual-list/create/50000` | 26 | 341 | 338 | +3.0ms | +0.8% |
+| `keyed-list/create/1000` | 1,001 | 29.0 | 25.6 | +3.4ms | +13.3% |
+| `keyed-list/create/10000` | 10,001 | 258 | 218 | +40ms | +18.2% |
+| `keyed-list/create/50000` | 50,001 | 1249 | 1091 | **+158ms** | +14.5% |
+| `virtual-list/create/1000` | 26 | 10.1 | 10.9 | −0.8ms | −7.3% |
+| `virtual-list/create/10000` | 26 | 77.5 | 90.9 | −13ms | −14.7% |
+| `virtual-list/create/50000` | 26 | 360 | 444 | **−85ms** | −19.1% |
 
-**Read the absolute column, not the percentage.** The dev build's cost tracks
-**mounted view count**, and the per-view figure is strikingly stable across two
-orders of magnitude: 4.2ms/1,001 views, 32ms/10,001, 190ms/50,001 — about
+**Read the absolute column, not the percentage.** On the full-DOM list the dev
+build's cost tracks **mounted view count**, and the per-view figure holds across
+two orders of magnitude: 3.4ms/1,001 views, 40ms/10,001, 158ms/50,001, about
 **3–4 microseconds of dev overhead per mounted view**. That is consistent with
-per-view dev registration and the devstate live-view registry.
+per-view dev registration and the devstate live-view registry, and it matches
+what the pre-D170 build measured.
 
-`virtual-list` mounts 26 views at every size, so its dev overhead is a flat
-1–3ms regardless of `n`. As a percentage that reads as +21% at 1k and +0.8% at
-50k, which looks like an inconsistency and is not one — it is a constant
-absolute cost divided by growing work.
+**The windowed create runs faster in the dev build**, and that is new. It
+mounts 26 views at every size, so the per-view overhead is negligible, but the
+production bundle is slower at the part both builds share, seeding the records.
+It reproduces: two more back-to-back production/development pairs of
+`virtual-list/create` measured 431 and 439ms production against 360 and 363ms
+development at 50,000. Before D170 the dev build was 1–3ms slower here, as
+expected. This harness does not say why; the 0.7.0 store-side step under
+[What the numbers say](#what-the-numbers-say), which the windowed list also
+paid, is the obvious place to look.
 
-The consequence is what matters. Dev-build numbers do not merely run slow: the
-penalty lands almost entirely on the strategy that mounts many views, so a
-dev-build A/B **overstates the case for windowing**. At 50k the dev build adds
-190ms to the full-DOM create and 3ms to the windowed one.
+The consequence is the same as before, only stronger. Dev-build numbers do not
+merely run slow: the penalty lands on the strategy that mounts many views, and
+the windowed strategy now runs faster in dev than it ships, so a dev-build A/B
+**overstates the case for windowing** at every size.
 
 Structural counters were identical across both builds, as they must be.
 
@@ -734,42 +873,35 @@ Structural counters were identical across both builds, as they must be.
 Non-negotiable for a benchmark: run it twice on an unchanged tree and see
 whether it can tell itself apart from the framework.
 
-This was done twice: two full suites on the current tree (the pair the committed
-`baseline.json` comes from), and an earlier pair on the same source. 28 ops each,
-55 comparable medians per pair.
-
-**Current pair** (run 2 against the committed baseline):
+For 0.8.0 this was two full suites on the same framework source (the first on
+the release branch head, the second after a harness-only commit that adds
+`history/`). Both predate the observer change; the committed baseline is a
+third run after it. 83 ops each, 157 comparable medians.
 
 | sample group | median abs. delta | p90 | max |
 | --- | ---: | ---: | ---: |
-| all comparable medians | 1.1% | 8.8% | 100.0% |
-| ops with script median >= 5ms | **1.4%** | **8.8%** | **12.9%** |
-| ops with script median < 5ms | 0.0% | 16.7% | 100.0% |
+| all comparable medians | 3.8% | 11.1% | 100.0% |
+| ops with script median >= 5ms | **3.2%** | **8.3%** | **18.3%** |
+| ops with script median < 5ms | 6.6% | 18.7% | 100.0% |
 
-**Earlier pair**, for corroboration: all ops median 2.4%; ops >= 5ms median
-2.1%, max 10.1%.
-
-**Detection threshold: on ops above 5ms, treat anything under ~13% as noise.
+**Detection threshold: on ops above 5ms, treat anything under ~18% as noise.
 Sub-5ms ops cannot be compared at all.** The 100% outlier is
-`subscriptions/update-one/precision` moving from 0.10ms to 0.00ms — one
+`subscriptions/update-one/precision` moving from 0.10ms to 0.00ms, one
 `performance.now()` tick wearing a percentage costume. The table prints `flr`
 instead of a percentage whenever either side is at the floor, and the LOG
 section adds a `FLOOR` line, so these cannot be misread as findings.
 
-The harness is therefore *not* measuring itself in the range that matters: above
-5ms, run-to-run disagreement has a median of 1.4% and a worst case of 12.9%,
-while the effects it exists to show are 3x to 255x. It has no resolution below
-~5ms and says so rather than pretending otherwise.
+This pair is noisier than the pre-D170 one (median 1.4%, max 12.9%), measured
+on a machine that was also running other work, and the worst offenders are
+long single-view ops: `flip-churn/interrupt` (432ms to 512ms), then
+`virtual-list/clear/50000` and a few 10,000-row paint medians at 11–14%. A
+single op's delta under ~18% is not a finding. A delta with the same sign and
+size across sizes and runs, like the 0.6.0-to-0.7.0 create and clear step
+under [What the numbers say](#what-the-numbers-say), is.
 
-One honest caveat: the largest drifts are not scattered randomly. In the earlier
-pair they clustered on the four `clear` ops, all in the same direction (+7.7% to
-+10.1%); in the current pair the worst offenders are the 1,000-row ops. Small and
-teardown-heavy ops look systematically drift-prone — allocator or thermal state
-rather than random noise — so deltas under ~13% on those rows deserve extra
-suspicion.
-
-All four suite runs: 28/28 ops `ok`, zero validate failures, zero structural
-mismatches, zero clamp rejections, exit 0. Wall time ~7 minutes per suite.
+Both 0.8.0 suite runs, and the committed baseline run after them: 83/83 ops
+`ok`, zero validate failures, zero structural mismatches, zero clamp
+rejections, exit 0. Wall time ~13 minutes per suite.
 
 ---
 
@@ -802,12 +934,14 @@ mismatches, zero clamp rejections, exit 0. Wall time ~7 minutes per suite.
   the only listener arm timed at both sizes. The two unimplemented scenarios
   in `examples/stress/README.md` obviously are not covered either. Add entries
   to `scenarios.mjs` — nothing else needs to change.
-- **The newest op groups have no committed baseline.** `route-churn/*`,
-  `listener-churn/*`, `flip-churn/*` and `virtual-list/native-scroll` were added
-  after `baseline.json` was last written, so their `Δscript`/`Δpaint` columns
-  read `—` and `compareCounters` has nothing to compare against. Their `expect`
-  blocks and invariants still assert every structural counter on every run; only
-  the baseline cross-check is missing until someone runs `npm run bench:update`.
+- **History is per-harness.** Each snapshot in `history/` was measured by its
+  own release's harness and stress example, so a column is that release as its
+  own instrument saw it. Where the instrument changed between releases, the
+  table cannot tell it from the framework. 0.8.0's stress example adds a
+  `MutationObserver`, but only to the three D170 gate ops, which have no older
+  column, so it stays out of every shared op (priced under
+  [What the numbers say](#what-the-numbers-say)). Snapshots start at 0.6.0; the
+  harness exists at `v0.5.0` too but was not backfilled.
 - **Two entries are behaviour gates whose timings mean nothing.**
   `virtual-list/native-scroll` (1 iteration, no warmup) is mostly the frames it
   waits between `scrollTop` writes, and every `flip-churn` arm carries its own

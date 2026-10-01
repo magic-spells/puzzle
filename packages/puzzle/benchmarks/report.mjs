@@ -362,4 +362,4 @@ export function formatReport({ summaries, baseline, meta, logs, config, calibrat
 	return out.join('\n');
 }
 
-export { fmtMs, fmtInt, fmtDelta };
+export { fmtMs, fmtInt, fmtDelta, renderTable };

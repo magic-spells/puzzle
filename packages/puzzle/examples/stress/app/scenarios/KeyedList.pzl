@@ -114,6 +114,11 @@ import { resetRowMetrics, rowMetrics } from '../row-metrics.js';
 // pasted a URL. Home adds a two-click arm on top of this for the ops themselves.
 // ---------------------------------------------------------------------------
 
+// The D170 gate ops whose expects assert klRowsTouched / klDomMutations
+// (benchmarks/scenarios.mjs renderWorkOps). Only these arm the observer: an
+// observer inside the timed window inflates create and clear.
+const WATCHED_OPS = new Set(['update-one', 'update-all', 'reorder']);
+
 export default class KeyedList extends PuzzleView {
   api = {
     name: 'keyed-list',
@@ -278,7 +283,7 @@ export default class KeyedList extends PuzzleView {
     // a frozen snapshot must not land inside scriptMs.
     resetRowMetrics();
     const perfBefore = perfSnapshot();
-    const watcher = this.watchRows();
+    const watcher = WATCHED_OPS.has(op) ? this.watchRows() : null;
 
     const t0 = performance.now();
     if (!this.applyOp(op)) {
@@ -292,7 +297,7 @@ export default class KeyedList extends PuzzleView {
     await afterPaint();
     const paintedMs = performance.now() - t0;
     await settleFrames(1);
-    const dom = watcher ? watcher.stop() : { mutations: -1, rowsTouched: -1 };
+    const dom = watcher ? watcher.stop() : null;
 
     // Capture only once everything has settled, so the number stats() reports is
     // the number this op actually caused.
@@ -305,7 +310,7 @@ export default class KeyedList extends PuzzleView {
       detail:
         `${op} [${this.handlerMode()}]: ${ms1(scriptMs)}ms script / ${ms1(paintedMs)}ms to paint · ` +
         `${this.ordered.length * 7} live elements · ${this.lastCounters.childDataRuns} row data() runs · ` +
-        `${dom.mutations} DOM mutations over ${dom.rowsTouched} rows` +
+        (dom ? `${dom.mutations} DOM mutations over ${dom.rowsTouched} rows` : 'DOM unwatched') +
         this.perfDetail(),
     };
   }
@@ -491,10 +496,12 @@ export default class KeyedList extends PuzzleView {
       perf: this.lastCounters.perf,
       // Merged into the runner's counter bag (benchmarks/runner.mjs
       // extractCounters), so `expect`/`invariant` can assert them directly.
-      counters: {
-        klDomMutations: this.lastCounters.dom?.mutations ?? -1,
-        klRowsTouched: this.lastCounters.dom?.rowsTouched ?? -1,
-      },
+      counters: this.lastCounters.dom
+        ? {
+            klDomMutations: this.lastCounters.dom.mutations,
+            klRowsTouched: this.lastCounters.dom.rowsTouched,
+          }
+        : {},
     };
   }
 }
