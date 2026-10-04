@@ -132,6 +132,41 @@ describe('resolveHead (D84) — per-field leaf→root resolution', () => {
 	});
 });
 
+describe('resolveHead (D177) — translated head text', () => {
+	const TABLE = { 'docs.title': 'Documentación', 'docs.description': 'Todo sobre Puzzle' };
+	const i18n = { t: (key) => (Object.hasOwn(TABLE, key) ? TABLE[key] : key) };
+
+	it('translates { t } title and description through the service, after the leaf→root walk', () => {
+		const chain = [
+			{ path: '/docs', meta: { title: { t: 'docs.title' }, description: { t: 'docs.description' } } },
+			{ path: 'intro', meta: { canonical: 'https://example.com/docs/intro' } },
+		];
+		expect(resolveHead(chain, i18n)).toEqual({
+			title: 'Documentación',
+			description: 'Todo sobre Puzzle',
+			canonical: 'https://example.com/docs/intro',
+			socialImage: null,
+		});
+	});
+
+	it('a missing key prints the key itself (D175); strings and null pass through', () => {
+		const head = resolveHead([{ path: '/', meta: { title: { t: 'nope' }, description: null } }], i18n);
+		expect(head.title).toBe('nope');
+		expect(head.description).toBe(null);
+		expect(resolveHead([{ path: '/', meta: { title: 'Plain' } }], i18n).title).toBe('Plain');
+	});
+
+	it('with no i18n service a { t } reference resolves null (no tag) and warns once', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const head = resolveHead([{ path: '/', meta: { title: { t: 'a' }, description: { t: 'b' } } }]);
+		expect(head.title).toBe(null);
+		expect(head.description).toBe(null);
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn.mock.calls[0][0]).toContain('needs i18n configured');
+		warn.mockRestore();
+	});
+});
+
 describe('prerender pages carry `head` (D84)', () => {
 	const routes = () => [
 		{
