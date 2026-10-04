@@ -12,6 +12,26 @@ connections:
   - FILE-PARSER-HOST
   - FILE-PARSER-EXPRS
   - TEST-COMPILER-PARSER
+notes:
+  - kind: gotcha
+    text: >-
+      A `{#let}` block parses in linear time, and three things keep it that way:
+
+      - Binding positions come from one `posCursor` over the header.
+
+      - Duplicate names are a map lookup.
+
+      - Once the binding stack grows past `manyBindings` (32), `parser.first` indexes each name's
+      lowest stack index. `exprScope.opts` then hands expr an `IsBinding` closure, so expr does not
+      scan the whole slice for every call. A name is in a snapshot scope when its first index is
+      below the snapshot's length, which is valid because scopes nest.
+
+
+      Before this, a 430 KB block took 5.6 s. `TestLargeLetBlockParsesWithinBudget` now allows 100
+      ms, or 300 ms in CI.
+
+
+      `depth.go` counts `{#let}` as void, like `{#svg}`.
 ---
 
 # let.go

@@ -16,19 +16,24 @@ import "strings"
 type attrCursor struct {
 	s    string
 	i    int
-	base Position
 	file string
 	sc   exprScope
+	// pos maps offsets in s to file positions in one forward pass, so a long
+	// value with many braces stays linear.
+	pos *posCursor
+	// depth is the inline-{#if} nesting at the cursor, checked against
+	// sc.maxDepth when a host set one (ParseMarkup).
+	depth int
 }
 
 func (c *attrCursor) posAt(i int) Position {
-	return c.base.advance(c.s[:i])
+	return c.pos.at(i)
 }
 
 // parseAttrParts parses a quoted/bareword attribute value into its parts,
 // parsing each expression in scope sc.
 func parseAttrParts(raw string, base Position, file string, sc exprScope) ([]Part, *ParseError) {
-	c := &attrCursor{s: raw, base: base, file: file, sc: sc}
+	c := &attrCursor{s: raw, file: file, sc: sc, pos: newPosCursor(raw, base)}
 	parts, _, perr := c.parseSequence(true)
 	return parts, perr
 }
@@ -101,6 +106,10 @@ func (c *attrCursor) parseSequence(topLevel bool) (parts []Part, term string, pe
 			}
 			flush()
 			c.i = end
+			c.depth++
+			if c.sc.maxDepth > 0 && c.depth > c.sc.maxDepth {
+				return nil, "", errAt(c.file, pos, "template nesting exceeds the limit of %d levels", c.sc.maxDepth)
+			}
 			thenParts, t, e := c.parseSequence(false)
 			if e != nil {
 				return nil, "", e
@@ -112,6 +121,7 @@ func (c *attrCursor) parseSequence(topLevel bool) (parts []Part, term string, pe
 					return nil, "", e
 				}
 			}
+			c.depth--
 			if t != "endif" {
 				return nil, "", errAt(c.file, pos, "unclosed {#if} in attribute value")
 			}

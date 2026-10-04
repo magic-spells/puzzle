@@ -147,6 +147,12 @@ root, err := parser.ParseMarkup(markup, parser.Position{}, "sections/Hero.pzl", 
   unknown-block error.
 - **`SkipIslandCheck`, `SkipSlotCheck`, `SkipRefCheck`** turn off the
   post-parse `island`, composition-marker and `ref` rules.
+- **`MaxDepth`** (read by `ParseMarkup` only) caps template nesting. The parser
+  is recursive descent, so an untrusted file nested a million levels deep would
+  exhaust the stack, which `recover()` cannot catch. `ParseMarkup` runs a
+  counting token scan first and returns a positioned error past the limit. 0
+  means `DefaultMaxDepth` (200, the playground's limit) and a negative value
+  turns the guard off.
 
 **Files without a wrapper.** `ParseMarkup(markup, at, filename, opts)` parses
 template content with no `<puzzle-view>` wrapper, starting at file position
@@ -158,8 +164,13 @@ reads a file exactly as the parser will: `TagNameAt`, `ScanOpenTag`,
 `FindScriptClose`, `FindStyleClose`, `FindTemplateClose`, `ScanBraceGroup`,
 `SkipBraceGroup` (comments and `{#raw}` spans whole), `AttrNames` (names only,
 values never parsed), `ParseAttrString`, `ParseScriptLang` and
-`ParseStyleScoped`. `parser/host_test.go` is a wrapper-less splitter built
-from these alone.
+`ParseStyleScoped`. They take the whole file, every index in or out is
+absolute, an out-of-range index is an answer (-1 or an error), never a panic,
+and every error is a positioned `*ParseError`. When `SkipBraceGroup` fails, the
+parse would fail at that brace too: return the error, or stop and let
+`ParseMarkup` report it. Never step one byte and retry, which is quadratic on
+a file of unclosed braces. `parser/host_test.go` is a wrapper-less splitter
+built from these alone, and `FuzzHostScanners` fuzzes all of them.
 
 ## Who imports it
 

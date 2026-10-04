@@ -35,6 +35,38 @@ notes:
       every file without {#let} (compared with `sameTree`, a DeepEqual that treats NaN == NaN — a
       `NaN` literal parses to a float NaN); `TestOptionsLetOffIsUnknownBlock` pins the unchanged
       PuzzleKit messages for {#let}/{#assign}/{#set}/….
+  - kind: state
+    text: >-
+      Review follow-up tests for 0.8.1. All timing tests take the best of three runs and are skipped
+      under `-short`.
+
+
+      `perf_test.go`:
+
+      - `TestLargeLetBlockParsesWithinBudget`: a 430 KB `{#let}` block of 10.8k bindings, each
+      calling a function, parses in about 22 ms. The budget is 100 ms, or 300 ms in CI.
+
+      - `TestLongAttributeValueParsesWithinBudget`: a 400 KB attribute value with 50k braces parses
+      in about 21 ms.
+
+
+      `host_test.go`:
+
+      - `TestParseMarkupDepthGuard`: a million levels of elements, components, blocks and attribute
+      inline-ifs each give a positioned error. 200 levels pass and 201 fail; `MaxDepth` 5 and -1
+      behave as set; the wrapped `Parse` keeps no limit.
+
+      - `TestLetIsVoidForDepth`: 300 flat `{#let}` blocks pass both `ParseMarkup` and
+      `OverNestingDepth`.
+
+      - `TestHostLiftUnclosedBracesIsLinear`: 100k unclosed `{` return a positioned error in well
+      under 1 s.
+
+      - `TestHostScannerEdges`: out-of-range indexes, absolute `Find*Close` results, positioned
+      errors.
+
+      - `FuzzHostScanners`: every exported scanner, plus `ParseMarkup` and the example splitter, on
+      arbitrary input. Its seeds run in `go test`; fuzz by hand with `-fuzz=FuzzHostScanners`.
 ---
 
 # Template parser, expression language, and section splitting

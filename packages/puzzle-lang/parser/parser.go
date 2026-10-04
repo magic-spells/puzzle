@@ -34,6 +34,13 @@ type parser struct {
 	// {#let} blocks bind, innermost last: the expression parser lets them be
 	// read and never called (see exprScope).
 	bound []string
+	// first indexes bound by name once it grows long (exprs.go), so a scope
+	// lookup is O(1); nil until then.
+	first map[string]int
+	// maxDepth is ParseMarkup's nesting limit, enforced here only where the
+	// token scan cannot see: inline {#if} nesting inside an attribute value.
+	// 0 (no limit) for every other entry point.
+	maxDepth int
 	// opts is the host's grammar and check selection (options.go).
 	opts Options
 }

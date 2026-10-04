@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
@@ -80,10 +81,12 @@ func liftBlocks(src, filename string) (liftedFile, error) {
 		case src[i] == '\\' && i+1 < len(src) && (src[i+1] == '{' || src[i+1] == '}'):
 			i += 2
 		case src[i] == '{':
-			next, err := parser.SkipBraceGroup(src, i)
+			next, err := parser.SkipBraceGroup(src, i, filename)
 			if err != nil {
-				i++ // the parser reports the malformed group with a position
-				continue
+				// An unterminated group runs to the end of the file, so the
+				// parse would fail here too: report it. Stepping one byte and
+				// retrying would rescan the rest of the file per '{'.
+				return out, err
 			}
 			i = next
 		case src[i] != '<':
@@ -208,19 +211,20 @@ func liftOne(f *liftedFile, src, filename, name string, tagStart, afterOpen, att
 	if err != nil {
 		return 0, err
 	}
-	var rel int
+	end := -1
 	switch name {
 	case "script":
-		rel, _ = parser.FindScriptClose(src, afterOpen)
+		end, _ = parser.FindScriptClose(src, afterOpen)
 	case "style":
-		rel = parser.FindStyleClose(src, afterOpen)
+		end = parser.FindStyleClose(src, afterOpen)
 	default:
-		rel = strings.Index(src[afterOpen:], "</"+name+">")
+		if rel := strings.Index(src[afterOpen:], "</"+name+">"); rel >= 0 {
+			end = afterOpen + rel
+		}
 	}
-	if rel < 0 {
+	if end < 0 {
 		return 0, hostErr(src, filename, tagStart, "missing </"+name+"> for <"+name+">")
 	}
-	end := afterOpen + rel
 	*block = liftedBlock{Body: src[afterOpen:end], BodyPos: hostPosAt(src, afterOpen), TagPos: hostPosAt(src, tagStart), Found: true}
 	return end + len("</"+name+">"), nil
 }
@@ -539,20 +543,20 @@ func TestHostScanners(t *testing.T) {
 		{"{ a", 0, true},
 		{"x", 0, true},
 	} {
-		end, err := parser.SkipBraceGroup(tt.s, 0)
+		end, err := parser.SkipBraceGroup(tt.s, 0, "f.pzl")
 		if (err != nil) != tt.fail || end != tt.end {
 			t.Errorf("SkipBraceGroup(%q) = %d, %v; want %d (fail %v)", tt.s, end, err, tt.end, tt.fail)
 		}
 	}
 
-	inner, end, err := parser.ScanBraceGroup("{ a | b }", 0)
+	inner, end, err := parser.ScanBraceGroup("{ a | b }", 0, "f.pzl")
 	if err != nil || inner != " a | b " || end != 9 {
 		t.Errorf("ScanBraceGroup = %q, %d, %v", inner, end, err)
 	}
 
 	src := "<puzzle-view>{ '</puzzle-view>' }<!-- </puzzle-view> -->{#raw}</puzzle-view>{/raw}</puzzle-view>"
-	if rel := parser.FindTemplateClose(src, 13, "</puzzle-view>"); rel != len(src)-len("</puzzle-view>")-13 {
-		t.Errorf("FindTemplateClose = %d", rel)
+	if at := parser.FindTemplateClose(src, 13, "</puzzle-view>"); at != len(src)-len("</puzzle-view>") {
+		t.Errorf("FindTemplateClose = %d", at)
 	}
 
 	attrs, err := parser.ParseAttrString(`page title="Home" count={ n }`, parser.Position{Line: 1, Col: 14, Offset: 13}, "f.pzl", "puzzle-view")
@@ -580,4 +584,188 @@ func TestHostScanners(t *testing.T) {
 	if scoped, err := parser.ParseStyleScoped("", parser.Position{Line: 1, Col: 1}, "f.pzl"); scoped || err != nil {
 		t.Errorf("ParseStyleScoped(\"\") = %v, %v", scoped, err)
 	}
+}
+
+// ParseMarkup rejects nesting past its limit before it parses, so an
+// untrusted file cannot run the recursive parser out of stack (a fatal error
+// recover() cannot catch). Each source here is megabytes deep.
+func TestParseMarkupDepthGuard(t *testing.T) {
+	limitMsg := "template nesting exceeds the limit of 200 levels"
+	for _, tt := range []struct {
+		name, src string
+		line, col int
+	}{
+		{"elements", strings.Repeat("<div>", 1_000_000), 1, 1 + 5*200},
+		{"components", strings.Repeat("<Card>", 1_000_000), 1, 1 + 6*200},
+		{"blocks", strings.Repeat("{#if a}", 1_000_000), 1, 1 + 7*200},
+		{"attribute inline ifs", `<p title="` + strings.Repeat("{#if a}", 1_000_000) + `"></p>`, 1, 11 + 7*200},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parser.ParseMarkup(tt.src, parser.Position{}, "deep.pzl", letOpts)
+			var pe *parser.ParseError
+			if !errors.As(err, &pe) || pe.Message != limitMsg || pe.Line != tt.line || pe.Col != tt.col {
+				t.Fatalf("got %v, want deep.pzl:%d:%d: %s", err, tt.line, tt.col, limitMsg)
+			}
+		})
+	}
+
+	nested := func(n int) string { return strings.Repeat("<i>", n) + strings.Repeat("</i>", n) }
+	if _, err := parser.ParseMarkup(nested(200), parser.Position{}, "f.pzl"); err != nil {
+		t.Fatalf("200 levels: %v", err)
+	}
+	if _, err := parser.ParseMarkup(nested(201), parser.Position{}, "f.pzl"); err == nil {
+		t.Fatal("201 levels passed the default limit")
+	}
+	if _, err := parser.ParseMarkup(nested(6), parser.Position{}, "f.pzl", parser.Options{MaxDepth: 5}); err == nil || !strings.Contains(err.Error(), "limit of 5 levels") {
+		t.Fatalf("MaxDepth 5: %v", err)
+	}
+	if _, err := parser.ParseMarkup(nested(500), parser.Position{}, "f.pzl", parser.Options{MaxDepth: -1}); err != nil {
+		t.Fatalf("MaxDepth -1: %v", err)
+	}
+	// The wrapped entry points are PuzzleKit's and keep no limit of their own.
+	if _, err := parser.Parse([]byte("<puzzle-view>"+nested(500)+"</puzzle-view>"), "f.pzl"); err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+}
+
+// {#let} is a void block: a flat row of them nests nothing, for ParseMarkup's
+// guard and for OverNestingDepth alike.
+func TestLetIsVoidForDepth(t *testing.T) {
+	flat := strings.Repeat("{#let a = 1}\n", 300) + "<p>{ a }</p>"
+	if _, err := parser.ParseMarkup(flat, parser.Position{}, "f.pzl", letOpts); err != nil {
+		t.Fatalf("300 flat lets: %v", err)
+	}
+	sec, err := parser.SplitSections("<puzzle-view>"+flat+"</puzzle-view>", "f.pzl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pos, over := parser.OverNestingDepth(sec, "f.pzl", 256); over {
+		t.Fatalf("300 flat lets read as nesting at %+v", pos)
+	}
+}
+
+// A host splitter that reports SkipBraceGroup's error stays linear on a file
+// of unclosed braces (retrying one byte later was quadratic: 23 s here).
+func TestHostLiftUnclosedBracesIsLinear(t *testing.T) {
+	src := strings.Repeat("{", 100_000)
+	start := time.Now()
+	_, err := liftBlocks(src, "f.pzl")
+	var pe *parser.ParseError
+	if !errors.As(err, &pe) || pe.Line != 1 || pe.Col != 1 || pe.Message != "unclosed '{' (interpolation or block directive)" {
+		t.Fatalf("err = %v", err)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("lifting 100k unclosed braces took %v", d)
+	}
+}
+
+// Out-of-range indexes are answers, never panics, and every Find*Close index
+// is absolute.
+func TestHostScannerEdges(t *testing.T) {
+	const s = "<script>a</script>{ x"
+	for _, i := range []int{-5, -1, len(s), len(s) + 3} {
+		if _, _, _, err := parser.ScanOpenTag(s, i, "script", "f.pzl"); err == nil {
+			t.Errorf("ScanOpenTag(%d) = nil error", i)
+		}
+		if _, _, err := parser.ScanBraceGroup(s, i, "f.pzl"); err == nil {
+			t.Errorf("ScanBraceGroup(%d) = nil error", i)
+		}
+		if _, err := parser.SkipBraceGroup(s, i, "f.pzl"); err == nil {
+			t.Errorf("SkipBraceGroup(%d) = nil error", i)
+		}
+		if parser.TagNameAt(s, i) != "" {
+			t.Errorf("TagNameAt(%d) found a name", i)
+		}
+	}
+	for _, i := range []int{-5, -1, len(s) + 1} {
+		if at, sw := parser.FindScriptClose(s, i); at != -1 || sw != -1 {
+			t.Errorf("FindScriptClose(%d) = %d, %d", i, at, sw)
+		}
+		if at := parser.FindStyleClose(s, i); at != -1 {
+			t.Errorf("FindStyleClose(%d) = %d", i, at)
+		}
+		if at := parser.FindTemplateClose(s, i, "</script>"); at != -1 {
+			t.Errorf("FindTemplateClose(%d) = %d", i, at)
+		}
+	}
+	if _, _, _, err := parser.ScanOpenTag(s, 0, "style", "f.pzl"); err == nil {
+		t.Error("ScanOpenTag accepted a name that is not at i")
+	}
+	if at, _ := parser.FindScriptClose(s, 8); at != 9 {
+		t.Errorf("FindScriptClose = %d, want 9", at)
+	}
+	if at := parser.FindStyleClose("<style>p{}</style>", 7); at != 10 {
+		t.Errorf("FindStyleClose = %d, want 10", at)
+	}
+	if at, sw := parser.FindScriptClose("<script>'</script>", 8); at != -1 || sw != 8 {
+		t.Errorf("FindScriptClose swallowed = %d, %d; want -1, 8", at, sw)
+	}
+	_, _, err := parser.ScanBraceGroup("\n  { a", 3, "f.pzl")
+	var pe *parser.ParseError
+	if !errors.As(err, &pe) || pe.File != "f.pzl" || pe.Line != 2 || pe.Col != 3 {
+		t.Errorf("ScanBraceGroup error = %v, want f.pzl:2:3", err)
+	}
+	for _, tt := range []struct{ s, msg string }{
+		{"x\n{## open", "f.pzl:2:1: unclosed {## comment"},
+		{"x\n{#comment} open", "f.pzl:2:1: unterminated {#comment} — expected {/comment}"},
+		{"x\n{#raw} open", "f.pzl:2:1: unterminated {#raw} — expected {/raw}"},
+		{"x\n{ open", "f.pzl:2:1: unclosed '{' (interpolation or block directive)"},
+	} {
+		if _, err := parser.SkipBraceGroup(tt.s, 2, "f.pzl"); err == nil || err.Error() != tt.msg {
+			t.Errorf("SkipBraceGroup(%q) = %v, want %s", tt.s, err, tt.msg)
+		}
+	}
+}
+
+// FuzzHostScanners runs every exported scanner, and ParseMarkup with {#let}
+// on, over arbitrary input at arbitrary indexes: no panic, and every index
+// returned lies inside the input. The seeds run in plain `go test`; fuzz by
+// hand with `go test -run '^$' -fuzz=FuzzHostScanners -fuzztime=60s ./parser`.
+func FuzzHostScanners(f *testing.F) {
+	for _, seed := range []string{
+		"", "<", "{", "<script>", "<style>/*", "<schema a={ b > c }>{}</schema>",
+		"{## don't }", "{#comment}{#comment}{/comment}", "{#raw}{/raw", "<p title=\"{#if a}x{/if}\">",
+		"{#let\n a = [1,\n2]\n b = a\n}", "<script>`${'</script>'}`</script>", "\\{ <a b='{'>",
+		"<style>'</style>' p{}</style>", "<x\n  y=\"{ '>' }\"\n/>", "{/}", "{#let a == b}",
+	} {
+		f.Add(seed, 0)
+		f.Add(seed, 1)
+	}
+	f.Fuzz(func(t *testing.T, s string, i int) {
+		if len(s) > 4096 {
+			return
+		}
+		check := func(name string, at int) {
+			if at < -1 || at > len(s) {
+				t.Fatalf("%s returned %d for a %d-byte input", name, at, len(s))
+			}
+		}
+		name := parser.TagNameAt(s, i)
+		if name != "" {
+			check("TagNameAt", i+len(name))
+		}
+		if i > 0 && i <= len(s) && s[i-1] == '<' && name != "" {
+			if after, attrAt, _, err := parser.ScanOpenTag(s, i-1, name, "f.pzl"); err == nil {
+				check("ScanOpenTag", after)
+				check("ScanOpenTag attrs", attrAt)
+			}
+		}
+		at, sw := parser.FindScriptClose(s, i)
+		check("FindScriptClose", at)
+		check("FindScriptClose swallowed", sw)
+		check("FindStyleClose", parser.FindStyleClose(s, i))
+		check("FindTemplateClose", parser.FindTemplateClose(s, i, "</puzzle-view>"))
+		if _, end, err := parser.ScanBraceGroup(s, i, "f.pzl"); err == nil {
+			check("ScanBraceGroup", end)
+		}
+		if end, err := parser.SkipBraceGroup(s, i, "f.pzl"); err == nil {
+			check("SkipBraceGroup", end)
+		}
+		parser.AttrNames(s, parser.Position{Line: 1, Col: 1}, "f.pzl")
+		parser.ParseAttrString(s, parser.Position{Line: 1, Col: 1}, "f.pzl", "x")
+		parser.ParseScriptLang(s, parser.Position{Line: 1, Col: 1}, "f.pzl")
+		parser.ParseStyleScoped(s, parser.Position{Line: 1, Col: 1}, "f.pzl")
+		parser.ParseMarkup(s, parser.Position{}, "f.pzl", letOpts)
+		liftBlocks(s, "f.pzl")
+	})
 }

@@ -31,6 +31,12 @@ type Options struct {
 	// A binding is a value: reading it is legal, calling it is an error, so
 	// `t('key')` inside `{#for t in …}` never reaches the library's `t`.
 	Bindings []string
+	// IsBinding, when set, answers "is this name in Bindings?" in place of a
+	// scan of the slice. It is for a caller that holds many bindings at once
+	// (a long {#let} block) and parses an expression per binding, where a
+	// scan per lookup would make the whole parse quadratic. It must report
+	// exactly the names in Bindings.
+	IsBinding func(name string) bool
 }
 
 // maxDepth caps syntactic nesting (groups, unary operators, conditionals,
@@ -133,6 +139,9 @@ func (p *parser) checkBindingCalls(root Node) {
 }
 
 func (p *parser) isBinding(name string) bool {
+	if p.opts.IsBinding != nil {
+		return p.opts.IsBinding(name)
+	}
 	for _, b := range p.opts.Bindings {
 		if b == name {
 			return true

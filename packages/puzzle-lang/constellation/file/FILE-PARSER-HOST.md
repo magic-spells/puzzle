@@ -14,8 +14,42 @@ connections:
   - FILE-PARSER-SCANNER
   - FILE-PARSER-SLOT
   - TEST-COMPILER-PARSER
----
+notes:
+  - kind: decision
+    text: >-
+      Review fixes before the v0.8.1 tag froze the API:
 
+
+      **Depth guard.** `ParseMarkup` runs `scanNesting`, a counting token scan with no recursion,
+      before it parses. It rejects nesting past `Options.MaxDepth` with "template nesting exceeds
+      the limit of N levels" at the first node too deep:
+
+      - 0 means `DefaultMaxDepth` (200, which pzl-wasm's `maxNestingDepth` now references), and a
+      negative value turns the guard off.
+
+      - Inline `{#if}` nesting inside an attribute value is invisible to the token scan, so
+      `attrCursor` enforces the same limit through `exprScope.maxDepth`. That limit is 0 on every
+      PuzzleKit path.
+
+      - Reason: a million nested `<div>`s is a stack overflow that recover() cannot catch, and Sites
+      parses untrusted theme files.
+
+
+      **Scanner conventions.**
+
+      - Every index in or out is ABSOLUTE; `Find*Close` used to return offsets relative to `from`.
+
+      - An out-of-range index returns -1 or an error, never a panic.
+
+      - `ScanBraceGroup` and `SkipBraceGroup` now take a filename and return a positioned
+      `*ParseError`.
+
+      - `SkipBraceGroup`'s doc says a host must return that error or stop. Stepping one byte and
+      retrying is quadratic on a file of unclosed braces.
+
+
+      **Fuzzing.** `FuzzHostScanners` covers all of the above. 15M executions ran clean.
+---
 
 # host.go (and options.go)
 

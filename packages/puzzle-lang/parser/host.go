@@ -1,9 +1,6 @@
 package parser
 
-import (
-	"fmt"
-	"strings"
-)
+import "strings"
 
 // host.go is the public surface for a host that brings its own file layout.
 // PuzzleKit files are split by SplitSections around a <puzzle-view> wrapper; a
@@ -19,7 +16,10 @@ import (
 // <puzzle-view> wrapper — whose first byte sits at at in the file, so every
 // node position and every error is in file coordinates. A zero at means the
 // fragment is the whole file (1:1, offset 0). opts is at most one Options
-// value; the post-parse checks it leaves on run over the fragment.
+// value; the post-parse checks it leaves on run over the fragment. Nesting
+// deeper than Options.MaxDepth (DefaultMaxDepth unless set) is a positioned
+// error at the first node past the limit, found before parsing, so an
+// untrusted file cannot exhaust the parser's stack.
 //
 // The result is a synthetic container: Tag is empty, Pos is at, Children are
 // the fragment's top-level nodes, and ContainsRaw records a {#raw} block, as on
@@ -29,10 +29,18 @@ func ParseMarkup(markup string, at Position, filename string, opts ...Options) (
 	if at.Line < 1 {
 		at = Position{Line: 1, Col: 1}
 	}
+	if limit := o.markupDepth(); limit > 0 {
+		// A token scan with a counter, no recursion: it answers before the
+		// recursive parser could run out of stack.
+		if pos, over := scanNesting(newLexer(markup, at, filename), filename, limit, 0, rawScanBudget); over {
+			return nil, errAt(filename, pos, "template nesting exceeds the limit of %d levels", limit)
+		}
+	}
 	p, err := newParser(newLexer(markup, at, filename), filename, o)
 	if err != nil {
 		return nil, err
 	}
+	p.maxDepth = o.markupDepth()
 	nodes, perr := p.parseChildren(openCtx{kind: ctxRoot, pos: at})
 	if perr != nil {
 		return nil, perr
@@ -44,13 +52,22 @@ func ParseMarkup(markup string, at Position, filename string, opts ...Options) (
 	return root, nil
 }
 
+// The scanners below take the whole file as src/s, so an index into it is a
+// file offset and an error position is the file's own line and column. Every
+// index they take or return is ABSOLUTE (an offset into s), and an index
+// outside s is never a panic: a scanner answers "not found" (-1) or a
+// positioned error.
+
 // ScanOpenTag finds the end of the open tag whose '<' is src[i] and whose
-// name, already read (TagNameAt), is name. It is quote- and brace-aware, so a
-// '>' inside an attribute value or a { a > b } does not end the tag early. It
-// returns the index just past '>', the offset of the first attribute byte, and
-// the trimmed attribute text; the error is a positioned *ParseError for an
-// unterminated tag or an unclosed '{'.
+// name, already read with TagNameAt, is name. It is quote- and brace-aware,
+// so a '>' inside an attribute value or a { a > b } does not end the tag
+// early. It returns the index just past '>', the index of the first attribute
+// byte, and the trimmed attribute text; the error is a positioned *ParseError
+// for an unterminated tag or an unclosed '{'.
 func ScanOpenTag(src string, i int, name, filename string) (afterGT, attrOffset int, attrsRaw string, err error) {
+	if i < 0 || i >= len(src) || src[i] != '<' || name == "" || !strings.HasPrefix(src[i+1:], name) {
+		return 0, 0, "", posErr(src, filename, clampOffset(src, i), "no <"+name+"> open tag here")
+	}
 	return scanOpenTag(src, i, name, filename)
 }
 
@@ -68,68 +85,114 @@ func TagNameAt(s string, i int) string {
 	return s[i:end]
 }
 
-// FindScriptClose scans a <script> body from from for its real </script>,
-// skipping JavaScript strings, template literals, regex literals and comments,
-// so a literal "</script>" inside one does not end the body. It returns the
-// close tag's '<' index RELATIVE to from, or -1; with -1 it also returns where
-// the opaque unit that swallowed the file's last "</script>" began (absolute,
-// -1 when none did), so the missing-close error can point there.
-func FindScriptClose(s string, from int) (rel, swallowedAt int) {
-	return findScriptClose(s, from)
+// FindScriptClose scans a <script> body from index from for its real
+// </script>, skipping JavaScript strings, template literals, regex literals
+// and comments, so a literal "</script>" inside one does not end the body. It
+// returns the index of the close tag's '<', or -1. With -1, swallowedAt is the
+// index where the opaque unit that swallowed the file's last "</script>"
+// began (-1 when none did), so the missing-close error can point there.
+func FindScriptClose(s string, from int) (closeAt, swallowedAt int) {
+	if from < 0 || from > len(s) {
+		return -1, -1
+	}
+	rel, swallowed := findScriptClose(s, from)
+	if rel < 0 {
+		return -1, swallowed
+	}
+	return from + rel, -1
 }
 
-// FindStyleClose scans a <style> body from from for its real </style>,
-// skipping CSS comments and quoted strings. It returns the close tag's '<'
-// index RELATIVE to from, or -1.
+// FindStyleClose scans a <style> body from index from for its real </style>,
+// skipping CSS comments and quoted strings. It returns the index of the close
+// tag's '<', or -1.
 func FindStyleClose(s string, from int) int {
-	return findStyleClose(s, from)
+	if from < 0 || from > len(s) {
+		return -1
+	}
+	if rel := findStyleClose(s, from); rel >= 0 {
+		return from + rel
+	}
+	return -1
 }
 
-// FindTemplateClose scans template markup from from for closeTag (for example
-// "</puzzle-view>"), skipping HTML comments, brace groups, template comments
-// and {#raw} spans, so a close tag written inside any of them is not the
-// close. It returns the close tag's '<' index RELATIVE to from, or -1.
+// FindTemplateClose scans template markup from index from for closeTag (for
+// example "</puzzle-view>"), skipping HTML comments, brace groups, template
+// comments and {#raw} spans, so a close tag written inside any of them is not
+// the close. It returns the index of the close tag's '<', or -1.
 func FindTemplateClose(s string, from int, closeTag string) int {
-	return findTemplateClose(s, from, closeTag)
+	if from < 0 || from > len(s) || closeTag == "" {
+		return -1
+	}
+	if rel := findTemplateClose(s, from, closeTag); rel >= 0 {
+		return from + rel
+	}
+	return -1
 }
 
 // ScanBraceGroup is the parser's one balanced-brace scan. s[open] must be
 // '{'. It returns the text between the braces and the index just past the
 // matching '}', skipping strings, regex literals and comments so a '}' inside
 // one does not end the group. It does not know template comments: use
-// SkipBraceGroup to step over a group without reading it.
-func ScanBraceGroup(s string, open int) (inner string, end int, err error) {
-	return scanBraceGroup(s, open)
+// SkipBraceGroup to step over a group without reading it. The error is a
+// positioned *ParseError at the '{'.
+func ScanBraceGroup(s string, open int, filename string) (inner string, end int, err error) {
+	if open < 0 || open >= len(s) || s[open] != '{' {
+		return "", 0, posErr(s, filename, clampOffset(s, open), "no '{' here")
+	}
+	inner, end, e := scanBraceGroup(s, open)
+	if e != nil {
+		return "", 0, posErr(s, filename, open, "unclosed '{' (interpolation or block directive)")
+	}
+	return inner, end, nil
 }
 
 // SkipBraceGroup steps over the template brace group at s[open] == '{' the
 // way the lexer does, returning the index just past it: a `{## … }` inline
 // comment, a whole {#comment}…{/comment} or {#raw}…{/raw} block (whose bodies
-// are never read as template grammar), or any other group via ScanBraceGroup.
-// An unterminated group is an error; the lexer reports it with a position when
-// the markup is parsed. A `\{` escape is the caller's to recognize before
-// calling.
-func SkipBraceGroup(s string, open int) (end int, err error) {
+// are never read as template grammar), or any other group as ScanBraceGroup
+// reads it. A `\{` escape is the caller's to recognize before calling.
+//
+// The error is a positioned *ParseError at the '{' — the same one the lexer
+// reports when the markup is parsed, because an unterminated group runs to
+// the end of the file either way. A host splitter should return it, or stop
+// scanning and let ParseMarkup report it. It must not step one byte and call
+// again: every later '{' would rescan to the end of the file, which is
+// quadratic in a hostile file full of unclosed braces.
+func SkipBraceGroup(s string, open int, filename string) (end int, err error) {
 	if open < 0 || open >= len(s) || s[open] != '{' {
-		return 0, fmt.Errorf("SkipBraceGroup: not positioned at '{'")
+		return 0, posErr(s, filename, clampOffset(s, open), "no '{' here")
 	}
+	var e error
 	switch {
 	case strings.HasPrefix(s[open:], "{##"):
-		return scanInlineComment(s, open)
-	case isBlockCommentOpen(s, open):
-		return scanBlockComment(s, open)
-	case isBlockRawOpen(s, open):
-		_, _, end, err := scanBlockRaw(s, open)
-		if err != nil {
-			return 0, err
+		if end, e = scanInlineComment(s, open); e != nil {
+			return 0, posErr(s, filename, open, "unclosed {## comment")
 		}
-		return end, nil
-	}
-	_, end, err = scanBraceGroup(s, open)
-	if err != nil {
-		return 0, err
+	case isBlockCommentOpen(s, open):
+		if end, e = scanBlockComment(s, open); e != nil {
+			return 0, posErr(s, filename, open, "unterminated {#comment} — expected {/comment}")
+		}
+	case isBlockRawOpen(s, open):
+		if _, _, end, e = scanBlockRaw(s, open); e != nil {
+			return 0, posErr(s, filename, open, "unterminated {#raw} — expected {/raw}")
+		}
+	default:
+		if _, end, e = scanBraceGroup(s, open); e != nil {
+			return 0, posErr(s, filename, open, "unclosed '{' (interpolation or block directive)")
+		}
 	}
 	return end, nil
+}
+
+// clampOffset keeps an out-of-range index inside s for an error position.
+func clampOffset(s string, i int) int {
+	if i < 0 {
+		return 0
+	}
+	if i > len(s) {
+		return len(s)
+	}
+	return i
 }
 
 // AttrName is one attribute name in an open tag, as AttrNames reads it.

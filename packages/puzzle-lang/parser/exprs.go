@@ -50,37 +50,89 @@ func (c *posCursor) at(j int) Position {
 }
 
 // exprScope is what an expression position sees: the names the enclosing
-// {#for} blocks and <Snippet> bodies bind. The expression parser lets a
-// binding be read and never called.
+// {#for} blocks, <Snippet> bodies and {#let} blocks bind. The expression
+// parser lets a binding be read and never called.
 type exprScope struct {
 	bindings []string
+	// first maps each bound name to its lowest index in the parser's binding
+	// stack (parser.first). A name is in this scope when that index falls
+	// inside bindings, so the lookup stays O(1) however many names a long
+	// {#let} block binds. nil when the parser never bound many names.
+	first map[string]int
+	// maxDepth caps inline-{#if} nesting inside an attribute value (attr.go):
+	// ParseMarkup's nesting limit, 0 everywhere else.
+	maxDepth int
 }
 
-func (s exprScope) valueOpts() expr.Options {
-	return expr.Options{Bindings: s.bindings}
+// manyBindings is the scope size past which an expression gets the map
+// lookup instead of expr's scan of the slice. Template scopes are a handful
+// of names; only a long {#let} block grows past it.
+const manyBindings = 32
+
+func (s exprScope) opts() expr.Options {
+	o := expr.Options{Bindings: s.bindings}
+	if s.first != nil && len(s.bindings) > manyBindings {
+		first, n := s.first, len(s.bindings)
+		o.IsBinding = func(name string) bool {
+			i, ok := first[name]
+			return ok && i < n
+		}
+	}
+	return o
 }
+
+func (s exprScope) valueOpts() expr.Options { return s.opts() }
 
 // handlerOpts is an @event value's: `event` is the DOM event there.
 func (s exprScope) handlerOpts() expr.Options {
-	return expr.Options{Bindings: s.bindings, Handler: true}
+	o := s.opts()
+	o.Handler = true
+	return o
 }
 
 // scope returns the expression scope at the parser's current position. The
-// full slice expression keeps a later bind from writing into it.
+// full slice expression keeps a later bind from writing into it. A scope is
+// used only while its prefix of the stack is intact — scopes nest — so the
+// shared first map answers for it.
 func (p *parser) scope() exprScope {
-	return exprScope{bindings: p.bound[:len(p.bound):len(p.bound)]}
+	return exprScope{bindings: p.bound[:len(p.bound):len(p.bound)], first: p.first, maxDepth: p.maxDepth}
 }
 
-// bind pushes the names a {#for} or <Snippet> binds for its body and returns
-// the mark to restore with unbind.
+// bind pushes the names a {#for}, <Snippet> or {#let} binds for the nodes
+// after it and returns the mark to restore with unbind.
 func (p *parser) bind(names ...string) int {
 	mark := len(p.bound)
 	for _, n := range names {
-		if n != "" {
-			p.bound = append(p.bound, n)
+		if n == "" {
+			continue
 		}
+		if p.first == nil && len(p.bound) >= manyBindings {
+			p.first = make(map[string]int, 2*len(p.bound))
+			for i, b := range p.bound {
+				if _, ok := p.first[b]; !ok {
+					p.first[b] = i
+				}
+			}
+		}
+		if p.first != nil {
+			if _, ok := p.first[n]; !ok {
+				p.first[n] = len(p.bound)
+			}
+		}
+		p.bound = append(p.bound, n)
 	}
 	return mark
 }
 
-func (p *parser) unbind(mark int) { p.bound = p.bound[:mark] }
+// unbind pops the stack back to mark. A name leaves first only when its
+// lowest occurrence is popped; a shadowed outer one stays.
+func (p *parser) unbind(mark int) {
+	if p.first != nil {
+		for i := mark; i < len(p.bound); i++ {
+			if j, ok := p.first[p.bound[i]]; ok && j >= mark {
+				delete(p.first, p.bound[i])
+			}
+		}
+	}
+	p.bound = p.bound[:mark]
+}

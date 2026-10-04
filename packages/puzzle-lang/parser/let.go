@@ -72,6 +72,10 @@ func (p *parser) parseLet(rest string, pos, restPos Position) (Node, *ParseError
 		return nil, errAt(p.file, pos, "{#let} requires at least one assignment — %s", letShape)
 	}
 	let := &Let{Pos: pos}
+	// Positions advance through rest once, in order, and names are looked up
+	// in a map, so a block of any length parses in linear time.
+	at := newPosCursor(rest, restPos)
+	named := map[string]Position{}
 	cursor := 0
 	// Assignments are one per line. Splitting at top level keeps a newline
 	// inside a string literal or inside brackets out of the split.
@@ -82,17 +86,16 @@ func (p *parser) parseLet(rest string, pos, restPos Position) (Node, *ParseError
 		if text == "" {
 			continue
 		}
-		lineAt := restPos.advance(rest[:start+len(line)-len(strings.TrimLeft(line, " \t\r"))])
+		lineAt := at.at(start + len(line) - len(strings.TrimLeft(line, " \t\r")))
 		binding, perr := p.parseLetBinding(text, lineAt)
 		if perr != nil {
 			return nil, perr
 		}
-		for _, prev := range let.Bindings {
-			if prev.Name == binding.Name {
-				return nil, errAt(p.file, binding.NamePos, "{#let} names %q twice in one block — already assigned at %d:%d",
-					binding.Name, prev.NamePos.Line, prev.NamePos.Col)
-			}
+		if prev, dup := named[binding.Name]; dup {
+			return nil, errAt(p.file, binding.NamePos, "{#let} names %q twice in one block — already assigned at %d:%d",
+				binding.Name, prev.Line, prev.Col)
 		}
+		named[binding.Name] = binding.NamePos
 		let.Bindings = append(let.Bindings, binding)
 		// Sequential: the next assignment, and everything after the block,
 		// sees this name.

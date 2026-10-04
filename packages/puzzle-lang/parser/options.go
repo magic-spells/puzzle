@@ -32,6 +32,33 @@ type Options struct {
 	// SkipRefCheck skips the post-parse `ref` rules (refs.go). A host with no
 	// element refs diagnoses `ref` itself.
 	SkipRefCheck bool
+
+	// MaxDepth is the deepest template nesting ParseMarkup accepts (elements,
+	// components, markers and block bodies each count one level, as
+	// OverNestingDepth counts them). The parser is recursive descent, so an
+	// untrusted file nested a million levels deep would exhaust the stack — a
+	// fatal error recover() cannot catch — and the guard rejects it first,
+	// with a positioned error, before any parsing. 0 means DefaultMaxDepth; a
+	// negative value turns the guard off. Only ParseMarkup reads it: the
+	// wrapped entry points are PuzzleKit's, whose playground runs
+	// OverNestingDepth itself.
+	MaxDepth int
+}
+
+// DefaultMaxDepth is ParseMarkup's nesting limit when Options.MaxDepth is 0:
+// the limit the playground's view path enforces. Real templates sit around a
+// dozen levels deep.
+const DefaultMaxDepth = 200
+
+// markupDepth resolves MaxDepth for ParseMarkup: the limit, or 0 for none.
+func (o Options) markupDepth() int {
+	switch {
+	case o.MaxDepth == 0:
+		return DefaultMaxDepth
+	case o.MaxDepth < 0:
+		return 0
+	}
+	return o.MaxDepth
 }
 
 // pickOptions returns the one Options a variadic entry point received, or the

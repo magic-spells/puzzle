@@ -180,12 +180,24 @@ construct, with per-host switches).
   - `SkipIslandCheck`, `SkipSlotCheck` and `SkipRefCheck` turn off the
     post-parse `island`, composition-marker and `ref` rules for a host that
     applies its own.
+  - `MaxDepth` caps `ParseMarkup`'s nesting (default `DefaultMaxDepth`, 200).
 - **Wrapper-less markup** (`parser.ParseMarkup`): parses a markup fragment at a
   given file position, for a host whose files have no `<puzzle-view>` wrapper.
+  Nesting past the limit is a positioned error found before parsing, so an
+  untrusted file cannot exhaust the parser's stack.
 - **Scanners for a host's own splitter**, the ones the section splitter and
   lexer use: `ScanOpenTag`, `TagNameAt`, `FindScriptClose`, `FindStyleClose`,
   `FindTemplateClose`, `ScanBraceGroup`, `SkipBraceGroup`, `AttrNames`,
-  `ParseAttrString`, `ParseScriptLang` and `ParseStyleScoped`.
+  `ParseAttrString`, `ParseScriptLang` and `ParseStyleScoped`. Indexes are
+  absolute, out-of-range input never panics, and errors are positioned.
+- **`expr.Options.IsBinding`**: an optional O(1) membership test for
+  `Bindings`, which the template parser passes once a scope grows long, so a
+  long `{#let}` block parses in linear time.
+
+### Fixed
+
+- An attribute value maps its expression positions in one forward pass. A
+  value with many braces was quadratic. Parse results are unchanged.
 
 ## 0.8.0 — 2026-10-01
 
