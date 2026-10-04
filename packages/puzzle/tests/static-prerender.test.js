@@ -10,6 +10,7 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { prerender, prerenderToDir, injectStaticShell } from '../client-runtime/ssg/index.js';
 import { adapter } from '../client-runtime/datastore/adapter.js';
 import { hasReadState } from '../client-runtime/capabilities.js';
@@ -1167,5 +1168,20 @@ describe('static read-state island (D161)', () => {
 		const index = fs.readFileSync(path.join(outDir, 'index.html'), 'utf8');
 		expect(index).not.toContain('data-puzzle-static-read');
 		expect(index).not.toContain('data-puzzle-static-data');
+	});
+});
+
+// D177 — the per-locale prerender changes nothing for a build without
+// `i18n.routing: 'prefix'`. golden.json holds every file and summary the
+// pre-D177 prerenderer wrote for an i18n app without routing and an app without
+// i18n, in both output modes (tests/fixtures/prerender-golden/app.js).
+describe('output without locale prefix routing is byte-identical (D177)', () => {
+	it('matches the pre-D177 bytes for an i18n app and a plain app, static and hybrid', async () => {
+		const { renderGolden } = await import('./fixtures/prerender-golden/run.js');
+		const file = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures/prerender-golden/golden.json');
+		const golden = JSON.parse(fs.readFileSync(file, 'utf8'));
+		const out = await renderGolden({ prerenderToDir, PuzzleView, ViewNode, SLOT_TAG });
+		expect(Object.keys(out)).toEqual(Object.keys(golden));
+		for (const name of Object.keys(golden)) expect(out[name], name).toBe(golden[name]);
 	});
 });

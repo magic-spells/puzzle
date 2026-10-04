@@ -11,6 +11,7 @@ import { hashRouter, memoryRouter } from '../client-runtime/router/modes.js';
 import { createTestApp, mountView } from '../client-runtime/testing/index.js';
 import { installFakeAnimate } from './helpers/fake-waapi.js';
 import { formatLocale } from '../client-runtime/formatters/locale.js';
+import { REDIRECT_CASES, REDIRECT_MANIFEST, SAME_ORIGIN } from './fixtures/locale-redirect-cases.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -1006,32 +1007,23 @@ describe('PuzzleApp + locale prefix routing (D177)', () => {
 		expect(loc.assign).toHaveBeenCalledWith(location.origin + '/about?x=1');
 	});
 
+	// The shared decision table (tests/fixtures/locale-redirect-cases.js), which
+	// the prerendered pages' inline script runs too, plus `detect: false`.
 	describe('first-visit redirect', () => {
 		const ORIGIN = 'http://localhost:3000'; // jsdom's test origin; asserted below
 		it.each([
-			// [case, url, routerBase, stored, languages, referrer, detect, expected]
-			['a browser-language match', '/about?q=1#top', undefined, null, ['es-MX', 'en'], '', undefined, '/es/about?q=1#top'],
-			['the root page', '/', undefined, null, ['es'], '', undefined, '/es/'],
-			['a stored choice, over the browser', '/about', undefined, 'es', ['en-US'], '', undefined, '/es/about'],
-			['an unconfigured stored choice falls to the browser', '/about', undefined, 'fr', ['es'], '', undefined, '/es/about'],
-			['a stored default choice suppresses it', '/about', undefined, 'en', ['es'], '', undefined, null],
-			['no browser match', '/about', undefined, null, ['fr', 'de'], '', undefined, null],
-			['a same-origin referrer', '/about', undefined, null, ['es'], ORIGIN + '/es/', undefined, null],
-			['another origin referrer', '/about', undefined, null, ['es'], 'https://search.example/q', undefined, '/es/about'],
-			['detect: false', '/about', undefined, null, ['es'], '', false, null],
-			['an already-prefixed URL', '/es/about', undefined, null, ['en'], '', undefined, null],
-			['under routerBase', '/docs/about', '/docs', null, ['es'], '', undefined, '/docs/es/about'],
-			['outside routerBase', '/elsewhere', '/docs', null, ['es'], '', undefined, null],
-		])('%s', async (_, url, routerBase, stored, languages, referrer, detect, expected) => {
+			...REDIRECT_CASES,
+			{ name: 'detect: false', url: '/about', languages: ['es'], detect: false, expected: null },
+		])('$name', async ({ url, routerBase, stored, languages, referrer, detect, expected }) => {
 			expect(location.origin).toBe(ORIGIN);
 			vi.spyOn(console, 'warn').mockImplementation(() => {}); // outside routerBase warns
 			if (stored) localStorage.setItem(STORE_KEY, stored);
 			setLanguages(languages);
-			setReferrer(referrer);
+			setReferrer(referrer === SAME_ORIGIN ? ORIGIN + '/es/' : (referrer ?? ''));
 			history.replaceState({}, '', url);
 			const fetch = stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
 			const loc = spyLocation();
-			const manifest = detect === false ? { ...ROUTED, detect } : ROUTED;
+			const manifest = detect === false ? { ...REDIRECT_MANIFEST, detect } : REDIRECT_MANIFEST;
 			const { app, el } = make({ routerBase, __i18n: { manifest } });
 			await app.mount();
 			if (expected) {

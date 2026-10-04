@@ -129,13 +129,15 @@ export function resolveHeadField(chain, field) {
  * managed og:/twitter:/description/canonical tags are emitted exclusively at
  * build time by the SSG injector (see headTags.js).
  *
- * `document.title` is assigned ONLY for a non-null resolved title — resolved
- * null (explicit suppression) and nothing-defined both leave it as-is (the
- * assignment mechanism is the pre-D84 #setTitle; only the null posture is now
- * uniform suppression rather than title-inherits — see resolveHead).
+ * `document.title` is assigned ONLY for a string — resolved null (explicit
+ * suppression) and nothing-defined both leave it as-is (the assignment
+ * mechanism is the pre-D84 #setTitle; only the null posture is now uniform
+ * suppression rather than title-inherits — see resolveHead). So does an
+ * untranslated `{ t }` reference in an app without i18n, which would otherwise
+ * put "[object Object]" in the tab.
  *
- * @param {string|null} title the resolved `title` field
+ * @param {unknown} title the resolved `title` field
  */
 export function syncTitle(title) {
-	if (title != null) document.title = String(title);
+	if (typeof title === 'string') document.title = title;
 }

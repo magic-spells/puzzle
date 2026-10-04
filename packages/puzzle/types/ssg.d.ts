@@ -78,6 +78,8 @@ export interface PrerenderedPage {
 	route?: object;
 	/** Enumerated but deliberately not rendered by a subset render (D155). */
 	reused?: boolean;
+	/** The locale the page was rendered in — under `i18n.routing: 'prefix'` only (D177). */
+	locale?: string;
 }
 
 /** One leaf entry from `enumerateRoutes` — the prerenderer's per-page unit. */
@@ -130,6 +132,11 @@ export interface WrittenPage {
 	 * exist — the caller supplies the previous render's copy (D155).
 	 */
 	reused?: boolean;
+	/**
+	 * The page's locale — under `i18n.routing: 'prefix'` only (D177), where every
+	 * route is written once per locale and a route's pages share one `entry`.
+	 */
+	locale?: string;
 }
 
 /** The summary returned by `prerenderToDir`. */
@@ -194,6 +201,13 @@ export interface PrerenderToDirOptions {
 	 * exporting no default); the KEY's absence is what means "no such module".
 	 */
 	adapterModule?: unknown;
+	/**
+	 * The app's public origin (`'https://example.com'`, the config's `site`,
+	 * D177): `hreflang` alternates become absolute, an absolute canonical on it is
+	 * localized per locale, and `outDir/sitemap.xml` is written — unless the
+	 * public folder already put one there, which wins.
+	 */
+	site?: string;
 }
 
 /**
@@ -239,6 +253,11 @@ export declare function injectShell(
 		head?: ResolvedRouteHead | null;
 		/** Markup inserted before the shell's `</body>` — the build's locale island (D175). */
 		island?: string;
+		/**
+		 * Markup appended to the shell head after the managed tags, with a resolved
+		 * `head` only — the build's `hreflang` alternates and locale redirect (D177).
+		 */
+		headExtra?: string;
 	}
 ): string;
 
@@ -273,5 +292,10 @@ export declare function injectStaticShell(
 		base?: string;
 		/** Markup inserted before the shell's `</body>` — the build's locale island (D175). */
 		island?: string;
+		/**
+		 * Markup appended to the shell head after the managed tags, with a resolved
+		 * `head` only — the build's `hreflang` alternates and locale redirect (D177).
+		 */
+		headExtra?: string;
 	}
 ): string;

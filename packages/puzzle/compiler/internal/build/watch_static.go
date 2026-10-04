@@ -113,8 +113,10 @@ type StaticWatchBuilder struct {
 	// "render everything".
 	graph *routeGraph
 
-	// routeCount is how many pages the last render enumerated — the denominator
-	// in the profile's partial-render row.
+	// routeCount is how many routes the last render wrote pages for — the
+	// denominator in the profile's partial-render row, whose numerator is the
+	// route filter. Routes, not pages: under prefix routing (D177) every route
+	// writes one page per locale.
 	routeCount int
 
 	// nextGraph and nextRouteCount hold what the in-flight rebuild captured,
@@ -760,7 +762,16 @@ func (b *StaticWatchBuilder) captureGraph(summary staticSummary, pagesMetafile, 
 		return
 	}
 	b.nextGraph = graph
-	b.nextRouteCount = len(summary.Written)
+	b.nextRouteCount = writtenRoutes(summary.Written)
+}
+
+// writtenRoutes counts the distinct route paths among the written pages.
+func writtenRoutes(written []staticPage) int {
+	paths := make(map[string]bool, len(written))
+	for _, page := range written {
+		paths[page.Path] = true
+	}
+	return len(paths)
 }
 
 // prerenderOnlyArgs renders the route filter as the generated prerender entry's

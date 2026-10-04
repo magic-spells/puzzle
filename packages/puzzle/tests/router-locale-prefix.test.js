@@ -13,6 +13,8 @@ import { Router } from '../client-runtime/router/router.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
 import { localizeRouterStub, makeRouterStub } from '../client-runtime/ssg/assemble.js';
+import { prerender } from '../client-runtime/ssg/index.js';
+import { setFormatLocale } from '../client-runtime/formatters/locale.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -251,10 +253,35 @@ describe('Router locale prefix — route collision (D177)', () => {
 
 // The four encoders D177 names — Router.url, the router's write side, the static
 // router stub (localizeRouterStub) and the hybrid prerender's url shadow — all go
-// through localeBase. This pins the first three against each other per locale;
-// the hybrid shadow joins when the per-locale prerender lands.
+// through localeBase. This pins all four against each other per locale. The
+// hybrid shadow is read from a real per-locale hybrid prerender pass, so a
+// shadow that kept the first locale's prefix would fail every later locale.
 describe('Router locale prefix — encoder parity (D177)', () => {
 	const PATH = '/user/9?tab=2#bio';
+	const OPTIONS = [undefined, { locale: 'es' }, { locale: 'en' }, { locale: 'pt-BR' }, { locale: false }];
+
+	/** locale → the hybrid prerender router's url(PATH, options) for each OPTIONS entry. */
+	async function hybridShadow(base) {
+		const seen = {};
+		class Probe extends PuzzleView {
+			render() {
+				seen[this.ctx.i18n.locale] = OPTIONS.map((options) => this.ctx.router.url(PATH, options));
+				return h('p', {}, []);
+			}
+		}
+		const tables = Object.fromEntries(LOCALES.map((tag) => [tag, {}]));
+		const manifest = {
+			defaultLocale: 'en',
+			locales: Object.fromEntries(LOCALES.map((tag) => [tag, `locales/${tag}.json`])),
+			routing: 'prefix',
+		};
+		await prerender(
+			{ target: '#app', routerBase: base, routes: [{ path: '/', view: Probe }] },
+			{ mode: 'hybrid', i18n: { manifest, table: {}, tables } }
+		);
+		setFormatLocale(undefined);
+		return seen;
+	}
 	for (const base of ['', '/docs']) {
 		for (const locale of LOCALES) {
 			it(`${locale} under base ${JSON.stringify(base)}`, async () => {
@@ -273,6 +300,9 @@ describe('Router locale prefix — encoder parity (D177)', () => {
 				for (const options of [{ locale: 'es' }, { locale: 'en' }, { locale: 'pt-BR' }, { locale: false }]) {
 					expect(router.url(PATH, options)).toBe(stub.url(PATH, options));
 				}
+				const shadow = (await hybridShadow(base))[locale];
+				expect(shadow).toEqual(OPTIONS.map((options) => router.url(PATH, options)));
+				expect(shadow[0]).toBe(written);
 			});
 		}
 	}

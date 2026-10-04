@@ -37,7 +37,7 @@ import { localeBase, normalizeBase, pathLocale } from './router/router.js';
  * @property {string} [base] URL of the folder the build's entry module was served from
  * @property {'prefix'} [routing] present only with `i18n.routing: 'prefix'` (D177)
  * @property {false} [detect] present only with `i18n.detect: false`: no first-visit
- *   redirect (D177)
+ *   redirect, neither the SPA's nor the prerendered pages' inline script (D177)
  */
 
 /**
@@ -76,6 +76,28 @@ export function selectLocale(tags, defaultLocale, stored, languages = []) {
 		if (hit) return hit;
 	}
 	return defaultLocale;
+}
+
+// Right-to-left scripts, and the languages written right-to-left when the tag
+// names no script (D177), including `iw`, Hebrew's legacy code. Kurdish (`ku`)
+// is rtl only as `ku-Arab`, which the script rule already covers.
+const RTL_SCRIPTS = ['arab', 'hebr', 'thaa', 'syrc', 'nkoo', 'adlm', 'rohg'];
+const RTL_LANGUAGES = ['ar', 'he', 'iw', 'fa', 'ur', 'ps', 'sd', 'ug', 'yi', 'dv', 'ckb', 'ks'];
+
+/**
+ * A locale's text direction (D177), for `<html dir>` and `i18n.dir`: from the
+ * tag's script subtag when it has one (`az-Arab` is rtl, `pa-Guru` is not),
+ * otherwise from its language (`ar`, `he`, `fa`, …). Decided from the tag alone —
+ * `Intl.Locale.prototype.getTextInfo` is not supported everywhere.
+ *
+ * @param {string} tag a locale tag
+ * @returns {'rtl' | 'ltr'}
+ */
+export function textDirection(tag) {
+	const [language, script] = tag.toLowerCase().split('-');
+	// A script is four letters; `de-1996` is a variant.
+	if (/^[a-z]{4}$/.test(script)) return RTL_SCRIPTS.includes(script) ? 'rtl' : 'ltr';
+	return RTL_LANGUAGES.includes(language) ? 'rtl' : 'ltr';
 }
 
 /** The remembered setLocale() choice, or null (no storage, or nothing stored). */
@@ -377,14 +399,21 @@ export function createI18n(options = {}) {
 		});
 	};
 
-	// The table, the locale, the formatter locale and <html lang> switch together
-	// (not <html lang> in memory mode, which touches nothing document-wide).
+	// The table, the locale, the formatter locale and <html lang dir> switch
+	// together (not <html> in memory mode, which touches nothing document-wide).
+	// `dir` is set for a right-to-left locale and removed again only when it says
+	// rtl, so a shell's own `dir` survives an ltr locale (D177).
 	/** @param {string} tag @param {LocaleTable} strings */
 	const apply = (tag, strings) => {
 		table = strings;
 		locale = tag;
 		setFormatLocale(tag);
-		if (lang && typeof document !== 'undefined') document.documentElement.lang = tag;
+		if (lang && typeof document !== 'undefined') {
+			const root = document.documentElement;
+			root.lang = tag;
+			if (textDirection(tag) === 'rtl') root.dir = 'rtl';
+			else if (root.dir === 'rtl') root.removeAttribute('dir');
+		}
 	};
 
 	// The startup load: the active locale, falling back ONCE to the default when
@@ -431,6 +460,10 @@ export function createI18n(options = {}) {
 		/** The active locale tag. */
 		get locale() {
 			return locale;
+		},
+		/** The active locale's text direction (D177): `'rtl'` or `'ltr'`. */
+		get dir() {
+			return textDirection(locale);
 		},
 		/**
 		 * Every configured locale, in config order, as a language switcher renders

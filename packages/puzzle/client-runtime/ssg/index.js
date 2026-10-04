@@ -40,7 +40,7 @@ import {
 } from '../capabilities.js';
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
-import { Router, encodeURL, normalizeBase } from '../router/router.js';
+import { Router, encodeURL, linkLocale, localeBase, normalizeBase } from '../router/router.js';
 import { memoryRouter } from '../router/modes.js';
 import { findShadowedPaths, isDynamicSegment } from '../router/routePath.js';
 import { walkRouteTree } from '../router/routeTree.js';
@@ -50,11 +50,14 @@ import { isLazyView, resolveRouteViews } from '../router/lazy.js';
 import { resolveHead } from '../head.js';
 import { MANAGED_TAGS } from '../headTags.js';
 import i18nManifest from '@magic-spells/puzzle/i18n/manifest';
-import { createI18n, installTranslate } from '../i18n.js';
+import { createI18n, installTranslate, localePath, textDirection } from '../i18n.js';
+import { formatLocale, setFormatLocale } from '../formatters/locale.js';
+import { redirectScript } from './redirect.js';
 
 /** @import { FormatterRegistry } from '../formatters.js' */
 /** @import { AdapterCapability, ReadStateEnvelope } from '../capabilities.js' */
 /** @import { RouterStub } from './assemble.js' */
+/** @import { WrittenPage } from '../../types/ssg.js' */
 
 /**
  * A route definition as the prerender reads it (author data: `view`/`layout`
@@ -71,21 +74,24 @@ import { createI18n, installTranslate } from '../i18n.js';
 /** @typedef {{ views: string[], layout: string | null }} ChainModules */
 /** @typedef {ReturnType<typeof serializeRouteJSON>} RouteJSON */
 /**
- * One prerendered page (see prerender's @returns).
+ * One prerendered page (see prerender's @returns). `locale` is set under prefix
+ * routing only (D177): the locale the page was rendered in.
  * @typedef {{ path: string, html: string | null, title: string | null,
  *   head: ResolvedHead | null, reused?: boolean, prerender?: boolean,
  *   data?: Record<string, any[]>, readState?: ReadStateEnvelope, modules?: ChainModules,
- *   route?: RouteJSON }} Page
+ *   route?: RouteJSON, locale?: string }} Page
  */
 /** @typedef {{ path: string, reason: string, modules?: ChainModules }} SkippedRoute */
 /**
  * The build's translation state: the locale manifest plus the default locale's
- * filled table (D175).
- * @typedef {{ manifest: import('../i18n.js').I18nManifest, table: Record<string, any> }} BuildI18n
+ * filled table (D175), and under prefix routing every locale's table by tag
+ * (D177) — the prerender renders each locale from its own.
+ * @typedef {{ manifest: import('../i18n.js').I18nManifest, table: Record<string, any>,
+ *   tables?: Record<string, Record<string, any>> }} BuildI18n
  */
 /**
  * @typedef {{ mode?: 'hybrid'|'static', routeRouter?: Router, i18n?: BuildI18n | null,
- *   only?: string[] }} PrerenderOptions
+ *   only?: string[], site?: string }} PrerenderOptions
  */
 /**
  * The per-page build-time ctx (buildContext): the services PuzzleApp.mount()
@@ -99,9 +105,11 @@ import { createI18n, installTranslate } from '../i18n.js';
 /**
  * The build's translation state for the prerender: the manifest plus the
  * default locale's filled table, read from the staged `locales/` file the Go
- * build wrote before this pass (no fetch). null without i18n. Every page renders
- * in the default locale — Node has no navigator or storage to choose another.
- * `override` ({ manifest, table }) is an internal seam for tests.
+ * build wrote before this pass (no fetch) — and under prefix routing every
+ * locale's table (D177). null without i18n. Without prefix routing every page
+ * renders in the default locale — Node has no navigator or storage to choose
+ * another. `override` ({ manifest, table, tables? }) is an internal seam for
+ * tests.
  *
  * @param {string} outDir
  * @param {BuildI18n} [override]
@@ -110,44 +118,168 @@ import { createI18n, installTranslate } from '../i18n.js';
 function loadBuildI18n(outDir, override) {
 	if (override) return override;
 	if (!(typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) || !i18nManifest) return null;
-	const file = path.join(outDir, i18nManifest.locales[i18nManifest.defaultLocale]);
-	return { manifest: i18nManifest, table: JSON.parse(fs.readFileSync(file, 'utf8')) };
+	/** @param {string} tag */
+	const read = (tag) => JSON.parse(fs.readFileSync(path.join(outDir, i18nManifest.locales[tag]), 'utf8'));
+	const table = read(i18nManifest.defaultLocale);
+	/** @type {BuildI18n} */
+	const i18n = { manifest: i18nManifest, table };
+	if (prefixRouting(i18n)) {
+		i18n.tables = {};
+		for (const tag of Object.keys(i18nManifest.locales)) {
+			i18n.tables[tag] = tag === i18nManifest.defaultLocale ? table : read(tag);
+		}
+	}
+	return i18n;
 }
 
 /**
- * The island every prerendered page carries so the default locale's first load
- * makes no request: the table as JSON in a `data-puzzle-locale` script, escaped
- * by the shared JSON-in-script rule (D113) so a `</script>` inside a string can
- * never close it.
+ * The manifest when the build routes locales by URL prefix (D177), else null.
  *
- * @param {BuildI18n | null} i18n
+ * @param {BuildI18n | null | undefined} i18n
+ * @returns {import('../i18n.js').I18nManifest | null}
+ */
+function prefixRouting(i18n) {
+	return (typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) &&
+		i18n?.manifest.routing === 'prefix'
+		? i18n.manifest
+		: null;
+}
+
+/**
+ * One locale's filled table: the default's is `table`, the others' (prefix
+ * routing) come from `tables`. A table the build did not supply fails the build
+ * rather than rendering another language's text under this locale's URLs.
+ *
+ * @param {BuildI18n} i18n
+ * @param {string} tag
+ * @returns {Record<string, any>}
+ */
+function localeTable(i18n, tag) {
+	const table = i18n.tables?.[tag] ?? (tag === i18n.manifest.defaultLocale ? i18n.table : undefined);
+	if (!table) throw new Error(`[puzzle] prerender has no "${tag}" translations table`);
+	return table;
+}
+
+/**
+ * The island every prerendered page carries so its locale's first load makes
+ * no request: the table as JSON in a `data-puzzle-locale` script, escaped by the
+ * shared JSON-in-script rule (D113) so a `</script>` inside a string can never
+ * close it. Each page carries only its own locale's table (D177).
+ *
+ * @param {string} tag
+ * @param {Record<string, any>} table
  * @returns {string}
  */
-function localeIsland(i18n) {
-	if (!i18n) return '';
-	const tag = i18n.manifest.defaultLocale;
+function localeIsland(tag, table) {
 	return `<script type="application/json" data-puzzle-locale="${escapeAttr(tag)}">${escapeScriptJson(
-		JSON.stringify(i18n.table)
+		JSON.stringify(table)
 	)}</script>`;
 }
 
 /**
- * The shell with `<html lang>` set to the build locale, so a prerendered page
+ * The shell with `<html lang>` set to the page's locale, so a prerendered page
  * declares the language it is written in before any script runs (the runtime
  * keeps it in step on every switch). Replaces an existing `lang`, adds one
- * otherwise; a shell without an `<html>` tag is returned unchanged.
+ * otherwise. A right-to-left locale also gets `dir="rtl"`, replacing any `dir`
+ * (D177); an ltr locale drops a `dir="rtl"` (any case) and keeps any other
+ * author value (`ltr`, `auto`) — the rule the client applies on a switch, so a
+ * shell written for an rtl default locale never lays an English page out
+ * right-to-left. A shell without an
+ * `<html>` tag is returned unchanged.
  *
  * @param {string} shell
- * @param {BuildI18n | null} i18n
+ * @param {string | null} tag the page's locale; null (no i18n) changes nothing
  * @returns {string}
  */
-function withHtmlLang(shell, i18n) {
-	if (!i18n) return shell;
-	const lang = ` lang="${escapeAttr(i18n.manifest.defaultLocale)}"`;
-	return shell.replace(
-		/<html\b([^>]*)>/i,
-		(_, attrs) => `<html${attrs.replace(/\slang\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/i, '')}${lang}>`
-	);
+function withHtmlLang(shell, tag) {
+	if (tag == null) return shell;
+	const rtl = textDirection(tag) === 'rtl';
+	const attr = (/** @type {string} */ name) => new RegExp(`\\s${name}\\s*=\\s*("[^"]*"|'[^']*'|[^\\s>]+)`, 'i');
+	return shell.replace(/<html\b([^>]*)>/i, (_, attrs) => {
+		attrs = attrs.replace(attr('lang'), '');
+		// The client's rule (i18n.js apply): an ltr locale drops only an rtl `dir`.
+		attrs = attrs.replace(attr('dir'), (/** @type {string} */ found, /** @type {string} */ value) =>
+			rtl || /^["']?rtl["']?$/i.test(value) ? '' : found
+		);
+		return `<html${attrs} lang="${escapeAttr(tag)}"${rtl ? ' dir="rtl"' : ''}>`;
+	});
+}
+
+/**
+ * `withHtmlLang` memoized per locale for one shell: every page of a locale
+ * shares one shell string, so the D151 shell plan compiles once per locale.
+ *
+ * @param {string} shell
+ * @returns {(tag: string | null) => string}
+ */
+function localeShells(shell) {
+	/** @type {Map<string | null, string>} */
+	const shells = new Map();
+	return (tag) => {
+		let out = shells.get(tag);
+		if (out === undefined) shells.set(tag, (out = withHtmlLang(shell, tag)));
+		return out;
+	};
+}
+
+/**
+ * Under prefix routing (D177) a non-default locale owns its first URL segment,
+ * so a route that starts with one (`/es/news` beside locale `es`) would be read
+ * as that locale's `/news` — and both would write `dist/es/news/`. A build
+ * error, naming the route and the locale; compared case-insensitively, since
+ * `dist/ES/` and `dist/es/` are one folder on the filesystems macOS and Windows
+ * default to.
+ *
+ * @param {RouteEntry[]} entries
+ * @param {string[]} tags configured locales
+ * @param {string | null} defaultLocale
+ */
+function assertNoLocaleCollision(entries, tags, defaultLocale) {
+	for (const { fullPath } of entries) {
+		const first = fullPath.split('/')[1]?.toLowerCase();
+		const tag = first && tags.find((t) => t !== defaultLocale && t.toLowerCase() === first);
+		if (tag) {
+			throw new Error(
+				`[puzzle] route "${fullPath}" collides with the "${tag}" locale — with i18n.routing: ` +
+					`'prefix' every /${tag}/ URL is a ${tag} page, so a route cannot start with that ` +
+					'segment; rename the route'
+			);
+		}
+	}
+}
+
+/**
+ * A page's canonical URL in a non-default locale (D177): a root-relative one
+ * (under routerBase) or an absolute one on the `site` origin gets the locale's
+ * prefix, the way link() would write it; anything else — another origin, a
+ * protocol-relative or relative URL, a path outside routerBase — cannot be
+ * localized, and the caller warns. null for those.
+ *
+ * @param {string} canonical
+ * @param {{ base: string, locale: string, manifest: import('../i18n.js').I18nManifest,
+ *   site?: string }} opts
+ * @returns {string | null}
+ */
+function localizeCanonical(canonical, { base, locale, manifest, site }) {
+	/** @param {string} href a root-relative path */
+	const localize = (href) => {
+		const pathname = href.split(/[?#]/)[0];
+		if (base && pathname !== base && !pathname.startsWith(base + '/')) return null;
+		return localePath(href, base, locale, manifest);
+	};
+	if (/^[/\\][/\\]/.test(canonical)) return null;
+	if (canonical[0] === '/') return localize(canonical);
+	if (!site) return null;
+	let url;
+	try {
+		url = new URL(canonical);
+	} catch {
+		return null;
+	}
+	const origin = new URL(site).origin;
+	if (url.origin !== origin) return null;
+	const localized = localize(url.pathname + url.search + url.hash);
+	return localized == null ? null : origin + localized;
 }
 
 // ---- build-time reads -------------------------------------------------------
@@ -258,7 +390,11 @@ function restoreBuildFetch() {
  *   Router over `config.routes`, so prerenderToDir's up-front route validation and
  *   this pass share one compiled matcher table instead of building it twice.
  * @param {BuildI18n | null} [opts.i18n] the build's translation
- *   manifest + default-locale table (prerenderToDir loads it); absent = no i18n
+ *   manifest + default-locale table (prerenderToDir loads it); absent = no i18n.
+ *   Under `routing: 'prefix'` (D177) every route renders once per locale —
+ *   default locale first, each page tagged with its `locale` — from `tables`
+ * @param {string} [opts.site] the app's public origin (D177), so an absolute
+ *   canonical on it can be localized per locale
  * @param {string[]} [opts.only] STATIC MODE ONLY — the subset of route paths to
  *   actually render. Every other reachable route still produces a page object
  *   (so route enumeration, skip/duplicate detection, slug assignment and the
@@ -274,14 +410,15 @@ function restoreBuildFetch() {
  *       socialImage: string|null } | null,
  *     prerender?: boolean,
  *     data?: Record<string, any[]>, readState?: ReadStateEnvelope, modules?: { views: string[], layout: string|null },
- *     route?: RouteJSON }>,
+ *     route?: RouteJSON, locale?: string }>,
  *   skipped: Array<{ path: string, reason: string }>,
  *   warnings: string[]
  * }>} `html`/`title`/`head` are null for a `prerender: false` page (the shell is
  *   written verbatim at its path by prerenderToDir — no head injection either).
  *   `head` is the D84 per-field leaf→root resolution (head.js); `title` rides
  *   beside it (=== head.title) for pre-D84 compatibility. `data`/`modules`/`route`
- *   are present only in static mode.
+ *   are present only in static mode, `locale` only under prefix routing — where
+ *   skips and warnings are reported once, not once per locale.
  */
 export async function prerender(config, opts = {}) {
 	// Every build-time read in the pass below goes through the build-fetch
@@ -289,10 +426,15 @@ export async function prerender(config, opts = {}) {
 	// and the two ways to make the read answerable from the build machine — never
 	// with undici's bare "Failed to parse URL".
 	installBuildFetch();
+	// Each locale pass points the module-level format locale at its own (D175);
+	// the run hands back whatever was there before it, so one prerender never
+	// leaks its last locale into the next code in this process.
+	const formatLocaleBefore = formatLocale;
 	try {
 		return await prerenderPass(config, opts);
 	} finally {
 		restoreBuildFetch();
+		setFormatLocale(formatLocaleBefore);
 	}
 }
 
@@ -343,6 +485,14 @@ async function prerenderPass(config, opts = {}) {
 	// nothing needs a subset render there.
 	const only = isStatic && opts.only ? new Set(opts.only) : null;
 
+	// Locale prefix routing (D177): every route renders once per locale, default
+	// first. Without it there is one pass, in the default locale (or none at all).
+	const routed = prefixRouting(opts.i18n);
+	const defaultLocale = opts.i18n?.manifest.defaultLocale ?? null;
+	const tags = routed ? Object.keys(routed.locales) : [];
+	const passes = routed ? [defaultLocale, ...tags.filter((tag) => tag !== defaultLocale)] : [defaultLocale];
+	if (routed) assertNoLocaleCollision(entries, tags, defaultLocale);
+
 	/** @type {Page[]} */
 	const pages = [];
 	/** @type {SkippedRoute[]} */
@@ -353,18 +503,27 @@ async function prerenderPass(config, opts = {}) {
 	// descends THROUGH the skipped route, marking every component it shares with a
 	// rendered page render-wide — which turns one component edit into a full
 	// re-render of the site. `/blog` beside `/blog/:id` is the everyday shape.
+	// Under prefix routing (D177) every pass after the first makes exactly the
+	// same per-route decisions, so only the first records skips and warnings.
+	let firstPass = true;
 	/**
 	 * @param {string} routePath
 	 * @param {string} reason
 	 * @param {RouteEntry} [entry]
 	 */
 	const skip = (routePath, reason, entry) => {
+		if (!firstPass) return;
 		/** @type {SkippedRoute} */
 		const record = { path: routePath, reason };
 		if (isStatic && entry) record.modules = collectSkippedModules(entry);
 		skipped.push(record);
 	};
+	/** @type {string[]} */
 	const warnings = [];
+	/** @param {string} warning */
+	const warn = (warning) => {
+		if (firstPass) warnings.push(warning);
+	};
 	let hasCatchAll = false;
 	let builtContext = false;
 	let compiledEntryIndex = 0;
@@ -388,14 +547,21 @@ async function prerenderPass(config, opts = {}) {
 				"history-style. Remove `routerMode`, or drop output: 'static' if you need hash routing."
 		);
 	}
+
+	// The locale being rendered: the pass's, or null without i18n.
+	/** @type {string | null} */
+	let passLocale = null;
+
 	// The hybrid ctx router: the build's ONE unstarted memory Router, with url()
-	// shadowed once from the app's `routerBase` (a config constant). Lazy so a
-	// hybrid build that renders nothing never pays for it and a malformed
-	// `routerBase` still throws at the first page, exactly as before.
-	let hybridRouterReady = false;
+	// shadowed from the app's `routerBase` (a config constant) — once, or once per
+	// locale pass under prefix routing (D177). Lazy so a hybrid build that renders
+	// nothing never pays for it and a malformed `routerBase` still throws at the
+	// first page, exactly as before.
+	/** @type {string | null | undefined} */
+	let hybridLocale;
 	const hybridRouter = () => {
-		if (!hybridRouterReady) {
-			hybridRouterReady = true;
+		if (hybridLocale !== passLocale) {
+			const locale = (hybridLocale = passLocale);
 			// …a memory router carries no URL, so its url() returns paths UNPREFIXED: a
 			// based app would prerender `/about` where the live app renders `/docs/about`
 			// — a broken href for crawlers, no-JS visitors, and anyone clicking before
@@ -403,30 +569,27 @@ async function prerenderPass(config, opts = {}) {
 			// through the same encoder Router.url() and the static stub use: hybrid
 			// output is path-only by construction (the guard above refuses anything
 			// else). The compiled route table stays the real memory Router the takeover
-			// expects.
+			// expects. Under prefix routing the base is the pass locale's, and
+			// link()'s { locale } options resolve as Router.url resolves them.
 			const base = normalizeBase(config.routerBase);
-			routeRouter.url = (path) => encodeURL(path, null, base);
+			/** @type {(path: string, options?: import('../../types/index.js').LinkOptions) => string} */
+			const url = routed
+				? (path, options) =>
+						encodeURL(path, null, localeBase(base, linkLocale(options, locale, tags), defaultLocale))
+				: (path) => encodeURL(path, null, base);
+			routeRouter.url = url;
 		}
 		return routeRouter;
 	};
 
-	// One build-wide i18n service over the default locale's filled table (D175):
-	// every page renders in the default locale, and nothing is fetched.
+	// One i18n service per pass over that locale's filled table (D175): created
+	// right before the pass's pages, since it points the module-level format
+	// locale at its own (D177). Nothing is fetched.
+	/** @type {ReturnType<typeof createI18n> | null} */
 	let i18n = null;
 	// The page being rendered, as its own href — `i18n.locales[].href` reads it
 	// (D177). Pages render one at a time, so createPageContext just moves it.
 	let pageHref = '';
-	if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && opts.i18n) {
-		const { manifest, table } = opts.i18n;
-		i18n = createI18n({
-			manifest,
-			tables: { [manifest.defaultLocale]: table },
-			locale: manifest.defaultLocale,
-			page: () => pageHref,
-			routerBase: config.routerBase,
-		});
-		await i18n.__ready();
-	}
 
 	/** @param {RouteEntry} [entry] absent for the beforeMount-only fallback */
 	const createPageContext = async (entry) => {
@@ -440,19 +603,15 @@ async function prerenderPass(config, opts = {}) {
 		if (isStatic && route) {
 			router = makeRouterStub(route, { base: config.routerBase });
 			// Locale prefix routing (D177): the static stub encodes under the locale
-			// being rendered (the default, until the per-locale pass) and resolves
-			// link()'s { locale } options exactly as the browser kernel's stub does.
-			// An unconfigured { locale } tag throws here, so it fails the build.
-			const manifest = opts.i18n?.manifest;
-			if (
-				(typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) &&
-				manifest?.routing === 'prefix'
-			) {
+			// being rendered and resolves link()'s { locale } options exactly as the
+			// browser kernel's stub does. An unconfigured { locale } tag throws here,
+			// so it fails the build.
+			if (routed) {
 				localizeRouterStub(router, {
 					base: config.routerBase,
-					locale: manifest.defaultLocale,
-					defaultLocale: manifest.defaultLocale,
-					locales: Object.keys(manifest.locales),
+					locale: /** @type {string} */ (passLocale),
+					defaultLocale: /** @type {string} */ (defaultLocale),
+					locales: tags,
 				});
 			}
 		} else {
@@ -470,125 +629,173 @@ async function prerenderPass(config, opts = {}) {
 				});
 			}
 		}
-		// The catch-all page (`*`) has no path of its own, so its page href is ''.
-		// Without prefix routing every entry then links to the URL that served the
-		// page; under prefix routing localePath turns '' into each locale's home
-		// page (`/`, `/es/`).
-		pageHref = route?.path[0] === '/' ? router.url(route.path) : '';
+		// The catch-all page (`*`) has no path of its own. Without prefix routing its
+		// page href is '', so every entry links to the URL that served the page;
+		// under prefix routing it is this locale's home page under the base
+		// (`/docs/es/`), which localePath turns into each locale's home.
+		pageHref =
+			route?.path[0] === '/' ? router.url(route.path) : routed && route ? router.url('/') : '';
 		return buildContext(config, { router, i18n });
 	};
 
-	for (const entry of entries) {
-		const { fullPath, chain } = entry;
+	const base = normalizeBase(config.routerBase);
+	/** @type {Set<string>} */
+	const canonicalWarned = new Set();
 
-		// The bare top-level catch-all (`path: '*'`, D19) lands at 404.html (see
-		// pageOutputPath). Every non-bare '*' is ordinary literal segment text, just
-		// as it is in the Router's regex compiler.
-		const isCatchAll = fullPath === '*';
-		if (isCatchAll) hasCatchAll = true;
-		// The Router drops a catch-all that declares `children` WHOLESALE — its '*'
-		// branch stores the flat single-node chain and never walks the tree — so the
-		// leaves enumerated beneath it are routes the app can never navigate to. They
-		// must also not consume a compiled-entry index: entryIndex is the position in
-		// the Router's compiled leaf list, and one phantom index shifts every later
-		// leaf's shadow attribution by one.
-		const underCatchAll = !isCatchAll && chain[0].path === '*';
-		const entryIndex = isCatchAll || underCatchAll ? null : compiledEntryIndex++;
-		if (underCatchAll) {
-			skip(fullPath, 'unreachable', entry);
-			warnings.push(
-				`[puzzle] skipped route "${fullPath}" — it is a child of the catch-all route ` +
-					"'*', which the Router matches as a single leaf, so this path is " +
-					'unreachable (declare it as a top-level route to prerender it)'
-			);
-			continue;
-		}
-
-		// Only a complete `:name` segment is dynamic. Colons and stars in any
-		// other segment are regex-escaped literal text by the Router and therefore
-		// produce ordinary prerenderable static paths here.
-		if (!isCatchAll && fullPath.split('/').some(isDynamicSegment)) {
-			skip(fullPath, 'dynamic', entry);
-			warnings.push(
-				`[puzzle] skipped dynamic route "${fullPath}" — SSG v1 renders static paths only ` +
-					'(a :param route needs a staticPaths() hook, a post-v1 follow-up)'
-			);
-			continue;
-		}
-
-		// Hybrid pages are taken over by the live first-match-wins Router. Emitting a
-		// static page for a route an earlier matcher wins would make first paint and
-		// takeover disagree. True static output has no Router, so it deliberately
-		// keeps the page.
-		if (!isStatic && shadowedByIndex.has(entryIndex)) {
-			const shadowedBy = shadowedByIndex.get(entryIndex);
-			skip(fullPath, 'shadowed', entry);
-			warnings.push(
-				`[puzzle] skipped shadowed route "${fullPath}" — earlier route "${shadowedBy}" ` +
-					'matches it first in hybrid output (routes match in declaration order)'
-			);
-			continue;
-		}
-
-		// Subset render (D155): this route's output is unchanged since the last
-		// render, so the caller will supply it. The page object is still produced —
-		// it consumes its output-path claim and its slug, and the SAME slug must
-		// fall to the SAME route as in a full render or the per-page bundle URLs
-		// would shift under pages nobody re-rendered. `modules`/`route` are pure
-		// functions of the route entry (no context, no store), so the generated
-		// per-page entry module is byte-identical either way; `data` is deliberately
-		// absent, because a page with no fresh island must not be written.
-		if (only && !only.has(fullPath)) {
-			/** @type {Page} */
-			const page = { path: fullPath, html: null, title: null, head: null, reused: true };
-			if (chain.some((route) => route.prerender === false)) page.prerender = false;
-			page.modules = await collectModules(entry);
-			page.route = serializeRouteJSON(entry);
-			pages.push(page);
-			continue;
-		}
-
-		// Opt-out: a `prerender: false` anywhere in the chain writes the untouched
-		// shell at this path (an SPA-only island inside a static site). In static
-		// mode the context is still built (beforeMount runs) and its store snapshot
-		// captured, so the page's per-page module can rehydrate + mount client-side
-		// into the empty target — html stays null (CONTRACT 3).
-		if (chain.some((route) => route.prerender === false)) {
-			const ctx = await createPageContext(entry);
-			/** @type {Page} */
-			const page = { path: fullPath, html: null, title: null, head: null, prerender: false };
-			if (isStatic) await attachStaticFields(page, entry, ctx);
-			pages.push(page);
-			continue;
-		}
-
-		// Guards are a browser-router gate, never a secrecy boundary: hybrid
-		// prerendering still emits the route's markup into public HTML. Warn once
-		// per rendered leaf whose effective root→leaf chain contains a guard;
-		// `prerender: false` above is the explicit opt-out and therefore stays quiet.
-		if (!isStatic && chain.some((route) => route.guard)) {
-			const warning =
-				`[puzzle] route "${fullPath}" has a guard, but its hybrid-prerendered markup ` +
-				'ships publicly — set prerender: false anywhere in its route chain to exclude it';
-			warnings.push(warning);
-			console.warn(warning);
-		}
-
-		const ctx = await createPageContext(entry);
-		let rendered;
-		try {
-			rendered = await renderRoute(entry, ctx);
-		} catch (/** @type {any} */ err) {
-			// A data() rejection must fail loudly, naming the route (DOC plan risk).
-			throw new Error(`[puzzle] prerender failed for route "${fullPath}": ${err.message}`, {
-				cause: err,
+	for (const locale of passes) {
+		passLocale = locale;
+		firstPass = locale === passes[0];
+		compiledEntryIndex = 0;
+		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && opts.i18n) {
+			const tag = /** @type {string} */ (locale);
+			i18n = createI18n({
+				manifest: opts.i18n.manifest,
+				tables: { [tag]: localeTable(opts.i18n, tag) },
+				locale: tag,
+				lang: false,
+				page: () => pageHref,
+				routerBase: config.routerBase,
 			});
+			await i18n.__ready();
 		}
-		/** @type {Page} */
-		const page = { path: fullPath, html: rendered.html, title: rendered.title, head: rendered.head };
-		if (isStatic) await attachStaticFields(page, entry, ctx);
-		pages.push(page);
+
+		for (const entry of entries) {
+			const { fullPath, chain } = entry;
+
+			// The bare top-level catch-all (`path: '*'`, D19) lands at 404.html (see
+			// pageOutputPath). Every non-bare '*' is ordinary literal segment text, just
+			// as it is in the Router's regex compiler.
+			const isCatchAll = fullPath === '*';
+			if (isCatchAll) hasCatchAll = true;
+			// The Router drops a catch-all that declares `children` WHOLESALE — its '*'
+			// branch stores the flat single-node chain and never walks the tree — so the
+			// leaves enumerated beneath it are routes the app can never navigate to. They
+			// must also not consume a compiled-entry index: entryIndex is the position in
+			// the Router's compiled leaf list, and one phantom index shifts every later
+			// leaf's shadow attribution by one.
+			const underCatchAll = !isCatchAll && chain[0].path === '*';
+			const entryIndex = isCatchAll || underCatchAll ? null : compiledEntryIndex++;
+			if (underCatchAll) {
+				skip(fullPath, 'unreachable', entry);
+				warn(
+					`[puzzle] skipped route "${fullPath}" — it is a child of the catch-all route ` +
+						"'*', which the Router matches as a single leaf, so this path is " +
+						'unreachable (declare it as a top-level route to prerender it)'
+				);
+				continue;
+			}
+
+			// Only a complete `:name` segment is dynamic. Colons and stars in any
+			// other segment are regex-escaped literal text by the Router and therefore
+			// produce ordinary prerenderable static paths here.
+			if (!isCatchAll && fullPath.split('/').some(isDynamicSegment)) {
+				skip(fullPath, 'dynamic', entry);
+				warn(
+					`[puzzle] skipped dynamic route "${fullPath}" — SSG v1 renders static paths only ` +
+						'(a :param route needs a staticPaths() hook, a post-v1 follow-up)'
+				);
+				continue;
+			}
+
+			// Hybrid pages are taken over by the live first-match-wins Router. Emitting a
+			// static page for a route an earlier matcher wins would make first paint and
+			// takeover disagree. True static output has no Router, so it deliberately
+			// keeps the page.
+			if (!isStatic && shadowedByIndex.has(entryIndex)) {
+				const shadowedBy = shadowedByIndex.get(entryIndex);
+				skip(fullPath, 'shadowed', entry);
+				warn(
+					`[puzzle] skipped shadowed route "${fullPath}" — earlier route "${shadowedBy}" ` +
+						'matches it first in hybrid output (routes match in declaration order)'
+				);
+				continue;
+			}
+
+			// Subset render (D155): this route's output is unchanged since the last
+			// render, so the caller will supply it. The page object is still produced —
+			// it consumes its output-path claim and its slug, and the SAME slug must
+			// fall to the SAME route as in a full render or the per-page bundle URLs
+			// would shift under pages nobody re-rendered. `modules`/`route` are pure
+			// functions of the route entry (no context, no store), so the generated
+			// per-page entry module is byte-identical either way; `data` is deliberately
+			// absent, because a page with no fresh island must not be written.
+			if (only && !only.has(fullPath)) {
+				/** @type {Page} */
+				const page = { path: fullPath, html: null, title: null, head: null, reused: true };
+				if (chain.some((route) => route.prerender === false)) page.prerender = false;
+				page.modules = await collectModules(entry);
+				page.route = serializeRouteJSON(entry);
+				if (routed) page.locale = /** @type {string} */ (locale);
+				pages.push(page);
+				continue;
+			}
+
+			// Opt-out: a `prerender: false` anywhere in the chain writes the untouched
+			// shell at this path (an SPA-only island inside a static site). In static
+			// mode the context is still built (beforeMount runs) and its store snapshot
+			// captured, so the page's per-page module can rehydrate + mount client-side
+			// into the empty target — html stays null (CONTRACT 3).
+			if (chain.some((route) => route.prerender === false)) {
+				const ctx = await createPageContext(entry);
+				/** @type {Page} */
+				const page = { path: fullPath, html: null, title: null, head: null, prerender: false };
+				if (isStatic) await attachStaticFields(page, entry, ctx);
+				if (routed) page.locale = /** @type {string} */ (locale);
+				pages.push(page);
+				continue;
+			}
+
+			// Guards are a browser-router gate, never a secrecy boundary: hybrid
+			// prerendering still emits the route's markup into public HTML. Warn once
+			// per rendered leaf whose effective root→leaf chain contains a guard;
+			// `prerender: false` above is the explicit opt-out and therefore stays quiet.
+			if (firstPass && !isStatic && chain.some((route) => route.guard)) {
+				const warning =
+					`[puzzle] route "${fullPath}" has a guard, but its hybrid-prerendered markup ` +
+					'ships publicly — set prerender: false anywhere in its route chain to exclude it';
+				warnings.push(warning);
+				console.warn(warning);
+			}
+
+			const ctx = await createPageContext(entry);
+			let rendered;
+			try {
+				rendered = await renderRoute(entry, ctx);
+			} catch (/** @type {any} */ err) {
+				// A data() rejection must fail loudly, naming the route (DOC plan risk).
+				throw new Error(`[puzzle] prerender failed for route "${fullPath}": ${err.message}`, {
+					cause: err,
+				});
+			}
+			// A canonical names the default locale's URL; each other locale's page
+			// points at its own (D177). og:url follows, as it derives from canonical.
+			if (routed && locale !== defaultLocale && rendered.head.canonical != null) {
+				const canonical = localizeCanonical(rendered.head.canonical, {
+					base,
+					locale: /** @type {string} */ (locale),
+					manifest: routed,
+					site: opts.site,
+				});
+				if (canonical != null) {
+					rendered.head.canonical = canonical;
+				} else if (!canonicalWarned.has(fullPath)) {
+					canonicalWarned.add(fullPath);
+					warnings.push(
+						`[puzzle] route "${fullPath}" canonical ${JSON.stringify(rendered.head.canonical)} ` +
+							'cannot be localized — every language\'s page will name it as canonical. Write it ' +
+							'root-relative (under routerBase) or on the `site` origin, and the build adds each ' +
+							"locale's prefix"
+					);
+				}
+			}
+			/** @type {Page} */
+			const page = { path: fullPath, html: rendered.html, title: rendered.title, head: rendered.head };
+			if (isStatic) await attachStaticFields(page, entry, ctx);
+			if (routed) page.locale = /** @type {string} */ (locale);
+			pages.push(page);
+		}
 	}
+	firstPass = true;
 
 	// No catch-all → no 404.html: warn (a static host will serve its own default
 	// 404 for unknown URLs instead). Flows to the Go build summary like any warning.
@@ -625,8 +832,19 @@ async function prerenderPass(config, opts = {}) {
  * @param {object} [options] (`outDir` and `shellPath` are required; a missing one throws)
  * @param {string} [options.outDir] directory to write the per-route files into
  * @param {string} [options.shellPath] the app shell HTML (the built index.html)
+ * Under `i18n.routing: 'prefix'` (D177) every route is written once per locale:
+ * the default locale at the root, each other under `outDir/<tag>/` (the
+ * catch-all at `<tag>/404.html`), each page with its own `<html lang>`, locale
+ * island, `hreflang` alternates and — on the default locale's pages — the
+ * first-visit redirect script.
+ *
  * @param {BuildI18n} [options.i18n] internal test seam: the
- *   translation manifest + default-locale table, read from `outDir` when absent
+ *   translation manifest + default-locale table (+ every locale's `tables` under
+ *   prefix routing), read from `outDir` when absent
+ * @param {string} [options.site] the app's public origin (`https://example.com`,
+ *   D177): makes `hreflang` URLs absolute, lets an absolute canonical on it be
+ *   localized, and writes `outDir/sitemap.xml` (unless the public folder already
+ *   put one there)
  * @param {'hybrid'|'static'} [options.mode] `'hybrid'` (default) is the current
  *   router-takeover output, byte-identical to before D81. `'static'` emits true
  *   static pages: the `/app.js` bundle tag is stripped, each page carries a
@@ -641,13 +859,13 @@ async function prerenderPass(config, opts = {}) {
  *   exists so the summary can report whether it IS `config.adapter`. Present but
  *   `undefined` is a real answer (a module that exports no default); the KEY's
  *   absence is what means "no such module".
- * @returns {Promise<{ outDir: string, written: import('../../types/ssg.js').WrittenPage[], skipped: SkippedRoute[],
+ * @returns {Promise<{ outDir: string, written: WrittenPage[], skipped: SkippedRoute[],
  *   warnings: string[], count: number, mode?: 'static', target?: string,
  *   apiURL?: string|null, hasFormatters?: boolean, hasAdapter?: boolean,
  *   adapterConfigured?: boolean, adapterModuleMatches?: boolean|null }>}
  */
 export async function prerenderToDir(config, options = {}) {
-	const { outDir, shellPath, mode = 'hybrid', only } = options;
+	const { outDir, shellPath, mode = 'hybrid', only, site } = options;
 	if (!outDir) throw new Error('[puzzle] prerenderToDir requires an outDir');
 	if (!shellPath) throw new Error('[puzzle] prerenderToDir requires a shellPath');
 
@@ -661,25 +879,42 @@ export async function prerenderToDir(config, options = {}) {
 
 	const targetId = parseTargetId(config.target);
 	const i18n = loadBuildI18n(outDir, options.i18n);
-	const shell = withHtmlLang(fs.readFileSync(shellPath, 'utf8'), i18n);
-	const { pages, skipped, warnings } = await prerender(config, { mode, routeRouter, only, i18n });
-	// Built once: every page carries the same default-locale table (D175).
-	const island = localeIsland(i18n);
+	const rawShell = fs.readFileSync(shellPath, 'utf8');
+	const { pages, skipped, warnings } = await prerender(config, { mode, routeRouter, only, i18n, site });
+	const dress = pageDressing({ config, i18n, site, warnings });
+	// Under prefix routing every page gets its own alternates (D177); a shell's
+	// stale ones go from the shell itself, so the verbatim shell a prerender:false
+	// page is written from does not carry them either.
+	const shell = dress.routed ? stripShellAlternates(rawShell) : rawShell;
 
-	if (mode === 'static') {
-		return writeStaticDir({
-			config,
-			outDir,
-			shell,
-			targetId,
-			pages,
-			skipped,
-			warnings,
-			island,
-			adapterModuleMatches:
-				'adapterModule' in options ? options.adapterModule === config.adapter : null,
-		});
-	}
+	const summary =
+		mode === 'static'
+			? await writeStaticDir({
+					config,
+					outDir,
+					shell,
+					targetId,
+					pages,
+					skipped,
+					warnings,
+					dress,
+					adapterModuleMatches:
+						'adapterModule' in options ? options.adapterModule === config.adapter : null,
+				})
+			: await writeHybridDir({ outDir, shell, targetId, pages, skipped, warnings, dress });
+	if (site) await writeSitemap(outDir, summary.written, dress, warnings);
+	return summary;
+}
+
+/**
+ * The hybrid writer: one page per route (per locale under prefix routing,
+ * D177), each the SPA shell injected with its markup, head and locale island.
+ *
+ * @param {{ outDir: string, shell: string, targetId: string, pages: Page[],
+ *   skipped: SkippedRoute[], warnings: string[], dress: PageDressing }} options
+ */
+async function writeHybridDir({ outDir, shell, targetId, pages, skipped, warnings, dress }) {
+	const shells = localeShells(shell);
 
 	// Claim the output paths FIRST (paths only, no HTML). Two route paths can
 	// normalize to one file — `/caf%C3%A9` and `/café` decode identically — and the
@@ -688,12 +923,17 @@ export async function prerenderToDir(config, options = {}) {
 	// which is what the sequential writer's overwrite produced. Unlike static output
 	// every page still appears in `written`: both routes are live in the SPA router,
 	// they just share a prerendered file.
+	/** @type {WrittenPage[]} */
 	const written = [];
+	/** @type {Map<string, Page>} */
 	const claimedPaths = new Map();
 	for (const page of pages) {
-		const outPath = pageOutputPath(outDir, page.path);
+		const outPath = pageOutputPath(outDir, page.path, dress.folder(page));
 		claimedPaths.set(outPath, page);
-		written.push({ path: page.path, file: outPath, prerender: page.prerender !== false });
+		/** @type {WrittenPage} */
+		const entry = { path: page.path, file: outPath, prerender: page.prerender !== false };
+		if (page.locale) entry.locale = page.locale;
+		written.push(entry);
 	}
 
 	// Injection is pure CPU and runs one page at a time as the pool pulls, so only
@@ -701,15 +941,17 @@ export async function prerenderToDir(config, options = {}) {
 	// list first held a second copy of the whole site's markup at peak.
 	function* injectPages() {
 		for (const [outPath, page] of claimedPaths) {
+			const locale = dress.locale(page);
 			const html =
 				page.prerender === false
-					? shell // opt-out: the plain SPA shell, untouched (no head injection either)
-					: injectShell(shell, {
+					? shells(locale) // opt-out: the plain SPA shell, untouched (no head injection either)
+					: injectShell(shells(locale), {
 							targetId,
-							content: page.html,
+							content: /** @type {string} */ (page.html),
 							title: page.title,
 							head: page.head,
-							island,
+							island: dress.island(locale),
+							headExtra: dress.head(page),
 						});
 			yield { outPath, html };
 		}
@@ -791,8 +1033,12 @@ async function writeFiles(files) {
  * `reused: true` — but no file is produced for it. Everything order-dependent
  * therefore lands identically to a full render; only the writes differ.
  *
+ * Under prefix routing (D177) a route's pages in every locale share ONE slug —
+ * one module serves every language — and a duplicate is reported once, for the
+ * default locale's page.
+ *
  * @param {{ config: Record<string, any>, outDir: string, shell: string, targetId: string,
- *   pages: Page[], skipped: SkippedRoute[], warnings: string[], island?: string,
+ *   pages: Page[], skipped: SkippedRoute[], warnings: string[], dress: PageDressing,
  *   adapterModuleMatches?: boolean | null }} options
  */
 async function writeStaticDir({
@@ -803,12 +1049,13 @@ async function writeStaticDir({
 	pages,
 	skipped,
 	warnings,
-	island = '',
+	dress,
 	adapterModuleMatches = null,
 }) {
-	// The app-bundle tag is stripped once (the shell is identical for every page) so
-	// a missing tag warns once, not per page.
-	const { shell: baseShell, found } = stripAppBundle(shell);
+	// The app-bundle tag is stripped once (the shell is identical for every page, up
+	// to its <html lang>) so a missing tag warns once, not per page.
+	const { shell: strippedShell, found } = stripAppBundle(shell);
+	const shells = localeShells(strippedShell);
 	if (!found) {
 		warnings.push(
 			'[puzzle] static output: no <script src="/app.js"> found in the shell to strip — ' +
@@ -835,6 +1082,10 @@ async function writeStaticDir({
 	const base = normalizeBase(config.routerBase);
 
 	const usedSlugs = new Set();
+	// route path → its slug, so a route's pages in every locale share one module
+	// (D177). Without prefix routing every path is looked up once.
+	/** @type {Map<string, string>} */
+	const slugs = new Map();
 	// outPath → the route path that already claimed it. Two routes can declare the
 	// SAME path, or two paths that normalize to one file (`/caf%C3%A9` and `/café`
 	// decode identically). Slugs are collision-suffixed but the output file is
@@ -845,10 +1096,7 @@ async function writeStaticDir({
 	// itself refuses the second claim — the emitted HTML then belongs to the first
 	// route in reachable order and no dead second bundle is generated.
 	const claimedPaths = new Map();
-	/**
-	 * @type {Array<{ path: string, file: string, prerender: boolean, entry: string,
-	 *   modules: ChainModules, route: Page['route'], reused?: boolean }>}
-	 */
+	/** @type {WrittenPage[]} */
 	const written = [];
 	// The pool pulls pages through this generator, so only its window of injected
 	// HTML is alive at once — collecting every page's HTML first held a second copy
@@ -856,14 +1104,17 @@ async function writeStaticDir({
 	// and `written` still land in enumeration order exactly as they did.
 	function* injectPages() {
 		for (const page of pages) {
-			const outPath = pageOutputPath(outDir, page.path);
+			const outPath = pageOutputPath(outDir, page.path, dress.folder(page));
 			if (claimedPaths.has(outPath)) {
-				skipped.push({ path: page.path, reason: 'duplicate', modules: page.modules });
-				warnings.push(
-					`[puzzle] skipped duplicate route "${page.path}" — earlier route ` +
-						`"${claimedPaths.get(outPath)}" already writes ${path.relative(outDir, outPath)} ` +
-						'(two routes cannot own one static page; remove or rename one of them)'
-				);
+				// Every locale repeats the default locale's duplicate: report it once.
+				if (!dress.folder(page)) {
+					skipped.push({ path: page.path, reason: 'duplicate', modules: page.modules });
+					warnings.push(
+						`[puzzle] skipped duplicate route "${page.path}" — earlier route ` +
+							`"${claimedPaths.get(outPath)}" already writes ${path.relative(outDir, outPath)} ` +
+							'(two routes cannot own one static page; remove or rename one of them)'
+					);
+				}
 				continue;
 			}
 			claimedPaths.set(outPath, page.path);
@@ -872,20 +1123,23 @@ async function writeStaticDir({
 			// order-dependent (uniqueSlug's used set accumulates over the page list), so a
 			// subset render has to consume them for every page a full render would, or
 			// the surviving pages' `_puzzle/<slug>.js` URLs would renumber.
-			const slug = uniqueSlug(computeSlug(page.path), usedSlugs);
-			if (page.reused) {
-				written.push({
-					path: page.path,
-					file: outPath,
-					prerender: page.prerender !== false,
-					entry: `_puzzle/${slug}.js`,
-					modules: page.modules,
-					route: page.route,
-					reused: true,
-				});
-				continue;
-			}
-			const html = injectStaticShell(baseShell, {
+			let slug = slugs.get(page.path);
+			if (slug === undefined) slugs.set(page.path, (slug = uniqueSlug(computeSlug(page.path), usedSlugs)));
+			/** @type {WrittenPage} */
+			const entry = {
+				path: page.path,
+				file: outPath,
+				prerender: page.prerender !== false,
+				entry: `_puzzle/${slug}.js`,
+				modules: page.modules,
+				route: page.route,
+			};
+			if (page.reused) entry.reused = true;
+			if (page.locale) entry.locale = page.locale;
+			written.push(entry);
+			if (page.reused) continue;
+			const locale = dress.locale(page);
+			const html = injectStaticShell(shells(locale), {
 				targetId,
 				base,
 				content: page.html, // null for a prerender:false page → empty, unmarked target
@@ -894,15 +1148,8 @@ async function writeStaticDir({
 				slug,
 				data: page.data ?? {},
 				readState: page.readState ?? null,
-				island,
-			});
-			written.push({
-				path: page.path,
-				file: outPath,
-				prerender: page.prerender !== false,
-				entry: `_puzzle/${slug}.js`,
-				modules: page.modules,
-				route: page.route,
+				island: dress.island(locale),
+				headExtra: dress.head(page),
 			});
 			yield { outPath, html };
 		}
@@ -931,6 +1178,125 @@ async function writeStaticDir({
 	};
 }
 
+// ---- per-locale page dressing (D175, D177) ----------------------------------
+
+/**
+ * What a written page gains beyond its render, by locale: its shell's
+ * `<html lang>`, its table island, its output folder, and the head markup prefix
+ * routing adds (`hreflang` alternates; the first-visit redirect on the default
+ * locale's pages).
+ *
+ * @typedef {object} PageDressing
+ * @property {(page: Page) => string | null} locale the page's locale (null without i18n)
+ * @property {(page: Page) => string} folder its folder under outDir (`''` = the root)
+ * @property {(locale: string | null) => string} island that locale's table island
+ * @property {(page: Page) => string} head the extra head markup
+ * @property {(routePath: string, locale: string | null) => string} url a route's URL
+ *   in a locale (absolute with `site`)
+ * @property {import('../i18n.js').I18nManifest | null} routed the manifest under prefix routing
+ */
+
+/**
+ * @param {{ config: Record<string, any>, i18n: BuildI18n | null, site?: string,
+ *   warnings: string[] }} options
+ * @returns {PageDressing}
+ */
+function pageDressing({ config, i18n, site, warnings }) {
+	const routed = prefixRouting(i18n);
+	const defaultLocale = i18n?.manifest.defaultLocale ?? null;
+	const base = normalizeBase(config.routerBase);
+	/** @type {Map<string, string>} */
+	const islands = new Map();
+	const redirect = routed && routed.detect !== false ? redirectScript(routed, base) : '';
+	if (routed && !site) {
+		warnings.push(
+			"[puzzle] i18n.routing: 'prefix' without `site` — the hreflang alternates are root-relative, " +
+				"which search engines ignore; set site: 'https://example.com' in puzzle.config.js"
+		);
+	}
+
+	/** @type {PageDressing['url']} */
+	const url = (routePath, locale) =>
+		(site ?? '') + encodeURL(routePath, null, localeBase(base, locale, defaultLocale ?? undefined));
+
+	/** @param {string} routePath */
+	const alternates = (routePath) => {
+		const link = (/** @type {string} */ hreflang, /** @type {string} */ href) =>
+			`<link rel="alternate" hreflang="${escapeAttr(hreflang)}" href="${escapeAttr(href)}" data-puzzle-head="alternate">`;
+		let out = '';
+		for (const tag of Object.keys(/** @type {NonNullable<typeof routed>} */ (routed).locales)) {
+			out += link(tag, url(routePath, tag));
+		}
+		return out + link('x-default', url(routePath, defaultLocale));
+	};
+
+	return {
+		locale: (page) => page.locale ?? defaultLocale,
+		folder: (page) => (page.locale && page.locale !== defaultLocale ? page.locale : ''),
+		island(locale) {
+			if (!i18n || locale == null) return '';
+			let island = islands.get(locale);
+			if (island === undefined) islands.set(locale, (island = localeIsland(locale, localeTable(i18n, locale))));
+			return island;
+		},
+		head(page) {
+			// A page with no head (prerender: false) gets no head work at all (D84);
+			// the catch-all is no page of its own, so it names no alternates.
+			if (!routed || !page.head) return '';
+			const out = page.path === '*' ? '' : alternates(page.path);
+			return page.locale === defaultLocale ? out + redirect : out;
+		},
+		url,
+		routed,
+	};
+}
+
+/**
+ * Write `outDir/sitemap.xml` (D177): every prerendered page — not the 404 page,
+ * not a `prerender: false` page — at its absolute URL, and under prefix routing
+ * with an `xhtml:link` alternate per locale plus `x-default`. A `sitemap.xml`
+ * the public folder already staged wins: it is left alone, with a warning.
+ *
+ * @param {string} outDir
+ * @param {WrittenPage[]} written
+ * @param {PageDressing} dress
+ * @param {string[]} warnings
+ */
+async function writeSitemap(outDir, written, dress, warnings) {
+	const file = path.join(outDir, 'sitemap.xml');
+	if (fs.existsSync(file)) {
+		warnings.push(
+			'[puzzle] public/sitemap.xml is kept — the build did not write its own sitemap (delete the ' +
+				'public file to get one listing every prerendered page)'
+		);
+		return;
+	}
+	const { routed } = dress;
+	const xml = (/** @type {string} */ s) =>
+		s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+	const seen = new Set();
+	let urls = '';
+	for (const page of written) {
+		if (!page.prerender || page.path === '*') continue;
+		const loc = dress.url(page.path, page.locale ?? null);
+		if (seen.has(loc)) continue;
+		seen.add(loc);
+		urls += `<url><loc>${xml(loc)}</loc>`;
+		if (routed) {
+			for (const tag of [...Object.keys(routed.locales), 'x-default']) {
+				const href = dress.url(page.path, tag === 'x-default' ? routed.defaultLocale : tag);
+				urls += `<xhtml:link rel="alternate" hreflang="${xml(tag)}" href="${xml(href)}"/>`;
+			}
+		}
+		urls += '</url>\n';
+	}
+	const ns = routed ? ' xmlns:xhtml="http://www.w3.org/1999/xhtml"' : '';
+	await fs.promises.writeFile(
+		file,
+		`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"${ns}>\n${urls}</urlset>\n`
+	);
+}
+
 // ---- ctx wiring -------------------------------------------------------------
 
 /**
@@ -957,6 +1323,8 @@ async function writeStaticDir({
  *
  * `config.beforeMount` is awaited with a `{ store, config }` facade (not a real
  * PuzzleApp — documented) so a build-time store seed lands before the first data().
+ * With translations the facade also carries `locale`, the locale the page renders
+ * in — under prefix routing the hook runs for every locale's pages (D177).
  *
  * @param {Record<string, any>} config
  * @param {{ router: Router | RouterStub, i18n?: ReturnType<typeof createI18n> | null }} services
@@ -995,7 +1363,9 @@ async function buildContext(config, { router, i18n = null }) {
 	// off config keeps the method-call receiver from silently being config itself.
 	const { beforeMount } = config;
 	if (typeof beforeMount === 'function') {
+		/** @type {{ store: Store, config: Record<string, any>, locale?: string }} */
 		const facade = { store, config };
+		if (ctx.i18n) facade.locale = ctx.i18n.locale;
 		await beforeMount.call(facade, facade);
 	}
 
@@ -1215,14 +1585,16 @@ function serializeRouteJSON(entry) {
  * the title-only path runs — no managed tags, byte-compatible. Both read the
  * per-shell plan compiled ONCE per build (getShellPlan, D151), so a page costs
  * one splice over precomputed offsets rather than a document-wide rescan. A
- * missing or non-empty target element is a descriptive throw.
+ * missing or non-empty target element is a descriptive throw. `headExtra` (with a
+ * resolved `head` only) is appended after the managed tags — the build's
+ * `hreflang` alternates and locale redirect script (D177).
  *
  * @param {string} shell
  * @param {{ targetId: string, content: string, title?: string | null,
- *   head?: ResolvedHead | null, island?: string }} page
+ *   head?: ResolvedHead | null, island?: string, headExtra?: string }} page
  * @returns {string}
  */
-export function injectShell(shell, { targetId, content, title, head, island = '' }) {
+export function injectShell(shell, { targetId, content, title, head, island = '', headExtra = '' }) {
 	const plan = getShellPlan(shell);
 	const target = findTarget(shell, plan, targetId);
 	if (!target) {
@@ -1239,7 +1611,7 @@ export function injectShell(shell, { targetId, content, title, head, island = ''
 			text: `<${target.tag}${target.attrs} data-puzzle-ssg>${content}</${target.tag}>`,
 		},
 	];
-	const headOp = headOperation(shell, plan, { head, title });
+	const headOp = headOperation(shell, plan, { head, title, headExtra });
 	if (headOp) ops.push(headOp);
 	// The locale island (D175) rides at the SHELL's `</body>` anchor, the same
 	// fixed offset the static data island uses (D151); appended when there is none.
@@ -1282,19 +1654,20 @@ function stripAppBundle(shell) {
  *    data island (`<` escaped to `<` so a `</script>` in a record can never
  *    break out of the script) and the per-page ES module `<script>`;
  *  - applies the title/head exactly as injectShell does (resolved `head` →
- *    the managed D84 tags; bare `title` → the pre-D84 title-only path), scoped
- *    to the shell's head region (D151).
+ *    the managed D84 tags, then `headExtra`; bare `title` → the pre-D84
+ *    title-only path), scoped to the shell's head region (D151).
  * The caller has already stripped the app-bundle tag from `shell`.
  *
  * @param {string} shell
  * @param {{ targetId: string, content: string | null, title?: string | null,
  *   head?: ResolvedHead | null, slug: string, data?: object,
- *   readState?: Partial<ReadStateEnvelope> | null, base?: string, island?: string }} page
+ *   readState?: Partial<ReadStateEnvelope> | null, base?: string, island?: string,
+ *   headExtra?: string }} page
  * @returns {string}
  */
 export function injectStaticShell(
 	shell,
-	{ targetId, content, title, head, slug, data, readState = null, base = '', island = '' }
+	{ targetId, content, title, head, slug, data, readState = null, base = '', island = '', headExtra = '' }
 ) {
 	const plan = getShellPlan(shell);
 	const ops = [];
@@ -1343,7 +1716,7 @@ export function injectStaticShell(
 		ops.push({ start: plan.bodyCloseIndex, end: plan.bodyCloseIndex, text: scripts });
 	}
 
-	const headOp = headOperation(shell, plan, { head, title });
+	const headOp = headOperation(shell, plan, { head, title, headExtra });
 	if (headOp) ops.push(headOp);
 
 	const out = spliceShell(shell, ops);
@@ -1465,9 +1838,11 @@ const BODY_CLOSE_RE = /<\/body>/gi;
  * constants, so these are module-level literals — never rebuilt per page.
  */
 const MANAGED_TAG_RES = MANAGED_TAGS.map((spec) => managedTagRe(spec.id));
+const ALTERNATE_TAG_RE = managedTagRe('alternate');
 
 // Shell → plan. A build uses one or two shells (hybrid: the shell; static: the
-// app-bundle-stripped shell), and a long-lived process could see a few more
+// app-bundle-stripped shell) — one per locale under prefix routing, whose pages
+// are written locale by locale — and a long-lived process could see a few more
 // across builds, so the map is bounded and evicts oldest-first.
 const MAX_SHELL_PLANS = 4;
 /** @type {Map<string, ShellPlan>} */
@@ -1560,6 +1935,13 @@ function compileShellPlan(shell) {
 			markerCounts[i]++;
 		}
 	}
+	// `hreflang` alternates (D177) are a managed set rebuilt per page: every one
+	// already in the shell head is removed (spec -2), and a page's own ride in
+	// after the managed tags.
+	ALTERNATE_TAG_RE.lastIndex = 0;
+	for (const m of region.matchAll(ALTERNATE_TAG_RE)) {
+		edits.push({ start: headStart + m.index, end: headStart + m.index + m[0].length, spec: -2, first: false });
+	}
 	edits.sort((a, b) => a.start - b.start);
 
 	let bodyCloseIndex = -1;
@@ -1597,6 +1979,20 @@ function findTarget(shell, plan, targetId) {
 }
 
 /**
+ * The shell without the `data-puzzle-head="alternate"` tags in its head region
+ * (the plan's spec -2 edits) — prefix routing's managed set (D177).
+ *
+ * @param {string} shell
+ * @returns {string}
+ */
+function stripShellAlternates(shell) {
+	const ops = getShellPlan(shell)
+		.edits.filter((edit) => edit.spec === -2)
+		.map(({ start, end }) => ({ start, end, text: '' }));
+	return ops.length ? spliceShell(shell, ops) : shell;
+}
+
+/**
  * Apply non-overlapping replacement ops to the shell in ONE pass. Ops are
  * `{ start, end, text }` in shell coordinates (a zero-length span inserts);
  * they are sorted here, and an op overlapping an earlier one is dropped — only
@@ -1631,12 +2027,12 @@ function spliceShell(shell, ops) {
  *
  * @param {string} shell
  * @param {ShellPlan} plan
- * @param {{ head?: ResolvedHead | null, title?: string | null }} page
+ * @param {{ head?: ResolvedHead | null, title?: string | null, headExtra?: string }} page
  * @returns {SpliceOp | null}
  */
-function headOperation(shell, plan, { head, title }) {
+function headOperation(shell, plan, { head, title, headExtra = '' }) {
 	if (head) {
-		return { start: plan.headStart, end: plan.headEnd, text: renderHeadRegion(shell, plan, head) };
+		return { start: plan.headStart, end: plan.headEnd, text: renderHeadRegion(shell, plan, head, headExtra) };
 	}
 	if (title != null && plan.titleSpan) {
 		return {
@@ -1666,6 +2062,9 @@ function headOperation(shell, plan, { head, title }) {
  *    region ends after the first `</title>` so the tags ride there, or — with
  *    neither anchor — they warn + skip; never a throw, the page content is still
  *    worth writing.
+ * Every `data-puzzle-head="alternate"` tag in the shell head is removed, and
+ * `headExtra` (the page's own `hreflang` alternates and redirect script, D177)
+ * rides at the end of the inserts.
  * All values are attribute-escaped (escapeAttr) so hostile metadata — quotes,
  * `</head>`, `<script>` — cannot break out of the generated tag.
  *
@@ -1673,9 +2072,10 @@ function headOperation(shell, plan, { head, title }) {
  * @param {ShellPlan} plan
  * @param {ResolvedHead & Record<string, string | null>} head resolved fields, read
  *   by name and by each managed tag's `field`
+ * @param {string} [headExtra] already-built markup appended after the managed tags
  * @returns {string}
  */
-function renderHeadRegion(shell, plan, head) {
+function renderHeadRegion(shell, plan, head, headExtra = '') {
 	const { headStart, headEnd, edits, markerCounts } = plan;
 	let out = '';
 	let cursor = headStart;
@@ -1684,6 +2084,7 @@ function renderHeadRegion(shell, plan, head) {
 		if (edit.start < cursor) continue; // overlapping spans in a pathological shell
 		out += shell.slice(cursor, edit.start);
 		cursor = edit.end;
+		if (edit.spec === -2) continue; // a shell alternate: always removed
 		if (edit.spec < 0) {
 			out +=
 				head.title != null
@@ -1707,6 +2108,7 @@ function renderHeadRegion(shell, plan, head) {
 		if (value == null) continue;
 		inserts += buildHeadTag(spec, value);
 	}
+	inserts += headExtra;
 	if (inserts) {
 		if (plan.hasAnchor) {
 			out += inserts;
@@ -1761,15 +2163,19 @@ function managedTagRe(id) {
  * escaped URI delimiters such as `%2F`. Malformed percent text keeps its current
  * literal-directory behavior. The bare catch-all (`path: '*'`) is the exception
  * — it writes `outDir/404.html`, the filename static hosts serve for unknown URLs.
+ * Under prefix routing (D177) a non-default locale's pages land in its `folder`
+ * (`outDir/es/about/index.html`, `outDir/es/404.html`).
  *
  * @param {string} outDir
  * @param {string} routePath
+ * @param {string} [folder] the locale folder; `''` writes at the root
  * @returns {string}
  */
-function pageOutputPath(outDir, routePath) {
+function pageOutputPath(outDir, routePath, folder = '') {
+	const root = folder ? path.join(outDir, folder) : outDir;
 	let outPath;
 	if (routePath === '*') {
-		outPath = path.join(outDir, '404.html');
+		outPath = path.join(root, '404.html');
 	} else {
 		let filesystemPath = routePath;
 		try {
@@ -1780,7 +2186,7 @@ function pageOutputPath(outDir, routePath) {
 		}
 		const clean = filesystemPath.replace(/^\//, '').replace(/\/$/, '');
 		const rel = clean === '' ? 'index.html' : path.join(clean, 'index.html');
-		outPath = path.join(outDir, rel);
+		outPath = path.join(root, rel);
 	}
 	// Containment guard: a route path like "/../x" path.joins OUT of outDir and would
 	// write outside the staging dir. Reject any resolved path that escapes it before

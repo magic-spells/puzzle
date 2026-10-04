@@ -19,6 +19,7 @@ import { Router } from '../client-runtime/router/router.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { MANAGED_TAGS } from '../client-runtime/headTags.js';
+import { syncTitle } from '../client-runtime/head.js';
 import { memoryRouter } from '../client-runtime/router/modes.js';
 import { PuzzleApp } from '../client-runtime/app.js';
 
@@ -419,5 +420,16 @@ describe('Router head sync (D177) — translated titles', () => {
 			app.unmount();
 			vi.unstubAllGlobals();
 		}
+	});
+
+	// In an app built without i18n the router hands syncTitle the raw resolved
+	// field (headText sits behind __PUZZLE_HAS_I18N__), so a `{ t }` reference
+	// arrives untranslated: it must leave the tab alone, not print "[object Object]".
+	it('syncTitle assigns only a string', () => {
+		document.title = 'Shell';
+		for (const value of [{ t: 'home.title' }, null, undefined, 42]) syncTitle(value);
+		expect(document.title).toBe('Shell');
+		syncTitle('Home');
+		expect(document.title).toBe('Home');
 	});
 });
