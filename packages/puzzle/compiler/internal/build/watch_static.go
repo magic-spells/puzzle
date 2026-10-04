@@ -301,7 +301,7 @@ func (b *StaticWatchBuilder) buildContexts() error {
 	}
 
 	adapterModule := findStaticModule(b.root, "app/adapter.js", "app/adapter.ts")
-	preStdin, err := staticPrerenderStdin(b.root, b.entry, adapterModule)
+	preStdin, err := staticPrerenderStdin(b.root, b.entry, adapterModule, b.cfg.Site)
 	if err != nil {
 		appCtx.Dispose()
 		return err
@@ -348,7 +348,7 @@ func (b *StaticWatchBuilder) newPlugin(usage plugin.Usage) *plugin.Plugin {
 	pl := plugin.New(b.root)
 	pl.SetUsage(usage)
 	pl.SetCompileCache(b.cache)
-	applyI18n(pl, b.cfg.I18nEnabled(), b.locales)
+	applyI18n(pl, b.cfg.I18n, b.locales)
 	return pl
 }
 
@@ -421,7 +421,7 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 		b.locales = res
 		for _, pl := range []*plugin.Plugin{b.appPl, b.prePl, b.pagesPl} {
 			if pl != nil {
-				applyI18n(pl, true, res)
+				applyI18n(pl, b.cfg.I18n, res)
 			}
 		}
 	}
@@ -883,21 +883,21 @@ func (b *StaticWatchBuilder) syncPageEntries(summary staticSummary) ([]string, e
 		return nil, fmt.Errorf("puzzle build --static: creating entry dir: %w", err)
 	}
 
+	pages, err := uniqueEntryPages(summary.Written)
+	if err != nil {
+		return nil, err
+	}
 	var entryFiles []string
 	live := map[string]bool{}
-	for _, page := range summary.Written {
-		slug, err := slugFromEntry(page.Entry)
+	for _, page := range pages {
+		src, err := staticEntrySource(b.root, b.entry, page.staticPage, summary, modelsModule, formattersModule, adapterModule)
 		if err != nil {
 			return nil, err
 		}
-		src, err := staticEntrySource(b.root, b.entry, page, summary, modelsModule, formattersModule, adapterModule)
-		if err != nil {
-			return nil, err
-		}
-		file := filepath.Join(entriesDir, slug+".js")
+		file := filepath.Join(entriesDir, page.slug+".js")
 		if prev, err := os.ReadFile(file); err != nil || string(prev) != src {
 			if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
-				return nil, fmt.Errorf("puzzle build --static: writing entry %s: %w", slug, err)
+				return nil, fmt.Errorf("puzzle build --static: writing entry %s: %w", page.slug, err)
 			}
 		}
 		entryFiles = append(entryFiles, file)

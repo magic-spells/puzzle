@@ -142,6 +142,10 @@ func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 		// because the plugin also serves the locale manifest, so the define and the
 		// module can never disagree about whether translations exist.
 		"__PUZZLE_HAS_I18N__": strconv.FormatBool(pl.I18nEnabled()),
+		// Also a config fact: i18n.routing === 'prefix' (D177). Every locale-prefix
+		// branch in the runtime sits behind it, so an app without routing ships the
+		// same bytes it did before prefixes existed.
+		"__PUZZLE_HAS_LOCALE_ROUTING__": strconv.FormatBool(pl.LocaleRoutingEnabled()),
 	}
 }
 

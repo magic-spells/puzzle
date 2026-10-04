@@ -83,6 +83,37 @@ func TestSlugFromEntry(t *testing.T) {
 	}
 }
 
+// TestUniqueEntryPages: one entry per slug, first page wins, summary order kept
+// — under prefix routing (D177) a route's locale pages repeat its slug and the
+// `locale` field decodes; a single-locale summary passes through unchanged.
+func TestUniqueEntryPages(t *testing.T) {
+	var summary staticSummary
+	if err := json.Unmarshal([]byte(`{"written":[
+		{"path":"/","file":"/d/index.html","entry":"_puzzle/index.js","locale":"en"},
+		{"path":"/about","file":"/d/about/index.html","entry":"_puzzle/about.js","locale":"en"},
+		{"path":"/","file":"/d/es/index.html","entry":"_puzzle/index.js","locale":"es"},
+		{"path":"/about","file":"/d/es/about/index.html","entry":"_puzzle/about.js","locale":"es"}
+	]}`), &summary); err != nil {
+		t.Fatal(err)
+	}
+	pages, err := uniqueEntryPages(summary.Written)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pages) != 2 || pages[0].slug != "index" || pages[1].slug != "about" || pages[0].Locale != "en" || pages[1].File != "/d/about/index.html" {
+		t.Fatalf("pages = %+v, want index then about, first locale each", pages)
+	}
+
+	single := []staticPage{{Path: "/", Entry: "_puzzle/index.js"}, {Path: "/a", Entry: "_puzzle/a.js"}}
+	pages, err = uniqueEntryPages(single)
+	if err != nil || len(pages) != 2 || pages[0].staticPage.Path != "/" || pages[1].slug != "a" || pages[1].Locale != "" {
+		t.Fatalf("single-locale pages = %+v (%v)", pages, err)
+	}
+	if _, err := uniqueEntryPages([]staticPage{{Entry: "_puzzle/a/b.js"}}); err == nil {
+		t.Fatal("a malformed entry must still error")
+	}
+}
+
 // cannedSummary is a hand-built static summary standing in for the JS side's
 // output, so entry-file generation is tested without running node. Its adapter
 // is the BARE capability with no conventional module on disk — the leanest of
@@ -295,13 +326,33 @@ func TestStaticCapturedIgnoresAdapterlessApps(t *testing.T) {
 	}
 }
 
+// The config's site origin (D177) reaches the prerender as prerenderToDir's
+// `site` option; without it the generated entry has no trace of the key.
+func TestStaticPrerenderStdinCarriesSite(t *testing.T) {
+	root := filepath.FromSlash("/abs/app-root")
+	without, err := staticPrerenderStdin(root, filepath.Join(root, "app", "app.js"), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(without, "site") {
+		t.Errorf("no site configured, but the prerender entry names one:\n%s", without)
+	}
+	with, err := staticPrerenderStdin(root, filepath.Join(root, "app", "app.js"), "", "https://example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(with, `mode: 'static', only, site: "https://example.com" });`) {
+		t.Errorf("prerender entry does not pass the site option:\n%s", with)
+	}
+}
+
 // The conventional module is imported by the PRERENDER entry too — that import
 // is the only place the identity answer can come from. A missing module leaves
 // the generated source byte-identical to the pre-D157 one.
 func TestStaticPrerenderStdinImportsTheAdapterModule(t *testing.T) {
 	root := filepath.FromSlash("/abs/app-root")
 
-	without, err := staticPrerenderStdin(root, filepath.Join(root, "app", "app.js"), "")
+	without, err := staticPrerenderStdin(root, filepath.Join(root, "app", "app.js"), "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +360,7 @@ func TestStaticPrerenderStdinImportsTheAdapterModule(t *testing.T) {
 		t.Errorf("no app/adapter module on disk, but the prerender entry names one:\n%s", without)
 	}
 
-	with, err := staticPrerenderStdin(root, filepath.Join(root, "app", "app.js"), "app/adapter.js")
+	with, err := staticPrerenderStdin(root, filepath.Join(root, "app", "app.js"), "app/adapter.js", "")
 	if err != nil {
 		t.Fatal(err)
 	}

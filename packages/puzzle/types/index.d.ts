@@ -407,8 +407,13 @@ export type LocaleArgument = string | readonly string[];
  * not listed here.
  */
 export interface LibraryFunctions {
-	/** The URL for an app path in the active routing mode (D79). */
-	link(path: unknown): string;
+	/**
+	 * The URL for an app path in the active routing mode (D79). Under
+	 * `i18n.routing: 'prefix'` it adds the active locale's prefix; `locale`
+	 * forces one locale, and `locale: false` skips the prefix for a file that
+	 * exists once (D177).
+	 */
+	link(path: unknown, options?: { locale?: string | false } | null): string;
 	/**
 	 * The translation for `key` in the active locale (D175), `{name}`
 	 * placeholders filled from `vars`, a `count` choosing the plural form; a

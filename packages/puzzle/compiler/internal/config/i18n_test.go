@@ -106,3 +106,92 @@ func TestValidLocaleTagNamesTheBadSubtag(t *testing.T) {
 		}
 	}
 }
+
+// TestI18nRouting: routing accepts only 'prefix' (D177), detect is a tri-state
+// boolean, and the temporary gate holds prefix routing to output: 'static'.
+func TestI18nRouting(t *testing.T) {
+	static := json.RawMessage(`"static"`)
+	cfg, err := validate(rawConfig{Output: static, I18n: json.RawMessage(`{"locales":["en","es"],"defaultLocale":"en","routing":"prefix","detect":false}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.I18n.PrefixRouting() || cfg.I18n.Routing != RoutingPrefix {
+		t.Fatalf("routing = %q, want prefix", cfg.I18n.Routing)
+	}
+	if cfg.I18n.Detect == nil || *cfg.I18n.Detect {
+		t.Fatalf("detect = %v, want an explicit false", cfg.I18n.Detect)
+	}
+
+	cfg, err = validate(rawConfig{I18n: json.RawMessage(`{"locales":["en"],"defaultLocale":"en","routing":null}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.I18n.PrefixRouting() || cfg.I18n.Detect != nil {
+		t.Fatalf("absent routing/detect = %+v, want both unset", cfg.I18n)
+	}
+	if (*I18n)(nil).PrefixRouting() {
+		t.Fatal("a nil block must not report prefix routing")
+	}
+
+	cases := []struct {
+		name, output, raw, want string
+	}{
+		{"typo", "static", `{"locales":["en"],"defaultLocale":"en","routing":"prefixed"}`, `i18n.routing accepts only 'prefix'; got "prefixed"`},
+		{"not a string", "static", `{"locales":["en"],"defaultLocale":"en","routing":true}`, "i18n.routing accepts only 'prefix'; got true"},
+		{"detect not boolean", "static", `{"locales":["en"],"defaultLocale":"en","routing":"prefix","detect":"no"}`, "i18n.detect must be a boolean"},
+		{"spa gate", "", `{"locales":["en","es"],"defaultLocale":"en","routing":"prefix"}`, "requires output: 'static'"},
+		{"hybrid gate", "hybrid", `{"locales":["en","es"],"defaultLocale":"en","routing":"prefix"}`, "not built yet"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := rawConfig{I18n: json.RawMessage(tc.raw)}
+			if tc.output != "" {
+				raw.Output = json.RawMessage(`"` + tc.output + `"`)
+			}
+			_, err := validate(raw)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want it to contain %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestSiteValidation: site is an absolute http(s) origin, trailing slash
+// dropped, and anything past the origin is an error (D177).
+func TestSiteValidation(t *testing.T) {
+	ok := map[string]string{
+		`"https://example.com"`:   "https://example.com",
+		`"https://example.com/"`:  "https://example.com",
+		`"http://localhost:4173"`: "http://localhost:4173",
+		`"HTTPS://Example.com"`:   "https://Example.com",
+		`null`:                    "",
+	}
+	for raw, want := range ok {
+		cfg, err := validate(rawConfig{Site: json.RawMessage(raw)})
+		if err != nil {
+			t.Errorf("site %s: unexpected error %v", raw, err)
+			continue
+		}
+		if cfg.Site != want {
+			t.Errorf("site %s = %q, want %q", raw, cfg.Site, want)
+		}
+	}
+	bad := map[string]string{
+		`1`:                           "site must be a string",
+		`"example.com"`:               "absolute http or https origin",
+		`"ftp://example.com"`:         "absolute http or https origin",
+		`"https://"`:                  "absolute http or https origin",
+		`"/docs"`:                     "absolute http or https origin",
+		`"https://example.com/docs"`:  `origin only (got "https://example.com/docs") — write "https://example.com"`,
+		`"https://example.com/docs/"`: "origin only",
+		`"https://example.com?x=1"`:   "origin only",
+		`"https://example.com#top"`:   "origin only",
+		`"https://user@example.com"`:  "origin only",
+	}
+	for raw, want := range bad {
+		_, err := validate(rawConfig{Site: json.RawMessage(raw)})
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("site %s: error = %v, want it to contain %q", raw, err, want)
+		}
+	}
+}

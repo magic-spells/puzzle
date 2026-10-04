@@ -67,6 +67,20 @@ type Usage struct {
 	// `t('cart.title')` — to the app-relative files that use it, for the build's missing-key warning. It
 	// is diagnostics only and never feeds a define.
 	TKeys map[string][]string
+	// RootHrefs are the literal root-relative `href`s on <a>/<area> (D177), in
+	// walk order. Always collected — the scan cannot see the config — and printed
+	// by the build only under prefix routing. Diagnostics only.
+	RootHrefs []RootHref
+}
+
+// RootHref is one literal root-relative link: `href="/about"`, or a mixed value
+// whose literal head is root-relative (`href="/blog/{ slug }"`, Mixed set and
+// Href holding that head). Position is the attribute's, in file coordinates.
+type RootHref struct {
+	File      string
+	Line, Col int
+	Href      string
+	Mixed     bool
 }
 
 // UsesT reports whether any template calls the `t` function.
@@ -517,6 +531,99 @@ func collectPartTKeys(parts []parser.Part, keys map[string]bool) {
 }
 
 func exprTKeys(n expr.Node, keys map[string]bool) { exprTKeysSkipping(n, nil, keys) }
+
+// collectRootHrefs records every literal root-relative `href` on an <a> or
+// <area> (D177's build warning): under prefix routing such a link skips the
+// locale prefix and sends every viewer to the default language. Skipped: a
+// fully dynamic value (no literal to judge), a protocol-relative `//host`, a
+// literal whose last path segment has a file extension (a file that exists once,
+// where the default URL is the right one), and authored literal markup ({#raw}),
+// where link() cannot be written. Like collectTKeys it is its own walk.
+func collectRootHrefs(nodes []parser.Node, out *[]RootHref) {
+	for _, n := range nodes {
+		switch node := n.(type) {
+		case *parser.Element:
+			if node.Tag == "a" || node.Tag == "area" {
+				for _, attr := range node.Attrs {
+					if h, ok := rootHref(attr); ok {
+						*out = append(*out, h)
+					}
+				}
+			}
+			collectRootHrefs(node.Children, out)
+		case *parser.Component:
+			collectRootHrefs(node.Children, out)
+		case *parser.Slot:
+			collectRootHrefs(node.Children, out)
+		case *parser.Snippet:
+			collectRootHrefs(node.Body, out)
+		case *parser.Portal:
+			collectRootHrefs(node.Children, out)
+		case *parser.If:
+			collectRootHrefs(node.Then, out)
+			collectRootHrefs(node.Else, out)
+		case *parser.Case:
+			for _, clause := range node.Clauses {
+				collectRootHrefs(clause.Body, out)
+			}
+			collectRootHrefs(node.Else, out)
+		case *parser.For:
+			collectRootHrefs(node.Body, out)
+		}
+	}
+}
+
+// rootHref reports whether attr is a literal root-relative href worth warning
+// about, and the entry to record (File is filled in by the caller's file).
+func rootHref(attr parser.Attr) (RootHref, bool) {
+	switch a := attr.(type) {
+	case *parser.StaticAttr:
+		if a.Name != "href" || a.Valueless || a.LiteralName || !isRootRelative(a.Value) || hasFileExtension(a.Value) {
+			return RootHref{}, false
+		}
+		return RootHref{Line: a.Pos.Line, Col: a.Pos.Col, Href: a.Value}, true
+	case *parser.MixedAttr:
+		if a.Name != "href" || len(a.Parts) == 0 {
+			return RootHref{}, false
+		}
+		head, ok := a.Parts[0].(*parser.StaticPart)
+		if !ok || !isRootRelative(head.Text) {
+			return RootHref{}, false
+		}
+		if tail, ok := a.Parts[len(a.Parts)-1].(*parser.StaticPart); ok && hasFileExtension(tail.Text) {
+			return RootHref{}, false
+		}
+		return RootHref{Line: a.Pos.Line, Col: a.Pos.Col, Href: head.Text, Mixed: true}, true
+	}
+	return RootHref{}, false
+}
+
+// isRootRelative: starts with one `/`, not `//` or `/\` (both protocol-relative
+// to a browser).
+func isRootRelative(v string) bool {
+	return strings.HasPrefix(v, "/") && !strings.HasPrefix(v, "//") && !strings.HasPrefix(v, `/\`)
+}
+
+// hasFileExtension reports whether v's last path segment (query and fragment
+// dropped) ends in a dot and one or more letters or digits — `/files/resume.pdf`,
+// or the `.pdf` tail of `/files/{ name }.pdf`. A heuristic that only quiets the
+// warning, so a wrong guess costs one missed warning, never a broken link.
+func hasFileExtension(v string) bool {
+	if i := strings.IndexAny(v, "?#"); i >= 0 {
+		v = v[:i]
+	}
+	seg := v[strings.LastIndexByte(v, '/')+1:]
+	dot := strings.LastIndexByte(seg, '.')
+	if dot < 0 || dot == len(seg)-1 {
+		return false
+	}
+	for _, r := range seg[dot+1:] {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+			return false
+		}
+	}
+	return true
+}
 
 // exprTKeysSkipping records the string-literal first argument of every `t`
 // call in n, skipping the calls in skip (an event handler's own call).

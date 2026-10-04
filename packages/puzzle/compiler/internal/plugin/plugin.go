@@ -39,6 +39,8 @@ type Plugin struct {
 	// __PUZZLE_HAS_I18N__ define (see SetI18n).
 	i18nEnabled  bool
 	i18nManifest string
+	// localeRouting backs __PUZZLE_HAS_LOCALE_ROUTING__ (D177; SetLocaleRouting).
+	localeRouting bool
 	// cache is the build-scoped .pzl transform memo shared with this build's
 	// other esbuild passes, or nil for "transform every time" (WatchBuilder).
 	cache *CompileCache
