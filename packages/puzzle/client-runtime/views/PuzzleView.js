@@ -44,7 +44,7 @@ import {
 
 /** @import { ViewNode } from './ViewNode.js' */
 /** @import { ErrorInfo, ErrorSite } from '../errors.js' */
-/** @import { AnimationSpec, RouteSnapshot } from '../../types/index.js' */
+/** @import { AnimationSpec, PrevViewState, RouteSnapshot } from '../../types/index.js' */
 
 /**
  * The { params, props, route } a prepared data() run evaluates against (D146).
@@ -147,6 +147,11 @@ export class PuzzleView {
 	// it survives store-change refreshes and stays null off-router.
 	/** @type {RouteSnapshot | null} */
 	#route = null;
+	// What the last landed render drew — afterUpdate(prev)'s argument for the next
+	// update (D178). Null until the first render, and always null for a view whose
+	// class does not override afterUpdate.
+	/** @type {PrevViewState | null} */
+	#prev = null;
 	/** @type {ViewNode[]} */
 	#children = [];
 	// Per-instance memo cache (v1.29, D64): key → { deps, value } for
@@ -1791,7 +1796,13 @@ export class PuzzleView {
 	created() {}
 	mounted() {}
 	beforeUpdate() {}
-	afterUpdate() {}
+	/**
+	 * After every update render (never the first — that is mounted()).
+	 *
+	 * @param {PrevViewState} prev frozen, shallow: the props, params, route and
+	 *   merged data the previous render drew (D178)
+	 */
+	afterUpdate(prev) {}
 	destroyed() {}
 
 	/**
@@ -2717,7 +2728,25 @@ export class PuzzleView {
 		// Timestamp the FIRST actual skeleton render so the hold measures from when
 		// the skeleton became visible, not from mount (v1.20, D52). Set once.
 		if (showSkeleton && this.#skeletonShownAt === 0) this.#skeletonShownAt = Date.now();
-		if (isUpdate) this.afterUpdate();
+		// afterUpdate(prev) (D178). The snapshot is taken HERE, as each render lands,
+		// and handed to the NEXT update — not at the start of that update — because
+		// the inputs move before the render that shows them: setData() writes #data
+		// at call time and refresh() swaps #props/#params/#route before data() even
+		// runs. #data is mutated in place, so it is copied; props, params and route
+		// are replaced wholesale on update and are referenced as they are. Only a
+		// class that overrides the hook pays for this (the prerender never gets here:
+		// it has no ViewManager). A hook installed on the instance after its last
+		// render has no history and sees the current state.
+		if (this.afterUpdate !== PuzzleView.prototype.afterUpdate) {
+			const prev = this.#prev;
+			const next = (this.#prev = Object.freeze({
+				props: this.#props,
+				params: this.#params,
+				route: this.#route,
+				data: Object.freeze({ ...this.#data }),
+			}));
+			if (isUpdate) this.afterUpdate(prev ?? next);
+		}
 	}
 
 	/**

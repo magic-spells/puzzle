@@ -181,6 +181,20 @@ export interface PuzzleErrorViewProps {
 /** Constructor accepted by PuzzleAppConfig.errorView. */
 export type PuzzleViewConstructor = new (ctx?: PuzzleContext) => PuzzleView;
 
+/**
+ * What `afterUpdate(prev)` receives (D178): the state the previous render
+ * drew, frozen shallowly. `data` is a copy of the merged `getData()` result;
+ * `props`, `params` and `route` are the objects that render saw. Records keep
+ * identity across their own mutations (D170), so compare fields to catch an
+ * edit to the same record.
+ */
+export interface PrevViewState {
+	readonly props: any;
+	readonly params: Record<string, string>;
+	readonly route: RouteSnapshot | null;
+	readonly data: Readonly<Record<string, any>>;
+}
+
 /** A single enter/leave animation spec (constellation/doc/DOC-SPEC.md §12). */
 export interface AnimationSpec {
 	from: object;
@@ -600,7 +614,8 @@ export declare class PuzzleView {
 	created(): void;
 	mounted(): void;
 	beforeUpdate(): void;
-	afterUpdate(): void;
+	/** After every update render; `prev` is what the previous render drew (D178). */
+	afterUpdate(prev: PrevViewState): void;
 	destroyed(): void;
 
 	// ---- enter/leave hooks (D28) ----
