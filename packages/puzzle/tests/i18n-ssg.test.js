@@ -17,6 +17,7 @@ import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { setFormatLocale } from '../client-runtime/formatters/locale.js';
 import { selectLocale } from '../client-runtime/i18n.js';
 import { localeRedirect, redirectScript } from '../client-runtime/ssg/redirect.js';
+import { REDIRECT_CASES, REDIRECT_MANIFEST, SAME_ORIGIN } from './fixtures/locale-redirect-cases.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -763,7 +764,7 @@ describe('per-locale prerender (D177)', () => {
 
 	describe('first-visit redirect script', () => {
 		const script = (html) => {
-			const m = /<script>(\(function localeRedirect[\s\S]*?)<\/script>/.exec(html);
+			const m = /<script>(\(function\(t,d,b,w\)[\s\S]*?)<\/script>/.exec(html);
 			return m && m[1];
 		};
 
@@ -771,8 +772,8 @@ describe('per-locale prerender (D177)', () => {
 			const { read } = await build({ site: 'https://example.com' });
 			const en = read('about/index.html');
 			expect(script(en)).toBeTruthy();
-			expect(en.indexOf('function localeRedirect')).toBeLessThan(en.indexOf('</head>'));
-			expect(en.indexOf('function localeRedirect')).toBeGreaterThan(en.indexOf('hreflang="x-default"'));
+			expect(en.indexOf('__puzzleLocale')).toBeLessThan(en.indexOf('</head>'));
+			expect(en.indexOf('__puzzleLocale')).toBeGreaterThan(en.indexOf('hreflang="x-default"'));
 			expect(script(read('404.html'))).toBeTruthy();
 			expect(script(read('es/about/index.html'))).toBe(null);
 			expect(script(read('ar/index.html'))).toBe(null);
@@ -780,7 +781,7 @@ describe('per-locale prerender (D177)', () => {
 			expect(script(read('spa/index.html'))).toBe(null);
 
 			const off = await build({ manifest: { ...ROUTED, detect: false } });
-			expect(off.read('about/index.html')).not.toContain('localeRedirect');
+			expect(off.read('about/index.html')).not.toContain('__puzzleLocale');
 		});
 
 		it('is self-contained: the inline text runs on a bare window', async () => {
@@ -796,56 +797,47 @@ describe('per-locale prerender (D177)', () => {
 });
 
 // The first-visit redirect (D177) is a second copy of selectLocale's matching,
-// so both run against this one table: the redirect goes exactly where
-// selectLocale points, and nowhere when that is the default locale.
+// so the inline script — both the source function and the exact text the build
+// emits — runs the shared decision table (tests/fixtures/locale-redirect-cases.js)
+// that selectLocale and the SPA redirect (tests/i18n-app.test.js) run too.
 describe('first-visit redirect decisions (D177)', () => {
-	const TAGS = ['en', 'es', 'pt-BR', 'ar'];
-	it.each([
-		{ stored: null, languages: ['es-MX', 'en'], want: 'es' },
-		{ stored: null, languages: ['en-US', 'es'], want: 'en' },
-		{ stored: null, languages: ['pt'], want: 'pt-BR' },
-		{ stored: null, languages: ['PT-br'], want: 'pt-BR' },
-		{ stored: null, languages: ['de', 'fr'], want: 'en' },
-		{ stored: null, languages: [], want: 'en' },
-		{ stored: null, languages: ['', 'ar'], want: 'ar' },
-		{ stored: 'ES', languages: ['en'], want: 'es' },
-		{ stored: 'en', languages: ['es'], want: 'en' },
-		{ stored: 'fr', languages: ['pt-PT'], want: 'pt-BR' },
-		{ stored: '', languages: ['ar-SA'], want: 'ar' },
-	])('stored $stored, languages $languages → $want', ({ stored, languages, want }) => {
-		expect(selectLocale(TAGS, 'en', stored, languages)).toBe(want);
-		const replace = vi.fn();
-		localeRedirect(TAGS, 'en', '', fakeWindow({ pathname: '/about', search: '?a=1', hash: '#h', stored, languages, replace }));
-		if (want === 'en') expect(replace).not.toHaveBeenCalled();
-		else expect(replace).toHaveBeenCalledWith(`/${want}/about?a=1#h`);
-	});
-
-	const decide = (opts, base = '') => {
-		const replace = vi.fn();
-		localeRedirect(TAGS, 'en', base, fakeWindow({ languages: ['es'], replace, ...opts }));
-		return replace.mock.calls[0]?.[0] ?? null;
+	const TAGS = Object.keys(REDIRECT_MANIFEST.locales);
+	const ORIGIN = 'https://site.dev';
+	const window = (row, replace) => {
+		const url = new URL(row.url, ORIGIN);
+		return fakeWindow({
+			pathname: url.pathname,
+			search: url.search,
+			hash: url.hash,
+			referrer: row.referrer === SAME_ORIGIN ? ORIGIN + '/es/' : (row.referrer ?? ''),
+			stored: row.stored ?? null,
+			languages: row.languages,
+			replace,
+		});
+	};
+	// The emitted text, evaluated on its own: what the build ships, not just its source.
+	const emitted = (base) => {
+		const html = redirectScript(REDIRECT_MANIFEST, base);
+		return new Function('window', html.slice('<script>'.length, -'</script>'.length));
 	};
 
-	it('never redirects a URL that already carries a locale prefix', () => {
-		expect(decide({ pathname: '/es/about' })).toBe(null);
-		expect(decide({ pathname: '/pt-BR/' })).toBe(null);
-		expect(decide({ pathname: '/docs/ar/x' }, '/docs')).toBe(null);
-		// `/esp` is not `es`, and the default locale has no prefix.
-		expect(decide({ pathname: '/esp' })).toBe('/es/esp');
+	it.each(REDIRECT_CASES)('$name', (row) => {
+		if (row.locale) expect(selectLocale(TAGS, 'en', row.stored ?? null, row.languages)).toBe(row.locale);
+		for (const run of [
+			(replace) => localeRedirect(TAGS, 'en', row.routerBase ?? '', window(row, replace)),
+			(replace) => emitted(row.routerBase ?? '')(window(row, replace)),
+		]) {
+			const replace = vi.fn();
+			run(replace);
+			if (row.expected) expect(replace).toHaveBeenCalledExactlyOnceWith(row.expected);
+			else expect(replace).not.toHaveBeenCalled();
+		}
 	});
 
-	it('never bounces a visitor who came from this site', () => {
-		expect(decide({ pathname: '/about', referrer: 'https://site.dev/es/about' })).toBe(null);
-		expect(decide({ pathname: '/about', referrer: 'https://search.example/?q=x' })).toBe('/es/about');
-		expect(decide({ pathname: '/about', referrer: 'not a url' })).toBe('/es/about');
-	});
-
-	it('keeps to routerBase and to this origin', () => {
-		expect(decide({ pathname: '/docs' }, '/docs')).toBe('/docs/es/');
-		expect(decide({ pathname: '/docs/' }, '/docs')).toBe('/docs/es/');
-		expect(decide({ pathname: '/elsewhere' }, '/docs')).toBe(null);
-		// A base that begins with two slashes still lands on this origin.
-		expect(decide({ pathname: '//docs/a' }, '//docs')).toBe('/docs/es/a');
+	it('keeps a base that begins with two slashes on this origin', () => {
+		const replace = vi.fn();
+		emitted('//docs')(fakeWindow({ pathname: '//docs/a', languages: ['es'], replace }));
+		expect(replace).toHaveBeenCalledWith('/docs/es/a');
 	});
 
 	it('survives blocked storage and a missing navigator.languages', () => {
@@ -857,14 +849,15 @@ describe('first-visit redirect decisions (D177)', () => {
 			},
 		};
 		win.navigator = { language: 'es-ES' };
-		localeRedirect(TAGS, 'en', '', win);
+		emitted('')(win);
 		expect(replace).toHaveBeenCalledWith('/es/');
 	});
 
-	it('escapes its arguments for an inline script', () => {
+	it('escapes its arguments for an inline script, and stays small', () => {
 		const out = redirectScript({ defaultLocale: 'en', locales: { en: '', es: '' } }, '/a</script><!--');
 		expect(out.slice('<script>'.length, -'</script>'.length)).not.toMatch(/<\/script|<!--/i);
 		expect(out).toContain('"/a\\u003c/script>\\u003c!--"');
+		expect(redirectScript(REDIRECT_MANIFEST, '').length).toBeLessThan(900);
 	});
 });
 
