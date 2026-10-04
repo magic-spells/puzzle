@@ -16,6 +16,7 @@ import './layout-wrapper.test.js';
 import './calendar-snippet.test.js';
 import './input-otp-component.test.js';
 import './rich-text-doc.test.js';
+import './rich-text-blocks.test.js';
 import './rich-text-parity.test.js';
 import './markdown-doc.test.js';
 import './markdown-walker.test.js';

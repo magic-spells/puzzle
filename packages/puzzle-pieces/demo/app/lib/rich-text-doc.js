@@ -185,6 +185,29 @@ export const RICH_TEXT_CLASSES = {
 	previewImage: 'w-28 shrink-0 bg-surface-sunken object-cover sm:w-40',
 };
 
+// Tighter block spacing, Notion / Grimoire style: lines sit about 4px apart
+// instead of 12px. Used by RichTextEditor's chrome="blocks" and by RichText's
+// `compact` prop, so a note reads the same in the editor and the renderer.
+// Only the keys that differ; everything else comes from RICH_TEXT_CLASSES.
+export const RICH_TEXT_COMPACT = {
+	paragraph: 'mt-1 first:mt-0 leading-7 text-body',
+	list: 'mt-1 first:mt-0 space-y-0.5 pl-6 text-body',
+	// A soft panel, not a left-edge bar.
+	blockquote: 'mt-2 first:mt-0 rounded-md bg-surface-sunken px-4 py-2 italic text-body',
+	codeBlock:
+		'mt-2 first:mt-0 overflow-x-auto rounded-lg bg-surface-sunken p-4 font-mono text-sm/relaxed text-body whitespace-pre',
+	figure: 'mt-2 first:mt-0',
+	preview:
+		'mt-2 first:mt-0 flex overflow-hidden rounded-lg border border-border bg-surface ' +
+		'no-underline transition-colors hover:bg-surface-sunken',
+};
+
+// The class map for a spacing mode: RICH_TEXT_CLASSES, or it with the compact
+// overrides applied.
+export function richTextClasses(compact = false) {
+	return compact ? { ...RICH_TEXT_CLASSES, ...RICH_TEXT_COMPACT } : RICH_TEXT_CLASSES;
+}
+
 // ---- Tiptap (ProseMirror JSON) → doc tree ---------------------------------
 
 function markFlags(pmText) {

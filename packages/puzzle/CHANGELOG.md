@@ -153,6 +153,44 @@ Pick `<Children/>` if that position received content from the call site, or
 `'static'` now produces a genuinely static site — no router, no `app.js`. This
 one is *not* a compile error; it silently builds a different product.
 
+## Unreleased
+
+### puzzle-pieces
+
+**Changed — `rich-text-editor`'s toolbar is one row.** The block-style picker
+(Normal text, Heading 1–4) is now the first item INSIDE the bordered Toolbar,
+followed by a separator and the formatting buttons — one box, one height. It
+was a separate bordered dropdown beside the toolbar and shorter than it. The
+picker is a ghost item with a stable width, sits in the toolbar's roving tab
+order (Left/Right reach it), opens with Up/Down or a click, and keeps its
+listbox semantics (`aria-haspopup`, `aria-expanded`, `aria-activedescendant`).
+Purely visual for apps that render the editor; re-copy the piece
+(`puzzle add piece rich-text-editor --overwrite`) to pick it up.
+
+**Added — `toolbar` items can open a popup.** Optional item fields `class`,
+`trailingIcon`, `haspopup`, `expanded`, `controls` and `activedescendant`;
+while `expanded` is true the item's arrow / Home / End keys belong to its
+popup. Items without them render exactly as before.
+
+**Added — `rich-text-editor` `chrome="blocks"`**, a Notion-style page modelled
+on the Grimoire example: no toolbar and no frame; a gutter handle on hover
+(click: turn into / delete; drag: move the block); a `/` command menu; a
+one-row selection bar (style picker, marks, lists, link) that pins to the top
+of the visible area on long selections (`floatingOffsetTop`); compact block
+spacing; and `blockPlaceholder`. Menus render in the top layer. New registry
+lib `lib/rich-text-blocks.js`.
+
+**Added — images and link previews** in `lib/rich-text-doc.js`
+(`image` / `link-preview` root-level nodes, `safePreviewUrl`, `plainText`,
+`imageRefs`, `docLimits`, `validateDoc`, `RICH_TEXT_COMPACT`), the editor
+(`resolveImage`, `uploadImage`, `fetchLinkPreview`, `tools`, `@imageError`) and
+`rich-text` (`resolveImage`, `compact`, `@imageError`).
+
+**Changed — `tools` also governs typing shortcuts.** When `tools` is passed,
+a group it leaves out loses its markdown input rules and keyboard shortcuts as
+well as its button (`> ` makes no quote without `'quote'`). Omitting `tools`
+keeps every shortcut, as before.
+
 ## 0.8.0 — 2026-10-01
 
 Puzzle becomes one template language with two hosts (D172): PuzzleKit, the app

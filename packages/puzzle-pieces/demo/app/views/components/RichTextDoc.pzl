@@ -36,6 +36,11 @@
           to turn ids into sources (see the Rich Text Editor page for a live example):
         </p>
         <CodeBlock code={ usageImages } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          Add
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-sm text-ink">compact</code>
+          for the tighter, Notion-style spacing the editor uses in block mode.
+        </p>
         <p class="mt-3 text-sm text-muted">
           Content renders client-side (the walker runs after mount), so it appears after
           takeover on prerendered pages rather than in the baked markup.

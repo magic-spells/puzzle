@@ -6,7 +6,7 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import { RICH_TEXT_CLASSES as C, isEmpty, safeLinkUrl, safePreviewUrl } from '../../lib/rich-text-doc.js';
+import { RICH_TEXT_CLASSES as C, richTextClasses, isEmpty, safeLinkUrl, safePreviewUrl } from '../../lib/rich-text-doc.js';
 
 // RichText — renders a stored rich text document (the RichTextEditor's
 // Shopify-style JSON tree, see lib/rich-text-doc.js for the format) as
@@ -24,6 +24,9 @@ import { RICH_TEXT_CLASSES as C, isEmpty, safeLinkUrl, safePreviewUrl } from '..
 //   doc    the document tree ({ type:'root', children:[…] }); null/empty
 //          renders nothing
 //   class  appended to the root
+//   compact  tighter block spacing (lines ~4px apart, Notion-style) — the
+//          spacing RichTextEditor uses in chrome="blocks", so a note reads the
+//          same in both
 //   resolveImage(ref, node) → url | null
 //          the ONLY source of an image's src: called with an image's `ref`
 //          (node = the image node) and a link preview's `imageRef` (node =
@@ -110,7 +113,7 @@ function alignStyle(el, node) {
 function imageMedia(url, node, ctx) {
 	if (url) {
 		const img = document.createElement('img');
-		img.className = C.image;
+		img.className = ctx.C.image;
 		img.src = url;
 		img.alt = node.alt || '';
 		img.loading = 'lazy';
@@ -121,7 +124,7 @@ function imageMedia(url, node, ctx) {
 		return img;
 	}
 	const box = document.createElement('div');
-	box.className = C.imagePlaceholder;
+	box.className = ctx.C.imagePlaceholder;
 	box.textContent = node.alt || 'Image unavailable';
 	if (node.width > 0 && node.height > 0) box.style.aspectRatio = `${node.width} / ${node.height}`;
 	return box;
@@ -129,7 +132,7 @@ function imageMedia(url, node, ctx) {
 
 function imageDom(node, ctx) {
 	const figure = document.createElement('figure');
-	figure.className = C.figure;
+	figure.className = ctx.C.figure;
 	const media = document.createElement('div');
 	figure.appendChild(media);
 	// Registered, not filled: _syncImages resolves the src now and on every
@@ -145,7 +148,7 @@ function imageDom(node, ctx) {
 	});
 	if (node.caption) {
 		const cap = document.createElement('figcaption');
-		cap.className = C.caption;
+		cap.className = ctx.C.caption;
 		cap.textContent = node.caption;
 		figure.appendChild(cap);
 	}
@@ -155,7 +158,7 @@ function imageDom(node, ctx) {
 function previewDom(node, ctx) {
 	const href = safePreviewUrl(node.url);
 	const card = document.createElement(href ? 'a' : 'div');
-	card.className = C.preview;
+	card.className = ctx.C.preview;
 	if (href) {
 		card.href = href;
 		card.target = '_blank';
@@ -168,16 +171,16 @@ function previewDom(node, ctx) {
 		hostname = '';
 	}
 	const body = document.createElement('div');
-	body.className = C.previewBody;
+	body.className = ctx.C.previewBody;
 	const line = (cls, text) => {
 		const d = document.createElement('div');
 		d.className = cls;
 		d.textContent = text;
 		body.appendChild(d);
 	};
-	line(C.previewSite, node.siteName || hostname);
-	line(C.previewTitle, node.title || node.url || '');
-	if (node.description) line(C.previewDescription, node.description);
+	line(ctx.C.previewSite, node.siteName || hostname);
+	line(ctx.C.previewTitle, node.title || node.url || '');
+	if (node.description) line(ctx.C.previewDescription, node.description);
 	card.appendChild(body);
 	if (node.imageRef) {
 		let img = null;
@@ -190,7 +193,7 @@ function previewDom(node, ctx) {
 				img = null;
 				if (!url) return;
 				img = document.createElement('img');
-				img.className = C.previewImage;
+				img.className = ctx.C.previewImage;
 				img.src = url;
 				img.alt = '';
 				img.loading = 'lazy';
@@ -211,7 +214,7 @@ function blockDom(node, ctx, atRoot = false) {
 			return atRoot ? previewDom(node, ctx) : document.createDocumentFragment();
 		case 'paragraph': {
 			const p = document.createElement('p');
-			p.className = C.paragraph;
+			p.className = ctx.C.paragraph;
 			alignStyle(p, node);
 			const inline = inlineDom(node.children);
 			// ProseMirror keeps empty paragraphs open with a <br>; match it so
@@ -238,10 +241,10 @@ function blockDom(node, ctx, atRoot = false) {
 		}
 		case 'list': {
 			const list = document.createElement(node.listType === 'ordered' ? 'ol' : 'ul');
-			list.className = `${C.list} ${node.listType === 'ordered' ? C.orderedList : C.bulletList}`;
+			list.className = `${ctx.C.list} ${node.listType === 'ordered' ? ctx.C.orderedList : ctx.C.bulletList}`;
 			for (const item of node.children || []) {
 				const li = document.createElement('li');
-				li.className = C.listItem;
+				li.className = ctx.C.listItem;
 				// A list-item mixes inline content and nested lists; preserve their order.
 				let inlineNodes = [];
 				for (const child of item.children || []) {
@@ -260,13 +263,13 @@ function blockDom(node, ctx, atRoot = false) {
 		}
 		case 'blockquote': {
 			const bq = document.createElement('blockquote');
-			bq.className = C.blockquote;
+			bq.className = ctx.C.blockquote;
 			for (const child of node.children || []) bq.appendChild(blockDom(child, ctx));
 			return bq;
 		}
 		case 'code-block': {
 			const pre = document.createElement('pre');
-			pre.className = C.codeBlock;
+			pre.className = ctx.C.codeBlock;
 			const code = document.createElement('code');
 			code.textContent = (node.children || []).map((t) => t.value || '').join('');
 			pre.appendChild(code);
@@ -299,6 +302,7 @@ export default class RichText extends PuzzleView {
 
 	_ctx() {
 		return {
+			C: richTextClasses(!!this.props.compact),
 			images: [],
 			onError: (ref) => {
 				const { imageError } = this.props;
@@ -322,7 +326,7 @@ export default class RichText extends PuzzleView {
 		const host = this.refs.host;
 		if (!host) return;
 		const doc = this.props.doc;
-		const key = JSON.stringify(doc ?? null);
+		const key = `${this.props.compact ? 'c' : ''}${JSON.stringify(doc ?? null)}`;
 		if (key === this._renderedKey) {
 			this._syncImages();
 			return;

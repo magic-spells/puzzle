@@ -12,6 +12,8 @@ import {
 	docLimits,
 	validateDoc,
 	RICH_TEXT_CLASSES,
+	RICH_TEXT_COMPACT,
+	richTextClasses,
 } from '../registry/lib/rich-text-doc.js';
 
 // ---- emptiness ------------------------------------------------------------
@@ -889,4 +891,16 @@ test('docLimits holds the documented defaults and is frozen', () => {
 	assert.equal(docLimits.maxLinkPreviews, 50);
 	assert.equal(docLimits.maxTextBytes, 32 * 1024);
 	assert.equal(Object.isFrozen(docLimits), true);
+});
+
+test('compact classes: overrides only known keys, tokens only, no left-edge bar', () => {
+	for (const [key, cls] of Object.entries(RICH_TEXT_COMPACT)) {
+		assert.ok(key in RICH_TEXT_CLASSES, key);
+		assert.doesNotMatch(cls, /\[/, `${key} has an arbitrary value`);
+		assert.doesNotMatch(cls, /\bborder-(l|s)\b|\bborder-(l|s)-/, `${key} has a left-edge border`);
+	}
+	assert.equal(richTextClasses(false), RICH_TEXT_CLASSES);
+	const compact = richTextClasses(true);
+	assert.equal(compact.paragraph, RICH_TEXT_COMPACT.paragraph);
+	assert.equal(compact.heading1, RICH_TEXT_CLASSES.heading1);
 });
