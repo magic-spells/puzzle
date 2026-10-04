@@ -25,7 +25,6 @@ connections:
   - TEST-I18N
 ---
 
-
 # D177 — Locale URL prefixes
 
 `i18n: { locales, defaultLocale, routing: 'prefix' }` gives every language its
@@ -177,10 +176,22 @@ or sites that want no automatic redirect).
 
 ## Consequences
 
+
 - HTML output and `beforeMount` build-time reads multiply by the locale count;
   JS, CSS and assets do not.
 - The inline redirect is the first executable inline script Puzzle emits.
-- A sitemap is not emitted (none exists in any mode).
+
+## Sitemap and text direction
+
+- **`dist/sitemap.xml`** is written by every prerendering build that sets
+  `site` (it needs absolute URLs; without `site` none is written). It lists
+  every prerendered page; under prefix routing each entry carries
+  `xhtml:link rel="alternate" hreflang` for its other languages. A
+  `public/sitemap.xml` wins, with a warning. Works without `i18n` too.
+- **`<html dir>`** is set beside `<html lang>` on every prerendered page and
+  on a client-side locale switch: `rtl` for right-to-left languages (Arabic,
+  Hebrew, Persian, Urdu and the like, decided from the tag's language and
+  script), nothing for the rest. The i18n service exposes it as `i18n.dir`.
 
 ## Build state
 
