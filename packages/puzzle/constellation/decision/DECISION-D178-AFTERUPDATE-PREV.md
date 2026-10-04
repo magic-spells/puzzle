@@ -1,11 +1,10 @@
 ---
 name: 'D178 — afterUpdate(prev): the previous props, params, route and data as an argument'
-status: planned
+status: built
 connections:
   - DOC-SPEC-VIEW
   - DOC-VIEW-LIFECYCLE
 ---
-
 
 # D178 — `afterUpdate(prev)`
 
@@ -18,8 +17,9 @@ view has to stash that value on the instance itself.
 
 ## Decision
 
-`afterUpdate` receives one argument, `prev`: a frozen, shallow snapshot taken
-just before the update.
+
+`afterUpdate` receives one argument, `prev`: a frozen, shallow snapshot of what
+the previous render drew.
 
 ```js
 afterUpdate(prev) {
@@ -28,16 +28,28 @@ afterUpdate(prev) {
 ```
 
 - `prev` holds `props`, `params`, `route` and `data` (the merged `getData()`
-  result). It leaves out `refs`, `element` and `ctx`.
-- `mounted()` covers the first render, so `afterUpdate` always gets a real
-  `prev`.
-- Records keep identity across mutations (D170), so `prev.data.post !==
-  this.getData().post` only detects a *different* record; compare fields to
-  catch an edit to the same one.
-- Existing `afterUpdate()` overrides keep working unchanged: the argument is
-  simply ignored.
-- The snapshot is taken only for a view class that defines `afterUpdate`, so
-  views without the hook pay nothing.
+  result). It leaves out `refs`, `element` and `ctx`. Type: `PrevViewState`.
+- **The snapshot is taken as each render lands**, in `#renderNowInner` (the
+  one place the runtime calls the hook), and handed to the next update. Taking
+  it when an update starts would be too late: `setData()` writes the data
+  immediately and `refresh()` swaps props, params and route before `data()`
+  runs. The mount render is snapshotted too, so the first `afterUpdate` gets a
+  real `prev`.
+- `props`, `params` and `route` are referenced (the runtime replaces them,
+  never mutates them); `data` is mutated in place, so it is shallow-copied and
+  the copy frozen.
+- **A record in `prev` is the same live object** — the snapshot is shallow and
+  records keep identity across their own mutations (D170). `!==` detects a
+  *different* record; to catch an edit to the same one, return the field from
+  `data()` (`title: post.title`) and compare that.
+- **With an async `data()`**, a `setData` render that lands while a
+  `refresh({ props })` is pending reports the prop change with the old data;
+  the refresh's render then reports the data change with no prop change. Each
+  change is reported exactly once. React to `prev.data`, not props, when the
+  work depends on what `data()` returned.
+- Existing `afterUpdate()` overrides keep working unchanged.
+- The snapshot is taken only for a view class that overrides `afterUpdate`;
+  other views pay one comparison per render.
 - Prerender never calls `afterUpdate`, so it never builds a snapshot.
 
 ## Alternatives rejected
@@ -52,5 +64,7 @@ afterUpdate(prev) {
 
 ## Consequences
 
-One shallow copy of four references per update, for views that define the
-hook.
+
+For a view that defines the hook: one frozen object and one shallow copy of
+its data per render. About 30 bytes gzip in every bundle. Built in PR #208;
+tests in `tests/view.test.js` and `tests/router-ancestor-transaction.test.js`.

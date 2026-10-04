@@ -196,9 +196,10 @@ export type PuzzleViewConstructor = new (ctx?: PuzzleContext) => PuzzleView;
 /**
  * What `afterUpdate(prev)` receives (D178): the state the previous render
  * drew, frozen shallowly. `data` is a copy of the merged `getData()` result;
- * `props`, `params` and `route` are the objects that render saw. Records keep
- * identity across their own mutations (D170), so compare fields to catch an
- * edit to the same record.
+ * `props`, `params` and `route` are the objects that render saw. The snapshot
+ * is shallow and a record keeps its identity across its own mutations (D170),
+ * so `prev.data.post` is the same live record: to catch an edit, return the
+ * field from `data()` (`title: post.title`) and compare that.
  */
 export interface PrevViewState {
 	readonly props: any;
