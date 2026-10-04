@@ -30,14 +30,23 @@ type parser struct {
 	// literal, so the composition markers, component resolution, and the
 	// attribute-namespace reservation are all switched off.
 	raw bool
-	// bound holds the names the enclosing {#for} blocks and <Snippet> bodies
-	// bind, innermost last: the expression parser lets them be read and
-	// never called (see exprScope).
+	// bound holds the names the enclosing {#for} blocks, <Snippet> bodies and
+	// {#let} blocks bind, innermost last: the expression parser lets them be
+	// read and never called (see exprScope).
 	bound []string
+	// first indexes bound by name once it grows long (exprs.go), so a scope
+	// lookup is O(1); nil until then.
+	first map[string]int
+	// maxDepth is ParseMarkup's nesting limit, enforced here only where the
+	// token scan cannot see: inline {#if} nesting inside an attribute value.
+	// 0 (no limit) for every other entry point.
+	maxDepth int
+	// opts is the host's grammar and check selection (options.go).
+	opts Options
 }
 
-func newParser(lex *lexer, file string) (*parser, error) {
-	p := &parser{lex: lex, file: file}
+func newParser(lex *lexer, file string, opts Options) (*parser, error) {
+	p := &parser{lex: lex, file: file, opts: opts}
 	if err := p.advance(); err != nil {
 		return nil, err
 	}
@@ -77,20 +86,23 @@ type openCtx struct {
 }
 
 // Parse splits sections and parses the template, returning the <puzzle-view>
-// root element.
-func Parse(source []byte, filename string) (*Element, error) {
+// root element. opts is at most one Options value; none is PuzzleKit's
+// grammar (options.go).
+func Parse(source []byte, filename string, opts ...Options) (*Element, error) {
 	sec, err := SplitSections(string(source), filename)
 	if err != nil {
 		return nil, err
 	}
-	return ParseTemplate(sec, filename)
+	return ParseTemplate(sec, filename, opts...)
 }
 
 // ParseTemplate parses the already-split template content into the root
-// <puzzle-view> element (attributes supplied by the section splitter).
-func ParseTemplate(sec *Sections, filename string) (*Element, error) {
+// <puzzle-view> element (attributes supplied by the section splitter). opts is
+// at most one Options value.
+func ParseTemplate(sec *Sections, filename string, opts ...Options) (*Element, error) {
+	o := pickOptions(opts)
 	lx := newLexer(sec.TemplateContent, sec.TemplatePos, filename)
-	p, err := newParser(lx, filename)
+	p, err := newParser(lx, filename, o)
 	if err != nil {
 		return nil, err
 	}
@@ -105,13 +117,7 @@ func ParseTemplate(sec *Sections, filename string) (*Element, error) {
 		Pos:         sec.ViewTagPos,
 		ContainsRaw: p.hasRaw,
 	}
-	if perr := validateIslands(root, filename); perr != nil {
-		return nil, perr
-	}
-	if perr := validateSlots(root, filename); perr != nil {
-		return nil, perr
-	}
-	if perr := validateRefs(root, filename); perr != nil {
+	if perr := o.validate(root, filename); perr != nil {
 		return nil, perr
 	}
 	return root, nil
@@ -121,13 +127,15 @@ func ParseTemplate(sec *Sections, filename string) (*Element, error) {
 // the full template grammar, returning (nil, nil) when the file has none. The
 // synthetic root carries NO attributes — in view mode codegen re-parents the
 // skeleton children under the same <puzzle-view> root (and attributes) as the
-// real template, so the loaded swap patches children only.
-func ParseSkeleton(sec *Sections, filename string) (*Element, error) {
+// real template, so the loaded swap patches children only. opts is at most one
+// Options value.
+func ParseSkeleton(sec *Sections, filename string, opts ...Options) (*Element, error) {
 	if !sec.HasSkeleton {
 		return nil, nil
 	}
+	o := pickOptions(opts)
 	lx := newLexer(sec.Skeleton, sec.SkeletonPos, filename)
-	p, err := newParser(lx, filename)
+	p, err := newParser(lx, filename, o)
 	if err != nil {
 		return nil, err
 	}
@@ -141,13 +149,7 @@ func ParseSkeleton(sec *Sections, filename string) (*Element, error) {
 		Pos:         sec.SkeletonTagPos,
 		ContainsRaw: p.hasRaw,
 	}
-	if perr := validateIslands(root, filename); perr != nil {
-		return nil, perr
-	}
-	if perr := validateSlots(root, filename); perr != nil {
-		return nil, perr
-	}
-	if perr := validateRefs(root, filename); perr != nil {
+	if perr := o.validate(root, filename); perr != nil {
 		return nil, perr
 	}
 	return root, nil
@@ -162,13 +164,13 @@ type ParsedFile struct {
 	HasStyles bool
 }
 
-// ParseFile parses a whole .pzl file.
-func ParseFile(source []byte, filename string) (*ParsedFile, error) {
+// ParseFile parses a whole .pzl file. opts is at most one Options value.
+func ParseFile(source []byte, filename string, opts ...Options) (*ParsedFile, error) {
 	sec, err := SplitSections(string(source), filename)
 	if err != nil {
 		return nil, err
 	}
-	root, err := ParseTemplate(sec, filename)
+	root, err := ParseTemplate(sec, filename, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +179,11 @@ func ParseFile(source []byte, filename string) (*ParsedFile, error) {
 
 // parseChildren collects nodes for ctx until it meets a closer token, which it
 // validates against ctx (leaving it unconsumed for the caller) or an error.
+//
+// A child list is the scope of the {#let} names bound inside it (let.go): they
+// reach the nodes after the block and are gone when the list ends.
 func (p *parser) parseChildren(ctx openCtx) ([]Node, *ParseError) {
+	defer p.unbind(len(p.bound))
 	var nodes []Node
 	for {
 		t := p.cur
@@ -259,7 +265,7 @@ func (p *parser) parseRaw(t Token, ctx openCtx) ([]Node, *ParseError) {
 		return []Node{&Text{Value: t.Value, Raw: true, Pos: pos}}, nil
 	}
 	lx := newRawLexer(t.Value, pos, p.file)
-	nested, err := newParser(lx, p.file)
+	nested, err := newParser(lx, p.file, p.opts)
 	if err != nil {
 		return nil, toPE(err)
 	}
@@ -1105,8 +1111,16 @@ func (p *parser) parseBlock() (Node, *ParseError) {
 		f.Body = body
 		return f, nil
 
+	case "let":
+		if p.opts.Let {
+			// {#let} is a VOID block like {#svg}: no context, no closer. Its
+			// names are bound until the enclosing child list ends.
+			return p.parseLet(rest, pos, restPos)
+		}
+		return nil, unknownBlockErr(p.file, pos, kw, p.opts)
+
 	default:
-		return nil, errAt(p.file, pos, "unknown block {#%s} (expected {#if}, {#unless}, {#for}, {#case}, or {#svg})", kw)
+		return nil, unknownBlockErr(p.file, pos, kw, p.opts)
 	}
 }
 
@@ -1199,6 +1213,8 @@ func nodePos(n Node) Position {
 	case *Case:
 		return t.Pos
 	case *InlineSVG:
+		return t.Pos
+	case *Let:
 		return t.Pos
 	}
 	return Position{Line: 1, Col: 1}

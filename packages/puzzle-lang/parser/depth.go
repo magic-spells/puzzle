@@ -84,11 +84,14 @@ func scanNesting(lx *lexer, file string, limit, depth, budget int) (Position, bo
 				depth--
 			}
 		case TokBlockOpen:
-			// {#svg 'icon.svg'} is the one VOID block (D46): it opens no context and
+			// {#svg 'icon.svg'} is a VOID block (D46): it opens no context and
 			// has no {/svg} to pop it, so counting it would make a flat row of icons
 			// read as ever-deepening nesting and trip the guard with zero real
 			// nesting.
-			if firstWord(t.Value) == "svg" {
+			//
+			// {#let} (Options.Let) is void the same way: a row of flat {#let}
+			// blocks nests nothing.
+			if kw := firstWord(t.Value); kw == "svg" || kw == "let" {
 				continue
 			}
 			blockElse = append(blockElse, 0)

@@ -153,6 +153,52 @@ Pick `<Children/>` if that position received content from the call site, or
 `'static'` now produces a genuinely static site — no router, no `app.js`. This
 one is *not* a compile error; it silently builds a different product.
 
+## 0.8.1 — unreleased (Go module only)
+
+A Go-module-only release of the template language: the tag is
+`packages/puzzle-lang/v0.8.1`. **The npm packages are unchanged** — no
+`@magic-spells/puzzle`, `puzzle-pieces`, `puzzle-eslint` or `puzzle-prettier`
+0.8.1 is published, and PuzzleKit compiles, diagnoses and renders exactly as
+0.8.0 does. It exists so Magic Spells Sites can import the parser from the
+module instead of keeping a vendored copy (D172: one parser that knows every
+construct, with per-host switches).
+
+### Added
+
+- **Host options for the parser** (`parser.Options`). Every entry point —
+  `Parse`, `ParseTemplate`, `ParseSkeleton`, `ParseFile`, and the new
+  `ParseMarkup` — takes an optional trailing `Options`. The zero value is
+  PuzzleKit's grammar, so existing callers are untouched. Every new feature is
+  off by default:
+  - `Let` turns on the `{#let name = expression}` block (Sites dialect): a
+    void block, single-line or one assignment per line, whose bindings are
+    sequential and scoped to the enclosing child list with shadowing. Each
+    right-hand side is one expression, and the names reach later expressions as
+    bindings, as `{#for}` names do. Diagnostics are positioned per line, with a
+    did-you-mean for `{#assign}`, `{#set}`, `{#var}` and similar spellings.
+    Off, `{#let}` is the same unknown-block error as before.
+  - `SkipIslandCheck`, `SkipSlotCheck` and `SkipRefCheck` turn off the
+    post-parse `island`, composition-marker and `ref` rules for a host that
+    applies its own.
+  - `MaxDepth` caps `ParseMarkup`'s nesting (default `DefaultMaxDepth`, 200).
+- **Wrapper-less markup** (`parser.ParseMarkup`): parses a markup fragment at a
+  given file position, for a host whose files have no `<puzzle-view>` wrapper.
+  Nesting past the limit is a positioned error found before parsing, so an
+  untrusted file cannot exhaust the parser's stack.
+- **Scanners for a host's own splitter**, the ones the section splitter and
+  lexer use: `ScanOpenTag`, `TagNameAt`, `FindScriptClose`, `FindStyleClose`,
+  `FindTemplateClose`, `ScanBraceGroup`, `SkipBraceGroup`, `AttrNames`,
+  `ParseAttrString`, `ParseScriptLang` and `ParseStyleScoped`. Indexes are
+  absolute, out-of-range input never panics, and errors are positioned.
+- **`expr.Options.IsBinding`**: an optional O(1) membership test for
+  `Bindings`, which the template parser passes once a scope grows long, so a
+  long `{#let}` block parses in linear time.
+
+### Fixed
+
+- An attribute value maps its expression positions in one forward pass. A
+  value with many braces was quadratic. Parse results are unchanged.
+
 ## 0.8.0 — 2026-10-01
 
 Puzzle becomes one template language with two hosts (D172): PuzzleKit, the app

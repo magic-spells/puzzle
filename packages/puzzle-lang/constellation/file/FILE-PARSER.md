@@ -10,6 +10,17 @@ summary: >-
   classification and name validation (with lexer.go's Unicode tag-name lexing).
 verified_at: '2026-09-25T10:41:32.868Z'
 verified_sha: a602784a9822fa3ff63123e597f72624b3c9ffff
+notes:
+  - kind: state
+    text: >-
+      0.8.1 (Go-only): the parser carries host options (FILE-PARSER-HOST). `parser` holds `opts
+      Options`; `newParser` takes it and the nested {#raw} parser inherits it.
+      Parse/ParseTemplate/ParseSkeleton/ParseFile take an optional trailing `Options` (zero =
+      PuzzleKit), and their three post-parse checks run through `Options.validate`. `parseBlock` has
+      a `case "let"` that hands to `parseLet` (FILE-PARSER-LET) only when `Let` is on; the
+      unknown-block message comes from `unknownBlockErr`, unchanged for PuzzleKit. `parseChildren`
+      now defers `p.unbind(len(p.bound))` so a child list is the scope of the {#let} names inside it
+      — a no-op when nothing was bound. `nodePos` knows `*Let`.
 ---
 
 # parser.go

@@ -120,13 +120,67 @@ from a base position inside a file. `go test ./expr` runs it; a host runs the
 same rows through `conformance.ExpressionsParse`, `expr.Print`, and
 `expr.PrintPositions`.
 
+## Host options
+
+The parser knows every construct in the language; each host turns on the
+extensions it uses and turns off the checks that do not apply to it (D172).
+Every entry point — `Parse`, `ParseTemplate`, `ParseSkeleton`, `ParseFile`,
+`ParseMarkup` — takes an optional trailing `parser.Options`. The zero value is
+PuzzleKit's grammar, so passing nothing parses exactly as PuzzleKit always has.
+
+```go
+root, err := parser.ParseMarkup(markup, parser.Position{}, "sections/Hero.pzl", parser.Options{
+	Let:             true, // {#let name = expression}
+	SkipIslandCheck: true, // the host diagnoses island, slots and ref itself
+	SkipSlotCheck:   true,
+	SkipRefCheck:    true,
+})
+```
+
+- **`Let`** turns on `{#let}`: a void block, `{#let total = price * qty}` or
+  one assignment per line in the multiline form. Bindings are sequential (each
+  sees the ones above it, never itself), scoped to the child list the block
+  sits in, and may be shadowed by a later `{#let}`; one block may not name a
+  value twice. A right-hand side is one expression, parsed into
+  `LetBinding.Interp.ExprAST`, and the names reach every later expression in
+  scope as bindings, like `{#for}` names. Off, `{#let}` is the ordinary
+  unknown-block error.
+- **`SkipIslandCheck`, `SkipSlotCheck`, `SkipRefCheck`** turn off the
+  post-parse `island`, composition-marker and `ref` rules.
+- **`MaxDepth`** (read by `ParseMarkup` only) caps template nesting. The parser
+  is recursive descent, so an untrusted file nested a million levels deep would
+  exhaust the stack, which `recover()` cannot catch. `ParseMarkup` runs a
+  counting token scan first and returns a positioned error past the limit. 0
+  means `DefaultMaxDepth` (200, the playground's limit) and a negative value
+  turns the guard off.
+
+**Files without a wrapper.** `ParseMarkup(markup, at, filename, opts)` parses
+template content with no `<puzzle-view>` wrapper, starting at file position
+`at` (zero means 1:1), and returns a synthetic container `Element` with an
+empty `Tag`. A host that lifts its own top-level blocks blanks each to spaces,
+newlines kept, so every position stays the author's. For that splitter the
+module exports the scanners its own section splitter and lexer use, so a host
+reads a file exactly as the parser will: `TagNameAt`, `ScanOpenTag`,
+`FindScriptClose`, `FindStyleClose`, `FindTemplateClose`, `ScanBraceGroup`,
+`SkipBraceGroup` (comments and `{#raw}` spans whole), `AttrNames` (names only,
+values never parsed), `ParseAttrString`, `ParseScriptLang` and
+`ParseStyleScoped`. They take the whole file, every index in or out is
+absolute, an out-of-range index is an answer (-1 or an error), never a panic,
+and every error is a positioned `*ParseError`. When `SkipBraceGroup` fails, the
+parse would fail at that brace too: return the error, or stop and let
+`ParseMarkup` report it. Never step one byte and retry, which is quadratic on
+a file of unclosed braces. `parser/host_test.go` is a wrapper-less splitter
+built from these alone, and `FuzzHostScanners` fuzzes all of them.
+
 ## Who imports it
 
 - **PuzzleKit's compiler** (`packages/puzzle`). Its `go.mod` requires this
   module at `v0.0.0` and replaces it with `../puzzle-lang`, so the compiler
   always builds against the working tree.
-- **Magic Spells Sites**, later. It vendors a pinned copy of the parser today
-  and will switch to importing a tagged version of this module.
+- **Magic Spells Sites**, from `v0.8.1`, with `Options{Let: true}` and the
+  three checks skipped, parsing its theme files through `ParseMarkup`. Its own
+  code keeps only the theme-file splitter (`<schema>` lifting) and its
+  migration tools.
 
 ## Versions
 
@@ -137,8 +191,11 @@ consumers outside this repo need a `packages/puzzle-lang/vX.Y.Z` tag next to
 the framework's `vX.Y.Z` tag:
 
 ```bash
-go get github.com/magic-spells/puzzle/packages/puzzle-lang@v0.8.0
+go get github.com/magic-spells/puzzle/packages/puzzle-lang@v0.8.1
 ```
+
+A patch release may be Go-only: `v0.8.1` added the host options with no
+framework or npm release beside it, so its tag stands alone.
 
 ## Plan
 
