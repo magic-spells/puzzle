@@ -51,6 +51,7 @@ import { resolveHead } from '../head.js';
 import { MANAGED_TAGS } from '../headTags.js';
 import i18nManifest from '@magic-spells/puzzle/i18n/manifest';
 import { createI18n, installTranslate, localePath, textDirection } from '../i18n.js';
+import { formatLocale, setFormatLocale } from '../formatters/locale.js';
 import { redirectScript } from './redirect.js';
 
 /** @import { FormatterRegistry } from '../formatters.js' */
@@ -180,7 +181,10 @@ function localeIsland(tag, table) {
  * declares the language it is written in before any script runs (the runtime
  * keeps it in step on every switch). Replaces an existing `lang`, adds one
  * otherwise. A right-to-left locale also gets `dir="rtl"`, replacing any `dir`
- * (D177); an ltr locale leaves the shell's `dir` alone. A shell without an
+ * (D177); an ltr locale drops a `dir="rtl"` (any case) and keeps any other
+ * author value (`ltr`, `auto`) — the rule the client applies on a switch, so a
+ * shell written for an rtl default locale never lays an English page out
+ * right-to-left. A shell without an
  * `<html>` tag is returned unchanged.
  *
  * @param {string} shell
@@ -193,7 +197,10 @@ function withHtmlLang(shell, tag) {
 	const attr = (/** @type {string} */ name) => new RegExp(`\\s${name}\\s*=\\s*("[^"]*"|'[^']*'|[^\\s>]+)`, 'i');
 	return shell.replace(/<html\b([^>]*)>/i, (_, attrs) => {
 		attrs = attrs.replace(attr('lang'), '');
-		if (rtl) attrs = attrs.replace(attr('dir'), '');
+		// The client's rule (i18n.js apply): an ltr locale drops only an rtl `dir`.
+		attrs = attrs.replace(attr('dir'), (/** @type {string} */ found, /** @type {string} */ value) =>
+			rtl || /^["']?rtl["']?$/i.test(value) ? '' : found
+		);
 		return `<html${attrs} lang="${escapeAttr(tag)}"${rtl ? ' dir="rtl"' : ''}>`;
 	});
 }
@@ -419,10 +426,15 @@ export async function prerender(config, opts = {}) {
 	// and the two ways to make the read answerable from the build machine — never
 	// with undici's bare "Failed to parse URL".
 	installBuildFetch();
+	// Each locale pass points the module-level format locale at its own (D175);
+	// the run hands back whatever was there before it, so one prerender never
+	// leaks its last locale into the next code in this process.
+	const formatLocaleBefore = formatLocale;
 	try {
 		return await prerenderPass(config, opts);
 	} finally {
 		restoreBuildFetch();
+		setFormatLocale(formatLocaleBefore);
 	}
 }
 
@@ -867,9 +879,13 @@ export async function prerenderToDir(config, options = {}) {
 
 	const targetId = parseTargetId(config.target);
 	const i18n = loadBuildI18n(outDir, options.i18n);
-	const shell = fs.readFileSync(shellPath, 'utf8');
+	const rawShell = fs.readFileSync(shellPath, 'utf8');
 	const { pages, skipped, warnings } = await prerender(config, { mode, routeRouter, only, i18n, site });
 	const dress = pageDressing({ config, i18n, site, warnings });
+	// Under prefix routing every page gets its own alternates (D177); a shell's
+	// stale ones go from the shell itself, so the verbatim shell a prerender:false
+	// page is written from does not carry them either.
+	const shell = dress.routed ? stripShellAlternates(rawShell) : rawShell;
 
 	const summary =
 		mode === 'static'
@@ -1960,6 +1976,20 @@ function findTarget(shell, plan, targetId) {
 		plan.targets.set(targetId, target);
 	}
 	return target;
+}
+
+/**
+ * The shell without the `data-puzzle-head="alternate"` tags in its head region
+ * (the plan's spec -2 edits) — prefix routing's managed set (D177).
+ *
+ * @param {string} shell
+ * @returns {string}
+ */
+function stripShellAlternates(shell) {
+	const ops = getShellPlan(shell)
+		.edits.filter((edit) => edit.spec === -2)
+		.map(({ start, end }) => ({ start, end, text: '' }));
+	return ops.length ? spliceShell(shell, ops) : shell;
 }
 
 /**

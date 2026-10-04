@@ -79,10 +79,10 @@ export function selectLocale(tags, defaultLocale, stored, languages = []) {
 }
 
 // Right-to-left scripts, and the languages written right-to-left when the tag
-// names no script (D177). Kurdish (`ku`) is rtl only as `ku-Arab`, which the
-// script rule already covers.
+// names no script (D177), including `iw`, Hebrew's legacy code. Kurdish (`ku`)
+// is rtl only as `ku-Arab`, which the script rule already covers.
 const RTL_SCRIPTS = ['arab', 'hebr', 'thaa', 'syrc', 'nkoo', 'adlm', 'rohg'];
-const RTL_LANGUAGES = ['ar', 'he', 'fa', 'ur', 'ps', 'sd', 'ug', 'yi', 'dv', 'ckb'];
+const RTL_LANGUAGES = ['ar', 'he', 'iw', 'fa', 'ur', 'ps', 'sd', 'ug', 'yi', 'dv', 'ckb', 'ks'];
 
 /**
  * A locale's text direction (D177), for `<html dir>` and `i18n.dir`: from the

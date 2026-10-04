@@ -86,6 +86,21 @@ func TestSlugFromEntry(t *testing.T) {
 // TestUniqueEntryPages: one entry per slug, first page wins, summary order kept
 // — under prefix routing (D177) a route's locale pages repeat its slug and the
 // `locale` field decodes; a single-locale summary passes through unchanged.
+// TestWrittenRoutes: the dev profile's partial-render denominator counts routes,
+// like its numerator, not one page per locale (D177).
+func TestWrittenRoutes(t *testing.T) {
+	written := []staticPage{
+		{Path: "/", Locale: "en"}, {Path: "/about", Locale: "en"}, {Path: "*", Locale: "en"},
+		{Path: "/", Locale: "es"}, {Path: "/about", Locale: "es"}, {Path: "*", Locale: "es"},
+	}
+	if got := writtenRoutes(written); got != 3 {
+		t.Fatalf("writtenRoutes = %d, want 3", got)
+	}
+	if got := writtenRoutes(written[:2]); got != 2 {
+		t.Fatalf("single-locale writtenRoutes = %d, want 2", got)
+	}
+}
+
 func TestUniqueEntryPages(t *testing.T) {
 	var summary staticSummary
 	if err := json.Unmarshal([]byte(`{"written":[

@@ -14,7 +14,7 @@ import { escapeScriptJson } from '../client-runtime/ssg/serialize.js';
 import { PuzzleApp } from '../client-runtime/app.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
-import { setFormatLocale } from '../client-runtime/formatters/locale.js';
+import { formatLocale, setFormatLocale } from '../client-runtime/formatters/locale.js';
 import { selectLocale } from '../client-runtime/i18n.js';
 import { localeRedirect, redirectScript } from '../client-runtime/ssg/redirect.js';
 import { REDIRECT_CASES, REDIRECT_MANIFEST, SAME_ORIGIN } from './fixtures/locale-redirect-cases.js';
@@ -627,6 +627,46 @@ describe('per-locale prerender (D177)', () => {
 		expect(es).toContain('<script type="module" src="/docs/_puzzle/about.js">');
 		// A translated title follows the page's locale.
 		expect(read('es/index.html')).toContain('<title>Bienvenido</title>');
+	});
+
+	// A shell written for an rtl default locale must not lay the English pages out
+	// right-to-left: an ltr locale drops `dir="rtl"` (any case), as the client does,
+	// and keeps any other author value.
+	it('an ltr page drops an rtl shell dir, and keeps any other author dir', async () => {
+		const manifest = {
+			defaultLocale: 'ar',
+			locales: { ar: 'locales/ar.CCCC.json', en: 'locales/en.AAAA.json' },
+			routing: 'prefix',
+		};
+		const shellWith = (html) => (dir) => fs.writeFileSync(path.join(dir, 'index.html'), SHELL.replace('<html>', html));
+		const rtl = await build({ manifest, before: shellWith('<html lang="ar" dir="rtl">') });
+		expect(rtl.read('index.html')).toContain('<html lang="ar" dir="rtl">');
+		expect(rtl.read('en/index.html')).toContain('<html lang="en">');
+		expect(rtl.read('en/about/index.html')).not.toMatch(/<html[^>]*dir=/);
+		const upper = await build({ manifest, before: shellWith('<html DIR="RTL" class="x">') });
+		expect(upper.read('en/index.html')).toContain('<html class="x" lang="en">');
+		const auto = await build({ manifest, before: shellWith('<html dir="auto">') });
+		expect(auto.read('en/index.html')).toContain('<html dir="auto" lang="en">');
+		expect(auto.read('index.html')).toContain('<html lang="ar" dir="rtl">');
+	});
+
+	it("leaves the format locale as it found it once the run ends", async () => {
+		setFormatLocale('de');
+		await prerender({ target: '#app', routes: [{ path: '/', view: Page }] }, { mode: 'static', i18n: ROUTED_I18N });
+		expect(formatLocale).toBe('de');
+		setFormatLocale(undefined);
+	});
+
+	it("removes a shell's stale alternates from every page, prerender:false included", async () => {
+		const stale = '<link rel="alternate" hreflang="fr" href="/fr/" data-puzzle-head="alternate">';
+		const { read } = await build({
+			mode: 'hybrid',
+			before: (dir) => fs.writeFileSync(path.join(dir, 'index.html'), SHELL.replace('</head>', stale + '</head>')),
+		});
+		for (const file of ['spa/index.html', 'es/spa/index.html', 'about/index.html']) {
+			expect(read(file)).not.toContain('hreflang="fr"');
+		}
+		expect(read('about/index.html')).toContain('hreflang="es"');
 	});
 
 	it("writes each locale's 404 page, its switcher linking each locale's home under the base", async () => {
