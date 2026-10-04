@@ -18,7 +18,7 @@ import manifestData from '@magic-spells/puzzle/i18n/manifest';
 import { displayValue } from './display.js';
 import { nearestFormatter } from './formatters.js';
 import { localeNumber, setFormatLocale } from './formatters/locale.js';
-import { localeBase, normalizeBase } from './router/router.js';
+import { localeBase, normalizeBase, pathLocale } from './router/router.js';
 
 /** @import { FormatterRegistry } from './formatters.js' */
 /** @import { PuzzleI18n, PuzzleLocale } from '../types/index.js' */
@@ -36,6 +36,8 @@ import { localeBase, normalizeBase } from './router/router.js';
  * @property {Record<string, string>} locales tag → dist-relative table path
  * @property {string} [base] URL of the folder the build's entry module was served from
  * @property {'prefix'} [routing] present only with `i18n.routing: 'prefix'` (D177)
+ * @property {false} [detect] present only with `i18n.detect: false`: no first-visit
+ *   redirect (D177)
  */
 
 /**
@@ -76,7 +78,8 @@ export function selectLocale(tags, defaultLocale, stored, languages = []) {
 	return defaultLocale;
 }
 
-function readStoredLocale() {
+/** The remembered setLocale() choice, or null (no storage, or nothing stored). */
+export function readStoredLocale() {
 	try {
 		return localStorage.getItem(LOCALE_STORAGE_KEY);
 	} catch {
@@ -93,7 +96,8 @@ function storeLocale(tag) {
 	}
 }
 
-function viewerLanguages() {
+/** The viewer's preferred languages (navigator.languages), or [] without a navigator. */
+export function viewerLanguages() {
 	if (typeof navigator === 'undefined') return [];
 	return navigator.languages?.length ? navigator.languages : [navigator.language];
 }
@@ -111,12 +115,7 @@ function viewerLanguages() {
  * @returns {string | null}
  */
 export function urlLocale(pathname, routerBase, manifest) {
-	const base = normalizeBase(routerBase);
-	if (base && pathname !== base && !pathname.startsWith(base + '/')) return null;
-	const segment = pathname.slice(base.length).split(/[/?#]/)[1];
-	return segment && segment !== manifest.defaultLocale && Object.hasOwn(manifest.locales, segment)
-		? segment
-		: null;
+	return pathLocale(pathname, normalizeBase(routerBase), manifest.defaultLocale, Object.keys(manifest.locales));
 }
 
 /**
@@ -164,18 +163,21 @@ export function samePath(href) {
 }
 
 /**
- * The static kernel's setLocale navigation under prefix routing (D177): load
- * `href` only when it resolves to this origin, otherwise refuse (and say so in
- * development). localePath already keeps its result on the site; this is the
- * second check, on the call that actually leaves the page.
+ * Every page load prefix routing (D177) issues — setLocale's in the static kernel
+ * and the SPA, and the SPA's first-visit redirect: load `href` only when it
+ * resolves to this origin, otherwise refuse (and say so in development).
+ * localePath already keeps its result on the site; this is the second check, on
+ * the call that actually leaves the page.
  *
  * @param {string} href
+ * @param {boolean} [replace] `location.replace` (the redirect: the unprefixed URL
+ *   leaves no history entry) instead of `location.assign`
  */
-export function assignSameOrigin(href) {
+export function assignSameOrigin(href, replace) {
 	const target = new URL(href, location.origin);
-	if (target.origin === location.origin) location.assign(target.href);
+	if (target.origin === location.origin) location[replace ? 'replace' : 'assign'](target.href);
 	else if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-		console.warn(`[puzzle] setLocale: refusing to navigate off the site to ${JSON.stringify(href)}`);
+		console.warn(`[puzzle] refusing to navigate off the site to ${JSON.stringify(href)}`);
 	}
 }
 
@@ -557,7 +559,10 @@ export function createI18n(options = {}) {
 				options.navigate
 			) {
 				storeLocale(match);
-				if (match !== locale) options.navigate(hrefIn(page(), match));
+				// Against the page's locale (the forced `initial`), not the loaded one:
+				// before the table arrives (beforeMount) `locale` still reads the
+				// default, and after a failed load it fell back to it.
+				if (match !== initial) options.navigate(hrefIn(page(), match));
 				return Promise.resolve();
 			}
 			const my = ++token;

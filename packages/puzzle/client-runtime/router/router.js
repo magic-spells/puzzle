@@ -513,7 +513,9 @@ export class Router {
 	// takes URLs under it. The app-facing surface — push(), matching, current,
 	// params, this.route — never sees the base; only the URL (and <a href>) carry
 	// it. Inert in a urlless mode (no URL exists), like scrollBehavior. '' ⇒ every
-	// seam is byte-identical to the base-less router.
+	// seam is byte-identical to the base-less router. Under locale prefix routing
+	// (D177) it also carries the page's locale prefix (`/docs/es`), fixed for the
+	// router's lifetime — a locale switch is a page load, never a base change.
 	#base;
 
 	// ---- scroll behavior (v1.5, D33; persistence v1.10, D41) ----------------
@@ -583,6 +585,15 @@ export class Router {
 	 *   this is only the FALLBACK: a route's own `transitionMode` field, or the
 	 *   destination view/layout's own `transitionMode` field, both take precedence
 	 *   when set — see `#resolveTransitionMode`.
+	 * @param {string} [options.locale] locale prefix routing (D177): the page's
+	 *   locale, read from its URL. With `locales`, the path-mode base becomes
+	 *   `base + '/' + locale` (unprefixed for `defaultLocale`) wherever the URL is
+	 *   read or written; routes, `push()`, `current` and `this.route` stay
+	 *   locale-free, as they stay base-free.
+	 * @param {string} [options.defaultLocale] the unprefixed locale (D177)
+	 * @param {readonly string[]} [options.locales] every configured locale, in
+	 *   config order (D177); a route whose first segment is a non-default tag is a
+	 *   constructor throw
 	 */
 	constructor(
 		routes = [],
@@ -666,6 +677,30 @@ export class Router {
 		}
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			warnShadowedPaths(findShadowedPaths(this.#routes));
+		}
+		// Locale prefix routing (D177). The options are read off `arguments`, not
+		// the destructuring above: esbuild keeps an unused destructured key, so every
+		// app without prefix routing would ship them. The page's locale prefix joins
+		// the base here, once, so every seam that reads or writes the URL with #base
+		// (#currentPath, #encodedUrl, the click interceptor) composes it for free; the
+		// bare routerBase is kept for url()'s `{ locale }` option and for telling
+		// another locale's links apart.
+		if (typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) {
+			const { locale, defaultLocale, locales } = arguments[1] ?? {};
+			if (locales) {
+				// /es/… is the Spanish pages' URL space: a route there could never be
+				// reached from a link (link() would prefix it again).
+				for (const entry of this.#routes) {
+					const first = entry.matchPath.split('/')[1];
+					if (first !== defaultLocale && locales.includes(first)) {
+						throw new Error(
+							`[puzzle] route "${entry.fullPath}" collides with the locale prefix "${first}" (i18n.routing: 'prefix')`
+						);
+					}
+				}
+				localeRouting.set(this, { base: this.#base, locale, defaultLocale, locales });
+				this.#base = localeBase(this.#base, locale, defaultLocale);
+			}
 		}
 		// Bind once so start()/stop() add and remove the SAME reference — the
 		// prototype bound at addEventListener time and leaked.
@@ -1091,11 +1126,38 @@ export class Router {
 	 * idempotently before the mode/base prefix is applied; query strings and
 	 * `#anchor` suffixes ride through the same normalization.
 	 *
+	 * Under locale prefix routing (D177) the href carries the page's locale prefix
+	 * (#base already has it), and a second argument takes `link()`'s options:
+	 * `{ locale: 'es' }` encodes for that locale (an unconfigured tag throws a
+	 * RangeError), `{ locale: false }` skips the prefix and keeps the base — for a
+	 * file that exists once. It is read off `arguments` so an app without prefix
+	 * routing ships the one-parameter method (esbuild keeps unused parameters);
+	 * the overload is how JSDoc spells the second parameter callers may pass.
+	 *
+	 * @overload
+	 * @param {string} path
+	 * @param {{ locale?: string | false } | null} [options]
+	 * @returns {string}
+	 */
+	/**
 	 * @param {string} path
 	 * @returns {string}
 	 */
 	url(path) {
-		return encodeURL(path, this.#mode, this.#base);
+		const routing =
+			(typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) &&
+			localeRouting.get(this);
+		return encodeURL(
+			path,
+			this.#mode,
+			routing
+				? localeBase(
+						routing.base,
+						linkLocale(arguments[1], routing.locale, routing.locales),
+						routing.defaultLocale
+					)
+				: this.#base
+		);
 	}
 
 	/**
@@ -1280,6 +1342,21 @@ export class Router {
 		}
 	) {
 		const matchPath = stripPath(rawPath);
+		// Locale prefix routing (D177): app code never writes a locale prefix. A path
+		// that starts with one routes as written — no route can own that segment (the
+		// constructor's collision check), so it lands on the catch-all, just as a
+		// base-carrying path does under D51 — and development says why.
+		if (
+			(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
+			(typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__)
+		) {
+			const routing = localeRouting.get(this);
+			if (routing && pathLocale(matchPath, '', routing.defaultLocale, routing.locales)) {
+				console.warn(
+					`[puzzle] router path "${matchPath}" starts with a locale prefix — router paths are locale-free (the URL carries the prefix); to change language call i18n.setLocale(tag)`
+				);
+			}
+		}
 		const matched = this.#match(matchPath);
 
 		if (!matched) {
@@ -3304,6 +3381,25 @@ export class Router {
 		// (hash routing: only a same-page URL carrying a route fragment is in-app).
 		if (this.#mode?.clickLink?.(url, e, this.#base, this)) return;
 
+		// Locale prefix routing (D177): a link into another locale's pages — another
+		// prefix, or the default locale's unprefixed URL from a prefixed page — is a
+		// real page load, because that page renders in its own locale under its own
+		// base. The link's locale base must equal ours; one outside routerBase
+		// entirely has no locale and falls to the base check below.
+		if (typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) {
+			const routing = !this.#mode && localeRouting.get(this);
+			if (
+				routing &&
+				localeBase(
+					routing.base,
+					pathLocale(url.pathname, routing.base, routing.defaultLocale, routing.locales),
+					routing.defaultLocale
+				) !== this.#base
+			) {
+				return;
+			}
+		}
+
 		// path mode: with a base (D51) intercept ONLY same-origin URLs UNDER the
 		// base (=== base or under base + '/') and push the base-STRIPPED path; a
 		// same-origin link outside the base is a real navigation away from the app
@@ -3719,6 +3815,26 @@ export function localeBase(routerBase, locale, defaultLocale) {
 }
 
 /**
+ * Under prefix routing (D177), the configured NON-default locale whose tag is the
+ * first path segment after `routerBase` — matched exactly, on a segment boundary
+ * (`/esp` is not `es`, `/ES` is not `es`) — otherwise null. The default locale is
+ * unprefixed, so `/en/…` is not a locale URL, and a path outside `routerBase` has
+ * no locale. The one copy of the rule: the router's click interceptor calls it
+ * here, and i18n.js's urlLocale (which imports this module) wraps it.
+ *
+ * @param {string} pathname a document pathname (a query or fragment is ignored)
+ * @param {string} routerBase an ALREADY-normalized base (normalizeBase above)
+ * @param {string | undefined} defaultLocale
+ * @param {readonly string[]} locales every configured tag
+ * @returns {string | null}
+ */
+export function pathLocale(pathname, routerBase, defaultLocale, locales) {
+	if (routerBase && pathname !== routerBase && !pathname.startsWith(routerBase + '/')) return null;
+	const segment = pathname.slice(routerBase.length).split(/[/?#]/)[1];
+	return segment && segment !== defaultLocale && locales.includes(segment) ? segment : null;
+}
+
+/**
  * The locale a `url(path, options)` / `link(path, options)` call encodes for
  * (D177): `{ locale: false }` → null (no prefix — a file that exists once),
  * `{ locale: 'es' }` → that configured tag (matched case-insensitively, spelled
@@ -3854,3 +3970,12 @@ function sameDocKey(rawPath) {
 // the minifier's merged `var` statement and moves the bytes of apps that never
 // use it.
 const REBUILD = {};
+
+// Locale prefix routing (D177): Router → { base, locale, defaultLocale, locales },
+// the bare routerBase and the configured tags the constructor was given. A
+// WeakMap rather than a private field, which would ship in every app: every read
+// sits behind the inline __PUZZLE_HAS_LOCALE_ROUTING__ probe, so without prefix
+// routing the map is never referenced and the minifier drops it. Last in the
+// module for the same reason as REBUILD.
+/** @type {WeakMap<Router, { base: string, locale: string | undefined, defaultLocale: string | undefined, locales: readonly string[] }>} */
+const localeRouting = new WeakMap();

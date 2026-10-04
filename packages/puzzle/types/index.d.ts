@@ -375,8 +375,11 @@ export interface Router {
 	back(): void | Promise<void>;
 	/** Go forward one entry. */
 	forward(): void | Promise<void>;
-	/** Path-shaped route in, mode-encoded href out (`'/x'` path mode, `'#/x'` hash, unchanged memory); strings not starting with `/` pass through (D79). */
-	url(path: string): string;
+	/**
+	 * Path-shaped route in, mode-encoded href out (`'/x'` path mode, `'#/x'` hash, unchanged memory); strings not starting with `/` pass through (D79).
+	 * Under `i18n.routing: 'prefix'` the href carries the page's locale prefix; `{ locale: 'es' }` forces one locale, `{ locale: false }` skips the prefix for a file that exists once (D177).
+	 */
+	url(path: string, options?: LinkOptions | null): string;
 	/** The current route snapshot, or null before the first navigation. */
 	readonly current: RouteSnapshot | null;
 	/** Register the shared-element morph handler (D55); null unregisters. */

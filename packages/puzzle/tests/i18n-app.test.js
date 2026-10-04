@@ -908,6 +908,164 @@ describe('PuzzleApp + i18n', () => {
 	});
 });
 
+// D177 — the SPA under locale prefix routing: the URL picks the locale, the
+// router reads and writes under its prefix, link()/router.url() take options,
+// setLocale is a page load, mount() redirects a first visit, and hash/memory
+// routing is refused.
+describe('PuzzleApp + locale prefix routing (D177)', () => {
+	const ROUTED = { ...MANIFEST, routing: 'prefix' };
+	const STORE_KEY = '__puzzleLocale';
+
+	// `location` with assign/replace spied: everything else reads the real one,
+	// so the router still sees replaceState/pushState.
+	function spyLocation() {
+		const calls = { assign: vi.fn(), replace: vi.fn() };
+		const real = window.location;
+		// A plain target: Location's own assign/replace are non-configurable, so a
+		// proxy over it may not report anything else for them.
+		vi.stubGlobal('location', new Proxy({}, { get: (_, k) => (k in calls ? calls[k] : real[k]) }));
+		return calls;
+	}
+	const setReferrer = (value) => Object.defineProperty(document, 'referrer', { value, configurable: true });
+	const setLanguages = (value) => Object.defineProperty(navigator, 'languages', { value, configurable: true });
+
+	afterEach(() => {
+		delete document.referrer;
+		delete navigator.languages;
+	});
+
+	it('the URL locale beats the stored choice; the router reads under the prefix', async () => {
+		localStorage.setItem(STORE_KEY, 'en');
+		const fetch = stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		history.replaceState({}, '', '/shop/es/about');
+		const { app, el } = make({ routerBase: '/shop', __i18n: { manifest: ROUTED, locale: 'en' } });
+		await app.mount();
+		expect(app.i18n.locale).toBe('es');
+		expect(app.router.current.path).toBe('/about');
+		expect(el.querySelector('h1').textContent).toBe('Acerca de');
+		expect(document.documentElement.lang).toBe('es');
+		// Locale files stay on the bare routerBase, never under the prefix.
+		expect(fetch.mock.calls.map(([url]) => url)).toEqual(['/shop/locales/es.BBBB.json']);
+	});
+
+	it('an unprefixed URL is the default locale, whatever was stored', async () => {
+		localStorage.setItem(STORE_KEY, 'es');
+		setReferrer(location.origin + '/es/'); // same-origin: no first-visit redirect
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		history.replaceState({}, '', '/about');
+		const { app, el } = make({ __i18n: { manifest: ROUTED } });
+		await app.mount();
+		expect(app.i18n.locale).toBe('en');
+		expect(el.querySelector('h1').textContent).toBe('About');
+	});
+
+	it('push writes under the prefix; link() and router.url() carry it and take options', async () => {
+		stubFetch({ 'locales/es.BBBB.json': ES });
+		history.replaceState({}, '', '/es/about');
+		const { app } = make({ __i18n: { manifest: ROUTED } });
+		await app.mount();
+		await app.router.push('/?q=1');
+		expect(location.pathname + location.search).toBe('/es/?q=1');
+		expect(app.router.current.path).toBe('/?q=1');
+		const link = app.formatters.getAll().link;
+		expect(link('/about')).toBe('/es/about');
+		expect(link('/about', { locale: 'en' })).toBe('/about');
+		expect(link('/files/cv.pdf', { locale: false })).toBe('/files/cv.pdf');
+		expect(app.router.url('/about', { locale: 'en' })).toBe('/about');
+		expect(app.i18n.locales.map((entry) => entry.href)).toEqual(['/?q=1', '/es/?q=1']);
+	});
+
+	it('setLocale stores the choice and loads the same page under the other prefix', async () => {
+		const fetch = stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		history.replaceState({}, '', '/es/about?x=1#team');
+		const { app, el } = make({ __i18n: { manifest: ROUTED } });
+		await app.mount();
+		const loc = spyLocation();
+		await app.i18n.setLocale('en');
+		expect(loc.assign).toHaveBeenCalledWith(location.origin + '/about?x=1#team');
+		expect(localStorage.getItem(STORE_KEY)).toBe('en');
+		// No fetch and no in-place rebuild: the page load does the switch.
+		expect(fetch).toHaveBeenCalledTimes(1);
+		expect(app.i18n.locale).toBe('es');
+		expect(el.querySelector('h1').textContent).toBe('Acerca de');
+		// The active locale again navigates nowhere, and is still remembered.
+		await app.i18n.setLocale('es');
+		expect(loc.assign).toHaveBeenCalledTimes(1);
+		expect(localStorage.getItem(STORE_KEY)).toBe('es');
+	});
+
+	it('setLocale in beforeMount navigates from the URL, before navigation #0', async () => {
+		stubFetch({ 'locales/es.BBBB.json': ES });
+		history.replaceState({}, '', '/es/about?x=1');
+		const loc = spyLocation();
+		const { app } = make({
+			__i18n: { manifest: ROUTED },
+			beforeMount: (a) => a.i18n.setLocale('en'),
+		});
+		await app.mount();
+		expect(loc.assign).toHaveBeenCalledWith(location.origin + '/about?x=1');
+	});
+
+	describe('first-visit redirect', () => {
+		const ORIGIN = 'http://localhost:3000'; // jsdom's test origin; asserted below
+		it.each([
+			// [case, url, routerBase, stored, languages, referrer, detect, expected]
+			['a browser-language match', '/about?q=1#top', undefined, null, ['es-MX', 'en'], '', undefined, '/es/about?q=1#top'],
+			['the root page', '/', undefined, null, ['es'], '', undefined, '/es/'],
+			['a stored choice, over the browser', '/about', undefined, 'es', ['en-US'], '', undefined, '/es/about'],
+			['an unconfigured stored choice falls to the browser', '/about', undefined, 'fr', ['es'], '', undefined, '/es/about'],
+			['a stored default choice suppresses it', '/about', undefined, 'en', ['es'], '', undefined, null],
+			['no browser match', '/about', undefined, null, ['fr', 'de'], '', undefined, null],
+			['a same-origin referrer', '/about', undefined, null, ['es'], ORIGIN + '/es/', undefined, null],
+			['another origin referrer', '/about', undefined, null, ['es'], 'https://search.example/q', undefined, '/es/about'],
+			['detect: false', '/about', undefined, null, ['es'], '', false, null],
+			['an already-prefixed URL', '/es/about', undefined, null, ['en'], '', undefined, null],
+			['under routerBase', '/docs/about', '/docs', null, ['es'], '', undefined, '/docs/es/about'],
+			['outside routerBase', '/elsewhere', '/docs', null, ['es'], '', undefined, null],
+		])('%s', async (_, url, routerBase, stored, languages, referrer, detect, expected) => {
+			expect(location.origin).toBe(ORIGIN);
+			vi.spyOn(console, 'warn').mockImplementation(() => {}); // outside routerBase warns
+			if (stored) localStorage.setItem(STORE_KEY, stored);
+			setLanguages(languages);
+			setReferrer(referrer);
+			history.replaceState({}, '', url);
+			const fetch = stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+			const loc = spyLocation();
+			const manifest = detect === false ? { ...ROUTED, detect } : ROUTED;
+			const { app, el } = make({ routerBase, __i18n: { manifest } });
+			await app.mount();
+			if (expected) {
+				expect(loc.replace).toHaveBeenCalledExactlyOnceWith(ORIGIN + expected);
+				// Nothing boots behind the redirect.
+				expect(app._mounted).toBe(false);
+				expect(fetch).not.toHaveBeenCalled();
+				expect(el.innerHTML).toBe('');
+			} else {
+				expect(loc.replace).not.toHaveBeenCalled();
+				expect(app._mounted).toBe(true);
+			}
+		});
+	});
+
+	it('hash and memory routing are refused at mount', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN });
+		for (const routerMode of [hashRouter(), memoryRouter()]) {
+			const { app, el } = make({ routerMode, __i18n: { manifest: ROUTED } });
+			await expect(app.mount()).rejects.toThrow(/i18n\.routing: 'prefix' needs path routing/);
+			expect(el.innerHTML).toBe('');
+		}
+	});
+
+	it('a route on a locale prefix is refused at mount', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN });
+		const { app } = make({
+			routes: [...routes(), { path: '/es/promo', view: About }],
+			__i18n: { manifest: ROUTED },
+		});
+		await expect(app.mount()).rejects.toThrow(/route "\/es\/promo" collides with the locale prefix "es"/);
+	});
+});
+
 describe('/testing with i18n', () => {
 	it('mountView renders a translated view from { locale, strings } with no fetch', async () => {
 		const fetch = stubFetch({});
