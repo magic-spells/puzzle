@@ -169,6 +169,17 @@ describe('PuzzleApp + i18n', () => {
 		expect(app.i18n).toBe(null);
 	});
 
+	it('under prefix routing, locales hrefs swap the prefix after routerBase (D177)', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN });
+		const { app } = make({
+			routerBase: '/docs/',
+			__i18n: { manifest: { ...MANIFEST, routing: 'prefix' }, locale: 'en' },
+		});
+		history.replaceState({}, '', '/docs/about?tab=2');
+		await app.mount();
+		expect(app.i18n.locales.map((entry) => entry.href)).toEqual(['/docs/about?tab=2', '/docs/es/about?tab=2']);
+	});
+
 	it('hash and memory modes resolve manifest paths next to the entry module', async () => {
 		// The build's manifest carries `base`, the folder app.js was served from.
 		const fetch = stubFetch({ 'locales/en.AAAA.json': EN });

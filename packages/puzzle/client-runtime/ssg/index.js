@@ -45,7 +45,7 @@ import { memoryRouter } from '../router/modes.js';
 import { findShadowedPaths, isDynamicSegment } from '../router/routePath.js';
 import { walkRouteTree } from '../router/routeTree.js';
 import { serialize, escapeText, escapeAttr, escapeScriptJson } from './serialize.js';
-import { assembleChain, makeRouteSnapshot, makeRouterStub } from './assemble.js';
+import { assembleChain, localizeRouterStub, makeRouteSnapshot, makeRouterStub } from './assemble.js';
 import { isLazyView, resolveRouteViews } from '../router/lazy.js';
 import { resolveHead } from '../head.js';
 import { MANAGED_TAGS } from '../headTags.js';
@@ -81,8 +81,7 @@ import { createI18n, installTranslate } from '../i18n.js';
 /**
  * The build's translation state: the locale manifest plus the default locale's
  * filled table (D175).
- * @typedef {{ manifest: { defaultLocale: string, locales: Record<string, string>, base?: string },
- *   table: Record<string, any> }} BuildI18n
+ * @typedef {{ manifest: import('../i18n.js').I18nManifest, table: Record<string, any> }} BuildI18n
  */
 /**
  * @typedef {{ mode?: 'hybrid'|'static', routeRouter?: Router, i18n?: BuildI18n | null,
@@ -440,6 +439,22 @@ async function prerenderPass(config, opts = {}) {
 		let router;
 		if (isStatic && route) {
 			router = makeRouterStub(route, { base: config.routerBase });
+			// Locale prefix routing (D177): the static stub encodes under the locale
+			// being rendered (the default, until the per-locale pass) and resolves
+			// link()'s { locale } options exactly as the browser kernel's stub does.
+			// An unconfigured { locale } tag throws here, so it fails the build.
+			const manifest = opts.i18n?.manifest;
+			if (
+				(typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) &&
+				manifest?.routing === 'prefix'
+			) {
+				localizeRouterStub(router, {
+					base: config.routerBase,
+					locale: manifest.defaultLocale,
+					defaultLocale: manifest.defaultLocale,
+					locales: Object.keys(manifest.locales),
+				});
+			}
 		} else {
 			router = hybridRouter();
 			if (route) {
@@ -455,8 +470,10 @@ async function prerenderPass(config, opts = {}) {
 				});
 			}
 		}
-		// The catch-all page (`*`) has no path of its own: '' links to whatever URL
-		// served it.
+		// The catch-all page (`*`) has no path of its own, so its page href is ''.
+		// Without prefix routing every entry then links to the URL that served the
+		// page; under prefix routing localePath turns '' into each locale's home
+		// page (`/`, `/es/`).
 		pageHref = route?.path[0] === '/' ? router.url(route.path) : '';
 		return buildContext(config, { router, i18n });
 	};

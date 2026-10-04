@@ -106,6 +106,39 @@ describe('prerender with translations', () => {
 		setFormatLocale(undefined);
 	});
 
+	// D177: the static prerender's stub resolves link() options the way the
+	// browser kernel's does, so the shipped hrefs are already right (the kernel
+	// does not re-render an unprefixed page's links).
+	it('static prerender under prefix routing encodes link() and its { locale } options', async () => {
+		class Links extends PuzzleView {
+			render() {
+				const link = this.ctx.formatters.getAll().link;
+				return h('nav', {}, [
+					h('a', { class: 'here', href: link('/p') }, [text('p')]),
+					h('a', { class: 'es', href: link('/p', { locale: 'es' }) }, [text('es')]),
+					h('a', { class: 'file', href: link('/cv.pdf', { locale: false }) }, [text('cv')]),
+				]);
+			}
+		}
+		Links.__pzlModule = 'app/views/Links.pzl';
+		const routed = { manifest: { ...MANIFEST, routing: 'prefix' }, table: EN };
+		const cfg = { target: '#app', routerBase: '/docs', routes: [{ path: '/', view: Links }] };
+		const { pages } = await prerender(cfg, { mode: 'static', i18n: routed });
+		expect(pages[0].html).toContain('<a class="here" href="/docs/p">');
+		expect(pages[0].html).toContain('<a class="es" href="/docs/es/p">');
+		expect(pages[0].html).toContain('<a class="file" href="/docs/cv.pdf">');
+
+		class Bad extends PuzzleView {
+			render() {
+				return h('a', { href: this.ctx.formatters.getAll().link('/p', { locale: 'fr' }) }, [text('fr')]);
+			}
+		}
+		Bad.__pzlModule = 'app/views/Bad.pzl';
+		await expect(
+			prerender({ target: '#app', routes: [{ path: '/', view: Bad }] }, { mode: 'static', i18n: routed })
+		).rejects.toThrow(/not a configured locale \(en, es\)/);
+	});
+
 	// D177: `i18n.locales[].href` is the page being rendered — each page its own,
 	// under routerBase; under prefix routing, under each locale's prefix.
 	it.each(['static', 'hybrid'])('gives i18n.locales the page being rendered (%s)', async (mode) => {

@@ -31,7 +31,14 @@ import { mount } from '../views/viewManager.js';
 import { setPortalHost } from '../views/portal.js';
 import { assembleChain, localizeRouterStub, makeRouteSnapshot, makeRouterStub } from '../ssg/assemble.js';
 import { preloadTakeoverComponents } from '../ssg/preload.js';
-import { createI18n, installTranslate, islandLocale, urlLocale } from '../i18n.js';
+import {
+	assignSameOrigin,
+	createI18n,
+	installTranslate,
+	islandLocale,
+	urlLocale,
+} from '../i18n.js';
+import { headText, resolveHeadField, syncTitle } from '../head.js';
 import { normalizeBase } from '../router/router.js';
 import manifestData from '@magic-spells/puzzle/i18n/manifest';
 
@@ -149,14 +156,17 @@ export async function mountStatic({
 		if (typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) {
 			const manifest = __i18n?.manifest ?? manifestData;
 			if (manifest?.routing === 'prefix') {
-				const pageLocale = urlLocale(location.pathname, routerBase, manifest) ?? islandLocale();
-				if (pageLocale) i18nOptions.locale = pageLocale;
+				// An unprefixed page with no island is a default-locale page: the stored
+				// choice and the browser never pick its locale, so text and links agree.
+				const pageLocale =
+					urlLocale(location.pathname, routerBase, manifest) ?? islandLocale() ?? manifest.defaultLocale;
+				i18nOptions.locale = pageLocale;
 				i18nOptions.routerBase = routerBase;
 				// A seam-supplied navigate (tests) stands; a build loads the page.
-				i18nOptions.navigate ??= (href) => location.assign(href);
+				i18nOptions.navigate ??= assignSameOrigin;
 				localizeRouterStub(ctx.router, {
 					base: routerBase,
-					locale: pageLocale ?? manifest.defaultLocale,
+					locale: pageLocale,
 					defaultLocale: manifest.defaultLocale,
 					locales: Object.keys(manifest.locales),
 				});
@@ -167,6 +177,9 @@ export async function mountStatic({
 			ctx.i18n = i18n;
 			installTranslate(ctx.formatters, i18n);
 			await i18n.__ready();
+			// The build wrote the page's <title> in its own locale (the island's tag);
+			// a viewer in another one gets a translated `{ t }` title in theirs.
+			if (i18n.locale !== (islandLocale() ?? i18n.defaultLocale)) syncLocaleTitle(chain, i18n);
 		}
 	}
 
@@ -225,6 +238,7 @@ export async function mountStatic({
 			}
 			current.destroy();
 			current = root;
+			syncLocaleTitle(chain, ctx.i18n);
 		};
 		if (earlyRefresh) {
 			earlyRefresh = false;
@@ -273,6 +287,20 @@ export async function mountStatic({
 	await Promise.resolve(root.playIn()).catch((err) =>
 		console.error('[puzzle] child enter animation failed:', err)
 	);
+}
+
+/**
+ * A translated route title (`meta.title: { t: 'key' }`, D177) follows the active
+ * locale, as the SPA router's #syncHead does; a plain string title is the one the
+ * build already wrote, so it is left alone. Only called behind the
+ * `__PUZZLE_HAS_I18N__` probe.
+ *
+ * @param {ReadonlyArray<{ meta?: Record<string, any> | null }>} chain the page's route defs, root → leaf
+ * @param {import('../head.js').HeadI18n} i18n
+ */
+function syncLocaleTitle(chain, i18n) {
+	const title = resolveHeadField(chain, 'title');
+	if (title && typeof title === 'object') syncTitle(headText(title, i18n));
 }
 
 /**

@@ -13,6 +13,8 @@ import {
 	LOCALE_STORAGE_KEY,
 	localeLabel,
 	localePath,
+	samePath,
+	assignSameOrigin,
 	selectLocale,
 	urlLocale,
 } from '../client-runtime/i18n.js';
@@ -510,6 +512,10 @@ describe('localeLabel (D177)', () => {
 		vi.unstubAllGlobals();
 		expect(localeLabel('en_US')).toBe('en_US');
 	});
+	it('keeps a tag Intl only echoes back (unknown language) verbatim, not capitalised', () => {
+		expect(localeLabel('zz')).toBe('zz');
+		expect(localeLabel('ZZ')).toBe('ZZ');
+	});
 });
 
 describe('i18n.locales (D177)', () => {
@@ -614,6 +620,89 @@ describe('setLocale under prefix routing (D177)', () => {
 		await i18n.setLocale('es');
 		expect(refresh).toHaveBeenCalledTimes(1);
 		expect(i18n.locale).toBe('es');
+	});
+});
+
+// A prefix swap must never produce a protocol-relative URL: stripping `/es` off
+// `/es//evil.example/` would leave `//evil.example/`, which a browser loads from
+// evil.example. Every result stays a same-origin path.
+describe('prefix swaps stay on the site (D177, open redirect)', () => {
+	it.each([
+		// [href, routerBase, target locale, expected]
+		['/es//evil.example/', '', 'en', '/evil.example/'],
+		['/es//evil.example/', '', 'pt-BR', '/pt-BR//evil.example/'],
+		['/es/\\evil.example', '', 'en', '/evil.example'],
+		['/es/\\\\evil.example/x', '', 'en', '/evil.example/x'],
+		['/es/\t/evil.example', '', 'en', '/evil.example'],
+		['/es/%2F%2Fevil.example', '', 'en', '/%2F%2Fevil.example'],
+		['//evil.example/es/x', '', 'en', '/evil.example/es/x'],
+		['//evil.example/es/x', '', 'es', '/es//evil.example/es/x'],
+		['/\\evil.example', '', 'en', '/evil.example'],
+		['/es//evil.example?q=1#h', '', 'en', '/evil.example?q=1#h'],
+		// Under routerBase the base stays in front, so the result already starts on-site…
+		['/docs/es//evil.example/', '/docs', 'en', '/docs//evil.example/'],
+		['/docs/es/\\evil.example', '/docs', 'en', '/docs/\\evil.example'],
+		// …and an href outside the base keeps its path, but never as //host.
+		['//evil.example/', '/docs', 'en', '/evil.example/'],
+		['/\\evil.example/docs/es', '/docs', 'es', '/evil.example/docs/es'],
+	])('%j under base %j in %j → %j', (href, base, locale, expected) => {
+		const out = localePath(href, base, locale, ROUTED);
+		expect(out).toBe(expected);
+		expect(new URL(out, 'https://site.test').origin).toBe('https://site.test');
+	});
+
+	it('samePath collapses a leading slash/backslash run and leaves the rest alone', () => {
+		expect(samePath('//evil.example/')).toBe('/evil.example/');
+		expect(samePath('/\\/\\evil.example')).toBe('/evil.example');
+		expect(samePath('/a//b')).toBe('/a//b');
+		expect(samePath('')).toBe('');
+		expect(samePath('#/x')).toBe('#/x');
+		expect(samePath('?q=//x')).toBe('?q=//x');
+	});
+
+	it('i18n.locales hrefs stay on the site, with and without prefix routing', async () => {
+		const routed = createI18n({
+			manifest: ROUTED,
+			tables: { es: ES },
+			locale: 'es',
+			page: () => '/es//evil.example/',
+		});
+		await routed.__ready();
+		for (const { href } of routed.locales) {
+			expect(new URL(href, 'https://site.test').origin).toBe('https://site.test');
+		}
+		expect(routed.locales[0].href).toBe('/evil.example/');
+
+		const plain = await service({ en: EN, es: ES }, 'en', { page: () => '//evil.example/x' });
+		expect(plain.locales.map((entry) => entry.href)).toEqual(['/evil.example/x', '/evil.example/x']);
+	});
+
+	it('setLocale navigates on-site from /es//evil.example/', async () => {
+		const navigate = vi.fn();
+		const i18n = createI18n({
+			manifest: ROUTED,
+			tables: { es: ES },
+			locale: 'es',
+			page: () => '/es//evil.example/',
+			navigate,
+		});
+		await i18n.__ready();
+		await i18n.setLocale('en');
+		expect(navigate).toHaveBeenCalledWith('/evil.example/');
+	});
+
+	it('assignSameOrigin refuses another origin, with a development warning', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const before = location.href;
+		assignSameOrigin('https://evil.example/');
+		assignSameOrigin('//evil.example/');
+		expect(location.href).toBe(before);
+		expect(warn).toHaveBeenCalledTimes(2);
+		expect(warn.mock.calls[0][0]).toMatch(/refusing to navigate off the site/);
+		// A same-origin target is loaded (a fragment change is one jsdom performs).
+		assignSameOrigin(location.pathname + '#langs');
+		expect(location.hash).toBe('#langs');
+		history.replaceState(null, '', before);
 	});
 });
 

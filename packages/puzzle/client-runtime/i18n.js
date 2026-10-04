@@ -125,8 +125,10 @@ export function urlLocale(pathname, routerBase, manifest) {
  * place a prefix is computed — so it agrees with `link(path, { locale })`. The
  * query and fragment ride along; the trailing slash is kept; the root page of a
  * locale is `<base>/<locale>/`, which is what `link('/')` renders there. An href
- * outside `routerBase` is returned unchanged. Used for `i18n.locales[].href` and
- * for the page setLocale navigates to.
+ * outside `routerBase` keeps its path. Used for `i18n.locales[].href` and for the
+ * page setLocale navigates to, so the result is always a same-origin path
+ * (samePath): `/es//evil.example/` in English is `/evil.example/`, never the
+ * protocol-relative `//evil.example/`.
  *
  * @param {string} href a document path: pathname, then an optional query and fragment
  * @param {string | undefined} routerBase the app's routerBase, normalized or not
@@ -138,10 +140,43 @@ export function localePath(href, routerBase, locale, manifest) {
 	const base = normalizeBase(routerBase);
 	const cut = href.search(/[?#]/);
 	const pathname = cut < 0 ? href : href.slice(0, cut);
-	if (base && pathname !== base && !pathname.startsWith(base + '/')) return href;
+	if (base && pathname !== base && !pathname.startsWith(base + '/')) return samePath(href);
 	const current = urlLocale(pathname, base, manifest);
 	const rest = pathname.slice(base.length + (current ? current.length + 1 : 0));
-	return localeBase(base, locale, manifest.defaultLocale) + (rest || '/') + (cut < 0 ? '' : href.slice(cut));
+	return samePath(
+		localeBase(base, locale, manifest.defaultLocale) + (rest || '/') + (cut < 0 ? '' : href.slice(cut))
+	);
+}
+
+/**
+ * Keep an href on this origin: a leading run of `/` and `\` (with any tab or
+ * newline inside it, which URL parsing drops) collapses to one `/`. A browser
+ * reads `//host/…` and `/\host/…` as protocol-relative — a link off the site —
+ * and stripping a locale prefix off `/es//evil.example/` would otherwise leave
+ * exactly that. Anything not starting with a slash (`''`, `?q`, `#x`) is
+ * unchanged.
+ *
+ * @param {string} href
+ * @returns {string}
+ */
+export function samePath(href) {
+	return href.replace(/^[/\\][/\\\t\n\r]*/, '/');
+}
+
+/**
+ * The static kernel's setLocale navigation under prefix routing (D177): load
+ * `href` only when it resolves to this origin, otherwise refuse (and say so in
+ * development). localePath already keeps its result on the site; this is the
+ * second check, on the call that actually leaves the page.
+ *
+ * @param {string} href
+ */
+export function assignSameOrigin(href) {
+	const target = new URL(href, location.origin);
+	if (target.origin === location.origin) location.assign(target.href);
+	else if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		console.warn(`[puzzle] setLocale: refusing to navigate off the site to ${JSON.stringify(href)}`);
+	}
 }
 
 // Language names, keyed by tag. Module-level: they hold nothing app-specific.
@@ -162,7 +197,12 @@ export function localeLabel(tag) {
 	if (label === undefined) {
 		try {
 			const name = new Intl.DisplayNames([tag], { type: 'language' }).of(tag);
-			label = name ? name.charAt(0).toLocaleUpperCase(tag) + name.slice(1) : tag;
+			// An unknown or private-use tag comes back as itself: keep it verbatim
+			// (`pt-BR`, never `Pt-BR`).
+			label =
+				name && name.toLowerCase() !== tag.toLowerCase()
+					? name.charAt(0).toLocaleUpperCase(tag) + name.slice(1)
+					: tag;
 		} catch {
 			label = tag;
 		}
@@ -383,7 +423,7 @@ export function createI18n(options = {}) {
 		(typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) &&
 		manifest.routing === 'prefix'
 			? localePath(here, options.routerBase, tag, manifest)
-			: here;
+			: samePath(here);
 
 	const service = {
 		/** The active locale tag. */
