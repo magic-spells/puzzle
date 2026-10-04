@@ -49,6 +49,11 @@ type Manifest struct {
 	// Paths maps each configured tag to its dist-relative file,
 	// "locales/<tag>.<hash>.json".
 	Paths map[string]string
+	// Routing is i18n.routing ("" or "prefix", D177) and NoDetect an explicit
+	// i18n.detect: false under it. Each is emitted only when set, so a manifest
+	// without prefix routing is byte-identical to D175's.
+	Routing  string
+	NoDetect bool
 }
 
 // chunkFilePattern matches the path of a code-splitting chunk — the only place
@@ -69,7 +74,8 @@ const manifestBase = `(u=>new URL(/` + chunkFilePattern + `/.test(u.pathname)?".
 
 // JS renders the manifest as the virtual module's source. Keys are emitted in
 // config order (the runtime's base-language fallback picks the FIRST configured
-// tag with a matching base).
+// tag with a matching base). Shape: { defaultLocale, locales, routing?,
+// detect?, base } — routing and detect only under prefix routing (D177).
 func (m Manifest) JS() string {
 	var b strings.Builder
 	def, _ := json.Marshal(m.DefaultLocale)
@@ -86,7 +92,16 @@ func (m Manifest) JS() string {
 		b.WriteByte(':')
 		b.Write(v)
 	}
-	b.WriteString(`},"base":` + manifestBase + "};\n")
+	b.WriteByte('}')
+	if m.Routing != "" {
+		r, _ := json.Marshal(m.Routing)
+		b.WriteString(`,"routing":`)
+		b.Write(r)
+		if m.NoDetect {
+			b.WriteString(`,"detect":false`)
+		}
+	}
+	b.WriteString(`,"base":` + manifestBase + "};\n")
 	return b.String()
 }
 
@@ -190,7 +205,10 @@ func Load(appRoot string, cfg *config.I18n) (*Result, error) {
 	def := cfg.DefaultLocale
 	defTable := tables[def]
 	res := &Result{
-		Manifest:    Manifest{DefaultLocale: def, Order: append([]string(nil), cfg.Locales...), Paths: map[string]string{}},
+		Manifest: Manifest{
+			DefaultLocale: def, Order: append([]string(nil), cfg.Locales...), Paths: map[string]string{},
+			Routing: cfg.Routing, NoDetect: cfg.PrefixRouting() && cfg.Detect != nil && !*cfg.Detect,
+		},
 		Files:       map[string][]byte{},
 		DefaultKeys: make(map[string]bool, len(defTable)),
 	}

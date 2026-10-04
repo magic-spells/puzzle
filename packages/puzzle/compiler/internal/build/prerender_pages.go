@@ -111,6 +111,11 @@ type staticPage struct {
 	// exist and the caller must supply the previous render's copy. Always false in
 	// a one-shot build, which never passes a route filter.
 	Reused bool `json:"reused"`
+	// Locale is the page's locale under prefix routing (D177), "" otherwise. The
+	// prerender writes one page per locale per route, and all of a route's pages
+	// share its Entry slug — one module serves every language — so the entry
+	// generators take the first page per slug (uniqueEntryPages).
+	Locale string `json:"locale,omitempty"`
 }
 
 // staticModules names the app-relative source paths (the codegen __pzlModule
@@ -155,7 +160,7 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 	// 1. Node prerender pass in mode 'static': the JS side renders each static
 	//    route, captures its store payload into the page's data island, strips the
 	//    app.js tag, and returns the extended summary behind the sentinel.
-	stdin, err := staticPrerenderStdin(absRoot, appEntry, adapterModule)
+	stdin, err := staticPrerenderStdin(absRoot, appEntry, adapterModule, cfg.Site)
 	if err != nil {
 		return err
 	}
@@ -185,24 +190,25 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 		}
 	}
 
-	// 2. Generate one mountStatic entry file per written page.
+	// 2. Generate one mountStatic entry file per entry slug (one per written page
+	//    unless prefix routing repeats a route's slug across locales).
 	entriesDir := filepath.Join(staging, prerenderDir, "entries")
 	if err := os.MkdirAll(entriesDir, 0o755); err != nil {
 		return fmt.Errorf("puzzle build --static: creating entry dir: %w", err)
 	}
+	pages, err := uniqueEntryPages(summary.Written)
+	if err != nil {
+		return err
+	}
 	var entryFiles []string
-	for _, page := range summary.Written {
-		slug, err := slugFromEntry(page.Entry)
+	for _, page := range pages {
+		src, err := staticEntrySource(absRoot, appEntry, page.staticPage, summary, modelsModule, formattersModule, adapterModule)
 		if err != nil {
 			return err
 		}
-		src, err := staticEntrySource(absRoot, appEntry, page, summary, modelsModule, formattersModule, adapterModule)
-		if err != nil {
-			return err
-		}
-		file := filepath.Join(entriesDir, slug+".js")
+		file := filepath.Join(entriesDir, page.slug+".js")
 		if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
-			return fmt.Errorf("puzzle build --static: writing entry %s: %w", slug, err)
+			return fmt.Errorf("puzzle build --static: writing entry %s: %w", page.slug, err)
 		}
 		entryFiles = append(entryFiles, file)
 	}
@@ -272,10 +278,17 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 // source change would throw that context's cache away, which is the whole thing
 // being bought. A one-shot build passes three arguments and renders everything,
 // so this line is inert there.
-func staticPrerenderStdin(absRoot, appEntry, adapterModule string) (string, error) {
+//
+// site is the config's `site` origin (D177), passed as prerenderToDir's `site`
+// option for hreflang alternates; "" adds nothing (see prerenderSiteOption).
+func staticPrerenderStdin(absRoot, appEntry, adapterModule, site string) (string, error) {
 	entry, err := json.Marshal(filepath.ToSlash(appEntry))
 	if err != nil {
 		return "", fmt.Errorf("encoding prerender entry path: %w", err)
+	}
+	siteOption, err := prerenderSiteOption(site)
+	if err != nil {
+		return "", err
 	}
 	adapterImport, adapterOption := "", ""
 	if adapterModule != "" {
@@ -291,12 +304,29 @@ func staticPrerenderStdin(absRoot, appEntry, adapterModule string) (string, erro
 			"%s"+
 			"import { prerenderToDir } from '@magic-spells/puzzle/ssg';\n"+
 			"const only = process.argv[4] ? JSON.parse(process.argv[4]) : undefined;\n"+
-			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3], mode: 'static', only%s });\n"+
+			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3], mode: 'static', only%s%s });\n"+
 			// Same forced exit as the hybrid entry: created() may leave a live
 			// handle, and the write callback keeps the payload from truncating.
 			"process.stdout.write('\\n%s' + JSON.stringify(summary), () => process.exit(0));\n",
-		string(entry), adapterImport, adapterOption, prerenderSentinel,
+		string(entry), adapterImport, adapterOption, siteOption, prerenderSentinel,
 	), nil
+}
+
+// prerenderSiteOption renders the config's `site` origin (D177) as an extra
+// prerenderToDir option, `, site: "https://example.com"`, or "" when unset so
+// the generated entry is byte-identical without it. It rides in the entry
+// source rather than the i18n manifest because only the build needs it — the
+// manifest also ships in every browser bundle. Config is loaded once per dev
+// session, so it cannot go stale in the dev builder's persistent context.
+func prerenderSiteOption(site string) (string, error) {
+	if site == "" {
+		return "", nil
+	}
+	enc, err := json.Marshal(site)
+	if err != nil {
+		return "", fmt.Errorf("encoding site: %w", err)
+	}
+	return ", site: " + string(enc), nil
 }
 
 // slugFromEntry extracts the page slug from an "_puzzle/<slug>.js" entry path
@@ -311,6 +341,33 @@ func slugFromEntry(entry string) (string, error) {
 		return "", fmt.Errorf("puzzle build --static: prerender returned a malformed entry path %q", entry)
 	}
 	return e, nil
+}
+
+// entryPage is a written page paired with its entry slug.
+type entryPage struct {
+	staticPage
+	slug string
+}
+
+// uniqueEntryPages returns the written pages that each need an entry module:
+// the first page per slug, in summary order. Without prefix routing every slug
+// is already unique, so this is the summary itself; with it (D177) a route's
+// locale pages repeat one slug and share one module.
+func uniqueEntryPages(written []staticPage) ([]entryPage, error) {
+	out := make([]entryPage, 0, len(written))
+	seen := make(map[string]bool, len(written))
+	for _, page := range written {
+		slug, err := slugFromEntry(page.Entry)
+		if err != nil {
+			return nil, err
+		}
+		if seen[slug] {
+			continue
+		}
+		seen[slug] = true
+		out = append(out, entryPage{staticPage: page, slug: slug})
+	}
+	return out, nil
 }
 
 // staticEntrySource builds the mountStatic entry module for one page. Import

@@ -20,6 +20,7 @@ import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { MANAGED_TAGS } from '../client-runtime/headTags.js';
 import { memoryRouter } from '../client-runtime/router/modes.js';
+import { PuzzleApp } from '../client-runtime/app.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -313,5 +314,110 @@ describe('Router head sync (D84) — hybrid takeover leaves prerendered tags int
 
 		await router.push('/');
 		expect([...allHeadTags()].map((n) => n.outerHTML)).toEqual(before);
+	});
+});
+
+describe('Router head sync (D177) — translated titles', () => {
+	const EN = { 'home.title': 'Home', 'about.title': 'About us' };
+	const ES = { 'home.title': 'Inicio', 'about.title': 'Acerca de' };
+	const MANIFEST = { defaultLocale: 'en', locales: { en: 'locales/en.AAAA.json', es: 'locales/es.BBBB.json' } };
+
+	/** A minimal i18n service: the slice headText calls (a missing key prints the key). */
+	const fakeI18n = (table) => ({ t: (key) => (Object.hasOwn(table, key) ? table[key] : key) });
+
+	async function bootWith(routes, i18n) {
+		const el = container();
+		const router = new Router(routes);
+		routers.push(router);
+		await router.start(el, { ...ctx(), i18n });
+		return router;
+	}
+
+	it('a { t } title resolves through ctx.i18n on start and on navigation', async () => {
+		const router = await bootWith(
+			[
+				{ path: '/', view: HomeView, layout: DefaultLayout, meta: { title: { t: 'home.title' } } },
+				{ path: '/about', view: AboutView, layout: DefaultLayout, meta: { title: { t: 'about.title' } } },
+			],
+			fakeI18n(EN)
+		);
+		expect(document.title).toBe('Home');
+		await router.push('/about');
+		expect(document.title).toBe('About us');
+		expect(allHeadTags()).toHaveLength(0);
+	});
+
+	it('a { t } title inherits leaf→root like a string; a missing key prints the key (D175)', async () => {
+		const router = await bootWith(
+			[
+				{ path: '/', view: HomeView, layout: DefaultLayout },
+				{
+					path: '/docs',
+					view: DocsShell,
+					layout: DefaultLayout,
+					meta: { title: { t: 'home.title' } },
+					children: [{ path: 'intro', view: IntroView }],
+				},
+				{ path: '/gone', view: AboutView, layout: DefaultLayout, meta: { title: { t: 'nope.title' } } },
+			],
+			fakeI18n(EN)
+		);
+		await router.push('/docs/intro');
+		expect(document.title).toBe('Home');
+		await router.push('/gone');
+		expect(document.title).toBe('nope.title');
+	});
+
+	it('with no i18n service a { t } title leaves document.title alone and warns once', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		document.title = 'Shell';
+		const router = await bootWith(
+			[
+				{ path: '/', view: HomeView, layout: DefaultLayout, meta: { title: { t: 'home.title' } } },
+				{ path: '/about', view: AboutView, layout: DefaultLayout, meta: { title: { t: 'about.title' } } },
+			],
+			undefined
+		);
+		await router.push('/about');
+		expect(document.title).toBe('Shell');
+		const headWarnings = warn.mock.calls.filter(([m]) => String(m).includes('needs i18n configured'));
+		expect(headWarnings).toHaveLength(1);
+		expect(headWarnings[0][0]).toContain('{ t: "home.title" }');
+	});
+
+	it('the tab title follows a D175 setLocale switch (the same-location rebuild commits it)', async () => {
+		vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (url) => {
+				const table = url.endsWith('locales/es.BBBB.json') ? ES : url.endsWith('locales/en.AAAA.json') ? EN : null;
+				return table
+					? { ok: true, status: 200, json: async () => table }
+					: { ok: false, status: 404, json: async () => ({}) };
+			})
+		);
+		const el = container();
+		const app = new PuzzleApp({
+			target: el,
+			routes: [
+				{ path: '/', view: HomeView, layout: DefaultLayout, meta: { title: { t: 'home.title' } } },
+				{ path: '/about', view: AboutView, layout: DefaultLayout, meta: { title: { t: 'about.title' } } },
+			],
+			__i18n: { manifest: MANIFEST, locale: 'en' },
+		});
+		try {
+			await app.mount();
+			expect(document.title).toBe('Home');
+			await app.router.push('/about');
+			expect(document.title).toBe('About us');
+
+			await app.i18n.setLocale('es');
+			expect(document.title).toBe('Acerca de');
+			await app.router.push('/');
+			expect(document.title).toBe('Inicio');
+		} finally {
+			app.unmount();
+			vi.unstubAllGlobals();
+		}
 	});
 });

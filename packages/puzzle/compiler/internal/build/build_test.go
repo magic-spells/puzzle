@@ -2026,7 +2026,7 @@ func TestValidatePublicReservedNamesCaseInsensitive(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(publicDir, name), []byte("USER ASSET"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			err := ValidatePublic(root, false, false)
+			err := ValidatePublic(root, false, nil)
 			if err == nil {
 				t.Fatalf("expected %q to be rejected as a reserved output name", name)
 			}

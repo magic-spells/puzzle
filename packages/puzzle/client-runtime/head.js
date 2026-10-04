@@ -38,7 +38,8 @@ export const HEAD_FIELDS = ['title', 'description', 'canonical', 'socialImage'];
  * a 0.2.0 pre-release divergence where `title` alone inherited on null; §45 /
  * D84 make suppression uniform — see the 0.1.x→0.2.0 migration note.)
  * Values are static strings or null by contract (no functions/HTML/arrays —
- * SPEC §45).
+ * SPEC §45); `title` and `description` may also be a translation reference
+ * `{ t: 'key' }` (D177), which resolves through `i18n` (see headText).
  *
  * Returns `{ title, description, canonical, socialImage }`, each `string|null`.
  * "Resolved null" and "nothing defined anywhere" are deliberately NOT
@@ -49,14 +50,52 @@ export const HEAD_FIELDS = ['title', 'description', 'canonical', 'socialImage'];
  * title keeps that same leave-alone posture rather than blanking the tab).
  *
  * @param {ReadonlyArray<{ meta?: Record<string, any> | null }>} chain route defs root→leaf (entry.chain)
+ * @param {HeadI18n | null} [i18n] the prerender pass's i18n service (D175), for `{ t }` text
  * @returns {{ title: string|null, description: string|null, canonical: string|null, socialImage: string|null }}
  */
-export function resolveHead(chain) {
+export function resolveHead(chain, i18n) {
 	const out = /** @type {ReturnType<typeof resolveHead>} */ ({});
 	for (const field of HEAD_FIELDS) {
 		out[field] = resolveHeadField(chain, field);
 	}
+	// Only the two text fields translate; canonical and socialImage are URLs.
+	out.title = headText(out.title, i18n);
+	out.description = headText(out.description, i18n);
 	return out;
+}
+
+/** @typedef {{ t(key: unknown): string }} HeadI18n the slice of the i18n service head text needs */
+
+/** @type {boolean | undefined} */
+let headTextWarned;
+
+/**
+ * Head text (D177): a resolved `title`/`description` as printable text. A string
+ * or null passes through unchanged; a translation reference `{ t: 'key' }`
+ * resolves through the app's i18n service — `i18n.t(key)`, so a missing key
+ * prints the key itself (D175). With no service (an app without `i18n`) the
+ * reference prints nothing — null, the same leave-alone posture as a suppressed
+ * field — and development warns once.
+ *
+ * The object branch sits behind the inline `__PUZZLE_HAS_I18N__` probe, and the
+ * router calls this only behind the same probe, so an app without translations
+ * ships none of it. The prerender calls it unconditionally (Node, never shipped).
+ *
+ * @param {unknown} value a resolved head field (resolveHeadField)
+ * @param {HeadI18n | null} [i18n] the app's (or prerender pass's) i18n service
+ * @returns {any} the text, or null
+ */
+export function headText(value, i18n) {
+	if (value === null || typeof value !== 'object') return value;
+	const key = /** @type {{ t?: unknown }} */ (value).t;
+	if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && i18n) return i18n.t(key);
+	if ((typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) && !headTextWarned) {
+		headTextWarned = true;
+		console.warn(
+			`[puzzle] route meta { t: "${String(key)}" } needs i18n configured in puzzle.config.js — the head text prints nothing`
+		);
+	}
+	return null;
 }
 
 /**

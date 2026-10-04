@@ -189,6 +189,7 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 	// The define is frozen into the context below, so the i18n bit is set now;
 	// the manifest itself arrives with the first rebuild's locale load.
 	pl.SetI18n(opts.I18n != nil, "")
+	pl.SetLocaleRouting(opts.I18n.PrefixRouting())
 	// One scanner for the session: the usage walk parses every .pzl in the
 	// project, and a dev rebuild changes one of them (plugin.UsageScanner).
 	scanner := plugin.NewUsageScanner()

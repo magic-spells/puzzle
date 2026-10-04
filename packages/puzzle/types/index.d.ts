@@ -54,6 +54,14 @@ export declare function lazy(
 ): LazyView;
 
 /**
+ * A translated route head text (D177): `meta: { title: { t: 'products.title' } }`
+ * resolves the key through the app's i18n service (D175), like `t('products.title')`.
+ */
+export interface HeadTranslation {
+	t: string;
+}
+
+/**
  * A route definition (constellation/doc/DOC-SPEC.md §9). `view`/`layout` are
  * PuzzleView subclasses (constructors) or `lazy()` markers (D163). `.pzl`
  * default exports and compiled classes are typed `any` by the compiler shim, so
@@ -71,7 +79,11 @@ export interface Route {
 	 * constellation/doc/DOC-SPEC.md §45): each resolves independently,
 	 * nearest-defined walking the destination chain leaf→root; `undefined`
 	 * inherits from a parent, `null` explicitly suppresses an inherited value.
-	 * Static strings only (no functions/HTML).
+	 * Static strings only (no functions/HTML). `title` and `description` may
+	 * instead be a translation reference, `{ t: 'products.title' }` (D177),
+	 * resolved through the app's i18n service at build time and in the
+	 * browser's title sync; a missing key prints the key itself, and without
+	 * `i18n` configured the reference prints nothing.
 	 *
 	 * Delivery is split (D84): the managed `data-puzzle-head` tags derived from
 	 * `description`/`canonical`/`socialImage` (og:/twitter:/description/canonical)
@@ -82,8 +94,8 @@ export interface Route {
 	 * the framework.
 	 */
 	meta?: {
-		title?: string | null;
-		description?: string | null;
+		title?: string | HeadTranslation | null;
+		description?: string | HeadTranslation | null;
 		canonical?: string | null;
 		socialImage?: string | null;
 		[key: string]: any;
@@ -180,6 +192,21 @@ export interface PuzzleErrorViewProps {
 
 /** Constructor accepted by PuzzleAppConfig.errorView. */
 export type PuzzleViewConstructor = new (ctx?: PuzzleContext) => PuzzleView;
+
+/**
+ * What `afterUpdate(prev)` receives (D178): the state the previous render
+ * drew, frozen shallowly. `data` is a copy of the merged `getData()` result;
+ * `props`, `params` and `route` are the objects that render saw. The snapshot
+ * is shallow and a record keeps its identity across its own mutations (D170),
+ * so `prev.data.post` is the same live record: to catch an edit, return the
+ * field from `data()` (`title: post.title`) and compare that.
+ */
+export interface PrevViewState {
+	readonly props: any;
+	readonly params: Record<string, string>;
+	readonly route: RouteSnapshot | null;
+	readonly data: Readonly<Record<string, any>>;
+}
 
 /** A single enter/leave animation spec (constellation/doc/DOC-SPEC.md §12). */
 export interface AnimationSpec {
@@ -416,11 +443,12 @@ export type LinkOptions = { locale?: string | false };
  */
 export interface LibraryFunctions {
 	/**
-	 * The URL for an app path in the active routing mode (D79), under the active
-	 * locale's prefix with `i18n.routing: 'prefix'` (D177). An unconfigured
-	 * `options.locale` throws a RangeError.
+	 * The URL for an app path in the active routing mode (D79). Under
+	 * `i18n.routing: 'prefix'` it adds the active locale's prefix; `locale`
+	 * forces one locale, and `locale: false` skips the prefix for a file that
+	 * exists once (D177).
 	 */
-	link(path: unknown, options?: LinkOptions): string;
+	link(path: unknown, options?: LinkOptions | null): string;
 	/**
 	 * The translation for `key` in the active locale (D175), `{name}`
 	 * placeholders filled from `vars`, a `count` choosing the plural form; a
@@ -636,7 +664,8 @@ export declare class PuzzleView {
 	created(): void;
 	mounted(): void;
 	beforeUpdate(): void;
-	afterUpdate(): void;
+	/** After every update render; `prev` is what the previous render drew (D178). */
+	afterUpdate(prev: PrevViewState): void;
 	destroyed(): void;
 
 	// ---- enter/leave hooks (D28) ----

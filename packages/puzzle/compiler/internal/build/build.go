@@ -172,7 +172,7 @@ func Build(root string, opts Options) error {
 
 	// Reject a public/ tree that would clobber compiler output BEFORE touching
 	// dist/ — a config error must never destroy the last good build.
-	if err := ValidatePublic(absRoot, splitting, cfg.I18nEnabled()); err != nil {
+	if err := ValidatePublic(absRoot, splitting, cfg.I18n); err != nil {
 		return err
 	}
 
@@ -228,7 +228,7 @@ func Build(root string, opts Options) error {
 	if scanErr != nil {
 		return scanErr
 	}
-	pc.i18n = cfg.I18nEnabled()
+	pc.i18n = cfg.I18n
 	pc.locales = localeRes
 	printI18nWarnings(os.Stderr, i18nWarnings(absRoot, cfg, pc.usage, localeRes))
 	// The hashed locale files go into staging before any pass runs: the prerender
@@ -343,7 +343,7 @@ func Build(root string, opts Options) error {
 	switch mode {
 	case "hybrid":
 		endHybrid := prof.phase("prerender (hybrid)")
-		hybridErr := prerenderHybrid(absRoot, entry, staging, publicFiles, pc)
+		hybridErr := prerenderHybrid(absRoot, entry, staging, cfg.Site, publicFiles, pc)
 		endHybrid()
 		if hybridErr != nil {
 			return hybridErr
@@ -575,9 +575,13 @@ func publicDir(root string) string {
 // same class of collision the static pass rejects for _puzzle
 // (prerender_pages.go). Off, that name belongs to the app again.
 //
-// i18n does the same for the root-level locales/ entry, which the build owns
-// while puzzle.config.js configures translations (D175).
-func ValidatePublic(root string, splitting, i18n bool) error {
+// i18n (the config's block, nil without translations) does the same for the
+// root-level locales/ entry, which the build owns while puzzle.config.js
+// configures translations (D175). Under prefix routing (D177) it also reserves
+// one root entry per non-default locale tag: that locale's pages are written to
+// dist/<tag>/, so a public/<tag> folder or file would be merged into or
+// clobbered by them.
+func ValidatePublic(root string, splitting bool, i18n *config.I18n) error {
 	src := publicDir(root)
 	if src == "" {
 		return nil
@@ -594,11 +598,21 @@ func ValidatePublic(root string, splitting, i18n bool) error {
 				filepath.Join(src, name), chunksDirName,
 			)
 		}
-		if i18n && strings.EqualFold(name, locales.OutDirName) {
+		if i18n != nil && strings.EqualFold(name, locales.OutDirName) {
 			return fmt.Errorf(
 				"public asset %s would overwrite compiler output dist/%s (a reserved output name while i18n is configured); rename or remove it",
 				filepath.Join(src, name), locales.OutDirName,
 			)
+		}
+		if i18n.PrefixRouting() {
+			for _, tag := range i18n.Locales {
+				if tag != i18n.DefaultLocale && strings.EqualFold(name, tag) {
+					return fmt.Errorf(
+						"public asset %s collides with the /%s/ locale prefix — with i18n.routing: 'prefix' the build writes that locale's pages to dist/%s/; rename or remove it",
+						filepath.Join(src, name), tag, tag,
+					)
+				}
+			}
 		}
 		if e.IsDir() {
 			continue

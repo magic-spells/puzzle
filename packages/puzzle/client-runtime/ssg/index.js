@@ -1066,7 +1066,8 @@ async function renderRoute(entry, ctx) {
 	const resolved = await resolveRouteViews(entry);
 	const { topVnode } = await assembleChain(entry, ctx, makeRouteSnapshot(entry), resolved);
 	const html = await serialize(topVnode, { ctx });
-	const head = resolveHead(chain);
+	// The pass's i18n service translates `{ t }` title/description text (D177).
+	const head = resolveHead(chain, ctx.i18n);
 	return { html, title: head.title, head };
 }
 

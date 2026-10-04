@@ -172,6 +172,38 @@ describe('prerender with translations', () => {
 		expect(html.lastIndexOf('</script>', html.indexOf('</body>'))).toBeGreaterThan(island);
 	});
 
+	it('translates { t } title and description into the prerendered head (D177)', async () => {
+		const dir = tmpDir();
+		fs.writeFileSync(path.join(dir, 'index.html'), SHELL);
+		const cfg = {
+			target: '#app',
+			routes: [
+				{
+					path: '/',
+					view: Home,
+					layout: Layout,
+					meta: { title: { t: 'title' }, description: { t: 'evil' }, canonical: 'https://x.dev/' },
+				},
+			],
+		};
+		const { pages } = await prerender(cfg, { i18n: I18N });
+		expect(pages[0].title).toBe('Welcome');
+		expect(pages[0].head.description).toBe(EN.evil);
+
+		const summary = await prerenderToDir(cfg, {
+			outDir: dir,
+			shellPath: path.join(dir, 'index.html'),
+			mode: 'static',
+			i18n: I18N,
+		});
+		const html = fs.readFileSync(summary.written[0].file, 'utf8');
+		expect(html).toContain('<title>Welcome</title>');
+		expect(html).toContain('<meta property="og:title" content="Welcome" data-puzzle-head="og:title">');
+		// Translated text is escaped like any other head value.
+		expect(html).toContain('content="a &lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt; b"');
+		expect(html).not.toContain('[object Object]');
+	});
+
 	it('static: pages (prerender:false too) carry the island before the page module', async () => {
 		const dir = tmpDir();
 		fs.writeFileSync(path.join(dir, 'index.html'), SHELL);
