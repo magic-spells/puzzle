@@ -275,7 +275,7 @@
  */
 
 import { ViewNode } from '../views/ViewNode.js';
-import { resolveHeadField, syncTitle } from '../head.js';
+import { headText, resolveHeadField, syncTitle } from '../head.js';
 import {
 	findShadowedPaths,
 	isDynamicSegment,
@@ -3164,7 +3164,16 @@ export class Router {
 		// rename the host page's tab or edit the host <head> — document-level side
 		// effects like the URL.
 		if (this.#mode?.urlless) return;
-		syncTitle(resolveHeadField(entry.chain, 'title'));
+		// A `{ t: 'key' }` title translates in the active locale (D177). The D175
+		// locale switch is a same-location rebuild that commits through here, so
+		// the tab title follows it. Behind the probe, the false branch is the
+		// pre-D177 expression verbatim, so an app without i18n ships the same bytes
+		// (a shared `const` is not inlined back by the minifier).
+		syncTitle(
+			typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__
+				? headText(resolveHeadField(entry.chain, 'title'), this.#ctx?.i18n)
+				: resolveHeadField(entry.chain, 'title')
+		);
 	}
 
 	#handlePopState() {

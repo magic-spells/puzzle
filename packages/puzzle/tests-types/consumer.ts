@@ -309,6 +309,19 @@ const routes: Route[] = [
 		guard: requireAuth,
 		children: [{ path: 'edit', name: 'todo-edit', view: TodoListView, guard: requireAdmin }],
 	},
+	{
+		path: '/products',
+		view: TodoListView,
+		// D177: title and description may be translation references.
+		meta: { title: { t: 'products.title' }, description: { t: 'products.description' } },
+	},
+	{
+		path: '/files',
+		view: TodoListView,
+		// canonical and socialImage are URLs: strings only.
+		// @ts-expect-error a translation reference is not a canonical URL
+		meta: { canonical: { t: 'files.url' } },
+	},
 ];
 
 // D163: lazy route views/layouts are explicit branded markers. A loader may

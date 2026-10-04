@@ -54,6 +54,14 @@ export declare function lazy(
 ): LazyView;
 
 /**
+ * A translated route head text (D177): `meta: { title: { t: 'products.title' } }`
+ * resolves the key through the app's i18n service (D175), like `t('products.title')`.
+ */
+export interface HeadTranslation {
+	t: string;
+}
+
+/**
  * A route definition (constellation/doc/DOC-SPEC.md §9). `view`/`layout` are
  * PuzzleView subclasses (constructors) or `lazy()` markers (D163). `.pzl`
  * default exports and compiled classes are typed `any` by the compiler shim, so
@@ -71,7 +79,11 @@ export interface Route {
 	 * constellation/doc/DOC-SPEC.md §45): each resolves independently,
 	 * nearest-defined walking the destination chain leaf→root; `undefined`
 	 * inherits from a parent, `null` explicitly suppresses an inherited value.
-	 * Static strings only (no functions/HTML).
+	 * Static strings only (no functions/HTML). `title` and `description` may
+	 * instead be a translation reference, `{ t: 'products.title' }` (D177),
+	 * resolved through the app's i18n service at build time and in the
+	 * browser's title sync; a missing key prints the key itself, and without
+	 * `i18n` configured the reference prints nothing.
 	 *
 	 * Delivery is split (D84): the managed `data-puzzle-head` tags derived from
 	 * `description`/`canonical`/`socialImage` (og:/twitter:/description/canonical)
@@ -82,8 +94,8 @@ export interface Route {
 	 * the framework.
 	 */
 	meta?: {
-		title?: string | null;
-		description?: string | null;
+		title?: string | HeadTranslation | null;
+		description?: string | HeadTranslation | null;
 		canonical?: string | null;
 		socialImage?: string | null;
 		[key: string]: any;
