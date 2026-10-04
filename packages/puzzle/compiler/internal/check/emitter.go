@@ -104,7 +104,7 @@ export {};
 // function library (codegen.LibraryFunctionNames, DESIGN-expr-v2 §4), declared
 // on __PuzzleFunctions in the shim. They are types/index.d.ts's
 // LibraryFunctions with its aliases (TranslationVars, DatePreset,
-// LocaleArgument) spelled out: TestLibrarySignaturesMatchPublicTypes fails
+// LocaleArgument, LinkOptions) spelled out: TestLibrarySignaturesMatchPublicTypes fails
 // when the two disagree, and TestLibrarySignaturesMatchCodegen keeps this
 // table and the compiler's name list identical. Values are `unknown` because
 // every function accepts any template value and prints nothing for a missing

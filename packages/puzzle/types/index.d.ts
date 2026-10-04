@@ -424,6 +424,14 @@ export type DatePreset = 'short' | 'medium' | 'long' | 'iso';
 export type LocaleArgument = string | readonly string[];
 
 /**
+ * Options for `link(path, options)` under locale prefix routing (D177):
+ * `{ locale: 'es' }` links to that configured locale's page, `{ locale: false }`
+ * skips the locale prefix (a file that exists once) but keeps `routerBase`.
+ * Without `i18n.routing: 'prefix'` there is no prefix, and they are ignored.
+ */
+export type LinkOptions = { locale?: string | false };
+
+/**
  * library signatures — every built-in function a template calls as
  * `name(args)` (D176 §4), with the arguments the runtime takes. `puzzle check`
  * types a template's library calls against this interface, so it moves with
@@ -440,7 +448,7 @@ export interface LibraryFunctions {
 	 * forces one locale, and `locale: false` skips the prefix for a file that
 	 * exists once (D177).
 	 */
-	link(path: unknown, options?: { locale?: string | false } | null): string;
+	link(path: unknown, options?: LinkOptions | null): string;
 	/**
 	 * The translation for `key` in the active locale (D175), `{name}`
 	 * placeholders filled from `vars`, a `count` choosing the plural form; a
@@ -523,8 +531,11 @@ export type TranslationVars = object;
 export interface PuzzleI18n {
 	/** The active locale tag. */
 	readonly locale: string;
-	/** Every configured locale, in config order. */
-	readonly locales: readonly string[];
+	/**
+	 * Every configured locale, in config order, as a language switcher renders
+	 * it (D177). Rebuilt on each read, so `href` is the page shown now.
+	 */
+	readonly locales: readonly PuzzleLocale[];
 	readonly defaultLocale: string;
 	/**
 	 * Look `key` up in the active locale. A missing key prints the key itself;
@@ -537,9 +548,30 @@ export interface PuzzleI18n {
 	 * rebuild the page at the same location. Rejects (changing nothing) when the
 	 * fetch fails; overlapping calls resolve last-wins, and a call a later one
 	 * overtook settles with the later call's outcome. Throws a RangeError for a
-	 * tag that is not configured.
+	 * tag that is not configured. Under `i18n.routing: 'prefix'` (D177) on a
+	 * static page it instead stores the choice and loads the same page under
+	 * the new locale's prefix, resolving once that navigation is issued.
 	 */
 	setLocale(tag: string): Promise<void>;
+}
+
+/** One entry of `i18n.locales` (D177). */
+export interface PuzzleLocale {
+	/** The configured tag (`'pt-BR'`). */
+	readonly locale: string;
+	/**
+	 * The language's own name (`'Español'`), from `Intl.DisplayNames`; the tag
+	 * itself where the browser cannot name it.
+	 */
+	readonly label: string;
+	/**
+	 * The current page in this locale: under `i18n.routing: 'prefix'` the same
+	 * page under this locale's prefix; otherwise the current page for every
+	 * entry (switch with `setLocale(entry.locale)`).
+	 */
+	readonly href: string;
+	/** Whether this is the active locale. */
+	readonly active: boolean;
 }
 
 // ----------------------------------------------------------------------------

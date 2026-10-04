@@ -15,15 +15,18 @@
  */
 
 import { ViewNode } from '../views/ViewNode.js';
-import { encodeURL, normalizeBase } from '../router/router.js';
+import { encodeURL, linkLocale, localeBase, normalizeBase } from '../router/router.js';
 import { normalizeRoutePath } from '../router/routePath.js';
 
 /** @import { PuzzleView } from '../views/PuzzleView.js' */
+/** @import { LinkOptions } from '../../types/index.js' */
 
 /**
  * The static router facade makeRouterStub returns: `url()` and a read-only
- * `current`, plus every Router navigation method (each throws).
- * @typedef {{ url: (path: string) => string, readonly current: object, [method: string]: any }} RouterStub
+ * `current`, plus every Router navigation method (each throws). `url` takes
+ * `options` only once localizeRouterStub has made it locale-aware (D177).
+ * @typedef {{ url: (path: string, options?: LinkOptions) => string, readonly current: object,
+ *   [method: string]: any }} RouterStub
  */
 
 /**
@@ -154,6 +157,29 @@ export function makeRouterStub(route, { base = '' } = {}) {
 		enumerable: true,
 		get: () => route,
 	});
+	return stub;
+}
+
+/**
+ * Locale prefix routing (D177): make a static router stub's `url(path, options)`
+ * encode under the page's locale prefix — `base + /<locale> + path`, unprefixed
+ * for the default locale — through the shared localeBase, so the prerendered
+ * hrefs and the static kernel's re-render agree. `{ locale: 'es' }` forces that
+ * locale's prefix (an unconfigured tag throws), `{ locale: false }` skips the
+ * prefix and keeps the base. A separate step rather than more makeRouterStub
+ * options: esbuild keeps unused destructured parameters, so every static page
+ * without prefix routing would carry them.
+ *
+ * @param {RouterStub} stub a makeRouterStub result
+ * @param {{ base?: string, locale: string, defaultLocale: string,
+ *   locales: readonly string[] }} opts the routerBase, the page's locale, the
+ *   default locale, and every configured tag (config order)
+ * @returns {RouterStub} the same stub
+ */
+export function localizeRouterStub(stub, { base = '', locale, defaultLocale, locales }) {
+	const normalizedBase = normalizeBase(base);
+	stub.url = (path, options) =>
+		encodeURL(path, null, localeBase(normalizedBase, linkLocale(options, locale, locales), defaultLocale));
 	return stub;
 }
 

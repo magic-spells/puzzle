@@ -1043,3 +1043,149 @@ describe('static kernel — read-state island (D161)', () => {
 		err.mockRestore();
 	});
 });
+
+// D177 — the static kernel under `i18n.routing: 'prefix'`. The URL decides the
+// page's locale (prefix, then the page's own table island, ahead of the stored
+// choice and navigator.languages), links render under that locale's prefix,
+// setLocale loads the same page under the other prefix, and the locale files
+// stay on the BARE routerBase.
+describe('static kernel — locale prefix routing (D177)', () => {
+	const EN = { title: 'Welcome' };
+	const ES = { title: 'Bienvenido' };
+	const ROUTED = {
+		defaultLocale: 'en',
+		locales: { en: 'locales/en.AAAA.json', es: 'locales/es.BBBB.json', 'pt-BR': 'locales/pt-BR.CCCC.json' },
+		routing: 'prefix',
+	};
+	const startURL = location.href;
+
+	function memoryStorage(seed = {}) {
+		const map = new Map(Object.entries(seed));
+		return { getItem: (k) => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, String(v)) };
+	}
+
+	beforeEach(() => {
+		document.body.innerHTML = '<div id="app"></div>';
+		// Everything the URL must beat: a stored English choice and an English browser.
+		vi.stubGlobal('localStorage', memoryStorage({ __puzzleLocale: 'en' }));
+		vi.stubGlobal('navigator', { languages: ['en'], language: 'en' });
+	});
+	afterEach(() => {
+		history.replaceState(null, '', startURL);
+		document.documentElement.removeAttribute('lang');
+		vi.unstubAllGlobals();
+	});
+
+	let seen;
+	class Page extends PuzzleView {
+		created() {
+			seen = this.ctx;
+		}
+		render() {
+			const link = this.ctx.formatters.getAll().link;
+			return h('main', {}, [
+				h('h1', {}, [text(this.ctx.i18n.t('title'))]),
+				h('a', { class: 'home', href: link('/') }, [text('home')]),
+				h('a', { class: 'about', href: link('/about') }, [text('about')]),
+				h('a', { class: 'en', href: link('/about', { locale: 'en' }) }, [text('en')]),
+				h('a', { class: 'pdf', href: link('/cv.pdf', { locale: false }) }, [text('cv')]),
+			]);
+		}
+	}
+
+	async function mountAt(url, { routerBase, tables = { en: EN, es: ES }, manifest = ROUTED, ...seam } = {}) {
+		history.replaceState(null, '', url);
+		seen = null;
+		await mountStatic({
+			target: '#app',
+			views: [Page],
+			route: { path: '/about', params: {}, chain: [{ path: '/about' }] },
+			routerBase,
+			__i18n: { manifest, tables, ...seam },
+		});
+		const href = (cls) => document.querySelector(`a.${cls}`).getAttribute('href');
+		return { i18n: seen.i18n, href };
+	}
+
+	it('the URL prefix decides the locale, ahead of the stored choice and the browser', async () => {
+		const { i18n, href } = await mountAt('/es/about');
+		expect(i18n.locale).toBe('es');
+		expect(document.querySelector('h1').textContent).toBe('Bienvenido');
+		expect(href('home')).toBe('/es/');
+		expect(href('about')).toBe('/es/about');
+		expect(href('en')).toBe('/about');
+		expect(href('pdf')).toBe('/cv.pdf');
+	});
+
+	it("an unprefixed page is the page's island locale (the default), whatever was stored", async () => {
+		vi.stubGlobal('localStorage', memoryStorage({ __puzzleLocale: 'es' }));
+		vi.stubGlobal('navigator', { languages: ['es'], language: 'es' });
+		document.body.innerHTML =
+			'<div id="app"></div>' +
+			`<script type="application/json" data-puzzle-locale="en">${JSON.stringify(EN)}</script>`;
+		const { i18n, href } = await mountAt('/about');
+		expect(i18n.locale).toBe('en');
+		expect(href('about')).toBe('/about');
+	});
+
+	it('falls back to the island tag when the URL carries no prefix', async () => {
+		document.body.innerHTML =
+			'<div id="app"></div>' +
+			`<script type="application/json" data-puzzle-locale="es">${JSON.stringify(ES)}</script>`;
+		const { i18n } = await mountAt('/about', { tables: {} });
+		expect(i18n.locale).toBe('es');
+		expect(document.querySelector('h1').textContent).toBe('Bienvenido');
+	});
+
+	it('i18n.locales is this page under every prefix, query and fragment kept', async () => {
+		const { i18n } = await mountAt('/docs/es/about?tab=2#faq', { routerBase: '/docs' });
+		expect(i18n.locales).toEqual([
+			{ locale: 'en', label: 'English', href: '/docs/about?tab=2#faq', active: false },
+			{ locale: 'es', label: 'Español', href: '/docs/es/about?tab=2#faq', active: true },
+			{ locale: 'pt-BR', label: 'Português (Brasil)', href: '/docs/pt-BR/about?tab=2#faq', active: false },
+		]);
+	});
+
+	it('setLocale stores the choice and loads the same page under the other prefix — no fetch, no remount', async () => {
+		const fetch = vi.fn();
+		vi.stubGlobal('fetch', fetch);
+		const navigate = vi.fn();
+		const { i18n } = await mountAt('/docs/es/about/?tab=2#faq', { routerBase: '/docs', navigate });
+		const main = document.querySelector('main');
+
+		await i18n.setLocale('en');
+		expect(navigate).toHaveBeenCalledWith('/docs/about/?tab=2#faq');
+		expect(localStorage.getItem('__puzzleLocale')).toBe('en');
+		expect(fetch).not.toHaveBeenCalled();
+		expect(document.querySelector('main')).toBe(main);
+		expect(i18n.locale).toBe('es');
+
+		await i18n.setLocale('pt-BR');
+		expect(navigate).toHaveBeenLastCalledWith('/docs/pt-BR/about/?tab=2#faq');
+		navigate.mockClear();
+		await i18n.setLocale('es');
+		expect(navigate).not.toHaveBeenCalled();
+	});
+
+	it('a Spanish page fetches its locale file from the BARE routerBase, never under /es', async () => {
+		const fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ES }));
+		vi.stubGlobal('fetch', fetch);
+		const { i18n, href } = await mountAt('/docs/es/about', { routerBase: '/docs', tables: {} });
+		expect(fetch).toHaveBeenCalledTimes(1);
+		expect(fetch.mock.calls[0][0]).toBe('/docs/locales/es.BBBB.json');
+		expect(i18n.locale).toBe('es');
+		expect(href('about')).toBe('/docs/es/about');
+		expect(href('pdf')).toBe('/docs/cv.pdf');
+	});
+
+	it('without routing in the manifest the URL decides nothing and links carry no prefix', async () => {
+		const { routing, ...plain } = ROUTED;
+		void routing;
+		const { i18n, href } = await mountAt('/es/about', { manifest: plain });
+		// The stored English choice wins, exactly as before D177.
+		expect(i18n.locale).toBe('en');
+		expect(href('about')).toBe('/about');
+		expect(href('en')).toBe('/about');
+		expect(i18n.locales.map((entry) => entry.href)).toEqual(['/es/about', '/es/about', '/es/about']);
+	});
+});

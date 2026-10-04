@@ -1,14 +1,22 @@
 // @vitest-environment jsdom
 // D175 — the i18n service: locale selection, lookup, single-pass substitution,
 // plurals through Intl.PluralRules, the loader (island, fetch, fallback), and
-// setLocale's fetch-first, last-wins switch.
+// setLocale's fetch-first, last-wins switch. D177 — the locale-prefix helpers
+// (urlLocale, localePath), the switcher list `i18n.locales`, and setLocale's
+// navigation under prefix routing.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	createI18n,
 	fillPlaceholders,
 	installTranslate,
+	islandLocale,
 	LOCALE_STORAGE_KEY,
+	localeLabel,
+	localePath,
+	samePath,
+	assignSameOrigin,
 	selectLocale,
+	urlLocale,
 } from '../client-runtime/i18n.js';
 import { makeFormatterRegistry } from '../client-runtime/formatters.js';
 import * as f from '../client-runtime/formatters/builtins.js';
@@ -413,5 +421,295 @@ describe('the formatter locale', () => {
 		expect(i18n.t('item_count', { count: 12345.5 })).toBe('12.345,5 artículos');
 		await i18n.setLocale('en');
 		expect(f.number_with_delimiter(12345.5)).toBe('12,345.5');
+	});
+});
+
+// D177 — prefix routing. `en` is the default (unprefixed); `es` and `pt-BR` live
+// under their tags, verbatim and on a segment boundary.
+const ROUTED = {
+	defaultLocale: 'en',
+	locales: { en: 'locales/en.json', es: 'locales/es.json', 'pt-BR': 'locales/pt-BR.json' },
+	routing: 'prefix',
+};
+
+describe('urlLocale (D177)', () => {
+	it.each([
+		// [pathname, routerBase, expected]
+		['/', '', null],
+		['', '', null],
+		['/about', '', null],
+		['/es', '', 'es'],
+		['/es/', '', 'es'],
+		['/es/about', '', 'es'],
+		['/es/about/', '', 'es'],
+		['/es?q=1', '', 'es'],
+		['/es#top', '', 'es'],
+		['/esp', '', null],
+		['/esp/about', '', null],
+		['/ES/about', '', null],
+		['/pt-BR/x', '', 'pt-BR'],
+		['/pt-br/x', '', null],
+		['/pt/x', '', null],
+		['/en/about', '', null],
+		['/about/es', '', null],
+		['/docs/es/about', '/docs', 'es'],
+		['/docs/es', '/docs', 'es'],
+		['/docs/', '/docs', null],
+		['/docs', '/docs', null],
+		['/docs/about', '/docs', null],
+		['/es/about', '/docs', null],
+		['/docsx/es/about', '/docs', null],
+		['/docs/es/about', 'docs/', 'es'],
+		['/a/b/pt-BR/', '/a/b', 'pt-BR'],
+	])('%j under base %j → %j', (pathname, base, expected) => {
+		expect(urlLocale(pathname, base, ROUTED)).toBe(expected);
+	});
+});
+
+describe('localePath (D177)', () => {
+	it.each([
+		// [href, routerBase, target locale, expected]
+		['/', '', 'en', '/'],
+		['/', '', 'es', '/es/'],
+		['', '', 'es', '/es/'],
+		['/es', '', 'en', '/'],
+		['/es', '', 'es', '/es/'],
+		['/es/', '', 'en', '/'],
+		['/es/', '', 'pt-BR', '/pt-BR/'],
+		['/about', '', 'es', '/es/about'],
+		['/about/', '', 'es', '/es/about/'],
+		['/es/about', '', 'en', '/about'],
+		['/es/about/', '', 'en', '/about/'],
+		['/es/about', '', 'pt-BR', '/pt-BR/about'],
+		['/pt-BR/blog/x', '', 'es', '/es/blog/x'],
+		['/esp/x', '', 'es', '/es/esp/x'],
+		['/esp/x', '', 'en', '/esp/x'],
+		['/en/about', '', 'es', '/es/en/about'],
+		['/about?q=1#h', '', 'es', '/es/about?q=1#h'],
+		['/es/about?q=a/b#x/y', '', 'en', '/about?q=a/b#x/y'],
+		['/es?q=1', '', 'en', '/?q=1'],
+		['/docs', '/docs', 'es', '/docs/es/'],
+		['/docs/', '/docs', 'es', '/docs/es/'],
+		['/docs/', '/docs', 'en', '/docs/'],
+		['/docs/es', '/docs', 'en', '/docs/'],
+		['/docs/es/about?q=1#h', '/docs', 'en', '/docs/about?q=1#h'],
+		['/docs/about', '/docs/', 'pt-BR', '/docs/pt-BR/about'],
+		['/elsewhere/es/x', '/docs', 'en', '/elsewhere/es/x'],
+	])('%j under base %j in %j → %j', (href, base, locale, expected) => {
+		expect(localePath(href, base, locale, ROUTED)).toBe(expected);
+	});
+});
+
+describe('localeLabel (D177)', () => {
+	it("names each language in its own language, first letter upper-cased", () => {
+		expect(localeLabel('en')).toBe('English');
+		expect(localeLabel('es')).toBe('Español');
+		expect(localeLabel('pt-BR')).toBe('Português (Brasil)');
+	});
+	it('falls back to the tag when Intl.DisplayNames is missing or rejects the tag', () => {
+		vi.stubGlobal('Intl', { ...Intl, DisplayNames: undefined });
+		expect(localeLabel('fi')).toBe('fi');
+		vi.unstubAllGlobals();
+		expect(localeLabel('en_US')).toBe('en_US');
+	});
+	it('keeps a tag Intl only echoes back (unknown language) verbatim, not capitalised', () => {
+		expect(localeLabel('zz')).toBe('zz');
+		expect(localeLabel('ZZ')).toBe('ZZ');
+	});
+});
+
+describe('i18n.locales (D177)', () => {
+	it('lists every configured locale in config order: tag, own name, current page, active', async () => {
+		const i18n = await service({ en: EN, es: ES }, 'es', { page: () => '/shop/cart?x=1' });
+		expect(i18n.locales).toEqual([
+			{ locale: 'en', label: 'English', href: '/shop/cart?x=1', active: false },
+			{ locale: 'es', label: 'Español', href: '/shop/cart?x=1', active: true },
+		]);
+	});
+	it("is the current document ('') when the host supplies no page", async () => {
+		const i18n = await service({ en: EN, es: ES });
+		expect(i18n.locales.map((entry) => entry.href)).toEqual(['', '']);
+	});
+	it('is read lazily: the page and the active flag are the ones at read time', async () => {
+		let here = '/a';
+		const i18n = await service({ en: EN, es: ES }, 'en', { page: () => here });
+		expect(i18n.locales[0].href).toBe('/a');
+		here = '/b';
+		await i18n.setLocale('es');
+		expect(i18n.locales).toEqual([
+			{ locale: 'en', label: 'English', href: '/b', active: false },
+			{ locale: 'es', label: 'Español', href: '/b', active: true },
+		]);
+	});
+	it('under prefix routing, is the current page under each locale’s prefix (routerBase kept)', async () => {
+		const i18n = createI18n({
+			manifest: ROUTED,
+			tables: { es: ES },
+			locale: 'es',
+			routerBase: '/docs',
+			page: () => '/docs/es/guide/?tab=2#install',
+		});
+		await i18n.__ready();
+		expect(i18n.locales).toEqual([
+			{ locale: 'en', label: 'English', href: '/docs/guide/?tab=2#install', active: false },
+			{ locale: 'es', label: 'Español', href: '/docs/es/guide/?tab=2#install', active: true },
+			{ locale: 'pt-BR', label: 'Português (Brasil)', href: '/docs/pt-BR/guide/?tab=2#install', active: false },
+		]);
+	});
+});
+
+describe('setLocale under prefix routing (D177)', () => {
+	async function routed(navigate, locale = 'es', manifest = ROUTED) {
+		const fetch = vi.fn();
+		vi.stubGlobal('fetch', fetch);
+		const refresh = vi.fn();
+		const i18n = createI18n({
+			manifest,
+			tables: { en: EN, es: ES },
+			locale,
+			page: () => '/es/cart?step=2#pay',
+			navigate,
+			refresh,
+		});
+		await i18n.__ready();
+		return { i18n, fetch, refresh };
+	}
+
+	it('stores the choice and navigates to the same page under the new prefix — no fetch, no re-render', async () => {
+		const navigate = vi.fn();
+		const { i18n, fetch, refresh } = await routed(navigate);
+		await expect(i18n.setLocale('pt-br')).resolves.toBeUndefined();
+		expect(navigate).toHaveBeenCalledWith('/pt-BR/cart?step=2#pay');
+		expect(localStorage.getItem(LOCALE_STORAGE_KEY)).toBe('pt-BR');
+		expect(fetch).not.toHaveBeenCalled();
+		expect(refresh).not.toHaveBeenCalled();
+		// The page itself is unchanged until the browser loads the other one.
+		expect(i18n.locale).toBe('es');
+		expect(i18n.t('nav.home')).toBe('Inicio');
+
+		await i18n.setLocale('en');
+		expect(navigate).toHaveBeenLastCalledWith('/cart?step=2#pay');
+	});
+	it('the active locale again is a no-op that still stores the choice', async () => {
+		const navigate = vi.fn();
+		const { i18n } = await routed(navigate);
+		await i18n.setLocale('es');
+		expect(navigate).not.toHaveBeenCalled();
+		expect(localStorage.getItem(LOCALE_STORAGE_KEY)).toBe('es');
+	});
+	it('an unconfigured tag throws the same RangeError and navigates nowhere', async () => {
+		const navigate = vi.fn();
+		const { i18n } = await routed(navigate);
+		expect(() => i18n.setLocale('fr')).toThrow(RangeError);
+		expect(() => i18n.setLocale('fr')).toThrow(/en, es, pt-BR/);
+		expect(navigate).not.toHaveBeenCalled();
+		expect(localStorage.getItem(LOCALE_STORAGE_KEY)).toBe(null);
+	});
+	it('switches in place as before without prefix routing, even with a navigate', async () => {
+		const navigate = vi.fn();
+		const { routing, ...plain } = ROUTED;
+		void routing;
+		const { i18n, refresh } = await routed(navigate, 'en', plain);
+		await i18n.setLocale('es');
+		expect(navigate).not.toHaveBeenCalled();
+		expect(refresh).toHaveBeenCalledTimes(1);
+		expect(i18n.locale).toBe('es');
+	});
+	it('switches in place when the host supplies no navigate', async () => {
+		const { i18n, refresh } = await routed(undefined, 'en');
+		await i18n.setLocale('es');
+		expect(refresh).toHaveBeenCalledTimes(1);
+		expect(i18n.locale).toBe('es');
+	});
+});
+
+// A prefix swap must never produce a protocol-relative URL: stripping `/es` off
+// `/es//evil.example/` would leave `//evil.example/`, which a browser loads from
+// evil.example. Every result stays a same-origin path.
+describe('prefix swaps stay on the site (D177, open redirect)', () => {
+	it.each([
+		// [href, routerBase, target locale, expected]
+		['/es//evil.example/', '', 'en', '/evil.example/'],
+		['/es//evil.example/', '', 'pt-BR', '/pt-BR//evil.example/'],
+		['/es/\\evil.example', '', 'en', '/evil.example'],
+		['/es/\\\\evil.example/x', '', 'en', '/evil.example/x'],
+		['/es/\t/evil.example', '', 'en', '/evil.example'],
+		['/es/%2F%2Fevil.example', '', 'en', '/%2F%2Fevil.example'],
+		['//evil.example/es/x', '', 'en', '/evil.example/es/x'],
+		['//evil.example/es/x', '', 'es', '/es//evil.example/es/x'],
+		['/\\evil.example', '', 'en', '/evil.example'],
+		['/es//evil.example?q=1#h', '', 'en', '/evil.example?q=1#h'],
+		// Under routerBase the base stays in front, so the result already starts on-site…
+		['/docs/es//evil.example/', '/docs', 'en', '/docs//evil.example/'],
+		['/docs/es/\\evil.example', '/docs', 'en', '/docs/\\evil.example'],
+		// …and an href outside the base keeps its path, but never as //host.
+		['//evil.example/', '/docs', 'en', '/evil.example/'],
+		['/\\evil.example/docs/es', '/docs', 'es', '/evil.example/docs/es'],
+	])('%j under base %j in %j → %j', (href, base, locale, expected) => {
+		const out = localePath(href, base, locale, ROUTED);
+		expect(out).toBe(expected);
+		expect(new URL(out, 'https://site.test').origin).toBe('https://site.test');
+	});
+
+	it('samePath collapses a leading slash/backslash run and leaves the rest alone', () => {
+		expect(samePath('//evil.example/')).toBe('/evil.example/');
+		expect(samePath('/\\/\\evil.example')).toBe('/evil.example');
+		expect(samePath('/a//b')).toBe('/a//b');
+		expect(samePath('')).toBe('');
+		expect(samePath('#/x')).toBe('#/x');
+		expect(samePath('?q=//x')).toBe('?q=//x');
+	});
+
+	it('i18n.locales hrefs stay on the site, with and without prefix routing', async () => {
+		const routed = createI18n({
+			manifest: ROUTED,
+			tables: { es: ES },
+			locale: 'es',
+			page: () => '/es//evil.example/',
+		});
+		await routed.__ready();
+		for (const { href } of routed.locales) {
+			expect(new URL(href, 'https://site.test').origin).toBe('https://site.test');
+		}
+		expect(routed.locales[0].href).toBe('/evil.example/');
+
+		const plain = await service({ en: EN, es: ES }, 'en', { page: () => '//evil.example/x' });
+		expect(plain.locales.map((entry) => entry.href)).toEqual(['/evil.example/x', '/evil.example/x']);
+	});
+
+	it('setLocale navigates on-site from /es//evil.example/', async () => {
+		const navigate = vi.fn();
+		const i18n = createI18n({
+			manifest: ROUTED,
+			tables: { es: ES },
+			locale: 'es',
+			page: () => '/es//evil.example/',
+			navigate,
+		});
+		await i18n.__ready();
+		await i18n.setLocale('en');
+		expect(navigate).toHaveBeenCalledWith('/evil.example/');
+	});
+
+	it('assignSameOrigin refuses another origin, with a development warning', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const before = location.href;
+		assignSameOrigin('https://evil.example/');
+		assignSameOrigin('//evil.example/');
+		expect(location.href).toBe(before);
+		expect(warn).toHaveBeenCalledTimes(2);
+		expect(warn.mock.calls[0][0]).toMatch(/refusing to navigate off the site/);
+		// A same-origin target is loaded (a fragment change is one jsdom performs).
+		assignSameOrigin(location.pathname + '#langs');
+		expect(location.hash).toBe('#langs');
+		history.replaceState(null, '', before);
+	});
+});
+
+describe('islandLocale (D177)', () => {
+	it("reads the page's table island tag, or null without one", () => {
+		expect(islandLocale()).toBe(null);
+		document.body.innerHTML = '<script type="application/json" data-puzzle-locale="pt-BR">{}</script>';
+		expect(islandLocale()).toBe('pt-BR');
 	});
 });

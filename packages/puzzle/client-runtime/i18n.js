@@ -18,9 +18,10 @@ import manifestData from '@magic-spells/puzzle/i18n/manifest';
 import { displayValue } from './display.js';
 import { nearestFormatter } from './formatters.js';
 import { localeNumber, setFormatLocale } from './formatters/locale.js';
+import { localeBase, normalizeBase } from './router/router.js';
 
 /** @import { FormatterRegistry } from './formatters.js' */
-/** @import { PuzzleI18n } from '../types/index.js' */
+/** @import { PuzzleI18n, PuzzleLocale } from '../types/index.js' */
 
 /**
  * One locale's flat, build-filled table: key → string, or a plural entry
@@ -34,6 +35,7 @@ import { localeNumber, setFormatLocale } from './formatters/locale.js';
  * @property {string} defaultLocale
  * @property {Record<string, string>} locales tag → dist-relative table path
  * @property {string} [base] URL of the folder the build's entry module was served from
+ * @property {'prefix'} [routing] present only with `i18n.routing: 'prefix'` (D177)
  */
 
 /**
@@ -94,6 +96,130 @@ function storeLocale(tag) {
 function viewerLanguages() {
 	if (typeof navigator === 'undefined') return [];
 	return navigator.languages?.length ? navigator.languages : [navigator.language];
+}
+
+/**
+ * Under prefix routing (D177), the configured NON-default locale whose tag is the
+ * first path segment after `routerBase` — matched exactly, on a segment boundary
+ * (`/esp` is not `es`, `/pt-BR/x` is `pt-BR`) — otherwise null. The default locale
+ * is unprefixed, so `/en/…` is not a locale URL, and a path outside `routerBase`
+ * has no locale.
+ *
+ * @param {string} pathname a document pathname (a query or fragment is ignored)
+ * @param {string | undefined} routerBase the app's routerBase, normalized or not
+ * @param {Pick<I18nManifest, 'defaultLocale' | 'locales'>} manifest
+ * @returns {string | null}
+ */
+export function urlLocale(pathname, routerBase, manifest) {
+	const base = normalizeBase(routerBase);
+	if (base && pathname !== base && !pathname.startsWith(base + '/')) return null;
+	const segment = pathname.slice(base.length).split(/[/?#]/)[1];
+	return segment && segment !== manifest.defaultLocale && Object.hasOwn(manifest.locales, segment)
+		? segment
+		: null;
+}
+
+/**
+ * The same page under another locale's prefix (D177): strips the locale prefix
+ * `href` carries (if any) and puts `locale`'s on, through localeBase — the one
+ * place a prefix is computed — so it agrees with `link(path, { locale })`. The
+ * query and fragment ride along; the trailing slash is kept; the root page of a
+ * locale is `<base>/<locale>/`, which is what `link('/')` renders there. An href
+ * outside `routerBase` keeps its path. Used for `i18n.locales[].href` and for the
+ * page setLocale navigates to, so the result is always a same-origin path
+ * (samePath): `/es//evil.example/` in English is `/evil.example/`, never the
+ * protocol-relative `//evil.example/`.
+ *
+ * @param {string} href a document path: pathname, then an optional query and fragment
+ * @param {string | undefined} routerBase the app's routerBase, normalized or not
+ * @param {string} locale the target locale (a configured tag)
+ * @param {Pick<I18nManifest, 'defaultLocale' | 'locales'>} manifest
+ * @returns {string}
+ */
+export function localePath(href, routerBase, locale, manifest) {
+	const base = normalizeBase(routerBase);
+	const cut = href.search(/[?#]/);
+	const pathname = cut < 0 ? href : href.slice(0, cut);
+	if (base && pathname !== base && !pathname.startsWith(base + '/')) return samePath(href);
+	const current = urlLocale(pathname, base, manifest);
+	const rest = pathname.slice(base.length + (current ? current.length + 1 : 0));
+	return samePath(
+		localeBase(base, locale, manifest.defaultLocale) + (rest || '/') + (cut < 0 ? '' : href.slice(cut))
+	);
+}
+
+/**
+ * Keep an href on this origin: a leading run of `/` and `\` (with any tab or
+ * newline inside it, which URL parsing drops) collapses to one `/`. A browser
+ * reads `//host/…` and `/\host/…` as protocol-relative — a link off the site —
+ * and stripping a locale prefix off `/es//evil.example/` would otherwise leave
+ * exactly that. Anything not starting with a slash (`''`, `?q`, `#x`) is
+ * unchanged.
+ *
+ * @param {string} href
+ * @returns {string}
+ */
+export function samePath(href) {
+	return href.replace(/^[/\\][/\\\t\n\r]*/, '/');
+}
+
+/**
+ * The static kernel's setLocale navigation under prefix routing (D177): load
+ * `href` only when it resolves to this origin, otherwise refuse (and say so in
+ * development). localePath already keeps its result on the site; this is the
+ * second check, on the call that actually leaves the page.
+ *
+ * @param {string} href
+ */
+export function assignSameOrigin(href) {
+	const target = new URL(href, location.origin);
+	if (target.origin === location.origin) location.assign(target.href);
+	else if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		console.warn(`[puzzle] setLocale: refusing to navigate off the site to ${JSON.stringify(href)}`);
+	}
+}
+
+// Language names, keyed by tag. Module-level: they hold nothing app-specific.
+/** @type {Map<string, string>} */
+const labels = new Map();
+
+/**
+ * A locale's name in its own language, for a language switcher (D177):
+ * `Intl.DisplayNames` (`es` → `Español`, `pt-BR` → `Português (Brasil)`), first
+ * letter upper-cased by that locale's rules. The tag itself when the browser has
+ * no `Intl.DisplayNames` or it rejects the tag.
+ *
+ * @param {string} tag
+ * @returns {string}
+ */
+export function localeLabel(tag) {
+	let label = labels.get(tag);
+	if (label === undefined) {
+		try {
+			const name = new Intl.DisplayNames([tag], { type: 'language' }).of(tag);
+			// An unknown or private-use tag comes back as itself: keep it verbatim
+			// (`pt-BR`, never `Pt-BR`).
+			label =
+				name && name.toLowerCase() !== tag.toLowerCase()
+					? name.charAt(0).toLocaleUpperCase(tag) + name.slice(1)
+					: tag;
+		} catch {
+			label = tag;
+		}
+		labels.set(tag, label);
+	}
+	return label;
+}
+
+/**
+ * The locale tag of the table island a prerendered page carries
+ * (`data-puzzle-locale`), or null without one — the page's own locale.
+ *
+ * @returns {string | null}
+ */
+export function islandLocale() {
+	if (typeof document === 'undefined') return null;
+	return document.querySelector('script[data-puzzle-locale]')?.getAttribute('data-puzzle-locale') ?? null;
 }
 
 /**
@@ -199,6 +325,16 @@ export function fillPlaceholders(text, vars) {
  * @param {string} [options.locale] a forced starting locale (the prerender always
  *   renders the default); skips storage and navigator
  * @param {() => unknown} [options.refresh] re-renders the host after a switch
+ * @param {() => string} [options.page] the current page as the document addresses
+ *   it — pathname (under routerBase and any locale prefix), query, fragment — read
+ *   each time `locales` is (static kernel: `location`; prerender: the page being
+ *   rendered; SPA: the router). Without it every `locales[].href` is `''`, which
+ *   is the current document too
+ * @param {string} [options.routerBase] the app's routerBase; prefix routing
+ *   (D177) swaps the locale prefix after it
+ * @param {(href: string) => void} [options.navigate] prefix routing only (D177):
+ *   setLocale stores the choice and hands this the same page under the new
+ *   locale's prefix instead of switching in place (static kernel: `location.assign`)
  * @returns the service (its type is inferred), or null without translations
  */
 export function createI18n(options = {}) {
@@ -206,7 +342,7 @@ export function createI18n(options = {}) {
 	if (!manifest) return null;
 	const tags = Object.keys(manifest.locales);
 	const defaultLocale = manifest.defaultLocale;
-	const { tables, url = (path) => path, refresh, lang = true } = options;
+	const { tables, url = (path) => path, refresh, lang = true, page = () => '' } = options;
 
 	/** @type {LocaleTable | null} */
 	let table = null;
@@ -280,13 +416,35 @@ export function createI18n(options = {}) {
 		canonical(options.locale) ??
 		selectLocale(tags, defaultLocale, readStoredLocale(), viewerLanguages());
 
+	// The current page in `tag` (D177): under prefix routing the same page under
+	// that locale's prefix; otherwise the current page, whatever the locale.
+	/** @param {string} here @param {string} tag */
+	const hrefIn = (here, tag) =>
+		(typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) &&
+		manifest.routing === 'prefix'
+			? localePath(here, options.routerBase, tag, manifest)
+			: samePath(here);
+
 	const service = {
 		/** The active locale tag. */
 		get locale() {
 			return locale;
 		},
-		/** Every configured locale, in config order. */
-		locales: tags,
+		/**
+		 * Every configured locale, in config order, as a language switcher renders
+		 * it (D177): `{ locale, label, href, active }`. Built on each read, so `href`
+		 * is the page being shown now.
+		 * @returns {PuzzleLocale[]}
+		 */
+		get locales() {
+			const here = page();
+			return tags.map((tag) => ({
+				locale: tag,
+				label: localeLabel(tag),
+				href: hrefIn(here, tag),
+				active: tag === locale,
+			}));
+		},
 		defaultLocale,
 
 		/**
@@ -378,6 +536,11 @@ export function createI18n(options = {}) {
 		 * never reports a switch that did not happen. An unconfigured tag throws a
 		 * RangeError.
 		 *
+		 * Under prefix routing (D177) with a host `navigate`, the URL owns the
+		 * locale: the choice is stored and the same page under the new locale's
+		 * prefix is loaded instead — no fetch, no in-place re-render — and the
+		 * promise resolves once that navigation is issued.
+		 *
 		 * @param {string} tag
 		 * @returns {Promise<void>} settles once the switch and its re-render are done
 		 */
@@ -387,6 +550,15 @@ export function createI18n(options = {}) {
 				throw new RangeError(
 					`[puzzle] setLocale(${JSON.stringify(tag)}): not a configured locale (${tags.join(', ')})`
 				);
+			}
+			if (
+				(typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) &&
+				manifest.routing === 'prefix' &&
+				options.navigate
+			) {
+				storeLocale(match);
+				if (match !== locale) options.navigate(hrefIn(page(), match));
+				return Promise.resolve();
 			}
 			const my = ++token;
 			// Already the active locale: nothing to fetch or re-render (unless the last

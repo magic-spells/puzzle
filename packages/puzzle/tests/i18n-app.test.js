@@ -156,12 +156,28 @@ describe('PuzzleApp + i18n', () => {
 		await app.mount();
 		expect(app.i18n).toBeTruthy();
 		expect(app.ctx.i18n).toBe(app.i18n);
-		expect(app.i18n.locales).toEqual(['en', 'es']);
+		// The switcher list (D177): config order, own-language names, the committed
+		// page (under routerBase) for every entry without prefix routing.
+		expect(app.i18n.locales).toEqual([
+			{ locale: 'en', label: 'English', href: '/shop/', active: true },
+			{ locale: 'es', label: 'Español', href: '/shop/', active: false },
+		]);
 		expect(app.i18n.defaultLocale).toBe('en');
 		expect(typeof app.formatters.getAll().t).toBe('function');
 		expect(fetch.mock.calls[0][0]).toBe('/shop/locales/en.AAAA.json');
 		app.unmount();
 		expect(app.i18n).toBe(null);
+	});
+
+	it('under prefix routing, locales hrefs swap the prefix after routerBase (D177)', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN });
+		const { app } = make({
+			routerBase: '/docs/',
+			__i18n: { manifest: { ...MANIFEST, routing: 'prefix' }, locale: 'en' },
+		});
+		history.replaceState({}, '', '/docs/about?tab=2');
+		await app.mount();
+		expect(app.i18n.locales.map((entry) => entry.href)).toEqual(['/docs/about?tab=2', '/docs/es/about?tab=2']);
 	});
 
 	it('hash and memory modes resolve manifest paths next to the entry module', async () => {

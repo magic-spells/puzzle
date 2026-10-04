@@ -363,6 +363,12 @@ export class PuzzleApp {
 						: normalizeBase(routerBase) + '/' + path,
 				lang: routerMode?.name !== 'memory',
 				refresh: () => this.router?.__failedView(null, true),
+				// `i18n.locales[].href` (D177): the committed page, as the router encodes
+				// it ('' — the current document — before navigation #0).
+				page: () => (this.router?.current ? this.router.url(this.router.current.path) : ''),
+				// The page carries routerBase in front of any locale prefix; prefix
+				// routing swaps the prefix after it (`/docs/es/about`, not `/es/docs/about`).
+				routerBase: normalizeBase(routerBase),
 			});
 		}
 

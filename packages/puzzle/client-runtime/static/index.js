@@ -29,10 +29,18 @@ import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
 import { mount } from '../views/viewManager.js';
 import { setPortalHost } from '../views/portal.js';
-import { assembleChain, makeRouteSnapshot, makeRouterStub } from '../ssg/assemble.js';
+import { assembleChain, localizeRouterStub, makeRouteSnapshot, makeRouterStub } from '../ssg/assemble.js';
 import { preloadTakeoverComponents } from '../ssg/preload.js';
-import { createI18n, installTranslate } from '../i18n.js';
+import {
+	assignSameOrigin,
+	createI18n,
+	installTranslate,
+	islandLocale,
+	urlLocale,
+} from '../i18n.js';
+import { headText, resolveHeadField, syncTitle } from '../head.js';
 import { normalizeBase } from '../router/router.js';
+import manifestData from '@magic-spells/puzzle/i18n/manifest';
 
 /** @import { PuzzleView } from '../views/PuzzleView.js' */
 /** @import { FormatterRegistry } from '../formatters.js' */
@@ -64,8 +72,10 @@ import { normalizeBase } from '../router/router.js';
  * @param {Pick<Storage, 'getItem' | 'setItem'>} [options.storage] Storage-like persistence object
  * @param {import('../capabilities.js').AdapterCapability} [options.adapter] opaque adapter capability
  * @param {string} [options.routerBase] normalized route URL prefix
- * @param {object} [options.__i18n] internal test seam, not API: translation service
- *   options (`{ manifest, tables, locale }`) so nothing is fetched
+ * @param {{ manifest?: import('../i18n.js').I18nManifest, tables?: Record<string, import('../i18n.js').LocaleTable>,
+ *   locale?: string, navigate?: (href: string) => void }} [options.__i18n] internal
+ *   test seam, not API: translation service options (`{ manifest, tables, locale }`)
+ *   so nothing is fetched, and a `navigate` that stands in for `location.assign`
  * @returns {Promise<void>}
  */
 export async function mountStatic({
@@ -127,17 +137,49 @@ export async function mountStatic({
 	// setLocale) is replayed once armRemount runs, instead of being dropped.
 	let earlyRefresh = false;
 	if (typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) {
-		const i18n = createI18n({
+		/** @type {NonNullable<Parameters<typeof createI18n>[0]>} */
+		const i18nOptions = {
 			// __i18n is an internal test seam ({ manifest, tables, locale }); a build
 			// reads the manifest module.
 			...__i18n,
+			// Locale files sit on the BARE routerBase, never under a locale prefix:
+			// they are emitted once and shared by every locale's pages (D177).
 			url: (path) => normalizeBase(routerBase) + '/' + path,
 			refresh: () => (remount ? remount() : void (earlyRefresh = true)),
-		});
+			page: () => location.pathname + location.search + location.hash,
+		};
+		// Locale prefix routing (D177): the URL decides the locale — its prefix,
+		// then the page's own table island — ahead of the stored choice and the
+		// browser's languages; links encode under that locale's prefix; and
+		// setLocale loads the same page under the other prefix instead of
+		// re-rendering in place.
+		if (typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) {
+			const manifest = __i18n?.manifest ?? manifestData;
+			if (manifest?.routing === 'prefix') {
+				// An unprefixed page with no island is a default-locale page: the stored
+				// choice and the browser never pick its locale, so text and links agree.
+				const pageLocale =
+					urlLocale(location.pathname, routerBase, manifest) ?? islandLocale() ?? manifest.defaultLocale;
+				i18nOptions.locale = pageLocale;
+				i18nOptions.routerBase = routerBase;
+				// A seam-supplied navigate (tests) stands; a build loads the page.
+				i18nOptions.navigate ??= assignSameOrigin;
+				localizeRouterStub(ctx.router, {
+					base: routerBase,
+					locale: pageLocale,
+					defaultLocale: manifest.defaultLocale,
+					locales: Object.keys(manifest.locales),
+				});
+			}
+		}
+		const i18n = createI18n(i18nOptions);
 		if (i18n) {
 			ctx.i18n = i18n;
 			installTranslate(ctx.formatters, i18n);
 			await i18n.__ready();
+			// The build wrote the page's <title> in its own locale (the island's tag);
+			// a viewer in another one gets a translated `{ t }` title in theirs.
+			if (i18n.locale !== (islandLocale() ?? i18n.defaultLocale)) syncLocaleTitle(chain, i18n);
 		}
 	}
 
@@ -196,6 +238,7 @@ export async function mountStatic({
 			}
 			current.destroy();
 			current = root;
+			syncLocaleTitle(chain, ctx.i18n);
 		};
 		if (earlyRefresh) {
 			earlyRefresh = false;
@@ -247,6 +290,20 @@ export async function mountStatic({
 }
 
 /**
+ * A translated route title (`meta.title: { t: 'key' }`, D177) follows the active
+ * locale, as the SPA router's #syncHead does; a plain string title is the one the
+ * build already wrote, so it is left alone. Only called behind the
+ * `__PUZZLE_HAS_I18N__` probe.
+ *
+ * @param {ReadonlyArray<{ meta?: Record<string, any> | null }>} chain the page's route defs, root → leaf
+ * @param {import('../head.js').HeadI18n} i18n
+ */
+function syncLocaleTitle(chain, i18n) {
+	const title = resolveHeadField(chain, 'title');
+	if (title && typeof title === 'object') syncTitle(headText(title, i18n));
+}
+
+/**
  * Wire the build-time ctx exactly as ssg/index.js buildContext does — a Store over
  * the models + apiURL and a FormatterRegistry seeded with the built-ins then the
  * config formatters — EXCEPT `ctx.router` is a throwing stub (no Router import in
@@ -281,7 +338,14 @@ function buildStaticContext({
 	// all (D159), and the build warns when one is configured. `routerBase` still
 	// applies — a subpath deploy wants the prefix.
 	const router = makeRouterStub(route, { base: routerBase });
-	const registry = makeFormatterRegistry(formatters, (path) => router.url(path));
+	const registry = makeFormatterRegistry(
+		formatters,
+		// Read router.url per call: locale prefix routing (D177) swaps in its
+		// locale-aware url(path, options) after this registry is built.
+		typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__
+			? (path, options) => router.url(path, options)
+			: (path) => router.url(path)
+	);
 
 	return { store, router, formatters: registry };
 }

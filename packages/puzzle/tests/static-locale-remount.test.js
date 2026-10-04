@@ -174,4 +174,98 @@ describe('static kernel: setLocale remount', () => {
 		expect(store.keysBySubscriber.size).toBe(live);
 		expect(document.querySelector('h1').textContent).toBe('Welcome');
 	});
+
+	it('a translated route title follows the viewer locale on load and every in-place switch (D177)', async () => {
+		document.body.innerHTML =
+			'<div id="app" data-puzzle-static><section class="home"><h1>Welcome</h1></section></div>' +
+			`<script type="application/json" data-puzzle-locale="en">${JSON.stringify(EN)}</script>`;
+		document.title = 'Welcome';
+		vi.stubGlobal('navigator', { languages: ['es'], language: 'es' });
+		let i18n;
+		class Home extends PuzzleView {
+			created() {
+				i18n = this.ctx.i18n;
+			}
+			render() {
+				return h('section', { class: 'home' }, [h('h1', {}, [text(this.ctx.i18n.t('title'))])]);
+			}
+		}
+		const route = (meta) => ({ path: '/', params: {}, chain: [{ path: '/', meta }] });
+		await mountStatic({
+			target: '#app',
+			views: [Home],
+			route: route({ title: { t: 'title' } }),
+			__i18n: { manifest: MANIFEST, tables: { en: EN, es: ES } },
+		});
+		// The prerendered page is English; the Spanish viewer gets a Spanish title.
+		expect(i18n.locale).toBe('es');
+		expect(document.title).toBe('Bienvenido');
+
+		await i18n.setLocale('en');
+		expect(document.title).toBe('Welcome');
+		await i18n.setLocale('es');
+		expect(document.title).toBe('Bienvenido');
+	});
+
+	it('leaves a plain-string title alone, and syncs nothing when the viewer reads the page locale', async () => {
+		document.body.innerHTML =
+			'<div id="app"></div>' +
+			`<script type="application/json" data-puzzle-locale="en">${JSON.stringify(EN)}</script>`;
+		document.title = 'Prerendered';
+		let i18n;
+		class Home extends PuzzleView {
+			created() {
+				i18n = this.ctx.i18n;
+			}
+			render() {
+				return h('h1', {}, [text(this.ctx.i18n.t('title'))]);
+			}
+		}
+		await mountStatic({
+			target: '#app',
+			views: [Home],
+			route: { path: '/', params: {}, chain: [{ path: '/', meta: { title: 'About us' } }] },
+			__i18n: { manifest: MANIFEST, tables: { en: EN, es: ES }, locale: 'en' },
+		});
+		expect(document.title).toBe('Prerendered');
+		await i18n.setLocale('es');
+		expect(document.title).toBe('Prerendered');
+	});
+
+	it('without prefix routing (D177) the switch stays an in-place remount, and every locales href is this page', async () => {
+		const startURL = location.href;
+		history.replaceState(null, '', '/about?tab=2#faq');
+		const navigate = vi.fn();
+		let i18n;
+		class Home extends PuzzleView {
+			created() {
+				i18n = this.ctx.i18n;
+			}
+			render() {
+				return h('section', { class: 'home' }, [h('h1', {}, [text(this.ctx.i18n.t('title'))])]);
+			}
+		}
+		try {
+			await mountStatic({
+				target: '#app',
+				views: [Home],
+				route: { path: '/about', params: {}, chain: [{ path: '/about' }] },
+				// A navigate only matters under prefix routing; MANIFEST has none.
+				__i18n: { manifest: MANIFEST, tables: { en: EN, es: ES }, locale: 'en', navigate },
+			});
+			expect(i18n.locales).toEqual([
+				{ locale: 'en', label: 'English', href: '/about?tab=2#faq', active: true },
+				{ locale: 'es', label: 'Español', href: '/about?tab=2#faq', active: false },
+			]);
+
+			await i18n.setLocale('es');
+
+			expect(navigate).not.toHaveBeenCalled();
+			expect(document.querySelector('h1').textContent).toBe('Bienvenido');
+			expect(i18n.locales.map((entry) => entry.active)).toEqual([false, true]);
+			expect(location.pathname).toBe('/about');
+		} finally {
+			history.replaceState(null, '', startURL);
+		}
+	});
 });

@@ -11,6 +11,8 @@ import fullBuiltins from '../client-runtime/formatters/builtins-all.js';
 import builtinNames from '../client-runtime/formatters/builtins.json';
 import { createI18n } from '../client-runtime/i18n.js';
 import { setFormatLocale } from '../client-runtime/formatters/locale.js';
+import { linkLocale, localeBase } from '../client-runtime/router/router.js';
+import { localizeRouterStub, makeRouterStub } from '../client-runtime/ssg/assemble.js';
 
 // The shared conformance table lives in the language module (the Go side embeds
 // it). Read with JSON.parse rather than a JSON import: Vite's JSON module
@@ -1100,5 +1102,85 @@ process.stdout.write(JSON.stringify({
 
 	it('lets an explicit locale argument win', () => {
 		expect(results.explicit).toBe('24. September 2026');
+	});
+});
+
+// D177 — link(path, options) under locale prefix routing. The registry hands the
+// options to the encoder; the encoders compute the prefix through localeBase.
+describe('link options (D177)', () => {
+	const LOCALES = ['en', 'es', 'pt-BR'];
+	const stub = (base = '', locale = 'es') =>
+		localizeRouterStub(makeRouterStub({ path: '/' }, { base }), {
+			base,
+			locale,
+			defaultLocale: 'en',
+			locales: LOCALES,
+		});
+
+	it('passes options through to the encoder; nullish still prints nothing', () => {
+		const url = vi.fn((path, options) => `${path}|${JSON.stringify(options ?? null)}`);
+		const link = makeFormatterRegistry({}, url).getAll().link;
+		expect(link('/a', { locale: 'es' })).toBe('/a|{"locale":"es"}');
+		expect(link('/a')).toBe('/a|null');
+		expect(link(7, { locale: false })).toBe('7|{"locale":false}');
+		expect(link(null, { locale: 'es' })).toBe('');
+		expect(link(undefined)).toBe('');
+	});
+
+	it('localeBase: the default locale (or none) is unprefixed, every other one is under its tag', () => {
+		expect(localeBase('', 'en', 'en')).toBe('');
+		expect(localeBase('', null, 'en')).toBe('');
+		expect(localeBase('', undefined, undefined)).toBe('');
+		expect(localeBase('', 'es', 'en')).toBe('/es');
+		expect(localeBase('/docs', 'pt-BR', 'en')).toBe('/docs/pt-BR');
+		expect(localeBase('/docs', 'en', 'en')).toBe('/docs');
+	});
+
+	it('linkLocale: false skips, a tag forces (case-insensitively, spelled as configured), absent is the active one', () => {
+		expect(linkLocale(undefined, 'es', LOCALES)).toBe('es');
+		expect(linkLocale({}, 'es', LOCALES)).toBe('es');
+		expect(linkLocale({ locale: false }, 'es', LOCALES)).toBe(null);
+		expect(linkLocale({ locale: 'pt-br' }, 'es', LOCALES)).toBe('pt-BR');
+		expect(() => linkLocale({ locale: 'fr' }, 'es', LOCALES)).toThrow(RangeError);
+		expect(() => linkLocale({ locale: 'fr' }, 'es', LOCALES)).toThrow(
+			'[puzzle] url(path, { locale: "fr" }): not a configured locale (en, es, pt-BR)'
+		);
+		expect(() => linkLocale({ locale: true }, 'es', LOCALES)).toThrow(RangeError);
+	});
+
+	it('the static router stub encodes under the page locale, and the options override it', () => {
+		const router = stub();
+		expect(router.url('/about')).toBe('/es/about');
+		expect(router.url('/')).toBe('/es/');
+		expect(router.url('/about', { locale: 'en' })).toBe('/about');
+		expect(router.url('/about', { locale: 'pt-BR' })).toBe('/pt-BR/about');
+		expect(router.url('/files/cv.pdf', { locale: false })).toBe('/files/cv.pdf');
+		expect(router.url('/café?q=1#x')).toBe('/es/caf%C3%A9?q=1#x');
+		// Not path-shaped: passed through untouched, as today.
+		expect(router.url('https://example.com/x')).toBe('https://example.com/x');
+		expect(router.url('#top')).toBe('#top');
+		expect(() => router.url('/about', { locale: 'fr' })).toThrow(/not a configured locale \(en, es, pt-BR\)/);
+	});
+
+	it('keeps routerBase in front of the prefix, and alone for { locale: false }', () => {
+		const router = stub('/docs/');
+		expect(router.url('/about')).toBe('/docs/es/about');
+		expect(router.url('/about', { locale: 'en' })).toBe('/docs/about');
+		expect(router.url('/files/cv.pdf', { locale: false })).toBe('/docs/files/cv.pdf');
+		expect(stub('/docs', 'en').url('/about')).toBe('/docs/about');
+	});
+
+	it('link() over a localized stub renders the same hrefs', () => {
+		const router = stub('/docs');
+		const link = makeFormatterRegistry({}, (path, options) => router.url(path, options)).getAll().link;
+		expect(link('/about')).toBe('/docs/es/about');
+		expect(link('/about', { locale: 'en' })).toBe('/docs/about');
+		expect(link('/resume.pdf', { locale: false })).toBe('/docs/resume.pdf');
+		expect(link('mailto:a@b.c')).toBe('mailto:a@b.c');
+	});
+
+	it('a stub nobody localized ignores options, as before', () => {
+		const router = makeRouterStub({ path: '/' }, { base: '/docs' });
+		expect(router.url('/about', { locale: 'es' })).toBe('/docs/about');
 	});
 });

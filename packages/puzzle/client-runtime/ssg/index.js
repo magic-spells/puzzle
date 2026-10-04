@@ -45,7 +45,7 @@ import { memoryRouter } from '../router/modes.js';
 import { findShadowedPaths, isDynamicSegment } from '../router/routePath.js';
 import { walkRouteTree } from '../router/routeTree.js';
 import { serialize, escapeText, escapeAttr, escapeScriptJson } from './serialize.js';
-import { assembleChain, makeRouteSnapshot, makeRouterStub } from './assemble.js';
+import { assembleChain, localizeRouterStub, makeRouteSnapshot, makeRouterStub } from './assemble.js';
 import { isLazyView, resolveRouteViews } from '../router/lazy.js';
 import { resolveHead } from '../head.js';
 import { MANAGED_TAGS } from '../headTags.js';
@@ -81,8 +81,7 @@ import { createI18n, installTranslate } from '../i18n.js';
 /**
  * The build's translation state: the locale manifest plus the default locale's
  * filled table (D175).
- * @typedef {{ manifest: { defaultLocale: string, locales: Record<string, string>, base?: string },
- *   table: Record<string, any> }} BuildI18n
+ * @typedef {{ manifest: import('../i18n.js').I18nManifest, table: Record<string, any> }} BuildI18n
  */
 /**
  * @typedef {{ mode?: 'hybrid'|'static', routeRouter?: Router, i18n?: BuildI18n | null,
@@ -414,12 +413,17 @@ async function prerenderPass(config, opts = {}) {
 	// One build-wide i18n service over the default locale's filled table (D175):
 	// every page renders in the default locale, and nothing is fetched.
 	let i18n = null;
+	// The page being rendered, as its own href — `i18n.locales[].href` reads it
+	// (D177). Pages render one at a time, so createPageContext just moves it.
+	let pageHref = '';
 	if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && opts.i18n) {
 		const { manifest, table } = opts.i18n;
 		i18n = createI18n({
 			manifest,
 			tables: { [manifest.defaultLocale]: table },
 			locale: manifest.defaultLocale,
+			page: () => pageHref,
+			routerBase: config.routerBase,
 		});
 		await i18n.__ready();
 	}
@@ -435,6 +439,22 @@ async function prerenderPass(config, opts = {}) {
 		let router;
 		if (isStatic && route) {
 			router = makeRouterStub(route, { base: config.routerBase });
+			// Locale prefix routing (D177): the static stub encodes under the locale
+			// being rendered (the default, until the per-locale pass) and resolves
+			// link()'s { locale } options exactly as the browser kernel's stub does.
+			// An unconfigured { locale } tag throws here, so it fails the build.
+			const manifest = opts.i18n?.manifest;
+			if (
+				(typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) &&
+				manifest?.routing === 'prefix'
+			) {
+				localizeRouterStub(router, {
+					base: config.routerBase,
+					locale: manifest.defaultLocale,
+					defaultLocale: manifest.defaultLocale,
+					locales: Object.keys(manifest.locales),
+				});
+			}
 		} else {
 			router = hybridRouter();
 			if (route) {
@@ -450,6 +470,11 @@ async function prerenderPass(config, opts = {}) {
 				});
 			}
 		}
+		// The catch-all page (`*`) has no path of its own, so its page href is ''.
+		// Without prefix routing every entry then links to the URL that served the
+		// page; under prefix routing localePath turns '' into each locale's home
+		// page (`/`, `/es/`).
+		pageHref = route?.path[0] === '/' ? router.url(route.path) : '';
 		return buildContext(config, { router, i18n });
 	};
 
@@ -953,7 +978,7 @@ async function buildContext(config, { router, i18n = null }) {
 	// per-page entry module by the Go build, and a function does not survive that.)
 	if (beforeRequest !== undefined) storeOptions.beforeRequest = beforeRequest;
 	const store = new Store(models, storeOptions);
-	const registry = makeFormatterRegistry(formatters, (path) => router.url(path));
+	const registry = makeFormatterRegistry(formatters, (path, options) => router.url(path, options));
 
 	/** @type {PrerenderContext} */
 	const ctx = { store, router, formatters: registry };
