@@ -44,11 +44,12 @@ declare module '@magic-spells/morph-engine' {
 // check. These shims cover exactly the calls the SSG makes.
 declare module 'node:fs' {
 	function readFileSync(path: string, encoding: 'utf8'): string;
+	function existsSync(path: string): boolean;
 	const promises: {
 		mkdir(path: string, options?: { recursive?: boolean }): Promise<string | undefined>;
 		writeFile(path: string, data: string): Promise<void>;
 	};
-	const fs: { readFileSync: typeof readFileSync; promises: typeof promises };
+	const fs: { readFileSync: typeof readFileSync; existsSync: typeof existsSync; promises: typeof promises };
 	export default fs;
 }
 

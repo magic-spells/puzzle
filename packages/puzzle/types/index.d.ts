@@ -82,8 +82,9 @@ export interface Route {
 	 * Static strings only (no functions/HTML). `title` and `description` may
 	 * instead be a translation reference, `{ t: 'products.title' }` (D177),
 	 * resolved through the app's i18n service at build time and in the
-	 * browser's title sync; a missing key prints the key itself, and without
-	 * `i18n` configured the reference prints nothing.
+	 * browser's title sync; a missing key prints the key itself. Without `i18n`
+	 * configured the build emits no text for it and the browser leaves the tab
+	 * title as it is.
 	 *
 	 * Delivery is split (D84): the managed `data-puzzle-head` tags derived from
 	 * `description`/`canonical`/`socialImage` (og:/twitter:/description/canonical)
@@ -538,6 +539,12 @@ export interface PuzzleI18n {
 	readonly locales: readonly PuzzleLocale[];
 	readonly defaultLocale: string;
 	/**
+	 * The active locale's text direction (D177), from its tag's script or
+	 * language: `'rtl'` for Arabic, Hebrew, Persian, Urdu and the like, `'ltr'`
+	 * otherwise. `<html dir>` follows it.
+	 */
+	readonly dir: 'rtl' | 'ltr';
+	/**
 	 * Look `key` up in the active locale. A missing key prints the key itself;
 	 * `vars` fill `{name}` placeholders in one pass, and a numeric `count` picks
 	 * the plural form through `Intl.PluralRules`.
@@ -895,6 +902,11 @@ export interface PuzzleAppConfig {
 	 * ctx services (store/router/formatters) are wired but BEFORE navigation #0,
 	 * and is awaited — store seeding here is visible to the first `data()`. A
 	 * throw aborts the mount (`mount()` rejects; `beforeUnmount` is skipped).
+	 *
+	 * In a prerender (`output: 'hybrid'`/`'static'`) it runs at build time for
+	 * every page with a `{ store, config }` facade (argument and `this`) instead
+	 * of the app — plus `locale`, the page's locale, when translations are
+	 * configured (under `i18n.routing: 'prefix'` each locale's pages, D177).
 	 */
 	beforeMount?: (this: PuzzleApp, app: PuzzleApp) => void | Promise<void>;
 	/**

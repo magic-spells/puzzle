@@ -112,6 +112,32 @@ func TestUniqueEntryPages(t *testing.T) {
 	if _, err := uniqueEntryPages([]staticPage{{Entry: "_puzzle/a/b.js"}}); err == nil {
 		t.Fatal("a malformed entry must still error")
 	}
+
+	// Pages sharing a slug must name the same modules: one entry imports one chain.
+	layout, other := "app/layouts/Default.pzl", "app/layouts/Other.pzl"
+	home := staticModules{Views: []string{"app/views/Home.pzl"}, Layout: &layout}
+	same := staticModules{Views: []string{"app/views/Home.pzl"}, Layout: &layout}
+	for name, mods := range map[string]staticModules{
+		"another view":   {Views: []string{"app/views/Other.pzl"}, Layout: &layout},
+		"another layout": {Views: []string{"app/views/Home.pzl"}, Layout: &other},
+		"no layout":      {Views: []string{"app/views/Home.pzl"}},
+		"a longer chain": {Views: []string{"app/views/Home.pzl", "app/views/Child.pzl"}, Layout: &layout},
+	} {
+		_, err := uniqueEntryPages([]staticPage{
+			{Path: "/", Entry: "_puzzle/index.js", Modules: home, Locale: "en"},
+			{Path: "/", Entry: "_puzzle/index.js", Modules: mods, Locale: "es"},
+		})
+		if err == nil || !strings.Contains(err.Error(), "share the entry _puzzle/index.js but name different modules") {
+			t.Errorf("%s: err = %v, want a shared-entry module mismatch", name, err)
+		}
+	}
+	pages, err = uniqueEntryPages([]staticPage{
+		{Path: "/", Entry: "_puzzle/index.js", Modules: home, Locale: "en"},
+		{Path: "/", Entry: "_puzzle/index.js", Modules: same, Locale: "es"},
+	})
+	if err != nil || len(pages) != 1 {
+		t.Fatalf("equal modules: pages = %+v (%v), want one entry", pages, err)
+	}
 }
 
 // cannedSummary is a hand-built static summary standing in for the JS side's

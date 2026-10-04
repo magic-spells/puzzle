@@ -609,3 +609,50 @@ describe('injectStaticShell head surgery (D84)', () => {
 		expect(out).toContain('<title>Shell</title>');
 	});
 });
+
+// D177 — `headExtra` (a page's hreflang alternates and the locale redirect) rides
+// at the managed tags' anchor, after them, inside the shell head; the shell's own
+// `data-puzzle-head="alternate"` tags are a managed set and are replaced.
+describe('head extras: hreflang alternates (D177)', () => {
+	const ALT = '<link rel="alternate" hreflang="es" href="/es/" data-puzzle-head="alternate">';
+
+	it('appends headExtra after the managed tags, before </head>, in both injectors', () => {
+		const hybrid = injectShell(SHELL, { targetId: 'app', content: '', head: FULL_HEAD, headExtra: ALT });
+		const statik = injectStaticShell(SHELL, {
+			targetId: 'app',
+			content: '',
+			head: FULL_HEAD,
+			slug: 'index',
+			data: {},
+			headExtra: ALT,
+		});
+		for (const out of [hybrid, statik]) {
+			expect(out).toContain(`data-puzzle-head="twitter:card">${ALT}</head>`);
+		}
+	});
+
+	it('replaces the shell head’s own alternates, never a body one', () => {
+		const shell =
+			'<!doctype html><html><head><title>Shell</title>' +
+			'<link rel="alternate" hreflang="fr" href="/fr/" data-puzzle-head="alternate"></head>' +
+			'<body><div id="app"></div><link data-puzzle-head="alternate"></body></html>';
+		const out = injectShell(shell, { targetId: 'app', content: '', head: EMPTY_HEAD, headExtra: ALT });
+		expect(out).not.toContain('hreflang="fr"');
+		expect(out).toContain(`<title>Shell</title>${ALT}</head>`);
+		expect(out).toContain('<div id="app" data-puzzle-ssg></div><link data-puzzle-head="alternate">');
+	});
+
+	it('the title-only path and a null head ignore headExtra', () => {
+		const titled = injectShell(SHELL, { targetId: 'app', content: '', title: 'T', headExtra: ALT });
+		expect(titled).not.toContain('hreflang');
+		const spa = injectStaticShell(SHELL, {
+			targetId: 'app',
+			content: null,
+			head: null,
+			slug: 'spa',
+			data: {},
+			headExtra: ALT,
+		});
+		expect(spa).not.toContain('hreflang');
+	});
+});

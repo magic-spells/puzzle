@@ -1128,6 +1128,15 @@ describe('static kernel — locale prefix routing (D177)', () => {
 		expect(href('about')).toBe('/about');
 	});
 
+	it('an unprefixed page with no island is the default locale, whatever was stored', async () => {
+		vi.stubGlobal('localStorage', memoryStorage({ __puzzleLocale: 'es' }));
+		vi.stubGlobal('navigator', { languages: ['es'], language: 'es' });
+		const { i18n, href } = await mountAt('/about');
+		expect(i18n.locale).toBe('en');
+		expect(document.querySelector('h1').textContent).toBe('Welcome');
+		expect(href('about')).toBe('/about');
+	});
+
 	it('falls back to the island tag when the URL carries no prefix', async () => {
 		document.body.innerHTML =
 			'<div id="app"></div>' +

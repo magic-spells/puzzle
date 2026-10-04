@@ -16,6 +16,7 @@ import {
 	samePath,
 	assignSameOrigin,
 	selectLocale,
+	textDirection,
 	urlLocale,
 } from '../client-runtime/i18n.js';
 import { makeFormatterRegistry } from '../client-runtime/formatters.js';
@@ -711,5 +712,55 @@ describe('islandLocale (D177)', () => {
 		expect(islandLocale()).toBe(null);
 		document.body.innerHTML = '<script type="application/json" data-puzzle-locale="pt-BR">{}</script>';
 		expect(islandLocale()).toBe('pt-BR');
+	});
+});
+
+describe('text direction (D177)', () => {
+	afterEach(() => {
+		document.documentElement.removeAttribute('dir');
+		document.documentElement.removeAttribute('lang');
+	});
+
+	it.each([
+		['ar', 'rtl'],
+		['ar-EG', 'rtl'],
+		['he', 'rtl'],
+		['fa-IR', 'rtl'],
+		['ur', 'rtl'],
+		['ckb', 'rtl'],
+		['yi', 'rtl'],
+		['ku', 'ltr'],
+		['ku-Arab', 'rtl'],
+		['ku-Latn-TR', 'ltr'],
+		['az-Arab', 'rtl'],
+		['pa-Guru', 'ltr'],
+		['ff-Adlm', 'rtl'],
+		['ar-Latn', 'ltr'],
+		['en', 'ltr'],
+		['pt-BR', 'ltr'],
+		['de-1996', 'ltr'],
+		['zh-Hant-TW', 'ltr'],
+	])('%s is %s', (tag, dir) => {
+		expect(textDirection(tag)).toBe(dir);
+	});
+
+	it('exposes i18n.dir and sets <html dir> on a switch, removing it again for an ltr locale', async () => {
+		const AR = { 'nav.home': 'الرئيسية' };
+		const i18n = await service({ en: EN, ar: AR });
+		expect(i18n.dir).toBe('ltr');
+		expect(document.documentElement.hasAttribute('dir')).toBe(false);
+		await i18n.setLocale('ar');
+		expect(i18n.dir).toBe('rtl');
+		expect(document.documentElement.getAttribute('dir')).toBe('rtl');
+		expect(document.documentElement.lang).toBe('ar');
+		await i18n.setLocale('en');
+		expect(i18n.dir).toBe('ltr');
+		expect(document.documentElement.hasAttribute('dir')).toBe(false);
+	});
+
+	it("leaves a shell's own dir alone for an ltr locale", async () => {
+		document.documentElement.setAttribute('dir', 'auto');
+		await service({ en: EN });
+		expect(document.documentElement.getAttribute('dir')).toBe('auto');
 	});
 });

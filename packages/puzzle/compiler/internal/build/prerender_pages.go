@@ -352,22 +352,46 @@ type entryPage struct {
 // uniqueEntryPages returns the written pages that each need an entry module:
 // the first page per slug, in summary order. Without prefix routing every slug
 // is already unique, so this is the summary itself; with it (D177) a route's
-// locale pages repeat one slug and share one module.
+// locale pages repeat one slug and share one module. Two pages that share a
+// slug must name the same modules — one entry cannot import two chains — so a
+// mismatch is a contract violation between the Go and JS sides and an error.
 func uniqueEntryPages(written []staticPage) ([]entryPage, error) {
 	out := make([]entryPage, 0, len(written))
-	seen := make(map[string]bool, len(written))
+	first := make(map[string]int, len(written))
 	for _, page := range written {
 		slug, err := slugFromEntry(page.Entry)
 		if err != nil {
 			return nil, err
 		}
-		if seen[slug] {
+		if i, ok := first[slug]; ok {
+			if !sameModules(out[i].Modules, page.Modules) {
+				return nil, fmt.Errorf(
+					"puzzle build --static: pages %q and %q share the entry %s but name different modules",
+					out[i].Path, page.Path, page.Entry,
+				)
+			}
 			continue
 		}
-		seen[slug] = true
+		first[slug] = len(out)
 		out = append(out, entryPage{staticPage: page, slug: slug})
 	}
 	return out, nil
+}
+
+// sameModules reports whether two pages name the same view chain and layout.
+func sameModules(a, b staticModules) bool {
+	if len(a.Views) != len(b.Views) || (a.Layout == nil) != (b.Layout == nil) {
+		return false
+	}
+	if a.Layout != nil && *a.Layout != *b.Layout {
+		return false
+	}
+	for i := range a.Views {
+		if a.Views[i] != b.Views[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // staticEntrySource builds the mountStatic entry module for one page. Import
