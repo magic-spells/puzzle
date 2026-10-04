@@ -499,7 +499,7 @@ func Serve(root string, opts Options) error {
 		// with a reserved output (app.js/app.js.map/styles.css) while the server
 		// runs must surface as a visible build error, not a silent clobber.
 		endPublicValidation := prof.Phase("public validation")
-		if err := build.ValidatePublic(absRoot, splitting, cfg.I18nEnabled()); err != nil {
+		if err := build.ValidatePublic(absRoot, splitting, cfg.I18n); err != nil {
 			endPublicValidation()
 			logBuildFailure(stderr, err)
 			message := err.Error()

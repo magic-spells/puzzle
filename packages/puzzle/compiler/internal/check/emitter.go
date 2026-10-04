@@ -110,7 +110,7 @@ export {};
 // every function accepts any template value and prints nothing for a missing
 // one — `t`'s key too, which the public type narrows to the primitives.
 var libraryFunctionSignatures = []struct{ name, signature string }{
-	{"link", "(path: unknown): string"},
+	{"link", "(path: unknown, options?: { locale?: string | false } | null): string"},
 	{"t", "(key: unknown, vars?: object | null): string"},
 	{"currency", "(value: unknown, symbol?: string, places?: number): string"},
 	{"percentage", "(value: unknown, places?: number): string"},

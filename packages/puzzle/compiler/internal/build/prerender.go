@@ -104,7 +104,10 @@ type ssgSummary struct {
 // returned error surfaces node's stderr/stdout and staging is discarded by
 // Build's defer, so the previous dist/ is untouched. appEntry is the entry
 // Build resolved (ResolveEntry); the generated module imports it by path.
-func prerenderHybrid(absRoot, appEntry, staging string, publicFiles map[string]bool, pc *passContext) error {
+//
+// site is the config's `site` origin (D177), handed to prerenderToDir as its
+// `site` option when set (prerenderSiteOption).
+func prerenderHybrid(absRoot, appEntry, staging, site string, publicFiles map[string]bool, pc *passContext) error {
 	// A public/ asset copied to staging/.puzzle-prerender would be overwritten by
 	// the prerender bundle and then deleted with it — reject it before any of that
 	// happens. copyPublic has already run, so the collision is observable here.
@@ -122,15 +125,19 @@ func prerenderHybrid(absRoot, appEntry, staging string, publicFiles map[string]b
 	if err != nil {
 		return fmt.Errorf("encoding prerender entry path: %w", err)
 	}
+	siteOption, err := prerenderSiteOption(site)
+	if err != nil {
+		return err
+	}
 	stdin := fmt.Sprintf(
 		"import app from %s;\n"+
 			"import { prerenderToDir } from '@magic-spells/puzzle/ssg';\n"+
-			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3], mode: 'hybrid' });\n"+
+			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3], mode: 'hybrid'%s });\n"+
 			// created() may leave a live handle (SSG never runs destroyed(), SPEC
 			// §36), so exit rather than wait for the loop to drain — in the write
 			// callback, because exiting before the pipe flushes truncates the JSON.
 			"process.stdout.write('\\n%s' + JSON.stringify(summary), () => process.exit(0));\n",
-		string(entry), prerenderSentinel,
+		string(entry), siteOption, prerenderSentinel,
 	)
 
 	outfile := filepath.Join(staging, prerenderDir, "prerender.mjs")

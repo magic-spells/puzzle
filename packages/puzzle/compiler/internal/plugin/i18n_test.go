@@ -152,3 +152,62 @@ export default class Plain extends PuzzleView {}
 		t.Fatalf("an app that never uses t reports %v", none.TKeys)
 	}
 }
+
+// TestScanUsageRootHrefs: the scan records each literal root-relative href on
+// <a>/<area> with its file position (D177) — static values, and mixed values
+// whose literal head is root-relative — at any depth, skeleton included. It
+// skips dynamic values, protocol-relative and relative URLs, other attributes
+// and elements, {#raw} markup, and a last segment with a file extension.
+func TestScanUsageRootHrefs(t *testing.T) {
+	root := writeApp(t, map[string]string{
+		"app/views/Home.pzl": `<puzzle-view>
+  <a href="/about">About</a>
+  <nav>{#if a}<a class="x" href="/blog/{ slug }">Post</a>{/if}</nav>
+  <map><area href="/" alt="home"></map>
+  <a href={ link('/about') }>ok</a>
+  <a href="{ base }/x">ok</a>
+  <a href="//cdn.example.com/x">ok</a>
+  <a href="https://example.com/">ok</a>
+  <a href="about">ok</a>
+  <a href="/files/resume.pdf">ok</a>
+  <a href="/files/{ name }.pdf">ok</a>
+  <a href="/files/resume.pdf?dl=1#p">ok</a>
+  <a href="/search?q=a.b">warn</a>
+  <link href="/styles.css">
+  <img src="/logo">
+  {#raw}<a href="/raw">ok</a>{/raw}
+  {#for p in posts}<a href="/p">x</a>{/for}
+</puzzle-view>
+<puzzle-skeleton><a href="/loading">x</a></puzzle-skeleton>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {}
+</script>
+`,
+	})
+	usage, err := ScanUsage(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := "app/views/Home.pzl"
+	want := []RootHref{
+		{File: f, Line: 2, Col: 6, Href: "/about"},
+		{File: f, Line: 3, Col: 28, Href: "/blog/", Mixed: true},
+		{File: f, Line: 4, Col: 14, Href: "/"},
+		{File: f, Line: 13, Col: 6, Href: "/search?q=a.b"},
+		{File: f, Line: 17, Col: 23, Href: "/p"},
+		{File: f, Line: 19, Col: 21, Href: "/loading"},
+	}
+	if !reflect.DeepEqual(usage.RootHrefs, want) {
+		t.Fatalf("RootHrefs =\n%+v\nwant\n%+v", usage.RootHrefs, want)
+	}
+
+	// The memoized scanner answers the same on a warm pass.
+	s := NewUsageScanner()
+	for i := 0; i < 2; i++ {
+		got, err := s.Scan(root)
+		if err != nil || !reflect.DeepEqual(got.RootHrefs, want) {
+			t.Fatalf("scan %d: RootHrefs = %+v (%v)", i, got.RootHrefs, err)
+		}
+	}
+}

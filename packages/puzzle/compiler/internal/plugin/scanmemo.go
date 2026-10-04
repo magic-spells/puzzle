@@ -51,6 +51,8 @@ type fileUsage struct {
 	// (D175 diagnostics).
 	name  string
 	tKeys []string
+	// rootHrefs are its literal root-relative links (D177 diagnostics), File set.
+	rootHrefs []RootHref
 }
 
 // scanStamp identifies a file version cheaply enough to check without reading.
@@ -167,6 +169,7 @@ func mergeFileUsage(usage *Usage, fu fileUsage) {
 		}
 		usage.TKeys[key] = append(usage.TKeys[key], fu.name)
 	}
+	usage.RootHrefs = append(usage.RootHrefs, fu.rootHrefs...)
 }
 
 // scanFileUsage reads and parses one .pzl and returns its contribution. It is
@@ -242,6 +245,13 @@ func scanFileUsage(root, path string, allow map[string]bool) fileUsage {
 			one.tKeys = append(one.tKeys, key)
 		}
 		sort.Strings(one.tKeys)
+	}
+	collectRootHrefs([]parser.Node{tree}, &one.rootHrefs)
+	if skel != nil {
+		collectRootHrefs([]parser.Node{skel}, &one.rootHrefs)
+	}
+	for i := range one.rootHrefs {
+		one.rootHrefs[i].File = name
 	}
 	return one
 }
