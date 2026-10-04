@@ -39,7 +39,21 @@ const makeStore = () => new Store({ post: Post }, { apiURL: API, adapter });
 const nudges = (warn) =>
 	warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes('inside a tracked data() run'));
 
-afterEach(() => vi.unstubAllGlobals());
+// Every view a test mounts, destroyed before fetch is unstubbed. A view that
+// loads inside data() re-runs on its own upsert's notification (D161), so a live
+// one keeps fetching every frame after its test ends — against the real fetch
+// once the stub is gone, and past jsdom's teardown.
+let views = [];
+const mount = (view) => {
+	views.push(view);
+	return view.mount(container());
+};
+
+afterEach(() => {
+	views.forEach((view) => view.destroy());
+	views = [];
+	vi.unstubAllGlobals();
+});
 
 describe('the tracked-load nudge', () => {
 	it('stays quiet for a load issued from outside data() while a view is suspended', async () => {
@@ -58,7 +72,7 @@ describe('the tracked-load nudge', () => {
 				return h('div', {}, [text('x')]);
 			}
 		}
-		const mounting = new Slow(ctxWith(store)).mount(container());
+		const mounting = mount(new Slow(ctxWith(store)));
 		await Promise.resolve();
 		// A button handler somewhere else in the app. `store` is the app store —
 		// not the suspended view's handle — so nothing here is that view's read.
@@ -83,7 +97,7 @@ describe('the tracked-load nudge', () => {
 				return h('div', {}, [text(String(this.getData().posts.length))]);
 			}
 		}
-		await new Eager(ctxWith(store)).mount(container());
+		await mount(new Eager(ctxWith(store)));
 
 		expect(nudges(warn).length).toBe(1);
 		expect(nudges(warn)[0]).toContain('store.loadMany()');
@@ -103,7 +117,7 @@ describe('the tracked-load nudge', () => {
 				return h('div', {}, [text(this.getData().post?.title ?? '')]);
 			}
 		}
-		await new Eager(ctxWith(store)).mount(container());
+		await mount(new Eager(ctxWith(store)));
 
 		expect(nudges(warn).length).toBe(1);
 		expect(nudges(warn)[0]).toContain('store.loadOne()');
