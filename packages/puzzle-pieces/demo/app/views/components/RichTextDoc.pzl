@@ -30,6 +30,12 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
         <CodeBlock code={ usageImport }/>
         <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          Images and link previews store an image id, never a URL; pass
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-sm text-ink">resolveImage</code>
+          to turn ids into sources (see the Rich Text Editor page for a live example):
+        </p>
+        <CodeBlock code={ usageImages } class="mt-3"/>
         <p class="mt-3 text-sm text-muted">
           Content renders client-side (the walker runs after mount), so it appears after
           takeover on prerendered pages rather than in the baked markup.
@@ -65,6 +71,8 @@ const installCmd = 'puzzle add piece rich-text';
 const usageImport = `import RichText from '@/components/ui/RichText.pzl';`;
 const usageMarkup = `<RichText doc={ article.body } />`;
 const codeHero = `<RichText doc={ sampleDoc } />`;
+const usageImages = `<RichText doc={ note.body } resolveImage={ (ref) => imageUrls[ref] ?? null }
+  @imageError={ refreshImageUrls } />`;
 
 const SAMPLE_DOC = {
 	type: 'root',
@@ -106,6 +114,7 @@ export default class RichTextDoc extends PuzzleView {
 			installCmd,
 			usageImport,
 			usageMarkup,
+			usageImages,
 			codeHero,
 			codeDoc,
 			toc: [

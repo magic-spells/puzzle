@@ -867,7 +867,7 @@
     },
     {
       "name": "rich-text",
-      "description": "Renders a stored rich text document — RichTextEditor's Shopify-style JSON tree — as semantic HTML with the shared typography classes; XSS-safe tree walker with zero npm dependencies",
+      "description": "Renders a stored rich text document — RichTextEditor's Shopify-style JSON tree, images and link previews included (sources via resolveImage) — as semantic HTML with the shared typography classes; XSS-safe tree walker with zero npm dependencies",
       "files": [
         "RichText.pzl"
       ],
@@ -879,7 +879,7 @@
     },
     {
       "name": "rich-text-editor",
-      "description": "Rich text editor on Tiptap/ProseMirror — a block-style dropdown (Normal text, Heading 1-4) plus Toolbar-driven bold/italic/underline/strike, alignment, lists, blockquote, code block, and links, emitting a controlled Shopify-style JSON document tree via @change; render stored docs with the rich-text piece",
+      "description": "Rich text editor on Tiptap/ProseMirror — a block-style dropdown (Normal text, Heading 1-4) plus Toolbar-driven bold/italic/underline/strike, alignment, lists, blockquote, code block, and links, with optional images (uploadImage) and pasted-URL link previews (fetchLinkPreview), emitting a controlled Shopify-style JSON document tree via @change; render stored docs with the rich-text piece",
       "files": [
         "RichTextEditor.pzl"
       ],

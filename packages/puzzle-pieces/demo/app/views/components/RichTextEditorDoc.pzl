@@ -51,6 +51,21 @@
           </div>
         </ExampleBox>
 
+        <ExampleBox id="images-and-previews" title="Images and link previews" code={ codeMedia }>
+          <div class="grid w-full grid-cols-1 gap-6 lg:grid-cols-2">
+            <RichTextEditor label="Notes" placeholder="Paste a link into an empty line…"
+              tools={ notesTools } value={ mediaDoc } @change={ setMediaDoc }
+              resolveImage={ resolveImage } uploadImage={ uploadImage }
+              fetchLinkPreview={ fetchLinkPreview } />
+            <div>
+              <div class="mb-1.5 text-sm font-medium text-ink">Rendered with RichText</div>
+              <div class="rounded-lg border border-border bg-surface px-3 py-2">
+                <RichText doc={ mediaDoc } resolveImage={ resolveImage } />
+              </div>
+            </div>
+          </div>
+        </ExampleBox>
+
         <ExampleBox id="disabled" title="Disabled" code={ codeDisabled }>
           <div class="w-full">
             <RichTextEditor label="Read-only" value={ doc } disabled={ true } />
@@ -61,8 +76,10 @@
           <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Data format</h2>
           <p class="mb-3 text-sm text-body">
             The document is a node tree — a superset of Shopify's rich text metafield format
-            (their format plus align, underline/strike, blockquote, and code-block). Store it
-            as JSON; render it with the Rich Text piece or your own tree walker.
+            (their format plus align, underline/strike, blockquote, code-block, and two
+            top-level atoms: image and link-preview). Store it as JSON; render it with the
+            Rich Text piece or your own tree walker. lib/rich-text-doc.js also exports
+            validateDoc, docLimits, plainText and imageRefs.
           </p>
           <CodeBlock code={ codeFormat }/>
         </section>
@@ -100,6 +117,73 @@ const codeLive = `<RichTextEditor label="Editor" value={ doc } @change={ setDoc 
 
 const codeDisabled = `<RichTextEditor label="Read-only" value={ doc } disabled={ true } />`;
 
+const codeMedia = `<RichTextEditor label="Notes" tools={ ['style', 'marks', 'lists', 'quote', 'link', 'image'] }
+  value={ doc } @change={ setDoc }
+  resolveImage={ resolveImage } uploadImage={ uploadImage }
+  fetchLinkPreview={ fetchLinkPreview } />
+<RichText doc={ doc } resolveImage={ resolveImage } />
+
+// The doc stores image ids, never URLs — your app owns all three hooks:
+resolveImage(ref, node)  // → url | null (pass a new function when URLs change)
+uploadImage(file)        // → Promise<{ ref, width?, height?, alt? }>
+fetchLinkPreview(url)    // → Promise<{ title?, description?, siteName?, imageRef? } | null>`;
+
+// Demo-only stand-ins for an app's API: uploads become object URLs under a
+// made-up ref, and previews return canned metadata after a short delay (any
+// URL containing "nopreview" returns null and stays a plain link).
+const demoImages = new Map([
+	['demo-seed', 'https://picsum.photos/id/1018/1200/675'],
+	['demo-preview', 'https://picsum.photos/id/1080/600/400'],
+]);
+let demoRefs = 0;
+const resolveImage = (ref) => demoImages.get(ref) ?? null;
+
+const uploadImage = (file) =>
+	new Promise((resolve, reject) => {
+		const url = URL.createObjectURL(file);
+		const probe = new Image();
+		probe.onload = () =>
+			setTimeout(() => {
+				const ref = `demo-upload-${++demoRefs}`;
+				demoImages.set(ref, url);
+				resolve({ ref, width: probe.naturalWidth, height: probe.naturalHeight });
+			}, 900);
+		probe.onerror = reject;
+		probe.src = url;
+	});
+
+const fetchLinkPreview = (url) =>
+	new Promise((resolve) =>
+		setTimeout(() => {
+			if (url.includes('nopreview')) return resolve(null);
+			const host = new URL(url).hostname;
+			resolve({
+				title: `A page on ${host}`,
+				description: 'Canned metadata from the demo’s fetchLinkPreview stub — a real app unfurls the URL on its server.',
+				siteName: host,
+				imageRef: 'demo-preview',
+			});
+		}, 900)
+	);
+
+const MEDIA_DOC = {
+	type: 'root',
+	children: [
+		{ type: 'heading', level: 3, children: [{ type: 'text', value: 'Site walk-through' }] },
+		{ type: 'paragraph', children: [{ type: 'text', value: 'Drop or paste an image, or use the image button. Paste a URL into an empty line for a preview.' }] },
+		{ type: 'image', ref: 'demo-seed', caption: 'The lake, from the north trail', width: 1200, height: 675 },
+		{
+			type: 'link-preview',
+			url: 'https://example.com/field-notes',
+			title: 'Field notes',
+			description: 'Everything we saw on the walk, written up the same afternoon.',
+			siteName: 'example.com',
+			imageRef: 'demo-preview',
+		},
+		{ type: 'paragraph', children: [] },
+	],
+};
+
 const codeFormat = `{
   "type": "root",
   "children": [
@@ -116,7 +200,12 @@ const codeFormat = `{
       "children": [
         { "type": "list-item",
           "children": [{ "type": "text", "value": "Free returns" }] }
-      ] }
+      ] },
+    { "type": "image", "ref": "img_81f2", "alt": "Box", "caption": "Packed",
+      "width": 1200, "height": 800 },
+    { "type": "link-preview", "url": "https://example.com/returns",
+      "title": "Returns", "description": "How returns work",
+      "siteName": "Example", "imageRef": "img_93c0" }
   ]
 }`;
 
@@ -149,7 +238,7 @@ const SAMPLE_DOC = {
 
 export default class RichTextEditorDoc extends PuzzleView {
 	created() {
-		this.setData({ doc: SAMPLE_DOC });
+		this.setData({ doc: SAMPLE_DOC, mediaDoc: MEDIA_DOC });
 	}
 
 	data(params, props) {
@@ -162,11 +251,17 @@ export default class RichTextEditorDoc extends PuzzleView {
 			codeHero,
 			codeLive,
 			codeDisabled,
+			codeMedia,
 			codeFormat,
+			notesTools: ['style', 'marks', 'lists', 'quote', 'link', 'image'],
+			resolveImage,
+			uploadImage,
+			fetchLinkPreview,
 			toc: [
 				{ label: 'Installation', href: '#installation' },
 				{ label: 'Usage', href: '#usage' },
 				{ label: 'Live document', href: '#live-document' },
+				{ label: 'Images and link previews', href: '#images-and-previews' },
 				{ label: 'Disabled', href: '#disabled' },
 				{ label: 'Data format', href: '#data-format' },
 			],
@@ -175,6 +270,7 @@ export default class RichTextEditorDoc extends PuzzleView {
 
 	events = {
 		setDoc: (doc) => this.setData('doc', doc),
+		setMediaDoc: (doc) => this.setData('mediaDoc', doc),
 	};
 }
 </script>

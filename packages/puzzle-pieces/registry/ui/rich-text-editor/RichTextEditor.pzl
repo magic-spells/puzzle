@@ -5,51 +5,58 @@
     {/if}
 
     <div class="mb-2 flex items-center gap-2" @pointerdown:prevent={ noopPointer }>
-      <div class="relative">
-        <button
-          type="button"
-          data-style-trigger
-          ref="styleTrigger"
-          class={ styleTriggerClass }
-          id={ styleTriggerId }
-          title="Block style"
-          role="combobox"
-          aria-haspopup="listbox"
-          aria-expanded={ styleExpanded }
-          aria-controls={ stylePanelId }
-          aria-activedescendant={ styleActiveId }
-          disabled={ disabled }
-          @click={ toggleStyle }
-          @keydown={ onStyleKey(event) }>
-          <span class="truncate">{ styleLabel }</span>
-          <svg class="size-3.5 shrink-0 text-muted" viewBox="0 0 20 20" fill="none"
-            stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M6 8l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
+      {#if showStyle}
+        <div class="relative">
+          <button
+            type="button"
+            data-style-trigger
+            ref="styleTrigger"
+            class={ styleTriggerClass }
+            id={ styleTriggerId }
+            title="Block style"
+            role="combobox"
+            aria-haspopup="listbox"
+            aria-expanded={ styleExpanded }
+            aria-controls={ stylePanelId }
+            aria-activedescendant={ styleActiveId }
+            disabled={ disabled }
+            @click={ toggleStyle }
+            @keydown={ onStyleKey(event) }>
+            <span class="truncate">{ styleLabel }</span>
+            <svg class="size-3.5 shrink-0 text-muted" viewBox="0 0 20 20" fill="none"
+              stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path d="M6 8l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
 
-        {#if styleOpen}
-          <ul class={ stylePanelClass } id={ stylePanelId } role="listbox" tabindex="-1"
-            aria-labelledby={ styleTriggerId } @pointerdown:outside={ onStyleOutside(event) }>
-            {#for opt in styleOptions}
-              <li id={ opt.id } key={ opt.key } role="option" aria-selected={ opt.ariaSelected }
-                class={ opt.class } @click={ chooseStyle(opt) }>
-                <span class="truncate">{ opt.label }</span>
-                {#if opt.selected}
-                  <svg class="size-4 shrink-0 text-brand" viewBox="0 0 20 20" fill="none"
-                    stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <path d="M5 10l3 3 7-7" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                {/if}
-              </li>
-            {/for}
-          </ul>
-        {/if}
-      </div>
+          {#if styleOpen}
+            <ul class={ stylePanelClass } id={ stylePanelId } role="listbox" tabindex="-1"
+              aria-labelledby={ styleTriggerId } @pointerdown:outside={ onStyleOutside(event) }>
+              {#for opt in styleOptions}
+                <li id={ opt.id } key={ opt.key } role="option" aria-selected={ opt.ariaSelected }
+                  class={ opt.class } @click={ chooseStyle(opt) }>
+                  <span class="truncate">{ opt.label }</span>
+                  {#if opt.selected}
+                    <svg class="size-4 shrink-0 text-brand" viewBox="0 0 20 20" fill="none"
+                      stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path d="M5 10l3 3 7-7" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  {/if}
+                </li>
+              {/for}
+            </ul>
+          {/if}
+        </div>
+      {/if}
 
       <Toolbar class="w-full" label="Text formatting" disabled={ disabled }
         items={ tbItems } @toggle={ onToggle } @press={ onPress }/>
     </div>
+
+    {#if canUpload}
+      <input type="file" accept="image/*" multiple class="hidden" tabindex="-1" aria-hidden="true"
+        ref="fileInput" @change={ onFiles(event) }/>
+    {/if}
 
     {#if linkOpen}
       <div class="mb-2 flex items-center gap-2 rounded-lg border border-border bg-surface p-2"
@@ -85,7 +92,10 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import { Editor } from '@tiptap/core';
+import { Editor, Extension, Node, mergeAttributes } from '@tiptap/core';
+import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { Fragment, Slice } from '@tiptap/pm/model';
 import { StarterKit } from '@tiptap/starter-kit';
 import { TextAlign } from '@tiptap/extension-text-align';
 import Toolbar from './Toolbar.pzl';
@@ -95,6 +105,8 @@ import {
 	emptyDoc,
 	isEmpty,
 	safeLinkUrl,
+	safePreviewUrl,
+	docLimits,
 	RICH_TEXT_CLASSES as C,
 } from '../../lib/rich-text-doc.js';
 
@@ -130,8 +142,52 @@ import {
 //   placeholder  muted hint shown while the document is empty
 //   disabled     disables the toolbar and makes the content read-only
 //   class        appended to the root
+//   tools        optional array naming the toolbar groups to show, from
+//                'style' (block dropdown), 'marks', 'align', 'lists',
+//                'quote', 'codeBlock', 'link', 'image'. Omitted = all. Hiding
+//                a tool hides its control only; keyboard shortcuts and
+//                markdown input rules still work and the format still
+//                accepts the node.
+//   resolveImage(ref, node) → url | null
+//                turns an image id into a src. Called for every `image` node
+//                (node = its doc node) and every link preview's `imageRef`
+//                (node = the link-preview doc node). The doc never stores a
+//                URL. Re-run on every render of this piece, so when the URLs
+//                behind your refs change (signed URLs refreshed, an upload
+//                finished elsewhere) pass a NEW function to re-render with
+//                them. null shows a placeholder box.
+//   uploadImage(file) → Promise<{ ref, width?, height?, alt? }>
+//                turns on images: an Image toolbar button (file picker), and
+//                paste / drop of image files. Each file shows an "Uploading…"
+//                placeholder that is an editor DECORATION, not a node, so the
+//                emitted doc never holds an image whose upload hasn't
+//                finished; the image node lands when the promise resolves (a
+//                rejection or a result without `ref` just removes the
+//                placeholder — report the failure yourself). Stops adding at
+//                docLimits.maxImages images.
+//   fetchLinkPreview(url) → Promise<{ title?, description?, siteName?,
+//                imageRef? } | null>
+//                turns on link previews: pasting a bare http(s) URL (one that
+//                passes safePreviewUrl) into an empty top-level paragraph
+//                inserts a link-preview node holding only `url` (one @change),
+//                then fills its fields when the promise resolves (a second
+//                @change), or replaces it with a paragraph holding a plain
+//                link to the url on null / rejection. Fields are clipped to
+//                docLimits. At docLimits.maxLinkPreviews the paste stays a
+//                plain paste.
 // Callbacks (value-first):
 //   @change(doc) fires on every edit with the full document tree
+//   @imageError(ref)  an image (or preview image) failed to load — e.g. an
+//                expired signed URL; refresh your URLs and pass a new
+//                resolveImage
+//
+// Images and link previews are atom blocks at the top level only (never in a
+// list or blockquote): selectable, draggable, deleted with Backspace. An
+// image's caption is edited in place under it. A pasted image or preview
+// image survives only when resolveImage resolves its ref — so a copy from
+// another document can't smuggle in an id the host doesn't know. None of
+// this is active unless the matching prop is passed; a doc that holds images
+// still round-trips losslessly without them.
 //
 // Formatting: a block-style dropdown (Normal text, Heading 1-4) followed by the
 // toolbar's bold / italic / underline / strike, align left/center/right,
@@ -204,7 +260,402 @@ const I = {
 	quote: 'M17 6H3M21 12H8M21 18H8M3 12v6',
 	codeBlock: 'M16 18l6-6-6-6M8 6l-6 6 6 6',
 	link: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
+	image: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM21 15l-5-5L5 21M10.5 8.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z',
 };
+
+const ALL_TOOLS = ['style', 'marks', 'align', 'lists', 'quote', 'codeBlock', 'link', 'image'];
+
+// ---- image + link-preview atoms ---------------------------------------------
+//
+// Both are Tiptap nodes in their own `rootBlock` group, which only the doc
+// node accepts — so ProseMirror itself keeps them out of lists and quotes.
+// Attributes mirror the doc fields 1:1 (see lib/rich-text-doc.js); the HTML
+// form (data-* attributes) exists only so copy/paste and drag inside the
+// editor survive a clipboard round trip.
+
+const SELECTED = ['outline-2', 'outline-offset-2', 'outline-ring', 'rounded-lg'];
+const CAPTION_INPUT =
+	`${C.caption} w-full bg-transparent outline-none placeholder:text-muted placeholder:opacity-70`;
+const PREVIEW_URL = 'truncate text-xs text-muted underline-offset-2 hover:text-ink hover:underline';
+const UPLOAD_PLACEHOLDER = `${C.figure} ${C.imagePlaceholder} animate-pulse`;
+
+const UPLOADS = new PluginKey('ppRichTextUploads');
+
+function dataAttr(name, int = false) {
+	return {
+		default: null,
+		parseHTML: (el) => {
+			const v = el.getAttribute(`data-${name}`);
+			if (v == null || v === '') return null;
+			if (!int) return v;
+			const n = parseInt(v, 10);
+			return n > 0 ? n : null;
+		},
+		renderHTML: (attrs) => {
+			const key = name.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+			return attrs[key] == null ? {} : { [`data-${name}`]: String(attrs[key]) };
+		},
+	};
+}
+
+// Editor-only attr marking a link preview whose fetch is in flight. Never
+// parsed from HTML and never copied by fromTiptap.
+const PENDING_ATTR = { default: null, rendered: false, parseHTML: () => null };
+
+function el(tag, className, text) {
+	const node = document.createElement(tag);
+	if (className) node.className = className;
+	if (text != null) node.textContent = text;
+	return node;
+}
+
+// The doc-format node for a ProseMirror atom, as handed to resolveImage.
+function docNodeOf(pmNode) {
+	return fromTiptap({ type: 'doc', content: [pmNode.toJSON()] }).children[0] || null;
+}
+
+function clip(value, max) {
+	if (typeof value !== 'string' || value === '') return null;
+	const chars = [...value];
+	return chars.length > max ? chars.slice(0, max).join('') : value;
+}
+
+function positiveInt(v) {
+	return Number.isInteger(v) && v > 0 ? v : null;
+}
+
+function countNodes(doc, name) {
+	let n = 0;
+	doc.descendants((node) => {
+		if (node.type.name === name) n++;
+		return node.isBlock && !node.isTextblock;
+	});
+	return n;
+}
+
+function findNode(doc, test) {
+	let found = null;
+	doc.descendants((node, pos) => {
+		if (found) return false;
+		if (test(node)) {
+			found = { node, pos };
+			return false;
+		}
+		return node.isBlock && !node.isTextblock;
+	});
+	return found;
+}
+
+function imageFiles(transfer) {
+	return Array.from((transfer && transfer.files) || []).filter((f) => /^image\//.test(f.type));
+}
+
+// Shared by both node views: a view registers with its editor host so the
+// host can re-resolve sources and editability on every render.
+class AtomView {
+	constructor({ node, getPos, editor }, host) {
+		this.node = node;
+		this.getPos = getPos;
+		this.editor = editor;
+		this.host = host;
+		this.selected = false;
+		this.key = null;
+		host._atomViews.add(this);
+	}
+
+	update(node) {
+		if (node.type !== this.node.type) return false;
+		this.node = node;
+		this.refresh();
+		return true;
+	}
+
+	selectNode() {
+		this.selected = true;
+		this.dom.classList.add(...SELECTED);
+		this.refresh();
+	}
+
+	deselectNode() {
+		this.selected = false;
+		this.dom.classList.remove(...SELECTED);
+		this.refresh();
+	}
+
+	// ProseMirror must never read the view's DOM back as content.
+	ignoreMutation() {
+		return true;
+	}
+
+	destroy() {
+		this.host._atomViews.delete(this);
+	}
+}
+
+class ImageView extends AtomView {
+	constructor(props, host) {
+		super(props, host);
+		this.dom = el('figure', C.figure);
+		this.dom.contentEditable = 'false';
+		this.dom.setAttribute('data-rte-image', '');
+		this.media = el('div');
+		this.caption = el('input', CAPTION_INPUT);
+		this.caption.type = 'text';
+		this.caption.placeholder = 'Add a caption';
+		this.caption.setAttribute('aria-label', 'Image caption');
+		this.caption.maxLength = docLimits.maxCaption;
+		this.caption.addEventListener('input', () => this.commitCaption());
+		this.caption.addEventListener('focus', () => this.refresh());
+		this.caption.addEventListener('blur', () => this.refresh());
+		this.dom.append(this.media, this.caption);
+		this.refresh();
+	}
+
+	refresh() {
+		const a = this.node.attrs;
+		const url = this.host._resolve(a.ref, docNodeOf(this.node));
+		const key = JSON.stringify([url, a.ref, a.alt, a.width, a.height]);
+		if (key !== this.key) {
+			this.key = key;
+			this.media.textContent = '';
+			this.media.appendChild(imageMedia(url, a, () => this.host._imageError(a.ref)));
+		}
+		const value = a.caption || '';
+		const focused = document.activeElement === this.caption;
+		if (!focused && this.caption.value !== value) this.caption.value = value;
+		const editable = this.editor.isEditable;
+		this.caption.readOnly = !editable;
+		this.caption.hidden = !(value || (editable && (this.selected || focused)));
+	}
+
+	commitCaption() {
+		const pos = this.getPos();
+		if (typeof pos !== 'number' || !this.editor.isEditable) return;
+		const caption = this.caption.value === '' ? null : this.caption.value;
+		if (caption === (this.node.attrs.caption || null)) return;
+		const { state, dispatch } = this.editor.view;
+		dispatch(state.tr.setNodeMarkup(pos, undefined, { ...this.node.attrs, caption }));
+	}
+
+	// Events inside the caption input belong to the input, not ProseMirror.
+	stopEvent(event) {
+		return event.target === this.caption;
+	}
+}
+
+// <img> when the host resolved a url; otherwise a placeholder box holding the
+// alt text, sized from width/height when known so the layout doesn't jump.
+function imageMedia(url, attrs, onError) {
+	if (url) {
+		const img = el('img', C.image);
+		img.src = url;
+		img.alt = attrs.alt || '';
+		img.draggable = false;
+		if (attrs.width) img.width = attrs.width;
+		if (attrs.height) img.height = attrs.height;
+		img.addEventListener('error', onError);
+		return img;
+	}
+	const box = el('div', C.imagePlaceholder, attrs.alt || 'Image unavailable');
+	if (attrs.width && attrs.height) box.style.aspectRatio = `${attrs.width} / ${attrs.height}`;
+	return box;
+}
+
+class LinkPreviewView extends AtomView {
+	constructor(props, host) {
+		super(props, host);
+		this.dom = el('div', C.preview);
+		this.dom.contentEditable = 'false';
+		this.dom.setAttribute('data-rte-link-preview', '');
+		this.refresh();
+	}
+
+	refresh() {
+		const a = this.node.attrs;
+		const loading = a.pendingId != null && this.host._previewWait.has(a.pendingId);
+		const imgUrl = a.imageRef ? this.host._resolve(a.imageRef, docNodeOf(this.node)) : null;
+		const key = JSON.stringify([loading, imgUrl, a.url, a.title, a.description, a.siteName]);
+		if (key === this.key) return;
+		this.key = key;
+		this.dom.textContent = '';
+		const safe = safePreviewUrl(a.url);
+		let host = '';
+		try {
+			host = new URL(a.url).hostname;
+		} catch {
+			host = '';
+		}
+		const body = el('div', C.previewBody);
+		if (loading) {
+			body.classList.add('animate-pulse');
+			body.append(el('div', C.previewSite, host), el('div', C.previewTitle, 'Loading preview…'));
+		} else {
+			body.append(el('div', C.previewSite, a.siteName || host), el('div', C.previewTitle, a.title || a.url));
+			if (a.description) body.appendChild(el('div', C.previewDescription, a.description));
+		}
+		const link = el(safe ? 'a' : 'span', PREVIEW_URL, a.url);
+		if (safe) {
+			link.href = safe;
+			link.target = '_blank';
+			link.rel = 'noopener noreferrer';
+		}
+		body.appendChild(link);
+		this.dom.appendChild(body);
+		if (imgUrl) {
+			const img = el('img', C.previewImage);
+			img.src = imgUrl;
+			img.alt = '';
+			img.draggable = false;
+			img.addEventListener('error', () => this.host._imageError(a.imageRef));
+			this.dom.appendChild(img);
+		}
+	}
+
+	stopEvent() {
+		return false;
+	}
+}
+
+function atomNodes(host) {
+	const ImageNode = Node.create({
+		name: 'image',
+		group: 'rootBlock',
+		atom: true,
+		selectable: true,
+		draggable: true,
+		addAttributes() {
+			return {
+				ref: dataAttr('ref'),
+				alt: dataAttr('alt'),
+				caption: dataAttr('caption'),
+				width: dataAttr('width', true),
+				height: dataAttr('height', true),
+			};
+		},
+		parseHTML() {
+			return [{ tag: 'figure[data-rte-image]', getAttrs: (el) => (el.getAttribute('data-ref') ? null : false) }];
+		},
+		renderHTML({ HTMLAttributes }) {
+			return ['figure', mergeAttributes({ 'data-rte-image': '' }, HTMLAttributes)];
+		},
+		addNodeView() {
+			return (props) => new ImageView(props, host);
+		},
+	});
+
+	const LinkPreviewNode = Node.create({
+		name: 'linkPreview',
+		group: 'rootBlock',
+		atom: true,
+		selectable: true,
+		draggable: true,
+		addAttributes() {
+			return {
+				url: dataAttr('url'),
+				title: dataAttr('title'),
+				description: dataAttr('description'),
+				siteName: dataAttr('site-name'),
+				imageRef: dataAttr('image-ref'),
+				pendingId: PENDING_ATTR,
+			};
+		},
+		parseHTML() {
+			return [
+				{
+					tag: 'div[data-rte-link-preview]',
+					getAttrs: (el) => (safePreviewUrl(el.getAttribute('data-url')) ? null : false),
+				},
+			];
+		},
+		renderHTML({ HTMLAttributes }) {
+			return ['div', mergeAttributes({ 'data-rte-link-preview': '' }, HTMLAttributes)];
+		},
+		addNodeView() {
+			return (props) => new LinkPreviewView(props, host);
+		},
+	});
+
+	// Replaces StarterKit's document node: the same `block+` content, plus the
+	// two atoms — which therefore can sit only at the top level.
+	const RootDocument = Node.create({
+		name: 'doc',
+		topNode: true,
+		content: '(block | rootBlock)+',
+	});
+
+	// In-flight uploads render as widget decorations: visible, positioned,
+	// mapped through edits, and never part of the document.
+	const UploadPlaceholders = Extension.create({
+		name: 'ppUploadPlaceholders',
+		addProseMirrorPlugins() {
+			return [
+				new Plugin({
+					key: UPLOADS,
+					state: {
+						init: () => DecorationSet.empty,
+						apply(tr, set) {
+							let next = set.map(tr.mapping, tr.doc);
+							const meta = tr.getMeta(UPLOADS);
+							if (meta && meta.add) {
+								const { id, pos, label } = meta.add;
+								const widget = Decoration.widget(
+									pos,
+									() => {
+										const box = el('div', UPLOAD_PLACEHOLDER, `Uploading ${label || 'image'}…`);
+										box.setAttribute('role', 'status');
+										return box;
+									},
+									{ id, key: id, side: 1 }
+								);
+								next = next.add(tr.doc, [widget]);
+							}
+							if (meta && meta.remove) {
+								next = next.remove(next.find(undefined, undefined, (s) => s.id === meta.remove));
+							}
+							return next;
+						},
+					},
+					props: {
+						decorations(state) {
+							return this.getState(state);
+						},
+					},
+				}),
+			];
+		},
+	});
+
+	return [RootDocument, ImageNode, LinkPreviewNode, UploadPlaceholders];
+}
+
+// Rebuild a pasted slice, dropping images whose ref the host can't resolve and
+// preview images likewise (the card itself stays).
+function filterSlice(slice, canResolve) {
+	// Ordinary pastes hold no atoms and pass through untouched.
+	let hasAtom = false;
+	slice.content.descendants((node) => {
+		if (node.type.name === 'image' || node.type.name === 'linkPreview') hasAtom = true;
+		return !hasAtom;
+	});
+	if (!hasAtom) return slice;
+	const walk = (fragment) => {
+		const out = [];
+		fragment.forEach((node) => {
+			if (node.type.name === 'image') {
+				if (canResolve(node.attrs.ref, node)) out.push(node);
+				return;
+			}
+			if (node.type.name === 'linkPreview') {
+				const keep = !node.attrs.imageRef || canResolve(node.attrs.imageRef, node);
+				out.push(keep ? node : node.type.create({ ...node.attrs, imageRef: null }));
+				return;
+			}
+			out.push(node.isLeaf ? node : node.copy(walk(node.content)));
+		});
+		return Fragment.fromArray(out);
+	};
+	return new Slice(walk(slice.content), slice.openStart, slice.openEnd);
+}
 
 export default class RichTextEditor extends PuzzleView {
 	created() {
@@ -218,7 +669,14 @@ export default class RichTextEditor extends PuzzleView {
 		this._lastSeenValue = undefined;
 		// Ordered serialized emissions still awaiting controlled-value echoes.
 		this._pending = [];
+		// Live image / link-preview node views, re-synced on every render.
+		this._atomViews = new Set();
+		// pendingId → url for link previews whose fetch is in flight.
+		this._previewWait = new Map();
+		this._seq = 0;
 		this.setData({
+			// Image uploads in flight (each one a placeholder decoration).
+			uploading: 0,
 			active: {},
 			empty: true,
 			linkOpen: false,
@@ -238,6 +696,8 @@ export default class RichTextEditor extends PuzzleView {
 			type: 'toggle', value, label, icon, iconOnly: true, pressed: !!pressed,
 		});
 		const level = this._currentLevel();
+		const tools = new Set(Array.isArray(props.tools) ? props.tools : ALL_TOOLS);
+		const canUpload = typeof props.uploadImage === 'function';
 		const styleOpen = !!g.styleOpen;
 		const styleActive = g.styleActive ?? -1;
 		const styleOptions = BLOCK_STYLES.map((s, i) => {
@@ -259,7 +719,46 @@ export default class RichTextEditor extends PuzzleView {
 				class: [STYLE_OPTION, selected ? 'font-medium' : '', state].filter(Boolean).join(' '),
 			};
 		});
+		// Toolbar sections in their fixed order; a separator sits between two
+		// non-empty sections. With every tool shown and no uploadImage this is
+		// exactly the original strip.
+		const sections = [
+			tools.has('marks')
+				? [
+						toggle('bold', 'Bold', I.bold, a.bold),
+						toggle('italic', 'Italic', I.italic, a.italic),
+						toggle('underline', 'Underline', I.underline, a.underline),
+						toggle('strike', 'Strikethrough', I.strike, a.strike),
+					]
+				: [],
+			tools.has('align')
+				? [
+						toggle('alignLeft', 'Align left', I.alignLeft, a.alignLeft),
+						toggle('alignCenter', 'Align center', I.alignCenter, a.alignCenter),
+						toggle('alignRight', 'Align right', I.alignRight, a.alignRight),
+					]
+				: [],
+			[
+				...(tools.has('lists')
+					? [toggle('ul', 'Bulleted list', I.ul, a.ul), toggle('ol', 'Numbered list', I.ol, a.ol)]
+					: []),
+				...(tools.has('quote') ? [toggle('quote', 'Blockquote', I.quote, a.quote)] : []),
+				...(tools.has('codeBlock')
+					? [toggle('codeBlock', 'Code block', I.codeBlock, a.codeBlock)]
+					: []),
+			],
+			[
+				...(tools.has('link')
+					? [{ type: 'button', value: 'link', label: 'Link', icon: I.link, iconOnly: true }]
+					: []),
+				...(canUpload && tools.has('image')
+					? [{ type: 'button', value: 'image', label: 'Image', icon: I.image, iconOnly: true }]
+					: []),
+			],
+		].filter((s) => s.length);
 		return {
+			showStyle: tools.has('style'),
+			canUpload,
 			styleOpen,
 			styleOptions,
 			styleLabel: (BLOCK_STYLES.find((s) => s.level === level) || BLOCK_STYLES[0]).label,
@@ -273,30 +772,14 @@ export default class RichTextEditor extends PuzzleView {
 			label: props.label,
 			labelId: `${this._fallbackId}-label`,
 			placeholder: props.placeholder ?? null,
-			showPlaceholder: !!props.placeholder && empty,
+			showPlaceholder: !!props.placeholder && empty && !g.uploading,
 			disabled,
 			linkOpen: !!g.linkOpen,
 			linkDraft: g.linkDraft ?? '',
 			linkBtnClass: LINK_BTN,
 			rootClass: props.class || '',
 			frameClass: [FRAME_BASE, disabled ? 'opacity-50' : ''].filter(Boolean).join(' '),
-			tbItems: [
-				toggle('bold', 'Bold', I.bold, a.bold),
-				toggle('italic', 'Italic', I.italic, a.italic),
-				toggle('underline', 'Underline', I.underline, a.underline),
-				toggle('strike', 'Strikethrough', I.strike, a.strike),
-				{ type: 'separator' },
-				toggle('alignLeft', 'Align left', I.alignLeft, a.alignLeft),
-				toggle('alignCenter', 'Align center', I.alignCenter, a.alignCenter),
-				toggle('alignRight', 'Align right', I.alignRight, a.alignRight),
-				{ type: 'separator' },
-				toggle('ul', 'Bulleted list', I.ul, a.ul),
-				toggle('ol', 'Numbered list', I.ol, a.ol),
-				toggle('quote', 'Blockquote', I.quote, a.quote),
-				toggle('codeBlock', 'Code block', I.codeBlock, a.codeBlock),
-				{ type: 'separator' },
-				{ type: 'button', value: 'link', label: 'Link', icon: I.link, iconOnly: true },
-			],
+			tbItems: sections.flatMap((s, i) => (i ? [{ type: 'separator' }, ...s] : s)),
 		};
 	}
 
@@ -318,6 +801,8 @@ export default class RichTextEditor extends PuzzleView {
 					// Inline code and horizontal rule are outside the doc contract.
 					code: false,
 					horizontalRule: false,
+					// Replaced by atomNodes()' RootDocument (block+ plus the atoms).
+					document: false,
 					heading: { levels: [1, 2, 3, 4] },
 					link: {
 						openOnClick: false,
@@ -334,8 +819,33 @@ export default class RichTextEditor extends PuzzleView {
 					codeBlock: { HTMLAttributes: { class: C.codeBlock } },
 				}),
 				TextAlign.configure({ types: ['heading', 'paragraph'] }),
+				...atomNodes(this),
 			],
 			editorProps: {
+				// Each hook below is inert unless its prop is set, so a consumer
+				// without uploadImage / fetchLinkPreview keeps stock paste and drop.
+				handlePaste: (view, event) => {
+					const files = imageFiles(event.clipboardData);
+					if (files.length && this._canUpload()) {
+						event.preventDefault();
+						this._uploadFiles(files, null);
+						return true;
+					}
+					return this._pastePreview(view, event);
+				},
+				handleDrop: (view, event, slice, moved) => {
+					if (moved) return false;
+					const files = imageFiles(event.dataTransfer);
+					if (!files.length || !this._canUpload()) return false;
+					event.preventDefault();
+					const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+					this._uploadFiles(files, at ? at.pos : null);
+					return true;
+				},
+				// An internal drag moves nodes this document already holds; only
+				// content arriving from outside is filtered.
+				transformPasted: (slice, view) =>
+					view.dragging ? slice : filterSlice(slice, (ref, node) => this._resolve(ref, docNodeOf(node)) != null),
 				attributes: {
 					class: CONTENT_CLASS,
 					// The rendered label names the content region when there is one;
@@ -366,6 +876,8 @@ export default class RichTextEditor extends PuzzleView {
 	destroyed() {
 		this._editor?.destroy();
 		this._editor = null;
+		this._atomViews.clear();
+		this._previewWait.clear();
 	}
 
 	afterUpdate() {
@@ -383,6 +895,9 @@ export default class RichTextEditor extends PuzzleView {
 		if (this.props.disabled && this.getData().styleOpen) {
 			this.setData({ styleOpen: false });
 		}
+		// Image sources and caption editability come from props / editor state
+		// the node views can't observe; re-sync them (DOM only, no transaction).
+		this._syncAtomViews();
 		const v = this.props.value;
 		// afterUpdate also runs for renders WE caused (onUpdate/_syncActive call
 		// setData + refresh synchronously), and those run BEFORE the parent's
@@ -459,6 +974,153 @@ export default class RichTextEditor extends PuzzleView {
 
 	_chain() {
 		return this._editor?.chain().focus();
+	}
+
+	// ---- images + link previews -------------------------------------------
+
+	_syncAtomViews() {
+		for (const view of this._atomViews) view.refresh();
+	}
+
+	_resolve(ref, node) {
+		const fn = this.props.resolveImage;
+		if (typeof fn !== 'function' || !ref) return null;
+		try {
+			const url = fn(ref, node);
+			return typeof url === 'string' && url !== '' ? url : null;
+		} catch {
+			return null;
+		}
+	}
+
+	_imageError(ref) {
+		const { imageError } = this.props;
+		if (typeof imageError === 'function') imageError(ref);
+	}
+
+	_canUpload() {
+		return typeof this.props.uploadImage === 'function' && !!this._editor?.isEditable;
+	}
+
+	// A top-level position to put new images at: before the caret's block when
+	// that block is an empty paragraph (the image takes the empty line's
+	// place, the caret stays below it), otherwise after it.
+	_insertPos(state, pos) {
+		const $p = state.doc.resolve(pos ?? state.selection.to);
+		if ($p.depth === 0) return $p.pos;
+		const top = $p.node(1);
+		if (top.type.name === 'paragraph' && top.content.size === 0) return $p.before(1);
+		return $p.after(1);
+	}
+
+	_setUploading(delta) {
+		this.setData('uploading', Math.max(0, (this.getData().uploading || 0) + delta));
+		this.refresh();
+	}
+
+	_uploadFiles(files, pos) {
+		const ed = this._editor;
+		const upload = this.props.uploadImage;
+		if (!ed || typeof upload !== 'function') return;
+		let room = docLimits.maxImages - countNodes(ed.state.doc, 'image') - (this.getData().uploading || 0);
+		const at = this._insertPos(ed.state, pos);
+		for (const file of files) {
+			if (room-- <= 0) break;
+			const id = `${this._fallbackId}-upload-${++this._seq}`;
+			ed.view.dispatch(ed.state.tr.setMeta(UPLOADS, { add: { id, pos: at, label: file.name } }));
+			this._setUploading(1);
+			Promise.resolve()
+				.then(() => upload(file))
+				.then(
+					(result) => this._finishUpload(id, result),
+					() => this._finishUpload(id, null)
+				);
+		}
+	}
+
+	_finishUpload(id, result) {
+		const ed = this._editor;
+		if (!ed || ed.isDestroyed) return;
+		this._setUploading(-1);
+		const { state } = ed;
+		const placeholder = UPLOADS.getState(state).find(undefined, undefined, (s) => s.id === id)[0];
+		const tr = state.tr.setMeta(UPLOADS, { remove: id });
+		if (result && typeof result.ref === 'string' && result.ref !== '') {
+			const node = state.schema.nodes.image.create({
+				ref: result.ref,
+				alt: clip(result.alt, docLimits.maxAlt),
+				width: positiveInt(result.width),
+				height: positiveInt(result.height),
+			});
+			// The placeholder can vanish under an external value reset; the
+			// upload still lands, at the end, rather than being lost.
+			const pos = placeholder ? this._insertPos(state, placeholder.from) : state.doc.content.size;
+			tr.insert(pos, node);
+		}
+		ed.view.dispatch(tr);
+	}
+
+	// A bare URL pasted into an empty top-level paragraph becomes a link
+	// preview holding only `url`; fetchLinkPreview fills it in afterwards.
+	_pastePreview(view, event) {
+		const fetchPreview = this.props.fetchLinkPreview;
+		if (typeof fetchPreview !== 'function' || !view.editable) return false;
+		const text = ((event.clipboardData && event.clipboardData.getData('text/plain')) || '').trim();
+		if (!text || /\s/.test(text) || safePreviewUrl(text) == null) return false;
+		const { state } = view;
+		const { selection } = state;
+		const $from = selection.$from;
+		if (!selection.empty || $from.depth !== 1) return false;
+		if ($from.parent.type.name !== 'paragraph' || $from.parent.content.size !== 0) return false;
+		if (countNodes(state.doc, 'linkPreview') >= docLimits.maxLinkPreviews) return false;
+		event.preventDefault();
+		const id = `${this._fallbackId}-preview-${++this._seq}`;
+		const { schema } = state;
+		const card = schema.nodes.linkPreview.create({ url: text, pendingId: id });
+		const start = $from.before(1);
+		const tr = state.tr.replaceWith(start, $from.after(1), card);
+		// The caret continues on a fresh empty line under the card.
+		const after = start + card.nodeSize;
+		tr.insert(after, schema.nodes.paragraph.create());
+		tr.setSelection(TextSelection.create(tr.doc, after + 1));
+		this._previewWait.set(id, text);
+		view.dispatch(tr.scrollIntoView());
+		Promise.resolve()
+			.then(() => fetchPreview(text))
+			.then(
+				(result) => this._fillPreview(id, result),
+				() => this._fillPreview(id, null)
+			);
+		return true;
+	}
+
+	_fillPreview(id, result) {
+		this._previewWait.delete(id);
+		const ed = this._editor;
+		if (!ed || ed.isDestroyed) return;
+		const found = findNode(ed.state.doc, (n) => n.type.name === 'linkPreview' && n.attrs.pendingId === id);
+		if (!found) return;
+		const { node, pos } = found;
+		const { state } = ed;
+		const tr = state.tr;
+		if (result && typeof result === 'object') {
+			tr.setNodeMarkup(pos, undefined, {
+				url: node.attrs.url,
+				title: clip(result.title, docLimits.maxPreviewTitle),
+				description: clip(result.description, docLimits.maxPreviewDescription),
+				siteName: clip(result.siteName, docLimits.maxPreviewSiteName),
+				imageRef: clip(result.imageRef, docLimits.maxUrlLength),
+				pendingId: null,
+			});
+		} else {
+			const { schema } = state;
+			const marks = schema.marks.link ? [schema.marks.link.create({ href: node.attrs.url })] : [];
+			const para = schema.nodes.paragraph.create(null, schema.text(node.attrs.url, marks));
+			tr.replaceWith(pos, pos + node.nodeSize, para);
+		}
+		// The fill belongs to the paste: one undo removes the whole thing.
+		tr.setMeta('addToHistory', false);
+		ed.view.dispatch(tr);
 	}
 
 	// Current block style as a heading level, 0 meaning paragraph. Drives both
@@ -610,6 +1272,10 @@ export default class RichTextEditor extends PuzzleView {
 		},
 
 		onPress: (value) => {
+			if (value === 'image') {
+				if (this._canUpload()) this.refs.fileInput?.click();
+				return;
+			}
 			if (value !== 'link' || !this._editor) return;
 			const href = this._editor.getAttributes('link').href || '';
 			this.setData({ linkOpen: true, linkDraft: href });
@@ -649,6 +1315,14 @@ export default class RichTextEditor extends PuzzleView {
 			this._chain()?.extendMarkRange('link').unsetLink().run();
 			this.setData({ linkOpen: false, linkDraft: '' });
 			this.refresh();
+		},
+
+		onFiles: (event) => {
+			const input = event.target;
+			const files = imageFiles(input);
+			// Clear it so choosing the same file again still fires change.
+			input.value = '';
+			if (files.length && this._canUpload()) this._uploadFiles(files, null);
 		},
 
 		closeLink: () => {

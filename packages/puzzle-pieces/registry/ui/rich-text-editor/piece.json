@@ -1,6 +1,6 @@
 {
   "name": "rich-text-editor",
-  "description": "Rich text editor on Tiptap/ProseMirror — a block-style dropdown (Normal text, Heading 1-4) plus Toolbar-driven bold/italic/underline/strike, alignment, lists, blockquote, code block, and links, emitting a controlled Shopify-style JSON document tree via @change; render stored docs with the rich-text piece",
+  "description": "Rich text editor on Tiptap/ProseMirror — a block-style dropdown (Normal text, Heading 1-4) plus Toolbar-driven bold/italic/underline/strike, alignment, lists, blockquote, code block, and links, with optional images (uploadImage) and pasted-URL link previews (fetchLinkPreview), emitting a controlled Shopify-style JSON document tree via @change; render stored docs with the rich-text piece",
   "files": ["RichTextEditor.pzl"],
   "registryDependencies": ["toolbar", "lib/rich-text-doc.js"],
   "dependencies": ["@tiptap/core@^3.30.0", "@tiptap/pm@^3.30.0", "@tiptap/starter-kit@^3.30.0", "@tiptap/extension-text-align@^3.30.0"],
