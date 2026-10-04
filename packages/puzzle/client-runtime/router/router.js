@@ -3693,6 +3693,49 @@ export function encodeURL(path, mode, base) {
 }
 
 /**
+ * The URL base for one locale under prefix routing (D177) — the ONE place the
+ * locale prefix is computed, so every encoder (Router.url, the router's write
+ * side, the static router stub, the hybrid prerender's url shadow) and the i18n
+ * service's page-in-another-locale hrefs agree: the default locale (or no
+ * locale) is unprefixed, every other locale lives under its configured tag,
+ * verbatim. `routerBase` is an ALREADY-normalized base (normalizeBase above).
+ *
+ * @param {string} routerBase
+ * @param {string | null | undefined} locale
+ * @param {string | undefined} defaultLocale
+ * @returns {string}
+ */
+export function localeBase(routerBase, locale, defaultLocale) {
+	return !locale || locale === defaultLocale ? routerBase : routerBase + '/' + locale;
+}
+
+/**
+ * The locale a `url(path, options)` / `link(path, options)` call encodes for
+ * (D177): `{ locale: false }` → null (no prefix — a file that exists once),
+ * `{ locale: 'es' }` → that configured tag (matched case-insensitively, spelled
+ * as configured), otherwise the active locale. An unconfigured tag throws the
+ * same RangeError shape as setLocale, naming the configured locales.
+ *
+ * @param {{ locale?: string | false } | null | undefined} options
+ * @param {string} locale the active locale
+ * @param {readonly string[]} locales every configured tag, in config order
+ * @returns {string | null}
+ */
+export function linkLocale(options, locale, locales) {
+	const want = options?.locale;
+	if (want === false) return null;
+	if (want == null) return locale;
+	const match =
+		typeof want === 'string' ? locales.find((tag) => tag.toLowerCase() === want.toLowerCase()) : undefined;
+	if (!match) {
+		throw new RangeError(
+			`[puzzle] url(path, { locale: ${JSON.stringify(want)} }): not a configured locale (${locales.join(', ')})`
+		);
+	}
+	return match;
+}
+
+/**
  * Reduce a full path to the pathname used for matching (drop query + hash).
  * @param {string} rawPath
  * @returns {string}

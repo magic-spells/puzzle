@@ -414,12 +414,17 @@ async function prerenderPass(config, opts = {}) {
 	// One build-wide i18n service over the default locale's filled table (D175):
 	// every page renders in the default locale, and nothing is fetched.
 	let i18n = null;
+	// The page being rendered, as its own href — `i18n.locales[].href` reads it
+	// (D177). Pages render one at a time, so createPageContext just moves it.
+	let pageHref = '';
 	if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && opts.i18n) {
 		const { manifest, table } = opts.i18n;
 		i18n = createI18n({
 			manifest,
 			tables: { [manifest.defaultLocale]: table },
 			locale: manifest.defaultLocale,
+			page: () => pageHref,
+			routerBase: config.routerBase,
 		});
 		await i18n.__ready();
 	}
@@ -450,6 +455,9 @@ async function prerenderPass(config, opts = {}) {
 				});
 			}
 		}
+		// The catch-all page (`*`) has no path of its own: '' links to whatever URL
+		// served it.
+		pageHref = route?.path[0] === '/' ? router.url(route.path) : '';
 		return buildContext(config, { router, i18n });
 	};
 
@@ -953,7 +961,7 @@ async function buildContext(config, { router, i18n = null }) {
 	// per-page entry module by the Go build, and a function does not survive that.)
 	if (beforeRequest !== undefined) storeOptions.beforeRequest = beforeRequest;
 	const store = new Store(models, storeOptions);
-	const registry = makeFormatterRegistry(formatters, (path) => router.url(path));
+	const registry = makeFormatterRegistry(formatters, (path, options) => router.url(path, options));
 
 	/** @type {PrerenderContext} */
 	const ctx = { store, router, formatters: registry };

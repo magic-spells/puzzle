@@ -235,7 +235,13 @@ function makeContext(options) {
 	/** @type {TestContext} */
 	const ctx = { store, router, formatters };
 	// `i18n: { locale, strings }` (D175): a translated view renders with no fetch.
-	const i18n = supplied.i18n ?? (options.i18n ? createTestI18n(options.i18n) : null);
+	const i18n =
+		supplied.i18n ??
+		(options.i18n
+			? createTestI18n(options.i18n, () =>
+					router.current?.path ? router.url(router.current.path) : ''
+				)
+			: null);
 	if (i18n) {
 		ctx.i18n = i18n;
 		installTranslate(formatters, i18n);
@@ -259,9 +265,12 @@ function testI18nOptions({ locale = 'en', strings = {} } = {}) {
 	};
 }
 
-/** @param {TestI18nOptions} options */
-function createTestI18n(options) {
-	return createI18n(testI18nOptions(options));
+/**
+ * @param {TestI18nOptions} options
+ * @param {() => string} page the current page, for `i18n.locales[].href` (D177)
+ */
+function createTestI18n(options, page) {
+	return createI18n({ ...testI18nOptions(options), page });
 }
 
 /**

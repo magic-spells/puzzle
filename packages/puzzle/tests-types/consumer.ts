@@ -45,6 +45,8 @@ import type {
 	LazyView,
 	PuzzleViewConstructor,
 	PuzzleI18n,
+	PuzzleLocale,
+	LinkOptions,
 	LibraryFunctions,
 	DatePreset,
 } from '@magic-spells/puzzle';
@@ -725,7 +727,13 @@ class LocaleSwitcher extends PuzzleView {
 		const label: string = i18n ? i18n.t('cart.items', { count: 3 }) : '';
 		const welcome: string = i18n ? i18n.t('welcome', profile) : '';
 		void welcome;
-		const tags: readonly string[] = i18n?.locales ?? [];
+		const tags: readonly string[] = i18n?.locales.map((entry) => entry.locale) ?? [];
+		const switcher: readonly PuzzleLocale[] = i18n?.locales ?? [];
+		const first = switcher[0];
+		const parts: [string, string, string, boolean] | undefined = first
+			? [first.locale, first.label, first.href, first.active]
+			: undefined;
+		void parts;
 		return { label, tags, current: i18n?.locale, fallback: i18n?.defaultLocale };
 	}
 	choose(tag: string): Promise<void> | undefined {
@@ -754,6 +762,9 @@ void translatedTests;
 function libraryCalls(lib: LibraryFunctions, price: number, when: Date, tags: string[]): void {
 	const texts: string[] = [
 		lib.link('/about'),
+		// Locale prefix routing (D177): force a locale, or skip the prefix.
+		lib.link('/about', { locale: 'es' }),
+		lib.link('/files/cv.pdf', { locale: false }),
 		lib.t('cart.title'),
 		lib.t('cart.items', { count: tags.length }),
 		lib.t(404, null),
@@ -813,8 +824,12 @@ function libraryCalls(lib: LibraryFunctions, price: number, when: Date, tags: st
 	const roundedText: string = lib.round(1.5);
 	// @ts-expect-error json takes one argument.
 	lib.json({}, 2);
-	// @ts-expect-error link takes one argument.
+	// @ts-expect-error link's second argument is { locale }, not a path.
 	lib.link('/a', '/b');
+	// @ts-expect-error locale is a tag or false, never true.
+	lib.link('/a', { locale: true });
+	const linkOptions: LinkOptions = { locale: false };
+	void linkOptions;
 	// @ts-expect-error raw takes one argument.
 	lib.raw('<b>', true);
 	// @ts-expect-error timeago takes one argument.

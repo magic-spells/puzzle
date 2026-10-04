@@ -29,10 +29,11 @@ import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
 import { mount } from '../views/viewManager.js';
 import { setPortalHost } from '../views/portal.js';
-import { assembleChain, makeRouteSnapshot, makeRouterStub } from '../ssg/assemble.js';
+import { assembleChain, localizeRouterStub, makeRouteSnapshot, makeRouterStub } from '../ssg/assemble.js';
 import { preloadTakeoverComponents } from '../ssg/preload.js';
-import { createI18n, installTranslate } from '../i18n.js';
+import { createI18n, installTranslate, islandLocale, urlLocale } from '../i18n.js';
 import { normalizeBase } from '../router/router.js';
+import manifestData from '@magic-spells/puzzle/i18n/manifest';
 
 /** @import { PuzzleView } from '../views/PuzzleView.js' */
 /** @import { FormatterRegistry } from '../formatters.js' */
@@ -64,8 +65,10 @@ import { normalizeBase } from '../router/router.js';
  * @param {Pick<Storage, 'getItem' | 'setItem'>} [options.storage] Storage-like persistence object
  * @param {import('../capabilities.js').AdapterCapability} [options.adapter] opaque adapter capability
  * @param {string} [options.routerBase] normalized route URL prefix
- * @param {object} [options.__i18n] internal test seam, not API: translation service
- *   options (`{ manifest, tables, locale }`) so nothing is fetched
+ * @param {{ manifest?: import('../i18n.js').I18nManifest, tables?: Record<string, import('../i18n.js').LocaleTable>,
+ *   locale?: string, navigate?: (href: string) => void }} [options.__i18n] internal
+ *   test seam, not API: translation service options (`{ manifest, tables, locale }`)
+ *   so nothing is fetched, and a `navigate` that stands in for `location.assign`
  * @returns {Promise<void>}
  */
 export async function mountStatic({
@@ -127,13 +130,39 @@ export async function mountStatic({
 	// setLocale) is replayed once armRemount runs, instead of being dropped.
 	let earlyRefresh = false;
 	if (typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) {
-		const i18n = createI18n({
+		/** @type {NonNullable<Parameters<typeof createI18n>[0]>} */
+		const i18nOptions = {
 			// __i18n is an internal test seam ({ manifest, tables, locale }); a build
 			// reads the manifest module.
 			...__i18n,
+			// Locale files sit on the BARE routerBase, never under a locale prefix:
+			// they are emitted once and shared by every locale's pages (D177).
 			url: (path) => normalizeBase(routerBase) + '/' + path,
 			refresh: () => (remount ? remount() : void (earlyRefresh = true)),
-		});
+			page: () => location.pathname + location.search + location.hash,
+		};
+		// Locale prefix routing (D177): the URL decides the locale — its prefix,
+		// then the page's own table island — ahead of the stored choice and the
+		// browser's languages; links encode under that locale's prefix; and
+		// setLocale loads the same page under the other prefix instead of
+		// re-rendering in place.
+		if (typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) {
+			const manifest = __i18n?.manifest ?? manifestData;
+			if (manifest?.routing === 'prefix') {
+				const pageLocale = urlLocale(location.pathname, routerBase, manifest) ?? islandLocale();
+				if (pageLocale) i18nOptions.locale = pageLocale;
+				i18nOptions.routerBase = routerBase;
+				// A seam-supplied navigate (tests) stands; a build loads the page.
+				i18nOptions.navigate ??= (href) => location.assign(href);
+				localizeRouterStub(ctx.router, {
+					base: routerBase,
+					locale: pageLocale ?? manifest.defaultLocale,
+					defaultLocale: manifest.defaultLocale,
+					locales: Object.keys(manifest.locales),
+				});
+			}
+		}
+		const i18n = createI18n(i18nOptions);
 		if (i18n) {
 			ctx.i18n = i18n;
 			installTranslate(ctx.formatters, i18n);
@@ -281,7 +310,14 @@ function buildStaticContext({
 	// all (D159), and the build warns when one is configured. `routerBase` still
 	// applies — a subpath deploy wants the prefix.
 	const router = makeRouterStub(route, { base: routerBase });
-	const registry = makeFormatterRegistry(formatters, (path) => router.url(path));
+	const registry = makeFormatterRegistry(
+		formatters,
+		// Read router.url per call: locale prefix routing (D177) swaps in its
+		// locale-aware url(path, options) after this registry is built.
+		typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__
+			? (path, options) => router.url(path, options)
+			: (path) => router.url(path)
+	);
 
 	return { store, router, formatters: registry };
 }

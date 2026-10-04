@@ -174,4 +174,41 @@ describe('static kernel: setLocale remount', () => {
 		expect(store.keysBySubscriber.size).toBe(live);
 		expect(document.querySelector('h1').textContent).toBe('Welcome');
 	});
+
+	it('without prefix routing (D177) the switch stays an in-place remount, and every locales href is this page', async () => {
+		const startURL = location.href;
+		history.replaceState(null, '', '/about?tab=2#faq');
+		const navigate = vi.fn();
+		let i18n;
+		class Home extends PuzzleView {
+			created() {
+				i18n = this.ctx.i18n;
+			}
+			render() {
+				return h('section', { class: 'home' }, [h('h1', {}, [text(this.ctx.i18n.t('title'))])]);
+			}
+		}
+		try {
+			await mountStatic({
+				target: '#app',
+				views: [Home],
+				route: { path: '/about', params: {}, chain: [{ path: '/about' }] },
+				// A navigate only matters under prefix routing; MANIFEST has none.
+				__i18n: { manifest: MANIFEST, tables: { en: EN, es: ES }, locale: 'en', navigate },
+			});
+			expect(i18n.locales).toEqual([
+				{ locale: 'en', label: 'English', href: '/about?tab=2#faq', active: true },
+				{ locale: 'es', label: 'Español', href: '/about?tab=2#faq', active: false },
+			]);
+
+			await i18n.setLocale('es');
+
+			expect(navigate).not.toHaveBeenCalled();
+			expect(document.querySelector('h1').textContent).toBe('Bienvenido');
+			expect(i18n.locales.map((entry) => entry.active)).toEqual([false, true]);
+			expect(location.pathname).toBe('/about');
+		} finally {
+			history.replaceState(null, '', startURL);
+		}
+	});
 });

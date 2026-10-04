@@ -3,11 +3,11 @@
     <span class="text-muted">{ t('language') }</span>
     {#for option in options}
       <button
-        key={ option.tag }
-        class="px-2.5 py-1 rounded-md border {#if option.tag === current}border-brand bg-brand-tint text-brand{:else}border-line hover:bg-page{/if}"
-        aria-pressed="{ option.tag === current }"
-        @click={ choose(option.tag) }
-      >{ option.name }</button>
+        key={ option.locale }
+        class="px-2.5 py-1 rounded-md border {#if option.active}border-brand bg-brand-tint text-brand{:else}border-line hover:bg-page{/if}"
+        aria-pressed="{ option.active }"
+        @click={ choose(option.locale) }
+      >{ option.label }</button>
     {/for}
   </div>
 </puzzle-view>
@@ -15,16 +15,11 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
-// Each language names itself, so these stay untranslated.
-const NAMES = { en: 'English', es: 'Español', pl: 'Polski' };
-
 export default class LocaleSwitcher extends PuzzleView {
   data() {
-    const { i18n } = this.ctx;
-    return {
-      current: i18n.locale,
-      options: i18n.locales.map((tag) => ({ tag, name: NAMES[tag] ?? tag })),
-    };
+    // One entry per configured locale: its tag, its own name (`Español`), the
+    // current page in that locale, and whether it is the active one.
+    return { options: this.ctx.i18n.locales };
   }
 
   events = {

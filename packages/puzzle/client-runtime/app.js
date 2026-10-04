@@ -363,6 +363,9 @@ export class PuzzleApp {
 						: normalizeBase(routerBase) + '/' + path,
 				lang: routerMode?.name !== 'memory',
 				refresh: () => this.router?.__failedView(null, true),
+				// `i18n.locales[].href` (D177): the committed page, as the router encodes
+				// it ('' — the current document — before navigation #0).
+				page: () => (this.router?.current ? this.router.url(this.router.current.path) : ''),
 			});
 		}
 

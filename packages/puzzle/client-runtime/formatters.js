@@ -16,7 +16,7 @@
 import manifestFormatters from '@magic-spells/puzzle/formatters/manifest';
 import { escape } from './formatters/builtins.js';
 
-/** @import { Formatter } from '../types/index.js' */
+/** @import { Formatter, LinkOptions } from '../types/index.js' */
 
 // `raw` is no longer seeded here (D174): templates reach it only through the
 // live-HTML node, never through the registry, and seeding it would pull the
@@ -230,7 +230,8 @@ export class FormatterRegistry {
  * formatter only when the app did not provide its own implementation.
  *
  * @param {object} [customFormatters] name → formatter function
- * @param {(path: string) => string} [url] mode-aware route URL encoder
+ * @param {(path: string, options?: LinkOptions) => string} [url] mode-aware route URL
+ *   encoder; `options` reaches it only under locale prefix routing (D177)
  * @returns {FormatterRegistry}
  */
 export function makeFormatterRegistry(customFormatters = {}, url) {
@@ -254,10 +255,18 @@ export function makeFormatterRegistry(customFormatters = {}, url) {
 		registry.register(name, fn);
 	}
 	if (!registry.getAll().link && typeof url === 'function') {
-		registry.register('link', (value) => {
-			if (value == null) return '';
-			return url(String(value));
-		});
+		registry.register(
+			'link',
+			// Locale prefix routing (D177) passes `options` ({ locale: 'es' } or
+			// { locale: false }) through to the encoder; without it the second
+			// argument is not even read, so those apps ship the one-argument form.
+			typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__
+				? (value, options) => (value == null ? '' : url(String(value), options))
+				: (value) => {
+						if (value == null) return '';
+						return url(String(value));
+					}
+		);
 	}
 	return registry;
 }
