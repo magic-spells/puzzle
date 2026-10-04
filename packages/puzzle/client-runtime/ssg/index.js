@@ -439,6 +439,17 @@ export async function prerender(config, opts = {}) {
 }
 
 /**
+ * One enumerated route's render decision, made once per build (planRoutes):
+ * `render` prerenders it, `shell` writes the plain shell (a `prerender: false`
+ * chain), `reuse` reports it without rendering (a D155 subset render).
+ * @typedef {{ entry: RouteEntry, kind: 'render' | 'shell' | 'reuse' }} PlannedRoute
+ */
+/**
+ * One locale pass (D177): its locale (null without i18n) and its i18n service.
+ * @typedef {{ locale: string | null, i18n: ReturnType<typeof createI18n> | null }} LocalePass
+ */
+
+/**
  * @param {Record<string, any>} config
  * @param {PrerenderOptions} [opts]
  * @returns {Promise<{ pages: Page[], skipped: SkippedRoute[], warnings: string[] }>}
@@ -497,36 +508,8 @@ async function prerenderPass(config, opts = {}) {
 	const pages = [];
 	/** @type {SkippedRoute[]} */
 	const skipped = [];
-	// A skipped route reports its chain modules in static mode (D155): it is never
-	// rendered, but its views still hang off the route table in the prerender
-	// graph, and the render-wide walk cuts at chain roots. Omit them and the walk
-	// descends THROUGH the skipped route, marking every component it shares with a
-	// rendered page render-wide — which turns one component edit into a full
-	// re-render of the site. `/blog` beside `/blog/:id` is the everyday shape.
-	// Under prefix routing (D177) every pass after the first makes exactly the
-	// same per-route decisions, so only the first records skips and warnings.
-	let firstPass = true;
-	/**
-	 * @param {string} routePath
-	 * @param {string} reason
-	 * @param {RouteEntry} [entry]
-	 */
-	const skip = (routePath, reason, entry) => {
-		if (!firstPass) return;
-		/** @type {SkippedRoute} */
-		const record = { path: routePath, reason };
-		if (isStatic && entry) record.modules = collectSkippedModules(entry);
-		skipped.push(record);
-	};
 	/** @type {string[]} */
 	const warnings = [];
-	/** @param {string} warning */
-	const warn = (warning) => {
-		if (firstPass) warnings.push(warning);
-	};
-	let hasCatchAll = false;
-	let builtContext = false;
-	let compiledEntryIndex = 0;
 	if (isStatic && hasGuard(config.routes ?? [])) {
 		const warning =
 			'[puzzle] static output declares route guards, but guards never run in static output (no router)';
@@ -548,9 +531,180 @@ async function prerenderPass(config, opts = {}) {
 		);
 	}
 
-	// The locale being rendered: the pass's, or null without i18n.
-	/** @type {string | null} */
-	let passLocale = null;
+	// Enumerate: every route's render decision is made once, before any locale
+	// pass — under prefix routing (D177) every pass makes exactly the same
+	// per-route decisions, so skips and warnings are recorded once.
+	const { plan, hasCatchAll } = planRoutes(entries, { isStatic, only, shadowedByIndex, skipped, warnings });
+
+	// Render: for each locale, for each planned route.
+	const renderer = pageRenderer(config, { isStatic, routed, tags, defaultLocale, routeRouter, warnings, site: opts.site });
+	/** @type {LocalePass} */
+	let pass = { locale: null, i18n: null };
+	for (const locale of passes) {
+		pass = await renderer.startPass(locale, opts.i18n);
+		for (const item of plan) pages.push(await renderer.renderEntry(item, pass));
+	}
+
+	// No catch-all → no 404.html: warn (a static host will serve its own default
+	// 404 for unknown URLs instead). Flows to the Go build summary like any warning.
+	if (!hasCatchAll) {
+		warnings.push(
+			"[puzzle] no catch-all route (path: '*') — dist/404.html not emitted; " +
+				"unknown URLs will get the host's default 404 page"
+		);
+	}
+
+	// Preserve the old fail-fast lifecycle-hook posture even for a route table that
+	// produces no written static pages: a throwing beforeMount still fails the build.
+	//
+	// An explicit `only` subset is the one caller that opts out. The dev loop passes
+	// `only: []` for a rebuild that renders no route at all (a public asset moved),
+	// and building the application to render nothing would run beforeMount's side
+	// effects on a no-op rebuild and let application setup fail a save that touched
+	// no route. `only === null` means no filter was given — a real full render — so
+	// every case this guard covered before the subset render existed is unchanged.
+	if (!renderer.builtContext() && only === null && typeof config.beforeMount === 'function') {
+		await renderer.createPageContext(null, pass);
+	}
+
+	return { pages, skipped, warnings };
+}
+
+/**
+ * Decide, once per build, what each enumerated route becomes: skipped (with its
+ * warning and, in static mode, its chain modules), reused, a plain shell, or a
+ * rendered page. Skips and warnings land in `skipped`/`warnings` in route order.
+ *
+ * @param {RouteEntry[]} entries
+ * @param {{ isStatic: boolean, only: Set<string> | null, shadowedByIndex: Map<number | null, string>,
+ *   skipped: SkippedRoute[], warnings: string[] }} options
+ * @returns {{ plan: PlannedRoute[], hasCatchAll: boolean }}
+ */
+function planRoutes(entries, { isStatic, only, shadowedByIndex, skipped, warnings }) {
+	/** @type {PlannedRoute[]} */
+	const plan = [];
+	let hasCatchAll = false;
+	let compiledEntryIndex = 0;
+	// A skipped route reports its chain modules in static mode (D155): it is never
+	// rendered, but its views still hang off the route table in the prerender
+	// graph, and the render-wide walk cuts at chain roots. Omit them and the walk
+	// descends THROUGH the skipped route, marking every component it shares with a
+	// rendered page render-wide — which turns one component edit into a full
+	// re-render of the site. `/blog` beside `/blog/:id` is the everyday shape.
+	/**
+	 * @param {RouteEntry} entry
+	 * @param {string} reason
+	 * @param {string} warning
+	 */
+	const skip = (entry, reason, warning) => {
+		/** @type {SkippedRoute} */
+		const record = { path: entry.fullPath, reason };
+		if (isStatic) record.modules = collectSkippedModules(entry);
+		skipped.push(record);
+		warnings.push(warning);
+	};
+
+	for (const entry of entries) {
+		const { fullPath, chain } = entry;
+
+		// The bare top-level catch-all (`path: '*'`, D19) lands at 404.html (see
+		// pageOutputPath). Every non-bare '*' is ordinary literal segment text, just
+		// as it is in the Router's regex compiler.
+		const isCatchAll = fullPath === '*';
+		if (isCatchAll) hasCatchAll = true;
+		// The Router drops a catch-all that declares `children` WHOLESALE — its '*'
+		// branch stores the flat single-node chain and never walks the tree — so the
+		// leaves enumerated beneath it are routes the app can never navigate to. They
+		// must also not consume a compiled-entry index: entryIndex is the position in
+		// the Router's compiled leaf list, and one phantom index shifts every later
+		// leaf's shadow attribution by one.
+		const underCatchAll = !isCatchAll && chain[0].path === '*';
+		const entryIndex = isCatchAll || underCatchAll ? null : compiledEntryIndex++;
+		if (underCatchAll) {
+			skip(
+				entry,
+				'unreachable',
+				`[puzzle] skipped route "${fullPath}" — it is a child of the catch-all route ` +
+					"'*', which the Router matches as a single leaf, so this path is " +
+					'unreachable (declare it as a top-level route to prerender it)'
+			);
+			continue;
+		}
+
+		// Only a complete `:name` segment is dynamic. Colons and stars in any
+		// other segment are regex-escaped literal text by the Router and therefore
+		// produce ordinary prerenderable static paths here.
+		if (!isCatchAll && fullPath.split('/').some(isDynamicSegment)) {
+			skip(
+				entry,
+				'dynamic',
+				`[puzzle] skipped dynamic route "${fullPath}" — SSG v1 renders static paths only ` +
+					'(a :param route needs a staticPaths() hook, a post-v1 follow-up)'
+			);
+			continue;
+		}
+
+		// Hybrid pages are taken over by the live first-match-wins Router. Emitting a
+		// static page for a route an earlier matcher wins would make first paint and
+		// takeover disagree. True static output has no Router, so it deliberately
+		// keeps the page.
+		if (!isStatic && shadowedByIndex.has(entryIndex)) {
+			skip(
+				entry,
+				'shadowed',
+				`[puzzle] skipped shadowed route "${fullPath}" — earlier route "${shadowedByIndex.get(entryIndex)}" ` +
+					'matches it first in hybrid output (routes match in declaration order)'
+			);
+			continue;
+		}
+
+		// Subset render (D155): this route's output is unchanged since the last
+		// render, so the caller will supply it (see renderEntry).
+		if (only && !only.has(fullPath)) {
+			plan.push({ entry, kind: 'reuse' });
+			continue;
+		}
+
+		// Opt-out: a `prerender: false` anywhere in the chain writes the untouched
+		// shell at this path (an SPA-only island inside a static site).
+		if (chain.some((route) => route.prerender === false)) {
+			plan.push({ entry, kind: 'shell' });
+			continue;
+		}
+
+		// Guards are a browser-router gate, never a secrecy boundary: hybrid
+		// prerendering still emits the route's markup into public HTML. Warn once
+		// per rendered leaf whose effective root→leaf chain contains a guard;
+		// `prerender: false` above is the explicit opt-out and therefore stays quiet.
+		if (!isStatic && chain.some((route) => route.guard)) {
+			const warning =
+				`[puzzle] route "${fullPath}" has a guard, but its hybrid-prerendered markup ` +
+				'ships publicly — set prerender: false anywhere in its route chain to exclude it';
+			warnings.push(warning);
+			console.warn(warning);
+		}
+		plan.push({ entry, kind: 'render' });
+	}
+	return { plan, hasCatchAll };
+}
+
+/**
+ * The per-page half of a prerender pass: one i18n service per locale pass
+ * (startPass), one build-time ctx per page (createPageContext), and one Page per
+ * planned route per locale (renderEntry).
+ *
+ * @param {Record<string, any>} config
+ * @param {{ isStatic: boolean, routed: import('../i18n.js').I18nManifest | null, tags: string[],
+ *   defaultLocale: string | null, routeRouter: Router, warnings: string[], site?: string }} options
+ */
+function pageRenderer(config, { isStatic, routed, tags, defaultLocale, routeRouter, warnings, site }) {
+	const base = normalizeBase(config.routerBase);
+	/** @type {Set<string>} */
+	const canonicalWarned = new Set();
+	let builtContext = false;
+	// The page being rendered, as its own href — `i18n.locales[].href` reads it
+	// (D177). Pages render one at a time, so createPageContext just moves it.
+	let pageHref = '';
 
 	// The hybrid ctx router: the build's ONE unstarted memory Router, with url()
 	// shadowed from the app's `routerBase` (a config constant) — once, or once per
@@ -559,7 +713,8 @@ async function prerenderPass(config, opts = {}) {
 	// first page, exactly as before.
 	/** @type {string | null | undefined} */
 	let hybridLocale;
-	const hybridRouter = () => {
+	/** @param {string | null} passLocale */
+	const hybridRouter = (passLocale) => {
 		if (hybridLocale !== passLocale) {
 			const locale = (hybridLocale = passLocale);
 			// …a memory router carries no URL, so its url() returns paths UNPREFIXED: a
@@ -567,9 +722,9 @@ async function prerenderPass(config, opts = {}) {
 			// — a broken href for crawlers, no-JS visitors, and anyone clicking before
 			// takeover. Shadow url() with HISTORY encoding over the app's real base,
 			// through the same encoder Router.url() and the static stub use: hybrid
-			// output is path-only by construction (the guard above refuses anything
-			// else). The compiled route table stays the real memory Router the takeover
-			// expects. Under prefix routing the base is the pass locale's, and
+			// output is path-only by construction (the guard in prerenderPass refuses
+			// anything else). The compiled route table stays the real memory Router the
+			// takeover expects. Under prefix routing the base is the pass locale's, and
 			// link()'s { locale } options resolve as Router.url resolves them.
 			const base = normalizeBase(config.routerBase);
 			/** @type {(path: string, options?: import('../../types/index.js').LinkOptions) => string} */
@@ -582,22 +737,43 @@ async function prerenderPass(config, opts = {}) {
 		return routeRouter;
 	};
 
-	// One i18n service per pass over that locale's filled table (D175): created
-	// right before the pass's pages, since it points the module-level format
-	// locale at its own (D177). Nothing is fetched.
-	/** @type {ReturnType<typeof createI18n> | null} */
-	let i18n = null;
-	// The page being rendered, as its own href — `i18n.locales[].href` reads it
-	// (D177). Pages render one at a time, so createPageContext just moves it.
-	let pageHref = '';
+	/**
+	 * Start one locale pass: one i18n service over that locale's filled table
+	 * (D175), created right before the pass's pages, since it points the
+	 * module-level format locale at its own (D177). Nothing is fetched.
+	 *
+	 * @param {string | null} locale
+	 * @param {BuildI18n | null | undefined} buildI18n
+	 * @returns {Promise<LocalePass>}
+	 */
+	const startPass = async (locale, buildI18n) => {
+		/** @type {ReturnType<typeof createI18n> | null} */
+		let i18n = null;
+		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && buildI18n) {
+			const tag = /** @type {string} */ (locale);
+			i18n = createI18n({
+				manifest: buildI18n.manifest,
+				tables: { [tag]: localeTable(buildI18n, tag) },
+				locale: tag,
+				lang: false,
+				page: () => pageHref,
+				routerBase: config.routerBase,
+			});
+			await i18n.__ready();
+		}
+		return { locale, i18n };
+	};
 
-	/** @param {RouteEntry} [entry] absent for the beforeMount-only fallback */
-	const createPageContext = async (entry) => {
+	/**
+	 * @param {RouteEntry | null} entry null for the beforeMount-only fallback
+	 * @param {LocalePass} pass
+	 */
+	const createPageContext = async (entry, { locale, i18n }) => {
 		builtContext = true;
 		// Both modes thread the page's route snapshot into their prerender router:
 		// static gives it to a fresh throwing stub, while hybrid shadows `current` on
-		// the shared memory Router. The beforeMount-only fallback below has no entry —
-		// it never renders, so a null route is fine.
+		// the shared memory Router. The beforeMount-only fallback has no entry — it
+		// never renders, so a null route is fine.
 		const route = entry ? makeRouteSnapshot(entry) : null;
 		let router;
 		if (isStatic && route) {
@@ -609,13 +785,13 @@ async function prerenderPass(config, opts = {}) {
 			if (routed) {
 				localizeRouterStub(router, {
 					base: config.routerBase,
-					locale: /** @type {string} */ (passLocale),
+					locale: /** @type {string} */ (locale),
 					defaultLocale: /** @type {string} */ (defaultLocale),
 					locales: tags,
 				});
 			}
 		} else {
-			router = hybridRouter();
+			router = hybridRouter(locale);
 			if (route) {
 				// Own property shadows the prototype getter — the same instance-shadowing
 				// trick url() uses above, and for the same reason: `current` reads private
@@ -638,188 +814,86 @@ async function prerenderPass(config, opts = {}) {
 		return buildContext(config, { router, i18n });
 	};
 
-	const base = normalizeBase(config.routerBase);
-	/** @type {Set<string>} */
-	const canonicalWarned = new Set();
+	/**
+	 * One planned route's page in one locale pass.
+	 *
+	 * @param {PlannedRoute} item
+	 * @param {LocalePass} pass
+	 * @returns {Promise<Page>}
+	 */
+	const renderEntry = async ({ entry, kind }, pass) => {
+		const { fullPath, chain } = entry;
+		const { locale } = pass;
 
-	for (const locale of passes) {
-		passLocale = locale;
-		firstPass = locale === passes[0];
-		compiledEntryIndex = 0;
-		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && opts.i18n) {
-			const tag = /** @type {string} */ (locale);
-			i18n = createI18n({
-				manifest: opts.i18n.manifest,
-				tables: { [tag]: localeTable(opts.i18n, tag) },
-				locale: tag,
-				lang: false,
-				page: () => pageHref,
-				routerBase: config.routerBase,
-			});
-			await i18n.__ready();
+		// Subset render (D155): the page object is still produced — it consumes its
+		// output-path claim and its slug, and the SAME slug must fall to the SAME
+		// route as in a full render or the per-page bundle URLs would shift under
+		// pages nobody re-rendered. `modules`/`route` are pure functions of the route
+		// entry (no context, no store), so the generated per-page entry module is
+		// byte-identical either way; `data` is deliberately absent, because a page
+		// with no fresh island must not be written.
+		if (kind === 'reuse') {
+			/** @type {Page} */
+			const page = { path: fullPath, html: null, title: null, head: null, reused: true };
+			if (chain.some((route) => route.prerender === false)) page.prerender = false;
+			page.modules = await collectModules(entry);
+			page.route = serializeRouteJSON(entry);
+			if (routed) page.locale = /** @type {string} */ (locale);
+			return page;
 		}
 
-		for (const entry of entries) {
-			const { fullPath, chain } = entry;
-
-			// The bare top-level catch-all (`path: '*'`, D19) lands at 404.html (see
-			// pageOutputPath). Every non-bare '*' is ordinary literal segment text, just
-			// as it is in the Router's regex compiler.
-			const isCatchAll = fullPath === '*';
-			if (isCatchAll) hasCatchAll = true;
-			// The Router drops a catch-all that declares `children` WHOLESALE — its '*'
-			// branch stores the flat single-node chain and never walks the tree — so the
-			// leaves enumerated beneath it are routes the app can never navigate to. They
-			// must also not consume a compiled-entry index: entryIndex is the position in
-			// the Router's compiled leaf list, and one phantom index shifts every later
-			// leaf's shadow attribution by one.
-			const underCatchAll = !isCatchAll && chain[0].path === '*';
-			const entryIndex = isCatchAll || underCatchAll ? null : compiledEntryIndex++;
-			if (underCatchAll) {
-				skip(fullPath, 'unreachable', entry);
-				warn(
-					`[puzzle] skipped route "${fullPath}" — it is a child of the catch-all route ` +
-						"'*', which the Router matches as a single leaf, so this path is " +
-						'unreachable (declare it as a top-level route to prerender it)'
-				);
-				continue;
-			}
-
-			// Only a complete `:name` segment is dynamic. Colons and stars in any
-			// other segment are regex-escaped literal text by the Router and therefore
-			// produce ordinary prerenderable static paths here.
-			if (!isCatchAll && fullPath.split('/').some(isDynamicSegment)) {
-				skip(fullPath, 'dynamic', entry);
-				warn(
-					`[puzzle] skipped dynamic route "${fullPath}" — SSG v1 renders static paths only ` +
-						'(a :param route needs a staticPaths() hook, a post-v1 follow-up)'
-				);
-				continue;
-			}
-
-			// Hybrid pages are taken over by the live first-match-wins Router. Emitting a
-			// static page for a route an earlier matcher wins would make first paint and
-			// takeover disagree. True static output has no Router, so it deliberately
-			// keeps the page.
-			if (!isStatic && shadowedByIndex.has(entryIndex)) {
-				const shadowedBy = shadowedByIndex.get(entryIndex);
-				skip(fullPath, 'shadowed', entry);
-				warn(
-					`[puzzle] skipped shadowed route "${fullPath}" — earlier route "${shadowedBy}" ` +
-						'matches it first in hybrid output (routes match in declaration order)'
-				);
-				continue;
-			}
-
-			// Subset render (D155): this route's output is unchanged since the last
-			// render, so the caller will supply it. The page object is still produced —
-			// it consumes its output-path claim and its slug, and the SAME slug must
-			// fall to the SAME route as in a full render or the per-page bundle URLs
-			// would shift under pages nobody re-rendered. `modules`/`route` are pure
-			// functions of the route entry (no context, no store), so the generated
-			// per-page entry module is byte-identical either way; `data` is deliberately
-			// absent, because a page with no fresh island must not be written.
-			if (only && !only.has(fullPath)) {
-				/** @type {Page} */
-				const page = { path: fullPath, html: null, title: null, head: null, reused: true };
-				if (chain.some((route) => route.prerender === false)) page.prerender = false;
-				page.modules = await collectModules(entry);
-				page.route = serializeRouteJSON(entry);
-				if (routed) page.locale = /** @type {string} */ (locale);
-				pages.push(page);
-				continue;
-			}
-
-			// Opt-out: a `prerender: false` anywhere in the chain writes the untouched
-			// shell at this path (an SPA-only island inside a static site). In static
-			// mode the context is still built (beforeMount runs) and its store snapshot
-			// captured, so the page's per-page module can rehydrate + mount client-side
-			// into the empty target — html stays null (CONTRACT 3).
-			if (chain.some((route) => route.prerender === false)) {
-				const ctx = await createPageContext(entry);
-				/** @type {Page} */
-				const page = { path: fullPath, html: null, title: null, head: null, prerender: false };
-				if (isStatic) await attachStaticFields(page, entry, ctx);
-				if (routed) page.locale = /** @type {string} */ (locale);
-				pages.push(page);
-				continue;
-			}
-
-			// Guards are a browser-router gate, never a secrecy boundary: hybrid
-			// prerendering still emits the route's markup into public HTML. Warn once
-			// per rendered leaf whose effective root→leaf chain contains a guard;
-			// `prerender: false` above is the explicit opt-out and therefore stays quiet.
-			if (firstPass && !isStatic && chain.some((route) => route.guard)) {
-				const warning =
-					`[puzzle] route "${fullPath}" has a guard, but its hybrid-prerendered markup ` +
-					'ships publicly — set prerender: false anywhere in its route chain to exclude it';
-				warnings.push(warning);
-				console.warn(warning);
-			}
-
-			const ctx = await createPageContext(entry);
-			let rendered;
-			try {
-				rendered = await renderRoute(entry, ctx);
-			} catch (/** @type {any} */ err) {
-				// A data() rejection must fail loudly, naming the route (DOC plan risk).
-				throw new Error(`[puzzle] prerender failed for route "${fullPath}": ${err.message}`, {
-					cause: err,
-				});
-			}
-			// A canonical names the default locale's URL; each other locale's page
-			// points at its own (D177). og:url follows, as it derives from canonical.
-			if (routed && locale !== defaultLocale && rendered.head.canonical != null) {
-				const canonical = localizeCanonical(rendered.head.canonical, {
-					base,
-					locale: /** @type {string} */ (locale),
-					manifest: routed,
-					site: opts.site,
-				});
-				if (canonical != null) {
-					rendered.head.canonical = canonical;
-				} else if (!canonicalWarned.has(fullPath)) {
-					canonicalWarned.add(fullPath);
-					warnings.push(
-						`[puzzle] route "${fullPath}" canonical ${JSON.stringify(rendered.head.canonical)} ` +
-							'cannot be localized — every language\'s page will name it as canonical. Write it ' +
-							'root-relative (under routerBase) or on the `site` origin, and the build adds each ' +
-							"locale's prefix"
-					);
-				}
-			}
+		// Opt-out (`prerender: false`): in static mode the context is still built
+		// (beforeMount runs) and its store snapshot captured, so the page's per-page
+		// module can rehydrate + mount client-side into the empty target — html
+		// stays null (CONTRACT 3).
+		if (kind === 'shell') {
+			const ctx = await createPageContext(entry, pass);
 			/** @type {Page} */
-			const page = { path: fullPath, html: rendered.html, title: rendered.title, head: rendered.head };
+			const page = { path: fullPath, html: null, title: null, head: null, prerender: false };
 			if (isStatic) await attachStaticFields(page, entry, ctx);
 			if (routed) page.locale = /** @type {string} */ (locale);
-			pages.push(page);
+			return page;
 		}
-	}
-	firstPass = true;
 
-	// No catch-all → no 404.html: warn (a static host will serve its own default
-	// 404 for unknown URLs instead). Flows to the Go build summary like any warning.
-	if (!hasCatchAll) {
-		warnings.push(
-			"[puzzle] no catch-all route (path: '*') — dist/404.html not emitted; " +
-				"unknown URLs will get the host's default 404 page"
-		);
-	}
+		const ctx = await createPageContext(entry, pass);
+		let rendered;
+		try {
+			rendered = await renderRoute(entry, ctx);
+		} catch (/** @type {any} */ err) {
+			// A data() rejection must fail loudly, naming the route (DOC plan risk).
+			throw new Error(`[puzzle] prerender failed for route "${fullPath}": ${err.message}`, {
+				cause: err,
+			});
+		}
+		// A canonical names the default locale's URL; each other locale's page
+		// points at its own (D177). og:url follows, as it derives from canonical.
+		if (routed && locale !== defaultLocale && rendered.head.canonical != null) {
+			const canonical = localizeCanonical(rendered.head.canonical, {
+				base,
+				locale: /** @type {string} */ (locale),
+				manifest: routed,
+				site,
+			});
+			if (canonical != null) {
+				rendered.head.canonical = canonical;
+			} else if (!canonicalWarned.has(fullPath)) {
+				canonicalWarned.add(fullPath);
+				warnings.push(
+					`[puzzle] route "${fullPath}" canonical ${JSON.stringify(rendered.head.canonical)} ` +
+						'cannot be localized — every language\'s page will name it as canonical. Write it ' +
+						'root-relative (under routerBase) or on the `site` origin, and the build adds each ' +
+						"locale's prefix"
+				);
+			}
+		}
+		/** @type {Page} */
+		const page = { path: fullPath, html: rendered.html, title: rendered.title, head: rendered.head };
+		if (isStatic) await attachStaticFields(page, entry, ctx);
+		if (routed) page.locale = /** @type {string} */ (locale);
+		return page;
+	};
 
-	// Preserve the old fail-fast lifecycle-hook posture even for a route table that
-	// produces no written static pages: a throwing beforeMount still fails the build.
-	//
-	// An explicit `only` subset is the one caller that opts out. The dev loop passes
-	// `only: []` for a rebuild that renders no route at all (a public asset moved),
-	// and building the application to render nothing would run beforeMount's side
-	// effects on a no-op rebuild and let application setup fail a save that touched
-	// no route. `only === null` means no filter was given — a real full render — so
-	// every case this guard covered before the subset render existed is unchanged.
-	if (!builtContext && only === null && typeof config.beforeMount === 'function') {
-		await createPageContext();
-	}
-
-	return { pages, skipped, warnings };
+	return { startPass, createPageContext, renderEntry, builtContext: () => builtContext };
 }
 
 /**
