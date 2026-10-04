@@ -5,6 +5,7 @@ import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { Store } from '../client-runtime/datastore/store.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
+import { back } from './helpers/history.js';
 
 // Hand-written stand-ins for what the compiler emits: a view/layout render()
 // returns a ViewNode tree, `<Slot/>` is a SLOT_TAG node, and a routed view is a
@@ -321,8 +322,7 @@ describe('Router — route guards (D87)', () => {
 		replaceSpy.mockRestore();
 
 		// Back therefore lands on the page the user was standing on, not past it.
-		history.back();
-		await delay(20);
+		await back(() => router.current.path === '/');
 		expect(location.pathname).toBe('/');
 		expect(router.current.path).toBe('/');
 	});
@@ -354,8 +354,7 @@ describe('Router — route guards (D87)', () => {
 		const length = history.length;
 		const pushSpy = vi.spyOn(history, 'pushState');
 
-		history.back();
-		await delay(30);
+		await back(() => router.current.path === '/login');
 
 		expect(router.current.path).toBe('/login');
 		expect(location.pathname).toBe('/login');
@@ -556,8 +555,8 @@ describe('Router — route guards (D87)', () => {
 		allowed = false;
 		guardRuns = 0;
 
-		history.back();
-		await delay(20);
+		// The popstate lands on /private; the rewind puts the URL back.
+		await back(() => location.pathname === '/after');
 
 		// The browser moved to /private before the guard ran; the guard refused, so
 		// nothing commits AND the URL is rewound to the committed route — URL and the
@@ -592,8 +591,8 @@ describe('Router — route guards (D87)', () => {
 		await router.push('/after');
 		redirect = true;
 
-		history.back();
-		await delay(20);
+		// The popstate lands on /private; the rewind puts the URL back.
+		await back(() => location.pathname === '/after');
 
 		expect(location.pathname).toBe('/after');
 		expect(router.current.path).toBe('/after');
@@ -621,8 +620,7 @@ describe('Router — route guards (D87)', () => {
 		await router.push('/after');
 		redirect = true;
 
-		history.back();
-		await delay(20);
+		await back(() => router.current.path === '/login');
 
 		expect(location.pathname).toBe('/login');
 		expect(router.current.path).toBe('/login');
@@ -2195,8 +2193,7 @@ describe('router.replace() — path mode (v1.49, D83)', () => {
 		await router.push('/about');
 		await router.replace('/docs'); // the '/about' entry now reads '/docs'
 
-		history.back(); // jsdom fires popstate asynchronously → the router pops
-		await delay(20);
+		await back(() => router.current.path === '/'); // a real jsdom traversal → the router pops
 		expect(location.pathname).toBe('/');
 		expect(router.current.path).toBe('/');
 		expect(el.querySelector('.home')).not.toBeNull();
