@@ -27,7 +27,17 @@
 import { isAdapterCapability } from './capabilities.js';
 import { Store } from './datastore/store.js';
 import { makeFormatterRegistry } from './formatters.js';
-import { createI18n, installTranslate } from './i18n.js';
+import {
+	assignSameOrigin,
+	createI18n,
+	installTranslate,
+	localePath,
+	readStoredLocale,
+	selectLocale,
+	urlLocale,
+	viewerLanguages,
+} from './i18n.js';
+import manifestData from '@magic-spells/puzzle/i18n/manifest';
 import { Router, normalizeBase } from './router/router.js';
 import { snapshotToStorage, restoreStoreFromStorage, restoreViewsFromStorage } from './devstate.js';
 import { devtoolsAppMounted, devtoolsAppUnmounted } from './devtools.js';
@@ -318,6 +328,28 @@ export class PuzzleApp {
 			errorView,
 		} = this.config;
 
+		// Locale prefix routing (D177), before anything is wired. Hash and memory
+		// routing have no path to carry a locale prefix, and the compiler cannot read
+		// this file to reject them at build time. Then the first-visit redirect: the
+		// plain SPA has no prerendered page to carry the inline redirect script, so it
+		// runs here, before navigation #0 (a hybrid page that ran its script never
+		// gets this far; one whose script declined reaches the same verdict).
+		if (typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) {
+			const routing = prefixRouting(this.config);
+			if (routing) {
+				if (routerMode) {
+					throw new Error(
+						"[puzzle] i18n.routing: 'prefix' needs path routing — remove routerMode (hash and memory URLs have no path for a locale prefix)"
+					);
+				}
+				const to = firstVisitRedirect(routing.manifest, routerBase);
+				if (to) {
+					assignSameOrigin(to, true);
+					return this;
+				}
+			}
+		}
+
 		// 1. Resolve the mount element — a selector string or an Element.
 		const el = this.#resolveTarget(target);
 		this._container = el;
@@ -369,14 +401,24 @@ export class PuzzleApp {
 				// The page carries routerBase in front of any locale prefix; prefix
 				// routing swaps the prefix after it (`/docs/es/about`, not `/es/docs/about`).
 				routerBase: normalizeBase(routerBase),
+				// Locale prefix routing (D177): the URL's locale, setLocale as a page
+				// load. Spread last so the URL beats the seam's `locale`. The spread
+				// folds away entirely without the define.
+				...((typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) &&
+					prefixI18nOptions(this.config)),
 			});
 		}
 
 		// 3. Formatters: shared built-in/custom wiring plus the live-router-backed
 		//    `link` encoder. The closure reads this.router lazily so a re-mount never
 		//    keeps a stale Router, and a custom `link` formatter still wins.
-		this.formatters = makeFormatterRegistry(formatters, (path) =>
-			this.router ? this.router.url(path) : path
+		this.formatters = makeFormatterRegistry(
+			formatters,
+			// Locale prefix routing (D177) hands link()'s options ({ locale: 'es' },
+			// { locale: false }) to router.url; without it the one-argument form ships.
+			typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__
+				? (path, options) => (this.router ? this.router.url(path, options) : path)
+				: (path) => (this.router ? this.router.url(path) : path)
 		);
 		// The service-bound `t` formatter (D175); an app `t` still wins.
 		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n)
@@ -387,7 +429,14 @@ export class PuzzleApp {
 		//    (path routing, inline) stands otherwise — mirroring how `storage` is
 		//    conditionally passed to the Store above (D34/D159).
 		/** @type {NonNullable<ConstructorParameters<typeof Router>[1]>} */
-		const routerOptions = { scrollBehavior };
+		const routerOptions = {
+			scrollBehavior,
+			// Locale prefix routing (D177): the page's locale and the configured ones,
+			// so the router reads and writes URLs under the locale's prefix. Folds
+			// away without the define.
+			...((typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) &&
+				prefixRouterOptions(this.config)),
+		};
 		// focusBehavior → Router `focusBehavior`, passed through ONLY when set so the
 		// Router's own default (focus the committed leaf root + announce the title)
 		// stands otherwise (v1.56, D93) — mirroring the conditional passthroughs below.
@@ -711,6 +760,102 @@ export class PuzzleApp {
 			'[puzzle] mount target must be a CSS selector string or a DOM Element (config.target)'
 		);
 	}
+}
+
+// ---- Locale prefix routing (D177) -------------------------------------------
+// Called only behind the inline __PUZZLE_HAS_LOCALE_ROUTING__ probe, so an app
+// without `i18n.routing` ships none of these. Each call re-reads the manifest
+// and the URL rather than threading a value through mount(): a local would
+// survive the fold as a declaration, and nothing between the calls awaits.
+
+/**
+ * The locale manifest when it routes by prefix (the build's, or the `__i18n`
+ * seam's), with the page's locale — the URL's prefix, else the default. The URL
+ * decides: it beats the stored choice and the browser's languages.
+ *
+ * @param {Record<string, any>} config the PuzzleApp config
+ * @returns {{ manifest: import('./i18n.js').I18nManifest, locale: string } | null}
+ */
+function prefixRouting(config) {
+	/** @type {import('./i18n.js').I18nManifest | null} */
+	const manifest = config.__i18n?.manifest ?? manifestData;
+	if (manifest?.routing !== 'prefix') return null;
+	return {
+		manifest,
+		locale: urlLocale(location.pathname, config.routerBase, manifest) ?? manifest.defaultLocale,
+	};
+}
+
+/**
+ * createI18n options under prefix routing: the URL's locale, the page read off
+ * the address bar (path routing keeps it equal to the committed route, and it
+ * is there before navigation #0), and setLocale as a same-origin page load — no
+ * in-place rebuild, so the router's base never changes while the app runs. A
+ * seam-supplied `navigate` (tests) stands.
+ *
+ * @param {Record<string, any>} config
+ */
+function prefixI18nOptions(config) {
+	const routing = prefixRouting(config);
+	return (
+		routing && {
+			locale: routing.locale,
+			page: () => location.pathname + location.search + location.hash,
+			navigate: config.__i18n?.navigate ?? assignSameOrigin,
+		}
+	);
+}
+
+/**
+ * Router options under prefix routing: the page's locale and every configured
+ * one, so the router composes the locale prefix into its base.
+ *
+ * @param {Record<string, any>} config
+ */
+function prefixRouterOptions(config) {
+	const routing = prefixRouting(config);
+	return (
+		routing && {
+			locale: routing.locale,
+			defaultLocale: routing.manifest.defaultLocale,
+			locales: Object.keys(routing.manifest.locales),
+		}
+	);
+}
+
+/**
+ * The SPA's first-visit redirect: the same page under the viewer's locale's
+ * prefix (query and fragment kept), or null. It redirects only when the URL has
+ * no locale prefix, the visitor did not come from this site (a deliberate click
+ * to another language is never bounced back), and the wanted locale — the stored
+ * choice, else the first `navigator.languages` match, both through selectLocale —
+ * is not the default (a stored default choice therefore suppresses it).
+ * `i18n: { detect: false }` turns it off.
+ *
+ * @param {import('./i18n.js').I18nManifest} manifest
+ * @param {string | undefined} routerBase
+ * @returns {string | null}
+ */
+function firstVisitRedirect(manifest, routerBase) {
+	if (manifest.detect === false || urlLocale(location.pathname, routerBase, manifest)) return null;
+	let from = null;
+	try {
+		from = new URL(document.referrer).origin;
+	} catch {
+		// No referrer (a typed URL, a bookmark) or an unparsable one: not this site.
+	}
+	if (from === location.origin) return null;
+	const want = selectLocale(
+		Object.keys(manifest.locales),
+		manifest.defaultLocale,
+		readStoredLocale(),
+		viewerLanguages()
+	);
+	if (want === manifest.defaultLocale) return null;
+	const here = location.pathname + location.search + location.hash;
+	const to = localePath(here, routerBase, want, manifest);
+	// A page outside routerBase has no locale URL: localePath hands it back as is.
+	return to === here ? null : to;
 }
 
 export default PuzzleApp;
