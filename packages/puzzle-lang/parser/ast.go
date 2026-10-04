@@ -175,6 +175,31 @@ type InlineSVG struct {
 	Pos    Position
 }
 
+// Let is `{#let name = expression}`, or several assignments one per line — a
+// VOID block that names values for the rest of the child list it sits in
+// (let.go). The parser builds one only when Options.Let is on, so a PuzzleKit
+// tree never holds one. Pos is the `{#let` opener.
+type Let struct {
+	// Bindings are the assignments in written order. Each sees the ones
+	// before it.
+	Bindings []LetBinding
+	Pos      Position
+}
+
+// LetBinding is one `name = expression` inside a {#let}.
+type LetBinding struct {
+	// Name is the value's name.
+	Name string
+	// Interp is the right-hand side: Expr is its trimmed source and ExprAST
+	// the parsed tree, as an interpolation's. Its Pos is the expression's
+	// first byte (there is no brace), the same as ExprPos.
+	Interp *Interpolation
+	// NamePos locates the name's first byte.
+	NamePos Position
+	// ExprPos locates the right-hand side's first byte.
+	ExprPos Position
+}
+
 func (*Element) isNode()       {}
 func (*Component) isNode()     {}
 func (*Slot) isNode()          {}
@@ -186,6 +211,7 @@ func (*If) isNode()            {}
 func (*For) isNode()           {}
 func (*Case) isNode()          {}
 func (*InlineSVG) isNode()     {}
+func (*Let) isNode()           {}
 
 // Attr is an element attribute or component prop.
 type Attr interface{ isAttr() }
