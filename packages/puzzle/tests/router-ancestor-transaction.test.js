@@ -633,3 +633,48 @@ describe('Router — D146 mid-gate scope fence (F4)', () => {
 		expect(clicks.at(-1)).toEqual({ params: '2', route: '2' });
 	});
 });
+
+describe('Router — afterUpdate(prev) on reused views (D178)', () => {
+	it('a params change hands each reused view the committed params, route and data of the old route', async () => {
+		const { store, routes } = makeFixture();
+		const seen = [];
+		// The fixture's shell plus the hook; the leaf under it is reused too.
+		class Shell extends routes[0].view {
+			afterUpdate(prev) {
+				seen.push({
+					view: 'shell',
+					prevId: prev.params.id,
+					prevRoute: prev.route.params.id,
+					prevOrg: prev.data.org.name,
+					nowId: this.params.id,
+					nowOrg: this.getData().org.name,
+				});
+			}
+		}
+		class Leaf extends PuzzleView {
+			afterUpdate(prev) {
+				seen.push({ view: 'leaf', prevRoute: prev.route.params.id, nowRoute: this.route.params.id });
+			}
+			render() {
+				return h('puzzle-view', { class: 'leaf' }, [text('LEAF')]);
+			}
+		}
+		const { router, el } = await boot(
+			[{ ...routes[0], view: Shell, children: [{ path: 'home', name: 'home', view: Leaf }] }],
+			{ store, router: null, formatters: null },
+			'/org/1/home'
+		);
+		expect(seen).toEqual([]);
+
+		await router.push('/org/2/home');
+		await tick();
+
+		expect(el.querySelector('h1').textContent).toBe('ORG 2');
+		expect(seen.filter((s) => s.view === 'shell')).toEqual([
+			{ view: 'shell', prevId: '1', prevRoute: '1', prevOrg: 'ORG 1', nowId: '2', nowOrg: 'ORG 2' },
+		]);
+		expect(seen.filter((s) => s.view === 'leaf')).toEqual([
+			{ view: 'leaf', prevRoute: '1', nowRoute: '2' },
+		]);
+	});
+});
