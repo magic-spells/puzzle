@@ -637,6 +637,11 @@ describe('Router — D146 mid-gate scope fence (F4)', () => {
 describe('Router — afterUpdate(prev) on reused views (D178)', () => {
 	it('a params change hands each reused view the committed params, route and data of the old route', async () => {
 		const { store, routes } = makeFixture();
+		// Drain the fixture's setup upserts now, before anything subscribes. Left
+		// pending, their frame-scheduled flush lands wherever the machine's timing puts
+		// it — before, inside or after the navigation — and each spot is a legitimate
+		// store-change update of the shell, one more afterUpdate than this test measures.
+		store.flush();
 		const seen = [];
 		// The fixture's shell plus the hook; the leaf under it is reused too.
 		class Shell extends routes[0].view {
