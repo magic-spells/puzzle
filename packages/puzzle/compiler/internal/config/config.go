@@ -433,18 +433,6 @@ func validate(raw rawConfig) (Config, error) {
 		cfg.I18n = i18n
 	}
 
-	// TEMPORARY GATE (D177): prefix routing is built for static output only so
-	// far. Hybrid and SPA need the router half (path base + locale prefix), which
-	// has not landed; delete this block when it does. It reads the config's
-	// output, not the --static flag, because `puzzle dev` picks its mode from the
-	// config alone.
-	if cfg.I18n.PrefixRouting() && cfg.Output != "static" {
-		return Config{}, fmt.Errorf(
-			"%s: i18n.routing: 'prefix' currently requires output: 'static' — prefix routing for hybrid output and the SPA is not built yet",
-			ConfigFileName,
-		)
-	}
-
 	if !unset(raw.Site) {
 		site, err := validateSite(raw.Site)
 		if err != nil {
