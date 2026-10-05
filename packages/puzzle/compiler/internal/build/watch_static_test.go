@@ -840,6 +840,125 @@ export default class About extends PuzzleView {}
 	}
 }
 
+// TestStaticWatchStaticPathsRebuilds: a `staticPaths` route (D179) is ONE
+// route to the dev loop — its generated pages share one entry, its view edit
+// re-renders all of them, and an edit elsewhere reuses them. The list itself
+// is re-read on every rebuild (here from the environment, standing in for an
+// external data source no file change reports): an entry that appeared has no
+// last-good page, so the partial render falls back to a full one; an entry that
+// disappeared is simply no longer written. Every step ends byte-identical to a
+// one-shot build.
+func TestStaticWatchStaticPathsRebuilds(t *testing.T) {
+	requireStaticRuntime(t)
+	const listVar = "PUZZLE_TEST_STATIC_PATHS"
+	files := baseSSGFixture()
+	files["app/routes.js"] = strings.Replace(files["app/routes.js"],
+		"view: Post, layout: DefaultLayout, meta: { title: 'Post Page' } }",
+		"view: Post, layout: DefaultLayout, meta: { title: 'Post Page' },\n"+
+			"    staticPaths: () => (process.env."+listVar+" || '').split(',').filter(Boolean).map((id) => ({ id })) }",
+		1)
+	post := func(heading string) string {
+		return `<puzzle-view>
+  <h1>` + heading + ` {id}</h1>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Post extends PuzzleView {
+  data() { return { id: this.params.id }; }
+}
+</script>
+`
+	}
+	files["app/views/Post.pzl"] = post("Post")
+	root := writeSSGFixture(t, files)
+	dist := filepath.Join(root, "dist")
+	read := func(rel string) string {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join(dist, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatalf("reading dist/%s: %v", rel, err)
+		}
+		return string(data)
+	}
+	exists := func(rel string) bool {
+		_, err := os.Stat(filepath.Join(dist, filepath.FromSlash(rel)))
+		return err == nil
+	}
+	edit := func(rel, body string) string {
+		t.Helper()
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	matchesOneShot := func(step string) {
+		t.Helper()
+		warm := snapshotTree(t, dist)
+		if err := Build(root, Options{Development: true, Output: "static"}); err != nil {
+			t.Fatalf("%s: one-shot build failed: %v", step, err)
+		}
+		if d := diffTrees(warm, snapshotTree(t, dist)); d != "" {
+			t.Errorf("%s: the dev rebuild is not the one-shot output:\n%s", step, d)
+		}
+	}
+
+	t.Setenv(listVar, "a,b")
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static"}})
+	if err != nil {
+		t.Fatalf("creating the static dev builder: %v", err)
+	}
+	defer builder.Dispose()
+	if err := builder.Rebuild(nil); err != nil {
+		t.Fatalf("initial rebuild failed: %v", err)
+	}
+	if !strings.Contains(read("blog/a/index.html"), "Post a") || !strings.Contains(read("blog/b/index.html"), "Post b") {
+		t.Fatal("initial render is missing a generated page")
+	}
+	entry := read("_puzzle/blog--_id.js")
+	if !strings.Contains(entry, "data-puzzle-static-route") {
+		t.Errorf("the shared entry does not read the page's route island:\n%s", entry)
+	}
+
+	// The route's view: one route, every generated page re-rendered.
+	viewFile := edit("app/views/Post.pzl", post("Entry"))
+	if err := builder.Rebuild([]string{viewFile}); err != nil {
+		t.Fatalf("view rebuild failed: %v", err)
+	}
+	(&wantPlan{routes: []string{"/blog/:id"}}).check(t, "view edit", builder.lastPlan)
+	if !strings.Contains(read("blog/a/index.html"), "Entry a") || !strings.Contains(read("blog/b/index.html"), "Entry b") {
+		t.Error("a view edit did not re-render every generated page")
+	}
+	matchesOneShot("view edit")
+
+	// The list changes under an edit elsewhere: "c" is new, so there is no
+	// last-good page to reuse and the rebuild becomes a full render; "a" is gone.
+	t.Setenv(listVar, "b,c")
+	homeFile := edit("app/views/Home.pzl", "<puzzle-view>\n  <h1>Home, again</h1>\n</puzzle-view>\n")
+	if err := builder.Rebuild([]string{homeFile}); err != nil {
+		t.Fatalf("rebuild with a new entry failed: %v", err)
+	}
+	if !builder.lastPlan.full {
+		t.Errorf("a new entry with no last-good page must fall back to a full render, got %v", builder.lastPlan.routes)
+	}
+	if exists("blog/a/index.html") || !strings.Contains(read("blog/c/index.html"), "Entry c") {
+		t.Error("the rebuild did not drop the removed entry and add the new one")
+	}
+	matchesOneShot("entry added")
+
+	// Only a removal: the partial render still runs, reusing "b".
+	t.Setenv(listVar, "b")
+	aboutFile := edit("app/views/About.pzl", "<puzzle-view>\n  <h1>About, again</h1>\n</puzzle-view>\n")
+	if err := builder.Rebuild([]string{aboutFile}); err != nil {
+		t.Fatalf("rebuild with a removed entry failed: %v", err)
+	}
+	(&wantPlan{routes: []string{"/about"}}).check(t, "entry removed", builder.lastPlan)
+	if exists("blog/c/index.html") || !strings.Contains(read("blog/b/index.html"), "Entry b") {
+		t.Error("the partial rebuild did not drop the removed entry while reusing the rest")
+	}
+	matchesOneShot("entry removed")
+}
+
 // TestStaticWatchSkippedRouteViewIsChainRoot: a route the prerender SKIPS still
 // hangs off the route table, so its views have to cut the render-wide walk like
 // any other chain root. Without them the walk descends through the skipped route

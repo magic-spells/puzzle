@@ -987,3 +987,154 @@ describe('sitemap (D177)', () => {
 		expect(summary.warnings.filter((w) => w.includes('public/sitemap.xml'))).toHaveLength(1);
 	});
 });
+
+// D179 — pages a `staticPaths` route generates take part in the per-locale
+// prerender: listed once per locale pass, written under each locale's folder,
+// with alternates and sitemap entries for the locales that list them.
+describe('staticPaths under locale prefix routing (D179)', () => {
+	const ROUTED = { ...MANIFEST, routing: 'prefix' };
+	const I18N_ROUTED = { manifest: ROUTED, table: EN, tables: { en: EN, es: ES } };
+
+	class Post extends PuzzleView {
+		render() {
+			const nav = this.ctx.i18n.locales.map((l) => h('a', { href: l.href, lang: l.locale }, [text(l.label)]));
+			return h('article', {}, [text(`${this.params.slug}:${this.ctx.i18n.locale}`), h('nav', {}, nav)]);
+		}
+	}
+	Post.__pzlModule = 'app/views/Post.pzl';
+
+	const LISTS = { en: ['shared', 'only-en'], es: ['shared', 'solo-es'] };
+	const routes = (staticPaths) => [
+		{ path: '/', view: Home, layout: Layout },
+		{
+			path: '/blog/:slug',
+			view: Post,
+			layout: Layout,
+			staticPaths: staticPaths ?? (({ locale }) => LISTS[locale].map((slug) => ({ slug }))),
+		},
+	];
+
+	async function build({ mode = 'static', staticPaths, i18n = I18N_ROUTED } = {}) {
+		const dir = tmpDir();
+		fs.writeFileSync(path.join(dir, 'index.html'), SHELL);
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			const summary = await prerenderToDir(
+				{ target: '#app', routerBase: '/docs', routes: routes(staticPaths) },
+				{ outDir: dir, shellPath: path.join(dir, 'index.html'), mode, site: 'https://example.com', i18n }
+			);
+			const read = (rel) => fs.readFileSync(path.join(dir, rel), 'utf8');
+			return { dir, summary, read };
+		} finally {
+			warn.mockRestore();
+			setFormatLocale(undefined);
+		}
+	}
+
+	it('lists per locale, with `locale` on the facade, and writes each list under its locale', async () => {
+		for (const mode of ['static', 'hybrid']) {
+			const { summary, read } = await build({ mode });
+			const generated = summary.written.filter((w) => w.pattern).map((w) => [w.locale, w.path]);
+			expect(generated).toEqual([
+				['en', '/blog/shared'],
+				['en', '/blog/only-en'],
+				['es', '/blog/shared'],
+				['es', '/blog/solo-es'],
+			]);
+			expect(read('blog/only-en/index.html')).toContain('only-en:en');
+			expect(read('es/blog/solo-es/index.html')).toContain('solo-es:es');
+			expect(read('es/blog/shared/index.html')).toContain('lang="es"');
+			if (mode === 'static') {
+				// One module for every page of the route, in every locale.
+				expect(new Set(summary.written.filter((w) => w.pattern).map((w) => w.entry))).toEqual(
+					new Set(['_puzzle/blog--_slug.js'])
+				);
+				expect(read('es/blog/solo-es/index.html')).toContain(
+					'data-puzzle-static-route>{"path":"/blog/solo-es","params":{"slug":"solo-es"}}'
+				);
+			}
+		}
+	});
+
+	it('names alternates only for the locales that list the page, and the switcher hrefs its real path', async () => {
+		const { read } = await build();
+		const alt = (hreflang, href) =>
+			`<link rel="alternate" hreflang="${hreflang}" href="${href}" data-puzzle-head="alternate">`;
+		const shared = read('blog/shared/index.html');
+		expect(shared).toContain(
+			alt('en', 'https://example.com/docs/blog/shared') +
+				alt('es', 'https://example.com/docs/es/blog/shared') +
+				alt('x-default', 'https://example.com/docs/blog/shared')
+		);
+		expect(shared).toContain('<a href="/docs/es/blog/shared" lang="es">');
+		const onlyEn = read('blog/only-en/index.html');
+		expect(onlyEn).toContain(
+			alt('en', 'https://example.com/docs/blog/only-en') + alt('x-default', 'https://example.com/docs/blog/only-en')
+		);
+		expect(onlyEn).not.toContain('hreflang="es"');
+		const soloEs = read('es/blog/solo-es/index.html');
+		expect(soloEs).toContain(alt('es', 'https://example.com/docs/es/blog/solo-es'));
+		expect(soloEs).not.toContain('hreflang="en"');
+		expect(soloEs).not.toContain('hreflang="x-default"');
+	});
+
+	it('limits the first-visit redirect to the locales that have the generated page', async () => {
+		// The redirect's first argument is the locale list it may send a visitor to.
+		const redirectLocales = (html) => {
+			const match = /<script>\(function[\s\S]*?\}\)\((\[[^\]]*\]),"en"/.exec(html);
+			return match ? JSON.parse(match[1]) : null;
+		};
+		for (const mode of ['static', 'hybrid']) {
+			const { read } = await build({ mode });
+			expect(redirectLocales(read('index.html'))).toEqual(['en', 'es']);
+			expect(redirectLocales(read('blog/shared/index.html'))).toEqual(['en', 'es']);
+			// Only the default locale lists it: no redirect to a Spanish page that does not exist.
+			expect(read('blog/only-en/index.html')).toContain('hreflang="en"');
+			expect(redirectLocales(read('blog/only-en/index.html'))).toBe(null);
+		}
+		const FR = { title: 'Bienvenue', items: { other: '{count} articles' }, evil: 'x' };
+		const three = {
+			manifest: { defaultLocale: 'en', locales: { ...MANIFEST.locales, fr: 'locales/fr.CCCC.json' }, routing: 'prefix' },
+			table: EN,
+			tables: { en: EN, es: ES, fr: FR },
+		};
+		const lists = { en: ['tarte'], es: [], fr: ['tarte'] };
+		const { read } = await build({
+			mode: 'hybrid',
+			i18n: three,
+			staticPaths: ({ locale }) => lists[locale].map((slug) => ({ slug })),
+		});
+		expect(redirectLocales(read('index.html'))).toEqual(['en', 'es', 'fr']);
+		expect(redirectLocales(read('blog/tarte/index.html'))).toEqual(['en', 'fr']);
+	});
+
+	it('puts every generated page in the sitemap with its own alternates', async () => {
+		const { read } = await build();
+		const xml = read('sitemap.xml');
+		expect(xml).toContain(
+			'<url><loc>https://example.com/docs/blog/shared</loc>' +
+				'<xhtml:link rel="alternate" hreflang="en" href="https://example.com/docs/blog/shared"/>' +
+				'<xhtml:link rel="alternate" hreflang="es" href="https://example.com/docs/es/blog/shared"/>' +
+				'<xhtml:link rel="alternate" hreflang="x-default" href="https://example.com/docs/blog/shared"/></url>'
+		);
+		expect(xml).toContain(
+			'<url><loc>https://example.com/docs/es/blog/solo-es</loc>' +
+				'<xhtml:link rel="alternate" hreflang="es" href="https://example.com/docs/es/blog/solo-es"/></url>'
+		);
+		expect(xml).toContain('<url><loc>https://example.com/docs/blog/only-en</loc>');
+		expect(xml.match(/<url>/g)).toHaveLength(2 + 4);
+	});
+
+	it('fails the build when a generated first segment is a locale tag', async () => {
+		const err = await prerender(
+			{ target: '#app', routes: [{ path: '/:slug', view: Post, staticPaths: [{ slug: 'ok' }, { slug: 'ES' }] }] },
+			{ mode: 'static', i18n: I18N_ROUTED }
+		).catch((e) => e);
+		setFormatLocale(undefined);
+		expect(err.message).toBe(
+			'[puzzle] staticPaths of route "/:slug" generates "/ES" (entry 1), which collides with the "es" locale — ' +
+				"with i18n.routing: 'prefix' every /es/ URL is a es page, so a generated page cannot start with that " +
+				'segment; drop the entry or give the route a fixed first segment'
+		);
+	});
+});

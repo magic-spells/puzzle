@@ -1185,3 +1185,393 @@ describe('output without locale prefix routing is byte-identical (D177)', () => 
 		for (const name of Object.keys(golden)) expect(out[name], name).toBe(golden[name]);
 	});
 });
+
+// D179 — `staticPaths`: one prerendered page per listed entry of a :param route.
+describe('staticPaths (D179)', () => {
+	class Post extends PuzzleView {
+		render() {
+			const params = Object.entries(this.params)
+				.map(([k, v]) => `${k}=${v}`)
+				.join(',');
+			return h('article', { 'data-path': this.route.path, 'data-current': this.ctx.router.current.path }, [
+				text(params),
+			]);
+		}
+	}
+	stamp(Post, 'app/views/Post.pzl');
+
+	class Article extends PuzzleModel {
+		static schema = {
+			id: Puzzle.string().primary(),
+			slug: Puzzle.string(),
+			title: Puzzle.string(),
+		};
+	}
+
+	const post = (staticPaths, extra = {}) => ({ path: '/blog/:slug', view: Post, layout: Layout, staticPaths, ...extra });
+	const cfgOf = (routes, extra = {}) => ({ target: '#app', models: { article: Article }, routes, ...extra });
+
+	async function build(routes, { mode = 'static', extra = {}, only } = {}) {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-paths-'));
+		const shellPath = writeShell(outDir);
+		const summary = await prerenderToDir(cfgOf(routes, extra), { outDir, shellPath, mode, only });
+		const read = (rel) => fs.readFileSync(path.join(outDir, rel), 'utf8');
+		const exists = (rel) => fs.existsSync(path.join(outDir, rel));
+		return { outDir, summary, read, exists };
+	}
+	const pagesOf = async (routes, opts = {}) =>
+		(await prerender(cfgOf(routes, opts.extra), { mode: 'static' })).pages;
+
+	it('renders one page per array entry, sharing one module, with the page`s params and path', async () => {
+		const { summary, read } = await build([post([{ slug: 'cookies' }, { slug: 'cake' }])]);
+		const written = summary.written.filter((w) => w.pattern);
+		expect(written.map((w) => [w.path, w.entry, w.pattern])).toEqual([
+			['/blog/cookies', '_puzzle/blog--_slug.js', '/blog/:slug'],
+			['/blog/cake', '_puzzle/blog--_slug.js', '/blog/:slug'],
+		]);
+		// Every page of the route shares its pattern-shaped route JSON (one module).
+		expect(written[0].route).toEqual(written[1].route);
+		expect(written[0].route.path).toBe('/blog/:slug');
+		expect(written[0].route.params).toEqual({});
+		const html = read('blog/cookies/index.html');
+		expect(html).toContain(
+			'<article data-path="/blog/cookies" data-current="/blog/cookies">slug=cookies</article>'
+		);
+		expect(html).toContain(
+			'<script type="application/json" data-puzzle-static-route>{"path":"/blog/cookies","params":{"slug":"cookies"}}</script>'
+		);
+		expect(read('blog/cake/index.html')).toContain('slug=cake');
+		expect(summary.skipped.map((s) => s.path)).not.toContain('/blog/:slug');
+	});
+
+	it('runs a sync function and an async function, after beforeMount, with the build facade', async () => {
+		const seen = [];
+		const pages = await pagesOf(
+			[
+				post(() => [{ slug: 'sync' }]),
+				{
+					path: '/docs/:page',
+					view: Post,
+					staticPaths: async (facade) => {
+						seen.push(Object.keys(facade).sort());
+						return facade.store.findMany('article').map((a) => ({ page: a.slug }));
+					},
+				},
+			],
+			{
+				extra: {
+					beforeMount({ store }) {
+						store.createRecord('article', { id: '1', slug: 'intro', title: 'Intro' });
+					},
+				},
+			}
+		);
+		expect(pages.map((p) => p.path)).toEqual(['/blog/sync', '/docs/intro']);
+		expect(seen).toEqual([['config', 'store']]);
+		expect(pages[1]).toMatchObject({ pattern: '/docs/:page', params: { page: 'intro' } });
+	});
+
+	it('loads an adapter-backed model through the store in a function', async () => {
+		class Remote extends PuzzleModel {
+			static schema = { id: Puzzle.string().primary(), slug: Puzzle.string() };
+			static adapter = { endpoint: '/remote' };
+		}
+		const fetch = vi.fn(async () => Response.json([{ id: 'r1', slug: 'from-api' }]));
+		vi.stubGlobal('fetch', fetch);
+		try {
+			const pages = await pagesOf(
+				[
+					post(async ({ store }) => {
+						const records = await store.loadMany('remote');
+						return records.map((r) => ({ slug: r.slug }));
+					}),
+				],
+				{ extra: { models: { remote: Remote }, apiURL: 'https://api.test', adapter } }
+			);
+			expect(pages.map((p) => p.path)).toEqual(['/blog/from-api']);
+			expect(String(fetch.mock.calls[0][0])).toBe('https://api.test/remote');
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	describe('model shorthand', () => {
+		it('loads every record through the adapter and fills params from same-named fields', async () => {
+			class Remote extends PuzzleModel {
+				static schema = { id: Puzzle.string().primary(), slug: Puzzle.string() };
+				static adapter = { endpoint: '/remote' };
+			}
+			const fetch = vi.fn(async () =>
+				Response.json([
+					{ id: 'r1', slug: 'one' },
+					{ id: 'r2', slug: 'two' },
+				])
+			);
+			vi.stubGlobal('fetch', fetch);
+			try {
+				const pages = await pagesOf([post('remote')], {
+					extra: { models: { remote: Remote }, apiURL: 'https://api.test', adapter },
+				});
+				expect(pages.map((p) => p.path)).toEqual(['/blog/one', '/blog/two']);
+				expect(String(fetch.mock.calls[0][0])).toBe('https://api.test/remote');
+			} finally {
+				vi.unstubAllGlobals();
+			}
+		});
+
+		it('uses records beforeMount seeded on a model with no adapter, and skips empty fields once', async () => {
+			const { pages, warnings } = await prerender(
+				cfgOf([post('article')], {
+					beforeMount({ store }) {
+						store.createRecord('article', { id: '1', slug: 'first', title: 'a' });
+						store.createRecord('article', { id: '2', slug: '', title: 'b' });
+						store.createRecord('article', { id: '3', slug: null, title: 'c' });
+						store.createRecord('article', { id: '4', slug: 'second', title: 'd' });
+					},
+				}),
+				{ mode: 'static' }
+			);
+			expect(pages.map((p) => p.path)).toEqual(['/blog/first', '/blog/second']);
+			expect(warnings.filter((w) => w.includes('staticPaths'))).toEqual([
+				'[puzzle] staticPaths of route "/blog/:slug" skipped 2 "article" records with an empty "slug" field',
+			]);
+		});
+
+		it('fails the build for a param with no same-named field, naming route, param and model', async () => {
+			await expect(
+				prerender(cfgOf([{ path: '/blog/:handle', view: Post, staticPaths: 'article' }]), { mode: 'static' })
+			).rejects.toThrow(
+				'[puzzle] route "/blog/:handle" staticPaths: param "handle" has no field of the same name on model "article"'
+			);
+		});
+
+		it('fails the build for an unregistered model', async () => {
+			await expect(prerender(cfgOf([post('nope')]), { mode: 'static' })).rejects.toThrow(
+				'[puzzle] route "/blog/:slug" staticPaths: "nope" is not a registered model (models: article)'
+			);
+		});
+	});
+
+	it('fills params inherited from a parent route', async () => {
+		const pages = await pagesOf([
+			{
+				path: '/c/:cat',
+				view: Guide,
+				layout: Layout,
+				children: [
+					{
+						path: ':slug',
+						view: Post,
+						staticPaths: [
+							{ cat: 'news', slug: 'one' },
+							{ cat: 'tips', slug: 2 },
+						],
+					},
+				],
+			},
+		]);
+		expect(pages.map((p) => [p.path, p.params])).toEqual([
+			['/c/news/one', { cat: 'news', slug: 'one' }],
+			['/c/tips/2', { cat: 'tips', slug: '2' }],
+		]);
+		expect(pages[0].html).toContain('cat=news,slug=one');
+	});
+
+	it('encodes each value as one segment the router decodes back, and converts numbers', async () => {
+		const values = ['a b', 'é', '%', 'a\\b', 'x:y', 7];
+		const { summary, exists } = await build([post(values.map((slug) => ({ slug })))]);
+		const written = summary.written.filter((w) => w.pattern);
+		expect(written.map((w) => w.path)).toEqual([
+			'/blog/a%20b',
+			'/blog/%C3%A9',
+			'/blog/%25',
+			'/blog/a%5Cb',
+			'/blog/x:y',
+			'/blog/7',
+		]);
+		// One segment each, and the live Router's matcher takes it back to the value.
+		const router = new Router([post([])], { mode: memoryRouter() });
+		for (const [i, w] of written.entries()) {
+			expect(w.path.split('/')).toHaveLength(3);
+			expect(router.routeEntries[0].regex.test(w.path)).toBe(true);
+			expect(decodeURIComponent(w.path.split('/')[2])).toBe(String(values[i]));
+		}
+		expect(exists('blog/a b/index.html')).toBe(true);
+		expect(exists('blog/é/index.html')).toBe(true);
+		expect(exists('blog/%/index.html')).toBe(true);
+		const pages = await pagesOf([post([{ slug: 'a b' }, { slug: 42 }])]);
+		expect(pages.map((p) => p.params.slug)).toEqual(['a b', '42']);
+	});
+
+	describe('errors', () => {
+		const fails = (staticPaths, message, route) =>
+			expect(prerender(cfgOf([route ?? post(staticPaths)]), { mode: 'static' })).rejects.toThrow(message);
+
+		it('names the route and entry index for a missing, empty or non-primitive value', async () => {
+			await fails(
+				[{ slug: 'ok' }, {}],
+				'[puzzle] staticPaths of route "/blog/:slug": entry 1 is missing param "slug"'
+			);
+			await fails([{ slug: '' }], 'entry 0 param "slug" is empty');
+			await fails([{ slug: { a: 1 } }], 'entry 0 param "slug" must be a string or a number (got object)');
+			await fails([{ slug: ['a'] }], 'entry 0 param "slug" must be a string or a number (got an array)');
+			await fails([{ slug: () => 'x' }], 'entry 0 param "slug" must be a string or a number (got function)');
+			await fails([{ slug: Number.NaN }], 'entry 0 param "slug" must be a string or a number');
+			await fails(['cookies'], 'entry 0 must be an object of params (got "cookies")');
+		});
+
+		it('refuses a value that is not one servable segment: ".", "..", or one holding /, ? or #', async () => {
+			for (const slug of ['.', '..', 'a/b', 'q?x', 'x#y']) {
+				await fails(
+					[{ slug: 'ok' }, { slug }],
+					`[puzzle] staticPaths of route "/blog/:slug": entry 1 param "slug" value ${JSON.stringify(slug)} ` +
+						'cannot be a URL segment — a value may not be "." or ".." or contain "/", "?" or "#"; slugify it'
+				);
+			}
+		});
+
+		it('fails for a non-array result or value', async () => {
+			await fails(
+				() => ({ slug: 'x' }),
+				'staticPaths of route "/blog/:slug" must return an array of params objects (got object)'
+			);
+			await fails(async () => null, 'must return an array of params objects (got null)');
+			await fails(
+				5,
+				'[puzzle] route "/blog/:slug" staticPaths must be an array, a function, or a model name (got number)'
+			);
+		});
+
+		it('fails for staticPaths on a route with no params, or on a parent', async () => {
+			await fails(null, 'route "/about" declares staticPaths but has no :param segment', {
+				path: '/about',
+				view: Post,
+				staticPaths: [],
+			});
+			await fails(null, 'route "*" declares staticPaths but has no :param segment', {
+				path: '*',
+				view: Post,
+				staticPaths: [],
+			});
+			await fails(null, 'route "/c/:cat" declares staticPaths but has children', {
+				path: '/c/:cat',
+				view: Guide,
+				staticPaths: [],
+				children: [{ path: '', view: Post }],
+			});
+		});
+
+		it('fails with the route named and the original error as cause for a throwing or rejecting function', async () => {
+			const boom = new Error('boom');
+			const throwing = () => {
+				throw boom;
+			};
+			const rejecting = async () => Promise.reject(boom);
+			for (const fn of [throwing, rejecting]) {
+				const err = await prerender(cfgOf([post(fn)]), { mode: 'static' }).catch((e) => e);
+				expect(err.message).toBe('[puzzle] staticPaths of route "/blog/:slug" failed: boom');
+				expect(err.cause).toBe(boom);
+			}
+		});
+	});
+
+	it('renders a duplicate once with one warning, and an empty list renders nothing', async () => {
+		const { pages, warnings, skipped } = await prerender(
+			cfgOf([
+				post([{ slug: 'a' }, { slug: 'a' }, { slug: 'b' }]),
+				{ path: '/tag/:tag', view: Post, staticPaths: [] },
+			]),
+			{ mode: 'static' }
+		);
+		expect(pages.map((p) => p.path)).toEqual(['/blog/a', '/blog/b']);
+		expect(warnings.filter((w) => w.includes('duplicate'))).toEqual([
+			'[puzzle] staticPaths of route "/blog/:slug" lists 1 duplicate entry (/blog/a) — each page renders once',
+		]);
+		expect(skipped).toEqual([
+			{ path: '/tag/:tag', reason: 'empty staticPaths', modules: { views: ['app/views/Post.pzl'], layout: null } },
+		]);
+	});
+
+	it('keeps the skip warning, naming the field, for a :param route without staticPaths', async () => {
+		const { warnings } = await prerender(cfgOf([{ path: '/u/:id', view: Post }]), { mode: 'static' });
+		expect(warnings).toContain(
+			'[puzzle] skipped dynamic route "/u/:id" — a :param route is prerendered only when it lists its values in a `staticPaths` route field'
+		);
+	});
+
+	it('lets a fixed route win its page over a generated one, with a warning, in either order (static)', async () => {
+		for (const order of ['dynamic-first', 'fixed-first']) {
+			const fixed = { path: '/blog/new', view: Home, layout: Layout };
+			const dynamic = post([{ slug: 'new' }, { slug: 'x' }]);
+			const { summary, read } = await build(order === 'dynamic-first' ? [dynamic, fixed] : [fixed, dynamic]);
+			expect(read('blog/new/index.html')).toContain('<h1>Home</h1>');
+			expect(summary.written.map((w) => w.path).sort()).toEqual(['/blog/new', '/blog/x']);
+			expect(summary.warnings).toContain(
+				'[puzzle] skipped staticPaths page "/blog/new" of route "/blog/:slug" — fixed route "/blog/new" already writes blog/new/index.html'
+			);
+			expect(summary.skipped).toContainEqual(expect.objectContaining({ path: '/blog/new', reason: 'duplicate' }));
+		}
+	});
+
+	it('follows the live router in hybrid: the fixed route wins unless the :param route shadows it', async () => {
+		const fixed = { path: '/blog/new', view: Home, layout: Layout };
+		const dynamic = post([{ slug: 'new' }]);
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const fixedFirst = await build([fixed, dynamic], { mode: 'hybrid' });
+		expect(fixedFirst.read('blog/new/index.html')).toContain('<h1>Home</h1>');
+		const dynamicFirst = await build([dynamic, fixed], { mode: 'hybrid' });
+		warn.mockRestore();
+		// The Router matches /blog/new to /blog/:slug first, so that page is the generated one.
+		expect(dynamicFirst.read('blog/new/index.html')).toContain('slug=new');
+		expect(dynamicFirst.summary.skipped.map((s) => [s.path, s.reason])).toEqual([['/blog/new', 'shadowed']]);
+	});
+
+	it('skips a generated page an earlier route matches first in hybrid, and keeps it in static', async () => {
+		const routes = () => [
+			{ path: '/:cat/featured', view: Home, layout: Layout, staticPaths: [] },
+			{ path: '/products/:id', view: Post, layout: Layout, staticPaths: [{ id: 'featured' }, { id: 'x' }] },
+		];
+		const hybrid = await build(routes(), { mode: 'hybrid' });
+		expect(hybrid.summary.written.map((w) => w.path)).toEqual(['/products/x']);
+		expect(hybrid.summary.skipped).toContainEqual({ path: '/products/featured', reason: 'shadowed' });
+		expect(hybrid.summary.warnings).toContain(
+			'[puzzle] skipped staticPaths page "/products/featured" of route "/products/:id" — earlier route ' +
+				'"/:cat/featured" matches it first in hybrid output (routes match in declaration order)'
+		);
+		expect(hybrid.exists('products/featured/index.html')).toBe(false);
+		const stat = await build(routes());
+		expect(stat.summary.written.map((w) => w.path)).toEqual(['/products/featured', '/products/x']);
+	});
+
+	it('re-lists on a subset render and reports the pages as reused when the route is not in it (D155)', async () => {
+		let calls = 0;
+		const routes = () => [
+			{ path: '/', view: Home, layout: Layout },
+			post(() => {
+				calls++;
+				return [{ slug: 'a' }, { slug: 'b' }];
+			}),
+		];
+		const reused = await build(routes(), { only: ['/'] });
+		expect(calls).toBe(1);
+		expect(reused.summary.written.map((w) => [w.path, w.reused ?? false])).toEqual([
+			['/', false],
+			['/blog/a', true],
+			['/blog/b', true],
+		]);
+		expect(reused.exists('blog/a/index.html')).toBe(false);
+		const rendered = await build(routes(), { only: ['/blog/:slug'] });
+		expect(calls).toBe(2);
+		expect(rendered.summary.written.map((w) => [w.path, w.reused ?? false])).toEqual([
+			['/', true],
+			['/blog/a', false],
+			['/blog/b', false],
+		]);
+		expect(rendered.read('blog/b/index.html')).toContain('slug=b');
+	});
+
+	it('writes no route island on a fixed route`s page', async () => {
+		const { read } = await build([{ path: '/', view: Home, layout: Layout }, post([{ slug: 'a' }])]);
+		expect(read('index.html')).not.toContain('data-puzzle-static-route');
+	});
+});

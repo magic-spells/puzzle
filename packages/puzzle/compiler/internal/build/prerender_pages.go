@@ -116,6 +116,23 @@ type staticPage struct {
 	// share its Entry slug — one module serves every language — so the entry
 	// generators take the first page per slug (uniqueEntryPages).
 	Locale string `json:"locale,omitempty"`
+	// Pattern is set on a page a `staticPaths` route generated (D179): the
+	// route's full path ("/blog/:slug"), while Path is the page's own
+	// ("/blog/cookies"). Every page of the route shares its Entry and its
+	// pattern-shaped Route; the page's path and params ride in its
+	// data-puzzle-static-route island, which the entry merges into Route.
+	Pattern string `json:"pattern,omitempty"`
+}
+
+// routeKey is the route a written page belongs to: its pattern for a page a
+// `staticPaths` route generated (D179), else its path. It is the unit the dev
+// builder's route filter (D155) names — the prerender matches `only` against
+// route paths, never against generated page paths.
+func (p staticPage) routeKey() string {
+	if p.Pattern != "" {
+		return p.Pattern
+	}
+	return p.Path
 }
 
 // staticModules names the app-relative source paths (the codegen __pzlModule
@@ -458,6 +475,14 @@ func staticEntrySource(absRoot, appEntry string, page staticPage, summary static
 	routeJSON := "null"
 	if len(page.Route) > 0 {
 		routeJSON = string(page.Route)
+	}
+	// A route whose pages `staticPaths` generated (D179) shares this one module
+	// across all of them, so the route JSON is the pattern's; each page's own
+	// path and params come from its island. Fixed routes keep the plain literal,
+	// so their entries are byte-identical to before.
+	if page.Pattern != "" {
+		routeJSON = "Object.assign(" + routeJSON +
+			", JSON.parse(document.querySelector('script[data-puzzle-static-route]').textContent))"
 	}
 	apiURLJSON := "null"
 	if len(summary.APIURL) > 0 {

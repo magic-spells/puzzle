@@ -480,6 +480,52 @@ func TestStaticEntrySourceMinimal(t *testing.T) {
 	}
 }
 
+// TestStaticEntrySourceStaticPaths: a route whose pages `staticPaths` generated
+// (D179) shares one entry, so the entry merges the page's own path and params
+// from its data-puzzle-static-route island into the pattern-shaped route JSON.
+// A fixed route's entry never reads the island.
+func TestStaticEntrySourceStaticPaths(t *testing.T) {
+	root := "/abs/app-root"
+	s := cannedSummary()
+	route := `{"path":"/blog/:slug","params":{},"chain":[{"path":"/blog/:slug"}]}`
+	page := staticPage{
+		Path:      "/blog/cookies",
+		Pattern:   "/blog/:slug",
+		Prerender: true,
+		Entry:     "_puzzle/blog--_slug.js",
+		Modules:   staticModules{Views: []string{"app/views/Post.pzl"}},
+		Route:     json.RawMessage(route),
+	}
+	src, err := staticEntrySource(root, root+"/app/app.js", page, s, "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "  route: Object.assign(" + route +
+		", JSON.parse(document.querySelector('script[data-puzzle-static-route]').textContent)),\n"
+	if !strings.Contains(src, want) {
+		t.Errorf("generated entry missing %q\n---\n%s", want, src)
+	}
+	fixed, err := staticEntrySource(root, root+"/app/app.js", s.Written[0], s, "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(fixed, "data-puzzle-static-route") || strings.Contains(fixed, "Object.assign") {
+		t.Errorf("a fixed route's entry must not read a route island\n---\n%s", fixed)
+	}
+	if page.routeKey() != "/blog/:slug" || s.Written[0].routeKey() != "/" {
+		t.Errorf("routeKey: got %q and %q", page.routeKey(), s.Written[0].routeKey())
+	}
+	// Two pages of one route share the entry; the route count counts the route once.
+	other := page
+	other.Path = "/blog/cake"
+	if _, err := uniqueEntryPages([]staticPage{page, other}); err != nil {
+		t.Errorf("pages of one staticPaths route must share an entry: %v", err)
+	}
+	if n := writtenRoutes([]staticPage{s.Written[0], page, other}); n != 2 {
+		t.Errorf("writtenRoutes = %d, want 2", n)
+	}
+}
+
 // mountStatic is async and nothing awaits it, so the generated entry must
 // observe its rejection. Without the .catch the prerendered markup stays on
 // screen (replaceChildren never ran) looking correct while nothing is
