@@ -383,7 +383,7 @@ you see:
 - **`<html dir>` follows the active locale** in every app that configures
   `i18n` (D177).
 
-## 0.8.1 — unreleased (Go module only)
+## 0.8.1 — 2026-10-04 (Go module only)
 
 A Go-module-only release of the template language: the tag is
 `packages/puzzle-lang/v0.8.1`. **The npm packages are unchanged** — no
