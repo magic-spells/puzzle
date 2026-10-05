@@ -67,8 +67,8 @@ enforced, not merely advised.
 - Published: `0.1.0` (2026-07-21), `0.1.1` (2026-07-22, D77 init prompts),
   `0.1.2` (the embedded agent skill + `puzzle add skills`, D78/v1.45), `0.2.0`
   (2026-07-24), `0.3.0` (2026-07-25), `0.3.1` (2026-07-25), `0.4.0`
-  (2026-07-28), `0.5.0` (2026-08-07), `0.6.0` (2026-08-15), and **`0.7.0`
-  (2026-09-09, the current `latest`)** are live on
+  (2026-07-28), `0.5.0` (2026-08-07), `0.6.0` (2026-08-15), `0.7.0`
+  (2026-09-09), and **`0.8.0` (2026-10-01, the current `latest`)** are live on
   npm (six packages since 0.7.0 — the root plus five platform binaries — MIT,
   manual publish via
   `npm run release:prep` — there is no CI publish). Everything from D88 onward
@@ -165,8 +165,7 @@ enforced, not merely advised.
   profile pointing at the pieces registry — now
   `packages/puzzle-pieces/registry` in this monorepo; unset it when smoke-testing
   the npm transport.
-- **`0.7.0` (2026-09-09, published and `verify:published`-clean — the current
-  `latest`;** registry metadata pins all five platform packages including the
+- **`0.7.0` (2026-09-09, published and `verify:published`-clean;** registry metadata pins all five platform packages including the
   NEW `@magic-spells/puzzle-win32-x64` — the first Windows release — a temp-dir
   install runs `puzzle version 0.7.0`, and a fresh-app `puzzle add piece`
   resolves `npm:@magic-spells/puzzle-pieces@0.7.0`. A fresh-app smoke went
@@ -216,8 +215,9 @@ enforced, not merely advised.
   version-floor mechanism closes the gap as D169 (0.8.0): each piece manifest
   now pins the floor it needs, so the gate becomes "every floor a manifest
   declares is published on npm".
-- **`0.8.0` (in progress on `release/0.8.0`, NOT yet published — Cory tags
-  and publishes; `0.7.1` was never published and is folded in):** D170
+- **`0.8.0` (2026-10-01, published — the current `latest`; tagged `v0.8.0`
+  with `packages/puzzle-lang/v0.8.0`; `0.7.1` was never published and is
+  folded in):** D170
   incremental rendering (persistent `{#for}` row blocks, static-subtree
   caching, record render revisions); D171 `puzzle add theme` and the pieces
   theme system (four palettes × three modes, `appearance-picker`, 102 pieces);
@@ -275,8 +275,17 @@ enforced, not merely advised.
   Heavily BREAKING for templates — the CHANGELOG opens the entry with an
   "Upgrading from 0.7" checklist. Production sizes: hello-world **21.9 KB
   gzip**, todos **26.0 KB gzip** (measured after the review-fix PR; the README banner
-  matches). Cards truthed through D176; the next free
-  decision number is **D177**.
+  matches).
+- **`0.9.0` (in progress on `release/0.9.0`, NOT yet published — Cory tags
+  and publishes; there is no npm `0.8.1`, which was the Go-module-only
+  `packages/puzzle-lang/v0.8.1` tag):** multilingual static sites. D177
+  locale URL prefixes (`i18n.routing: 'prefix'`, per-locale prerender in
+  static and hybrid plus SPA path routing, `hreflang` + `site`, sitemap,
+  first-visit redirect, `<html dir>`, translated `meta` titles; BREAKING:
+  `i18n.locales` is `{ locale, label, href, active }[]`); D178
+  `afterUpdate(prev)`; D179 `staticPaths`; and the `language-switcher` and
+  `language-menu` pieces (PR #217). Production sizes unchanged from 0.8.0.
+  The next free decision number is **D180**.
 - Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
   amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74, D160 = v1.75,

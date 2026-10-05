@@ -11,14 +11,22 @@ numbered `Dnn` cards, referenced below.
 
 ## Upgrading across versions
 
-Nine breaking changes are easy to miss on a multi-version jump. Most fail
-loudly — a compile error, a constructor throw, an unresolvable import. Five are
+Ten breaking changes are easy to miss on a multi-version jump. Most fail
+loudly — a compile error, a constructor throw, an unresolvable import. Six are
 quiet: the 0.8.0 template semantics change output without an error;
-`output: 'static'` (renamed, 0.2.0) and `errorContent()` (removed, 0.6.0)
-are greppable; the stricter write-response guard (0.6.0) is not — it depends on
-what your server returns, so it surfaces at runtime on the first save — and
-neither is the behavior change under auto-fetching finds (0.7.0), which turns
-some reads that used to be local into requests.
+`i18n.locales` (reshaped, 0.9.0), `output: 'static'` (renamed, 0.2.0) and
+`errorContent()` (removed, 0.6.0) are greppable; the stricter write-response
+guard (0.6.0) is not — it depends on what your server returns, so it surfaces
+at runtime on the first save — and neither is the behavior change under
+auto-fetching finds (0.7.0), which turns some reads that used to be local into
+requests.
+
+**`i18n.locales` lists entries, not tags (0.9.0, D177).** Only apps that
+configure `i18n` are affected. `ctx.i18n.locales` was a `string[]`; it is now
+one `{ locale, label, href, active }` per configured locale, in config order.
+Nothing fails at build time: a switcher built on the old list prints nothing
+where a tag was, and handing an entry to `setLocale` throws a `RangeError`.
+Where code wants the tags, write `i18n.locales.map((l) => l.locale)`.
 
 **Template expressions change syntax, and templates print differently (0.8.0,
 D176, D168, D173, D174).** The syntax half is loud: a formatter pipe is a
@@ -152,6 +160,228 @@ Pick `<Children/>` if that position received content from the call site, or
 0.2.0, rename it to `output: 'hybrid'` to keep the behavior you had. The name
 `'static'` now produces a genuinely static site — no router, no `app.js`. This
 one is *not* a compile error; it silently builds a different product.
+
+## 0.9.0 — unreleased
+
+Multilingual static sites. With `i18n.routing: 'prefix'` every language gets
+its own URLs (`/about`, `/es/about`) and its own prerendered HTML, with
+`hreflang` alternates, a sitemap, a first-visit language redirect, `<html
+dir>` for right-to-left languages and translated page titles (D177). A
+`:param` route can now be prerendered too: `staticPaths` lists its pages at
+build time, so `/blog/:slug` becomes one page per post, per language (D179).
+`afterUpdate(prev)` receives what the previous render drew (D178). Two new
+pieces, `language-switcher` and `language-menu`, render the language list.
+There is no npm 0.8.1 (that release is the `packages/puzzle-lang` Go module
+only), so 0.9.0 follows 0.8.0 on npm.
+
+Production sizes are unchanged from 0.8.0. Apps without `i18n.routing` get no
+added code: every prefix branch sits behind a build-time define, and their
+prerendered HTML is pinned byte for byte by a golden test.
+
+### Upgrading from 0.8
+
+Change the range to `^0.9.0`. One change breaks, and it only touches apps
+that configure `i18n`:
+
+1. **BREAKING: `i18n.locales` is `[{ locale, label, href, active }]`.** 0.8.0
+   exposed a `string[]` of tags. `label` is the language's own name
+   (`Español`), `href` the current page in that language and `active` marks
+   the current one, so a switcher can render the list as it is. Code that
+   wants the tags:
+
+   ```js
+   const tags = this.ctx.i18n.locales.map((l) => l.locale);
+   ```
+
+   Nothing fails at build time. A switcher built on the old list prints
+   nothing where a tag was, and `setLocale(entry)` throws a `RangeError`.
+
+Three behavior changes do not break anything that worked, but can change what
+you see:
+
+2. **`puzzle preview` and `puzzle dev` in static mode serve a nested 404
+   first.** A miss whose first URL segment names a `dist` folder holding its
+   own `404.html` gets that page (`/es/missing` → `dist/es/404.html`) before
+   the root `dist/404.html`. The rule reads the file layout, not the config,
+   and the folder name must match the segment exactly. A `404.html` that
+   `public/` copies into a first-level folder now answers for misses under it.
+3. **`<html dir>` follows the locale in every app that configures `i18n`.**
+   An rtl locale (Arabic, Hebrew, Persian, Urdu, …) sets `dir="rtl"` on the
+   prerendered page and on a client switch. An ltr locale removes only a
+   `dir="rtl"`; any other `dir` the shell sets is kept.
+4. **The config's top-level `site` key is now read, and validated.** It must
+   be an http(s) origin with no path (`'https://example.com'`); anything else
+   fails the build. `i18n.routing` accepts only `'prefix'` and `i18n.detect`
+   only a boolean.
+
+### Added
+
+- **Locale URL prefixes: `i18n.routing: 'prefix'` (D177).**
+
+  ```js
+  i18n: { locales: ['en', 'es', 'pt-BR'], defaultLocale: 'en', routing: 'prefix' }
+  ```
+
+  The default locale stays unprefixed (`/blog/cookies`); every other locale
+  lives under its tag, matched exactly on a segment boundary
+  (`/es/blog/cookies`, `/pt-BR/…`). Under `routerBase` the URL is
+  `base + /<locale> + path`; locale files, page modules and assets stay on the
+  bare base, emitted once. Works in `output: 'static'`, `output: 'hybrid'` and
+  the SPA with path routing. Hash and memory routing have no path to prefix:
+  hybrid already rejects them, static ignores `routerMode`, and the SPA throws
+  in `mount()`.
+  - **One page per locale.** The prerender renders every page once per locale,
+    the default locale at the dist root and the others under `dist/<locale>/`,
+    the catch-all's `404.html` included. Each page has its own `<html lang>`,
+    carries only its own locale's table, and formats numbers and dates in its
+    own locale. `beforeMount`'s build facade gains `locale`, since it runs once
+    per locale. In hybrid output the SPA takes over each page in its own
+    locale, and a fallback page (`/es/product/1` served the root shell) sets
+    `<html lang>` from the URL.
+  - **Links.** `link(path)` and `router.url(path)` add the active locale's
+    prefix, at build time and in the browser, so templates and script never
+    write one; `router.push('/about')` stays locale-free. `{ locale: 'es' }`
+    forces a locale (an unconfigured tag is a `RangeError`, and in a static
+    build a build error); `{ locale: false }` skips the prefix and still
+    applies `routerBase`, for files that exist once:
+    `link('/files/resume.pdf', { locale: false })`. A click on another
+    locale's link is a real page load.
+  - **The URL decides the locale.** A prefix beats the stored choice and
+    `navigator.languages`. `setLocale(tag)` stores the choice, then loads the
+    same page under the other prefix, query and fragment kept. During a
+    navigation it targets the page being navigated to.
+  - **Build errors for collisions:** a route whose first segment equals a
+    non-default locale tag (case-insensitive), and a top-level
+    `public/<locale>/` folder. The Router constructor throws on the route
+    collision too.
+  - **Development.** `puzzle dev` re-renders an edited route in every locale.
+    `router.push('/es/about')` routes as written and warns.
+- **`hreflang` alternates and the `site` config (D177).** Under prefix routing
+  every prerendered page except the 404 pages gets
+  `<link rel="alternate" hreflang>` for each locale plus `x-default`. Set
+  `site: 'https://example.com'` at the top of `puzzle.config.js` to make them
+  absolute; without it they are root-relative and the build warns once. A
+  root-relative or same-origin `canonical` is localized per page.
+- **A sitemap (D177).** Every prerendering build that sets `site` writes
+  `dist/sitemap.xml`, listing every prerendered page except the 404 pages and
+  `prerender: false` routes. Under prefix routing each entry names its
+  alternates. A `public/sitemap.xml` wins, with a warning. It works without
+  `i18n`.
+- **A first-visit language redirect (D177).** A visitor who lands on an
+  unprefixed default-locale page from outside the site (another site, or
+  directly), and whose stored choice or first matching `navigator.languages`
+  entry is another locale, is sent to that locale's URL. A click from your own
+  site never bounces, and a stored default-locale choice suppresses it. Prerendered pages carry it as a
+  small inline script (under 1 KB for three locales); a page that was not
+  prerendered runs the same decision at the top of `mount()`.
+  `i18n: { detect: false }` removes both. Under a CSP without
+  `unsafe-inline` the inline script is blocked, and prerendered pages do not
+  redirect.
+- **`i18n.dir` and `<html dir>` (D177).** `i18n.dir` is `'rtl'` for a
+  right-to-left locale, else `'ltr'`, decided from the tag's language and
+  script. `<html dir>` follows it on every prerendered page and on a switch,
+  with or without prefix routing.
+- **Translated page titles (D177).** A route's `meta.title` and
+  `meta.description` may be a translation key, `meta: { title: { t:
+  'about.title' } }`, resolved in the prerender and in the browser, so the tab
+  title follows a locale switch. It works with or without prefix routing. A
+  `{ t }` value in an app with no `i18n` block is a build warning.
+- **A build warning for a bare `href` (D177).** Under prefix routing a literal
+  root-relative `href="/about"` on an `<a>` or `<area>` skips `link()` and so
+  never gets a prefix; the build warns at its position. A protocol-relative
+  `//host`, a dynamic value, a `{#raw}` body and a path whose last segment has
+  a file extension are skipped.
+- **`staticPaths`: prerender a `:param` route (D179).** A leaf route lists the
+  pages to prerender, in `output: 'static'` and `output: 'hybrid'`:
+
+  ```js
+  {
+    path: '/blog/:slug',
+    view: BlogPost,
+    staticPaths: async ({ store }) => {
+      const posts = await store.loadMany('post');
+      return posts.map((post) => ({ slug: post.slug }));
+    },
+  }
+  // shorthand: one page per record of a model, params from its fields
+  { path: '/principles/:id', view: Principle, staticPaths: 'principle' }
+  ```
+
+  The value is an array, a function (sync or async) returning one, or a model
+  name. Each entry holds every param of the route's full path. The function
+  receives `{ store, config, locale }`, runs after `beforeMount`, and runs once
+  per locale under prefix routing, so a site can list different posts per
+  language. The browser never calls it. Each entry becomes a page rendered
+  like a fixed route with those params: `dist/blog/cookies/index.html`, and
+  `dist/es/blog/cookies/index.html`. Types: `StaticPathsEntry`,
+  `StaticPathsContext`, `StaticPathsFn`.
+  - **The model shorthand** loads the model through the adapter when one is
+    configured, then reads the store, so records seeded in `beforeMount` count
+    too. An unregistered model, or a param with no same-named field in the
+    model's schema, is a build error. Records with an empty field are skipped
+    with one warning per route.
+  - **Build errors:** `staticPaths` on a route with children or with no
+    `:param` (the `*` catch-all included); an entry missing a param; a value
+    of `.` or `..`, or one holding `/`, `?` or `#` (the message says to slugify
+    it); a function that throws or returns something other than an array. Any
+    other value is encoded as one path segment (`a b` → `a%20b`).
+  - **Warnings:** duplicate entries render once. An empty list renders nothing.
+    A `:param` route without `staticPaths` is still skipped, and the warning
+    now names the field.
+  - **Static output:** all pages of a route share one page module; each page
+    carries its path and params in a small JSON island, so the page's `route`
+    and `preload` see the params without reading `location`. An unlisted value
+    is a 404. A fixed route keeps its own page over a generated one, with a
+    warning.
+  - **Hybrid output:** an unlisted value still works — the SPA takes over and
+    fetches in the browser. A generated path an earlier route would match
+    first is skipped as `shadowed`, with a warning, so takeover never renders a
+    different view than the prerender.
+  - **With locale prefixes,** `hreflang` alternates, the redirect script and
+    the sitemap name only the locales whose lists contain the page.
+  - **Keep heavy sources out of the bundle.** In SPA and hybrid apps the route
+    table ships to the browser, and with it anything `staticPaths` imports at
+    module level. Load the list inside the function, with `fetch` or
+    `await import()`.
+  - See `examples/static-docs` (`/principles/:id`).
+- **`afterUpdate(prev)` (D178).** The hook receives a frozen, shallow snapshot
+  of what the previous render drew: `props`, `params`, `route` and the merged
+  `data`.
+
+  ```js
+  afterUpdate(prev) {
+    if (prev.props.center !== this.props.center) this.map.setCenter(this.props.center);
+  }
+  ```
+
+  A record in `prev` is the same live object, so `!==` catches a different
+  record, not an edit to the same one: return the field from `data()` and
+  compare that. Existing `afterUpdate()` overrides keep working, and only a
+  class that overrides the hook takes the snapshot. Type: `PrevViewState`.
+- **Two language pieces.** Both take the parent's `i18n.locales` as a
+  `locales` prop. Read the list in the layout's or view's `data()` and pass it
+  down: a component inside a persistent layout runs `data()` once and would
+  keep the first page's links. Under prefix routing each language is a real
+  link with `hreflang`. A plain click calls `setLocale`, so the choice is
+  stored; a modified or middle click stays native. Without prefix routing the
+  rows are buttons that call `setLocale`. Both take `label` and `class`, and
+  fire `@change(locale)` before switching.
+  - `puzzle add piece language-switcher`: an inline row of pills in a
+    `<nav>`, with no dependencies.
+  - `puzzle add piece language-menu`: a compact menu button showing the
+    active language, built on `dropdown-menu`, with an `align` prop.
+
+### Changed
+
+- **BREAKING: `i18n.locales` is `[{ locale, label, href, active }]` (D177).**
+  It was a `string[]` in 0.8.0. `label` comes from `Intl.DisplayNames`; `href`
+  is the current page in that locale under prefix routing, and the current
+  page for every entry without it. See Upgrading from 0.8.
+- **`puzzle preview` and static `puzzle dev` try `dist/<first-segment>/404.html`
+  before `dist/404.html`** for a miss (D177), so a miss under `/es/` gets the
+  Spanish 404 page.
+- **`<html dir>` follows the active locale** in every app that configures
+  `i18n` (D177).
 
 ## 0.8.1 — unreleased (Go module only)
 
