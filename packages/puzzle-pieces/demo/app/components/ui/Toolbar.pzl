@@ -11,6 +11,10 @@
             class={ item.class }
             title={ item.title }
             aria-pressed={ item.pressedAttr }
+            aria-haspopup={ item.haspopup }
+            aria-expanded={ item.expandedAttr }
+            aria-controls={ item.controls }
+            aria-activedescendant={ item.activedescendant }
             tabindex={ item.tabindex }
             disabled={ item.disabled }
             @focus={ focusItem(item.value) }
@@ -22,6 +26,11 @@
               </svg>
             {/if}
             <span class={ item.labelClass }>{ item.label }</span>
+            {#if item.trailingIcon}
+              <svg class={ iconClass } viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d={ item.trailingIcon }/>
+              </svg>
+            {/if}
           </button>
         {/if}
       </div>
@@ -51,6 +60,16 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   { type:'separator' }                                             a non-focusable divider
 // `type` defaults to 'button' when omitted. `value` must be unique across the
 // interactive items (it keys the row and drives the callbacks + roving focus).
+//
+// OPTIONAL, for a control that opens a popup (a style picker, a menu) — all
+// default off, so existing items render exactly as before:
+//   class            appended to the button (e.g. a stable min width)
+//   trailingIcon     SVG path `d` rendered AFTER the label (a chevron)
+//   haspopup         'menu' | 'listbox' | … → aria-haspopup
+//   expanded         boolean → aria-expanded; while true the item's arrow /
+//                    Home / End keys belong to its popup, not to roving focus
+//   controls         id → aria-controls
+//   activedescendant id → aria-activedescendant (a listbox driven from the button)
 //
 // ICON CONTRACT — like ButtonGroup: `icon` is an SVG path `d` string (24×24,
 // stroke-current), rendered before the label. `label` is ALWAYS required — it is
@@ -165,7 +184,13 @@ export default class Toolbar extends PuzzleView {
         pressedAttr: type === 'toggle' ? (pressed ? 'true' : 'false') : false,
         title: iconOnly ? it.label : false,
         labelClass: iconOnly ? 'sr-only' : '',
-        class: [ITEM_BASE, type === 'toggle' && pressed ? ON : OFF].join(' '),
+        class: [ITEM_BASE, type === 'toggle' && pressed ? ON : OFF, it.class || ''].filter(Boolean).join(' '),
+        trailingIcon: it.trailingIcon || false,
+        haspopup: it.haspopup || false,
+        expanded: !!it.expanded,
+        expandedAttr: it.haspopup ? (it.expanded ? 'true' : 'false') : false,
+        controls: it.controls || false,
+        activedescendant: it.activedescendant || false,
         tabindex: '-1', // assigned below once the roving item is known
       };
     });
@@ -252,6 +277,9 @@ export default class Toolbar extends PuzzleView {
       if (n === 0) return;
       const idx = enabled.indexOf(value);
       if (idx === -1) return;
+      // An open popup owns the keys of the item that opened it.
+      const own = this.getData().items.find((i) => i.type !== 'separator' && i.value === value);
+      if (own && own.expanded) return;
 
       const vertical = orientation === 'vertical';
       const nextKey = vertical ? 'ArrowDown' : 'ArrowRight';

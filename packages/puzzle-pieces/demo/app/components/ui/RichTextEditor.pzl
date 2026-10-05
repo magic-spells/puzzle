@@ -4,54 +4,39 @@
       <div id={ labelId } class="mb-1.5 block text-sm font-medium text-ink">{ label }</div>
     {/if}
 
-    <div class="mb-2 flex items-center gap-2" @pointerdown:prevent={ noopPointer }>
-      <div class="relative">
-        <button
-          type="button"
-          data-style-trigger
-          ref="styleTrigger"
-          class={ styleTriggerClass }
-          id={ styleTriggerId }
-          title="Block style"
-          role="combobox"
-          aria-haspopup="listbox"
-          aria-expanded={ styleExpanded }
-          aria-controls={ stylePanelId }
-          aria-activedescendant={ styleActiveId }
-          disabled={ disabled }
-          @click={ toggleStyle }
-          @keydown={ onStyleKey(event) }>
-          <span class="truncate">{ styleLabel }</span>
-          <svg class="size-3.5 shrink-0 text-muted" viewBox="0 0 20 20" fill="none"
-            stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M6 8l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
-
-        {#if styleOpen}
-          <ul class={ stylePanelClass } id={ stylePanelId } role="listbox" tabindex="-1"
-            aria-labelledby={ styleTriggerId } @pointerdown:outside={ onStyleOutside(event) }>
-            {#for opt in styleOptions}
-              <li id={ opt.id } key={ opt.key } role="option" aria-selected={ opt.ariaSelected }
-                class={ opt.class } @click={ chooseStyle(opt) }>
-                <span class="truncate">{ opt.label }</span>
-                {#if opt.selected}
-                  <svg class="size-4 shrink-0 text-brand" viewBox="0 0 20 20" fill="none"
-                    stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <path d="M5 10l3 3 7-7" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                {/if}
-              </li>
-            {/for}
-          </ul>
-        {/if}
-      </div>
-
+    {#if showToolbar}
+    <!-- One bordered row: the block-style picker is the Toolbar's first item
+         (in its roving tab order), its listbox drops below the row. -->
+    <div class="relative mb-2" @pointerdown:prevent={ noopPointer } @keydown={ onRowKey(event) }>
       <Toolbar class="w-full" label="Text formatting" disabled={ disabled }
         items={ tbItems } @toggle={ onToggle } @press={ onPress }/>
-    </div>
 
-    {#if linkOpen}
+      {#if styleOpen}
+        <ul class={ stylePanelClass } id={ stylePanelId } role="listbox" tabindex="-1"
+          aria-label="Block style" @pointerdown:outside={ onStyleOutside(event) }>
+          {#for opt in styleOptions}
+            <li id={ opt.id } key={ opt.key } role="option" aria-selected={ opt.ariaSelected }
+              class={ opt.class } @click={ chooseStyle(opt) }>
+              <span class="truncate">{ opt.label }</span>
+              {#if opt.selected}
+                <svg class="size-4 shrink-0 text-brand" viewBox="0 0 20 20" fill="none"
+                  stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M5 10l3 3 7-7" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              {/if}
+            </li>
+          {/for}
+        </ul>
+      {/if}
+    </div>
+    {/if}
+
+    {#if canUpload}
+      <input type="file" accept="image/*" multiple class="hidden" tabindex="-1" aria-hidden="true"
+        ref="fileInput" @change={ onFiles(event) }/>
+    {/if}
+
+    {#if linkRow}
       <div class="mb-2 flex items-center gap-2 rounded-lg border border-border bg-surface p-2"
         @keydown:escape={ closeLink }>
         <!-- Implicit two-way binding (D147) is load-bearing: applyLink reads
@@ -74,18 +59,110 @@
       </div>
     {/if}
 
-    <div class={ frameClass }>
+    <div class={ frameClass } @mousemove={ onHover(event) } @mouseleave={ onLeave }>
       <div island ref="mount"></div>
       {#if showPlaceholder}
-        <div aria-hidden="true" class="pointer-events-none absolute left-3 top-2 leading-7 text-muted">{ placeholder }</div>
+        <div aria-hidden="true" class={ placeholderClass }>{ placeholder }</div>
+      {/if}
+      {#if blocks}
+        <!-- Gutter handle for the hovered (or caret) line. Click / Enter opens the
+             block menu; dragging it moves the line's top-level block. Positioned
+             imperatively (_placeHandle) so hovering never re-renders. -->
+        <button type="button" ref="handle" data-rte-handle class={ handleClass }
+          aria-label="Block options" aria-haspopup="menu" aria-expanded={ blockMenuExpanded }
+          aria-controls={ blockMenuId } draggable="true"
+          @click={ toggleBlockMenu } @keydown={ onHandleKey(event) }
+          @focus={ onHandleFocus } @blur={ onHandleBlur }
+          @dragstart={ onHandleDragStart(event) } @dragend={ onHandleDragEnd }>
+          <svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/>
+            <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
+            <circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
+          </svg>
+        </button>
       {/if}
     </div>
+
+    <!-- Block-mode popovers: top layer (popover="manual"), fixed coordinates
+         placed in _placePopovers() and re-placed on scroll and resize. -->
+    {#if blockMenuOpen}
+      <div popover="manual" ref="blockMenu" id={ blockMenuId } role="menu" aria-label={ blockMenuLabel }
+        class={ menuClass } @keydown={ onBlockMenuKey(event) } @pointerdown:outside={ onBlockMenuOutside(event) }>
+        {#for row in blockMenuRows}
+          <button type="button" key={ row.id } role={ row.role } aria-checked={ row.ariaChecked }
+            tabindex={ row.tabindex } class={ row.class } data-menu-index={ row.index }
+            @mouseenter={ hoverBlockRow(row.index) } @click={ chooseBlockCommand(row.id) }>
+            <span class={ row.glyphClass } aria-hidden="true">{ row.glyph }</span>
+            <span class="flex-1 truncate">{ row.label }</span>
+            {#if row.current}
+              <svg class="size-4 shrink-0 text-brand" viewBox="0 0 20 20" fill="none"
+                stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M5 10l3 3 7-7" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            {/if}
+          </button>
+        {/for}
+      </div>
+    {/if}
+
+    {#if slashOpen}
+      <div popover="manual" ref="slashMenu" id={ slashMenuId } class={ menuClass }
+        @pointerdown:outside={ onSlashOutside(event) }>
+        <!-- Focus stays in the editor (aria-activedescendant points here), so
+             a press must not take it. -->
+        <div role="listbox" aria-label="Commands" @pointerdown:prevent={ noopPointer }>
+          {#for row in slashRows}
+            <div key={ row.id } id={ row.domId } role="option" aria-selected={ row.ariaSelected }
+              class={ row.class } @mouseenter={ hoverSlashRow(row.index) } @click={ chooseSlashCommand(row.id) }>
+              <span class={ row.glyphClass } aria-hidden="true">{ row.glyph }</span>
+              <span class="flex-1 truncate">{ row.label }</span>
+            </div>
+          {/for}
+          {#if slashEmpty}
+            <div class="px-2 py-1.5 text-sm text-muted">No matches</div>
+          {/if}
+        </div>
+      </div>
+    {/if}
+
+    {#if bubbleOpen}
+      <div popover="manual" ref="bubble" class={ bubbleClass }
+        @focusin={ onBubbleFocus } @focusout={ onBubbleBlur(event) } @keydown:escape={ closeBubble }>
+        {#if linkOpen}
+          <div class="flex items-center gap-2 rounded-lg border border-border bg-surface p-2">
+            <!-- Same implicit binding as the toolbar-mode link row (D147): only
+                 one of the two inputs exists at a time. -->
+            <input
+              type="url"
+              class="block w-64 rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm text-ink placeholder:text-muted transition-colors outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              placeholder="https://example.com or /path"
+              aria-label="Link URL"
+              value={ linkDraft }
+              disabled={ disabled }
+              ref="bubbleLinkInput"
+              @keydown:enter={ applyLink }
+            />
+            <button type="button" class={ linkBtnClass } disabled={ disabled } @click={ applyLink }>Set</button>
+            <button type="button" class={ linkBtnClass } disabled={ disabled } @click={ removeLink }>Remove</button>
+            <button type="button" class={ linkBtnClass } disabled={ disabled } @click={ closeLink }>Cancel</button>
+          </div>
+        {:else}
+          <div @pointerdown:prevent={ noopPointer }>
+            <Toolbar label="Text formatting" disabled={ disabled }
+              items={ bubbleItems } @toggle={ onToggle } @press={ onPress }/>
+          </div>
+        {/if}
+      </div>
+    {/if}
   </div>
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import { Editor } from '@tiptap/core';
+import { Editor, Extension, Node, mergeAttributes } from '@tiptap/core';
+import { Plugin, PluginKey, TextSelection, NodeSelection } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { Fragment, Slice } from '@tiptap/pm/model';
 import { StarterKit } from '@tiptap/starter-kit';
 import { TextAlign } from '@tiptap/extension-text-align';
 import Toolbar from './Toolbar.pzl';
@@ -95,8 +172,20 @@ import {
 	emptyDoc,
 	isEmpty,
 	safeLinkUrl,
+	safePreviewUrl,
+	docLimits,
+	richTextClasses,
 	RICH_TEXT_CLASSES as C,
 } from '../../lib/rich-text-doc.js';
+import {
+	slashCommands,
+	blockMenuCommands,
+	filterCommands,
+	slashQueryAt,
+	lineKind,
+	styleMenuCommands,
+	styleLabel as styleLabelFor,
+} from '../../lib/rich-text-blocks.js';
 
 // RichTextEditor — WYSIWYG rich text editing on Tiptap/ProseMirror, with the
 // Toolbar piece as the formatting bar. The value is NOT HTML: it is the
@@ -130,11 +219,98 @@ import {
 //   placeholder  muted hint shown while the document is empty
 //   disabled     disables the toolbar and makes the content read-only
 //   class        appended to the root
+//   tools        optional array naming the toolbar groups to show, from
+//                'style' (block dropdown), 'marks', 'align', 'lists',
+//                'quote', 'codeBlock', 'link', 'image'. Omitted = all. Hiding
+//                a group also turns off its markdown typing shortcuts (`# `,
+//                `- `, `> `, ``` …) and keyboard shortcuts, so it can't be
+//                created by typing either (read at mount); the format still
+//                accepts the node, so stored content keeps it.
+//   resolveImage(ref, node) → url | null
+//                turns an image id into a src. Called for every `image` node
+//                (node = its doc node) and every link preview's `imageRef`
+//                (node = the link-preview doc node). The doc never stores a
+//                URL. Re-run on every render of this piece, so when the URLs
+//                behind your refs change (signed URLs refreshed, an upload
+//                finished elsewhere) pass a NEW function to re-render with
+//                them. null shows a placeholder box.
+//   uploadImage(file) → Promise<{ ref, width?, height?, alt? }>
+//                turns on images: an Image toolbar button (file picker), and
+//                paste / drop of image files. Each file shows an "Uploading…"
+//                placeholder that is an editor DECORATION, not a node, so the
+//                emitted doc never holds an image whose upload hasn't
+//                finished; the image node lands when the promise resolves (a
+//                rejection or a result without `ref` just removes the
+//                placeholder — report the failure yourself). Stops adding at
+//                docLimits.maxImages images.
+//   fetchLinkPreview(url) → Promise<{ title?, description?, siteName?,
+//                imageRef? } | null>
+//                turns on link previews: pasting a bare http(s) URL (one that
+//                passes safePreviewUrl) into an empty top-level paragraph
+//                inserts a link-preview node holding only `url` (one @change),
+//                then fills its fields when the promise resolves (a second
+//                @change), or replaces it with a paragraph holding a plain
+//                link to the url on null / rejection. Fields are clipped to
+//                docLimits. At docLimits.maxLinkPreviews the paste stays a
+//                plain paste.
+//   chrome       'toolbar' (default) or 'blocks'. 'blocks' is the Notion-style
+//                page: no toolbar, no frame (no border, background, padding
+//                box or focus ring — style the page through `class`), and
+//                instead —
+//                • a gutter handle beside the hovered line (Grimoire-style:
+//                  seen on hover only; the caret's line keeps a transparent
+//                  one the keyboard can Tab to) that opens a block menu: turn
+//                  into Text, Heading 1–3,
+//                  Bulleted / Numbered list, Quote, Code (each only when its
+//                  `tools` group is on), then Delete. Dragging the handle moves
+//                  the line's TOP-LEVEL block (a whole list or quote). The
+//                  handle hangs 1.75rem (w-7) left of the content, so leave
+//                  that much gutter, e.g. class="pl-8".
+//                • a "/" menu: "/" at the start of a line or after a space
+//                  opens the same kinds plus Image (needs uploadImage) and
+//                  Link; typing filters, arrows + Enter (or Tab) choose,
+//                  Escape dismisses and keeps the typed text.
+//                • a selection bar, one compact row acting on the selected
+//                  text only: the text-style picker (Text, Heading 1–3;
+//                  'style'), bold / italic / underline / strike ('marks'),
+//                  bulleted / numbered list ('lists') and link ('link'). It
+//                  sits above the selection, flips below when there is no
+//                  room, pins to the top of the visible area (scroll parents
+//                  included, + floatingOffsetTop) while a long selection runs
+//                  past it, and hides once the selection is off screen. The
+//                  only place for inline marks besides the keyboard shortcuts.
+//                • Mod-/ opens the block menu for the caret's line; Alt-F10
+//                  moves focus into the bubble. Markdown shortcuts, image
+//                  paste / drop and link previews behave as in toolbar mode.
+//                Block spacing is the compact set (RICH_TEXT_COMPACT, lines
+//                ~4px apart, quotes as a soft panel); render the stored doc
+//                with <RichText compact> to match. Chrome is read at mount.
+//                Menus render in the top layer (popover), so a scrolling or
+//                clipping parent never cuts them off.
+//   floatingOffsetTop  px reserved at the top of the visible area (a host's
+//                sticky header) when the selection bar pins there; default 0.
+//   blockPlaceholder  muted hint on the caret's empty top-level line in
+//                'blocks' mode (default "Type '/' for commands"; '' hides it).
+//                On an empty document `placeholder` shows instead.
 // Callbacks (value-first):
 //   @change(doc) fires on every edit with the full document tree
+//   @imageError(ref)  an image (or preview image) failed to load — e.g. an
+//                expired signed URL; refresh your URLs and pass a new
+//                resolveImage
 //
-// Formatting: a block-style dropdown (Normal text, Heading 1-4) followed by the
-// toolbar's bold / italic / underline / strike, align left/center/right,
+// Images and link previews are atom blocks at the top level only (never in a
+// list or blockquote): selectable, draggable, deleted with Backspace. An
+// image's caption is edited in place under it. A pasted image or preview
+// image survives only when resolveImage resolves its ref — so a copy from
+// another document can't smuggle in an id the host doesn't know. None of
+// this is active unless the matching prop is passed; a doc that holds images
+// still round-trips losslessly without them.
+//
+// Formatting (chrome="toolbar"): ONE bordered Toolbar row — the block-style
+// picker first (Normal text, Heading 1-4; a ghost item with a stable width in
+// the toolbar's roving tab order, its listbox dropping below the row; arrows
+// open it and move the highlight, Enter / Space choose, Escape closes), then
+// bold / italic / underline / strike, align left/center/right,
 // bullet + ordered lists, blockquote, code block, links (inline URL row
 // — Enter or Set applies, empty URL or Remove clears; bare domains get https://
 // prefixed). Undo/redo ride on the standard keyboard shortcuts via Tiptap.
@@ -166,12 +342,10 @@ const BLOCK_STYLES = [
 	{ level: 4, label: 'Heading 4' },
 ];
 
-const STYLE_TRIGGER =
-	'inline-flex h-8 shrink-0 items-center justify-between gap-1.5 rounded-md px-2 ' +
-	'text-sm font-medium whitespace-nowrap text-body cursor-pointer transition-colors ' +
-	'border border-border bg-surface hover:bg-surface-sunken hover:text-ink ' +
-	'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
-	'disabled:opacity-50 disabled:pointer-events-none';
+// The style picker is a Toolbar item: ghost like the icon buttons, a stable
+// width so the row doesn't shift between "Normal text" and "Heading 2".
+const STYLE_ITEM_CLASS = 'min-w-32 justify-between';
+const CHEVRON = 'M6 9l6 6 6-6';
 
 const STYLE_PANEL =
 	'absolute left-0 top-full z-30 mt-1 min-w-44 rounded-lg border border-border ' +
@@ -204,7 +378,567 @@ const I = {
 	quote: 'M17 6H3M21 12H8M21 18H8M3 12v6',
 	codeBlock: 'M16 18l6-6-6-6M8 6l-6 6 6 6',
 	link: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
+	image: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM21 15l-5-5L5 21M10.5 8.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z',
 };
+
+const ALL_TOOLS = ['style', 'marks', 'align', 'lists', 'quote', 'codeBlock', 'link', 'image'];
+
+// ---- chrome="blocks" ----------------------------------------------------------
+
+const DEFAULT_BLOCK_PLACEHOLDER = "Type '/' for commands";
+
+// The content without the frame's padding box (min height kept so an empty
+// page still takes a click).
+const BLOCKS_CONTENT_CLASS = CONTENT_CLASS.replace('min-h-40 px-3 py-2 ', 'min-h-40 ');
+
+const HANDLE =
+	'absolute -left-7 top-0 flex h-6 w-7 cursor-grab items-center justify-center rounded-md ' +
+	'text-muted opacity-60 transition-colors hover:bg-surface-sunken hover:text-ink hover:opacity-100 ' +
+	'active:cursor-grabbing outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+	'focus-visible:opacity-100';
+
+// Popovers: undo the UA [popover] box (inset 0 + auto margins centre it).
+const MENU =
+	'fixed inset-auto m-0 max-h-96 min-w-56 overflow-y-auto rounded-lg border border-border ' +
+	'bg-surface p-1 text-ink shadow-popover';
+const BUBBLE = 'fixed inset-auto m-0 overflow-visible border-0 bg-transparent p-0 text-ink shadow-popover rounded-lg';
+const MENU_ROW =
+	'flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm ' +
+	'outline-none transition-colors';
+const MENU_GLYPH =
+	'inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-border ' +
+	'bg-surface text-xs font-medium text-muted';
+const HINT = 'pointer-events-none absolute select-none text-muted';
+
+// ---- image + link-preview atoms ---------------------------------------------
+//
+// Both are Tiptap nodes in their own `rootBlock` group, which only the doc
+// node accepts — so ProseMirror itself keeps them out of lists and quotes.
+// Attributes mirror the doc fields 1:1 (see lib/rich-text-doc.js); the HTML
+// form (data-* attributes) exists only so copy/paste and drag inside the
+// editor survive a clipboard round trip.
+
+const SELECTED = ['outline-2', 'outline-offset-2', 'outline-ring', 'rounded-lg'];
+const CAPTION_INPUT =
+	`${C.caption} w-full bg-transparent outline-none placeholder:text-muted placeholder:opacity-70`;
+const PREVIEW_URL = 'truncate text-xs text-muted underline-offset-2 hover:text-ink hover:underline';
+const UPLOAD_PLACEHOLDER = `${C.imagePlaceholder} animate-pulse`;
+
+const UPLOADS = new PluginKey('ppRichTextUploads');
+
+function dataAttr(name, int = false) {
+	return {
+		default: null,
+		parseHTML: (el) => {
+			const v = el.getAttribute(`data-${name}`);
+			if (v == null || v === '') return null;
+			if (!int) return v;
+			const n = parseInt(v, 10);
+			return n > 0 ? n : null;
+		},
+		renderHTML: (attrs) => {
+			const key = name.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+			return attrs[key] == null ? {} : { [`data-${name}`]: String(attrs[key]) };
+		},
+	};
+}
+
+// Editor-only attr marking a link preview whose fetch is in flight. Never
+// parsed from HTML and never copied by fromTiptap.
+const PENDING_ATTR = { default: null, rendered: false, parseHTML: () => null };
+
+function el(tag, className, text) {
+	const node = document.createElement(tag);
+	if (className) node.className = className;
+	if (text != null) node.textContent = text;
+	return node;
+}
+
+// The doc-format node for a ProseMirror atom, as handed to resolveImage.
+function docNodeOf(pmNode) {
+	return fromTiptap({ type: 'doc', content: [pmNode.toJSON()] }).children[0] || null;
+}
+
+function clip(value, max) {
+	if (typeof value !== 'string' || value === '') return null;
+	const chars = [...value];
+	return chars.length > max ? chars.slice(0, max).join('') : value;
+}
+
+function positiveInt(v) {
+	return Number.isInteger(v) && v > 0 ? v : null;
+}
+
+function countNodes(doc, name) {
+	let n = 0;
+	doc.descendants((node) => {
+		if (node.type.name === name) n++;
+		return node.isBlock && !node.isTextblock;
+	});
+	return n;
+}
+
+function findNode(doc, test) {
+	let found = null;
+	doc.descendants((node, pos) => {
+		if (found) return false;
+		if (test(node)) {
+			found = { node, pos };
+			return false;
+		}
+		return node.isBlock && !node.isTextblock;
+	});
+	return found;
+}
+
+function imageFiles(transfer) {
+	return Array.from((transfer && transfer.files) || []).filter((f) => /^image\//.test(f.type));
+}
+
+// Shared by both node views: a view registers with its editor host so the
+// host can re-resolve sources and editability on every render.
+class AtomView {
+	constructor({ node, getPos, editor }, host) {
+		this.node = node;
+		this.getPos = getPos;
+		this.editor = editor;
+		this.host = host;
+		this.selected = false;
+		this.key = null;
+		host._atomViews.add(this);
+	}
+
+	update(node) {
+		if (node.type !== this.node.type) return false;
+		this.node = node;
+		this.refresh();
+		return true;
+	}
+
+	selectNode() {
+		this.selected = true;
+		this.dom.classList.add(...SELECTED);
+		this.refresh();
+	}
+
+	deselectNode() {
+		this.selected = false;
+		this.dom.classList.remove(...SELECTED);
+		this.refresh();
+	}
+
+	// ProseMirror must never read the view's DOM back as content.
+	ignoreMutation() {
+		return true;
+	}
+
+	destroy() {
+		this.host._atomViews.delete(this);
+	}
+}
+
+class ImageView extends AtomView {
+	constructor(props, host) {
+		super(props, host);
+		this.dom = el('figure', host._cls.figure);
+		this.dom.contentEditable = 'false';
+		this.dom.setAttribute('data-rte-image', '');
+		this.media = el('div');
+		this.caption = el('input', CAPTION_INPUT);
+		this.caption.type = 'text';
+		this.caption.placeholder = 'Add a caption';
+		this.caption.setAttribute('aria-label', 'Image caption');
+		this.caption.maxLength = docLimits.maxCaption;
+		this.caption.addEventListener('input', () => this.commitCaption());
+		this.caption.addEventListener('focus', () => this.refresh());
+		this.caption.addEventListener('blur', () => this.refresh());
+		this.dom.append(this.media, this.caption);
+		this.refresh();
+	}
+
+	refresh() {
+		const a = this.node.attrs;
+		const url = this.host._resolve(a.ref, docNodeOf(this.node));
+		const key = JSON.stringify([url, a.ref, a.alt, a.width, a.height]);
+		if (key !== this.key) {
+			this.key = key;
+			this.media.textContent = '';
+			this.media.appendChild(imageMedia(url, a, () => this.host._imageError(a.ref)));
+		}
+		const value = a.caption || '';
+		const focused = document.activeElement === this.caption;
+		if (!focused && this.caption.value !== value) this.caption.value = value;
+		const editable = this.editor.isEditable;
+		this.caption.readOnly = !editable;
+		this.caption.hidden = !(value || (editable && (this.selected || focused)));
+	}
+
+	commitCaption() {
+		const pos = this.getPos();
+		if (typeof pos !== 'number' || !this.editor.isEditable) return;
+		const caption = this.caption.value === '' ? null : this.caption.value;
+		if (caption === (this.node.attrs.caption || null)) return;
+		const { state, dispatch } = this.editor.view;
+		dispatch(state.tr.setNodeMarkup(pos, undefined, { ...this.node.attrs, caption }));
+	}
+
+	// Events inside the caption input belong to the input, not ProseMirror.
+	stopEvent(event) {
+		return event.target === this.caption;
+	}
+}
+
+// <img> when the host resolved a url; otherwise a placeholder box holding the
+// alt text, sized from width/height when known so the layout doesn't jump.
+function imageMedia(url, attrs, onError) {
+	if (url) {
+		const img = el('img', C.image);
+		img.src = url;
+		img.alt = attrs.alt || '';
+		img.draggable = false;
+		if (attrs.width) img.width = attrs.width;
+		if (attrs.height) img.height = attrs.height;
+		img.addEventListener('error', onError);
+		return img;
+	}
+	const box = el('div', C.imagePlaceholder, attrs.alt || 'Image unavailable');
+	if (attrs.width && attrs.height) box.style.aspectRatio = `${attrs.width} / ${attrs.height}`;
+	return box;
+}
+
+class LinkPreviewView extends AtomView {
+	constructor(props, host) {
+		super(props, host);
+		this.dom = el('div', host._cls.preview);
+		this.dom.contentEditable = 'false';
+		this.dom.setAttribute('data-rte-link-preview', '');
+		this.refresh();
+	}
+
+	refresh() {
+		const a = this.node.attrs;
+		const loading = a.pendingId != null && this.host._previewWait.has(a.pendingId);
+		const imgUrl = a.imageRef ? this.host._resolve(a.imageRef, docNodeOf(this.node)) : null;
+		const key = JSON.stringify([loading, imgUrl, a.url, a.title, a.description, a.siteName]);
+		if (key === this.key) return;
+		this.key = key;
+		this.dom.textContent = '';
+		const safe = safePreviewUrl(a.url);
+		let host = '';
+		try {
+			host = new URL(a.url).hostname;
+		} catch {
+			host = '';
+		}
+		const body = el('div', C.previewBody);
+		if (loading) {
+			body.classList.add('animate-pulse');
+			body.append(el('div', C.previewSite, host), el('div', C.previewTitle, 'Loading preview…'));
+		} else {
+			body.append(el('div', C.previewSite, a.siteName || host), el('div', C.previewTitle, a.title || a.url));
+			if (a.description) body.appendChild(el('div', C.previewDescription, a.description));
+		}
+		const link = el(safe ? 'a' : 'span', PREVIEW_URL, a.url);
+		if (safe) {
+			link.href = safe;
+			link.target = '_blank';
+			link.rel = 'noopener noreferrer';
+		}
+		body.appendChild(link);
+		this.dom.appendChild(body);
+		if (imgUrl) {
+			const img = el('img', C.previewImage);
+			img.src = imgUrl;
+			img.alt = '';
+			img.draggable = false;
+			img.addEventListener('error', () => this.host._imageError(a.imageRef));
+			this.dom.appendChild(img);
+		}
+	}
+
+	stopEvent() {
+		return false;
+	}
+}
+
+function atomNodes(host) {
+	const ImageNode = Node.create({
+		name: 'image',
+		group: 'rootBlock',
+		atom: true,
+		selectable: true,
+		draggable: true,
+		addAttributes() {
+			return {
+				ref: dataAttr('ref'),
+				alt: dataAttr('alt'),
+				caption: dataAttr('caption'),
+				width: dataAttr('width', true),
+				height: dataAttr('height', true),
+			};
+		},
+		parseHTML() {
+			return [{ tag: 'figure[data-rte-image]', getAttrs: (el) => (el.getAttribute('data-ref') ? null : false) }];
+		},
+		renderHTML({ HTMLAttributes }) {
+			return ['figure', mergeAttributes({ 'data-rte-image': '' }, HTMLAttributes)];
+		},
+		addNodeView() {
+			return (props) => new ImageView(props, host);
+		},
+	});
+
+	const LinkPreviewNode = Node.create({
+		name: 'linkPreview',
+		group: 'rootBlock',
+		atom: true,
+		selectable: true,
+		draggable: true,
+		addAttributes() {
+			return {
+				url: dataAttr('url'),
+				title: dataAttr('title'),
+				description: dataAttr('description'),
+				siteName: dataAttr('site-name'),
+				imageRef: dataAttr('image-ref'),
+				pendingId: PENDING_ATTR,
+			};
+		},
+		parseHTML() {
+			return [
+				{
+					tag: 'div[data-rte-link-preview]',
+					getAttrs: (el) => (safePreviewUrl(el.getAttribute('data-url')) ? null : false),
+				},
+			];
+		},
+		renderHTML({ HTMLAttributes }) {
+			return ['div', mergeAttributes({ 'data-rte-link-preview': '' }, HTMLAttributes)];
+		},
+		addNodeView() {
+			return (props) => new LinkPreviewView(props, host);
+		},
+	});
+
+	// Replaces StarterKit's document node: the same `block+` content, plus the
+	// two atoms — which therefore can sit only at the top level.
+	const RootDocument = Node.create({
+		name: 'doc',
+		topNode: true,
+		content: '(block | rootBlock)+',
+	});
+
+	// In-flight uploads render as widget decorations: visible, positioned,
+	// mapped through edits, and never part of the document.
+	const UploadPlaceholders = Extension.create({
+		name: 'ppUploadPlaceholders',
+		addProseMirrorPlugins() {
+			return [
+				new Plugin({
+					key: UPLOADS,
+					state: {
+						init: () => DecorationSet.empty,
+						apply(tr, set) {
+							let next = set.map(tr.mapping, tr.doc);
+							const meta = tr.getMeta(UPLOADS);
+							if (meta && meta.add) {
+								const { id, pos, label } = meta.add;
+								const widget = Decoration.widget(
+									pos,
+									() => {
+										const box = el('div', `${host._cls.figure} ${UPLOAD_PLACEHOLDER}`, `Uploading ${label || 'image'}…`);
+										box.setAttribute('role', 'status');
+										return box;
+									},
+									{ id, key: id, side: 1 }
+								);
+								next = next.add(tr.doc, [widget]);
+							}
+							if (meta && meta.remove) {
+								next = next.remove(next.find(undefined, undefined, (s) => s.id === meta.remove));
+							}
+							return next;
+						},
+					},
+					props: {
+						decorations(state) {
+							return this.getState(state);
+						},
+					},
+				}),
+			];
+		},
+	});
+
+	return [RootDocument, ImageNode, LinkPreviewNode, UploadPlaceholders];
+}
+
+// chrome="blocks": the muted hint on the caret's empty top-level line. A widget
+// (not a CSS ::before) so no arbitrary-content utility is needed; `absolute`
+// with no insets keeps it at the line's start without taking width, so the
+// caret sits over its first letter. Inert outside blocks mode.
+function emptyLineHint(host) {
+	return Extension.create({
+		name: 'ppEmptyLineHint',
+		addProseMirrorPlugins() {
+			const editor = this.editor;
+			return [
+				new Plugin({
+					props: {
+						decorations(state) {
+							if (!host._blocks() || !editor.isEditable || !editor.isFocused) return null;
+							const { selection, doc } = state;
+							if (!selection.empty) return null;
+							const $from = selection.$from;
+							const line = $from.parent;
+							if ($from.depth !== 1 || line.type.name !== 'paragraph' || line.content.size !== 0) return null;
+							// On an empty document the document placeholder speaks instead.
+							if (host.props.placeholder && doc.childCount === 1) return null;
+							const text = host.props.blockPlaceholder ?? DEFAULT_BLOCK_PLACEHOLDER;
+							if (!text) return null;
+							return DecorationSet.create(doc, [
+								Decoration.widget($from.pos, () => el('span', HINT, text), {
+									side: -1,
+									key: `hint:${text}`,
+									ignoreSelection: true,
+								}),
+							]);
+						},
+					},
+				}),
+			];
+		},
+	});
+}
+
+// `tools` also governs typing shortcuts: the Tiptap extensions behind each
+// group, whose markdown input rules (`# `, `- `, `> `, ```, `**x**`…) and
+// keyboard shortcuts only work while the group is on.
+const TOOL_EXTENSIONS = {
+	style: ['heading'],
+	lists: ['bulletList', 'orderedList'],
+	quote: ['blockquote'],
+	codeBlock: ['codeBlock'],
+	marks: ['bold', 'italic', 'underline', 'strike'],
+};
+const TOOL_SHORTCUTS = {
+	style: ['Mod-Alt-1', 'Mod-Alt-2', 'Mod-Alt-3', 'Mod-Alt-4', 'Mod-Alt-5', 'Mod-Alt-6'],
+	lists: ['Mod-Shift-7', 'Mod-Shift-8'],
+	quote: ['Mod-Shift-b'],
+	codeBlock: ['Mod-Alt-c'],
+	marks: ['Mod-b', 'Mod-B', 'Mod-i', 'Mod-I', 'Mod-u', 'Mod-U', 'Mod-Shift-s'],
+};
+
+// Input rules to enable: `true` (all, the stock behaviour) unless `tools` is
+// given, then only the enabled groups' extensions.
+function inputRulesFor(tools) {
+	if (!Array.isArray(tools)) return true;
+	return Object.entries(TOOL_EXTENSIONS)
+		.filter(([group]) => tools.includes(group))
+		.flatMap(([, names]) => names);
+}
+
+// The last markdown rule that fired, kept until the next real edit or caret
+// move. Tiptap's own record (behind undoInputRule) is dropped by ANY following
+// doc change — including StarterKit's TrailingNode, which appends a paragraph
+// the moment "## " turns the last line into a heading — so Mod-z could never
+// give "## " back at the end of a document. Appended transactions don't clear
+// this one.
+const LAST_RULE = new PluginKey('ppLastInputRule');
+
+function lastRulePlugin() {
+	return new Plugin({
+		key: LAST_RULE,
+		state: {
+			init: () => null,
+			apply(tr, prev, oldState, newState) {
+				// Tiptap registers one input-rules plugin per extension.
+				for (const p of newState.plugins) {
+					const fired = p.spec.isInputRules && tr.getMeta(p);
+					if (fired) return fired;
+				}
+				if (tr.getMeta('appendedTransaction')) return prev;
+				return tr.selectionSet || tr.docChanged ? null : prev;
+			},
+		},
+	});
+}
+
+// Reverse the recorded rule exactly as Tiptap's undoInputRule does: invert its
+// steps, then put the typed characters back.
+function undoLastRule(editor) {
+	const undoable = LAST_RULE.getState(editor.state);
+	if (!undoable) return false;
+	const { state, view } = editor;
+	const tr = state.tr;
+	const steps = undoable.transform.steps;
+	for (let j = steps.length - 1; j >= 0; j -= 1) {
+		tr.step(steps[j].invert(undoable.transform.docs[j]));
+	}
+	if (undoable.text) {
+		const marks = tr.doc.resolve(undoable.from).marks();
+		tr.replaceWith(undoable.from, undoable.to, state.schema.text(undoable.text, marks));
+	} else {
+		tr.delete(undoable.from, undoable.to);
+	}
+	view.dispatch(tr);
+	return true;
+}
+
+// Runs before the stock keymaps. Swallows the shortcuts of groups `tools`
+// leaves out (so a hidden kind can't be created from the keyboard either), and
+// in blocks mode makes Mod-z first undo a just-fired markdown rule — one undo
+// gives back the literal "## " — before falling through to history.
+function shortcutGuard(host) {
+	return Extension.create({
+		name: 'ppShortcutGuard',
+		priority: 1000,
+		addProseMirrorPlugins() {
+			return [lastRulePlugin()];
+		},
+		addKeyboardShortcuts() {
+			const editor = this.editor;
+			const keys = {};
+			const tools = host.props.tools;
+			if (Array.isArray(tools)) {
+				for (const [group, list] of Object.entries(TOOL_SHORTCUTS)) {
+					if (!tools.includes(group)) for (const key of list) keys[key] = () => true;
+				}
+			}
+			keys['Mod-z'] = () => host._blocks() && undoLastRule(editor);
+			return keys;
+		},
+	});
+}
+
+// Rebuild a pasted slice, dropping images whose ref the host can't resolve and
+// preview images likewise (the card itself stays).
+function filterSlice(slice, canResolve) {
+	// Ordinary pastes hold no atoms and pass through untouched.
+	let hasAtom = false;
+	slice.content.descendants((node) => {
+		if (node.type.name === 'image' || node.type.name === 'linkPreview') hasAtom = true;
+		return !hasAtom;
+	});
+	if (!hasAtom) return slice;
+	const walk = (fragment) => {
+		const out = [];
+		fragment.forEach((node) => {
+			if (node.type.name === 'image') {
+				if (canResolve(node.attrs.ref, node)) out.push(node);
+				return;
+			}
+			if (node.type.name === 'linkPreview') {
+				const keep = !node.attrs.imageRef || canResolve(node.attrs.imageRef, node);
+				out.push(keep ? node : node.type.create({ ...node.attrs, imageRef: null }));
+				return;
+			}
+			out.push(node.isLeaf ? node : node.copy(walk(node.content)));
+		});
+		return Fragment.fromArray(out);
+	};
+	return new Slice(walk(slice.content), slice.openStart, slice.openEnd);
+}
 
 export default class RichTextEditor extends PuzzleView {
 	created() {
@@ -218,7 +952,37 @@ export default class RichTextEditor extends PuzzleView {
 		this._lastSeenValue = undefined;
 		// Ordered serialized emissions still awaiting controlled-value echoes.
 		this._pending = [];
+		// Live image / link-preview node views, re-synced on every render.
+		this._atomViews = new Set();
+		// pendingId → url for link previews whose fetch is in flight.
+		this._previewWait = new Map();
+		this._seq = 0;
+		// chrome="blocks" bookkeeping. Lines are { pos, node, kind }; positions
+		// are applied imperatively, so hover and scroll never re-render.
+		this._hoverLine = null;
+		this._caretLine = null;
+		this._handleLine = null;
+		this._menuLine = null;
+		// 'block' = the handle's menu for _menuLine; 'style' = the selection
+		// bar's text-style picker, acting on the selection.
+		this._menuVariant = 'block';
+		this._slashFrom = null;
+		this._internalDrag = false;
+		this._onViewport = () => this._onViewportChange();
 		this.setData({
+			handleVisible: false,
+			// 'hover' (shown) or 'caret' (transparent until keyboard focus).
+			handleMode: 'hover',
+			handleFocus: false,
+			blockMenuOpen: false,
+			blockMenuIndex: 0,
+			slashOpen: false,
+			slashQuery: '',
+			slashActive: 0,
+			bubbleOpen: false,
+			bubbleFocus: false,
+			// Image uploads in flight (each one a placeholder decoration).
+			uploading: 0,
 			active: {},
 			empty: true,
 			linkOpen: false,
@@ -238,6 +1002,8 @@ export default class RichTextEditor extends PuzzleView {
 			type: 'toggle', value, label, icon, iconOnly: true, pressed: !!pressed,
 		});
 		const level = this._currentLevel();
+		const tools = new Set(Array.isArray(props.tools) ? props.tools : ALL_TOOLS);
+		const canUpload = typeof props.uploadImage === 'function';
 		const styleOpen = !!g.styleOpen;
 		const styleActive = g.styleActive ?? -1;
 		const styleOptions = BLOCK_STYLES.map((s, i) => {
@@ -259,44 +1025,170 @@ export default class RichTextEditor extends PuzzleView {
 				class: [STYLE_OPTION, selected ? 'font-medium' : '', state].filter(Boolean).join(' '),
 			};
 		});
+		// Toolbar sections in their fixed order; a separator sits between two
+		// non-empty sections. With every tool shown and no uploadImage this is
+		// exactly the original strip.
+		const sections = [
+			tools.has('style')
+				? [
+						{
+							type: 'button',
+							value: 'style',
+							label: (BLOCK_STYLES.find((st) => st.level === level) || BLOCK_STYLES[0]).label,
+							class: STYLE_ITEM_CLASS,
+							trailingIcon: CHEVRON,
+							haspopup: 'listbox',
+							expanded: styleOpen,
+							controls: `${this._fallbackId}-style-panel`,
+							activedescendant:
+								styleOpen && styleActive >= 0 ? styleOptions[styleActive].id : false,
+						},
+					]
+				: [],
+			tools.has('marks')
+				? [
+						toggle('bold', 'Bold', I.bold, a.bold),
+						toggle('italic', 'Italic', I.italic, a.italic),
+						toggle('underline', 'Underline', I.underline, a.underline),
+						toggle('strike', 'Strikethrough', I.strike, a.strike),
+					]
+				: [],
+			tools.has('align')
+				? [
+						toggle('alignLeft', 'Align left', I.alignLeft, a.alignLeft),
+						toggle('alignCenter', 'Align center', I.alignCenter, a.alignCenter),
+						toggle('alignRight', 'Align right', I.alignRight, a.alignRight),
+					]
+				: [],
+			[
+				...(tools.has('lists')
+					? [toggle('ul', 'Bulleted list', I.ul, a.ul), toggle('ol', 'Numbered list', I.ol, a.ol)]
+					: []),
+				...(tools.has('quote') ? [toggle('quote', 'Blockquote', I.quote, a.quote)] : []),
+				...(tools.has('codeBlock')
+					? [toggle('codeBlock', 'Code block', I.codeBlock, a.codeBlock)]
+					: []),
+			],
+			[
+				...(tools.has('link')
+					? [{ type: 'button', value: 'link', label: 'Link', icon: I.link, iconOnly: true }]
+					: []),
+				...(canUpload && tools.has('image')
+					? [{ type: 'button', value: 'image', label: 'Image', icon: I.image, iconOnly: true }]
+					: []),
+			],
+		].filter((s) => s.length);
+		const blocks = props.chrome === 'blocks';
+		// The selection bar: ONE Toolbar row — the text-style picker (a text
+		// button opening the style menu), marks, lists, link — separated only by
+		// hairlines, so it reads as one compact group.
+		const bubbleSections = [
+			tools.has('style')
+				? [
+						{
+							type: 'button',
+							value: 'style',
+							label: styleLabelFor(this._caretLine?.kind),
+							class: 'min-w-24 justify-between',
+							trailingIcon: CHEVRON,
+							haspopup: 'menu',
+							expanded: !!g.blockMenuOpen && this._menuVariant === 'style',
+							controls: `${this._fallbackId}-block-menu`,
+						},
+					]
+				: [],
+			tools.has('marks')
+				? [
+						toggle('bold', 'Bold', I.bold, a.bold),
+						toggle('italic', 'Italic', I.italic, a.italic),
+						toggle('underline', 'Underline', I.underline, a.underline),
+						toggle('strike', 'Strikethrough', I.strike, a.strike),
+					]
+				: [],
+			tools.has('lists')
+				? [toggle('ul', 'Bulleted list', I.ul, a.ul), toggle('ol', 'Numbered list', I.ol, a.ol)]
+				: [],
+			tools.has('link')
+				? [{ type: 'button', value: 'link', label: 'Link', icon: I.link, iconOnly: true }]
+				: [],
+		].filter((sec) => sec.length);
+		const bubbleItems = bubbleSections.flatMap((sec, i) => (i ? [{ type: 'separator' }, ...sec] : sec));
+		const menuRow = (cmd, i, active) => ({
+			id: cmd.id,
+			index: i,
+			label: cmd.label,
+			glyph: cmd.glyph,
+			current: !!cmd.current,
+			class: [
+				MENU_ROW,
+				i === active ? 'bg-surface-sunken' : '',
+				cmd.danger ? 'text-danger' : 'text-ink',
+			].filter(Boolean).join(' '),
+			glyphClass: cmd.danger ? `${MENU_GLYPH} text-danger` : MENU_GLYPH,
+		});
+		const blockMenuOpen = blocks && !!g.blockMenuOpen && !disabled;
+		const blockMenuIndex = g.blockMenuIndex || 0;
+		const blockMenuRows = blockMenuOpen
+			? this._menuCommands().map((cmd, i) => ({
+					...menuRow(cmd, i, blockMenuIndex),
+					role: cmd.danger ? 'menuitem' : 'menuitemradio',
+					ariaChecked: cmd.danger ? false : cmd.current ? 'true' : 'false',
+					tabindex: i === blockMenuIndex ? '0' : '-1',
+				}))
+			: [];
+		const slashOpen = blocks && !!g.slashOpen && !disabled;
+		const slashList = slashOpen ? this._slashList() : [];
+		const slashActive = g.slashActive || 0;
+		const slashRows = slashList.map((cmd, i) => ({
+			...menuRow(cmd, i, slashActive),
+			domId: `${this._fallbackId}-slash-${cmd.id}`,
+			ariaSelected: i === slashActive ? 'true' : 'false',
+		}));
 		return {
+			blocks,
+			showToolbar: !blocks,
+			linkRow: !blocks && !!g.linkOpen,
+			placeholderClass: blocks
+				? 'pointer-events-none absolute left-0 top-0 leading-7 text-muted'
+				: 'pointer-events-none absolute left-3 top-2 leading-7 text-muted',
+			// Grimoire's handle: seen only on hover (or while its menu is open). On
+			// the caret's line it is still there, transparent, so the keyboard can
+			// Tab to it; focus-visible reveals it.
+			handleClass:
+				!g.handleVisible || disabled
+					? `${HANDLE} invisible`
+					: g.handleMode === 'caret'
+						? `${HANDLE} opacity-0`
+						: HANDLE,
+			blockMenuOpen,
+			blockMenuRows,
+			blockMenuId: `${this._fallbackId}-block-menu`,
+			blockMenuLabel: this._menuVariant === 'style' ? 'Text style' : 'Block options',
+			blockMenuExpanded: blockMenuOpen ? 'true' : 'false',
+			slashOpen,
+			slashRows,
+			slashEmpty: slashOpen && slashRows.length === 0,
+			slashMenuId: `${this._fallbackId}-slash-menu`,
+			menuClass: MENU,
+			bubbleOpen: blocks && !!g.bubbleOpen && !disabled && bubbleItems.length > 0,
+			bubbleClass: BUBBLE,
+			bubbleItems,
+			canUpload,
 			styleOpen,
 			styleOptions,
-			styleLabel: (BLOCK_STYLES.find((s) => s.level === level) || BLOCK_STYLES[0]).label,
-			styleExpanded: styleOpen ? 'true' : 'false',
-			styleTriggerId: `${this._fallbackId}-style-trigger`,
 			stylePanelId: `${this._fallbackId}-style-panel`,
-			styleActiveId:
-				styleOpen && styleActive >= 0 ? styleOptions[styleActive].id : false,
-			styleTriggerClass: STYLE_TRIGGER,
 			stylePanelClass: STYLE_PANEL,
 			label: props.label,
 			labelId: `${this._fallbackId}-label`,
 			placeholder: props.placeholder ?? null,
-			showPlaceholder: !!props.placeholder && empty,
+			showPlaceholder: !!props.placeholder && empty && !g.uploading,
 			disabled,
 			linkOpen: !!g.linkOpen,
 			linkDraft: g.linkDraft ?? '',
 			linkBtnClass: LINK_BTN,
 			rootClass: props.class || '',
-			frameClass: [FRAME_BASE, disabled ? 'opacity-50' : ''].filter(Boolean).join(' '),
-			tbItems: [
-				toggle('bold', 'Bold', I.bold, a.bold),
-				toggle('italic', 'Italic', I.italic, a.italic),
-				toggle('underline', 'Underline', I.underline, a.underline),
-				toggle('strike', 'Strikethrough', I.strike, a.strike),
-				{ type: 'separator' },
-				toggle('alignLeft', 'Align left', I.alignLeft, a.alignLeft),
-				toggle('alignCenter', 'Align center', I.alignCenter, a.alignCenter),
-				toggle('alignRight', 'Align right', I.alignRight, a.alignRight),
-				{ type: 'separator' },
-				toggle('ul', 'Bulleted list', I.ul, a.ul),
-				toggle('ol', 'Numbered list', I.ol, a.ol),
-				toggle('quote', 'Blockquote', I.quote, a.quote),
-				toggle('codeBlock', 'Code block', I.codeBlock, a.codeBlock),
-				{ type: 'separator' },
-				{ type: 'button', value: 'link', label: 'Link', icon: I.link, iconOnly: true },
-			],
+			frameClass: [blocks ? 'relative' : FRAME_BASE, disabled ? 'opacity-50' : ''].filter(Boolean).join(' '),
+			tbItems: sections.flatMap((s, i) => (i ? [{ type: 'separator' }, ...s] : s)),
 		};
 	}
 
@@ -309,6 +1201,10 @@ export default class RichTextEditor extends PuzzleView {
 		// Seed the emptiness flag data() switches to post-mount, or a non-empty
 		// starting value would render under the placeholder until the first edit.
 		this.setData('empty', isEmpty(value));
+		// Block typography is fixed at mount: blocks mode uses the compact
+		// (Notion-style) spacing, toolbar mode the standard map.
+		const K = richTextClasses(this._blocks());
+		this._cls = K;
 		this._editor = new Editor({
 			element: this.refs.mount,
 			editable: !this.props.disabled,
@@ -318,6 +1214,8 @@ export default class RichTextEditor extends PuzzleView {
 					// Inline code and horizontal rule are outside the doc contract.
 					code: false,
 					horizontalRule: false,
+					// Replaced by atomNodes()' RootDocument (block+ plus the atoms).
+					document: false,
 					heading: { levels: [1, 2, 3, 4] },
 					link: {
 						openOnClick: false,
@@ -326,18 +1224,67 @@ export default class RichTextEditor extends PuzzleView {
 						// refuses to create a link the renderer would refuse to link.
 						isAllowedUri: (url) => safeLinkUrl(url) != null,
 					},
-					paragraph: { HTMLAttributes: { class: C.paragraph } },
-					bulletList: { HTMLAttributes: { class: `${C.list} ${C.bulletList}` } },
-					orderedList: { HTMLAttributes: { class: `${C.list} ${C.orderedList}` } },
-					listItem: { HTMLAttributes: { class: C.listItem } },
-					blockquote: { HTMLAttributes: { class: C.blockquote } },
-					codeBlock: { HTMLAttributes: { class: C.codeBlock } },
+					paragraph: { HTMLAttributes: { class: K.paragraph } },
+					bulletList: { HTMLAttributes: { class: `${K.list} ${K.bulletList}` } },
+					orderedList: { HTMLAttributes: { class: `${K.list} ${K.orderedList}` } },
+					listItem: { HTMLAttributes: { class: K.listItem } },
+					blockquote: { HTMLAttributes: { class: K.blockquote } },
+					codeBlock: { HTMLAttributes: { class: K.codeBlock } },
 				}),
 				TextAlign.configure({ types: ['heading', 'paragraph'] }),
+				...atomNodes(this),
+				emptyLineHint(this),
+				shortcutGuard(this),
 			],
+			// Markdown shortcuts follow `tools` (read at mount).
+			enableInputRules: inputRulesFor(this.props.tools),
 			editorProps: {
+				// Each hook below is inert unless its prop is set, so a consumer
+				// without uploadImage / fetchLinkPreview keeps stock paste and drop.
+				handlePaste: (view, event) => {
+					const files = imageFiles(event.clipboardData);
+					if (files.length && this._canUpload()) {
+						event.preventDefault();
+						this._uploadFiles(files, null);
+						return true;
+					}
+					return this._pastePreview(view, event);
+				},
+				handleDrop: (view, event, slice, moved) => {
+					if (moved) return false;
+					const files = imageFiles(event.dataTransfer);
+					if (!files.length || !this._canUpload()) return false;
+					event.preventDefault();
+					const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+					this._uploadFiles(files, at ? at.pos : null);
+					return true;
+				},
+				// An internal drag moves nodes this document already holds; only
+				// content arriving from outside is filtered. ProseMirror clears
+				// view.dragging before a drop reaches this hook, so a drag that
+				// started here is also tracked by _internalDrag.
+				transformPasted: (slice, view) =>
+					view.dragging || this._internalDrag
+						? slice
+						: filterSlice(slice, (ref, node) => this._resolve(ref, docNodeOf(node)) != null),
+				handleDOMEvents: {
+					dragstart: () => {
+						this._internalDrag = true;
+						return false;
+					},
+					dragend: () => {
+						this._internalDrag = false;
+						return false;
+					},
+				},
+				// Only the "/" menu and two block-mode shortcuts take keys here.
+				handleKeyDown: (view, event) => this._blockKeyDown(event),
+				// An OBJECT: Tiptap spreads it (adding role="textbox"), so a function
+				// would silently drop every attribute. The class follows `chrome`,
+				// read at mount; the "/" menu's aria wiring is set imperatively in
+				// _syncSlashAria.
 				attributes: {
-					class: CONTENT_CLASS,
+					class: this._blocks() ? BLOCKS_CONTENT_CLASS : CONTENT_CLASS,
 					// The rendered label names the content region when there is one;
 					// only one of the two naming attributes is ever emitted.
 					...(this.props.label
@@ -357,15 +1304,34 @@ export default class RichTextEditor extends PuzzleView {
 				if (typeof change === 'function') change(doc);
 			},
 			// Fires on every state change including selection moves — keeps the
-			// toolbar's pressed states tracking the caret.
-			onTransaction: () => this._syncActive(),
+			// toolbar's pressed states tracking the caret, and in blocks mode the
+			// handle, "/" menu and bubble.
+			onTransaction: ({ transaction }) => {
+				this._syncActive();
+				this._syncBlocks(transaction);
+			},
+			onFocus: () => this._syncBlocks(null),
+			// Tab from the text lands on the caret line's (transparent) handle;
+			// keep it focusable through the blur, or the browser skips it.
+			onBlur: ({ event }) => {
+				if (event?.relatedTarget && event.relatedTarget === this.refs.handle) {
+					this.setData('handleFocus', true);
+				}
+				this._syncBlocks(null);
+			},
 		});
 		this._syncActive();
+		window.addEventListener('scroll', this._onViewport, true);
+		window.addEventListener('resize', this._onViewport);
 	}
 
 	destroyed() {
+		window.removeEventListener('scroll', this._onViewport, true);
+		window.removeEventListener('resize', this._onViewport);
 		this._editor?.destroy();
 		this._editor = null;
+		this._atomViews.clear();
+		this._previewWait.clear();
 	}
 
 	afterUpdate() {
@@ -383,6 +1349,11 @@ export default class RichTextEditor extends PuzzleView {
 		if (this.props.disabled && this.getData().styleOpen) {
 			this.setData({ styleOpen: false });
 		}
+		// Image sources and caption editability come from props / editor state
+		// the node views can't observe; re-sync them (DOM only, no transaction).
+		this._syncAtomViews();
+		// Block-mode popovers enter the top layer once rendered, then get placed.
+		this._showPopovers();
 		const v = this.props.value;
 		// afterUpdate also runs for renders WE caused (onUpdate/_syncActive call
 		// setData + refresh synchronously), and those run BEFORE the parent's
@@ -461,6 +1432,675 @@ export default class RichTextEditor extends PuzzleView {
 		return this._editor?.chain().focus();
 	}
 
+	_styleTrigger() {
+		return this.element?.querySelector?.('[data-tb-value="style"]') || null;
+	}
+
+	// ---- images + link previews -------------------------------------------
+
+	_syncAtomViews() {
+		for (const view of this._atomViews) view.refresh();
+	}
+
+	_resolve(ref, node) {
+		const fn = this.props.resolveImage;
+		if (typeof fn !== 'function' || !ref) return null;
+		try {
+			const url = fn(ref, node);
+			return typeof url === 'string' && url !== '' ? url : null;
+		} catch {
+			return null;
+		}
+	}
+
+	_imageError(ref) {
+		const { imageError } = this.props;
+		if (typeof imageError === 'function') imageError(ref);
+	}
+
+	_canUpload() {
+		return typeof this.props.uploadImage === 'function' && !!this._editor?.isEditable;
+	}
+
+	// A top-level position to put new images at: before the caret's block when
+	// that block is an empty paragraph (the image takes the empty line's
+	// place, the caret stays below it), otherwise after it.
+	_insertPos(state, pos) {
+		const $p = state.doc.resolve(pos ?? state.selection.to);
+		if ($p.depth === 0) return $p.pos;
+		const top = $p.node(1);
+		if (top.type.name === 'paragraph' && top.content.size === 0) return $p.before(1);
+		return $p.after(1);
+	}
+
+	_setUploading(delta) {
+		this.setData('uploading', Math.max(0, (this.getData().uploading || 0) + delta));
+		this.refresh();
+	}
+
+	_uploadFiles(files, pos) {
+		const ed = this._editor;
+		const upload = this.props.uploadImage;
+		if (!ed || typeof upload !== 'function') return;
+		let room = docLimits.maxImages - countNodes(ed.state.doc, 'image') - (this.getData().uploading || 0);
+		const at = this._insertPos(ed.state, pos);
+		for (const file of files) {
+			if (room-- <= 0) break;
+			const id = `${this._fallbackId}-upload-${++this._seq}`;
+			ed.view.dispatch(ed.state.tr.setMeta(UPLOADS, { add: { id, pos: at, label: file.name } }));
+			this._setUploading(1);
+			Promise.resolve()
+				.then(() => upload(file))
+				.then(
+					(result) => this._finishUpload(id, result),
+					() => this._finishUpload(id, null)
+				);
+		}
+	}
+
+	_finishUpload(id, result) {
+		const ed = this._editor;
+		if (!ed || ed.isDestroyed) return;
+		this._setUploading(-1);
+		const { state } = ed;
+		const placeholder = UPLOADS.getState(state).find(undefined, undefined, (s) => s.id === id)[0];
+		const tr = state.tr.setMeta(UPLOADS, { remove: id });
+		if (result && typeof result.ref === 'string' && result.ref !== '') {
+			const node = state.schema.nodes.image.create({
+				ref: result.ref,
+				alt: clip(result.alt, docLimits.maxAlt),
+				width: positiveInt(result.width),
+				height: positiveInt(result.height),
+			});
+			// The placeholder can vanish under an external value reset; the
+			// upload still lands, at the end, rather than being lost.
+			const pos = placeholder ? this._insertPos(state, placeholder.from) : state.doc.content.size;
+			tr.insert(pos, node);
+		}
+		ed.view.dispatch(tr);
+	}
+
+	// A bare URL pasted into an empty top-level paragraph becomes a link
+	// preview holding only `url`; fetchLinkPreview fills it in afterwards.
+	_pastePreview(view, event) {
+		const fetchPreview = this.props.fetchLinkPreview;
+		if (typeof fetchPreview !== 'function' || !view.editable) return false;
+		const text = ((event.clipboardData && event.clipboardData.getData('text/plain')) || '').trim();
+		if (!text || /\s/.test(text) || safePreviewUrl(text) == null) return false;
+		const { state } = view;
+		const { selection } = state;
+		const $from = selection.$from;
+		if (!selection.empty || $from.depth !== 1) return false;
+		if ($from.parent.type.name !== 'paragraph' || $from.parent.content.size !== 0) return false;
+		if (countNodes(state.doc, 'linkPreview') >= docLimits.maxLinkPreviews) return false;
+		event.preventDefault();
+		const id = `${this._fallbackId}-preview-${++this._seq}`;
+		const { schema } = state;
+		const card = schema.nodes.linkPreview.create({ url: text, pendingId: id });
+		const start = $from.before(1);
+		const tr = state.tr.replaceWith(start, $from.after(1), card);
+		// The caret continues on a fresh empty line under the card.
+		const after = start + card.nodeSize;
+		tr.insert(after, schema.nodes.paragraph.create());
+		tr.setSelection(TextSelection.create(tr.doc, after + 1));
+		this._previewWait.set(id, text);
+		view.dispatch(tr.scrollIntoView());
+		Promise.resolve()
+			.then(() => fetchPreview(text))
+			.then(
+				(result) => this._fillPreview(id, result),
+				() => this._fillPreview(id, null)
+			);
+		return true;
+	}
+
+	_fillPreview(id, result) {
+		this._previewWait.delete(id);
+		const ed = this._editor;
+		if (!ed || ed.isDestroyed) return;
+		const found = findNode(ed.state.doc, (n) => n.type.name === 'linkPreview' && n.attrs.pendingId === id);
+		if (!found) return;
+		const { node, pos } = found;
+		const { state } = ed;
+		const tr = state.tr;
+		if (result && typeof result === 'object') {
+			tr.setNodeMarkup(pos, undefined, {
+				url: node.attrs.url,
+				title: clip(result.title, docLimits.maxPreviewTitle),
+				description: clip(result.description, docLimits.maxPreviewDescription),
+				siteName: clip(result.siteName, docLimits.maxPreviewSiteName),
+				imageRef: clip(result.imageRef, docLimits.maxUrlLength),
+				pendingId: null,
+			});
+		} else {
+			const { schema } = state;
+			const marks = schema.marks.link ? [schema.marks.link.create({ href: node.attrs.url })] : [];
+			const para = schema.nodes.paragraph.create(null, schema.text(node.attrs.url, marks));
+			tr.replaceWith(pos, pos + node.nodeSize, para);
+		}
+		// The fill belongs to the paste: one undo removes the whole thing.
+		tr.setMeta('addToHistory', false);
+		ed.view.dispatch(tr);
+	}
+
+	// ---- chrome="blocks" ----------------------------------------------------
+	//
+	// Interaction model from the Grimoire example's block editor (handle click
+	// opens Turn-into, "/" at line start or after a space opens a filterable
+	// command list, Escape keeps the typed text, menus flip above their anchor
+	// near the viewport bottom and clamp to an 8px margin), mapped onto one
+	// Tiptap document instead of per-block contenteditables.
+
+	_blocks() {
+		return this.props.chrome === 'blocks';
+	}
+
+	// The "line" at a document position: the innermost textblock around it, or
+	// a top-level atom. { pos, node, kind } with kind from lineKind().
+	_lineAt(state, pos, inside) {
+		const { doc } = state;
+		if (inside != null && inside >= 0) {
+			const n = doc.nodeAt(inside);
+			if (n && n.isBlock && n.isAtom) return { pos: inside, node: n, kind: lineKind([{ type: n.type.name }]) };
+		}
+		const $p = doc.resolve(Math.max(0, Math.min(pos, doc.content.size)));
+		for (let d = $p.depth; d >= 1; d--) {
+			const n = $p.node(d);
+			if (!n.isTextblock) continue;
+			const path = [];
+			for (let k = 1; k <= d; k++) {
+				const a = $p.node(k);
+				path.push({ type: a.type.name, level: a.attrs.level });
+			}
+			return { pos: $p.before(d), node: n, kind: lineKind(path) };
+		}
+		// Between top-level blocks: the block after (or before) the position.
+		const n = $p.nodeAfter || $p.nodeBefore;
+		if (!n) return null;
+		const at = $p.nodeAfter ? $p.pos : $p.pos - n.nodeSize;
+		if (n.isAtom) return { pos: at, node: n, kind: lineKind([{ type: n.type.name }]) };
+		let inner = null;
+		n.descendants((c, p) => {
+			if (inner != null) return false;
+			if (c.isTextblock) {
+				inner = at + 1 + p;
+				return false;
+			}
+			return true;
+		});
+		return inner == null ? null : this._lineAt(state, inner + 1);
+	}
+
+	_sameLine(a, b) {
+		return (!a && !b) || (!!a && !!b && a.pos === b.pos && a.node === b.node);
+	}
+
+	_syncBlocks(tr) {
+		const ed = this._editor;
+		if (!ed || !this._blocks()) return;
+		const { state } = ed;
+		this._caretLine = this._lineAt(state, state.selection.from);
+		// Hover positions go stale when the document changes; the next pointer
+		// move recomputes, and meanwhile the handle follows the caret.
+		if (tr && tr.docChanged) this._hoverLine = null;
+		this._syncSlash(tr);
+		this._syncBubble();
+		this._refreshHandle();
+	}
+
+	// Which line the handle serves: the open menu's line, else the hovered line,
+	// else the caret's line while the editor (or the handle itself) has focus.
+	_refreshHandle() {
+		const ed = this._editor;
+		if (!ed) return;
+		const g = this.getData();
+		let line = null;
+		let mode = 'hover';
+		if (this._blocks() && ed.isEditable) {
+			if (g.blockMenuOpen && this._menuVariant === 'block' && this._menuLine) line = this._menuLine;
+			else if (this._hoverLine) line = this._hoverLine;
+			else if (ed.isFocused || g.handleFocus) {
+				line = this._caretLine;
+				mode = 'caret';
+			}
+		}
+		if (!this._sameLine(line, this._handleLine)) this._handleLine = line;
+		if (!!line !== !!g.handleVisible || (line && mode !== g.handleMode)) {
+			this.setData({ handleVisible: !!line, handleMode: mode });
+			this.refresh();
+		}
+		this._placeHandle();
+	}
+
+	_placeHandle() {
+		const btn = this.refs.handle;
+		const line = this._handleLine;
+		const ed = this._editor;
+		if (!btn || !line || !ed) return;
+		let dom = null;
+		try {
+			dom = ed.view.nodeDOM(line.pos);
+		} catch {
+			dom = null;
+		}
+		if (!(dom instanceof HTMLElement)) return;
+		const frame = btn.offsetParent || btn.parentElement;
+		const fr = frame.getBoundingClientRect();
+		const r = dom.getBoundingClientRect();
+		// Centre the 24px handle on the line's FIRST text line.
+		const lh = parseFloat(getComputedStyle(dom).lineHeight);
+		const first = Number.isFinite(lh) ? Math.min(lh, r.height) : Math.min(r.height, 28);
+		btn.style.top = `${Math.round(r.top - fr.top + Math.max(0, (first - 24) / 2))}px`;
+	}
+
+	// ---- "/" menu ----
+
+	_slashList() {
+		const canUpload = typeof this.props.uploadImage === 'function';
+		return filterCommands(
+			slashCommands({ tools: this.props.tools, canUpload }),
+			this.getData().slashQuery
+		);
+	}
+
+	_syncSlash(tr) {
+		const ed = this._editor;
+		const g = this.getData();
+		const { state } = ed;
+		const sel = state.selection;
+		let hit = null;
+		if (ed.isEditable && sel.empty && sel.$from.parent.isTextblock && sel.$from.parent.type.name !== 'codeBlock') {
+			const before = sel.$from.parent.textBetween(0, sel.$from.parentOffset, '\n', '￼');
+			hit = slashQueryAt(before);
+			if (hit) hit.from = sel.$from.start() + hit.offset;
+		}
+		if (!g.slashOpen) {
+			// Opens only on the keystroke that typed the "/" — not when the caret
+			// later lands after an old one, and not on a paste.
+			const typed =
+				hit && hit.query === '' && tr && tr.docChanged && tr.getMeta('uiEvent') !== 'paste' &&
+				sel.from === hit.from + 1;
+			if (typed) {
+				this._slashFrom = hit.from;
+				this.setData({ slashOpen: true, slashQuery: '', slashActive: 0 });
+				this.refresh();
+			}
+			return;
+		}
+		if (tr && tr.docChanged && this._slashFrom != null) this._slashFrom = tr.mapping.map(this._slashFrom);
+		if (!hit || hit.from !== this._slashFrom) {
+			this._closeSlash();
+			return;
+		}
+		if (hit.query !== g.slashQuery) {
+			this.setData({ slashQuery: hit.query, slashActive: 0 });
+			this.refresh();
+		} else {
+			this._placePopovers();
+		}
+	}
+
+	_closeSlash() {
+		this._slashFrom = null;
+		if (!this.getData().slashOpen) return;
+		this.setData({ slashOpen: false, slashQuery: '', slashActive: 0 });
+		this.refresh();
+	}
+
+	_setSlashActive(i) {
+		this.setData('slashActive', i);
+		this.refresh();
+		// Keep the highlighted row in view inside a scrolled list.
+		const row = this.refs.slashMenu?.querySelectorAll('[role="option"]')[i];
+		row?.scrollIntoView?.({ block: 'nearest' });
+	}
+
+	_runSlash(cmd) {
+		const ed = this._editor;
+		if (!ed || !cmd) return;
+		const from = this._slashFrom;
+		const to = ed.state.selection.from;
+		this._closeSlash();
+		if (from != null && to > from) ed.chain().focus().deleteRange({ from, to }).run();
+		if (cmd.id === 'image') {
+			if (this._canUpload()) this.refs.fileInput?.click();
+			return;
+		}
+		if (cmd.id === 'link') {
+			this.events.onPress('link');
+			return;
+		}
+		this._applyKind(cmd.id, null);
+	}
+
+	// Keys while a block-mode surface is active. Returning true stops Tiptap's
+	// own handling (Enter would split the line, arrows would move the caret).
+	_blockKeyDown(event) {
+		if (!this._blocks()) return false;
+		const g = this.getData();
+		if (g.slashOpen) {
+			const list = this._slashList();
+			const n = list.length;
+			const i = g.slashActive || 0;
+			switch (event.key) {
+				case 'ArrowDown':
+					if (n) this._setSlashActive((i + 1) % n);
+					return true;
+				case 'ArrowUp':
+					if (n) this._setSlashActive((i - 1 + n) % n);
+					return true;
+				case 'Enter':
+				case 'Tab':
+					if (n) {
+						this._runSlash(list[i]);
+						return true;
+					}
+					this._closeSlash();
+					return false;
+				case 'Escape':
+					// Dismiss; the typed "/query" stays as text.
+					this._closeSlash();
+					return true;
+				default:
+					return false;
+			}
+		}
+		if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key === '/') {
+			this._openBlockMenu(this._caretLine);
+			return true;
+		}
+		if (event.altKey && event.key === 'F10' && g.bubbleOpen) {
+			this.setData('bubbleFocus', true);
+			this.refs.bubble?.querySelector('button:not([disabled])')?.focus();
+			return true;
+		}
+		return false;
+	}
+
+	// ---- turn into / delete ----
+
+	_applyKind(kind, line) {
+		const ed = this._editor;
+		if (!ed) return;
+		let c = ed.chain().focus();
+		if (line) c = c.setTextSelection(line.pos + line.node.nodeSize - 1);
+		const current = line ? line.kind : this._lineAt(ed.state, ed.state.selection.from)?.kind;
+		switch (kind) {
+			case 'paragraph':
+				c.clearNodes().setParagraph().run();
+				break;
+			case 'heading1':
+			case 'heading2':
+			case 'heading3':
+				c.clearNodes().setHeading({ level: Number(kind.slice(-1)) }).run();
+				break;
+			case 'bulletList':
+				if (current === 'bulletList') c.run();
+				else if (current === 'orderedList') c.toggleBulletList().run();
+				else c.clearNodes().toggleBulletList().run();
+				break;
+			case 'orderedList':
+				if (current === 'orderedList') c.run();
+				else if (current === 'bulletList') c.toggleOrderedList().run();
+				else c.clearNodes().toggleOrderedList().run();
+				break;
+			case 'blockquote':
+				if (current === 'blockquote') c.run();
+				else c.clearNodes().setBlockquote().run();
+				break;
+			case 'codeBlock':
+				if (current === 'codeBlock') c.run();
+				else c.clearNodes().setCodeBlock().run();
+				break;
+			default:
+				c.run();
+		}
+	}
+
+	// Delete a line. A list item's lead line stands for the whole item, and a
+	// container the deletion would leave empty (a one-item list, a one-line
+	// quote) goes with it; deleting the last block leaves an empty paragraph.
+	_deleteLine(line) {
+		const ed = this._editor;
+		if (!ed || !line) return;
+		const { state } = ed;
+		let from = line.pos;
+		let to = line.pos + line.node.nodeSize;
+		if (!line.node.isAtom) {
+			const $p = state.doc.resolve(line.pos + 1);
+			let d = $p.depth;
+			if (d > 1 && $p.node(d - 1).type.name === 'listItem' && $p.index(d - 1) === 0) d -= 1;
+			while (d > 1 && $p.node(d - 1).childCount === 1) d -= 1;
+			from = $p.before(d);
+			to = $p.after(d);
+		}
+		const tr =
+			from <= 0 && to >= state.doc.content.size
+				? state.tr.replaceWith(0, state.doc.content.size, state.schema.nodes.paragraph.create())
+				: state.tr.delete(from, to);
+		ed.view.dispatch(tr.scrollIntoView());
+		ed.commands.focus();
+	}
+
+	// ---- block menu ----
+
+	_openBlockMenu(line) {
+		if (!line || !this._editor?.isEditable) return;
+		this._closeSlash();
+		this._menuVariant = 'block';
+		this._menuLine = line;
+		this._handleLine = line;
+		const current = this._menuCommands().findIndex((c) => c.current);
+		this.setData({
+			blockMenuOpen: true,
+			blockMenuIndex: Math.max(0, current),
+			handleVisible: true,
+			handleMode: 'hover',
+		});
+		this.refresh();
+		this._focusBlockRow();
+	}
+
+	// The selection bar's style picker: the same menu surface, listing Text and
+	// Heading 1–3 for the selection's lines.
+	_openStyleMenu() {
+		if (!this._editor?.isEditable) return;
+		this._menuVariant = 'style';
+		this._menuLine = null;
+		const current = this._menuCommands().findIndex((c) => c.current);
+		this.setData({ blockMenuOpen: true, blockMenuIndex: Math.max(0, current) });
+		this.refresh();
+		this._focusBlockRow();
+	}
+
+	_menuCommands() {
+		return this._menuVariant === 'style'
+			? styleMenuCommands({ tools: this.props.tools, kind: this._caretLine?.kind })
+			: blockMenuCommands({ tools: this.props.tools, kind: this._menuLine?.kind });
+	}
+
+	// `refocus`: return focus to whatever opened the menu (the handle, or the
+	// selection bar's picker button) — used on Escape.
+	_closeBlockMenu(refocus = false) {
+		if (!this.getData().blockMenuOpen) return;
+		const variant = this._menuVariant;
+		this._menuLine = null;
+		this._menuVariant = 'block';
+		this.setData({ blockMenuOpen: false, blockMenuIndex: 0 });
+		this.refresh();
+		if (refocus) {
+			if (variant === 'style') this.refs.bubble?.querySelector('[data-tb-value="style"]')?.focus();
+			else this.refs.handle?.focus();
+		}
+		this._syncBlocks(null);
+	}
+
+	_focusBlockRow() {
+		const i = this.getData().blockMenuIndex || 0;
+		this.refs.blockMenu?.querySelector(`[data-menu-index="${i}"]`)?.focus();
+	}
+
+	// ---- bubble ----
+
+	_syncBubble() {
+		const ed = this._editor;
+		const g = this.getData();
+		const sel = ed.state.selection;
+		const inCode = sel.$from.parent.type.name === 'codeBlock';
+		const want =
+			this._blocks() &&
+			ed.isEditable &&
+			!g.slashOpen &&
+			(!!g.linkOpen ||
+				(!!g.blockMenuOpen && this._menuVariant === 'style') ||
+				(!sel.empty && !sel.node && !inCode && (ed.isFocused || !!g.bubbleFocus)));
+		if (want !== !!g.bubbleOpen) {
+			this.setData('bubbleOpen', want);
+			this.refresh();
+		} else if (want) {
+			this._placePopovers();
+		}
+	}
+
+	// ---- popover placement ----
+
+	// The editing surface acts as the combobox for the "/" listbox: it keeps
+	// focus and points at the highlighted option.
+	_syncSlashAria() {
+		const dom = this._editor?.view.dom;
+		if (!dom) return;
+		const g = this.getData();
+		const row = this._blocks() && g.slashOpen ? this._slashList()[g.slashActive || 0] : null;
+		if (this._blocks() && g.slashOpen) {
+			dom.setAttribute('aria-controls', `${this._fallbackId}-slash-menu`);
+			dom.setAttribute('aria-expanded', 'true');
+		} else {
+			dom.removeAttribute('aria-controls');
+			dom.removeAttribute('aria-expanded');
+		}
+		if (row) dom.setAttribute('aria-activedescendant', `${this._fallbackId}-slash-${row.id}`);
+		else dom.removeAttribute('aria-activedescendant');
+	}
+
+	_showPopovers() {
+		this._syncSlashAria();
+		if (!this._blocks()) return;
+		for (const el of [this.refs.blockMenu, this.refs.slashMenu, this.refs.bubble]) {
+			if (!el || !el.isConnected) continue;
+			try {
+				if (!el.matches(':popover-open')) el.showPopover();
+			} catch {
+				// No popover support: the fixed position still applies, minus the top layer.
+			}
+		}
+		this._placePopovers();
+		this._placeHandle();
+	}
+
+	// The part of the viewport the editor is actually visible in: the viewport
+	// intersected with every scrolling / clipping ancestor.
+	_visibleArea() {
+		let top = 0;
+		let left = 0;
+		let bottom = window.innerHeight;
+		let right = document.documentElement.clientWidth;
+		let node = this._editor?.view.dom.parentElement;
+		while (node && node !== document.body && node !== document.documentElement) {
+			const cs = getComputedStyle(node);
+			if (/(auto|scroll|hidden|clip|overlay)/.test(cs.overflowY + cs.overflowX)) {
+				const r = node.getBoundingClientRect();
+				top = Math.max(top, r.top + node.clientTop);
+				left = Math.max(left, r.left + node.clientLeft);
+				bottom = Math.min(bottom, r.top + node.clientTop + node.clientHeight);
+				right = Math.min(right, r.left + node.clientLeft + node.clientWidth);
+			}
+			node = node.parentElement;
+		}
+		return { top, left, bottom, right };
+	}
+
+	_placePopovers() {
+		const ed = this._editor;
+		if (!ed || !this._blocks()) return;
+		const { view, state } = ed;
+		const M = 8;
+		const GAP = 6;
+		// Menus: below the anchor, flipped above near the viewport bottom,
+		// clamped to an 8px margin (Grimoire's rule).
+		const place = (el, anchor) => {
+			if (!el || !el.isConnected || !anchor) return;
+			const w = el.offsetWidth;
+			const h = el.offsetHeight;
+			const vw = document.documentElement.clientWidth;
+			const vh = window.innerHeight;
+			const left = Math.max(M, Math.min(anchor.left, vw - w - M));
+			let top = anchor.bottom + GAP;
+			if (top + h > vh - M) top = Math.max(M, anchor.top - h - GAP);
+			el.style.left = `${Math.round(left)}px`;
+			el.style.top = `${Math.round(top)}px`;
+		};
+		const coords = (pos) => {
+			try {
+				return view.coordsAtPos(Math.max(0, Math.min(pos, state.doc.content.size)));
+			} catch {
+				return null;
+			}
+		};
+		const rectOf = (node) => {
+			const r = node?.getBoundingClientRect();
+			return r ? { left: r.left, top: r.top, bottom: r.bottom } : null;
+		};
+		if (this.refs.slashMenu && this._slashFrom != null) {
+			place(this.refs.slashMenu, coords(this._slashFrom));
+		}
+		if (this.refs.blockMenu) {
+			const anchor =
+				this._menuVariant === 'style'
+					? this.refs.bubble?.querySelector('[data-tb-value="style"]')
+					: this.refs.handle;
+			place(this.refs.blockMenu, rectOf(anchor));
+		}
+		const bubble = this.refs.bubble;
+		if (!bubble || !bubble.isConnected) return;
+		const { from, to } = state.selection;
+		const a = coords(from);
+		const b = coords(to);
+		if (!a || !b) return;
+		// The selection bar sits just above the selection. It never scrolls out
+		// of sight while the selection is on screen: when the selection's top is
+		// above the visible area it pins to that area's top edge (plus
+		// floatingOffsetTop, for a host's sticky header); with no room above it
+		// flips below; once the selection leaves the visible area it hides.
+		const area = this._visibleArea();
+		const offset = Number(this.props.floatingOffsetTop) || 0;
+		const ceiling = area.top + offset;
+		const selTop = Math.min(a.top, b.top);
+		const selBottom = Math.max(a.bottom, b.bottom);
+		const w = bubble.offsetWidth;
+		const h = bubble.offsetHeight;
+		if (selBottom <= ceiling || selTop >= area.bottom) {
+			bubble.style.visibility = 'hidden';
+			return;
+		}
+		bubble.style.visibility = '';
+		let top;
+		if (selTop - GAP - h >= ceiling) top = selTop - GAP - h; // above
+		else if (selTop >= ceiling) top = Math.min(selBottom + GAP, area.bottom - h); // flip below
+		else top = ceiling; // pinned
+		const sameLine = Math.abs(a.top - b.top) < 4;
+		const want = sameLine ? (a.left + b.right) / 2 - w / 2 : a.left;
+		const left = Math.max(area.left + M, Math.min(want, area.right - w - M));
+		bubble.style.left = `${Math.round(left)}px`;
+		bubble.style.top = `${Math.round(Math.max(ceiling, top))}px`;
+	}
+
+	_onViewportChange() {
+		if (!this._blocks()) return;
+		const g = this.getData();
+		if (g.slashOpen || g.blockMenuOpen || g.bubbleOpen) this._placePopovers();
+		if (g.handleVisible) this._placeHandle();
+	}
+
 	// Current block style as a heading level, 0 meaning paragraph. Drives both
 	// the trigger's label and which listbox row reads as selected. A paragraph
 	// inside a list, a blockquote and a code block all report 0 (Normal text).
@@ -534,7 +2174,7 @@ export default class RichTextEditor extends PuzzleView {
 			// nothing here depends on the DOM selection surviving. Escape
 			// deliberately leaves focus ON the trigger (listbox convention — the
 			// user may want to reopen); only applying returns focus to the editor.
-			if (open) this.refs.styleTrigger?.focus();
+			if (open) this._styleTrigger()?.focus();
 		},
 
 		closeStyle: () => {
@@ -547,15 +2187,19 @@ export default class RichTextEditor extends PuzzleView {
 		// and immediately reopen in @click. Skip it and let the trigger's own
 		// toggle own that interaction (the guard Select.pzl's listener uses).
 		onStyleOutside: (event) => {
-			if (event.target?.closest?.('[data-style-trigger]')) return;
+			if (event.target?.closest?.('[data-tb-value="style"]')) return;
 			this.events.closeStyle();
 		},
 
-		onStyleKey: (event) => {
+		// Keys on the picker item bubble here from the Toolbar. Closed, Enter and
+		// Space are the button's own click (→ onPress); Up/Down open it. Open,
+		// the Toolbar leaves arrows / Home / End to us (its `expanded` rule).
+		onRowKey: (event) => {
+			if (this._blocks() || !event.target?.closest?.('[data-tb-value="style"]')) return;
 			const g = this.getData();
 			const n = BLOCK_STYLES.length;
 			if (!g.styleOpen) {
-				if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key)) {
+				if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
 					event.preventDefault();
 					this.events.toggleStyle();
 				}
@@ -563,6 +2207,10 @@ export default class RichTextEditor extends PuzzleView {
 			}
 			const i = g.styleActive;
 			switch (event.key) {
+				case 'ArrowLeft':
+				case 'ArrowRight':
+					this.events.closeStyle();
+					break;
 				case 'Escape':
 					event.preventDefault();
 					this.events.closeStyle();
@@ -586,6 +2234,11 @@ export default class RichTextEditor extends PuzzleView {
 				case 'Enter':
 				case ' ':
 					event.preventDefault();
+					// The button would also click (→ onPress → toggle) on this key.
+					this._styleKeyChose = true;
+					setTimeout(() => {
+						this._styleKeyChose = false;
+					}, 0);
 					if (i >= 0) this.events.chooseStyle(BLOCK_STYLES[i]);
 					break;
 				case 'Tab':
@@ -610,16 +2263,30 @@ export default class RichTextEditor extends PuzzleView {
 		},
 
 		onPress: (value) => {
+			if (value === 'style') {
+				if (!this._blocks()) {
+					if (!this._styleKeyChose) this.events.toggleStyle();
+					return;
+				}
+				if (this.getData().blockMenuOpen) this._closeBlockMenu();
+				else this._openStyleMenu();
+				return;
+			}
+			if (value === 'image') {
+				if (this._canUpload()) this.refs.fileInput?.click();
+				return;
+			}
 			if (value !== 'link' || !this._editor) return;
 			const href = this._editor.getAttributes('link').href || '';
-			this.setData({ linkOpen: true, linkDraft: href });
+			// Blocks mode hosts the URL row in the bubble, so open it with the row.
+			this.setData({ linkOpen: true, linkDraft: href, ...(this._blocks() ? { bubbleOpen: true } : {}) });
 			this.refresh();
 			// An explicit refresh() renders synchronously, so the row's input is
 			// already mounted by the time it returns — focus it right here, or the
 			// row is keyboard-unreachable. Deliberately NOT deferred: Chrome pauses
 			// requestAnimationFrame in unfocused/occluded windows, so an rAF focus
 			// never fires there at all.
-			const input = this.refs.linkInput;
+			const input = this.refs.linkInput || this.refs.bubbleLinkInput;
 			input?.focus();
 			if (href) input?.select();
 		},
@@ -633,6 +2300,19 @@ export default class RichTextEditor extends PuzzleView {
 			}
 			// Bare domains get a scheme; site-relative (/…) and hash (#…) pass through.
 			const url = /^([a-z][a-z0-9+.-]*:|\/|#)/i.test(raw) ? raw : `https://${raw}`;
+			// Blocks mode, nothing selected (the "/" Link command): insert the URL
+			// as linked text rather than setting an invisible stored mark.
+			const ed = this._editor;
+			if (this._blocks() && ed && ed.state.selection.empty && !ed.isActive('link')) {
+				if (safeLinkUrl(url) == null) return;
+				this._chain()
+					?.insertContent({ type: 'text', text: raw, marks: [{ type: 'link', attrs: { href: url } }] })
+					.run();
+				this.setData({ linkOpen: false, linkDraft: '' });
+				this.refresh();
+				this._syncBlocks(null);
+				return;
+			}
 			// setLink returns false when the URL fails the link policy, which aborts
 			// the chain and applies nothing. Keep the row open with the text intact
 			// so a rejected URL reads as "that wasn't accepted, here's what I typed"
@@ -642,6 +2322,7 @@ export default class RichTextEditor extends PuzzleView {
 			if (!applied) return;
 			this.setData({ linkOpen: false, linkDraft: '' });
 			this.refresh();
+			this._syncBlocks(null);
 		},
 
 		removeLink: () => {
@@ -649,6 +2330,186 @@ export default class RichTextEditor extends PuzzleView {
 			this._chain()?.extendMarkRange('link').unsetLink().run();
 			this.setData({ linkOpen: false, linkDraft: '' });
 			this.refresh();
+			this._syncBlocks(null);
+		},
+
+		onFiles: (event) => {
+			const input = event.target;
+			const files = imageFiles(input);
+			// Clear it so choosing the same file again still fires change.
+			input.value = '';
+			if (files.length && this._canUpload()) this._uploadFiles(files, null);
+		},
+
+		// ---- chrome="blocks" ------------------------------------------------
+
+		onHover: (event) => {
+			const ed = this._editor;
+			if (!ed || !this._blocks() || !ed.isEditable || this.getData().blockMenuOpen) return;
+			if (event.target?.closest?.('[data-rte-handle]')) return;
+			const box = ed.view.dom.getBoundingClientRect();
+			// Clamp into the content so the gutter beside a line still maps to it.
+			const left = Math.max(box.left + 1, Math.min(event.clientX, box.right - 1));
+			const top = Math.max(box.top + 1, Math.min(event.clientY, box.bottom - 1));
+			const hit = ed.view.posAtCoords({ left, top });
+			const line = hit ? this._lineAt(ed.state, hit.pos, hit.inside) : null;
+			if (this._sameLine(line, this._hoverLine)) return;
+			this._hoverLine = line;
+			this._refreshHandle();
+		},
+
+		onLeave: () => {
+			if (!this._hoverLine) return;
+			this._hoverLine = null;
+			this._refreshHandle();
+		},
+
+		toggleBlockMenu: () => {
+			if (this.getData().blockMenuOpen) this._closeBlockMenu(true);
+			else this._openBlockMenu(this._handleLine);
+		},
+
+		onHandleKey: (event) => {
+			if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+				event.preventDefault();
+				this._openBlockMenu(this._handleLine);
+			}
+		},
+
+		onHandleFocus: () => {
+			this.setData('handleFocus', true);
+			this._refreshHandle();
+		},
+
+		onHandleBlur: () => {
+			this.setData('handleFocus', false);
+			this._refreshHandle();
+		},
+
+		// Drag the line's top-level block with ProseMirror's own node drag: select
+		// the block, hand ProseMirror the slice as an internal move, and let its
+		// drop handling (dropcursor, one undo step) do the rest.
+		onHandleDragStart: (event) => {
+			const ed = this._editor;
+			const line = this._handleLine;
+			if (!ed || !line || !ed.isEditable || !event.dataTransfer) {
+				event.preventDefault();
+				return;
+			}
+			this._closeBlockMenu();
+			this._closeSlash();
+			const { state, view } = ed;
+			const top = line.node.isAtom ? line.pos : state.doc.resolve(line.pos + 1).before(1);
+			const selection = NodeSelection.create(state.doc, top);
+			view.dispatch(state.tr.setSelection(selection));
+			view.dragging = { slice: selection.content(), move: true };
+			this._internalDrag = true;
+			event.dataTransfer.effectAllowed = 'move';
+			event.dataTransfer.clearData();
+			event.dataTransfer.setData('text/plain', selection.node.textContent || ' ');
+			const dom = view.nodeDOM(top);
+			if (dom instanceof HTMLElement) event.dataTransfer.setDragImage(dom, 0, 0);
+		},
+
+		onHandleDragEnd: () => {
+			this._internalDrag = false;
+			const view = this._editor?.view;
+			// A cancelled drag never reaches ProseMirror's drop, which is what
+			// clears this.
+			if (view) view.dragging = null;
+			this._hoverLine = null;
+			this._syncBlocks(null);
+		},
+
+		onBlockMenuKey: (event) => {
+			const g = this.getData();
+			const n = this._menuCommands().length;
+			const i = g.blockMenuIndex || 0;
+			let next = null;
+			switch (event.key) {
+				case 'ArrowDown':
+					next = (i + 1) % n;
+					break;
+				case 'ArrowUp':
+					next = (i - 1 + n) % n;
+					break;
+				case 'Home':
+					next = 0;
+					break;
+				case 'End':
+					next = n - 1;
+					break;
+				case 'Escape':
+					event.preventDefault();
+					event.stopPropagation();
+					this._closeBlockMenu(true);
+					return;
+				case 'Tab':
+					this._closeBlockMenu();
+					return;
+				default:
+					return;
+			}
+			event.preventDefault();
+			this.setData('blockMenuIndex', next);
+			this.refresh();
+			this._focusBlockRow();
+		},
+
+		onBlockMenuOutside: (event) => {
+			// The handle and the picker button toggle on their own click.
+			if (event.target?.closest?.('[data-rte-handle], [data-tb-value="style"]')) return;
+			this._closeBlockMenu();
+		},
+
+		hoverBlockRow: (i) => {
+			if (this.getData().blockMenuIndex === i) return;
+			this.setData('blockMenuIndex', i);
+			this.refresh();
+			this._focusBlockRow();
+		},
+
+		chooseBlockCommand: (id) => {
+			const variant = this._menuVariant;
+			const line = this._menuLine;
+			this._closeBlockMenu();
+			if (variant === 'style') {
+				this._applyKind(id, null);
+				return;
+			}
+			if (!line) return;
+			if (id === 'delete') this._deleteLine(line);
+			else this._applyKind(id, line);
+		},
+
+		onSlashOutside: () => this._closeSlash(),
+
+		hoverSlashRow: (i) => {
+			if (this.getData().slashActive !== i) this._setSlashActive(i);
+		},
+
+		chooseSlashCommand: (id) => {
+			this._runSlash(this._slashList().find((c) => c.id === id));
+		},
+
+		onBubbleFocus: () => {
+			if (this.getData().bubbleFocus) return;
+			this.setData('bubbleFocus', true);
+		},
+
+		onBubbleBlur: (event) => {
+			if (this.refs.bubble?.contains(event.relatedTarget)) return;
+			this.setData('bubbleFocus', false);
+			this._syncBlocks(null);
+		},
+
+		closeBubble: () => {
+			if (this.getData().linkOpen) {
+				this.events.closeLink();
+				return;
+			}
+			this.setData('bubbleFocus', false);
+			this._editor?.commands.focus();
 		},
 
 		closeLink: () => {
@@ -658,6 +2519,7 @@ export default class RichTextEditor extends PuzzleView {
 			// editor instead of letting it fall to <body>. (applyLink/removeLink
 			// already refocus through _chain().)
 			this._editor?.commands.focus();
+			this._syncBlocks(null);
 		},
 	};
 }

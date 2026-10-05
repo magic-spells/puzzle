@@ -6,7 +6,14 @@ import {
 	fromTiptap,
 	toTiptap,
 	safeLinkUrl,
+	safePreviewUrl,
+	plainText,
+	imageRefs,
+	docLimits,
+	validateDoc,
 	RICH_TEXT_CLASSES,
+	RICH_TEXT_COMPACT,
+	richTextClasses,
 } from '../registry/lib/rich-text-doc.js';
 
 // ---- emptiness ------------------------------------------------------------
@@ -509,9 +516,391 @@ test('safeLinkUrl normalizes tabs and newlines before testing the scheme', () =>
 test('RICH_TEXT_CLASSES exposes a class string per node kind', () => {
 	for (const key of [
 		'paragraph', 'heading1', 'heading2', 'heading3', 'heading4', 'list', 'bulletList',
-		'orderedList', 'listItem', 'blockquote', 'codeBlock', 'link',
+		'orderedList', 'listItem', 'blockquote', 'codeBlock', 'link', 'figure', 'image',
+		'imagePlaceholder', 'caption', 'preview', 'previewBody', 'previewSite', 'previewTitle',
+		'previewDescription', 'previewImage',
 	]) {
 		assert.equal(typeof RICH_TEXT_CLASSES[key], 'string', key);
 		assert.ok(RICH_TEXT_CLASSES[key].length > 0, key);
 	}
+});
+
+// The atoms' classes are a styling contract: tokens only, no arbitrary values
+// and no left-edge accent bar on the card.
+test('atom classes use scale utilities only, no left-edge bars', () => {
+	for (const key of ['figure', 'image', 'imagePlaceholder', 'caption', 'preview', 'previewBody',
+		'previewSite', 'previewTitle', 'previewDescription', 'previewImage']) {
+		const cls = RICH_TEXT_CLASSES[key];
+		assert.doesNotMatch(cls, /\[/, `${key} has an arbitrary value`);
+		assert.doesNotMatch(cls, /\bborder-(l|s)\b|\bborder-(l|s)-/, `${key} has a left-edge border`);
+	}
+});
+
+// ---- image + link-preview atoms -------------------------------------------
+
+const IMG = { type: 'image', ref: 'img-1', alt: 'A chart', caption: 'Q3 numbers', width: 800, height: 600 };
+const PREVIEW = {
+	type: 'link-preview',
+	url: 'https://example.com/post',
+	title: 'A post',
+	description: 'About things',
+	siteName: 'Example',
+	imageRef: 'img-2',
+};
+
+test('toTiptap maps the atoms to image / linkPreview nodes with attrs', () => {
+	const pm = toTiptap({ type: 'root', children: [IMG, PREVIEW] });
+	assert.deepEqual(pm.content, [
+		{ type: 'image', attrs: { ref: 'img-1', alt: 'A chart', caption: 'Q3 numbers', width: 800, height: 600 } },
+		{
+			type: 'linkPreview',
+			attrs: {
+				url: 'https://example.com/post',
+				title: 'A post',
+				description: 'About things',
+				siteName: 'Example',
+				imageRef: 'img-2',
+			},
+		},
+	]);
+});
+
+test('round-trip: the atoms survive fromTiptap(toTiptap(doc)) between blocks', () => {
+	const doc = {
+		type: 'root',
+		children: [
+			{ type: 'paragraph', children: [{ type: 'text', value: 'before' }] },
+			IMG,
+			{ type: 'image', ref: 'img-3' },
+			PREVIEW,
+			{ type: 'link-preview', url: 'https://example.com/x' },
+			{ type: 'paragraph', children: [{ type: 'text', value: 'after' }] },
+		],
+	};
+	assert.deepEqual(fromTiptap(toTiptap(doc)), doc);
+});
+
+test('fromTiptap drops null / empty / non-integer atom attrs and editor-only attrs', () => {
+	const doc = fromTiptap({
+		type: 'doc',
+		content: [
+			{ type: 'image', attrs: { ref: 'r', alt: '', caption: null, width: 1.5, height: -2 } },
+			{
+				type: 'linkPreview',
+				attrs: { url: 'https://a.b', title: null, description: '', siteName: null, imageRef: null, pendingId: 'p-1' },
+			},
+		],
+	});
+	assert.deepEqual(doc.children, [
+		{ type: 'image', ref: 'r' },
+		{ type: 'link-preview', url: 'https://a.b' },
+	]);
+});
+
+test('atoms without their required field are dropped both ways', () => {
+	assert.deepEqual(
+		fromTiptap({ type: 'doc', content: [{ type: 'image', attrs: {} }, { type: 'linkPreview', attrs: { url: '' } }] })
+			.children,
+		[]
+	);
+	assert.deepEqual(toTiptap({ type: 'root', children: [{ type: 'image' }, { type: 'link-preview' }] }), {
+		type: 'doc',
+		content: [{ type: 'paragraph' }],
+	});
+});
+
+test('atoms are root-level only: nested ones are dropped both ways', () => {
+	const nestedPm = {
+		type: 'doc',
+		content: [{ type: 'blockquote', content: [{ type: 'image', attrs: { ref: 'r' } }, { type: 'paragraph' }] }],
+	};
+	assert.deepEqual(fromTiptap(nestedPm).children[0], {
+		type: 'blockquote',
+		children: [{ type: 'paragraph', children: [] }],
+	});
+	const pm = toTiptap({
+		type: 'root',
+		children: [{ type: 'blockquote', children: [PREVIEW, { type: 'paragraph', children: [] }] }],
+	});
+	assert.deepEqual(pm.content[0], { type: 'blockquote', content: [{ type: 'paragraph' }] });
+});
+
+test('an image-only doc is not empty', () => {
+	assert.equal(isEmpty({ type: 'root', children: [IMG] }), false);
+});
+
+// ---- safePreviewUrl -------------------------------------------------------
+
+test('safePreviewUrl accepts absolute http(s) urls unchanged', () => {
+	for (const url of [
+		'https://example.com',
+		'http://example.com/a?b=c#d',
+		'HTTPS://Example.com/path',
+		'https://example.com:8443/x',
+		'https://bücher.example/straße',
+	]) {
+		assert.equal(safePreviewUrl(url), url, url);
+	}
+});
+
+test('safePreviewUrl rejects relative, other schemes, userinfo, whitespace and oversize', () => {
+	for (const url of [
+		'',
+		null,
+		undefined,
+		42,
+		'/relative',
+		'example.com',
+		'//example.com',
+		'mailto:a@b.c',
+		'javascript:alert(1)',
+		'ftp://example.com',
+		'data:text/html,x',
+		'https://user@example.com',
+		'https://user:pw@example.com',
+		'https://@example.com',
+		'https://',
+		'https:///path',
+		'https://exa mple.com',
+		' https://example.com',
+		'https://example.com/\n',
+		'ht\ttps://example.com',
+		'https:\\\\example.com',
+		'https://example.com\\@evil.com',
+		`https://example.com/${'a'.repeat(2048)}`,
+	]) {
+		assert.equal(safePreviewUrl(url), null, String(url));
+	}
+	assert.equal(safePreviewUrl(`https://e.co/${'a'.repeat(2048 - 13)}`).length, 2048);
+});
+
+// ---- plainText / imageRefs ------------------------------------------------
+
+test('plainText joins block lines and includes atom text, skipping blanks', () => {
+	const doc = {
+		type: 'root',
+		children: [
+			{ type: 'heading', level: 2, children: [{ type: 'text', value: 'Title' }] },
+			{
+				type: 'paragraph',
+				children: [
+					{ type: 'text', value: 'See ' },
+					{ type: 'link', url: 'https://x.y', children: [{ type: 'text', value: 'this', bold: true }] },
+					{ type: 'text', value: '\nnext' },
+				],
+			},
+			{ type: 'paragraph', children: [{ type: 'text', value: '   ' }] },
+			{
+				type: 'list',
+				listType: 'unordered',
+				children: [
+					{
+						type: 'list-item',
+						children: [
+							{ type: 'text', value: 'one' },
+							{
+								type: 'list',
+								listType: 'ordered',
+								children: [{ type: 'list-item', children: [{ type: 'text', value: 'sub' }] }],
+							},
+							{ type: 'text', value: 'tail' },
+						],
+					},
+				],
+			},
+			{ type: 'blockquote', children: [{ type: 'paragraph', children: [{ type: 'text', value: 'q\u0000' }] }] },
+			{ type: 'code-block', children: [{ type: 'text', value: 'x = 1' }] },
+			IMG,
+			{ type: 'image', ref: 'bare' },
+			PREVIEW,
+			{ type: 'mystery', children: [{ type: 'text', value: 'ignored' }] },
+		],
+	};
+	assert.equal(
+		plainText(doc),
+		[
+			'Title',
+			'See this\nnext',
+			'one',
+			'sub',
+			'tail',
+			'q',
+			'x = 1',
+			'A chart',
+			'Q3 numbers',
+			'A post',
+			'About things',
+			'https://example.com/post',
+		].join('\n')
+	);
+	assert.equal(plainText(null), '');
+	assert.equal(plainText(emptyDoc()), '');
+});
+
+test('imageRefs lists image refs and preview imageRefs once, in order', () => {
+	const doc = {
+		type: 'root',
+		children: [PREVIEW, IMG, { type: 'image', ref: 'img-2' }, { type: 'link-preview', url: 'https://a.b' }],
+	};
+	assert.deepEqual(imageRefs(doc), ['img-2', 'img-1']);
+	assert.deepEqual(imageRefs(null), []);
+});
+
+// ---- validateDoc ----------------------------------------------------------
+
+const para = (value) => ({ type: 'paragraph', children: [{ type: 'text', value }] });
+const root = (...children) => ({ type: 'root', children });
+
+function nestLists(depth) {
+	let node = { type: 'list-item', children: [{ type: 'text', value: 'deep' }] };
+	for (let i = 0; i < depth; i++) {
+		const list = { type: 'list', listType: 'unordered', children: [node] };
+		node = i === depth - 1 ? list : { type: 'list-item', children: [list] };
+	}
+	return node;
+}
+
+function nestQuotes(depth) {
+	let node = para('deep');
+	for (let i = 0; i < depth; i++) node = { type: 'blockquote', children: [node] };
+	return node;
+}
+
+test('validateDoc accepts a full valid doc', () => {
+	const doc = root(
+		{ type: 'heading', level: 1, align: 'center', children: [{ type: 'text', value: 'H', bold: true }] },
+		{
+			type: 'paragraph',
+			align: 'right',
+			children: [
+				{ type: 'text', value: 'a', italic: false, underline: true, strike: true },
+				{ type: 'link', url: '/rel', title: 't', target: '_blank', children: [{ type: 'text', value: 'l' }] },
+			],
+		},
+		nestLists(6),
+		nestQuotes(11),
+		{ type: 'code-block', children: [{ type: 'text', value: 'code' }] },
+		IMG,
+		PREVIEW,
+		{ type: 'paragraph', children: [] }
+	);
+	assert.deepEqual(validateDoc(doc), { ok: true });
+	assert.deepEqual(validateDoc(emptyDoc()), { ok: true });
+	// The editor's own output is always valid.
+	assert.deepEqual(validateDoc(fromTiptap(toTiptap(doc))), { ok: true });
+});
+
+function rejects(doc, code, path, limits) {
+	const r = validateDoc(doc, limits);
+	assert.equal(r.ok, false, JSON.stringify(doc).slice(0, 120));
+	assert.equal(r.code, code, r.message);
+	if (path !== undefined) assert.equal(r.path, path, r.message);
+	assert.equal(typeof r.message, 'string');
+}
+
+test('validateDoc rejects a non-root body', () => {
+	rejects(null, 'invalid', '');
+	rejects([], 'invalid', '');
+	rejects({ type: 'paragraph', children: [] }, 'invalid', '');
+	rejects({ type: 'root' }, 'invalid', '');
+	rejects({ type: 'root', children: [], extra: 1 }, 'unknown_key', '');
+});
+
+test('validateDoc enforces the byte, node and text limits', () => {
+	rejects(root(para('x'.repeat(262144))), 'too_large', '');
+	rejects(root(para('é'.repeat(16385))), 'text_too_long', 'children[0].children[0]');
+	assert.equal(validateDoc(root(para('é'.repeat(16384)))).ok, true);
+	const many = root(...Array.from({ length: 2500 }, () => para('a')));
+	rejects(many, 'too_many_nodes');
+	assert.equal(validateDoc(root(...Array.from({ length: 2499 }, () => para('a')))).ok, true);
+	rejects(root(para('a'), para('b')), 'too_many_nodes', undefined, { maxNodes: 4 });
+});
+
+test('validateDoc enforces nesting and list depth', () => {
+	rejects(root(nestQuotes(12)), 'too_deep');
+	rejects(root(nestLists(7)), 'list_too_deep');
+	assert.equal(validateDoc(root(nestLists(6))).ok, true);
+});
+
+test('validateDoc caps images and link previews at 50 each', () => {
+	const imgs = (n) => Array.from({ length: n }, (_, i) => ({ type: 'image', ref: `r${i}` }));
+	const pvs = (n) => Array.from({ length: n }, (_, i) => ({ type: 'link-preview', url: `https://e.co/${i}` }));
+	assert.equal(validateDoc(root(...imgs(50), ...pvs(50))).ok, true);
+	rejects(root(...imgs(51)), 'too_many_images', 'children[50]');
+	rejects(root(...pvs(51)), 'too_many_link_previews', 'children[50]');
+});
+
+test('validateDoc rejects unknown types, misplaced nodes and unknown keys with a path', () => {
+	rejects(root({ type: 'video', src: 'x' }), 'unknown_type', 'children[0]');
+	rejects(root({ type: 'root', children: [] }), 'unknown_type', 'children[0]');
+	rejects(root('text'), 'invalid', 'children[0]');
+	rejects(root({ type: 'blockquote', children: [IMG] }), 'not_allowed', 'children[0].children[0]');
+	rejects(
+		root({ type: 'list', listType: 'ordered', children: [{ type: 'list-item', children: [PREVIEW] }] }),
+		'not_allowed',
+		'children[0].children[0].children[0]'
+	);
+	rejects(root({ type: 'text', value: 'loose' }), 'not_allowed', 'children[0]');
+	rejects(root({ type: 'paragraph', children: [para('x')] }), 'not_allowed', 'children[0].children[0]');
+	rejects(root({ ...para('x'), id: 1 }), 'unknown_key', 'children[0]');
+	rejects(root({ ...IMG, src: 'https://x' }), 'unknown_key', 'children[0]');
+	rejects(root({ ...PREVIEW, image: 'x' }), 'unknown_key', 'children[0]');
+	rejects(root({ type: 'paragraph', children: [{ type: 'text', value: 'x', code: true }] }), 'unknown_key');
+});
+
+test('validateDoc checks field values', () => {
+	const bad = [
+		{ type: 'heading', level: 5, children: [] },
+		{ type: 'heading', level: 0, children: [] },
+		{ type: 'heading', level: '2', children: [] },
+		{ type: 'paragraph', align: 'left', children: [] },
+		{ type: 'paragraph' },
+		{ type: 'list', listType: 'dotted', children: [] },
+		{ type: 'paragraph', children: [{ type: 'text', value: 'x', bold: 'yes' }] },
+		{ type: 'paragraph', children: [{ type: 'text' }] },
+		{ type: 'paragraph', children: [{ type: 'link', url: 'javascript:alert(1)', children: [] }] },
+		{ type: 'paragraph', children: [{ type: 'link', url: 'java\nscript:alert(1)', children: [] }] },
+		{ type: 'paragraph', children: [{ type: 'link', url: 'data:text/html,x', children: [] }] },
+		{ type: 'paragraph', children: [{ type: 'link', url: `/${'a'.repeat(2048)}`, children: [] }] },
+		{ type: 'paragraph', children: [{ type: 'link', url: '/a', target: '_self', children: [] }] },
+		{ type: 'image', ref: '' },
+		{ type: 'image', ref: 'r', alt: null },
+		{ type: 'image', ref: 'r', alt: 'a'.repeat(501) },
+		{ type: 'image', ref: 'r', caption: 'a'.repeat(501) },
+		{ type: 'image', ref: 'r', width: 0 },
+		{ type: 'image', ref: 'r', height: 2.5 },
+		{ type: 'link-preview', url: '/relative' },
+		{ type: 'link-preview', url: 'https://user@example.com' },
+		{ type: 'link-preview', url: 'https://e.co', title: 'a'.repeat(301) },
+		{ type: 'link-preview', url: 'https://e.co', description: 'a'.repeat(1001) },
+		{ type: 'link-preview', url: 'https://e.co', siteName: 'a'.repeat(201) },
+		{ type: 'link-preview', url: 'https://e.co', imageRef: '' },
+	];
+	for (const node of bad) rejects(root(node), 'invalid');
+	// Caps count code points, not UTF-16 units.
+	assert.equal(validateDoc(root({ type: 'image', ref: 'r', alt: '😀'.repeat(500) })).ok, true);
+	assert.equal(validateDoc(root({ type: 'heading', level: 6, children: [] }), { maxHeadingLevel: 6 }).ok, true);
+});
+
+test('docLimits holds the documented defaults and is frozen', () => {
+	assert.equal(docLimits.maxBytes, 256 * 1024);
+	assert.equal(docLimits.maxNodes, 5000);
+	assert.equal(docLimits.maxDepth, 12);
+	assert.equal(docLimits.maxListDepth, 6);
+	assert.equal(docLimits.maxImages, 50);
+	assert.equal(docLimits.maxLinkPreviews, 50);
+	assert.equal(docLimits.maxTextBytes, 32 * 1024);
+	assert.equal(Object.isFrozen(docLimits), true);
+});
+
+test('compact classes: overrides only known keys, tokens only, no left-edge bar', () => {
+	for (const [key, cls] of Object.entries(RICH_TEXT_COMPACT)) {
+		assert.ok(key in RICH_TEXT_CLASSES, key);
+		assert.doesNotMatch(cls, /\[/, `${key} has an arbitrary value`);
+		assert.doesNotMatch(cls, /\bborder-(l|s)\b|\bborder-(l|s)-/, `${key} has a left-edge border`);
+	}
+	assert.equal(richTextClasses(false), RICH_TEXT_CLASSES);
+	const compact = richTextClasses(true);
+	assert.equal(compact.paragraph, RICH_TEXT_COMPACT.paragraph);
+	assert.equal(compact.heading1, RICH_TEXT_CLASSES.heading1);
 });
