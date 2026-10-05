@@ -18,7 +18,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 import LocaleSwitcher from '../components/LocaleSwitcher.pzl';
 
-// Chrome only. Its strings come through `t` like everything else, so a locale
-// switch — which rebuilds every routed level, layout included — repaints it too.
+// Chrome only. Its strings come through `t` and its links through `link()`, so
+// every locale's pages render it in their own language under their own prefix.
 export default class DefaultLayout extends PuzzleView {}
 </script>

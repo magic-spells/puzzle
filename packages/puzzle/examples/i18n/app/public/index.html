@@ -7,9 +7,10 @@
   <link href="/styles.css" rel="stylesheet">
 </head>
 <body>
-  <!-- The runtime sets <html lang> to the active locale on load and on every
-       switch. Prerendered builds (--hybrid, --static) also inject the default
-       locale's table at the end of the body, so an English visitor fetches nothing. -->
+  <!-- The runtime sets <html lang> to the locale the URL names (/es/… is
+       Spanish). Prerendered builds (--hybrid, --static) write one copy of every
+       page per locale, each with its own <html lang> and its own table at the end
+       of the body, so no visitor fetches strings. -->
   <div id="app"></div>
   <script type="module" src="/app.js"></script>
 </body>

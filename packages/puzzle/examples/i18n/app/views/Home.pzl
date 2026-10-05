@@ -28,8 +28,8 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
-// The cart is a store record, so it survives a language switch (which rebuilds
-// every routed view — local setData() state does not survive it).
+// The cart is a store record persisted to localStorage (app.js), so it survives a
+// language switch, which loads the page again under the other locale's prefix.
 export default class Home extends PuzzleView {
   created() {
     const { store } = this.ctx;

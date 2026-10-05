@@ -38,7 +38,7 @@ import {
 	viewerLanguages,
 } from './i18n.js';
 import manifestData from '@magic-spells/puzzle/i18n/manifest';
-import { Router, normalizeBase } from './router/router.js';
+import { Router, localePage, normalizeBase } from './router/router.js';
 import { snapshotToStorage, restoreStoreFromStorage, restoreViewsFromStorage } from './devstate.js';
 import { devtoolsAppMounted, devtoolsAppUnmounted } from './devtools.js';
 import { reportError, setErrorConfig } from './errors.js';
@@ -256,7 +256,9 @@ export class PuzzleApp {
 	 * services, and runs the initial navigation. Returns a promise that resolves
 	 * to `this` once the initial route has rendered (router.start is async).
 	 * Calls made while a mount is still in flight share that mount's promise, so
-	 * they settle with it — resolution or rejection — rather than early.
+	 * they settle with it — resolution or rejection — rather than early. Under
+	 * locale prefix routing (D177), a first-visit redirect leaves it pending for
+	 * good: the page is being replaced and nothing was wired.
 	 */
 	mount() {
 		if (this.#mountPromise) return this.#mountPromise;
@@ -328,12 +330,18 @@ export class PuzzleApp {
 			errorView,
 		} = this.config;
 
+		// 1. Resolve the mount element — a selector string or an Element.
+		const el = this.#resolveTarget(target);
+
 		// Locale prefix routing (D177), before anything is wired. Hash and memory
 		// routing have no path to carry a locale prefix, and the compiler cannot read
-		// this file to reject them at build time. Then the first-visit redirect: the
-		// plain SPA has no prerendered page to carry the inline redirect script, so it
-		// runs here, before navigation #0 (a hybrid page that ran its script never
-		// gets this far; one whose script declined reaches the same verdict).
+		// this file to reject them at build time. Then the first-visit redirect, for
+		// the plain SPA: it has no prerendered page to carry the build's inline
+		// redirect script, so it decides here, before navigation #0. A prerendered
+		// page (its container still carries `data-puzzle-ssg`) skips it: its inline
+		// script already ran in the head on the same decision table, and either
+		// redirected (a second location.replace would restart that navigation) or
+		// declined, as this would.
 		if (typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) {
 			const routing = prefixRouting(this.config);
 			if (routing) {
@@ -342,16 +350,18 @@ export class PuzzleApp {
 						"[puzzle] i18n.routing: 'prefix' needs path routing — remove routerMode (hash and memory URLs have no path for a locale prefix)"
 					);
 				}
-				const to = firstVisitRedirect(routing.manifest, routerBase);
+				const to = !el.hasAttribute('data-puzzle-ssg') && firstVisitRedirect(routing.manifest, routerBase);
 				if (to) {
 					assignSameOrigin(to, true);
-					return this;
+					// Never settle: the page is being replaced, and code after
+					// `await app.mount()` must not run against an app that wired nothing
+					// (app.router.push() would throw into an error tracker on every
+					// redirected first visit).
+					return /** @type {Promise<never>} */ (new Promise(() => {}));
 				}
 			}
 		}
 
-		// 1. Resolve the mount element — a selector string or an Element.
-		const el = this.#resolveTarget(target);
 		this._container = el;
 		// Portal outlet host (D144): portals teleport into a framework-created
 		// element appended NEXT TO the mount container, so it survives the
@@ -405,7 +415,7 @@ export class PuzzleApp {
 				// load. Spread last so the URL beats the seam's `locale`. The spread
 				// folds away entirely without the define.
 				...((typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) &&
-					prefixI18nOptions(this.config)),
+					prefixI18nOptions(this)),
 			});
 		}
 
@@ -787,20 +797,25 @@ function prefixRouting(config) {
 }
 
 /**
- * createI18n options under prefix routing: the URL's locale, the page read off
- * the address bar (path routing keeps it equal to the committed route, and it
- * is there before navigation #0), and setLocale as a same-origin page load — no
- * in-place rebuild, so the router's base never changes while the app runs. A
- * seam-supplied `navigate` (tests) stands.
+ * createI18n options under prefix routing: the URL's locale; the page from the
+ * router — the target of a navigation in flight, so a setLocale from its guard
+ * or data() reloads the page it is headed to (the address bar moves only at
+ * commit), else the committed page — or the address bar before the router has
+ * one; and setLocale as a same-origin page load — no in-place rebuild, so the
+ * router's base never changes while the app runs. A seam-supplied `navigate`
+ * (tests) stands.
  *
- * @param {Record<string, any>} config
+ * @param {PuzzleApp} app
  */
-function prefixI18nOptions(config) {
+function prefixI18nOptions(app) {
+	/** @type {Record<string, any>} */
+	const config = app.config;
 	const routing = prefixRouting(config);
 	return (
 		routing && {
 			locale: routing.locale,
-			page: () => location.pathname + location.search + location.hash,
+			page: () =>
+				(app.router && localePage(app.router)) ?? location.pathname + location.search + location.hash,
 			navigate: config.__i18n?.navigate ?? assignSameOrigin,
 		}
 	);

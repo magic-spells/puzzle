@@ -10,6 +10,7 @@ import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { hashRouter, memoryRouter } from '../client-runtime/router/modes.js';
 import { createTestApp, mountView } from '../client-runtime/testing/index.js';
 import { installFakeAnimate } from './helpers/fake-waapi.js';
+import { back } from './helpers/history.js';
 import { formatLocale } from '../client-runtime/formatters/locale.js';
 import { REDIRECT_CASES, REDIRECT_MANIFEST, SAME_ORIGIN } from './fixtures/locale-redirect-cases.js';
 
@@ -407,16 +408,20 @@ describe('PuzzleApp + i18n', () => {
 	// the pop commits and the rebuild runs there — never over the entry it left.
 	function gatedHome() {
 		let gate = Promise.resolve();
+		const state = { loading: false };
 		class SlowHome extends Home {
 			async data() {
+				state.loading = true;
 				await gate;
 				return super.data();
 			}
 		}
 		return {
+			state,
 			hold() {
 				let release;
 				gate = new Promise((r) => (release = r));
+				state.loading = false;
 				return release;
 			},
 			routes: [
@@ -433,8 +438,7 @@ describe('PuzzleApp + i18n', () => {
 		await app.mount();
 		await app.router.push('/about');
 		const release = slow.hold();
-		history.back();
-		for (let i = 0; i < 5; i++) await tick();
+		await back(() => slow.state.loading); // the pop is loading, held by the gate
 		// Resolves once the strings are active — before the pop lands.
 		await app.i18n.setLocale('es');
 		expect(location.pathname).toBe('/');
@@ -459,8 +463,7 @@ describe('PuzzleApp + i18n', () => {
 		await app.router.push('/about');
 		const release = slow.hold();
 		const switched = app.i18n.setLocale('es');
-		history.back();
-		for (let i = 0; i < 5; i++) await tick();
+		await back(() => slow.state.loading); // the pop is loading, held by the gate
 		releaseEs();
 		await tick();
 		release();
@@ -1007,6 +1010,110 @@ describe('PuzzleApp + locale prefix routing (D177)', () => {
 		expect(loc.assign).toHaveBeenCalledWith(location.origin + '/about?x=1');
 	});
 
+	// setLocale from a guard or data() (D175) runs while the address bar still
+	// shows the page being left: it must reload the page being navigated TO.
+	describe('setLocale during a navigation', () => {
+		class Switching extends PuzzleView {
+			data() {
+				this.ctx.i18n.setLocale('es');
+				return {};
+			}
+			render() {
+				return h('puzzle-view', {}, [text('switching')]);
+			}
+		}
+		const switchGuard = (app) => () => {
+			app.i18n.setLocale('es');
+			return true;
+		};
+
+		function boot(extraRoutes, url = '/about') {
+			stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+			history.replaceState({}, '', url);
+			const navigate = vi.fn();
+			const holder = {};
+			const { app, el } = make({
+				routes: [...routes(), ...extraRoutes(holder)],
+				__i18n: { manifest: ROUTED, navigate },
+			});
+			holder.app = app;
+			return { app, el, navigate };
+		}
+
+		it('from a guard: the pushed page, query and fragment included', async () => {
+			const { app, navigate } = boot((h) => [{ path: '/account', view: About, guard: () => switchGuard(h.app)() }]);
+			await app.mount();
+			await app.router.push('/account?tab=2#plan');
+			expect(navigate).toHaveBeenCalledExactlyOnceWith('/es/account?tab=2#plan');
+		});
+
+		it('from data(): the pushed page, and the replaced one', async () => {
+			const { app, navigate } = boot(() => [{ path: '/account', view: Switching }]);
+			await app.mount();
+			await app.router.push('/account?x=1');
+			expect(navigate).toHaveBeenLastCalledWith('/es/account?x=1');
+			await app.router.push('/');
+			await app.router.replace('/account?y=2');
+			expect(navigate).toHaveBeenLastCalledWith('/es/account?y=2');
+		});
+
+		it('from a superseded navigation: the page that superseded it', async () => {
+			let releaseSlow;
+			const slowGate = new Promise((r) => (releaseSlow = r));
+			let releaseNext;
+			const nextGate = new Promise((r) => (releaseNext = r));
+			class Slow extends PuzzleView {
+				async data() {
+					await slowGate;
+					this.ctx.i18n.setLocale('es');
+					return {};
+				}
+				render() {
+					return h('puzzle-view', {}, [text('slow')]);
+				}
+			}
+			class Next extends PuzzleView {
+				async data() {
+					await nextGate;
+					return {};
+				}
+				render() {
+					return h('puzzle-view', {}, [text('next')]);
+				}
+			}
+			const { app, navigate } = boot(() => [
+				{ path: '/slow', view: Slow },
+				{ path: '/next', view: Next },
+			]);
+			await app.mount();
+			const slow = app.router.push('/slow');
+			const next = app.router.push('/next?n=1');
+			releaseSlow();
+			await slow;
+			expect(navigate).toHaveBeenCalledExactlyOnceWith('/es/next?n=1');
+			releaseNext();
+			await next;
+		});
+
+		it('after a blocked navigation: the committed page again', async () => {
+			const { app, navigate } = boot(() => [{ path: '/account', view: About, guard: () => false }]);
+			await app.mount();
+			await app.router.push('/account');
+			expect(app.router.current.path).toBe('/about');
+			await app.i18n.setLocale('es');
+			expect(navigate).toHaveBeenCalledExactlyOnceWith('/es/about');
+		});
+
+		it('on navigation #0: the page being loaded', async () => {
+			const { app, navigate } = boot(
+				(h) => [{ path: '/account', view: About, guard: () => switchGuard(h.app)() }],
+				'/account?x=1#top'
+			);
+			await app.mount();
+			expect(navigate).toHaveBeenCalledExactlyOnceWith('/es/account?x=1#top');
+		});
+	});
+
 	// The shared decision table (tests/fixtures/locale-redirect-cases.js), which
 	// the prerendered pages' inline script runs too, plus `detect: false`.
 	describe('first-visit redirect', () => {
@@ -1025,17 +1132,64 @@ describe('PuzzleApp + locale prefix routing (D177)', () => {
 			const loc = spyLocation();
 			const manifest = detect === false ? { ...REDIRECT_MANIFEST, detect } : REDIRECT_MANIFEST;
 			const { app, el } = make({ routerBase, __i18n: { manifest } });
-			await app.mount();
+			const mounted = app.mount();
 			if (expected) {
 				expect(loc.replace).toHaveBeenCalledExactlyOnceWith(ORIGIN + expected);
-				// Nothing boots behind the redirect.
+				// Nothing boots behind the redirect, and mount() never settles.
+				expect(await outcome(mounted)).toBe('pending');
 				expect(app._mounted).toBe(false);
 				expect(fetch).not.toHaveBeenCalled();
 				expect(el.innerHTML).toBe('');
 			} else {
+				await mounted;
 				expect(loc.replace).not.toHaveBeenCalled();
 				expect(app._mounted).toBe(true);
 			}
+		});
+
+		// The decision runs synchronously inside mount(), so one macrotask is
+		// enough for a settled promise to have reported.
+		const outcome = (p) =>
+			Promise.race([
+				p.then(
+					() => 'resolved',
+					() => 'rejected'
+				),
+				new Promise((resolve) => setTimeout(() => resolve('pending'), 0)),
+			]);
+
+		it('a redirect leaves mount() pending, so code after `await app.mount()` never runs', async () => {
+			setLanguages(['es']);
+			history.replaceState({}, '', '/about');
+			stubFetch({});
+			const loc = spyLocation();
+			const { app } = make({ __i18n: { manifest: ROUTED } });
+			let after = false;
+			const boot = (async () => {
+				await app.mount();
+				after = true;
+				app.router.push('/'); // would throw: nothing was wired
+			})();
+			expect(await outcome(boot)).toBe('pending');
+			expect(after).toBe(false);
+			expect(loc.replace).toHaveBeenCalledTimes(1);
+			expect(app.router).toBe(null);
+			// A second mount() shares the same pending promise rather than booting.
+			expect(await outcome(app.mount())).toBe('pending');
+			expect(loc.replace).toHaveBeenCalledTimes(1);
+		});
+
+		it('a prerendered page skips it: its inline script already decided', async () => {
+			setLanguages(['es']);
+			history.replaceState({}, '', '/about');
+			stubFetch({ 'locales/en.AAAA.json': EN });
+			const loc = spyLocation();
+			const { app, el } = make({ __i18n: { manifest: ROUTED } });
+			el.setAttribute('data-puzzle-ssg', '');
+			await app.mount();
+			expect(loc.replace).not.toHaveBeenCalled();
+			expect(app.i18n.locale).toBe('en');
+			expect(el.querySelector('h1').textContent).toBe('About');
 		});
 	});
 

@@ -698,7 +698,20 @@ export class Router {
 						);
 					}
 				}
-				localeRouting.set(this, { base: this.#base, locale, defaultLocale, locales });
+				const routing = {
+					base: this.#base,
+					locale,
+					defaultLocale,
+					locales,
+					/** @type {string | null} the in-flight navigation's path (setLocaleTarget) */
+					target: null,
+					// The page the app is on or headed to (localePage below): the
+					// navigation in flight — push, replace, pop or navigation #0 — else
+					// the committed path. A closure here can read #state; a class member
+					// would ship in every app.
+					page: () => routing.target ?? this.#state?.path ?? null,
+				};
+				localeRouting.set(this, routing);
 				this.#base = localeBase(this.#base, locale, defaultLocale);
 			}
 		}
@@ -1269,6 +1282,9 @@ export class Router {
 		// failure, or a same-path redirect no-op) and still owns the token: clear the
 		// in-flight target so a later push to that path is not wrongly no-op'd.
 		this.#pendingNavPath = null;
+		if (typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) {
+			setLocaleTarget(this, null);
+		}
 		this.#pendingNavPromise = null;
 	}
 
@@ -1393,6 +1409,13 @@ export class Router {
 		// promise for a navigation that is already over.
 		this.#pendingNavPath = push ? rawPath : null;
 		this.#pendingNavPromise = null;
+		// Locale prefix routing (D177): every verb's target, for localePage — a
+		// setLocale from this navigation's guard or data() reloads the page it is
+		// headed to, not the one the address bar still shows. Cleared where
+		// #pendingNavPath is (commit, failure); a newer navigation overwrites it.
+		if (typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) {
+			setLocaleTarget(this, rawPath);
+		}
 		const guardReentry = this.#guardRedirecting;
 		this.#guardRedirecting = false;
 		if (!guardReentry) this.#guardRedirectCount = 0;
@@ -2666,6 +2689,9 @@ export class Router {
 		// The in-flight navigation just committed (only the token owner reaches
 		// #commitState): clear its pending target — #state now names it.
 		this.#pendingNavPath = null;
+		if (typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) {
+			setLocaleTarget(this, null);
+		}
 		this.#pendingNavPromise = null;
 		// D146 — COMMIT the prepared reused ancestors: swap params/route/model/store
 		// subscriptions and re-render, synchronously here so ancestor state lands in the
@@ -3835,6 +3861,34 @@ export function pathLocale(pathname, routerBase, defaultLocale, locales) {
 }
 
 /**
+ * Under prefix routing (D177), the page a router is showing or loading, as the
+ * document addresses it (`/es/account?tab=2`): the target of the navigation in
+ * flight — so a setLocale from its guard or data() reloads the page it is headed
+ * to, with that query and fragment — else the committed page. Null before the
+ * first navigation starts (the address bar is the page then), or without prefix
+ * routing. Reached only behind the __PUZZLE_HAS_LOCALE_ROUTING__ probe.
+ *
+ * @param {Router} router
+ * @returns {string | null}
+ */
+export function localePage(router) {
+	const path = localeRouting.get(router)?.page();
+	return path == null ? null : router.url(path);
+}
+
+/**
+ * Record (or clear, with null) the path of the navigation that owns a router's
+ * token, for localePage. A no-op without prefix routing.
+ *
+ * @param {Router} router
+ * @param {string | null} path
+ */
+function setLocaleTarget(router, path) {
+	const routing = localeRouting.get(router);
+	if (routing) routing.target = path;
+}
+
+/**
  * The locale a `url(path, options)` / `link(path, options)` call encodes for
  * (D177): `{ locale: false }` → null (no prefix — a file that exists once),
  * `{ locale: 'es' }` → that configured tag (matched case-insensitively, spelled
@@ -3971,11 +4025,13 @@ function sameDocKey(rawPath) {
 // use it.
 const REBUILD = {};
 
-// Locale prefix routing (D177): Router → { base, locale, defaultLocale, locales },
-// the bare routerBase and the configured tags the constructor was given. A
-// WeakMap rather than a private field, which would ship in every app: every read
-// sits behind the inline __PUZZLE_HAS_LOCALE_ROUTING__ probe, so without prefix
-// routing the map is never referenced and the minifier drops it. Last in the
-// module for the same reason as REBUILD.
-/** @type {WeakMap<Router, { base: string, locale: string | undefined, defaultLocale: string | undefined, locales: readonly string[] }>} */
+// Locale prefix routing (D177): Router → { base, locale, defaultLocale, locales,
+// target, page }, the bare routerBase and the configured tags the constructor
+// was given, plus the in-flight navigation's path and the page reader localePage
+// uses. A WeakMap rather than private fields, which would ship in every app:
+// every read sits behind the inline __PUZZLE_HAS_LOCALE_ROUTING__ probe, so
+// without prefix routing the map is never referenced and the minifier drops it.
+// Last in the module for the same reason as REBUILD.
+/** @type {WeakMap<Router, { base: string, locale: string | undefined, defaultLocale: string | undefined,
+ *   locales: readonly string[], target: string | null, page: () => string | null }>} */
 const localeRouting = new WeakMap();

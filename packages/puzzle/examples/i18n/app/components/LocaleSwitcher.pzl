@@ -1,15 +1,18 @@
 <puzzle-view>
-  <div class="flex items-center gap-2 text-sm">
+  <nav class="flex items-center gap-2 text-sm" aria-label={ t('language') }>
     <span class="text-muted">{ t('language') }</span>
     {#for option in options}
-      <button
+      <a
         key={ option.locale }
+        href={ option.href }
+        hreflang={ option.locale }
+        lang={ option.locale }
         class="px-2.5 py-1 rounded-md border {#if option.active}border-brand bg-brand-tint text-brand{:else}border-line hover:bg-page{/if}"
-        aria-pressed="{ option.active }"
-        @click={ choose(option.locale) }
-      >{ option.label }</button>
+        aria-current={ option.active && 'true' }
+        @click={ choose(event, option.locale) }
+      >{ option.label }</a>
     {/for}
-  </div>
+  </nav>
 </puzzle-view>
 
 <script>
@@ -17,20 +20,21 @@ import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class LocaleSwitcher extends PuzzleView {
   data() {
-    // One entry per configured locale: its tag, its own name (`Español`), the
-    // current page in that locale, and whether it is the active one.
+    // One entry per configured locale: its tag, its own name (`Español`), this
+    // page under that locale's prefix (/es/about), and whether it is the active one.
     return { options: this.ctx.i18n.locales };
   }
 
   events = {
-    // setLocale fetches the new table first, then rebuilds the page at the same
-    // location — no history entry, no scroll jump — and remembers the choice.
-    // It rejects when the new file fails to load (nothing changes) or the page
-    // could not be rebuilt (the error already went to onError).
-    choose: (tag) => {
-      this.ctx.i18n.setLocale(tag).catch((err) => {
-        console.error(err);
-      });
+    // Each option is a real link to the same page in that language, so crawlers
+    // and new tabs follow it as is. A plain click goes through setLocale
+    // instead: it remembers the choice (the first-visit redirect honours it on
+    // the next visit to an unprefixed URL), then loads the same page under the
+    // other prefix. A modified or middle click is left to the browser.
+    choose: (event, tag) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      this.ctx.i18n.setLocale(tag);
     },
   };
 }
