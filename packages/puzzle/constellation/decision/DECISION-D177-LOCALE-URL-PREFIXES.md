@@ -121,7 +121,7 @@ goes through `assignSameOrigin`. (`/es//evil.example/` once produced
 
 ### Head
 
-- Every prerendered page gains `<link rel="alternate" hreflang>` for each
+- Every prerendered page except the catch-all 404 pages gains `<link rel="alternate" hreflang>` for each
   locale plus `x-default`, tagged `data-puzzle-head="alternate"`, a managed set:
   stale shell ones are stripped. `prerender: false` pages get no hreflang and
   no redirect.

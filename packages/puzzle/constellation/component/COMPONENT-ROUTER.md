@@ -102,9 +102,10 @@ it has no `lazy()` marker, its class array — lazy-free apps pay nothing per na
    D83). The D39 skeleton gate must start all gated loads before any skeleton-exempt
    preload opens its tracking scope.
 4. **Commit** (`#commitState`, one synchronous window): location/history, title
-   (`syncTitle(resolveHeadField(chain, 'title'))` — the other head fields are
-   build-time only, D84), scroll bookkeeping, mounted tree, `current`, and the dev-only
-   D100 route emit ([[FILE-DEVTOOLS]]), after `#commitLocation`.
+   (`syncTitle(headText(resolveHeadField(chain, 'title'), ctx.i18n))`, the `headText`
+   call behind `__PUZZLE_HAS_I18N__` — the other head fields are build-time only, D84),
+   scroll bookkeeping, mounted tree, `current`, and the dev-only D100 route emit
+   ([[FILE-DEVTOOLS]]), after `#commitLocation`.
 
 Same-path push when committed is a no-op; while in flight it returns that navigation's
 promise, so both callers settle at commit. The route announcement reads

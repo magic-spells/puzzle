@@ -159,7 +159,7 @@ Exports `mountView`, `createTestApp`, `settled`, `type`, `measureRenders`, `inst
 - The flag is constant per process; watch rebuilds never re-decide it.
 - **Rejected** with `--static`/`--hybrid` or a config `output`. There is no config-file equivalent — the CLI switch is the real-API vs fakes toggle.
 
-**Build defines** (`compiler/internal/build/options.go`). Usage facts from the scan: `__PUZZLE_HAS_FLIP__`, `__PUZZLE_HAS_PORTAL__`, `__PUZZLE_HAS_RAW_AT__`, `__PUZZLE_HAS_SNIPPETS__`, `__PUZZLE_HAS_RAW_HTML__`, `__PUZZLE_HAS_RAW_SANITIZE__` (read from `.pzl` templates) and `__PUZZLE_HAS_LAZY__` (read from the app's `.js`/`.ts` scripts, since `lazy()` is called in `routes.js`). Config fact: `__PUZZLE_HAS_I18N__`. Build facts: `__PUZZLE_DEV__`, `__PUZZLE_TAKEOVER__`, `__PUZZLE_CAPTURE__`. The runtime probes each as `typeof X === 'undefined' || X`, so an unbundled consumer keeps every path. There is no managed-head define (D84).
+**Build defines** (`compiler/internal/build/options.go`). Usage facts from the scan: `__PUZZLE_HAS_FLIP__`, `__PUZZLE_HAS_PORTAL__`, `__PUZZLE_HAS_RAW_AT__`, `__PUZZLE_HAS_SNIPPETS__`, `__PUZZLE_HAS_RAW_HTML__`, `__PUZZLE_HAS_RAW_SANITIZE__` (read from `.pzl` templates) and `__PUZZLE_HAS_LAZY__` (read from the app's `.js`/`.ts` scripts, since `lazy()` is called in `routes.js`). Config facts: `__PUZZLE_HAS_I18N__` and `__PUZZLE_HAS_LOCALE_ROUTING__` (D177, `i18n.routing: 'prefix'`). Build facts: `__PUZZLE_DEV__`, `__PUZZLE_TAKEOVER__`, `__PUZZLE_CAPTURE__`. The runtime probes each as `typeof X === 'undefined' || X`, so an unbundled consumer keeps every path. There is no managed-head define (D84).
 
 ## 55. The DevTools bridge and wire protocol
 
