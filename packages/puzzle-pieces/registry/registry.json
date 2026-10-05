@@ -604,14 +604,24 @@
       "targetDir": "app/components/ui"
     },
     {
-      "name": "language-switcher",
-      "description": "Language switcher over the app's i18n.locales list — real hreflang links under locale prefix routing (a plain click stores the choice through setLocale, a modified click opens natively), setLocale buttons without it, as an inline pill row or a compact dropdown menu",
+      "name": "language-menu",
+      "description": "Compact language menu over the app's i18n.locales list — a menu button showing the active language over dropdown-menu, with hreflang link rows under locale prefix routing and setLocale button rows without it",
       "files": [
-        "LanguageSwitcher.pzl"
+        "LanguageMenu.pzl"
       ],
       "registryDependencies": [
         "dropdown-menu"
       ],
+      "dependencies": [],
+      "targetDir": "app/components/ui"
+    },
+    {
+      "name": "language-switcher",
+      "description": "Inline language switcher over the app's i18n.locales list — real hreflang links under locale prefix routing (a plain click stores the choice through setLocale, a modified click opens natively) and setLocale buttons without it, with no dependencies",
+      "files": [
+        "LanguageSwitcher.pzl"
+      ],
+      "registryDependencies": [],
       "dependencies": [],
       "targetDir": "app/components/ui"
     },
