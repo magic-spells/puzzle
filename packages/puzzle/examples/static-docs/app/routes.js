@@ -1,5 +1,6 @@
 import HomeView from './views/Home.pzl';
 import AboutView from './views/About.pzl';
+import PrincipleView from './views/Principle.pzl';
 import PlaygroundView from './views/Playground.pzl';
 import NotFoundView from './views/NotFound.pzl';
 import GuideShell from './views/guide/GuideShell.pzl';
@@ -75,6 +76,24 @@ export default [
     },
   },
 
+  // A parameterised route (D179). The build cannot guess which ids exist, so
+  // `staticPaths` lists them: 'principle' is the model shorthand — one page per
+  // `principle` record (the three app.js seeds in beforeMount), each `:id` taken
+  // from the record's `id` field — written to dist/principles/<id>/index.html.
+  // Every page shares one module; each carries its own params for the browser.
+  // The list can also be an array of params objects, or a build-time function
+  // `({ store, config }) => [...]`.
+  {
+    path: '/principles/:id',
+    name: 'principle',
+    view: PrincipleView,
+    layout: DefaultLayout,
+    staticPaths: 'principle',
+    meta: {
+      title: 'Principle · Puzzle Field Guide',
+    },
+  },
+
   // Client-rendered island (D67/D81): `prerender: false` opts this route OUT of
   // prerendering. In static mode the build writes an empty-target shell at
   // /playground/ — no baked markup, `#app` unstamped — but still ships the page's
@@ -94,9 +113,8 @@ export default [
   // Catch-all (D67 · D19): the top-level `path: '*'` matches any URL no earlier
   // route claims. In static mode the build renders it to dist/404.html — the file
   // static hosts (GitHub Pages/Netlify/Render/Cloudflare) serve for unknown paths.
-  // Must stay LAST: routes match in order. (A dynamic `:param` route would be
-  // SKIPPED here with a build warning — the static build cannot enumerate its
-  // paths; a staticPaths() hook is the planned follow-up.)
+  // Must stay LAST: routes match in order. (A `:param` route WITHOUT staticPaths
+  // would be SKIPPED with a build warning — the build cannot enumerate its paths.)
   {
     path: '*',
     name: 'not-found',
