@@ -1,0 +1,8 @@
+{
+  "name": "language-switcher",
+  "description": "Inline language switcher over the app's i18n.locales list — real hreflang links under locale prefix routing (a plain click stores the choice through setLocale, a modified click opens natively) and setLocale buttons without it, with no dependencies",
+  "files": ["LanguageSwitcher.pzl"],
+  "registryDependencies": [],
+  "dependencies": [],
+  "targetDir": "app/components/ui"
+}

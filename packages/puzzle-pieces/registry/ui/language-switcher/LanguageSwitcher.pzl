@@ -1,0 +1,144 @@
+<puzzle-view>
+  <nav class={ rootClass } aria-label={ label }>
+    <ul class="flex flex-wrap items-center gap-1">
+      {#if routed}
+        {#for option in options}
+          <li key={ option.locale }>
+            <a
+              href={ option.href }
+              hreflang={ option.locale }
+              lang={ option.locale }
+              class={ option.pillClass }
+              aria-current={ option.current }
+              @click={ follow(event, option.locale) }>{ option.label }</a>
+          </li>
+        {/for}
+      {:else}
+        {#for option in options}
+          <li key={ option.locale }>
+            <button
+              type="button"
+              lang={ option.locale }
+              class={ option.pillClass }
+              aria-current={ option.current }
+              @click={ pick(option.locale) }>{ option.label }</button>
+          </li>
+        {/for}
+      {/if}
+    </ul>
+  </nav>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// LanguageSwitcher — a row of pills, one per configured locale, from the app's
+// `i18n.locales` list (D177): `{ locale, label, href, active }`, in config
+// order, `label` being the language's own name (`Español`, `日本語`). For a
+// compact dropdown, use the `language-menu` piece: same props, same clicks.
+//
+//   <LanguageSwitcher locales={ locales }/>
+//
+// THE LIST IS A PROP — PASS IT FROM THE LAYOUT OR VIEW. Do not move the read in
+// here. `i18n.locales` describes the page being shown (every `href` is THIS
+// page in that language), and inside a persistent layout only the layout's
+// own data() re-runs for each navigation; a component that read
+// `this.ctx.i18n.locales` itself would keep the first page's list and send
+// every later switch back to it. So the parent reads it and passes it down:
+//
+//   data() {
+//     return { locales: this.ctx.i18n.locales };
+//   }
+//
+// LINKS OR BUTTONS — DECIDED FROM THE LIST. Under `i18n.routing: 'prefix'`
+// every language has its own URL, so each entry's `href` is distinct (`/about`,
+// `/es/about`) and the piece renders real links: `href`, `hreflang` and `lang`
+// set to the locale, `aria-current="true"` on the active one. Crawlers follow
+// them, and a modified or middle click, open-in-new-tab and copy-link-address
+// all work natively. A PLAIN click goes through `ctx.i18n.setLocale(locale)`
+// instead (default prevented): it stores the viewer's choice — which the
+// first-visit redirect honours on their next visit to an unprefixed URL — and
+// then loads the same page under the other prefix. In an app with no `i18n`
+// (no `ctx.i18n`) nothing is prevented: the link navigates as written.
+//
+// Without prefix routing there is one URL for every language, so the runtime
+// gives every entry the SAME `href` (the current page; `''` where the host has
+// no page to name). A link there would only reload the page in whatever locale
+// is stored, so when the hrefs are not all present and distinct the piece
+// renders <button>s that call `setLocale` — the client-side swap of D175.
+//
+// `@change(locale)` is a pure HOOK — close a mobile nav, send analytics. It
+// fires on a plain click before `setLocale` and never changes what the click
+// does.
+//
+// ACCESSIBILITY. The root is a <nav> named by `label` ('Language' — pass your
+// own translation, e.g. `label={ t('language') }`), around a <ul>, so the
+// count is announced. Each entry carries `lang={ locale }` so a screen reader
+// speaks `Deutsch` as German.
+//
+// Props
+//   locales  the parent's `this.ctx.i18n.locales`: [{ locale, label, href, active }]
+//   label    the nav's accessible name (default 'Language')
+//   class    merged onto the <nav>
+// Callbacks
+//   @change(locale)  a plain click chose `locale` — a hook, fired before setLocale
+
+const PILL =
+  'inline-flex h-8 items-center rounded-md px-2.5 text-sm whitespace-nowrap select-none ' +
+  'cursor-pointer no-underline transition-colors ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+const PILL_OFF = 'text-muted hover:bg-surface-sunken hover:text-ink';
+const PILL_ON = 'bg-faint font-medium text-ink';
+
+// Real links only when every entry has its own URL — prefix routing. Without
+// it the runtime hands every entry the current page (or '').
+const hasOwnUrls = (list) => {
+  const hrefs = list.map((entry) => entry.href);
+  return (
+    hrefs.length > 0 &&
+    hrefs.every((href) => typeof href === 'string' && href !== '') &&
+    new Set(hrefs).size === hrefs.length
+  );
+};
+
+export default class LanguageSwitcher extends PuzzleView {
+  data(params, props) {
+    const list = (Array.isArray(props.locales) ? props.locales : []).filter(
+      (entry) => entry && entry.locale != null
+    );
+    return {
+      options: list.map((entry) => ({
+        locale: String(entry.locale),
+        label: entry.label != null ? String(entry.label) : String(entry.locale),
+        href: entry.href,
+        // the string form; false omits the attribute
+        current: entry.active ? 'true' : false,
+        pillClass: [PILL, entry.active ? PILL_ON : PILL_OFF].join(' '),
+      })),
+      routed: hasOwnUrls(list),
+      label: props.label != null ? String(props.label) : 'Language',
+      rootClass: props.class || false,
+    };
+  }
+
+  events = {
+    // A link. A modified or middle click (new tab, new window, download) is the
+    // browser's; a plain one stores the choice through setLocale, which loads
+    // the same page under the other prefix.
+    follow: (event, tag) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      this.props.change?.(tag);
+      const i18n = this.ctx?.i18n;
+      if (!i18n) return;
+      event.preventDefault();
+      i18n.setLocale(tag);
+    },
+
+    // A button (no prefix routing): nothing native to defer to.
+    pick: (tag) => {
+      this.props.change?.(tag);
+      this.ctx?.i18n?.setLocale(tag);
+    },
+  };
+}
+</script>
