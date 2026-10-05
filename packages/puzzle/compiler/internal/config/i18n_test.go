@@ -108,7 +108,8 @@ func TestValidLocaleTagNamesTheBadSubtag(t *testing.T) {
 }
 
 // TestI18nRouting: routing accepts only 'prefix' (D177), detect is a tri-state
-// boolean, and the temporary gate holds prefix routing to output: 'static'.
+// boolean, and prefix routing builds in every output mode (SPA, hybrid,
+// static).
 func TestI18nRouting(t *testing.T) {
 	static := json.RawMessage(`"static"`)
 	cfg, err := validate(rawConfig{Output: static, I18n: json.RawMessage(`{"locales":["en","es"],"defaultLocale":"en","routing":"prefix","detect":false}`)})
@@ -132,6 +133,19 @@ func TestI18nRouting(t *testing.T) {
 	if (*I18n)(nil).PrefixRouting() {
 		t.Fatal("a nil block must not report prefix routing")
 	}
+	for _, output := range []string{"", "hybrid"} {
+		raw := rawConfig{I18n: json.RawMessage(`{"locales":["en","es"],"defaultLocale":"en","routing":"prefix"}`)}
+		if output != "" {
+			raw.Output = json.RawMessage(`"` + output + `"`)
+		}
+		cfg, err := validate(raw)
+		if err != nil {
+			t.Fatalf("output %q: %v", output, err)
+		}
+		if !cfg.I18n.PrefixRouting() {
+			t.Fatalf("output %q: routing = %q, want prefix", output, cfg.I18n.Routing)
+		}
+	}
 
 	cases := []struct {
 		name, output, raw, want string
@@ -139,8 +153,6 @@ func TestI18nRouting(t *testing.T) {
 		{"typo", "static", `{"locales":["en"],"defaultLocale":"en","routing":"prefixed"}`, `i18n.routing accepts only 'prefix'; got "prefixed"`},
 		{"not a string", "static", `{"locales":["en"],"defaultLocale":"en","routing":true}`, "i18n.routing accepts only 'prefix'; got true"},
 		{"detect not boolean", "static", `{"locales":["en"],"defaultLocale":"en","routing":"prefix","detect":"no"}`, "i18n.detect must be a boolean"},
-		{"spa gate", "", `{"locales":["en","es"],"defaultLocale":"en","routing":"prefix"}`, "requires output: 'static'"},
-		{"hybrid gate", "hybrid", `{"locales":["en","es"],"defaultLocale":"en","routing":"prefix"}`, "not built yet"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -181,6 +193,9 @@ func TestSiteValidation(t *testing.T) {
 		`"example.com"`:               "absolute http or https origin",
 		`"ftp://example.com"`:         "absolute http or https origin",
 		`"https://"`:                  "absolute http or https origin",
+		`"https://:80"`:               "absolute http or https origin",
+		`"https://example.com:"`:      "absolute http or https origin",
+		`"https://[]:443"`:            "absolute http or https origin",
 		`"/docs"`:                     "absolute http or https origin",
 		`"https://example.com/docs"`:  `origin only (got "https://example.com/docs") — write "https://example.com"`,
 		`"https://example.com/docs/"`: "origin only",

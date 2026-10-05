@@ -987,7 +987,11 @@ export declare class PuzzleApp {
 	i18n?: PuzzleI18n | null;
 	/** The shared context injected into every view (null before mount). */
 	ctx: PuzzleContext | null;
-	/** Boot the app and run the initial navigation. */
+	/**
+	 * Boot the app and run the initial navigation. Under `i18n.routing: 'prefix'`,
+	 * when the first-visit redirect sends the visitor to their language's URL, the
+	 * promise never settles: the page is being replaced and nothing was wired (D177).
+	 */
 	mount(): Promise<this>;
 	/** Tear down the app. Idempotent. */
 	unmount(): this;

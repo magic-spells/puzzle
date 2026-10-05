@@ -433,18 +433,6 @@ func validate(raw rawConfig) (Config, error) {
 		cfg.I18n = i18n
 	}
 
-	// TEMPORARY GATE (D177): prefix routing is built for static output only so
-	// far. Hybrid and SPA need the router half (path base + locale prefix), which
-	// has not landed; delete this block when it does. It reads the config's
-	// output, not the --static flag, because `puzzle dev` picks its mode from the
-	// config alone.
-	if cfg.I18n.PrefixRouting() && cfg.Output != "static" {
-		return Config{}, fmt.Errorf(
-			"%s: i18n.routing: 'prefix' currently requires output: 'static' — prefix routing for hybrid output and the SPA is not built yet",
-			ConfigFileName,
-		)
-	}
-
 	if !unset(raw.Site) {
 		site, err := validateSite(raw.Site)
 		if err != nil {
@@ -466,7 +454,9 @@ func validateSite(raw json.RawMessage) (string, error) {
 		return "", fmt.Errorf("%s: site must be a string like 'https://example.com'; got %s", ConfigFileName, strings.TrimSpace(string(raw)))
 	}
 	u, err := url.Parse(site)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Opaque != "" {
+	// Hostname, not Host: "https://:80" has a Host and no host name. A trailing
+	// colon with no port ("https://example.com:") is refused with it.
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || strings.HasSuffix(u.Host, ":") || u.Opaque != "" {
 		return "", fmt.Errorf("%s: site must be an absolute http or https origin like 'https://example.com'; got %q", ConfigFileName, site)
 	}
 	if u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.HasSuffix(site, "#") {

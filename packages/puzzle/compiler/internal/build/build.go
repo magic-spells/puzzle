@@ -133,6 +133,7 @@ func Build(root string, opts Options) error {
 		return err
 	}
 	warnDeadSPARouteMeta(absRoot, mode, os.Stderr)
+	warnUntranslatedRouteMeta(absRoot, cfg.I18n, os.Stderr)
 
 	// --fixtures (D98): validate and generate the wrapper entry that installs the
 	// fixtures module ahead of the app module. Checking mode (not opts.Output)

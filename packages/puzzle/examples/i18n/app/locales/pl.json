@@ -7,7 +7,7 @@
   "language": "Język",
   "home": {
     "greeting": "Witaj ponownie, {name}!",
-    "intro": "Każdy tekst na tej stronie pochodzi z app/locales. Zmień język powyżej — strona przebuduje się na miejscu, a wybór zostanie zapamiętany.",
+    "intro": "Każdy tekst na tej stronie pochodzi z app/locales. Każdy język ma własne adresy: zmień go powyżej, by wczytać tę stronę pod /es/ lub /pl/, a wybór zostanie zapamiętany.",
     "cart": {
       "title": "Twój koszyk",
       "items": {
@@ -25,7 +25,7 @@
   },
   "about": {
     "title": "O tym przykładzie",
-    "body": "Strony są prerenderowane po angielsku. Każda strona zawiera angielską tabelę, więc angielski gość nie wysyła dodatkowego żądania; każdy inny język ładuje jeden mały plik."
+    "body": "Każda strona jest prerenderowana raz dla każdego języka, pod własnym adresem, z tabelą tego języka w środku, więc żaden gość nie wysyła dodatkowego żądania po teksty."
   },
   "notFound": "Ta strona nie istnieje."
 }

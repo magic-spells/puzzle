@@ -211,3 +211,37 @@ export default class Home extends PuzzleView {}
 		}
 	}
 }
+
+// TestScanUsageRootHrefsMixedQuery: a mixed value whose query or fragment holds
+// an expression still has its path's extension seen — the extension sits in
+// the static part that opens the query, not in the value's last part.
+func TestScanUsageRootHrefsMixedQuery(t *testing.T) {
+	root := writeApp(t, map[string]string{
+		"app/views/Home.pzl": `<puzzle-view>
+  <a href="/files/{ n }.pdf?v={ q }">ok</a>
+  <a href="/files/{ n }.pdf#{ frag }">ok</a>
+  <a href="/files/report.pdf?v={ q }">ok</a>
+  <a href="/blog/{ slug }?ref={ r }">warn</a>
+  <a href="/blog/{ slug }?v=1.2">warn</a>
+  <a href="/files/{ n }?name={ f }.pdf">warn</a>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {}
+</script>
+`,
+	})
+	usage, err := ScanUsage(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := "app/views/Home.pzl"
+	want := []RootHref{
+		{File: f, Line: 5, Col: 6, Href: "/blog/", Mixed: true},
+		{File: f, Line: 6, Col: 6, Href: "/blog/", Mixed: true},
+		{File: f, Line: 7, Col: 6, Href: "/files/", Mixed: true},
+	}
+	if !reflect.DeepEqual(usage.RootHrefs, want) {
+		t.Fatalf("RootHrefs =\n%+v\nwant\n%+v", usage.RootHrefs, want)
+	}
+}
