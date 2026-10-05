@@ -454,7 +454,9 @@ func validateSite(raw json.RawMessage) (string, error) {
 		return "", fmt.Errorf("%s: site must be a string like 'https://example.com'; got %s", ConfigFileName, strings.TrimSpace(string(raw)))
 	}
 	u, err := url.Parse(site)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Opaque != "" {
+	// Hostname, not Host: "https://:80" has a Host and no host name. A trailing
+	// colon with no port ("https://example.com:") is refused with it.
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || strings.HasSuffix(u.Host, ":") || u.Opaque != "" {
 		return "", fmt.Errorf("%s: site must be an absolute http or https origin like 'https://example.com'; got %q", ConfigFileName, site)
 	}
 	if u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.HasSuffix(site, "#") {

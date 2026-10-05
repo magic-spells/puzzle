@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/magic-spells/puzzle/compiler/internal/config"
 )
 
 func writeRoutesModule(t *testing.T, rel, source string) string {
@@ -79,6 +81,56 @@ export default [{ path: '/', meta: { title: 'Home' } }];
 			if out.Len() != 0 {
 				t.Errorf("%s output should not warn:\n%s", mode, out.String())
 			}
+		}
+	})
+}
+
+func TestWarnUntranslatedRouteMeta(t *testing.T) {
+	routes := `export default [
+  { path: '/', meta: { title: { t: 'home.title' }, description: 'Plain copy' } },
+  { path: '/shop', meta: {
+    title: 'Shop',
+    description: { vars: { n: 1 }, t: 'shop.description' },
+  } },
+  { path: '/x', meta: { title: { t: key } } },
+];`
+	root := writeRoutesModule(t, "app/routes.js", routes)
+	fix := ", but puzzle.config.js configures no i18n, so the page gets no "
+	tail := " — add i18n: { locales: ['en'], defaultLocale: 'en' } with app/locales/en.json, or write a plain string"
+
+	t.Run("warns without i18n", func(t *testing.T) {
+		var out bytes.Buffer
+		warnUntranslatedRouteMeta(root, nil, &out)
+		want := strings.Join([]string{
+			"app/routes.js:2:24: warning: route meta.title is { t: 'home.title' }" + fix + "title" + tail,
+			"app/routes.js:5:5: warning: route meta.description is { t: 'shop.description' }" + fix + "description" + tail,
+			"app/routes.js:7:25: warning: route meta.title is { t: … }" + fix + "title" + tail,
+		}, "\n") + "\n"
+		if out.String() != want {
+			t.Errorf("warnings =\n%s\nwant\n%s", out.String(), want)
+		}
+	})
+
+	t.Run("silent with i18n", func(t *testing.T) {
+		var out bytes.Buffer
+		warnUntranslatedRouteMeta(root, &config.I18n{Locales: []string{"en"}, DefaultLocale: "en"}, &out)
+		if out.Len() != 0 {
+			t.Errorf("i18n configured, yet warned:\n%s", out.String())
+		}
+	})
+
+	t.Run("plain strings, other keys and prose do not warn", func(t *testing.T) {
+		root := writeRoutesModule(t, "app/routes.ts", `
+const prose = "meta: { title: { t: 'x' } }";
+const other = { title: { t: 'not a route meta' } };
+export default [
+  { path: '/', meta: { title: 'Home', canonical: { t: 'x' } } },
+  { path: '/a', meta: { title: { text: 'nested', inner: { t: 'deep' } } } },
+];`)
+		var out bytes.Buffer
+		warnUntranslatedRouteMeta(root, nil, &out)
+		if out.Len() != 0 {
+			t.Errorf("unexpected warning:\n%s", out.String())
 		}
 	})
 }

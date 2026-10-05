@@ -304,6 +304,57 @@ func TestUsageScannerMatchesColdScan(t *testing.T) {
 	}
 }
 
+// TestUsageScannerRootHrefsFollowEdits: the root-relative hrefs (D177) are a
+// per-file memo entry like every other fact, so an edit that adds, moves or
+// fixes one must change what the warm scanner reports — the dev builders print
+// the warning from this answer on every rebuild.
+func TestUsageScannerRootHrefsFollowEdits(t *testing.T) {
+	root := t.TempDir()
+	a := filepath.Join(root, "app", "views", "A.pzl")
+	b := filepath.Join(root, "app", "views", "B.pzl")
+	view := func(markup string) string {
+		return "<puzzle-view>\n" + markup + "\n</puzzle-view>\n<script>\nimport { PuzzleView } from '@magic-spells/puzzle';\nexport default class V extends PuzzleView {}\n</script>\n"
+	}
+	writePZL(t, a, view(`  <a href="/about">About</a>`))
+	writePZL(t, b, view(`  <p>plain</p>`))
+
+	s := NewUsageScanner()
+	scan := func(step string) []RootHref {
+		t.Helper()
+		got, err := s.Scan(root)
+		if err != nil {
+			t.Fatalf("%s: %v", step, err)
+		}
+		cold, err := NewUsageScanner().Scan(root)
+		if err != nil {
+			t.Fatalf("%s: cold scan: %v", step, err)
+		}
+		if !reflect.DeepEqual(got.RootHrefs, cold.RootHrefs) {
+			t.Fatalf("%s: warm RootHrefs %+v, cold %+v", step, got.RootHrefs, cold.RootHrefs)
+		}
+		return got.RootHrefs
+	}
+
+	if got := scan("initial"); len(got) != 1 || got[0].Href != "/about" || got[0].Line != 2 {
+		t.Fatalf("initial RootHrefs = %+v", got)
+	}
+
+	// The edit moves the link down a line and adds a second file's link.
+	writePZL(t, a, view("  <p>intro</p>\n  <a href=\"/about\">About</a>"))
+	writePZL(t, b, view(`  <a href="/contact">Contact</a>`))
+	got := scan("edit moves and adds")
+	if len(got) != 2 || got[0].File != "app/views/A.pzl" || got[0].Line != 3 || got[1].Href != "/contact" {
+		t.Fatalf("after the edit RootHrefs = %+v", got)
+	}
+
+	// Fixing both with link() clears them.
+	writePZL(t, a, view(`  <a href={ link('/about') }>About</a>`))
+	writePZL(t, b, view(`  <a href={ link('/contact') }>Contact</a>`))
+	if got := scan("edit fixes"); len(got) != 0 {
+		t.Fatalf("fixed hrefs still reported: %+v", got)
+	}
+}
+
 // TestUsageScannerReusesUnchangedFiles proves the memo actually memoizes: a
 // second Scan over an untouched tree must not re-read a single .pzl.
 func TestUsageScannerReusesUnchangedFiles(t *testing.T) {

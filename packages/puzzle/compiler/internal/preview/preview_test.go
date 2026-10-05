@@ -112,6 +112,31 @@ func TestPreviewStaticServes404Page(t *testing.T) {
 	}
 }
 
+// TestPreviewStaticServesLocale404Page proves a miss under a locale prefix
+// (D177) answers with that locale's own dist/<locale>/404.html, at status 404,
+// while the locale's pages and every other miss behave as before.
+func TestPreviewStaticServesLocale404Page(t *testing.T) {
+	dist := writeDist(t, map[string]string{
+		"index.html":    `<html><body>HOME</body></html>`,
+		"404.html":      `<html><body>ROOT_404</body></html>`,
+		"es/index.html": `<html lang="es"><body>INICIO</body></html>`,
+		"es/404.html":   `<html lang="es"><body>ES_404</body></html>`,
+	})
+
+	for path, want := range map[string]string{"/es/nope": "ES_404", "/nope": "ROOT_404", "/ES/nope": "ROOT_404"} {
+		rec := get(t, dist, serve.ModeStatic, path)
+		if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("static %s = %d %q, want %s at 404", path, rec.Code, rec.Body.String(), want)
+		}
+	}
+	for _, path := range []string{"/es", "/es/"} {
+		rec := get(t, dist, serve.ModeStatic, path)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "INICIO") {
+			t.Errorf("static %s = %d %q, want the es home page", path, rec.Code, rec.Body.String())
+		}
+	}
+}
+
 func TestCheckDistErrors(t *testing.T) {
 	root := t.TempDir()
 	missing := filepath.Join(root, "dist")

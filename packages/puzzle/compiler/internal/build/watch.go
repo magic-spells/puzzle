@@ -185,6 +185,10 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 		return nil, fmt.Errorf("creating dist: %w", err)
 	}
 
+	// Once per session, like the static dev builder: a translated route title
+	// in an app without i18n renders nothing.
+	warnUntranslatedRouteMeta(absRoot, opts.I18n, os.Stderr)
+
 	pl := plugin.New(absRoot)
 	// The define is frozen into the context below, so the i18n bit is set now;
 	// the manifest itself arrives with the first rebuild's locale load.
