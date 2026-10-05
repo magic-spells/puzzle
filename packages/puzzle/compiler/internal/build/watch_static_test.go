@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/magic-spells/puzzle/compiler/internal/config"
+	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 )
 
 // staticEquivalenceFixture is baseSSGFixture plus everything the equivalence
@@ -911,4 +912,224 @@ export default class Post extends PuzzleView {}
 	if d := diffTrees(warm, snapshotTree(t, filepath.Join(root, "dist"))); d != "" {
 		t.Errorf("the partial rebuild is not the one-shot output:\n%s", d)
 	}
+}
+
+// prefixRoutingFixture is i18nFixture under prefix routing (D177), with a
+// component on the home page so a component edit has exactly one route to
+// re-render — in every locale.
+func prefixRoutingFixture(homeLink string) ssgFixtureFiles {
+	files := i18nFixture()
+	files["puzzle.config.js"] = "export default { output: 'static', site: 'https://example.com', i18n: { locales: ['en', 'es'], defaultLocale: 'en', routing: 'prefix' } };\n"
+	files["app/components/Badge.pzl"] = prefixBadge("ORIGINAL BADGE")
+	files["app/views/Home.pzl"] = prefixHome(homeLink)
+	return files
+}
+
+func prefixBadge(text string) string {
+	return `<puzzle-view>
+  <span class="badge">` + text + `</span>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Badge extends PuzzleView {}
+</script>
+`
+}
+
+func prefixHome(link string) string {
+	return `<puzzle-view>
+  <h1>{ t('home.title') }</h1>
+  <Badge/>
+  ` + link + `
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Badge from '../components/Badge.pzl';
+export default class Home extends PuzzleView {}
+</script>
+`
+}
+
+var prefixRoutingI18n = &config.I18n{Locales: []string{"en", "es"}, DefaultLocale: "en", Routing: config.RoutingPrefix}
+
+// TestStaticWatchLocaleRouting covers `puzzle dev` under i18n.routing: 'prefix'
+// (D177): the routing define reaches every dev pass, a component edit re-renders
+// its route in every locale, a locale-file edit re-renders the site, the
+// root-relative href warning follows edits, and the result is still the
+// one-shot build's output.
+func TestStaticWatchLocaleRouting(t *testing.T) {
+	requireStaticRuntime(t)
+	root := writeSSGFixture(t, prefixRoutingFixture(`<a href={ link('/about') }>About</a>`))
+	abs := func(rel string) string { return filepath.Join(root, filepath.FromSlash(rel)) }
+	dist := filepath.Join(root, "dist")
+	cfg := config.Config{Output: "static", I18n: prefixRoutingI18n, Site: "https://example.com"}
+
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: cfg})
+	if err != nil {
+		t.Fatalf("creating the static dev builder: %v", err)
+	}
+	defer builder.Dispose()
+	rebuild := func(name string, changed ...string) string {
+		t.Helper()
+		var rebuildErr error
+		out := captureStderr(t, func() { rebuildErr = builder.Rebuild(changed) })
+		if rebuildErr != nil {
+			t.Fatalf("%s: dev rebuild failed: %v", name, rebuildErr)
+		}
+		return out
+	}
+	page := func(rel string) string { return readFile(t, filepath.Join(dist, filepath.FromSlash(rel))) }
+
+	if stderr := rebuild("initial"); strings.Contains(stderr, "skips the locale prefix") {
+		t.Errorf("initial: a link() href warned:\n%s", stderr)
+	}
+	for name, pl := range map[string]*plugin.Plugin{"app": builder.appPl, "prerender": builder.prePl, "pages": builder.pagesPl} {
+		if pl == nil {
+			t.Fatalf("%s pass has no plugin after the initial rebuild", name)
+		}
+		if got := bundleDefines(pl, bundleFlags{Dev: true})["__PUZZLE_HAS_LOCALE_ROUTING__"]; got != "true" {
+			t.Errorf("%s pass: __PUZZLE_HAS_LOCALE_ROUTING__ = %s in dev, want true", name, got)
+		}
+	}
+	for rel, want := range map[string]string{"index.html": "Welcome", "es/index.html": "Bienvenido"} {
+		if body := page(rel); !strings.Contains(body, want) || !strings.Contains(body, "ORIGINAL BADGE") {
+			t.Errorf("initial %s missing %q or the badge:\n%s", rel, want, body)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dist, "es", "404.html")); err != nil {
+		t.Errorf("dev output has no es/404.html: %v", err)
+	}
+
+	// A component edit: one route, rendered in both locales.
+	write(t, abs("app/components/Badge.pzl"), prefixBadge("REVISED BADGE"))
+	rebuild("component edit", abs("app/components/Badge.pzl"))
+	if plan := builder.lastPlan; plan.full || strings.Join(plan.routes, ",") != "/" {
+		t.Errorf("component edit planned full=%v routes=%v (%s), want just /", plan.full, plan.routes, plan.reason)
+	}
+	for _, rel := range []string{"index.html", "es/index.html"} {
+		if body := page(rel); !strings.Contains(body, "REVISED BADGE") {
+			t.Errorf("component edit did not re-render %s:\n%s", rel, body)
+		}
+	}
+
+	// A root-relative href added by an edit warns on that rebuild...
+	write(t, abs("app/views/Home.pzl"), prefixHome(`<a href="/about">About</a>`))
+	stderr := rebuild("href added", abs("app/views/Home.pzl"))
+	if !strings.Contains(stderr, `app/views/Home.pzl:4:6: href="/about" skips the locale prefix`) {
+		t.Errorf("href added: no positioned warning on the rebuild:\n%s", stderr)
+	}
+	// ...and is gone once the href is fixed.
+	write(t, abs("app/views/Home.pzl"), prefixHome(`<a href={ link('/about') }>About</a>`))
+	if stderr := rebuild("href fixed", abs("app/views/Home.pzl")); strings.Contains(stderr, "skips the locale prefix") {
+		t.Errorf("href fixed: the warning still printed:\n%s", stderr)
+	}
+	if got := builder.usage.RootHrefs; len(got) != 0 {
+		t.Errorf("href fixed: the builder's scan still holds %+v", got)
+	}
+
+	// A locale-file edit is render-wide and lands in that locale's pages.
+	write(t, abs("app/locales/es.json"), `{ "home": { "title": "Hola de nuevo" } }`)
+	rebuild("locale edit", abs("app/locales/es.json"))
+	if plan := builder.lastPlan; !plan.full || plan.reason != "a locale file changed" {
+		t.Errorf("locale edit planned full=%v (%s), want the render-wide locale classification", plan.full, plan.reason)
+	}
+	if body := page("es/index.html"); !strings.Contains(body, "Hola de nuevo") {
+		t.Errorf("locale edit did not re-render es/index.html:\n%s", body)
+	}
+	if body := page("index.html"); !strings.Contains(body, "Welcome") {
+		t.Errorf("locale edit changed the default page:\n%s", body)
+	}
+
+	warm := snapshotTree(t, dist)
+	if err := Build(root, Options{Development: true, Output: "static"}); err != nil {
+		t.Fatalf("one-shot build failed: %v", err)
+	}
+	if d := diffTrees(warm, snapshotTree(t, dist)); d != "" {
+		t.Errorf("the dev output is not the one-shot output:\n%s", d)
+	}
+}
+
+// TestStaticSitemapAndPublicFile: with `site` set the prerender writes
+// dist/sitemap.xml (D177), and a public/sitemap.xml wins instead. Neither the
+// public-folder validation nor the public copy may reject or double-write it,
+// in the one-shot build or in a dev session — including a partial rebuild,
+// whose sitemap must still list every page.
+func TestStaticSitemapAndPublicFile(t *testing.T) {
+	requireStaticRuntime(t)
+	cfg := config.Config{Output: "static", I18n: prefixRoutingI18n, Site: "https://example.com"}
+	const hand = "<?xml version=\"1.0\"?>\n<urlset>HAND WRITTEN</urlset>\n"
+
+	t.Run("generated", func(t *testing.T) {
+		root := writeSSGFixture(t, prefixRoutingFixture(""))
+		sitemap := filepath.Join(root, "dist", "sitemap.xml")
+		if err := Build(root, Options{Development: true, Output: "static"}); err != nil {
+			t.Fatalf("one-shot build: %v", err)
+		}
+		oneShot := readFile(t, sitemap)
+		for _, want := range []string{"<loc>https://example.com/about</loc>", "<loc>https://example.com/es/about</loc>", `hreflang="es"`} {
+			if !strings.Contains(oneShot, want) {
+				t.Errorf("one-shot sitemap missing %s:\n%s", want, oneShot)
+			}
+		}
+
+		builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: cfg})
+		if err != nil {
+			t.Fatalf("creating the static dev builder: %v", err)
+		}
+		defer builder.Dispose()
+		if err := builder.Rebuild(nil); err != nil {
+			t.Fatalf("initial dev rebuild: %v", err)
+		}
+		if got := readFile(t, sitemap); got != oneShot {
+			t.Errorf("dev sitemap differs from the one-shot one:\n%s\nwant\n%s", got, oneShot)
+		}
+		badge := filepath.Join(root, "app", "components", "Badge.pzl")
+		write(t, badge, prefixBadge("REVISED BADGE"))
+		if err := builder.Rebuild([]string{badge}); err != nil {
+			t.Fatalf("partial dev rebuild: %v", err)
+		}
+		if builder.lastPlan.full {
+			t.Fatalf("the component edit was not a partial rebuild (%s)", builder.lastPlan.reason)
+		}
+		if got := readFile(t, sitemap); got != oneShot {
+			t.Errorf("a partial rebuild changed the sitemap:\n%s\nwant\n%s", got, oneShot)
+		}
+	})
+
+	t.Run("public file wins", func(t *testing.T) {
+		files := prefixRoutingFixture("")
+		files["app/public/sitemap.xml"] = hand
+		root := writeSSGFixture(t, files)
+		sitemap := filepath.Join(root, "dist", "sitemap.xml")
+		if err := ValidatePublic(root, false, prefixRoutingI18n); err != nil {
+			t.Fatalf("ValidatePublic rejected public/sitemap.xml: %v", err)
+		}
+		if err := Build(root, Options{Development: true, Output: "static"}); err != nil {
+			t.Fatalf("one-shot build: %v", err)
+		}
+		if got := readFile(t, sitemap); got != hand {
+			t.Errorf("one-shot build replaced public/sitemap.xml:\n%s", got)
+		}
+
+		builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: cfg})
+		if err != nil {
+			t.Fatalf("creating the static dev builder: %v", err)
+		}
+		defer builder.Dispose()
+		if err := builder.Rebuild(nil); err != nil {
+			t.Fatalf("initial dev rebuild: %v", err)
+		}
+		if got := readFile(t, sitemap); got != hand {
+			t.Errorf("dev build replaced public/sitemap.xml:\n%s", got)
+		}
+		public := filepath.Join(root, "app", "public", "sitemap.xml")
+		edited := strings.Replace(hand, "HAND WRITTEN", "HAND EDITED", 1)
+		write(t, public, edited)
+		if err := builder.Rebuild([]string{public}); err != nil {
+			t.Fatalf("public edit rebuild: %v", err)
+		}
+		if got := readFile(t, sitemap); got != edited {
+			t.Errorf("dev did not serve the edited public/sitemap.xml:\n%s", got)
+		}
+	})
 }
