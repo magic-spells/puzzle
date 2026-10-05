@@ -742,7 +742,7 @@ func (b *StaticWatchBuilder) captureGraph(summary staticSummary, pagesMetafile, 
 		if err != nil {
 			return
 		}
-		entryRoutes[filepath.Join(entriesDir, slug+".js")] = page.Path
+		entryRoutes[filepath.Join(entriesDir, slug+".js")] = page.routeKey()
 		addChainRoots(page.Modules)
 	}
 	// A SKIPPED route ships no page and so has no entry to attribute anything to,
@@ -765,11 +765,12 @@ func (b *StaticWatchBuilder) captureGraph(summary staticSummary, pagesMetafile, 
 	b.nextRouteCount = writtenRoutes(summary.Written)
 }
 
-// writtenRoutes counts the distinct route paths among the written pages.
+// writtenRoutes counts the distinct routes among the written pages — a
+// `staticPaths` route counts once, however many pages it generated (D179).
 func writtenRoutes(written []staticPage) int {
 	paths := make(map[string]bool, len(written))
 	for _, page := range written {
-		paths[page.Path] = true
+		paths[page.routeKey()] = true
 	}
 	return len(paths)
 }
