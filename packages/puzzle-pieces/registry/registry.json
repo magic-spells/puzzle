@@ -604,6 +604,18 @@
       "targetDir": "app/components/ui"
     },
     {
+      "name": "language-switcher",
+      "description": "Language switcher over the app's i18n.locales list — real hreflang links under locale prefix routing (a plain click stores the choice through setLocale, a modified click opens natively), setLocale buttons without it, as an inline pill row or a compact dropdown menu",
+      "files": [
+        "LanguageSwitcher.pzl"
+      ],
+      "registryDependencies": [
+        "dropdown-menu"
+      ],
+      "dependencies": [],
+      "targetDir": "app/components/ui"
+    },
+    {
       "name": "line-chart",
       "description": "Responsive, config-first multi-series line chart with a nearest-x hover crosshair, tooltip, legend, and an sr-only data table",
       "files": [

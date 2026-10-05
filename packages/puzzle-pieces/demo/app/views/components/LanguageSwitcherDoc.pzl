@@ -1,0 +1,200 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Language Switcher</h1>
+        <p class="mt-2 text-body">
+          One entry per configured locale, from the app’s
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">i18n.locales</code>
+          list. Under locale prefix routing each entry is a real link to this page in that
+          language — crawlers follow it and a modified click opens it natively — while a plain
+          click goes through
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">setLocale</code>
+          so the viewer’s choice is remembered. Without prefix routing it renders buttons.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          This docs site has no i18n configured, so the examples below are driven by a static
+          sample list and a click only reports what it would switch to.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex flex-col items-center gap-4">
+          <LanguageSwitcher locales={ routedLocales } @change={ choose }/>
+          <p class="text-sm text-muted">Active: <span class="font-medium text-ink">{ current }</span></p>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app. Its menu layout composes
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">dropdown-menu</code>,
+          which comes along with it:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          That menu wraps a web component, so install it and merge its stylesheet into your app’s
+          style entry:
+        </p>
+        <CodeBlock code={ installDep }/>
+        <CodeBlock code={ installCss } class="mt-3"/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <p class="mb-3 text-sm text-body">
+          Read
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">this.ctx.i18n.locales</code>
+          in the layout or view’s own
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">data()</code>
+          and pass it down. Every entry’s link is <em>this page</em> in that language, and only the
+          layout’s
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">data()</code>
+          re-runs on each navigation — a switcher that read the list itself would keep pointing at
+          the first page it saw.
+        </p>
+        <CodeBlock code={ usageMarkup }/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="menu" title="Menu" code={ codeMenu }>
+          <div class="flex w-full justify-end pb-56">
+            <LanguageSwitcher locales={ routedLocales } variant="menu" align="end" @change={ choose }/>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="no-prefix" title="Without prefix routing" code={ codeButtons }>
+          <div class="flex flex-col items-center gap-4">
+            <LanguageSwitcher locales={ sharedLocales } @change={ choose }/>
+            <p class="max-w-md text-center text-sm text-muted">
+              Without
+              <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">routing: 'prefix'</code>
+              every entry’s
+              <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">href</code>
+              is the same page, so the piece renders buttons that switch in place.
+            </p>
+          </div>
+        </ExampleBox>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import LanguageSwitcher from '@/components/ui/LanguageSwitcher.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+import { toast } from '@/components/ui/toast.js';
+
+// Docs page for LanguageSwitcher. The demo app configures no i18n, so the live
+// examples render a static sample shaped like `i18n.locales`; the code samples
+// show the real wiring. Code samples live as template-literal consts because
+// literal tag names would be parsed as template syntax in prose.
+const installCmd = 'puzzle add piece language-switcher';
+const installDep = 'npm install @magic-spells/dropdown-panel@^2.1.1';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dropdown-panel/css" layer(components);`;
+
+const usageMarkup = `<!-- app/layouts/Default.pzl -->
+<header class="flex items-center justify-between">
+  <a href="{ link('/') }">{ t('brand') }</a>
+  <LanguageSwitcher locales={ locales } label={ t('language') }/>
+</header>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import LanguageSwitcher from '@/components/ui/LanguageSwitcher.pzl';
+
+export default class DefaultLayout extends PuzzleView {
+  // The layout's data() re-runs for every navigation, so the list always
+  // names the page being shown. The switcher only receives it.
+  data() {
+    return { locales: this.ctx.i18n.locales };
+  }
+}
+</script>`;
+
+const codeHero = `<LanguageSwitcher locales={ locales }/>
+
+// this.ctx.i18n.locales, under i18n.routing: 'prefix', on /about:
+// [
+//   { locale: 'en', label: 'English', href: '/about',    active: true  },
+//   { locale: 'es', label: 'Español', href: '/es/about', active: false },
+//   { locale: 'fr', label: 'Français', href: '/fr/about', active: false },
+//   { locale: 'ja', label: '日本語',   href: '/ja/about', active: false },
+// ]`;
+
+const codeMenu = `<LanguageSwitcher locales={ locales } variant="menu" align="end"/>`;
+
+const codeButtons = `// puzzle.config.js — no routing, one URL for every language
+i18n: { locales: ['en', 'es', 'fr', 'ja'], defaultLocale: 'en' }
+
+// every entry's href is the current page, so the piece renders
+// buttons; a click calls this.ctx.i18n.setLocale(locale)
+<LanguageSwitcher locales={ locales }/>`;
+
+const LANGS = [
+  ['en', 'English'],
+  ['es', 'Español'],
+  ['fr', 'Français'],
+  ['ja', '日本語'],
+];
+const PAGE = '#/components/language-switcher';
+
+export default class LanguageSwitcherDoc extends PuzzleView {
+  created() {
+    this.setData({ current: 'en' });
+  }
+
+  data(params, props) {
+    const { current } = this.getData();
+    return {
+      current,
+      // Prefix routing: one URL per language.
+      routedLocales: LANGS.map(([locale, label]) => ({
+        locale,
+        label,
+        href: `${PAGE}?lang=${locale}`,
+        active: locale === current,
+      })),
+      // No routing: the runtime names the current page for every entry.
+      sharedLocales: LANGS.map(([locale, label]) => ({
+        locale,
+        label,
+        href: PAGE,
+        active: locale === current,
+      })),
+      installCmd,
+      installDep,
+      installCss,
+      usageMarkup,
+      codeHero,
+      codeMenu,
+      codeButtons,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Menu', href: '#menu' },
+        { label: 'Without prefix routing', href: '#no-prefix' },
+      ],
+    };
+  }
+
+  events = {
+    choose: (locale) => {
+      this.setData({ current: locale });
+      this.refresh();
+      toast({ message: `In an app with i18n this calls setLocale('${locale}').` });
+    },
+  };
+}
+</script>
