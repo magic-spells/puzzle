@@ -1014,14 +1014,14 @@ describe('staticPaths under locale prefix routing (D179)', () => {
 		},
 	];
 
-	async function build({ mode = 'static', staticPaths } = {}) {
+	async function build({ mode = 'static', staticPaths, i18n = I18N_ROUTED } = {}) {
 		const dir = tmpDir();
 		fs.writeFileSync(path.join(dir, 'index.html'), SHELL);
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		try {
 			const summary = await prerenderToDir(
 				{ target: '#app', routerBase: '/docs', routes: routes(staticPaths) },
-				{ outDir: dir, shellPath: path.join(dir, 'index.html'), mode, site: 'https://example.com', i18n: I18N_ROUTED }
+				{ outDir: dir, shellPath: path.join(dir, 'index.html'), mode, site: 'https://example.com', i18n }
 			);
 			const read = (rel) => fs.readFileSync(path.join(dir, rel), 'utf8');
 			return { dir, summary, read };
@@ -1076,6 +1076,36 @@ describe('staticPaths under locale prefix routing (D179)', () => {
 		expect(soloEs).toContain(alt('es', 'https://example.com/docs/es/blog/solo-es'));
 		expect(soloEs).not.toContain('hreflang="en"');
 		expect(soloEs).not.toContain('hreflang="x-default"');
+	});
+
+	it('limits the first-visit redirect to the locales that have the generated page', async () => {
+		// The redirect's first argument is the locale list it may send a visitor to.
+		const redirectLocales = (html) => {
+			const match = /<script>\(function[\s\S]*?\}\)\((\[[^\]]*\]),"en"/.exec(html);
+			return match ? JSON.parse(match[1]) : null;
+		};
+		for (const mode of ['static', 'hybrid']) {
+			const { read } = await build({ mode });
+			expect(redirectLocales(read('index.html'))).toEqual(['en', 'es']);
+			expect(redirectLocales(read('blog/shared/index.html'))).toEqual(['en', 'es']);
+			// Only the default locale lists it: no redirect to a Spanish page that does not exist.
+			expect(read('blog/only-en/index.html')).toContain('hreflang="en"');
+			expect(redirectLocales(read('blog/only-en/index.html'))).toBe(null);
+		}
+		const FR = { title: 'Bienvenue', items: { other: '{count} articles' }, evil: 'x' };
+		const three = {
+			manifest: { defaultLocale: 'en', locales: { ...MANIFEST.locales, fr: 'locales/fr.CCCC.json' }, routing: 'prefix' },
+			table: EN,
+			tables: { en: EN, es: ES, fr: FR },
+		};
+		const lists = { en: ['tarte'], es: [], fr: ['tarte'] };
+		const { read } = await build({
+			mode: 'hybrid',
+			i18n: three,
+			staticPaths: ({ locale }) => lists[locale].map((slug) => ({ slug })),
+		});
+		expect(redirectLocales(read('index.html'))).toEqual(['en', 'es', 'fr']);
+		expect(redirectLocales(read('blog/tarte/index.html'))).toEqual(['en', 'fr']);
 	});
 
 	it('puts every generated page in the sitemap with its own alternates', async () => {

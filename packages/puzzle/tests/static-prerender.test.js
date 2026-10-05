@@ -1378,15 +1378,15 @@ describe('staticPaths (D179)', () => {
 	});
 
 	it('encodes each value as one segment the router decodes back, and converts numbers', async () => {
-		const values = ['a b', 'a/b', 'é', '%', 'q?#', 7];
+		const values = ['a b', 'é', '%', 'a\\b', 'x:y', 7];
 		const { summary, exists } = await build([post(values.map((slug) => ({ slug })))]);
 		const written = summary.written.filter((w) => w.pattern);
 		expect(written.map((w) => w.path)).toEqual([
 			'/blog/a%20b',
-			'/blog/a%2Fb',
 			'/blog/%C3%A9',
 			'/blog/%25',
-			'/blog/q%3F%23',
+			'/blog/a%5Cb',
+			'/blog/x:y',
 			'/blog/7',
 		]);
 		// One segment each, and the live Router's matcher takes it back to the value.
@@ -1397,11 +1397,10 @@ describe('staticPaths (D179)', () => {
 			expect(decodeURIComponent(w.path.split('/')[2])).toBe(String(values[i]));
 		}
 		expect(exists('blog/a b/index.html')).toBe(true);
-		expect(exists('blog/a%2Fb/index.html')).toBe(true);
 		expect(exists('blog/é/index.html')).toBe(true);
 		expect(exists('blog/%/index.html')).toBe(true);
-		const pages = await pagesOf([post([{ slug: 'a/b' }, { slug: 42 }])]);
-		expect(pages.map((p) => p.params.slug)).toEqual(['a/b', '42']);
+		const pages = await pagesOf([post([{ slug: 'a b' }, { slug: 42 }])]);
+		expect(pages.map((p) => p.params.slug)).toEqual(['a b', '42']);
 	});
 
 	describe('errors', () => {
@@ -1419,6 +1418,16 @@ describe('staticPaths (D179)', () => {
 			await fails([{ slug: () => 'x' }], 'entry 0 param "slug" must be a string or a number (got function)');
 			await fails([{ slug: Number.NaN }], 'entry 0 param "slug" must be a string or a number');
 			await fails(['cookies'], 'entry 0 must be an object of params (got "cookies")');
+		});
+
+		it('refuses a value that is not one servable segment: ".", "..", or one holding /, ? or #', async () => {
+			for (const slug of ['.', '..', 'a/b', 'q?x', 'x#y']) {
+				await fails(
+					[{ slug: 'ok' }, { slug }],
+					`[puzzle] staticPaths of route "/blog/:slug": entry 1 param "slug" value ${JSON.stringify(slug)} ` +
+						'cannot be a URL segment — a value may not be "." or ".." or contain "/", "?" or "#"; slugify it'
+				);
+			}
 		});
 
 		it('fails for a non-array result or value', async () => {
@@ -1515,6 +1524,23 @@ describe('staticPaths (D179)', () => {
 		// The Router matches /blog/new to /blog/:slug first, so that page is the generated one.
 		expect(dynamicFirst.read('blog/new/index.html')).toContain('slug=new');
 		expect(dynamicFirst.summary.skipped.map((s) => [s.path, s.reason])).toEqual([['/blog/new', 'shadowed']]);
+	});
+
+	it('skips a generated page an earlier route matches first in hybrid, and keeps it in static', async () => {
+		const routes = () => [
+			{ path: '/:cat/featured', view: Home, layout: Layout, staticPaths: [] },
+			{ path: '/products/:id', view: Post, layout: Layout, staticPaths: [{ id: 'featured' }, { id: 'x' }] },
+		];
+		const hybrid = await build(routes(), { mode: 'hybrid' });
+		expect(hybrid.summary.written.map((w) => w.path)).toEqual(['/products/x']);
+		expect(hybrid.summary.skipped).toContainEqual({ path: '/products/featured', reason: 'shadowed' });
+		expect(hybrid.summary.warnings).toContain(
+			'[puzzle] skipped staticPaths page "/products/featured" of route "/products/:id" — earlier route ' +
+				'"/:cat/featured" matches it first in hybrid output (routes match in declaration order)'
+		);
+		expect(hybrid.exists('products/featured/index.html')).toBe(false);
+		const stat = await build(routes());
+		expect(stat.summary.written.map((w) => w.path)).toEqual(['/products/featured', '/products/x']);
 	});
 
 	it('re-lists on a subset render and reports the pages as reused when the route is not in it (D155)', async () => {

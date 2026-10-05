@@ -583,6 +583,11 @@ async function prerenderPass(config, opts = {}) {
 	// effects on a no-op rebuild and let application setup fail a save that touched
 	// no route. `only === null` means no filter was given — a real full render — so
 	// every case this guard covered before the subset render existed is unchanged.
+	//
+	// The exception is a `staticPaths` function or model shorthand (D179): its
+	// reused pages still have to be listed, so even an `only: []` rebuild runs each
+	// one, and `beforeMount` with it, once per locale pass. Only an array needs no
+	// context.
 	if (!renderer.builtContext() && only === null && typeof config.beforeMount === 'function') {
 		await renderer.createPageContext(null, pass);
 	}
@@ -796,6 +801,15 @@ function staticPathParams(item, index, names, fullPath) {
 		}
 		const text = String(value);
 		if (text === '') throw new Error(`[puzzle] ${where} param "${name}" is empty`);
+		// A page is a directory: `.`/`..` would resolve onto another page's file,
+		// and a `/`, `?` or `#` names a file no static host serves at that URL
+		// (hosts decode the request path before looking the file up).
+		if (text === '.' || text === '..' || /[/?#]/.test(text)) {
+			throw new Error(
+				`[puzzle] ${where} param "${name}" value ${JSON.stringify(text)} cannot be a URL segment — ` +
+					'a value may not be "." or ".." or contain "/", "?" or "#"; slugify it'
+			);
+		}
 		params[name] = text;
 	}
 	return params;
@@ -804,11 +818,12 @@ function staticPathParams(item, index, names, fullPath) {
 /**
  * A generated page's path: the route's full path with each `:param` segment
  * replaced by its value. The path goes through the router's own write-side
- * encoder (encodeURL), so it is spelled exactly as a `link()` to it is; the
- * characters that encoder deliberately leaves alone because they are path
- * structure — `%`, `/`, `?`, `#`, and `\` (which browsers read as `/`) — are
- * escaped inside a value first, so a value is always one segment that the
- * Router's matcher decodes back to the same string.
+ * encoder (encodeURL), so it is spelled exactly as a `link()` to it is. That
+ * encoder leaves `%` alone (it reads it as an existing escape) and `\`
+ * unescaped (which a browser rewrites to `/`), so both are escaped inside a
+ * value first: a value is always one segment the Router's matcher decodes back
+ * to the same string. (`/`, `?`, `#`, `.` and `..` are refused earlier, in
+ * staticPathParams.)
  *
  * @param {string} fullPath
  * @param {Record<string, string>} params
@@ -819,7 +834,7 @@ function fillParams(fullPath, params) {
 		.split('/')
 		.map((segment) =>
 			isDynamicSegment(segment)
-				? params[segment.slice(1)].replace(/[%/?#\\]/g, (char) => encodeURIComponent(char))
+				? params[segment.slice(1)].replace(/[%\\]/g, (char) => encodeURIComponent(char))
 				: segment
 		)
 		.join('/');
@@ -942,11 +957,12 @@ function pageRenderer(config, { isStatic, routed, tags, defaultLocale, routeRout
 	 * @param {RouteEntry} entry the route
 	 * @param {string} pagePath the generated page that is not written
 	 * @param {string} warning
+	 * @param {string} [reason]
 	 */
-	const skipGenerated = (entry, pagePath, warning) => {
+	const skipGenerated = (entry, pagePath, warning, reason = 'duplicate') => {
 		if (noted.has(warning)) return;
 		/** @type {SkippedRoute} */
-		const record = { path: pagePath, reason: 'duplicate' };
+		const record = { path: pagePath, reason };
 		if (isStatic) record.modules = collectSkippedModules(entry);
 		skipped.push(record);
 		warnOnce(warning);
@@ -1169,6 +1185,24 @@ function pageRenderer(config, { isStatic, routed, tags, defaultLocale, routeRout
 						`${fixedFiles.has(file) ? 'fixed' : 'earlier'} route "${owner}" already writes ${file}`
 				);
 				return;
+			}
+			// Hybrid pages are taken over by the live first-match-wins Router, so a
+			// generated URL an earlier route matches would prerender one view and
+			// take over with another — skipped, like a shadowed fixed route.
+			if (!isStatic) {
+				const leaf = entry.chain[entry.chain.length - 1];
+				const url = pagePath.length > 1 && pagePath.endsWith('/') ? pagePath.slice(0, -1) : pagePath;
+				const first = routeRouter.routeEntries.find((compiled) => compiled.regex.test(url));
+				if (first && first.chain[first.chain.length - 1] !== leaf) {
+					skipGenerated(
+						entry,
+						pagePath,
+						`[puzzle] skipped staticPaths page "${pagePath}" of route "${fullPath}" — earlier route ` +
+							`"${first.fullPath}" matches it first in hybrid output (routes match in declaration order)`,
+						'shadowed'
+					);
+					return;
+				}
 			}
 			generatedFiles.set(file, fullPath);
 			out.push({ kind, entry: { ...entry, fullPath: pagePath, params, pattern: fullPath } });
@@ -1720,6 +1754,26 @@ function pageDressing({ config, i18n, site, warnings, pages }) {
 		return locales ? tags.filter((tag) => locales.has(tag === 'x-default' ? defaultLocale ?? undefined : tag)) : tags;
 	};
 
+	// The first-visit redirect may only send a visitor to a page that exists: a
+	// generated page's script lists just the locales that list it, and a page
+	// only the default locale has gets none. One script per distinct locale set.
+	/** @type {Map<string, string>} */
+	const redirects = new Map();
+	/** @param {Page} page */
+	const redirectFor = (page) => {
+		if (!redirect || !page.pattern) return redirect;
+		const tags = alternateLocales(page.path).filter((tag) => tag !== 'x-default');
+		if (tags.length <= 1) return '';
+		const key = tags.join(' ');
+		let script = redirects.get(key);
+		if (script === undefined) {
+			const manifest = /** @type {NonNullable<typeof routed>} */ (routed);
+			const locales = Object.fromEntries(tags.map((tag) => [tag, manifest.locales[tag]]));
+			redirects.set(key, (script = redirectScript({ defaultLocale: manifest.defaultLocale, locales }, base)));
+		}
+		return script;
+	};
+
 	/** @param {string} routePath */
 	const alternates = (routePath) => {
 		const link = (/** @type {string} */ hreflang, /** @type {string} */ href) =>
@@ -1745,7 +1799,7 @@ function pageDressing({ config, i18n, site, warnings, pages }) {
 			// the catch-all is no page of its own, so it names no alternates.
 			if (!routed || !page.head) return '';
 			const out = page.path === '*' ? '' : alternates(page.path);
-			return page.locale === defaultLocale ? out + redirect : out;
+			return page.locale === defaultLocale ? out + redirectFor(page) : out;
 		},
 		url,
 		routed,
