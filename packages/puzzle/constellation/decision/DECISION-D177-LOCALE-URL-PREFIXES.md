@@ -23,6 +23,55 @@ connections:
   - DOC-SPEC-BUILD
   - DOC-SPEC-ROUTER
   - TEST-I18N
+notes:
+  - kind: state
+    text: >-
+      As built through PRs #206, #207, #209, #212, #213, #214 (fold into the body when the card is
+      truthed; #215 pending lifts the static-only gate). Go: `Config.Site` (origin only, hostname
+      required), `I18n.Routing`/`Detect`, `(*I18n).PrefixRouting()`; define via
+      `Plugin.SetLocaleRouting` in `bundleDefines` on all three passes; manifest carries `routing`
+      and `detect:false` only when set; `site` reaches the prerender as `options.site` on
+      `prerenderToDir`, not the manifest; `ValidatePublic(root, splitting, *config.I18n)`;
+      `Usage.RootHrefs` always collected, printed only under routing, skips `{#raw}`, extension
+      check reads the path's last static text; `uniqueEntryPages` one entry per slug, error when
+      same slug names different modules; `staticPage.locale`; serve: a static-mode miss tries
+      `dist/<first-segment>/404.html` (exact case, any first-level folder incl. public ones) before
+      the root 404; `warnUntranslatedRouteMeta` warns on `{ t }` title/description without `i18n`;
+      unknown keys inside `i18n` stay silently ignored (existing convention). Runtime: `localeBase`,
+      `linkLocale`, `pathLocale` (the single prefix matcher) in `router/router.js`; `urlLocale`,
+      `localePath`, `localeLabel`, `islandLocale`, `samePath`, `assignSameOrigin(href, replace?)`,
+      `textDirection`, `readStoredLocale`, `viewerLanguages` in `i18n.js`; `createI18n` options
+      `page`, `routerBase`, `navigate(href)`; `localizeRouterStub` in `ssg/assemble.js` (separate
+      from `makeRouterStub` because esbuild keeps unused destructured params); Router composes
+      `#base = localeBase(...)` once, keeps bare base and tags in a module-level WeakMap
+      (`localeRouting`), reads `url`'s options from `arguments[1]` with a JSDoc `@overload`; click
+      interception takes a link only when its locale base equals the router's; `push('/es/about')`
+      routes as written and lands on the catch-all with a dev warning; `setLocale` compares against
+      the page's forced locale; SPA redirect runs at the top of `#mount()` using `selectLocale`
+      itself; an unprefixed static page takes the island locale, so a stored choice does not apply
+      there (the redirect's job). Security: every prefix-swap result is a same-origin path
+      (`samePath` collapses a leading run of `/`, `\`, tab, newline); the only
+      `location.assign`/`replace` goes through `assignSameOrigin`. Prerender: passes run default
+      locale first, one i18n service per pass, hybrid `routeRouter.url` shadow rebuilt per locale;
+      `BuildI18n.tables` required per locale; route collision check is case-insensitive; alternates
+      are a managed set (`data-puzzle-head="alternate"`, stale shell ones stripped, also from
+      `prerender:false` pages); `prerender:false` pages get no hreflang or redirect; root-relative
+      canonicals must include `routerBase` to be localized; redirect script lives in
+      `ssg/redirect.js`, on default-locale pages incl. 404, 879 B for three locales, generated from
+      one function source, build fails if it contains `</script` or `<!--`; shared decision table
+      `tests/fixtures/locale-redirect-cases.js` drives `selectLocale`, the emitted script and the
+      SPA redirect; `dir`: ltr pages drop a shell `dir="rtl"` only, client switch removes `dir` only
+      when it says `rtl`; sitemap excludes 404 and `prerender:false` pages, namespace only under
+      routing, `public/sitemap.xml` wins with a warning; 404 page's switcher links each locale's
+      home; format locale restored after a prerender. Tests: golden fixture
+      `tests/fixtures/prerender-golden/golden.json` pins byte-identity without routing;
+      `tests/fixtures/locale-prefix-site` is a real built fixture;
+      `tests/locale-redirect-build.test.js` runs the script a real build emits. Rule to state:
+      without `routing` there is no added code (minifier identifier names may differ by a byte or
+      two, so not literal byte identity for bundles). Head (#206): `headText`, `HeadTranslation` on
+      title/description only, `syncTitle` string-only, static kernel syncs a `{ t }` title on load
+      and after remount.
+    sha: be67d739
 ---
 
 # D177 — Locale URL prefixes
