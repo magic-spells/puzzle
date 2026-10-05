@@ -42,10 +42,20 @@ chains, and `assembleChain` preloads each chain (`created()` + awaited `data()`,
 router's `#navigate` builds. The route snapshot has the D83 seven-key shape (static
 pathname, empty frozen query, `''` hash).
 
-- **Output paths**: `<path>/index.html`; a top-level catch-all writes `404.html`;
-  dynamic/splat routes are skipped with warnings; `prerender: false` writes the plain
-  shell. Route guards (D87) never run at build time: hybrid warns per rendered page whose
-  chain has a guard, static warns once.
+- **Pass structure** (`ssg/index.js`): `planRoutes` makes each route's
+  skip/reuse/shell/render decision once; then each locale pass runs `entriesFor` (one entry
+  for a fixed route, one per listed value for a `staticPaths` route,
+  [[DECISION-D179-STATIC-PATHS]]) → `renderEntry`. `pageFile(routePath)` is the one
+  route-path → file mapping, and also the identity a generated page is compared against the
+  fixed pages by (static: the fixed page keeps its file, warned). A generated page carries
+  `pattern` (its route as authored) on `Page`/`WrittenPage`, and `params` on its route JSON.
+- **Output paths**: `<path>/index.html`; a top-level catch-all writes `404.html`; a
+  `:param` route without `staticPaths` is skipped with a warning naming the field (skip
+  reason `'empty staticPaths'` when its list is empty); `prerender: false` writes the plain
+  shell. Hybrid also skips a generated path an earlier route matches first in the live
+  router, reason `shadowed` (`findShadowedPaths` is the first-match check), so takeover never
+  renders a different view. Route guards (D87) never run at build time: hybrid warns per
+  rendered page whose chain has a guard, static warns once.
 - **Serializer** mirrors ViewManager: escaped text/attrs, controlled initial state,
   wrapperless components, shared `expandSlots`, SVG seeds verbatim, framework
   attrs/events/keys/refs omitted, placeholders → nothing, `@@name` → literal `@name`,
@@ -83,7 +93,10 @@ pathname, empty frozen query, `''` hash).
   "alternate"`, a managed set — shell alternates are stripped; none on `*` or
   `prerender: false` pages) and, on default-locale pages, the first-visit redirect from
   `ssg/redirect.js` (one function's source text, inlined; the build fails if it contains
-  `</script` or `<!--`; omitted under `detect: false`). A root-relative or same-origin
+  `</script` or `<!--`; omitted under `detect: false`). A generated page's alternates and
+  redirect name only the locales whose `staticPaths` lists contain it; `redirectFor` caches
+  one script per distinct locale set, and a page only the default locale has gets none.
+  A root-relative or same-origin
   canonical is localized per locale. `site` arrives as a prerender option, making
   alternates absolute (warned once when absent). `WrittenPage.locale` tags each page.
 - **Sitemap**: with `site`, `prerenderToDir` writes `outDir/sitemap.xml` — every
@@ -140,11 +153,17 @@ settled reads through the adapter, and swaps `/app.js` for the page module (base
 by `routerBase`). `beforeMount` and tracked-query faults run at build time: the API must
 be reachable from Node, and a non-404 fault fails the build naming the route.
 
+- **Generated pages** ([[DECISION-D179-STATIC-PATHS]]): every page of a `staticPaths`
+  route shares ONE module, slugged from its `pattern` with `:` → `_` (`blog--_slug`), and
+  carries a `data-puzzle-static-route` JSON island (its path and params) that the shared
+  entry merges into the pattern-shaped route JSON. Fixed-route modules are byte-identical.
 - **`only` subset** ([[DECISION-D155-ROUTE-LEVEL-INVALIDATION]]): the dev loop passes a
   route subset on `argv[4]` (not in the source — dev keeps one esbuild context over those
   bytes). Every route is still enumerated and claims its path and slug (so slugs never
   renumber) and appears in `written` (`reused`), but no context is built for it. An empty
-  subset renders nothing and skips the zero-page `beforeMount` fail-fast.
+  subset renders nothing and skips the zero-page `beforeMount` fail-fast. A `staticPaths`
+  route outside the subset still re-runs its list (and so `beforeMount`) to enumerate its
+  reused pages.
 - Static reports `modules` for SKIPPED routes too (chain roots for invalidation); a
   missing `__pzlModule` stamp there is dropped, not raised.
 - **Browser kernel** ([[FILE-STATIC-MOUNT]], `mountStatic`): same ctx (Store, formatters,

@@ -8,6 +8,7 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - COMPONENT-SSG
   - DECISION-D81-STATIC-PAGES-MODE
+  - DECISION-D179-STATIC-PATHS
 verified_at: '2026-08-24T21:11:50.859Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
@@ -29,6 +30,16 @@ when the capability is reachable only from `app.js`, a capture-mode import of th
 app entry — which pulls the route table and every view into the shared chunk and
 so prints a steering note. An inline `adapter.defaults()` in `app.js` must keep
 working through that capture tier.
+
+**Generated pages** ([[DECISION-D179-STATIC-PATHS]]): `staticPage.Pattern` is set
+on a page a `staticPaths` route generated — the route's full path
+(`/blog/:slug`) beside the page's own `Path`. All of a route's pages share one
+entry and its pattern-shaped route JSON; for those entries only, the route literal
+becomes an `Object.assign` with the page's `data-puzzle-static-route` island, so
+fixed-route entries stay byte-identical. `routeKey()` (Pattern, else Path) is the
+route a page belongs to — the unit the dev builder's route graph and D155 `only`
+filter name (`watch_static.go`), since the prerender matches `only` against route
+paths, never generated page paths.
 
 Two load-bearing shapes that are easy to undo:
 

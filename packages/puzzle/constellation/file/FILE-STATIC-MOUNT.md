@@ -23,6 +23,13 @@ drops an absence whose record turned out present, which only works in that
 order), assembles the page chain through the shared [[FILE-SSG-ASSEMBLE]], and
 swaps the prerendered markup flash-free.
 
+**Route params** ([[DECISION-D179-STATIC-PATHS]]): `route.params` is `{}` for a
+fixed route. On a page a `staticPaths` route generated, the shared page entry
+merges the page's `data-puzzle-static-route` island (its path and params) into the
+pattern-shaped route JSON before calling `mountStatic`, and the kernel threads
+`route.params` into the route snapshot and every `preload`. It never reads params
+off `location`.
+
 Translations ([[DECISION-D175-TRANSLATIONS]]), behind `__PUZZLE_HAS_I18N__`: the
 kernel builds the i18n service from the virtual manifest (paths resolve against
 the stub's normalized `routerBase`), sets `ctx.i18n`, installs `t`, and awaits

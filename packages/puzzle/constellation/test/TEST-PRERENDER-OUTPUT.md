@@ -26,6 +26,7 @@ connections:
   - DECISION-D161-AUTO-FETCHING-FINDS
   - DOC-SPEC-BUILD
   - DOC-TESTING
+  - DECISION-D179-STATIC-PATHS
 verified_at: '2026-08-24T21:39:23.520Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
@@ -34,8 +35,9 @@ verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 
 Both prerender modes ([[DOC-SPEC-BUILD]] §36) and the seam where the browser
 picks the markup up. Suites under `tests/`: `ssg-*`, `static-kernel`,
-`static-prerender`, `static-locale-remount`, `prerender-router-base`,
-`route-tree-shared`. Run with `npx vitest run tests/ssg tests/static tests/prerender`.
+`static-prerender`, `static-locale-remount`, `static-docs-example`,
+`prerender-router-base`, `route-tree-shared`. Run with
+`npx vitest run tests/ssg tests/static tests/prerender`.
 
 - **Serializer:** node-to-HTML emission, RAWTEXT elements, refs dropped, and the
   equivalence suite that renders one tree through the serializer and through
@@ -49,6 +51,16 @@ picks the markup up. Suites under `tests/`: `ssg-*`, `static-kernel`,
   facade, base-prefixed page-module hrefs, hash and memory modes flattened or
   refused, storage ignored with a warning, and the route-subset render used by
   incremental rebuilds.
+- **`staticPaths`** ([[DECISION-D179-STATIC-PATHS]]): `static-prerender` covers the
+  value forms and model shorthand, the build errors (missing or unservable values,
+  non-array results, no `:param` or a parent route, a throwing function), duplicates,
+  empty lists, value encoding, fixed-route collisions in both modes, the hybrid
+  `shadowed` skip and the D155 subset re-list; `static-kernel` the
+  island-to-`route.params` threading; `ssg-router-takeover` hybrid takeover of a
+  generated page; `i18n-ssg` per-locale lists with their alternates, redirect and
+  sitemap; `static-docs-example` runs a built generated page of
+  `examples/static-docs`. Go: `static_pages_test.go` (pattern entries) and
+  `watch_static_test.go` (dev rebuilds keyed by pattern).
 - **D161 read state**, both sides. Emission: the envelope island beside the
   record island, omitted for adapter-less and settled-nothing pages,
   script-breakout escaping, a rejected tracked fault failing the build naming the

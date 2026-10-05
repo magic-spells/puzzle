@@ -22,6 +22,7 @@ connections:
   - COMPONENT-DEV-SERVER
   - FLOW-BUILD
   - FLOW-REACTIVITY
+  - DECISION-D179-STATIC-PATHS
 ---
 
 # Puzzle release surface
@@ -70,7 +71,8 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
 - **Route fields:** `path`, `view`, `layout` (class or `lazy()` marker),
   `children`, `guard`, `meta` (`title`/`description`/`canonical`/`socialImage`
   plus free custom keys; `title`/`description` may be `{ t: 'key' }`),
-  `transitionMode`, `prerender: false`, `name` (informational — no
+  `transitionMode`, `prerender: false`, `staticPaths` (build-only, leaf
+  `:param` routes — see Build and output), `name` (informational — no
   named-route navigation).
 - **`puzzle.config.js`:** `styles.use: ['tailwindcss']`, `build.dropConsole`
   (default true), `build.sourceMap` (default off; dev always has maps),
@@ -282,11 +284,16 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   routing required). `output: 'static'` ships no router or `app.js`: one
   `dist/_puzzle/<slug>.js` per page with build data and settled read state
   inlined; `storage` is ignored. Both write directory-style pages plus
-  `404.html`, skip dynamic routes with a warning, and honor
-  `prerender: false`. Under prefix routing every page is written once per
+  `404.html`, skip a `:param` route without `staticPaths` with a warning, and
+  honor `prerender: false`. Under prefix routing every page is written once per
   locale (`dist/<tag>/…`, each with its own `lang`/`dir` and table) with
   `hreflang` alternates; a literal root-relative `<a href>` warns. With
   `site`, a prerendering build writes `dist/sitemap.xml`.
+- **`staticPaths` (D179):** a leaf `:param` route lists its pages for both
+  prerender modes — an array of params objects, a build-time function
+  (`{ store, config, locale? }`, once per locale), or a model name. One page
+  per entry; static pages of a route share one module. Types:
+  `StaticPathsEntry`, `StaticPathsContext`, `StaticPathsFn` (root export).
 - **Dev server:** incremental rebuilds, warm Tailwind, port 3000 (scans
   upward), SPA fallback, SSE reload; static projects rebuild + prerender per
   change. Build errors show in the browser. Reload preserves store records and
@@ -342,8 +349,8 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
 
 ## Not shipped
 
-SSR server, hydration, named-route navigation, dynamic-route `staticPaths`,
-route link preloading, array refs, a built-in virtual list, per-module hot
-swap, Sass, an event bus, a global keyboard API, app-level
-computed/settings/methods, a config-level devtools hook, and editor-level
-`.pzl` type checking (`puzzle check` is a command, not a language service).
+SSR server, hydration, named-route navigation, route link preloading, array
+refs, a built-in virtual list, per-module hot swap, Sass, an event bus, a
+global keyboard API, app-level computed/settings/methods, a config-level
+devtools hook, and editor-level `.pzl` type checking (`puzzle check` is a
+command, not a language service).
