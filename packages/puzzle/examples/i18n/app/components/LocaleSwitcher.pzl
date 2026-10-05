@@ -19,10 +19,13 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class LocaleSwitcher extends PuzzleView {
-  data() {
-    // One entry per configured locale: its tag, its own name (`Español`), this
-    // page under that locale's prefix (/es/about), and whether it is the active one.
-    return { options: this.ctx.i18n.locales };
+  // `options` is the layout's i18n.locales — one entry per configured locale:
+  // its tag, its own name (`Español`), this page under that locale's prefix
+  // (/es/about), and whether it is the active one. A prop, not this component's
+  // own read of ctx.i18n: the list changes with every navigation, and only the
+  // layout's data() re-runs for each one.
+  data(params, props) {
+    return { options: props.options ?? [] };
   }
 
   events = {

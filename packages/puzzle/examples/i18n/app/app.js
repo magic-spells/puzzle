@@ -9,6 +9,7 @@ import models from './models/index.js';
 //
 // A language switch is a page load under prefix routing (/about → /es/about), so
 // the store persists to localStorage: the cart is still there in the new language.
+// `storage` persists every model in the store to localStorage, not just the cart.
 const storage = typeof window !== 'undefined' ? window.localStorage : undefined;
 
 const app = new PuzzleApp({

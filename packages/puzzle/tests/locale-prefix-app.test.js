@@ -173,6 +173,31 @@ describe('hybrid output under prefix routing (D177)', () => {
 	});
 });
 
+// examples/i18n as built by `npm run build:i18n` (its last build is --hybrid):
+// the layout's language switcher must follow a client-side navigation, or a
+// ctrl-click, a new tab or a copied link lands on the page the app started on.
+describe('examples/i18n language switcher (D177)', () => {
+	const EXAMPLE = path.join(path.dirname(fileURLToPath(import.meta.url)), '../examples/i18n/dist');
+	const switcher = () => document.querySelector('#app nav[aria-label]');
+
+	it('re-points every link at the new page after a client navigation', async () => {
+		const app = await open(EXAMPLE, 'es/index.html', '/es/');
+		await app.mount();
+		expect(hrefs('#app nav[aria-label] a')).toEqual(['/', '/es/', '/pl/']);
+		const nav = [...document.querySelectorAll('#app header nav:not([aria-label]) a')];
+		const about = nav.find((a) => a.getAttribute('href') === '/es/about');
+		about.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+		for (let i = 0; i < 200 && app.router.current.path !== '/about'; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		}
+		expect(location.pathname).toBe('/es/about');
+		expect(hrefs('#app nav[aria-label] a')).toEqual(['/about', '/es/about', '/pl/about']);
+		const current = switcher().querySelector('[aria-current]');
+		expect(current.getAttribute('href')).toBe('/es/about');
+		expect(switcher().querySelectorAll('[aria-current]')).toHaveLength(1);
+	});
+});
+
 describe('plain SPA under prefix routing (D177)', () => {
 	it('/es/about on the index.html shell boots in Spanish under the prefix', async () => {
 		const app = await open(SPA, 'index.html', '/es/about');

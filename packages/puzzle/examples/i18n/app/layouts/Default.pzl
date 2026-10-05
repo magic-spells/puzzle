@@ -6,7 +6,7 @@
         <a href="{ link('/') }" class="hover:text-ink">{ t('nav.home') }</a>
         <a href="{ link('/about') }" class="hover:text-ink">{ t('nav.about') }</a>
       </nav>
-      <LocaleSwitcher />
+      <LocaleSwitcher options={ locales } />
     </div>
   </header>
   <main class="max-w-2xl mx-auto px-6 py-12">
@@ -18,7 +18,15 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 import LocaleSwitcher from '../components/LocaleSwitcher.pzl';
 
-// Chrome only. Its strings come through `t` and its links through `link()`, so
-// every locale's pages render it in their own language under their own prefix.
-export default class DefaultLayout extends PuzzleView {}
+// Chrome. Its strings come through `t` and its links through `link()`, so every
+// locale's pages render it in their own language under their own prefix.
+export default class DefaultLayout extends PuzzleView {
+  // i18n.locales names the page being shown, so it is read here: the layout's
+  // data() re-runs for every navigation's destination, while a component inside
+  // it (the switcher) keeps its own data() from the first page. The switcher
+  // gets the fresh list as a prop.
+  data() {
+    return { locales: this.ctx.i18n.locales };
+  }
+}
 </script>
