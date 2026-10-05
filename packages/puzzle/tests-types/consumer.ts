@@ -49,6 +49,9 @@ import type {
 	LinkOptions,
 	LibraryFunctions,
 	DatePreset,
+	StaticPathsContext,
+	StaticPathsEntry,
+	StaticPathsFn,
 } from '@magic-spells/puzzle';
 import { adapter, PuzzleAdapterError } from '@magic-spells/puzzle/adapter';
 import type {
@@ -337,6 +340,22 @@ routes.push({ path: '/lazy', view: lazyClass, layout: lazyNamespace });
 // A bare loader never occupies a view position — lazy() is the explicit API.
 // @ts-expect-error a loader function is not a PuzzleView constructor or LazyView.
 routes.push({ path: '/bare-loader', view: async () => TodoListView });
+
+// D179: staticPaths lists a :param route's build-time pages — an array, a
+// (sync or async) function of the build facade, or a model name.
+const listPosts: StaticPathsFn = async ({ store, config, locale }: StaticPathsContext) => {
+	const entries: StaticPathsEntry[] = store.findMany('todo').map((todo) => ({ slug: String(todo.id) }));
+	void [config.routes, locale?.toUpperCase()];
+	return entries;
+};
+routes.push(
+	{ path: '/blog/:slug', view: TodoListView, staticPaths: listPosts },
+	{ path: '/tags/:tag', view: TodoListView, staticPaths: [{ tag: 'news' }, { tag: 7 }] },
+	{ path: '/notes/:id', view: TodoListView, staticPaths: () => [{ id: 'n1' }] },
+	{ path: '/todo/:id', view: TodoListView, staticPaths: 'todo' }
+);
+// @ts-expect-error a staticPaths value is a string or a number, not an object
+routes.push({ path: '/bad/:id', view: TodoListView, staticPaths: [{ id: { nested: true } }] });
 
 // The marker brand cannot be forged by a structural look-alike.
 // @ts-expect-error only lazy() produces LazyView.

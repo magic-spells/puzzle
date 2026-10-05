@@ -33,13 +33,15 @@ import { normalizeRoutePath } from '../router/routePath.js';
  * Instantiate + preload the layout+view chain for one route and assemble it into
  * a nested component vnode tree.
  *
- * @param {{ fullPath: string, chain: Array<Record<string, any>>, layout?: Function | null }} entry
+ * @param {{ fullPath: string, chain: Array<Record<string, any>>, layout?: Function | null,
+ *   params?: Record<string, string> }} entry
  *   an enumerated route entry — { fullPath, chain (root→leaf route defs, each
- *   with a `.view` class), layout (LayoutClass|null) }
+ *   with a `.view` class), layout (LayoutClass|null), params (a generated
+ *   page's, D179) }
  * @param {Record<string, any>} ctx the { store, router, formatters } passed to every preload
- * @param {object} [route] an already-built static route snapshot. The static
+ * @param {Record<string, any>} [route] an already-built static route snapshot. The static
  *   browser kernel supplies this so `ctx.router.current` and `this.route` share
- *   the exact same object during preload.
+ *   the exact same object during preload. Every level preloads with its `params`.
  * @param {{views: Function[], layout: Function|null}} [resolved] classes already
  *   resolved from the entry's `lazy()` markers (D163). ONLY the Node prerender
  *   pass passes it — that is the one caller whose entries can hold markers, and
@@ -66,7 +68,7 @@ export async function assembleChain(entry, ctx, route = makeRouteSnapshot(entry)
 		for (let i = 0; i < chain.length; i++) {
 			const view = new viewClasses[i](ctx);
 			instances.push(view);
-			await view.preload({ params: {}, props: {}, route });
+			await view.preload({ params: route.params, props: {}, route });
 		}
 
 		// Assemble the chain leaf-up into nested component vnodes, each adopting its
@@ -83,7 +85,7 @@ export async function assembleChain(entry, ctx, route = makeRouteSnapshot(entry)
 		if (LayoutClass) {
 			const layout = new (/** @type {typeof PuzzleView} */ (LayoutClass))(ctx);
 			instances.push(layout);
-			await layout.preload({ params: {}, props: {}, route });
+			await layout.preload({ params: route.params, props: {}, route });
 			const layoutVnode = new ViewNode(LayoutClass, {}, [topVnode]);
 			layoutVnode.instance = layout;
 			topVnode = layoutVnode;
@@ -98,8 +100,11 @@ export async function assembleChain(entry, ctx, route = makeRouteSnapshot(entry)
 
 /**
  * Build the frozen D83 route snapshot shared by static prerender and mount.
- * Static paths carry no params/query/fragment, so their pathname is the full
- * path and the query object is a frozen null-prototype empty map.
+ * A prerendered path carries no query/fragment, so its pathname is the full
+ * path and the query object is a frozen null-prototype empty map. A fixed route
+ * has no params; a page a `staticPaths` route generated (D179) passes its own
+ * path as `fullPath` and its param values as `params` — the shape the Router's
+ * matcher produces for that URL.
  *
  * The path runs through the Router's own normalizer: a live Router exposes
  * `/caf%C3%A9` for a route declared `/café`, so a raw snapshot would make
@@ -107,11 +112,11 @@ export async function assembleChain(entry, ctx, route = makeRouteSnapshot(entry)
  * replaces it. Both prerender modes build the snapshot here, so normalizing
  * once keeps every side in the same spelling (the operation is idempotent).
  *
- * @param {{ chain: Array<Record<string, any>>, fullPath: string }} entry an
- *   enumerated route entry
+ * @param {{ chain: Array<Record<string, any>>, fullPath: string,
+ *   params?: Record<string, string> }} entry an enumerated route entry
  * @returns {Readonly<Record<string, any>>} the frozen route snapshot
  */
-export function makeRouteSnapshot({ chain, fullPath }) {
+export function makeRouteSnapshot({ chain, fullPath, params = {} }) {
 	const path = normalizeRoutePath(fullPath);
 	return Object.freeze({
 		path,
@@ -119,7 +124,7 @@ export function makeRouteSnapshot({ chain, fullPath }) {
 		query: Object.freeze(Object.create(null)),
 		hash: '',
 		route: chain[chain.length - 1],
-		params: {},
+		params,
 		chain,
 	});
 }

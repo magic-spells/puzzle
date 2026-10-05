@@ -102,8 +102,38 @@ export interface Route {
 		[key: string]: any;
 	};
 	children?: Route[];
+	/**
+	 * Build-time list of the param values to prerender for a `:param` route
+	 * (D179), in `output: 'static'` and `'hybrid'` — one page per entry. An array
+	 * of params objects, a function (sync or async) returning one, or the name
+	 * of a registered model: `'post'` loads every `post` record and takes each
+	 * param from the record's same-named field. Declared on the leaf route; each
+	 * entry holds every param of the route's full path, inherited ones included.
+	 * The browser never calls it, but the route table ships in SPA and hybrid
+	 * bundles — keep a heavy list source behind `await import()` in the function.
+	 */
+	staticPaths?: ReadonlyArray<StaticPathsEntry> | StaticPathsFn | string;
 	[key: string]: any;
 }
+
+/** One `staticPaths` entry (D179): a value for every param of the route's full path. */
+export type StaticPathsEntry = Record<string, string | number>;
+
+/**
+ * The build facade a `staticPaths` function receives (D179) — the one
+ * `beforeMount` gets at build time, after `beforeMount` has run on its store.
+ */
+export interface StaticPathsContext {
+	store: Store;
+	config: PuzzleAppConfig;
+	/** The locale being prerendered, when translations are configured (D177). */
+	locale?: string;
+}
+
+/** A `staticPaths` function (D179): runs once per prerender pass (once per locale under prefix routing). */
+export type StaticPathsFn = (
+	context: StaticPathsContext
+) => ReadonlyArray<StaticPathsEntry> | Promise<ReadonlyArray<StaticPathsEntry>>;
 
 /** A route guard (D87): allow, block, or redirect before navigation loads. */
 export type GuardFn = (nav: {

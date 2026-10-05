@@ -65,7 +65,9 @@ import manifestData from '@magic-spells/puzzle/i18n/manifest';
  * @param {Function|null} [options.layout] the top-level layout class, or null
  * @param {{ path: string, params?: Record<string, string>,
  *   chain: Array<{ path: string, name?: string, meta?: object }> }} [options.route] the
- *   serialized route snapshot from the summary
+ *   serialized route snapshot from the summary — for a page a `staticPaths` route
+ *   generated (D179), with `path` and `params` taken from the page's
+ *   `data-puzzle-static-route` island
  * @param {object} [options.models] the app models map
  * @param {object} [options.formatters] the app custom formatters map
  * @param {string} [options.apiURL] the store's base API URL
@@ -107,7 +109,11 @@ export async function mountStatic({
 		setPortalHost(targetEl.parentNode ?? document.body);
 
 	const chain = route.chain.map((def, i) => ({ ...def, view: views[i] }));
-	const entry = { fullPath: route.path, chain, layout };
+	// `route.params` is `{}` for a fixed route. A page a `staticPaths` route
+	// generated (D179) shares its route's module, so its entry fills `path` and
+	// `params` from the page's own island before calling here — the kernel never
+	// reads them off `location`.
+	const entry = { fullPath: route.path, chain, layout, params: route.params };
 	const routeSnapshot = makeRouteSnapshot(entry);
 	const ctx = buildStaticContext({
 		models,

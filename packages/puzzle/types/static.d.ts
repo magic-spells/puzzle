@@ -19,7 +19,12 @@ export interface StaticRouteDef {
 	meta?: Record<string, any>;
 }
 
-/** The plain-JSON route snapshot the prerender summary emits per page. */
+/**
+ * The plain-JSON route snapshot the prerender summary emits per page. `params`
+ * is `{}` for a fixed route; for a page a `staticPaths` route generated (D179),
+ * `path` and `params` are the page's own, read from its
+ * `data-puzzle-static-route` island by the generated entry.
+ */
 export interface StaticRoute {
 	path: string;
 	params: Record<string, string>;
