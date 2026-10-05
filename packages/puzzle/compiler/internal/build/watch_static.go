@@ -200,8 +200,10 @@ func NewStaticWatchBuilder(root string, opts StaticWatchOptions) (*StaticWatchBu
 
 	// Route `meta` on an SPA-only route is dead in static output — a one-shot
 	// build warns about it once, and so does a dev session (once, at startup,
-	// rather than on every save).
+	// rather than on every save). So does a translated route title in an app
+	// without i18n.
 	warnDeadSPARouteMeta(absRoot, "static", os.Stderr)
+	warnUntranslatedRouteMeta(absRoot, opts.Config.I18n, os.Stderr)
 
 	b := &StaticWatchBuilder{
 		root:     absRoot,

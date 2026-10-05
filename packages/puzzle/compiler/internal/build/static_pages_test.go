@@ -387,6 +387,26 @@ func TestStaticPrerenderStdinCarriesSite(t *testing.T) {
 	}
 }
 
+// The hybrid prerender entry carries the site origin the same way (D177), and
+// without it stays byte-identical to the pre-D177 entry.
+func TestHybridPrerenderStdinCarriesSite(t *testing.T) {
+	entry := filepath.FromSlash("/abs/app-root/app/app.js")
+	without, err := hybridPrerenderStdin(entry, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(without, "site") || !strings.Contains(without, `mode: 'hybrid' });`) {
+		t.Errorf("no site configured, but the hybrid entry is not the plain one:\n%s", without)
+	}
+	with, err := hybridPrerenderStdin(entry, "https://example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(with, `mode: 'hybrid', site: "https://example.com" });`) {
+		t.Errorf("hybrid prerender entry does not pass the site option:\n%s", with)
+	}
+}
+
 // The conventional module is imported by the PRERENDER entry too — that import
 // is the only place the identity answer can come from. A missing module leaves
 // the generated source byte-identical to the pre-D157 one.

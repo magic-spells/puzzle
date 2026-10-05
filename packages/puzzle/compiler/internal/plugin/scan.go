@@ -590,12 +590,33 @@ func rootHref(attr parser.Attr) (RootHref, bool) {
 		if !ok || !isRootRelative(head.Text) {
 			return RootHref{}, false
 		}
-		if tail, ok := a.Parts[len(a.Parts)-1].(*parser.StaticPart); ok && hasFileExtension(tail.Text) {
+		if hasFileExtension(mixedPathTail(a.Parts)) {
 			return RootHref{}, false
 		}
 		return RootHref{Line: a.Pos.Line, Col: a.Pos.Col, Href: head.Text, Mixed: true}, true
 	}
 	return RootHref{}, false
+}
+
+// mixedPathTail returns the static text that ends a mixed value's PATH, for the
+// extension check: the static part that opens the query or fragment, cut at its
+// `?`/`#` (empty when the path itself ends in an expression), else the last
+// static part. `/files/{ n }.pdf?v={ q }` gives `.pdf`, which the value's final
+// part — an expression — never shows.
+func mixedPathTail(parts []parser.Part) string {
+	tail := ""
+	for _, part := range parts {
+		p, ok := part.(*parser.StaticPart)
+		if !ok {
+			tail = ""
+			continue
+		}
+		if i := strings.IndexAny(p.Text, "?#"); i >= 0 {
+			return p.Text[:i]
+		}
+		tail = p.Text
+	}
+	return tail
 }
 
 // isRootRelative: starts with one `/`, not `//` or `/\` (both protocol-relative
