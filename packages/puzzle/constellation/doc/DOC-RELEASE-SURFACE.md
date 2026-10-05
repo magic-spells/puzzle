@@ -69,13 +69,16 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   `errorView`.
 - **Route fields:** `path`, `view`, `layout` (class or `lazy()` marker),
   `children`, `guard`, `meta` (`title`/`description`/`canonical`/`socialImage`
-  plus free custom keys), `transitionMode`, `prerender: false`, `name`
-  (informational — no named-route navigation).
+  plus free custom keys; `title`/`description` may be `{ t: 'key' }`),
+  `transitionMode`, `prerender: false`, `name` (informational — no
+  named-route navigation).
 - **`puzzle.config.js`:** `styles.use: ['tailwindcss']`, `build.dropConsole`
   (default true), `build.sourceMap` (default off; dev always has maps),
   `build.splitting` (default off), `dev.proxy` (path prefix → backend
   origin), `output` (`'hybrid'` | `'static'`; absent = SPA),
-  `i18n: { locales, defaultLocale }`.
+  `i18n: { locales, defaultLocale, routing?: 'prefix', detect?: boolean }`,
+  `site` (the public origin, `'https://example.com'` — origin only; makes
+  `hreflang` absolute and turns on the sitemap).
 
 ## Templates (`.pzl`)
 
@@ -141,14 +144,16 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   `escape`, `raw`, `newline_to_br`. Values: `json`. Dates: `date`, `time`,
   `datetime` (presets `short`/`medium`/`long`/`iso`; defaults medium date,
   short time, medium date + short time) and `in_timezone`. Translation: `t`.
+  `link(path, { locale })` takes `{ locale: 'es' }` or `{ locale: false }`
+  under locale prefix routing.
 - Calls nest (`{ truncate(capitalize(title), 40) }`). Apps register their own
   under the `formatters` config key (a standard name is overridable with a
   dev warning). A dropped library name passes through with a dev error naming
   the JS replacement.
 - A bad literal date preset or `in_timezone` zone is a compile warning;
   dynamic ones are dev errors. Prerender prints locale-sensitive functions and
-  `timeago` in the build machine's locale and `TZ` (or `i18n.defaultLocale`);
-  the browser re-renders them in the viewer's.
+  `timeago` in the build machine's locale and `TZ` (or the page's i18n
+  locale); the browser re-renders them in the viewer's.
 - **`raw` and `newline_to_br`** must be the outermost call of a text
   interpolation (else a compile error) and lower to an HTML vnode. `raw`
   always runs one allowlist sanitizer in browser and prerender (no scripts,
@@ -158,11 +163,15 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   (nested keys flatten to dotted; CLDR-category objects are plurals). The
   build fills missing keys from the default (warning) and emits hashed
   `dist/locales/<tag>.*.json`; the browser fetches only the active locale
-  (stored choice → `navigator.languages` → default). `ctx.i18n` / `app.i18n`
-  expose `t`, `locale`, `locales`, `defaultLocale`, `setLocale(tag)`
-  (persists to `localStorage.__puzzleLocale`, sets `<html lang>`, rebuilds in
-  place). Prerender uses the default locale. Date/number functions follow the
-  active locale.
+  (stored choice → `navigator.languages` → default; under prefix routing the
+  URL decides). `ctx.i18n` / `app.i18n` expose `t`, `locale`, `locales`,
+  `defaultLocale`, `dir` (`'rtl'`/`'ltr'`, also set as `<html dir>`), and
+  `setLocale(tag)` (persists to `localStorage.__puzzleLocale`, sets
+  `<html lang>`, rebuilds in place — or, under prefix routing, loads the same
+  page under the other prefix). **`locales` is the switcher list `[{ locale,
+  label, href, active }]`** — breaking: 0.8.0 returned `string[]`. Without
+  prefix routing prerender uses the default locale. Date/number functions
+  follow the active locale.
 
 ## Component runtime
 
@@ -171,10 +180,13 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   Store/prop/route changes rerun `data()`; `setData()` alone does not. Async
   `data()` is last-wins. Skeletons show only on first load and may hold a
   minimum duration.
-- Lifecycle: `created`, `mounted`, `beforeUpdate`, `afterUpdate`,
+- Lifecycle: `created`, `mounted`, `beforeUpdate`, `afterUpdate(prev)`,
   `destroyed`, `viewWillShow`/`viewDidShow`, `viewWillHide`/`viewDidHide`.
-  Live members: `this.route` (pre-commit-safe snapshot), `this.element`,
-  `this.refs`, `this.memo()`, `getData()`, `setData()`, `refresh()`.
+  `prev` (D178, type `PrevViewState`) is a frozen shallow snapshot
+  `{ props, params, route, data }` of the previous render; a record in it is
+  the same live object. Live members: `this.route` (pre-commit-safe snapshot),
+  `this.element`, `this.refs`, `this.memo()`, `getData()`, `setData()`,
+  `refresh()`.
 - **Incremental rendering (D170):** item `{#for}` rows cache their vnode
   subtree per key and static subtrees build once. A record prop carries a
   render revision, so a child refreshes on that record's store mutations; a
@@ -217,7 +229,14 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   carries `path`, `pathname`, frozen `query` (repeated keys → arrays) and
   `hash`; query never merges into params.
 - `push`, `replace` (no history entry), `go`, `back`, `forward`; same-origin
-  link interception; `router.url()` / `link('/x')` for mode-agnostic hrefs.
+  link interception; `router.url(path, options?)` / `link('/x')` for
+  mode-agnostic hrefs.
+- **Locale URL prefixes (D177):** `i18n.routing: 'prefix'` (path routing
+  only) puts every non-default locale under `/<tag>` (default unprefixed).
+  App paths stay locale-free; `link()`/`router.url()` add the active prefix,
+  `{ locale: 'es' }` forces one, `{ locale: false }` skips it. A link into
+  another locale is a full page load. Default-locale pages redirect a
+  first-time visitor to their language once (`i18n.detect: false` opts out).
 - Load-then-commit navigation: URL, title, view, scroll and reused-ancestor
   state commit atomically; failed or superseded pushes change nothing.
 - **Guards:** inherited `guard` runs root→leaf before views load; allow /
@@ -229,9 +248,10 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   re-invokes); a failed load is a failed push (`phase: 'navigation'`).
   Prerender awaits them.
 - **Head:** `document.title` syncs on every navigation; `meta` fields resolve
-  leaf→root per field (`null` suppresses an inherited value). The managed
-  description/canonical/social tags are baked by the prerender only, so they
-  are inert in a plain SPA build.
+  leaf→root per field (`null` suppresses an inherited value); a `{ t: 'key' }`
+  title/description translates. The managed description/canonical/social tags
+  and `hreflang` alternates are baked by the prerender only, so they are inert
+  in a plain SPA build.
 - `scrollBehavior`: scroll-to-top, pop restoration, session persistence,
   custom function or `false`. `focusBehavior` (same shape): each committed
   navigation focuses the incoming view root and announces the title in an
@@ -245,10 +265,11 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
 
 - Production: ES2022, minified, console stripped by default, tree-shaken
   function manifest, collected CSS. A usage scan over `.pzl` and app
-  `.js`/`.ts` gates optional runtime behind literal defines —
+  `.js`/`.ts` plus config facts gate optional runtime behind literal defines —
   `__PUZZLE_HAS_FLIP__`, `_PORTAL__`, `_RAW_AT__`, `_RAW_HTML__`,
-  `_RAW_SANITIZE__`, `_LAZY__`, `_SNIPPETS__`, `_I18N__`. Fixtures and the
-  adapter are excluded structurally: nothing imports them unless wired.
+  `_RAW_SANITIZE__`, `_LAZY__`, `_SNIPPETS__`, `_I18N__`, `_LOCALE_ROUTING__`.
+  Fixtures and the adapter are excluded structurally: nothing imports them
+  unless wired.
 - `build.splitting` makes each dynamic `import()` a chunk under
   `dist/chunks/` (a reserved name while on); `output: 'static'` ignores it;
   dev prunes stale chunks. The size banner lists per-dependency bytes and
@@ -262,7 +283,10 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   `dist/_puzzle/<slug>.js` per page with build data and settled read state
   inlined; `storage` is ignored. Both write directory-style pages plus
   `404.html`, skip dynamic routes with a warning, and honor
-  `prerender: false`.
+  `prerender: false`. Under prefix routing every page is written once per
+  locale (`dist/<tag>/…`, each with its own `lang`/`dir` and table) with
+  `hreflang` alternates; a literal root-relative `<a href>` warns. With
+  `site`, a prerendering build writes `dist/sitemap.xml`.
 - **Dev server:** incremental rebuilds, warm Tailwind, port 3000 (scans
   upward), SPA fallback, SSE reload; static projects rebuild + prerender per
   change. Build errors show in the browser. Reload preserves store records and
@@ -283,7 +307,8 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   (both is an error); `--fixtures` wires `app/fixtures.js|ts` first. Both
   stop early when `@magic-spells/puzzle` is not installed.
 - `puzzle preview [dir]` — `--port` (4000), `--strict-port`; serves `dist/`
-  with production-host semantics per output mode.
+  with production-host semantics per output mode (a static miss serves
+  `dist/<first-segment>/404.html` before the root one).
 - `puzzle check [dir]` — type-checks `.pzl` scripts and template
   expressions via virtual files in `.puzzle/check/` and the app's own
   `node node_modules/typescript/bin/tsc --noEmit`, remapping diagnostics to

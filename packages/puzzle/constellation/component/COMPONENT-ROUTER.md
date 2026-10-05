@@ -39,6 +39,38 @@ validation survives the `__PUZZLE_HAS_LAZY__` fold), `lazy.js` (D163 resolver),
 - Path/hash modes intercept safe same-origin unmodified links; hash keeps app paths
   base-free in the fragment; `routerBase` is inert in memory mode, which owns an entry
   stack and has no URL/title/scroll effects.
+- `#syncHead` is `syncTitle(headText(resolveHeadField(chain, 'title'), ctx.i18n))`; the
+  `headText` branch sits behind `__PUZZLE_HAS_I18N__` so `{ t: 'key' }` titles translate
+  without changing the bytes of apps without i18n ([[DECISION-D84-HEAD-MANAGEMENT]]).
+
+## Locale prefix routing (D177)
+
+[[DECISION-D177-LOCALE-URL-PREFIXES]]; every branch sits behind the inline
+`__PUZZLE_HAS_LOCALE_ROUTING__` probe, so apps without `i18n.routing` ship none of it.
+
+- **Composed `#base`.** In path mode with prefix routing the constructor composes
+  `#base = localeBase(routerBase, locale, defaultLocale)` once (`routerBase + /<locale>`
+  for a non-default locale). Reading, writing and click interception all use it; route
+  matching and `this.route` stay locale-free. It never changes while the app runs —
+  `setLocale` is a page load. The constructor throws for a route whose first segment is
+  a non-default locale tag.
+- **`localeRouting` WeakMap** (module level, last in the module): Router →
+  `{ base, locale, defaultLocale, locales, target, page }` — the bare `routerBase`, the
+  configured tags, the in-flight navigation's path (`setLocaleTarget`, set for every
+  verb in `#navigate`, cleared at commit or failure) and a `page()` closure that reads
+  `target ?? #state.path`. A WeakMap rather than private fields, which would ship in
+  every app. `localePage(router)` returns `router.url(page())`: the page `setLocale`
+  reloads — the navigation's target when one is in flight, else the committed page.
+- **`url(path)` options** are read from `arguments[1]` (`{ locale: 'es' }` or
+  `{ locale: false }`, through `linkLocale`), so the method keeps one declared
+  parameter; a JSDoc `@overload` types the second. The base comes from `localeBase` over
+  `routing.base`.
+- **Click interception:** after the mode's own `clickLink`, a link is taken only when
+  `localeBase(routing.base, pathLocale(url.pathname, …), defaultLocale)` equals the
+  router's `#base`; a link into another locale's pages (another prefix, or the default
+  locale's unprefixed URL from a prefixed page) is a real page load.
+- `push('/es/…')` routes as written and warns in development (app paths are
+  locale-free). `pathLocale` is the single prefix matcher, shared with `i18n.js`.
 
 ## Route table
 

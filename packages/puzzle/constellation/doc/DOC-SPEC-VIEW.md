@@ -9,6 +9,16 @@ connections:
   - DECISION-D145-ERROR-BOUNDARIES
 verified_at: '2026-08-24T05:28:12.855Z'
 verified_sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
+notes:
+  - kind: state
+    text: >-
+      `afterUpdate(prev)` (D178, DECISION-D178-AFTERUPDATE-PREV): the hook receives a frozen,
+      shallow snapshot `{ props, params, route, data }` of what the previous render drew
+      (`PrevViewState` in types). The snapshot is taken as each render lands, in `#renderNowInner`
+      (mount render included), not when the update starts. A record in `prev.data` is the same live
+      object as in `this.data`, so an edit to that record is invisible to `!==`; return the field
+      from `data()` (`title: post.title`) and compare that. Only views that override `afterUpdate`
+      pay for it; prerender never calls it. The full rule set is on D178 and DOC-VIEW-LIFECYCLE §3.
 ---
 
 The contract for the view runtime: animations, skeleton loading, `this.memo()`, app lifecycle hooks, cross-view morphs, element refs, scroll-triggered enters, the `flip` directive, and app-level error handling. See [[DOC-SPEC]] for the section index.

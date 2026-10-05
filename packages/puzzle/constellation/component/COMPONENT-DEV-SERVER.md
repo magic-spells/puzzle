@@ -127,7 +127,10 @@ Binds `127.0.0.1` before printing the banner; a busy port scans up to 10 candida
 file mapping is the shared mode-aware `serve.Resolve`, so dev and preview can't drift:
 SPA keeps history fallback and injects the reload client only into the root index;
 static resolves clean URLs, answers real 404s, and injects the client into EVERY HTML
-response at serve time (disk stays clean). `dev.proxy` prefixes register before the
+response at serve time (disk stays clean). A static miss tries
+`dist/<first-segment>/404.html` before the root `404.html` — the per-locale 404 of
+[[DECISION-D177-LOCALE-URL-PREFIXES]], read from the file layout, not the config; the
+folder must match the segment's case exactly. `dev.proxy` prefixes register before the
 catch-all. `/__puzzle/reload` uses buffered per-client channels and non-blocking
 broadcasts. Before reloading, the client invokes [[COMPONENT-DEVSTATE]]; the page always
 fully reloads.

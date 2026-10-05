@@ -36,11 +36,11 @@ Puzzle prerenders routes at build time in two output modes — `output: 'hybrid'
 `@magic-spells/puzzle/ssg`: `prerender()` is DOM/filesystem-free; `prerenderToDir()`
 writes output for the Go build's node prerender bundle. The orchestrator builds
 Store/Router/Formatter services, calls `beforeMount` with one `{ store, config }` facade
-(receiver and argument), enumerates static route chains, and `assembleChain` preloads
-each chain (`created()` + awaited `data()`, `this.route` set, no `mounted()` or
-animations) into the same nested keyed vnode tree the router's `#navigate` builds. The
-route snapshot has the D83 seven-key shape (static pathname, empty frozen query, `''`
-hash).
+(receiver and argument; plus `locale` when translations are on), enumerates static route
+chains, and `assembleChain` preloads each chain (`created()` + awaited `data()`,
+`this.route` set, no `mounted()` or animations) into the same nested keyed vnode tree the
+router's `#navigate` builds. The route snapshot has the D83 seven-key shape (static
+pathname, empty frozen query, `''` hash).
 
 - **Output paths**: `<path>/index.html`; a top-level catch-all writes `404.html`;
   dynamic/splat routes are skipped with warnings; `prerender: false` writes the plain
@@ -54,8 +54,9 @@ hash).
   escape (`escapeScriptJson`, shared by the data islands); other script/style content
   fails the build on `</script`/`</style` or the `<!--`+`<script` pair.
 - **Head** ([[DECISION-D84-HEAD-MANAGEMENT]]): fields resolve leaf → root through the
-  `head.js` resolver the router shares. `MANAGED_TAGS` (headTags.js) is used ONLY here —
-  the browser syncs only `document.title`. Injection replaces/removes/inserts
+  `head.js` resolver the router shares; a `{ t: 'key' }` title/description resolves
+  through the pass's i18n service (`headText`). `MANAGED_TAGS` (headTags.js) is used ONLY
+  here — the browser syncs only `document.title`. Injection replaces/removes/inserts
   `data-puzzle-head` tags by escaped string surgery, confined to the shell's head region.
 - **Shell plan** ([[DECISION-D151-SHELL-HEAD-OWNERSHIP]]): the shell is read once and
   compiled into build-constant offsets (head span, `<title>`, marker spans, target,
@@ -71,7 +72,23 @@ hash).
 - **Translations** (D175): `loadBuildI18n` reads the staged default-locale table, builds
   one service per pass (which also calls `setFormatLocale(defaultLocale)`), sets
   `ctx.i18n`/`t`, adds a `data-puzzle-locale` JSON island at `</body>` on every page, and
-  `withHtmlLang` rewrites `<html lang>`. Apps without i18n emit byte-identical HTML.
+  `withHtmlLang` rewrites `<html lang>` (and `dir`). Apps without i18n emit byte-identical
+  HTML.
+- **Locale prefix routing** ([[DECISION-D177-LOCALE-URL-PREFIXES]]): `BuildI18n.tables`
+  holds every locale's table and is required — a missing one fails the build. The pass
+  runs locale by locale, default first, creating each locale's service right before its
+  pages (the format locale is module state) and restoring it after; page-module slugs
+  are per route path, shared by every locale. `pageDressing` gives each page its folder
+  (`dist/<locale>/…`), its own island, its `hreflang` alternates (`data-puzzle-head=
+  "alternate"`, a managed set — shell alternates are stripped; none on `*` or
+  `prerender: false` pages) and, on default-locale pages, the first-visit redirect from
+  `ssg/redirect.js` (one function's source text, inlined; the build fails if it contains
+  `</script` or `<!--`; omitted under `detect: false`). A root-relative or same-origin
+  canonical is localized per locale. `site` arrives as a prerender option, making
+  alternates absolute (warned once when absent). `WrittenPage.locale` tags each page.
+- **Sitemap**: with `site`, `prerenderToDir` writes `outDir/sitemap.xml` — every
+  prerendered page except 404 and `prerender: false`, with `xhtml:link` alternates under
+  prefix routing — unless the public folder already shipped one (warned).
 - **Generated entries force-exit** in the summary write's callback
   (`process.stdout.write(…, () => process.exit(0))`): SSG runs `created()` but never
   `destroyed()`, so a timer from `created()` would pin the subprocess until the 120 s
@@ -85,14 +102,20 @@ A prerendered `href` (`link(path)` reads `router.url`) must match the client's.
 - **Static**: `makeRouterStub` over the page snapshot — navigation throws, `current` is
   the snapshot, `url()` is hard-coded to history encoding (static pages are path-shaped
   files with no router, so a hash href would be dead; [[DECISION-D81-STATIC-PAGES-MODE]]);
-  a configured `routerMode` warns; `routerBase` applies.
+  a configured `routerMode` warns; `routerBase` applies. Under prefix routing
+  `localizeRouterStub` (`ssg/assemble.js`) replaces `url` with a locale-aware
+  `url(path, options)` for the page's locale — kept apart from `makeRouterStub` because
+  esbuild keeps unused destructured parameters, so apps without routing ship the
+  one-argument stub. The browser kernel calls the same function.
 - **Hybrid**: the real unstarted memory Router (the takeover needs its compiled table,
   and `current` reads private fields so it can't be wrapped), with `url()` shadowed to
   history encoding over the real `routerBase` and `current` shadowed per page
-  ([[DECISION-D142-HYBRID-ROUTE-SNAPSHOT]]). `prerender()` throws for hybrid + a
-  hash/memory `routerMode`.
-- All three paths call the single `encodeURL(path, mode, base)` (and `normalizeBase`)
-  exported from `router/router.js` — one encoder makes parity structural.
+  ([[DECISION-D142-HYBRID-ROUTE-SNAPSHOT]]); under prefix routing the `url` shadow is
+  re-set per locale. `prerender()` throws for hybrid + a hash/memory `routerMode`.
+- All paths call the single `encodeURL(path, mode, base)` (and `normalizeBase`) exported
+  from `router/router.js`; under prefix routing the base comes from `localeBase` and the
+  option from `linkLocale`, both from the same module. One encoder makes parity
+  structural; `tests/router-locale-prefix.test.js` pins the four encoders per locale.
 
 ## Hybrid mode (D67)
 

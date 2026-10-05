@@ -48,8 +48,8 @@ substitution) and must adopt the rest (see *Sites, pending*).
 
 ## Forces
 
-- **Bytes.** No `i18n` config → zero bytes, bundles byte-identical. With it,
-  ~1.3 KB gzip (measured on `examples/i18n`), not a 10+ KB library.
+- **Bytes.** No `i18n` config → no added code. With it, ~1.3 KB gzip
+  (measured on `examples/i18n`), not a 10+ KB library.
 - **No flash.** First render is in the right language, or (prerendered
   output only) the default language with one swap after load.
 - **The compiler never parses `<script>`**, so only template literals are
@@ -164,8 +164,13 @@ change it and `chunkFilePattern` in `locales.go` must follow.
 
 - **One service, `i18n`**, on `this.ctx.i18n` and `app.i18n` (only when
   configured; the per-view derived ctx inherits via `Object.create`). It has
-  `t(key, vars?)`, `locale`, `locales`, `defaultLocale`, and
+  `t(key, vars?)`, `locale`, `locales`, `defaultLocale`, `dir`, and
   `setLocale(tag)` → promise.
+- **`locales` is a switcher list** since 0.9.0: `[{ locale, label, href,
+  active }]` in config order (**breaking**: 0.8.0 returned `string[]`). Without
+  prefix routing every `href` is the current page; see
+  [[DECISION-D177-LOCALE-URL-PREFIXES]] for the prefix case and the rule to
+  read it in a `data()` that re-runs. `dir` is `'rtl'` or `'ltr'`.
 - **Template `t` is service-bound**: `installTranslate(registry, i18n)`
   registers it right after `makeFormatterRegistry` (so `formatters.js` never
   imports i18n) unless the app registered its own `t`, which wins with D174's
@@ -173,9 +178,9 @@ change it and `chunkFilePattern` in `locales.go` must follow.
 - **No `this.t()` on views**: it would add a method to every view class,
   collide with user methods, and duplicate `ctx`; templates never reach the
   instance anyway (D176).
-- **`<html lang>`** tracks the active locale on load and every switch —
-  except memory routing (no document side effects; also `/testing`'s
-  `createTestApp`).
+- **`<html lang>`** (and `dir`) tracks the active locale on load and every
+  switch — except memory routing (no document side effects; also
+  `/testing`'s `createTestApp`).
 - Static kernel and `/testing` ctx carry the service; `/testing` takes
   `i18n: { locale, strings }` (one table, both active and default).
   `PuzzleApp`/`mountStatic` accept an internal `__i18n`
@@ -186,12 +191,18 @@ change it and `chunkFilePattern` in `locales.go` must follow.
 
 ## Locale selection
 
+This section describes apps without `i18n.routing`. Under `routing: 'prefix'`
+([[DECISION-D177-LOCALE-URL-PREFIXES]]) the URL decides — its prefix, then
+(static) the page's island tag, ahead of the stored choice and
+`navigator.languages`; the prerender runs once per locale; and `setLocale(tag)`
+stores the choice and loads the same page under the other prefix (a full page
+load, no fetch, no rebuild; it still throws the `RangeError` below).
 
 At startup: (1) `localStorage['__puzzleLocale']` (try/catch) if still
 configured; (2) each `navigator.languages` tag in order — exact
 (case-insensitive), then base language (`es-CO` → `es`), then the first
 configured tag with that base (`pt` → `pt-BR`); (3) `defaultLocale`.
-Prerender always uses `defaultLocale`.
+Prerender uses `defaultLocale`.
 
 `setLocale(tag)`:
 
@@ -273,16 +284,21 @@ locale-aware** (D174 identical-output).
 
 ## Static and hybrid output
 
-- Pages prerender in `defaultLocale` from the staged default table (no
-  fetch); the build rewrites the shell's `<html lang>`.
-- **Every prerendered page carries the table** as
+- Without `routing`, pages prerender in `defaultLocale` from the staged
+  default table (no fetch); the build rewrites the shell's `<html lang>`.
+- Under `routing: 'prefix'` every page prerenders once per locale
+  (`dist/<locale>/…`, default locale at the root), each with its own
+  `<html lang>`/`dir`, its own table island and its own format locale; see
+  [[DECISION-D177-LOCALE-URL-PREFIXES]].
+- **Every prerendered page carries its table** as
   `<script type="application/json" data-puzzle-locale="en">` via
   `escapeScriptJson` ([[DECISION-D113-SSG-RAWTEXT-RULE]]) at the last
   `</body>` with the data island ([[DECISION-D151-SHELL-HEAD-OWNERSHIP]]).
   Static `prerender: false` pages carry it; a hybrid `prerender: false` page
   is the verbatim shell and fetches.
-- A viewer in another locale sees the default language first, then one swap
-  (hybrid: before navigation zero; static: before the kernel mount).
+- Without `routing`, a viewer in another locale sees the default language
+  first, then one swap (hybrid: before navigation zero; static: before the
+  kernel mount).
 - Plain SPA fetches the active file during `mount()`.
 
 ## Diagnostics
@@ -298,14 +314,12 @@ translations".
 
 ## Future work (not built)
 
-- **Locale URL prefixes** — recorded design: `i18n: { routing: 'prefix' }`,
-  default locale unprefixed, each page prerendered per locale into
-  `dist/<locale>/…`, URL locale beats storage/navigator, `link` prefixes,
-  `setLocale` navigates, head gains `hreflang` alternates (build-time, D84).
-- Translated route `meta.title` (needs a [[DECISION-D84-HEAD-MANAGEMENT]]
-  amendment, e.g. `meta: { title: { t: 'products.title' } }`).
 - Rich-text translations (a link inside a sentence); key-union types for
-  `puzzle check`; `dir="rtl"`; per-route string splitting; SPA preload hint.
+  `puzzle check`; per-route string splitting; SPA preload hint.
+
+Built since 0.8.0 in [[DECISION-D177-LOCALE-URL-PREFIXES]] (0.9.0): locale URL
+prefixes, translated route `meta.title`/`description` (`{ t: 'key' }`), and
+`<html dir>` / `i18n.dir`.
 
 ## Sites, pending
 
@@ -335,5 +349,3 @@ prototype; the shared `t` conformance rows.
 - **Flat files only** — plural entries force object parsing in Sites anyway.
 - **Strict CLDR `zero`** — forces an `{#if count === 0}` around every English
   empty-state message.
-- **Locale URL prefixes now** — touches routing, prerender, `link`, redirects
-  and head; a release of its own.
