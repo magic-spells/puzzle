@@ -582,6 +582,49 @@ func TestGenerateRejectsMarkerComponentNames(t *testing.T) {
 	}
 }
 
+// Component.pzl is reserved even for routed views and layouts (D180), unlike
+// the composition markers that are only reserved as component tag names.
+func TestGenerateRejectsReservedComponentName(t *testing.T) {
+	cases := []struct {
+		name string
+		opts Options
+	}{
+		{"component", Options{Kind: KindComponent, Name: "Component"}},
+		{"view", Options{Kind: KindView, Name: "Component"}},
+		{"layout", Options{Kind: KindLayout, Name: "Component"}},
+		{"family root", Options{Kind: KindComponent, Name: "Component", Family: []string{"Card"}}},
+		{"family member", Options{Kind: KindComponent, Name: "Frame", Family: []string{"Wrapper", "Component"}}},
+	}
+	for _, lang := range []string{"js", "ts"} {
+		t.Run(lang, func(t *testing.T) {
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					root := newProject(t)
+					if lang == "ts" {
+						if err := os.WriteFile(filepath.Join(root, "tsconfig.json"), []byte("{}\n"), 0o644); err != nil {
+							t.Fatal(err)
+						}
+					}
+					opts := tc.opts
+					opts.Root = root
+					_, err := Generate(opts)
+					if err == nil {
+						t.Fatal("expected the reserved Component name to be refused")
+					}
+					for _, want := range []string{"Component is a reserved built-in tag", "rename Component.pzl", "Card.pzl"} {
+						if !strings.Contains(err.Error(), want) {
+							t.Errorf("error = %q, want it to contain %q", err, want)
+						}
+					}
+					if _, err := os.Stat(filepath.Join(root, "app")); !os.IsNotExist(err) {
+						t.Errorf("a refused name must write nothing (app directory exists: %v)", err)
+					}
+				})
+			}
+		})
+	}
+}
+
 // TestGenerateFamilyHintFollowsPath pins the import specifier the hint prints:
 // `@` is the alias for the project's app/ directory, so a family under app/ is
 // advertised at its real alias path — not the default one — and a family placed
