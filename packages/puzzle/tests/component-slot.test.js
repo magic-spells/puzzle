@@ -7,6 +7,8 @@ import { serialize } from '../client-runtime/ssg/serialize.js';
 import { preloadTakeoverComponents } from '../client-runtime/ssg/preload.js';
 import { ViewManager } from '../client-runtime/views/viewManager.js';
 import CompiledHost from './fixtures/component-slot/Host.compiled.js';
+import CompiledConditional from './fixtures/component-slot/Conditional.compiled.js';
+import CompiledCard from './fixtures/component-slot/Card.compiled.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => h('text', { value });
@@ -230,6 +232,29 @@ describe('<Component> runtime (D180)', () => {
 			expect(child.isDestroyed).toBe(true);
 			expect(modal.parentNode).toBeNull();
 		} finally { fake.finishAll(); fake.uninstall(); }
+	});
+
+	it.each([false, true])('compiled conditional replacement takes the leaving component position (selected: %s)', async (selected) => {
+		const fake = installFakeAnimate();
+		let container;
+		try {
+			const view = await mounted(CompiledConditional, { props: { selected, open: true } });
+			container = view.container;
+			document.body.append(container);
+			const before = view.find('.before');
+			const after = view.find('.after');
+			const modal = view.find('.compiled-card');
+			const child = liveViewList().find((v) => v.constructor === CompiledCard);
+			child.animations = { out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 1000 } };
+			await view.setProps({ selected, open: false });
+			expect(fake.animations).toHaveLength(1);
+			expect(child.isDestroyed).toBe(false);
+			expect([...view.element.children]).toEqual([before, view.find('p'), modal, after]);
+			fake.finishAll();
+			await settled();
+			expect(child.isDestroyed).toBe(true);
+			expect([...view.element.children]).toEqual([before, view.find('p'), after]);
+		} finally { fake.finishAll(); fake.uninstall(); container?.remove(); }
 	});
 
 	it('destroys subscriptions, refs, listeners, and animations before the replacement mounts', async () => {

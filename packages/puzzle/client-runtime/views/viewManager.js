@@ -1205,7 +1205,14 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 		// against a detached node throws NotFoundError and empties the container. The
 		// child's element getter always tracks its current root, so prefer it; fall
 		// back to vnode.el for non-component (or not-yet-mounted) vnodes.
-		const anchor = (oldVnode.isComponent && oldVnode.component?.element) || oldVnode.el;
+		// Removing a Component range drops its comments immediately, but the selected
+		// child's element may stay for its leave. Replace before that live element,
+		// just as for a plain component, instead of after the departing child.
+		const selectedAnchor =
+			(typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
+			oldVnode.tag === COMPONENT_SLOT_TAG &&
+			oldVnode.children[0]?.component?.element;
+		const anchor = selectedAnchor || (oldVnode.isComponent && oldVnode.component?.element) || oldVnode.el;
 		// UNMOUNT FIRST (D170). Vnodes are no longer single-use: a list block's
 		// cached row and a `this.__c[n]` static subtree are the SAME OBJECT in the
 		// outgoing and the incoming tree. Mounting first would overwrite that
