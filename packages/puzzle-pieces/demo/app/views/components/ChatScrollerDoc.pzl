@@ -16,6 +16,7 @@
           <ChatScroller height={ 360 } @pin={ setPinned } class="rounded-xl border border-border bg-page px-2">
             {#for m in rows}
               <ChatMessage
+                key={ m.key }
                 author={ m.author }
                 avatarName={ m.author }
                 time={ m.time }
@@ -119,8 +120,8 @@ events = {
 };
 
 <ChatScroller height={ 360 } @pin={ setPinned }>
-  {#for m in log}
-    <ChatMessage author={ m.author } avatarName={ m.author } time={ m.time }
+  {#for m in log, i}
+    <ChatMessage key={ i } author={ m.author } avatarName={ m.author } time={ m.time }
                  align={ m.align } variant={ m.variant }>{ m.body }</ChatMessage>
   {/for}
 </ChatScroller>
@@ -160,6 +161,8 @@ function decorate(list) {
     const mine = m.author === 'You';
     const showMeta = i === 0 || list[i - 1].author !== m.author;
     return {
+      // The log only ever appends, so a message's position is its identity.
+      key: i,
       author: m.author,
       time: m.time,
       body: m.body,

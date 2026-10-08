@@ -15,7 +15,7 @@
       <ExampleBox code={ codeHero }>
         <div class="grid w-full max-w-2xl grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-4 lg:grid-cols-7">
           {#for v in variants}
-            <div class="flex flex-col items-center gap-3">
+            <div class="flex flex-col items-center gap-3" key={ v.name }>
               <div class="flex h-10 items-center text-ink">
                 <Spinner variant={ v.name } size="lg" label={ v.label }/>
               </div>
@@ -47,7 +47,7 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Variants</h2>
         <dl class="grid gap-x-8 gap-y-5 sm:grid-cols-2">
           {#for v in variants}
-            <div class="flex gap-4">
+            <div class="flex gap-4" key={ v.name }>
               <dt class="flex w-10 shrink-0 justify-center pt-0.5 text-ink">
                 <Spinner variant={ v.name } label={ v.label }/>
               </dt>
@@ -68,7 +68,7 @@
             <span class="text-center font-mono text-code text-muted">md</span>
             <span class="text-center font-mono text-code text-muted">lg</span>
             {#for row in sizeRows}
-              <div class="contents">
+              <div class="contents" key={ row.name }>
                 <span class="font-mono text-code text-muted">{ row.name }</span>
                 <div class="flex justify-center text-ink"><Spinner variant={ row.name } size="sm" label={ row.label }/></div>
                 <div class="flex justify-center text-ink"><Spinner variant={ row.name } size="md" label={ row.label }/></div>

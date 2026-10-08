@@ -39,7 +39,7 @@
         <ExampleBox id="fallback-colors" title="Fallback colors" code={ codeColors } tall={ false }>
           <div class="flex flex-wrap items-center justify-center gap-2">
             {#for person in people}
-              <Avatar name={ person } size="lg" />
+              <Avatar key={ person } name={ person } size="lg" />
             {/for}
           </div>
         </ExampleBox>

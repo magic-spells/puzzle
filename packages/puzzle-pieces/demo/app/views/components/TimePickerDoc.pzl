@@ -109,7 +109,7 @@
             <table class="w-full text-sm">
               <tbody class="divide-y divide-border">
                 {#for row in keys}
-                  <tr>
+                  <tr key={ row.key }>
                     <td class="w-40 whitespace-nowrap px-4 py-2.5 align-top">
                       <kbd class="rounded border border-border bg-surface-sunken px-1.5 py-0.5 font-mono text-xs text-ink">{ row.key }</kbd>
                     </td>

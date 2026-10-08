@@ -48,6 +48,7 @@
           <div class="flex min-h-[3rem] flex-wrap items-start gap-2">
             {#for file in files}
               <ChatAttachment
+                key={ file.name }
                 name={ file.name }
                 size={ file.size }
                 removable
@@ -116,7 +117,7 @@ events = {
 };
 
 {#for file in files}
-  <ChatAttachment name={ file.name } size={ file.size } removable
+  <ChatAttachment key={ file.name } name={ file.name } size={ file.size } removable
                   @remove={ removeFile } />
 {/for}`;
 
