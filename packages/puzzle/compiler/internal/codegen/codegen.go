@@ -1410,6 +1410,7 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 // synthetic `key` attribute — UNLESS the root already carries an explicit `key`
 // (static or dynamic), in which case the author's attribute stands and the
 // synthetic prepend is skipped entirely (D58), in both item and range forms.
+// Component row keys follow all spreads so a prop bag cannot override the key.
 //
 // A LOWERED site (site != nil) inverts that: the row's key is always the
 // block's resolved `key: s.k`, because an explicit key has already moved into
@@ -1446,6 +1447,7 @@ func (c *compiler) forBody(f *parser.For, scope scopeMap, keyExpr expr.Node, ind
 		if !explicitKey {
 			props = append([]parser.Attr{key}, props...)
 		}
+		props = componentRowKeyAfterSpreads(props)
 		if n.Name == "Component" {
 			keyed := *n
 			keyed.Props = props
@@ -1454,6 +1456,29 @@ func (c *compiler) forBody(f *parser.For, scope scopeMap, keyExpr expr.Node, ind
 		return c.emitElement(n.Name, props, n.Children, ind, ind, true, scope)
 	}
 	return "", c.cgErr(f.Pos, "internal error: {#for} body root not an element or component after forBodyRoot")
+}
+
+func componentRowKeyAfterSpreads(props []parser.Attr) []parser.Attr {
+	hasSpread := false
+	for _, prop := range props {
+		if _, ok := prop.(*parser.SpreadAttr); ok {
+			hasSpread = true
+			break
+		}
+	}
+	if !hasSpread {
+		return props
+	}
+	ordered := make([]parser.Attr, 0, len(props))
+	var keys []parser.Attr
+	for _, prop := range props {
+		if hasKeyAttr([]parser.Attr{prop}) {
+			keys = append(keys, prop)
+		} else {
+			ordered = append(ordered, prop)
+		}
+	}
+	return append(ordered, keys...)
 }
 
 // forRowsProvablyKeyed reports whether every row emitted by a loop is known to

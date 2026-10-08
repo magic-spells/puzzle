@@ -11,6 +11,9 @@ func componentSelectorAttrs(attrs []Attr, pos Position, file string) *ParseError
 			continue
 		}
 		name := attrNameOf(attr)
+		if name == "flip" {
+			return errAt(file, attrPos(attr), "flip is not supported on <Component> — put flip on a wrapping element")
+		}
 		if name != "is" {
 			continue
 		}

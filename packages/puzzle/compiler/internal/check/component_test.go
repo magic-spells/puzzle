@@ -18,7 +18,10 @@ func TestComponentInvalidSelectorAndFlipArePositionedCheckErrors(t *testing.T) {
 			}
 		})
 	}
-
+	_, err := emitFiles([]byte("<puzzle-view>\n  <Component is={Card} flip/>\n</puzzle-view>"), "app/views/Home.pzl", ".puzzle/check/src/views/Home.pzl", "")
+	if err == nil || !strings.Contains(err.Error(), "app/views/Home.pzl:2:24: flip is not supported on <Component>") {
+		t.Fatalf("flip check error = %v, want positioned unsupported-attribute rejection", err)
+	}
 }
 
 func TestComponentSelectorAndSpreadExpressionsAreChecked(t *testing.T) {

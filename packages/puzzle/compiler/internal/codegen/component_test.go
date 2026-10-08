@@ -85,6 +85,29 @@ func TestComponentModuleSelectorInvalidatesCachedRows(t *testing.T) {
 	}
 }
 
+func TestComponentLoopKeyWinsOverSpreads(t *testing.T) {
+	for _, tag := range []string{"Component is={Card}", "Card"} {
+		for _, tc := range []struct{ name, body, key string }{
+			{"lowered synthetic", `{#for row in rows}<` + tag + ` {...row.props} title={row.title}/>{/for}`, "s.k"},
+			{"lowered explicit", `{#for row in rows}<` + tag + ` key={row.slug} {...row.props} title={row.title}/>{/for}`, "s.k"},
+			{"map explicit", `{#for row in rows}<` + tag + ` key={prefix + row.slug} {...row.props} title={row.title}/>{/for}`, "__d.prefix + row?.slug"},
+			{"range synthetic", `{#for 1...3, i}<` + tag + ` {...props} title={i}/>{/for}`, "i"},
+			{"range explicit", `{#for 1...3, i}<` + tag + ` key={prefix + i} {...props} title={i}/>{/for}`, "__d.prefix + i"},
+		} {
+			t.Run(tag+"/"+tc.name, func(t *testing.T) {
+				got := compileSrc(t, `<puzzle-view>`+tc.body+`</puzzle-view>
+<script>import Card from './Card.pzl'; export default class Home extends Object {}</script>`)
+				keyIndex := strings.LastIndex(got, "key: "+tc.key)
+				spreadIndex := strings.LastIndex(got, "...(")
+				titleIndex := strings.LastIndex(got, "title:")
+				if spreadIndex < 0 || titleIndex < spreadIndex || keyIndex < titleIndex {
+					t.Fatalf("row key must follow spreads without reordering other props:\n%s", got)
+				}
+			})
+		}
+	}
+}
+
 func TestComponentSelectorHygiene(t *testing.T) {
 	source := `<puzzle-view>
 <Component is={__d} title={capitalize('ready')}/>
