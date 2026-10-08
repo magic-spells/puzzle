@@ -174,6 +174,64 @@ describe('<Component> runtime (D180)', () => {
 		} finally { vm.clear(); }
 	});
 
+	it.each(['conditional', 'keyed row'])('removing a selected %s runs the same hide hooks as a plain component', async (mode) => {
+		for (const selected of [false, true]) {
+			const willHide = vi.fn();
+			const didHide = vi.fn();
+			class Modal extends Card {
+				viewWillHide() { willHide(); }
+				viewDidHide() { didHide(); }
+			}
+			class Conditional extends PuzzleView {
+				data(_params, props) { return props; }
+				render() {
+					const child = selected ? dynamicComponent(Modal, { key: 'modal' }) : h(Modal, { key: 'modal' });
+					return h('main', {}, mode === 'keyed row'
+						? this.getData().open ? [child] : []
+						: [this.getData().open ? child : h('#')]);
+				}
+			}
+			const view = await mounted(Conditional, { props: { open: true } });
+			await view.setProps({ open: false });
+			expect(willHide).toHaveBeenCalledOnce();
+			expect(didHide).toHaveBeenCalledOnce();
+			expect(view.find('.card')).toBeNull();
+		}
+	});
+
+	it('keeps a selected child in place until its normal leave animation finishes', async () => {
+		const fake = installFakeAnimate();
+		const willHide = vi.fn();
+		const didHide = vi.fn();
+		class Modal extends Card {
+			animations = { out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 1000 } };
+			viewWillHide() { willHide(); }
+			viewDidHide() { didHide(); }
+		}
+		class Conditional extends PuzzleView {
+			data(_params, props) { return props; }
+			render() { return h('main', {}, [this.getData().open ? dynamicComponent(Modal) : h('#'), h('input')]); }
+		}
+		try {
+			const view = await mounted(Conditional, { props: { open: true } });
+			const modal = view.find('.card');
+			const child = liveViewList().find((v) => v.constructor === Modal);
+			const destroyAnimated = vi.spyOn(child, 'destroyAnimated');
+			await view.setProps({ open: false });
+			expect(destroyAnimated).toHaveBeenCalledOnce();
+			expect(willHide).toHaveBeenCalledOnce();
+			expect(didHide).not.toHaveBeenCalled();
+			expect(fake.animations).toHaveLength(1);
+			expect(modal.parentNode).toBe(view.element);
+			expect(child.isDestroyed).toBe(false);
+			fake.finishAll();
+			await settled();
+			expect(didHide).toHaveBeenCalledOnce();
+			expect(child.isDestroyed).toBe(true);
+			expect(modal.parentNode).toBeNull();
+		} finally { fake.finishAll(); fake.uninstall(); }
+	});
+
 	it('destroys subscriptions, refs, listeners, and animations before the replacement mounts', async () => {
 		const outside = vi.fn();
 		const destroyed = vi.fn();

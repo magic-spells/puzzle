@@ -103,7 +103,7 @@ export function moveComponentSlot(parent, vnode, ref, end = vnode.slotEnd) {
  * @param {Unmount} unmount
  */
 export function unmountComponentSlot(vnode, unmount) {
-	for (const child of /** @type {ViewNode[]} */ (vnode.children)) unmount(child, true);
+	for (const child of /** @type {ViewNode[]} */ (vnode.children)) unmount(child);
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 		devperfMutation(Number(!!vnode.el?.parentNode) + Number(!!vnode.slotEnd?.parentNode));
 	}
