@@ -54,7 +54,7 @@ or unparseable files are skipped, generated/vendor trees pruned. `.pzl` ASTs yie
 library functions called (the formatter virtual module), `t` literal keys
 (`Usage.TKeys`, key → files, for the missing-key warning; runtime-built keys skipped), and
 the feature facts behind `__PUZZLE_HAS_FLIP__` (a `flip` attr or prop),
-`__PUZZLE_HAS_PORTAL__`, `__PUZZLE_HAS_RAW_AT__` (any raw block). `__PUZZLE_HAS_LAZY__`
+`__PUZZLE_HAS_PORTAL__`, `__PUZZLE_HAS_COMPONENT_SLOT__` (a reserved `<Component>` tag, including nested/skeleton content), `__PUZZLE_HAS_RAW_AT__` (any raw block). `__PUZZLE_HAS_LAZY__`
 comes from reading `.js`/`.ts`-family files (and each `.pzl`'s whole source, before its
 parse) as TEXT for a `lazy(`-shaped call or a `lazy` specifier imported from
 `@magic-spells/puzzle` — `lazy()` lives in `routes.js`, where no template parse reaches.

@@ -47,11 +47,12 @@ func builtinAllowlist() (map[string]bool, error) {
 
 // Usage is the build-wide feature set discovered by ScanUsage.
 type Usage struct {
-	Formatters  map[string]bool
-	HasFlip     bool
-	HasPortal   bool
-	HasRawAt    bool
-	HasSnippets bool
+	Formatters       map[string]bool
+	HasFlip          bool
+	HasPortal        bool
+	HasRawAt         bool
+	HasSnippets      bool
+	HasComponentSlot bool
 	// HasRawHTML: a template calls `raw` or `newline_to_br` (D174) as a text
 	// interpolation's outermost call, which keeps the live-HTML node and the
 	// sanitizer in the bundle.
@@ -93,13 +94,14 @@ func (u Usage) UsesT() bool {
 // WatchBuilder can decide with one == whether the Define set frozen into its
 // esbuild context went stale.
 type Features struct {
-	Flip        bool
-	Portal      bool
-	RawAt       bool
-	Lazy        bool
-	Snippets    bool
-	RawHTML     bool
-	RawSanitize bool
+	Flip          bool
+	Portal        bool
+	RawAt         bool
+	Lazy          bool
+	Snippets      bool
+	RawHTML       bool
+	RawSanitize   bool
+	ComponentSlot bool
 }
 
 // Features projects the scan result onto the define bits. It is exported for
@@ -107,13 +109,14 @@ type Features struct {
 // whether the Defines frozen into an esbuild context went stale.
 func (u Usage) Features() Features {
 	return Features{
-		Flip:        u.HasFlip,
-		Portal:      u.HasPortal,
-		RawAt:       u.HasRawAt,
-		Lazy:        u.HasLazy,
-		Snippets:    u.HasSnippets,
-		RawHTML:     u.HasRawHTML,
-		RawSanitize: u.HasRawSanitize,
+		Flip:          u.HasFlip,
+		Portal:        u.HasPortal,
+		RawAt:         u.HasRawAt,
+		Lazy:          u.HasLazy,
+		Snippets:      u.HasSnippets,
+		RawHTML:       u.HasRawHTML,
+		RawSanitize:   u.HasRawSanitize,
+		ComponentSlot: u.HasComponentSlot,
 	}
 }
 
@@ -276,6 +279,9 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 			collectUsage(child, usage, allow)
 		}
 	case *parser.Component:
+		if node.Name == "Component" {
+			usage.HasComponentSlot = true
+		}
 		// Components carry `flip` too: a component vnode's PROPS are its attrs
 		// (ViewNode `get props()` aliases `attrs`), so the keyed patcher's
 		// `'flip' in newChild.attrs` fast path fires for `<PostCard … flip>`
@@ -375,6 +381,8 @@ func collectAttrCalls(attrs []parser.Attr, usage *Usage, allow map[string]bool) 
 			collectPartCalls(a.Parts, usage, allow)
 		case *parser.DynamicAttr:
 			// A brace-only attribute, prop or marker argument.
+			collectExprCalls(a.ExprAST, nil, usage, allow)
+		case *parser.SpreadAttr:
 			collectExprCalls(a.ExprAST, nil, usage, allow)
 		case *parser.EventAttr:
 			// The handler's own call names a view handler, never the library
@@ -508,6 +516,8 @@ func collectAttrTKeys(attrs []parser.Attr, keys map[string]bool) {
 		case *parser.MixedAttr:
 			collectPartTKeys(a.Parts, keys)
 		case *parser.DynamicAttr:
+			exprTKeys(a.ExprAST, keys)
+		case *parser.SpreadAttr:
 			exprTKeys(a.ExprAST, keys)
 		case *parser.EventAttr:
 			exprTKeysSkipping(a.ExprAST, handlerOwnCalls(a.ExprAST), keys)

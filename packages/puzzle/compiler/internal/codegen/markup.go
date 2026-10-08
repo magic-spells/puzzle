@@ -250,6 +250,10 @@ func (c *compiler) checkAttrExprs(attrs []parser.Attr, where string) error {
 			if err := c.checkExpr(a.ExprAST, where); err != nil {
 				return err
 			}
+		case *parser.SpreadAttr:
+			if err := c.checkExpr(a.ExprAST, "a spread prop"); err != nil {
+				return err
+			}
 		case *parser.MixedAttr:
 			if err := c.checkParts(a.Parts, where); err != nil {
 				return err

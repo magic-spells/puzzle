@@ -86,7 +86,7 @@ gotcha: in a `<script>`, a regex right after `...` or `for (x of` reads as divis
 
 ## Attributes and markup
 
-- Attributes are static, dynamic, mixed, event or valueless. Non-event names with `:`
+- Attributes are static, dynamic, mixed, event, valueless or a standalone `SpreadAttr` (`{...expr}`). A spread stores one `ExprAST` with its source position; the expression grammar itself still rejects spread. Non-event names with `:`
   are reserved unless the prefix is `xml`/`xlink`/`xmlns`; `checkAttrNamespace` runs at
   the NAME in both attribute loops, before the `=` branch, so valued and valueless forms
   reject alike. Event modifiers: `prevent`, `stop`, `once`, `outside` on any event; key
@@ -106,6 +106,10 @@ gotcha: in a `<script>`, a regex right after `...` or `for (x of` reads as divis
   `*Component` construction site, requires `Ident('.'Ident)*` (`$`-free segments); a
   dotted name starting with a marker name (`<Slot.Foo>`) gets a steering error. Not
   checked inside `{#raw}`.
+
+## Runtime component selection (D180)
+
+`parser/component.go` validates the reserved `<Component>` tag while retaining `*Component{Name: "Component"}` in the AST. A required expression-valued `is` is the only selector; missing, valueless, string or duplicate `is` steers. Every other attr is a normal component attr, including `name`, `from` and standalone spreads. `Component.*` is a reserved family error; the compiler owns user filename/import rename diagnostics. The tag is forbidden in islands like every component. The `is` module scope and normal default-slot semantics are compiler/runtime contracts in [[DECISION-D180-COMPONENT-SLOT]] / SPEC §67.
 
 ## Composition markers
 

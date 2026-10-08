@@ -428,6 +428,8 @@ func reservedBindingEmission(name string) (verb, what, why string) {
 		return "imports", "SNIPPET_TAG", "this template contains a <Snippet>"
 	case "PORTAL_TAG":
 		return "imports", "PORTAL_TAG", "this template contains a <Portal>"
+	case "__dc":
+		return "imports", "dynamicComponent as __dc", "this template contains <Component is>"
 	case "__s":
 		return "imports", "the display helper as __s", "this template coerces an interpolation for display"
 	case "__l":

@@ -1230,6 +1230,18 @@ func WriteCheckValue(w CheckWriter, n expr.Node, scope map[string]bool) {
 	newLowerer(w, targetCheck, checkScope(scope), nil).value(n)
 }
 
+// WriteCheckSelectorValue preserves selector-only module references while
+// template locals and arrow parameters retain their usual lexical precedence.
+func WriteCheckSelectorValue(w CheckWriter, n expr.Node, scope map[string]bool, modules map[string]string) {
+	selection := checkScope(scope)
+	for name, ref := range modules {
+		if _, local := selection[name]; !local {
+			selection[name] = ref
+		}
+	}
+	newLowerer(w, targetCheck, selection, nil).value(n)
+}
+
 // WriteCheckEvent writes an @event value as TypeScript for puzzle check. src
 // is the authored value, for the error message of a value that is not a
 // handler form.
