@@ -69,6 +69,9 @@ export const PORTAL_TAG = 'portal';
 // `new ViewNode('#html', { value })`.
 export const HTML_TAG = '#html';
 
+/** Reserved range holding a <Component> selection or its fallback (D180). */
+export const COMPONENT_SLOT_TAG = '#component';
+
 /**
  * The one diagnostic for a reserved '#'-prefixed metadata tag that reached a
  * rendering path (D89 boundary). Every such tag is consumed by expansion before

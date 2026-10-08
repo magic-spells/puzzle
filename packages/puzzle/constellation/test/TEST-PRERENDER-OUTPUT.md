@@ -74,3 +74,5 @@ picks the markup up. Suites under `tests/`: `ssg-*`, `static-kernel`,
 - **Head management:** per-field leaf-to-root resolution and managed-tag surgery
   into both shells, landing before any JS. Head-tag injection is build-time only;
   the tests keep it that way.
+
+- **D180:** `component-slot` serializes selected component HTML and default-slot content, indexed-map expressions and empty null selection through the shared DOM-free assembly/serializer. A selection range adds no visible wrapper; both prerender modes share this machinery.

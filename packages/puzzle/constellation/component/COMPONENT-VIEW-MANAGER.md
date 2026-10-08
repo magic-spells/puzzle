@@ -18,7 +18,7 @@ verified_sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 DOM/component links, plus helpers for text, list keys (`keyOf`), slot markers and
 placeholders. `ViewManager` (views/viewManager.js) mounts, diffs, patches and tears
 those trees down. Satellite modules: `html.js` (live-HTML ranges), `flip.js`,
-`portal.js` ([[FILE-PORTAL]]), `listBlock.js` ([[FILE-LIST-BLOCK]]).
+`portal.js` ([[FILE-PORTAL]]), `componentSlot.js` ([[FILE-COMPONENT-SLOT]]), `listBlock.js` ([[FILE-LIST-BLOCK]]).
 
 ## Reconciliation
 
@@ -62,6 +62,12 @@ those trees down. Satellite modules: `html.js` (live-HTML ranges), `flip.js`,
 - Controlled `value`/`checked` re-sync from the new value on every patch, including
   browser-drifted values (`syncControl`, the one implementation shared with
   `patchAttrs`/`reassertSelectValue`).
+
+## Runtime component slots (D180)
+
+`dynamicComponent` wraps the selected ordinary component vnode in a stable `COMPONENT_SLOT_TAG` (`#component`) range with start/end comments. It remains one sibling position whether selection is empty or contains a selected component. Keyed moves move the whole range. A same-constructor patch delegates to normal `patchChildren` / `patchComponent`, preserving prop reactivity, event callbacks, async mounts and DevTools parentage.
+
+Changing `attrs.selected` unmounts the outgoing children immediately before mounting the replacement, so subscriptions/effects, refs and listeners are gone even when an out animation would delay ordinary removal. Nullish `is` leaves an empty range; children are normal default-slot content. Indexed module maps are ordinary `is` expressions; the runtime consumes the resulting constructor. `__PUZZLE_HAS_COMPONENT_SLOT__` gates the manager's range branches.
 
 ## Identity short-circuit (D170)
 

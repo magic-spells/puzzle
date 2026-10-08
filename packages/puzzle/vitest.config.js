@@ -19,6 +19,7 @@ function pzlModuleGraph() {
 	const compiledDirs = [
 		fileURLToPath(new URL('./tests/fixtures/todos-compiled/', import.meta.url)),
 		fileURLToPath(new URL('./tests/fixtures/slot-forwarding/', import.meta.url)),
+		fileURLToPath(new URL('./tests/fixtures/component-slot/', import.meta.url)),
 	];
 	return {
 		name: 'puzzle-pzl-module-graph',

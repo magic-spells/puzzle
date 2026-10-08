@@ -44,6 +44,7 @@ import {
 	PLACEHOLDER_TAG,
 	PORTAL_TAG,
 	HTML_TAG,
+	COMPONENT_SLOT_TAG,
 	metadataTagError,
 } from '../views/ViewNode.js';
 import { expandSlots } from '../views/viewManager.js';
@@ -218,6 +219,11 @@ async function serializeNode(vnode, ctx, selectState) {
 	// not emitted: takeover re-mounts the tree, it never adopts these nodes.
 	if (vnode.tag === HTML_TAG) return htmlOf(vnode);
 
+	if (vnode.tag === COMPONENT_SLOT_TAG) {
+		let html = '';
+		for (const child of /** @type {ViewNode[]} */ (vnode.children)) html += await serializeNode(child, ctx, selectState);
+		return html;
+	}
 	if (vnode.isComponent) return serializeComponent(vnode, ctx, selectState);
 
 	const tag = /** @type {string} */ (vnode.tag);

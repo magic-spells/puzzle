@@ -29,3 +29,4 @@ export { lazy } from './router/lazy.js';
 export { ViewNode, SLOT_TAG, SNIPPET_TAG, PORTAL_TAG } from './views/ViewNode.js';
 export { displayValue } from './display.js';
 export { listRows, loopItems, loopRange } from './views/listBlock.js';
+export { dynamicComponent } from './views/componentSlot.js';

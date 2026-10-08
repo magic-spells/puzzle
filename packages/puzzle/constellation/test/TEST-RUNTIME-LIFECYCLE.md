@@ -48,3 +48,5 @@ destroy. Suites under `tests/` include `app`, `app-lifecycle-hooks`,
   safe-assign skip sets, snapshot iteration of the subscriber set, batched
   persistence in `flush()`, observed abandoned tracking promises, refs nulled
   after destroy, and the `pagehide` flush.
+
+- **D180:** `component-slot.test.js` pins complete outgoing teardown before a new constructor mounts, including pending async mounts and out animations; `destroys a selected component with a component root before mounting its replacement` proves the synchronous context reaches nested `ViewManager.clear()` and descendant hide hooks cannot postpone cleanup; no surviving subscriptions/listeners/refs, current reactive props and callbacks across swaps, a retained same-constructor instance, null selection and nested/keyed ranges.

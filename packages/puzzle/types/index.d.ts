@@ -1045,6 +1045,9 @@ export declare const SNIPPET_TAG: string;
 /** Reserved tag marking a `<Portal>…</Portal>` teleport (D144). */
 export declare const PORTAL_TAG: string;
 
+/** Compiler support for <Component is={...}>; children are normal slot content. */
+export declare function dynamicComponent(value: unknown, props?: Record<string, any>, children?: ViewNode[]): ViewNode;
+
 /**
  * Render one item-form `{#for}` site (D170). A compiled module imports this as
  * `__l`, and ONLY when it lowers at least one such loop — the same conditional
