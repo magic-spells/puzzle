@@ -288,6 +288,11 @@ CLI — it is unrelated and must not be bumped along with the release.
   variant (`open:flex`).
 - **`{#for}` bodies need a single element root** — precompute per-row role/class in `data()`,
   or wrap in a `display:contents` element.
+- **Every item-form `{#for}` row needs a key.** Precompute a `key` in `data()` and bind
+  `key={ row.key }` on the row root, keyed by a real identity (option value, locale, path)
+  and by position only when the items carry no id. A row with neither a `key` nor an `.id`
+  makes the consumer's console log `{#for} item … has no usable key`.
+  `test/for-keys.test.js` fails on a new keyless loop.
 - `inert={ !open }` compiles fine; `aria-hidden` needs the **string** form.
 - **Focus flash:** Tailwind's `transition-colors` animates `outline-color`, so an outline
   color set only under `focus-visible:` flashes from the default on every focus. Set the

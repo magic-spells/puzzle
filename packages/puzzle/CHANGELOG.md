@@ -586,6 +586,19 @@ you see:
 - `raw` and `newline_to_br` ranges move safely when page translation wraps or
   relocates their nodes; an unreachable range end cannot loop indefinitely.
 
+### Fixed
+
+- **Pieces no longer log `{#for} item (Object) has no usable key`.** Eleven
+  pieces looped over rows with no `key` and no `.id`, so each list fell back
+  to positional diffing and the app's console warned once per session. Every
+  item-form `{#for}` row in the registry now has a key. `sidebar`,
+  `breadcrumb`, `dropzone`, `stepper` and `timeline` key by position,
+  because their items carry no id. `radio-group` keys by the option's
+  `value`, `time-picker` by the column, `chat-attachment` by the icon path,
+  `spinner` by the part's index, and `bar-chart` and `pie-chart` by the
+  mark keys they already computed but never used.
+  Re-add a piece with `puzzle add piece <name> --overwrite` to pick up the fix.
+
 ## 0.8.1 — 2026-10-04 (Go module only)
 
 A Go-module-only release of the template language: the tag is
