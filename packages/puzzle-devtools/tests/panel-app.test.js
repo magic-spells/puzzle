@@ -961,6 +961,37 @@ describe.skipIf(!built)('Views panel', () => {
 		expect(treeIds()).not.toContain('10');
 	});
 
+	it('shows a dynamic Component replacement and its nested child as ordinary component views', async () => {
+		// <Component> mounts a normal child instance. Its anchored range has no
+		// view id; the existing events and snapshot describe the selected child.
+		bridge.world.views[0].children[0].children[0] = {
+			id: 9,
+			name: 'BacktestCard',
+			module: 'components/BacktestCard.pzl',
+			children: [{ id: 10, name: 'TaskCard', module: 'components/TaskCard.pzl', children: [] }],
+		};
+		bridge.world.inspect[9] = {
+			name: 'BacktestCard', module: 'components/BacktestCard.pzl',
+			params: {}, props: { title: 'Current backtest' }, model: {}, local: {},
+		};
+		bridge.emit('view-destroyed', { id: 3 });
+		bridge.emit('view-mounted', { id: 9, name: 'BacktestCard', module: 'components/BacktestCard.pzl' });
+		bridge.emit('view-mounted', { id: 10, name: 'TaskCard', module: 'components/TaskCard.pzl' });
+		await settle(app, 220);
+
+		expect(treeIds()).toEqual(['1', '2', '9', '10', '4', '5']);
+		expect(treeRow('3')).toBeNull();
+		expect(treeRow('9').textContent).toContain('BacktestCard');
+		expect(treeRow('10').textContent).toContain('TaskCard');
+		expect(treeRow('9').style.paddingLeft).toBe('31px');
+		expect(treeRow('10').style.paddingLeft).toBe('43px');
+
+		treeRow('9').click();
+		await settle(app, 60);
+		expect(bridge.payloadsFor('inspect:view')).toEqual([{ id: 9 }]);
+		expect(document.body.textContent).toContain('Current backtest');
+	});
+
 	it('walks the visible rows with the arrow keys', async () => {
 		const list = document.querySelector('[aria-label="View tree"]');
 		list.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
