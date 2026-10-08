@@ -1,7 +1,7 @@
 <puzzle-view>
   <ol class={ listClass } aria-label={ label }>
     {#for item in items}
-      <li class={ item.rowClass }>
+      <li class={ item.rowClass } key={ item.key }>
         {#if !item.isLast}
           <span aria-hidden="true" class="absolute left-3 top-3 bottom-0 w-px -translate-x-1/2 bg-border"></span>
         {/if}
@@ -127,6 +127,8 @@ export default class Timeline extends PuzzleView {
       const hasOwnNumber = it.number !== undefined && it.number !== null && it.number !== '';
       const number = hasOwnNumber ? it.number : numbered ? i + 1 : '';
       return {
+        // Items carry no id of their own; the position is the row key.
+        key: i,
         title: it.title || '',
         time: it.time || '',
         description: it.description || '',

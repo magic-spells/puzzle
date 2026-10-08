@@ -1,7 +1,7 @@
 <puzzle-view>
   <ol class={ rootClass } role="list" aria-label={ navLabel }>
     {#for step in steps}
-      <li class={ step.itemClass } aria-current={ step.currentAttr }>
+      <li class={ step.itemClass } aria-current={ step.currentAttr } key={ step.index }>
         <div class={ step.gutterClass }>
           {#if step.interactive}
             <button
