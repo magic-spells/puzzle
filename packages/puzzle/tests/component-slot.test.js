@@ -257,6 +257,46 @@ describe('<Component> runtime (D180)', () => {
 		} finally { fake.finishAll(); fake.uninstall(); container?.remove(); }
 	});
 
+	it.each(['dispatcher', 'selected dispatcher', 'nested dispatcher', 'selected nested dispatcher'])(
+		'conditional replacement takes the leaving child position through a %s', async (shape) => {
+			const fake = installFakeAnimate();
+			class Modal extends Card {
+				animations = { out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 1000 } };
+			}
+			class Dispatcher extends PuzzleView {
+				render() { return dynamicComponent(Modal, { title: 'selected' }); }
+			}
+			class NestedDispatcher extends PuzzleView {
+				render() { return dynamicComponent(Dispatcher); }
+			}
+			class Conditional extends PuzzleView {
+				data(_params, props) { return props; }
+				render() {
+					const Row = shape.includes('nested') ? NestedDispatcher : Dispatcher;
+					const child = shape.startsWith('selected') ? dynamicComponent(Row) : h(Row);
+					return h('main', {}, [h('input', { class: 'before' }),
+						this.getData().open ? child : h('p', {}, [text('closed')]),
+						h('input', { class: 'after' })]);
+				}
+			}
+			try {
+				const view = await mounted(Conditional, { props: { open: true } });
+				const before = view.find('.before');
+				const after = view.find('.after');
+				const modal = view.find('.card');
+				const child = liveViewList().find((v) => v.constructor === Modal);
+				await view.setProps({ open: false });
+				expect(fake.animations).toHaveLength(1);
+				expect(child.isDestroyed).toBe(false);
+				expect([...view.element.children]).toEqual([before, view.find('p'), modal, after]);
+				fake.finishAll();
+				await settled();
+				expect(child.isDestroyed).toBe(true);
+				expect([...view.element.childNodes]).toEqual([before, view.find('p'), after]);
+			} finally { fake.finishAll(); fake.uninstall(); }
+		}
+	);
+
 	it('destroys subscriptions, refs, listeners, and animations before the replacement mounts', async () => {
 		const outside = vi.fn();
 		const destroyed = vi.fn();

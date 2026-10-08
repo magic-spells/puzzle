@@ -45,7 +45,7 @@ real DOM, and what it promises not to touch. Suites under `tests/` include
   subtree caching, including control-value replay into cached rows.
 - the component prop bailout — the shallow-equality boundary that decides
   whether a child re-renders at all.
-- `component-slot` (D180): stable comment-bracketed positions for empty/selected output, keyed moves of whole ranges through component roots, compiled conditional replacements before the leaving selected element with the same order as plain components, recursive nested component-root range ends and unknown-tree recovery; current props/events through the ordinary selected component path, and immediate cleanup on constructor changes. A compiled-out feature diagnostic names `<Component>` and its own build gate.
+- `component-slot` (D180): stable comment-bracketed positions for empty/selected output, keyed moves of whole ranges through component roots, compiled conditional replacements before the leaving selected element with the same order as plain components, plus dispatcher and nested-dispatcher replacements both directly and inside a selection in a detached host, recursive nested component-root range ends and unknown-tree recovery; current props/events through the ordinary selected component path, and immediate cleanup on constructor changes. A compiled-out feature diagnostic names `<Component>` and its own build gate.
 - `island` freezing children after mount while its own attrs and listeners keep
   patching; inline SVG arriving as string children.
 - per-node listeners, `@event` modifiers, key filters, and the `outside`

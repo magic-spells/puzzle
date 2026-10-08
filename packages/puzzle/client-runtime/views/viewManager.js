@@ -1205,14 +1205,7 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 		// against a detached node throws NotFoundError and empties the container. The
 		// child's element getter always tracks its current root, so prefer it; fall
 		// back to vnode.el for non-component (or not-yet-mounted) vnodes.
-		// Removing a Component range drops its comments immediately, but the selected
-		// child's element may stay for its leave. Replace before that live element,
-		// just as for a plain component, instead of after the departing child.
-		const selectedAnchor =
-			(typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
-			oldVnode.tag === COMPONENT_SLOT_TAG &&
-			oldVnode.children[0]?.component?.element;
-		const anchor = selectedAnchor || (oldVnode.isComponent && oldVnode.component?.element) || oldVnode.el;
+		const anchor = (oldVnode.isComponent && oldVnode.component?.element) || oldVnode.el;
 		// UNMOUNT FIRST (D170). Vnodes are no longer single-use: a list block's
 		// cached row and a `this.__c[n]` static subtree are the SAME OBJECT in the
 		// outgoing and the incoming tree. Mounting first would overwrite that
@@ -1221,20 +1214,22 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 		// — while the old one leaks its subscriptions, and releaseSubtree would sweep
 		// the NEW element's document-level `outside` listeners.
 		//
-		// The insertion reference is captured BEFORE the unmount and resolved after
-		// it, so both removal shapes keep today's placement: an element animating out
-		// (D58/D85 destroyAnimated, registered in leavingEls) is still in the DOM, so
-		// the new element is inserted before it exactly as it was; a synchronous
-		// removal leaves the captured next sibling as the ref.
-		// A live-HTML range (D174) ends at its last parsed node, not at its comment.
-		const next = lastNode(oldVnode)?.nextSibling ?? null;
+		// Capture the complete old range before unmount. Selection comments disappear
+		// immediately, including through dispatcher component roots, while a child's
+		// leaving element can remain. Replace before the first surviving range node;
+		// synchronous removal falls back to the sibling after the range. Live HTML
+		// (D174) also ends at its last parsed node rather than its start comment.
+		const end = lastNode(oldVnode);
+		const next = end?.nextSibling ?? null;
+		const oldNodes = [];
+		for (let node = anchor; node; node = node.nextSibling) {
+			oldNodes.push(node);
+			if (node === end) break;
+		}
 		unmount(oldVnode);
 		const ref =
-			anchor && anchor.isConnected
-				? anchor
-				: next && next.parentNode === parent
-					? next
-					: null;
+			oldNodes.find((node) => node.parentNode === parent) ??
+			(next?.parentNode === parent ? next : null);
 		mount(newVnode, parent, ref, ctx, owner);
 		return;
 	}
