@@ -40,14 +40,16 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   <Breadcrumb items={ trail }/>
 //   <Breadcrumb items={ trail } class="mb-4"/>
 //
-// items: [{ label, href }]  — href is ignored on the final item
+// items: [{ label, href, id? }]  — href is ignored on the final item; id, when
+// given, is the row key (the position otherwise)
 export default class Breadcrumb extends PuzzleView {
   data(params, props) {
     const src = props.items || [];
     const last = src.length - 1;
     const items = src.map((item, i) => ({
-      // Crumbs carry no id, and the last one drops its href, so the position is the row key.
-      key: i,
+      // The caller's id when it gives one, else the position: the last crumb drops
+      // its href, so the href cannot be the key.
+      key: item.id ?? i,
       label: item.label,
       // Drop the href on the current-page crumb — it renders as plain text.
       href: i === last ? undefined : item.href,

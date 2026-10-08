@@ -78,6 +78,17 @@ notes:
       items carry no id (Sidebar keeps its existing `index`, which already owns the open map and
       ids). Loops whose rows carry an `id` may stay implicit. `test/for-keys.test.js` fails on any
       new keyless loop unless it is listed in its ID_KEYED set.
+  - kind: gotcha
+    text: >-
+      Correction to the previous note (`{#for}` keys): bar-chart and pie-chart did NOT log "no
+      usable key". Their marks carry an `.id`, so ViewNode.keyOf keyed them. bar-chart never warned.
+      pie-chart logged a DUPLICATE-key warning when one slice filled the whole circle: slicePaths
+      splits it into two paths that shared the slice's `id`. Binding the per-path `m.key` fixes
+      that. Nine pieces hit the no-usable-key warning: sidebar, radio-group, breadcrumb, dropzone,
+      stepper, timeline, time-picker (columns), chat-attachment and spinner. breadcrumb, stepper and
+      timeline now key by the caller's `id` when it gives one, and by position otherwise.
+      test/for-keys.test.js removes HTML comments before scanning, and its ID_KEYED allow-list is
+      per file, with a count for each loop name.
 ---
 
 # The registry — source of truth

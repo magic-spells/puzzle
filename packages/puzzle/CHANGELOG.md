@@ -588,16 +588,22 @@ you see:
 
 ### Fixed
 
-- **Pieces no longer log `{#for} item (Object) has no usable key`.** Eleven
+- **Pieces no longer log `{#for} item (Object) has no usable key`.** Nine
   pieces looped over rows with no `key` and no `.id`, so each list fell back
   to positional diffing and the app's console warned once per session. Every
-  item-form `{#for}` row in the registry now has a key. `sidebar`,
-  `breadcrumb`, `dropzone`, `stepper` and `timeline` key by position,
-  because their items carry no id. `radio-group` keys by the option's
-  `value`, `time-picker` by the column, `chat-attachment` by the icon path,
-  `spinner` by the part's index, and `bar-chart` and `pie-chart` by the
-  mark keys they already computed but never used.
-  Re-add a piece with `puzzle add piece <name> --overwrite` to pick up the fix.
+  item-form `{#for}` row in the registry now has a key. `radio-group` keys by
+  the option's `value`, `time-picker` by the column, `chat-attachment` by the
+  icon path and `spinner` by the part's index. `breadcrumb`, `stepper` and
+  `timeline` key by an item's `id` when the caller gives one, and by position
+  otherwise. `sidebar` and `dropzone` key by position, because their items
+  carry no id.
+- **`pie-chart` no longer warns about a duplicate key** when one slice fills
+  the whole circle. That slice draws two paths, and both were keyed by the
+  slice's `id`. Each path now has its own key, and `bar-chart` binds its
+  per-bar keys the same way.
+
+Re-add a piece with `puzzle add piece <name> --overwrite` to pick up these
+fixes.
 
 ## 0.8.1 — 2026-10-04 (Go module only)
 
