@@ -15,6 +15,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
+import { dynamicComponent } from '../client-runtime/views/componentSlot.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -50,6 +51,36 @@ afterEach(() => {
 });
 
 describe('render() returning null clears the mounted DOM', () => {
+	it.each([false, true])('re-anchors after the complete Component range (selected: %s)', async (selected) => {
+		const el = container();
+		class Child extends PuzzleView {
+			render() { return h('span', { class: 'child' }, [text('selected')]); }
+		}
+		class Host extends PuzzleView {
+			data(_params, props) { return props; }
+			render() { return this.getData().hide ? null : dynamicComponent(selected ? Child : null); }
+		}
+		const before = document.createElement('input');
+		el.append(before);
+		const host = await new Host().mount(el);
+		await flush();
+		const after = document.createElement('input');
+		el.append(after);
+		try {
+			await host.refresh({ props: { hide: true } });
+			expect(el.childNodes).toHaveLength(3);
+			expect([...el.childNodes]).toEqual([before, host.element, after]);
+			expect(host.element.nodeType).toBe(8);
+			await host.refresh({ props: { hide: true } });
+			expect([...el.childNodes]).toEqual([before, host.element, after]);
+			await host.refresh({ props: { hide: false } });
+			await flush();
+			expect(el.firstChild).toBe(before);
+			expect(el.lastChild).toBe(after);
+			expect(el.querySelectorAll('.child')).toHaveLength(selected ? 1 : 0);
+		} finally { host.destroy(); }
+	});
+
 	it('vnode → null empties the DOM; null → vnode mounts fresh and stays interactive', async () => {
 		const el = container();
 		const v = await new Toggling().mount(el);

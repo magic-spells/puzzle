@@ -79,6 +79,8 @@ single-flight, and delegates to the Router (routed) or the parent's `refresh()`
 (child). A routed retry keeps the error view up until a rebuild commits. Error-view
 failures report as `phase: 'error-view'` without recursion.
 
+A hand-written `render()` returning null clears its mounted tree and reserves the same position with a comment. Re-anchoring captures the sibling after `elementEnd`, outside the complete range even when the root is an empty or selected `<Component>`; repeated nulls reuse that position and later content remounts before trailing siblings.
+
 ## Refs and two-way binding
 
 Static `ref="name"` uses cached `__ref` callbacks. `__bind(target, key, spec)`

@@ -42,7 +42,7 @@ destroy. Suites under `tests/` include `app`, `app-lifecycle-hooks`,
 - **View:** the two-layer `data()` / `setData()` split, tracked store reactivity
   across the full subscription loop, `refresh()`, `memo()`, skeleton loading
   with the `min-duration` hold, element refs, `render()` returning null clearing
-  the mounted DOM without disturbing the skeleton path, and teardown guards — a
+  the mounted DOM without disturbing the skeleton path; empty and selected Component-root ranges re-anchor outside their complete boundaries and remount between their original siblings, and teardown guards — a
   throwing `destroyed()` must not wedge the cascade or half-unmount the app.
 - `soft-launch-runtime-fixes` is a cross-cutting hardening set: unified
   safe-assign skip sets, snapshot iteration of the subscriber set, batched
