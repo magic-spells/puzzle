@@ -17,3 +17,7 @@ Theme: public sites with real pages for each language and dynamic content, plus 
 - `i18n.locales` returns `{ locale, label, href, active }[]`; code needing tags maps each entry's `locale`.
 - `Component` is a reserved built-in tag/family root. Rename a user component or imported tag binding named `Component`.
 - No npm `0.8.1` exists; that version belongs to the independently tagged `puzzle-lang` Go module.
+
+## Editor grammar follow-ups
+
+The separate puzzle-vscode, puzzle-sublime and puzzle-zed repositories need `Component` built-in highlighting for D180. Extend Zed's self-closing whitelist to include `Component`. These grammar updates remain out-of-repo release follow-ups.

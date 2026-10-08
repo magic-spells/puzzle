@@ -21,7 +21,7 @@ verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 Plain base class (views/PuzzleView.js) for every component, view and layout. It owns
 state, lifecycle, tracked `data()` evaluation, refresh tokens, animations, refs and
 update scheduling; [[COMPONENT-VIEW-MANAGER]] owns the DOM. The author-facing class
-contract is [[DOC-SPEC-ANATOMY]] §4 and [[DOC-SPEC-VIEW]].
+contract is [[DOC-SPEC-ANATOMY]] §4 and [[DOC-SPEC-VIEW]]. The internal `elementEnd` getter follows the live manager or error view to the end of a component's complete DOM range, recursively through component-root selections; `element` remains its first node.
 
 ## The per-view ctx
 

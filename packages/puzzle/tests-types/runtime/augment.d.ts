@@ -59,7 +59,7 @@ declare module '../../client-runtime/views/PuzzleView.js' {
 
 declare module '../../client-runtime/views/ViewNode.js' {
 	interface ViewNode {
-		/** Closing comment of a <Component> selection/fallback range (D180). */
+		/** Closing comment of a <Component> selection range (D180). */
 		slotEnd?: Comment;
 		/** An html vnode's parsed nodes (views/html.js). */
 		nodes?: ChildNode[];

@@ -109,7 +109,7 @@ gotcha: in a `<script>`, a regex right after `...` or `for (x of` reads as divis
 
 ## Runtime component selection (D180)
 
-`parser/component.go` validates the reserved `<Component>` tag while retaining `*Component{Name: "Component"}` in the AST. A required expression-valued `is` is the only selector; missing, valueless, string or duplicate `is` steers. Every other attr is a normal component attr, including `name`, `from` and standalone spreads. `Component.*` is a reserved family error; the compiler owns user filename/import rename diagnostics. The tag is forbidden in islands like every component. The `is` module scope and normal default-slot semantics are compiler/runtime contracts in [[DECISION-D180-COMPONENT-SLOT]] / SPEC §67.
+`parser/component.go` validates the reserved `<Component>` tag while retaining `*Component{Name: "Component"}` in the AST. A required expression-valued `is` is the only selector; missing, valueless, string, number, boolean, template-literal or duplicate `is` steers, including non-component literals inside braces. Nullish selectors remain valid. An authored `flip` attribute is a positioned error steering to a wrapping keyed element. Every other attr is a normal component attr, including `name`, `from` and standalone spreads. `Component.*` is a reserved family error; the compiler owns user filename/import rename diagnostics. The tag is forbidden in islands like every component. The `is` module scope and normal default-slot semantics are compiler/runtime contracts in [[DECISION-D180-COMPONENT-SLOT]] / SPEC §67.
 
 ## Composition markers
 

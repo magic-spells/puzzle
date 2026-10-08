@@ -12,7 +12,7 @@ connections:
 
 # Component selector validation
 
-The parser half of DECISION-D180-COMPONENT-SLOT in the framework plan (`repo=puzzle`): `<Component is={value}>` is a `Component` AST node with a reserved exact name. The authored `is` selector is required, unique and expression-valued; a spread cannot supply it. Missing, valueless, string or duplicate `is` gives a positioned error.
+The parser half of DECISION-D180-COMPONENT-SLOT in the framework plan (`repo=puzzle`): `<Component is={value}>` is a `Component` AST node with a reserved exact name. The authored `is` selector is required, unique and expression-valued; a spread cannot supply it. Missing, valueless, string, number, boolean, template-literal or duplicate `is` gives a positioned error, including those non-component literals inside braces; null/undefined remain valid selectors. An authored `flip` attribute is rejected with a wrapping-element hint; `@flip` remains an ordinary callback prop.
 
 Every other attribute uses normal component rules, including ordinary `name`/`from` props and `SpreadAttr` (`ast.go`/`parser.go`). Event callback attrs remain props; component `bind:` stays unsupported. No lexer or expression-language spelling changes.
 

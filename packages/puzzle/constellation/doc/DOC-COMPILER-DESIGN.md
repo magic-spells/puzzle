@@ -73,9 +73,9 @@ Emission contracts:
 - **Caching (D170).** Data-independent handlers and ref setters are cached per
   instance; an item-form `{#for}` lowers to a persistent list block with
   row-scoped handler caches; maximal static subtrees are allocated once.
-- List rows get primary-key-aware automatic keys unless `key` overrides.
+- List rows get primary-key-aware automatic keys unless `key` overrides; the resolved row key follows component prop spreads and wins over them.
 - Conditionals emit placeholders to keep sibling arity stable.
-- **Runtime component selection (D180):** `is` lowers with loop/snippet/arrow bindings before script module bindings before data. Other props keep normal data scope; `{...props}` operands are ordinary expressions merged in written order. Emission imports `dynamicComponent as __dc` only when used, never a registry; children are ordinary default-slot content. `name` and `from` retain normal prop semantics. `__PUZZLE_HAS_COMPONENT_SLOT__` gates stable range machinery.
+- **Runtime component selection (D180):** `is` lowers with loop/snippet/arrow bindings before script module bindings before data. Other props keep normal data scope; `{...props}` operands are ordinary expressions merged in written order. Emission imports `dynamicComponent as __dc` only when used, never a registry; children are ordinary default-slot content. `name` and `from` retain normal prop semantics. Imports/`const` selectors preserve row caching; module `let`/`var` reads make enclosing cached loops volatile. Mutating a const map's entries in place is not observed by cached rows. Non-component literal selectors and authored `flip` on `<Component>` are compile errors. `__PUZZLE_HAS_COMPONENT_SLOT__` gates stable range machinery.
 - Component children, named slots, snippets and router outlets share one
   composition mechanism under distinct spellings.
 

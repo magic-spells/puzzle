@@ -12,3 +12,5 @@ connections:
 ---
 
 Source binding for the D180 `dynamicComponent` helper and range lifecycle. Behavioral intent lives in [[COMPONENT-VIEW-MANAGER]] and [[DECISION-D180-COMPONENT-SLOT]]; this module selects only supplied constructors and delegates child components to the normal mount/patch/teardown paths.
+
+Only changing `is` uses immediate child teardown. Removing the slot itself calls ordinary unmount so the selected child's hide hooks and leave transition run. Its range mover also accepts a resolved end from the manager for a component-root selection or live-HTML range.
