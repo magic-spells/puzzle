@@ -33,6 +33,14 @@ func TestComponentSelectorErrors(t *testing.T) {
 		{`<Component {...props}/>`, "requires is={value}"},
 		{`<Component is/>`, "requires a value"},
 		{`<Component is="Card"/>`, "requires a component value expression"},
+		{`<Component is={"Card"}/>`, "requires a component value expression"},
+		{`<Component is={'Card'}/>`, "requires a component value expression"},
+		{`<Component is={5}/>`, "requires a component value expression"},
+		{`<Component is={-5}/>`, "requires a component value expression"},
+		{`<Component is={true}/>`, "requires a component value expression"},
+		{`<Component is={false}/>`, "requires a component value expression"},
+		{"<Component is={`Card`}/>", "requires a component value expression"},
+		{"<Component is={`Card${kind}`}/>", "requires a component value expression"},
 		{`<Component is={Card} is={Other}/>`, "duplicate is"},
 		{`<Component.Card/>`, "rename the component or import"},
 		{`<div {...props}/>`, "only supported on component tags"},
@@ -48,6 +56,10 @@ func TestComponentSelectorErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestComponentNullishSelectorsRemainValid(t *testing.T) {
+	parseContent(t, `<Component is={null}/><Component is={undefined}/>`)
 }
 
 func TestSpreadExpressionKeepsPositionAndBindings(t *testing.T) {

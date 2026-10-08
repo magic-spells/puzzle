@@ -8,6 +8,19 @@ import (
 	"testing"
 )
 
+func TestComponentInvalidSelectorAndFlipArePositionedCheckErrors(t *testing.T) {
+	for _, selector := range []string{`"Card"`, `'Card'`, "5", "-5", "true", "false", "`Card`", "`Card${kind}`"} {
+		t.Run(selector, func(t *testing.T) {
+			source := []byte("<puzzle-view>\n  <Component is={" + selector + "}/>\n</puzzle-view>")
+			_, err := emitFiles(source, "app/views/Home.pzl", ".puzzle/check/src/views/Home.pzl", "")
+			if err == nil || !strings.Contains(err.Error(), "app/views/Home.pzl:2:14: <Component is> requires a component value expression") {
+				t.Fatalf("selector check error = %v, want positioned literal rejection", err)
+			}
+		})
+	}
+
+}
+
 func TestComponentSelectorAndSpreadExpressionsAreChecked(t *testing.T) {
 	for _, language := range []string{"js", "ts"} {
 		t.Run(language, func(t *testing.T) {
