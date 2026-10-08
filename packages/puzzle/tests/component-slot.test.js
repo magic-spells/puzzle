@@ -5,6 +5,7 @@ import { mountView, settled, installFakeAnimate } from '../client-runtime/testin
 import { liveViewList } from '../client-runtime/devstate.js';
 import { serialize } from '../client-runtime/ssg/serialize.js';
 import { preloadTakeoverComponents } from '../client-runtime/ssg/preload.js';
+import { ViewManager } from '../client-runtime/views/viewManager.js';
 import CompiledHost from './fixtures/component-slot/Host.compiled.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
@@ -12,6 +13,7 @@ const text = (value) => h('text', { value });
 const handles = [];
 afterEach(() => {
 	for (const handle of handles.splice(0)) handle.destroy();
+	vi.unstubAllGlobals();
 	vi.restoreAllMocks();
 });
 async function mounted(Class, options) {
@@ -37,7 +39,6 @@ class Host extends PuzzleView {
 		return h('main', {}, [dynamicComponent(current, { title, close }, [h('b', {}, [text(content)])]), h('input', { class: 'sibling' })]);
 	}
 }
-
 describe('<Component> runtime (D180)', () => {
 	it('runs compiler output with indexed module selection, ordered spreads, events, and default slots', async () => {
 		const onclose = vi.fn();
@@ -92,6 +93,15 @@ describe('<Component> runtime (D180)', () => {
 		for (const value of ['Card', {}, false, () => {}]) {
 			expect(() => dynamicComponent(value)).toThrow('imported Puzzle component');
 		}
+	});
+
+	it('names <Component> when its runtime support was compiled out', () => {
+		vi.stubGlobal('__PUZZLE_HAS_COMPONENT_SLOT__', false);
+		const vm = new ViewManager(document.createElement('div'));
+		const tree = dynamicComponent(Card);
+		expect(() => vm.render(tree)).toThrow('<Component> support was compiled out');
+		expect(() => vm.render(tree)).toThrow('__PUZZLE_HAS_COMPONENT_SLOT__ is false');
+		vm.clear();
 	});
 
 	it('destroys subscriptions, refs, listeners, and animations before the replacement mounts', async () => {
