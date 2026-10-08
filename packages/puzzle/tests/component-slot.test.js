@@ -39,6 +39,17 @@ class Host extends PuzzleView {
 		return h('main', {}, [dynamicComponent(current, { title, close }, [h('b', {}, [text(content)])]), h('input', { class: 'sibling' })]);
 	}
 }
+class ComponentRoot extends PuzzleView {
+	data(_params, props) { return props; }
+	render() { return dynamicComponent(Card, this.getData()); }
+}
+class NestedComponentRoot extends ComponentRoot {
+	render() { return dynamicComponent(ComponentRoot, this.getData()); }
+}
+class ForwardedComponentRoot extends ComponentRoot {
+	render() { return h(NestedComponentRoot, this.getData()); }
+}
+
 describe('<Component> runtime (D180)', () => {
 	it('runs compiler output with indexed module selection, ordered spreads, events, and default slots', async () => {
 		const onclose = vi.fn();
@@ -102,6 +113,65 @@ describe('<Component> runtime (D180)', () => {
 		expect(() => vm.render(tree)).toThrow('<Component> support was compiled out');
 		expect(() => vm.render(tree)).toThrow('__PUZZLE_HAS_COMPONENT_SLOT__ is false');
 		vm.clear();
+	});
+
+	it.each([ComponentRoot, NestedComponentRoot, ForwardedComponentRoot].map((Row) => [Row.name, Row]))(
+		'keyed rows with %s roots move their entire ranges', async (_name, Row) => {
+			class List extends PuzzleView {
+				data(_params, props) { return props; }
+				render() { return h('main', {}, this.getData().items.map((id) => h(Row, { key: id, title: id }))); }
+			}
+			const view = await mounted(List, { props: { items: ['a', 'b', 'c'] } });
+			const a = view.find('.card');
+			await view.setProps({ items: ['c', 'b', 'a'] });
+			expect(view.findAll('.card').map((node) => node.textContent)).toEqual(['c', 'b', 'a']);
+			expect(view.findAll('.card')[2]).toBe(a);
+			await view.setProps({ items: ['c', 'a'] });
+			expect(view.findAll('.card').map((node) => node.textContent)).toEqual(['c', 'a']);
+			await view.setProps({ items: [] });
+			expect(view.element.childNodes).toHaveLength(0);
+		}
+	);
+
+	it.each([ComponentRoot, NestedComponentRoot, ForwardedComponentRoot].map((Row) => [Row.name, Row]))(
+		'conditional replacement of %s stays between its siblings', async (_name, Row) => {
+			class Conditional extends PuzzleView {
+				data(_params, props) { return props; }
+				render() {
+					return h('main', {}, [h('input', { class: 'before' }),
+						this.getData().open ? h(Row, { title: 'selected' }) : h('p', {}, [text('replacement')]),
+						h('input', { class: 'after' })]);
+				}
+			}
+			const view = await mounted(Conditional, { props: { open: true } });
+			const before = view.find('.before');
+			const after = view.find('.after');
+			await view.setProps({ open: false });
+			expect([...view.element.children]).toEqual([before, view.find('p'), after]);
+			await view.setProps({ open: true });
+			expect([...view.element.children]).toEqual([before, view.find('.card'), after]);
+		}
+	);
+
+	it('error recovery brackets a component root through nested selection ranges', async () => {
+		const host = document.createElement('main');
+		const before = document.createElement('input');
+		const after = document.createElement('input');
+		host.append(before, after);
+		const vm = new ViewManager(host);
+		vm.anchorAt(after);
+		try {
+			vm.render(h(ForwardedComponentRoot, { title: 'old' }));
+			await settled();
+			class Exploding extends PuzzleView {
+				boom = (() => { throw new Error('root boom'); })();
+			}
+			expect(() => vm.render(h(Exploding))).toThrow('root boom');
+			vm.render(h('p', {}, [text('recovered')]));
+			await settled();
+			expect([...host.children]).toEqual([before, host.querySelector('p'), after]);
+			expect(host.childNodes).toHaveLength(3);
+		} finally { vm.clear(); }
 	});
 
 	it('destroys subscriptions, refs, listeners, and animations before the replacement mounts', async () => {

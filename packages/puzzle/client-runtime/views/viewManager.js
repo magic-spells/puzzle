@@ -31,7 +31,7 @@ import {
 	COMPONENT_SLOT_TAG,
 	metadataTagError,
 } from './ViewNode.js';
-import { mountHtml, patchHtml, htmlTail, moveHtml, unmountHtml } from './html.js';
+import { mountHtml, patchHtml, htmlTail, unmountHtml } from './html.js';
 import { mountComponentSlot, patchComponentSlot, moveComponentSlot, unmountComponentSlot } from './componentSlot.js';
 import { beginFlip, playFlip } from './flip.js';
 import {
@@ -127,6 +127,20 @@ function outgoingOf(vnode) {
 	if (copy === undefined) return vnode;
 	outgoing.delete(vnode);
 	return copy;
+}
+
+/**
+ * Resolve a range's end through component roots, including nested selections.
+ * @param {ViewNode} vnode
+ * @returns {Node | null}
+ */
+function lastNode(vnode) {
+	if (vnode.isComponent) return vnode.component?.elementEnd ?? vnode.el;
+	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
+		vnode.tag === COMPONENT_SLOT_TAG) return vnode.slotEnd;
+	if ((typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__) &&
+		vnode.tag === HTML_TAG) return htmlTail(vnode);
+	return vnode.el;
 }
 
 export class ViewManager {
@@ -275,10 +289,7 @@ export class ViewManager {
 			const el = this.currentTree.el ?? null;
 			const bracketed = el != null && el.parentNode === this.container;
 			const before = bracketed ? el.previousSibling : null;
-			const after = bracketed ? (
-				(typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
-				this.currentTree.tag === COMPONENT_SLOT_TAG ? this.currentTree.slotEnd : el
-			).nextSibling : null;
+			const after = bracketed ? lastNode(this.currentTree)?.nextSibling ?? null : null;
 			const outer = walking;
 			walking = walk;
 			try {
@@ -385,6 +396,11 @@ export class ViewManager {
 	/** The DOM node currently occupying this subtree's position (or null). */
 	get element() {
 		return /** @type {Element | Comment | null} */ (this.currentTree?.el ?? this.anchor ?? null);
+	}
+
+	/** The last DOM node occupying this subtree's position (or null). */
+	get elementEnd() {
+		return this.currentTree ? lastNode(this.currentTree) : this.anchor;
 	}
 
 	/** Remove everything this manager mounted. */
@@ -1204,15 +1220,7 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 		// the new element is inserted before it exactly as it was; a synchronous
 		// removal leaves the captured next sibling as the ref.
 		// A live-HTML range (D174) ends at its last parsed node, not at its comment.
-		const next =
-			((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
-			oldVnode.tag === COMPONENT_SLOT_TAG
-				? oldVnode.slotEnd
-				: (typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__) &&
-			oldVnode.tag === HTML_TAG
-				? htmlTail(oldVnode)
-				: anchor
-			)?.nextSibling ?? null;
+		const next = lastNode(oldVnode)?.nextSibling ?? null;
 		unmount(oldVnode);
 		const ref =
 			anchor && anchor.isConnected
@@ -2169,24 +2177,15 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail = nul
 		const [oldChild, newChild] = pairs[i];
 		if (oldChild) {
 			patch(oldChild, newChild, el, ctx, owner);
-			if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
-				newChild.tag === COMPONENT_SLOT_TAG) {
-				if (nextPersistentSibling(newChild.slotEnd) !== ref) {
-					moveComponentSlot(el, newChild, ref);
-					if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+			const end = lastNode(newChild);
+			if (nextPersistentSibling(end) !== ref) {
+				if (((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) ||
+					(typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__)) &&
+					end !== newChild.el) {
+					moveComponentSlot(el, newChild, ref, end);
+				} else {
+					el.insertBefore(newChild.el, ref);
 				}
-			} else if (
-				(typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__) &&
-				newChild.tag === HTML_TAG
-			) {
-				// Compare the tail and move the whole live-HTML range (D174).
-				// The inline probe removes this arm when the feature is unused.
-				if (nextPersistentSibling(htmlTail(newChild)) !== ref) {
-					moveHtml(el, newChild, ref);
-					if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
-				}
-			} else if (nextPersistentSibling(newChild.el) !== ref) {
-				el.insertBefore(newChild.el, ref);
 				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 					devperfMutation();
 				}

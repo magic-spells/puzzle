@@ -649,6 +649,8 @@ export declare class PuzzleView {
 	 * type is `Element | Comment`, not `Element` alone.
 	 */
 	readonly element: Element | Comment | null;
+	/** @internal Last DOM node of the rendered component range. */
+	readonly elementEnd: Node | null;
 
 	/**
 	 * Live element refs (D72): `ref="name"` in the template exposes the

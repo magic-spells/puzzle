@@ -86,13 +86,14 @@ export function patchComponentSlot(before, after, parent, ctx, owner, mount, pat
  * @param {Node} parent
  * @param {ViewNode} vnode
  * @param {Node | null} ref
+ * @param {Node} [end] resolved end when moving a component whose root is a range
  */
-export function moveComponentSlot(parent, vnode, ref) {
+export function moveComponentSlot(parent, vnode, ref, end = vnode.slotEnd) {
 	let node = vnode.el;
 	while (node) {
 		const next = node.nextSibling;
 		parent.insertBefore(node, ref);
-		if (node === vnode.slotEnd) break;
+		if (node === end) break;
 		node = next;
 	}
 }

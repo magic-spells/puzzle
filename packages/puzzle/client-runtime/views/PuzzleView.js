@@ -1000,6 +1000,16 @@ export class PuzzleView {
 		);
 	}
 
+	/** @returns {Node | null} The end of this component's DOM range. */
+	get elementEnd() {
+		return (
+			this.#errorView?.elementEnd ??
+			(this.__failedPlaceholder?.parentNode ? this.__failedPlaceholder : null) ??
+			this.#vm?.elementEnd ??
+			null
+		);
+	}
+
 	/**
 	 * Whether the first data() result has committed (v1.8, D39). False while a
 	 * skeleton (or the anchor placeholder) holds this component's position.
