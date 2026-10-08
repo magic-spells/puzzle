@@ -153,6 +153,8 @@ func expressionSites(root *Element) []exprSite {
 			switch a := a.(type) {
 			case *DynamicAttr:
 				add("attribute", a.Expr, a.ExprAST)
+			case *SpreadAttr:
+				add("spread attribute", a.Expr, a.ExprAST)
 			case *EventAttr:
 				add("handler", a.Expr, a.ExprAST)
 			case *MixedAttr:
