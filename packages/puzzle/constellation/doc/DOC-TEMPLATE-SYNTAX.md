@@ -80,6 +80,31 @@ The built-ins: `round`, `currency`, `percentage`, `number_with_delimiter`, `comp
 
 `{:else}` comes last. `{#unless}` takes `{:else}` but not `{:else if}`. `{#case}` matches with `===`; commas list alternatives; the first match wins with no fallthrough.
 
+## Runtime component selection: `<Component>`
+
+Choose one of the compiled Puzzle components imported by this file (§67). All candidates are loaded before rendering; there is no runtime module-name lookup.
+
+```html
+<script>
+import TaskCard from './TaskCard.pzl';
+import BacktestCard from './BacktestCard.pzl';
+const cards = { task: TaskCard, backtest: BacktestCard };
+</script>
+
+<!-- current is a constructor returned by data(); it may also be null -->
+<Component is={ current } title={ title } @close={ close }>
+  <p>Default content for the selected card</p>
+</Component>
+
+<Component is={ cards[embed.type] } {...embed.props} />
+```
+
+- **`is` chooses a value.** It must be an imported compiled component constructor; `null`/`undefined` renders nothing. Children become the selected component's normal default slot.
+- **Only `is` may read imports and simple script declarations directly.** `is={ TaskCard }` and `is={ cards[key] }` work without returning those bindings from `data()`. Loop/snippet bindings win, then module bindings, then data fields. Destructured bindings need a simple module alias or a value returned by `data()`. Other props, spread operands and child expressions read normal template data.
+- Props and callback props are reactive as on any component. `name` and `from` are ordinary forwarded props when `is` exists. `{...embed.props}` passes the current object's props; later written attributes override earlier spreads and vice versa. `bind:` is unsupported on components.
+- Changing the constructor fully destroys the old instance and descendants before mounting the new one at the same position, with current props. A stable constructor reuses the instance. Prerender applies the same rule to its HTML.
+- Missing or non-expression `is` is a compile error. `Component` is a reserved tag/family root: rename a user `Component.pzl` or a tag import named `Component`.
+
 ## Loops
 
 ```html

@@ -57,8 +57,8 @@ compiled into broken JS.
 - **Attribute and prop names may be non-ASCII**: `<Card größe={ 3 }>` →
   `props.größe`.
 - **Marker names cannot be a family root**: `Children.X`, `Slot.X`,
-  `Snippet.X`, `Portal.X` are errors ([[DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS]]);
-  markers match exactly, never dotted.
+  `Snippet.X`, `Portal.X`, `Component.X` are errors ([[DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS]]);
+  built-ins match exactly, never dotted. `Component` is the runtime selection built-in (D180), and a user component/tag import with that name needs a rename.
 - **Codegen is unchanged**: `<Frame.Wrapper>` emits
   `new ViewNode(Frame.Wrapper, …)`, resolved lexically like `Frame`. No
   registry, no import inspection. The `component_family` golden pins it.

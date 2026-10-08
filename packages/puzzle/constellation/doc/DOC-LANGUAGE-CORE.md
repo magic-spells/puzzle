@@ -115,7 +115,7 @@ A tag whose name does **not** start with a lowercase ASCII letter is a component
 
 - The name is `Ident('.'Ident)*` of `$`-free JavaScript identifiers in any script; the dotted form is a **component family** member. §65, [[DECISION-D167-COMPONENT-FAMILIES]].
 - **Props are attributes**: static → a string, brace-only → the value (a list stays a list), quoted with interpolation → the assembled string. Prop names may use any script.
-- `Children`, `Slot`, `Snippet` and `Portal` are reserved tag names (and cannot root a dotted name).
+- `Children`, `Slot`, `Snippet`, `Portal` and `Component` are reserved tag names (and cannot root a dotted name).
 - How a name finds its file and how a component reads props is host-defined (D173 V15): PuzzleKit resolves `<script>` imports and passes props to `data(params, props)`, and a script-less component's `data()` returns its props; Sites resolves `components/<Name>.pzl` and exposes props as bare names.
 
 ## Slots
@@ -162,7 +162,7 @@ A **snippet** is a template the caller hands a component that owns a loop; the c
 
 A template expression is **JavaScript's expression syntax, closed by one grammar and a method table** ([[DECISION-D176-EXPRESSION-LANGUAGE]]). One parser (`packages/puzzle-lang/expr`) reads every expression into a tree both hosts consume — PuzzleKit lowers it to JavaScript, Sites evaluates it in Go — so anything outside the grammar is a positioned compile error in both, at the same position, naming the construct and what to write instead. Every position takes the same grammar: text, attribute values, props, marker arguments, conditions, `{:when}` values, `{#for}` headers and PuzzleKit's `@event` handler arguments.
 
-**A template expression never reaches the view instance.** Every value comes through `data()` (PuzzleKit) or the render context (Sites); logic that outgrows an expression is computed first — a `data()` field in PuzzleKit, a `{#let}` in Sites.
+**A template expression never reaches the view instance.** A displayed value comes through `data()` (PuzzleKit) or the render context (Sites); logic that outgrows an expression is computed first — a `data()` field in PuzzleKit, a `{#let}` in Sites.
 
 **Names.** An identifier reads the host's scope (PuzzleKit `data()` fields and props; Sites the render context and props) plus template bindings: `{#for}` items and counters, `<Snippet>` parameters, arrow parameters. Identifiers follow JavaScript's `ID_Start`/`ID_Continue` (`{ größe }`). Reserved words are errors except `eval` and `arguments`; `__proto__`, `constructor` and `prototype` are errors as member names and object keys. A bound name is a value (calling one is an error).
 
@@ -228,6 +228,8 @@ A computed method call (`a[name]()`), calling a call's result (`f(x)(y)`) and an
 - **A date value** takes only `<`, `<=`, `>`, `>=` and binary `-` (as milliseconds), has no methods, and cannot be constructed; display it with `date()`, `time()`, `datetime()` or `timeago()`.
 - **Division:** with no regex literals, `/` after any operand divides (`{ café / 2 }`, `{ 金額 / 2 }`, `{ 5. / 2 }`, a field named `of`), and a regex-shaped expression is the grammar's error at the `/`, never "unclosed `{`".
 
+**Attribute spread is separate syntax (D180):** `{...props}` on a component invocation is parsed as an attribute with one ordinary expression operand. It merges props in written order; it does not make `[...items]` or `{ ...props }` legal expressions. The `<Component>` `is` attribute alone may read script module bindings directly; other expressions retain data scope.
+
 **Not in the language** (a compile error in both hosts): bitwise operators — a `|` gets the pipe steer "`| name` pipes were removed — write `name(value)`; bitwise OR is not available", naming the JavaScript replacement when the name is a removed function (`| upcase` → `.toUpperCase()`) — `**` (`Math.pow`), `in`, `instanceof`, `typeof`, `void`, `delete`, `new`, the comma operator, assignment, `++`/`--`, regular expressions, comments, statements, `function`, classes, `await`/`yield`, tagged templates and spread. Arithmetic or comparison on mixed or non-number types is host-defined (V5).
 
 **Handlers (PuzzleKit only)** are the one door into the view's JavaScript: a handler name, one call to it, a conditional of those or `null`, or `null`; arguments are ordinary expressions evaluated at fire time, and a chain rooted at the free `event` is the DOM event and skips the method table. §5. Sites rejects `@event`.
@@ -239,7 +241,7 @@ A computed method call (`a[name]()`), calling a call's result (`f(x)(y)`) and an
 | File structure | `<puzzle-view>` root (§3); optional `<puzzle-skeleton>` (§16), `<script>` class (§4, `lang="ts"` §25), `<style>`/`<style scoped>` (§29) | No wrapper; the directory decides the file kind; optional `<schema>`, `<script>` (browser JS), `<style>`/`<style scoped>` — `sites/constellation/decision/DECISION-TEMPLATE-GRAMMAR.md`, `DECISION-NO-VIEW-WRAPPERS-IN-THEMES.md` |
 | Expressions | The D176 grammar, lowered to JavaScript, plus the `@event` handler | The same grammar once its Go evaluator reads the shared tree (D176 P6, planned); a shared-table entry Sites switches off is a positioned error there (rule 5). Today its own `engine/expr` allow-list, with pipes, and `==` spelled `===` until V2 — `DECISION-EXPRESSION-SUBSET.md` |
 | Naming a computed value | a `data()` field (no `{#let}`) | `{#let}` |
-| Adds | `@event` + modifiers (§5, §47); callback props; implicit two-way binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]); `<Portal>` ([[DECISION-D144-PORTAL]]); `island` (§17); `key` (§28); `ref` (§38); `flip` (§46); `link`, `timeago` and app-registered functions; script-less components read props (V15) | `{#let}`; implicit props; `<Form>`; reserved layout slots and section groups; Sites-only functions (`url`, `asset_url`, `menu_link`, `image_url`, `image_srcset`, `image_tag`, `class_map`) — `sites/engine/constellation/doc/DOC-TEMPLATE-LANGUAGE.md` |
+| Adds | `<Component>` runtime selection from imported constructors (§67), with module bindings available only in `is` and component attribute spreads (`{...props}`); `@event` + modifiers (§5, §47); callback props; implicit two-way binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]); `<Portal>` ([[DECISION-D144-PORTAL]]); `island` (§17); `key` (§28); `ref` (§38); `flip` (§46); `link`, `timeago` and app-registered functions; script-less components read props (V15) | `{#let}`; implicit props; `<Form>`; reserved layout slots and section groups; Sites-only functions (`url`, `asset_url`, `menu_link`, `image_url`, `image_srcset`, `image_tag`, `class_map`) — `sites/engine/constellation/doc/DOC-TEMPLATE-LANGUAGE.md` |
 | Restricts | — | `@event` and `<Portal>` are errors; `ref`/`key`/`flip`/`island` dropped with a warning; an unknown function or wrong argument count is an error; no interpolation in `<script>`/`<style>` bodies or event-handler attributes — `DECISION-AUTO-ESCAPE.md` |
 | Not yet built | — | `<Snippet>` and marker arguments; the Go evaluator over the shared tree and the function library (D176 P6) |
 
@@ -262,6 +264,7 @@ Which SPEC sections are core and which PuzzleKit. A **core** section can still c
 | 64 | Snippets | core | the `__PUZZLE_HAS_SNIPPETS__` gate, dev diagnostics |
 | 65 | Component families | core (tag-name grammar) | the barrel, lexical resolution, `generate component --family` |
 | 66 | Translations | core `t` | the service, `setLocale`, loading |
+| 67 | Runtime component selection | PuzzleKit | imported constructors, selector module scope, runtime lifecycle |
 
 [[DOC-SPEC-ANATOMY]] §3, §4, §10, §11, §25, §29 (Sites has its own `<style scoped>`, V18) and §40 are PuzzleKit, as are DOC-SPEC-VIEW §12, §16, §38 and §46.
 

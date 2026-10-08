@@ -25,25 +25,12 @@ cards explain its shape; [[DOC-RELEASE-SURFACE]] inventories what ships.
 
 ## Current state
 
-- **npm `latest` is 0.7.0** (2026-09-09, [[RELEASE-V0-7-0]]). Never recommend
-  0.3.0 (published broken; use 0.3.1).
-- **0.8.0 is on `release/0.8.0`, merged but not tagged or published**
-  ([[RELEASE-V0-8-0]]): the D176 expression language (JavaScript-shaped
-  expressions, functions instead of `|` pipes, `.length`, no `this`), the
-  `puzzle-lang` module, D173 core semantics, the D174 function library, D175
-  translations, D170 incremental rendering, D168 whitespace, D171
-  `puzzle add theme`, D169 registry version floors, and the `app/app.ts`
-  entry. Before the tag: the satellites review (pieces, devtools, eslint,
-  prettier), a manual Windows CLI pass, then Cory's `release:prep` and
-  publish. After the tag: D176 P6, the Go evaluator in Sites.
-- The repo is a monorepo ([[DECISION-D162-MONOREPO-PACKAGES]]); every package
-  in the release train carries the framework version. The three editor
-  grammars are separate, dev-install-only repos with their own versions; sweep
-  them whenever the template grammar changes.
-- **The next free decision number is D177.**
+- **npm `latest` is 0.8.0** (2026-10-01, [[RELEASE-V0-8-0]]). Never recommend 0.3.0 (published broken; use 0.3.1).
+- **0.9.0 is in progress on `release/0.9.0`, not tagged or published** ([[RELEASE-V0-9-0]]): multilingual static sites (D177), `afterUpdate(prev)` (D178), `staticPaths` (D179), and bounded runtime component selection (D180 / [[FEATURE-COMPONENT-SLOT]]).
+- The repo is a monorepo ([[DECISION-D162-MONOREPO-PACKAGES]]); every package in the release train carries the framework version. The three editor grammars are separate, dev-install-only repos with their own versions; sweep them whenever the template grammar changes.
+- **The next free decision number is D181.**
 
 ## Open and deferred
-
 
 Structural limits, not bugs:
 
@@ -73,9 +60,7 @@ Rejected (don't re-propose without new evidence):
 
 - A `puzzle dev` mock API server — the fixtures mock adapter needs no server
   and behaves identically in dev and in Vitest.
-- Dynamic components (`<component is={}>`) — `{#if}`/`{#case}` over imported
-  components covers the enumerable case, and compile-time import resolution
-  makes an open-ended `is` real design work.
+- Open-ended dynamic module resolution (`<component is="module-name">`) — rejected. `<Component>` (D180) selects only constructors already imported by its file, through `is={ value }`, including ordinary script-map lookup `is={ cards[key] }`; no registry, lazy manifest or runtime string-to-module lookup. `{#if}`/`{#case}` remain useful when branches need different markup.
 
 ## Release checklist
 

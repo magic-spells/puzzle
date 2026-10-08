@@ -86,6 +86,7 @@ The contract is split across six domain cards; this card is the entry point. Sec
 | 64 | Snippets: `<Snippet>` + marker arguments | [[DOC-SPEC-TEMPLATE]] |
 | 65 | Component families: dotted component tags | [[DOC-SPEC-TEMPLATE]] |
 | 66 | Translations: the `t` function and `ctx.i18n` | [[DOC-SPEC-TEMPLATE]] |
+| 67 | Runtime component selection: `<Component>` | [[DOC-SPEC-TEMPLATE]] |
 | — | Deferred features | this card |
 | — | Open questions | this card |
 

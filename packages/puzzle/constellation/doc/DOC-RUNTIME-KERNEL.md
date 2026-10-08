@@ -44,6 +44,8 @@ component instances, default/named composition, router outlets, refs, islands
 and teardown. Conditionals keep sibling positions with invisible placeholders;
 call-site children execute in the parent's scope.
 
+`<Component>` (D180) uses `dynamicComponent` to put an ordinary constructor vnode in a stable comment-bracketed range. The normal component mount/patch path keeps reactive props, events, DevTools ownership and teardown. A constructor change releases the outgoing instance before mounting, including an animated instance; nullish selection leaves an empty range. `__PUZZLE_HAS_COMPONENT_SLOT__` removes this range handling from apps without the built-in tag.
+
 Each render rebuilds only part of the tree. A maximal static subtree is
 allocated once per instance (or per row); an item-form `{#for}` is a
 persistent list block that returns a row's previous subtree unless that row's
