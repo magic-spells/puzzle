@@ -19,9 +19,22 @@ func ScriptValueBindings(scripts string) map[string]int {
 // selectors also need the simple names after a top-level comma. Their
 // initializers are never interpreted, and nested declaration names are skipped.
 func scriptSelectorBindings(tokens []jsTok) map[string]int {
+	bindings, _ := scriptSelectorBindingInfo(tokens)
+	return bindings
+}
+
+func scriptSelectorBindingInfo(tokens []jsTok) (map[string]int, map[string]bool) {
 	bindings := scriptTopLevelBindings(tokens)
+	mutable := map[string]bool{}
 	depth := 0
 	inDeclaration := false
+	declarationMutable := false
+	bind := func(name string, off int) {
+		bindings[name] = off
+		if declarationMutable {
+			mutable[name] = true
+		}
+	}
 	previous := jsTok{ch: ';'}
 	for i, token := range tokens {
 		if token.comment {
@@ -31,6 +44,12 @@ func scriptSelectorBindings(tokens []jsTok) map[string]int {
 			switch token.ident {
 			case "const", "let", "var":
 				inDeclaration = previous.ident != "declare"
+				declarationMutable = token.ident != "const"
+				if inDeclaration {
+					if next, ok := nextNonCommentToken(tokens, i+1); ok {
+						bindDeclaredName(tokens, next, bind)
+					}
+				}
 			case "import", "export", "return", "throw":
 				inDeclaration = false
 			case "function", "class":
@@ -46,7 +65,7 @@ func scriptSelectorBindings(tokens []jsTok) map[string]int {
 				if ok && tokens[name].ident != "" {
 					following, ok := nextNonCommentToken(tokens, name+1)
 					if ok && (tokens[following].ch == '=' || tokens[following].ch == ':' || tokens[following].ch == ',' || tokens[following].ch == ';') {
-						bindings[tokens[name].ident] = tokens[name].off
+						bind(tokens[name].ident, tokens[name].off)
 					}
 				}
 			}
@@ -63,7 +82,7 @@ func scriptSelectorBindings(tokens []jsTok) map[string]int {
 			previous = token
 		}
 	}
-	return bindings
+	return bindings, mutable
 }
 
 // ComponentSelectorBindings returns module names that selectors read, so a JS
@@ -93,6 +112,17 @@ func ComponentSelectorBindings(scripts string, roots ...*parser.Element) []strin
 
 func collectSelectorBindings(tree expr.Node, bindings map[string]int, used map[string]bool) {
 	expr.Walk(tree, func(node expr.Node) bool {
+		if arrow, ok := node.(*expr.Arrow); ok {
+			visible := make(map[string]int, len(bindings))
+			for name, offset := range bindings {
+				visible[name] = offset
+			}
+			for _, param := range arrow.Params {
+				delete(visible, param.Name)
+			}
+			collectSelectorBindings(arrow.Body, visible, used)
+			return false
+		}
 		if id, ok := node.(*expr.Identifier); ok {
 			if _, module := bindings[id.Name]; module {
 				used[id.Name] = true
@@ -156,11 +186,11 @@ func (c *compiler) componentSelectionScope(scope scopeMap, used map[string]bool)
 func (c *compiler) componentSelectorValue(attr *parser.DynamicAttr, scope scopeMap) (string, error) {
 	used := map[string]bool{}
 	collectSelectorBindings(attr.ExprAST, c.moduleBindings, used)
-	// A module map or variable can change without a data-root revision. Any
-	// enclosing cached row must re-evaluate that selector on the next render.
+	// Only reassigned let/var bindings invalidate cached rows. Imports and const
+	// maps are stable; mutating a const map's entries is not observed by the cache.
 	if len(c.loops) > 0 && c.analyzing == 0 {
 		for name := range used {
-			if _, local := scope[name]; !local {
+			if _, local := scope[name]; !local && c.mutableModuleBindings[name] {
 				for _, site := range c.loops {
 					site.volatile = true
 				}

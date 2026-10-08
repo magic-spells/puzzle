@@ -77,11 +77,33 @@ object.const;
 	}
 }
 
-func TestComponentModuleSelectorInvalidatesCachedRows(t *testing.T) {
-	got := compileSrc(t, `<puzzle-view>{#for row in rows}<Component is={cards[row.type]}/>{/for}</puzzle-view>
-<script>import Card from './Card.pzl'; const cards = {card: Card}; export default class Home extends Object {}</script>`)
-	if !strings.Contains(got, "volatile: true") {
-		t.Fatalf("a mutable module map must be re-read on row renders:\n%s", got)
+func TestComponentModuleSelectorRowCaching(t *testing.T) {
+	for _, tc := range []struct {
+		name, binding, selector, item string
+		volatile                      bool
+	}{
+		{"import", "", "Card", "row", false},
+		{"const map", "const cards = {card: Card};", "cards[row.type]", "row", false},
+		{"later const", "const ignored = 1, cards = {card: Card};", "cards[row.type]", "row", false},
+		{"let map", "let cards = {card: Card};", "cards[row.type]", "row", true},
+		{"later let", "export let ignored = 1, cards = {card: Card};", "cards[row.type]", "row", true},
+		{"var map", "var cards = {card: Card};", "cards[row.type]", "row", true},
+		{"later var", "var ignored = 1, cards = {card: Card};", "cards[row.type]", "row", true},
+		{"commented let", "let /* binding */ cards = {card: Card};", "cards[row.type]", "row", true},
+		{"row shadows let", "let cards = {card: Card};", "cards.component", "cards", false},
+		{"arrow shadows let", "let cards = Card;", "[Card].map(cards => cards)[0]", "row", false},
+		{"unread let", "let cards = Card;", "Card", "row", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := compileSrc(t, `<puzzle-view>{#for `+tc.item+` in rows}<Component is={`+tc.selector+`}/>{/for}</puzzle-view>
+<script>import Card from './Card.pzl'; `+tc.binding+` export default class Home extends Object {}</script>`)
+			if !strings.Contains(got, "__l(this, this, 0,") {
+				t.Fatalf("selector loop must keep persistent row caching:\n%s", got)
+			}
+			if volatile := strings.Contains(got, "volatile: true"); volatile != tc.volatile {
+				t.Fatalf("volatile = %v, want %v:\n%s", volatile, tc.volatile, got)
+			}
+		})
 	}
 }
 

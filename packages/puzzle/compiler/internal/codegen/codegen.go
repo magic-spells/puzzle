@@ -209,7 +209,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	// lex these same bytes independently: the class-name extraction, the
 	// import-collision warning scan, and the reserved-binding check.
 	scriptToks := tokenizeJS(sec.Scripts)
-	moduleBindings := scriptSelectorBindings(scriptToks)
+	moduleBindings, mutableModuleBindings := scriptSelectorBindingInfo(scriptToks)
 	if filepath.Base(strings.ReplaceAll(opts.Filename, "\\", "/")) == "Component.pzl" {
 		return "", &parser.ParseError{File: opts.Filename, Line: 1, Col: 1, Message: "Component is a reserved built-in tag — rename Component.pzl (for example, Card.pzl) and its imports"}
 	}
@@ -245,6 +245,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		assetReadsUnavailable:   opts.AssetReadsUnavailable,
 		warnings:                warnings,
 		moduleBindings:          moduleBindings,
+		mutableModuleBindings:   mutableModuleBindings,
 		componentSelectorSource: sec.Source + sec.Scripts,
 	}
 	scope := scopeMap{}
@@ -542,6 +543,7 @@ type compiler struct {
 	usesLoopRange            bool
 	usesDynamicComponent     bool
 	moduleBindings           map[string]int
+	mutableModuleBindings    map[string]bool
 	componentSelectorGetters []componentSelectorGetter
 	componentSelectorSource  string
 
