@@ -1,0 +1,16 @@
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Card from './Card.pzl';
+export default class Conditional extends PuzzleView {
+  data(_params, props) { return props; }
+}
+</script>
+<puzzle-view>
+  <input class="before"/>
+  {#if selected}
+    {#if open}<Component is={Card} title="selected"/>{:else}<p>closed</p>{/if}
+  {:else}
+    {#if open}<Card title="selected"/>{:else}<p>closed</p>{/if}
+  {/if}
+  <input class="after"/>
+</puzzle-view>

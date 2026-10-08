@@ -1,0 +1,34 @@
+<puzzle-view>
+  <section>
+    <Component is={current} title={title} @close={close} {...embed.props}>
+      <p>the selected component's default slot</p>
+    </Component>
+    <Component is={embeds[embed.type]} {...embed.props}>
+      <p>default slot for the indexed selection</p>
+      <Component is={TaskCard}/>
+    </Component>
+    <TaskCard {...embed.props} title="ordinary component spread"/>
+    <Component is={null}/>
+    <Component is={embeds['missing']} {...embed.props ?? { label: '</puzzle-view><Card/>' }} />
+    <Component is={TaskCard} name={propName} from={propSource}/>
+  </section>
+</puzzle-view>
+
+<puzzle-skeleton>
+  <Component is={TaskCard} title="loading"/>
+</puzzle-skeleton>
+
+<script>
+import {PuzzleView} from '@magic-spells/puzzle';
+import TaskCard from './TaskCard.pzl';
+import BacktestCard from './BacktestCard.pzl';
+const embeds={task:TaskCard,backtest:BacktestCard};
+export default class ComponentSlotSpecimen extends PuzzleView {
+  data(){return {current:TaskCard,title:'Tasks',embed:{type:'task',props:{label:'ready'}},propName:'child name',propSource:'child source'};}
+  events={close:()=>{}};
+}
+</script>
+
+<style scoped>
+section{color:red; padding:1rem}
+</style>

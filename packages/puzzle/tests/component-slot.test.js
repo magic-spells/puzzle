@@ -1,0 +1,429 @@
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Puzzle, PuzzleModel, PuzzleView, ViewNode, SLOT_TAG, dynamicComponent } from '../client-runtime/index.js';
+import { mountView, settled, installFakeAnimate } from '../client-runtime/testing/index.js';
+import { liveViewList } from '../client-runtime/devstate.js';
+import { serialize } from '../client-runtime/ssg/serialize.js';
+import { preloadTakeoverComponents } from '../client-runtime/ssg/preload.js';
+import { ViewManager } from '../client-runtime/views/viewManager.js';
+import CompiledHost from './fixtures/component-slot/Host.compiled.js';
+import CompiledConditional from './fixtures/component-slot/Conditional.compiled.js';
+import CompiledCard from './fixtures/component-slot/Card.compiled.js';
+
+const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
+const text = (value) => h('text', { value });
+const handles = [];
+afterEach(() => {
+	for (const handle of handles.splice(0)) handle.destroy();
+	vi.unstubAllGlobals();
+	vi.restoreAllMocks();
+});
+async function mounted(Class, options) {
+	const handle = await mountView(Class, options);
+	handles.push(handle);
+	return handle;
+}
+
+class Card extends PuzzleView {
+	data(_params, props) { return props; }
+	render() {
+		const { title, close } = this.getData();
+		return h('section', { class: 'card' }, [text(title), h('button', { '@click': () => close?.(title) }), h(SLOT_TAG)]);
+	}
+}
+class Panel extends Card {
+	render() { return h('article', { class: 'panel' }, [text(this.getData().title), h(SLOT_TAG)]); }
+}
+class Host extends PuzzleView {
+	data(_params, props) { return props; }
+	render() {
+		const { current, title, close, content } = this.getData();
+		return h('main', {}, [dynamicComponent(current, { title, close }, [h('b', {}, [text(content)])]), h('input', { class: 'sibling' })]);
+	}
+}
+class ComponentRoot extends PuzzleView {
+	data(_params, props) { return props; }
+	render() { return dynamicComponent(Card, this.getData()); }
+}
+class NestedComponentRoot extends ComponentRoot {
+	render() { return dynamicComponent(ComponentRoot, this.getData()); }
+}
+class ForwardedComponentRoot extends ComponentRoot {
+	render() { return h(NestedComponentRoot, this.getData()); }
+}
+
+describe('<Component> runtime (D180)', () => {
+	it('runs compiler output with indexed module selection, ordered spreads, events, and default slots', async () => {
+		const onclose = vi.fn();
+		const view = await mounted(CompiledHost, { props: { type: 'card', title: 'first', extra: { title: 'overridden' }, onclose } });
+		const input = view.find('.persistent');
+		expect(view.find('.current').textContent).toBe('firstslot first');
+		expect(view.find('.mapped').textContent).toBe('firstmap slot first');
+		expect(view.find('.direct').textContent).toBe('direct');
+		await view.click('.current button');
+		expect(onclose).toHaveBeenLastCalledWith('first');
+		await view.setProps({ type: 'panel', title: 'second', extra: { title: 'old' }, onclose });
+		expect(view.findAll('.compiled-panel')).toHaveLength(2);
+		expect(view.find('.current').textContent).toBe('secondslot second');
+		await view.click('.mapped button');
+		expect(onclose).toHaveBeenLastCalledWith('second');
+		expect(view.find('.mapped').textContent).toBe('secondmap slot second');
+		await view.setProps({ type: 'missing', title: 'third', onclose });
+		expect(view.find('.current').textContent).toBe('');
+		expect(view.find('.mapped').textContent).toBe('');
+		expect(view.find('.persistent')).toBe(input);
+	});
+
+	it('updates props and callbacks, swaps constructors with current props, and forwards is children', async () => {
+		const close = vi.fn();
+		const view = await mounted(Host, { props: { current: Card, title: 'one', close, content: 'slot one' } });
+		const card = liveViewList().find((v) => v.constructor === Card);
+		const sibling = view.find('.sibling');
+		await view.click('button');
+		expect(close).toHaveBeenLastCalledWith('one');
+		await view.setProps({ current: Card, title: 'two', close, content: 'slot two' });
+		expect(liveViewList()).toContain(card);
+		expect(view.find('.card').textContent).toBe('twoslot two');
+		await view.click('button');
+		expect(close).toHaveBeenLastCalledWith('two');
+		await view.setProps({ current: Panel, title: 'three', close, content: 'slot three' });
+		expect(card.isDestroyed).toBe(true);
+		expect(view.find('.panel').textContent).toBe('threeslot three');
+		expect(view.find('.sibling')).toBe(sibling);
+	});
+
+	it('null and undefined hold the position, release the child, and mount again', async () => {
+		const view = await mounted(Host, { props: { current: Card, title: 'a', content: '' } });
+		const sibling = view.find('.sibling');
+		for (const current of [null, undefined, Panel, null, Card]) {
+			await view.setProps({ current, title: 'now', content: '' });
+			expect(view.findAll('section, article')).toHaveLength(current ? 1 : 0);
+			expect(view.find('.sibling')).toBe(sibling);
+		}
+	});
+
+	it('rejects values that are not compiled Puzzle component constructors', () => {
+		for (const value of ['Card', {}, false, () => {}]) {
+			expect(() => dynamicComponent(value)).toThrow('imported Puzzle component');
+		}
+	});
+
+	it('names <Component> when its runtime support was compiled out', () => {
+		vi.stubGlobal('__PUZZLE_HAS_COMPONENT_SLOT__', false);
+		const vm = new ViewManager(document.createElement('div'));
+		const tree = dynamicComponent(Card);
+		expect(() => vm.render(tree)).toThrow('<Component> support was compiled out');
+		expect(() => vm.render(tree)).toThrow('__PUZZLE_HAS_COMPONENT_SLOT__ is false');
+		vm.clear();
+	});
+
+	it.each([ComponentRoot, NestedComponentRoot, ForwardedComponentRoot].map((Row) => [Row.name, Row]))(
+		'keyed rows with %s roots move their entire ranges', async (_name, Row) => {
+			class List extends PuzzleView {
+				data(_params, props) { return props; }
+				render() { return h('main', {}, this.getData().items.map((id) => h(Row, { key: id, title: id }))); }
+			}
+			const view = await mounted(List, { props: { items: ['a', 'b', 'c'] } });
+			const a = view.find('.card');
+			await view.setProps({ items: ['c', 'b', 'a'] });
+			expect(view.findAll('.card').map((node) => node.textContent)).toEqual(['c', 'b', 'a']);
+			expect(view.findAll('.card')[2]).toBe(a);
+			await view.setProps({ items: ['c', 'a'] });
+			expect(view.findAll('.card').map((node) => node.textContent)).toEqual(['c', 'a']);
+			await view.setProps({ items: [] });
+			expect(view.element.childNodes).toHaveLength(0);
+		}
+	);
+
+	it.each([ComponentRoot, NestedComponentRoot, ForwardedComponentRoot].map((Row) => [Row.name, Row]))(
+		'conditional replacement of %s stays between its siblings', async (_name, Row) => {
+			class Conditional extends PuzzleView {
+				data(_params, props) { return props; }
+				render() {
+					return h('main', {}, [h('input', { class: 'before' }),
+						this.getData().open ? h(Row, { title: 'selected' }) : h('p', {}, [text('replacement')]),
+						h('input', { class: 'after' })]);
+				}
+			}
+			const view = await mounted(Conditional, { props: { open: true } });
+			const before = view.find('.before');
+			const after = view.find('.after');
+			await view.setProps({ open: false });
+			expect([...view.element.children]).toEqual([before, view.find('p'), after]);
+			await view.setProps({ open: true });
+			expect([...view.element.children]).toEqual([before, view.find('.card'), after]);
+		}
+	);
+
+	it('error recovery brackets a component root through nested selection ranges', async () => {
+		const host = document.createElement('main');
+		const before = document.createElement('input');
+		const after = document.createElement('input');
+		host.append(before, after);
+		const vm = new ViewManager(host);
+		vm.anchorAt(after);
+		try {
+			vm.render(h(ForwardedComponentRoot, { title: 'old' }));
+			await settled();
+			class Exploding extends PuzzleView {
+				boom = (() => { throw new Error('root boom'); })();
+			}
+			expect(() => vm.render(h(Exploding))).toThrow('root boom');
+			vm.render(h('p', {}, [text('recovered')]));
+			await settled();
+			expect([...host.children]).toEqual([before, host.querySelector('p'), after]);
+			expect(host.childNodes).toHaveLength(3);
+		} finally { vm.clear(); }
+	});
+
+	it.each(['conditional', 'keyed row'])('removing a selected %s runs the same hide hooks as a plain component', async (mode) => {
+		for (const selected of [false, true]) {
+			const willHide = vi.fn();
+			const didHide = vi.fn();
+			class Modal extends Card {
+				viewWillHide() { willHide(); }
+				viewDidHide() { didHide(); }
+			}
+			class Conditional extends PuzzleView {
+				data(_params, props) { return props; }
+				render() {
+					const child = selected ? dynamicComponent(Modal, { key: 'modal' }) : h(Modal, { key: 'modal' });
+					return h('main', {}, mode === 'keyed row'
+						? this.getData().open ? [child] : []
+						: [this.getData().open ? child : h('#')]);
+				}
+			}
+			const view = await mounted(Conditional, { props: { open: true } });
+			await view.setProps({ open: false });
+			expect(willHide).toHaveBeenCalledOnce();
+			expect(didHide).toHaveBeenCalledOnce();
+			expect(view.find('.card')).toBeNull();
+		}
+	});
+
+	it('keeps a selected child in place until its normal leave animation finishes', async () => {
+		const fake = installFakeAnimate();
+		const willHide = vi.fn();
+		const didHide = vi.fn();
+		class Modal extends Card {
+			animations = { out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 1000 } };
+			viewWillHide() { willHide(); }
+			viewDidHide() { didHide(); }
+		}
+		class Conditional extends PuzzleView {
+			data(_params, props) { return props; }
+			render() { return h('main', {}, [this.getData().open ? dynamicComponent(Modal) : h('#'), h('input')]); }
+		}
+		try {
+			const view = await mounted(Conditional, { props: { open: true } });
+			const modal = view.find('.card');
+			const child = liveViewList().find((v) => v.constructor === Modal);
+			const destroyAnimated = vi.spyOn(child, 'destroyAnimated');
+			await view.setProps({ open: false });
+			expect(destroyAnimated).toHaveBeenCalledOnce();
+			expect(willHide).toHaveBeenCalledOnce();
+			expect(didHide).not.toHaveBeenCalled();
+			expect(fake.animations).toHaveLength(1);
+			expect(modal.parentNode).toBe(view.element);
+			expect(child.isDestroyed).toBe(false);
+			fake.finishAll();
+			await settled();
+			expect(didHide).toHaveBeenCalledOnce();
+			expect(child.isDestroyed).toBe(true);
+			expect(modal.parentNode).toBeNull();
+		} finally { fake.finishAll(); fake.uninstall(); }
+	});
+
+	it.each([false, true])('compiled conditional replacement takes the leaving component position (selected: %s)', async (selected) => {
+		const fake = installFakeAnimate();
+		let container;
+		try {
+			const view = await mounted(CompiledConditional, { props: { selected, open: true } });
+			container = view.container;
+			document.body.append(container);
+			const before = view.find('.before');
+			const after = view.find('.after');
+			const modal = view.find('.compiled-card');
+			const child = liveViewList().find((v) => v.constructor === CompiledCard);
+			child.animations = { out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 1000 } };
+			await view.setProps({ selected, open: false });
+			expect(fake.animations).toHaveLength(1);
+			expect(child.isDestroyed).toBe(false);
+			expect([...view.element.children]).toEqual([before, view.find('p'), modal, after]);
+			fake.finishAll();
+			await settled();
+			expect(child.isDestroyed).toBe(true);
+			expect([...view.element.children]).toEqual([before, view.find('p'), after]);
+		} finally { fake.finishAll(); fake.uninstall(); container?.remove(); }
+	});
+
+	it.each(['dispatcher', 'selected dispatcher', 'nested dispatcher', 'selected nested dispatcher'])(
+		'conditional replacement takes the leaving child position through a %s', async (shape) => {
+			const fake = installFakeAnimate();
+			class Modal extends Card {
+				animations = { out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 1000 } };
+			}
+			class Dispatcher extends PuzzleView {
+				render() { return dynamicComponent(Modal, { title: 'selected' }); }
+			}
+			class NestedDispatcher extends PuzzleView {
+				render() { return dynamicComponent(Dispatcher); }
+			}
+			class Conditional extends PuzzleView {
+				data(_params, props) { return props; }
+				render() {
+					const Row = shape.includes('nested') ? NestedDispatcher : Dispatcher;
+					const child = shape.startsWith('selected') ? dynamicComponent(Row) : h(Row);
+					return h('main', {}, [h('input', { class: 'before' }),
+						this.getData().open ? child : h('p', {}, [text('closed')]),
+						h('input', { class: 'after' })]);
+				}
+			}
+			try {
+				const view = await mounted(Conditional, { props: { open: true } });
+				const before = view.find('.before');
+				const after = view.find('.after');
+				const modal = view.find('.card');
+				const child = liveViewList().find((v) => v.constructor === Modal);
+				await view.setProps({ open: false });
+				expect(fake.animations).toHaveLength(1);
+				expect(child.isDestroyed).toBe(false);
+				expect([...view.element.children]).toEqual([before, view.find('p'), modal, after]);
+				fake.finishAll();
+				await settled();
+				expect(child.isDestroyed).toBe(true);
+				expect([...view.element.childNodes]).toEqual([before, view.find('p'), after]);
+			} finally { fake.finishAll(); fake.uninstall(); }
+		}
+	);
+
+	it('destroys subscriptions, refs, listeners, and animations before the replacement mounts', async () => {
+		const outside = vi.fn();
+		const destroyed = vi.fn();
+		const fake = installFakeAnimate();
+		class Item extends PuzzleModel { static schema = { id: Puzzle.string().primary(), title: Puzzle.string() }; }
+		let old;
+		class Tracked extends PuzzleView {
+			animations = { in: { from: { opacity: 0 }, to: { opacity: 1 }, duration: 1000 }, out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 1000 } };
+			created() { old = this; }
+			data() { return { item: this.ctx.store.findOne('item', '1') }; }
+			render() { return h('div', {}, [h('button', { ref: this.__ref('button'), '@click:outside': outside }, [text(this.getData().item?.title ?? '')])]); }
+			destroyed() { destroyed(); }
+		}
+		class Replacement extends Card {
+			created() {
+				expect(old.isDestroyed).toBe(true);
+				expect(old.refs.button).toBeNull();
+				expect(this.ctx.store.keysBySubscriber.has(old)).toBe(false);
+			}
+		}
+		try {
+			const view = await mounted(Host, { props: { current: Tracked, content: '' }, models: { item: Item } });
+			expect(view.store.keysBySubscriber.has(old)).toBe(true);
+			expect(fake.animations).toHaveLength(1);
+			await view.setProps({ current: Replacement, title: 'fresh', content: '' });
+			expect(fake.animations[0].finishedState).toBe('cancelled');
+			expect(destroyed).toHaveBeenCalledOnce();
+			expect(liveViewList()).not.toContain(old);
+			document.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+			expect(outside).not.toHaveBeenCalled();
+			view.store.createRecord('item', { id: '1', title: 'late' });
+			await settled();
+			expect(view.find('.card').textContent).toBe('fresh');
+		} finally { fake.uninstall(); }
+	});
+
+	it('cancels a pending async child so its eventual data cannot mount after a swap', async () => {
+		let resolveData;
+		let announceCreated;
+		const created = new Promise((resolve) => { announceCreated = resolve; });
+		const data = new Promise((resolve) => { resolveData = resolve; });
+		const mountedHook = vi.fn();
+		let pending;
+		class Pending extends Card {
+			created() { pending = this; announceCreated(); }
+			async data() { return await data; }
+			mounted() { mountedHook(); }
+		}
+		const view = await mounted(Host, { props: { current: null, title: 'ready', content: '' } });
+		view.instance.setData('current', Pending);
+		await created;
+		let announceReplacement;
+		const replaced = new Promise((resolve) => { announceReplacement = resolve; });
+		class Replacement extends Card { created() { announceReplacement(); } }
+		view.instance.setData('current', Replacement);
+		await replaced;
+		expect(pending.isDestroyed).toBe(true);
+		resolveData({ title: 'late' });
+		await settled();
+		expect(mountedHook).not.toHaveBeenCalled();
+		expect(view.find('.card').textContent).toBe('ready');
+	});
+
+	it('destroys a selected component with a component root before mounting its replacement', async () => {
+		let nested;
+		class Nested extends Card {
+			created() { nested = this; }
+			viewWillHide() {}
+		}
+		class Selected extends PuzzleView {
+			render() { return h(Nested, { title: 'nested' }); }
+		}
+		class Replacement extends Card {
+			created() { expect(nested.isDestroyed).toBe(true); }
+		}
+		const view = await mounted(Host, { props: { current: Selected, title: 'new', content: '' } });
+		await view.setProps({ current: Replacement, title: 'new', content: '' });
+		expect(view.findAll('.card')).toHaveLength(1);
+		expect(liveViewList()).not.toContain(nested);
+	});
+
+	it('nested selections and keyed moves carry their whole DOM ranges', async () => {
+		class Nested extends Card {
+			render() { return h('div', { class: 'nested' }, [dynamicComponent(Card, { title: this.props.title })]); }
+		}
+		class List extends PuzzleView {
+			data(_params, props) { return props; }
+			render() { return h('main', {}, this.getData().items.map((id) => dynamicComponent(Nested, { key: id, title: id }))); }
+		}
+		const view = await mounted(List, { props: { items: ['a', 'b'] } });
+		const a = view.findAll('.nested')[0];
+		await view.setProps({ items: ['b', 'a'] });
+		expect(view.findAll('.nested').map((v) => v.textContent)).toEqual(['b', 'a']);
+		expect(view.findAll('.nested')[1]).toBe(a);
+		await view.setProps({ items: [] });
+		expect(view.element.childNodes).toHaveLength(0);
+	});
+
+	it('an empty selection leaves an enclosing slot unfilled', async () => {
+		class FallbackCard extends PuzzleView {
+			render() { return h('section', {}, [h(SLOT_TAG, {}, [text('unfilled')])]); }
+		}
+		class Wrapper extends PuzzleView {
+			render() { return h('main', {}, [h(FallbackCard, {}, [dynamicComponent(null)])]); }
+		}
+		const view = await mounted(Wrapper);
+		expect(view.element.textContent).toBe('unfilled');
+	});
+
+	it('a root range can swap and be destroyed without leaving comments or content', async () => {
+		class Root extends PuzzleView {
+			data(_params, props) { return props; }
+			render() { return dynamicComponent(this.getData().current, { title: 'root' }); }
+		}
+		const view = await mounted(Root, { props: { current: Card } });
+		await view.setProps({ current: Panel });
+		expect(view.container.textContent).toBe('root');
+		view.destroy();
+		expect(view.container.childNodes).toHaveLength(0);
+	});
+
+	it('serializes selections, slot content and null, and preloads takeover children', async () => {
+		const tree = h('main', {}, [dynamicComponent(Card, { title: 'SSR' }, [h('b', {}, [text('slot')])]), dynamicComponent(null)]);
+		expect(await serialize(tree)).toBe('<main><section class="card">SSR<button></button><b>slot</b></section></main>');
+		const host = await mounted(Host, { props: { current: null } });
+		const preloaded = await preloadTakeoverComponents(tree, host.ctx);
+		try { expect(preloaded.map((v) => v.constructor)).toEqual([Card]); }
+		finally { for (const view of preloaded) view.destroy(); }
+	});
+});

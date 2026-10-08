@@ -28,9 +28,11 @@ import {
 	PORTAL_TAG,
 	SNIPPET_TAG,
 	HTML_TAG,
+	COMPONENT_SLOT_TAG,
 	metadataTagError,
 } from './ViewNode.js';
-import { mountHtml, patchHtml, htmlTail, moveHtml, unmountHtml } from './html.js';
+import { mountHtml, patchHtml, htmlTail, unmountHtml } from './html.js';
+import { mountComponentSlot, patchComponentSlot, moveComponentSlot, unmountComponentSlot } from './componentSlot.js';
 import { beginFlip, playFlip } from './flip.js';
 import {
 	mountPortal,
@@ -110,6 +112,8 @@ function keepOutgoing(vnode) {
 	copy.instance = vnode.instance;
 	if (vnode.tag === HTML_TAG) copy.nodes = vnode.nodes;
 	else if (vnode.tag === PORTAL_TAG) copy.portal = vnode.portal;
+	else if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
+		vnode.tag === COMPONENT_SLOT_TAG) copy.slotEnd = vnode.slotEnd;
 	(outgoing ??= new Map()).set(vnode, copy);
 }
 
@@ -123,6 +127,20 @@ function outgoingOf(vnode) {
 	if (copy === undefined) return vnode;
 	outgoing.delete(vnode);
 	return copy;
+}
+
+/**
+ * Resolve a range's end through component roots, including nested selections.
+ * @param {ViewNode} vnode
+ * @returns {Node | null}
+ */
+function lastNode(vnode) {
+	if (vnode.isComponent) return vnode.component?.elementEnd ?? vnode.el;
+	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
+		vnode.tag === COMPONENT_SLOT_TAG) return vnode.slotEnd;
+	if ((typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__) &&
+		vnode.tag === HTML_TAG) return htmlTail(vnode);
+	return vnode.el;
 }
 
 export class ViewManager {
@@ -271,7 +289,7 @@ export class ViewManager {
 			const el = this.currentTree.el ?? null;
 			const bracketed = el != null && el.parentNode === this.container;
 			const before = bracketed ? el.previousSibling : null;
-			const after = bracketed ? el.nextSibling : null;
+			const after = bracketed ? lastNode(this.currentTree)?.nextSibling ?? null : null;
 			const outer = walking;
 			walking = walk;
 			try {
@@ -378,6 +396,11 @@ export class ViewManager {
 	/** The DOM node currently occupying this subtree's position (or null). */
 	get element() {
 		return /** @type {Element | Comment | null} */ (this.currentTree?.el ?? this.anchor ?? null);
+	}
+
+	/** The last DOM node occupying this subtree's position (or null). */
+	get elementEnd() {
+		return this.currentTree ? lastNode(this.currentTree) : this.anchor;
 	}
 
 	/** Remove everything this manager mounted. */
@@ -585,6 +608,11 @@ function expandNode(vnode, parts) {
 
 	const clone = new ViewNode(vnode.tag, vnode.attrs, out);
 	clone.key = vnode.key;
+	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
+		vnode.tag === COMPONENT_SLOT_TAG) {
+		clone.el = vnode.el;
+		clone.slotEnd = vnode.slotEnd;
+	}
 	if (vnode.isComponent) {
 		// Mirror stripSlotAttr's clone: preserve the live links so patch/teardown
 		// keep working if this vnode has already been mounted (fresh render-tree
@@ -722,7 +750,7 @@ function fill(out, nodes, k, parts) {
 	if (
 		nodes &&
 		((!k.attrs.fallback && !k.children.length) ||
-			nodes.some((n) => n.tag !== PLACEHOLDER_TAG && (!n.isText || /\S/.test(n.attrs.value))))
+			nodes.some(fillsSlot))
 	) {
 		for (const n of nodes) out.push(n);
 		return;
@@ -739,6 +767,15 @@ function fill(out, nodes, k, parts) {
 		return;
 	}
 	for (const fb of k.children) out.push(expandNode(fb, parts));
+}
+
+/** @param {ViewNode} node @returns {boolean} */
+function fillsSlot(node) {
+	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
+		node.tag === COMPONENT_SLOT_TAG) {
+		return /** @type {ViewNode[]} */ (node.children).some(fillsSlot);
+	}
+	return node.tag !== PLACEHOLDER_TAG && (!node.isText || /\S/.test(node.attrs.value));
 }
 
 const UNKNOWN_SNIPPET_OWNER = {};
@@ -850,6 +887,10 @@ export function mount(vnode, parent, ref, ctx, owner = null) {
 	// tree (see keepOutgoing).
 	if (vnode.el != null) keepOutgoing(vnode);
 	if (vnode.isComponent) return mountComponent(vnode, parent, ref, ctx, owner);
+	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
+		vnode.tag === COMPONENT_SLOT_TAG) {
+		return mountComponentSlot(vnode, parent, ref, ctx, owner, mount);
+	}
 
 	if (vnode.tag === PORTAL_TAG) {
 		if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
@@ -1173,25 +1214,22 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 		// — while the old one leaks its subscriptions, and releaseSubtree would sweep
 		// the NEW element's document-level `outside` listeners.
 		//
-		// The insertion reference is captured BEFORE the unmount and resolved after
-		// it, so both removal shapes keep today's placement: an element animating out
-		// (D58/D85 destroyAnimated, registered in leavingEls) is still in the DOM, so
-		// the new element is inserted before it exactly as it was; a synchronous
-		// removal leaves the captured next sibling as the ref.
-		// A live-HTML range (D174) ends at its last parsed node, not at its comment.
-		const next =
-			((typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__) &&
-			oldVnode.tag === HTML_TAG
-				? htmlTail(oldVnode)
-				: anchor
-			)?.nextSibling ?? null;
+		// Capture the complete old range before unmount. Selection comments disappear
+		// immediately, including through dispatcher component roots, while a child's
+		// leaving element can remain. Replace before the first surviving range node;
+		// synchronous removal falls back to the sibling after the range. Live HTML
+		// (D174) also ends at its last parsed node rather than its start comment.
+		const end = lastNode(oldVnode);
+		const next = end?.nextSibling ?? null;
+		const oldNodes = [];
+		for (let node = anchor; node; node = node.nextSibling) {
+			oldNodes.push(node);
+			if (node === end) break;
+		}
 		unmount(oldVnode);
 		const ref =
-			anchor && anchor.isConnected
-				? anchor
-				: next && next.parentNode === parent
-					? next
-					: null;
+			oldNodes.find((node) => node.parentNode === parent) ??
+			(next?.parentNode === parent ? next : null);
 		mount(newVnode, parent, ref, ctx, owner);
 		return;
 	}
@@ -1243,6 +1281,11 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 	}
 
 	const el = (newVnode.el = oldVnode.el);
+	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
+		newVnode.tag === COMPONENT_SLOT_TAG) {
+		patchComponentSlot(oldVnode, newVnode, parent, ctx, owner, mount, patchChildren, unmount);
+		return;
+	}
 
 	// Placeholder → placeholder (sameNode already matched tag '#' + null key):
 	// transfer the comment el, nothing to patch. A placeholder ↔ real node swap is
@@ -1571,15 +1614,30 @@ function propsEqual(a, b, child) {
  */
 const leavingEls = new WeakSet();
 
+// A selection swap also destroys descendants whose rendered root is another
+// component. Carry synchronous teardown through their own ViewManager.clear().
+let immediateUnmount = false;
+
 /**
  * Removing an element vnode detaches one DOM node, but component instances
  * anywhere in the subtree still hold store subscriptions and lifecycle state —
  * destroy them all, not just a top-level component vnode.
  *
  * @param {ViewNode} vnode
+ * @param {boolean} [immediate] bypass leave animations for a dynamic selection swap
  */
-function unmount(vnode) {
+function unmount(vnode, immediate = false) {
+	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) && immediate) {
+		const previous = immediateUnmount;
+		immediateUnmount = true;
+		try { return unmount(vnode); }
+		finally { immediateUnmount = previous; }
+	}
 	if (outgoing !== null) vnode = outgoingOf(vnode);
+	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
+		vnode.tag === COMPONENT_SLOT_TAG) {
+		return unmountComponentSlot(vnode, unmount);
+	}
 	if (
 		(typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__) &&
 		vnode.tag === HTML_TAG
@@ -1649,7 +1707,8 @@ function unmount(vnode) {
 		// takes the instant, synchronous destroy() — 0.6.0's behaviour, and the
 		// timing every non-animating removal already has. playOut() carries the same
 		// rule for the router's leave paths, which never come through here.
-		if (child.__isMounted && (child?.animations?.out || child?.__hasHideHooks)) {
+		if (!((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) && immediateUnmount) &&
+			child.__isMounted && (child?.animations?.out || child?.__hasHideHooks)) {
 			const leavingEl = child.element;
 			if (leavingEl && leavingEl.nodeType === 1 /* ELEMENT_NODE */) {
 				leavingEls.add(leavingEl);
@@ -2120,19 +2179,15 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail = nul
 		const [oldChild, newChild] = pairs[i];
 		if (oldChild) {
 			patch(oldChild, newChild, el, ctx, owner);
-			// A live-HTML range (D174) is compared by its last node and moved whole.
-			// The probe stays inline in the condition so a build without it folds
-			// this arm away and keeps only the original single-node move.
-			if (
-				(typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__) &&
-				newChild.tag === HTML_TAG
-			) {
-				if (nextPersistentSibling(htmlTail(newChild)) !== ref) {
-					moveHtml(el, newChild, ref);
-					if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+			const end = lastNode(newChild);
+			if (nextPersistentSibling(end) !== ref) {
+				if (((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) ||
+					(typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__)) &&
+					end !== newChild.el) {
+					moveComponentSlot(el, newChild, ref, end);
+				} else {
+					el.insertBefore(newChild.el, ref);
 				}
-			} else if (nextPersistentSibling(newChild.el) !== ref) {
-				el.insertBefore(newChild.el, ref);
 				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 					devperfMutation();
 				}

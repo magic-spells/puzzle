@@ -18,6 +18,7 @@ connections:
   - FILE-EXPR-AST
   - FILE-EXPR-METHODS
   - FILE-EXPR-PRINT
+  - FILE-PARSER-COMPONENT
 notes:
   - kind: state
     text: >-
@@ -89,6 +90,7 @@ loosening one fails a test on purpose.
   `café / 2`, `金額 / 2`, `価格new / 2`, `5. / 2`, `of / 2` in every position; a
   regex-shaped template expression closes at its brace and fails with the
   grammar's error; the `<script>` scan keeps a regex holding a quote opaque.
+- **Component selector** (`component_test.go`, D180 in the framework plan): the required expression-valued `is` preserves normal props and children, including ordinary `name`/`from` props; spread operands carry parsed trees and original positions. Missing/non-expression/non-component-literal/duplicate `is`, an authored `flip`, reserved Component family names and unsupported spreads have clear errors. Nullish selectors and `@flip` callback props remain valid. Generic corpus expression auditing includes `SpreadAttr` operands.
 - **Every construct parses:** conditionals and else-if chains, unless,
   case/when, loops, interpolation, comments, inline SVG, refs, raw blocks,
   composition markers, Portal, snippets, dotted family tags.
@@ -144,4 +146,4 @@ Contracts pinned (framework plan, `repo=puzzle`; plans cannot connect across
 repos): COMPONENT-TEMPLATE-PARSER, DECISION-D150-RAW-TEMPLATE-BLOCK,
 DECISION-D164-PLAYGROUND-WASM-BOUNDARY, DECISION-D166-SNIPPETS,
 DECISION-D167-COMPONENT-FAMILIES, DECISION-D173-CORE-SEMANTICS,
-DECISION-D176-EXPRESSION-LANGUAGE, DOC-LANGUAGE-CORE, DOC-SPEC-TEMPLATE.
+DECISION-D176-EXPRESSION-LANGUAGE, DECISION-D180-COMPONENT-SLOT, DOC-LANGUAGE-CORE, DOC-SPEC-TEMPLATE.

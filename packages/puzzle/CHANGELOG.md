@@ -180,8 +180,7 @@ prerendered HTML is pinned byte for byte by a golden test.
 
 ### Upgrading from 0.8
 
-Change the range to `^0.9.0`. One change breaks, and it only touches apps
-that configure `i18n`:
+Change the range to `^0.9.0`. Two changes can require an update:
 
 1. **BREAKING: `i18n.locales` is `[{ locale, label, href, active }]`.** 0.8.0
    exposed a `string[]` of tags. `label` is the language's own name
@@ -196,25 +195,49 @@ that configure `i18n`:
    Nothing fails at build time. A switcher built on the old list prints
    nothing where a tag was, and `setLocale(entry)` throws a `RangeError`.
 
+2. **`Component` is a reserved built-in tag/family root (D180).** Rename a
+   user `Component.pzl`, a tag import named `Component`, or a family rooted
+   at `Component`. The compiler reports a positioned error with a rename
+   hint. Other component names are unaffected.
+
 Three behavior changes do not break anything that worked, but can change what
 you see:
 
-2. **`puzzle preview` and `puzzle dev` in static mode serve a nested 404
+3. **`puzzle preview` and `puzzle dev` in static mode serve a nested 404
    first.** A miss whose first URL segment names a `dist` folder holding its
    own `404.html` gets that page (`/es/missing` → `dist/es/404.html`) before
    the root `dist/404.html`. The rule reads the file layout, not the config,
    and the folder name must match the segment exactly. A `404.html` that
    `public/` copies into a first-level folder now answers for misses under it.
-3. **`<html dir>` follows the locale in every app that configures `i18n`.**
+4. **`<html dir>` follows the locale in every app that configures `i18n`.**
    An rtl locale (Arabic, Hebrew, Persian, Urdu, …) sets `dir="rtl"` on the
    prerendered page and on a client switch. An ltr locale removes only a
    `dir="rtl"`; any other `dir` the shell sets is kept.
-4. **The config's top-level `site` key is now read, and validated.** It must
+5. **The config's top-level `site` key is now read, and validated.** It must
    be an http(s) origin with no path (`'https://example.com'`); anything else
    fails the build. `i18n.routing` accepts only `'prefix'` and `i18n.detect`
    only a boolean.
 
 ### Added
+
+- **Runtime component selection: `<Component is={ expr }>` (D180).** Select an
+  imported compiled component directly or through a script map
+  (`is={ cards[embed.type] }`). Every candidate must be
+  imported by the caller; there is no registry or runtime module lookup.
+  Changing the constructor completely tears down the old instance before
+  mounting with current reactive props and callbacks. A `null`/`undefined`
+  selection renders nothing. Children are normal default-slot content.
+  Both prerender modes serialize the selected component or nothing.
+
+  Only `is` may read imports and simple module declarations, so
+  `is={ TaskCard }` and `is={ cards[key] }` work: template locals win, then
+  module bindings, then data. Other props/children retain data scope;
+  `name` and `from` are ordinary forwarded props.
+  Component attribute spreads (`{...embed.props}`) merge in written order;
+  later attrs or spreads win. `bind:` remains unsupported on components.
+  `Component` is now a reserved tag/family root; user files or tag imports
+  with that name get a compile error and rename hint. Missing or
+  non-expression `is` is a positioned error.
 
 - **Locale URL prefixes: `i18n.routing: 'prefix'` (D177).**
 

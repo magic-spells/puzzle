@@ -83,8 +83,9 @@ the per-feature sections it points to; this card holds implementation rules.
   `app/models/<name>.ts`. Model generation prints registry wiring instead of editing JS.
   `--family A,B` (D167) scaffolds `app/components/<Root>/` with one `.pzl` per member plus
   an `index.js`/`index.ts` barrel; names are PascalCase and reserved marker names are
-  refused (views exempt). Collisions are all-or-nothing and `--force` rewrites only the
-  family's files. The `--path` containment guard resolves symlinks
+  refused for components. `Component` is refused for every `.pzl` scaffold, including
+  views, layouts, family roots and members (D180), with a rename hint before any write.
+  Collisions are all-or-nothing and `--force` rewrites only the family's files. The `--path` containment guard resolves symlinks
   (`evalSymlinksAllowMissing`, in lockstep with pieces).
 - **`add tailwind`** writes missing canonical files or prints the snippet for
   user-owned config.

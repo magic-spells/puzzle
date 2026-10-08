@@ -57,8 +57,8 @@ compiled into broken JS.
 - **Attribute and prop names may be non-ASCII**: `<Card größe={ 3 }>` →
   `props.größe`.
 - **Marker names cannot be a family root**: `Children.X`, `Slot.X`,
-  `Snippet.X`, `Portal.X` are errors ([[DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS]]);
-  markers match exactly, never dotted.
+  `Snippet.X`, `Portal.X`, `Component.X` are errors ([[DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS]]);
+  built-ins match exactly, never dotted. `Component` is the runtime selection built-in (D180), and a user component/tag import with that name needs a rename.
 - **Codegen is unchanged**: `<Frame.Wrapper>` emits
   `new ViewNode(Frame.Wrapper, …)`, resolved lexically like `Frame`. No
   registry, no import inspection. The `component_family` golden pins it.
@@ -69,8 +69,11 @@ compiled into broken JS.
 - **`puzzle generate component Frame --family Wrapper,Content`** scaffolds the
   directory, one `.pzl` per member and the barrel. Root and member names must
   be PascalCase and not a marker name (the marker guard applies to plain
-  `generate component` too; views are exempt). Family stubs use a
-  composition-shaped template (`<div class={ classes }>` + `<Children/>` + a
+  `generate component` too; views are exempt). `Component` is separately reserved
+  for every `.pzl` scaffold, including views, layouts and family members (D180),
+  because codegen rejects that basename in every emission mode. The generator
+  refuses it before any write and prints the compiler's rename hint. Family stubs
+  use a composition-shaped template (`<div class={ classes }>` + `<Children/>` + a
   caller `class` override) so nesting members doesn't drop content. The
   printed import hint follows `--path` (`@` alias under `app/`, else the
   project-relative path).

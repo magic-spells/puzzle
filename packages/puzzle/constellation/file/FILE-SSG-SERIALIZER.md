@@ -3,7 +3,7 @@ name: SSG ViewNode serializer
 status: verified
 path: client-runtime/ssg/serialize.js
 language: javascript
-summary: ViewNode-to-HTML serializer matching browser ViewManager semantics.
+summary: ViewNode-to-HTML serialization matching browser semantics, including transparent Component ranges.
 connections:
   - COMPONENT-SSG
 verified_at: '2026-08-24T21:11:50.859Z'

@@ -42,7 +42,8 @@ type Element struct {
 	RawSrc string
 }
 
-// Component is a capitalized tag referencing an imported component. Props reuse
+// Component is a capitalized tag referencing an imported component, or the
+// reserved <Component> runtime selector (D180). Props reuse
 // the attribute node types; callback props (@name={...}) are EventAttr values
 // resolved by codegen (D16).
 type Component struct {
@@ -248,6 +249,14 @@ type DynamicAttr struct {
 	Pos     Position
 }
 
+// SpreadAttr is {...expr} on a component invocation. It spreads the evaluated
+// object into props in source order; expression syntax inside it is unchanged.
+type SpreadAttr struct {
+	Expr    string
+	ExprAST expr.Node
+	Pos     Position
+}
+
 // EventAttr is `@name={ expr }` with optional `:modifier` suffixes
 // (`@keydown:enter:prevent={ … }`). On a DOM element it is a listener; on a
 // component tag codegen turns it into a callback prop (D16) and rejects any
@@ -274,6 +283,7 @@ type MixedAttr struct {
 
 func (*StaticAttr) isAttr()  {}
 func (*DynamicAttr) isAttr() {}
+func (*SpreadAttr) isAttr()  {}
 func (*EventAttr) isAttr()   {}
 func (*MixedAttr) isAttr()   {}
 

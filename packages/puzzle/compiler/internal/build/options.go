@@ -126,13 +126,14 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 	f := pl.Features()
 	return map[string]string{
-		"__PUZZLE_DEV__":          strconv.FormatBool(flags.Dev),
-		"__PUZZLE_HAS_FLIP__":     strconv.FormatBool(f.Flip),
-		"__PUZZLE_HAS_PORTAL__":   strconv.FormatBool(f.Portal),
-		"__PUZZLE_HAS_RAW_AT__":   strconv.FormatBool(f.RawAt),
-		"__PUZZLE_HAS_LAZY__":     strconv.FormatBool(f.Lazy),
-		"__PUZZLE_HAS_SNIPPETS__": strconv.FormatBool(f.Snippets),
-		"__PUZZLE_HAS_RAW_HTML__": strconv.FormatBool(f.RawHTML),
+		"__PUZZLE_DEV__":                strconv.FormatBool(flags.Dev),
+		"__PUZZLE_HAS_FLIP__":           strconv.FormatBool(f.Flip),
+		"__PUZZLE_HAS_PORTAL__":         strconv.FormatBool(f.Portal),
+		"__PUZZLE_HAS_RAW_AT__":         strconv.FormatBool(f.RawAt),
+		"__PUZZLE_HAS_LAZY__":           strconv.FormatBool(f.Lazy),
+		"__PUZZLE_HAS_SNIPPETS__":       strconv.FormatBool(f.Snippets),
+		"__PUZZLE_HAS_COMPONENT_SLOT__": strconv.FormatBool(f.ComponentSlot),
+		"__PUZZLE_HAS_RAW_HTML__":       strconv.FormatBool(f.RawHTML),
 		// The sanitizer alone: only `raw` needs it, not `newline_to_br` (D174).
 		"__PUZZLE_HAS_RAW_SANITIZE__": strconv.FormatBool(f.RawSanitize),
 		"__PUZZLE_TAKEOVER__":         strconv.FormatBool(flags.Takeover),

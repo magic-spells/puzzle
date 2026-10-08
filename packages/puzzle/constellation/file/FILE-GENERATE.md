@@ -3,7 +3,7 @@ name: artifact generator
 status: verified
 path: compiler/internal/generate/generate.go
 language: go
-summary: Component/view/layout/model generation and output-path rules.
+summary: Component/view/layout/model generation; Component.pzl is reserved across every .pzl scaffold.
 connections:
   - COMPONENT-COMPILER-CLI
 verified_at: '2026-08-24T21:11:50.859Z'

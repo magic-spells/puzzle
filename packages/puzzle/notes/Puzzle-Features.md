@@ -62,6 +62,7 @@ blog posts included.
 | **Sitemap** | `sitemap.xml` listing every page in every language | D177 | S |
 | **Dynamic-route prerendering** | A `staticPaths` route field: `/blog/:slug` becomes one page per post, per language | new decision card | M |
 | **`prev` on `afterUpdate`** | `afterUpdate(prev)` receives the props, params, route and data from before the update | new decision card | S |
+| **Runtime component selection** | `<Component is={ current }>` or `is={ cards[key] }` with imported constructors; reactive props, events and spreads, full teardown on swaps, normal default slots and nullish empty selection | [D180](../constellation/decision/DECISION-D180-COMPONENT-SLOT.md) | S–M |
 
 Dynamic-route prerendering was the top-ranked gap in one review ("static site
 mostly means blogs, docs and products"). Without it a multilingual blog would
@@ -83,7 +84,7 @@ more than one release can hold; pick from the top.
 | 7 | **Per-component HMR** | A state-preserving full reload | Measure real editing friction before replacing reload | L / high |
 | 8 | **Link prefetch** on hover or when visible | None | Chunk-only prefetch first; data prefetch needs #2 | S–M / medium |
 | 9 | **Named routes** (`router.push({ name, params })`) | `name` is informational only | Small API addition | S / low |
-| 10 | **Dynamic components** chosen at runtime | `{#case}` is the workaround | Verify what is possible today first; the unrestricted form is a deliberate boundary | S–M |
+| 10 | **Dynamic components** chosen at runtime | In 0.9.0: `<Component is={ expr }>` chooses imported constructors; an ordinary `cards[key]` expression supports maps (D180) | Bounded form implemented; unrestricted module-name resolution remains a deliberate boundary | S–M |
 | 11 | **Markdown and content collections** | None; no public build plugin contract | A content prebuild step; pairs with dynamic-route prerendering | M / medium |
 | 12 | **Element actions** (tooltip, autofocus, …) | Refs plus lifecycle; only `@event:outside` built in | The intended shape is `ref={ fn }` | S–M |
 | 13 | **Asset imports and image optimization** | Public files and inline SVG | Hashed imports for images and fonts, then an optional image integration | M–L / medium |

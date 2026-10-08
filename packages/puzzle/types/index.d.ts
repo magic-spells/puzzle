@@ -649,6 +649,8 @@ export declare class PuzzleView {
 	 * type is `Element | Comment`, not `Element` alone.
 	 */
 	readonly element: Element | Comment | null;
+	/** @internal Last DOM node of the rendered component range. */
+	readonly elementEnd: Node | null;
 
 	/**
 	 * Live element refs (D72): `ref="name"` in the template exposes the
@@ -1044,6 +1046,9 @@ export declare const SNIPPET_TAG: string;
 
 /** Reserved tag marking a `<Portal>…</Portal>` teleport (D144). */
 export declare const PORTAL_TAG: string;
+
+/** Compiler support for <Component is={...}>; children are normal slot content. */
+export declare function dynamicComponent(value: unknown, props?: Record<string, any>, children?: ViewNode[]): ViewNode;
 
 /**
  * Render one item-form `{#for}` site (D170). A compiled module imports this as

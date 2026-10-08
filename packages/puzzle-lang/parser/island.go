@@ -210,6 +210,8 @@ func attrPos(a Attr) Position {
 		return t.Pos
 	case *DynamicAttr:
 		return t.Pos
+	case *SpreadAttr:
+		return t.Pos
 	case *EventAttr:
 		return t.Pos
 	case *MixedAttr:

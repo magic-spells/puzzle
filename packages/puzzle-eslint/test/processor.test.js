@@ -341,9 +341,9 @@ describe('TypeScript blocks', () => {
 	});
 });
 
-// Component tags are the one way a template uses a script binding: <Card>
-// renders the imported Card. puzzle/uses-template-components marks each tag's
-// root (Frame for <Frame.Header>) used, like react/jsx-uses-vars.
+// Component tags and <Component> selectors use script bindings.
+// puzzle/uses-template-components marks each tag's root (Frame for
+// <Frame.Header>) and each selector's free references, like react/jsx-uses-vars.
 describe('puzzle/uses-template-components', () => {
 	const unusedNames = (res, ruleId) =>
 		res.messages
@@ -397,6 +397,100 @@ describe('puzzle/uses-template-components', () => {
 				'InProp',
 			].sort(),
 		);
+	});
+
+	it('accepts constructor and indexed-map selectors with spread props, marking module reads as used', async () => {
+		const src = `<puzzle-view>
+  <section>
+    <Component is={TaskCard} title={title} onclose={close} {...embed.props}><p>default slot</p></Component>
+    <Component is={embeds[kind]} {...embed.props ?? { label: '</puzzle-view><InSpread/>' }}><SlotCard/></Component>
+  </section>
+</puzzle-view>
+<puzzle-skeleton><Component is={Loading}/></puzzle-skeleton>
+<script>
+import TaskCard from './TaskCard.pzl';
+import BacktestCard from './BacktestCard.pzl';
+import SlotCard from './SlotCard.pzl';
+import Loading from './Loading.pzl';
+import InSpread from './InSpread.pzl';
+const embeds = { backtest: BacktestCard };
+const kind = 'backtest';
+const title = 'data props do not read module bindings';
+export default class Page {}
+</script>`;
+		const res = await lintWith([js.configs.recommended, ...plugin.configs.recommended], src, 'component-slot.pzl');
+		expect(res.messages.filter((m) => m.fatal || m.ruleId === 'puzzle/no-invalid-sections')).toEqual([]);
+		expect(unusedNames(res, 'no-unused-vars')).toEqual(['InSpread', 'title']);
+	});
+
+	it('keeps name and from props in data scope beside an is selector', async () => {
+		const src = `<puzzle-view><Component is={Selected} name={name} from={from}/></puzzle-view>
+<script>
+import Selected from './Selected.pzl';
+const name = 'module name';
+const from = {};
+export default class Page {}
+</script>`;
+		const res = await lintWith([js.configs.recommended, ...plugin.configs.recommended], src, 'ordinary-props.pzl');
+		expect(res.messages.filter((m) => m.fatal)).toEqual([]);
+		expect(unusedNames(res, 'no-unused-vars')).toEqual(['from', 'name']);
+	});
+
+	it('does not treat reserved Component tags or a reserved family root as an import use', async () => {
+		const src = `<puzzle-view><Component is={current}/><Component.Card/></puzzle-view>
+<script>import Component from './Component.pzl'; export default class Page {}</script>`;
+		const res = await lintWith([js.configs.recommended, ...plugin.configs.recommended], src, 'reserved-component.pzl');
+		expect(res.messages.filter((m) => m.fatal)).toEqual([]);
+		expect(unusedNames(res, 'no-unused-vars')).toEqual(['Component']);
+	});
+
+	it('finds selector reads without marking strings, property keys or arrow parameters', async () => {
+		const src = `<puzzle-view>
+  <Component is={cards.find(Card => Card.name === 'InString') ?? { InKey: Selected }.value}/>
+</puzzle-view>
+<script>
+import Selected from './Selected.pzl';
+import Card from './Card.pzl';
+import InKey from './InKey.pzl';
+import InString from './InString.pzl';
+const cards = [];
+export default class Page {}
+</script>`;
+		const res = await lintWith([js.configs.recommended, ...plugin.configs.recommended], src, 'selector-scopes.pzl');
+		expect(res.messages.filter((m) => m.fatal)).toEqual([]);
+		expect(unusedNames(res, 'no-unused-vars')).toEqual(['Card', 'InKey', 'InString']);
+	});
+
+	it('keeps module names unused when loop items or snippet parameters shadow selectors', async () => {
+		const src = `<puzzle-view>
+  <List><Snippet Card><Component is={Card}/></Snippet></List>
+  {#for Row in rows, Index}<Component is={Row}/><Component is={maps[Index]}/>{/for}
+  <Component is={After}/>
+</puzzle-view>
+<script>
+import List from './List.pzl';
+import Card from './Card.pzl';
+import Row from './Row.pzl';
+import Index from './Index.pzl';
+import After from './After.pzl';
+const maps = {};
+export default class Page {}
+</script>`;
+		const res = await lintWith([js.configs.recommended, ...plugin.configs.recommended], src, 'template-scopes.pzl');
+		expect(res.messages.filter((m) => m.fatal)).toEqual([]);
+		expect(unusedNames(res, 'no-unused-vars')).toEqual(['Card', 'Index', 'Row']);
+	});
+
+	it('marks module selectors in TypeScript without changing the script offsets', async () => {
+		const src = `<puzzle-view><Component is={Card}/></puzzle-view>
+<script lang="ts">import Card from './Card.pzl'; const unused: number = 1; export default class Page {}</script>`;
+		const res = await lintWith(
+			[...plugin.configs.recommended, ...tsConfig, { files: TS_BLOCKS, rules: { '@typescript-eslint/no-unused-vars': 'error' } }],
+			src,
+			'dynamic-ts.pzl',
+		);
+		expect(res.messages.filter((m) => m.fatal)).toEqual([]);
+		expect(unusedNames(res, '@typescript-eslint/no-unused-vars')).toEqual(['unused']);
 	});
 
 	it('without the rule, tag-only imports are reported (the rule is what marks them)', async () => {

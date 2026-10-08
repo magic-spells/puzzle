@@ -284,8 +284,10 @@ enforced, not merely advised.
   first-visit redirect, `<html dir>`, translated `meta` titles; BREAKING:
   `i18n.locales` is `{ locale, label, href, active }[]`); D178
   `afterUpdate(prev)`; D179 `staticPaths`; and the `language-switcher` and
-  `language-menu` pieces (PR #217). Production sizes unchanged from 0.8.0.
-  The next free decision number is **D180**.
+  `language-menu` pieces (PR #217). D180 adds `<Component>` for runtime
+  selection from constructors imported by the caller: `is={ current }` or
+  `is={ cards[key] }` forwards children as the normal default slot; nullish
+  selection renders nothing. The next free decision number is **D181**.
 - Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
   amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74, D160 = v1.75,
@@ -442,6 +444,9 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   lifecycle, refs, memoization, skeletons, animation hooks.
 - `views/ViewNode.js` + `views/viewManager.js`: vnode representation, DOM
   mount/patch, keyed reconciliation, components, slots, islands, refs, events.
+- `views/componentSlot.js`: D180 compiler-support `dynamicComponent`
+  helper for `<Component>`; ordinary component vnodes inside
+  a stable comment-bracketed range, gated by `__PUZZLE_HAS_COMPONENT_SLOT__`.
 - `views/listBlock.js`: one persistent row state per key for an item-form
   `{#for}` site — the row's item, index, stored record revision, live handler
   scope, cached vnode subtree and nested blocks; returns the cached subtree for
@@ -529,6 +534,19 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   component name is validated as `Ident('.'Ident)*` with JavaScript
   identifier rules, so the dotted family form `<Frame.Wrapper>` is legal and
   `<Frame-x>`, `<Frame:Wrapper>`, and `<Slot.Foo>` are not (D167).
+- `<Component>` selects only compiled constructors already imported by its
+  caller (D180, SPEC §67). `is={ value }` forwards normal default children;
+  nullish is empty. `is={ cards[key] }` reads an ordinary map of imported
+  constructors. Only `is` may read imports and simple module declarations
+  directly (template locals → module bindings
+  → data); destructured bindings need an alias or `data()` exposure. Other props,
+  ordered `{...props}` spreads and children keep data scope; `name` and
+  `from` are ordinary forwarded props. Missing or non-expression `is` is a
+  compile error. A constructor swap completely tears down the old instance
+  before mounting the new one
+  with current props. `Component` is reserved as a tag/family root; rename a
+  user file or import used under that name. No registry or runtime module
+  lookup; component `bind:` remains unsupported (D147).
 - DOM listeners are per-node and patch-managed. Component `@event` bindings
   are callback props, not custom DOM events; there is no `$emit`.
 - Template text is not HTML-entity decoded and interpolations become text

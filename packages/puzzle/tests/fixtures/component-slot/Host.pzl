@@ -1,0 +1,16 @@
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Card from './Card.pzl';
+import Panel from './Panel.pzl';
+const cards = { card: Card, panel: Panel };
+export default class Host extends PuzzleView {
+  data(_params, props) { return { ...props, current: cards[props.type] }; }
+  events = { close: (title) => this.props.onclose?.(title) };
+}
+</script>
+<puzzle-view>
+  <div class="current"><Component is={current} {...extra} title={title} @close={close}><b>slot {title}</b></Component></div>
+  <div class="mapped"><Component is={cards[type]} {...extra} title={title} @close={close}><b>map slot {title}</b></Component></div>
+  <div class="direct"><Component is={Card} title="direct"/></div>
+  <input class="persistent"/>
+</puzzle-view>

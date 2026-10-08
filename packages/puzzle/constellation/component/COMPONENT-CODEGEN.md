@@ -29,12 +29,13 @@ inline component ([[DECISION-D173-CORE-SEMANTICS]] V15) gets a synthesized class
 
 The `<script>` body is tokenized ONCE (`tokenizeJS`) and feeds class-name extraction,
 the import-collision warning and the reserved-binding check. Tokens carry a `comment`
-bit: a comment is whitespace to the class-keyword adjacency rule
+bit and remember line terminators in preceding whitespace/comments for selector ASI.
+A comment is whitespace to the class-keyword adjacency rule
 (`export default /* x */ class Foo {}` is a declaration); a string or regex breaks it.
 Class extraction requires a real named `export default class … extends …`.
 
 - **Reserved bindings** cover what the compiler imports or declares: `ViewNode`,
-  `SLOT_TAG`, `SNIPPET_TAG`, `PORTAL_TAG`, `__s`, `__l`, `__e`, `__r`, the `{#svg}`
+  `SLOT_TAG`, `SNIPPET_TAG`, `PORTAL_TAG`, `__dc`, `__s`, `__l`, `__e`, `__r`, the `{#svg}`
   shared-asset locals and the hoisted `__L<n>` list-block metas. A clash is a
   positioned error naming the emission.
 - **Names are Unicode JS identifiers** ([[DECISION-D176-EXPRESSION-LANGUAGE]] rule 8,
@@ -60,6 +61,7 @@ D176 and [[DOC-SPEC-TEMPLATE]]. Non-obvious points:
   `ViewNode`), otherwise a rewrite (row `todo` → `s.item`, counter → `s.i`, mangled
   `__pzl<name>`). Arrow params shadow bindings, which shadow a handler's `event`; every
   other name is `__d.<name>` — including `event` outside a handler.
+- **Selector scope (D180):** `<Component>` `is` adds module imports and simple declared identifiers below loop/snippet/arrow bindings and above data. Props and spread operands retain ordinary data scope. The conservative token scan includes subsequent `const`/`let`/`var` declarators, including an uninitialized final name terminated by a line break or EOF through ASI, but not destructuring patterns; use a simple alias or `data()` for those values. It never rewrites the script or permits arbitrary script calls. Only a selector read of a module `let`/`var` binding marks enclosing cached row blocks volatile. Imports and `const` bindings preserve normal row caching; in-place edits to a const map's entries are not observed by cached rows.
 - **`event` read both as data and as the DOM event in one template is an error**
   (`checkEventUses`, after render + skeleton emission). A loop/snippet/arrow binding
   named `event` counts as neither. The DOM param is renamed `__ev` when a binding owns
@@ -111,7 +113,7 @@ built-in.
 
 **The import line is built per file from what it uses** — the tree-shaking contract:
 `ViewNode` always; then `SLOT_TAG`, `SNIPPET_TAG`, `PORTAL_TAG`, `displayValue as __s`,
-`listRows as __l`, `loopItems as __e`, `loopRange as __r` (in that order) only when
+`dynamicComponent as __dc`, `listRows as __l`, `loopItems as __e`, `loopRange as __r` (in that order) only when
 emitted. So `views/listBlock.js` must never be imported from inside `client-runtime/`
 ([[FILE-LIST-BLOCK]]).
 
@@ -119,6 +121,7 @@ emitted. So `views/listBlock.js` must never be imported from inside `client-runt
   `fallback: () => […]` thunk (D141) that a filled marker never runs. `<Snippet>` emits
   `SNIPPET_TAG` with ordered `params` and a `fn({...params})` closure keeping caller
   scope. `<Portal>` emits one `PORTAL_TAG`; a Portal as a component's ROOT is an error.
+- **Runtime component selection** (`component.go`, [[FILE-CODEGEN-COMPONENT]]): a reserved `Component` invocation emits `dynamicComponent as __dc`, imported only when used. Children are normal default-slot content; `is={ cards[key] }` is ordinary expression lookup. Other attrs, including `name` and `from`, use normal data-scoped props/events plus source-ordered `SpreadAttr` emission. Missing/non-expression and non-component literal `is`, an authored `flip` attribute, and a user `Component` file/tag binding get positioned rename/usage errors. `Component.*` is reserved at the parser. The check emitter (`compiler/internal/check/component.go`) preserves selector scope in its TypeScript mirror.
 - **Loop domain is guarded** (D173 V12): `__e(coll).map(…)` / `__r(from, to).map(…)`, so
   a missing collection loops zero times. Integer-literal ranges fold: an array literal
   up to 16 items, `Array.from` beyond, `[]` when end < start — no `loopRange` import.
@@ -139,7 +142,7 @@ Item-form loops lower to persistent list blocks
 in place, with static facts in a module-scope `const __L<id> = { key, counter?, ctrl?,
 roots?, fields?, deep?, volatile? }` (non-default fields only, fixed order). The key
 function is hoisted; a key that reads a data root or a library call can't live at module
-scope, so that site keeps `.map`. The row root gets `key: s.k`; nested loops take the
+scope, so that site keeps `.map`. The row root gets `key: s.k` after prop spreads, so the resolved synthetic or explicit row key wins over any key in a spread; nested loops take the
 enclosing row as owner and name scopes `s1`, `s2`, …; `Class.__roots = […]` is stamped
 when any site has a root mask, capped at 31 (JS bitwise AND is 32-bit signed), past which
 a site degrades to `volatile`.

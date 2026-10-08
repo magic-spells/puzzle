@@ -135,7 +135,8 @@ grammar off inside — literal braces compile as-is, HTML still parses; no
 nesting, and attribute-value use is a compile error; a single literal brace
 anywhere, attribute values included, is `\{` / `\}` — e.g. `pattern="[0-9]\{5\}"`),
 `@event={ handler }` with modifiers, component imports used as capitalized tags
-(dotted family members too — `<Frame.Wrapper>`). A range loop binds its
+(dotted family members too — `<Frame.Wrapper>`), and `<Component>` for runtime
+selection from imported constructors (puzzle ≥ 0.9.0; below). A range loop binds its
 counter after the range: `{#for 1...n, i}`. HTML void elements (`<br>`,
 `<img …>`, `<input …>`) need no `/>`, and a closer such as `</br>` is a
 compile error.
@@ -314,7 +315,8 @@ Rules that bite:
   `address` is missing instead of throwing (`?.` is legal but unnecessary),
   and a method call on a missing value prints nothing too (dev warning). A
   bare call names the library, so a data field is never callable; a bare read
-  names `data()`. A missing collection or a non-list loops zero times (dev
+  names `data()`, except the `<Component>` `is` attribute may read script module
+  bindings directly. A missing collection or a non-list loops zero times (dev
   warns on a non-list; range bounds truncate to whole numbers), so a string's
   characters are `{#for c in text.split('')}`. `==` keeps its
   JavaScript meaning; `x == null` is the absence test. Object literals work as
@@ -378,7 +380,7 @@ Rules that bite:
 - **Component families are dotted tags + a barrel** (puzzle ≥ 0.7.0). A
   capitalized tag must be `Ident('.'Ident)*` — `<Card>` or `<Frame.Wrapper>`;
   a dash, a colon, or an empty segment is a compile error, and a marker name
-  (`Children`/`Slot`/`Snippet`/`Portal`) cannot be a family root. A dotted tag
+  (`Children`/`Slot`/`Snippet`/`Portal`/`Component`) cannot be a family root. A dotted tag
   is a plain member expression resolved against module scope, so group the
   family in a directory with a plain JS barrel — `.pzl` stays ONE class per
   file, and there is no registry or compiler magic:
@@ -399,6 +401,58 @@ Rules that bite:
   ```
 
   `puzzle generate component Frame --family Wrapper,Content` scaffolds it all.
+
+- **`<Component>` chooses an imported constructor** (puzzle ≥ 0.9.0). Every
+  possible component must already be imported by this file. There is no lazy
+  manifest, global registry or runtime string-to-module lookup.
+
+  ```html
+  <puzzle-view>
+    <div>
+      <Component is={ current } title={ title } @close={ close }>
+        <p>Default content for the selected card</p>
+      </Component>
+
+      <Component is={ cards[embed.type] } {...embed.props}/>
+    </div>
+  </puzzle-view>
+
+  <script>
+  import { PuzzleView } from '@magic-spells/puzzle';
+  import TaskCard from './TaskCard.pzl';
+  import BacktestCard from './BacktestCard.pzl';
+  const cards = { task: TaskCard, backtest: BacktestCard };
+
+  export default class EmbedHost extends PuzzleView {
+    data(params, props) { return props; }
+    events = { close: () => {} };
+  }
+  </script>
+  ```
+
+  `current` may be a constructor returned by `data()`; `is={ TaskCard }`
+  also reads the import directly. `is` forwards children as the selected
+  component's normal default slot; `null`/`undefined` renders nothing.
+  `is={ cards[embed.type] }` selects through an ordinary script map. A missing
+  map entry evaluates to `undefined`, so it renders nothing too.
+
+  Only `is` may read imports and simple script declarations
+  directly (including later `const`/`let`/`var` declarators). Destructured
+  bindings need a simple module alias or exposure through `data()`. Template
+  loop/snippet/arrow bindings win, then module bindings, then data fields.
+  Other props, including `name` and `from`, spread operands and child
+  expressions keep ordinary data scope. `{...props}` merges props in written
+  attribute order; later attrs or spreads win. This is attribute syntax, not
+  spread inside expressions.
+  Use a variable or parenthesized object literal for its operand; the
+  leading-object-literal restriction still applies.
+  Reactive props and callback props work as on a normal component; `bind:`
+  remains unsupported. A constructor swap destroys the old instance and its
+  subscriptions/listeners/refs before mounting with current props; a stable
+  constructor retains its instance. Both prerender modes emit selected HTML
+  or nothing. Missing or non-expression `is` is a compile error; a spread
+  cannot supply it. `Component` is a reserved tag/family root: rename a
+  user `Component.pzl` or tag import named `Component`.
 
 - **`<Portal>` teleports overlays.** `<Portal>…</Portal>` (paired-only,
   attribute-free) mounts its children into a framework-created outlet beside
