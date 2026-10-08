@@ -29,7 +29,8 @@ inline component ([[DECISION-D173-CORE-SEMANTICS]] V15) gets a synthesized class
 
 The `<script>` body is tokenized ONCE (`tokenizeJS`) and feeds class-name extraction,
 the import-collision warning and the reserved-binding check. Tokens carry a `comment`
-bit: a comment is whitespace to the class-keyword adjacency rule
+bit and remember line terminators in preceding whitespace/comments for selector ASI.
+A comment is whitespace to the class-keyword adjacency rule
 (`export default /* x */ class Foo {}` is a declaration); a string or regex breaks it.
 Class extraction requires a real named `export default class … extends …`.
 
@@ -60,7 +61,7 @@ D176 and [[DOC-SPEC-TEMPLATE]]. Non-obvious points:
   `ViewNode`), otherwise a rewrite (row `todo` → `s.item`, counter → `s.i`, mangled
   `__pzl<name>`). Arrow params shadow bindings, which shadow a handler's `event`; every
   other name is `__d.<name>` — including `event` outside a handler.
-- **Selector scope (D180):** `<Component>` `is` adds module imports and simple declared identifiers below loop/snippet/arrow bindings and above data. Props and spread operands retain ordinary data scope. The conservative token scan includes subsequent `const`/`let`/`var` declarators, but not destructuring patterns; use a simple alias or `data()` for those values. It never rewrites the script or permits arbitrary script calls. Only a selector read of a module `let`/`var` binding marks enclosing cached row blocks volatile. Imports and `const` bindings preserve normal row caching; in-place edits to a const map's entries are not observed by cached rows.
+- **Selector scope (D180):** `<Component>` `is` adds module imports and simple declared identifiers below loop/snippet/arrow bindings and above data. Props and spread operands retain ordinary data scope. The conservative token scan includes subsequent `const`/`let`/`var` declarators, including an uninitialized final name terminated by a line break or EOF through ASI, but not destructuring patterns; use a simple alias or `data()` for those values. It never rewrites the script or permits arbitrary script calls. Only a selector read of a module `let`/`var` binding marks enclosing cached row blocks volatile. Imports and `const` bindings preserve normal row caching; in-place edits to a const map's entries are not observed by cached rows.
 - **`event` read both as data and as the DOM event in one template is an error**
   (`checkEventUses`, after render + skeleton emission). A loop/snippet/arrow binding
   named `event` counts as neither. The DOM param is renamed `__ev` when a binding owns

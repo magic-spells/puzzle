@@ -48,6 +48,10 @@ func scriptSelectorBindingInfo(tokens []jsTok) (map[string]int, map[string]bool)
 				if inDeclaration {
 					if next, ok := nextNonCommentToken(tokens, i+1); ok {
 						bindDeclaredName(tokens, next, bind)
+						if tokens[next].ident != "" {
+							_, ended := selectorDeclaratorTail(tokens, next)
+							inDeclaration = !ended
+						}
 					}
 				}
 			case "import", "export", "return", "throw":
@@ -63,9 +67,12 @@ func scriptSelectorBindingInfo(tokens []jsTok) (map[string]int, map[string]bool)
 			if inDeclaration && token.ch == ',' {
 				name, ok := nextNonCommentToken(tokens, i+1)
 				if ok && tokens[name].ident != "" {
-					following, ok := nextNonCommentToken(tokens, name+1)
-					if ok && (tokens[following].ch == '=' || tokens[following].ch == ':' || tokens[following].ch == ',' || tokens[following].ch == ';') {
+					recognized, ended := selectorDeclaratorTail(tokens, name)
+					if recognized {
 						bind(tokens[name].ident, tokens[name].off)
+					}
+					if ended {
+						inDeclaration = false
 					}
 				}
 			}
@@ -83,6 +90,22 @@ func scriptSelectorBindingInfo(tokens []jsTok) (map[string]int, map[string]bool)
 		}
 	}
 	return bindings, mutable
+}
+
+// A simple declarator continues with an initializer, type or another binding.
+// Otherwise a line break (including comments) or EOF ends it through ASI.
+func selectorDeclaratorTail(tokens []jsTok, name int) (recognized, ended bool) {
+	following, ok := nextNonCommentToken(tokens, name+1)
+	if !ok {
+		return true, true
+	}
+	switch tokens[following].ch {
+	case '=', ':', ',':
+		return true, false
+	case ';':
+		return true, true
+	}
+	return tokens[following].lineBreak, tokens[following].lineBreak
 }
 
 // ComponentSelectorBindings returns module names that selectors read, so a JS

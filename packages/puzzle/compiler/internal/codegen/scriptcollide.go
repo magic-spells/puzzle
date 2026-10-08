@@ -42,6 +42,9 @@ type jsTok struct {
 	// declaration) while a string or regex breaks keyword adjacency.
 	comment bool
 	off     int // byte offset of the token's first byte in the scanned body
+	// lineBreak records a line terminator in the whitespace/comments before
+	// this token; selector declarations can end there through JavaScript ASI.
+	lineBreak bool
 }
 
 // tokenizeJS lexes s into jsToks, skipping whitespace and treating strings,
@@ -57,8 +60,19 @@ type jsTok struct {
 func tokenizeJS(s string) []jsTok {
 	var toks []jsTok
 	prevEndsExpr := false
+	lineBreak := false
 	for i := 0; i < len(s); {
 		c := s[i]
+		if c == '\n' || c == '\r' {
+			lineBreak = true
+			i++
+			continue
+		}
+		if c == 0xe2 && (strings.HasPrefix(s[i:], "\u2028") || strings.HasPrefix(s[i:], "\u2029")) {
+			lineBreak = true
+			i += 3
+			continue
+		}
 		if next, pee, consumed := parser.LexSkip(s, i, prevEndsExpr); consumed {
 			if isIdentStart(c) {
 				// LexSkip's run stops at the first non-ASCII byte, but the name goes
@@ -67,9 +81,16 @@ func tokenizeJS(s string) []jsTok {
 				if end := identRunEnd(s, next); end > next {
 					next, pee = end, true
 				}
-				toks = append(toks, jsTok{ident: s[i:next], off: i})
+				toks = append(toks, jsTok{ident: s[i:next], off: i, lineBreak: lineBreak})
+				lineBreak = false
 			} else {
-				toks = append(toks, jsTok{opaque: true, comment: isCommentStart(s, i), off: i})
+				comment := isCommentStart(s, i)
+				toks = append(toks, jsTok{opaque: true, comment: comment, off: i, lineBreak: lineBreak})
+				if comment {
+					lineBreak = lineBreak || strings.ContainsAny(s[i:next], "\n\r\u2028\u2029")
+				} else {
+					lineBreak = false
+				}
 			}
 			prevEndsExpr = pee
 			i = next
@@ -77,13 +98,15 @@ func tokenizeJS(s string) []jsTok {
 		}
 		if startsNonASCIIIdent(s, i) {
 			next := identRunEnd(s, i)
-			toks = append(toks, jsTok{ident: s[i:next], off: i})
+			toks = append(toks, jsTok{ident: s[i:next], off: i, lineBreak: lineBreak})
+			lineBreak = false
 			prevEndsExpr = true
 			i = next
 			continue
 		}
 		if !isASCIISpace(c) {
-			toks = append(toks, jsTok{ch: c, off: i})
+			toks = append(toks, jsTok{ch: c, off: i, lineBreak: lineBreak})
+			lineBreak = false
 		}
 		prevEndsExpr = parser.LexPlainEndsExpr(c, prevEndsExpr)
 		i++

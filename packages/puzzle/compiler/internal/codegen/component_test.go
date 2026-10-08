@@ -107,6 +107,44 @@ func TestComponentModuleSelectorRowCaching(t *testing.T) {
 	}
 }
 
+func TestComponentSelectorASIDeclarators(t *testing.T) {
+	for _, tc := range []struct{ name, script string }{
+		{"let newline", "let ignored = null, current\nexport default class Home extends Object {}"},
+		{"var newline", "var ignored = null, current\nexport default class Home extends Object {}"},
+		{"let CRLF", "let ignored = null, current\r\nexport default class Home extends Object {}"},
+		{"var CR", "var ignored = null, current\rexport default class Home extends Object {}"},
+		{"let line separator", "let ignored = null, current\u2028export default class Home extends Object {}"},
+		{"var paragraph separator", "var ignored = null, current\u2029export default class Home extends Object {}"},
+		{"var line comment", "var ignored = null, current // final declarator\nexport default class Home extends Object {}"},
+		{"let block comment", "let ignored = null, current /* line\nbreak */ export default class Home extends Object {}"},
+		{"let EOF", "export default class Home extends Object {}\nlet ignored = null, current"},
+		{"var EOF", "export default class Home extends Object {}\nvar ignored = null, current"},
+		{"continued initializer", "let ignored = null, current\n= null\nexport default class Home extends Object {}"},
+		{"continued declarator list", "var ignored = null, intermediate\n, current\nexport default class Home extends Object {}"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, ok := ScriptValueBindings(tc.script)["current"]; !ok {
+				t.Error("puzzle check must expose the ASI-terminated module binding")
+			}
+			got := compileSrc(t, `<puzzle-view><Component is={current} title={current}/>{#for row in rows}<Component is={current}/>{/for}</puzzle-view>
+<script>`+tc.script+`</script>`)
+			for _, want := range []string{"__dc(current, { title: __d.current }", "__dc(current, { key: s.k }", "volatile: true"} {
+				if !strings.Contains(got, want) {
+					t.Errorf("missing %q for ASI-terminated mutable selector:\n%s", want, got)
+				}
+			}
+		})
+	}
+	for _, script := range []string{
+		"let ignored\nleft, current\nexport default class Home extends Object {}",
+		"var ignored = null, last\nleft, current\nexport default class Home extends Object {}",
+	} {
+		if _, ok := ScriptValueBindings(script)["current"]; ok {
+			t.Error("a comma expression after the ASI boundary must not add a module binding")
+		}
+	}
+}
+
 func TestComponentLoopKeyWinsOverSpreads(t *testing.T) {
 	for _, tag := range []string{"Component is={Card}", "Card"} {
 		for _, tc := range []struct{ name, body, key string }{
