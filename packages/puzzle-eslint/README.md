@@ -85,8 +85,14 @@ any tag whose name does not start with an ASCII lowercase letter (`<Card>`,
 `<Élan>`, `<_Row>`); a family tag (`<Frame.Header>`) marks its root, `Frame`.
 Only markup counts: a tag written inside an HTML or template comment, a
 `{#raw}` block, an attribute value or a string in `{ … }` is not a use.
-Template expressions (`{ title }`) read view data, never `<script>` bindings,
+Ordinary template expressions (`{ title }`) read view data, never `<script>` bindings,
 so a `const` referenced only inside `{ … }` is still reported as unused.
+The `is` selector on the built-in `<Component>` is the exception: it may read
+module bindings, so selector-only imports and indexed maps (`is={cards[key]}`)
+are marked as used. Loop items and `<Snippet>` parameters still shadow those
+bindings. Every other attribute, including `name` and `from`, reads ordinary
+view data. `<Component>` itself, including a reserved `Component` family root,
+does not count as a use of an import named `Component`.
 
 ### TypeScript (`<script lang="ts">`)
 
