@@ -109,6 +109,10 @@ type Build struct {
 	// value. Pointer storage so a later release can flip the default in the
 	// accessor without changing stored semantics.
 	Splitting *bool
+
+	// HashNames is the tri-state build.hashNames setting: nil follows Splitting(),
+	// a non-nil pointer is the explicit user value. It applies to production only.
+	HashNames *bool
 }
 
 // Dev mirrors the `dev` block of puzzle.config.js.
@@ -150,6 +154,15 @@ func (c Config) Splitting() bool {
 	return c.Build.Splitting != nil && *c.Build.Splitting
 }
 
+// HashNames reports whether production output names should carry content hashes.
+// When unset, it follows the configured build.splitting value.
+func (c Config) HashNames() bool {
+	if c.Build.HashNames == nil {
+		return c.Splitting()
+	}
+	return *c.Build.HashNames
+}
+
 // rawConfig is the permissive shape used to decode the JSON that node prints.
 // styles.use entries are kept as raw messages so object entries (deferred) can
 // be distinguished from strings and reported precisely; build booleans are raw
@@ -162,6 +175,7 @@ type rawConfig struct {
 		DropConsole json.RawMessage `json:"dropConsole"`
 		SourceMap   json.RawMessage `json:"sourceMap"`
 		Splitting   json.RawMessage `json:"splitting"`
+		HashNames   json.RawMessage `json:"hashNames"`
 	} `json:"build"`
 	Dev Dev `json:"dev"`
 	// Output is kept raw so a non-string or unsupported value can be named
@@ -347,6 +361,19 @@ func validate(raw rawConfig) (Config, error) {
 			)
 		}
 		cfg.Build.Splitting = &split
+	}
+
+	// build.hashNames: an explicit boolean overrides the splitting-based default.
+	// Anything non-boolean is rejected; null means unset.
+	if !unset(raw.Build.HashNames) {
+		var hash bool
+		if err := json.Unmarshal(raw.Build.HashNames, &hash); err != nil {
+			return Config{}, fmt.Errorf(
+				"%s: build.hashNames must be a boolean; got %s",
+				ConfigFileName, strings.TrimSpace(string(raw.Build.HashNames)),
+			)
+		}
+		cfg.Build.HashNames = &hash
 	}
 
 	// dev.proxy is consumed only by puzzle dev. Prefixes stay intact when

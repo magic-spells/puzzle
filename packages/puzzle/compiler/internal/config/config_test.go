@@ -331,6 +331,64 @@ func TestLoadConfigSplitting(t *testing.T) {
 	})
 }
 
+func TestLoadConfigHashNames(t *testing.T) {
+	t.Run("no config file", func(t *testing.T) {
+		cfg, err := LoadConfig(t.TempDir())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.HashNames() || cfg.Build.HashNames != nil {
+			t.Fatal("hashNames must be unset and default to false without a config file")
+		}
+	})
+
+	requireNode(t)
+	for _, tt := range []struct {
+		name string
+		body string
+		want bool
+		set  bool
+	}{
+		{name: "absent means false", body: "export default {};\n"},
+		{name: "absent follows splitting true", body: "export default { build: { splitting: true } };\n", want: true},
+		{name: "absent follows splitting false", body: "export default { build: { splitting: false } };\n"},
+		{name: "null means unset", body: "export default { build: { hashNames: null } };\n"},
+		{name: "null follows splitting", body: "export default { build: { splitting: true, hashNames: null } };\n", want: true},
+		{name: "explicit true without splitting", body: "export default { build: { hashNames: true } };\n", want: true, set: true},
+		{name: "explicit false overrides splitting", body: "export default { build: { splitting: true, hashNames: false } };\n", set: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := LoadConfig(writeConfig(t, tt.body))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := cfg.HashNames(); got != tt.want {
+				t.Errorf("HashNames() = %v, want %v", got, tt.want)
+			}
+			if (cfg.Build.HashNames != nil) != tt.set {
+				t.Fatalf("Build.HashNames set = %v, want %v", cfg.Build.HashNames != nil, tt.set)
+			}
+			if tt.set && *cfg.Build.HashNames != tt.want {
+				t.Errorf("Build.HashNames = %v, want %v", *cfg.Build.HashNames, tt.want)
+			}
+		})
+	}
+
+	t.Run("non-boolean rejected", func(t *testing.T) {
+		for _, value := range []string{"'yes'", "1", "[]", "{}"} {
+			t.Run(value, func(t *testing.T) {
+				_, err := LoadConfig(writeConfig(t, "export default { build: { hashNames: "+value+" } };\n"))
+				if err == nil {
+					t.Fatal("expected an error for a non-boolean build.hashNames")
+				}
+				if !strings.Contains(err.Error(), "build.hashNames") || !strings.Contains(err.Error(), "must be a boolean") {
+					t.Fatalf("want boolean-type error naming build.hashNames, got %v", err)
+				}
+			})
+		}
+	})
+}
+
 func TestLoadConfigDevProxy(t *testing.T) {
 	requireNode(t)
 	root := writeConfig(t, "export default { dev: { proxy: { '/api': 'http://localhost:3091' } } };\n")
