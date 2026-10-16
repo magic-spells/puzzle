@@ -51,34 +51,39 @@ at it.
 
 ## Decisions (Cory, 2026-10-16)
 
-- **On in every production build; `build.hashNames: false` opts out.** Puzzle
-  has no users outside our own apps ("no one else is using Puzzle yet, just us,
-  so small breaking changes are fine"). So there is no compatibility default.
-  The default does not follow `build.splitting`, and no branch keeps today's
-  output for non-split apps. The opt-out stays because it costs one boolean,
-  and it is the escape for a page on another site that embeds `/app.js`.
-  Development builds keep fixed names, because `puzzle dev` and HMR need stable
-  URLs.
-- **`public/` files are never hashed or renamed.** In Cory's words: "I think the
+
+- **`build.hashNames`, following `build.splitting` when unset; production
+  only; `false` opts out.** A split app has already opted into a hashed,
+  multi-file `dist/`. `hashNames: true` turns hashing on for an app that does
+  not split, and `hashNames: false` turns it off for one that does (for
+  example, a page on another site embeds `/app.js`). Development builds keep
+  fixed names, because `puzzle dev` and HMR need stable URLs.
+- **No compatibility code.** Cory: "no one else is using Puzzle yet, just us,
+  so small breaking changes are fine". The plan carries no fallbacks or extra
+  branches whose only job is to keep old shell shapes working. A shell with no
+  `</head>` is an error rather than a fallback insertion point, and a hashed
+  stylesheet is hashed whether or not the shell links it.
+- **`public/` files are never hashed or renamed.** Cory, verbatim: "I think the
   stuff in public is designed to be static and not really change much. like you
   drop in a pacakge .js file for something and it's just there and rarely gets
   updated. it does't need to be folded into anything." Only compiler output is
   renamed.
-- **Static mode is in scope.** Its per-page modules are hashed and preload
-  their shared chunks, in this feature rather than a follow-up ("why not just do
-  both now?").
+- **Static mode is in scope.** Its per-page modules are hashed under the same
+  `hashNames` rule, and they preload their shared chunks. Both land in this
+  feature rather than a follow-up ("why not just do both now?").
 - **Listed as a feature, not a breaking change.** The CHANGELOG describes the
   new names and the opt-out, with no migration section.
 
 ## Design
+
 
 Every step below runs only when `!opts.Development`. Development output,
 including all of `puzzle dev` and the static dev builder, stays byte-identical
 to today. The rules are:
 
 ```
-hash    := !dev && cfg.HashNames()          // default true
-preload := !dev                              // whenever the emitting pass splits
+hash    := !dev && cfg.HashNames()   // unset → follows build.splitting
+preload := !dev                       // whenever the emitting pass splits
 ```
 
 ### Names
@@ -89,16 +94,17 @@ preload := !dev                              // whenever the emitting pass split
   characters, `[A-Z2-7]`. esbuild folds the hashes of the imported chunks into
   the entry's hash. When the app's JS imports CSS, the entry's CSS bundle
   becomes `app-XXXXXXXX.css` under the same setting.
-- **Stylesheet.** `styles.css` is written by Go from `styles.Compose` and becomes
-  `styles-XXXXXXXX.css`, always, whether or not the shell links it. The hash is
-  8 base32 characters of SHA-256 over the final bytes, the same hash the locale
-  tables use. `locales.contentHash` moves to `fsutil.ContentHash` so both share
-  it.
+- **Stylesheet.** When hashing is on, `styles.css` (written by Go from
+  `styles.Compose`) becomes `styles-XXXXXXXX.css`, whether or not the shell
+  links it. The hash is 8 base32 characters of SHA-256 over the final bytes,
+  the same hash the locale tables use. `locales.contentHash` moves to
+  `fsutil.ContentHash` so both share it.
 - **Static per-page modules.** `staticPagesBundleOptions` sets `EntryNames` to
-  `[name]-[hash]` instead of `[name]`, which produces `_puzzle/<slug>-XXXXXXXX.js`.
-  The decision is made inside the options builder from `!dev &&
-  cfg.HashNames()`. The static dev builder (`watch_static.go`) always passes
-  `dev=true`, so its warm tree is unchanged and its signature does not move.
+  `[name]-[hash]` instead of `[name]`, which produces
+  `_puzzle/<slug>-XXXXXXXX.js`. The options builder decides this itself, from
+  `!dev && cfg.HashNames()`. The static dev builder (`watch_static.go`) always
+  passes `dev=true`, so its warm tree is unchanged and the builder's signature
+  does not change.
 - In static mode the SPA pass's `app.js` is still deleted before the swap
   (`prerender_pages.go` step 5), so that pass leaves `EntryNames` unset.
 
@@ -113,9 +119,10 @@ change on the JavaScript side.
 
 The code goes in a new `compiler/internal/build/shell.go` as plain functions.
 
-- **Rename table.** It is built from what this build emitted: `app.js` maps to the
-  hashed entry, `app.css` maps to its hashed CSS bundle when one was emitted,
-  and `styles.css` maps to the hashed stylesheet.
+- **Rename table.** It is built from what this build emitted: `app.js` maps to
+  the hashed entry, `app.css` maps to its hashed CSS bundle when one was
+  emitted, and `styles.css` maps to the hashed stylesheet. When nothing is
+  hashed, the table is empty.
 - **Which references are rewritten.** Every `src`/`href` on a `<script>` or
   `<link>` start tag (any `rel`) whose value, ignoring query and fragment, is
   exactly `name`, `./name` or `/name`. The prefix, query and fragment are kept.
@@ -151,19 +158,22 @@ The code goes in a new `compiler/internal/build/shell.go` as plain functions.
 The JS prerender writes each page with the generated tag
 `<script type="module" src="${base}/_puzzle/${slug}.js"></script>`
 (`client-runtime/ssg/index.js`). That happens before the per-page esbuild pass
-exists, so the Go side rewrites the pages after that pass:
+exists, so the Go side rewrites the pages after that pass. It runs in every
+production static build: preloads always, and hashed names when `hashNames` is
+on.
 
 - `bundleStaticPages` turns on `Metafile` in production and returns it. That
   pass anchors `AbsWorkingDir` at staging, so its output keys are already
-  staging-relative (`_puzzle/<slug>-H.js`, `_puzzle/chunks/…`).
-- From the metafile, each slug maps to its hashed module and to the static
-  closure of `_puzzle/chunks/` it imports. Outputs are matched to slugs through
+  staging-relative (`_puzzle/<slug>-H.js` or `_puzzle/<slug>.js`, and
+  `_puzzle/chunks/…`).
+- From the metafile, each slug maps to its module and to the static closure of
+  `_puzzle/chunks/` it imports. Outputs are matched to slugs through
   `entryPoint`, the generated `.puzzle-prerender/entries/<slug>.js`.
 - The rewrite is a new step 4b in `prerenderStaticPages`, after the per-page
   pass. It runs over each `summary.Written` page. Under D177 prefix routing,
   several locale pages share one slug, and each is rewritten.
-  - Replace that page's module tag `src` with the hashed name, keeping the
-    `${base}` prefix that was matched.
+  - Replace that page's module tag `src` with the emitted name (a no-op when
+    the name is not hashed), keeping the `${base}` prefix that was matched.
   - Insert the page's modulepreload links before `</head>`, using the same
     prefix.
   - Exactly one module tag must match. The tag is generated, so a miss is an
@@ -176,9 +186,21 @@ exists, so the Go side rewrites the pages after that pass:
 
 ### Config
 
-`build.hashNames` is `Config.Build.HashNames *bool`, decoded and rejected like
-the other build booleans ("must be a boolean"). `Config.HashNames()` returns
-true when the key is unset, the same pattern as `DropConsole()`.
+`build.hashNames` is stored as `Config.Build.HashNames *bool`. It is decoded
+and rejected like the other build booleans ("must be a boolean").
+`Config.HashNames()` is the only place the default lives. When the key is
+unset, it returns `Config.Splitting()`, the configured value. That means a
+static app with no `splitting` key builds fixed names by default, but still
+gets per-page modulepreload links in production.
+
+| production build | entry JS | CSS | static page modules | modulepreload |
+|---|---|---|---|---|
+| SPA/hybrid, `hashNames` on | hashed | hashed | — | when splitting |
+| SPA/hybrid, `hashNames` off | fixed | fixed | — | when splitting |
+| static, `hashNames` on | — (no app.js) | hashed | hashed | every page |
+| static, `hashNames` off | — | fixed | fixed | every page |
+
+Development builds never hash and never preload.
 
 ## Files to change
 
@@ -234,6 +256,7 @@ These stay unchanged:
 
 ## Test plan
 
+
 - **Unit (`shell_test.go`)**
   - **Tag rewrite cases:**
     - attribute quoting: double, single, unquoted
@@ -255,43 +278,50 @@ These stay unchanged:
   - **Static page-tag rewrite:**
     - with `${base}` empty and `/app`
     - zero matches is an error
-- **Config:** `hashNames` true, false, null and non-boolean; the default is
-  true.
+- **Config:** `hashNames` true, false, null and non-boolean. When unset, it
+  follows `splitting` (true → true, absent → false).
 - **Build integration (`build_test.go`, `prerender_test.go`,
   `static_pages_test.go`)**
-  - **Production SPA:**
-    - Without splitting: `app-<H>.js` and `styles-<H>.css` exist, no `app.js`,
-      and no preloads.
-    - With splitting: the preload set equals the metafile's static closure and
-      excludes the lazy chunk.
-  - **`hashNames: false`:** fixed names, and preloads still emitted with
-    splitting on.
+  - **Production SPA, splitting on:**
+    - `app-<H>.js` and `styles-<H>.css` exist, and there is no `app.js`.
+    - The preload set equals the metafile's static closure and excludes the
+      lazy chunk.
+  - **Production SPA, splitting off:**
+    - Output is unchanged: fixed names, no preloads, shell bytes equal
+      `public/index.html`.
+    - With `hashNames: true`, the names are hashed.
+  - **`hashNames: false` with splitting on:** fixed names, and preloads are
+    still emitted.
   - **Development:** fixed names, and the shell bytes equal
     `public/index.html`.
   - **Hybrid + splitting:** every prerendered page and SPA shell carries the
     hashed tags and preloads.
-  - **Static:**
-    - every page's module `src` is hashed and exists on disk
-    - every page has preloads for its shared `_puzzle/chunks/`
-    - the stylesheet is hashed
-    - there is no `app.js`
-    - prefix routing: each locale page of a slug is rewritten
-  - **Determinism:** two builds of the same source give the same names.
+  - **Static, default config:**
+    - Fixed names.
+    - Every page still gets preloads for its shared `_puzzle/chunks/`.
+  - **Static with `hashNames: true`:**
+    - Every page's module `src` is hashed and exists on disk.
+    - The stylesheet is hashed.
+    - There is no `app.js`.
+    - Under prefix routing, each locale page of a slug is rewritten.
+  - **Determinism:** two builds of the same source produce the same names.
   - **JS-imported CSS:** `app-<H>.css` is rewritten in the shell.
-  - **Missing entry tag:** a shell without one fails, and `dist/` is untouched.
-  - **Existing tests:** production tests that read `dist/app.js`,
-    `dist/styles.css` or `_puzzle/<slug>.js` switch to one helper that reads
-    the names from the built HTML.
+  - **Missing entry tag:** a shell without one fails the build, and `dist/` is
+    untouched.
+  - **Existing tests:** production split tests that read `dist/app.js` or
+    `dist/styles.css` switch to one helper that reads the names from the built
+    HTML.
 - **Preview:** `shapeWarning` with a hashed entry.
 - **Examples:**
-  - production builds of `examples/blog` (SPA, splits) and
-    `examples/static-docs` (static). Every `src`/`href` naming `app-*`,
-    `styles-*`, `chunks/` or `_puzzle/` must exist on disk.
+  - Production builds of `examples/blog` (SPA, splits, so hashed) and
+    `examples/static-docs` (static, fixed names plus preloads). Every
+    `src`/`href` naming `app-*`, `styles-*`, `chunks/` or `_puzzle/` must exist
+    on disk.
   - `puzzle preview` each one, then load a lazy route and a static page in a
     browser.
 - The full suites from `CLAUDE.md` pass. `build:static-docs` is a production
-  build, so a vitest test that reads `examples/static-docs/dist` by fixed name
-  needs the same helper.
+  build, so its pages gain preload links. Any vitest assertion on exact page
+  bytes must account for them.
 
 ## Risks
 
