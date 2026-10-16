@@ -3,7 +3,7 @@ name: ViewNode representation
 status: verified
 path: client-runtime/views/ViewNode.js
 language: javascript
-summary: VNode values, slot/placeholder constants, and list-key helpers.
+summary: VNode values, slot/placeholder/Component-range constants, and list-key helpers.
 connections:
   - COMPONENT-VIEW-MANAGER
 verified_at: '2026-08-24T21:11:50.859Z'

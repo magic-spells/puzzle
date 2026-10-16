@@ -505,6 +505,16 @@ func (p *parser) parseElement() (Node, *ParseError) {
 	var snippetFits string
 	var snippetParams []string
 	if !p.raw {
+		if name == "Component" {
+			if e := componentSelectorAttrs(attrs, pos, p.file); e != nil {
+				return nil, e
+			}
+		}
+		for _, attr := range attrs {
+			if spread, ok := attr.(*SpreadAttr); ok && (!isComponentName(name) || isCompositionMarker(name)) {
+				return nil, errAt(p.file, spread.Pos, "spread attributes are only supported on component tags")
+			}
+		}
 		if name == "children" {
 			return nil, errAt(p.file, pos, "the default marker is spelled <Children/> (D134)")
 		}
@@ -622,6 +632,25 @@ func (p *parser) parseAttrs() (attrs []Attr, selfClose bool, perr *ParseError) {
 				return nil, false, toPE(err)
 			}
 			return attrs, true, nil
+		case TokAttrBrace:
+			inner := strings.TrimSpace(t.Value)
+			if !strings.HasPrefix(inner, "...") {
+				return nil, false, errAt(p.file, tokPos(t), "an attribute expression must be a spread: write {...props}")
+			}
+			rawExpr := inner[3:]
+			expression := strings.TrimSpace(rawExpr)
+			if expression == "" {
+				return nil, false, errAt(p.file, tokPos(t), "a spread attribute requires an expression after ...")
+			}
+			expressionPos := tokPos(t).advance("{" + t.Value[:leadingSpace(t.Value)+3+leadingSpace(rawExpr)])
+			tree, e := parseExprAt(expression, expressionPos, p.file, p.scope().valueOpts())
+			if e != nil {
+				return nil, false, e
+			}
+			attrs = append(attrs, &SpreadAttr{Expr: expression, ExprAST: tree, Pos: tokPos(t)})
+			if err := p.advance(); err != nil {
+				return nil, false, toPE(err)
+			}
 		case TokAttrName:
 			name := t.Value
 			// D150: EVERY attribute captured inside {#raw} is an authored literal,
@@ -1479,6 +1508,9 @@ func isCompositionMarker(name string) bool {
 // JS expression and produced syntactically broken output instead of an error.
 func checkComponentName(name string, pos Position, file string) *ParseError {
 	segments := strings.Split(name, ".")
+	if len(segments) > 1 && segments[0] == "Component" {
+		return errAt(file, pos, "<%s> uses the reserved Component tag as a family root — rename the component or import (for example, DynamicCard)", name)
+	}
 	if len(segments) > 1 && isCompositionMarker(segments[0]) {
 		return errAt(file, pos,
 			"<%s> is not a component — %s is a reserved composition marker and cannot be a component family root (D134/D167)",

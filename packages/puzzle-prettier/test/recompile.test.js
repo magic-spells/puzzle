@@ -179,6 +179,23 @@ describe.skipIf(!canRun)('formatted corpus still compiles with pzlc', () => {
 					expect(readFileSync(outFmt, 'utf8'), literal).toContain(literal);
 				}
 			}
+			if (file.endsWith('component-slot.pzl')) {
+				// Selectors keep their module/data scope, and spread props reach
+				// both dynamic and ordinary component invocations unchanged.
+				for (const literal of [
+					'__dc(TaskCard,',
+					'__dc(__d.current,',
+					'__dc(embeds?.[__d.embed?.type],',
+					'...(__d.embed?.props)',
+					'default slot for the indexed selection',
+					'name: __d.propName',
+					'from: __d.propSource',
+					"</puzzle-view><Card/>",
+				]) {
+					expect(readFileSync(outOrig, 'utf8'), literal).toContain(literal);
+					expect(readFileSync(outFmt, 'utf8'), literal).toContain(literal);
+				}
+			}
 			if (file.endsWith('gnarly-template.pzl')) {
 				// Brace strings inside interpolations and an object-literal argument.
 				for (const literal of [
@@ -232,6 +249,7 @@ describe.skipIf(!canRun)('formatted corpus still compiles with pzlc', () => {
 			expect.arrayContaining([
 				'grammar-0-7.pzl',
 				'grammar-0-8.pzl',
+				'component-slot.pzl',
 				'gnarly-template.pzl',
 				'raw-block.pzl',
 				'raw-inert.pzl',

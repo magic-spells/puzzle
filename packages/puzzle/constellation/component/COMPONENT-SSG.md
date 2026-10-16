@@ -108,6 +108,10 @@ pathname, empty frozen query, `''` hash).
   timeout. The callback is load-bearing — a bare `exit()` after a pipe write truncates
   the payload.
 
+## Runtime component selection (D180)
+
+Both prerender modes traverse the `#component` range's ordinary selected constructor vnode and assemble it with the normal props/data/slot machinery. Serialization emits the range's children without a visible wrapper: selected component HTML, or nothing for nullish selection. Children fill the normal default slot. Indexed-map `is` expressions follow ordinary expression semantics. The DOM-free path creates no global registry or runtime module lookup. Selection ranges must recurse through the same assembly and serialization walkers as ordinary nested children.
+
 ## `ctx.router` parity
 
 A prerendered `href` (`link(path)` reads `router.url`) must match the client's.

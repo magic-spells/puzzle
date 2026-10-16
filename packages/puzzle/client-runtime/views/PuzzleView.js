@@ -1000,6 +1000,16 @@ export class PuzzleView {
 		);
 	}
 
+	/** @returns {Node | null} The end of this component's DOM range. */
+	get elementEnd() {
+		return (
+			this.#errorView?.elementEnd ??
+			(this.__failedPlaceholder?.parentNode ? this.__failedPlaceholder : null) ??
+			this.#vm?.elementEnd ??
+			null
+		);
+	}
+
 	/**
 	 * Whether the first data() result has committed (v1.8, D39). False while a
 	 * skeleton (or the anchor placeholder) holds this component's position.
@@ -2840,9 +2850,9 @@ export class PuzzleView {
 			// the manager REUSABLE (currentTree/anchor both null, so a later render()
 			// takes its first-mount branch again).
 			//
-			// Re-anchor at the SAME position afterwards, capturing the departing root's
-			// nextSibling first: clear() alone would leave this.element null and drop the
-			// spot, so a parent's insertion refs (patch()/patchComponent read
+			// Re-anchor at the SAME position afterwards, capturing the sibling AFTER
+			// the departing root's complete range: clear() alone would leave this.element
+			// null and drop the spot, so a parent's insertion refs (patch()/patchComponent read
 			// child.element) would go stale and the later truthy render would APPEND to
 			// the end of a container it may share with siblings. The comment anchor is
 			// exactly the placeholder mount() uses while async data() is in flight; the
@@ -2851,7 +2861,7 @@ export class PuzzleView {
 			// Gated on currentTree: null on the FIRST render is a no-op (nothing mounted,
 			// the mount-time anchor still holds the position) and repeated nulls never
 			// stack up comment nodes.
-			const ref = this.#vm.element?.nextSibling ?? null;
+			const ref = this.#vm.elementEnd?.nextSibling ?? null;
 			this.#vm.clear();
 			this.#vm.anchorAt(ref);
 		}

@@ -1,0 +1,25 @@
+<puzzle-view>
+  <div>
+    <Component is={TaskCard} title={title} @close={close} {...extra}>
+      <p>Default slot: {caption}</p>
+    </Component>
+    <Component is={current} {...embed.props}/>
+    <Component is={embeds[embed.type]} name={embed.type} from={origin} {...embed.props} title={title}>
+      <p>Selected {embed.type}</p>
+      <Component is={TaskCard}/>
+    </Component>
+    <Component is={embeds['task']}/>
+    <Card {...extra} title={title}/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import TaskCard from './TaskCard.pzl';
+import BacktestCard from './BacktestCard.pzl';
+import Card from './Card.pzl';
+const embeds = { task: TaskCard, backtest: BacktestCard };
+export default class Slots extends PuzzleView {
+  events = { close: () => {} };
+}
+</script>

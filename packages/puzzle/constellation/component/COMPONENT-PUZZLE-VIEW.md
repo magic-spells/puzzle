@@ -21,7 +21,7 @@ verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 Plain base class (views/PuzzleView.js) for every component, view and layout. It owns
 state, lifecycle, tracked `data()` evaluation, refresh tokens, animations, refs and
 update scheduling; [[COMPONENT-VIEW-MANAGER]] owns the DOM. The author-facing class
-contract is [[DOC-SPEC-ANATOMY]] §4 and [[DOC-SPEC-VIEW]].
+contract is [[DOC-SPEC-ANATOMY]] §4 and [[DOC-SPEC-VIEW]]. The internal `elementEnd` getter follows the live manager or error view to the end of a component's complete DOM range, recursively through component-root selections; `element` remains its first node.
 
 ## The per-view ctx
 
@@ -78,6 +78,8 @@ reports once, keeps the exact position and destroys the instance. With an app
 single-flight, and delegates to the Router (routed) or the parent's `refresh()`
 (child). A routed retry keeps the error view up until a rebuild commits. Error-view
 failures report as `phase: 'error-view'` without recursion.
+
+A hand-written `render()` returning null clears its mounted tree and reserves the same position with a comment. Re-anchoring captures the sibling after `elementEnd`, outside the complete range even when the root is an empty or selected `<Component>`; repeated nulls reuse that position and later content remounts before trailing siblings.
 
 ## Refs and two-way binding
 

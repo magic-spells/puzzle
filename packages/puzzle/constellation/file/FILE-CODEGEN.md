@@ -3,7 +3,7 @@ name: render code generator
 status: verified
 path: compiler/internal/codegen/codegen.go
 language: go
-summary: AST-to-ViewNode render emission, handlers, loops, slots, and arity padding.
+summary: AST-to-ViewNode render emission, handlers, loops, slots, Component selection and arity padding.
 connections:
   - COMPONENT-CODEGEN
 verified_at: '2026-08-24T21:11:50.859Z'

@@ -135,7 +135,7 @@ A display transform is a call: `{ currency(price) }`, `{ b(a(x)) }`. The
 library holds only what no method, operator or `Math` global covers (D174).
 
 - **Resolution.** A bare call resolves to the library; a bare read resolves
-  to `data()`. They never resolve to each other (so a data field sharing a
+  to `data()`, except for module scope in the `<Component>` `is` attribute (§67, D180). They never resolve to each other (so a data field sharing a
   function's name is not ambiguous and draws no warning, by design). An
   unregistered name is the D43 guard: value passes through with a dev error
   (did-you-mean or the removed name's replacement).
@@ -203,7 +203,7 @@ date takes only `< <= > >=` and binary `-` (milliseconds) in both hosts.
 - **PuzzleKit codegen** (`compiler/internal/codegen/lower.go`; its header
   carries the lowering table; [[COMPONENT-CODEGEN]]) lowers from the tree,
   never the source string: arrow params shadow template bindings, which
-  shadow the handler's `event`; every other name is `__d.<name>`. Every
+  shadow the handler's `event`; every other name is `__d.<name>`. The PuzzleKit-only `<Component>` `is` selector scope also admits module bindings after loop/snippet/arrow bindings and before data (D180), without widening the grammar or calls. Every
   member step, index step and method call gets `?.` (handler args too);
   `Object.*` take `<arg> ?? {}`; a library call is
   `(__f["name"] || __f.__missing("name"))(…)`; methods and `Math.*` stay as
@@ -254,7 +254,7 @@ date takes only `< <= > >=` and binary `-` (milliseconds) in both hosts.
 Unchanged by this card: markers, snippets, `{#raw}`, D168 whitespace, keys,
 islands, the loop domain (D173 V12), D170 list blocks, V6 printing, the
 markup placement rule. Every expression position is one `expr.Parse`, so
-headers take any expression (`{#for t in todos.filter(t => !t.done)}`,
+attribute `{...props}` is an attribute form whose operand is one expression, not spread inside this grammar (D180). Headers take any expression (`{#for t in todos.filter(t => !t.done)}`,
 `{#if items.length}`), and `{#unless c}` is `!` over the condition.
 
 | Need | Expression |

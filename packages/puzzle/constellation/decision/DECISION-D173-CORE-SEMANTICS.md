@@ -130,7 +130,7 @@ V3's strict comparison, V5, V15, V17 and the V18 styles.
   not whitespace-only text.** A call-site `{#if}` that renders nothing or a
   `{#for}` over an empty list leaves it unfilled, so the
   [[DECISION-D141-MARKER-FALLBACK-BODIES]] fallback shows (free empty
-  states). Applies per snippet stamp too. PuzzleKit tests only when the
+  states). Applies per snippet stamp too. A D180 `<Component>` range counts its rendered children, not its comment anchors, so an empty selection remains unfilled. PuzzleKit tests only when the
   marker has a fallback (`fill()` in `viewManager.js`); without one it
   splices the supplied nodes through, placeholders included, so arity stays
   constant (pinned by `tests/slot-filled.test.js`). **Gotcha:** a fallback

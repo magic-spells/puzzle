@@ -209,6 +209,14 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	// lex these same bytes independently: the class-name extraction, the
 	// import-collision warning scan, and the reserved-binding check.
 	scriptToks := tokenizeJS(sec.Scripts)
+	moduleBindings, mutableModuleBindings := scriptSelectorBindingInfo(scriptToks)
+	if filepath.Base(strings.ReplaceAll(opts.Filename, "\\", "/")) == "Component.pzl" {
+		return "", &parser.ParseError{File: opts.Filename, Line: 1, Col: 1, Message: "Component is a reserved built-in tag — rename Component.pzl (for example, Card.pzl) and its imports"}
+	}
+	if off, reserved := moduleBindings["Component"]; reserved && hasComponentSlot(root.Children) {
+		pos := sec.ScriptsPos.Advance(sec.Scripts[:off])
+		return "", &parser.ParseError{File: opts.Filename, Line: pos.Line, Col: pos.Col, Message: "Component is a reserved built-in tag — rename the user component or import named Component (for example, Card)"}
+	}
 	var className string
 	if strings.TrimSpace(scripts) == "" {
 		className = classNameFromFilename(opts.Filename)
@@ -230,12 +238,15 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	}
 
 	c := &compiler{
-		src:                   sec.Source,
-		file:                  opts.Filename,
-		svgDedup:              opts.SVGDedup,
-		svgCache:              opts.SVGCache,
-		assetReadsUnavailable: opts.AssetReadsUnavailable,
-		warnings:              warnings,
+		src:                     sec.Source,
+		file:                    opts.Filename,
+		svgDedup:                opts.SVGDedup,
+		svgCache:                opts.SVGCache,
+		assetReadsUnavailable:   opts.AssetReadsUnavailable,
+		warnings:                warnings,
+		moduleBindings:          moduleBindings,
+		mutableModuleBindings:   mutableModuleBindings,
+		componentSelectorSource: sec.Source + sec.Scripts,
 	}
 	scope := scopeMap{}
 
@@ -362,6 +373,9 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	if c.usesLoopRange {
 		imports = append(imports, "loopRange as __r")
 	}
+	if c.usesDynamicComponent {
+		imports = append(imports, "dynamicComponent as __dc")
+	}
 	importLine := "import { " + strings.Join(imports, ", ") + " } from '@magic-spells/puzzle';"
 
 	// Reserved module-scope names: everything the import line above binds locally,
@@ -398,6 +412,12 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	//     after the ViewNode import, in first-seen order; empty in inline mode.
 	b.WriteString(c.emitSVGImports())
 	b.WriteString("\n")
+	for _, getter := range c.componentSelectorGetters {
+		b.WriteString("const " + getter.alias + " = () => " + getter.name + ";\n")
+	}
+	if len(c.componentSelectorGetters) > 0 {
+		b.WriteString("\n")
+	}
 	// 2c. per-site list-block meta consts (D170), one per lowered item-form
 	//     {#for} in source order, set off by a blank line on each side. The
 	//     facts in them are compile-time static, so they are hoisted out of
@@ -519,8 +539,13 @@ type compiler struct {
 	// Set when a `.map` item loop (usesLoopItems) or a range loop
 	// (usesLoopRange) is emitted, so the runtime loop guards (D173 V12) are
 	// imported only by a module that calls them.
-	usesLoopItems bool
-	usesLoopRange bool
+	usesLoopItems            bool
+	usesLoopRange            bool
+	usesDynamicComponent     bool
+	moduleBindings           map[string]int
+	mutableModuleBindings    map[string]bool
+	componentSelectorGetters []componentSelectorGetter
+	componentSelectorSource  string
 
 	// Set when an emitted expression calls a library function, which is the
 	// only thing that reads __f. It gates
@@ -663,6 +688,9 @@ func (c *compiler) emitComponentRoot(root *parser.Element, startCol int, scope s
 	case *parser.Component:
 		if scopeStamp != nil {
 			n.Props = append(n.Props, scopeStamp)
+		}
+		if n.Name == "Component" {
+			return c.emitComponentSlot(n, 2, scope)
 		}
 		return c.emitElement(n.Name, n.Props, n.Children, 2, startCol, true, scope)
 	case *parser.Portal:
@@ -832,6 +860,9 @@ func (c *compiler) emitItem(it item, ind int, scope scopeMap) (string, error) {
 		}
 		return c.emitElement("'"+n.Tag+"'", n.Attrs, n.Children, ind, ind, false, scope)
 	case *parser.Component:
+		if n.Name == "Component" {
+			return c.emitComponentSlot(n, ind, scope)
+		}
 		return c.emitElement(n.Name, n.Props, n.Children, ind, ind, true, scope)
 	case *parser.Slot:
 		return c.emitSlot(n, ind, scope)
@@ -1381,6 +1412,7 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 // synthetic `key` attribute — UNLESS the root already carries an explicit `key`
 // (static or dynamic), in which case the author's attribute stands and the
 // synthetic prepend is skipped entirely (D58), in both item and range forms.
+// Component row keys follow all spreads so a prop bag cannot override the key.
 //
 // A LOWERED site (site != nil) inverts that: the row's key is always the
 // block's resolved `key: s.k`, because an explicit key has already moved into
@@ -1417,9 +1449,38 @@ func (c *compiler) forBody(f *parser.For, scope scopeMap, keyExpr expr.Node, ind
 		if !explicitKey {
 			props = append([]parser.Attr{key}, props...)
 		}
+		props = componentRowKeyAfterSpreads(props)
+		if n.Name == "Component" {
+			keyed := *n
+			keyed.Props = props
+			return c.emitComponentSlot(&keyed, ind, scope)
+		}
 		return c.emitElement(n.Name, props, n.Children, ind, ind, true, scope)
 	}
 	return "", c.cgErr(f.Pos, "internal error: {#for} body root not an element or component after forBodyRoot")
+}
+
+func componentRowKeyAfterSpreads(props []parser.Attr) []parser.Attr {
+	hasSpread := false
+	for _, prop := range props {
+		if _, ok := prop.(*parser.SpreadAttr); ok {
+			hasSpread = true
+			break
+		}
+	}
+	if !hasSpread {
+		return props
+	}
+	ordered := make([]parser.Attr, 0, len(props))
+	var keys []parser.Attr
+	for _, prop := range props {
+		if hasKeyAttr([]parser.Attr{prop}) {
+			keys = append(keys, prop)
+		} else {
+			ordered = append(ordered, prop)
+		}
+	}
+	return append(ordered, keys...)
 }
 
 // forRowsProvablyKeyed reports whether every row emitted by a loop is known to
@@ -1665,6 +1726,11 @@ func (c *compiler) attrKV(a parser.Attr, scope scopeMap, isComponent bool, emit 
 			return "", c.cgErr(at.Pos, objectLiteralMsg)
 		}
 		return jsKey(at.Name) + ": " + c.value(at.ExprAST, scope), nil
+	case *parser.SpreadAttr:
+		if startsWithObjectLiteral(at.Expr) {
+			return "", c.cgErr(at.Pos, objectLiteralMsg)
+		}
+		return "...(" + c.value(at.ExprAST, scope) + ")", nil
 	case *parser.MixedAttr:
 		return jsKey(at.Name) + ": " + c.emitMixed(at.Parts, scope), nil
 	case *parser.EventAttr:

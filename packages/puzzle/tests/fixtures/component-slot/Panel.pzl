@@ -1,0 +1,10 @@
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Panel extends PuzzleView {
+  data(_params, props) { return props; }
+  events = { close: () => this.props.close?.(this.props.title) };
+}
+</script>
+<puzzle-view>
+  <article class="compiled-panel"><button @click={close}>{title}</button><Children/></article>
+</puzzle-view>

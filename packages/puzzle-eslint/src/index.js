@@ -3,8 +3,8 @@
 // ESLint >= 9 flat config only. The plugin exposes a single processor
 // (`puzzle/puzzle`) that lints the <script> body of a .pzl file as real JS/TS
 // and reports section-structure errors, one rule
-// (`puzzle/uses-template-components`) that marks components rendered as
-// template tags as used, a `recommended` flat-config array that wires them up,
+// (`puzzle/uses-template-components`) that marks template component tags and
+// the dynamic Component is selector as used, a `recommended` flat-config array that wires them up,
 // and a `typescript` entry that extends the rule setup to `lang="ts"` blocks.
 
 import { createRequire } from 'node:module';

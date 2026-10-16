@@ -46,7 +46,7 @@ things:
 Pyramid works around both with two post-build scripts
 (`web/scripts/hash-entries.mjs`, `web/scripts/modulepreload.mjs`). The build
 should do this itself, so every app gets it and the scripts can go. The decision
-record is a new **D180** (the next free number). D160's "stable app.js name"
+record is a new **D181** (the next free number). D160's "stable app.js name"
 sentence and its "On by default" alternative are rewritten in place to point
 at it.
 
@@ -236,9 +236,9 @@ Development builds never hash and never preload.
   - `README.md`: the splitting section (~L687–700) and the dist layout.
   - `skills/puzzle/SKILL.md`: ~L72–85 and the static section around L967.
   - `CHANGELOG.md`: a 0.9.0 feature entry.
-  - `packages/puzzle/CLAUDE.md`: next free decision number becomes D181.
+  - `packages/puzzle/CLAUDE.md`: next free decision number becomes D182.
 - Cards:
-  - New `DECISION-D180-…` and `FILE-BUILD-SHELL`.
+  - New `DECISION-D181-…` and `FILE-BUILD-SHELL`.
   - Rewrite D160 in place.
   - Update `DOC-SPEC-BUILD`, `FLOW-BUILD`, `FLOW-PRERENDER`, `FILE-BUILD`,
     `FILE-BUILD-OPTIONS`, `FILE-BUILD-PRERENDER-PAGES`, `FILE-CONFIG`,

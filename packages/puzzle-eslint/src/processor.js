@@ -26,6 +26,7 @@ import {
 	isBlockRawOpen,
 	scanBlockRaw,
 } from './split.js';
+import { Linter } from 'eslint';
 
 // Carries splitter errors from preprocess to postprocess, keyed by filename.
 const errorStore = new Map();
@@ -44,6 +45,72 @@ const tagStore = new Map();
 // TAG_REST consumes the remainder of the name (D167 name characters).
 const TAG_ROOT = /[_\p{ID_Start}]\p{ID_Continue}*/uy;
 const TAG_REST = /[\p{ID_Continue}\-:.]*/uy;
+const BINDING_NAME = '[$_\\p{ID_Start}][$_\\u200c\\u200d\\p{ID_Continue}]*';
+const FOR_ITEM = new RegExp(`^#for\\s+(${BINDING_NAME})\\s+in\\s+`, 'u');
+const FOR_COUNTER = new RegExp(`,\\s*(${BINDING_NAME})\\s*$`, 'u');
+const selectorLinter = new Linter();
+
+// Only <Component>'s is selector reads module bindings. Use ESLint's own parser
+// and scope analysis to find their free names: property keys, quoted text and
+// arrow parameters are not reads. Enclosing template bindings are parameters
+// of the wrapper, so a loop item or snippet parameter shadows a module name.
+function collectSelectorBindings(expr, names, localScopes) {
+	const locals = [...new Set(localScopes.flatMap((scope) => scope.names))];
+	const messages = selectorLinter.verify(`(${locals.join(',')}) => (${expr})`, {});
+	if (messages.some((message) => message.fatal)) return; // compiler owns syntax errors
+	for (const reference of selectorLinter.getSourceCode().scopeManager.globalScope.through) {
+		names.add(reference.identifier.name);
+	}
+}
+
+// Read an opening tag without interpreting ordinary template expressions. The
+// same brace/quote skips used for tag discovery also protect spread values
+// containing markup or a section-close sentinel.
+function readOpenTagAttrs(s, i) {
+	const attrs = [];
+	while (i < s.length) {
+		if (s[i] === '>') return { attrs, end: i + 1, selfClosing: false };
+		if (s.startsWith('/>', i)) return { attrs, end: i + 2, selfClosing: true };
+		if (/\s/u.test(s[i])) { i++; continue; }
+		if (s[i] === '{') { i = skipBraceSpan(s, i); continue; }
+		const name = /^[^\s=/>{'"]+/u.exec(s.slice(i))?.[0];
+		if (!name) { i++; continue; }
+		i += name.length;
+		while (i < s.length && /\s/u.test(s[i])) i++;
+		const expressions = [];
+		const bare = s[i] !== '=';
+		if (!bare) {
+			i++;
+			while (i < s.length && /\s/u.test(s[i])) i++;
+			if (s[i] === '{') {
+				const group = scanBraceGroup(s, i);
+				if (!group.err) expressions.push(group.inner);
+				i = group.err ? i + 1 : group.end;
+			} else if (s[i] === '"' || s[i] === "'") {
+				const end = skipQuotedValue(s, i);
+				for (let valueAt = i + 1; valueAt < end - 1;) {
+					if (s[valueAt] === '\\' && (s[valueAt + 1] === '{' || s[valueAt + 1] === '}')) {
+						valueAt += 2;
+					} else if (s[valueAt] === '{') {
+						const group = scanBraceGroup(s, valueAt);
+						if (!group.err) expressions.push(group.inner);
+						valueAt = group.err ? valueAt + 1 : group.end;
+					} else valueAt++;
+				}
+				i = end;
+			} else {
+				while (i < s.length && !/[\s>]/u.test(s[i]) && !s.startsWith('/>', i)) i++;
+			}
+		}
+		attrs.push({ name, bare, expressions });
+	}
+	return { attrs, end: i, selfClosing: false };
+}
+
+function popLocalScope(localScopes, kind) {
+	const at = localScopes.findLastIndex((scope) => scope.kind === kind);
+	if (at >= 0) localScopes.splice(at);
+}
 
 // matchAt runs a sticky regex at s[i] and returns the match text or ''.
 function matchAt(re, s, i) {
@@ -122,6 +189,7 @@ function skipOpenTagAttrs(s, i) {
 // inside any of those (<!-- <Old/> -->, { '<Card>' }, title="<Card>") is not
 // a use.
 function collectComponentTags(s, names) {
+	const localScopes = [];
 	for (let i = 0; i < s.length;) {
 		if (s.startsWith('<!--', i)) {
 			const end = s.indexOf('-->', i + 4);
@@ -132,16 +200,39 @@ function collectComponentTags(s, names) {
 			const raw = scanBlockRaw(s, i);
 			i = raw.err ? s.length : raw.end;
 		} else if (s[i] === '{') {
+			const group = scanBraceGroup(s, i);
+			if (!group.err) {
+				const inner = group.inner.trim();
+				if (/^#for\s/u.test(inner)) {
+					const locals = [FOR_ITEM.exec(inner)?.[1], FOR_COUNTER.exec(inner)?.[1]].filter(Boolean);
+					localScopes.push({ kind: 'for', names: locals });
+				} else if (/^\/\s*for\s*$/u.test(inner)) popLocalScope(localScopes, 'for');
+			}
 			i = skipBraceSpan(s, i);
 		} else if (s[i] === '<') {
+			if (s.startsWith('</Snippet', i) && /[\s>]/u.test(s[i + 9] || '')) {
+				popLocalScope(localScopes, 'snippet');
+			}
 			const root = matchAt(TAG_ROOT, s, i + 1);
 			if (!root) {
 				i++;
 				continue;
 			}
-			if (!(root[0] >= 'a' && root[0] <= 'z')) names.add(root);
 			const nameEnd = i + 1 + root.length;
-			i = skipOpenTagAttrs(s, nameEnd + matchAt(TAG_REST, s, nameEnd).length);
+			const rest = matchAt(TAG_REST, s, nameEnd);
+			if (!(root[0] >= 'a' && root[0] <= 'z') && root !== 'Component') names.add(root);
+			if ((root === 'Component' || root === 'Snippet') && !rest) {
+				const tag = readOpenTagAttrs(s, nameEnd);
+				if (root === 'Component') {
+					for (const attr of tag.attrs) {
+						if (attr.name !== 'is') continue;
+						for (const expr of attr.expressions) collectSelectorBindings(expr, names, localScopes);
+					}
+				} else if (!tag.selfClosing) {
+					localScopes.push({ kind: 'snippet', names: tag.attrs.filter((attr) => attr.bare).map((attr) => attr.name) });
+				}
+				i = tag.end;
+			} else i = skipOpenTagAttrs(s, nameEnd + rest.length);
 		} else {
 			i++;
 		}
@@ -149,7 +240,8 @@ function collectComponentTags(s, names) {
 }
 
 // componentTags returns the root names of every component tag in the
-// template sections. Markers (Slot, Children, Snippet, Portal) come along too;
+// template sections and the free names in <Component is={...}>. Markers
+// (Slot, Children, Snippet, Portal) come along too;
 // they are never script bindings, so marking them used is a no-op.
 function componentTags(sections) {
 	const names = new Set();
@@ -233,15 +325,14 @@ export const processor = {
 };
 
 // usesTemplateComponents marks every component the template renders as used,
-// the way react/jsx-uses-vars does for JSX: <Card> is the only template
-// construct that reads a <script> binding, so an import used only as a tag is
-// not unused. It never reports. Template expressions (`{ title }`) read view
-// data, never script bindings (D176), so they mark nothing.
+// the way react/jsx-uses-vars does for JSX. The <Component> is selector also reads
+// module bindings; ordinary expressions (`{ title }`) read view data (D176),
+// so they mark nothing. Reserved Component tags never use a same-named import.
 export const usesTemplateComponents = {
 	meta: {
 		type: 'problem',
 		docs: {
-			description: 'Mark components rendered as template tags as used by the <script> body',
+			description: 'Mark template component tags and the dynamic Component is selector as script binding uses',
 		},
 		schema: [],
 	},

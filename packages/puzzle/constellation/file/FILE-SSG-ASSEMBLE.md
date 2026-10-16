@@ -3,7 +3,9 @@ name: Shared chain assembly
 status: verified
 path: client-runtime/ssg/assemble.js
 language: javascript
-summary: assembleChain — DOM-free layout+view chain assembly shared by prerenderer and static kernel.
+summary: >-
+  DOM-free chain and nested component assembly shared by prerenderer and static kernel, including
+  Component ranges.
 connections:
   - COMPONENT-SSG
   - DECISION-D81-STATIC-PAGES-MODE
