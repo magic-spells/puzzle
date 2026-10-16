@@ -38,6 +38,7 @@ connections:
   - DECISION-D59-SCOPED-STYLES
   - FEATURE-DEV-PROXY
   - DOC-TESTING
+  - DECISION-D180-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
 ---
 
 # Build pipeline, watch, and dev server
@@ -65,3 +66,14 @@ plus the long-running dev loop on top of it. Packages:
 
 Watch tests include benchmark-shaped cases that measure rebuild cost; they are
 not a pass/fail timing gate.
+
+Production asset coverage spans shell_test.go and build/prerender/static_pages
+integration tests: exact local reference spellings, quoting/query/fragment
+preservation, credentials and indentation, metafile static BFS order/diamonds/external
+and dynamic exclusions, cwd/staging keys and symlink spelling, deterministic entry/CSS
+names, unlinked stylesheets, imported CSS, opt-in/opt-out/default config, and
+failure-before-swap. Hybrid shells/pages and every static locale page inherit the
+emitted URLs; default static output keeps names and gains preloads. Development byte
+stability and the warm watch suites remain covered. Preview recognizes hashed app
+entries; the JS static-docs acceptance test checks production preloads without
+changing the prerender summary contract.

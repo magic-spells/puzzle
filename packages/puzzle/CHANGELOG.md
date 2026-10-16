@@ -216,6 +216,16 @@ you see:
 
 ### Added
 
+- **Content-hashed production output and modulepreload (D180).**
+  `build.hashNames` defaults to `build.splitting`: split SPA/hybrid builds emit
+  `app-<hash>.js`, `styles-<hash>.css`, and `app-<hash>.css` when the entry imports
+  CSS, with shell references rewritten automatically. Static page modules become
+  `_puzzle/<slug>-<hash>.js` under the same setting. Split SPA/hybrid shells and
+  every production static page preload their transitive static-import chunks;
+  lazy chunks stay on demand. Set `build: { splitting: true, hashNames: false }`
+  to keep fixed names with preloads, or `build: { hashNames: true }` to hash
+  without splitting. A static build with neither key keeps fixed names and gains
+  preloads. Development output stays unchanged; `public/` files are never renamed.
 - **Locale URL prefixes: `i18n.routing: 'prefix'` (D177).**
 
   ```js

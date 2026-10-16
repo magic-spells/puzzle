@@ -23,6 +23,10 @@ Traps:
   ([[DECISION-D160-SPA-CODE-SPLITTING]]): set, the pass gains `Splitting` +
   `ChunkNames: "chunks/[name]-[hash]"`. esbuild rejects `Splitting` alongside the
   prerender pass's `Outfile`, so it cannot be global.
+- **`HashEntry` is also a per-pass flag.** It sets `EntryNames: "[name]-[hash]"`
+  only for a production SPA/hybrid entry; its CSS bundle follows esbuild's same
+  naming rule. It must not leak onto the Node pass's `Outfile` or the static
+  mode's discarded SPA output.
 - **`AbsWorkingDir` stays unanchored on the SPA pass**, unlike the per-page pass:
   its metafile input keys are resolved against the process cwd by
   `metafileAllInputs`, which drives dev CSS pruning; anchoring would silently

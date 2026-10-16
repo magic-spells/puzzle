@@ -1,6 +1,6 @@
 ---
 name: Hashed entry, stylesheet and page-module names + modulepreload
-status: planned
+status: built
 change: feature
 branch: feat/build-hashed-entry
 connections:
@@ -25,6 +25,7 @@ connections:
   - DOC-RELEASE-SURFACE
   - TEST-BUILD-AND-DEV-PIPELINE
   - TEST-CLI-COMMANDS
+  - FILE-BUILD-SHELL
 ---
 
 # Hashed entry, stylesheet and page-module names + modulepreload
