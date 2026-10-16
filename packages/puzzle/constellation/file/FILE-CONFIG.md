@@ -22,11 +22,13 @@ intent stays on [[COMPONENT-ESBUILD-PLUGIN]]; the user-facing keys are in
 
 Traps:
 
-- **Tri-state scalars.** `build.*` keys such as `build.splitting` and
+- **Tri-state scalars.** `build.splitting`, `build.hashNames` and
   `build.dropConsole` are held as `json.RawMessage` and read through the shared
   `unset()` helper, so JSON `null` means unset, not `false`. Pointer storage
-  keeps "absent" distinguishable from "false", so a default can flip in the
-  accessor (`Config.Splitting()`) without changing what a stored config means.
+  keeps "absent" distinguishable from "false". `Config.HashNames()` alone owns
+  its default: absent/null follows the configured `Config.Splitting()`.
+  Explicit true/false overrides it; non-booleans fail with the key's "must be a
+  boolean" error. Build callers apply the production-only gate.
 - **`dev.proxy`** keys must be absolute `/`-prefixed paths and targets absolute
   http(s) URLs; `/` and colliding normalized prefixes are errors
   ([[FEATURE-DEV-PROXY]]).

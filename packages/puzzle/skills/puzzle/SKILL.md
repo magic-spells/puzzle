@@ -74,15 +74,24 @@ dynamic `import()` is inlined into it — a heavy on-demand dependency (mermaid,
 chart library, an editor) is paid for on every page load. Set
 `build: { splitting: true }` and each dynamic `import()` becomes a lazy chunk
 under `dist/chunks/`, fetched by the browser only when that code path runs.
-The entry keeps its stable `app.js` name, so the shell HTML is unchanged, and
-esbuild's ESM splitting has no chunk-loader runtime, so total bytes do not grow.
-Static imports are untouched — an app with no dynamic `import()` builds to the
-same single file as before. Notes:
+Production split builds emit `app-<hash>.js`, `styles-<hash>.css`, and
+`app-<hash>.css` when the entry imports CSS. The build rewrites the shell's
+references and adds `modulepreload` links for the entry's transitive
+static-import chunks; lazy chunks stay on demand. esbuild's ESM splitting has
+no chunk-loader runtime, so it adds no runtime bytes. Notes:
 
+- **`build.hashNames` defaults to `build.splitting`.** Set
+  `build: { splitting: true, hashNames: false }` for fixed names with preloads,
+  or `build: { hashNames: true }` to hash without splitting. Development builds
+  keep fixed names and add no preloads. `public/` files are never renamed.
+- A hashed SPA/hybrid build needs a shell reference to `/app.js`, `./app.js` or
+  `app.js`. A shell with no entry reference fails the build and points to
+  `build.hashNames: false`; choose that when another page needs a fixed URL.
 - **`chunks/` becomes a reserved output name** while the flag is on: a
   root-level `public/chunks` asset fails the build (as `app.js` already does).
-- `output: 'static'` ignores the flag — those pages get their own already-split
-  per-page bundles and no `app.js` ships. `hybrid` splits like the SPA.
+- `output: 'static'` always splits its own per-page bundles and ships no app
+  entry. Its hashing default still follows the configured `build.splitting`.
+  `hybrid` splits like the SPA.
 - The build's size banner prints a **largest-dependencies** breakdown from
   esbuild's metafile and, in production, flags any single dependency over
   200 KB — the signal to move it behind a dynamic `import()`. Your own code and
@@ -1018,18 +1027,23 @@ Working example: `examples/kanban-morph` in the framework repo.
 ## Prerendered output — THE RULES (bugs happen when these are missed)
 
 Two output modes, chosen in puzzle.config.js or by flag. Both emit
-`dist/<path>/index.html` per static route + `styles.css`; top-level `*` renders
-to `dist/404.html`; the route's `meta.title` is injected via a leaf→root walk.
+`dist/<path>/index.html` per static route + `styles.css` (or
+`styles-<hash>.css` with `build.hashNames` on); top-level `*` renders to
+`dist/404.html`; the route's `meta.title` is injected via a leaf→root walk.
 
 - **`output: 'static'`** / `puzzle build --static` — a TRUE static site. No
   router, no SPA, no `app.js` in `dist/`. Each page ships a small module
-  (`/_puzzle/<slug>.js`) that mounts only that page's components over the
-  prerendered markup, so `@event` handlers and local state work; navigation is
-  plain `<a href="/path/">` page loads. Pick this for docs/marketing/blogs.
+  (`/_puzzle/<slug>.js`, or `/_puzzle/<slug>-<hash>.js` with hashing on) that mounts
+  only that page's components over the prerendered markup, so `@event` handlers
+  and local state work; navigation is
+  plain `<a href="/path/">` page loads. Every production page preloads its shared
+  `/_puzzle/chunks/`, including with fixed names. With no `splitting` or
+  `hashNames` key, names stay fixed. Pick this for docs/marketing/blogs.
 - **`output: 'hybrid'`** / `puzzle build --hybrid` — prerendered first paint,
   then the full SPA bundle takes over on load and re-renders (not true
   DOM-adoption hydration); all later navigation is client-side (transitions,
-  morphs work). Pick this for apps that want SEO'd entry pages.
+  morphs work). Entry/CSS names and preloads follow the SPA rules above. Pick
+  this for apps that want SEO'd entry pages.
 
 `puzzle dev` on a static-mode project serves the REAL static output (clean
 URLs, full page loads, real 404s, prerender on every rebuild); hybrid projects
@@ -1089,7 +1103,8 @@ production-host semantics for any mode (SPA deep-link fallback, static real
 ## Styling
 
 Tailwind v4 is the supported pipeline (`styles: { use: ['tailwindcss'] }` — the
-CLI folds Tailwind output + collected `<style>` blocks into `dist/styles.css`;
+CLI folds Tailwind output + collected `<style>` blocks into `dist/styles.css`
+or `dist/styles-<hash>.css` when production hashing is on;
 wire it with `puzzle add tailwind`). For puzzle-pieces apps, import the theme after
 `@import "tailwindcss"` — `@import "@magic-spells/puzzle-pieces/themes/default.css"`
 (or the copied `app/styles/pieces.css`) plus any palette you offer

@@ -13,8 +13,6 @@ package locales
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/base32"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -242,7 +240,7 @@ func Load(appRoot string, cfg *config.I18n) (*Result, error) {
 		if err != nil {
 			return nil, fmt.Errorf("encoding the %s table: %w", tag, err)
 		}
-		rel := OutDirName + "/" + tag + "." + contentHash(data) + ".json"
+		rel := OutDirName + "/" + tag + "." + fsutil.ContentHash(data) + ".json"
 		res.Manifest.Paths[tag] = rel
 		res.Files[rel] = data
 	}
@@ -287,13 +285,6 @@ func encode(table map[string]any) ([]byte, error) {
 		return nil, err
 	}
 	return bytes.TrimRight(buf.Bytes(), "\n"), nil
-}
-
-// contentHash is 8 base32 characters of the content's SHA-256 — the same shape
-// as esbuild's [hash] in the D160 chunk names.
-func contentHash(data []byte) string {
-	sum := sha256.Sum256(data)
-	return base32.StdEncoding.EncodeToString(sum[:])[:8]
 }
 
 func plural(n int, word string) string {

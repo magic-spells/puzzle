@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -689,6 +690,141 @@ func TestBuildStaticEmitsPages(t *testing.T) {
 	// The prerender scaffolding never ships.
 	if _, err := os.Stat(filepath.Join(dist, prerenderDir)); !os.IsNotExist(err) {
 		t.Errorf("%s must be deleted before the swap; it survived in dist/ (err=%v)", prerenderDir, err)
+	}
+}
+
+// The per-page pass always splits, so production pages preload their shared
+// chunks even when the app never opts into hashed output. Development keeps
+// fixed names and emits no preloads, including with hashNames on.
+func TestBuildStaticProductionPreloads(t *testing.T) {
+	requireStaticRuntime(t)
+	for _, tc := range []struct {
+		name   string
+		config string
+		dev    bool
+	}{
+		{name: "production defaults"},
+		{name: "development with hashing configured", config: "export default { build: { hashNames: true } };\n", dev: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			files := baseSSGFixture()
+			files["app/routes.js"] = strings.Replace(files["app/routes.js"], "name: 'about',", "name: 'about', prerender: false,", 1)
+			if tc.config != "" {
+				files["puzzle.config.js"] = tc.config
+			}
+			root := writeSSGFixture(t, files)
+			if err := Build(root, Options{Development: tc.dev, Output: "static"}); err != nil {
+				t.Fatalf("static Build failed: %v", err)
+			}
+			dist := filepath.Join(root, "dist")
+			for _, page := range []struct{ file, slug string }{
+				{"index.html", "index"}, {"about/index.html", "about"}, {"404.html", "404"},
+			} {
+				htmlPath := filepath.Join(dist, filepath.FromSlash(page.file))
+				html := readFile(t, htmlPath)
+				entry := emittedAsset(t, dist, htmlPath, "_puzzle/"+page.slug+".js")
+				if entry != filepath.Join(dist, staticPagesDir, page.slug+".js") {
+					t.Errorf("%s entry = %s, want its fixed name", page.file, entry)
+				}
+				style := emittedAsset(t, dist, htmlPath, "styles.css")
+				if style != filepath.Join(dist, "styles.css") {
+					t.Errorf("%s stylesheet = %s, want styles.css", page.file, style)
+				}
+				for _, asset := range []string{entry, style} {
+					if _, err := os.Stat(asset); err != nil {
+						t.Errorf("%s asset %s does not exist: %v", page.file, asset, err)
+					}
+				}
+				hrefs := modulepreloadHrefs(html)
+				if tc.dev {
+					if len(hrefs) != 0 {
+						t.Errorf("development page %s gained preloads: %v", page.file, hrefs)
+					}
+					continue
+				}
+				if len(hrefs) == 0 {
+					t.Fatalf("production page %s has no shared-chunk preloads", page.file)
+				}
+				seen := make(map[string]bool)
+				for _, href := range hrefs {
+					if !strings.HasPrefix(href, "/_puzzle/chunks/") || seen[href] {
+						t.Errorf("%s has an invalid or repeated preload %q", page.file, href)
+					}
+					seen[href] = true
+					if _, err := os.Stat(filepath.Join(dist, filepath.FromSlash(strings.TrimPrefix(href, "/")))); err != nil {
+						t.Errorf("%s preload %s does not exist: %v", page.file, href, err)
+					}
+				}
+			}
+		})
+	}
+}
+
+// Locale pages share a module slug, but each HTML file needs the emitted name
+// and its preloads. routerBase prefixes those URLs without becoming part of the
+// output directory; the same module serves every language under either base.
+func TestBuildStaticHashedLocalePages(t *testing.T) {
+	requireStaticRuntime(t)
+	hashedEntry := regexp.MustCompile(`^_puzzle/(index|about|404)-[A-Z2-7]{8}\.js$`)
+	hashedStyle := regexp.MustCompile(`^styles-[A-Z2-7]{8}\.css$`)
+	for _, base := range []string{"", "/docs"} {
+		t.Run("base="+base, func(t *testing.T) {
+			files := i18nFixture()
+			files["puzzle.config.js"] = "export default { output: 'static', build: { hashNames: true }, i18n: { locales: ['en', 'es'], defaultLocale: 'en', routing: 'prefix', detect: false } };\n"
+			files["app/app.js"] = strings.Replace(files["app/app.js"], "target: '#app', routes", "target: '#app', routerBase: '"+base+"', routes", 1)
+			root := writeSSGFixture(t, files)
+			if err := Build(root, Options{}); err != nil {
+				t.Fatalf("hashed static Build failed: %v", err)
+			}
+			dist := filepath.Join(root, "dist")
+			firstEntries := make(map[string]string)
+			for _, locale := range []string{"", "es"} {
+				for _, page := range []struct{ file, slug string }{
+					{"index.html", "index"}, {"about/index.html", "about"}, {"404.html", "404"},
+				} {
+					htmlPath := filepath.Join(dist, locale, filepath.FromSlash(page.file))
+					html := readFile(t, htmlPath)
+					entryPath := emittedAsset(t, dist, htmlPath, "_puzzle/"+page.slug+".js")
+					entry := "_puzzle/" + filepath.Base(entryPath)
+					if !strings.Contains(html, `src="`+base+"/"+entry+`"`) {
+						t.Fatalf("%s has no per-page module under base %q:\n%s", htmlPath, base, html)
+					}
+					if !hashedEntry.MatchString(entry) {
+						t.Fatalf("%s module %s does not have a hashed name", htmlPath, entry)
+					}
+					if first, ok := firstEntries[page.slug]; ok && first != entry {
+						t.Errorf("locale %q entry %s differs from the default locale's %s", locale, entry, first)
+					}
+					firstEntries[page.slug] = entry
+					style := emittedAsset(t, dist, htmlPath, "styles.css")
+					if !hashedStyle.MatchString(filepath.Base(style)) {
+						t.Errorf("%s stylesheet %s does not have a hashed name", htmlPath, style)
+					}
+					for _, asset := range []string{entryPath, style} {
+						if _, err := os.Stat(asset); err != nil {
+							t.Errorf("%s asset %s does not exist: %v", htmlPath, asset, err)
+						}
+					}
+					hrefs := modulepreloadHrefs(html)
+					if len(hrefs) == 0 {
+						t.Fatalf("%s has no shared-chunk preloads", htmlPath)
+					}
+					for _, href := range hrefs {
+						if !strings.HasPrefix(href, base+"/_puzzle/chunks/") {
+							t.Errorf("%s preload %s does not preserve base %q", htmlPath, href, base)
+						}
+						if _, err := os.Stat(filepath.Join(dist, filepath.FromSlash(strings.TrimPrefix(href, base+"/")))); err != nil {
+							t.Errorf("%s preload %s does not exist: %v", htmlPath, href, err)
+						}
+					}
+				}
+			}
+			for _, pattern := range []string{"app*.js", "styles.css", "_puzzle/index.js", "_puzzle/about.js", "_puzzle/404.js"} {
+				if files, err := filepath.Glob(filepath.Join(dist, filepath.FromSlash(pattern))); err != nil || len(files) != 0 {
+					t.Errorf("hashed static build left %s: %v (err=%v)", pattern, files, err)
+				}
+			}
+		})
 	}
 }
 

@@ -250,10 +250,16 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 	//    render (no static routes).
 	if len(entryFiles) > 0 {
 		endPages := prof.phase("per-page bundles")
-		pagesErr := bundleStaticPages(absRoot, entryFiles, filepath.Join(staging, staticPagesDir), cfg, dev, pc)
+		metafile, pagesErr := bundleStaticPages(absRoot, entryFiles, filepath.Join(staging, staticPagesDir), cfg, dev, pc)
 		endPages()
 		if pagesErr != nil {
 			return pagesErr
+		}
+
+		if !dev {
+			if err := rewriteStaticPages(staging, metafile, summary.Written); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -269,6 +275,38 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 	}
 
 	printStaticSummary(summary, len(entryFiles))
+	return nil
+}
+
+func rewriteStaticPages(staging, metafile string, written []staticPage) error {
+	outputs, err := bundleOutputs(metafile, staging, staging)
+	if err != nil {
+		return err
+	}
+	entries := make(map[string]string)
+	for name, output := range outputs {
+		if output.EntryPoint != "" && filepath.Ext(name) == ".js" {
+			entries[output.EntryPoint] = name
+		}
+	}
+	for _, page := range written {
+		entry := filepath.ToSlash(filepath.Join(prerenderDir, "entries", filepath.Base(page.Entry)))
+		output, ok := entries[entry]
+		if !ok {
+			return fmt.Errorf("puzzle build --static: per-page bundle has no output for %s", page.Entry)
+		}
+		html, err := os.ReadFile(page.File)
+		if err != nil {
+			return fmt.Errorf("puzzle build --static: reading page %s: %w", page.File, err)
+		}
+		rewritten, err := rewriteStaticPage(string(html), page.Entry, output, staticImportClosure(outputs, output))
+		if err != nil {
+			return fmt.Errorf("puzzle build --static: rewriting page %s: %w", page.File, err)
+		}
+		if err := os.WriteFile(page.File, []byte(rewritten), 0o644); err != nil {
+			return fmt.Errorf("puzzle build --static: writing page %s: %w", page.File, err)
+		}
+	}
 	return nil
 }
 
@@ -624,11 +662,12 @@ func staticPagesSourcemap(cfg config.Config, dev bool) api.SourceMap {
 
 // bundleStaticPages runs the browser-platform, Splitting esbuild pass over the
 // generated per-page entries into outdir (staging/_puzzle). Target/minify/define
-// and the dropConsole policy match the main app.js pass exactly; EntryNames is
-// the bare slug so the emitted /_puzzle/<slug>.js matches the URLs the shell
-// surgery injected, and shared code splits into _puzzle/chunks/. The CSS this
-// fresh plugin collects is discarded — styles.css was composed by the main pass.
-func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg config.Config, dev bool, pc *passContext) error {
+// and the dropConsole policy match the main app.js pass exactly. EntryNames is
+// the slug, hashed in production when build.hashNames is on; the production
+// page rewrite resolves the injected URLs through the returned metafile. Shared
+// code splits into _puzzle/chunks/. The CSS this fresh plugin collects is
+// discarded — the main pass already composed the stylesheet.
+func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg config.Config, dev bool, pc *passContext) (string, error) {
 	result := api.Build(staticPagesBundleOptions(absRoot, entryFiles, outdir, cfg, dev, pc.plugin(absRoot)))
 	if len(result.Errors) > 0 {
 		lines := api.FormatMessages(result.Errors, api.FormatMessagesOptions{
@@ -636,9 +675,9 @@ func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg c
 			Color:         ui.New(os.Stderr).Enabled(),
 			TerminalWidth: 0,
 		})
-		return fmt.Errorf("puzzle build --static: per-page bundle failed:\n%s", strings.Join(lines, "\n"))
+		return "", fmt.Errorf("puzzle build --static: per-page bundle failed:\n%s", strings.Join(lines, "\n"))
 	}
-	return nil
+	return result.Metafile, nil
 }
 
 // staticPagesBundleOptions assembles the per-page pass's BuildOptions. Split out
@@ -686,6 +725,10 @@ func staticPagesBundleOptions(absRoot string, entryFiles []string, outdir string
 	// Production (dev=false) matches the main bundle: minify everything and strip
 	// console.* unless build.dropConsole: false opts out.
 	if !dev {
+		buildOpts.Metafile = true
+		if cfg.HashNames() {
+			buildOpts.EntryNames = "[name]-[hash]"
+		}
 		buildOpts.MinifyWhitespace = true
 		buildOpts.MinifyIdentifiers = true
 		buildOpts.MinifySyntax = true

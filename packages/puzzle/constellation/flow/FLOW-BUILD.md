@@ -15,6 +15,7 @@ connections:
   - FILE-BUILD-WATCH
   - FILE-BUILD-PRERENDER
   - DECISION-D160-SPA-CODE-SPLITTING
+  - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
 verified_at: '2026-08-24T21:11:50.859Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
@@ -38,16 +39,20 @@ orchestration → esbuild with [[COMPONENT-ESBUILD-PLUGIN]] → section parsing
    ([[DECISION-D152-BUILD-SCOPED-COMPILE-CACHE]]); `<script>` bytes stay as authored
    (TypeScript is transpile-only). Tailwind runs concurrently; browser errors are
    reported before Tailwind errors.
-4. Compose `styles.css` (Tailwind output, then collected component styles, deterministic
-   order).
+4. Compose the global stylesheet: Tailwind output, then collected component styles in
+   deterministic order. Production hashing names it `styles-<ContentHash>.css`;
+   otherwise it is `styles.css`.
 5. Copy public assets and write the bundle (split into `chunks/` when `build.splitting`
    is on) into staging under `.puzzle/tmp/` ([[DECISION-D153-PUZZLE-SCRATCH-DIR]]).
-6. For `hybrid`/`static` output, bundle for Node and run [[COMPONENT-SSG]] into staging.
-7. Atomically replace `dist/` (the previous output is renamed into `.puzzle/tmp/`, then
+6. In production, [[FILE-BUILD-SHELL]] follows emitted entry/CSS names and inserts
+   the split entry's static-import modulepreloads into the copied shell. Missing hashed
+   entry references or closing head fail before the swap; public files retain their names.
+7. For `hybrid`/`static` output, bundle for Node and run [[COMPONENT-SSG]] into staging.
+8. Atomically replace `dist/` (the previous output is renamed into `.puzzle/tmp/`, then
    removed). A failed build leaves the last good output intact.
 
-Production output is minified ES2022 ESM with linked source maps and console calls
-removed unless config opts out.
+Production output is minified ES2022 ESM with console calls removed unless config opts
+out. Linked production source maps are opt-in.
 
 ## Development build
 

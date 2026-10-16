@@ -23,6 +23,7 @@ connections:
   - FLOW-BUILD
   - FLOW-REACTIVITY
   - DECISION-D179-STATIC-PATHS
+  - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
 ---
 
 # Puzzle release surface
@@ -275,15 +276,22 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   unless wired.
 - `build.splitting` makes each dynamic `import()` a chunk under
   `dist/chunks/` (a reserved name while on); `output: 'static'` ignores it;
-  dev prunes stale chunks. The size banner lists per-dependency bytes and
+  dev prunes stale chunks.
+- In production `build.hashNames` defaults to the configured splitting value: app
+  entry/JS-imported CSS, the composed stylesheet and static page modules get
+  content-derived names; false opts out and true enables hashing without splitting.
+  Shell references follow emitted names. Split SPA/hybrid shells and all production
+  static pages preload their transitive static-import chunks, excluding lazy/external
+  edges (D181). Public files and all development output retain their names. The size
+  banner lists per-dependency bytes and
   warns past 200 KB for one dependency in production.
 - Tailwind-first styles. Public assets copy with case-insensitive collision
   checks against generated names. One-shot builds stage and atomically swap
   `dist/`, keeping the last good build on failure.
 - **Output modes** (no SSR server or hydration): SPA by default.
-  `output: 'hybrid'` prerenders pages one shared `app.js` takes over (path
+  `output: 'hybrid'` prerenders pages one shared app entry (fixed or hashed) takes over (path
   routing required). `output: 'static'` ships no router or `app.js`: one
-  `dist/_puzzle/<slug>.js` per page with build data and settled read state
+  `dist/_puzzle/<slug>.js` (or `<slug>-[hash].js`) per page with build data and settled read state
   inlined; `storage` is ignored. Both write directory-style pages plus
   `404.html`, skip a `:param` route without `staticPaths` with a warning, and
   honor `prerender: false`. Under prefix routing every page is written once per

@@ -28,14 +28,24 @@ var rootCmd = &cobra.Command{
 var buildCmd = &cobra.Command{
 	Use:   "build [dir]",
 	Short: "Compile the app and produce a bundle in dist/",
-	Long: `Compile .pzl components and package the app into dist/ (app.js, styles.css,
-and the copied public/ assets).
+	Long: `Compile .pzl components and package the app into dist/ (by default app.js,
+styles.css, and the copied public/ assets).
+
+With build.splitting enabled, production builds emit app-<hash>.js,
+styles-<hash>.css and lazy chunks under dist/chunks/. The shell references are
+rewritten and its static-import chunks get modulepreload links. build.hashNames
+defaults to build.splitting. Set build.hashNames: false to keep fixed names, or
+true to enable hashing without splitting. JavaScript-imported CSS is hashed too.
+Development builds keep fixed names and add no preloads; public/ assets are never
+renamed.
 
 With --static, additionally emit true static pages: each static route becomes
 its own dist/<path>/index.html plus a small per-page module bundle under
-dist/_puzzle/ — no router, no SPA takeover. With --hybrid, prerender each
-static route to dist/<path>/index.html that the full SPA runtime takes over on
-load (the mode formerly spelled --static). Either flag has a puzzle.config.js
+dist/_puzzle/ — no router, no SPA takeover. Production pages preload their
+shared chunks; with build.hashNames on, page modules are <slug>-<hash>.js.
+With --hybrid, prerender each static route to dist/<path>/index.html that the
+full SPA runtime takes over on load (the mode formerly spelled --static).
+Either flag has a puzzle.config.js
 equivalent (output: 'static' | 'hybrid'); passing a flag that disagrees with
 the config output value is an error. Dynamic (:id / *) routes are skipped with
 a warning.
