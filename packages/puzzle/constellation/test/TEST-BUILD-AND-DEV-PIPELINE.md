@@ -72,7 +72,11 @@ integration tests: exact local reference spellings, quoting/query/fragment
 preservation, credentials and indentation, metafile static BFS order/diamonds/external
 and dynamic exclusions, cwd/staging keys and symlink spelling, deterministic entry/CSS
 names, unlinked stylesheets, imported CSS, opt-in/opt-out/default config, and
-failure-before-swap. Hybrid shells/pages and every static locale page inherit the
+failure-before-swap. Unrecognized unhashed shell entries skip preloads, and
+non-missing shell read errors report their I/O cause. The preload integration
+assertion identifies the fixture's expected shared chunk directly; source-map and
+determinism checks have separate tests. Hybrid shells/pages and every static locale
+page inherit the
 emitted URLs; default static output keeps names and gains preloads. Development byte
 stability and the warm watch suites remain covered. Preview recognizes hashed app
 entries; the JS static-docs acceptance test checks production preloads without

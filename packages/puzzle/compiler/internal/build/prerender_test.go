@@ -303,11 +303,11 @@ func TestBuildHybridHashedEntriesAndPreloads(t *testing.T) {
 	for _, page := range []string{"index.html", "about/index.html", "404.html", "client-only/index.html"} {
 		htmlPath := filepath.Join(dist, filepath.FromSlash(page))
 		html := readFile(t, htmlPath)
-		app := emittedAsset(t, htmlPath, "app.js")
+		app := emittedAsset(t, dist, htmlPath, "app.js")
 		if !hashedApp.MatchString(filepath.Base(app)) {
 			t.Errorf("%s entry %s does not have a hashed name", page, app)
 		}
-		style := emittedAsset(t, htmlPath, "styles.css")
+		style := emittedAsset(t, dist, htmlPath, "styles.css")
 		if !hashedStyle.MatchString(filepath.Base(style)) {
 			t.Errorf("%s stylesheet %s does not have a hashed name", page, style)
 		}

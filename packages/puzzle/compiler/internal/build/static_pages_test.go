@@ -722,11 +722,11 @@ func TestBuildStaticProductionPreloads(t *testing.T) {
 			} {
 				htmlPath := filepath.Join(dist, filepath.FromSlash(page.file))
 				html := readFile(t, htmlPath)
-				entry := emittedAsset(t, htmlPath, "_puzzle/"+page.slug+".js")
+				entry := emittedAsset(t, dist, htmlPath, "_puzzle/"+page.slug+".js")
 				if entry != filepath.Join(dist, staticPagesDir, page.slug+".js") {
 					t.Errorf("%s entry = %s, want its fixed name", page.file, entry)
 				}
-				style := emittedAsset(t, htmlPath, "styles.css")
+				style := emittedAsset(t, dist, htmlPath, "styles.css")
 				if style != filepath.Join(dist, "styles.css") {
 					t.Errorf("%s stylesheet = %s, want styles.css", page.file, style)
 				}
@@ -784,7 +784,7 @@ func TestBuildStaticHashedLocalePages(t *testing.T) {
 				} {
 					htmlPath := filepath.Join(dist, locale, filepath.FromSlash(page.file))
 					html := readFile(t, htmlPath)
-					entryPath := emittedAsset(t, htmlPath, "_puzzle/"+page.slug+".js")
+					entryPath := emittedAsset(t, dist, htmlPath, "_puzzle/"+page.slug+".js")
 					entry := "_puzzle/" + filepath.Base(entryPath)
 					if !strings.Contains(html, `src="`+base+"/"+entry+`"`) {
 						t.Fatalf("%s has no per-page module under base %q:\n%s", htmlPath, base, html)
@@ -796,7 +796,7 @@ func TestBuildStaticHashedLocalePages(t *testing.T) {
 						t.Errorf("locale %q entry %s differs from the default locale's %s", locale, entry, first)
 					}
 					firstEntries[page.slug] = entry
-					style := emittedAsset(t, htmlPath, "styles.css")
+					style := emittedAsset(t, dist, htmlPath, "styles.css")
 					if !hashedStyle.MatchString(filepath.Base(style)) {
 						t.Errorf("%s stylesheet %s does not have a hashed name", htmlPath, style)
 					}

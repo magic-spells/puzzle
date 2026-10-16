@@ -10,9 +10,6 @@ import (
 	"strings"
 )
 
-// Output paths in a metafile use the pass's working directory, not the importing
-// file's directory. Normalize them once so both browser passes walk the same
-// staging-relative graph, including on macOS where /var aliases /private/var.
 type bundleImport struct {
 	Path     string `json:"path"`
 	Kind     string `json:"kind"`
@@ -25,6 +22,9 @@ type bundleOutput struct {
 	Imports    []bundleImport `json:"imports"`
 }
 
+// Output paths in a metafile use the pass's working directory, not the importing
+// file's directory. Normalize them once so both browser passes walk the same
+// staging-relative graph, including on macOS where /var aliases /private/var.
 func bundleOutputs(metafile, base, staging string) (map[string]bundleOutput, error) {
 	var mf struct {
 		Outputs map[string]bundleOutput `json:"outputs"`
@@ -40,9 +40,6 @@ func bundleOutputs(metafile, base, staging string) (map[string]bundleOutput, err
 		rel, err := filepath.Rel(staging, resolvePath(key))
 		if err != nil {
 			return "", err
-		}
-		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return "", fmt.Errorf("bundle output %s is outside staging %s", key, staging)
 		}
 		return filepath.ToSlash(rel), nil
 	}
@@ -121,30 +118,24 @@ func shellReference(value string) (prefix, name, suffix string) {
 	return prefix, value, suffix
 }
 
-func shellRenames(outputs map[string]bundleOutput, stylesheet string, hashEntry bool) (map[string]string, string) {
-	renames := map[string]string{}
-	var entry string
+func shellRenames(outputs map[string]bundleOutput, stylesheet, entryPoint string) (map[string]string, string) {
+	renames := map[string]string{"styles.css": stylesheet}
 	for name, output := range outputs {
-		if output.EntryPoint == "" || filepath.Ext(name) != ".js" || strings.Contains(name, "/") {
+		if output.EntryPoint == "" || filepath.Ext(name) != ".js" || resolvePath(output.EntryPoint) != resolvePath(entryPoint) {
 			continue
 		}
-		entry = name
-		if hashEntry {
-			renames["app.js"] = name
-			if output.CSSBundle != "" {
-				renames["app.css"] = output.CSSBundle
-			}
+		renames["app.js"] = name
+		if output.CSSBundle != "" {
+			renames["app.css"] = output.CSSBundle
 		}
+		return renames, name
 	}
-	if stylesheet != "styles.css" {
-		renames["styles.css"] = stylesheet
-	}
-	return renames, entry
+	return renames, ""
 }
 
 // rewriteShellHTML follows emitted filenames and reads the entry tag before
 // renaming it, so preload URLs and credentials match the app's own script.
-func rewriteShellHTML(source string, renames map[string]string, hashEntry bool, chunks []string) (string, error) {
+func rewriteShellHTML(source string, renames map[string]string, chunks []string) (string, bool, error) {
 	entryFound := false
 	var entryPrefix, crossorigin string
 	rewritten := shellTagRE.ReplaceAllStringFunc(source, func(tag string) string {
@@ -178,10 +169,11 @@ func rewriteShellHTML(source string, renames map[string]string, hashEntry bool, 
 		}
 		return tag
 	})
-	if hashEntry && !entryFound {
-		return "", fmt.Errorf("public/index.html must load app.js when entry names are hashed; set build.hashNames: false to keep fixed names")
+	if !entryFound {
+		chunks = nil
 	}
-	return insertModulepreloads(rewritten, entryPrefix, chunks, crossorigin)
+	rewritten, err := insertModulepreloads(rewritten, entryPrefix, chunks, crossorigin)
+	return rewritten, entryFound, err
 }
 
 func insertModulepreloads(source, prefix string, chunks []string, crossorigin string) (string, error) {
@@ -211,26 +203,32 @@ func insertModulepreloads(source, prefix string, chunks []string, crossorigin st
 	return source[:lineStart] + links.String() + source[lineStart:], nil
 }
 
-func rewriteShell(staging, metafile, stylesheet string, hashEntry, preload bool) error {
+func rewriteShell(staging, metafile, stylesheet, entryPoint string, hashEntry, preload bool) error {
 	shellPath := filepath.Join(staging, "index.html")
 	source, err := os.ReadFile(shellPath)
-	if os.IsNotExist(err) && !hashEntry {
-		return nil
+	if os.IsNotExist(err) {
+		if !hashEntry {
+			return nil
+		}
+		return fmt.Errorf("reading public/index.html (set build.hashNames: false to keep fixed entry names): %w", err)
 	}
 	if err != nil {
-		return fmt.Errorf("reading public/index.html (set build.hashNames: false to keep fixed entry names): %w", err)
+		return fmt.Errorf("reading public/index.html: %w", err)
 	}
 	// The browser pass leaves AbsWorkingDir unset, so an empty base means cwd.
 	outputs, err := bundleOutputs(metafile, "", staging)
 	if err != nil {
 		return err
 	}
-	renames, entry := shellRenames(outputs, stylesheet, hashEntry)
+	renames, entry := shellRenames(outputs, stylesheet, entryPoint)
 	var chunks []string
 	if preload {
 		chunks = staticImportClosure(outputs, entry)
 	}
-	rewritten, err := rewriteShellHTML(string(source), renames, hashEntry, chunks)
+	rewritten, entryFound, err := rewriteShellHTML(string(source), renames, chunks)
+	if hashEntry && !entryFound {
+		return fmt.Errorf("public/index.html must load app.js when entry names are hashed; set build.hashNames: false to keep fixed names")
+	}
 	if err != nil {
 		return fmt.Errorf("rewriting public/index.html: %w", err)
 	}
@@ -243,11 +241,11 @@ func rewriteShell(staging, metafile, stylesheet string, hashEntry, preload bool)
 // The static tag is generated by the prerenderer, so exactly one must exist.
 // The base is read from that tag; locale pages can share an entry and still
 // carry their own URL prefix.
-func rewriteStaticPage(source, slug, output string, chunks []string) (string, error) {
-	tagRE := regexp.MustCompile(`<script type="module" src="([^"]*)/_puzzle/` + regexp.QuoteMeta(slug) + `\.js"></script>`)
+func rewriteStaticPage(source, entry, output string, chunks []string) (string, error) {
+	tagRE := regexp.MustCompile(`<script type="module" src="([^"]*)/` + regexp.QuoteMeta(entry) + `"></script>`)
 	matches := tagRE.FindAllStringSubmatchIndex(source, -1)
 	if len(matches) != 1 {
-		return "", fmt.Errorf("static page entry %s: expected exactly one generated module tag, found %d", slug, len(matches))
+		return "", fmt.Errorf("static page entry %s: expected exactly one generated module tag, found %d", entry, len(matches))
 	}
 	m := matches[0]
 	base := source[m[2]:m[3]]

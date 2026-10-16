@@ -120,10 +120,10 @@ change on the JavaScript side.
 
 The code goes in a new `compiler/internal/build/shell.go` as plain functions.
 
-- **Rename table.** It is built from what this build emitted: `app.js` maps to
-  the hashed entry, `app.css` maps to its hashed CSS bundle when one was
-  emitted, and `styles.css` maps to the hashed stylesheet. When nothing is
-  hashed, the table is empty.
+- **Rename table.** `app.js` maps to the emitted entry, `app.css` to its CSS
+  bundle when emitted, and `styles.css` to the emitted stylesheet. Unhashed
+  outputs remain no-op renames. The SPA entry is selected by its source
+  `entryPoint`.
 - **Which references are rewritten.** Every `src`/`href` on a `<script>` or
   `<link>` start tag (any `rel`) whose value, ignoring query and fragment, is
   exactly `name`, `./name` or `/name`. The prefix, query and fragment are kept.
@@ -146,7 +146,8 @@ The code goes in a new `compiler/internal/build/shell.go` as plain functions.
     metafile keys are cwd-relative. They are resolved with `resolvePath` and
     compared against the EvalSymlinks'd staging path.
   - Each `href` is the entry tag's own `src` prefix plus the chunk's
-    dist-relative path.
+    dist-relative path. Without a recognized entry tag, an unhashed shell
+    skips preloads.
   - `crossorigin` is copied verbatim from the entry `<script>`. If the
     credentials mode differs from the script's, the browser fetches the chunk
     twice.
@@ -285,8 +286,8 @@ These stay unchanged:
   `static_pages_test.go`)**
   - **Production SPA, splitting on:**
     - `app-<H>.js` and `styles-<H>.css` exist, and there is no `app.js`.
-    - The preload set equals the metafile's static closure and excludes the
-      lazy chunk.
+    - Exactly the fixture's shared chunk is preloaded; the lazy chunk is
+      excluded. Expectations do not call the closure helper.
   - **Production SPA, splitting off:**
     - Output is unchanged: fixed names, no preloads, shell bytes equal
       `public/index.html`.

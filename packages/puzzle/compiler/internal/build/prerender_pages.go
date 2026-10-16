@@ -256,45 +256,9 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 			return pagesErr
 		}
 
-		// 4b. The prerender wrote fixed module URLs before the browser pass
-		//     existed. Production now knows their emitted names and static imports;
-		//     every locale page sharing an entry needs the same rewrite.
 		if !dev {
-			outputs, err := bundleOutputs(metafile, staging, staging)
-			if err != nil {
+			if err := rewriteStaticPages(staging, metafile, summary.Written); err != nil {
 				return err
-			}
-			type pageBundle struct {
-				name   string
-				chunks []string
-			}
-			entries := make(map[string]pageBundle, len(pages))
-			for name, output := range outputs {
-				if output.EntryPoint != "" && strings.HasSuffix(name, ".js") {
-					entries[output.EntryPoint] = pageBundle{name: name, chunks: staticImportClosure(outputs, name)}
-				}
-			}
-			for _, page := range summary.Written {
-				slug, err := slugFromEntry(page.Entry)
-				if err != nil {
-					return err
-				}
-				entry := filepath.ToSlash(filepath.Join(prerenderDir, "entries", slug+".js"))
-				output, ok := entries[entry]
-				if !ok {
-					return fmt.Errorf("puzzle build --static: per-page bundle has no output for %s", entry)
-				}
-				html, err := os.ReadFile(page.File)
-				if err != nil {
-					return fmt.Errorf("puzzle build --static: reading page %s: %w", page.File, err)
-				}
-				rewritten, err := rewriteStaticPage(string(html), slug, output.name, output.chunks)
-				if err != nil {
-					return fmt.Errorf("puzzle build --static: rewriting page %s: %w", page.File, err)
-				}
-				if err := os.WriteFile(page.File, []byte(rewritten), 0o644); err != nil {
-					return fmt.Errorf("puzzle build --static: writing page %s: %w", page.File, err)
-				}
 			}
 		}
 	}
@@ -311,6 +275,38 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 	}
 
 	printStaticSummary(summary, len(entryFiles))
+	return nil
+}
+
+func rewriteStaticPages(staging, metafile string, written []staticPage) error {
+	outputs, err := bundleOutputs(metafile, staging, staging)
+	if err != nil {
+		return err
+	}
+	entries := make(map[string]string)
+	for name, output := range outputs {
+		if output.EntryPoint != "" && filepath.Ext(name) == ".js" {
+			entries[output.EntryPoint] = name
+		}
+	}
+	for _, page := range written {
+		entry := filepath.ToSlash(filepath.Join(prerenderDir, "entries", filepath.Base(page.Entry)))
+		output, ok := entries[entry]
+		if !ok {
+			return fmt.Errorf("puzzle build --static: per-page bundle has no output for %s", page.Entry)
+		}
+		html, err := os.ReadFile(page.File)
+		if err != nil {
+			return fmt.Errorf("puzzle build --static: reading page %s: %w", page.File, err)
+		}
+		rewritten, err := rewriteStaticPage(string(html), page.Entry, output, staticImportClosure(outputs, output))
+		if err != nil {
+			return fmt.Errorf("puzzle build --static: rewriting page %s: %w", page.File, err)
+		}
+		if err := os.WriteFile(page.File, []byte(rewritten), 0o644); err != nil {
+			return fmt.Errorf("puzzle build --static: writing page %s: %w", page.File, err)
+		}
+	}
 	return nil
 }
 

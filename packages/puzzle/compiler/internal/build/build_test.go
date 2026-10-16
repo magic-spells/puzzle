@@ -1607,7 +1607,7 @@ func TestSplittingEmitsLazyChunk(t *testing.T) {
 	if err := Build(root, Options{Development: false}); err != nil {
 		t.Fatalf("Build failed: %v", err)
 	}
-	appJS := readFile(t, emittedAsset(t, filepath.Join(root, "dist", "index.html"), "app.js"))
+	appJS := readFile(t, emittedAsset(t, filepath.Join(root, "dist"), filepath.Join(root, "dist", "index.html"), "app.js"))
 	if strings.Contains(appJS, lazyMarker) {
 		t.Fatal("lazy module was inlined into app.js despite build.splitting")
 	}
@@ -1650,7 +1650,7 @@ func TestSplittingOffByDefault(t *testing.T) {
 			if _, err := os.Stat(filepath.Join(root, "dist", chunksDirName)); !os.IsNotExist(err) {
 				t.Fatalf("dist/%s must not exist when splitting is off (err=%v)", chunksDirName, err)
 			}
-			if !strings.Contains(readFile(t, emittedAsset(t, filepath.Join(root, "dist", "index.html"), "app.js")), lazyMarker) {
+			if !strings.Contains(readFile(t, emittedAsset(t, filepath.Join(root, "dist"), filepath.Join(root, "dist", "index.html"), "app.js")), lazyMarker) {
 				t.Fatal("lazy module must be inlined into app.js when splitting is off")
 			}
 		})
@@ -1683,7 +1683,7 @@ func TestLazyRouteBuildSplittingModes(t *testing.T) {
 				t.Fatalf("lazy-route SPA Build failed: %v", err)
 			}
 
-			appJS := readFile(t, emittedAsset(t, filepath.Join(root, "dist", "index.html"), "app.js"))
+			appJS := readFile(t, emittedAsset(t, filepath.Join(root, "dist"), filepath.Join(root, "dist", "index.html"), "app.js"))
 			chunks := globChunks(t, filepath.Join(root, "dist", chunksDirName))
 			if tt.splitting {
 				if strings.Contains(appJS, lazyRouteViewMarker) {
@@ -2305,27 +2305,16 @@ func TestCopyPublicStagingWritesPlainCopies(t *testing.T) {
 
 // emittedAsset reads compiler-owned asset names from the built HTML. The shell
 // can carry a router base; the on-disk path is still relative to dist.
-func emittedAsset(t *testing.T, htmlPath, originalName string) string {
+func emittedAsset(t *testing.T, dist, htmlPath, originalName string) string {
 	t.Helper()
-	source := readFile(t, htmlPath)
 	ext := filepath.Ext(originalName)
-	stem := strings.TrimSuffix(filepath.Base(originalName), ext)
-	assetRE := regexp.MustCompile(`(?:src|href)=["']([^"']*(?:^|/)` + regexp.QuoteMeta(stem) + `(?:-[A-Z2-7]{8})?` + regexp.QuoteMeta(ext) + `(?:[?#][^"']*)?)["']`)
-	// Bare names have no slash, so match them independently of URL prefixes.
-	bareRE := regexp.MustCompile(`(?:src|href)=["'](` + regexp.QuoteMeta(stem) + `(?:-[A-Z2-7]{8})?` + regexp.QuoteMeta(ext) + `(?:[?#][^"']*)?)["']`)
-	match := assetRE.FindStringSubmatch(source)
-	if match == nil {
-		match = bareRE.FindStringSubmatch(source)
-	}
+	stem := strings.TrimSuffix(filepath.ToSlash(originalName), ext)
+	assetRE := regexp.MustCompile(`(?:src|href)=["'](?:[^"']*/)?(` + regexp.QuoteMeta(stem) + `(?:-[A-Z2-7]{8})?` + regexp.QuoteMeta(ext) + `)(?:[?#][^"']*)?["']`)
+	match := assetRE.FindStringSubmatch(readFile(t, htmlPath))
 	if match == nil {
 		t.Fatalf("%s has no reference to %s", htmlPath, originalName)
 	}
-	name := strings.SplitN(strings.SplitN(match[1], "?", 2)[0], "#", 2)[0]
-	dist := filepath.Dir(htmlPath)
-	for filepath.Base(dist) != "dist" && filepath.Dir(dist) != dist {
-		dist = filepath.Dir(dist)
-	}
-	return filepath.Join(dist, filepath.Dir(originalName), filepath.Base(name))
+	return filepath.Join(dist, filepath.FromSlash(match[1]))
 }
 
 func TestProductionHashedNamesAndPreloads(t *testing.T) {
@@ -2337,7 +2326,7 @@ func TestProductionHashedNamesAndPreloads(t *testing.T) {
 		{name: "default production"},
 		{name: "split production", cfg: `build: { splitting: true }`, hashed: true, preload: true},
 		{name: "split opt out", cfg: `build: { splitting: true, hashNames: false }`, preload: true},
-		{name: "hash without splitting", cfg: `build: { hashNames: true, sourceMap: true }`, hashed: true},
+		{name: "hash without splitting", cfg: `build: { hashNames: true }`, hashed: true},
 		{name: "development", cfg: `build: { splitting: true, hashNames: true }`, dev: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2365,19 +2354,17 @@ globalThis.__loadLazy = () => import('./lib/lazy.js');`,
 					t.Fatal(err)
 				}
 			}
-			var metafile string
-			if err := Build(root, Options{Development: tt.dev, Metafile: &metafile}); err != nil {
+			if err := Build(root, Options{Development: tt.dev}); err != nil {
 				t.Fatal(err)
 			}
-			htmlPath := filepath.Join(root, "dist", "index.html")
+			dist := filepath.Join(root, "dist")
+			htmlPath := filepath.Join(dist, "index.html")
 			source := readFile(t, htmlPath)
-			var names []string
 			for _, original := range []string{"app.js", "app.css", "styles.css"} {
-				asset := emittedAsset(t, htmlPath, original)
+				asset := emittedAsset(t, dist, htmlPath, original)
 				if _, err := os.Stat(asset); err != nil {
 					t.Fatalf("HTML references missing %s: %v", asset, err)
 				}
-				names = append(names, filepath.Base(asset))
 				if changed := filepath.Base(asset) != original; changed != tt.hashed {
 					t.Errorf("%s hashed = %v, want %v", asset, changed, tt.hashed)
 				}
@@ -2385,15 +2372,6 @@ globalThis.__loadLazy = () => import('./lib/lazy.js');`,
 					if _, err := os.Stat(filepath.Join(root, "dist", original)); !os.IsNotExist(err) {
 						t.Errorf("fixed %s still exists: %v", original, err)
 					}
-				}
-			}
-			if strings.Contains(tt.cfg, "sourceMap: true") {
-				entry := emittedAsset(t, htmlPath, "app.js")
-				if _, err := os.Stat(entry + ".map"); err != nil {
-					t.Fatal(err)
-				}
-				if !strings.Contains(readFile(t, entry), "sourceMappingURL="+filepath.Base(entry)+".map") {
-					t.Fatal("hashed entry lost its linked source map")
 				}
 			}
 			if !strings.Contains(source, "?theme#main") || !strings.Contains(source, "?boot#main") {
@@ -2407,27 +2385,13 @@ globalThis.__loadLazy = () => import('./lib/lazy.js');`,
 				t.Fatalf("preloads = %v, enabled = %v", preloads, tt.preload)
 			}
 			if tt.preload {
-				var mf struct {
-					Outputs map[string]bundleOutput `json:"outputs"`
-				}
-				if err := json.Unmarshal([]byte(metafile), &mf); err != nil {
-					t.Fatal(err)
-				}
-				var expected []string
-				for key, output := range mf.Outputs {
-					if output.EntryPoint != "" && filepath.Base(filepath.Dir(key)) != "chunks" && strings.HasSuffix(key, ".js") {
-						for _, chunk := range staticImportClosure(mf.Outputs, key) {
-							expected = append(expected, "/chunks/"+filepath.Base(chunk))
-						}
-					}
-				}
-				if !reflect.DeepEqual(preloads, expected) {
-					t.Fatalf("preloads = %v, metafile static closure = %v", preloads, expected)
+				if len(preloads) != 1 {
+					t.Fatalf("preloads = %v, want only the shared chunk", preloads)
 				}
 				for _, href := range preloads {
 					chunk := readFile(t, filepath.Join(root, "dist", strings.TrimPrefix(href, "/")))
-					if strings.Contains(chunk, lazyMarker) {
-						t.Fatal("lazy chunk was preloaded")
+					if !strings.Contains(chunk, "SHARED_MARKER") || strings.Contains(chunk, lazyMarker) {
+						t.Fatalf("expected the shared chunk only, got:\n%s", chunk)
 					}
 					if !strings.Contains(source, `href="`+href+`" crossorigin="use-credentials"`) {
 						t.Fatal("preload credentials differ from entry")
@@ -2436,16 +2400,6 @@ globalThis.__loadLazy = () => import('./lib/lazy.js');`,
 			} else if !tt.hashed {
 				if want := readFile(t, filepath.Join(root, "app", "public", "index.html")); source != want {
 					t.Fatal("fixed-name shell bytes changed")
-				}
-			}
-			if tt.hashed {
-				if err := Build(root, Options{}); err != nil {
-					t.Fatal(err)
-				}
-				for i, original := range []string{"app.js", "app.css", "styles.css"} {
-					if got := filepath.Base(emittedAsset(t, htmlPath, original)); got != names[i] {
-						t.Errorf("nondeterministic name %s, want %s", got, names[i])
-					}
 				}
 			}
 		})
@@ -2503,5 +2457,61 @@ func TestUnlinkedStylesheetIsHashed(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "dist", "styles.css")); !os.IsNotExist(err) {
 		t.Fatalf("fixed stylesheet still emitted: %v", err)
+	}
+}
+
+func TestHashedEntrySourceMap(t *testing.T) {
+	requireNodeBin(t)
+	root := writeSplitFixture(t, `export default { build: { hashNames: true, sourceMap: true } };`)
+	if err := Build(root, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	dist := filepath.Join(root, "dist")
+	entry := emittedAsset(t, dist, filepath.Join(dist, "index.html"), "app.js")
+	if _, err := os.Stat(entry + ".map"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(readFile(t, entry), "sourceMappingURL="+filepath.Base(entry)+".map") {
+		t.Fatal("hashed entry lost its linked source map")
+	}
+}
+
+func TestHashedNamesAreDeterministic(t *testing.T) {
+	requireNodeBin(t)
+	root := writeSplitFixture(t, `export default { build: { splitting: true } };`)
+	if err := Build(root, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	shell := filepath.Join(root, "dist", "index.html")
+	before := readFile(t, shell)
+	if err := Build(root, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if after := readFile(t, shell); after != before {
+		t.Fatalf("identical builds changed shell URLs:\nbefore: %s\nafter: %s", before, after)
+	}
+}
+
+func TestSplitShellWithoutRecognizedEntrySkipsPreloads(t *testing.T) {
+	requireNodeBin(t)
+	root := writeSplitFixture(t, `export default { build: { splitting: true, hashNames: false } };`)
+	for name, source := range map[string]string{
+		"app/app.js":        `import { shared } from './lib/shared.js'; globalThis.value = shared('entry'); globalThis.load = () => import('./lib/lazy.js');`,
+		"app/lib/lazy.js":   `import { shared } from './shared.js'; export const value = shared('lazy');`,
+		"app/lib/shared.js": `export function shared(value) { return value + 'shared'; }`,
+	} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(source), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	shell := `<head><link rel="stylesheet" href="/styles.css"></head><script type="module" src="/docs/app.js"></script>`
+	if err := os.WriteFile(filepath.Join(root, "app", "public", "index.html"), []byte(shell), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Build(root, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, filepath.Join(root, "dist", "index.html")); got != shell {
+		t.Fatalf("shell without a recognized entry changed: %s", got)
 	}
 }

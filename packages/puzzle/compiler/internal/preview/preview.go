@@ -225,7 +225,7 @@ func shapeWarning(dist, mode string) string {
 	} else {
 		entries, _ := os.ReadDir(dist)
 		for _, entry := range entries {
-			if hashedAppName.MatchString(entry.Name()) && fileExists(filepath.Join(dist, entry.Name())) {
+			if hashedAppName.MatchString(entry.Name()) {
 				appName = entry.Name()
 				break
 			}

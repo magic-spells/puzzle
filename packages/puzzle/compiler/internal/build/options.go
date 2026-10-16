@@ -47,8 +47,6 @@ type bundleFlags struct {
 	// writes (prerender.go), and the static-mode SPA pass's output is deleted
 	// before the swap, so splitting it would strand chunks nothing imports.
 	Splitting bool
-	// HashEntry gives production browser entries content-derived names. It is
-	// separate from splitting so either setting can be selected independently.
 	HashEntry bool
 }
 
