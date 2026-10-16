@@ -47,6 +47,9 @@ type bundleFlags struct {
 	// writes (prerender.go), and the static-mode SPA pass's output is deleted
 	// before the swap, so splitting it would strand chunks nothing imports.
 	Splitting bool
+	// HashEntry gives production browser entries content-derived names. It is
+	// separate from splitting so either setting can be selected independently.
+	HashEntry bool
 }
 
 // newBundleOptions assembles the shared esbuild BuildOptions. All runtime probes
@@ -78,9 +81,9 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 		buildOpts.Sourcemap = api.SourceMapLinked
 	}
 	if flags.Splitting {
-		// The entry keeps its stable app.js name (EntryNames is left alone), so the
-		// shell HTML is unchanged; everything a dynamic import() pulls in lands in
-		// the reserved chunks/ directory beside it, imported with native ESM. There
+		// Everything a dynamic import() pulls in lands in the reserved chunks/
+		// directory, imported with native ESM. Production entries can also be
+		// hashed (HashEntry); the shell rewrite follows the emitted names. There
 		// is no chunk-loader runtime to pay for.
 		//
 		// AbsWorkingDir is deliberately NOT anchored here, unlike the static-pages
@@ -92,6 +95,10 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 		// app.js has always carried — and production minifies them away.
 		buildOpts.Splitting = true
 		buildOpts.ChunkNames = chunksDirName + "/[name]-[hash]"
+	}
+
+	if flags.HashEntry {
+		buildOpts.EntryNames = "[name]-[hash]"
 	}
 
 	configureRuntime(absRoot, &buildOpts, pl)

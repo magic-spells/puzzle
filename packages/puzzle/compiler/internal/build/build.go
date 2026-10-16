@@ -50,7 +50,8 @@ type Options struct {
 
 	// Metafile receives esbuild's JSON metafile when non-nil. It is primarily a
 	// build-test seam for proving an input contributes zero production bytes;
-	// normal CLI builds leave it nil and pay nothing.
+	// production builds also use it internally to rewrite shell references and
+	// preload statically imported chunks.
 	Metafile *string
 
 	// Config is an ALREADY-LOADED puzzle.config.js. Non-nil, Build uses it as-is
@@ -157,6 +158,9 @@ func Build(root string, opts Options) error {
 	// Resolved here, before ValidatePublic, because it decides whether dist/chunks
 	// is a reserved output name for this build.
 	splitting := cfg.Splitting() && mode != "static"
+	hash := !opts.Development && cfg.HashNames()
+	hashEntry := hash && mode != "static"
+	preloadShell := !opts.Development && splitting
 
 	// Translations (D175): read, validate, flatten, and fill every locale up
 	// front, so a broken locale file fails the build before dist/ is touched and
@@ -250,8 +254,9 @@ func Build(root string, opts Options) error {
 		Dev:       opts.Development,
 		Takeover:  mode == "hybrid",
 		Splitting: splitting,
+		HashEntry: hashEntry,
 	})
-	buildOpts.Metafile = opts.Metafile != nil
+	buildOpts.Metafile = opts.Metafile != nil || !opts.Development
 	if opts.Fixtures {
 		buildOpts.Plugins = append(buildOpts.Plugins, fixtures.Plugin())
 	}
@@ -313,14 +318,18 @@ func Build(root string, opts Options) error {
 		return tailwindErr
 	}
 
-	// Styles → one global stylesheet (index.html links /styles.css): the
+	// Styles → one global stylesheet (the shell follows its emitted name): the
 	// Tailwind layer (when puzzle.config.js declares it) followed by the
 	// collected <style> blocks. A declared-but-unrunnable Tailwind fails the
 	// build — the pipeline is never silently skipped. Written into staging, not
 	// dist/, so a Tailwind failure above never touches the last good build.
 	endStyles := prof.phase("styles compose")
 	final := styles.Compose(tailwindCSS, pl.CSS())
-	writeErr := os.WriteFile(filepath.Join(staging, "styles.css"), []byte(final), 0o644)
+	stylesheet := "styles.css"
+	if hash {
+		stylesheet = "styles-" + fsutil.ContentHash([]byte(final)) + ".css"
+	}
+	writeErr := os.WriteFile(filepath.Join(staging, stylesheet), []byte(final), 0o644)
 	endStyles()
 	if writeErr != nil {
 		return fmt.Errorf("writing styles.css: %w", writeErr)
@@ -334,6 +343,12 @@ func Build(root string, opts Options) error {
 	endPublic()
 	if err != nil {
 		return fmt.Errorf("copying public assets: %w", err)
+	}
+
+	if hash || preloadShell {
+		if err := rewriteShell(staging, result.Metafile, stylesheet, hashEntry, preloadShell); err != nil {
+			return err
+		}
 	}
 
 	// Prerender modes (D67 hybrid / D81 static): render each route inside staging,
