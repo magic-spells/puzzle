@@ -164,11 +164,20 @@ func TestCheckDistErrors(t *testing.T) {
 // TestShapeWarning proves a dist/ whose shape disagrees with the configured mode
 // is called out (and, per the command's contract, still served per the config).
 func TestShapeWarning(t *testing.T) {
-	spaShaped := writeDist(t, map[string]string{"index.html": "x", "app.js": "x"})
 	staticShaped := writeDist(t, map[string]string{"index.html": "x", "_puzzle/index.js": "x"})
 
-	if got := shapeWarning(spaShaped, serve.ModeStatic); !strings.Contains(got, "app.js") {
-		t.Errorf("static config + SPA-shaped dist warning = %q", got)
+	for _, appName := range []string{"app.js", "app-ABCDEFG2.js"} {
+		t.Run(appName, func(t *testing.T) {
+			spaShaped := writeDist(t, map[string]string{"index.html": "x", appName: "x"})
+			if got := shapeWarning(spaShaped, serve.ModeStatic); !strings.Contains(got, "dist/"+appName) {
+				t.Errorf("static config + SPA-shaped dist warning = %q", got)
+			}
+			for _, mode := range []string{serve.ModeSPA, serve.ModeHybrid} {
+				if got := shapeWarning(spaShaped, mode); got != "" {
+					t.Errorf("matching %s shape warned: %q", mode, got)
+				}
+			}
+		})
 	}
 	if got := shapeWarning(staticShaped, serve.ModeSPA); !strings.Contains(got, "app.js") {
 		t.Errorf("SPA config + static-shaped dist warning = %q", got)
@@ -176,11 +185,12 @@ func TestShapeWarning(t *testing.T) {
 	if got := shapeWarning(staticShaped, serve.ModeHybrid); !strings.Contains(got, "hybrid") {
 		t.Errorf("hybrid config + static-shaped dist warning = %q", got)
 	}
-	if got := shapeWarning(spaShaped, serve.ModeSPA); got != "" {
-		t.Errorf("matching SPA shape warned: %q", got)
-	}
 	if got := shapeWarning(staticShaped, serve.ModeStatic); got != "" {
 		t.Errorf("matching static shape warned: %q", got)
+	}
+	lookalike := writeDist(t, map[string]string{"index.html": "x", "app-settings.js": "x"})
+	if got := shapeWarning(lookalike, serve.ModeSPA); got == "" {
+		t.Error("non-entry app-*.js hid the missing app entry")
 	}
 }
 

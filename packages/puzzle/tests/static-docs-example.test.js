@@ -15,6 +15,28 @@ const DIST = path.join(path.dirname(fileURLToPath(import.meta.url)), '../example
 const read = (rel) => fs.readFileSync(path.join(DIST, rel), 'utf8');
 
 describe('examples/static-docs — a staticPaths route (D179)', () => {
+	it('keeps fixed production names and preloads shared chunks on every page', () => {
+		const pages = fs.readdirSync(DIST, { recursive: true, withFileTypes: true })
+			.filter((entry) => entry.isFile() && entry.name.endsWith('.html'));
+		expect(pages.length).toBeGreaterThan(1);
+		for (const entry of pages) {
+			const file = path.join(entry.parentPath ?? entry.path, entry.name);
+			const page = new DOMParser().parseFromString(fs.readFileSync(file, 'utf8'), 'text/html');
+			const links = [...page.head.querySelectorAll('link[rel="modulepreload"]')];
+			expect(links.length, file).toBeGreaterThan(0);
+			const hrefs = links.map((link) => link.getAttribute('href'));
+			expect(new Set(hrefs).size).toBe(hrefs.length);
+			for (const href of hrefs) {
+				expect(href).toMatch(/^\/_puzzle\/chunks\/.+\.js$/);
+				expect(fs.existsSync(path.join(DIST, href.slice(1))), href).toBe(true);
+			}
+			expect(page.querySelector('script[type="module"]').getAttribute('src')).toMatch(/^\/_puzzle\/[^/]+\.js$/);
+			expect(page.querySelector('link[rel="stylesheet"][href="/styles.css"]')).not.toBeNull();
+		}
+		expect(fs.existsSync(path.join(DIST, 'app.js'))).toBe(false);
+		expect(fs.existsSync(path.join(DIST, '_puzzle/index.js'))).toBe(true);
+	});
+
 	it('writes one page per principle record, sharing one module', () => {
 		for (const [id, title] of [
 			['p1', 'One file per component'],

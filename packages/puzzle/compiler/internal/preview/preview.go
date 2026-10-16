@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -211,27 +212,39 @@ func checkDist(dist string) error {
 	return nil
 }
 
+var hashedAppName = regexp.MustCompile(`^app-[A-Z2-7]{8}\.js$`)
+
 // shapeWarning reports a visible disagreement between the config's output mode
 // and what dist/ actually holds — almost always a build that predates the config
 // change. Preview still serves per the config (the config is the request); the
 // warning explains why the result may look wrong.
 func shapeWarning(dist, mode string) string {
-	appJS := filepath.Join(dist, "app.js")
-	hasAppJS := fileExists(appJS)
+	appName := ""
+	if fileExists(filepath.Join(dist, "app.js")) {
+		appName = "app.js"
+	} else {
+		entries, _ := os.ReadDir(dist)
+		for _, entry := range entries {
+			if hashedAppName.MatchString(entry.Name()) && fileExists(filepath.Join(dist, entry.Name())) {
+				appName = entry.Name()
+				break
+			}
+		}
+	}
 	switch mode {
 	case serve.ModeStatic:
-		if hasAppJS {
-			return "dist/app.js exists, but puzzle.config.js says output: 'static' (a static build emits no app.js) — " +
-				"serving as static; rebuild with `puzzle build` to preview the real output"
+		if appName != "" {
+			return fmt.Sprintf("dist/%s exists, but puzzle.config.js says output: 'static' (a static build emits no app.js) — "+
+				"serving as static; rebuild with `puzzle build` to preview the real output", appName)
 		}
 	default:
-		if !hasAppJS {
+		if appName == "" {
 			label := "the default SPA output"
 			if mode == serve.ModeHybrid {
 				label = "output: 'hybrid'"
 			}
 			return fmt.Sprintf(
-				"dist/app.js is missing, but puzzle.config.js selects %s (which ships app.js) — "+
+				"dist/ has no app.js or app-<hash>.js, but puzzle.config.js selects %s (which ships an app entry) — "+
 					"serving anyway; rebuild with `puzzle build` to preview the real output", label)
 		}
 	}
