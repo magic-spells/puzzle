@@ -118,7 +118,7 @@ events = {
 };
 ```
 
-A template reads only what `data()` returns — it has no `this`, so a helper method or getter on the class is out of its reach. Put the value in the model (a getter on a `PuzzleModel` works as a field: `{ user.fullName }`).
+A displayed expression reads what `data()` returns (the `<Component>` `is` module-binding exception is §67 / [[DOC-TEMPLATE-SYNTAX]]) — it has no `this`, so a helper method or getter on the class is out of its reach. Put the value in the model (a getter on a `PuzzleModel` works as a field: `{ user.fullName }`).
 
 ## Skeletons
 

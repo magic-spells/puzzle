@@ -197,6 +197,9 @@ func generateFamily(opts Options, ts bool) (*Result, error) {
 	if !pascalCase.MatchString(opts.Name) {
 		return nil, fmt.Errorf("component name %q must be PascalCase (e.g. UserCard)", opts.Name)
 	}
+	if opts.Name == "Component" {
+		return nil, fmt.Errorf("Component is a reserved built-in tag — rename Component.pzl (for example, Card.pzl) and its imports")
+	}
 	if isMarkerName(opts.Name) {
 		return nil, fmt.Errorf("component family root %q is a reserved composition marker (Children, Slot, Snippet, Portal)", opts.Name)
 	}
@@ -208,6 +211,8 @@ func generateFamily(opts Options, ts bool) (*Result, error) {
 			return nil, fmt.Errorf("empty family member name (--family takes a comma-separated list, e.g. --family Wrapper,Content)")
 		case !pascalCase.MatchString(member):
 			return nil, fmt.Errorf("family member %q must be PascalCase (e.g. Wrapper)", member)
+		case member == "Component":
+			return nil, fmt.Errorf("Component is a reserved built-in tag — rename Component.pzl (for example, Card.pzl) and its imports")
 		case isMarkerName(member):
 			return nil, fmt.Errorf("family member %q is a reserved composition marker (Children, Slot, Snippet, Portal)", member)
 		case member == opts.Name:
@@ -338,6 +343,11 @@ func render(kind Kind, name string, ts bool) (content, filename string, err erro
 	case KindComponent, KindView, KindLayout:
 		if !pascalCase.MatchString(name) {
 			return "", "", fmt.Errorf("%s name %q must be PascalCase (e.g. UserCard)", kind, name)
+		}
+		// Component.pzl is rejected by codegen in every emission mode (D180),
+		// including a view or layout that is only ever invoked by the router.
+		if name == "Component" {
+			return "", "", fmt.Errorf("Component is a reserved built-in tag — rename Component.pzl (for example, Card.pzl) and its imports")
 		}
 		// The compiler matches the composition markers BEFORE it resolves a
 		// capitalized tag as a component (D134), so <Slot>, <Children>, <Snippet>,

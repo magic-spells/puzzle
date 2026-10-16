@@ -47,3 +47,5 @@ compiled fixtures come from `npm run pretest`.
   diagnostics, serialization, and warning-free hybrid/static takeover.
 - Portal mounting into the framework outlet, teardown, and its interaction with
   the `outside` modifier.
+
+- `component-slot` (D180 / §67): children fill the selected component's normal default slot. An empty selection leaves an enclosing default marker unfilled. Indexed-map expressions, nullish selection and nested slots follow normal composition rules.

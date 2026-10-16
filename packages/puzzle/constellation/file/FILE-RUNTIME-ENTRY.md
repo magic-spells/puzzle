@@ -3,7 +3,7 @@ name: runtime package entry
 status: verified
 path: client-runtime/index.js
 language: javascript
-summary: Public package exports and compiler-support exports.
+summary: Public package exports and compiler-support exports, including per-use Component selectors.
 connections:
   - COMPONENT-PUZZLE-APP
 verified_at: '2026-08-24T21:11:50.859Z'

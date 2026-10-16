@@ -69,6 +69,9 @@ export const PORTAL_TAG = 'portal';
 // `new ViewNode('#html', { value })`.
 export const HTML_TAG = '#html';
 
+/** Reserved range holding a <Component> selection (D180). */
+export const COMPONENT_SLOT_TAG = '#component';
+
 /**
  * The one diagnostic for a reserved '#'-prefixed metadata tag that reached a
  * rendering path (D89 boundary). Every such tag is consumed by expansion before
@@ -96,6 +99,8 @@ export function metadataTagError(tag) {
 			`[puzzle] vnode tag "${tag}" reached the DOM — it is framework metadata; ` +
 				(tag === HTML_TAG
 					? '`raw`/`newline_to_br` support was compiled out of this build (__PUZZLE_HAS_RAW_HTML__ is false). '
+					: tag === COMPONENT_SLOT_TAG
+						? '<Component> support was compiled out of this build (__PUZZLE_HAS_COMPONENT_SLOT__ is false). '
 					: 'snippet support was compiled out of this build (__PUZZLE_HAS_SNIPPETS__ is false). ') +
 				'Compiled component packages are not scanned for feature usage; use source pieces ' +
 				'or force the feature on.'

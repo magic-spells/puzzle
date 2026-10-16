@@ -127,6 +127,20 @@ describe('paired composition markers (D141)', () => {
 	});
 });
 
+describe('dynamic Component built-in', () => {
+	it('preserves constructor/map selectors, forwarded children, null and spread props byte-for-byte', async () => {
+		const input = read('component-slot.pzl');
+		const output = await format(input);
+		const before = sectionMap(input);
+		const after = sectionMap(output);
+		expect(after['puzzle-view'].inner).toBe(before['puzzle-view'].inner);
+		expect(after['puzzle-skeleton'].inner).toBe(before['puzzle-skeleton'].inner);
+		expect(Object.keys(after).sort()).toEqual(['puzzle-skeleton', 'puzzle-view', 'script', 'style']);
+		expect(output).toContain('const embeds = { task: TaskCard, backtest: BacktestCard };');
+		expect(output).toContain('padding: 1rem;');
+	});
+});
+
 describe('{#raw} blocks (D150)', () => {
 	// findTemplateClose steps over a whole raw span (sections.go, D150), and the
 	// `raw` closer keyword stays load-bearing in lex.js for a stray {/raw} that

@@ -56,12 +56,13 @@ Emission contracts:
   these names compiler-owned in a script: `ViewNode`; `SLOT_TAG`,
   `SNIPPET_TAG`, `PORTAL_TAG` (when used); `__s` (display coercion); `__l`
   (list blocks), `__L<n>` (list-block metadata), `__e` / `__r` (loop guards);
+  `__dc` (runtime component selection, only when emitted);
   `__svg_N` (shared `{#svg}` assets). Binding one at module scope is a
   positioned compile error (D133), found by a conservative top-level
   declaration scan that never parses the script; misses fall through to
   esbuild's duplicate-binding error. Function-scope scratch names (`__d`,
   `__f`, `__ev`, `__i`, …) are not reserved — they only shadow. An alias
-  allocator stays rejected.
+  allocator for compiler imports stays rejected; D180 selector getters separately avoid collisions with render-local scopes.
 - **Library calls.** `const __f = this.ctx.formatters.getAll()` is emitted only
   when a template calls a library function; each call goes through
   `(__f["name"] || __f.__missing("name"))` (the D43 guard).
@@ -72,8 +73,9 @@ Emission contracts:
 - **Caching (D170).** Data-independent handlers and ref setters are cached per
   instance; an item-form `{#for}` lowers to a persistent list block with
   row-scoped handler caches; maximal static subtrees are allocated once.
-- List rows get primary-key-aware automatic keys unless `key` overrides.
+- List rows get primary-key-aware automatic keys unless `key` overrides; the resolved row key follows component prop spreads and wins over them.
 - Conditionals emit placeholders to keep sibling arity stable.
+- **Runtime component selection (D180):** `is` lowers with loop/snippet/arrow bindings before script module bindings before data. Other props keep normal data scope; `{...props}` operands are ordinary expressions merged in written order. Emission imports `dynamicComponent as __dc` only when used, never a registry; children are ordinary default-slot content. `name` and `from` retain normal prop semantics. Imports/`const` selectors preserve row caching; module `let`/`var` reads make enclosing cached loops volatile. Mutating a const map's entries in place is not observed by cached rows. Non-component literal selectors and authored `flip` on `<Component>` are compile errors. `__PUZZLE_HAS_COMPONENT_SLOT__` gates stable range machinery.
 - Component children, named slots, snippets and router outlets share one
   composition mechanism under distinct spellings.
 

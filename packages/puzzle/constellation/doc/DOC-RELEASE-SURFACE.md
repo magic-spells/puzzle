@@ -96,7 +96,7 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   table, or an allowed global (`Math.*`, `Number`, `Object.keys`, …). The count
   is `.length`. `|`, `this`, `new`, `typeof`, bitwise, `**`, assignment,
   regex, `Date` and `JSON` are compile errors naming the alternative. Free
-  names read `data()` fields or props; `event` is the DOM event only inside an
+  names read `data()` fields or props (module bindings in `<Component>` `is` below); `event` is the DOM event only inside an
   `@event` handler.
 - **Value semantics:** member steps and method calls compile to `?.`; a loop
   over a non-list runs zero times; `NaN`, ±Infinity and objects print nothing
@@ -125,6 +125,7 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   resolves lexically as a member expression — the component-family idiom,
   grouped by an `index.js` barrel (`export default Object.assign(Frame,
   { Wrapper })`).
+- **Runtime component selection (D180):** `<Component is={ current }>` chooses an imported constructor; nullish is empty and children are its default slot. An explicit script map uses `is={ cards[key] }`. A swap destroys the outgoing instance and descendants before mounting with current props. Only `is` may read script bindings directly; other attrs, including ordinary `name`/`from` props, use data scope. `{...props}` spreads merge in written order, events are normal callback props, and `bind:` remains unsupported. `Component` is a reserved tag/family root with rename diagnostics. No registry or runtime module resolution; prerender emits selected HTML or nothing.
 - **Composition:** `<Children/>` default content, `<Slot name="…"/>` named
   slots, bare `<Slot/>` router outlet; paired marker bodies are fallbacks.
   **Snippets:** caller-side `<Snippet fits="row" user>…</Snippet>` is a

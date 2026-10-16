@@ -21,6 +21,8 @@ notes:
       unknown-block message comes from `unknownBlockErr`, unchanged for PuzzleKit. `parseChildren`
       now defers `p.unbind(len(p.bound))` so a child list is the scope of the {#let} names inside it
       — a no-op when nothing was bound. `nodePos` knows `*Let`.
+connections:
+  - FILE-PARSER-COMPONENT
 ---
 
 # parser.go
@@ -38,6 +40,7 @@ is relative to `packages/puzzle-lang`.
   (`parseForHeader` → `peelForCounter`/`splitForIn`), which splits
   `item in collection, i` or `a...b, x` and hands each piece to `expr`. This file
   never reads inside an expression; a `|` is rejected by `expr.Parse` itself.
+- **Component selectors and spread props (D180).** `<Component>` remains a `Component` AST node with its reserved name. [[FILE-PARSER-COMPONENT]] validates the required expression-valued `is`; `name` and `from` stay ordinary props. `parseAttrs` accepts the lexer's existing `TokAttrBrace` with a leading `...` as `SpreadAttr`, parses the remaining expression with its original file position, and rejects spreads on elements and composition markers. No expression grammar or lexer token change is needed. `Component` cannot be a dotted family root.
 - **`{#unless c}`** stores `!` over the parsed condition — one tree shape.
 - **A second `{:else}`** in `{#if}`/`{#unless}`/`{#case}` is reported at the stray
   clause ("a second {:else} in {#if} opened at L:C — {:else} must be the last

@@ -39,14 +39,15 @@ import (
 
 // fileUsage is one file's contribution to the project-wide Usage.
 type fileUsage struct {
-	formatters  []string
-	hasFlip     bool
-	hasPortal   bool
-	hasRawAt    bool
-	hasLazy     bool
-	hasSnippets bool
-	hasRawHTML  bool
-	hasRawSan   bool
+	formatters       []string
+	hasFlip          bool
+	hasPortal        bool
+	hasRawAt         bool
+	hasLazy          bool
+	hasSnippets      bool
+	hasComponentSlot bool
+	hasRawHTML       bool
+	hasRawSan        bool
 	// name is the app-relative file name and tKeys the literal `t` keys it uses
 	// (D175 diagnostics).
 	name  string
@@ -157,6 +158,9 @@ func mergeFileUsage(usage *Usage, fu fileUsage) {
 	if fu.hasSnippets {
 		usage.HasSnippets = true
 	}
+	if fu.hasComponentSlot {
+		usage.HasComponentSlot = true
+	}
 	if fu.hasRawHTML {
 		usage.HasRawHTML = true
 	}
@@ -229,6 +233,7 @@ func scanFileUsage(root, path string, allow map[string]bool) fileUsage {
 	one.hasPortal = tpl.HasPortal
 	one.hasRawAt = tpl.HasRawAt
 	one.hasSnippets = tpl.HasSnippets
+	one.hasComponentSlot = tpl.HasComponentSlot
 	one.hasRawHTML = tpl.HasRawHTML
 	one.hasRawSan = tpl.HasRawSanitize
 	for formatter := range tpl.Formatters {
