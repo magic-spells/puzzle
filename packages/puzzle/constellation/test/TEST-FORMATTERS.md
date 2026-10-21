@@ -39,6 +39,10 @@ the one coercion function that decides how any value becomes text. Suites:
 - `handler-library-collision` pins the mount-time development warning when a
   view handler shares a library function's name
   ([[DECISION-D176-EXPRESSION-LANGUAGE]] rule 4).
+- `formatters-hardening` pins unreadable input: `round` gives NaN, the number
+  and date functions print nothing for NaN, ±Infinity, an Invalid Date or an
+  object, and `date(in_timezone(v))` on a bad date prints nothing; a string
+  still prints as written.
 - The Intl-backed built-ins are covered with their caches — a carelessly keyed
   cache leaks locale or array-locale state between calls. The calendar-date
   functions run a second time under a foreign process time zone.

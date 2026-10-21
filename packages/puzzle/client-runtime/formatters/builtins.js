@@ -17,7 +17,7 @@
 // `.toFixed()` returns a padded string, so nothing in JavaScript rounds half
 // away from zero to a number in one call.
 
-import { calendarISO, isCalendarDate, noDate, parseDateInput } from '../dates.js';
+import { calendarISO, isCalendarDate, parseDateInput } from '../dates.js';
 import { formatLocale, localeNumber } from './locale.js';
 import { sanitizeHtml, newlineToBr } from '../sanitize.js';
 
@@ -31,12 +31,12 @@ const str = (v) => (v == null ? '' : String(v));
 /** @param {unknown} v @returns {number} */
 const num = (v) => (v == null || v === '' || typeof v === 'boolean' ? NaN : Number(v));
 
-// What a text-producing number formatter prints for input that is not a finite
-// number: nothing for a NaN or ±Infinity NUMBER (`{ currency(total / count) }`
-// on an empty list), exactly as the bare value prints (D173 V6); anything else —
-// a missing value, a non-numeric string — prints as text (D174 deviation 2).
+// What a number or date function prints for input it cannot read: a string as
+// written (D174 deviation 2), anything else nothing — a missing value, a NaN or
+// ±Infinity number (`{ currency(total / count) }` on an empty list), an Invalid
+// Date, an object. Never `NaN`, `Invalid Date` or `[object Object]` (D173 V6).
 /** @param {unknown} v @returns {string} */
-const notFinite = (v) => (typeof v === 'number' ? '' : str(v));
+const unread = (v) => (typeof v === 'string' ? v : '');
 
 // Normalize a `places` argument to a digit count toFixed accepts: coerce to an
 // integer and clamp to 0–100. A non-numeric, NaN, or infinite argument falls back
@@ -228,7 +228,7 @@ export function strip_newlines(v) {
 /** @param {unknown} count @param {unknown} singular @param {unknown} [plural] @returns {string} */
 export function pluralize(count, singular, plural) {
 	const n = num(count);
-	if (!Number.isFinite(n)) return notFinite(count);
+	if (!Number.isFinite(n)) return unread(count);
 	const word = n === 1 ? str(singular) : plural == null ? str(singular) + 's' : str(plural);
 	return localeNumber(n) + ' ' + word;
 }
@@ -237,14 +237,15 @@ export function pluralize(count, singular, plural) {
 
 // Rounds half away from zero on the decimal value — `round(1.005, 2)` is 1.01,
 // `round(2.5)` is 3 — and negative places round to tens and hundreds (D174
-// F19). Returns a number, so another function can keep formatting it as one.
+// F19). Returns a number, so another function can keep formatting it as one;
+// a missing or non-numeric input is NaN, which prints nothing (D173 V6).
 // Stays in the library (D176 §4): `Math.round` takes no places, and
 // `.toFixed()` rounds the binary value and returns a padded string.
 /** @param {unknown} v @param {unknown} [places] @returns {number} */
 export function round(v, places = 0) {
 	let p = Math.trunc(Number(places));
 	if (!Number.isFinite(p)) p = 0;
-	return roundHalfAway(Number(v), Math.min(100, Math.max(-100, p)));
+	return roundHalfAway(num(v), Math.min(100, Math.max(-100, p)));
 }
 
 // Groups thousands with `,`, puts the sign before the symbol (`-$1,234.50`), and
@@ -252,7 +253,7 @@ export function round(v, places = 0) {
 /** @param {unknown} v @param {unknown} [symbol] @param {unknown} [places] @returns {string} */
 export function currency(v, symbol = '$', places = 2) {
 	const n = num(v);
-	if (!Number.isFinite(n)) return notFinite(v);
+	if (!Number.isFinite(n)) return unread(v);
 	const p = normDecimals(places, 2);
 	const rounded = roundHalfAway(n, p);
 	const [whole, frac] = Math.abs(rounded).toFixed(p).split('.');
@@ -264,7 +265,7 @@ export function currency(v, symbol = '$', places = 2) {
 /** @param {unknown} v @param {unknown} [places] @returns {string} */
 export function percentage(v, places = 0) {
 	const n = num(v);
-	if (!Number.isFinite(n)) return notFinite(v);
+	if (!Number.isFinite(n)) return unread(v);
 	const p = normDecimals(places, 0);
 	return roundHalfAway(n, p).toFixed(p) + '%';
 }
@@ -275,7 +276,7 @@ export function percentage(v, places = 0) {
 /** @param {unknown} v @param {unknown} [delimiter] @returns {string} */
 export function number_with_delimiter(v, delimiter) {
 	const n = num(v);
-	if (!Number.isFinite(n)) return notFinite(v);
+	if (!Number.isFinite(n)) return unread(v);
 	if (delimiter == null) return localeNumber(n);
 	const [whole, frac] = String(n).split('.');
 	return group(whole, str(delimiter)) + (frac === undefined ? '' : '.' + frac);
@@ -290,7 +291,7 @@ let compactLocale;
 /** @param {unknown} v @returns {string} */
 export function compact_number(v) {
 	const n = num(v);
-	if (!Number.isFinite(n)) return notFinite(v);
+	if (!Number.isFinite(n)) return unread(v);
 	if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && compactLocale !== formatLocale) {
 		compactLocale = formatLocale;
 		compactFormatter = undefined;
@@ -373,7 +374,7 @@ export function json(v) {
 
 // ── Dates ─────────────────────────────────────────────────────────────────────
 
-// The calendar-date parse rule (D114) — noDate, parseDateInput, and the
+// The calendar-date parse rule (D114) — parseDateInput and the
 // CalendarDate tag its `isCalendarDate`/`calendarISO` pair reads — is shared with
 // the datastore's JSON hydration boundary, so it lives in ../dates.js; see that
 // module for the rationale. Nothing here may re-export it: this module's export
@@ -464,13 +465,9 @@ function isoTime(d) {
  * @returns {string}
  */
 function formatDate(kind, v, preset, locale) {
-	// An absent value renders NOTHING, in every preset (`iso` included). The invalid
-	// -date fall-through below already does that for null/undefined/'' via str(), but
-	// not for a boolean — 'false' is not a date worth echoing back — so the empty
-	// path is explicit.
-	if (noDate(v)) return '';
+	// An absent value (parseDateInput's noDate) renders nothing in every preset.
 	const d = parseDateInput(v);
-	if (isNaN(d.getTime())) return str(v);
+	if (isNaN(d.getTime())) return unread(v);
 	// An explicit locale argument wins; otherwise the formatter locale (D175).
 	if (typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) locale ??= formatLocale;
 
@@ -546,12 +543,11 @@ export function datetime(v, preset, locale) {
 
 /** @param {unknown} v @param {string} [tz] IANA zone id @returns {Date | ''} */
 export function in_timezone(v, tz = 'UTC') {
-	// An absent value has no instant to re-express, and the fail-soft below would
-	// hand the outer function an Invalid Date — `{ date(in_timezone(x, 'UTC')) }`
-	// then rendered the literal text "Invalid Date" for an unset field.
-	// Same empty answer as date()/timeago(), for the same reason.
-	if (noDate(v)) return '';
+	// An absent or invalid value has no instant to re-express; handing the outer
+	// function an Invalid Date would print "Invalid Date" in
+	// `{ date(in_timezone(x, 'UTC')) }`.
 	const d = parseDateInput(v);
+	if (isNaN(d.getTime())) return '';
 	// A bare YYYY-MM-DD names a DAY, not an instant, so there is nothing to
 	// re-express in another zone — return D114's local midnight untouched.
 	// Shifting it would move the day: the local-midnight instant read as a wall
@@ -562,8 +558,8 @@ export function in_timezone(v, tz = 'UTC') {
 	// No zone (an unset `user.timezone`) is not a typo: nothing to re-express.
 	if (tz == null || tz === '') return d;
 	// An unknown time-zone identifier throws RangeError at DateTimeFormat
-	// construction, and formatToParts throws on an invalid date — fail soft to the
-	// un-shifted date so a bad tz/date never crashes the render.
+	// construction — fail soft to the un-shifted date so a bad tz never crashes
+	// the render.
 	let formatter = TIMEZONE_FORMATTERS.get(tz);
 	try {
 		if (!formatter) {
@@ -601,9 +597,8 @@ export function in_timezone(v, tz = 'UTC') {
 /** @param {unknown} v @returns {string} */
 export function timeago(v) {
 	// `{ timeago(todo.completedAt) }` on an incomplete todo: nothing to say.
-	if (noDate(v)) return '';
 	const then = parseDateInput(v).getTime();
-	if (isNaN(then)) return str(v);
+	if (isNaN(then)) return unread(v);
 
 	if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && relativeLocale !== formatLocale) {
 		relativeLocale = formatLocale;

@@ -200,9 +200,13 @@ load, no fetch, no rebuild; it still throws the `RangeError` below).
 
 At startup: (1) `localStorage['__puzzleLocale']` (try/catch) if still
 configured; (2) each `navigator.languages` tag in order — exact
-(case-insensitive), then base language (`es-CO` → `es`), then the first
-configured tag with that base (`pt` → `pt-BR`); (3) `defaultLocale`.
-Prerender uses `defaultLocale`.
+(case-insensitive), then for a Chinese tag its script (`zh-Hant` for
+`zh-Hant*`, `zh-TW`, `zh-HK` and `zh-MO`; `zh-Hans` for every other `zh`
+tag), then base language (`es-CO` → `es`), then the first configured tag with
+that base (`pt` → `pt-BR`); (3) `defaultLocale`. So `zh-TW` selects a
+configured `zh-Hant` even when `zh-Hans` is listed first. Prerender uses
+`defaultLocale`. The first-visit redirect script repeats this matching; the
+shared case table keeps the two in step.
 
 `setLocale(tag)`:
 

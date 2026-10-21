@@ -12,13 +12,35 @@ export const REDIRECT_MANIFEST = {
 
 export const SAME_ORIGIN = Symbol('same origin');
 
+const chinese = (tags) => ({
+	...REDIRECT_MANIFEST,
+	locales: Object.fromEntries(['en', ...tags].map((tag) => [tag, `locales/${tag}.json`])),
+});
+const HANS_FIRST = chinese(['zh-Hans', 'zh-Hant']);
+const HANT_FIRST = chinese(['zh-Hant', 'zh-Hans']);
+
 /**
  * `locale` is selectLocale's answer, given where the URL, base and referrer let
  * the matching decide at all.
  * @type {Array<{ name: string, url: string, routerBase?: string, stored?: string | null,
- *   languages: string[], referrer?: string | symbol, locale?: string, expected: string | null }>}
+ *   languages: string[], manifest?: typeof REDIRECT_MANIFEST,
+ *   referrer?: string | symbol, locale?: string, expected: string | null }>}
  */
 export const REDIRECT_CASES = [
+	...['zh-TW', 'zh-HK', 'zh-MO', 'zh-Hant', 'zh-Hant-TW', 'ZH-hant-HK'].map((lang) => ({
+		name: `traditional Chinese: ${lang}`, url: '/about', languages: [lang],
+		manifest: HANS_FIRST, locale: 'zh-Hant', expected: '/zh-Hant/about',
+	})),
+	...['zh-CN', 'zh-SG', 'zh-Hans', 'zh-Hans-CN'].map((lang) => ({
+		name: `simplified Chinese: ${lang}`, url: '/about', languages: [lang],
+		manifest: HANT_FIRST, locale: 'zh-Hans', expected: '/zh-Hans/about',
+	})),
+	{ name: 'an explicit script beats its region', url: '/about', languages: ['zh-Hans-TW'], manifest: HANT_FIRST, locale: 'zh-Hans', expected: '/zh-Hans/about' },
+	{ name: 'an exact regional tag beats a script match', url: '/about', languages: ['zh-TW'], manifest: chinese(['zh-Hans', 'zh-Hant', 'zh-TW']), locale: 'zh-TW', expected: '/zh-TW/about' },
+	{ name: 'a script match beats the bare language', url: '/about', languages: ['zh-TW'], manifest: chinese(['zh', 'zh-Hans', 'zh-Hant']), locale: 'zh-Hant', expected: '/zh-Hant/about' },
+	{ name: 'a script match keeps browser preference order', url: '/about', languages: ['zh-HK', 'es'], manifest: HANS_FIRST, locale: 'zh-Hant', expected: '/zh-Hant/about' },
+	{ name: 'a stored choice beats a script match', url: '/about', stored: 'zh-Hans', languages: ['zh-HK'], manifest: HANS_FIRST, locale: 'zh-Hans', expected: '/zh-Hans/about' },
+	{ name: 'an unavailable script falls back to the base language', url: '/about', languages: ['zh-HK'], manifest: chinese(['zh-Hans', 'zh']), locale: 'zh', expected: '/zh/about' },
 	{ name: 'a browser-language match', url: '/about?q=1#top', languages: ['es-MX', 'en'], locale: 'es', expected: '/es/about?q=1#top' },
 	{ name: 'the root page', url: '/', languages: ['es'], locale: 'es', expected: '/es/' },
 	{ name: 'the first browser language wins', url: '/about', languages: ['en-US', 'es'], locale: 'en', expected: null },
