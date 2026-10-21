@@ -85,14 +85,14 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // ShellMock — a miniature of the docs shell (frame / bar / rail / panel / card)
-// rendered in ONE scheme × mode, whatever the page around it is set to. The
+// rendered in ONE scheme × style, whatever the page around it is set to. The
 // trick is a single element carrying both `data-scheme` and `data-theme`: every
 // theme file's selectors are written unanchored (`[data-scheme='warm']`, not
 // `:root[data-scheme='warm']`) precisely so a preview can scope itself, and the
 // dim and mixed blocks include `[data-scheme='x'][data-theme='dim']` (and
 // 'mixed') so an element naming both still lands in that style. `data-scheme="default"` is
 // spelled out rather than omitted, so a mock of the default palette stays the
-// default palette on a page currently showing dim, warm or void.
+// default palette on a page currently showing cool, warm or void.
 //
 //   <ShellMock scheme="warm" mode="mixed" size="mini"/>
 //   <ShellMock scheme={ scheme } mode={ mode } size="full" callouts={ true }/>

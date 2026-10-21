@@ -204,12 +204,22 @@ Change the range to `^0.9.0`. Three changes can require an update:
    palette is now `cool` (`themes/dim.css` → `themes/cool.css`,
    `data-scheme="cool"`), and `data-theme` takes `dark | dim | mixed | light`
    where it took `light | medium | dark`: `medium` became `dim`, and `mixed`
-   is a real style now (a dark sidebar around a light panel). Re-copy the
-   theme files (`puzzle add theme default cool warm void --overwrite`) or
-   switch the `@import` to `themes/cool.css`. Stored choices read forward —
-   `appearance.js` and the pre-paint snippet map a stored `dim` scheme to
-   `cool` and a stored `medium` mode to `dim` — but a hand-written
-   `data-scheme="dim"` or `data-theme="medium"` in markup paints the default.
+   is a real style now (a dark sidebar around a light panel). An app that
+   imports the package's theme files switches `themes/dim.css` to
+   `themes/cool.css`. An app that copied them re-copies with
+   `puzzle add theme default cool warm void --overwrite`, deletes
+   `app/styles/themes/dim.css`, and points its `@import` at
+   `./themes/cool.css`. Re-copy `appearance.js`, the inline pre-paint
+   snippet and `puzzle add piece appearance-picker --overwrite` together:
+   the 0.8 copies know neither `cool` nor `dim` as a style, and a 0.8
+   pre-paint beside a 0.9 `appearance.js` paints one choice before first
+   frame and `boot()` another. Stored choices read
+   forward — `appearance.js` and the pre-paint snippet map a stored `dim`
+   scheme to `cool` and a stored `medium` mode to `dim`, and so do the
+   snippet's `data-default-scheme` / `data-default-mode` — but a
+   hand-written `data-scheme="dim"` or `data-theme="medium"` in markup
+   paints the default. A 0.8 store holding `mode: "mixed"` (Pyramid's
+   name, which 0.8 read as `medium`) now paints the real Mixed style.
 
 Four behavior changes do not break anything that worked, but can change what
 you see:

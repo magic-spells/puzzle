@@ -40,6 +40,16 @@
 (function () {
 	var SCHEMES = ['default', 'cool', 'warm', 'void'];
 	var MODES = ['dark', 'dim', 'mixed', 'light'];
+	// normalizeScheme / normalizeMode from appearance.js: the alias, then the
+	// list. Every source below goes through them, as it does there.
+	var toScheme = function (value) {
+		if (value === 'dim') value = 'cool';
+		return SCHEMES.indexOf(value) !== -1 ? value : null;
+	};
+	var toMode = function (value) {
+		if (value === 'medium') value = 'dim';
+		return MODES.indexOf(value) !== -1 ? value : null;
+	};
 	var script = document.currentScript;
 	var attr = function (name) {
 		return script ? script.getAttribute(name) : null;
@@ -50,25 +60,23 @@
 	// this snippet painted, without a configure() call repeating them.
 	window.__puzzleAppearance = { key: key, scheme: attr('data-default-scheme'), mode: attr('data-default-mode') };
 	var root = document.documentElement;
+	var pick = {};
 	try {
-		var pick = JSON.parse(localStorage.getItem(key) || 'null') || {};
-		var scheme = pick.scheme || pick.theme || attr('data-default-scheme');
-		if (scheme === 'dim') scheme = 'cool';
-		var mode = pick.mode === 'medium' ? 'dim' : pick.mode;
-		// A stored `mode: null` is a real choice — "follow the OS" — not an
-		// empty store, so it must NOT fall through to data-default-mode (that
-		// would paint the default and let boot() strip it: the very flash this
-		// file exists to prevent). Only a missing or unknown mode takes the default.
-		if (pick.mode === null) mode = null;
-		else if (MODES.indexOf(mode) === -1) mode = attr('data-default-mode');
-		if (SCHEMES.indexOf(scheme) !== -1 && scheme !== 'default') {
-			root.setAttribute('data-scheme', scheme);
-		}
-		if (MODES.indexOf(mode) !== -1) {
-			root.setAttribute('data-theme', mode);
-			root.style.colorScheme = mode === 'light' || mode === 'mixed' ? 'light' : 'dark';
-		}
+		pick = JSON.parse(localStorage.getItem(key) || 'null') || {};
 	} catch (e) {
-		/* storage unavailable — appearance.boot() sorts the attributes out */
+		// Storage unavailable or junk: paint the defaults, as appearance.read() does.
+	}
+	var scheme = toScheme(pick.scheme) || toScheme(pick.theme) || toScheme(attr('data-default-scheme'));
+	// A stored `mode: null` is a real choice — "follow the OS" — not an
+	// empty store, so it must NOT fall through to data-default-mode (that
+	// would paint the default and let boot() strip it: the very flash this
+	// file exists to prevent). Only a missing or unknown mode takes the default.
+	var mode = pick.mode === null ? null : toMode(pick.mode) || toMode(attr('data-default-mode'));
+	if (scheme && scheme !== 'default') {
+		root.setAttribute('data-scheme', scheme);
+	}
+	if (mode) {
+		root.setAttribute('data-theme', mode);
+		root.style.colorScheme = mode === 'light' || mode === 'mixed' ? 'light' : 'dark';
 	}
 })();

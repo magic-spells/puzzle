@@ -218,7 +218,7 @@ export default class SchemePanel extends PuzzleView {
 			this.setData({ mode: liveMode() });
 			this.refresh();
 		});
-		// The demo is hash-routed. Navigating /themes/dim → /themes/warm reuses
+		// The demo is hash-routed. Navigating /themes/cool → /themes/warm reuses
 		// this view with new params; the router re-renders on hashchange, and the
 		// queued probe (next frame) reads the re-rendered, re-scoped probe area.
 		this._onHashChange = () => this.scheduleProbe();

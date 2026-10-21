@@ -10,7 +10,7 @@ import vm from 'node:vm';
 
 const prePaint = readFileSync(new URL('../registry/theme/pre-paint.js', import.meta.url), 'utf8');
 
-function fakeDom({ stored, scriptAttrs = {} } = {}) {
+function fakeDom({ stored, raw, throws = false, scriptAttrs = {} } = {}) {
 	const attrs = new Map();
 	const root = {
 		style: {},
@@ -21,8 +21,12 @@ function fakeDom({ stored, scriptAttrs = {} } = {}) {
 	};
 	const store = new Map();
 	if (stored !== undefined) store.set(scriptAttrs['data-key'] || 'puzzle:appearance', JSON.stringify(stored));
+	if (raw !== undefined) store.set(scriptAttrs['data-key'] || 'puzzle:appearance', raw);
 	const localStorage = {
-		getItem: (k) => (store.has(k) ? store.get(k) : null),
+		getItem: (k) => {
+			if (throws) throw new Error('SecurityError: storage is disabled');
+			return store.has(k) ? store.get(k) : null;
+		},
 		setItem: (k, v) => store.set(k, String(v)),
 		removeItem: (k) => store.delete(k),
 	};
@@ -104,6 +108,27 @@ test('appearance.js and pre-paint agree on every alias and every style', async (
 		const { appearance, booted } = await bootAfterPrePaint(dom, `alias-${n}`);
 		assert.deepEqual(booted, want, `boot() of ${JSON.stringify(stored)}`);
 		assert.deepEqual(painted, { scheme: want.scheme, mode: want.mode, cs: appearance.resolveColorScheme(want.mode) }, `pre-paint of ${JSON.stringify(stored)}`);
+	}
+});
+
+test('appearance.js and pre-paint agree on the fallbacks: aliased defaults, junk fields, unreadable storage', async () => {
+	const defaults = { 'data-default-scheme': 'dim', 'data-default-mode': 'medium' };
+	const cases = [
+		// 0.8 names in the <script> parameters alias forward, like stored ones.
+		[{ scriptAttrs: defaults }, { scheme: 'cool', mode: 'dim' }],
+		// A junk scheme falls to the legacy `theme`, a junk mode to the default.
+		[{ stored: { scheme: 'sepia', theme: 'warm', mode: 'sepia' }, scriptAttrs: defaults }, { scheme: 'warm', mode: 'dim' }],
+		[{ stored: { scheme: 'sepia' }, scriptAttrs: { 'data-default-scheme': 'void' } }, { scheme: 'void', mode: null }],
+		// Unparseable and throwing storage both read as the empty store.
+		[{ raw: '{not json', scriptAttrs: { 'data-default-mode': 'mixed' } }, { scheme: 'default', mode: 'mixed' }],
+		[{ throws: true, scriptAttrs: { 'data-default-mode': 'light', 'data-default-scheme': 'warm' } }, { scheme: 'warm', mode: 'light' }],
+	];
+	for (const [n, [opts, want]] of cases.entries()) {
+		const dom = runPrePaint(opts);
+		const painted = { scheme: dom.attrs.get('data-scheme') ?? 'default', mode: dom.attrs.get('data-theme') ?? null };
+		const { booted } = await bootAfterPrePaint(dom, `fallback-${n}`);
+		assert.deepEqual(painted, want, `pre-paint of case ${n}`);
+		assert.deepEqual(booted, want, `boot() of case ${n}`);
 	}
 });
 

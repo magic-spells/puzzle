@@ -230,8 +230,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //                       the shell roles every theme file declares — bg-rail, text-rail-ink /
 //                       text-rail-muted, bg-rail-active on hover and the active row, and
 //                       border-rail-edge for every hairline — so it reads as one flat
-//                       surface with a top bar (bg-bar) in all three modes: dark frame
-//                       in dark and medium, light-grey frame in light. The flyout stays a
+//                       surface with a top bar (bg-bar) in every style: dark frame
+//                       in dark, dim and mixed, light-grey frame in light. The flyout stays a
 //                       surface popover in both variants (it floats over content).
 //   collapsible bool    OPTIONAL, default true. `false` removes the edge toggle from
 //                       the DOM, ignores `collapsed`, and keeps the rail at its full

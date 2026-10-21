@@ -22,8 +22,8 @@ export const SCHEME_PANELS = SCHEMES.map((s) => ({
 }));
 
 export const THEMES = [
-	{ title: 'Compare', path: '/themes/compare', description: 'All four schemes × three modes as mini shells, one screen.' },
-	{ title: 'Pieces', path: '/themes/pieces', description: 'The registry pieces in the current scheme and mode.' },
+	{ title: 'Compare', path: '/themes/compare', description: 'All four schemes × four styles as mini shells, one screen.' },
+	{ title: 'Pieces', path: '/themes/pieces', description: 'The registry pieces in the current scheme and style.' },
 ];
 
 // SVG path `d` strings on a 24×24 stroked grid — the Sidebar piece's icon
