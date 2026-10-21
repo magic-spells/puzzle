@@ -30,11 +30,22 @@ type NavigationResult =
 ```
 
 - **`ok: true`** — the navigation committed, the catch-all `*` included. `route` is the navigation's frozen snapshot (the same object its guards saw as `to`, equal to `router.current` at commit).
-- **Same-path no-op, only when nothing is in flight.** A push or replace to the committed path resolves `ok: true` with the current route only when the committed state is the whole story: no navigation in flight (`#pendingNavPromise` empty) and the committed chain not invalidated.
-  - With a navigation in flight, a push back to the committed path supersedes it, so the last push wins. "Already there" would be false the moment the in-flight one committed.
-  - An invalidated chain (a failed position, a commit-window throw) is never "already there", so the push rebuilds the page.
-  - **Either way it runs with replace semantics.** The app already stands on that entry, so the navigation rewrites it instead of stacking a duplicate: path and hash modes gain no history entry, and memory mode keeps `[/prev, /a]` rather than `[/prev, /a, /a]` when `push('/a')` overtakes a loading `back()`. Replace's scroll and focus rules apply: scroll is left alone, and a leaf-identical rebuild moves no focus.
+- **`push()` to the committed path** follows one table. Each row has its own test in `tests/router-navigation-result.test.js`.
+
+  | Situation | Behaviour |
+  | --- | --- |
+  | Nothing in flight, chain intact | No-op, `ok` with the current route |
+  | Nothing in flight, chain invalid (a failed view, a commit-window throw) | Rebuild with replace semantics; history unchanged |
+  | A push or replace in flight (the URL has not moved yet) | Supersede it; rebuild with replace semantics; history unchanged |
+  | A pop in flight, path or hash mode (the browser already moved onto the popped entry) | An ordinary push (`pushState`), so the popped entry survives |
+  | A pop in flight, memory mode (the index did not move) | Replace semantics |
+  | Any row above, called twice in a row | The second call returns the identical promise; `data()` runs once |
+
+  - The no-op test is `#isCommittedNoop`: the committed path, an intact chain, and `#pendingNavPromise` empty.
+  - "Replace semantics" means `#navigate` in replace mode, but tracked like a push. `push()` records `#pendingNavPath`/`#pendingNavPromise` once the navigation holds the token, so the in-flight same-path check (which runs before this branch) hands a second click the same promise.
+  - Whether the in-flight navigation is a pop is `#popInFlight`, set by every `#navigate` that takes the token. It is read only while `#pendingNavPromise` is set, so a stale value is never consulted.
   - A guard redirect to the committed path stays a no-op (D87's loop safety), because the only navigation in flight is the one being redirected.
+  - `replace()` to the committed path is a no-op under the same rule, and otherwise an ordinary replace.
 - **Same-key in flight.** A push to the path already in flight returns that push's promise, so both callers get one result object. A push fired synchronously from inside `#navigate` before the promise is paired (a `created()` hook pushing its own path) reads the slot again one microtask later and gets the same in-flight result.
 - **Redirects** resolve the final navigation's result. When it is `ok`, `redirectedFrom` names the path originally requested; across a chain (`/a` → `/b` → `/c`) each outer frame overwrites the field, so it ends as `/a`. A refused or failed redirect carries that failure without `redirectedFrom`.
 - **The rule for `ok: false`: reported to `onError` means `'error'`.**
@@ -47,7 +58,7 @@ type NavigationResult =
 - **Commit-window deferral.** A push or replace from `mounted()`/`viewWillShow` is parked in the single last-wins slot together with its promise's resolver. The promise adopts the re-dispatched navigation's result when `#runPendingPush` runs it. An entry displaced by a later deferral, or dropped by `stop()`, resolves `'superseded'`.
 - `go()`, `back()` and `forward()` keep their `void | Promise<void>` contract.
 
-Bytes: two module-level helpers (`fail(reason, error)` and one frozen `SUPERSEDED`) and two private methods (`#defer`, shared by push, replace and go, and `#isCommittedNoop`, shared by push and replace). Every other change reuses an existing exit.
+Bytes: two module-level helpers (`fail(reason, error)` and one frozen `SUPERSEDED`), two private methods (`#defer`, shared by push, replace and go, and `#isCommittedNoop`), and one private field (`#popInFlight`). Every other change reuses an existing exit.
 
 ## Alternatives rejected
 

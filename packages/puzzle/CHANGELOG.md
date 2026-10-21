@@ -422,7 +422,8 @@ you see:
   real navigation (D182).** It supersedes the loading one (last push wins)
   instead of resolving as a no-op that the loading navigation then overrode.
   Clicking the active link after a failed page also rebuilds it. Both rewrite
-  the current history entry rather than adding one.
+  the current history entry rather than adding one; over a Back that is still
+  loading, the push is an ordinary push so the entry Back moved to survives.
 
 ### Changed
 

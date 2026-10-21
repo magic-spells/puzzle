@@ -423,6 +423,9 @@ export class Router {
 	// Cleared in #navigate, #commitState, #recoverFailedNavigation and stop().
 	/** @type {Promise<NavigationResult> | null} */
 	#pendingNavPromise = null;
+	// Whether the navigation that owns the token is a pop (D182: a push to the
+	// committed path over a path/hash-mode pop is a real push, not a rewrite).
+	#popInFlight = false;
 	// Guard redirects re-enter the normal pipeline through push()/replace() — the
 	// redirect inherits the denied navigation's verb — so every destination gets its
 	// own inherited guard chain and the denied URL never commits (and never enters
@@ -988,12 +991,6 @@ export class Router {
 		if (this.#isCommittedNoop(key)) {
 			return Promise.resolve({ ok: true, route: this.current });
 		}
-		// The committed path, but not a no-op (a navigation in flight, or an
-		// invalidated chain): the app is already standing on this entry, so the
-		// navigation rewrites it rather than stacking a duplicate — no extra
-		// history entry, and in memory mode no [/a, /a] stack while a back() to
-		// another entry is still loading.
-		if (this.#state && key === sameNavKey(this.#state.path)) return this.replace(path);
 		// In-flight double-click guard: the COMMITTED #state check above misses a
 		// second click on the active link WHILE its navigation is still loading — the
 		// old route is still committed there. Without this, that second push bumps the
@@ -1031,7 +1028,29 @@ export class Router {
 				Promise.resolve().then(() => this.#pendingNavPromise ?? { ok: true, route: this.current })
 			);
 		}
-		const nav = this.#navigate(path, { push: true });
+		// The committed path, but not a no-op (a navigation in flight, or an
+		// invalidated chain) — the D182 table. The app is still standing on the
+		// committed entry, so the navigation REWRITES it instead of stacking a
+		// duplicate (no extra history entry; memory mode keeps one entry while a
+		// back() is loading) — except over a path/hash-mode pop in flight, where the
+		// browser has already moved onto the popped entry: rewriting that would
+		// overwrite it, so this is an ordinary push. Tracked like a push either
+		// way, so a second click returns this navigation's promise (above).
+		const asReplace =
+			!!this.#state &&
+			key === sameNavKey(this.#state.path) &&
+			!(this.#pendingNavPromise && this.#popInFlight && !this.#mode?.urlless);
+		const token = this.#token;
+		const nav = this.#navigate(path, asReplace ? { push: false, replace: true } : { push: true });
+		if (asReplace) {
+			// #navigate records no target for a replace; claim the slot for this push
+			// only when it took the token and no re-entrant navigation claimed it.
+			if (this.#token !== token && this.#pendingNavPromise == null) {
+				this.#pendingNavPath = path;
+				this.#pendingNavPromise = nav;
+			}
+			return nav;
+		}
 		// #navigate runs synchronously up to its first await, so it has already
 		// recorded this push's target in #pendingNavPath (or left it null: an
 		// unmatched path warns and returns before the token bump). Pair the promise
@@ -1480,6 +1499,9 @@ export class Router {
 		// promise for a navigation that is already over.
 		this.#pendingNavPath = push ? rawPath : null;
 		this.#pendingNavPromise = null;
+		// Read by push() only while #pendingNavPromise is set, so a stale value from
+		// a finished navigation is never consulted.
+		this.#popInFlight = pop;
 		// Locale prefix routing (D177): every verb's target, for localePage — a
 		// setLocale from this navigation's guard or data() reloads the page it is
 		// headed to, not the one the address bar still shows. Cleared where

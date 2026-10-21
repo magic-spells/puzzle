@@ -569,7 +569,172 @@ describe('router.push() — navigations that do not commit (D182)', () => {
 });
 
 describe('router.push() — the committed path when it is not a no-op (D182)', () => {
-	it('a push back to the committed path while another navigation loads adds no history entry', async () => {
+	// One test per row of D182's "target equals the committed path" table.
+	const tick = () => new Promise((r) => setTimeout(r, 0));
+	function loadingView(cls) {
+		const View = class extends PuzzleView {
+			static gate = null;
+			static runs = 0;
+			async data() {
+				View.runs++;
+				if (View.gate) await View.gate;
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: cls }, [text(cls)]);
+			}
+		};
+		return View;
+	}
+
+	it('row 1 — nothing in flight, chain intact: no-op, ok, data() not re-run', async () => {
+		const A = loadingView('a');
+		const { router } = await boot([
+			{ path: '/', name: 'home', view: HomeView },
+			{ path: '/a', name: 'a', view: A },
+		]);
+		await router.push('/a');
+		const runs = A.runs;
+		const before = history.length;
+
+		expect(await router.push('/a')).toEqual({ ok: true, route: router.current });
+		expect(A.runs).toBe(runs);
+		expect(history.length).toBe(before);
+	});
+
+	it('row 3 — a replace in flight: superseded, rebuilt with replace semantics, history unchanged', async () => {
+		const slow = gated();
+		const { router } = await boot([
+			{ path: '/', name: 'home', view: HomeView },
+			{ path: '/slow', name: 'slow', view: slow.View },
+		]);
+		const before = history.length;
+
+		const pSlow = router.replace('/slow');
+		const pHome = router.push('/');
+		slow.release();
+
+		expect(await pSlow).toEqual({ ok: false, reason: 'superseded' });
+		expect((await pHome).ok).toBe(true);
+		expect(location.pathname).toBe('/');
+		expect(history.length).toBe(before);
+	});
+
+	for (const [label, mode] of [
+		['path', undefined],
+		['hash', hashRouter()],
+	]) {
+		it(`row 4 — a pop in flight, ${label} mode: a normal push over the popped entry`, async () => {
+			const Prev = loadingView('prev');
+			const { router } = await boot(
+				[
+					{ path: '/', name: 'prev', view: Prev },
+					{ path: '/a', name: 'a', view: AboutView },
+				],
+				{ mode }
+			);
+			await router.push('/a'); // history: [/, /a]
+			const before = history.length;
+			Prev.gate = new Promise(() => {}); // Back to / never finishes loading
+			history.back();
+			await tick();
+			await tick();
+			expect(router.current.path).toBe('/a'); // the pop is still loading
+
+			const first = router.push('/a');
+			const second = router.push('/a');
+			expect(second).toBe(first);
+			expect((await first).ok).toBe(true);
+			expect(router.current.path).toBe('/a');
+			// The popped / entry survives: [/, /a] again, not [/a, /a].
+			expect(history.length).toBe(before);
+			Prev.gate = null;
+			history.back();
+			await tick();
+			await tick();
+			await tick();
+			expect(router.current.path).toBe('/');
+		});
+	}
+
+	it('row 6 — called twice: one promise and one data() run (push in flight, failed view, memory pop)', async () => {
+		const A = loadingView('a');
+		const Other = loadingView('other');
+		const { router } = await boot([
+			{ path: '/', name: 'home', view: HomeView },
+			{ path: '/a', name: 'a', view: A },
+			{ path: '/other', name: 'other', view: Other },
+		]);
+		await router.push('/a');
+
+		// A push in flight.
+		Other.gate = new Promise(() => {});
+		router.push('/other');
+		let release;
+		A.gate = new Promise((r) => (release = r));
+		const runs = A.runs;
+		const p1 = router.push('/a');
+		const p2 = router.push('/a');
+		expect(p2).toBe(p1);
+		release();
+		expect((await p1).ok).toBe(true);
+		expect(A.runs - runs).toBe(1);
+
+		// Memory mode with a back() in flight.
+		const M = loadingView('m');
+		const mem = await boot(
+			[
+				{ path: '/m', name: 'm', view: M },
+				{ path: '/a', name: 'a', view: AboutView },
+			],
+			{ mode: memoryRouter({ initialPath: '/m' }) }
+		);
+		await mem.router.push('/a');
+		M.gate = new Promise(() => {});
+		mem.router.back();
+		const m1 = mem.router.push('/a');
+		expect(mem.router.push('/a')).toBe(m1);
+		expect((await m1).ok).toBe(true);
+	});
+
+	it('row 6 — after a failed view, a double click on the active link rebuilds once', async () => {
+		let failing = true;
+		let runs = 0;
+		class Flaky extends PuzzleView {
+			renderSkeleton() {
+				return h('puzzle-view', {}, [text('…')]);
+			}
+			async data() {
+				runs++;
+				if (failing) throw new Error('data boom');
+				await null;
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'flaky' }, [text('OK')]);
+			}
+		}
+		const { router } = await boot(
+			[
+				{ path: '/', name: 'home', view: HomeView },
+				{ path: '/f', name: 'f', view: Flaky },
+			],
+			{ onError: () => {} }
+		);
+		await router.push('/f');
+		await tick();
+		failing = false;
+		const before = runs;
+
+		const p1 = router.push('/f');
+		const p2 = router.push('/f');
+		expect(p2).toBe(p1);
+		await p1;
+		await tick();
+		expect(runs - before).toBe(1);
+	});
+
+	it('row 3 — a push in flight: superseded, rebuilt with replace semantics, history unchanged', async () => {
 		const slow = gated();
 		const { router } = await boot([
 			{ path: '/', name: 'home', view: HomeView },
@@ -587,7 +752,7 @@ describe('router.push() — the committed path when it is not a no-op (D182)', (
 		expect(history.length).toBe(before);
 	});
 
-	it('clicking the active link after a failed view rebuilds it without a new history entry', async () => {
+	it('row 2 — nothing in flight, chain invalid (failed view): rebuilt, history unchanged', async () => {
 		let failing = true;
 		let runs = 0;
 		class Flaky extends PuzzleView {
@@ -624,7 +789,7 @@ describe('router.push() — the committed path when it is not a no-op (D182)', (
 		expect(history.length).toBe(before);
 	});
 
-	it('memory mode: push(committed) while back() loads leaves one entry for it', async () => {
+	it('row 5 — a pop in flight, memory mode: replace semantics, one stack entry', async () => {
 		let release;
 		let gate = Promise.resolve();
 		class Prev extends PuzzleView {
