@@ -1509,3 +1509,32 @@ export default class Home extends PuzzleView {}
 		t.Errorf("expected a did-you-mean error; errors: %v", res.Errors)
 	}
 }
+
+func TestPluginScriptErrorPositions(t *testing.T) {
+	for _, tc := range []struct {
+		name, open, script string
+	}{
+		{"javascript multiline", "<script>\n", "import { PuzzleView } from '@magic-spells/puzzle';\nexport default class Home extends PuzzleView {\n  data() { const broken = ; }\n}\n"},
+		{"javascript inline", "<script>", "import { PuzzleView } from '@magic-spells/puzzle'; export default class Home extends PuzzleView { data() { const broken = ; } }"},
+		{"typescript multiline", "<script lang=\"ts\">\n", "import { PuzzleView } from '@magic-spells/puzzle';\nexport default class Home extends PuzzleView {\n  data() { const broken: string = ; }\n}\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "<puzzle-view>\n  <h1>Home</h1>\n</puzzle-view>\n\n" + tc.open + tc.script + "</script>"
+			root := writeApp(t, map[string]string{
+				"app/app.js":         "import Home from './views/Home.pzl'; export default Home;",
+				"app/views/Home.pzl": src,
+			})
+			res, _ := buildApp(t, root)
+			if len(res.Errors) != 1 {
+				t.Fatalf("errors = %v, want one syntax error", res.Errors)
+			}
+			loc := res.Errors[0].Location
+			off := strings.Index(src, "= ;") + 2
+			line := 1 + strings.Count(src[:off], "\n")
+			col := off - strings.LastIndex(src[:off], "\n") - 1
+			if loc == nil || loc.Line != line || loc.Column != col || !strings.HasSuffix(filepath.ToSlash(loc.File), "app/views/Home.pzl") {
+				t.Fatalf("location = %+v, want Home.pzl:%d:%d", loc, line, col)
+			}
+		})
+	}
+}

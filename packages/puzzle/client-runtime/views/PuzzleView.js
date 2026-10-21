@@ -375,7 +375,7 @@ export class PuzzleView {
 	/** @type {unknown[] | null} */
 	#prevRoots = null;
 
-	/** @param {Record<string, any>} [ctx] exactly { store, router, formatters } (SPEC §10) */
+	/** @param {Record<string, any>} [ctx] { store, router, formatters, idle } (SPEC §10) */
 	constructor(ctx = {}) {
 		// D161 tracked-read attribution. On an adapter app this view reads the store
 		// through its OWN handle: only reads made through `this.ctx.store`, by this

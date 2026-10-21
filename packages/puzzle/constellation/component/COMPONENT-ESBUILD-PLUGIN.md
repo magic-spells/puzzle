@@ -47,6 +47,8 @@ watch set.
 - Scoped styles wrap via `codegen.ScopedCSS` with the same symlink-normalized
   app-relative name as codegen.
 
+- Generated modules retain the opaque script at its original file line and byte column by padding its start with whitespace. Native JS/TS syntax and import diagnostics therefore use `.pzl` coordinates without rewriting script bytes; `TestPluginScriptErrorPositions` covers multiline JS/TS and same-line JS scripts.
+
 ## Usage scan and defines
 
 

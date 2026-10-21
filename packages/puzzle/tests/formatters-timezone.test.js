@@ -30,7 +30,7 @@ import { in_timezone, date, datetime } from ${JSON.stringify(BUILTINS)};
 // "a Date whose LOCAL fields read as the wall clock in tz", so these components
 // are the time-zone-stable observable — getTime() is not.
 const wall = (d) =>
-	Number.isNaN(d.getTime())
+	d === '' ? '' : Number.isNaN(d.getTime())
 		? 'Invalid Date'
 		: [
 				d.getFullYear(),
@@ -170,9 +170,9 @@ describe('date formatters under a foreign process time zone (D114)', () => {
 				// The instant falls back to itself, so its wall clock is the process
 				// zone's — assert only that it is a valid date, not a fixed string.
 				'bad tz on an instant': expect.stringMatching(/^2026-07-2[34]-\d\d-\d\d$/),
-				// D114 coerces a spec-legal-but-nonexistent day to Invalid Date.
-				'nonexistent day': 'Invalid Date',
-				'garbage': 'Invalid Date',
+				// Invalid inputs render empty in every process zone.
+				'nonexistent day': '',
+				'garbage': '',
 			});
 		});
 

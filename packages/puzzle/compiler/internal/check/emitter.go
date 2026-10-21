@@ -604,7 +604,7 @@ func emitCheckedFile(
 		// says why).
 		view = "__PuzzleCheckJSView<" + view + ">"
 	}
-	b.WriteString("void function (this: " + view + " & Record<string, any>): void {\n")
+	b.WriteString("void function (this: " + view + " & { [key: string]: any }): void {\n")
 	b.WriteString("  const __d = this;\n")
 
 	e := &emitter{b: b, moduleBindings: codegen.ScriptValueBindings(sec.Scripts)}

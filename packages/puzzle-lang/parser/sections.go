@@ -278,6 +278,14 @@ func findTemplateClose(s string, from int, closeTag string) int {
 			// Leave an unterminated comment to the template lexer for its positioned
 			// diagnostic while continuing to find the section's actual close.
 			i += 4
+		case s[i] == '<' && startsTagName(s[i+1:]):
+			end := tagNameEnd(s, i+1)
+			after, _, _, err := scanOpenTag(s, i, s[i+1:end], "")
+			if err != nil {
+				i++ // let the template lexer report the malformed tag
+				continue
+			}
+			i = after
 		case s[i] == '\\' && i+1 < len(s) && (s[i+1] == '{' || s[i+1] == '}'):
 			i += 2
 		case isBlockRawOpen(s, i):
@@ -468,9 +476,21 @@ func scanOpenTag(src string, i int, name, filename string) (afterGT, attrOffset 
 	var quote byte
 	for j < len(src) {
 		c := src[j]
+		if c == '\\' && j+1 < len(src) && (src[j+1] == '{' || src[j+1] == '}') {
+			j += 2
+			continue
+		}
+		if c == '{' {
+			_, end, e := scanBraceGroup(src, j)
+			if e != nil {
+				return 0, 0, "", posErr(src, filename, j, "unclosed '{' in <"+name+"> tag")
+			}
+			j = end
+			continue
+		}
 		if quote != 0 {
 			// HTML attribute values have no backslash escapes (matching the tag-mode
-			// lexer, lexQuotedValue): the next matching quote always closes the value.
+			// lexer): outside a brace group, the next matching quote closes the value.
 			if c == quote {
 				quote = 0
 			}
@@ -481,12 +501,6 @@ func scanOpenTag(src string, i int, name, filename string) (afterGT, attrOffset 
 		case '"', '\'':
 			quote = c
 			j++
-		case '{':
-			_, end, e := scanBraceGroup(src, j)
-			if e != nil {
-				return 0, 0, "", posErr(src, filename, j, "unclosed '{' in <"+name+"> tag")
-			}
-			j = end
 		case '>':
 			raw := src[attrStart:j]
 			trimmed := strings.TrimSpace(raw)

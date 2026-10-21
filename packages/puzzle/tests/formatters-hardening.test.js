@@ -2,7 +2,10 @@
 // markup (must stay linear), and the locale-rendered number functions under a
 // formatter locale Intl rejects.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { strip_html, compact_number, number_with_delimiter, pluralize, timeago } from '../client-runtime/formatters/builtins.js';
+import {
+	strip_html, compact_number, number_with_delimiter, pluralize, timeago,
+	round, currency, percentage, date, time, datetime, in_timezone,
+} from '../client-runtime/formatters/builtins.js';
 import { setFormatLocale, localeNumber } from '../client-runtime/formatters/locale.js';
 
 afterEach(() => setFormatLocale(undefined));
@@ -36,5 +39,41 @@ describe('a formatter locale Intl rejects', () => {
 		expect(compact_number(1500)).toBe(new Intl.NumberFormat(undefined, { notation: 'compact' }).format(1500));
 		expect(pluralize(3, 'item')).toMatch(/3 items/);
 		expect(() => timeago(new Date(Date.now() - 3600 * 1000))).not.toThrow();
+	});
+});
+
+// Input a number or date function cannot read prints nothing — never `NaN`,
+// `Invalid Date` or `[object Object]` (D173 V6) — except a string, which prints
+// as written (D174).
+describe('unreadable number and date input', () => {
+	it('round gives NaN for a missing or non-numeric value, which prints nothing', () => {
+		for (const v of [undefined, null, '', 'abc', {}]) expect(round(v), String(v)).toBeNaN();
+		expect(round('2.5')).toBe(3);
+	});
+
+	it('the text number functions print nothing for an object', () => {
+		for (const format of [currency, percentage, number_with_delimiter, compact_number]) {
+			expect(format({}), format.name).toBe('');
+			expect(format([1, 2]), format.name).toBe('');
+		}
+		expect(pluralize({}, 'item')).toBe('');
+		expect(currency('abc')).toBe('abc');
+	});
+
+	it('the date functions print nothing for NaN, ±Infinity and an Invalid Date', () => {
+		for (const v of [NaN, Infinity, new Date(NaN), {}]) {
+			for (const format of [date, time, datetime, timeago]) expect(format(v), `${format.name}(${v})`).toBe('');
+			expect(date(v, 'iso')).toBe('');
+		}
+		expect(date('not a date')).toBe('not a date');
+	});
+
+	it('in_timezone returns empty for an invalid date, so a nested call prints nothing', () => {
+		for (const v of ['garbage', '2026-02-31', NaN, new Date(NaN)]) {
+			expect(in_timezone(v, 'UTC'), String(v)).toBe('');
+			expect(in_timezone(v, ''), String(v)).toBe('');
+			expect(date(in_timezone(v, 'Asia/Tokyo'))).toBe('');
+		}
+		expect(in_timezone(0, 'UTC')).toBeInstanceOf(Date);
 	});
 });

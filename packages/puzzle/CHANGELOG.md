@@ -238,6 +238,16 @@ you see:
   store flush and scheduled render has landed, including the renders those
   schedule, in hidden tabs too. It forces nothing and does not wait for async
   `data()`, requests or navigation — that is `app.idle()`.
+- **`ctx.idle(options?)` (D189).** Components can await the app's bound idle
+  method, with the same timeout and boolean result as `app.idle()`. Under
+  `/testing`'s `mountView` it runs `settled()` and resolves `true`; on
+  prerendered and `output: 'static'` pages it resolves `true` at once.
+- **Catch-all navigation results (D189).** A successful `push()` or `replace()`
+  result includes `catchAll: true` when the committed route is `path: '*'`,
+  including redirects and same-path no-ops; `ok` stays `true`.
+- **Public model lookup (D189).** `store.modelFor(type)` returns the registered
+  constructor (or `PuzzleModel` for an unknown type), including through adapter
+  view handles. It and the model's static `primaryKey()` are typed.
 - **Installed packages' `.pzl` files feed the usage scan (D89).** A package
   whose `package.json` lists `@magic-spells/puzzle` in `peerDependencies` (or
   `dependencies`) has its `.pzl` files read by the build's usage scan, from
@@ -526,6 +536,34 @@ you see:
   SVG animation `to`/`from`/`by`/`values` (each `;` entry) are guarded too,
   and a dynamic `<iframe srcdoc>` is a compile error unless the iframe has a
   static `sandbox` without `allow-scripts`.
+- **Locale selection respects Chinese scripts (D175).** `zh-TW`, `zh-HK`,
+  `zh-MO` and `zh-Hant-*` match a configured `zh-Hant`; other Chinese tags match
+  `zh-Hans`. The first-visit redirect makes the same choice.
+- **Number and date functions no longer print `NaN`, `Invalid Date` or
+  `[object Object]` (D174).** Unreadable non-string input prints nothing,
+  including `date(in_timezone(...))` on a bad date; `round` of a missing value is
+  `NaN` (prints nothing) rather than `0` for `null`. A non-numeric or non-date
+  string still prints as written.
+- Production shell asset rewrites preserve deployment prefixes, queries and
+  fragments across SPA, hybrid, static and locale pages. Missing compiler
+  stylesheets fail before replacing `dist/`, and static pages strip the
+  base-prefixed app script while retaining public scripts (D51/D177/D181).
+- Adapter settlement counts dirty re-passes toward the ten-round cap, preventing
+  repeated store notifications from starving a view's `data()` run (D161).
+- A data field whose name matches one the compiler uses internally for loop
+  keys (such as `__i` or `ViewNode`) now reads the data value inside loop
+  bodies and explicit keys, instead of the compiler's own binding.
+- `__proto__` attributes emit ordinary own properties for elements and components
+  instead of invoking the special object-literal prototype setter.
+- Comments between `class`/`function` and the declaration name preserve module
+  bindings used by `<Component is={...}>` (D180).
+- `puzzle check` accepts a selector class named `Record` in JavaScript and
+  TypeScript components without shadowing a generated utility type (D165).
+- Native script syntax diagnostics report the authored `.pzl` line and column
+  for multiline JavaScript/TypeScript and same-line scripts.
+- Section splitting keeps section-like text inside quoted attributes inert,
+  including expressions whose strings reuse the attribute's quote and literal
+  section closers. The editor splitter ports share the same boundaries.
 
 ## 0.8.1 — 2026-10-04 (Go module only)
 

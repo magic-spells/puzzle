@@ -828,3 +828,23 @@ describe('error handling', () => {
 		await expect(format('<puzzle-view class="x"\n')).rejects.toThrow(/unterminated <puzzle-view> tag/);
 	});
 });
+
+describe('quoted section text', () => {
+	it.each(['"', "'"])('keeps section tags inside a %s-quoted expression', (quote) => {
+		const value = `{ flag ? ${quote}<script>${quote} : ${quote}<style>${quote} }`;
+		const src = `<puzzle-view title=${quote}${value}${quote}><p>kept</p></puzzle-view>` +
+			'<script>const kept = true;</script><style>.kept { color: red; }</style>';
+		const sections = splitSections(src);
+		expect(sections.map((s) => s.name)).toEqual(['puzzle-view', 'script', 'style']);
+		expect(src.slice(sections[0].contentStart, sections[0].contentEnd)).toBe('<p>kept</p>');
+	});
+
+	it.each(['puzzle-view', 'puzzle-skeleton'])('keeps a %s closer inside a quoted attribute', (section) => {
+		const body = `<p title="</${section}><script>literal</script><style>literal</style>">kept</p>`;
+		const src = (section === 'puzzle-skeleton' ? '<puzzle-view></puzzle-view>' : '') +
+			`<${section}>${body}</${section}>`;
+		const sections = splitSections(src);
+		const target = sections.find((s) => s.name === section);
+		expect(src.slice(target.contentStart, target.contentEnd)).toBe(body);
+	});
+});

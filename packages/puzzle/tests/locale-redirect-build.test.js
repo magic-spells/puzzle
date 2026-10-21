@@ -49,7 +49,7 @@ describe('the built first-visit redirect script (D177)', () => {
 		const declared = new Set([
 			...[...code.matchAll(/function\s*\(([^)]*)\)/g)].flatMap((m) => m[1].split(',').map((s) => s.trim())),
 			...[...code.matchAll(/\b(?:const|let|var)\s+([\w$]+)/g)].map((m) => m[1]),
-			...[...code.matchAll(/\(\s*([\w$]+)\s*\)\s*=>|([\w$]+)\s*=>/g)].map((m) => m[1] ?? m[2]),
+			...[...code.matchAll(/\(\s*([\w$]+)\s*(?:=[^)]*)?\)\s*=>|([\w$]+)\s*=>/g)].map((m) => m[1] ?? m[2]),
 		]);
 		const keywords = ['function', 'try', 'catch', 'const', 'let', 'var', 'if', 'return', 'new', 'typeof', 'for', 'continue', 're'];
 		const globals = ['location', 'document', 'navigator', 'localStorage', 'URL'];
@@ -64,7 +64,8 @@ describe('the built first-visit redirect script (D177)', () => {
 
 	it.each(REDIRECT_CASES)('$name', (row) => {
 		const replace = vi.fn();
-		built()(TAGS, 'en', row.routerBase ?? '', fakeWindow(row, replace));
+		const manifest = row.manifest ?? REDIRECT_MANIFEST;
+		built()(Object.keys(manifest.locales), manifest.defaultLocale, row.routerBase ?? '', fakeWindow(row, replace));
 		if (row.expected) expect(replace).toHaveBeenCalledExactlyOnceWith(row.expected);
 		else expect(replace).not.toHaveBeenCalled();
 	});

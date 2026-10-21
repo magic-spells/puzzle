@@ -841,7 +841,6 @@ describe('per-locale prerender (D177)', () => {
 // emits — runs the shared decision table (tests/fixtures/locale-redirect-cases.js)
 // that selectLocale and the SPA redirect (tests/i18n-app.test.js) run too.
 describe('first-visit redirect decisions (D177)', () => {
-	const TAGS = Object.keys(REDIRECT_MANIFEST.locales);
 	const ORIGIN = 'https://site.dev';
 	const window = (row, replace) => {
 		const url = new URL(row.url, ORIGIN);
@@ -856,16 +855,18 @@ describe('first-visit redirect decisions (D177)', () => {
 		});
 	};
 	// The emitted text, evaluated on its own: what the build ships, not just its source.
-	const emitted = (base) => {
-		const html = redirectScript(REDIRECT_MANIFEST, base);
+	const emitted = (base, manifest = REDIRECT_MANIFEST) => {
+		const html = redirectScript(manifest, base);
 		return new Function('window', html.slice('<script>'.length, -'</script>'.length));
 	};
 
 	it.each(REDIRECT_CASES)('$name', (row) => {
-		if (row.locale) expect(selectLocale(TAGS, 'en', row.stored ?? null, row.languages)).toBe(row.locale);
+		const manifest = row.manifest ?? REDIRECT_MANIFEST;
+		const tags = Object.keys(manifest.locales);
+		if (row.locale) expect(selectLocale(tags, manifest.defaultLocale, row.stored ?? null, row.languages)).toBe(row.locale);
 		for (const run of [
-			(replace) => localeRedirect(TAGS, 'en', row.routerBase ?? '', window(row, replace)),
-			(replace) => emitted(row.routerBase ?? '')(window(row, replace)),
+			(replace) => localeRedirect(tags, manifest.defaultLocale, row.routerBase ?? '', window(row, replace)),
+			(replace) => emitted(row.routerBase ?? '', manifest)(window(row, replace)),
 		]) {
 			const replace = vi.fn();
 			run(replace);

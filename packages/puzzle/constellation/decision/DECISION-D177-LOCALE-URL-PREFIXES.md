@@ -149,7 +149,7 @@ Default-locale pages redirect once to the matching prefixed URL when all hold:
   choice suppresses it.
 
 Prerendered default-locale pages (404 included) carry an inline script,
-`ssg/redirect.js`, generated from one function source (879 B for three
+`ssg/redirect.js`, generated from one function source (891 B for three
 locales; the build fails if it contains `</script` or `<!--`). Pages without
 it — the SPA, a hybrid `prerender: false` shell, `puzzle dev` — redirect at
 the top of `mount()`, which skips a container marked `data-puzzle-ssg`, so no

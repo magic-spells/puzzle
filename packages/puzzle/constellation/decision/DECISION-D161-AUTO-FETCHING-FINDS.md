@@ -38,8 +38,8 @@ An awaited `loadOne` inside `data()` loops (its own upsert notifies the subscrip
 
 1. Run a pass with its own request map. An unsatisfied tracked read (a `findOne` miss, a `findMany` on a type not yet LOADED) returns its local value and queues a deduped fetch when the model has a resolvable read verb.
 2. Requests queued ⇒ don't commit; await the batch, discard the pass's subscriptions, re-run.
-3. Commit the first pass that queues nothing. Dependent reads (post → `post.authorId` → author) settle across rounds with no declared graph.
-4. After 10 rounds (`MAX_SETTLE_ROUNDS`) **throw** through the normal data-failure path, naming the view and last round's request keys. Never warn-and-commit.
+3. Commit the first pass that queues nothing and has no folded notification. Dependent reads (post → `post.authorId` → author) settle across rounds with no declared graph.
+4. Every provisional pass counts toward `MAX_SETTLE_ROUNDS`, whether it queued fetches or needs a re-pass for a folded store notification. After 10 provisional passes, a pass that still needs either **throws** through the normal data-failure path, naming the view and last round's request keys. A clean final pass may commit. Never warn-and-commit. A dirty warm-read pass consumes its folded notification before checking the cap, so exhaustion propagates rather than scheduling another refresh.
 
 `data()` must tolerate multiple runs per navigation. All rounds count as one D39 load with the D52 hold.
 

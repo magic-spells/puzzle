@@ -56,8 +56,9 @@ during its own evaluation, may fault (D161).
   later no-adapter app in the same realm must be held back by its own store's `_a`
   (`tests/adapter-realm-isolation.test.js`); `_settleData` absent means the loop isn't in
   the bundle. A pass that queued fetches is not committed: await, unwind its
-  subscriptions, re-run; ten rounds throw naming the view and request keys. A sync
-  hit-only first pass stays sync. Mid-settle notifications coalesce into `_settleDirty`.
+  subscriptions, re-run. Every provisional pass counts toward the ten-round cap,
+  including a dirty re-pass with no fetches; exhaustion throws naming the view and
+  request keys. A clean final pass may commit, and a sync hit-only first pass stays sync. Mid-settle notifications coalesce into `_settleDirty`.
   A destroyed/leaving/superseded view stops after its current await (shared requests are
   not aborted); `unsubscribe()` clears the request slot but is not a latch —
   `_restoreFromLeaving()` restores faulting.

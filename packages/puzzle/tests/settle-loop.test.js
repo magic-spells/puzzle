@@ -194,6 +194,51 @@ describe('D161 settle loop — rounds', () => {
 		expect(error.message).toMatch(/post p11/);
 		expect(view.getData().last).toBeUndefined(); // nothing partial committed
 	});
+
+	it('counts dirty re-passes with fresh reads toward the ten-round cap', async () => {
+		const { calls } = serveFrom();
+		const store = makeStore();
+		for (let i = 1; i <= 12; i++) {
+			store.upsert('post', { id: `p${i}`, title: `Post ${i}` });
+		}
+		store.flush();
+		let runs = 0;
+		let release;
+		class DirtyView extends PuzzleView {
+			async data() {
+				const post = this.ctx.store.findOne('post', `p${++runs}`);
+				await new Promise((resolve) => (release = resolve));
+				return { post };
+			}
+			render() {
+				return h('div', {}, [text(this.getData().post?.title ?? '')]);
+			}
+		}
+		const view = new DirtyView(ctxWith(store));
+		const el = container();
+		let error;
+		const mounting = view.mount(el).catch((err) => (error = err));
+		for (let round = 1; round <= 11; round++) {
+			expect(runs).toBe(round);
+			store.findOne('post', `p${round}`).update({ title: `Changed ${round}` });
+			store.flush();
+			release();
+			await tick();
+			if (error) break;
+		}
+		// Release an uncapped extra pass too, so a regression fails without hanging.
+		if (!error) release();
+		await mounting;
+
+		expect(error).toBeInstanceOf(Error);
+		expect(error.message).toBe(
+			'[puzzle] DirtyView: data() did not settle after 10 settle rounds — the store kept changing while it ran'
+		);
+		expect(runs).toBe(11);
+		expect(view.getData().post).toBeUndefined();
+		expect(calls).toEqual([]);
+		view.destroy();
+	});
 });
 
 describe('D161 settle loop — supersession and subscriptions', () => {

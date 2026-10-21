@@ -51,7 +51,7 @@ import manifestData from '@magic-spells/puzzle/i18n/manifest';
  * The static page's ctx: the build-time Store + FormatterRegistry, the throwing
  * router stub, and the translation service once one is installed (D175).
  * @typedef {{ store: Store, router: RouterStub, formatters: FormatterRegistry,
- *   i18n?: ReturnType<typeof createI18n> }} StaticContext
+ *   idle: () => Promise<boolean>, i18n?: ReturnType<typeof createI18n> }} StaticContext
  */
 
 /**
@@ -353,7 +353,8 @@ function buildStaticContext({
 			: (path) => router.url(path)
 	);
 
-	return { store, router, formatters: registry };
+	// ctx.idle (D189): no navigation or app to wait on, so a static page is always idle.
+	return { store, router, formatters: registry, idle: async () => true };
 }
 
 /**

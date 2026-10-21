@@ -17,7 +17,7 @@
  * ownership chain (APP_ANATOMY §2–§3):
  *
  *   Store(models, {apiURL, storage}) ─┐
- *   FormatterRegistry (+ config)      ├─▶ ctx = { store, router, formatters }
+ *   FormatterRegistry (+ config)      ├─▶ ctx = { store, router, formatters, idle }
  *   Router(routes)                    ─┘         │ injected into every view
  *   router.start(el, ctx)  → runs navigation #0 (initial paint)
  *
@@ -58,9 +58,10 @@ import { frame } from './scheduler.js';
  */
 
 /**
- * The ctx injected into every view: the three services, plus `i18n` when
- * translations are configured (D175).
+ * The ctx injected into every view: the three services and bound `idle`, plus
+ * `i18n` when translations are configured (D175).
  * @typedef {{ store: Store, router: Router, formatters: FormatterRegistry,
+ *   idle: (options?: { timeout?: number }) => Promise<boolean>,
  *   i18n?: import('./i18n.js').I18nService }} AppContext
  */
 
@@ -525,7 +526,12 @@ export class PuzzleApp {
 			this.router.setMorphHandler(this.#morphHandler);
 		}
 
-		this.ctx = { store: this.#store, router: this.router, formatters: this.formatters };
+		this.ctx = {
+			store: this.#store,
+			router: this.router,
+			formatters: this.formatters,
+			idle: this.idle.bind(this),
+		};
 		// ctx gains `i18n` only when translations are configured (D175) — beside the
 		// store and router, reached as this.ctx.i18n.
 		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n)

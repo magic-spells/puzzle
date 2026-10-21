@@ -32,7 +32,8 @@ The constructor is a side-effect-free config store; only `errorView` is validate
 
 `mount()` validates hooks, then builds Store → FormatterRegistry (with a router-bound
 `link` registered if absent, its closure reading `this.router` lazily, D79) → Router;
-`ctx = { store, router, formatters }` (+ `i18n` when configured). `focusBehavior`,
+`ctx = { store, router, formatters, idle }` (+ `i18n` when configured), where `idle` is
+`this.idle.bind(this)` ([[DECISION-D189-AGENT-HOOKS]]). `focusBehavior`,
 `routerMode`, `routerBase`, `transitionMode` are forwarded only when set.
 `onError`/`errorView` are stored in a WeakMap keyed by the app ctx (so ctx stays exactly
 those services; lookups resolve through the per-view ctx's prototype chain), deleted at

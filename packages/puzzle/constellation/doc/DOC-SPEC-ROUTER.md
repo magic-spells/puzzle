@@ -178,14 +178,14 @@ The location side effects — `pushState`/`replaceState`, `document.title`, the 
 - The D19 data gate is unchanged; the §16 skeleton exemption bypasses only the data gate, not the transition.
 - **Out of scope:** an exception after the location commit (a mount throw) can leave the URL ahead of the view; there is no rollback (rejected as racy). The failed position is handled by §60.
 
-**Navigation result (D182).** `push(path)` and `replace(path)` resolve a `NavigationResult` and never reject: `{ ok: true, route, redirectedFrom? }` or `{ ok: false, reason, error? }`.
+**Navigation result (D182).** `push(path)` and `replace(path)` resolve a `NavigationResult` and never reject: `{ ok: true, route, catchAll?, redirectedFrom? }` or `{ ok: false, reason, error? }`.
 
-- `ok: true` — committed (the catch-all `*` included); `route` is the committed snapshot. A same-path push while that path is in flight returns the in-flight push's result.
+- `ok: true` — committed (the catch-all `*` included); `route` is the committed snapshot. `catchAll: true` is present exactly when the committed leaf is the `path: '*'` route (D189), on redirects, reused routes and same-path no-ops too; the snapshot itself carries no flag. A same-path push while that path is in flight returns the in-flight push's result.
 - **`push()` to the committed path:**
 
   | Situation | Behaviour |
   | --- | --- |
-  | Nothing in flight, chain intact | No-op, `ok` with the current route |
+  | Nothing in flight, chain intact | No-op, `ok` with the current route (`catchAll: true` on the catch-all) |
   | Nothing in flight, chain invalid (failed view) | Rebuild with replace semantics; history unchanged |
   | A push/replace in flight (URL not moved yet) | Supersede it; rebuild with replace semantics; history unchanged |
   | A pop in flight, path or hash mode (browser already moved) | An ordinary push (`pushState`) |
@@ -235,7 +235,7 @@ Route `meta` carries four **reserved head fields** — `title`, `description`, `
 Any route node — root, child or catch-all — may declare `guard: ({ to, from, ctx }) => verdict` (D87). The effective chain is every guard on the matched root → leaf path, run **sequentially**, stopping at the first non-allow verdict.
 
 - **Placement:** once per matched navigation — push, replace, pop, params-only, query-only, navigation #0 — after matching and the token bump, before `lazy()` resolution (§62), any construction, and the D19 load gate. A denied navigation commits nothing and has nothing to tear down. A push to the committed path is the §44 same-path no-op and never reaches guards.
-- **Arguments:** `to`/`from` are frozen snapshots (`from` null on navigation #0); `ctx` is the app context (`store`, `router`, `formatters`, plus `i18n` when configured).
+- **Arguments:** `to`/`from` are frozen snapshots (`from` null on navigation #0); `ctx` is the app context (`store`, `router`, `formatters`, the bound `idle`, plus `i18n` when configured).
 - **Verdicts:** `undefined`/`true` allows; `false` blocks; a path string redirects through the router **inheriting the denied verb** — a push redirect is a `push()` (Back still returns to the prior page), a pop or navigation-#0 redirect is a `replace()`. The denied URL never enters history; the destination's own guards run. Guards may be async (each awaited; a superseded one abandons silently). A throw is logged and the app stays put.
 - **Loop safety:** a redirect to the committed path is the same-path no-op. At most ten guard redirects may run without a commit; the next is treated as a cycle — `console.error`, stay put. A commit resets the counter.
 - **Validation:** a present non-function `guard` throws at construction.

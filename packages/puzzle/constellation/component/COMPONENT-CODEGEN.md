@@ -50,6 +50,8 @@ Class extraction requires a real named `export default class … extends …`.
   name back from the render tail (`compiledClassName`), counting every byte ≥ 0x80.
 - These two files have no FILE card; this card is their contract.
 
+Declaration binding scans treat comments as whitespace before class/function names and on both sides of a generator's `*`; those names remain module bindings for `<Component is>` and retain their authored offsets for reserved-binding diagnostics.
+
 ## Expressions (`lower.go`)
 
 The parser attaches a parsed tree (`puzzle-lang/expr`) to every expression position and
@@ -57,8 +59,7 @@ codegen lowers the tree; nothing reads source strings except `startsWithObjectLi
 The lowering table in `lower.go`'s header comment is the contract; the language rules are
 D176 and [[DOC-SPEC-TEMPLATE]]. Non-obvious points:
 
-- **scopeMap** maps an in-scope binding to its JS: `""` = bare (range var, snippet param,
-  `ViewNode`), otherwise a rewrite (row `todo` → `s.item`, counter → `s.i`, mangled
+- **scopeMap** maps an in-scope binding to its JS: `""` = bare (range var, snippet param), otherwise a rewrite (row `todo` → `s.item`, counter → `s.i`, mangled
   `__pzl<name>`). Arrow params shadow bindings, which shadow a handler's `event`; every
   other name is `__d.<name>` — including `event` outside a handler.
 - **Selector scope (D180):** `<Component>` `is` adds module imports and simple declared identifiers below loop/snippet/arrow bindings and above data. Props and spread operands retain ordinary data scope. The conservative token scan includes subsequent `const`/`let`/`var` declarators, including an uninitialized final name terminated by a line break or EOF through ASI, but not destructuring patterns; use a simple alias or `data()` for those values. It never rewrites the script or permits arbitrary script calls. Only a selector read of a module `let`/`var` binding marks enclosing cached row blocks volatile. Imports and `const` bindings preserve normal row caching; in-place edits to a const map's entries are not observed by cached rows.
@@ -67,7 +68,7 @@ D176 and [[DOC-SPEC-TEMPLATE]]. Non-obvious points:
   named `event` counts as neither. The DOM param is renamed `__ev` when a binding owns
   `event`.
 - **Guards** (D173 V4): every member, index and method step is written optional, handler
-  arguments included. Written as authored: a handler's free `event` chain and `ViewNode`.
+  arguments included. Written as authored: a handler's free `event` chain.
   `Object.keys/values/entries` get `(<arg> ?? {})` (`objectGlobalArgs`, render only).
 - **Calls**: a bare call is the library, `(__f["name"] || __f.__missing("name"))(…)`
   (the `const __f` line only when used); methods and allowed globals are verbatim.
@@ -141,6 +142,8 @@ emitted. So `views/listBlock.js` must never be imported from inside `client-runt
   counts different text vnodes than emission. `preservedBody` drops the one newline after
   the start tag; `forBodyRoot` zeroes the counter for the loop body's own list.
 - A `#html` markup vnode is a non-text sibling for D168 and dynamic to the static cache.
+
+Synthetic loop keys use a compiler-only binding that no authored identifier can spell. Generated `__i`, the row-key sentinel and the `ViewNode` helper never become template bindings; same-named data fields retain ordinary data scope, including explicit keys. Attribute object literals emit `__proto__` as a computed key so static, dynamic, mixed, component and authored-literal attributes are own properties.
 
 ## List blocks (`listblock.go`)
 

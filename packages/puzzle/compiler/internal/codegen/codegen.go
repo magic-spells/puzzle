@@ -1352,7 +1352,7 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 		if f.Counter != "" {
 			bodyScope, counter := c.bareBinding(scope, f.Counter)
 			c.mapDepth++
-			body, err := c.forBody(f, bodyScope, identNode(f.Counter), ind+2, nil)
+			body, err := c.forBody(f, bodyScope, counter, ind+2, nil)
 			c.mapDepth--
 			if err != nil {
 				return "", err
@@ -1363,7 +1363,7 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 		// Counterless range: the generated value binds as the compiler-private
 		// `__i` and keys the row.
 		c.mapDepth++
-		body, err := c.forBody(f, scopeAdd(scope, "__i"), identNode("__i"), ind+2, nil)
+		body, err := c.forBody(f, scope, "__i", ind+2, nil)
 		c.mapDepth--
 		if err != nil {
 			return "", err
@@ -1395,14 +1395,10 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 		bodyScope, counterParam = c.bareBinding(bodyScope, f.Counter)
 		params += ", " + counterParam
 	}
-	// The synthetic auto-key is `ViewNode.keyOf(<item>)`; ViewNode is a module
-	// identifier (always imported), so mark it in-scope to keep the expression
-	// resolver from rewriting it to `__d.ViewNode` (D58).
-	bodyScope = scopeAdd(bodyScope, "ViewNode")
 	// This body is NOT lowered: nothing inside it may take a site id or a cache
 	// slot, because the one it took would be shared by every iteration.
 	c.mapDepth++
-	body, err := c.forBody(f, bodyScope, keyOfNode(f.Item), ind+2, nil)
+	body, err := c.forBody(f, bodyScope, "ViewNode.keyOf("+itemParam+")", ind+2, nil)
 	c.mapDepth--
 	if err != nil {
 		return "", err
@@ -1422,7 +1418,7 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 // block's resolved `key: s.k`, because an explicit key has already moved into
 // the site meta's key function, so the author's attribute is dropped from the
 // root instead of suppressing the prepend (D170 emission contract).
-func (c *compiler) forBody(f *parser.For, scope scopeMap, keyExpr expr.Node, ind int, site *loopSite) (string, error) {
+func (c *compiler) forBody(f *parser.For, scope scopeMap, keyJS string, ind int, site *loopSite) (string, error) {
 	only, explicitKey, err := c.forBodyRoot(f, scope)
 	if err != nil {
 		return "", err
@@ -1430,7 +1426,11 @@ func (c *compiler) forBody(f *parser.For, scope scopeMap, keyExpr expr.Node, ind
 	if site != nil {
 		explicitKey = false
 	}
-	key := &parser.DynamicAttr{Name: "key", Expr: "key", ExprAST: keyExpr}
+	// The synthetic key has a compiler-only binding that no authored identifier
+	// can spell. Generated names must not enter the template's lexical scope.
+	const keyIdent = "\x00key"
+	key := &parser.DynamicAttr{Name: "key", Expr: "key", ExprAST: identNode(keyIdent)}
+	scope = scopeAddAs(scope, keyIdent, keyJS)
 	switch n := only.(type) {
 	case *parser.Element:
 		attrs := n.Attrs
@@ -2288,8 +2288,12 @@ func anyMixed(attrs []parser.Attr) bool {
 }
 
 // jsKey emits an object key: bare when a valid identifier, single-quoted
-// otherwise (e.g. '@submit', 'fill-rule').
+// otherwise (e.g. '@submit', 'fill-rule'). The prototype key is computed so
+// the object receives an own property instead of changing its prototype.
 func jsKey(name string) string {
+	if name == "__proto__" {
+		return "['__proto__']"
+	}
 	if isJSIdentifier(name) {
 		return name
 	}
@@ -2355,21 +2359,10 @@ func scopeAddAs(scope scopeMap, name, js string) scopeMap {
 	return out
 }
 
-// identNode is a synthetic Identifier for a name the compiler itself reads —
-// a loop's generated key (`__i`, a range counter, the row block's key
-// sentinel). It has no source position; the render target never maps one.
+// identNode is a synthetic Identifier for a compiler-only binding. It has no
+// source position; the render target never maps one.
 func identNode(name string) *expr.Identifier {
 	return &expr.Identifier{Name: name}
-}
-
-// keyOfNode is the synthetic `ViewNode.keyOf(<item>)` key of a `.map` loop
-// row (D58). ViewNode is in the body scope, and a chain off it is never
-// guarded.
-func keyOfNode(item string) expr.Node {
-	return &expr.Call{
-		Callee: &expr.Member{Object: identNode("ViewNode"), Property: "keyOf"},
-		Args:   []expr.Node{identNode(item)},
-	}
 }
 
 var spaces = strings.Repeat(" ", 256)

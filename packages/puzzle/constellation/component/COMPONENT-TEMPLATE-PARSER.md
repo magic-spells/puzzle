@@ -31,6 +31,8 @@ only a fallback, so a `{#raw}` missing `{/raw}` still splits at the real close t
 `{` (each `scanBraceGroup` fails at EOF, then the loop advances one byte) — ~210 ms for
 4,000 `{ `, same in the eslint/prettier ports. Such a file is already a compile error.
 
+Opening-tag scans handle brace expressions before attribute quote delimiters, including expressions whose strings reuse the enclosing quote. Template close scans skip whole opening tags, keeping section-looking text inside their attribute values inert; the lint/format splitter ports use the same boundaries.
+
 ## Lexer and nodes
 
 The lexer emits elements/components, text, interpolation, if/unless/else-if, case/when,
