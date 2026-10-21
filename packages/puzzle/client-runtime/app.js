@@ -44,7 +44,7 @@ import { devtoolsAppMounted, devtoolsAppUnmounted } from './devtools.js';
 import { reportError, setErrorConfig } from './errors.js';
 import { PuzzleView } from './views/PuzzleView.js';
 import { setPortalHost, teardownPortals } from './views/portal.js';
-import { frame } from './scheduler.js';
+import { frame, scheduled } from './scheduler.js';
 
 /** @import { FormatterRegistry } from './formatters.js' */
 
@@ -276,10 +276,11 @@ export class PuzzleApp {
 
 	/**
 	 * Wait for the app to go quiet (D185): resolves true once two consecutive
-	 * frames find no mount or navigation in flight, no store notification or flush
-	 * pending, no async data() running, no setLocale() switch loading, and — with
-	 * the adapter — no tracked find's fetch in flight; false when `timeout` (ms,
-	 * default 10000) runs out first. A check runs after its frame's callbacks, so
+	 * frames find no mount or navigation in flight, no store notification, flush
+	 * or view render pending, no async data() running, no setLocale() switch
+	 * loading, and — with the adapter — no tracked find's fetch in flight; false
+	 * when `timeout` (ms, default 10000; a bad value falls back to it) runs out
+	 * first. A check runs after its frame's callbacks, so
 	 * a setData() render scheduled before it has landed. Frames follow the store's
 	 * scheduler (D63): timers in a hidden tab. An app neither mounted nor mounting
 	 * resolves true at once. Never rejects. It reads state the runtime already
@@ -292,13 +293,12 @@ export class PuzzleApp {
 	 * @returns {Promise<boolean>}
 	 */
 	idle({ timeout = 10000 } = {}) {
-		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-			if (typeof timeout !== 'number' || !(timeout >= 0 && timeout < Infinity)) {
+		if (typeof timeout !== 'number' || !(timeout >= 0 && timeout < Infinity)) {
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
 				console.error(
 					`[puzzle] app.idle() timeout must be a finite number of ms ≥ 0 (got ${String(timeout)}) — using 10000`
 				);
-				timeout = 10000;
-			}
+			timeout = 10000;
 		}
 		const end = Date.now() + timeout;
 		return new Promise((resolve) => {
@@ -311,6 +311,7 @@ export class PuzzleApp {
 				const store = /** @type {Store} */ (this.#store);
 				if (
 					this.#mountPromise ||
+					scheduled() ||
 					store._flushScheduled ||
 					store._asyncTrackingChain ||
 					store._reading?.() ||

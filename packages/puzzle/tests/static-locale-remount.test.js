@@ -232,6 +232,36 @@ describe('static kernel: setLocale remount', () => {
 		expect(document.title).toBe('Prerendered');
 	});
 
+	it.each([
+		['en', '/', MANIFEST, 'Welcome'],
+		['a prefixed locale', '/es/', { ...MANIFEST, routing: 'prefix' }, 'Bienvenido'],
+	])('a client-rendered page (no prerender) syncs its translated title in %s', async (_, path, manifest, want) => {
+		const startURL = location.href;
+		history.replaceState(null, '', path);
+		const locale = path === '/' ? 'en' : 'es';
+		document.body.innerHTML =
+			'<div id="app"></div>' +
+			`<script type="application/json" data-puzzle-locale="${locale}">${JSON.stringify(locale === 'en' ? EN : ES)}</script>`;
+		document.title = 'Shell';
+		class Home extends PuzzleView {
+			render() {
+				return h('h1', {}, [text(this.ctx.i18n.t('title'))]);
+			}
+		}
+		try {
+			await mountStatic({
+				target: '#app',
+				views: [Home],
+				route: { path: '/', params: {}, chain: [{ path: '/', meta: { title: { t: 'title' } } }] },
+				__i18n: { manifest, tables: { en: EN, es: ES }, navigate: vi.fn() },
+			});
+			expect(document.querySelector('h1').textContent).toBe(want);
+			expect(document.title).toBe(want);
+		} finally {
+			history.replaceState(null, '', startURL);
+		}
+	});
+
 	it('without prefix routing (D177) the switch stays an in-place remount, and every locales href is this page', async () => {
 		const startURL = location.href;
 		history.replaceState(null, '', '/about?tab=2#faq');

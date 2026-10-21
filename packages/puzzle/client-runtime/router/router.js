@@ -1044,10 +1044,16 @@ export class Router {
 		) {
 			// An empty slot is read again on a microtask: a push fired synchronously
 			// from inside #navigate (a created() hook) runs before push() pairs the
-			// promise; one tick later the slot holds the in-flight navigation.
+			// promise; one tick later the slot holds the in-flight navigation — if it
+			// is still this path's. Otherwise a navigation fired in between took the
+			// token, so the one this push joined was superseded.
 			return (
 				this.#pendingNavPromise ??
-				Promise.resolve().then(() => this.#pendingNavPromise ?? succeed(this.current))
+				Promise.resolve().then(
+					() =>
+						(this.#pendingNavPath != null && sameNavKey(this.#pendingNavPath) === key && this.#pendingNavPromise) ||
+						SUPERSEDED
+				)
 			);
 		}
 		// The committed path, but not a no-op (a navigation in flight, or an
@@ -1067,9 +1073,15 @@ export class Router {
 		if (asReplace) {
 			// #navigate records no target for a replace; claim the slot for this push
 			// only when it took the token and no re-entrant navigation claimed it.
+			// The claim happens after #navigate returned, so a navigation that already
+			// ended (a view constructor throwing synchronously) must not stay latched:
+			// release the slot once it settles, or every later push gets its result.
 			if (this.#token !== token && this.#pendingNavPromise == null) {
 				this.#pendingNavPath = path;
 				this.#pendingNavPromise = nav;
+				nav.then(() => {
+					if (this.#pendingNavPromise === nav) this.#pendingNavPath = this.#pendingNavPromise = null;
+				});
 			}
 			return nav;
 		}

@@ -300,6 +300,67 @@ describe('app.idle() (D185)', () => {
 		expect(error.mock.calls[0][0]).toMatch(/app\.idle\(\) timeout/);
 	});
 
+	it('clamps a bad timeout in production too, so a stuck app still times out', async () => {
+		globalThis.__PUZZLE_DEV__ = false;
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			const never = gate();
+			class StuckView extends PuzzleView {
+				async data() {
+					await never.promise;
+					return {};
+				}
+				render() {
+					return h('puzzle-view', {}, []);
+				}
+			}
+			const { app } = make({
+				routes: [
+					{ path: '/', view: HomeView },
+					{ path: '/stuck', view: StuckView },
+				],
+			});
+			await app.mount();
+			app.router.push('/stuck');
+			const now = Date.now();
+			for (const bad of [NaN, Infinity]) {
+				const idle = watch(app.idle({ timeout: bad }));
+				await wait(40);
+				expect(idle.done).toBe(false);
+				// Past the 10000ms default the bad value was clamped to.
+				const clock = vi.spyOn(Date, 'now').mockReturnValue(now + 20000);
+				await vi.waitFor(() => expect(idle.done).toBe(true));
+				expect(idle.value).toBe(false);
+				clock.mockRestore();
+			}
+			expect(error).not.toHaveBeenCalled();
+			never.open();
+		} finally {
+			delete globalThis.__PUZZLE_DEV__;
+		}
+	});
+
+	it('waits out a render chain afterUpdate() keeps scheduling', async () => {
+		let view;
+		class ChainView extends PuzzleView {
+			mounted() {
+				view = this;
+			}
+			afterUpdate() {
+				const n = this.getData().n;
+				if (n > 0 && n < 8) this.setData({ n: n + 1 });
+			}
+			render() {
+				return h('puzzle-view', { class: 'chain' }, [text(String(this.getData().n ?? 0))]);
+			}
+		}
+		const { app, el } = make({ routes: [{ path: '/', view: ChainView }] });
+		await app.mount();
+		view.setData({ n: 1 });
+		expect(await app.idle()).toBe(true);
+		expect(el.querySelector('.chain').textContent).toBe('8');
+	});
+
 	it('steps on timers in a hidden tab, where rAF is frozen', async () => {
 		const { app, el } = make({ models: { note: Note }, routes: [{ path: '/', view: NotesView }] });
 		await app.mount();

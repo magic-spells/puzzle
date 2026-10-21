@@ -33,6 +33,9 @@ export function schedule(job) {
 	});
 }
 
+/** How many scheduled store flushes and view renders are still pending (D185). */
+export const scheduled = () => pending;
+
 /** Resolve once no scheduled store flush or view render is pending (D188). */
 export async function tick() {
 	while (pending) await new Promise((resolve) => waiters.push(/** @type {() => void} */ (resolve)));
