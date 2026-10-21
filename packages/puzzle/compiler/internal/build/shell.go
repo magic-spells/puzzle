@@ -92,8 +92,14 @@ func staticImportClosure(outputs map[string]bundleOutput, entry string) []string
 }
 
 // Only start tags participate in reference rewriting. Quoted attribute values
-// may contain >, so a tag ends at the first unquoted >.
-var shellTagRE = regexp.MustCompile(`(?i)<(script|link)(?:\s+(?:[^"'<>]|"[^"]*"|'[^']*')*)?/?>`)
+// may contain >, so a tag ends at the first unquoted >. The scan steps over a
+// whole <script>…</script> (its body is not markup), then any start tag (its
+// quoted values are not markup), then an HTML comment, to its end or the end of
+// the shell when unterminated, so the tags inside a comment are left alone.
+const shellTagTail = `(?:\s+(?:[^"'<>]|"[^"]*"|'[^']*')*)?/?>`
+
+var shellOpenRE = regexp.MustCompile(`(?i)^<([a-z][^\s/>]*)` + shellTagTail)
+var shellTagRE = regexp.MustCompile(`(?i)<script` + shellTagTail + `(?:[\s\S]*?</script\s*>|[\s\S]*$)|<[a-z][^\s/>]*` + shellTagTail + `|<!--[\s\S]*?(?:-->|$)`)
 var shellAttrRE = regexp.MustCompile("(\\s+)([^\\s=<>/]+)(?:\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s\"'=<>`]+))?")
 var headEndRE = regexp.MustCompile(`(?i)</head\s*>`)
 
@@ -155,8 +161,17 @@ func rewriteShellHTML(source string, renames map[string]string, chunks []string,
 	entryFound := false
 	var entryPrefix, crossorigin string
 	var assetErr error
-	rewritten := shellTagRE.ReplaceAllStringFunc(source, func(tag string) string {
-		isScript := strings.EqualFold(shellTagRE.FindStringSubmatch(tag)[1], "script")
+	rewritten := shellTagRE.ReplaceAllStringFunc(source, func(match string) string {
+		open := shellOpenRE.FindStringSubmatchIndex(match)
+		if open == nil {
+			return match // a comment
+		}
+		name := match[open[2]:open[3]]
+		isScript := strings.EqualFold(name, "script")
+		if !isScript && !strings.EqualFold(name, "link") {
+			return match
+		}
+		tag, body := match[:open[1]], match[open[1]:]
 		attrs := shellAttrRE.FindAllStringSubmatchIndex(tag, -1)
 		var tagCrossorigin string
 		for _, a := range attrs {
@@ -186,7 +201,7 @@ func rewriteShellHTML(source string, renames map[string]string, chunks []string,
 				assetErr = fmt.Errorf("shell asset %q has no emitted output", attrValue(raw))
 			}
 		}
-		return tag
+		return tag + body
 	})
 	if assetErr != nil {
 		return "", entryFound, assetErr

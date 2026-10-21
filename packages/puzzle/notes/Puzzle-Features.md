@@ -122,7 +122,7 @@ them.
 
 ## Marketing qualifications worth keeping straight
 
-- The README sizes are **21.9 KB gzip for a minimal complete app** and
-  **26.0 KB for the todos app**, not a universal framework cost.
+- The README sizes are **23.0 KB gzip for a minimal complete app** and
+  **27.0 KB for the todos app**, not a universal framework cost.
 - The ~200 ms production build is the todos example on Apple Silicon.
 - Neither is an apples-to-apples benchmark against a bare rendering runtime.

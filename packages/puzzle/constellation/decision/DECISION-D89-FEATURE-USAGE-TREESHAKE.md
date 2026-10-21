@@ -36,7 +36,7 @@ them. This extends D31's per-app scan and D57's define+DCE mechanism.
 | `__PUZZLE_HAS_FLIP__` | `views/flip.js` (D85) | exact: a `flip` attr on elements, **component props** (a component vnode's props are its attrs) and slot children |
 | `__PUZZLE_HAS_PORTAL__` | `views/portal.js` (D144) | exact: any `*parser.Portal` node; `<Portal>` inside a raw block doesn't count |
 | `__PUZZLE_HAS_SNIPPETS__` | snippet partition/stamping + diagnostics (D166) | exact: any `*parser.Snippet` or args-bearing `<Slot>`/`<Children>` |
-| `__PUZZLE_HAS_CONDITIONAL_SLOT__` | routed-outlet parking and reattach in the ViewManager, PuzzleView and router (D30 conditional outlets) | over-inclusive: a plain `<Slot>`/`<Children>` (no snippet args) under `{#if}`/`{#case}`/`{#for}`, a snippet body, a marker fallback, a `<Component>` selection, a `key`-carrying element or component, or in a skeleton |
+| `__PUZZLE_HAS_CONDITIONAL_SLOT__` | routed-outlet parking and reattach in the ViewManager, PuzzleView and router (D30 conditional outlets) | over-inclusive: a plain `<Slot>`/`<Children>` (no snippet args) under `{#if}`/`{#case}`/`{#for}`, a snippet body, a marker fallback, a `<Component>` selection, an element or component carrying a `key` or a `{...spread}` (the spread may hold one), or in a skeleton |
 | `__PUZZLE_HAS_RAW_AT__` | the D150 literal-`@` attribute shim | over-inclusive: any `{#raw}` block |
 | `__PUZZLE_HAS_RAW_HTML__` / `__PUZZLE_HAS_RAW_SANITIZE__` | live-HTML node / sanitizer (D174) | a text interpolation whose outermost call is `raw` or `newline_to_br`; only `raw` keeps the sanitizer |
 | `__PUZZLE_HAS_LAZY__` | `router/lazy.js` (D163) | over-inclusive, the one **script** fact (below) |

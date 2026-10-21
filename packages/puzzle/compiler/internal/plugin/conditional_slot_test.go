@@ -17,6 +17,7 @@ func TestConditionalSlotUsage(t *testing.T) {
 		`<puzzle-view>{#for row in rows}<Slot name="row"/>{/for}</puzzle-view>`:                            true,
 		`<puzzle-view><Frame key={id}><Slot/></Frame></puzzle-view>`:                                       true,
 		`<puzzle-view><Component is={current}><Slot/></Component></puzzle-view>`:                           true,
+		`<puzzle-view><Frame {...props}><Slot/></Frame></puzzle-view>`:                                     true,
 		`<puzzle-view><ul>{#for item in items}<li><Children item={ item }/></li>{/for}</ul></puzzle-view>`: false,
 		`<puzzle-view><Slot/></puzzle-view><puzzle-skeleton><Slot/></puzzle-skeleton>`:                     true,
 	} {

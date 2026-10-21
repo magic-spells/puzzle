@@ -42,9 +42,11 @@ switch that lands before the remount is armed (a `mounted()` calling `setLocale`
 is replayed, not dropped. `__i18n` is an internal test seam, as on `PuzzleApp`.
 
 **Translated title.** A `meta.title: { t: 'key' }` follows the active locale
-(`syncLocaleTitle` → `syncTitle(headText(…))`): on load when the active locale
-differs from the island's (the build already wrote the island locale's title), and
-after every locale remount. A plain string title is left as the build wrote it.
+(`syncLocaleTitle` → `syncTitle(headText(…))`): on load when the page is not a
+prerendered takeover (no `data-puzzle-static` marker — a `prerender: false` page
+still shows the shell's title) or the active locale differs from the island's
+(the build already wrote the island locale's title), and after every locale
+remount. A plain string title is left as the build wrote it.
 
 **Locale prefix routing** ([[DECISION-D177-LOCALE-URL-PREFIXES]]), behind
 `__PUZZLE_HAS_LOCALE_ROUTING__` and `manifest.routing === 'prefix'`: the URL

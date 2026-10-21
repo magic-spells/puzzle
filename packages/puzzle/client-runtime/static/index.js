@@ -108,6 +108,8 @@ export async function mountStatic({
 	if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
 		setPortalHost(targetEl.parentNode ?? document.body);
 
+	// A marked page replaces prerendered DOM; an unmarked one is prerender:false.
+	const isTakeover = targetEl.hasAttribute('data-puzzle-static');
 	const chain = route.chain.map((def, i) => ({ ...def, view: views[i] }));
 	// `route.params` is `{}` for a fixed route. A page a `staticPaths` route
 	// generated (D179) shares its route's module, so its entry fills `path` and
@@ -183,9 +185,10 @@ export async function mountStatic({
 			ctx.i18n = i18n;
 			installTranslate(ctx.formatters, i18n);
 			await i18n.__ready();
-			// The build wrote the page's <title> in its own locale (the island's tag);
-			// a viewer in another one gets a translated `{ t }` title in theirs.
-			if (i18n.locale !== (islandLocale() ?? i18n.defaultLocale)) syncLocaleTitle(chain, i18n);
+			// A prerendered page's <title> is in its own locale (the island's tag); a
+			// viewer in another one, or a client-rendered page (the shell's title),
+			// gets a translated `{ t }` title.
+			if (!isTakeover || i18n.locale !== (islandLocale() ?? i18n.defaultLocale)) syncLocaleTitle(chain, i18n);
 		}
 	}
 
@@ -196,7 +199,6 @@ export async function mountStatic({
 	// too — mountComponent auto-chains playIn() onto each one, and that content is
 	// already on screen. An unmarked prerender:false page keeps ordinary
 	// fire-and-forget component mounting AND its ordinary nested enters.
-	const isTakeover = targetEl.hasAttribute('data-puzzle-static');
 	if (isTakeover) {
 		const nested = await preloadTakeoverComponents(topVnode, ctx);
 		for (const instance of nested) instance.skipEnter();

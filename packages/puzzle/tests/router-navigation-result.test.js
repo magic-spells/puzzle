@@ -233,6 +233,32 @@ describe('router.push() — committed navigations (D182)', () => {
 		expect(result.route.path).toBe('/x');
 	});
 
+	it("a same-path push from created() whose navigation a sibling push supersedes resolves 'superseded'", async () => {
+		let inner;
+		let other;
+		let router;
+		class X extends PuzzleView {
+			created() {
+				inner = router.push('/x');
+				other = router.push('/about');
+			}
+			render() {
+				return h('puzzle-view', { class: 'x' }, [text('X')]);
+			}
+		}
+		({ router } = await boot([
+			{ path: '/', name: 'home', view: HomeView },
+			{ path: '/x', name: 'x', view: X },
+			{ path: '/about', name: 'about', view: AboutView },
+		]));
+
+		const outer = await router.push('/x');
+		expect(outer).toEqual({ ok: false, reason: 'superseded' });
+		expect((await other).ok).toBe(true);
+		expect(await inner).toEqual({ ok: false, reason: 'superseded' });
+		expect(router.current.path).toBe('/about');
+	});
+
 	it('replace() resolves the same shape', async () => {
 		const { router } = await boot([
 			{ path: '/', name: 'home', view: HomeView },
@@ -791,6 +817,47 @@ describe('router.push() — the committed path when it is not a no-op (D182)', (
 		await p1;
 		await tick();
 		expect(runs - before).toBe(1);
+	});
+
+	it('row 2 — a rebuild whose constructor throws is not latched: the next push retries', async () => {
+		let failing = true;
+		let throwing = false;
+		let constructed = 0;
+		class Flaky extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				constructed++;
+				if (throwing) throw new Error('constructor boom');
+			}
+			renderSkeleton() {
+				return h('puzzle-view', {}, [text('…')]);
+			}
+			async data() {
+				if (failing) throw new Error('data boom');
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'flaky' }, [text('OK')]);
+			}
+		}
+		const { router, el } = await boot(
+			[
+				{ path: '/', name: 'home', view: HomeView },
+				{ path: '/f', name: 'f', view: Flaky },
+			],
+			{ onError: () => {} }
+		);
+		await router.push('/f'); // the skeleton commits, then data() fails: chain invalid
+		await tick();
+		throwing = true;
+		expect(await router.push('/f')).toMatchObject({ ok: false, reason: 'error' });
+		expect(constructed).toBe(2);
+
+		failing = throwing = false;
+		expect((await router.push('/f')).ok).toBe(true);
+		await tick();
+		expect(constructed).toBe(3);
+		expect(el.querySelector('.flaky')).not.toBeNull();
 	});
 
 	it('row 3 — a push in flight: superseded, rebuilt with replace semantics, history unchanged', async () => {

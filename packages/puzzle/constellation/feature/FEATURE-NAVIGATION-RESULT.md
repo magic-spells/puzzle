@@ -22,9 +22,11 @@ Part of the 0.9.0 agent-API round. An agent kit drove the router by polling, bec
 
 ## Design
 
-`#navigate` returns a result at every exit, and `#swap` returns `ok` after its commit or `SUPERSEDED` from its two abandon points. `push()`/`replace()` hand that promise back unchanged, so the in-flight same-key rule shares one result. A slot that is still empty (a push from `created()`) is read again on a microtask.
+`#navigate` returns a result at every exit, and `#swap` returns `ok` after its commit or `SUPERSEDED` from its two abandon points. `push()`/`replace()` hand that promise back unchanged, so the in-flight same-key rule shares one result. A slot that is still empty (a push from `created()`) is read again on a microtask; it takes the in-flight promise only while `#pendingNavPath` still names its path, and resolves `SUPERSEDED` otherwise.
 
 `#isCommittedNoop` gates the same-path no-op. It needs the committed path, an intact chain, and nothing in flight; a guard redirect is exempt.
+
+A same-path push that rebuilds with replace semantics records its own slot after `#navigate` returns, and releases it when the promise settles if it is still current, so a navigation that ended synchronously never stays latched.
 
 `#runGuards` returns an `{ error }` marker for a throwing guard and for the redirect cap, so both resolve `'error'`.
 
