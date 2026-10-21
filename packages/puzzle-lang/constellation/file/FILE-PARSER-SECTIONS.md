@@ -48,3 +48,5 @@ COMPONENT-TEMPLATE-PARSER (`repo=puzzle`).
   already a compile error.
 - Also reads `<script lang>` (`""` | `"ts"`) and the `<puzzle-skeleton>`
   `min-duration` attribute, each attribute error positioned.
+
+- **Quoted attributes remain opaque to section discovery.** Opening-tag scans handle brace groups before quote delimiters, including groups inside quoted attributes; matching quotes and `<script>`/`<style>` strings inside an expression cannot end the tag. Template close scans skip complete opening tags with that scanner, so a literal `</puzzle-view>` or `</puzzle-skeleton>` inside an attribute cannot end its section. Brace escapes retain the template lexer's spelling.

@@ -21,27 +21,27 @@ func TestRewriteShellReferences(t *testing.T) {
 		{`<img src="app.js"><scripture src="app.js">text app.js`, `<img src="app.js"><scripture src="app.js">text app.js`},
 	} {
 		t.Run(tt.source, func(t *testing.T) {
-			got, _, err := rewriteShellHTML("<head>"+tt.source+"</head>", renames, nil)
+			got, _, err := rewriteShellHTML("<head>"+tt.source+"</head>", renames, nil, map[string]bool{"vendor/app.js": true})
 			if err != nil || got != "<head>"+tt.want+"</head>" {
 				t.Fatalf("rewrite = %q, %v; want %q", got, err, tt.want)
 			}
 		})
 	}
-	for _, source := range []string{`<head></head>`, `<head><link href="app.js"></head>`, `<head><script src="/base/app.js"></script></head>`} {
-		if _, found, err := rewriteShellHTML(source, renames, nil); err != nil || found {
+	for _, source := range []string{`<head></head>`, `<head><link href="app.js"></head>`} {
+		if _, found, err := rewriteShellHTML(source, renames, nil, nil); err != nil || found {
 			t.Fatalf("entry found = %v, error = %v", found, err)
 		}
 	}
-	if _, _, err := rewriteShellHTML(`<script src="app.js"></script>`, renames, nil); err == nil || !strings.Contains(err.Error(), "</head>") {
+	if _, _, err := rewriteShellHTML(`<script src="app.js"></script>`, renames, nil, nil); err == nil || !strings.Contains(err.Error(), "</head>") {
 		t.Fatalf("missing head error = %v", err)
 	}
 }
 
 func TestShellPreloads(t *testing.T) {
 	for _, cross := range []string{"", "crossorigin", `crossorigin = 'use-credentials'`} {
-		for _, prefix := range []string{"/", "./", ""} {
+		for _, prefix := range []string{"/", "./", "", "/docs/site/"} {
 			source := "<html>\n  <head>\n    <script " + cross + ` src="` + prefix + "app.js\"></script>\n  </head>\n</html>"
-			got, _, err := rewriteShellHTML(source, nil, []string{"chunks/first.js", "chunks/shared.js"})
+			got, _, err := rewriteShellHTML(source, nil, []string{"chunks/first.js", "chunks/shared.js"}, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -163,7 +163,7 @@ func TestRewriteShellReadErrors(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(staging, "index.html"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	err := rewriteShell(staging, "", "styles.css", "app/app.js", true, false)
+	err := rewriteShell(staging, "", "styles.css", "app/app.js", true, false, nil)
 	if err == nil || !strings.Contains(err.Error(), "reading public/index.html:") || strings.Contains(err.Error(), "hashNames") {
 		t.Fatalf("shell read error = %v", err)
 	}

@@ -101,6 +101,16 @@ function scanOpenTag(src, i, name) {
 	let quote = 0;
 	while (j < src.length) {
 		const c = src[j];
+		if (c === '\\' && j + 1 < src.length && (src[j + 1] === '{' || src[j + 1] === '}')) {
+			j += 2;
+			continue;
+		}
+		if (c === '{') {
+			const g = scanBraceGroup(src, j);
+			if (!g.ok) throw posErr(src, j, `unclosed '{' in <${name}> tag`);
+			j = g.end;
+			continue;
+		}
 		if (quote) {
 			if (c === quote) quote = 0;
 			j++;
@@ -109,12 +119,6 @@ function scanOpenTag(src, i, name) {
 		if (c === '"' || c === "'") {
 			quote = c;
 			j++;
-			continue;
-		}
-		if (c === '{') {
-			const g = scanBraceGroup(src, j);
-			if (!g.ok) throw posErr(src, j, `unclosed '{' in <${name}> tag`);
-			j = g.end;
 			continue;
 		}
 		if (c === '>') {
@@ -206,6 +210,14 @@ function findTemplateClose(s, from, closeTag) {
 				continue;
 			}
 			i += 4;
+			continue;
+		}
+		if (s[i] === '<' && /^<[_\p{ID_Start}]/u.test(s.slice(i, i + 3))) {
+			try {
+				i = scanOpenTag(s, i, '').afterGT;
+			} catch {
+				i++; // let the template lexer report the malformed tag
+			}
 			continue;
 		}
 		if (s[i] === '\\' && i + 1 < s.length && (s[i + 1] === '{' || s[i + 1] === '}')) {

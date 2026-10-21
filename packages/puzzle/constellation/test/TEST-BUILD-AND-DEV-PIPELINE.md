@@ -81,3 +81,5 @@ emitted URLs; default static output keeps names and gains preloads. Development 
 stability and the warm watch suites remain covered. Preview recognizes hashed app
 entries; the JS static-docs acceptance test checks production preloads without
 changing the prerender summary contract.
+
+`shell_base_test.go` builds SPA, hybrid and static output under single- and multi-segment deployment prefixes, including every locale page and 404. Emitted CSS/JS/preload targets exist, copied public scripts stay unchanged, static output drops the discarded app script, and a missing compiler stylesheet fails before replacing dist.

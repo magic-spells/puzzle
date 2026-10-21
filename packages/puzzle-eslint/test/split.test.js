@@ -725,3 +725,25 @@ describe('splitSections — division after a non-ASCII name, `5.` or `of`', () =
 		}
 	});
 });
+
+describe('splitSections — quoted section text', () => {
+	it.each(['"', "'"])('keeps section tags inside a %s-quoted expression', (quote) => {
+		const value = `{ flag ? ${quote}<script>${quote} : ${quote}<style>${quote} }`;
+		const src = `<puzzle-view title=${quote}${value}${quote}><p>kept</p></puzzle-view>` +
+			'<script>const kept = true;</script><style>.kept { color: red; }</style>';
+		const { sections, errors } = splitSections(src, 'Quoted.pzl');
+		expect(errors).toEqual([]);
+		expect(sections.view.content).toBe('<p>kept</p>');
+		expect(sections.scripts.content).toBe('const kept = true;');
+		expect(sections.styles.content).toBe('.kept { color: red; }');
+	});
+
+	it.each(['puzzle-view', 'puzzle-skeleton'])('keeps a %s closer inside a quoted attribute', (section) => {
+		const body = `<p title="</${section}><script>literal</script><style>literal</style>">kept</p>`;
+		const src = (section === 'puzzle-skeleton' ? '<puzzle-view></puzzle-view>' : '') +
+			`<${section}>${body}</${section}>`;
+		const { sections, errors } = splitSections(src, 'Quoted.pzl');
+		expect(errors).toEqual([]);
+		expect((section === 'puzzle-view' ? sections.view : sections.skeleton).content).toBe(body);
+	});
+});

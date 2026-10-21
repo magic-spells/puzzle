@@ -418,6 +418,9 @@ function findTemplateClose(s, from, closeTag) {
 				continue;
 			}
 			i += 4;
+		} else if (s[i] === '<' && /^<[_\p{ID_Start}]/u.test(s.slice(i, i + 3))) {
+			const tag = scanOpenTag(s, i, '');
+			i = tag.err ? i + 1 : tag.afterGT;
 		} else if (s[i] === '\\' && i + 1 < s.length && (s[i + 1] === '{' || s[i + 1] === '}')) {
 			i += 2;
 		} else if (isBlockRawOpen(s, i)) {
@@ -552,6 +555,18 @@ function scanOpenTag(src, i, name) {
 	let quote = '';
 	while (j < src.length) {
 		const c = src[j];
+		if (c === '\\' && j + 1 < src.length && (src[j + 1] === '{' || src[j + 1] === '}')) {
+			j += 2;
+			continue;
+		}
+		if (c === '{') {
+			const bg = scanBraceGroup(src, j);
+			if (bg.err) {
+				return { err: { offset: j, message: "unclosed '{' in <" + name + '> tag' } };
+			}
+			j = bg.end;
+			continue;
+		}
 		if (quote !== '') {
 			if (c === quote) quote = '';
 			j++;
@@ -560,12 +575,6 @@ function scanOpenTag(src, i, name) {
 		if (c === '"' || c === "'") {
 			quote = c;
 			j++;
-		} else if (c === '{') {
-			const bg = scanBraceGroup(src, j);
-			if (bg.err) {
-				return { err: { offset: j, message: "unclosed '{' in <" + name + '> tag' } };
-			}
-			j = bg.end;
 		} else if (c === '>') {
 			const raw = src.slice(attrStart, j);
 			const trimmed = raw.trim();

@@ -1555,7 +1555,7 @@ async function writeStaticDir({
 }) {
 	// The app-bundle tag is stripped once (the shell is identical for every page, up
 	// to its <html lang>) so a missing tag warns once, not per page.
-	const { shell: strippedShell, found } = stripAppBundle(shell);
+	const { shell: strippedShell, found } = stripAppBundle(shell, normalizeBase(config.routerBase));
 	const shells = localeShells(strippedShell);
 	if (!found) {
 		warnings.push(
@@ -2184,17 +2184,19 @@ export function injectShell(shell, { targetId, content, title, head, island = ''
 
 // Any `<script … src="/app.js" …></script>` — the SPA bundle tag. Static pages
 // have no router/app.js, so it is struck once (a missing tag warns; see
-// writeStaticDir). `\/?` tolerates a bare `app.js` too; the trailing group allows
-// attrs after src (type/defer/etc.) up to the tag close.
-const APP_BUNDLE_RE = /<script\b[^>]*\bsrc=["']\/?app\.js["'][^>]*><\/script>\s*/i;
+// writeStaticDir). Local fixed-name spellings and the app's deployment base
+// identify the entry; other scripts, including public vendor files, stay.
 
 /**
  * Strip the app-bundle `<script>` from the shell. `found` is false if none matched.
  * @param {string} shell
+ * @param {string} base
  * @returns {{ shell: string, found: boolean }}
  */
-function stripAppBundle(shell) {
-	const match = APP_BUNDLE_RE.exec(shell);
+function stripAppBundle(shell, base) {
+	const prefix = base ? `(?:\\.?/|${escapeRegExp(base)}/)?` : '(?:\\.?/)?';
+	const entry = new RegExp(`<script\\b[^>]*\\bsrc=(["'])${prefix}app\\.js(?:[?#][^"']*)?\\1[^>]*></script>\\s*`, 'i');
+	const match = entry.exec(shell);
 	if (!match) return { shell, found: false };
 	return {
 		shell: shell.slice(0, match.index) + shell.slice(match.index + match[0].length),

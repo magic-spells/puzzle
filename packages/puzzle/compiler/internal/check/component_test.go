@@ -112,6 +112,24 @@ export default class Home extends PuzzleView {
 	}
 }
 
+func TestLiveTSCComponentSelectorNamedRecord(t *testing.T) {
+	for _, language := range []string{"js", "ts"} {
+		t.Run(language, func(t *testing.T) {
+			root := liveTSCApp(t)
+			source := `<puzzle-view><Component is={Record}/></puzzle-view>
+<script lang="` + language + `">
+import { PuzzleView } from '@magic-spells/puzzle';
+class Record extends PuzzleView {}
+export default class Home extends PuzzleView {}
+</script>`
+			writeLiveView(t, root, source)
+			if _, err := Run(root); err != nil {
+				t.Fatalf("a selector named Record must check clean: %v", err)
+			}
+		})
+	}
+}
+
 func TestLiveTSCComponentSpreadPositionsAnError(t *testing.T) {
 	root := liveTSCApp(t)
 	source := `<puzzle-view><Component is={current} {...value.missing}/></puzzle-view>

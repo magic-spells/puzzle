@@ -505,6 +505,28 @@ you see:
 - **`<html dir>` follows the active locale** in every app that configures
   `i18n` (D177).
 
+### Fixed
+
+- Production shell asset rewrites preserve deployment prefixes, queries and
+  fragments across SPA, hybrid, static and locale pages. Missing compiler
+  stylesheets fail before replacing `dist/`, and static pages strip the
+  base-prefixed app script while retaining public scripts (D51/D177/D181).
+- Adapter settlement counts dirty re-passes toward the ten-round cap, preventing
+  repeated store notifications from starving a view's `data()` run (D161).
+- Generated loop key bindings preserve same-named data fields, including
+  `__i`, `__pzlRowKey` and `ViewNode`, in loop bodies and explicit keys.
+- `__proto__` attributes emit ordinary own properties for elements and components
+  instead of invoking the special object-literal prototype setter.
+- Comments between `class`/`function` and the declaration name preserve module
+  bindings used by `<Component is={...}>` (D180).
+- `puzzle check` accepts a selector class named `Record` in JavaScript and
+  TypeScript components without shadowing a generated utility type (D165).
+- Native script syntax diagnostics report the authored `.pzl` line and column
+  for multiline JavaScript/TypeScript and same-line scripts.
+- Section splitting keeps section-like text inside quoted attributes inert,
+  including expressions whose strings reuse the attribute's quote and literal
+  section closers. The editor splitter ports share the same boundaries.
+
 ## 0.8.1 — 2026-10-04 (Go module only)
 
 A Go-module-only release of the template language: the tag is
