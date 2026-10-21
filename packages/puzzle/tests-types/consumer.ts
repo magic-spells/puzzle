@@ -53,6 +53,8 @@ import type {
 	StaticPathsEntry,
 	StaticPathsFn,
 	NavigationResult,
+	RouteView,
+	RouteAgent,
 } from '@magic-spells/puzzle';
 import { adapter, PuzzleAdapterError } from '@magic-spells/puzzle/adapter';
 import type {
@@ -343,6 +345,37 @@ const routes: Route[] = [
 		meta: { canonical: { t: 'files.url' } },
 	},
 ];
+
+// D183: the top-level `agent` field hides (false) or names and describes a route.
+routes.push(
+	{ path: '/admin', view: TodoListView, agent: false, children: [
+		{ path: 'help', view: TodoListView, agent: { name: 'admin-help', about: 'Admin help' } },
+	] },
+	{ path: '/inbox', view: TodoListView, agent: { name: 'inbox' } }
+);
+// @ts-expect-error agent is false or an object with a string name
+routes.push({ path: '/bad-agent', view: TodoListView, agent: true });
+// @ts-expect-error an agent object needs a name
+routes.push({ path: '/no-name', view: TodoListView, agent: { about: 'x' } });
+
+function readViews(router: import('@magic-spells/puzzle').Router): void {
+	const views: readonly RouteView[] = router.views;
+	for (const v of views) {
+		const path: string = v.path;
+		const params: readonly string[] = v.params;
+		const name: string | undefined = v.name;
+		const title: string | { t: string } | undefined = v.title;
+		const agent: RouteAgent | undefined = v.agent;
+		const listed = agent !== false && agent !== undefined ? agent.name + (agent.about ?? '') : null;
+		const leaf: Route = v.chain[v.chain.length - 1];
+		void [path, params, name, title, listed, leaf, v.meta?.title];
+	}
+	// @ts-expect-error views is read-only
+	router.views = [];
+	// @ts-expect-error entries are frozen
+	views[0].path = '/x';
+}
+void readViews;
 
 // D163: lazy route views/layouts are explicit branded markers. A loader may
 // resolve to a class directly or to the module-namespace shape import() returns.

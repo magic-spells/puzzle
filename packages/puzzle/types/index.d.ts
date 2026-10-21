@@ -75,6 +75,14 @@ export interface Route {
 	/** Route-entry guard (D87), inherited root → leaf and run before views load. */
 	guard?: GuardFn;
 	/**
+	 * How the route reads to an agent or other tool listing `router.views`
+	 * (D183): `false` hides it, `{ name, about }` names and describes it. It
+	 * resolves nearest-defined leaf→root, so `false` on a parent hides the
+	 * subtree and a child's own object re-exposes that child. Puzzle never acts
+	 * on it — navigation and the prerender ignore it.
+	 */
+	agent?: RouteAgent;
+	/**
 	 * Route metadata. Four RESERVED head fields (D84 —
 	 * constellation/doc/DOC-SPEC.md §45): each resolves independently,
 	 * nearest-defined walking the destination chain leaf→root; `undefined`
@@ -141,6 +149,30 @@ export type GuardFn = (nav: {
 	from: RouteSnapshot | null;
 	ctx: PuzzleContext;
 }) => void | boolean | string | Promise<void | boolean | string>;
+
+/** A route's `agent` field (D183). */
+export type RouteAgent = false | { name: string; about?: string };
+
+/**
+ * One leaf route as `router.views` lists it (D183) — frozen, in declaration
+ * order, the catch-all left out.
+ */
+export interface RouteView {
+	/** The full path pattern, e.g. `'/:workspace/tasks/:taskId'` — base- and locale-free. */
+	readonly path: string;
+	/** The pattern's `:param` names, in order. */
+	readonly params: readonly string[];
+	/** The leaf route's `name`. */
+	readonly name: string | undefined;
+	/** The leaf route's own `meta` object, as defined (not inherited). */
+	readonly meta: Route['meta'];
+	/** `meta.title` resolved leaf→root like the tab title (D84); `undefined` when none or suppressed. */
+	readonly title: string | HeadTranslation | undefined;
+	/** The `agent` field resolved nearest-defined leaf→root; `undefined` when no level sets it. */
+	readonly agent: RouteAgent | undefined;
+	/** The route definitions, root→leaf. */
+	readonly chain: readonly Route[];
+}
 
 /** A window scroll position. */
 export interface ScrollPosition {
@@ -445,6 +477,8 @@ export interface Router {
 	url(path: string, options?: LinkOptions | null): string;
 	/** The current route snapshot, or null before the first navigation. */
 	readonly current: RouteSnapshot | null;
+	/** Every leaf route as frozen data (D183), built once on first read; the catch-all is left out. */
+	readonly views: readonly RouteView[];
 	/** Register the shared-element morph handler (D55); null unregisters. */
 	setMorphHandler(handler: MorphHandler | null): void;
 	[key: string]: any;

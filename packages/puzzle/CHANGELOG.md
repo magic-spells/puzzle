@@ -280,6 +280,24 @@ you see:
   adapter apps too, and works through a view's `this.ctx.store`. `stop()`
   removes exactly that observation and is safe to call twice. `store.flush()`
   is now declared on the `Store` type as well.
+- **`router.views` and the `agent` route field (D183).** `router.views` lists
+  every leaf route, catch-all excluded, as frozen
+  `{ path, params, name, meta, title, agent, chain }` entries, built once on
+  first read; `title` resolves leaf to root like the tab title. A new
+  top-level route field describes a route to tools that read the list:
+
+  ```js
+  { path: '/admin', view: AdminShell, agent: false, children: [   // hides the section…
+    { path: 'help', view: AdminHelp, agent: { name: 'admin-help', about: 'How to use admin' } }, // …but not this page
+  ] }
+  ```
+
+  `agent` resolves nearest-defined from the leaf up, so a child's own value
+  beats its parent's. The router and the prerender never act on it — a hidden
+  route still navigates and prerenders. In development an invalid value
+  throws at construction, a name two routes resolve to warns, and once any
+  route uses `agent` one warning lists the routes that set neither `false`
+  nor `{ name }`. Exported types: `RouteView`, `RouteAgent`.
 - **Locale URL prefixes: `i18n.routing: 'prefix'` (D177).**
 
   ```js
