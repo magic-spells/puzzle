@@ -231,7 +231,9 @@ describe('D161 settle loop — rounds', () => {
 		await mounting;
 
 		expect(error).toBeInstanceOf(Error);
-		expect(error.message).toMatch(/DirtyView: data\(\) still needed server data after 10 settle rounds/);
+		expect(error.message).toBe(
+			'[puzzle] DirtyView: data() did not settle after 10 settle rounds — the store kept changing while it ran'
+		);
 		expect(runs).toBe(11);
 		expect(view.getData().post).toBeUndefined();
 		expect(calls).toEqual([]);

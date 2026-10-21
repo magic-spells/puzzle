@@ -1740,7 +1740,10 @@ class AdapterViewMethods {
 			if (++rounds > MAX_SETTLE_ROUNDS) {
 				channel.reconcile?.(false);
 				throw new Error(
-					`[puzzle] ${this.constructor.name}: data() still needed server data after ${MAX_SETTLE_ROUNDS} settle rounds — last round requested ${[...requests.keys()].join(', ')}`
+					`[puzzle] ${this.constructor.name}: data() ` +
+						(requests.size
+							? `still needed server data after ${MAX_SETTLE_ROUNDS} settle rounds — last round requested ${[...requests.keys()].join(', ')}`
+							: `did not settle after ${MAX_SETTLE_ROUNDS} settle rounds — the store kept changing while it ran`)
 				);
 			}
 			if (requests.size === 0) {

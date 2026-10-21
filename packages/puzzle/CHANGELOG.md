@@ -513,8 +513,9 @@ you see:
   base-prefixed app script while retaining public scripts (D51/D177/D181).
 - Adapter settlement counts dirty re-passes toward the ten-round cap, preventing
   repeated store notifications from starving a view's `data()` run (D161).
-- Generated loop key bindings preserve same-named data fields, including
-  `__i`, `__pzlRowKey` and `ViewNode`, in loop bodies and explicit keys.
+- A data field whose name matches one the compiler uses internally for loop
+  keys (such as `__i` or `ViewNode`) now reads the data value inside loop
+  bodies and explicit keys, instead of the compiler's own binding.
 - `__proto__` attributes emit ordinary own properties for elements and components
   instead of invoking the special object-literal prototype setter.
 - Comments between `class`/`function` and the declaration name preserve module
