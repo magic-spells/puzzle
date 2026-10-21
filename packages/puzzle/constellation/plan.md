@@ -26,9 +26,9 @@ cards explain its shape; [[DOC-RELEASE-SURFACE]] inventories what ships.
 ## Current state
 
 - **npm `latest` is 0.8.0** (2026-10-01, [[RELEASE-V0-8-0]]). Never recommend 0.3.0 (published broken; use 0.3.1).
-- **0.9.0 is in progress on `release/0.9.0`, not tagged or published** ([[RELEASE-V0-9-0]]): multilingual static sites (D177), `afterUpdate(prev)` (D178), `staticPaths` (D179), bounded runtime component selection (D180 / [[FEATURE-COMPONENT-SLOT]]), and hashed production output names + modulepreload (D181 / [[FEATURE-HASHED-ENTRY-MODULEPRELOAD]]).
+- **0.9.0 is in progress on `release/0.9.0`, not tagged or published** ([[RELEASE-V0-9-0]]): multilingual static sites (D177), `afterUpdate(prev)` (D178), `staticPaths` (D179), bounded runtime component selection (D180 / [[FEATURE-COMPONENT-SLOT]]), hashed production output names + modulepreload (D181 / [[FEATURE-HASHED-ENTRY-MODULEPRELOAD]]), navigation results (D182), `router.views` + the `agent` route field (D183), `store.observe` (D184), `app.idle()` (D185), dynamic URL safety (D186), `passive`/`capture` modifiers (D187), `this.tick()` (D188), and `ctx.idle` / `catchAll` / public `modelFor` (D189).
 - The repo is a monorepo ([[DECISION-D162-MONOREPO-PACKAGES]]); every package in the release train carries the framework version. The three editor grammars are separate, dev-install-only repos with their own versions; sweep them whenever the template grammar changes.
-- **The next free decision number is D182.**
+- **The next free decision number is D190.**
 
 ## Open and deferred
 
