@@ -25,7 +25,7 @@
     <div class="-ml-1 flex min-w-0 flex-1 items-center gap-3">
       <a
         href="#/"
-        class="flex min-w-0 items-center gap-3 rounded-md px-3 py-1.5 text-brand font-semibold tracking-tight text-bar-ink transition-colors hover:bg-bar-hover outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
+        class="flex min-w-0 items-center gap-3 rounded-md px-3 py-1.5 text-wordmark font-semibold tracking-tight text-bar-ink transition-colors hover:bg-bar-hover outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
         <span class="flex size-5 shrink-0 items-center justify-center rounded-md bg-brand text-2xs font-bold text-brand-ink" aria-hidden="true">P</span>
         <span class="truncate">Puzzle Pieces</span>
       </a>
