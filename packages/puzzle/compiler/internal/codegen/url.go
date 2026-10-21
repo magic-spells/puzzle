@@ -83,30 +83,34 @@ func schemeFixed(parts []parser.Part) bool {
 
 // checkSrcdoc rejects a dynamic iframe srcdoc: it is a whole HTML document, so
 // data reaching it is script injection unless a static sandbox without
-// allow-scripts contains it (D186).
+// allow-scripts contains it (D186). Every sandbox attribute must be that static
+// one: a repeated sandbox that is dynamic, mixed or allows scripts can replace it.
 func (c *compiler) checkSrcdoc(tag string, attrs []parser.Attr) error {
 	if strings.ToLower(tag) != "iframe" {
 		return nil
 	}
 	var pos *parser.Position
-	sandboxed := false
+	sandboxed, unsafe := false, false
 	for _, a := range attrs {
 		switch at := a.(type) {
 		case *parser.StaticAttr:
-			if strings.EqualFold(at.Name, "sandbox") && !strings.Contains(strings.ToLower(at.Value), "allow-scripts") {
+			if strings.EqualFold(at.Name, "sandbox") {
 				sandboxed = true
+				unsafe = unsafe || strings.Contains(strings.ToLower(at.Value), "allow-scripts")
 			}
 		case *parser.DynamicAttr:
 			if strings.EqualFold(at.Name, "srcdoc") {
 				pos = &at.Pos
 			}
+			unsafe = unsafe || strings.EqualFold(at.Name, "sandbox")
 		case *parser.MixedAttr:
 			if strings.EqualFold(at.Name, "srcdoc") {
 				pos = &at.Pos
 			}
+			unsafe = unsafe || strings.EqualFold(at.Name, "sandbox")
 		}
 	}
-	if pos == nil || sandboxed {
+	if pos == nil || (sandboxed && !unsafe) {
 		return nil
 	}
 	return c.cgErr(*pos, "a dynamic srcdoc on <iframe> renders data as a full HTML document, which can run script. "+

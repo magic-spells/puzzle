@@ -93,7 +93,9 @@ func staticImportClosure(outputs map[string]bundleOutput, entry string) []string
 
 // Only start tags participate in reference rewriting. Quoted attribute values
 // may contain >, so a tag ends at the first unquoted >.
-var shellTagRE = regexp.MustCompile(`(?i)<(script|link)(?:\s+(?:[^"'<>]|"[^"]*"|'[^']*')*)?/?>`)
+// The first alternative matches an HTML comment (to its end, or the end of the
+// shell when unterminated) so the tags inside it are left alone.
+var shellTagRE = regexp.MustCompile(`(?i)<!--[\s\S]*?(?:-->|$)|<(script|link)(?:\s+(?:[^"'<>]|"[^"]*"|'[^']*')*)?/?>`)
 var shellAttrRE = regexp.MustCompile("(\\s+)([^\\s=<>/]+)(?:\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s\"'=<>`]+))?")
 var headEndRE = regexp.MustCompile(`(?i)</head\s*>`)
 
@@ -156,6 +158,9 @@ func rewriteShellHTML(source string, renames map[string]string, chunks []string,
 	var entryPrefix, crossorigin string
 	var assetErr error
 	rewritten := shellTagRE.ReplaceAllStringFunc(source, func(tag string) string {
+		if strings.HasPrefix(tag, "<!--") {
+			return tag
+		}
 		isScript := strings.EqualFold(shellTagRE.FindStringSubmatch(tag)[1], "script")
 		attrs := shellAttrRE.FindAllStringSubmatchIndex(tag, -1)
 		var tagCrossorigin string

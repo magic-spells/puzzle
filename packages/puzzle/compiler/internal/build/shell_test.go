@@ -37,6 +37,16 @@ func TestRewriteShellReferences(t *testing.T) {
 	}
 }
 
+// A commented-out tag is not an asset reference: it is neither rewritten,
+// checked against the emitted outputs, nor read as the entry script.
+func TestRewriteShellSkipsComments(t *testing.T) {
+	source := "<head><!-- <link rel=stylesheet href=/app.css> <script src=\"/app.js\"></script> --><!-- unterminated <link href=app.css></head>"
+	got, found, err := rewriteShellHTML(source, map[string]string{"app.js": "app-HASH.js", "styles.css": "styles-HASH.css"}, []string{"chunks/a.js"}, nil)
+	if err != nil || found || got != source {
+		t.Fatalf("rewrite = %q, found = %v, %v; want the shell unchanged", got, found, err)
+	}
+}
+
 func TestShellPreloads(t *testing.T) {
 	for _, cross := range []string{"", "crossorigin", `crossorigin = 'use-credentials'`} {
 		for _, prefix := range []string{"/", "./", "", "/docs/site/"} {

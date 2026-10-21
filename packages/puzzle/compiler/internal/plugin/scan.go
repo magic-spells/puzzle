@@ -383,7 +383,7 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 // conditionalSlot reports whether a <Slot>/<Children> marker sits where its
 // position can leave the tree and come back: under {#if}/{#case}/{#for}, in a
 // snippet body or a marker fallback, under a <Component> selection, or under an
-// element or component carrying a `key`. under starts true for a skeleton (the
+// element or component carrying a `key` or a spread. under starts true for a skeleton (the
 // real template replaces it). Over-inclusive on purpose: a false positive costs
 // the runtime's outlet-parking bytes; a false negative brings back a routed view
 // that a hidden outlet destroys while the router still holds it.
@@ -424,9 +424,13 @@ func conditionalSlot(n parser.Node, under bool) bool {
 	return false
 }
 
+// hasKeyAttr reports whether a node may carry a `key`. A `{...spread}` counts:
+// the spread object can hold one, and a false negative is the costly side.
 func hasKeyAttr(attrs []parser.Attr) bool {
 	for _, attr := range attrs {
 		switch a := attr.(type) {
+		case *parser.SpreadAttr:
+			return true
 		case *parser.StaticAttr:
 			if a.Name == "key" {
 				return true
