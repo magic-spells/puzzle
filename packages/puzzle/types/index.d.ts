@@ -1032,11 +1032,14 @@ export declare class PuzzleApp {
 	/**
 	 * Wait for the app to go quiet (D185). Resolves `true` once two consecutive
 	 * frames find no mount or navigation in flight, no store notification or
-	 * flush pending, no async `data()` running, and (with the adapter) no tracked
-	 * find's fetch in flight; `false` when `timeout` ms (default 10000) run out
-	 * first. In a hidden tab it steps on timers. An app neither mounted nor
-	 * mounting resolves `true` at once. Never rejects. It cannot see user timers,
-	 * animations, or fetches nothing awaits.
+	 * flush pending, no async `data()` running, no `setLocale()` switch loading,
+	 * and (with the adapter) no tracked find's fetch in flight; `false` when
+	 * `timeout` ms (default 10000) run out first. In a hidden tab it steps on
+	 * timers. An app neither mounted nor mounting resolves `true` at once. Never
+	 * rejects. It cannot see user timers, animations, IntersectionObserver
+	 * triggers, writes or fetches nothing awaits (an event handler's unawaited
+	 * `save()` or `loadMany()`), or a path- or hash-mode `back()`, `forward()` or
+	 * `go()` before its `popstate` fires.
 	 */
 	idle(options?: { timeout?: number }): Promise<boolean>;
 	/**

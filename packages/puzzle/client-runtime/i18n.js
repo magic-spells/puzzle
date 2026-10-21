@@ -457,6 +457,12 @@ export function createI18n(options = {}) {
 			: samePath(here);
 
 	const service = {
+		/**
+		 * INTERNAL — a setLocale() switch is fetching or re-rendering. Read by
+		 * PuzzleApp.idle() (D185); one flag per switch, cleared by the call that
+		 * owns the token when it settles.
+		 */
+		__busy: false,
 		/** The active locale tag. */
 		get locale() {
 			return locale;
@@ -606,8 +612,10 @@ export function createI18n(options = {}) {
 			// the now-active locale must not rebuild again.
 			if (match === locale && table && !stale) {
 				storeLocale(match);
+				service.__busy = false;
 				return (pending = Promise.resolve());
 			}
+			service.__busy = true;
 			const p = load(match).then(
 				(strings) => {
 					// Overtaken: this table is dropped, so follow whatever is now the latest
@@ -632,6 +640,10 @@ export function createI18n(options = {}) {
 				}
 			);
 			pending = p;
+			const done = () => {
+				if (my === token) service.__busy = false;
+			};
+			p.then(done, done);
 			return /** @type {Promise<void>} */ (p);
 		},
 
@@ -639,6 +651,7 @@ export function createI18n(options = {}) {
 		__dispose() {
 			token++;
 			pending = null;
+			service.__busy = false;
 		},
 
 		/**

@@ -283,6 +283,68 @@ describe('app.idle() (D185)', () => {
 		expect(el.querySelector('.notes').textContent).toBe('bg');
 	});
 
+	it('renders a setData() in a hidden tab, and waits for it', async () => {
+		let view;
+		class LocalView extends PuzzleView {
+			mounted() {
+				view = this;
+			}
+			render() {
+				return h('puzzle-view', { class: 'local' }, [text(String(this.getData().n ?? 0))]);
+			}
+		}
+		const { app, el } = make({ routes: [{ path: '/', view: LocalView }] });
+		await app.mount();
+		const raf = vi.fn(() => 0); // frozen
+		vi.stubGlobal('requestAnimationFrame', raf);
+		vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+
+		view.setData({ n: 7 });
+		expect(el.querySelector('.local').textContent).toBe('0');
+		const idle = watch(app.idle());
+		// Never true while the old value is still on screen.
+		await vi.waitFor(() => expect(idle.done).toBe(true));
+		expect(idle.value).toBe(true);
+		expect(el.querySelector('.local').textContent).toBe('7');
+		expect(raf).not.toHaveBeenCalled();
+	});
+
+	it('waits for a setLocale() switch whose table is still loading', async () => {
+		const held = gate();
+		vi.stubGlobal('fetch', async (url) => {
+			if (String(url).endsWith('es.json')) await held.promise;
+			const body = String(url).endsWith('es.json') ? { hi: 'Hola' } : { hi: 'Hello' };
+			return { ok: true, status: 200, json: async () => body };
+		});
+		class HiView extends PuzzleView {
+			render() {
+				return h('puzzle-view', { class: 'hi' }, [text(this.ctx.i18n.t('hi'))]);
+			}
+		}
+		const { app, el } = make({
+			routes: [{ path: '/', view: HiView }],
+			__i18n: {
+				manifest: { defaultLocale: 'en', locales: { en: 'locales/en.json', es: 'locales/es.json' } },
+				locale: 'en',
+			},
+		});
+		await app.mount();
+		expect(el.querySelector('.hi').textContent).toBe('Hello');
+
+		const switching = app.i18n.setLocale('es');
+		const idle = watch(app.idle());
+		await wait(80);
+		expect(app.i18n.__busy).toBe(true);
+		expect(idle.done).toBe(false);
+
+		held.open();
+		await switching;
+		await vi.waitFor(() => expect(idle.done).toBe(true));
+		expect(idle.value).toBe(true);
+		expect(app.i18n.__busy).toBe(false);
+		expect(el.querySelector('.hi').textContent).toBe('Hola');
+	});
+
 	it('falls back to the timer when a visible tab rAF never fires', async () => {
 		const { app } = make({ routes: [{ path: '/', view: HomeView }] });
 		await app.mount();

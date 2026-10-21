@@ -275,14 +275,16 @@ export class PuzzleApp {
 	/**
 	 * Wait for the app to go quiet (D185): resolves true once two consecutive
 	 * frames find no mount or navigation in flight, no store notification or flush
-	 * pending, no async data() running, and — with the adapter — no tracked find's
-	 * fetch in flight; false when `timeout` (ms, default 10000) runs out first. A
-	 * check runs after its frame's callbacks, so a setData() render scheduled
-	 * before it has landed. Frames follow the store's scheduler (D63): a hidden
-	 * tab steps on timers. An app neither mounted nor mounting resolves true at
-	 * once. Never rejects. Reads existing state only, so it shares settled()'s
-	 * limits (D94): user timers, animations, and fetches nothing awaits are not
-	 * work it can see.
+	 * pending, no async data() running, no setLocale() switch loading, and — with
+	 * the adapter — no tracked find's fetch in flight; false when `timeout` (ms,
+	 * default 10000) runs out first. A check runs after its frame's callbacks, so
+	 * a setData() render scheduled before it has landed. Frames follow the store's
+	 * scheduler (D63): timers in a hidden tab. An app neither mounted nor mounting
+	 * resolves true at once. Never rejects. It reads state the runtime already
+	 * keeps, so it cannot see user timers, animations, IntersectionObserver
+	 * triggers, writes or fetches nothing awaits (an event handler's unawaited
+	 * `save()` or `loadMany()`), or a path- or hash-mode `back()`, `forward()` or
+	 * `go()` before its `popstate` fires.
 	 *
 	 * @param {{ timeout?: number }} [options]
 	 * @returns {Promise<boolean>}
@@ -310,20 +312,23 @@ export class PuzzleApp {
 					store._flushScheduled ||
 					store._asyncTrackingChain ||
 					store._reading?.() ||
-					navigating(/** @type {Router} */ (this.router))
+					navigating(/** @type {Router} */ (this.router)) ||
+					((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n?.__busy)
 				)
 					clear = 0;
 				else if (++clear > 1) return resolve(true);
 				if (Date.now() >= end) return resolve(false);
-				// Check again after the next frame's callbacks, so a setData() render
-				// scheduled before then has landed. The store's scheduler (D63): timers
-				// in a hidden tab, and a fallback timer if rAF freezes mid-wait.
-				let done = 0;
-				const go = () => done++ || setTimeout(check, 0);
+				// Check again after the next frame's callbacks (rAF, then a timer), so a
+				// setData() render scheduled before then has landed. The store's
+				// scheduler (D63): one timer in a hidden tab, and a fallback timer if rAF
+				// freezes mid-wait, cleared when the frame wins.
 				if (!document.hidden && typeof requestAnimationFrame === 'function') {
-					requestAnimationFrame(go);
-					setTimeout(go, 220);
-				} else setTimeout(go, 0);
+					const fallback = setTimeout(check, 220);
+					requestAnimationFrame(() => {
+						clearTimeout(fallback);
+						setTimeout(check, 0);
+					});
+				} else setTimeout(check, 0);
 			};
 			check();
 		});

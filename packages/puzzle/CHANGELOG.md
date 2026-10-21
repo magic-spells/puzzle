@@ -287,12 +287,17 @@ you see:
   ```
 
   It resolves `true` once two consecutive frames find no mount or navigation
-  in flight, no pending store flush, no async `data()` running and, on adapter
-  apps, no tracked find's fetch in flight. It never rejects, steps on timers in
-  a hidden tab, and resolves `true` at once when the app is not mounted. It
-  only observes state the runtime already keeps, so unlike `/testing`'s
-  `settled()` it forces nothing — and like it, it cannot see user timers,
-  animations, or fetches nothing awaits.
+  in flight, no pending store flush, no async `data()` running, no
+  `setLocale()` switch loading and, on adapter apps, no tracked find's fetch in
+  flight. It never rejects, steps on timers in a hidden tab, and resolves
+  `true` at once when the app is not mounted. It only observes state the
+  runtime already keeps, so unlike `/testing`'s `settled()` it forces nothing.
+  It cannot see user timers, animations, IntersectionObserver triggers, writes
+  or fetches nothing awaits (an event handler's unawaited `save()` or
+  `loadMany()`), or a path- or hash-mode `back()`, `forward()` or `go()`
+  before its `popstate` fires. A view's `setData()` render now uses the
+  store's hidden-tab scheduler too, so it lands in a background tab instead of
+  waiting for the tab to come back.
 - **Locale URL prefixes: `i18n.routing: 'prefix'` (D177).**
 
   ```js

@@ -2906,12 +2906,17 @@ export class PuzzleView {
 			devperfRenderScheduled(this, 'local-state');
 		}
 
-		/** @type {(cb: () => void) => void} */
-		const schedule =
-			typeof requestAnimationFrame === 'function'
-				? requestAnimationFrame
-				: (cb) => setTimeout(cb, 0);
-		schedule(() => this.flushUpdates());
+		// The store's D63 scheduler: rAF is suspended in a hidden tab, so take the
+		// timer there (and without rAF); when visible, arm a fallback timer too, in
+		// case the tab hides before the frame. flushUpdates() is a no-op once the
+		// flag has cleared, so whichever fires second does nothing.
+		if (!(typeof document !== 'undefined' && document.hidden) && typeof requestAnimationFrame === 'function') {
+			const fallback = setTimeout(() => this.flushUpdates(), 220);
+			requestAnimationFrame(() => {
+				clearTimeout(fallback);
+				this.flushUpdates();
+			});
+		} else setTimeout(() => this.flushUpdates(), 0);
 	}
 
 	/**
