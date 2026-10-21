@@ -78,7 +78,7 @@ describe.skipIf(!haveExamples || files.length === 0)('corpus sweep', () => {
 		expect(checked).toBe(files.length);
 		// eslint-disable-next-line no-console
 		console.log(`corpus sweep: ${checked} files formatted, idempotent, templates byte-identical`);
-	});
+	}, 30_000); // formats every example file in one test; ~5s on CI runners
 
 	it('re-splitting the formatted output yields the same section set (via splitter directly)', async () => {
 		for (const file of files) {
