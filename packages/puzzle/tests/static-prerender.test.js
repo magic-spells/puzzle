@@ -484,6 +484,25 @@ describe('static prerender (D81)', () => {
 	});
 
 	describe('static shell surgery', () => {
+		it.each(['app.js', './app.js', '/app.js', '/docs/site/app.js?boot#main'])(
+			'strips the local entry %s while preserving a public script',
+			async (entry) => {
+				const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-base-'));
+				const shell = SHELL.replace('src="/app.js"', `src="${entry}"`).replace(
+					'</head>', '<script type="module" src="/docs/site/vendor/app.js"></script></head>'
+				);
+				const shellPath = writeShell(outDir, shell);
+				const summary = await prerenderToDir({ ...staticConfig(), routerBase: '/docs/site' }, {
+					outDir, shellPath, mode: 'static',
+				});
+				const index = fs.readFileSync(path.join(outDir, 'index.html'), 'utf8');
+				expect(index).not.toContain(`src="${entry}"`);
+				expect(index).toContain('src="/docs/site/vendor/app.js"');
+				expect(index).toContain('src="/docs/site/_puzzle/index.js"');
+				expect(summary.warnings.filter((w) => w.includes('to strip'))).toEqual([]);
+			}
+		);
+
 		it('strips /app.js, injects data + entry scripts, marks data-puzzle-static', async () => {
 			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-'));
 			const shellPath = writeShell(outDir);

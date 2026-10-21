@@ -2512,7 +2512,7 @@ func TestSplitShellWithoutRecognizedEntrySkipsPreloads(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	shell := `<head><link rel="stylesheet" href="/styles.css"></head><script type="module" src="/docs/app.js"></script>`
+	shell := `<head><link rel="stylesheet" href="/styles.css"></head><script type="module" src="https://cdn.example/app.js"></script>`
 	if err := os.WriteFile(filepath.Join(root, "app", "public", "index.html"), []byte(shell), 0o644); err != nil {
 		t.Fatal(err)
 	}

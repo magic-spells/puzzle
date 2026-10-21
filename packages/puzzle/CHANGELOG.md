@@ -525,6 +525,26 @@ you see:
   including `date(in_timezone(...))` on a bad date; `round` of a missing value is
   `NaN` (prints nothing) rather than `0` for `null`. A non-numeric or non-date
   string still prints as written.
+- Production shell asset rewrites preserve deployment prefixes, queries and
+  fragments across SPA, hybrid, static and locale pages. Missing compiler
+  stylesheets fail before replacing `dist/`, and static pages strip the
+  base-prefixed app script while retaining public scripts (D51/D177/D181).
+- Adapter settlement counts dirty re-passes toward the ten-round cap, preventing
+  repeated store notifications from starving a view's `data()` run (D161).
+- A data field whose name matches one the compiler uses internally for loop
+  keys (such as `__i` or `ViewNode`) now reads the data value inside loop
+  bodies and explicit keys, instead of the compiler's own binding.
+- `__proto__` attributes emit ordinary own properties for elements and components
+  instead of invoking the special object-literal prototype setter.
+- Comments between `class`/`function` and the declaration name preserve module
+  bindings used by `<Component is={...}>` (D180).
+- `puzzle check` accepts a selector class named `Record` in JavaScript and
+  TypeScript components without shadowing a generated utility type (D165).
+- Native script syntax diagnostics report the authored `.pzl` line and column
+  for multiline JavaScript/TypeScript and same-line scripts.
+- Section splitting keeps section-like text inside quoted attributes inert,
+  including expressions whose strings reuse the attribute's quote and literal
+  section closers. The editor splitter ports share the same boundaries.
 
 ## 0.8.1 — 2026-10-04 (Go module only)
 

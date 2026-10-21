@@ -255,6 +255,11 @@ func (p *Plugin) transformPZL(path string, src []byte) pzlResult {
 		return out
 	}
 	out.js = res.JS
+	if sec.Scripts != "" {
+		// Codegen keeps the script first and verbatim. Padding its original
+		// position makes native JS/TS diagnostics refer to the .pzl source.
+		out.js = strings.Repeat("\n", sec.ScriptsPos.Line-1) + strings.Repeat(" ", sec.ScriptsPos.Col-1) + out.js
+	}
 
 	// Out-of-band codegen warnings (e.g. a template expression referencing a
 	// <script> import). The bundle build runs at LogLevelSilent, so print

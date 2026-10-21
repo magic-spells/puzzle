@@ -104,9 +104,9 @@ func attrValue(raw string) string {
 	return raw
 }
 
-// shellReference recognizes just the three supported local spellings. A base
-// path, vendor file or remote URL is never a reference to compiler output.
-func shellReference(value string) (prefix, name, suffix string) {
+// Local references may carry a deployment base. Copied public files take
+// precedence over compiler filenames, including under that base.
+func shellReference(value string, publicFiles map[string]bool) (prefix, name, suffix string) {
 	if i := strings.IndexAny(value, "?#"); i >= 0 {
 		suffix, value = value[i:], value[:i]
 	}
@@ -114,6 +114,22 @@ func shellReference(value string) (prefix, name, suffix string) {
 		prefix, value = "./", value[2:]
 	} else if strings.HasPrefix(value, "/") {
 		prefix, value = "/", value[1:]
+	}
+	if strings.HasPrefix(value, "/") || strings.Contains(value, ":") {
+		return "", "", ""
+	}
+	for path := value; path != ""; {
+		if publicFiles[path] {
+			return "", "", ""
+		}
+		i := strings.IndexByte(path, '/')
+		if i < 0 {
+			break
+		}
+		path = path[i+1:]
+	}
+	if i := strings.LastIndexByte(value, '/'); i >= 0 {
+		prefix, value = prefix+value[:i+1], value[i+1:]
 	}
 	return prefix, value, suffix
 }
@@ -135,9 +151,10 @@ func shellRenames(outputs map[string]bundleOutput, stylesheet, entryPoint string
 
 // rewriteShellHTML follows emitted filenames and reads the entry tag before
 // renaming it, so preload URLs and credentials match the app's own script.
-func rewriteShellHTML(source string, renames map[string]string, chunks []string) (string, bool, error) {
+func rewriteShellHTML(source string, renames map[string]string, chunks []string, publicFiles map[string]bool) (string, bool, error) {
 	entryFound := false
 	var entryPrefix, crossorigin string
+	var assetErr error
 	rewritten := shellTagRE.ReplaceAllStringFunc(source, func(tag string) string {
 		isScript := strings.EqualFold(shellTagRE.FindStringSubmatch(tag)[1], "script")
 		attrs := shellAttrRE.FindAllStringSubmatchIndex(tag, -1)
@@ -155,7 +172,7 @@ func rewriteShellHTML(source string, renames map[string]string, chunks []string)
 				continue
 			}
 			raw := tag[a[6]:a[7]]
-			prefix, name, suffix := shellReference(attrValue(raw))
+			prefix, name, suffix := shellReference(attrValue(raw), publicFiles)
 			if isScript && strings.EqualFold(attr, "src") && name == "app.js" && !entryFound {
 				entryFound, entryPrefix, crossorigin = true, prefix, tagCrossorigin
 			}
@@ -165,10 +182,15 @@ func rewriteShellHTML(source string, renames map[string]string, chunks []string)
 					value = raw[:1] + value + raw[:1]
 				}
 				tag = tag[:a[6]] + value + tag[a[7]:]
+			} else if renames != nil && (name == "app.js" || name == "app.css" || name == "styles.css") {
+				assetErr = fmt.Errorf("shell asset %q has no emitted output", attrValue(raw))
 			}
 		}
 		return tag
 	})
+	if assetErr != nil {
+		return "", entryFound, assetErr
+	}
 	if !entryFound {
 		chunks = nil
 	}
@@ -203,7 +225,7 @@ func insertModulepreloads(source, prefix string, chunks []string, crossorigin st
 	return source[:lineStart] + links.String() + source[lineStart:], nil
 }
 
-func rewriteShell(staging, metafile, stylesheet, entryPoint string, hashEntry, preload bool) error {
+func rewriteShell(staging, metafile, stylesheet, entryPoint string, hashEntry, preload bool, publicFiles map[string]bool) error {
 	shellPath := filepath.Join(staging, "index.html")
 	source, err := os.ReadFile(shellPath)
 	if os.IsNotExist(err) {
@@ -225,7 +247,7 @@ func rewriteShell(staging, metafile, stylesheet, entryPoint string, hashEntry, p
 	if preload {
 		chunks = staticImportClosure(outputs, entry)
 	}
-	rewritten, entryFound, err := rewriteShellHTML(string(source), renames, chunks)
+	rewritten, entryFound, err := rewriteShellHTML(string(source), renames, chunks, publicFiles)
 	if hashEntry && !entryFound {
 		return fmt.Errorf("public/index.html must load app.js when entry names are hashed; set build.hashNames: false to keep fixed names")
 	}

@@ -346,7 +346,7 @@ func Build(root string, opts Options) error {
 	}
 
 	if hash || preloadShell {
-		if err := rewriteShell(staging, result.Metafile, stylesheet, entry, hashEntry, preloadShell); err != nil {
+		if err := rewriteShell(staging, result.Metafile, stylesheet, entry, hashEntry, preloadShell, publicFiles); err != nil {
 			return err
 		}
 	}

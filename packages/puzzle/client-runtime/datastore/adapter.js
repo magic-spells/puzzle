@@ -53,9 +53,9 @@ const ADAPTER_VERBS = ['loadMany', 'loadOne', 'create', 'update', 'delete'];
 // custom verb rejects it by name instead, so an unmigrated app fails at build/boot
 // rather than silently never loading a collection (D161).
 const LEGACY_LOAD_ALL = 'loadAll';
-// D161: how many times one refresh may re-run data() behind fetches before it
-// gives up. Ten is deep enough for any realistic dependency chain and shallow
-// enough that a query which can never be satisfied fails fast instead of
+// D161: how many times one refresh may re-run data() behind fetches or folded
+// notifications before it gives up. Ten is deep enough for realistic chains and
+// shallow enough that a query which can never be satisfied fails fast instead of
 // hammering the API. Exhaustion THROWS — committing partial data would make a
 // null mean "still loading", which is exactly the contract this feature buys.
 const MAX_SETTLE_ROUNDS = 10;
@@ -1721,28 +1721,34 @@ class AdapterViewMethods {
 				// takes one more pass here rather than a second competing refresh.
 				if (ownsWindow() && this._settleDirty) {
 					this._settleDirty = false;
-					channel.reconcile?.(false);
-					return pass();
+				} else {
+					if (parked) parked.reconcile = channel.reconcile;
+					else {
+						channel.reconcile?.(true);
+						// This pass is the committed one, so every notification the store
+						// had already queued when it started is baked into `model` — most
+						// of them this run's OWN upserts, whose flush lands after the
+						// subscriptions above go live. Record the boundary so that flush
+						// does not buy a third data() run and a second render of identical
+						// content (D161). Only an owning run marks: a prepared run's model
+						// is not on screen until its commit.
+						this._settleMark = mark;
+					}
+					return model;
 				}
-				if (parked) parked.reconcile = channel.reconcile;
-				else {
-					channel.reconcile?.(true);
-					// This pass is the committed one, so every notification the store
-					// had already queued when it started is baked into `model` — most
-					// of them this run's OWN upserts, whose flush lands after the
-					// subscriptions above go live. Record the boundary so that flush
-					// does not buy a third data() run and a second render of identical
-					// content (D161). Only an owning run marks: a prepared run's model
-					// is not on screen until its commit.
-					this._settleMark = mark;
-				}
-				return model;
 			}
 			if (++rounds > MAX_SETTLE_ROUNDS) {
 				channel.reconcile?.(false);
 				throw new Error(
-					`[puzzle] ${this.constructor.name}: data() still needed server data after ${MAX_SETTLE_ROUNDS} settle rounds — last round requested ${[...requests.keys()].join(', ')}`
+					`[puzzle] ${this.constructor.name}: data() ` +
+						(requests.size
+							? `still needed server data after ${MAX_SETTLE_ROUNDS} settle rounds — last round requested ${[...requests.keys()].join(', ')}`
+							: `did not settle after ${MAX_SETTLE_ROUNDS} settle rounds — the store kept changing while it ran`)
 				);
+			}
+			if (requests.size === 0) {
+				channel.reconcile?.(false);
+				return pass();
 			}
 			return Promise.all(requests.values()).then(
 				() => {

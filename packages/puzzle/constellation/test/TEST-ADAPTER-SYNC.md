@@ -46,3 +46,5 @@ auto-fetch/settle loop has its own `auto-fetching-finds`, `settle-*` and
 
 The author-facing mock adapter is proven with the fixtures module
 ([[TEST-PUBLIC-TESTING-SURFACE]]).
+
+- **Settlement:** fetch batches and dirty warm-read re-passes share the ten-round cap. A view selecting a fresh read each pass rejects at exhaustion, keeps the view-specific diagnostic, and commits no partial model (`tests/settle-loop.test.js`).

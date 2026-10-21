@@ -383,12 +383,18 @@ func scriptTopLevelBindings(toks []jsTok) map[string]int {
 	return set
 }
 
-// bindDeclaredName binds the declared identifier at toks[j], skipping a
-// generator `*`. A non-identifier (or a reserved word, e.g. the `extends` of an
+// bindDeclaredName binds the declared identifier at toks[j], skipping comments
+// and a generator `*`. A non-identifier (or a reserved word, e.g. the `extends` of an
 // anonymous default class) is one of the forms this scan skips.
 func bindDeclaredName(toks []jsTok, j int, bind func(name string, off int)) {
+	for j < len(toks) && toks[j].comment {
+		j++
+	}
 	if j < len(toks) && toks[j].ch == '*' {
 		j++
+		for j < len(toks) && toks[j].comment {
+			j++
+		}
 	}
 	if j < len(toks) && toks[j].ident != "" && !jsident.IsReservedBindingIdentifier(toks[j].ident) {
 		bind(toks[j].ident, toks[j].off)
