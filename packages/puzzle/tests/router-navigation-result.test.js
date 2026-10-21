@@ -157,6 +157,56 @@ describe('router.push() — committed navigations (D182)', () => {
 		expect(a.route.path).toBe('/slow');
 	});
 
+	it('a push back to the committed path while another navigation is in flight supersedes it', async () => {
+		const slow = gated();
+		const { router } = await boot([
+			{ path: '/', name: 'home', view: HomeView },
+			{ path: '/slow', name: 'slow', view: slow.View },
+		]);
+
+		const pSlow = router.push('/slow');
+		const pHome = router.push('/');
+		slow.release();
+
+		expect(await pSlow).toEqual({ ok: false, reason: 'superseded' });
+		expect(await pHome).toEqual({ ok: true, route: router.current });
+		expect(router.current.path).toBe('/');
+
+		const pSlow2 = router.push('/slow');
+		const rHome = router.replace('/');
+		expect(await pSlow2).toEqual({ ok: false, reason: 'superseded' });
+		expect((await rHome).ok).toBe(true);
+		expect(router.current.path).toBe('/');
+	});
+
+	it('a same-path push from created() of the view being loaded returns the in-flight result', async () => {
+		let inner;
+		let router;
+		class X extends PuzzleView {
+			created() {
+				inner = router.push('/x');
+			}
+			async data() {
+				await null;
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'x' }, [text('X')]);
+			}
+		}
+		({ router } = await boot([
+			{ path: '/', name: 'home', view: HomeView },
+			{ path: '/x', name: 'x', view: X },
+		]));
+
+		const outer = await router.push('/x');
+		const result = await inner;
+
+		expect(outer.ok).toBe(true);
+		expect(result).toBe(outer);
+		expect(result.route.path).toBe('/x');
+	});
+
 	it('replace() resolves the same shape', async () => {
 		const { router } = await boot([
 			{ path: '/', name: 'home', view: HomeView },
@@ -185,7 +235,7 @@ describe('router.push() — navigations that do not commit (D182)', () => {
 		expect(router.current.path).toBe('/');
 	});
 
-	it("a throwing guard is reported and resolves 'blocked', like false", async () => {
+	it("a throwing guard is reported and resolves 'error' with the error", async () => {
 		const errors = [];
 		const failure = new Error('guard blew up');
 		const { router } = await boot(
@@ -203,8 +253,29 @@ describe('router.push() — navigations that do not commit (D182)', () => {
 			{ onError: (error) => errors.push(error) }
 		);
 
-		expect(await router.push('/private')).toEqual({ ok: false, reason: 'blocked' });
+		expect(await router.push('/private')).toEqual({ ok: false, reason: 'error', error: failure });
 		expect(errors).toEqual([failure]);
+		expect(router.current.path).toBe('/');
+	});
+
+	it("the redirect cycle cap is reported and resolves 'error' with the cap's error", async () => {
+		const errors = [];
+		const { router } = await boot(
+			[
+				{ path: '/', name: 'home', view: HomeView },
+				{ path: '/login', name: 'login', view: view('login'), guard: () => '/login' },
+			],
+			{ onError: (error) => errors.push(error) }
+		);
+
+		const result = await router.push('/login');
+
+		expect(result.ok).toBe(false);
+		expect(result.reason).toBe('error');
+		expect(result.error).toBe(errors[0]);
+		expect(errors).toHaveLength(1);
+		expect(String(errors[0].message)).toMatch(/redirect limit exceeded/);
+		expect(router.current.path).toBe('/');
 	});
 
 	it('a guard redirect resolves the final navigation plus redirectedFrom', async () => {
@@ -403,6 +474,97 @@ describe('router.push() — navigations that do not commit (D182)', () => {
 		expect(result).toEqual({ ok: false, reason: 'error', error: failure });
 		expect(errors).toHaveLength(1);
 		expect(errors[0]).toMatchObject({ error: failure, info: { phase: 'navigation' } });
+	});
+
+	it('after a commit throw, a retry navigates again and the old path is not a stale no-op', async () => {
+		const failure = new Error('afterUpdate boom');
+		let throwOnUpdate = false;
+		class FlakyLayout extends PuzzleView {
+			afterUpdate() {
+				if (throwOnUpdate) {
+					throwOnUpdate = false;
+					throw failure;
+				}
+			}
+			render() {
+				return h('puzzle-view', { class: 'layout' }, [h('main', {}, [slot()])]);
+			}
+		}
+		const { router, el } = await boot(
+			[
+				{ path: '/', name: 'home', view: HomeView, layout: FlakyLayout },
+				{ path: '/about', name: 'about', view: AboutView, layout: FlakyLayout },
+			],
+			{ onError: () => {} }
+		);
+
+		throwOnUpdate = true;
+		const first = await router.push('/about');
+		expect(first.reason).toBe('error');
+
+		// The latch is released: the retry is a fresh navigation that commits.
+		const retry = await router.push('/about');
+		expect(retry).not.toBe(first);
+		expect(retry).toEqual({ ok: true, route: router.current });
+		expect(router.current.path).toBe('/about');
+
+		// And after a throw that left #state on '/' while the DOM moved, a push to
+		// '/' rebuilds instead of claiming "already there".
+		throwOnUpdate = true;
+		expect((await router.push('/')).reason).toBe('error');
+		const home = await router.push('/about');
+		expect(home.ok).toBe(true);
+		expect(el.querySelector('.about')).not.toBeNull();
+		expect(el.querySelector('.home')).toBeNull();
+	});
+
+	it('a push that supersedes navigation zero resolves even when its commit throws', async () => {
+		const failure = new Error('title setter boom');
+		const slow = gated();
+		history.replaceState({}, '', '/slow');
+		const el = document.createElement('div');
+		document.body.appendChild(el);
+		const context = { store: null, router: null, formatters: null };
+		const errors = [];
+		setErrorConfig(context, (error) => errors.push(error), null);
+		const router = new Router([
+			{ path: '/slow', name: 'slow', view: slow.View },
+			{ path: '/boom', name: 'boom', view: AboutView, meta: { title: 'Boom' } },
+		]);
+		context.router = router;
+		routers.push({ router, context });
+		const started = router.start(el, context);
+
+		// #commitLocation's title sync throws inside the commit window. Nothing has
+		// committed yet, but this is a push, not start()'s navigation: it resolves.
+		vi.spyOn(document, 'title', 'set').mockImplementationOnce(() => {
+			throw failure;
+		});
+		const result = await router.push('/boom');
+		slow.release();
+		await expect(started).resolves.toBe(router);
+
+		expect(result).toEqual({ ok: false, reason: 'error', error: failure });
+		expect(errors).toEqual([failure]);
+	});
+
+	it('a push after a blocked navigation zero resolves even when its commit throws', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const failure = new Error('title setter boom');
+		const { router } = await boot(
+			[
+				{ path: '/', name: 'home', view: HomeView, guard: () => false },
+				{ path: '/about', name: 'about', view: AboutView, meta: { title: 'About' } },
+			],
+			{ onError: () => {} }
+		);
+		expect(router.current).toBeNull();
+
+		vi.spyOn(document, 'title', 'set').mockImplementationOnce(() => {
+			throw failure;
+		});
+		await expect(router.push('/about')).resolves.toEqual({ ok: false, reason: 'error', error: failure });
+		await expect(router.replace('/about')).resolves.toMatchObject({ ok: true });
 	});
 });
 

@@ -178,9 +178,12 @@ The location side effects — `pushState`/`replaceState`, `document.title`, the 
 
 **Navigation result (D182).** `push(path)` and `replace(path)` resolve a `NavigationResult` and never reject: `{ ok: true, route, redirectedFrom? }` or `{ ok: false, reason, error? }`.
 
-- `ok: true` — committed (the catch-all `*` included); `route` is the committed snapshot. A same-path no-op resolves `ok: true` with the current route; a same-path push while that path is in flight returns the in-flight push's result.
+- `ok: true` — committed (the catch-all `*` included); `route` is the committed snapshot. A same-path push while that path is in flight returns the in-flight push's result.
+- **Same-path no-op:** a push or replace to the committed path resolves `ok: true` with the current route only when no navigation is in flight and the committed chain is intact. Otherwise it is an ordinary navigation: back to the committed path during a slow push, it supersedes that push (last push wins); after a failed position or a commit-window throw, it rebuilds. A guard redirect to the committed path stays a no-op (§48).
 - A guard redirect resolves the final navigation's result; when it is `ok`, `redirectedFrom` is the path originally requested (the first one across a chain).
-- `'blocked'` — a guard returned `false` (a throwing guard and the redirect cycle cap, both reported, block the same way). `'superseded'` — a later navigation won. `'not-found'` — no match and no catch-all (still warns). `'error'` plus `error` — a lazy load, construction or `data()` failure, or a synchronous throw in the commit window; each is also reported to `onError` (phase `navigation`). Navigation zero still rethrows a commit-window throw, so `mount()` rejects as before.
+- `'blocked'` — a guard returned `false`. `'superseded'` — a later navigation won. `'not-found'` — no match and no catch-all (still warns). `'error'` plus `error` — anything reported to `onError` (phase `navigation`): a throwing guard, the redirect cycle cap, a lazy load, construction or `data()` failure, or a synchronous throw in the commit window.
+- `ok: false` means the navigation did not complete. Every reason except a commit-window throw leaves URL, DOM and `router.current` untouched. A commit-window throw can leave the URL and DOM on the target while `router.current` still names the old route; the next navigation, the same path included, rebuilds every level.
+- Only start()'s navigation zero (and a guard redirect continuing it) rethrows a commit-window throw, so `mount()` rejects and tears down; a push that supersedes or follows it resolves.
 - A push or replace from inside the commit window (a `mounted()` redirect) resolves when the deferred navigation runs; the last-wins slot resolves the entry it displaces, or one `stop()` drops, as `'superseded'`.
 - `go()`/`back()`/`forward()` are unchanged.
 

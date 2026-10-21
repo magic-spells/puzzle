@@ -409,13 +409,19 @@ you see:
   `{ ok: true, route, redirectedFrom? }` when the navigation committed (the
   catch-all `*` and a same-path no-op included; `redirectedFrom` is the path
   you asked for when a guard redirected), or `{ ok: false, reason, error? }`
-  with `reason` `'blocked'` (a guard said no), `'superseded'` (a later
-  navigation won), `'not-found'` (no route and no catch-all) or `'error'` (a
-  lazy load, construction or `data()` failure, still sent to `onError`). The
-  promise never rejects: a throw inside the commit window, which used to
-  reject the push, now resolves `'error'` and reaches `onError`. A push made
-  from `mounted()` resolves once that deferred navigation has run. `go()`,
-  `back()` and `forward()` are unchanged. Exported type: `NavigationResult`.
+  with `reason` `'blocked'` (a guard returned `false`), `'superseded'` (a
+  later navigation won), `'not-found'` (no route and no catch-all) or
+  `'error'` (anything sent to `onError`: a throwing guard, the redirect cycle
+  cap, a lazy load, construction or `data()` failure). The promise never
+  rejects: a throw inside the commit window, which used to reject the push,
+  now resolves `'error'` and reaches `onError` (only the first navigation
+  still rejects `app.mount()`). A push made from `mounted()` resolves once
+  that deferred navigation has run. `go()`, `back()` and `forward()` are
+  unchanged. Exported type: `NavigationResult`.
+- **A push back to the current path while another navigation is loading is a
+  real navigation (D182).** It supersedes the loading one (last push wins)
+  instead of resolving as a no-op that the loading navigation then overrode.
+  Clicking the active link after a failed page also rebuilds it.
 
 ### Changed
 

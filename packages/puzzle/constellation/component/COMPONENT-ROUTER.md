@@ -14,14 +14,19 @@ verified_sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 notes:
   - kind: gotcha
     text: >-
-      Every #navigate exit returns a NavigationResult (D182, [[DECISION-D182-NAVIGATION-RESULT]]) —
-      a new exit path must return one too (fail(reason, err), SUPERSEDED, or { ok: true, route: to
-      }), or push() resolves undefined. The outer catch around the load/#swap block turns a
-      synchronous commit-window throw into a reported 'error' result EXCEPT on navigation zero
-      (`!cur`), which rethrows so app.mount() keeps its teardown; a guard redirect from nav #0
-      inherits that because its inner #navigate also has no cur. The #pendingPush slot carries the
-      caller's resolver: anything that clears the slot (a displacing #defer, stop()) must resolve
-      the old entry SUPERSEDED or that caller waits forever.
+      Every #navigate exit returns a NavigationResult (D182, [[DECISION-D182-NAVIGATION-RESULT]]). A
+      new exit path must return one too (fail(reason, err), SUPERSEDED, or { ok: true, route: to }),
+      or push() resolves undefined. Reported to onError means 'error': #runGuards returns an { error
+      } marker for a throwing guard and for the redirect cap, never false. The outer catch around
+      the load/#swap block handles a synchronous commit-window throw. It may land after
+      #commitLocation, while #state still names the old route, so when it owns the token it clears
+      #pendingNavPath, #pendingNavPromise and the locale target, and sets #state.chainInvalid. It
+      then rethrows only for `initial` (start()'s verb-less navigation zero, or a guard redirect
+      whose chain box has `start`), so app.mount() keeps its teardown; every other navigation
+      resolves. #isCommittedNoop gates the push()/replace() same-path no-op: committed path, chain
+      intact, and nothing in flight (#guardRedirecting exempt). The #pendingPush slot carries the
+      caller's resolver, so anything that clears the slot (a displacing #defer, stop()) must resolve
+      the old entry SUPERSEDED, or that caller waits forever.
 ---
 
 # Router
@@ -118,10 +123,12 @@ it has no `lazy()` marker, its class array — lazy-free apps pay nothing per na
    scroll bookkeeping, mounted tree, `current`, and the dev-only D100 route emit
    ([[FILE-DEVTOOLS]]), after `#commitLocation`.
 
-Same-path push when committed is a no-op; while in flight it returns that navigation's
-promise, so both callers settle at commit. The route announcement reads
-`document.title`, falling back to the route name/path (aria-live announces only on
-change). Trailing `/` is insignificant.
+A same-path push or replace is a no-op (`#isCommittedNoop`) only when the committed chain
+is intact and nothing is in flight; otherwise it navigates and supersedes (D182). A
+same-key push while that key is in flight returns that navigation's promise, so both
+callers get its result. The route announcement reads `document.title`, falling back to
+the route name/path (aria-live announces only on change). Trailing `/` is
+insignificant.
 
 ## Failure invariants
 

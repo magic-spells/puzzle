@@ -171,10 +171,15 @@ export interface RouteSnapshot {
  * What `router.push()` / `router.replace()` resolve (D182); the promise never
  * rejects. `ok: true` carries the committed snapshot (or the current route for
  * a same-path no-op); `redirectedFrom` names the originally requested path when
- * a guard redirected. `ok: false` says why nothing committed: a guard refused
- * (`'blocked'`), a later navigation won (`'superseded'`), no route and no
- * catch-all matched (`'not-found'`), or a lazy load, view construction or
- * `data()` failed (`'error'`, with the error, also reported to `onError`).
+ * a guard redirected. `ok: false` says the navigation did not complete: a guard
+ * returned `false` (`'blocked'`), a later navigation won (`'superseded'`), no
+ * route and no catch-all matched (`'not-found'`), or something failed and was
+ * reported to `onError` (`'error'`, with the error) — a throwing guard, the
+ * guard-redirect cycle cap, a lazy load, view construction, `data()`, or a
+ * throw inside the commit window. Every reason but that last one leaves the
+ * URL, DOM and `router.current` untouched; a commit-window throw can leave the
+ * URL and DOM on the target while `router.current` still names the old route,
+ * and the next navigation rebuilds every level.
  */
 export type NavigationResult =
 	| { ok: true; route: RouteSnapshot; redirectedFrom?: string }

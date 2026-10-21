@@ -449,7 +449,8 @@ export class Router {
 	// #navigate always bumps #token. A LATER, unrelated chain installs its own box
 	// here, which is exactly why the continuation keeps its own reference instead
 	// of reading this slot again.
-	/** @type {{ token: number } | null} */
+	// `start` marks a chain that continues navigation zero (see `initial` in #navigate).
+	/** @type {{ token: number, start?: boolean } | null} */
 	#guardChain = null;
 	// The instance an in-flight transition is currently animating OUT (or null).
 	// A newer navigation reads this to cancel the running out and proceed
@@ -975,8 +976,16 @@ export class Router {
 		// committed, so it never moves this reference, and a DIFFERENT path on the
 		// same route (`/user/1` → `/user/2`) still runs its params-only refresh.
 		// Memory mode shares the semantics (#state.path is set there too).
+		//
+		// The no-op holds only while the committed state is the whole story (D182):
+		// with a navigation in flight, a push back to the committed path is an
+		// ordinary push that supersedes it (last push wins), since "already there"
+		// would be false the moment the in-flight one commits. A guard redirect is
+		// exempt — the only navigation in flight is the one it is redirecting — and
+		// an invalidated chain (a failed position, a commit-window throw) is never
+		// "already there", so it navigates.
 		const key = sameNavKey(path);
-		if (this.#state && key === sameNavKey(this.#state.path)) {
+		if (this.#isCommittedNoop(key)) {
 			return Promise.resolve({ ok: true, route: this.current });
 		}
 		// In-flight double-click guard: the COMMITTED #state check above misses a
@@ -1008,7 +1017,13 @@ export class Router {
 			this.#pendingNavPath != null &&
 			key === sameNavKey(this.#pendingNavPath)
 		) {
-			return this.#pendingNavPromise ?? Promise.resolve({ ok: true, route: this.current });
+			// An empty slot is read again on a microtask: a push fired synchronously
+			// from inside #navigate (a created() hook) runs before push() pairs the
+			// promise; one tick later the slot holds the in-flight navigation.
+			return (
+				this.#pendingNavPromise ??
+				Promise.resolve().then(() => this.#pendingNavPromise ?? { ok: true, route: this.current })
+			);
 		}
 		const nav = this.#navigate(path, { push: true });
 		// #navigate runs synchronously up to its first await, so it has already
@@ -1044,10 +1059,27 @@ export class Router {
 		if (this.#committing) return this.#defer({ kind: 'replace', path });
 		// Same-path no-op, exactly push()'s guard: replacing the committed entry
 		// with itself would re-run data() and rewrite an identical URL for nothing.
-		if (this.#state && sameNavKey(path) === sameNavKey(this.#state.path)) {
+		if (this.#isCommittedNoop(sameNavKey(path))) {
 			return Promise.resolve({ ok: true, route: this.current });
 		}
 		return this.#trackNav(this.#token, this.#navigate(path, { push: false, replace: true }));
+	}
+
+	/**
+	 * The push()/replace() same-path no-op test (D182): the target is the
+	 * committed path, the committed chain is intact, and nothing else is in
+	 * flight (a guard redirect's own denied navigation does not count).
+	 *
+	 * @param {string} key the target's sameNavKey
+	 */
+	#isCommittedNoop(key) {
+		const st = this.#state;
+		return (
+			!!st &&
+			!st.chainInvalid &&
+			key === sameNavKey(st.path) &&
+			(this.#guardRedirecting || this.#pendingNavPromise == null)
+		);
 	}
 
 	/**
@@ -1243,8 +1275,8 @@ export class Router {
 	 * checked BEFORE another guard may observe a superseded navigation. No view or
 	 * layout exists yet, so a losing guard phase has no fresh instance teardown.
 	 *
-	 * @returns {Promise<true|false|string|null>} allow, block/failure, redirect,
-	 *   or superseded (`null`)
+	 * @returns {Promise<true|false|string|null|{ error: unknown }>} allow, block,
+	 *   redirect, superseded (`null`), or a reported failure (a throw, the cycle cap)
 	 * @param {RouteEntry} entry
 	 * @param {RouteSnapshot} to
 	 * @param {RouteSnapshot | null} from
@@ -1266,7 +1298,7 @@ export class Router {
 					'[puzzle] navigation guard failed:',
 					err
 				);
-				return false;
+				return { error: err };
 			}
 
 			// A newer navigation owns the router now. Stop before the next ancestor/
@@ -1282,7 +1314,7 @@ export class Router {
 						'[puzzle] navigation guard redirect limit exceeded (10) — staying on the current route'
 					);
 					reportError(this.#ctx, err, { phase: 'navigation', route: to }, err.message);
-					return false;
+					return { error: err };
 				}
 				this.#guardRedirectCount++;
 				return verdict;
@@ -1456,6 +1488,10 @@ export class Router {
 		// chain's box with the token this frame just took, so the waiting continuation
 		// can recognize its own redirect as the current owner of the location.
 		else if (this.#guardChain) this.#guardChain.token = token;
+		// Navigation zero — start()'s, the only #navigate with no verb — or a guard
+		// redirect continuing it. Its commit-window throw rethrows (below) so
+		// app.mount() rejects and tears down; every other navigation resolves.
+		const initial = guardReentry ? this.#guardChain?.start : !(push || pop || replace);
 		// A real push supersedes any in-flight memory pop and truncates forward
 		// entries (D42), so the pending pop target is moot — reset it here (at the
 		// point supersession becomes real) so a go() arriving before this push commits
@@ -1507,9 +1543,10 @@ export class Router {
 			const guardVerdict = await this.#runGuards(entry, to, from, token);
 			// Supersession is silent: no fresh view exists to destroy.
 			if (token !== this.#token || guardVerdict === null) return SUPERSEDED;
-			if (guardVerdict === false) {
+			// `false`, or the { error } marker of a throwing guard / the redirect cap.
+			if (guardVerdict === false || typeof guardVerdict === 'object') {
 				this.#recoverFailedNavigation(token);
-				if (cur == null) {
+				if (cur == null && !guardVerdict) {
 					// Initial navigation refused with nothing yet committed (D87): there is
 					// no prior route to fall back to, so the app container stays empty — a
 					// silent blank page. There is deliberately no 404 surface, so KEEP the
@@ -1529,9 +1566,8 @@ export class Router {
 					// is its correct outcome (D87), so only pops repair here.
 					this.#restoreCommittedUrl(cur.path);
 				}
-				// A throwing guard and the redirect-limit cycle (#runGuards, both already
-				// reported) block exactly like `false`.
-				return fail('blocked');
+				// Reported to onError means 'error' (D182); a plain `false` is a block.
+				return guardVerdict ? fail('error', guardVerdict.error) : fail('blocked');
 			}
 			if (typeof guardVerdict === 'string') {
 				// Re-enter through the public push()/replace() seam: same-path no-op,
@@ -1557,7 +1593,7 @@ export class Router {
 				// box it re-entered on, an externally-initiated one starts a fresh box.
 				// Held by identity across the await so a LATER chain installing its own box
 				// cannot be mistaken for ours.
-				const chain = guardReentry && this.#guardChain ? this.#guardChain : { token };
+				const chain = guardReentry && this.#guardChain ? this.#guardChain : { token, start: initial };
 				this.#guardChain = chain;
 				this.#guardRedirecting = true;
 				let redirected;
@@ -2077,10 +2113,22 @@ export class Router {
 			});
 		} catch (err) {
 			// A synchronous commit-block throw (a render()/afterUpdate() in the
-			// commit window) or a takeover component load. Navigation zero rethrows
-			// so app.mount() still tears down on it; any later navigation resolves
-			// an 'error' result (D182), reported here because no promise rejects.
-			if (!cur) throw err;
+			// commit window) or a takeover component load. #commitLocation may have
+			// run (URL and DOM on the target) while #commitState did not, so #state
+			// still names the old route: release the in-flight latch so a retry
+			// navigates again, and invalidate the chain so the next navigation —
+			// the same path included — rebuilds every level instead of trusting it.
+			if (token === this.#token) {
+				this.#pendingNavPath = this.#pendingNavPromise = null;
+				if (typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) {
+					setLocaleTarget(this, null);
+				}
+				if (this.#state) this.#state.chainInvalid = true;
+			}
+			// Navigation zero rethrows so app.mount() still tears down on it; any
+			// other navigation resolves 'error' (D182), reported here because no
+			// promise rejects.
+			if (initial) throw err;
 			reportError(this.#ctx, err, { phase: 'navigation', route: to }, '[puzzle] navigation failed:', err);
 			return fail('error', err);
 		} finally {

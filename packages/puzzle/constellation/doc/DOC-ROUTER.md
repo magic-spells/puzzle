@@ -261,6 +261,13 @@ if (result.ok) {
 }
 ```
 
-A push to the current path resolves `ok` with the current route. `'blocked'` means a guard said no (or threw); `'superseded'` means a later navigation won; `'not-found'` means no route and no `*` catch-all matched. A push made from `mounted()` resolves once that deferred navigation has run.
+The results mean:
+
+- **A push to the current path** resolves `ok` with the current route, provided nothing else is loading. If another navigation is loading, the push is a real navigation and the last push wins.
+- **`'blocked'`**: a guard returned `false`.
+- **`'superseded'`**: a later navigation won.
+- **`'not-found'`**: no route matched and there is no `*` catch-all.
+- **`'error'`**: something failed and was sent to `onError`, such as a throwing guard or a failed `data()`.
+- **A push made from `mounted()`** resolves once that deferred navigation has run.
 
 Named-route navigation is not supported.
