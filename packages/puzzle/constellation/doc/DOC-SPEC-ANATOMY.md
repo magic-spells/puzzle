@@ -155,7 +155,7 @@ export default class TodoHome extends PuzzleView {
 
 ## 10. Component context
 
-`this.ctx` holds three services: `store`, `router`, `formatters` (the function registry). A fourth, `i18n`, is present only when `puzzle.config.js` configures translations (§66, [[DECISION-D175-TRANSLATIONS]]). `this.$app`, `this.$events`, `ctx.utils` and a global event bus are rejected ([[DOC-SPEC]] cut list).
+`this.ctx` holds three services, `store`, `router`, `formatters` (the function registry), and `idle(options?)`, the app's `idle()` bound to the app (§2, D189), so a component can await it (or destructure it) without holding the app. `i18n` is present only when `puzzle.config.js` configures translations (§66, [[DECISION-D175-TRANSLATIONS]]). `this.$app`, `this.$events`, `ctx.utils` and a global event bus are rejected ([[DOC-SPEC]] cut list).
 
 ## 11. Project layout & build
 

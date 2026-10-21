@@ -47,6 +47,7 @@ export { installFixtures } from '../fixtures/index.js';
  * @property {Store} store
  * @property {Router | InertRouter} router
  * @property {FormatterRegistry} formatters
+ * @property {(options?: { timeout?: number }) => Promise<boolean>} idle
  * @property {I18nService} [i18n]
  */
 
@@ -232,8 +233,10 @@ function makeContext(options) {
 	const formatters =
 		supplied.formatters ??
 		makeFormatterRegistry(options.formatters ?? {}, (path) => router.url(path));
+	// ctx.idle (D189): with no app to observe, it drives work to a fixed point.
+	const idle = supplied.idle ?? (() => settled().then(() => true));
 	/** @type {TestContext} */
-	const ctx = { store, router, formatters };
+	const ctx = { store, router, formatters, idle };
 	// `i18n: { locale, strings }` (D175): a translated view renders with no fetch.
 	const i18n =
 		supplied.i18n ??

@@ -33,6 +33,20 @@ afterEach(() => {
 });
 
 describe('@magic-spells/puzzle/testing — mountView', () => {
+	it('gives the ctx an idle() that settles pending renders (D189)', async () => {
+		class Probe extends PuzzleView {
+			render() {
+				return h('span', {}, [text(String(this.getData().n ?? 0))]);
+			}
+		}
+		const view = await mountView(Probe);
+		handles.push(view);
+		const { idle } = view.instance.ctx;
+		view.instance.setData({ n: 3 });
+		expect(await idle()).toBe(true);
+		expect(view.element.textContent).toBe('3');
+	});
+
 	it('accepts the adapter capability option and rejects a raw object', async () => {
 		class Probe extends PuzzleView {
 			data() {
@@ -93,7 +107,7 @@ describe('@magic-spells/puzzle/testing — mountView', () => {
 		handles.push(view);
 
 		expect(view.container.isConnected).toBe(false);
-		expect(Object.keys(view.ctx).sort()).toEqual(['formatters', 'router', 'store']);
+		expect(Object.keys(view.ctx).sort()).toEqual(['formatters', 'idle', 'router', 'store']);
 		expect(view.element.tagName).toBe('SECTION');
 		expect(view.find('.label').textContent).toBe('Open');
 		expect(view.findAll('li')).toEqual([]);

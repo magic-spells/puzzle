@@ -212,6 +212,9 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   or fetches nothing awaits (an event handler's unawaited `save()` or
   `loadMany()`), or a path- or hash-mode `back()`, `forward()` or `go()`
   before its `popstate` fires.
+- **`ctx.idle(options?)` (D189):** the same method bound to the app, on every
+  view's and component's `this.ctx`, so library components can wait for idle
+  without holding the app.
 
 ## Data layer
 
@@ -229,6 +232,10 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   outside a view and returns an idempotent `stop()`; `fn()` runs once per
   batched flush, never fetches (D184). `store.flush()` delivers pending
   notifications now.
+- **Model lookup (D189):** `store.modelFor(type)` returns the registered
+  model class (`PuzzleModel` for an unknown type); static
+  `Model.primaryKey()` names its primary field (default `'id'`). Never
+  subscribes or fetches; works through a view's adapter store handle too.
 - **Server sync is opt-in** via the `/adapter` capability passed once to
   `PuzzleApp`. A model's `static adapter` holds per-verb fetch functions
   (`endpoint` generates REST defaults); dispatch is model function →
@@ -254,9 +261,11 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   link interception; `router.url(path, options?)` / `link('/x')` for
   mode-agnostic hrefs.
 - **Navigation result (D182):** `push()`/`replace()` resolve
-  `{ ok: true, route, redirectedFrom? }` or
+  `{ ok: true, route, catchAll?, redirectedFrom? }` or
   `{ ok: false, reason: 'blocked' | 'superseded' | 'not-found' | 'error', error? }`
   and never reject; a push deferred from `mounted()` resolves when it runs.
+  `catchAll: true` marks a landing on the `*` route (D189), which stays
+  `ok`; `'not-found'` means no match and no catch-all.
 - **Route views (D183):** `router.views` lists every leaf route (catch-all
   excluded) as frozen `{ path, params, name, meta, title, agent, chain }`,
   built once on first read. The top-level `agent` route field — `false` or
