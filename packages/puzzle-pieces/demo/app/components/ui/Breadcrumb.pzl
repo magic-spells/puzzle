@@ -2,7 +2,7 @@
   <nav aria-label="Breadcrumb" class={ navClass }>
     <ol class="flex flex-wrap items-center gap-1.5 text-sm">
       {#for item in items}
-        <li class="inline-flex items-center gap-1.5">
+        <li class="inline-flex items-center gap-1.5" key={ item.key }>
           {#if item.isLast}
             <span class="font-medium text-ink" aria-current="page">{ item.label }</span>
           {:else}
@@ -40,12 +40,16 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   <Breadcrumb items={ trail }/>
 //   <Breadcrumb items={ trail } class="mb-4"/>
 //
-// items: [{ label, href }]  — href is ignored on the final item
+// items: [{ label, href, id? }]  — href is ignored on the final item; id, when
+// given, is the row key (the position otherwise)
 export default class Breadcrumb extends PuzzleView {
   data(params, props) {
     const src = props.items || [];
     const last = src.length - 1;
     const items = src.map((item, i) => ({
+      // The caller's id when it gives one, else the position: the last crumb drops
+      // its href, so the href cannot be the key.
+      key: item.id ?? '#' + i,
       label: item.label,
       // Drop the href on the current-page crumb — it renders as plain text.
       href: i === last ? undefined : item.href,

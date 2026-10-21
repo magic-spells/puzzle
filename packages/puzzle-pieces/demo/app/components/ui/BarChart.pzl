@@ -20,7 +20,7 @@
         {/if}
 
         {#for m in marks}
-          <path d={ m.d } class={ m.class } @pointermove={ onHover(m, event) } />
+          <path d={ m.d } class={ m.class } key={ m.key } @pointermove={ onHover(m, event) } />
         {/for}
       </svg>
 

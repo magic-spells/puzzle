@@ -18,7 +18,7 @@
         <ScrollArea maxHeight={ 256 } label="Ingredients" class="w-72 rounded-lg border border-border bg-surface">
           <ul class="divide-y divide-border">
             {#for item in ingredients}
-              <li class="px-4 py-3 text-sm text-body">{ item }</li>
+              <li class="px-4 py-3 text-sm text-body" key={ item }>{ item }</li>
             {/for}
           </ul>
         </ScrollArea>
@@ -46,7 +46,7 @@
           <ScrollArea orientation="horizontal" label="Covers" class="w-80 max-w-full rounded-lg border border-border bg-surface p-2">
             <div class="flex w-max gap-3">
               {#for card in covers}
-                <div class="flex h-24 w-32 shrink-0 items-center justify-center rounded-md bg-surface-sunken text-sm font-medium text-body">{ card }</div>
+                <div class="flex h-24 w-32 shrink-0 items-center justify-center rounded-md bg-surface-sunken text-sm font-medium text-body" key={ card }>{ card }</div>
               {/for}
             </div>
           </ScrollArea>
@@ -56,7 +56,7 @@
           <ScrollArea orientation="both" maxHeight={ 240 } label="Log output" class="w-80 max-w-full rounded-lg border border-border bg-surface">
             <div class="w-[640px] space-y-1.5 p-3">
               {#for line in logLines}
-                <p class="whitespace-nowrap font-mono text-[13px] text-body">{ line }</p>
+                <p class="whitespace-nowrap font-mono text-[13px] text-body" key={ line }>{ line }</p>
               {/for}
             </div>
           </ScrollArea>
@@ -97,7 +97,7 @@ const usageMarkup = `<ScrollArea maxHeight={ 256 } label="Ingredients" class="w-
 const codeHero = `<ScrollArea maxHeight={ 256 } label="Ingredients" class="w-72 rounded-lg border border-border bg-surface">
   <ul class="divide-y divide-border">
     {#for item in ingredients}
-      <li class="px-4 py-3 text-sm text-body">{ item }</li>
+      <li class="px-4 py-3 text-sm text-body" key={ item }>{ item }</li>
     {/for}
   </ul>
 </ScrollArea>`;
@@ -107,7 +107,7 @@ const codeHorizontal = `// orientation="horizontal" enables x-overflow and a bot
 <ScrollArea orientation="horizontal" class="w-80 rounded-lg border border-border bg-surface p-2">
   <div class="flex w-max gap-3">
     {#for card in covers}
-      <div class="h-24 w-32 shrink-0 rounded-md bg-surface-sunken">{ card }</div>
+      <div class="h-24 w-32 shrink-0 rounded-md bg-surface-sunken" key={ card }>{ card }</div>
     {/for}
   </div>
 </ScrollArea>`;
@@ -116,7 +116,7 @@ const codeBoth = `// orientation="both" scrolls on both axes with a thumb on eac
 <ScrollArea orientation="both" maxHeight={ 240 } label="Log output" class="w-80 rounded-lg border border-border bg-surface">
   <div class="w-[640px] space-y-1.5 p-3">
     {#for line in logLines}
-      <p class="whitespace-nowrap font-mono text-[13px] text-body">{ line }</p>
+      <p class="whitespace-nowrap font-mono text-[13px] text-body" key={ line }>{ line }</p>
     {/for}
   </div>
 </ScrollArea>`;

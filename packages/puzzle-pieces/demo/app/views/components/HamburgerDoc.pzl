@@ -15,7 +15,7 @@
       <ExampleBox code={ codeHero }>
         <div class="grid w-full max-w-md grid-cols-3 gap-6">
           {#for v in variants}
-            <div class="flex flex-col items-center gap-3">
+            <div class="flex flex-col items-center gap-3" key={ v.name }>
               <Hamburger variant={ v.name } size="lg" label={ v.label }/>
               <span class="font-mono text-code text-muted">{ v.name }</span>
             </div>
@@ -45,7 +45,7 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Variants</h2>
         <dl class="grid gap-y-5">
           {#for v in variants}
-            <div class="flex items-start gap-4">
+            <div class="flex items-start gap-4" key={ v.name }>
               <dt class="shrink-0">
                 <Hamburger variant={ v.name } label={ v.label }/>
               </dt>
@@ -66,7 +66,7 @@
             <span class="text-center font-mono text-code text-muted">md</span>
             <span class="text-center font-mono text-code text-muted">lg</span>
             {#for row in variants}
-              <div class="contents">
+              <div class="contents" key={ row.name }>
                 <span class="font-mono text-code text-muted">{ row.name }</span>
                 <div class="flex justify-center"><Hamburger variant={ row.name } size="sm" label={ row.label }/></div>
                 <div class="flex justify-center"><Hamburger variant={ row.name } size="md" label={ row.label }/></div>
@@ -94,7 +94,7 @@
         <ExampleBox id="no-animation" title="No animation" code={ codeNoAnimate } tall={ false }>
           <div class="flex items-center gap-8">
             {#for v in variants}
-              <div class="flex flex-col items-center gap-3">
+              <div class="flex flex-col items-center gap-3" key={ v.name }>
                 <Hamburger variant={ v.name } animate={ false } label={ v.label }/>
                 <span class="font-mono text-code text-muted">{ v.name }</span>
               </div>

@@ -2,7 +2,7 @@
   <span class={ rootClass } role="status" aria-label={ label }>
     {#if variant === 'ticks'}
       {#for t in ticks}
-        <span class="absolute inset-0 spinner-tick-arm" style={ t.style } aria-hidden="true"><span class={ tickClass }></span></span>
+        <span class="absolute inset-0 spinner-tick-arm" style={ t.style } key={ t.key } aria-hidden="true"><span class={ tickClass }></span></span>
       {/for}
     {:else if variant === 'trace'}
       <svg class="block size-full overflow-visible" viewBox="0 0 24 24" fill="none" stroke-width={ traceStroke } stroke-linecap="round" aria-hidden="true">
@@ -11,11 +11,11 @@
       </svg>
     {:else if variant === 'dots'}
       {#for d in dots}
-        <span class={ dotClass } style={ d.style } aria-hidden="true"></span>
+        <span class={ dotClass } style={ d.style } key={ d.key } aria-hidden="true"></span>
       {/for}
     {:else if variant === 'snap'}
       {#for p in pieces}
-        <span class={ p.class } style={ p.style } aria-hidden="true"></span>
+        <span class={ p.class } style={ p.style } key={ p.key } aria-hidden="true"></span>
       {/for}
     {:else if variant === 'spark'}
       <span class="absolute inset-0 m-auto size-11/20 bg-linear-to-br from-brand/60 to-brand spinner-spark-star spinner-spark-main" aria-hidden="true"></span>
@@ -118,8 +118,8 @@ const BEAT_DOT = { sm: 'size-1.5', md: 'size-2.5', lg: 'size-4' };
 
 // --i drives every stagger in the <style> block; --x/--y point each snap tile
 // away from the centre.
-const TICK_PARTS = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => ({ style: `--i:${i}` }));
-const DOT_PARTS = [0, 1, 2].map((i) => ({ style: `--i:${i}` }));
+const TICK_PARTS = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => ({ key: i, style: `--i:${i}` }));
+const DOT_PARTS = [0, 1, 2].map((i) => ({ key: i, style: `--i:${i}` }));
 const TILE_DIRS = [
   [-1, -1],
   [1, -1],
@@ -150,6 +150,7 @@ export default class Spinner extends PuzzleView {
     } else if (variant === 'snap') {
       out.rootClass = `${SNAP} ${SIZE[size]} ${SNAP_SIZE[size]} ${extra}`;
       out.pieces = TILE_DIRS.map(([x, y], i) => ({
+        key: i,
         class: `${TILE_ROUND[size]} bg-current spinner-snap-tile ${i === 0 ? '' : 'opacity-40'}`,
         style: `--x:${x};--y:${y}`,
       }));

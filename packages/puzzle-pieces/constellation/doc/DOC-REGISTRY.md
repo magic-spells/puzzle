@@ -65,6 +65,22 @@ notes:
     text: >-
       0.8.0 adds `hamburger` (PR #148) — registry now 102 pieces; README count bumped. See
       [[COMPONENT-HAMBURGER]].
+  - kind: gotcha
+    text: >-
+      Every item-form `{#for}` row needs a key. With no `key={ … }` on the row root the runtime keys
+      by `.id` (ViewNode.keyOf); a row without one drops the list to positional diffing and the
+      CONSUMER's console logs `[puzzle] {#for} item (Object) has no usable key` once per session.
+      Nine pieces needed explicit keys: sidebar, radio-group, breadcrumb, dropzone, stepper,
+      timeline, time-picker (columns), chat-attachment and spinner. Convention: precompute a `key`
+      in data() and bind `key={ row.key }`; key by a real identity (option value, column, path
+      string) and fall back to the position only when items carry no id (Sidebar keeps its existing
+      `index`, which already owns the open map and ids). breadcrumb, stepper and timeline key by the
+      caller's `id` when it gives one and by `'#' + index` otherwise, so a partial set of numeric
+      ids cannot collide with a position. Loops whose rows carry an `id` may stay implicit — but
+      pie-chart's full-circle slice draws two paths from one slice, so marks bind their own per-path
+      `m.key` (bar-chart binds `m.key` the same way). `test/for-keys.test.js` strips HTML comments,
+      then fails on any keyless loop not listed in its per-file ID_KEYED allow-list (with a count
+      for each loop name), and on stale allow-list entries.
 ---
 
 # The registry — source of truth

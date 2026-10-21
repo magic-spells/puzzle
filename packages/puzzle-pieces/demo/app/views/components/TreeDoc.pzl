@@ -119,7 +119,7 @@
             </thead>
             <tbody class="divide-y divide-border text-body">
               {#for k in keys}
-                <tr>
+                <tr key={ k.key }>
                   <td class="whitespace-nowrap px-4 py-2.5">
                     <kbd class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-xs text-ink">{ k.key }</kbd>
                   </td>
