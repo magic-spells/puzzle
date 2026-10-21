@@ -47,6 +47,7 @@ type fileUsage struct {
 	hasLazy          bool
 	hasSnippets      bool
 	hasComponentSlot bool
+	hasCondSlot      bool
 	hasRawHTML       bool
 	hasRawSan        bool
 	// name is the app-relative file name and tKeys the literal `t` keys it uses
@@ -188,6 +189,9 @@ func mergeFileUsage(usage *Usage, fu fileUsage) {
 	if fu.hasComponentSlot {
 		usage.HasComponentSlot = true
 	}
+	if fu.hasCondSlot {
+		usage.HasConditionalSlot = true
+	}
 	if fu.hasRawHTML {
 		usage.HasRawHTML = true
 	}
@@ -266,6 +270,7 @@ func fileUsageFromSource(root, path, raw string, allow map[string]bool) fileUsag
 	one.hasRawAt = tpl.HasRawAt
 	one.hasSnippets = tpl.HasSnippets
 	one.hasComponentSlot = tpl.HasComponentSlot
+	one.hasCondSlot = conditionalSlot(tree, false) || (skel != nil && conditionalSlot(skel, true))
 	one.hasRawHTML = tpl.HasRawHTML
 	one.hasRawSan = tpl.HasRawSanitize
 	for formatter := range tpl.Formatters {

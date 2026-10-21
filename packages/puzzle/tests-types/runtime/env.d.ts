@@ -15,6 +15,7 @@ declare const __PUZZLE_HAS_I18N__: boolean;
 declare const __PUZZLE_HAS_LOCALE_ROUTING__: boolean;
 declare const __PUZZLE_HAS_PORTAL__: boolean;
 declare const __PUZZLE_HAS_COMPONENT_SLOT__: boolean;
+declare const __PUZZLE_HAS_CONDITIONAL_SLOT__: boolean;
 declare const __PUZZLE_HAS_SNIPPETS__: boolean;
 declare const __PUZZLE_HAS_RAW_HTML__: boolean;
 declare const __PUZZLE_HAS_RAW_AT__: boolean;

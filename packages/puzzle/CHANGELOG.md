@@ -510,7 +510,8 @@ you see:
 - Conditional layout or parent-view `<Slot/>` outlets retain the current routed
   instance across hide/show and wrapper swaps. Navigation while hidden updates
   the child chain and releases superseded views; teardown also releases views
-  that have not mounted yet.
+  that have not mounted yet. The usage scan keeps this code only in apps whose
+  templates can hide an outlet (`__PUZZLE_HAS_CONDITIONAL_SLOT__`).
 - `<Component slot="x" is={ current }>` fills the named slot and strips the
   consumed routing attribute from the selected component.
 - `raw` and `newline_to_br` ranges move safely when page translation wraps or

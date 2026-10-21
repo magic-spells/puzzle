@@ -166,6 +166,26 @@ function parkRetained(child) {
 	return true;
 }
 
+/**
+ * Move a manager's existing root without mounting it again (conditional outlets).
+ * @param {ViewManager} vm
+ * @param {Node} container
+ * @param {Node | null} [ref]
+ */
+export function moveManager(vm, container, ref) {
+	const tree = vm.currentTree;
+	// A component root moves itself, so its own manager follows too.
+	if (tree?.isComponent) tree.component.__moveTo(container, ref);
+	else if (((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) ||
+		(typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__)) && tree && lastNode(tree) !== tree.el) {
+		moveComponentSlot(container, tree, ref, lastNode(tree));
+		if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) && tree.tag === COMPONENT_SLOT_TAG) {
+			for (const child of /** @type {ViewNode[]} */ (tree.children)) child.component?.__moveTo(container, tree.slotEnd);
+		}
+	} else if (vm.element) container.insertBefore(vm.element, ref);
+	vm.container = container;
+}
+
 /** @param {ViewNode} vnode */
 function keepOutgoing(vnode) {
 	const copy = new ViewNode(vnode.tag, vnode.attrs, vnode.children);
@@ -269,10 +289,12 @@ export class ViewManager {
 	 */
 	render(rawTree, slotsExpanded = false) {
 		passes++;
-		eachPin(this.slotChildren, retain);
+		// Conditional outlets (D30) are gated on __PUZZLE_HAS_CONDITIONAL_SLOT__: an
+		// app whose templates never hide a slot keeps one routed lifetime per outlet.
+		if (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) eachPin(this.slotChildren, retain);
 		try {
 			const tree = this.#render(rawTree, slotsExpanded);
-			if (passes === 1 && retained) {
+			if ((typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) && passes === 1 && retained) {
 				// A pin no outlet placed this pass still needs the newest chain below
 				// it: a parked parent that later re-renders must not mount stale levels.
 				for (const [pin, node] of retained) {
@@ -286,7 +308,7 @@ export class ViewManager {
 		} finally {
 			if (--passes === 0) {
 				outgoing = null;
-				retained = null;
+				if (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) retained = null;
 			}
 		}
 	}
@@ -481,25 +503,6 @@ export class ViewManager {
 		return this.currentTree ? lastNode(this.currentTree) : this.anchor;
 	}
 
-	/**
-	 * Move an existing root without mounting it again.
-	 * @param {Node} container
-	 * @param {Node | null} [ref]
-	 */
-	moveTo(container, ref) {
-		const tree = this.currentTree;
-		// A component root moves itself, so its own manager follows too.
-		if (tree?.isComponent) tree.component.__moveTo(container, ref);
-		else if (((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) ||
-			(typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__)) && tree && lastNode(tree) !== tree.el) {
-			moveComponentSlot(container, tree, ref, lastNode(tree));
-			if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) && tree.tag === COMPONENT_SLOT_TAG) {
-				for (const child of /** @type {ViewNode[]} */ (tree.children)) child.component?.__moveTo(container, tree.slotEnd);
-			}
-		} else if (this.element) container.insertBefore(this.element, ref);
-		this.container = container;
-	}
-
 	/** Remove everything this manager mounted. */
 	clear() {
 		// A destroy that arrives BEFORE any replacement render still has to release the
@@ -510,7 +513,7 @@ export class ViewManager {
 			this.unknownTrees = null;
 		}
 		if (this.currentTree) unmount(this.currentTree);
-		releasePins(this.slotChildren);
+		if (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) releasePins(this.slotChildren);
 		if (this.anchor) {
 			this.anchor.remove();
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
@@ -1145,8 +1148,8 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 	const child = pinned ?? new vnode.tag(ctx);
 	child.__retryParent = owner;
 	vnode.component = child;
-	placed(child);
-	if (pinned?.element) {
+	// A parked routed view (D30 conditional outlet) moves in instead of mounting.
+	if ((typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) && (placed(child), pinned?.element)) {
 		child.__moveTo(parent, ref);
 		child.applyParentUpdate({ children: /** @type {ViewNode[]} */ (vnode.children) });
 		vnode.el = child.element;
@@ -1289,7 +1292,7 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 		if (live !== null ? !live.isDestroyed && !live.__walk : typeof newVnode.tag !== 'function' && !walking) {
 			if (live !== null) {
 				newVnode.el = live.element;
-				placed(live);
+				if (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) placed(live);
 			}
 			// The `controls` list is what reaches controls under a cached ROW ROOT.
 			// It collects from the row vnode down, so a controlled row root is in its
@@ -1622,7 +1625,7 @@ function reassertSelectValue(el, attrs) {
  */
 function patchComponent(oldVnode, newVnode) {
 	const child = (newVnode.component = oldVnode.component);
-	placed(child);
+	if (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) placed(child);
 	const props = propsEqual(oldVnode.props, newVnode.props, child) ? undefined : newVnode.props;
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 		devperfComponentPatch(child, props === undefined);
@@ -1771,7 +1774,7 @@ function unmount(vnode, immediate = false) {
 	}
 	if (vnode.isComponent) {
 		const child = vnode.component;
-		if (child && parkRetained(child)) return;
+		if ((typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) && child && parkRetained(child)) return;
 		// A component vnode that never got as far as an instance, holding only a
 		// comment placeholder: the takeoverFailed path in mountComponent returns
 		// before constructing a child, so `component` is still null. No instance to
@@ -1908,7 +1911,7 @@ function releaseSubtree(vnode) {
 		if (child.tag === PORTAL_TAG) {
 			if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
 				unmountPortal(child, unmount);
-		} else if (child.isComponent) release(child.component);
+		} else if (child.isComponent) (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) ? release(child.component) : child.component?.destroy();
 		else if (!child.isText) releaseSubtree(child);
 	}
 }
@@ -1951,7 +1954,7 @@ function releaseAborted(trees) {
 			if (tree.tag === PORTAL_TAG) {
 				if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
 					unmountPortal(tree, unmount);
-			} else if (tree.isComponent) release(tree.component);
+			} else if (tree.isComponent) (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) ? release(tree.component) : tree.component?.destroy();
 			else if (!tree.isText) releaseSubtree(tree);
 		} catch (err) {
 			console.error('[puzzle] releasing an aborted render failed:', err);

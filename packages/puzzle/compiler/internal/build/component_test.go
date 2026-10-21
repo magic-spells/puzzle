@@ -23,6 +23,20 @@ func TestComponentSlotBundleDefine(t *testing.T) {
 	}
 }
 
+func TestConditionalSlotBundleDefine(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		pl := plugin.New(t.TempDir())
+		pl.SetUsage(plugin.Usage{HasConditionalSlot: enabled})
+		want := "false"
+		if enabled {
+			want = "true"
+		}
+		if got := bundleDefines(pl, bundleFlags{})["__PUZZLE_HAS_CONDITIONAL_SLOT__"]; got != want {
+			t.Fatalf("conditional slot define = %q, want %q", got, want)
+		}
+	}
+}
+
 func componentSlotFixture() ssgFixtureFiles {
 	files := baseSSGFixture()
 	files["app/components/Card.pzl"] = `<puzzle-view><article>{title}<Children/></article></puzzle-view>`
@@ -113,5 +127,22 @@ func TestBuildWithoutComponentSlotsDropsRangeAndHelpers(t *testing.T) {
 	}
 	if bytes := metafileBytesInOutput(t, meta, "client-runtime/views/componentSlot.js"); bytes != 0 {
 		t.Fatalf("unused component helpers contribute %d bytes", bytes)
+	}
+}
+
+func TestBuildConditionalSlotKeepsOutletParkingOnlyWhenUsed(t *testing.T) {
+	for _, conditional := range []bool{false, true} {
+		files := baseSSGFixture()
+		if conditional {
+			files["app/components/Gate.pzl"] = `<puzzle-view>{#if open}<Children/>{:else}<p>closed</p>{/if}</puzzle-view>`
+		}
+		root := writeSSGFixture(t, files)
+		if err := Build(root, Options{Development: false}); err != nil {
+			t.Fatal(err)
+		}
+		// parkRetained is the only runtime caller of createDocumentFragment.
+		if got := strings.Contains(readFile(t, filepath.Join(root, "dist", "app.js")), "createDocumentFragment"); got != conditional {
+			t.Fatalf("conditional slot %v: outlet parking in bundle = %v", conditional, got)
+		}
 	}
 }

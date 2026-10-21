@@ -19,7 +19,7 @@
  * - setData() → re-render only, data() does NOT re-run
  */
 
-import { ViewManager, releasePins } from './viewManager.js';
+import { ViewManager, releasePins, moveManager } from './viewManager.js';
 import { playAnimation, prefersReducedMotion, isValidSpec, warnOnceForSpec } from './animate.js';
 import { observeVisible } from './visibility.js';
 import { registerView, unregisterView } from '../devstate.js';
@@ -1016,9 +1016,11 @@ export class PuzzleView {
 	 * @param {Node | null} [ref]
 	 */
 	__moveTo(container, ref) {
-		this.#vm?.moveTo(container, ref);
-		if (this.__failedPlaceholder) container.insertBefore(this.__failedPlaceholder, ref);
-		this.#errorView?.__moveTo(container, this.__failedPlaceholder ?? ref);
+		if (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) {
+			if (this.#vm) moveManager(this.#vm, container, ref);
+			if (this.__failedPlaceholder) container.insertBefore(this.__failedPlaceholder, ref);
+			this.#errorView?.__moveTo(container, this.__failedPlaceholder ?? ref);
+		}
 	}
 
 	/**
@@ -1770,7 +1772,7 @@ export class PuzzleView {
 		this.#vm?.clear();
 		// A view that never mounted (no outlet ever placed it) still owns the routed
 		// levels below it.
-		if (!this.#vm) releasePins(this.#children);
+		if ((typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) && !this.#vm) releasePins(this.#children);
 		// Null every element ref (v1.39, D72 / SPEC §38: "nulled on removal"). The
 		// __ref removal setter bails while #destroyed is true, so #vm.clear()'s
 		// teardown removals above leave this.refs pointing at now-detached DOM;
