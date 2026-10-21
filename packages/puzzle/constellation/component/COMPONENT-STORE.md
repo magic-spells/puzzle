@@ -69,8 +69,14 @@ author-facing contract is [[DOC-SPEC-DATA]] §8; server sync is [[COMPONENT-ADAP
 - `_deliverNotifications` is two-phase: gather `Map<subscriber, highest seq>`, then call
   `sub.onStoreChange(seq)` (function subscribers get no argument). Subscribers ADDED
   mid-delivery are not notified for that batch; subscribers REMOVED mid-delivery are
-  re-checked against `keysBySubscriber` and skipped (the only guard a plain
-  `subscribe(fn)` has).
+  re-checked against the key set they were gathered from and skipped (the only guard a
+  `store.observe()` callback has).
+- **`observe(type, [id,] fn)`** ([[DECISION-D184-STORE-OBSERVE]]) links a fresh wrapper
+  closure straight into `subscribersByKey`/`keysBySubscriber` — a function subscriber
+  outside `withTracking`, so no reset, no request map, no fetch. The key is spelled as
+  `_findOneLocal`/`_notify` spell it. `stop()` is `_dropSubscription(key, wrapper)`.
+  `_notify` stamps both the collection and record keys on every mutation path, so no
+  observe-specific emission exists. DevTools reports observers as `'fn'`.
 - `flush()` notifies each subscriber once in isolation, observes thenable failures,
   continues past throws, then (dev) reports the batch to the D100 bridge
   ([[FILE-DEVTOOLS]]) behind an inline probe. Scheduling: rAF when visible plus a 220 ms

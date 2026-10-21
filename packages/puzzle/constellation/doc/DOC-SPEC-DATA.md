@@ -59,6 +59,8 @@ store.findOne('todo', id);
 store.findMany('todo', { filter: (t) => !t.completed });
 record.update({ completed: true });               // re-runs subscribed data()
 record.destroy();
+const stop = store.observe('todo', fn);           // outside a view; stop() ends it
+store.flush();                                    // deliver pending notifications now
 // with the /adapter capability — escape hatches; tracked finds fetch on their own (§61)
 await store.loadMany('todo', { page: 2 });
 await store.loadOne('todo', id);                  // bypasses the negative cache
@@ -66,6 +68,7 @@ await store.loadOne('todo', id);                  // bypasses the negative cache
 
 - Server methods exist only with the `adapter` capability; `store.loadAll()` and an adapter `loadAll` verb throw naming `loadMany`.
 - **Queries inside `data()` auto-subscribe**; matching changes re-run `data()`. With the capability, a tracked `findOne`/`findMany` miss faults the data in and the view commits once settled (§61). **Every other read is a pure local snapshot** — the raw `app.store` never fetches; fetching belongs to the per-view handle `this.ctx.store` during that view's own `data()` run. Calling `loadOne`/`loadMany` through that handle inside a tracked run warns once per verb in development.
+- **`store.observe(type, fn)` / `store.observe(type, id, fn)` (D184)** watch the collection key or one record key from outside a view. `fn()` runs with no arguments after the batched flush that carries a matching change, at most once per flush, isolated like any subscriber. A type observation fires on every create, update and removal of that type; a record observation on its own, including its creation when observed before it exists (the id matches as `findOne` matches it). Observing never fetches and never resets, through the raw store or a view's handle. It returns `stop()`, which removes exactly that observation, is idempotent, and holds within the current flush; the same function observed twice is two observations. Observers live until stopped. Bad arguments throw in development.
 - **Record identity is number/string-insensitive (D112):** number pks are indexed by their string form, so `findOne('todo', 7)` and `findOne('todo', '7')` agree (route params are strings, JSON usually numbers). Only numbers normalize — `null`/objects keep strict identity, no numeric parsing (`'01'` ≠ `1`). The record's own pk keeps its type; a type-variant duplicate is a duplicate (`createRecord` throws, `upsert` updates in place).
 - **Record render revision (D170):** every observable mutation path (create, `update()`, upsert, save reconciliation) funnels through the store's notify, which stamps the record's `RENDER_REV` symbol (`client-runtime/renderRev.js`) with the notification sequence. A record passed as a prop or looped in a `{#for}` therefore refreshes on its own mutations; a related record's fields, a getter's inputs, or a direct field assignment advance nothing — re-query by id in `data()` for those. A removed record gets no revision (its row leaves).
 

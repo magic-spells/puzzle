@@ -24,13 +24,14 @@ The per-app store at runtime: queries, identity, auto-fetching finds, merge and 
 
 ## Store API
 
-Views reach the store as `this.ctx.store`. `createRecord`, the finds and `flush` are core; the rest exist only with the `/adapter` capability. Records returned by any read are the live instances, mutated in place.
+Views reach the store as `this.ctx.store`. `createRecord`, the finds, `observe` and `flush` are core; the rest exist only with the `/adapter` capability. Records returned by any read are the live instances, mutated in place.
 
 | API | Behavior |
 | --- | --- |
 | `createRecord(type, data)` | Defaults, pk, validation, insert, notify ([[DOC-MODELS]]). |
 | `findOne(type, id)` | One record or `null`; subscribes the record key. May fetch (below). |
 | `findMany(type, { filter }?)` | Records in insertion order; `filter` always runs locally; subscribes the collection key. May fetch (below). |
+| `observe(type, [id,] fn)` | Calls `fn()` after each flush carrying a change to the collection (or the one record); returns an idempotent `stop()`. Never fetches (D184, below). |
 | `flush()` | Deliver pending notifications and write pending persistence now. |
 | `loadOne(type, id)` | Always requests and upserts. Bypasses the negative cache (the force-refresh hatch); accepts whatever record the server returns (a slug-resolving endpoint works) and clears the requested id's absence on success. |
 | `loadMany(type, options?)` | Always requests and upserts every record. No options: marks the type loaded (and exhaustive when the generated REST verb made the request). With options (`{}` included): a partial page that accumulates and marks nothing. |
@@ -68,7 +69,10 @@ Every server path preserves object identity, so references and relationships sta
 
 ## Subscriptions
 
+
 Inside `data()`, `findOne` subscribes `type id` and `findMany` subscribes `type`; each run replaces the prior dependency set (D146 holds a prepared run's keys until commit), and destroy unsubscribes. Creates, updates, upserts and removals notify both levels. Notifications batch to one delivery per flush on `requestAnimationFrame`, with a 220 ms fallback timer and a direct timer when the tab is hidden (D63). Subscriber errors are isolated. A notification arriving while a view's settle loop runs coalesces into one more pass.
+
+Outside a view, `store.observe('task', fn)` links `fn` to the collection key and `store.observe('task', id, fn)` to one record key (D184). Each call is its own observation: no tracking scope, no reset, no fetch, the same delivery (`fn()` with no arguments, once per flush). `stop()` removes exactly that observation and is idempotent; nothing stops an observer for you, so code that observes from a view stops it in teardown. A record observed before it exists fires on its creation.
 
 Every notification stamps the record's render revision (D170), so a child given a record prop refreshes when that record changes through `update()` or any store path. A related record's fields, a computed getter's inputs and direct field assignment advance no revision — a child that needs those re-queries by id in its own `data()`.
 
