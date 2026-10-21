@@ -38,7 +38,7 @@ registry/                     # SOURCE OF TRUTH
     └── piece.json            # per-piece manifest
 demo/                         # Puzzle docs-site app (port 3070) — CONSUMES copies
 ├── app/components/ui/*.pzl   # COPIES of registry pieces (downstream)
-├── app/lib/*.js              # COPIES of registry/lib files (+ appearance.js copy, demo-only tokenNames.js and contrast.js)
+├── app/lib/*.js              # COPIES of registry/lib files (+ appearance.js copy, demo-only tokenNames.js, contrast.js and no-autofill.js)
 ├── app/styles/styles.css     # imports the four registry/theme/*.css DIRECTLY (not copies)
 ├── app/views/themes/*.pzl    # design-system panels: SchemePanel, Compare, Pieces
 ├── app/views/components/*Doc.pzl  # one docs page per piece
