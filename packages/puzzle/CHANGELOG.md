@@ -174,8 +174,9 @@ pieces, `language-switcher` and `language-menu`, render the language list.
 There is no npm 0.8.1 (that release is the `packages/puzzle-lang` Go module
 only), so 0.9.0 follows 0.8.0 on npm.
 
-Production sizes are unchanged from 0.8.0. Apps without `i18n.routing` get no
-added code: every prefix branch sits behind a build-time define, and their
+Production sizes: hello-world **23.0 KB gzip** (21.9 in 0.8.0), todos
+**27.0 KB gzip** (26.0), about a kilobyte each, mostly the new built-in
+APIs of D182–D189. Apps without `i18n.routing` get no added code: every prefix branch sits behind a build-time define, and their
 prerendered HTML is pinned byte for byte by a golden test.
 
 ### Upgrading from 0.8
@@ -306,17 +307,17 @@ you see:
   ```
 
   It resolves `true` once two consecutive frames find no mount or navigation
-  in flight, no pending store flush, no async `data()` running, no
-  `setLocale()` switch loading and, on adapter apps, no tracked find's fetch in
-  flight. It never rejects, steps on timers in a hidden tab, and resolves
-  `true` at once when the app is not mounted. It only observes state the
-  runtime already keeps, so unlike `/testing`'s `settled()` it forces nothing.
+  in flight, no pending store flush or view render, no async `data()` running,
+  no `setLocale()` switch loading and, on adapter apps, no tracked find's fetch
+  in flight. It never rejects, steps on timers in a hidden tab, and resolves
+  `true` at once when the app is not mounted. A `timeout` that is not a finite
+  number ≥ 0 falls back to 10000 (development also logs it). It only observes
+  state the runtime already keeps, so unlike `/testing`'s `settled()` it forces
+  nothing.
   It cannot see user timers, animations, IntersectionObserver triggers, writes
   or fetches nothing awaits (an event handler's unawaited `save()` or
   `loadMany()`), or a path- or hash-mode `back()`, `forward()` or `go()`
-  before its `popstate` fires. A view's `setData()` render now uses the
-  store's hidden-tab scheduler too, so it lands in a background tab instead of
-  waiting for the tab to come back.
+  before its `popstate` fires.
 - **`router.views` and the `agent` route field (D183).** `router.views` lists
   every leaf route, catch-all excluded, as frozen
   `{ path, params, name, meta, title, agent, chain }` entries, built once on
@@ -404,7 +405,8 @@ you see:
 - **Translated page titles (D177).** A route's `meta.title` and
   `meta.description` may be a translation key, `meta: { title: { t:
   'about.title' } }`, resolved in the prerender and in the browser, so the tab
-  title follows a locale switch. It works with or without prefix routing. A
+  title follows a locale switch. It works with or without prefix routing, and
+  on a client-rendered (`prerender: false`) static page too. A
   `{ t }` value in an app with no `i18n` block is a build warning.
 - **A build warning for a bare `href` (D177).** Under prefix routing a literal
   root-relative `href="/about"` on an `<a>` or `<area>` skips `link()` and so
@@ -503,12 +505,15 @@ you see:
   rejects: a throw inside the commit window, which used to reject the push,
   now resolves `'error'` and reaches `onError` (only the first navigation
   still rejects `app.mount()`). A push made from `mounted()` resolves once
-  that deferred navigation has run. `go()`, `back()` and `forward()` are
+  that deferred navigation has run. A push to the path already loading
+  returns that navigation's promise, or `'superseded'` when a push made in
+  between took over. `go()`, `back()` and `forward()` are
   unchanged. Exported type: `NavigationResult`.
 - **A push back to the current path while another navigation is loading is a
   real navigation (D182).** It supersedes the loading one (last push wins)
   instead of resolving as a no-op that the loading navigation then overrode.
-  Clicking the active link after a failed page also rebuilds it. Both rewrite
+  Clicking the active link after a failed page also rebuilds it, and a rebuild
+  that fails is retried by the next click. Both rewrite
   the current history entry rather than adding one; over a Back that is still
   loading, the push is an ordinary push so the entry Back moved to survives.
 
@@ -523,6 +528,10 @@ you see:
   Spanish 404 page.
 - **`<html dir>` follows the active locale** in every app that configures
   `i18n` (D177).
+- **One frame scheduler (D63, D185, D188).** Store flushes, view renders,
+  `app.idle()` and `this.tick()` share `client-runtime/scheduler.js`, so a
+  view's `setData()` render lands in a background tab instead of waiting for
+  the tab to come back.
 
 ### Fixed
 
@@ -534,8 +543,8 @@ you see:
   in development. Only dynamic URL bindings whose scheme the template leaves
   open pay for the check: `href="/users/{ id }"` compiles without it.
   SVG animation `to`/`from`/`by`/`values` (each `;` entry) are guarded too,
-  and a dynamic `<iframe srcdoc>` is a compile error unless the iframe has a
-  static `sandbox` without `allow-scripts`.
+  and a dynamic `<iframe srcdoc>` is a compile error unless the iframe's only
+  `sandbox` attributes are static ones without `allow-scripts`.
 - **Locale selection respects Chinese scripts (D175).** `zh-TW`, `zh-HK`,
   `zh-MO` and `zh-Hant-*` match a configured `zh-Hant`; other Chinese tags match
   `zh-Hans`. The first-visit redirect makes the same choice.
@@ -548,6 +557,8 @@ you see:
   fragments across SPA, hybrid, static and locale pages. Missing compiler
   stylesheets fail before replacing `dist/`, and static pages strip the
   base-prefixed app script while retaining public scripts (D51/D177/D181).
+  Tags inside HTML comments are left as written, so a commented-out
+  `<link href="/app.css">` no longer fails a hashed build.
 - Adapter settlement counts dirty re-passes toward the ten-round cap, preventing
   repeated store notifications from starving a view's `data()` run (D161).
 - A data field whose name matches one the compiler uses internally for loop
@@ -568,7 +579,8 @@ you see:
   instance across hide/show and wrapper swaps. Navigation while hidden updates
   the child chain and releases superseded views; teardown also releases views
   that have not mounted yet. The usage scan keeps this code only in apps whose
-  templates can hide an outlet (`__PUZZLE_HAS_CONDITIONAL_SLOT__`).
+  templates can hide an outlet (`__PUZZLE_HAS_CONDITIONAL_SLOT__`); a wrapper
+  component given a `{...spread}` counts, since the spread may carry a `key`.
 - `<Component slot="x" is={ current }>` fills the named slot and strips the
   consumed routing attribute from the selected component.
 - `raw` and `newline_to_br` ranges move safely when page translation wraps or

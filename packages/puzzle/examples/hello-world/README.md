@@ -30,7 +30,7 @@ app has no CSS, so nothing but the runtime is being weighed. The exact number
 tracks whichever `@magic-spells/puzzle` version is installed. The CLI's gzip
 figure runs slightly high: both gzip at level 9, but the framework's
 `npm run measure:size` uses Node's zlib, which packs a little tighter, and
-reports 21.9 KB for this 0.8.0 bundle, the figure the CHANGELOG cites.
+reports 23.0 KB for this 0.9.0 bundle, the figure the CHANGELOG cites.
 
 ## Files
 
