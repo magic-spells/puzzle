@@ -21,6 +21,7 @@ one frozen rAF and no subscriber would hear anything until the tab was visible.
 
 ## Decision
 
+
 rAF stays the primary scheduler. `_scheduleFlush` — the single arming point for
 both `_notify` (subscriber delivery) and `_persist` (batched storage write) —
 adds two guards:
@@ -34,7 +35,7 @@ The rule lives once, as `frame(run)` in `client-runtime/scheduler.js`: whichever
 of the frame or the timer fires first runs, and the other does nothing. Store
 flushes, `PuzzleView` `setData()` renders and `app.idle()` checks all use it;
 store flushes and view renders go through `schedule(job)`, which also counts
-them for `tick()` ([[DECISION-D188-TICK]]). A frame that fires after an explicit
+them for `renderTick()` ([[DECISION-D188-TICK]]). A frame that fires after an explicit
 `flush()` finds nothing pending, since `flush()` is idempotent.
 
 ## Alternatives

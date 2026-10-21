@@ -207,8 +207,8 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   `{ props, params, route, data }` of the previous render; a record in it is
   the same live object. Live members: `this.route` (pre-commit-safe snapshot),
   `this.element`, `this.refs`, `this.memo()`, `getData()`, `setData()`,
-  `refresh()`, `tick()`.
-- **`this.tick()` (D188):** resolves once no store flush or view render is
+  `refresh()`, `renderTick()`.
+- **`this.renderTick()` (D188):** resolves once no store flush or view render is
   scheduled anywhere in the runtime, including the renders those schedule
   (timers in a hidden tab). Forces nothing, no timeout; does not wait for
   async `data()`, fetches or navigation — that is `app.idle()`.

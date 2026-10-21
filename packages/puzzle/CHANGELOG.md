@@ -235,7 +235,7 @@ you see:
   `outside` or `once`; listener removal preserves the capture flag. Combining
   `passive` with `prevent` is a positioned compile error. Apps whose templates
   use neither ship no code for them.
-- **`this.tick()` (D188).** A view method that resolves once every pending
+- **`this.renderTick()` (D188).** A view method that resolves once every pending
   store flush and scheduled render has landed, including the renders those
   schedule, in hidden tabs too. It forces nothing and does not wait for async
   `data()`, requests or navigation — that is `app.idle()`.
@@ -529,7 +529,7 @@ you see:
 - **`<html dir>` follows the active locale** in every app that configures
   `i18n` (D177).
 - **One frame scheduler (D63, D185, D188).** Store flushes, view renders,
-  `app.idle()` and `this.tick()` share `client-runtime/scheduler.js`, so a
+  `app.idle()` and `this.renderTick()` share `client-runtime/scheduler.js`, so a
   view's `setData()` render lands in a background tab instead of waiting for
   the tab to come back.
 

@@ -11,6 +11,7 @@ import { hashRouter, memoryRouter } from '../client-runtime/router/modes.js';
 import { setErrorConfig } from '../client-runtime/errors.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { SLOT_TAG, ViewNode } from '../client-runtime/views/ViewNode.js';
+import { installFakeAnimate } from './helpers/fake-waapi.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -948,6 +949,163 @@ describe('router.push() — the committed path when it is not a no-op (D182)', (
 		await router.back();
 		expect(router.current.path).toBe('/prev');
 		expect(router.back()).toBeUndefined();
+	});
+
+	// A push to the committed path rewrites the entry (replace semantics), and
+	// #navigate runs synchronously into created() when the route has no guards or
+	// lazy(). A same-path push from that created() must join the rebuild, exactly
+	// as it joins a plain push ('a same-path push from created() of the view
+	// being loaded returns the in-flight result', above).
+	it('a same-path push from created() during a rebuild over a navigation in flight shares its result', async () => {
+		const waapi = installFakeAnimate();
+		try {
+			let router;
+			let armed = false;
+			let inner = null;
+			let release;
+			const gate = new Promise((r) => (release = r));
+			class Home extends PuzzleView {
+				animations = { out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 150 } };
+				created() {
+					if (armed && !inner) inner = router.push('/');
+				}
+				async data() {
+					if (armed) {
+						await gate;
+						throw new Error('rebuild failed');
+					}
+					return {};
+				}
+				render() {
+					return h('puzzle-view', { class: 'home' }, [text('HOME')]);
+				}
+			}
+			({ router } = await boot(
+				[
+					{ path: '/', name: 'home', view: Home },
+					{ path: '/about', name: 'about', view: AboutView },
+				],
+				{ onError: () => {} }
+			));
+			router.push('/about'); // Home's out animation holds this navigation in flight
+			for (let i = 0; i < 4; i++) await tick();
+			armed = true;
+			const outer = router.push('/'); // the committed path with a navigation in flight: a rebuild
+			let early = null;
+			inner.then((r) => (early ??= r));
+			await tick();
+			expect(early).toBeNull(); // not the old snapshot's { ok: true }
+			release();
+			for (let i = 0; i < 8; i++) {
+				waapi.finishAll();
+				await tick();
+			}
+			expect(await outer).toMatchObject({ ok: false, reason: 'error' });
+			expect(await inner).toBe(await outer);
+		} finally {
+			waapi.uninstall();
+		}
+	});
+
+	it('a same-path push from created() during a rebuild over an invalidated chain joins it once', async () => {
+		let router;
+		let failing = true;
+		let armed = false;
+		let created = 0;
+		let inner = null;
+		class Flaky extends PuzzleView {
+			renderSkeleton() {
+				return h('puzzle-view', {}, [text('…')]);
+			}
+			created() {
+				created++;
+				// Capped so a regression fails the count instead of overflowing the stack.
+				if (armed && created < 10) inner ??= router.push('/f');
+			}
+			async data() {
+				if (failing) throw new Error('boom');
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'flaky' }, [text('OK')]);
+			}
+		}
+		({ router } = await boot(
+			[
+				{ path: '/', name: 'home', view: HomeView },
+				{ path: '/f', name: 'f', view: Flaky },
+			],
+			{ onError: () => {} }
+		));
+		await router.push('/f'); // the skeleton commits, data() fails: the chain is invalid
+		await tick();
+		failing = false;
+		armed = true;
+		created = 0;
+		const outer = await router.push('/f');
+		expect(created).toBe(1);
+		expect(outer.ok).toBe(true);
+		expect(await inner).toBe(outer);
+		expect(router.current.path).toBe('/f');
+	});
+
+	it('replace() to an uncommitted path a plain push has in flight supersedes it', async () => {
+		const { View: Slow, release } = gated();
+		const { router } = await boot([
+			{ path: '/', name: 'home', view: HomeView },
+			{ path: '/y', name: 'y', view: Slow },
+		]);
+		const pushed = router.push('/y');
+		const replaced = router.replace('/y');
+		expect(replaced).not.toBe(pushed);
+		release();
+		expect(await pushed).toEqual({ ok: false, reason: 'superseded' });
+		const result = await replaced;
+		expect(result.ok).toBe(true);
+		expect(result.route.path).toBe('/y');
+		expect(router.current.path).toBe('/y');
+	});
+
+	it('a same-path replace() from created() during a rebuild over an invalidated chain joins it once', async () => {
+		let router;
+		let failing = true;
+		let armed = false;
+		let created = 0;
+		let inner = null;
+		class Flaky extends PuzzleView {
+			renderSkeleton() {
+				return h('puzzle-view', {}, [text('…')]);
+			}
+			created() {
+				created++;
+				// Capped so a regression fails the count instead of overflowing the stack.
+				if (armed && created < 10) inner ??= router.replace('/f');
+			}
+			async data() {
+				if (failing) throw new Error('boom');
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'flaky' }, [text('OK')]);
+			}
+		}
+		({ router } = await boot(
+			[
+				{ path: '/', name: 'home', view: HomeView },
+				{ path: '/f', name: 'f', view: Flaky },
+			],
+			{ onError: () => {} }
+		));
+		await router.push('/f'); // the skeleton commits, data() fails: the chain is invalid
+		await tick();
+		failing = false;
+		armed = true;
+		created = 0;
+		const outer = await router.push('/f');
+		expect(created).toBe(1);
+		expect(outer.ok).toBe(true);
+		expect(await inner).toBe(outer);
+		expect(router.current.path).toBe('/f');
 	});
 });
 

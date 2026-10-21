@@ -532,11 +532,11 @@ rebuilds in place and the choice is remembered. See `examples/i18n`.
 
 ### Waiting for a render
 
-`await this.tick()` resolves once every pending store flush and scheduled render has landed, including renders those schedule (D188):
+`await this.renderTick()` resolves once every pending store flush and scheduled render has landed, including renders those schedule (D188):
 
 ```js
 this.setData({ editing: true });
-await this.tick();
+await this.renderTick();
 this.refs.editor.focus();
 ```
 
