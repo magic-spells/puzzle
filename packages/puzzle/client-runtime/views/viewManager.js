@@ -2127,9 +2127,9 @@ function warnFlipCompiledOut() {
 	warnedFlipCompiledOut = true;
 	console.warn(
 		'[puzzle] a `flip` attribute is present at runtime, but flip support was compiled out — ' +
-			'the build scan found no `flip` in the .pzl source it reads (the project and installed packages ' +
-			'that declare @magic-spells/puzzle), so the reorder animation will not play. Pre-compiled ' +
-			'component JavaScript is not scanned: import the .pzl source, or remove the attribute.'
+			'the build scan found no `flip` written in a template, so the reorder animation will not play. ' +
+			'Write `flip` directly on the row in the template: it is not detected inside a `{...spread}` ' +
+			'or in pre-compiled component JavaScript.'
 	);
 }
 

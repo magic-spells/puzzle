@@ -27,6 +27,7 @@ position; inserts and removes keep their own enter/leave paths. Spec:
 ## Decision
 
 
+
 - **A directive attribute, not a namespace.** `flip` parses as an ordinary
   attribute and joins `key`/`island`/`ref` as a framework-owned vnode attr
   (`reservedVnodeAttrs`): stripped by `setAttr`/`removeAttr` and the SSG
@@ -47,9 +48,13 @@ position; inserts and removes keep their own enter/leave paths. Spec:
   **component props** (a component vnode's props are its attrs —
   `<PostCard … flip>` is a real flip row) and slot children, and emits
   `__PUZZLE_HAS_FLIP__`; with none, `flip.js` tree-shakes out. A compiled `.pzl`
-  the scan never read that uses `flip` fails the build. A `flip` seen at
-  runtime when support was compiled out (only possible from pre-compiled
-  component JavaScript) logs a dev-only warning once.
+  the scan never read that uses `flip` fails the build.
+- **`flip` must be written in the template.** A `flip` key passed inside a
+  `{...spread}` or set by pre-compiled component JavaScript is invisible to the
+  scan; if no template writes `flip`, support is compiled out and that row
+  reorders without animating. This is a deliberate limit, not a gap to close:
+  FLIP is an authored choice on the row, not a dynamic value. A `flip` seen at
+  runtime when support was compiled out logs a dev-only warning once.
 
 ## Alternatives
 
