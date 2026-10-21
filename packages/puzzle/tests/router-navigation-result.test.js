@@ -1048,6 +1048,48 @@ describe('router.push() — the committed path when it is not a no-op (D182)', (
 		expect(await inner).toBe(outer);
 		expect(router.current.path).toBe('/f');
 	});
+
+	it('a same-path replace() from created() during a rebuild over an invalidated chain joins it once', async () => {
+		let router;
+		let failing = true;
+		let armed = false;
+		let created = 0;
+		let inner = null;
+		class Flaky extends PuzzleView {
+			renderSkeleton() {
+				return h('puzzle-view', {}, [text('…')]);
+			}
+			created() {
+				created++;
+				// Capped so a regression fails the count instead of overflowing the stack.
+				if (armed && created < 10) inner ??= router.replace('/f');
+			}
+			async data() {
+				if (failing) throw new Error('boom');
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'flaky' }, [text('OK')]);
+			}
+		}
+		({ router } = await boot(
+			[
+				{ path: '/', name: 'home', view: HomeView },
+				{ path: '/f', name: 'f', view: Flaky },
+			],
+			{ onError: () => {} }
+		));
+		await router.push('/f'); // the skeleton commits, data() fails: the chain is invalid
+		await tick();
+		failing = false;
+		armed = true;
+		created = 0;
+		const outer = await router.push('/f');
+		expect(created).toBe(1);
+		expect(outer.ok).toBe(true);
+		expect(await inner).toBe(outer);
+		expect(router.current.path).toBe('/f');
+	});
 });
 
 describe('router.push() — pops during navigation zero (D182)', () => {

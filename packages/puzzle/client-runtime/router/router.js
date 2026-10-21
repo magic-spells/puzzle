@@ -1027,35 +1027,9 @@ export class Router {
 		// OLD route was still committed and the new DOM did not exist yet. Sharing
 		// the first navigation's promise gives both callers the same settlement —
 		// commit, failure, or supersession alike — the same NavigationResult (D182).
-		//
-		// A GUARD REDIRECT is exempt (D87). Since the redirect inherits the denied
-		// verb, a verdict equal to the path being denied re-enters here through
-		// push() while that very navigation still owns #pendingNavPath — so this
-		// guard would hand the redirect the denied navigation's OWN promise, and the
-		// `await` inside #navigate's redirect branch would wait on itself forever.
-		// (A guard on '/login' that redirects to '/login' — the inherited-guard
-		// mistake — is the reachable case.) #guardRedirecting is set only around
-		// that re-entry, so skipping the guard there lets the redirect supersede
-		// normally and trip the redirect-limit cycle error instead of hanging.
-		if (
-			!this.#guardRedirecting &&
-			this.#pendingNavPath != null &&
-			key === sameNavKey(this.#pendingNavPath)
-		) {
-			// An empty slot is read again on a microtask: a push fired synchronously
-			// from inside #navigate (a created() hook) runs before push() pairs the
-			// promise; one tick later the slot holds the in-flight navigation — if it
-			// is still this path's. Otherwise a navigation fired in between took the
-			// token, so the one this push joined was superseded.
-			return (
-				this.#pendingNavPromise ??
-				Promise.resolve().then(
-					() =>
-						(this.#pendingNavPath != null && sameNavKey(this.#pendingNavPath) === key && this.#pendingNavPromise) ||
-						SUPERSEDED
-				)
-			);
-		}
+		// A guard redirect is exempt (D87; see #joinInFlight).
+		const joined = this.#joinInFlight(key);
+		if (joined) return joined;
 		// The committed path, but not a no-op (a navigation in flight, or an
 		// invalidated chain) — the D182 table. The app is still standing on the
 		// committed entry, so the navigation REWRITES it instead of stacking a
@@ -1109,10 +1083,51 @@ export class Router {
 		if (this.#committing) return this.#defer({ kind: 'replace', path });
 		// Same-path no-op, exactly push()'s guard: replacing the committed entry
 		// with itself would re-run data() and rewrite an identical URL for nothing.
-		if (this.#isCommittedNoop(sameNavKey(path))) {
+		const key = sameNavKey(path);
+		if (this.#isCommittedNoop(key)) {
 			return Promise.resolve(succeed(this.current));
 		}
-		return this.#trackNav(this.#token, this.#navigate(path, { push: false, replace: true }));
+		// A replace to the path a push (or a push's rebuild) already has in flight
+		// joins it, as a second push does: a replace from created() of the view that
+		// rebuild is constructing would otherwise supersede it and construct a fresh
+		// view, whose created() replaces again, until the stack overflows (D182).
+		return this.#joinInFlight(key) || this.#trackNav(this.#token, this.#navigate(path, { push: false, replace: true }));
+	}
+
+	/**
+	 * The in-flight same-key join shared by push() and replace() (D182): the
+	 * navigation in flight to `key`'s promise, or null when none is.
+	 *
+	 * A GUARD REDIRECT is exempt (D87). Since the redirect inherits the denied
+	 * verb, a verdict equal to the path being denied re-enters push()/replace()
+	 * while that very navigation still owns #pendingNavPath — so the join would
+	 * hand the redirect the denied navigation's OWN promise, and the `await`
+	 * inside #navigate's redirect branch would wait on itself forever. (A guard on
+	 * '/login' that redirects to '/login' — the inherited-guard mistake — is the
+	 * reachable case.) #guardRedirecting is set only around that re-entry, so
+	 * skipping the join there lets the redirect supersede normally and trip the
+	 * redirect-limit cycle error instead of hanging.
+	 *
+	 * @param {string} key the target's sameNavKey
+	 * @returns {Promise<NavigationResult> | null}
+	 */
+	#joinInFlight(key) {
+		if (this.#guardRedirecting || this.#pendingNavPath == null || key !== sameNavKey(this.#pendingNavPath)) {
+			return null;
+		}
+		// An empty slot is read again on a microtask: a push or replace fired
+		// synchronously from inside #navigate (a created() hook) runs before push()
+		// pairs the promise; one tick later the slot holds the in-flight navigation —
+		// if it is still this path's. Otherwise a navigation fired in between took
+		// the token, so the one this call joined was superseded.
+		return (
+			this.#pendingNavPromise ??
+			Promise.resolve().then(
+				() =>
+					(this.#pendingNavPath != null && sameNavKey(this.#pendingNavPath) === key && this.#pendingNavPromise) ||
+					SUPERSEDED
+			)
+		);
 	}
 
 	/**
