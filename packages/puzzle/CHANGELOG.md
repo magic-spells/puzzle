@@ -416,6 +416,27 @@ you see:
   - `puzzle add piece language-menu`: a compact menu button showing the
     active language, built on `dropdown-menu`, with an `align` prop.
 
+- **`router.push()` and `router.replace()` resolve a `NavigationResult`
+  (D182).** `await router.push('/account')` tells you what happened:
+  `{ ok: true, route, redirectedFrom? }` when the navigation committed (the
+  catch-all `*` and a same-path no-op included; `redirectedFrom` is the path
+  you asked for when a guard redirected), or `{ ok: false, reason, error? }`
+  with `reason` `'blocked'` (a guard returned `false`), `'superseded'` (a
+  later navigation won), `'not-found'` (no route and no catch-all) or
+  `'error'` (anything sent to `onError`: a throwing guard, the redirect cycle
+  cap, a lazy load, construction or `data()` failure). The promise never
+  rejects: a throw inside the commit window, which used to reject the push,
+  now resolves `'error'` and reaches `onError` (only the first navigation
+  still rejects `app.mount()`). A push made from `mounted()` resolves once
+  that deferred navigation has run. `go()`, `back()` and `forward()` are
+  unchanged. Exported type: `NavigationResult`.
+- **A push back to the current path while another navigation is loading is a
+  real navigation (D182).** It supersedes the loading one (last push wins)
+  instead of resolving as a no-op that the loading navigation then overrode.
+  Clicking the active link after a failed page also rebuilds it. Both rewrite
+  the current history entry rather than adding one; over a Back that is still
+  loading, the push is an ordinary push so the entry Back moved to survives.
+
 ### Changed
 
 - **BREAKING: `i18n.locales` is `[{ locale, label, href, active }]` (D177).**

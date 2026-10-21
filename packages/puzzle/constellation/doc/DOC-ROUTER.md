@@ -242,10 +242,32 @@ Declare a `path: '*'` route; it is matched last wherever it sits. Without one, a
 
 | Member | Description |
 | ------ | ----------- |
-| `push(path)` | Navigate with a new history entry. Returns a promise that settles when the navigation does. |
-| `replace(path)` | Same pipeline, replaces the current entry, leaves scroll alone. |
+| `push(path)` | Navigate with a new history entry. Resolves a `NavigationResult` when the navigation settles, and never rejects. |
+| `replace(path)` | Same pipeline and result, replaces the current entry, leaves scroll alone. |
 | `go(n)` / `back()` / `forward()` | History movement in every mode. |
 | `url(path)` | Mode- and base-correct href for a path (what `link()` calls). |
 | `current` | The committed snapshot `{ path, pathname, query, hash, route, params, chain }`. |
+
+`await router.push(path)` tells you what happened (D182):
+
+```js
+const result = await this.ctx.router.push('/account');
+if (result.ok) {
+  result.route.path;      // where it landed — '/login' if a guard redirected
+  result.redirectedFrom;  // '/account' after a redirect, else undefined
+} else {
+  result.reason;          // 'blocked' | 'superseded' | 'not-found' | 'error'
+  result.error;           // the failure, for 'error' (also sent to onError)
+}
+```
+
+The results mean:
+
+- **A push to the current path** resolves `ok` with the current route, provided nothing else is loading. If another navigation is loading, the push is a real navigation and the last push wins.
+- **`'blocked'`**: a guard returned `false`.
+- **`'superseded'`**: a later navigation won.
+- **`'not-found'`**: no route matched and there is no `*` catch-all.
+- **`'error'`**: something failed and was sent to `onError`, such as a throwing guard or a failed `data()`.
+- **A push made from `mounted()`** resolves once that deferred navigation has run.
 
 Named-route navigation is not supported.

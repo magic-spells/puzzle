@@ -93,7 +93,7 @@ describe('routed constructor throws', () => {
 		);
 
 		const first = router.push('/boom');
-		await expect(first).resolves.toBeUndefined();
+		await expect(first).resolves.toEqual({ ok: false, reason: 'error', error: failure });
 
 		expect(errors).toHaveLength(1);
 		expect(errors[0]).toMatchObject({ error: failure, info: { phase: 'navigation' } });
@@ -139,7 +139,7 @@ describe('routed constructor throws', () => {
 		);
 
 		const first = router.push('/boom');
-		await expect(first).resolves.toBeUndefined();
+		await expect(first).resolves.toEqual({ ok: false, reason: 'error', error: failure });
 
 		expect(errors).toHaveLength(1);
 		expect(errors[0]).toMatchObject({ error: failure, info: { phase: 'navigation' } });
@@ -174,7 +174,7 @@ describe('routed constructor throws', () => {
 		);
 
 		const first = router.push('/parent/child');
-		await expect(first).resolves.toBeUndefined();
+		await expect(first).resolves.toEqual({ ok: false, reason: 'error', error: failure });
 
 		// The parent instance was constructed before the child threw; it is dropped
 		// without created() ever running, so no destroyed() partner is owed either.

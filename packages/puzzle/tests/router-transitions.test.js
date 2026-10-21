@@ -696,7 +696,7 @@ describe('Router transitions — incomplete navigations do not strand an in-flig
 		expect(log).toContain('two:mounted');
 	});
 
-	it('a same-path no-op push during an in-flight out phase leaves it untouched (no-op precedes any bump)', async () => {
+	it('a push back to the committed path during an in-flight out phase supersedes it (D182)', async () => {
 		waapi = installFakeAnimate();
 		const log = [];
 		const { router, el } = await boot(flatRoutes(log));
@@ -708,15 +708,17 @@ describe('Router transitions — incomplete navigations do not strand an in-flig
 		expect(log).toEqual(['one:willHide']); // parked in its out phase
 
 		// '/' is still the COMMITTED path (#state moves only at the end of the
-		// swap), so this is the FIX-2 no-op — it must return from push() BEFORE
-		// #navigate's token bump, leaving the in-flight navigation valid.
-		await router.push('/');
+		// swap), but a navigation is in flight, so this is NOT the same-path no-op:
+		// it is an ordinary push that supersedes '/two' (last push wins). The
+		// parked outgoing unit is torn down by the winner's swap, never stranded.
+		const back = router.push('/');
 
 		await settle();
-		await p;
-		expect(el.querySelector('.two')).not.toBeNull();
-		expect(el.querySelector('.one')).toBeNull();
-		expect(router.current.path).toBe('/two');
+		expect(await p).toEqual({ ok: false, reason: 'superseded' });
+		expect((await back).ok).toBe(true);
+		expect(el.querySelector('.one')).not.toBeNull();
+		expect(el.querySelector('.two')).toBeNull();
+		expect(router.current.path).toBe('/');
 	});
 
 	it('failed recovery cancels the router out animation but preserves an app-owned root animation', async () => {

@@ -52,6 +52,7 @@ import type {
 	StaticPathsContext,
 	StaticPathsEntry,
 	StaticPathsFn,
+	NavigationResult,
 } from '@magic-spells/puzzle';
 import { adapter, PuzzleAdapterError } from '@magic-spells/puzzle/adapter';
 import type {
@@ -261,6 +262,20 @@ class TodoListView extends PuzzleView {
 		this.ctx.router.push('/todos');
 		this.ctx.router.replace('/todos?tab=2'); // v1.49, D83
 		this.ctx.router.go(-1);
+		// push/replace resolve a NavigationResult (D182), narrowed on `ok`.
+		void this.ctx.router.push('/about').then((result: NavigationResult) => {
+			if (result.ok) {
+				const landed: RouteSnapshot = result.route;
+				const from: string | undefined = result.redirectedFrom;
+				void landed;
+				void from;
+			} else {
+				const reason: 'blocked' | 'superseded' | 'not-found' | 'error' = result.reason;
+				const error: unknown = result.error;
+				void reason;
+				void error;
+			}
+		});
 
 		// element is Element | Comment | null (the anchor Comment during async data()).
 		const node: Element | Comment | null = this.element;
