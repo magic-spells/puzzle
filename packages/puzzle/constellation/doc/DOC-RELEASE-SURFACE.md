@@ -235,6 +235,10 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
 - `push`, `replace` (no history entry), `go`, `back`, `forward`; same-origin
   link interception; `router.url(path, options?)` / `link('/x')` for
   mode-agnostic hrefs.
+- **Navigation result (D182):** `push()`/`replace()` resolve
+  `{ ok: true, route, redirectedFrom? }` or
+  `{ ok: false, reason: 'blocked' | 'superseded' | 'not-found' | 'error', error? }`
+  and never reject; a push deferred from `mounted()` resolves when it runs.
 - **Locale URL prefixes (D177):** `i18n.routing: 'prefix'` (path routing
   only) puts every non-default locale under `/<tag>` (default unprefixed).
   App paths stay locale-free; `link()`/`router.url()` add the active prefix,

@@ -168,6 +168,19 @@ export interface RouteSnapshot {
 }
 
 /**
+ * What `router.push()` / `router.replace()` resolve (D182); the promise never
+ * rejects. `ok: true` carries the committed snapshot (or the current route for
+ * a same-path no-op); `redirectedFrom` names the originally requested path when
+ * a guard redirected. `ok: false` says why nothing committed: a guard refused
+ * (`'blocked'`), a later navigation won (`'superseded'`), no route and no
+ * catch-all matched (`'not-found'`), or a lazy load, view construction or
+ * `data()` failed (`'error'`, with the error, also reported to `onError`).
+ */
+export type NavigationResult =
+	| { ok: true; route: RouteSnapshot; redirectedFrom?: string }
+	| { ok: false; reason: 'blocked' | 'superseded' | 'not-found' | 'error'; error?: unknown };
+
+/**
  * Custom scroll behavior (D33): return a position to scroll to, or a
  * falsy value to leave scroll alone.
  */
@@ -396,10 +409,10 @@ export interface MorphHandler {
  * `this.ctx.router`. The public API is path-shaped in all router modes.
  */
 export interface Router {
-	/** Navigate to a path (push a history entry). */
-	push(path: string): void | Promise<void>;
-	/** Navigate to a path REPLACING the current history entry — no new entry, scroll left alone by default (D83). */
-	replace(path: string): void | Promise<void>;
+	/** Navigate to a path (push a history entry); resolves the outcome (D182). */
+	push(path: string): Promise<NavigationResult>;
+	/** Navigate to a path REPLACING the current history entry — no new entry, scroll left alone by default (D83); resolves the outcome (D182). */
+	replace(path: string): Promise<NavigationResult>;
 	/** Move `n` entries in history (negative = back). All modes (D42). */
 	go(n: number): void | Promise<void>;
 	/** Go back one entry. */

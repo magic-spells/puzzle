@@ -298,7 +298,7 @@ import { reportError } from '../errors.js';
 
 /** @import { PuzzleView } from '../views/PuzzleView.js' */
 /** @import { RouterModeDescriptor, RouterModeInstance } from './modes.js' */
-/** @import { Route, RouteSnapshot, GuardFn, ScrollPosition, PuzzleContext } from '../../types/index.js' */
+/** @import { Route, RouteSnapshot, GuardFn, ScrollPosition, PuzzleContext, NavigationResult } from '../../types/index.js' */
 
 /**
  * A compiled route leaf (makeEntry), or the synthetic catch-all entry.
@@ -378,6 +378,16 @@ import { reportError } from '../errors.js';
 const SCROLL_STORE_KEY = '__puzzleScroll';
 const SCROLL_MAX_ENTRIES = 50;
 
+// What push()/replace() resolve (D182). A navigation that did not commit says
+// why; every reason is final, so one frozen object serves every superseded one.
+/**
+ * @param {'blocked' | 'superseded' | 'not-found' | 'error'} reason
+ * @param {unknown} [error]
+ * @returns {NavigationResult}
+ */
+const fail = (reason, error) => ({ ok: false, reason, error });
+const SUPERSEDED = Object.freeze(fail('superseded'));
+
 export class Router {
 	/** @type {RouteEntry[]} */
 	#routes = []; // compiled leaf Entries, in declaration order (depth-first)
@@ -411,7 +421,7 @@ export class Router {
 	// locale rebuild (__failedView(null, true), D175) waits on it, so a replace or a
 	// Back pop still loading lands before the committed location is rebuilt.
 	// Cleared in #navigate, #commitState, #recoverFailedNavigation and stop().
-	/** @type {Promise<void> | null} */
+	/** @type {Promise<NavigationResult> | null} */
 	#pendingNavPromise = null;
 	// Guard redirects re-enter the normal pipeline through push()/replace() — the
 	// redirect inherits the denied navigation's verb — so every destination gets its
@@ -473,7 +483,9 @@ export class Router {
 	// can land while the flag is set; one arriving during the async LOAD or
 	// out-animation phases (flag off) keeps today's interruption semantics.
 	#committing = false;
-	/** @type {{ kind: 'push' | 'replace', path: string } | { kind: 'go', n: number } | null} */
+	// Each slot entry carries the resolver of the promise its caller holds (#defer).
+	/** @type {({ kind: 'push' | 'replace', path: string } | { kind: 'go', n: number }) &
+	 *   { resolve: (result: NavigationResult | Promise<NavigationResult>) => void } | null} */
 	#pendingPush = null;
 
 	#onClick;
@@ -895,7 +907,9 @@ export class Router {
 		// Drop any deferred push and clear the commit-window flag (defensive: the
 		// flag is finally-cleared per commit, and #pendingPush is consumed
 		// synchronously right after being set, so both are normally already idle).
+		// A dropped deferral still settles its caller (D182).
 		this.#committing = false;
+		this.#pendingPush?.resolve(SUPERSEDED);
 		this.#pendingPush = null;
 
 		// 5. Remove listeners + restore scrollRestoration (both no-ops on a second
@@ -935,20 +949,18 @@ export class Router {
 	}
 
 	/**
-	 * Programmatic navigation (also the link-click path). Returns the nav promise.
-	 * A push arriving inside the commit window (e.g. from a view's mounted()) is
-	 * DEFERRED to run right after the in-flight commit — see #committing; it
-	 * returns a resolved promise since the deferred nav has not started yet.
+	 * Programmatic navigation (also the link-click path). Resolves the
+	 * navigation's NavigationResult (D182) and never rejects. A push arriving
+	 * inside the commit window (e.g. from a view's mounted()) is DEFERRED to run
+	 * right after the in-flight commit — see #committing and #defer — and its
+	 * promise settles when that deferred navigation does.
 	 *
 	 * @param {string} path
-	 * @returns {Promise<void>}
+	 * @returns {Promise<NavigationResult>}
 	 */
 	push(path) {
 		path = normalizeRoutePath(path);
-		if (this.#committing) {
-			this.#pendingPush = { kind: 'push', path }; // last-wins, single slot (no queue)
-			return Promise.resolve();
-		}
+		if (this.#committing) return this.#defer({ kind: 'push', path });
 		// v-next same-path no-op: a push whose target matches the COMMITTED state's
 		// path is a no-op — no history entry, no data() re-run, no scroll change (Vue
 		// Router parity; double-clicking the ACTIVE nav link must not pile duplicate
@@ -965,7 +977,7 @@ export class Router {
 		// Memory mode shares the semantics (#state.path is set there too).
 		const key = sameNavKey(path);
 		if (this.#state && key === sameNavKey(this.#state.path)) {
-			return Promise.resolve();
+			return Promise.resolve({ ok: true, route: this.current });
 		}
 		// In-flight double-click guard: the COMMITTED #state check above misses a
 		// second click on the active link WHILE its navigation is still loading — the
@@ -980,7 +992,7 @@ export class Router {
 		// landed". A resolved promise here let the second caller continue while the
 		// OLD route was still committed and the new DOM did not exist yet. Sharing
 		// the first navigation's promise gives both callers the same settlement —
-		// commit, failure, or supersession alike.
+		// commit, failure, or supersession alike — the same NavigationResult (D182).
 		//
 		// A GUARD REDIRECT is exempt (D87). Since the redirect inherits the denied
 		// verb, a verdict equal to the path being denied re-enters here through
@@ -996,7 +1008,7 @@ export class Router {
 			this.#pendingNavPath != null &&
 			key === sameNavKey(this.#pendingNavPath)
 		) {
-			return this.#pendingNavPromise ?? Promise.resolve();
+			return this.#pendingNavPromise ?? Promise.resolve({ ok: true, route: this.current });
 		}
 		const nav = this.#navigate(path, { push: true });
 		// #navigate runs synchronously up to its first await, so it has already
@@ -1022,19 +1034,18 @@ export class Router {
 	 * pathname) and the commit-window deferral (a replace from a mounted() hook
 	 * — the auth-redirect case that must not leave the aborted page in history).
 	 *
+	 * Resolves a NavigationResult exactly as push() does (D182).
+	 *
 	 * @param {string} path
-	 * @returns {Promise<void>}
+	 * @returns {Promise<NavigationResult>}
 	 */
 	replace(path) {
 		path = normalizeRoutePath(path);
-		if (this.#committing) {
-			this.#pendingPush = { kind: 'replace', path }; // last-wins, shared slot with push/go
-			return Promise.resolve();
-		}
+		if (this.#committing) return this.#defer({ kind: 'replace', path });
 		// Same-path no-op, exactly push()'s guard: replacing the committed entry
 		// with itself would re-run data() and rewrite an identical URL for nothing.
 		if (this.#state && sameNavKey(path) === sameNavKey(this.#state.path)) {
-			return Promise.resolve();
+			return Promise.resolve({ ok: true, route: this.current });
 		}
 		return this.#trackNav(this.#token, this.#navigate(path, { push: false, replace: true }));
 	}
@@ -1048,8 +1059,8 @@ export class Router {
 	 * fired inside that stretch claimed it — its own record must stand.
 	 *
 	 * @param {number} token
-	 * @param {Promise<void>} nav
-	 * @returns {Promise<void>}
+	 * @param {Promise<NavigationResult>} nav
+	 * @returns {Promise<NavigationResult>}
 	 */
 	#trackNav(token, nav) {
 		if (this.#token !== token && this.#pendingNavPromise == null) this.#pendingNavPromise = nav;
@@ -1057,10 +1068,26 @@ export class Router {
 	}
 
 	/**
+	 * Park a push/replace/memory-go that arrived inside the commit window in the
+	 * single deferral slot — last writer wins, no queue. The promise settles with
+	 * the deferred navigation's own result once #runPendingPush runs it (D182);
+	 * the entry it displaces resolves 'superseded', so no caller waits forever.
+	 *
+	 * @param {{ kind: 'push' | 'replace', path: string } | { kind: 'go', n: number }} pending
+	 * @returns {Promise<NavigationResult>}
+	 */
+	#defer(pending) {
+		this.#pendingPush?.resolve(SUPERSEDED);
+		return new Promise((resolve) => {
+			this.#pendingPush = { ...pending, resolve };
+		});
+	}
+
+	/**
 	 * Run a push/replace/memory-go deferred during the commit window, now that
 	 * #state/current are consistent (the just-committed chain is recorded).
-	 * Fire-and-forget: the caller has already finished its own commit. Single
-	 * slot — last writer wins.
+	 * Fire-and-forget: the caller has already finished its own commit. Its
+	 * deferred promise (#defer) adopts the re-dispatched navigation's result.
 	 */
 	#runPendingPush() {
 		if (this.#pendingPush == null) return;
@@ -1074,13 +1101,13 @@ export class Router {
 		// pushing '/login') would run a full redundant navigation + duplicate
 		// history entry. go() likewise must recompute from the mode's now-committed
 		// index so it preserves the normal double-back semantics.
-		if (pending.kind === 'go') {
-			this.go(pending.n);
-		} else if (pending.kind === 'replace') {
-			this.replace(pending.path);
-		} else {
-			this.push(pending.path);
-		}
+		pending.resolve(
+			pending.kind === 'go'
+				? /** @type {Promise<any>} */ (this.go(pending.n))
+				: pending.kind === 'replace'
+					? this.replace(pending.path)
+					: this.push(pending.path)
+		);
 	}
 
 	/**
@@ -1094,6 +1121,9 @@ export class Router {
 	 * the entry already targeted, are a silent no-op (browser `history.go`
 	 * semantics; before start()/after stop() there is likewise nothing to move).
 	 *
+	 * Its promise's value is not part of the contract: only push()/replace()
+	 * resolve a NavigationResult (D182).
+	 *
 	 * @param {number} n
 	 * @returns {Promise<void> | void}
 	 */
@@ -1105,16 +1135,18 @@ export class Router {
 			return;
 		}
 		if (this.#committing) {
-			this.#pendingPush = { kind: 'go', n }; // last-wins, shared slot with push/replace
-			// The deferred navigation has not started yet, so there is no nav promise
-			// to return; this matches push()/replace()'s commit-window posture.
+			// Shared slot with push/replace (#defer). go() keeps its void return here:
+			// the deferred navigation has not started, and go() reports no result.
+			this.#defer({ kind: 'go', n });
 			return;
 		}
 		const target = mode.go(n);
 		if (!target) return;
-		return this.#trackNav(
-			this.#token,
-			this.#navigate(target.path, { push: false, pop: true, memoryIndex: target.index })
+		return /** @type {Promise<any>} */ (
+			this.#trackNav(
+				this.#token,
+				this.#navigate(target.path, { push: false, pop: true, memoryIndex: target.index })
+			)
 		);
 	}
 
@@ -1335,7 +1367,7 @@ export class Router {
 	 *   savedPosition?: ScrollPosition | null, memoryIndex?: number | null,
 	 *   retryView?: PuzzleView | { __retryErrorView?: undefined } | null }} options the verb flags;
 	 *   `retryView` is the failed view whose error view pressed retry, or the REBUILD marker
-	 * @returns {Promise<void>}
+	 * @returns {Promise<NavigationResult>} what push()/replace() resolve (D182)
 	 */
 	async #navigate(
 		rawPath,
@@ -1347,8 +1379,9 @@ export class Router {
 			memoryIndex = null,
 			// The failed view whose error view pressed retry (__failedView), or null for
 			// every ordinary navigation. Read ONLY by the load-failure catch below, which
-			// refreshes that position's held face — #navigate returns undefined on success
-			// and failure alike, so the retry closure cannot detect the failure itself.
+			// refreshes that position's held face — the face needs this failure's
+			// onError info, which the NavigationResult (D182) does not carry, so the
+			// retry closure cannot redraw it from the result.
 			// A same-location rebuild (__failedView(null, true), D175) passes the REBUILD
 			// marker here instead of a view: every test of it sits behind the inline
 			// __PUZZLE_HAS_I18N__ probe, so an app without translations ships none of
@@ -1377,7 +1410,7 @@ export class Router {
 
 		if (!matched) {
 			console.warn('[puzzle] no route matched:', matchPath);
-			return; // stay put, URL untouched — and no token bump (below)
+			return fail('not-found'); // stay put, URL untouched — and no token bump (below)
 		}
 
 		// The cancellation token is bumped only once this navigation is REAL
@@ -1473,7 +1506,7 @@ export class Router {
 		if (entry.guards.length) {
 			const guardVerdict = await this.#runGuards(entry, to, from, token);
 			// Supersession is silent: no fresh view exists to destroy.
-			if (token !== this.#token || guardVerdict === null) return;
+			if (token !== this.#token || guardVerdict === null) return SUPERSEDED;
 			if (guardVerdict === false) {
 				this.#recoverFailedNavigation(token);
 				if (cur == null) {
@@ -1496,7 +1529,9 @@ export class Router {
 					// is its correct outcome (D87), so only pops repair here.
 					this.#restoreCommittedUrl(cur.path);
 				}
-				return;
+				// A throwing guard and the redirect-limit cycle (#runGuards, both already
+				// reported) block exactly like `false`.
+				return fail('blocked');
 			}
 			if (typeof guardVerdict === 'string') {
 				// Re-enter through the public push()/replace() seam: same-path no-op,
@@ -1547,7 +1582,9 @@ export class Router {
 				// unguarded replaceState would strand the address bar on our route forever.
 				if (pop && cur && this.#token === chain.token && this.#state === cur)
 					this.#restoreCommittedUrl(cur.path);
-				return redirected;
+				// The final navigation's result (D182); a chain names its first request,
+				// since each outer frame overwrites the field on the way back out.
+				return redirected.ok ? { ...redirected, redirectedFrom: rawPath } : redirected;
 			}
 		}
 
@@ -1599,9 +1636,9 @@ export class Router {
 				if (retryView && token === this.#token) {
 					await retryView.__retryErrorView?.(err, info);
 				}
-				return;
+				return fail('error', err);
 			}
-			if (token !== this.#token) return;
+			if (token !== this.#token) return SUPERSEDED;
 			viewClasses = resolvedViews.views;
 			LayoutClass = resolvedViews.layout;
 		}
@@ -1678,7 +1715,7 @@ export class Router {
 			if (retryView && token === this.#token) {
 				await retryView.__retryErrorView?.(err, info);
 			}
-			return;
+			return fail('error', err);
 		}
 
 		// LOAD (pre-commit, parallel, D19 gate). Fresh views preload (created +
@@ -1845,7 +1882,7 @@ export class Router {
 				if (retryView && token === this.#token) {
 					await retryView.__retryErrorView?.(err, info);
 				}
-				return; // stay put, no history entry (reused ancestors kept — soft-violation)
+				return fail('error', err); // stay put, no history entry (reused ancestors kept — soft-violation)
 			}
 
 			// A newer navigation started while we awaited — discard this one.
@@ -1853,7 +1890,7 @@ export class Router {
 				for (const v of freshViews) v.destroy();
 				if (layout && !reuseLayout) layout.destroy();
 				discardPrepared(); // D146
-				return;
+				return SUPERSEDED;
 			}
 
 			// LOCATION is NOT committed here anymore (D61): URL + memory stack + title/head (D84) all
@@ -1938,7 +1975,7 @@ export class Router {
 					focus: replace ? null : focus,
 				});
 				if (layout) this.#refreshLogged(layout, params, to);
-				return;
+				return { ok: true, route: to };
 			}
 
 			// Assemble the FULL chain LEAF-UP into nested keyed component vnodes — all
@@ -1996,7 +2033,7 @@ export class Router {
 					for (const v of freshViews) v.destroy();
 					if (layout && !reuseLayout) layout.destroy();
 					discardPrepared(); // D146
-					return;
+					return SUPERSEDED;
 				}
 				// Same suppression the routed chain gets below: mountComponent auto-chains
 				// playIn() onto every component it mounts, and these are about to mount over
@@ -2004,7 +2041,7 @@ export class Router {
 				for (const instance of nestedInstances) instance.skipEnter();
 			}
 
-			await this.#swap(token, cur, {
+			return await this.#swap(token, cur, {
 				rawPath,
 				// The parsed URL parts (v1.49, D83) — #commitState records them on
 				// #state so the `current` getter never reparses.
@@ -2038,6 +2075,14 @@ export class Router {
 				memoryIndex,
 				departScroll,
 			});
+		} catch (err) {
+			// A synchronous commit-block throw (a render()/afterUpdate() in the
+			// commit window) or a takeover component load. Navigation zero rethrows
+			// so app.mount() still tears down on it; any later navigation resolves
+			// an 'error' result (D182), reported here because no promise rejects.
+			if (!cur) throw err;
+			reportError(this.#ctx, err, { phase: 'navigation', route: to }, '[puzzle] navigation failed:', err);
+			return fail('error', err);
 		} finally {
 			discardPrepared();
 		}
@@ -2126,6 +2171,7 @@ export class Router {
 	 * @param {number} token this navigation's monotonic token
 	 * @param {?Record<string, any>} cur the previous committed #state
 	 * @param {SwapInput} next
+	 * @returns {Promise<NavigationResult>}
 	 */
 	async #swap(token, cur, next) {
 		const { entry, params, views, layout, reuseLayout, keep, rootVnode } = next;
@@ -2230,12 +2276,18 @@ export class Router {
 				// the winner just cancelled) would otherwise strand (leak) the loser's
 				// fresh instances. #pendingOut stays set to oldAnimator so the WINNING
 				// navigation destroys the outgoing unit via its own #swap skipOut path.
-				if (token !== this.#token) return this.#abandon(next);
+				if (token !== this.#token) {
+					this.#abandon(next);
+					return SUPERSEDED;
+				}
 				// WINNER only: hold the outgoing unit on screen until the blob lands.
 				if (morphOut) await morphOut;
 				// Superseded during the fly-back: leave the outgoing unit for the winner
 				// rather than tearing it down out from under a mid-flight morph.
-				if (token !== this.#token) return this.#abandon(next);
+				if (token !== this.#token) {
+					this.#abandon(next);
+					return SUPERSEDED;
+				}
 				this.#pendingOut = null;
 				oldAnimator.destroy(); // cascades to inner/deeper old instances
 			}
@@ -2377,6 +2429,7 @@ export class Router {
 			// unchanged — morph-enter above still runs before this.
 			this.#runPendingPush();
 		}
+		return { ok: true, route: next.to };
 	}
 
 	/**
@@ -2392,7 +2445,7 @@ export class Router {
 	 *
 	 * @param {PuzzleView | null} view the failed routed view, or null for the D175 rebuild
 	 * @param {boolean} [retry]
-	 * @returns {Promise<void> | null | void}
+	 * @returns {Promise<unknown> | null | void}
 	 */
 	__failedView(view, retry = false) {
 		const st = this.#state;

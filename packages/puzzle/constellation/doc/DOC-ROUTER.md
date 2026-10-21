@@ -242,10 +242,25 @@ Declare a `path: '*'` route; it is matched last wherever it sits. Without one, a
 
 | Member | Description |
 | ------ | ----------- |
-| `push(path)` | Navigate with a new history entry. Returns a promise that settles when the navigation does. |
-| `replace(path)` | Same pipeline, replaces the current entry, leaves scroll alone. |
+| `push(path)` | Navigate with a new history entry. Resolves a `NavigationResult` when the navigation settles, and never rejects. |
+| `replace(path)` | Same pipeline and result, replaces the current entry, leaves scroll alone. |
 | `go(n)` / `back()` / `forward()` | History movement in every mode. |
 | `url(path)` | Mode- and base-correct href for a path (what `link()` calls). |
 | `current` | The committed snapshot `{ path, pathname, query, hash, route, params, chain }`. |
+
+`await router.push(path)` tells you what happened (D182):
+
+```js
+const result = await this.ctx.router.push('/account');
+if (result.ok) {
+  result.route.path;      // where it landed — '/login' if a guard redirected
+  result.redirectedFrom;  // '/account' after a redirect, else undefined
+} else {
+  result.reason;          // 'blocked' | 'superseded' | 'not-found' | 'error'
+  result.error;           // the failure, for 'error' (also sent to onError)
+}
+```
+
+A push to the current path resolves `ok` with the current route. `'blocked'` means a guard said no (or threw); `'superseded'` means a later navigation won; `'not-found'` means no route and no `*` catch-all matched. A push made from `mounted()` resolves once that deferred navigation has run.
 
 Named-route navigation is not supported.

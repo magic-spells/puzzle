@@ -11,6 +11,17 @@ connections:
   - DECISION-D163-LAZY-ROUTE-VIEWS
 verified_at: '2026-09-25T10:47:50.423Z'
 verified_sha: 5c21245a984c2fe5c86abf097189af44266f3b13
+notes:
+  - kind: gotcha
+    text: >-
+      Every #navigate exit returns a NavigationResult (D182, [[DECISION-D182-NAVIGATION-RESULT]]) —
+      a new exit path must return one too (fail(reason, err), SUPERSEDED, or { ok: true, route: to
+      }), or push() resolves undefined. The outer catch around the load/#swap block turns a
+      synchronous commit-window throw into a reported 'error' result EXCEPT on navigation zero
+      (`!cur`), which rethrows so app.mount() keeps its teardown; a guard redirect from nav #0
+      inherits that because its inner #navigate also has no cur. The #pendingPush slot carries the
+      caller's resolver: anything that clears the slot (a displacing #defer, stop()) must resolve
+      the old entry SUPERSEDED or that caller waits forever.
 ---
 
 # Router

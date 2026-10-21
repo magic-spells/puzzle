@@ -176,6 +176,14 @@ The location side effects — `pushState`/`replaceState`, `document.title`, the 
 - The D19 data gate is unchanged; the §16 skeleton exemption bypasses only the data gate, not the transition.
 - **Out of scope:** an exception after the location commit (a mount throw) can leave the URL ahead of the view; there is no rollback (rejected as racy). The failed position is handled by §60.
 
+**Navigation result (D182).** `push(path)` and `replace(path)` resolve a `NavigationResult` and never reject: `{ ok: true, route, redirectedFrom? }` or `{ ok: false, reason, error? }`.
+
+- `ok: true` — committed (the catch-all `*` included); `route` is the committed snapshot. A same-path no-op resolves `ok: true` with the current route; a same-path push while that path is in flight returns the in-flight push's result.
+- A guard redirect resolves the final navigation's result; when it is `ok`, `redirectedFrom` is the path originally requested (the first one across a chain).
+- `'blocked'` — a guard returned `false` (a throwing guard and the redirect cycle cap, both reported, block the same way). `'superseded'` — a later navigation won. `'not-found'` — no match and no catch-all (still warns). `'error'` plus `error` — a lazy load, construction or `data()` failure, or a synchronous throw in the commit window; each is also reported to `onError` (phase `navigation`). Navigation zero still rethrows a commit-window throw, so `mount()` rejects as before.
+- A push or replace from inside the commit window (a `mounted()` redirect) resolves when the deferred navigation runs; the last-wins slot resolves the entry it displaces, or one `stop()` drops, as `'superseded'`.
+- `go()`/`back()`/`forward()` are unchanged.
+
 ## 33. Per-route / per-view transition mode
 
 `transitionMode` resolves per navigation, most specific first (D65):

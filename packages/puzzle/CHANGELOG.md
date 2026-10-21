@@ -404,6 +404,19 @@ you see:
   - `puzzle add piece language-menu`: a compact menu button showing the
     active language, built on `dropdown-menu`, with an `align` prop.
 
+- **`router.push()` and `router.replace()` resolve a `NavigationResult`
+  (D182).** `await router.push('/account')` tells you what happened:
+  `{ ok: true, route, redirectedFrom? }` when the navigation committed (the
+  catch-all `*` and a same-path no-op included; `redirectedFrom` is the path
+  you asked for when a guard redirected), or `{ ok: false, reason, error? }`
+  with `reason` `'blocked'` (a guard said no), `'superseded'` (a later
+  navigation won), `'not-found'` (no route and no catch-all) or `'error'` (a
+  lazy load, construction or `data()` failure, still sent to `onError`). The
+  promise never rejects: a throw inside the commit window, which used to
+  reject the push, now resolves `'error'` and reaches `onError`. A push made
+  from `mounted()` resolves once that deferred navigation has run. `go()`,
+  `back()` and `forward()` are unchanged. Exported type: `NavigationResult`.
+
 ### Changed
 
 - **BREAKING: `i18n.locales` is `[{ locale, label, href, active }]` (D177).**
