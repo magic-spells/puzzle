@@ -2250,8 +2250,21 @@ function setAttr(el, name, value, owner = null) {
 		// so a panel mounted synchronously mid-dispatch attaches AFTER document's
 		// capture phase already passed (the open interaction can't instantly close
 		// it). The element only anchors the containment gate (withModifiers).
+		// `passive`/`capture` (D187) are native listener options, compiled out
+		// when no template writes either. The probe stays inline in each condition:
+		// hoisted into a local, the minifier keeps both branches.
 		const target = mods.includes('outside') ? document : el;
-		const opts = target === el ? undefined : OUTSIDE_OPTS;
+		const capture =
+			target !== el ||
+			((typeof __PUZZLE_HAS_LISTENER_OPTIONS__ === 'undefined' || __PUZZLE_HAS_LISTENER_OPTIONS__) &&
+				mods.includes('capture'));
+		const opts =
+			(typeof __PUZZLE_HAS_LISTENER_OPTIONS__ === 'undefined' || __PUZZLE_HAS_LISTENER_OPTIONS__) &&
+			mods.includes('passive')
+				? { capture, passive: true }
+				: capture
+					? OUTSIDE_OPTS
+					: undefined;
 		const listeners = (el[LISTENERS] ??= {});
 		detachListener(el, name, event, mods, listeners);
 		if (typeof value === 'function') {
@@ -2404,6 +2417,12 @@ function detachListener(el, name, event, mods, listeners) {
 	const handler = listeners[name];
 	if (!handler) return;
 	if (mods.includes('outside')) document.removeEventListener(event, handler, OUTSIDE_OPTS);
+	// Removal matches on the capture flag alone (D187).
+	else if (
+		(typeof __PUZZLE_HAS_LISTENER_OPTIONS__ === 'undefined' || __PUZZLE_HAS_LISTENER_OPTIONS__) &&
+		mods.includes('capture')
+	)
+		el.removeEventListener(event, handler, true);
 	else el.removeEventListener(event, handler);
 	delete listeners[name];
 }

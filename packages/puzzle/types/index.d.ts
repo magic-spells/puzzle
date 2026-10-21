@@ -742,6 +742,12 @@ export declare class PuzzleView {
 	/** Merge local UI state and schedule a re-render (does NOT re-run data()). */
 	setData(key: string, value: any): void;
 	setData(partial: Record<string, any>): void;
+	/**
+	 * Wait for every pending store flush and scheduled view render to land,
+	 * including the ones they schedule (D188). Forces nothing, and does not await
+	 * async data(), fetches or navigation — that is app.idle().
+	 */
+	tick(): Promise<void>;
 
 	/**
 	 * Reference-stable derived value (D64). Per-instance cache keyed by
@@ -1093,6 +1099,9 @@ export declare class PuzzleApp {
  * `sep`, a list prints its items joined by it, dropping `false` and empty items.
  */
 export declare function displayValue(value: unknown, expression?: string | 0, sep?: string): string;
+
+/** @internal Compiler-support guard for dynamic URL attribute values. */
+export declare function urlValue(value: unknown, mode?: number): unknown;
 
 /** One node of the virtual tree — compiled render functions build these. */
 export declare class ViewNode {

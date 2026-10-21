@@ -129,6 +129,7 @@ events = {
 
 ## Modifiers
 
+
 `@event:modifier[:modifier…]` adjusts dispatch (§5):
 
 | Modifier | Effect |
@@ -136,15 +137,18 @@ events = {
 | `prevent` / `stop` | `preventDefault()` / `stopPropagation()` |
 | `once` | fires once ever for this binding |
 | `outside` | fires only for events outside the element (below) |
+| `passive` | native passive listener — cannot cancel the default action |
+| `capture` | native capture-phase listener |
 | `enter` `escape` `tab` `space` `up` `down` `left` `right` `backspace` `delete` | key filters, keyboard events only |
 
 ```html
 <input @keydown:enter={ addTodo(event) } @keydown:escape:prevent={ cancelEdit } />
 <a @click:prevent:stop={ navigate('/home') }>Home</a>
 <button @click:once={ claimReward }>Claim</button>
+<div @wheel:passive={ onScroll }>…</div>
 ```
 
-Order is fixed whatever you write: outside check, key check, once, `preventDefault`, `stopPropagation`, handler — so a non-matching key never prevents the browser's default. For a *sometimes* intercept (Backspace only at the caret's start), write a plain `@keydown` handler that checks and calls `event.preventDefault()` itself. Modifiers are DOM-only: any modifier on a component's callback prop is a compile error.
+Order is fixed whatever you write: outside check, key check, once, `preventDefault`, `stopPropagation`, handler — so a non-matching key never prevents the browser's default. For a *sometimes* intercept (Backspace only at the caret's start), write a plain `@keydown` handler that checks and calls `event.preventDefault()` itself. `passive` and `capture` set the native listener options (D187); `passive:prevent` is a compile error, and `outside` always captures on document. Modifiers are DOM-only: any modifier on a component's callback prop is a compile error.
 
 ## Outside-dismiss: `:outside`
 

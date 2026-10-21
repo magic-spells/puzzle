@@ -288,14 +288,17 @@ See [constellation/doc/DOC-TEMPLATE-SYNTAX.md](constellation/doc/DOC-TEMPLATE-SY
 <!-- A one-member path writes the record itself, through validated update() -->
 <input type="checkbox" checked={ todo.completed } />
 
-<!-- Event modifiers: prevent / stop / once + key filters, and they stack -->
+<!-- Event modifiers: prevent / stop / once / passive / capture + key filters, and they stack -->
 <input @keydown:enter={ handleSubmit } @keydown:escape:prevent={ cancelEdit } />
 <button @click:once={ claimReward }>Claim</button>
+<div @wheel:passive={ onScroll }>…</div>
 ```
 
 **Two-way binding** (D147): `value=` and `checked=` on a plain `<input>`, `<textarea>`, or `<select>` bind in both directions when the expression is a bare identifier or a one-member path — the compiler synthesizes the write-back handler. A bare identifier writes local state; a path writes the record through validated `update()`. Opt out with your own `@input`/`@change`, a non-path expression (`value={ x ?? '' }`), or a static `readonly`. Handlers on other events (`@blur`, `@keydown:enter`) coexist with the bind.
 
-**Event modifiers** (`prevent`, `stop`, `once`, and key filters like `:enter`/`:escape`) stack; the canonical order is key-gate → once-spend → preventDefault → stopPropagation → handler. See [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §5.
+**Event modifiers** (`prevent`, `stop`, `once`, and key filters like `:enter`/`:escape`) stack; the canonical order is key-gate → once-spend → preventDefault → stopPropagation → handler. `passive` and `capture` set the native listener options (D187); `passive` with `prevent` is a compile error.
+
+**Dynamic URL attributes** (`href={ url }`, `src="{ path }"`, …) never carry `javascript:` or `vbscript:`, and `data:` only in image positions: a blocked value leaves the attribute off, in the browser and in prerendered HTML alike, with a warning in development (D186). Static attributes you write yourself are left as written. See [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §5.
 
 ### Slots & Nested Routing
 
@@ -526,6 +529,18 @@ rebuilds in place and the choice is remembered. See `examples/i18n`.
   var(--primary-color); color: white; } .btn--medium { font-size: 1rem; }
 </style>
 ```
+
+### Waiting for a render
+
+`await this.tick()` resolves once every pending store flush and scheduled render has landed, including renders those schedule (D188):
+
+```js
+this.setData({ editing: true });
+await this.tick();
+this.refs.editor.focus();
+```
+
+It forces nothing and does not wait for async `data()`, requests or navigation; `app.idle()` waits for the whole app to go quiet.
 
 ### Imports
 

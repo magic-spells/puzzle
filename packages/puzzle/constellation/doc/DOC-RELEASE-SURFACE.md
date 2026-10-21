@@ -38,7 +38,8 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
 - **Root exports:** `PuzzleApp`, `PuzzleView`, `PuzzleModel`, `Puzzle`,
   `PuzzleValidationError`, `FormatterRegistry`, `lazy`, plus compiler-support
   exports a compiled module imports only when it emits them (`ViewNode`,
-  `*_TAG` markers, `displayValue`, `listRows`, `loopItems`, `loopRange`).
+  `*_TAG` markers, `displayValue`, `listRows`, `loopItems`, `loopRange`,
+  `urlValue`).
 - **Subpaths** (each with `types/*.d.ts`):
   - `/adapter` — the frozen `adapter` capability (with `adapter.defaults()`,
     the app-wide dialect tier) and `PuzzleAdapterError`.
@@ -110,6 +111,12 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
 - Dynamic, mixed and boolean attributes; controlled `value`, `checked`,
   `disabled`, `selected`. Void elements take no closer (`</input>` is a compile
   error). Attr namespaces are a compile error except `xml`/`xlink`/`xmlns`.
+- **Dynamic URL safety (D186):** a dynamic URL attribute (`href`, `src`,
+  `action`, `srcset`, …) drops `javascript:`/`vbscript:` values, and `data:`
+  outside image positions, after entity/control/case normalization — in the
+  browser and prerendered HTML alike, with a development warning. Static
+  author-written values stay as written; a mixed value whose literal head fixes
+  the scheme (`href="/users/{ id }"`) compiles without the check.
 - **Two-way binding:** a path-shaped `value=`/`checked=` on a plain form
   control writes back automatically (records via validated `update()`, locals
   via `setData`) unless an author `@input`/`@change`, static
@@ -120,8 +127,10 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   `{#svg 'path'}` compile-time inline SVG, and comments `{## … }` /
   `{#comment}…{/comment}`.
 - **Events:** `@event` handlers (bare or call) with `prevent`, `stop`,
-  `once`, `outside`, and key filters on key events. A handler is the only door
-  into the view's JavaScript; on a component it compiles to a callback prop.
+  `once`, `outside`, `passive` and `capture` (native listener options, D187;
+  `passive:prevent` is a compile error), and key filters on key events. A
+  handler is the only door into the view's JavaScript; on a component it
+  compiles to a callback prop.
 - **Components (D167):** a tag whose first character is not ASCII `a`–`z` is
   a component (`<Card>`, `<Übersicht>`); `<straße-karte>` is a custom element.
   Names validate as `Ident('.'Ident)*`. A dotted tag (`<Frame.Wrapper>`)
@@ -192,7 +201,11 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   `{ props, params, route, data }` of the previous render; a record in it is
   the same live object. Live members: `this.route` (pre-commit-safe snapshot),
   `this.element`, `this.refs`, `this.memo()`, `getData()`, `setData()`,
-  `refresh()`.
+  `refresh()`, `tick()`.
+- **`this.tick()` (D188):** resolves once no store flush or view render is
+  scheduled anywhere in the runtime, including the renders those schedule
+  (timers in a hidden tab). Forces nothing, no timeout; does not wait for
+  async `data()`, fetches or navigation — that is `app.idle()`.
 - **Incremental rendering (D170):** item `{#for}` rows cache their vnode
   subtree per key and static subtrees build once. A record prop carries a
   render revision, so a child refreshes on that record's store mutations; a

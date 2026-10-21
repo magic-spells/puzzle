@@ -26,6 +26,7 @@ import { registerView, unregisterView } from '../devstate.js';
 import { getErrorView, reportError } from '../errors.js';
 import { warnHandlerShadows } from '../formatters.js';
 import { RENDER_REV } from '../renderRev.js';
+import { schedule, tick } from '../scheduler.js';
 import {
 	devperfCanRender,
 	devperfMarkCause,
@@ -426,6 +427,16 @@ export class PuzzleView {
 			this.#data[/** @type {string} */ (key)] = value;
 		}
 		this.#scheduleRender();
+	}
+
+	/**
+	 * Wait for every pending store flush and scheduled view render to land,
+	 * including the ones they schedule (D188). Async data(), fetches and
+	 * navigation are outside it — see app.idle().
+	 * @returns {Promise<void>}
+	 */
+	tick() {
+		return tick();
 	}
 
 	/**
@@ -2906,17 +2917,9 @@ export class PuzzleView {
 			devperfRenderScheduled(this, 'local-state');
 		}
 
-		// The store's D63 scheduler: rAF is suspended in a hidden tab, so take the
-		// timer there (and without rAF); when visible, arm a fallback timer too, in
-		// case the tab hides before the frame. flushUpdates() is a no-op once the
-		// flag has cleared, so whichever fires second does nothing.
-		if (!(typeof document !== 'undefined' && document.hidden) && typeof requestAnimationFrame === 'function') {
-			const fallback = setTimeout(() => this.flushUpdates(), 220);
-			requestAnimationFrame(() => {
-				clearTimeout(fallback);
-				this.flushUpdates();
-			});
-		} else setTimeout(() => this.flushUpdates(), 0);
+		// D63 frame/timer scheduling; flushUpdates() is a no-op once the flag has
+		// cleared (an immediate render ran first).
+		schedule(() => this.flushUpdates());
 	}
 
 	/**

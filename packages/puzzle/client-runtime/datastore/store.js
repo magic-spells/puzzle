@@ -27,6 +27,7 @@ import {
 } from '../model.js';
 import { devtoolsFlush } from '../devtools.js';
 import { RENDER_REV } from '../renderRev.js';
+import { schedule } from '../scheduler.js';
 import {
 	devperfStoreFlushEnd,
 	devperfStoreFlushNotifications,
@@ -182,7 +183,6 @@ export class Store {
 		// data() run.
 		this._flushSeq = 0;
 		this._flushScheduled = false;
-		this._flushTimer = null; // armed fallback timer (D63); cleared by flush()
 		this._persistPending = false; // dirty flag: storage write is batched into flush()
 		// Both authoring guards run BEFORE _installRelationships so a relationship
 		// named after a model method is caught rather than quietly replacing that
@@ -912,26 +912,15 @@ export class Store {
 	 * save whose 204 body changes nothing observable — still guarantees the
 	 * pending storage write lands.
 	 *
-	 * D63: rAF stays the primary scheduler (frame-aligned batching — one flush
-	 * per frame however many records changed), but Chrome suspends rAF entirely
-	 * in hidden tabs, so a backgrounded app would queue mutations forever behind
-	 * one frozen rAF. When hidden (or in node/tests with no rAF), take the timer
-	 * queue directly; when visible, ALSO arm a fallback timer so a flush
-	 * scheduled at the visibility boundary — the tab hiding after we schedule but
-	 * before the next frame — still delivers. flush() clears the fallback and is
-	 * idempotent, so the rAF and the timer can never double-deliver.
+	 * D63: frame-aligned batching (one flush per frame however many records
+	 * changed), with a timer in hidden tabs — see scheduler.js. A frame that fires
+	 * after an explicit flush() finds nothing pending.
 	 */
 	_scheduleFlush() {
 		if (this._flushScheduled) return;
 		this._flushScheduled = true;
 
-		const hidden = typeof document !== 'undefined' && document.hidden;
-		if (!hidden && typeof requestAnimationFrame === 'function') {
-			requestAnimationFrame(() => this.flush());
-			this._flushTimer = setTimeout(() => this.flush(), 220);
-		} else {
-			setTimeout(() => this.flush(), 0);
-		}
+		schedule(() => this.flush());
 	}
 
 	/**
@@ -946,12 +935,6 @@ export class Store {
 			devperfStoreFlushStart(this);
 		}
 		this._flushScheduled = false;
-		// Clear any armed D63 fallback timer — whichever scheduler (rAF or the
-		// timer) reached flush() first cancels the other, so delivery is once-only.
-		if (this._flushTimer) {
-			clearTimeout(this._flushTimer);
-			this._flushTimer = null;
-		}
 
 		this._deliverNotifications();
 

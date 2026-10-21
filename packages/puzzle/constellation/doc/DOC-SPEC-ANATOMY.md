@@ -67,6 +67,10 @@ const quiet = await app.idle({ timeout: 10000 }); // true when idle; false on ti
 
 `idle()` resolves `true` once two consecutive frames find no `mount()` or navigation in flight, no store notification or flush pending, no async `data()` running, no `setLocale()` switch loading, and — with the adapter — no tracked find's fetch in flight (D185). Each check runs after its frame's callbacks, so a `setData()` render scheduled before it has landed. It resolves `false` when `timeout` ms (default 10000) run out first, and never rejects; a timeout that is not a finite number ≥ 0 logs a development error and uses 10000. In a hidden tab it steps on timers, as the store's flush and a view's `setData()` render do (D63). An app neither mounted nor mounting — never mounted, or after `unmount()` — resolves `true` at once. It reads state the runtime already keeps, so it cannot see user timers, animations, IntersectionObserver triggers, writes or fetches nothing awaits (an event handler's unawaited `save()` or `loadMany()`), or a path- or hash-mode `back()`, `forward()` or `go()` before its `popstate` fires. The testing module's `settled()` drives work to a fixed point instead ([[DOC-TESTING]]).
 
+### `this.tick()` — wait for a render
+
+`await this.tick()` in view code resolves once no store flush or view render is scheduled anywhere in the runtime, including the renders those schedule (D188) — the point to read `this.refs` or measure the DOM after `setData()` or a store write. It is a `PuzzleView` method, so it needs no import. It forces nothing, has no timeout, and does not wait for async `data()`, fetches, navigation, locale loading, animations or user timers; that wider question is `app.idle()`.
+
 ## 3. `.pzl` file anatomy
 
 ```html

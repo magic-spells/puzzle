@@ -21,6 +21,7 @@ declare const __PUZZLE_HAS_RAW_AT__: boolean;
 declare const __PUZZLE_HAS_RAW_SANITIZE__: boolean;
 declare const __PUZZLE_HAS_LAZY__: boolean;
 declare const __PUZZLE_HAS_FLIP__: boolean;
+declare const __PUZZLE_HAS_LISTENER_OPTIONS__: boolean;
 
 interface Window {
 	/** The mounted app, published in dev builds for the DevTools bridge. */

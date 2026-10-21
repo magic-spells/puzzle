@@ -1,0 +1,13 @@
+<puzzle-view>
+  <div>
+    <a class="dynamic" href={ url }>Dynamic</a>
+    <a class="mixed" href="{ url }">Mixed</a>
+    <a class="static" href="javascript:author()">Static</a>
+    <img src={ url } srcset={ candidates } />
+    <form action={ url }><button formaction={ url }>Submit</button></form>
+    <iframe src={ url }></iframe>
+    <object data={ url }></object>
+    <svg><a xlink:href={ url }><text>Link</text></a></svg>
+    <p title={ url }>Text</p>
+  </div>
+</puzzle-view>

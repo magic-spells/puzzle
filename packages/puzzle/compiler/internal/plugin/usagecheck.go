@@ -125,6 +125,9 @@ func (p *Plugin) missingLocked(fu fileUsage) []string {
 	if fu.hasSnippets && !f.Snippets {
 		out = append(out, "snippets")
 	}
+	if fu.hasListenerOpts && !f.ListenerOpts {
+		out = append(out, "the passive or capture event modifier")
+	}
 	if fu.hasComponentSlot && !f.ComponentSlot {
 		out = append(out, "<Component>")
 	}

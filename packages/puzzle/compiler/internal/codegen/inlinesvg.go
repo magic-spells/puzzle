@@ -330,7 +330,7 @@ func (c *compiler) svgAttrsLiteral(attrs []parser.Attr) (string, error) {
 	scope := scopeMap{}
 	parts := make([]string, 0, len(attrs))
 	for _, a := range attrs {
-		kv, err := c.attrKV(a, scope, false, true)
+		kv, err := c.attrKV("svg", a, scope, false, true)
 		if err != nil {
 			return "", err
 		}

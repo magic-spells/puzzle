@@ -229,6 +229,15 @@ you see:
 
 ### Added
 
+- **`passive` and `capture` event modifiers (D187).** `@wheel:passive` and
+  `@click:capture` pass native listener options, including when combined with
+  `outside` or `once`; listener removal preserves the capture flag. Combining
+  `passive` with `prevent` is a positioned compile error. Apps whose templates
+  use neither ship no code for them.
+- **`this.tick()` (D188).** A view method that resolves once every pending
+  store flush and scheduled render has landed, including the renders those
+  schedule, in hidden tabs too. It forces nothing and does not wait for async
+  `data()`, requests or navigation — that is `app.idle()`.
 - **Installed packages' `.pzl` files feed the usage scan (D89).** A package
   whose `package.json` lists `@magic-spells/puzzle` in `peerDependencies` (or
   `dependencies`) has its `.pzl` files read by the build's usage scan, from
@@ -504,6 +513,16 @@ you see:
   Spanish 404 page.
 - **`<html dir>` follows the active locale** in every app that configures
   `i18n` (D177).
+
+### Fixed
+
+- **Dynamic URL bindings block script schemes (D186).** Brace-only and mixed
+  URL attributes omit `javascript:`, `vbscript:` and executable `data:` values
+  after entity, control-character and case normalization, in browser rendering
+  and prerendered HTML. Data URLs remain supported in image bindings;
+  static author-written attributes remain trusted. Blocked values warn only
+  in development. Only dynamic URL bindings whose scheme the template leaves
+  open pay for the check: `href="/users/{ id }"` compiles without it.
 
 ## 0.8.1 — 2026-10-04 (Go module only)
 
