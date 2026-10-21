@@ -60,9 +60,13 @@ manifest and either can turn a gate on:
 - **The package walk** (`plugin/scanpkg.go`) reads the `.pzl` files of
   installed packages whose `package.json` lists `@magic-spells/puzzle` in
   `peerDependencies` or `dependencies`. Puzzle itself never counts, and neither
-  does an **app**: the scan root or an ancestor of it (a workspace root linked
-  into `node_modules`), or any directory holding a `puzzle.config.js` (a
-  workspace sibling app).
+  does an **app**: the scan root itself, or a directory outside every
+  `node_modules` holding a `puzzle.config.js` (a workspace sibling app, which
+  resolves to its real place in the workspace). An installed package sits
+  inside a `node_modules`, so a `puzzle.config.js` it ships does not make it an
+  app; a package repo that an example app links back with `"file:.."` (an
+  ancestor of the scan root) counts like any package. Inside a counted
+  package's tree, the scan root and app folders are skipped.
   - It visits the `node_modules` under the scan root and under each ancestor
     (node's own search path), scoped and unscoped entries, the nested
     `node_modules` of **every** package (a Puzzle package can be the dependency

@@ -386,12 +386,13 @@ func TestScanUsageFindsPuzzlePackagesUnderPlainParents(t *testing.T) {
 }
 
 // An app is not a dependency: a workspace sibling app linked into the shared
-// node_modules (it has a puzzle.config.js), and a workspace root that is the
-// scan root's ancestor, contribute nothing even though both declare Puzzle.
+// node_modules (it has a puzzle.config.js and lives outside node_modules)
+// contributes nothing, and neither does it when a declaring workspace root
+// linked into node_modules is walked — app folders inside a counted package's
+// tree are skipped.
 func TestScanUsageSkipsAppsLinkedAsPackages(t *testing.T) {
 	ws := writeApp(t, map[string]string{
 		"package.json":                      `{"name":"ws","dependencies":{"@magic-spells/puzzle":"*"}}`,
-		"Root.pzl":                          `<puzzle-view><div flip>root</div></puzzle-view>`,
 		"packages/app-a/package.json":       `{"name":"app-a","dependencies":{"@magic-spells/puzzle":"*"}}`,
 		"packages/app-a/puzzle.config.js":   "export default {};\n",
 		"packages/app-a/app/views/Home.pzl": plainHome,
@@ -484,5 +485,44 @@ func BenchmarkPackageWalkFlat(b *testing.B) {
 		if _, err := s.Scan(root); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// A package repo whose example app depends on it with "file:.." links the
+// package back as an ancestor of the scan root. It is a package, not the app:
+// its source is read, and the example app (the scan root) is not walked twice.
+func TestScanUsageReadsAPackageRepoFromItsExampleApp(t *testing.T) {
+	kit := writeApp(t, map[string]string{
+		"package.json":               peerManifest,
+		"src/Msg.pzl":                kitMessage,
+		"example/package.json":       `{"name":"example","dependencies":{"kit":"file:..","@magic-spells/puzzle":"*"}}`,
+		"example/puzzle.config.js":   "export default {};\n",
+		"example/app/views/Home.pzl": plainHome,
+	})
+	symlink(t, "../..", filepath.Join(kit, "example", "node_modules", "kit"))
+	usage, err := ScanUsage(filepath.Join(kit, "example"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !usage.HasRawHTML || !usage.Formatters["currency"] {
+		t.Errorf("the package repo linked back as an ancestor was skipped: %+v", usage)
+	}
+}
+
+// An installed package that ships a puzzle.config.js (for its own demo) is
+// still a package: the app marker only counts outside node_modules.
+func TestScanUsageReadsInstalledPackageWithAConfig(t *testing.T) {
+	root := writeApp(t, map[string]string{
+		"app/views/Home.pzl":                plainHome,
+		"node_modules/kit/package.json":     peerManifest,
+		"node_modules/kit/puzzle.config.js": "export default {};\n",
+		"node_modules/kit/Msg.pzl":          kitMessage,
+	})
+	usage, err := ScanUsage(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !usage.HasRawHTML || !usage.Formatters["currency"] {
+		t.Errorf("an installed package with a puzzle.config.js was skipped: %+v", usage)
 	}
 }

@@ -179,7 +179,7 @@ func (p *Plugin) mismatchHint(path string) string {
 	if !manifestDeclaresPuzzle(manifest) {
 		return fmt.Sprintf(`Its package (%s) does not declare Puzzle: add "@magic-spells/puzzle" to that package's peerDependencies so the usage scan reads its .pzl files.`, owner)
 	}
-	return fmt.Sprintf("Its package (%s) declares Puzzle, but the usage scan does not read this file: it skips packages that are apps (a puzzle.config.js), example/, examples/, test/, tests/ and __tests__/ at a package root, and packages outside every node_modules the project resolves from. Import the component from the package's shipped source, or install the package so node_modules reaches it.", owner)
+	return fmt.Sprintf("Its package (%s) declares Puzzle, but the usage scan does not read this file: it skips apps (a puzzle.config.js outside node_modules), example/, examples/, test/, tests/ and __tests__/ at a package root, and packages outside every node_modules the project resolves from. Import the component from the package's shipped source, or install the package so node_modules reaches it.", owner)
 }
 
 // nearestManifest returns the package.json nearest above dir, or "" when the

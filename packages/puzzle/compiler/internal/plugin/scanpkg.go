@@ -12,8 +12,9 @@ package plugin
 //
 // Which packages count: one whose package.json lists "@magic-spells/puzzle" in
 // peerDependencies or dependencies — except Puzzle itself, and except an app
-// (the project or an ancestor of it, or any directory with a puzzle.config.js:
-// a workspace sibling app linked into node_modules is not a dependency). One
+// (the scan root, or a directory outside every node_modules with a
+// puzzle.config.js: a workspace sibling app linked into node_modules is not a
+// dependency; app folders inside a counted package's tree are skipped too). One
 // manifest read per package root is the whole cost of an ordinary package, and
 // an uncounted package's files are never read. Inside a counted package the
 // walk reads .pzl files ONLY, and drops their lazy() text match — a package's
@@ -195,15 +196,27 @@ func (w *pkgWalk) pkg(dir string, link bool) {
 	}
 }
 
-// isApp reports whether a declaring package is really an app — the project
-// itself or one of its ancestors (a workspace root linked into node_modules),
-// or any directory holding a puzzle.config.js (a sibling app in a workspace).
-// An app's templates are its own build's business, not a dependency's.
+// isApp reports whether a declaring package is really an app: the scan root
+// itself, or a directory outside every node_modules that holds a
+// puzzle.config.js (a workspace sibling app, which resolves to its real place
+// in the workspace). An installed package sits inside a node_modules, so a
+// puzzle.config.js it ships for its own demo does not make it an app. A
+// package repo whose example app links the package back (`"kit": "file:.."`)
+// is an ancestor of the scan root and counts like any other package.
 func (w *pkgWalk) isApp(real string) bool {
-	if real == w.root || strings.HasPrefix(w.root, real+string(filepath.Separator)) {
+	if real == w.root {
 		return true
 	}
-	_, err := os.Stat(filepath.Join(real, "puzzle.config.js"))
+	return hasAppConfig(real)
+}
+
+// hasAppConfig reports whether dir, outside every node_modules, holds a
+// puzzle.config.js.
+func hasAppConfig(dir string) bool {
+	if strings.Contains(filepath.ToSlash(dir)+"/", "/node_modules/") {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(dir, "puzzle.config.js"))
 	return err == nil
 }
 
@@ -229,6 +242,11 @@ func (w *pkgWalk) readPZL(real string) {
 			case strings.HasPrefix(name, "."):
 				return fs.SkipDir
 			case pkgSkipDirs[name] && filepath.Dir(path) == real:
+				return fs.SkipDir
+			case path == w.root || hasAppConfig(path):
+				// An app inside a counted package's tree (the project itself,
+				// when the package is an ancestor of it, or a workspace app)
+				// is not the package's shipped source.
 				return fs.SkipDir
 			}
 			return nil
