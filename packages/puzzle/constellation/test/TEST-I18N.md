@@ -30,7 +30,7 @@ option's isolation lives in [[TEST-PUBLIC-TESTING-SURFACE]]
 (`testing-i18n-isolation`).
 
 - **Service (`i18n`):** locale selection (stored choice, viewer languages
-  exact/base/same-base, default fallback); `t` lookup — a missing key prints
+  exact/Chinese script/base/same-base, default fallback); `t` lookup — a missing key prints
   itself with a did-you-mean, inherited properties are never translations;
   single-pass substitution that never re-substitutes inserted text or injects
   markup; plurals through `Intl.PluralRules` with an exact-0 `zero` form; the
@@ -76,7 +76,7 @@ option's isolation lives in [[TEST-PUBLIC-TESTING-SURFACE]]
   rule.
 - **Shared cases and real builds:** `tests/fixtures/locale-redirect-cases.js`
   is the one first-visit decision table that `selectLocale`, the inline script
-  and the SPA redirect all run. `npm run build:locale-prefix` (pretest) builds
+  and the SPA redirect all run, Chinese script cases included. `npm run build:locale-prefix` (pretest) builds
   `tests/fixtures/locale-prefix-site` (static), `locale-prefix-hybrid` and
   `locale-prefix-spa` with the compiler; `locale-redirect-build` runs the
   redirect script a real build emitted, and `locale-prefix-app` loads the

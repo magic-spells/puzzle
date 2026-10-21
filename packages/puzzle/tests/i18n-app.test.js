@@ -1121,7 +1121,7 @@ describe('PuzzleApp + locale prefix routing (D177)', () => {
 		it.each([
 			...REDIRECT_CASES,
 			{ name: 'detect: false', url: '/about', languages: ['es'], detect: false, expected: null },
-		])('$name', async ({ url, routerBase, stored, languages, referrer, detect, expected }) => {
+		])('$name', async ({ url, routerBase, stored, languages, referrer, manifest: rowManifest, detect, expected }) => {
 			expect(location.origin).toBe(ORIGIN);
 			vi.spyOn(console, 'warn').mockImplementation(() => {}); // outside routerBase warns
 			if (stored) localStorage.setItem(STORE_KEY, stored);
@@ -1130,7 +1130,7 @@ describe('PuzzleApp + locale prefix routing (D177)', () => {
 			history.replaceState({}, '', url);
 			const fetch = stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
 			const loc = spyLocation();
-			const manifest = detect === false ? { ...REDIRECT_MANIFEST, detect } : REDIRECT_MANIFEST;
+			const manifest = detect === false ? { ...REDIRECT_MANIFEST, detect } : (rowManifest ?? REDIRECT_MANIFEST);
 			const { app, el } = make({ routerBase, __i18n: { manifest } });
 			const mounted = app.mount();
 			if (expected) {

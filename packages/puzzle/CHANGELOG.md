@@ -515,6 +515,17 @@ you see:
 - **`<html dir>` follows the active locale** in every app that configures
   `i18n` (D177).
 
+### Fixed
+
+- **Locale selection respects Chinese scripts (D175).** `zh-TW`, `zh-HK`,
+  `zh-MO` and `zh-Hant-*` match a configured `zh-Hant`; other Chinese tags match
+  `zh-Hans`. The first-visit redirect makes the same choice.
+- **Number and date functions no longer print `NaN`, `Invalid Date` or
+  `[object Object]` (D174).** Unreadable non-string input prints nothing,
+  including `date(in_timezone(...))` on a bad date; `round` of a missing value is
+  `NaN` (prints nothing) rather than `0` for `null`. A non-numeric or non-date
+  string still prints as written.
+
 ## 0.8.1 — 2026-10-04 (Go module only)
 
 A Go-module-only release of the template language: the tag is

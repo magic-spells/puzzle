@@ -24,7 +24,8 @@ import { escapeScriptJson } from './serialize.js';
  *
  * Locals: `l` location, `p` pathname, `r` the path after the base, `s` the
  * stored choice, `n` the wanted locale, `g` navigator, `a` its languages, `x`
- * one language lower-cased, `o` its base language.
+ * one language lower-cased, `o` its base language, `m` the case-insensitive
+ * lookup. A Chinese language also tries its script (`zh-TW` → `zh-Hant`).
  *
  * @param {string[]} t configured locales, in config order
  * @param {string} d the default locale
@@ -35,30 +36,28 @@ export function localeRedirect(t, d, b, w) {
 	try {
 		const l = w.location;
 		const p = l.pathname;
-		if (b && p !== b && !p.startsWith(b + '/')) return;
+		if (b && p != b && !p.startsWith(b + '/')) return;
 		const r = p.slice(b.length);
 		const f = r.split('/')[1];
-		if (f !== d && t.includes(f)) return;
+		if (f != d && t.includes(f)) return;
 		try {
-			if (new URL(w.document.referrer).origin === l.origin) return;
+			if (new URL(w.document.referrer).origin == l.origin) return;
 		} catch {}
 		let s = '';
 		try {
 			s = w.localStorage.getItem('__puzzleLocale');
 		} catch {}
-		let n = typeof s === 'string' && s ? t.find((y) => y.toLowerCase() === s.toLowerCase()) : '';
+		const m = (z = '') => t.find((y) => y.toLowerCase() == z);
+		let n = typeof s == 'string' && s && m(s.toLowerCase());
 		const g = w.navigator || {};
-		const a = g.languages && g.languages.length ? g.languages : [g.language];
+		const a = g.languages?.length ? g.languages : [g.language];
 		for (let i = 0; i < a.length && !n; i++) {
-			if (typeof a[i] !== 'string' || !a[i]) continue;
+			if (typeof a[i] != 'string' || !a[i]) continue;
 			const x = a[i].toLowerCase();
 			const o = x.split('-')[0];
-			n =
-				t.find((y) => y.toLowerCase() === x) ||
-				t.find((y) => y.toLowerCase() === o) ||
-				t.find((y) => y.toLowerCase().split('-')[0] === o);
+			n = m(x) || m(/^zh-(hant|tw|hk|mo)\b/.test(x) ? 'zh-hant' : o == 'zh' ? 'zh-hans' : x) || m(o) || t.find((y) => y.toLowerCase().split('-')[0] == o);
 		}
-		if (n && n !== d) l.replace((b + '/' + n + (r || '/') + l.search + l.hash).replace(/^[/\\][/\\\t\n\r]*/, '/'));
+		if (n && n != d) l.replace((b + '/' + n + (r || '/') + l.search + l.hash).replace(/^[/\\][/\\\t\n\r]*/, '/'));
 	} catch {}
 }
 

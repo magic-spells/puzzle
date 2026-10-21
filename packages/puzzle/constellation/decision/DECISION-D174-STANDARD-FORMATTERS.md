@@ -85,7 +85,8 @@ host-defined (D173 V17); a returned value prints by D173 V6.
 
 - **`round(v, places = 0)`** — half away from zero on the decimal value
   (`round(1.005, 2)` → `1.01`, `round(2.5)` → `3`); negative places round to
-  tens/hundreds; returns a number. A missing input coerces to `0`.
+  tens/hundreds; returns a number. A missing or non-numeric input gives `NaN`,
+  which prints nothing (D173 V6).
 - **`currency(v, symbol = '$', places = 2)`** — `,` thousands, sign before
   the symbol (`-$1,234.50`), `round`'s rule; an amount that rounds to zero is
   unsigned (`-0.001` → `$0.00`).
@@ -99,8 +100,8 @@ host-defined (D173 V17); a returned value prints by D173 V6.
   'compact' })` in PuzzleKit (`1.2K`, `3.4M`); Sites computes it from its own
   suffix data (Go has no compact notation), English-only in v1.
 - `currency`, `percentage`, `number_with_delimiter`, `compact_number` and
-  `pluralize` print nothing for a missing input and pass a non-numeric string
-  through as text. Arithmetic is operators and `Math.*`.
+  `pluralize` print nothing for a missing, non-finite or object input and pass
+  a non-numeric string through as text. Arithmetic is operators and `Math.*`.
 
 ### Text
 
@@ -129,7 +130,8 @@ host-defined (D173 V17); a returned value prints by D173 V6.
 - **`in_timezone(v, zone = 'UTC')`** — returns a date whose wall clock reads
   as `zone`, for `date`/`time`/`datetime` to present. A `null`/`''` zone or
   an unresolvable one renders un-shifted; PuzzleKit logs a dev error once per
-  zone when `Intl` rejects it (stripped in production).
+  zone when `Intl` rejects it (stripped in production). An absent or invalid
+  date returns `''`, so `date(in_timezone(v))` prints nothing for it.
 
 ### Dates: `date`, `time`, `datetime`
 
@@ -149,6 +151,9 @@ host-defined (D173 V17); a returned value prints by D173 V6.
   `time(v)`. Warning, not error, because an app function under the same name
   wins and its presets are invisible. A dynamic unknown preset renders the
   default and logs a dev error once per name.
+- Input that is not a valid date prints nothing — never `Invalid Date` —
+  except a string, which prints as written (`2026-02-31` included); `timeago`
+  follows the same rule. Numeric 0 is an epoch timestamp.
 - `locale` is a PuzzleKit addition; Go layout strings are a Sites addition.
 
 ## Markup: `escape`, `raw`, `newline_to_br`
