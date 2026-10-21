@@ -171,6 +171,67 @@ describe('store.observe (D184)', () => {
 		expect(view.onStoreChange).not.toHaveBeenCalled();
 	});
 
+	it('runs its callback untracked, even while an async data() is paused at an await', async () => {
+		const store = new Store({ task: Task, note: Task });
+		const view = { onStoreChange: vi.fn() };
+		let release;
+		const gate = new Promise((r) => (release = r));
+		const run = store.withTracking(view, async () => {
+			store.findMany('task');
+			await gate;
+			return 1;
+		}, true);
+		store.observe('task', () => {
+			store.findMany('note');
+			store.findOne('note', 1);
+		});
+		store.createRecord('task', { id: 1 });
+		store.flush();
+		expect([...store.keysBySubscriber.get(view)]).toEqual(['task']);
+		release();
+		await run;
+		expect([...store.keysBySubscriber.get(view)]).toEqual(['task']);
+		view.onStoreChange.mockClear();
+		store.createRecord('note', { id: 1 });
+		store.flush();
+		expect(view.onStoreChange).not.toHaveBeenCalled();
+	});
+
+	it('an observer added during a flush is first called on the next flush', () => {
+		const store = makeStore();
+		const late = vi.fn();
+		let added = false;
+		store.observe('task', () => {
+			if (!added) {
+				added = true;
+				store.observe('task', late);
+			}
+		});
+		store.createRecord('task', { id: 1 });
+		store.flush();
+		expect(late).not.toHaveBeenCalled();
+		store.createRecord('task', { id: 2 });
+		store.flush();
+		expect(late).toHaveBeenCalledTimes(1);
+	});
+
+	it('logs a rejected async callback without breaking delivery to the others', async () => {
+		const store = makeStore();
+		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const failure = new Error('async boom');
+		const after = vi.fn();
+		store.observe('task', async () => {
+			throw failure;
+		});
+		store.observe('task', after);
+		store.createRecord('task', { id: 1 });
+		store.flush();
+		expect(after).toHaveBeenCalledTimes(1);
+		await new Promise((r) => setTimeout(r, 0));
+		expect(err).toHaveBeenCalledWith('[puzzle] store subscriber failed:', failure);
+		err.mockRestore();
+	});
+
 	it('throws a plain Error on invalid arguments', () => {
 		const store = makeStore();
 		expect(() => store.observe('task')).toThrow(/store\.observe/);

@@ -9,6 +9,16 @@ connections:
   - DOC-SPEC-DATA
   - DECISION-D161-AUTO-FETCHING-FINDS
   - DECISION-D112-STORE-ID-KEY-NORMALIZATION
+notes:
+  - kind: decision
+    text: >-
+      The callback runs untracked: the wrapper saves `_tracking`/`_trackingAdded`, nulls both around
+      `cb()`, and restores them in a `finally`. A flush can land while an async data() is paused at
+      an await with `_tracking` still naming its view; without this, reads inside the callback
+      subscribe that view and cause spurious refreshes. Residue (D161 identity rule): faulting rides
+      the handle's own request map, not `_tracking`, so a callback that reads through a view's own
+      `this.ctx.store` handle while that view's evaluation is in flight can still join its fetch
+      batch. Read through the raw `app.store` inside an observer.
 ---
 
 ## Context

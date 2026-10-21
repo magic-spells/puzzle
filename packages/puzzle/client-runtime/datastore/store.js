@@ -834,7 +834,24 @@ export class Store {
 		}
 		const key = one ? type + REC_SEP + id : type;
 		// A function subscriber: delivery calls it as `sub()` (see _deliverNotifications).
-		const sub = /** @type {Subscriber} */ (/** @type {unknown} */ (() => /** @type {Function} */ (cb)()));
+		// The callback runs UNTRACKED: a flush can land while an async data() sits
+		// at an await with `_tracking` still pointing at its view, and reads inside
+		// the callback must not be credited to that view.
+		const sub = /** @type {Subscriber} */ (
+			/** @type {unknown} */ (
+				() => {
+					const tracking = this._tracking;
+					const added = this._trackingAdded;
+					this._tracking = this._trackingAdded = null;
+					try {
+						return /** @type {Function} */ (cb)();
+					} finally {
+						this._tracking = tracking;
+						this._trackingAdded = added;
+					}
+				}
+			)
+		);
 		if (!this.subscribersByKey.has(key)) this.subscribersByKey.set(key, new Set());
 		this.subscribersByKey.get(key).add(sub);
 		this.keysBySubscriber.set(sub, new Set([key]));
