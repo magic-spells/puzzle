@@ -564,6 +564,15 @@ you see:
 - Section splitting keeps section-like text inside quoted attributes inert,
   including expressions whose strings reuse the attribute's quote and literal
   section closers. The editor splitter ports share the same boundaries.
+- Conditional layout or parent-view `<Slot/>` outlets retain the current routed
+  instance across hide/show and wrapper swaps. Navigation while hidden updates
+  the child chain and releases superseded views; teardown also releases views
+  that have not mounted yet. The usage scan keeps this code only in apps whose
+  templates can hide an outlet (`__PUZZLE_HAS_CONDITIONAL_SLOT__`).
+- `<Component slot="x" is={ current }>` fills the named slot and strips the
+  consumed routing attribute from the selected component.
+- `raw` and `newline_to_br` ranges move safely when page translation wraps or
+  relocates their nodes; an unreachable range end cannot loop indefinitely.
 
 ## 0.8.1 — 2026-10-04 (Go module only)
 

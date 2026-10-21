@@ -2099,7 +2099,9 @@ export class Router {
 					{ key: keys[i] },
 					childVnode ? [childVnode] : []
 				);
-				if (i >= keep) vnode.instance = views[i]; // adopt, don't construct
+				// Adopt, don't construct. With conditional outlets (D30) a reused level
+				// carries its pin too, so a returning outlet adopts the live instance.
+				if ((typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) || i >= keep) vnode.instance = views[i];
 				childVnode = vnode;
 			}
 			const rootVnode = childVnode; // vnode for chain level 0

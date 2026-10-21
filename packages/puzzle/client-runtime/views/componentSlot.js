@@ -28,7 +28,7 @@ function componentClass(value) {
  */
 export function dynamicComponent(value, props = {}, children = []) {
 	const selected = componentClass(value);
-	return new ViewNode(COMPONENT_SLOT_TAG, { key: props.key, selected },
+	return new ViewNode(COMPONENT_SLOT_TAG, { key: props.key, slot: props.slot, selected },
 		selected ? [new ViewNode(selected, props, children)] : []);
 }
 
@@ -89,13 +89,15 @@ export function patchComponentSlot(before, after, parent, ctx, owner, mount, pat
  * @param {Node} [end] resolved end when moving a component whose root is a range
  */
 export function moveComponentSlot(parent, vnode, ref, end = vnode.slotEnd) {
-	let node = vnode.el;
-	while (node) {
-		const next = node.nextSibling;
-		parent.insertBefore(node, ref);
+	// Collect before moving: page translation can wrap the end or move it before
+	// the start, and a move loop hunting for an unreachable end rotates the
+	// siblings forever. Without a reachable end, only the start moves.
+	const nodes = [];
+	for (let node = vnode.el; node; node = node.nextSibling) {
+		nodes.push(node);
 		if (node === end) break;
-		node = next;
 	}
+	for (const node of nodes[nodes.length - 1] === end ? nodes : nodes.slice(0, 1)) parent.insertBefore(node, ref);
 }
 
 /**

@@ -138,6 +138,7 @@ func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 		"__PUZZLE_HAS_LAZY__":             strconv.FormatBool(f.Lazy),
 		"__PUZZLE_HAS_SNIPPETS__":         strconv.FormatBool(f.Snippets),
 		"__PUZZLE_HAS_COMPONENT_SLOT__":   strconv.FormatBool(f.ComponentSlot),
+		"__PUZZLE_HAS_CONDITIONAL_SLOT__": strconv.FormatBool(f.ConditionalSlot),
 		"__PUZZLE_HAS_LISTENER_OPTIONS__": strconv.FormatBool(f.ListenerOpts),
 		"__PUZZLE_HAS_RAW_HTML__":         strconv.FormatBool(f.RawHTML),
 		// The sanitizer alone: only `raw` needs it, not `newline_to_br` (D174).

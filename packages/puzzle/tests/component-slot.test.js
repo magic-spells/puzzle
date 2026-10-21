@@ -53,6 +53,35 @@ class ForwardedComponentRoot extends ComponentRoot {
 }
 
 describe('<Component> runtime (D180)', () => {
+	it('routes a selected component into its named slot and strips the routing attribute', async () => {
+		class Regions extends PuzzleView {
+			render() { return h('main', {}, [h('header', {}, [h(SLOT_TAG, { name: 'heading' })]), h('article', {}, [h(SLOT_TAG)])]); }
+		}
+		class NamedHost extends PuzzleView {
+			data(_params, props) { return props; }
+			render() { return h(Regions, {}, [dynamicComponent(this.getData().current, { slot: 'heading', title: 'title' }), h('p', {}, [text('body')])]); }
+		}
+		const view = await mounted(NamedHost, { props: { current: Card } });
+		expect(view.find('header .card')?.textContent).toBe('title');
+		expect(view.find('article').textContent).toBe('body');
+		expect(view.find('[slot]')).toBeNull();
+		await view.setProps({ current: Panel });
+		expect(view.find('header .panel')?.textContent).toBe('title');
+		expect(view.find('[slot]')).toBeNull();
+	});
+
+	it('forwards an ordinary slot prop when no enclosing component consumes it', async () => {
+		class Slotted extends PuzzleView {
+			data(_params, props) { return props; }
+			render() { return h('div', { slot: this.getData().slot }); }
+		}
+		class PlainHost extends PuzzleView {
+			render() { return h('main', {}, [dynamicComponent(Slotted, { slot: 'native' })]); }
+		}
+		const view = await mounted(PlainHost);
+		expect(view.find('div').getAttribute('slot')).toBe('native');
+	});
+
 	it('runs compiler output with indexed module selection, ordered spreads, events, and default slots', async () => {
 		const onclose = vi.fn();
 		const view = await mounted(CompiledHost, { props: { type: 'card', title: 'first', extra: { title: 'overridden' }, onclose } });

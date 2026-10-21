@@ -53,6 +53,9 @@ type Usage struct {
 	HasRawAt         bool
 	HasSnippets      bool
 	HasComponentSlot bool
+	// HasConditionalSlot: a <Slot>/<Children> marker can leave and re-enter
+	// the tree (see conditionalSlot), which keeps the routed-outlet parking code.
+	HasConditionalSlot bool
 	// HasListenerOptions: some element listener carries the `passive` or
 	// `capture` modifier (D187), which keeps the native-options branch.
 	HasListenerOptions bool
@@ -101,15 +104,16 @@ func (u Usage) UsesT() bool {
 // WatchBuilder can decide with one == whether the Define set frozen into its
 // esbuild context went stale.
 type Features struct {
-	Flip          bool
-	Portal        bool
-	RawAt         bool
-	Lazy          bool
-	Snippets      bool
-	RawHTML       bool
-	RawSanitize   bool
-	ComponentSlot bool
-	ListenerOpts  bool
+	Flip            bool
+	Portal          bool
+	RawAt           bool
+	Lazy            bool
+	Snippets        bool
+	RawHTML         bool
+	RawSanitize     bool
+	ComponentSlot   bool
+	ConditionalSlot bool
+	ListenerOpts    bool
 }
 
 // Features projects the scan result onto the define bits. It is exported for
@@ -117,15 +121,16 @@ type Features struct {
 // whether the Defines frozen into an esbuild context went stale.
 func (u Usage) Features() Features {
 	return Features{
-		Flip:          u.HasFlip,
-		Portal:        u.HasPortal,
-		RawAt:         u.HasRawAt,
-		Lazy:          u.HasLazy,
-		Snippets:      u.HasSnippets,
-		RawHTML:       u.HasRawHTML,
-		RawSanitize:   u.HasRawSanitize,
-		ComponentSlot: u.HasComponentSlot,
-		ListenerOpts:  u.HasListenerOptions,
+		Flip:            u.HasFlip,
+		Portal:          u.HasPortal,
+		RawAt:           u.HasRawAt,
+		Lazy:            u.HasLazy,
+		Snippets:        u.HasSnippets,
+		RawHTML:         u.HasRawHTML,
+		RawSanitize:     u.HasRawSanitize,
+		ComponentSlot:   u.HasComponentSlot,
+		ConditionalSlot: u.HasConditionalSlot,
+		ListenerOpts:    u.HasListenerOptions,
 	}
 }
 
@@ -373,6 +378,70 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 			collectUsage(child, usage, allow)
 		}
 	}
+}
+
+// conditionalSlot reports whether a <Slot>/<Children> marker sits where its
+// position can leave the tree and come back: under {#if}/{#case}/{#for}, in a
+// snippet body or a marker fallback, under a <Component> selection, or under an
+// element or component carrying a `key`. under starts true for a skeleton (the
+// real template replaces it). Over-inclusive on purpose: a false positive costs
+// the runtime's outlet-parking bytes; a false negative brings back a routed view
+// that a hidden outlet destroys while the router still holds it.
+func conditionalSlot(n parser.Node, under bool) bool {
+	walk := func(nodes []parser.Node, under bool) bool {
+		for _, child := range nodes {
+			if conditionalSlot(child, under) {
+				return true
+			}
+		}
+		return false
+	}
+	switch node := n.(type) {
+	case *parser.Slot:
+		// An args-bearing marker stamps snippets (D166); it never receives the
+		// routed vnode, so only a plain marker counts.
+		return (under && len(node.Args) == 0) || walk(node.Children, true)
+	case *parser.Element:
+		return walk(node.Children, under || hasKeyAttr(node.Attrs))
+	case *parser.Component:
+		return walk(node.Children, under || node.Name == "Component" || hasKeyAttr(node.Props))
+	case *parser.Portal:
+		return walk(node.Children, under)
+	case *parser.Snippet:
+		return walk(node.Body, true)
+	case *parser.If:
+		return walk(node.Then, true) || walk(node.Else, true)
+	case *parser.Case:
+		for _, clause := range node.Clauses {
+			if walk(clause.Body, true) {
+				return true
+			}
+		}
+		return walk(node.Else, true)
+	case *parser.For:
+		return walk(node.Body, true)
+	}
+	return false
+}
+
+func hasKeyAttr(attrs []parser.Attr) bool {
+	for _, attr := range attrs {
+		switch a := attr.(type) {
+		case *parser.StaticAttr:
+			if a.Name == "key" {
+				return true
+			}
+		case *parser.DynamicAttr:
+			if a.Name == "key" {
+				return true
+			}
+		case *parser.MixedAttr:
+			if a.Name == "key" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // hasFlipAttr reports whether any attribute/prop in the list is the D85 `flip`

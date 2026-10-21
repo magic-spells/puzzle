@@ -130,6 +130,13 @@ connections:
   - DECISION-D73-SCROLL-TRIGGER-ANIMATIONS
 verified_at: '2026-08-24T18:49:30.658Z'
 verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+notes:
+  - kind: gotcha
+    text: >-
+      Parking a routed view under a conditional outlet only works when the outlet disappears inside
+      a render pass. A wrapper component that has an out animation or hide hooks finishes its
+      teardown after the pass ends. Its clear() then destroys the routed view it held, and the next
+      show constructs a fresh view with no route. This is not covered yet.
 ---
 
 # PuzzleView lifecycle machine
@@ -191,6 +198,8 @@ stateDiagram-v2
   revives this instance — the router's same-location replace or a parent refresh builds a
   new one from `constructed`, and the face is held until something refills the position.
   An error view failing reports once as `phase: 'error-view'` and stops.
+
+A conditional router outlet parks its current routed root without ending this instance's mounted lifetime. Returning the outlet relocates the live root without repeating `mounted()` or the enter bracket. Hidden navigation updates the pinned child chain and releases superseded instances; owner teardown also releases children that are still preloaded and have never acquired a ViewManager.
 
 ## Gotchas
 

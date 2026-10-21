@@ -131,6 +131,9 @@ func (p *Plugin) missingLocked(fu fileUsage) []string {
 	if fu.hasComponentSlot && !f.ComponentSlot {
 		out = append(out, "<Component>")
 	}
+	if fu.hasCondSlot && !f.ConditionalSlot {
+		out = append(out, "a conditional <Slot/>")
+	}
 	var fns []string
 	for _, name := range fu.formatters {
 		// `t` is service-bound and configured, never a manifest entry (D175).
