@@ -121,7 +121,7 @@ Open http://localhost:3000 to see the app.
 
 This example shows how Puzzle enables rapid development with:
 
-1. **Zero boilerplate** - No Redux setup, no router configuration hell
+1. **Zero boilerplate** - No separate state library, no router configuration
 2. **Clear patterns** - data() for data, events for interactions
 3. **Reactive updates** - Change a model, UI updates automatically
 4. **Rich templating** - JavaScript expressions, display functions, conditionals, loops all built-in
@@ -131,11 +131,11 @@ This example shows how Puzzle enables rapid development with:
 
 Building this todo app felt **fast and intuitive**. The patterns are clear, there's no decision fatigue, and everything just works together seamlessly.
 
-Compared to React, this would have required:
-- Redux setup and boilerplate
-- React Router configuration
-- useEffect dependency arrays
-- Custom hooks for data fetching
+Assembled from separate libraries, this would have required:
+- A state-management library and its boilerplate
+- A separate router and its configuration
+- Effect dependency lists to keep data in sync
+- Hand-written data-fetching helpers
 - Context providers or prop drilling
 - 10+ npm packages
 

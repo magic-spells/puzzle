@@ -13,9 +13,11 @@ live docs and examples for every piece.
 
 ## Why copy-in?
 
-Puzzle compiles `.pzl` single-file components, and `.pzl` files can't live in
-`node_modules` — the compiler doesn't scan there. So instead of fighting that,
-puzzle-pieces embraces it: each piece is source you copy into `app/components/ui/`.
+Puzzle compiles `.pzl` single-file components. It can compile `.pzl` files from an
+installed package that declares `@magic-spells/puzzle` as a peer dependency, but your
+Tailwind scan covers only `app/`, so a piece imported from `node_modules` would render
+unstyled, and it would not be yours to edit. So puzzle-pieces is copy-in: each piece is
+source you copy into `app/components/ui/`.
 Your `puzzle build` compiles it, your Tailwind scan picks up its classes, and the
 code is yours to restyle and rework.
 

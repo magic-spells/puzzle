@@ -79,8 +79,8 @@ rules scoped to it never reach your code.
 An import the `<script>` body only uses as a template tag
 (`import Card from './Card.pzl'` rendered as `<Card>`) is a real use, so
 `recommended` enables `puzzle/uses-template-components`, which marks every
-component tag in `<puzzle-view>` and `<puzzle-skeleton>` as used — like
-`react/jsx-uses-vars` — and never reports anything itself. A component tag is
+component tag in `<puzzle-view>` and `<puzzle-skeleton>` as used and never
+reports anything itself. A component tag is
 any tag whose name does not start with an ASCII lowercase letter (`<Card>`,
 `<Élan>`, `<_Row>`); a family tag (`<Frame.Header>`) marks its root, `Frame`.
 Only markup counts: a tag written inside an HTML or template comment, a

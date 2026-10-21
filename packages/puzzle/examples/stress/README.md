@@ -90,7 +90,7 @@ is the entire story. `stageNodes` is the whole-scenario count if you want it.
 
 **Probes:** the cost of a keyed list where every row is mounted, using the
 [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark) op
-set so the numbers are comparable to React/Vue/Svelte.
+set so the numbers are comparable to other frameworks' published figures.
 
 Ops: `create-1k`, `create-10k`, `create-50k`, `replace-all`,
 `update-every-10th`, `select-row`, `swap-rows`, `remove-row`, `click-select`,
@@ -669,7 +669,7 @@ the formatters).
 ## Scenario 9 — `listener-churn`
 
 **Probes:** `viewManager.js`'s `setAttr()` removes and re-adds a DOM listener
-whenever a handler's identity changes. Vue avoids that with an "invoker" — one
+whenever a handler's identity changes. A common alternative is an "invoker" — one
 stable wrapper attached at mount, then a `wrapper.value` reassignment. Is
 adopting that pattern worth the regression risk?
 

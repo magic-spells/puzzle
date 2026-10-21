@@ -43,7 +43,7 @@ npm install -D @magic-spells/puzzle
 > [CHANGELOG.md](CHANGELOG.md#upgrading-across-versions) before upgrading.
 >
 > **[constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) is the canonical, frozen v1
-> contract** — it indexes the numbered sections (§1–§66) across six domain
+> contract** — it indexes the numbered sections (§1–§67) across six domain
 > cards, and they are the source of truth for exactly what ships; if anything
 > here conflicts with it, the spec wins.
 
@@ -58,8 +58,12 @@ npm install -D @magic-spells/puzzle
 - **Server data with no loading code** — `findOne`/`findMany` inside a view's `data()` fetch whatever the store is missing and settle before the view commits, so a committed `null` always means "does not exist", never "still loading"
 - **Template expressions that are JavaScript** — `{ truncate(title.toLowerCase(), 40) }`, `{#for t in todos.filter(t => !t.done)}`: one closed grammar and method table, parsed once and shared with Magic Spells Sites, with display functions called like any function
 - **Translations** — `{ t('cart.title') }` with one `app/locales/<tag>.json` per language: nested files, CLDR plurals through `Intl.PluralRules`, missing keys filled from the default at build time, and only the active locale's hashed file downloaded; `this.ctx.i18n.setLocale('es')` switches in place. Apps without `i18n` configured ship none of it
+- **Multilingual static sites** — `i18n.routing: 'prefix'` gives every non-default language its own URLs (`/es/about`) and its own prerendered pages, with `hreflang` alternates, a `sitemap.xml` once `site` is set, a first-visit language redirect, `<html dir>` for right-to-left locales and translated page titles
 - **Raw template blocks** — `{#raw}…{/raw}` turns off template-expression parsing so JSON, JavaScript, CSS, and syntax examples with literal braces compile as-is (HTML inside still renders normally)
 - **Nested routing** with view slots — path routing by default, hash/memory via `hashRouter()`/`memoryRouter()` from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` function
+- **Prerendered `:param` routes** — `staticPaths` lists a route's pages at build time (`/blog/:slug` becomes one page per post, per language), as an array, a function, or a model name
+- **Runtime component selection** — `<Component is={ cards[embed.type] }>` picks one of the constructors the file imports; no registry, no runtime module lookup
+- **Hooks for tests and tools** — `router.push()` resolves a `NavigationResult` instead of rejecting, `router.views` lists every page (with an optional `agent` description per route), `store.observe()` watches records from outside a view, and `await app.idle()` waits for the app to go quiet
 - **On-demand route views** — `view: lazy(() => import('./views/Admin.pzl'))` in the route table downloads a view or layout the first time a navigation needs it, guards first
 - **Virtual DOM** with efficient diffing, pk-aware list keying, and `{#for}` rows and static markup cached between renders
 - **Built-in view & component animations** (Web Animations API), including visibility-triggered enters and app lifecycle hooks
@@ -471,6 +475,13 @@ languages with
 `this.ctx.i18n.setLocale('es')`: the new file loads first, then the page
 rebuilds in place and the choice is remembered. See `examples/i18n`.
 
+Add `routing: 'prefix'` to the `i18n` block and every non-default locale gets
+its own URLs under its tag (`/es/about`; the default stays unprefixed), with one
+prerendered page per locale in static and hybrid output. `link()` adds the
+active prefix for you, and `this.ctx.i18n.locales` is a list of
+`{ locale, label, href, active }` entries a language switcher can render as is
+(the `language-switcher` and `language-menu` pieces do).
+
 ## Single-File Components
 
 ```html
@@ -756,7 +767,8 @@ Its optional argument is the **project** directory (its `dist/` is found for
 you), not the output directory.
 It serves per the resolved output mode: an SPA gets history-API fallback, hybrid
 serves the prerendered page first and the shell otherwise, and static gets clean
-URLs and a real `404.html` rather than the shell. It defaults to port 4000 so it
+URLs and a real `404.html` rather than the shell — a folder's own `404.html`
+first, so a miss under `/es/` gets `dist/es/404.html`. It defaults to port 4000 so it
 runs alongside `puzzle dev`.
 
 `puzzle upgrade` updates the CLI you are running, resolved from the executable's

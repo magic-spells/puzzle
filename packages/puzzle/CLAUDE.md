@@ -284,12 +284,25 @@ enforced, not merely advised.
   first-visit redirect, `<html dir>`, translated `meta` titles; BREAKING:
   `i18n.locales` is `{ locale, label, href, active }[]`); D178
   `afterUpdate(prev)`; D179 `staticPaths`; and the `language-switcher` and
-  `language-menu` pieces (PR #217); D180 `<Component>` for runtime selection
+  `language-menu` pieces; D180 `<Component>` for runtime selection
   from constructors imported by the caller (`is={ current }` or
   `is={ cards[key] }` forwards children as the normal default slot; nullish
-  selection renders nothing); and D181 content-hashed production entry/CSS/page
+  selection renders nothing; BREAKING: `Component` is a reserved tag/family
+  root); and D181 content-hashed production entry/CSS/page
   module names and static-import modulepreloads (`build.hashNames` follows
-  `build.splitting`, with a `false` opt-out). Production sizes: hello-world
+  `build.splitting`, with a `false` opt-out). The agent/tooling APIs:
+  D182 `push()`/`replace()` resolve a never-rejecting `NavigationResult`;
+  D183 `router.views` and the `agent` route field; D184 `store.observe()`;
+  D185 `app.idle()`; D186 dynamic URL bindings drop script schemes; D187
+  `passive`/`capture` modifiers; D188 `this.renderTick()` (the method is
+  `renderTick`, never `tick`) on the one shared frame scheduler
+  (`client-runtime/scheduler.js`); D189 `ctx.idle()`, `catchAll: true` on
+  catch-all results, and `store.modelFor()`. D89 now also reads installed
+  packages' `.pzl` files (packages declaring `@magic-spells/puzzle`), and a
+  `.pzl` the scan never read that uses a compiled-out feature fails the
+  build. Pieces: four schemes × four styles (`dim` palette → `cool`;
+  `data-theme` is `dark | dim | mixed | light`, BREAKING for copied theme
+  files) and every item-form `{#for}` row keyed. Production sizes: hello-world
   **23.0 KB gzip**, todos **27.0 KB gzip** (about +1 KB each over 0.8.0,
   mostly the D182–D189 built-in APIs). The next free decision number is
   **D190**.
@@ -444,7 +457,8 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   unmount, HMR restore, morph-handler forwarding.
 - `router/router.js`: path/hash/memory routing, nested route chains,
   load-then-atomic-commit navigation, layouts/outlets, scroll restoration,
-  transitions, SSG takeover.
+  transitions, SSG takeover; `router/routeViews.js` builds `router.views`
+  and checks `agent` fields (D183).
 - `views/PuzzleView.js`: model/local state layers, tracked `data()`, refresh,
   lifecycle, refs, memoization, skeletons, animation hooks.
 - `views/ViewNode.js` + `views/viewManager.js`: vnode representation, DOM
@@ -462,6 +476,9 @@ puzzle-devtools repos are archived on GitHub, never deleted.
 - `renderRev.js`: the `RENDER_REV` Symbol alone, with no imports — `store.js`
   stamps a record's last notification sequence onto it, `views/` compares
   against it, and neither side may import the other.
+- `scheduler.js`: the one frame scheduler shared by store flushes, view
+  renders, `app.idle()` and `renderTick()`; steps on timers in a hidden tab
+  (D63, D185, D188).
 - `views/animate.js` + `views/visibility.js`: WAAPI animation normalization and
   shared IntersectionObserver scheduling for visible-trigger enters.
 - `datastore/store.js` + `model.js`: core records, schema builders, validation,
@@ -552,6 +569,11 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   with current props. `Component` is reserved as a tag/family root; rename a
   user file or import used under that name. No registry or runtime module
   lookup; component `bind:` remains unsupported (D147).
+- Opt-in runtime features (`flip`, `raw()`, `<Portal>`, snippets,
+  `<Component>`, library functions) ship only when the `.pzl` usage scan sees
+  them written in a template (D89). A `flip` passed through a `{...spread}` is
+  invisible to the scan, so write `flip` directly on the row; `flip` on
+  `<Component>` is a compile error (wrap it in an element).
 - DOM listeners are per-node and patch-managed. Component `@event` bindings
   are callback props, not custom DOM events; there is no `$emit`.
 - Template text is not HTML-entity decoded and interpolations become text

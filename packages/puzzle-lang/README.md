@@ -205,7 +205,7 @@ root). It holds the parser's code binding — a FILE card per load-bearing parse
 and `expr` file and the test card for this module's suite — so drift in
 `parser/` or `expr/` shows up in this plan's stale report. The parser's behavioral contract
 (COMPONENT-TEMPLATE-PARSER) and every language decision card (D172 through
-D176, and the grammar decisions before them) live in the framework plan,
+D176, D180's `<Component>` grammar, and the grammar decisions before them) live in the framework plan,
 `packages/puzzle/constellation`.
 
 ## Tests

@@ -292,7 +292,10 @@ Polish with a live locale switch.
 `puzzle build` produces a single-page app by default. Two optional prerender
 modes are there when you need HTML up front: `output: 'hybrid'` prerenders each
 page and the SPA takes over, and `output: 'static'` emits plain static pages
-with no router and no `app.js`. There is no request-time server.
+with no router and no `app.js`. Both prerender a `:param` route from the
+pages its `staticPaths` lists, and with `i18n.routing: 'prefix'` they write
+one page per language under its own URL prefix, with `hreflang` alternates
+and a sitemap. There is no request-time server.
 
 ## Examples
 
