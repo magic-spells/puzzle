@@ -67,28 +67,20 @@ notes:
       [[COMPONENT-HAMBURGER]].
   - kind: gotcha
     text: >-
-      Every item-form `{#for}` row needs a key (0.9.0, fix/pieces-for-keys). With no `key={ … }` on
-      the row root the runtime keys by `.id` (ViewNode.keyOf); a row without one drops the list to
-      positional diffing and the CONSUMER's console logs `[puzzle] {#for} item (Object) has no
-      usable key` once per session. 0.8.0's sidebar, radio-group, breadcrumb, dropzone, stepper,
-      timeline, time-picker (columns), chat-attachment, spinner, bar-chart and pie-chart (marks —
-      they computed `m.key` but never bound it) all tripped it; the demo's Sidebar shell warned on
-      every page. Convention: precompute a `key` in data() and bind `key={ row.key }`; key by a real
-      identity (option value, locale, column, path string) and fall back to the position only when
-      items carry no id (Sidebar keeps its existing `index`, which already owns the open map and
-      ids). Loops whose rows carry an `id` may stay implicit. `test/for-keys.test.js` fails on any
-      new keyless loop unless it is listed in its ID_KEYED set.
-  - kind: gotcha
-    text: >-
-      Correction to the previous note (`{#for}` keys): bar-chart and pie-chart did NOT log "no
-      usable key". Their marks carry an `.id`, so ViewNode.keyOf keyed them. bar-chart never warned.
-      pie-chart logged a DUPLICATE-key warning when one slice filled the whole circle: slicePaths
-      splits it into two paths that shared the slice's `id`. Binding the per-path `m.key` fixes
-      that. Nine pieces hit the no-usable-key warning: sidebar, radio-group, breadcrumb, dropzone,
-      stepper, timeline, time-picker (columns), chat-attachment and spinner. breadcrumb, stepper and
-      timeline now key by the caller's `id` when it gives one, and by position otherwise.
-      test/for-keys.test.js removes HTML comments before scanning, and its ID_KEYED allow-list is
-      per file, with a count for each loop name.
+      Every item-form `{#for}` row needs a key. With no `key={ … }` on the row root the runtime keys
+      by `.id` (ViewNode.keyOf); a row without one drops the list to positional diffing and the
+      CONSUMER's console logs `[puzzle] {#for} item (Object) has no usable key` once per session.
+      Nine pieces needed explicit keys: sidebar, radio-group, breadcrumb, dropzone, stepper,
+      timeline, time-picker (columns), chat-attachment and spinner. Convention: precompute a `key`
+      in data() and bind `key={ row.key }`; key by a real identity (option value, column, path
+      string) and fall back to the position only when items carry no id (Sidebar keeps its existing
+      `index`, which already owns the open map and ids). breadcrumb, stepper and timeline key by the
+      caller's `id` when it gives one and by `'#' + index` otherwise, so a partial set of numeric
+      ids cannot collide with a position. Loops whose rows carry an `id` may stay implicit — but
+      pie-chart's full-circle slice draws two paths from one slice, so marks bind their own per-path
+      `m.key` (bar-chart binds `m.key` the same way). `test/for-keys.test.js` strips HTML comments,
+      then fails on any keyless loop not listed in its per-file ID_KEYED allow-list (with a count
+      for each loop name), and on stale allow-list entries.
 ---
 
 # The registry — source of truth

@@ -49,7 +49,7 @@ export default class Breadcrumb extends PuzzleView {
     const items = src.map((item, i) => ({
       // The caller's id when it gives one, else the position: the last crumb drops
       // its href, so the href cannot be the key.
-      key: item.id ?? i,
+      key: item.id ?? '#' + i,
       label: item.label,
       // Drop the href on the current-page crumb — it renders as plain text.
       href: i === last ? undefined : item.href,

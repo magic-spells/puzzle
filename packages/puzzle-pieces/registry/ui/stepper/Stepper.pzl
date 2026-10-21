@@ -156,7 +156,7 @@ export default class Stepper extends PuzzleView {
 
       return {
         // The caller's id when it gives one, else the position.
-        key: s?.id ?? i,
+        key: s?.id ?? '#' + i,
         index: i,
         number: String(i + 1),
         label: s && s.label != null ? String(s.label) : '',

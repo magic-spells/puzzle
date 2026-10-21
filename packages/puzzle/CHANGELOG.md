@@ -585,9 +585,6 @@ you see:
   consumed routing attribute from the selected component.
 - `raw` and `newline_to_br` ranges move safely when page translation wraps or
   relocates their nodes; an unreachable range end cannot loop indefinitely.
-
-### Fixed
-
 - **Pieces no longer log `{#for} item (Object) has no usable key`.** Nine
   pieces looped over rows with no `key` and no `.id`, so each list fell back
   to positional diffing and the app's console warned once per session. Every

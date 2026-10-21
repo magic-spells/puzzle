@@ -129,7 +129,7 @@ export default class Timeline extends PuzzleView {
       const number = hasOwnNumber ? it.number : numbered ? i + 1 : '';
       return {
         // The caller's id when it gives one, else the position.
-        key: it.id ?? i,
+        key: it.id ?? '#' + i,
         title: it.title || '',
         time: it.time || '',
         description: it.description || '',
