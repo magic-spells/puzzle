@@ -158,6 +158,29 @@ describe('static kernel — mountStatic (D81)', () => {
 		expect(document.querySelector('#app').textContent).toBe('true:1');
 	});
 
+	it('gives prerender and static page contexts an idle() that resolves true (D189)', async () => {
+		const seen = [];
+		class IdleProbe extends PuzzleView {
+			async data() {
+				const { idle } = this.ctx;
+				seen.push(await idle({ timeout: 0 }));
+				return {};
+			}
+			render() {
+				return h('main', {}, [text('idle')]);
+			}
+		}
+		stamp(IdleProbe, 'app/views/IdleProbe.pzl');
+		const { pages } = await prerender(
+			{ target: '#app', routes: [{ path: '/', view: IdleProbe }] },
+			{ mode: 'static' }
+		);
+		expect(seen).toEqual([true]);
+		seedDocument({ content: pages[0].html, data: pages[0].data });
+		await mountStatic({ target: '#app', views: [IdleProbe], route: pages[0].route });
+		expect(seen).toEqual([true, true]);
+	});
+
 	it('mounts to markup identical to the prerendered output (parity)', async () => {
 		const { pages } = await prerender(config(), { mode: 'static' });
 		const page = pages[0];

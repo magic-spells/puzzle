@@ -231,7 +231,8 @@ you see:
 
 - **`ctx.idle(options?)` (D189).** Components can await the app's bound idle
   method, with the same timeout and boolean result as `app.idle()`. Under
-  `/testing`'s `mountView` it runs `settled()` and resolves `true`.
+  `/testing`'s `mountView` it runs `settled()` and resolves `true`; on
+  prerendered and `output: 'static'` pages it resolves `true` at once.
 - **Catch-all navigation results (D189).** A successful `push()` or `replace()`
   result includes `catchAll: true` when the committed route is `path: '*'`,
   including redirects and same-path no-ops; `ok` stays `true`.

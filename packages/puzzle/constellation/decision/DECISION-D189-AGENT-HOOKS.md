@@ -33,6 +33,6 @@ Reusable components (the agent kit's first) need three things app code already h
 
 ## Consequences
 
-About 35 bytes gzip on hello-world. A nested catch-all does not exist (the router rejects `path: '*'` inside `children`), so the flag has one meaning.
+About 35 bytes gzip on hello-world; about 10 bytes on the `output: 'static'` kernel. A nested catch-all does not exist (the router rejects `path: '*'` inside `children`), so the flag has one meaning.
 
-`ctx.idle` exists wherever a `PuzzleApp` builds the ctx, and under `/testing`'s `mountView`, where it runs `settled()` and resolves `true`. The prerender and `output: 'static'` page contexts (`{ store, router, formatters }`) carry no `idle`: they have no app and no navigation to wait on, and adding it there would ship bytes no caller has asked for.
+Every ctx carries `idle`, so `PuzzleContext.idle` is required in the types. A `PuzzleApp` ctx binds `app.idle`. The other three have no app to observe: `/testing`'s `mountView` runs `settled()` and resolves `true`, and the prerender page context (build time, Node) and the `output: 'static'` page kernel (no router, no navigation) resolve `true` at once.
