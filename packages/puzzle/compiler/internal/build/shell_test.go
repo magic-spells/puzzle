@@ -47,6 +47,23 @@ func TestRewriteShellSkipsComments(t *testing.T) {
 	}
 }
 
+// "<!--" inside a script body or a quoted attribute value opens no comment, so
+// the real tags after it are still rewritten and a real comment stays inert.
+func TestRewriteShellCommentMarkersInScriptsAndAttributes(t *testing.T) {
+	renames := map[string]string{"app.js": "app-HASH.js", "styles.css": "styles-HASH.css"}
+	for _, tt := range []struct{ source, want string }{
+		{`<script>var m = "<!--";</script><script type="module" src="/app.js"></script>`, `<script>var m = "<!--";</script><script type="module" src="/app-HASH.js"></script>`},
+		{`<script>a<!--b</script><script src="/app.js"></script><!-- footer <link href="/app.css"> -->`, `<script>a<!--b</script><script src="/app-HASH.js"></script><!-- footer <link href="/app.css"> -->`},
+		{`<meta content="<!--"><script src="/app.js"></script>`, `<meta content="<!--"><script src="/app-HASH.js"></script>`},
+		{`<script src="/app.js">if (a <!--b) {}</script>`, `<script src="/app-HASH.js">if (a <!--b) {}</script>`},
+	} {
+		got, found, err := rewriteShellHTML("<head>"+tt.source+"</head>", renames, nil, nil)
+		if err != nil || !found || got != "<head>"+tt.want+"</head>" {
+			t.Errorf("rewrite = %q, found = %v, %v; want %q", got, found, err, tt.want)
+		}
+	}
+}
+
 func TestShellPreloads(t *testing.T) {
 	for _, cross := range []string{"", "crossorigin", `crossorigin = 'use-credentials'`} {
 		for _, prefix := range []string{"/", "./", "", "/docs/site/"} {
