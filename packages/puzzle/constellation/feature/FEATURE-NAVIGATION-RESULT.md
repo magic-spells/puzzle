@@ -42,7 +42,7 @@ The commit-window deferral slot carries the caller's resolver (`#defer`). `#runP
 
 ## Size
 
-hello-world 22595 → 22864 bytes gzip (+269), todos 26755 → 27028 (+273).
+hello-world 22595 → 22941 bytes gzip (+346), todos 26755 → 27109 (+354).
 
 ## Callers checked
 
