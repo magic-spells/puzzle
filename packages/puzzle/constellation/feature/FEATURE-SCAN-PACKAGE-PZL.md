@@ -20,7 +20,6 @@ connections:
   - DOC-RELEASE-SURFACE
 ---
 
-
 # Usage scan reads .pzl files from installed packages
 
 A component package that ships `.pzl` source (an agent kit's message list, a
@@ -36,25 +35,30 @@ place (no new decision number).
 
 ## What ships
 
+
 - **Package walk** (`compiler/internal/plugin/scanpkg.go`). After the project
   walk, `UsageScanner.Scan` visits the `node_modules` under the scan root and
   each ancestor. A package counts when its `package.json` lists
   `@magic-spells/puzzle` in `peerDependencies` or `dependencies`; Puzzle
-  itself never counts. Scoped and unscoped top-level packages, nested
-  `node_modules` inside a counted package, and the `node_modules` holding a
+  itself and apps (the scan root or an ancestor, or a directory with a
+  `puzzle.config.js`) never count. Scoped and unscoped packages, the nested
+  `node_modules` of every package, and the `node_modules` holding a linked or
   counted package's real directory (store layouts) are covered. Only `.pzl`
-  files are read inside a package, through the same `scanFileUsage` and
-  memo as the project walk. Every directory is visited by real path, so
-  linked packages are read once. Uncounted packages cost one `package.json`
-  read and are never descended into; classifications are memoized by
-  manifest stamp.
+  files are read inside a package, through the same `scanFileUsage` and memo,
+  with their `lazy()` match dropped; `example/`, `examples/`, `test/`, `tests/`
+  and `__tests__/` at the package root are skipped. Every directory is visited
+  by real path, so linked packages are read once, and only link entries pay
+  for resolving one. Uncounted packages cost one `package.json` read and
+  their files are never read; classifications are memoized by manifest stamp.
 - **Per-file check** (`compiler/internal/plugin/usagecheck.go`). `Usage`
   gains `PZLFiles` (the `.pzl` files the scan read). The `.pzl` OnLoad
   records the usage of any compiled `.pzl` outside that set, and an esbuild
   OnEnd callback fails the pass when one needs a compiled-out gate or a
-  library function the manifest lacks. It runs on every pass, one-shot and
-  incremental, and filters records by the pass's metafile graph so a dropped
-  import clears the error. In dev it surfaces as the ordinary rebuild error.
+  library function the manifest lacks. The advice reads the owning package's
+  manifest: declare Puzzle, or (when it already does) why the walk skipped
+  the file. It runs on every pass, one-shot and incremental, and filters
+  records by the pass's metafile graph so a dropped import clears the error.
+  In dev it surfaces as the ordinary rebuild error.
 - **Runtime text.** `metadataTagError` (`views/ViewNode.js`) and the dev-only
   flip/Portal compiled-out warnings (`views/viewManager.js`) state the real
   rule: `.pzl` source only, from the app and from declaring packages;
@@ -72,15 +76,21 @@ place (no new decision number).
 
 ## Tests
 
+
 - `plugin/scanpkg_test.go`: declaring packages (scoped/peer, unscoped/deps,
-  nested) contribute bits and functions; undeclared, malformed, manifest-less
-  packages, Puzzle itself, package scripts, package dot-dirs and nested deps
-  of an uncounted package do not; ancestor `node_modules`; linked and
+  nested) contribute bits and functions, including from `dist/`; undeclared,
+  malformed, manifest-less packages, Puzzle itself, package scripts, the
+  `lazy()` match of package templates, package dot-dirs and root-level
+  example/test folders do not; a Puzzle package under a plain parent is found
+  (npm nested and store layout); workspace apps and an ancestor workspace root
+  linked into `node_modules` are skipped; ancestor `node_modules`; linked and
   store-layout packages read once by real path; a long-lived scanner tracks
   manifest edits; the check errors on an undeclared package (file, features,
   peerDependencies hint, restart note), passes when features are already on
-  or no `Usage` was set, and follows the module graph across incremental
-  rebuilds.
+  or no `Usage` was set, follows the module graph across incremental
+  rebuilds, and picks its advice from the owning manifest (a linked undeclared
+  checkout vs a declaring package's skipped folder).
+  `BenchmarkPackageWalkFlat` tracks the warm rescan of 3,000 flat packages.
 - `build/package_pzl_test.go`: a production static build importing
   `@x/kit/Message.pzl` (which uses `raw()`) from a declaring package
   prerenders the sanitized markup and ships the sanitizer; the same app with

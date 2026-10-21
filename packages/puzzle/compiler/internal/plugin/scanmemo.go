@@ -114,7 +114,7 @@ func (s *UsageScanner) Scan(scanRoot string) (Usage, error) {
 			return nil
 		}
 		if IsScanInput(path) {
-			s.visit(root, path, d, allow, &usage, seen)
+			s.visit(root, path, d, allow, &usage, seen, false)
 		}
 		return nil
 	})
@@ -132,8 +132,10 @@ func (s *UsageScanner) Scan(scanRoot string) (Usage, error) {
 
 // visit folds one scan input into usage, through the memo. A path already
 // visited this pass (a package inside the project tree that both walks reach)
-// is counted once.
-func (s *UsageScanner) visit(root, path string, d fs.DirEntry, allow map[string]bool, usage *Usage, seen map[string]bool) {
+// is counted once. pkg marks a file the package walk reached: its lazy() text
+// match is dropped, because the lazy bit is an app route-table fact and a
+// package template that merely mentions `lazy(` must not pull the resolver in.
+func (s *UsageScanner) visit(root, path string, d fs.DirEntry, allow map[string]bool, usage *Usage, seen map[string]bool, pkg bool) {
 	if seen[path] {
 		return
 	}
@@ -147,11 +149,18 @@ func (s *UsageScanner) visit(root, path string, d fs.DirEntry, allow map[string]
 		stamp = scanStamp{modUnixNano: info.ModTime().UnixNano(), size: info.Size()}
 	}
 	if prev, ok := s.entries[path]; ok && prev.stamp == stamp && stamp != (scanStamp{}) {
-		mergeFileUsage(usage, prev.usage)
+		fu := prev.usage
+		if pkg {
+			fu.hasLazy = false
+		}
+		mergeFileUsage(usage, fu)
 		return
 	}
 
 	fu := scanFileUsage(root, path, allow)
+	if pkg {
+		fu.hasLazy = false
+	}
 	s.entries[path] = scanEntry{stamp: stamp, usage: fu}
 	mergeFileUsage(usage, fu)
 }

@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,33 +60,36 @@ func TestScanUsageReadsDeclaringPackages(t *testing.T) {
 	}
 }
 
-// Everything that is not a declaring package's .pzl stays out: undeclared and
-// malformed packages, Puzzle itself, a package's scripts (the lazy() text match
-// would trip on runtime-like JavaScript), its dot-directories, and the nested
-// dependencies of a package that is not read at all.
+// Everything that is not a declaring package's shipped .pzl stays out:
+// undeclared and malformed packages, Puzzle itself, a package's scripts and the
+// lazy() text match of its templates (the bit is an app route-table fact), its
+// dot-directories, and the example/test folders at its root. Its dist/ is read:
+// packages publish .pzl source there.
 func TestScanUsageSkipsWhatPackagesMayNotContribute(t *testing.T) {
 	root := writeApp(t, map[string]string{
-		"app/views/Home.pzl":                                plainHome,
-		"node_modules/plain/package.json":                   `{"name":"plain","dependencies":{"left-pad":"1"}}`,
-		"node_modules/plain/Thing.pzl":                      `<puzzle-view><Portal><p>x</p></Portal></puzzle-view>`,
-		"node_modules/plain/node_modules/deep/package.json": peerManifest,
-		"node_modules/plain/node_modules/deep/Deep.pzl":     `<puzzle-view><div flip>x</div></puzzle-view>`,
-		"node_modules/broken/package.json":                  `{"name":"broken","peerDependencies":`,
-		"node_modules/broken/Broken.pzl":                    `<puzzle-view>{ raw(x) }</puzzle-view>`,
-		"node_modules/nomanifest/Bare.pzl":                  `<puzzle-view>{ raw(x) }</puzzle-view>`,
-		"node_modules/@magic-spells/puzzle/package.json":    `{"name":"@magic-spells/puzzle","dependencies":{"@magic-spells/puzzle":"*"}}`,
-		"node_modules/@magic-spells/puzzle/Fixture.pzl":     `<puzzle-view>{#raw}<b @x="y">r</b>{/raw}</puzzle-view>`,
-		"node_modules/@x/kit/package.json":                  peerManifest,
-		"node_modules/@x/kit/router.js":                     "export const view = lazy(() => import('./V.pzl'));\n",
-		"node_modules/@x/kit/.cache/Cached.pzl":             `<puzzle-view>{ currency(x) }</puzzle-view>`,
-		"node_modules/@x/kit/Card.pzl":                      `<puzzle-view><p>{ capitalize(x) }</p></puzzle-view>`,
+		"app/views/Home.pzl":                             plainHome,
+		"node_modules/plain/package.json":                `{"name":"plain","dependencies":{"left-pad":"1"}}`,
+		"node_modules/plain/Thing.pzl":                   `<puzzle-view><Portal><p>x</p></Portal></puzzle-view>`,
+		"node_modules/broken/package.json":               `{"name":"broken","peerDependencies":`,
+		"node_modules/broken/Broken.pzl":                 `<puzzle-view>{ raw(x) }</puzzle-view>`,
+		"node_modules/nomanifest/Bare.pzl":               `<puzzle-view>{ raw(x) }</puzzle-view>`,
+		"node_modules/@magic-spells/puzzle/package.json": `{"name":"@magic-spells/puzzle","dependencies":{"@magic-spells/puzzle":"*"}}`,
+		"node_modules/@magic-spells/puzzle/Fixture.pzl":  `<puzzle-view>{#raw}<b @x="y">r</b>{/raw}</puzzle-view>`,
+		"node_modules/@x/kit/package.json":               peerManifest,
+		"node_modules/@x/kit/router.js":                  "export const view = lazy(() => import('./V.pzl'));\n",
+		"node_modules/@x/kit/.cache/Cached.pzl":          `<puzzle-view>{ currency(x) }</puzzle-view>`,
+		"node_modules/@x/kit/Card.pzl":                   `<puzzle-view><p>{ capitalize(x) }</p></puzzle-view>`,
+		"node_modules/@x/kit/Routes.pzl":                 "<puzzle-view><p>r</p></puzzle-view>\n<script>\nexport const v = lazy(() => import('./V.pzl'));\n</script>\n",
+		"node_modules/@x/kit/example/Demo.pzl":           `<puzzle-view><div flip>demo</div></puzzle-view>`,
+		"node_modules/@x/kit/tests/Spec.pzl":             `<puzzle-view><Portal><p>t</p></Portal></puzzle-view>`,
+		"node_modules/@x/kit/dist/Ship.pzl":              `<puzzle-view><p>{ truncate(x, 3) }</p></puzzle-view>`,
 	})
 	usage, err := ScanUsage(root)
 	if err != nil {
 		t.Fatalf("ScanUsage: %v", err)
 	}
-	if !usage.Formatters["capitalize"] {
-		t.Fatalf("the declaring package itself was not read: %+v", usage)
+	if !usage.Formatters["capitalize"] || !usage.Formatters["truncate"] {
+		t.Fatalf("the declaring package (root and dist/) was not read: %+v", usage)
 	}
 	if usage.HasPortal || usage.HasFlip || usage.HasRawHTML || usage.HasRawAt || usage.HasLazy || usage.Formatters["currency"] {
 		t.Errorf("a package source that must not contribute did: %+v", usage)
@@ -331,5 +335,154 @@ func TestUsageCheckFollowsTheModuleGraph(t *testing.T) {
 	rescan()
 	if res := ctx.Rebuild(); len(res.Errors) != 0 {
 		t.Errorf("dropping the import did not clear the error: %+v", res.Errors)
+	}
+}
+
+// A Puzzle package can be the dependency of one that is not: its nested
+// node_modules (npm) and the store directory beside a linked entry (pnpm) are
+// listed whatever the parent's verdict, though the parent's own files are not
+// read.
+func TestScanUsageFindsPuzzlePackagesUnderPlainParents(t *testing.T) {
+	base := `{"name":"@y/base","peerDependencies":{"@magic-spells/puzzle":"*"}}`
+	t.Run("npm nested", func(t *testing.T) {
+		root := writeApp(t, map[string]string{
+			"app/views/Home.pzl":                                     plainHome,
+			"node_modules/wrapper/package.json":                      `{"name":"wrapper"}`,
+			"node_modules/wrapper/index.pzl":                         `<puzzle-view><Portal><p>w</p></Portal></puzzle-view>`,
+			"node_modules/wrapper/node_modules/@y/base/package.json": base,
+			"node_modules/wrapper/node_modules/@y/base/Msg.pzl":      kitMessage,
+		})
+		usage, err := ScanUsage(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !usage.HasRawHTML || !usage.Formatters["currency"] {
+			t.Errorf("Puzzle package nested under a plain one not read: %+v", usage)
+		}
+		if usage.HasPortal {
+			t.Error("the plain parent's own .pzl was read")
+		}
+	})
+	t.Run("store layout", func(t *testing.T) {
+		root := writeApp(t, map[string]string{
+			"app/views/Home.pzl": plainHome,
+			"node_modules/.pnpm/wrapper@1.0.0/node_modules/wrapper/package.json": `{"name":"wrapper"}`,
+			"node_modules/.pnpm/wrapper@1.0.0/node_modules/wrapper/index.pzl":    `<puzzle-view><p>w</p></puzzle-view>`,
+			"node_modules/.pnpm/@y+base@1.0.0/node_modules/@y/base/package.json": base,
+			"node_modules/.pnpm/@y+base@1.0.0/node_modules/@y/base/Msg.pzl":      kitMessage,
+		})
+		nm := filepath.Join(root, "node_modules")
+		symlink(t, filepath.Join(nm, ".pnpm", "wrapper@1.0.0", "node_modules", "wrapper"), filepath.Join(nm, "wrapper"))
+		symlink(t, filepath.Join(nm, ".pnpm", "@y+base@1.0.0", "node_modules", "@y", "base"),
+			filepath.Join(nm, ".pnpm", "wrapper@1.0.0", "node_modules", "@y", "base"))
+		usage, err := ScanUsage(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !usage.HasRawHTML || !usage.Formatters["currency"] {
+			t.Errorf("store-layout Puzzle dependency of a plain package not read: %+v", usage)
+		}
+	})
+}
+
+// An app is not a dependency: a workspace sibling app linked into the shared
+// node_modules (it has a puzzle.config.js), and a workspace root that is the
+// scan root's ancestor, contribute nothing even though both declare Puzzle.
+func TestScanUsageSkipsAppsLinkedAsPackages(t *testing.T) {
+	ws := writeApp(t, map[string]string{
+		"package.json":                      `{"name":"ws","dependencies":{"@magic-spells/puzzle":"*"}}`,
+		"Root.pzl":                          `<puzzle-view><div flip>root</div></puzzle-view>`,
+		"packages/app-a/package.json":       `{"name":"app-a","dependencies":{"@magic-spells/puzzle":"*"}}`,
+		"packages/app-a/puzzle.config.js":   "export default {};\n",
+		"packages/app-a/app/views/Home.pzl": plainHome,
+		"packages/app-b/package.json":       `{"name":"app-b","dependencies":{"@magic-spells/puzzle":"*"}}`,
+		"packages/app-b/puzzle.config.js":   "export default {};\n",
+		"packages/app-b/app/views/Rich.pzl": kitMessage,
+	})
+	nm := filepath.Join(ws, "node_modules")
+	symlink(t, filepath.Join(ws, "packages", "app-a"), filepath.Join(nm, "app-a"))
+	symlink(t, filepath.Join(ws, "packages", "app-b"), filepath.Join(nm, "app-b"))
+	symlink(t, ws, filepath.Join(nm, "ws"))
+	usage, err := ScanUsage(filepath.Join(ws, "packages", "app-a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usage.HasRawHTML || usage.Formatters["currency"] || usage.HasFlip {
+		t.Errorf("an app linked into node_modules was read as a package: %+v", usage)
+	}
+}
+
+func symlink(t *testing.T, target, link string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+}
+
+// The error's advice follows the owning package's manifest: an undeclared
+// package linked in from outside the project gets the peerDependencies fix,
+// and a package that already declares Puzzle is told why the walk skipped the
+// file instead of being told to declare it again.
+func TestUsageMismatchAdviceReadsTheOwningManifest(t *testing.T) {
+	base := writeApp(t, map[string]string{
+		"project/app/app.js":                           "import Home from './views/Home.pzl';\nimport M from 'kit/Message.pzl';\nimport D from '@x/kit/example/Demo.pzl';\nexport default [Home, M, D];\n",
+		"project/app/views/Home.pzl":                   plainHome,
+		"linked/kit/package.json":                      `{"name":"kit"}`,
+		"linked/kit/Message.pzl":                       kitMessage,
+		"project/node_modules/@x/kit/package.json":     peerManifest,
+		"project/node_modules/@x/kit/example/Demo.pzl": `<puzzle-view><div flip>d</div></puzzle-view>`,
+	})
+	root := filepath.Join(base, "project")
+	symlink(t, filepath.Join(base, "linked", "kit"), filepath.Join(root, "node_modules", "kit"))
+	res := scannedBuild(t, root)
+	if len(res.Errors) != 2 {
+		t.Fatalf("want two mismatch errors, got %+v", res.Errors)
+	}
+	notes := map[string]string{}
+	for _, m := range res.Errors {
+		notes[m.Location.File] = m.Notes[0].Text
+	}
+	var linked, declared string
+	for file, note := range notes {
+		switch {
+		case strings.HasSuffix(file, "linked/kit/Message.pzl"):
+			linked = note
+		case strings.HasSuffix(file, "example/Demo.pzl"):
+			declared = note
+		}
+	}
+	if !strings.Contains(linked, "peerDependencies") || !strings.Contains(linked, "does not declare") {
+		t.Errorf("linked undeclared package got %q", linked)
+	}
+	if !strings.Contains(declared, "declares Puzzle") || strings.Contains(declared, "add \"@magic-spells/puzzle\"") {
+		t.Errorf("declared package got %q", declared)
+	}
+}
+
+// A large flat install: only link entries resolve symlinks. The benchmark
+// tracks the warm rescan cost the dev loop pays on every scan-input save.
+func BenchmarkPackageWalkFlat(b *testing.B) {
+	root := b.TempDir()
+	for i := 0; i < 3000; i++ {
+		dir := filepath.Join(root, "node_modules", fmt.Sprintf("pkg%04d", i))
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			b.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"p"}`), 0o644); err != nil {
+			b.Fatal(err)
+		}
+	}
+	s := NewUsageScanner()
+	if _, err := s.Scan(root); err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := s.Scan(root); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

@@ -50,6 +50,7 @@ the namespace). Rules match structure, never a bare English word.
 
 ## What the scan reads
 
+
 Two walks feed one `Usage`, so functions from either reach the formatter
 manifest and either can turn a gate on:
 
@@ -58,17 +59,28 @@ manifest and either can turn a gate on:
   depth, and `dist`/`build`/`vendor` only directly under the root.
 - **The package walk** (`plugin/scanpkg.go`) reads the `.pzl` files of
   installed packages whose `package.json` lists `@magic-spells/puzzle` in
-  `peerDependencies` or `dependencies` (Puzzle itself excluded). It visits the
-  `node_modules` under the scan root and under each ancestor (node's own
-  search path), scoped and unscoped top-level entries, the nested
-  `node_modules` of a counted package, and the `node_modules` that holds a
-  counted package's real directory (a store layout keeps a package's
-  dependencies beside it). It reads only `package.json` at each package root
-  and never descends into an uncounted package. In a counted package it reads
-  **`.pzl` files only** — no script scanning, so runtime-like package
-  JavaScript cannot set `__PUZZLE_HAS_LAZY__`. Directories are visited by real
-  path, so a linked package is read once. Package manifests are memoized by
-  stamp like files.
+  `peerDependencies` or `dependencies`. Puzzle itself never counts, and neither
+  does an **app**: the scan root or an ancestor of it (a workspace root linked
+  into `node_modules`), or any directory holding a `puzzle.config.js` (a
+  workspace sibling app).
+  - It visits the `node_modules` under the scan root and under each ancestor
+    (node's own search path), scoped and unscoped entries, the nested
+    `node_modules` of **every** package (a Puzzle package can be the dependency
+    of one that is not), and the `node_modules` holding the real directory of
+    a linked or counted package (a store layout keeps a package's dependencies
+    beside it).
+  - It reads one `package.json` per package root and never reads an uncounted
+    package's files. Only link entries pay for resolving a real path; a plain
+    entry under a real directory is already real (3,000 flat packages rescan
+    in ~15 ms warm). Manifests are memoized by stamp like files.
+  - In a counted package it reads **`.pzl` files only** and drops their
+    `lazy()` text match, so package code can never set `__PUZZLE_HAS_LAZY__`.
+    It skips `example/`, `examples/`, `test/`, `tests/` and `__tests__/` at the
+    package root — a linked checkout carries them, a published package leaves
+    them out. It does NOT prune `dist`/`build`/`vendor`: packages commonly
+    publish their `.pzl` under `dist/`, and a Puzzle build never writes `.pzl`
+    into one.
+  - Directories are visited by real path, so a linked package is read once.
 - **Pre-compiled component packages are unsupported input.** Only `.pzl`
   source is scanned; a package must ship its `.pzl` files and declare Puzzle.
 
@@ -77,14 +89,17 @@ The `.pzl` OnLoad records the usage of every compiled `.pzl` the scan did not
 read (`Usage.PZLFiles` lists the ones it did), keyed by path so the record
 survives esbuild's cached OnLoad. An OnEnd callback then fails the pass when a
 recorded file needs a gate that is off or a library function the manifest
-lacks. The error names the file and the features, says to add
-`@magic-spells/puzzle` to the package's `peerDependencies` (or, outside
-`node_modules`, to move the file where the walk reads it), and says a running
-`puzzle dev` needs a restart after a package changes. Records leave with the
-import: each pass filters them by its metafile graph. `lazy()` is not checked,
-because it is an app route-table fact, and the text match would fail builds
-over a template that only mentions the word. A plugin that never received a
-`Usage` (focused callers) runs no check.
+lacks. The error names the file and the features, and its advice reads the
+owning package's manifest (the nearest `package.json` above a file inside
+`node_modules` or outside the project root): an undeclared package is told to
+add `@magic-spells/puzzle` to its `peerDependencies`; a declaring one is told
+which places the walk skips; a project file outside both walks is told to
+move. It also says a running `puzzle dev` needs a restart after a package
+changes. Records leave with the import: each pass filters them by its
+metafile graph. `lazy()` is not checked, because it is an app route-table
+fact, and the text match would fail builds over a template that only mentions
+the word. A plugin that never received a `Usage` (focused callers) runs no
+check.
 
 ## Rules
 

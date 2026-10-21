@@ -95,7 +95,7 @@ func (p *Plugin) featureMismatches(graph map[string]bool) []api.Message {
 		if len(missing) == 0 {
 			continue
 		}
-		msgs = append(msgs, usageMismatchMessage(p.relName(path), path, missing))
+		msgs = append(msgs, usageMismatchMessage(p.relName(path), missing, p.mismatchHint(path)))
 	}
 	return msgs
 }
@@ -139,11 +139,7 @@ func (p *Plugin) missingLocked(fu fileUsage) []string {
 	return append(out, fns...)
 }
 
-func usageMismatchMessage(name, path string, missing []string) api.Message {
-	hint := "Move it under the project root, outside node_modules, dist/, build/, vendor/ and dot-directories, so the usage scan reads it."
-	if strings.Contains(filepath.ToSlash(path), "/node_modules/") {
-		hint = `If it comes from an installed package, add "@magic-spells/puzzle" to that package's peerDependencies so the usage scan reads its .pzl files.`
-	}
+func usageMismatchMessage(name string, missing []string, hint string) api.Message {
 	return api.Message{
 		Text: fmt.Sprintf("this .pzl uses %s, which this build compiled out: the usage scan never read the file", strings.Join(missing, ", ")),
 		Location: &api.Location{
@@ -154,6 +150,55 @@ func usageMismatchMessage(name, path string, missing []string) api.Message {
 			{Text: hint},
 			{Text: "A running `puzzle dev` reads installed packages at startup: restart it after installing or changing a package."},
 		},
+	}
+}
+
+// mismatchHint picks the fix for one unscanned file. A file inside
+// node_modules, or outside the project root (an npm-linked checkout), belongs
+// to the package whose manifest sits nearest above it: when that manifest does
+// not declare Puzzle, declaring it is the fix; when it already does, the file
+// sits where the package walk does not read (an app, a root-level example or
+// test folder, a package the walk cannot reach). A project file outside both
+// walks must move.
+func (p *Plugin) mismatchHint(path string) string {
+	const move = "Move it under the project root, outside node_modules, dist/, build/, vendor/ and dot-directories, so the usage scan reads it."
+	real := resolveSymlinks(path)
+	inPackages := strings.Contains(filepath.ToSlash(real), "/node_modules/")
+	outside := p.appRoot != "" && !strings.HasPrefix(real, p.appRoot+string(filepath.Separator))
+	if !inPackages && !outside {
+		return move
+	}
+	manifest := nearestManifest(filepath.Dir(real), p.appRoot)
+	if manifest == "" {
+		if inPackages {
+			return `Its package has no package.json: give it one that lists "@magic-spells/puzzle" in peerDependencies so the usage scan reads its .pzl files.`
+		}
+		return move
+	}
+	owner := filepath.ToSlash(manifest)
+	if !manifestDeclaresPuzzle(manifest) {
+		return fmt.Sprintf(`Its package (%s) does not declare Puzzle: add "@magic-spells/puzzle" to that package's peerDependencies so the usage scan reads its .pzl files.`, owner)
+	}
+	return fmt.Sprintf("Its package (%s) declares Puzzle, but the usage scan does not read this file: it skips packages that are apps (a puzzle.config.js), example/, examples/, test/, tests/ and __tests__/ at a package root, and packages outside every node_modules the project resolves from. Import the component from the package's shipped source, or install the package so node_modules reaches it.", owner)
+}
+
+// nearestManifest returns the package.json nearest above dir, or "" when the
+// search reaches appRoot (the app's own manifest is not a package's) or the
+// filesystem root.
+func nearestManifest(dir, appRoot string) string {
+	for {
+		if dir == appRoot {
+			return ""
+		}
+		candidate := filepath.Join(dir, "package.json")
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
 	}
 }
 
