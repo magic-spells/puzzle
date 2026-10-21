@@ -200,7 +200,7 @@ Change the range to `^0.9.0`. Two changes can require an update:
    at `Component`. The compiler reports a positioned error with a rename
    hint. Other component names are unaffected.
 
-Three behavior changes do not break anything that worked, but can change what
+Four behavior changes do not break anything that worked, but can change what
 you see:
 
 3. **`puzzle preview` and `puzzle dev` in static mode serve a nested 404
@@ -217,9 +217,28 @@ you see:
    be an http(s) origin with no path (`'https://example.com'`); anything else
    fails the build. `i18n.routing` accepts only `'prefix'` and `i18n.detect`
    only a boolean.
+6. **A `.pzl` the usage scan never read can fail the build (D89).** When the
+   app imports a `.pzl` from a package that does not declare Puzzle, from a
+   pruned directory (`dist/`, `build/`, `vendor/` at the project root, a
+   dot-directory) or from a folder linked in from outside, and that file uses
+   a feature or library function the build compiled out, the build stops
+   with an error naming the file and the feature. 0.8.0 built it and the page
+   threw `#html reached the DOM` (or rendered the function's input unchanged)
+   in production. A component package fixes it by listing
+   `@magic-spells/puzzle` in its `peerDependencies`.
 
 ### Added
 
+- **Installed packages' `.pzl` files feed the usage scan (D89).** A package
+  whose `package.json` lists `@magic-spells/puzzle` in `peerDependencies` (or
+  `dependencies`) has its `.pzl` files read by the build's usage scan, from
+  the `node_modules` of the project and of every parent directory, so its
+  `raw()`, `flip`, `<Portal>`, snippets, `<Component>` and library functions
+  reach the bundle like the app's own. Only `.pzl` files are read in a
+  package, never its JavaScript. Linked and store-layout installs are read
+  once by their real path. A shim component that used each feature once in
+  the app's own tree is no longer needed. `puzzle dev` reads packages at
+  startup; restart it after installing one.
 - **Runtime component selection: `<Component is={ expr }>` (D180).** Select an
   imported compiled component directly or through a script map
   (`is={ cards[embed.type] }`). Every candidate must be

@@ -52,7 +52,10 @@ detail lives on [[COMPONENT-DEV-SERVER]].
    one-shot build per save — same output, higher cost.
 4. **Bind, then print the banner** (port scan, [[DECISION-D90-DEV-PORT-SCAN]]).
 5. **Initial build, then watch** `app/` and `public/` recursively, the root
-   non-recursively (config edits and atomic saves only).
+   non-recursively (config edits and atomic saves only). Installed packages are not
+   watched: the usage scan reads declaring packages' `.pzl` files at startup and on later
+   scans, but a package install or manifest change needs a restart, and the per-file
+   usage check's error says so ([[DECISION-D89-FEATURE-USAGE-TREESHAKE]]).
 6. **Batch** events for 150 ms (every op counts, `Chmod` included); drop junk by
    denylist; split out config paths — a config change only prints "restart" and triggers
    nothing (`output`, `build.splitting`, `dev.proxy` and the style pipeline are frozen
@@ -61,8 +64,9 @@ detail lives on [[COMPONENT-DEV-SERVER]].
    the window a successful rebuild opens. Needed because the watcher calls the rebuild
    synchronously, so nothing drains fsnotify while it runs.
 8. **Classify** — the verdict is the most conservative member's. SPA: does it contain a
-   `.pzl` (usage scan), touch the bundle graph (esbuild), or is it public-only (mirror and
-   stop)? Static: which routes can it reach ([[DECISION-D155-ROUTE-LEVEL-INVALIDATION]])?
+   scan input (`plugin.IsScanInput`: a `.pzl` or a `.js`/`.ts`-family module — usage
+   rescan), touch the bundle graph (esbuild), or is it public-only (mirror and stop)?
+   Static: which routes can it reach ([[DECISION-D155-ROUTE-LEVEL-INVALIDATION]])?
    Anything unplaceable is a full rebuild; it only narrows on evidence.
 9. **Rebuild on warm state.** esbuild owns graph invalidation; a context is replaced only
    when a value frozen into it changes — a feature define, or the static page pass's
@@ -106,7 +110,8 @@ first-ever failed build self-heals. A failure wipes the echo filter's memo.
 - **Promote the captured graph and pending set only after the swap succeeds**, or the next
   save hardlinks stale pages back in as last-good.
 - **Prune the style collector from the metafile**, not load callbacks — a `.pzl` still on
-  disk but no longer imported never re-runs its load.
+  disk but no longer imported never re-runs its load. The per-file usage check filters
+  its records by the same graph.
 - **The warm static output tree sits at staging depth** (esbuild bakes output-relative
   paths into source maps) and its name avoids the sweep prefixes (an idle session must not
   lose it).

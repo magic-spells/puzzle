@@ -1998,25 +1998,26 @@ function warnDuplicateKey(key) {
 	);
 }
 
-// D89's usage scan prunes node_modules/dist/vendor/dot-dirs, so a `flip` attr
-// arriving from an INSTALLED .pzl component is invisible to it: the define lands
-// false, flip.js tree-shakes out, and the reorder animation silently never plays.
-// The formatter half of the same scan degrades LOUDLY (D43's unknown-formatter
-// error) — this is flip's equivalent, dev-only and once per session.
+// D89's usage scan reads .pzl source only — the project's and declaring
+// packages' — and the build fails on any compiled .pzl it did not read that
+// needs flip. A `flip` attr can still arrive from code no .pzl compile saw
+// (pre-compiled component JavaScript, a hand-built vnode): the define lands
+// false, flip.js tree-shakes out, and the reorder animation silently never
+// plays. This is the dev-only, once-per-session warning for that case.
 let warnedFlipCompiledOut = false;
 function warnFlipCompiledOut() {
 	if (warnedFlipCompiledOut) return;
 	warnedFlipCompiledOut = true;
 	console.warn(
 		'[puzzle] a `flip` attribute is present at runtime, but flip support was compiled out — ' +
-			'the build scan found no `flip` in project templates (it does not scan node_modules or ' +
-			'build output), so the reorder animation will not play. Use `flip` on an element in ' +
-			'project source to keep the runtime in, or remove the attribute.'
+			'the build scan found no `flip` in the .pzl source it reads (the project and installed packages ' +
+			'that declare @magic-spells/puzzle), so the reorder animation will not play. Pre-compiled ' +
+			'component JavaScript is not scanned: import the .pzl source, or remove the attribute.'
 	);
 }
 
-// Same false-negative posture as flip: installed/generated templates are
-// outside the first-party usage walk, so a Portal vnode can still arrive after
+// Same false-negative posture as flip: a vnode from code no .pzl compile saw is
+// outside the usage scan, so a Portal vnode can still arrive after
 // __PUZZLE_HAS_PORTAL__ was baked false. Warn once in development; mount() keeps
 // an inert placeholder so production never throws.
 let warnedPortalCompiledOut = false;
@@ -2025,9 +2026,9 @@ function warnPortalCompiledOut() {
 	warnedPortalCompiledOut = true;
 	console.warn(
 		'[puzzle] a `<Portal>` vnode is present at runtime, but Portal support was compiled out — ' +
-			'the build scan found no `<Portal>` in project templates (it does not scan node_modules ' +
-			'or build output), so the portal content will not render. Use `<Portal>` in project ' +
-			'source to keep the runtime in, or remove the vnode.'
+			'the build scan found no `<Portal>` in the .pzl source it reads (the project and installed ' +
+			'packages that declare @magic-spells/puzzle), so the portal content will not render. ' +
+			'Pre-compiled component JavaScript is not scanned: import the .pzl source, or remove the vnode.'
 	);
 }
 

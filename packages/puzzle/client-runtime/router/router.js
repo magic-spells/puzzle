@@ -3625,7 +3625,7 @@ function finishEntry(entry) {
  * routing a validation call through the resolver module would pin lazy.js into
  * every bundle and defeat the __PUZZLE_HAS_LAZY__ gate. When the gate is off,
  * a marker that reached the route table anyway (an installed package building
- * routes — the same blind spot the D89 scan has for flip) is not silently
+ * routes — the D89 scan reads lazy() from the app's scripts only) is not silently
  * mistaken for a view class: it falls through to the throw below, which names
  * the compiled-out gate.
  *

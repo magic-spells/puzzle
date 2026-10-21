@@ -117,6 +117,7 @@ anchors and resolve insertion refs from the live element.
 
 ## Composition markers
 
+
 `SLOT_TAG` + shared `expandSlots` (also used by SSG/static): `<Children/>` → default
 bucket, `<Slot name>` → named, `<Slot/>` → router outlet; `SNIPPET_TAG` children form a
 bucket keyed by `fits`, and an args-bearing marker stamps the Snippet function per render.
@@ -135,9 +136,13 @@ Semantics: [[DOC-SPEC-TEMPLATE]] §24/§64.
 - A marker makes its subtree dynamic, so `expandSlots` never clones a cached static
   subtree — only the path down to a marker.
 - Any `#`-prefixed metadata tag reaching element creation or the SSG serializer throws
-  `metadataTagError` in every build (the long D89 explanation is dev-only) — it means a
-  build whose usage scan missed a feature ([[DECISION-D89-FEATURE-USAGE-TREESHAKE]]).
-  A compiled-out `#component` diagnostic names `<Component>` and
+  `metadataTagError` in every build (the long D89 explanation is dev-only). The build
+  already fails on any compiled `.pzl` the usage scan never read that needs a
+  compiled-out feature, so this throw means vnodes from pre-compiled component
+  JavaScript, which the scan does not read
+  ([[DECISION-D89-FEATURE-USAGE-TREESHAKE]]). The dev text names the supported input:
+  `.pzl` source from the app and from packages that list `@magic-spells/puzzle` in
+  `peerDependencies`. A compiled-out `#component` diagnostic names `<Component>` and
   `__PUZZLE_HAS_COMPONENT_SLOT__`.
 
 ## Host behavior

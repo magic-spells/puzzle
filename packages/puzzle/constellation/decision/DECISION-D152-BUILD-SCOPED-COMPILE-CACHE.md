@@ -18,6 +18,14 @@ connections:
   - DECISION-D155-ROUTE-LEVEL-INVALIDATION
 verified_at: '2026-08-24T21:11:50.859Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: gotcha
+    text: >-
+      The one shared scan includes the package walk (installed packages that declare
+      @magic-spells/puzzle, D89), and the shared Usage carries PZLFiles. The D89 per-file usage
+      check is per-PASS plugin state, never in the CompileCache: each pass's OnLoad records
+      unscanned files in its own plugin even on a memo hit, and each pass's OnEnd checks them,
+      because the record must follow that pass's module graph.
 ---
 
 # D152 — Build-scoped compile cache: one transform per source, shared by every esbuild pass

@@ -16,12 +16,12 @@ release branches, feature PRs, and CI are the monorepo's, the framework root is 
 (not a sibling checkout), and the monorepo's `release:prep` asserts this package's
 version stamps at release time.
 
-**Why pieces can't ship as npm imports:** plain-JS npm packages work fine in a Puzzle app,
-but `.pzl` files inside `node_modules` are unsupported — the compiler's formatter scan prunes
-`node_modules` (out of scope for v1 per the compiler source), and the app's Tailwind
-`@source` scan only covers `app/`, so a package-shipped piece would render unstyled. So
-pieces must land in the app's own `app/components/ui/`, where the consumer's `puzzle build`
-compiles them and their Tailwind scan picks up the classes. This is the whole reason the
+**Why pieces don't ship as npm imports:** a Puzzle app can import `.pzl` files from an
+installed package that lists `@magic-spells/puzzle` in `peerDependencies` (the usage scan
+reads them, framework D89), but the app's Tailwind `@source` scan only covers `app/`, so a
+package-shipped piece would render unstyled, and an installed piece is not the app's to
+edit. So pieces land in the app's own `app/components/ui/`, where the consumer's
+`puzzle build` compiles them and their Tailwind scan picks up the classes. This is why the
 repo is shaped as a copyable registry.
 
 ## Topology — registry is source of truth, demo is downstream

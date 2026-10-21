@@ -738,9 +738,17 @@ func TestBuildUsageThroughSymlinkedRoot(t *testing.T) {
 	}
 	// The link lives outside the checkout's runtime-discovery walk.
 	t.Setenv("PUZZLE_RUNTIME", repoRoot(t))
+	resolved, err := filepath.EvalSymlinks(real)
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := plugin.Usage{
 		HasPortal: true, HasSnippets: true,
 		Formatters: map[string]bool{"currency": true, "capitalize": true},
+		PZLFiles: map[string]bool{
+			filepath.Join(resolved, "app", "views", "Home.pzl"):            true,
+			filepath.Join(resolved, "app", "components", "ScopedList.pzl"): true,
+		},
 	}
 	var realDefines map[string]string
 	for _, root := range []string{real, link} {

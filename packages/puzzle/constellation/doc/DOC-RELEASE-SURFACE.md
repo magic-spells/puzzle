@@ -267,13 +267,18 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
 
 ## Build and output
 
+
 - Production: ES2022, minified, console stripped by default, tree-shaken
-  function manifest, collected CSS. A usage scan over `.pzl` and app
-  `.js`/`.ts` plus config facts gate optional runtime behind literal defines —
+  function manifest, collected CSS. A usage scan over the project's `.pzl` and
+  `.js`/`.ts`, plus the `.pzl` files of installed packages that list
+  `@magic-spells/puzzle` in `peerDependencies` or `dependencies` (D89), and
+  config facts gate optional runtime behind literal defines —
   `__PUZZLE_HAS_FLIP__`, `_PORTAL__`, `_RAW_AT__`, `_RAW_HTML__`,
   `_RAW_SANITIZE__`, `_LAZY__`, `_SNIPPETS__`, `_I18N__`, `_LOCALE_ROUTING__`.
-  Fixtures and the adapter are excluded structurally: nothing imports them
-  unless wired.
+  A compiled `.pzl` the scan never read that needs a compiled-out feature or
+  function fails the build, naming the file. Pre-compiled component packages
+  are unsupported. Fixtures and the adapter are excluded structurally: nothing
+  imports them unless wired.
 - `build.splitting` makes each dynamic `import()` a chunk under
   `dist/chunks/` (a reserved name while on); `output: 'static'` ignores it;
   dev prunes stale chunks.
@@ -305,7 +310,8 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   `StaticPathsEntry`, `StaticPathsContext`, `StaticPathsFn` (root export).
 - **Dev server:** incremental rebuilds, warm Tailwind, port 3000 (scans
   upward), SPA fallback, SSE reload; static projects rebuild + prerender per
-  change. Build errors show in the browser. Reload preserves store records and
+  change. Build errors show in the browser. Installing or changing a package
+  needs a restart (the watcher covers the project only). Reload preserves store records and
   JSON-safe local view state. The DevTools bridge attaches to an
   extension-injected `window.__PUZZLE_DEVTOOLS_HOOK__`. None ships in
   production.

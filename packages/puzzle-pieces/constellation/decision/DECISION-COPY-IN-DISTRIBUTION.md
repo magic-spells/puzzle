@@ -12,7 +12,8 @@ connections:
 
 ## Context
 
-Pieces are `.pzl` single-file components for the [Puzzle framework](../puzzle). The natural instinct is to publish them as an npm package apps `import`. That does not work for `.pzl`.
+
+Pieces are `.pzl` single-file components for the [Puzzle framework](../puzzle). The natural instinct is to publish them as an npm package apps `import`. The framework can compile a `.pzl` from a package that declares Puzzle as a peer dependency, but an installed piece would be unstyled by default and not the app's to edit.
 
 ## Decision
 
@@ -20,11 +21,12 @@ Pieces are distributed as **source copied into the consumer's `app/components/ui
 
 ## Alternatives rejected
 
-- **npm-import distribution of `.pzl`** — rejected for v1, and it is structural, not taste:
-  1. The Puzzle compiler's formatter scan *prunes* `node_modules` (out of scope for v1 per the compiler source), so a package-shipped `.pzl` is never compiled.
-  2. `.pzl` is not in the compiler's resolve extensions — an npm Puzzle component would have to hand-write `render()` against `ViewNode`/`SLOT_TAG` (the pain is documented in `../tarot-puzzle/docs/PUZZLE-FRICTION.md` item 7).
-  3. The app's Tailwind `@source` scan only covers `app/`, so a package-shipped piece renders **unstyled**.
-  Copied files land in `app/`, compile with the consumer's own `puzzle build`, and their classes get scanned. Plain-JS npm packages *do* work in `node_modules` — that is why `dependencies` in a manifest (e.g. `@magic-spells/morph-engine`) are real npm installs while the `.pzl` never is.
+
+- **npm-import distribution of `.pzl`** — rejected as the pieces distribution, though the framework supports the mechanism:
+  1. A `.pzl` imported from `node_modules` (with its extension) is compiled by the app's build like its own, and the usage scan reads the `.pzl` files of an installed package whose `package.json` lists `@magic-spells/puzzle` in `peerDependencies` (framework D89). An undeclared package's `.pzl` that needs a compiled-out feature fails the build, naming the file. So a component package can work; pieces still choose copy-in for the reasons below.
+  2. The app's Tailwind `@source` scan only covers `app/`, so a package-shipped piece renders **unstyled** unless the app adds the package to its sources.
+  3. Pieces are meant to be owned: restyled, forked and edited in place, which an installed package cannot be.
+  Copied files land in `app/`, compile with the consumer's own `puzzle build`, and their classes get scanned. Plain-JS npm packages work in `node_modules` too — that is why `dependencies` in a manifest (e.g. `@magic-spells/morph-engine`) are real npm installs while the piece's `.pzl` is copied.
 
 ## Consequences
 

@@ -72,6 +72,10 @@ type Usage struct {
 	// walk order. Always collected — the scan cannot see the config — and printed
 	// by the build only under prefix routing. Diagnostics only.
 	RootHrefs []RootHref
+	// PZLFiles is every .pzl the walk read, by absolute real path. The plugin's
+	// per-file check skips these: their usage is already in the bits above, so
+	// only a compiled .pzl the scan never saw can need a feature that is off.
+	PZLFiles map[string]bool
 }
 
 // RootHref is one literal root-relative link: `href="/about"`, or a mixed value
@@ -120,7 +124,7 @@ func (u Usage) Features() Features {
 	}
 }
 
-// ScanUsage walks scanRoot for first-party source usage that controls runtime
+// ScanUsage walks scanRoot for the source usage that controls runtime
 // tree-shaking. Two kinds of file contribute:
 //
 //   - .pzl templates are fully parsed for library function calls, flip
@@ -133,11 +137,19 @@ func (u Usage) Features() Features {
 //     the bundle, and .pzl script sections are covered because a .pzl is read
 //     whole before it is split.
 //
-// The scan deliberately errs toward OVER-inclusion: it walks the whole project
-// (not just app/) so a component imported from a sibling directory still
-// contributes its usage, and it SKIPS files it cannot read or parse rather than
-// failing. Rationale: a false positive only leaves a small runtime module in the
-// bundle, whereas a false negative silently removes a used feature. Since v1.12
+// Two walks feed one Usage. The project walk reads both kinds of file across
+// the whole project (not just app/), so a component imported from a sibling
+// directory still contributes its usage. The package walk (scanpkg.go) reads
+// only the .pzl files of installed packages that declare
+// "@magic-spells/puzzle" in peerDependencies or dependencies, found in the
+// node_modules under the scan root and its ancestors; their functions reach
+// the formatter manifest exactly like the app's own. Pre-compiled component
+// JavaScript is not scanned and not supported.
+//
+// The scan deliberately errs toward OVER-inclusion, and it SKIPS files it
+// cannot read or parse rather than failing. Rationale: a false positive only
+// leaves a small runtime module in the bundle, whereas a false negative
+// silently removes a used feature. Since v1.12
 // (D43) an unseeded builtin no longer crashes the render — codegen wraps every
 // call in the __missing typo-guard, so the value passes through with a
 // console.error — but the scan still seeds every USED builtin so the guard stays
@@ -145,7 +157,11 @@ func (u Usage) Features() Features {
 // to the real formatter, not the pass-through. A genuinely broken .pzl that the
 // app actually imports is still reported — with position info — by the esbuild
 // .pzl OnLoad pass; the scan must not preempt that by failing the build over a
-// file nothing imports. See DOC-COMPILER-DESIGN §b.
+// file nothing imports. A .pzl the app imports that NEITHER walk read (an
+// undeclared package, a pruned directory, a linked folder outside every
+// node_modules) is caught by the plugin after the pass instead: when it uses a
+// feature this build compiled out, the build fails naming the file and the
+// feature (Plugin.featureMismatches). See DOC-COMPILER-DESIGN §b.
 //
 // A long-lived dev builder calls UsageScanner.Scan (scanmemo.go) instead, which
 // is this same walk with a per-file memo in front of the parse; both share
@@ -244,10 +260,11 @@ func scanScriptUsage(src string, usage *fileUsage) {
 	}
 }
 
-// skipScanDir reports whether a directory should be pruned from the usage scan:
-// installed packages, build output, vendor trees, and dot-directories hold no
-// first-party source worth scanning (installed .pzl component packages are out
-// of scope for v1 — see ScanUsage). node_modules and dot-directories are pruned
+// skipScanDir reports whether a directory should be pruned from the PROJECT
+// walk: installed packages, build output, vendor trees, and dot-directories
+// hold no first-party source worth scanning. Installed packages are the package
+// walk's job (scanpkg.go), which reads only the .pzl files of the ones that
+// declare Puzzle. node_modules and dot-directories are pruned
 // at any depth; `dist`, `build` and `vendor` only directly under the scan root
 // (atRoot), because deeper down a folder of that name is the app's own source —
 // pruning app/components/vendor/ compiled `raw` and its formatters out of a
