@@ -36,6 +36,8 @@ func (p *Plugin) SetUsage(usage Usage) {
 
 	p.setFormattersLocked(usage.Formatters)
 	p.features = usage.Features()
+	p.usageSet = true
+	p.scanned = usage.PZLFiles
 }
 
 func (p *Plugin) setFormattersLocked(used map[string]bool) {

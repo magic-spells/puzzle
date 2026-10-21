@@ -3,7 +3,8 @@ package plugin
 // scanmemo.go — the per-file memo that makes the usage scan incremental.
 //
 // ScanUsage is a serial walk that READS AND FULLY PARSES every .pzl in the
-// project (SplitSections + ParseTemplate, plus ParseSkeleton when present) to
+// project and in the installed packages that declare Puzzle (scanpkg.go)
+// (SplitSections + ParseTemplate, plus ParseSkeleton when present) to
 // answer the formatter union plus the D85 flip, D144 Portal, and D150 raw-block
 // feature facts, and additionally READS (never parses) every .js/.ts-family
 // module for the D163 lazy() bit. All are properties of the source
@@ -72,25 +73,29 @@ type scanEntry struct {
 // instead.
 type UsageScanner struct {
 	entries map[string]scanEntry
+	// pkgs memoizes installed-package classification by real directory
+	// (scanpkg.go).
+	pkgs map[string]pkgEntry
 }
 
 // NewUsageScanner returns an empty scanner. Its first Scan is a full walk.
 func NewUsageScanner() *UsageScanner {
-	return &UsageScanner{entries: map[string]scanEntry{}}
+	return &UsageScanner{entries: map[string]scanEntry{}, pkgs: map[string]pkgEntry{}}
 }
 
-// Scan walks scanRoot and returns the project-wide Usage, re-reading only the
-// files whose mtime or size changed since the previous Scan. It follows
-// ScanUsage's contract exactly — same walk, same pruned directories, same
-// fail-soft handling of unreadable or unparseable files — so the two are
-// interchangeable and a builder can be tested against either.
+// Scan walks scanRoot, then the installed packages that declare Puzzle
+// (scanpkg.go), and returns the build-wide Usage, re-reading only the files
+// whose mtime or size changed since the previous Scan. It follows ScanUsage's
+// contract exactly — same walk, same pruned directories, same fail-soft
+// handling of unreadable or unparseable files — so the two are interchangeable
+// and a builder can be tested against either.
 func (s *UsageScanner) Scan(scanRoot string) (Usage, error) {
 	allow, err := builtinAllowlist()
 	if err != nil {
 		return Usage{}, err
 	}
 
-	usage := Usage{Formatters: map[string]bool{}}
+	usage := Usage{Formatters: map[string]bool{}, PZLFiles: map[string]bool{}}
 	// WalkDir does not follow a symlink at its root. Use the plugin's resolved
 	// spelling so real/link aliases share memo keys and app-relative names.
 	root := resolveSymlinks(filepath.Clean(scanRoot))
@@ -108,34 +113,56 @@ func (s *UsageScanner) Scan(scanRoot string) (Usage, error) {
 			}
 			return nil
 		}
-		if !IsScanInput(path) {
-			return nil
+		if IsScanInput(path) {
+			s.visit(root, path, d, allow, &usage, seen, false)
 		}
-		seen[path] = true
-
-		stamp := scanStamp{}
-		if info, err := d.Info(); err == nil {
-			stamp = scanStamp{modUnixNano: info.ModTime().UnixNano(), size: info.Size()}
-		}
-		if prev, ok := s.entries[path]; ok && prev.stamp == stamp && stamp != (scanStamp{}) {
-			mergeFileUsage(&usage, prev.usage)
-			return nil
-		}
-
-		fu := scanFileUsage(root, path, allow)
-		s.entries[path] = scanEntry{stamp: stamp, usage: fu}
-		mergeFileUsage(&usage, fu)
 		return nil
 	})
 	if err != nil {
 		return Usage{}, err
 	}
+	s.scanPackages(root, allow, &usage, seen)
 	for path := range s.entries {
 		if !seen[path] {
 			delete(s.entries, path)
 		}
 	}
 	return usage, nil
+}
+
+// visit folds one scan input into usage, through the memo. A path already
+// visited this pass (a package inside the project tree that both walks reach)
+// is counted once. pkg marks a file the package walk reached: its lazy() text
+// match is dropped, because the lazy bit is an app route-table fact and a
+// package template that merely mentions `lazy(` must not pull the resolver in.
+func (s *UsageScanner) visit(root, path string, d fs.DirEntry, allow map[string]bool, usage *Usage, seen map[string]bool, pkg bool) {
+	if seen[path] {
+		return
+	}
+	seen[path] = true
+	if filepath.Ext(path) == ".pzl" {
+		usage.PZLFiles[path] = true
+	}
+
+	stamp := scanStamp{}
+	if info, err := d.Info(); err == nil {
+		stamp = scanStamp{modUnixNano: info.ModTime().UnixNano(), size: info.Size()}
+	}
+	if prev, ok := s.entries[path]; ok && prev.stamp == stamp && stamp != (scanStamp{}) {
+		fu := prev.usage
+		if pkg {
+			fu.hasLazy = false
+		}
+		mergeFileUsage(usage, fu)
+		return
+	}
+
+	fu := scanFileUsage(root, path, allow)
+	if pkg {
+		fu.hasLazy = false
+	}
+	s.entries[path] = scanEntry{stamp: stamp, usage: fu}
+	mergeFileUsage(usage, fu)
 }
 
 // mergeFileUsage folds one file's contribution into the project-wide result.
@@ -186,7 +213,12 @@ func scanFileUsage(root, path string, allow map[string]bool) fileUsage {
 	if err != nil {
 		return fileUsage{}
 	}
-	raw := string(src)
+	return fileUsageFromSource(root, path, string(src), allow)
+}
+
+// fileUsageFromSource is scanFileUsage over bytes already in hand — the
+// plugin's per-file check calls it with the source its OnLoad just read.
+func fileUsageFromSource(root, path, raw string, allow map[string]bool) fileUsage {
 	if strings.TrimSpace(raw) == "" {
 		return fileUsage{}
 	}

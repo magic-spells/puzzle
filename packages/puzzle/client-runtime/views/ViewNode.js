@@ -102,8 +102,9 @@ export function metadataTagError(tag) {
 					: tag === COMPONENT_SLOT_TAG
 						? '<Component> support was compiled out of this build (__PUZZLE_HAS_COMPONENT_SLOT__ is false). '
 					: 'snippet support was compiled out of this build (__PUZZLE_HAS_SNIPPETS__ is false). ') +
-				'Compiled component packages are not scanned for feature usage; use source pieces ' +
-				'or force the feature on.'
+				'The build reads feature usage from .pzl source only: the app\'s own, and installed packages that ' +
+				'list @magic-spells/puzzle in peerDependencies. Pre-compiled component JavaScript is not supported; ' +
+				'import the package\'s .pzl files instead.'
 		);
 	}
 	return new Error(`[puzzle] metadata tag "${tag}" reached the DOM (compiled out)`);

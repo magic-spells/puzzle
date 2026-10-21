@@ -32,6 +32,7 @@ independent one-shot phases ran serially.
 
 ## Decision
 
+
 **Profile every mode on demand.** `--profile-build` (on `puzzle build` and
 `puzzle dev`) and `PUZZLE_PROFILE_BUILD=1` print per-phase startup and rebuild
 tables to stderr for SPA, hybrid and static. Disabled profiling is
@@ -42,7 +43,10 @@ so report order is deterministic.
 watch builder so the dev server can't drift from it:
 
 - The usage scan from context construction is reused by the initial rebuild;
-  later scans run only when a `.pzl` path changed.
+  later scans run only when the batch holds a path the project walk reads —
+  `plugin.IsScanInput`: a `.pzl` or a `.js`/`.mjs`/`.cjs`/`.jsx`/`.ts`/`.mts`/
+  `.cts`/`.tsx` module (the lazy bit is a script fact). Installed packages are
+  outside the watcher, so a package change needs a dev restart (D89).
 - Root-level public validation always runs; the full public mirror runs on the
   initial rebuild, on batches touching the current or last-successful public
   dir (deletes/renames included), and whenever the resolved public source

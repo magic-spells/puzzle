@@ -28,17 +28,22 @@ orchestration → esbuild with [[COMPONENT-ESBUILD-PLUGIN]] → section parsing
 
 ## Production build
 
+
 1. Runtime preflight, sweep stale transient dirs, load config, and validate public assets
    before touching existing output. Generated names (`app.js`, its map, `styles.css`, and
    `chunks/` when splitting, [[DECISION-D160-SPA-CODE-SPLITTING]]) are reserved
    case-insensitively at the public ROOT only — nested files with those names copy fine
    (`TestBuildAllowsNestedReservedNames`).
-2. Run the usage scan once and hand it to every pass (`passContext`).
+2. Run the usage scan once and hand it to every pass (`passContext`). It walks the
+   project, then the `.pzl` files of installed packages that declare
+   `@magic-spells/puzzle` ([[DECISION-D89-FEATURE-USAGE-TREESHAKE]]).
 3. Bundle the entry (`app/app.ts` or `app/app.js`), compiling each reachable `.pzl`
    through the build-scoped compile cache
    ([[DECISION-D152-BUILD-SCOPED-COMPILE-CACHE]]); `<script>` bytes stay as authored
    (TypeScript is transpile-only). Tailwind runs concurrently; browser errors are
-   reported before Tailwind errors.
+   reported before Tailwind errors. Each pass ends with the per-file usage check: a
+   compiled `.pzl` the scan never read that needs a compiled-out feature or function
+   fails the pass, before anything is swapped.
 4. Compose the global stylesheet: Tailwind output, then collected component styles in
    deterministic order. Production hashing names it `styles-<ContentHash>.css`;
    otherwise it is `styles.css`.

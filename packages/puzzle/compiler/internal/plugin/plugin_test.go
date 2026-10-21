@@ -787,9 +787,9 @@ export default class Nested extends PuzzleView {}
 			files: map[string]string{"app/routes.js": "import { lazyLoad } from './util.js';\nexport const a = lazyLoad(1), b = isLazy(2), c = app_lazy(3);\n"},
 		},
 		{
-			// Same posture as flip/Portal: installed packages are outside the
-			// first-party walk, and the runtime fails loudly rather than silently
-			// when a marker still reaches the route table.
+			// lazy() is never read from a package, declaring or not: the package
+			// walk reads .pzl files only, and the runtime fails loudly rather
+			// than silently when a marker still reaches the route table.
 			name:  "node_modules is pruned",
 			files: map[string]string{"node_modules/pkg/routes.js": "import { lazy } from '@magic-spells/puzzle';\nexport default [{ view: lazy(() => import('./P.pzl')) }];\n"},
 		},
@@ -911,7 +911,9 @@ import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
 </script>
 `,
-		"app/components/Broken.pzl":  `<puzzle-view>{#if oops}<p>broken</p></puzzle-view>`,
+		"app/components/Broken.pzl": `<puzzle-view>{#if oops}<p>broken</p></puzzle-view>`,
+		// No package.json, so no Puzzle declaration: the package walk skips it
+		// (TestScanUsageReadsDeclaringPackages covers one that declares).
 		"node_modules/pkg/Thing.pzl": `<puzzle-view><div flip>vendored</div></puzzle-view>`,
 	})
 
@@ -929,7 +931,8 @@ export default class Home extends PuzzleView {}
 // app/components/vendor/ — is source, and pruning it compiled `raw`, its
 // sanitizer and its formatters out of a component the app renders (the
 // component vanished in production). node_modules and dot-directories stay
-// pruned at any depth.
+// pruned from the project walk at any depth; app/node_modules is not one of the
+// package walk's directories (the scan root's own and its ancestors' are).
 func TestScanUsagePrunesBuildTreesOnlyAtTheRoot(t *testing.T) {
 	const bio = `<puzzle-view><div class="bio">{ raw(html) } { currency(price) }</div></puzzle-view>
 <script>
@@ -1005,7 +1008,8 @@ export default class Card extends PuzzleView {}
 }
 
 // A .pzl that fails to parse must NOT fail the scan (esbuild reports it if the
-// app actually imports it), and vendored trees are pruned entirely.
+// app actually imports it), and packages that do not declare Puzzle are pruned
+// entirely.
 func TestScanFormattersTolerantAndPrunes(t *testing.T) {
 	root := writeApp(t, map[string]string{
 		"app/views/Home.pzl": `<puzzle-view><h1>{ capitalize(title) }</h1></puzzle-view>
@@ -1016,7 +1020,7 @@ export default class Home extends PuzzleView {}
 `,
 		// Malformed template (unclosed {#if}) — previously fatal to the build.
 		"app/components/Broken.pzl": `<puzzle-view>{#if oops}<p>{ truncate(x, 2) }</p></puzzle-view>`,
-		// Vendored .pzl must be pruned, not scanned.
+		// A package that does not declare Puzzle must be pruned, not scanned.
 		"node_modules/pkg/Thing.pzl": `<puzzle-view>{ currency(v, '$') }</puzzle-view>`,
 	})
 

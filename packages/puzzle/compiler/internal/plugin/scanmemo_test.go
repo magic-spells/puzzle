@@ -108,9 +108,12 @@ export default class Home extends PuzzleView {}
 		t.Fatal(err)
 	}
 	canonicalPath := filepath.Join(resolved, name)
+	// PZLFiles carries the resolved spelling too: the plugin's per-file check
+	// compares it against esbuild's resolved paths.
 	want := Usage{
 		HasPortal: true, HasSnippets: true,
 		Formatters: map[string]bool{"currency": true, "capitalize": true},
+		PZLFiles:   map[string]bool{canonicalPath: true},
 	}
 	s := NewUsageScanner()
 	for _, root := range []string{real, link, real} {
@@ -133,13 +136,13 @@ export default class Home extends PuzzleView {}
 
 	// Edits and deletions through either alias must retire the old contribution.
 	writePZL(t, filepath.Join(link, name), plainView)
-	if got, err := s.Scan(real); err != nil || !reflect.DeepEqual(got, Usage{Formatters: map[string]bool{}}) {
+	if got, err := s.Scan(real); err != nil || !reflect.DeepEqual(got, Usage{Formatters: map[string]bool{}, PZLFiles: map[string]bool{canonicalPath: true}}) {
 		t.Fatalf("scan after edit = %+v, %v; want no usage", got, err)
 	}
 	if err := os.Remove(filepath.Join(real, name)); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := s.Scan(link); err != nil || !reflect.DeepEqual(got, Usage{Formatters: map[string]bool{}}) {
+	if got, err := s.Scan(link); err != nil || !reflect.DeepEqual(got, Usage{Formatters: map[string]bool{}, PZLFiles: map[string]bool{}}) {
 		t.Fatalf("scan after deletion = %+v, %v; want no usage", got, err)
 	}
 	if len(s.entries) != 0 {

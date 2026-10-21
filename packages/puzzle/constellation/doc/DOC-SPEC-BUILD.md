@@ -153,6 +153,7 @@ Exports `mountView`, `createTestApp`, `settled`, `type`, `measureRenders`, `inst
 
 ## 54. The `--fixtures` build switch
 
+
 `puzzle dev --fixtures` and `puzzle build --fixtures` (D98) wire §52's module into the bundle; without the flag nothing references it, so exclusion holds by construction.
 
 - Requires `app/fixtures.js` (or `.ts`), whose default export is §52's `{ seed, mock, setup }`; missing is a clear error.
@@ -161,7 +162,7 @@ Exports `mountView`, `createTestApp`, `settled`, `type`, `measureRenders`, `inst
 - The flag is constant per process; watch rebuilds never re-decide it.
 - **Rejected** with `--static`/`--hybrid` or a config `output`. There is no config-file equivalent — the CLI switch is the real-API vs fakes toggle.
 
-**Build defines** (`compiler/internal/build/options.go`). Usage facts from the scan: `__PUZZLE_HAS_FLIP__`, `__PUZZLE_HAS_PORTAL__`, `__PUZZLE_HAS_RAW_AT__`, `__PUZZLE_HAS_SNIPPETS__`, `__PUZZLE_HAS_RAW_HTML__`, `__PUZZLE_HAS_RAW_SANITIZE__` (read from `.pzl` templates) and `__PUZZLE_HAS_LAZY__` (read from the app's `.js`/`.ts` scripts, since `lazy()` is called in `routes.js`). Config facts: `__PUZZLE_HAS_I18N__` and `__PUZZLE_HAS_LOCALE_ROUTING__` (D177, `i18n.routing: 'prefix'`). Build facts: `__PUZZLE_DEV__`, `__PUZZLE_TAKEOVER__`, `__PUZZLE_CAPTURE__`. The runtime probes each as `typeof X === 'undefined' || X`, so an unbundled consumer keeps every path. There is no managed-head define (D84).
+**Build defines** (`compiler/internal/build/options.go`). Usage facts from the scan: `__PUZZLE_HAS_FLIP__`, `__PUZZLE_HAS_PORTAL__`, `__PUZZLE_HAS_RAW_AT__`, `__PUZZLE_HAS_SNIPPETS__`, `__PUZZLE_HAS_RAW_HTML__`, `__PUZZLE_HAS_RAW_SANITIZE__` (read from `.pzl` templates — the project's, and those of installed packages whose `package.json` lists `@magic-spells/puzzle` in `peerDependencies` or `dependencies`, found in the `node_modules` of the project root and its ancestors) and `__PUZZLE_HAS_LAZY__` (read from the app's `.js`/`.ts` scripts, since `lazy()` is called in `routes.js`; never from a package). A compiled `.pzl` the scan never read that uses a feature or library function the build left out fails the build with an error naming the file and the feature and telling the package to declare `@magic-spells/puzzle` as a peer dependency; `puzzle dev` reports it as a build error and needs a restart after a package install (D89). Config facts: `__PUZZLE_HAS_I18N__` and `__PUZZLE_HAS_LOCALE_ROUTING__` (D177, `i18n.routing: 'prefix'`). Build facts: `__PUZZLE_DEV__`, `__PUZZLE_TAKEOVER__`, `__PUZZLE_CAPTURE__`. The runtime probes each as `typeof X === 'undefined' || X`, so an unbundled consumer keeps every path. There is no managed-head define (D84).
 
 ## 55. The DevTools bridge and wire protocol
 

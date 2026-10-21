@@ -25,6 +25,7 @@ D160 splits what app code `import()`s itself. Route views are the other natural 
 
 ## Decision
 
+
 A route's `view` or `layout` may be a `lazy()` marker:
 
 ```js
@@ -52,8 +53,8 @@ export default [
 
 **Cost containment (preserve these):**
 - Per navigation: an entry with no markers stays synchronous — no allocation, no microtask; a warm lazy route is synchronous too.
-- Per bundle: `router/lazy.js` sits behind the D89 `__PUZZLE_HAS_LAZY__` define, false when no first-party source calls `lazy()`. So `validateRouteView` lives in `router.js`, and the shared `isViewClass`/`describeValue` live in `router/viewClass.js`, so neither module imports the other.
-- A marker reaching a compiled-out build (the scan skips `node_modules`) falls through to `validateRouteView`'s throw, which names the gate — never mistaken for a class.
+- Per bundle: `router/lazy.js` sits behind the D89 `__PUZZLE_HAS_LAZY__` define, false when no project source calls `lazy()`. So `validateRouteView` lives in `router.js`, and the shared `isViewClass`/`describeValue` live in `router/viewClass.js`, so neither module imports the other.
+- A marker reaching a compiled-out build falls through to `validateRouteView`'s throw, which names the gate — never mistaken for a class. That happens when routes come from an installed package: the scan reads `lazy()` from the project's scripts only, never from a package (the package walk reads `.pzl` files only, D89).
 - The resolver stays out of `ssg/assemble.js`, which is shared with the static browser kernel; only the Node prerender resolves markers and hands the classes in.
 
 ## Alternatives
