@@ -89,17 +89,17 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // trick is a single element carrying both `data-scheme` and `data-theme`: every
 // theme file's selectors are written unanchored (`[data-scheme='warm']`, not
 // `:root[data-scheme='warm']`) precisely so a preview can scope itself, and the
-// medium blocks include `[data-scheme='x'][data-theme='medium']` so an element
-// naming both still lands in the soft-dark ladder. `data-scheme="default"` is
+// dim and mixed blocks include `[data-scheme='x'][data-theme='dim']` (and
+// 'mixed') so an element naming both still lands in that style. `data-scheme="default"` is
 // spelled out rather than omitted, so a mock of the default palette stays the
 // default palette on a page currently showing dim, warm or void.
 //
-//   <ShellMock scheme="warm" mode="medium" size="mini"/>
+//   <ShellMock scheme="warm" mode="mixed" size="mini"/>
 //   <ShellMock scheme={ scheme } mode={ mode } size="full" callouts={ true }/>
 //
 // Props
-//   scheme    'default' | 'dim' | 'warm' | 'void'   (default 'default')
-//   mode      'light' | 'medium' | 'dark'           (default 'dark')
+//   scheme    'default' | 'cool' | 'warm' | 'void'        (default 'default')
+//   mode      'dark' | 'dim' | 'mixed' | 'light'          (default 'dark')
 //   size      'mini' (fixed-aspect tile) | 'full'   (default 'mini')
 //   callouts  boolean — numbered role pills + a legend; full size only
 //   class     extra utilities on the outer wrapper
@@ -107,8 +107,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // Tailwind v4 scans source TEXT, so every utility below is spelled out verbatim
 // here and composed with .map()/string concatenation — never generated.
 
-const SCHEMES = ['default', 'dim', 'warm', 'void'];
-const MODES = ['light', 'medium', 'dark'];
+const SCHEMES = ['default', 'cool', 'warm', 'void'];
+const MODES = ['dark', 'dim', 'mixed', 'light'];
 
 // The two typography/geometry sets. Same keys, different scale and different
 // copy: the mini tile is a ~280×180 thumbnail, so it keeps the smallest scale

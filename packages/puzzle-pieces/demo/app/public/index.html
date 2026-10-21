@@ -33,13 +33,13 @@
  * two attributes and the inline `color-scheme` that themes/default.css keys on:
  *
  *   data-scheme  the PALETTE — absent for the default
- *   data-theme   the MODE — light | medium | dark
- *   colorScheme  light for light, dark for medium and dark
+ *   data-theme   the STYLE — dark | dim | mixed | light
+ *   colorScheme  light for light and mixed, dark for dim and dark
  *
  * Parameters, as data attributes on the <script> tag (all optional):
  *   data-key             the storage key (default `puzzle:appearance`;
  *                        Pyramid passes `pyramid:appearance`)
- *   data-default-mode    the mode to paint when nothing is stored. Omit it and
+ *   data-default-mode    the style to paint when nothing is stored. Omit it and
  *                        the page follows the OS between light and dark.
  *   data-default-scheme  the palette to paint when nothing is stored.
  *
@@ -47,12 +47,13 @@
  * boot() then agrees with this paint (an explicit configure() still wins).
  *
  * Compatibility: a stored `theme` field is read as `scheme` (Pyramid's shape),
- * and a stored `mixed` mode reads as `medium`. The same two aliases live in
- * appearance.js — CHANGE THEM THERE AND CHANGE THEM HERE.
+ * the old `dim` palette reads as `cool` and the old `medium` mode as `dim`.
+ * The same three aliases live in appearance.js — CHANGE THEM THERE AND CHANGE
+ * THEM HERE.
  */
 (function () {
-	var SCHEMES = ['default', 'dim', 'warm', 'void'];
-	var MODES = ['light', 'medium', 'dark'];
+	var SCHEMES = ['default', 'cool', 'warm', 'void'];
+	var MODES = ['dark', 'dim', 'mixed', 'light'];
 	var script = document.currentScript;
 	var attr = function (name) {
 		return script ? script.getAttribute(name) : null;
@@ -66,7 +67,8 @@
 	try {
 		var pick = JSON.parse(localStorage.getItem(key) || 'null') || {};
 		var scheme = pick.scheme || pick.theme || attr('data-default-scheme');
-		var mode = pick.mode === 'mixed' ? 'medium' : pick.mode;
+		if (scheme === 'dim') scheme = 'cool';
+		var mode = pick.mode === 'medium' ? 'dim' : pick.mode;
 		// A stored `mode: null` is a real choice — "follow the OS" — not an
 		// empty store, so it must NOT fall through to data-default-mode (that
 		// would paint the default and let boot() strip it: the very flash this
@@ -78,7 +80,7 @@
 		}
 		if (MODES.indexOf(mode) !== -1) {
 			root.setAttribute('data-theme', mode);
-			root.style.colorScheme = mode === 'light' ? 'light' : 'dark';
+			root.style.colorScheme = mode === 'light' || mode === 'mixed' ? 'light' : 'dark';
 		}
 	} catch (e) {
 		/* storage unavailable — appearance.boot() sorts the attributes out */

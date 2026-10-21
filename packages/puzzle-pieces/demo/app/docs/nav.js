@@ -283,7 +283,7 @@ export const SECTIONS = [
 		label: "Layouts",
 		items: [
 		{ name: "appearance-picker", title: "Appearance Picker", path: "/components/appearance-picker",
-			description: "Controlled palette + mode picker — theme cards that are live miniatures of the shell painted in each palette (scoped data-scheme), and a Light / Medium / Dark / System radiogroup; fires @change({ scheme, mode }) for the app to persist with the appearance module" },
+			description: "Controlled palette + style picker — theme cards that are live miniatures of the shell painted in each palette (scoped data-scheme), and a Dark / Dim / Mixed / Light / System style group, each a live miniature too; fires @change({ scheme, mode }) for the app to persist with the appearance module" },
 		{ name: "masonry", title: "Masonry", path: "/components/masonry",
 			description: "Responsive CSS-columns masonry/gallery grid — slot children flow into a responsive column count with a gap prop" },
 		{ name: "split-panel", title: "Split Panel", path: "/components/split-panel",

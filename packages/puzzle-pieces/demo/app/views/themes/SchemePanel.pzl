@@ -17,10 +17,10 @@
         <p class="mb-8 max-w-3xl text-sm/relaxed text-muted">
           Every value below is read from the live computed styles of the shipped
           stylesheet — each swatch is a real element scoped to this palette and that
-          mode, and the hex under it is what the browser resolved.
+          style, and the hex under it is what the browser resolved.
         </p>
 
-        <div class="mb-12 grid gap-3 sm:grid-cols-3">
+        <div class="mb-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {#for s in summary}
             <div key={ s.mode } class={ s.class }>
               <p class="text-2xs font-medium uppercase tracking-wide text-muted">{ s.label }</p>
@@ -34,7 +34,7 @@
           <section id={ g.id } key={ g.id } class="mt-12 scroll-mt-20">
             <h2 class="mb-2 text-xl font-semibold tracking-tight text-ink">{ g.title }</h2>
             <p class="mb-5 max-w-2xl text-sm/relaxed text-body">{ g.description }</p>
-            <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div class="grid gap-4 sm:grid-cols-2">
               {#for t in g.tokens}
                 <TokenCard
                   key={ t.prop }
@@ -86,18 +86,18 @@ import { SCHEMES, current, set, subscribe } from '@/lib/appearance.js';
 import { contrastRatio, formatValue } from '@/lib/contrast.js';
 
 // SchemePanel — route /themes/:scheme. One page per palette: every token in
-// the package, shown in light, medium and dark side by side, with the AA
+// the package, shown in all four styles side by side, with the AA
 // result for the tokens that carry a ground.
 //
 // NOTHING here is a hardcoded colour. In mounted() the view renders a
-// visually-hidden probe area: one wrapper per mode carrying
+// visually-hidden probe area: one wrapper per style carrying
 // `data-scheme` + `data-theme`, and inside it one <span> per token whose
 // inline style applies that token's var to `background-color` (or `box-shadow`
 // for the composed shadows). `getComputedStyle(probe).backgroundColor` is then
 // the resolved value — reading the custom property directly would hand back
 // the unresolved `light-dark(…)` text. The grounds each foreground is measured
 // on are probed the same way in the SAME wrapper, so a ratio is always
-// palette-and-mode correct. The worst ground wins: a token that fails on any
+// palette-and-style correct. The worst ground wins: a token that fails on any
 // of its declared grounds fails here.
 //
 // The probe area stays `sr-only` rather than `display: none` — a display:none
@@ -326,7 +326,7 @@ export default class SchemePanel extends PuzzleView {
 	}
 }
 
-/** The `{ light, medium, dark }` slice for one property, never undefined. */
+/** The `{ dark, dim, mixed, light }` slice for one property, never undefined. */
 function valuesFor(bag, prop) {
 	return bag[prop] || {};
 }

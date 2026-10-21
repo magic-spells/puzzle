@@ -75,14 +75,36 @@ test('pre-paint: an EMPTY store takes data-default-mode; an unknown mode does to
 	assert.equal(junk.root.style.colorScheme, 'light');
 });
 
-test('pre-paint: mixed reads as medium, legacy { theme } as the scheme, default scheme sets no attribute', () => {
-	const dom = runPrePaint({ stored: { theme: 'dim', mode: 'mixed' } });
-	assert.equal(dom.attrs.get('data-scheme'), 'dim');
-	assert.equal(dom.attrs.get('data-theme'), 'medium');
+test('pre-paint: 0.8 names alias forward (dim → cool, medium → dim), legacy { theme } is the scheme, default sets no attribute', () => {
+	const dom = runPrePaint({ stored: { theme: 'dim', mode: 'medium' } });
+	assert.equal(dom.attrs.get('data-scheme'), 'cool');
+	assert.equal(dom.attrs.get('data-theme'), 'dim');
 	assert.equal(dom.root.style.colorScheme, 'dark');
 	const def = runPrePaint({ stored: { scheme: 'default', mode: 'light' } });
 	assert.equal(def.attrs.has('data-scheme'), false);
 	assert.equal(def.attrs.get('data-theme'), 'light');
+});
+
+test('pre-paint: mixed is its own style and paints color-scheme light', () => {
+	const dom = runPrePaint({ stored: { scheme: 'warm', mode: 'mixed' } });
+	assert.equal(dom.attrs.get('data-theme'), 'mixed');
+	assert.equal(dom.root.style.colorScheme, 'light');
+});
+
+test('appearance.js and pre-paint agree on every alias and every style', async () => {
+	const cases = [
+		[{ scheme: 'dim', mode: 'medium' }, { scheme: 'cool', mode: 'dim' }],
+		[{ theme: 'dim', mode: 'mixed' }, { scheme: 'cool', mode: 'mixed' }],
+		[{ scheme: 'void', mode: 'dark' }, { scheme: 'void', mode: 'dark' }],
+		[{ scheme: 'warm', mode: 'light' }, { scheme: 'warm', mode: 'light' }],
+	];
+	for (const [n, [stored, want]] of cases.entries()) {
+		const dom = runPrePaint({ stored });
+		const painted = { scheme: dom.attrs.get('data-scheme'), mode: dom.attrs.get('data-theme'), cs: dom.root.style.colorScheme };
+		const { appearance, booted } = await bootAfterPrePaint(dom, `alias-${n}`);
+		assert.deepEqual(booted, want, `boot() of ${JSON.stringify(stored)}`);
+		assert.deepEqual(painted, { scheme: want.scheme, mode: want.mode, cs: appearance.resolveColorScheme(want.mode) }, `pre-paint of ${JSON.stringify(stored)}`);
+	}
 });
 
 test('boot() keeps what pre-paint painted from data-default-mode / data-default-scheme on an empty store', async () => {
@@ -97,11 +119,11 @@ test('boot() keeps what pre-paint painted from data-default-mode / data-default-
 });
 
 test('boot() reads the custom data-key pre-paint read, without configure()', async () => {
-	const dom = runPrePaint({ stored: { scheme: 'dim', mode: 'light' }, scriptAttrs: { 'data-key': 'app:look' } });
-	assert.equal(dom.attrs.get('data-scheme'), 'dim');
+	const dom = runPrePaint({ stored: { scheme: 'cool', mode: 'light' }, scriptAttrs: { 'data-key': 'app:look' } });
+	assert.equal(dom.attrs.get('data-scheme'), 'cool');
 	const { appearance, booted } = await bootAfterPrePaint(dom, 'seed-key');
-	assert.deepEqual(booted, { scheme: 'dim', mode: 'light' });
-	assert.equal(dom.attrs.get('data-scheme'), 'dim');
+	assert.deepEqual(booted, { scheme: 'cool', mode: 'light' });
+	assert.equal(dom.attrs.get('data-scheme'), 'cool');
 	assert.equal(dom.attrs.get('data-theme'), 'light');
 	assert.equal(appearance.configure().storageKey, 'app:look');
 });
@@ -119,10 +141,14 @@ test('appearance.js: read() keeps a stored null mode, apply() removes data-theme
 		assert.equal(dom.attrs.has('data-theme'), false);
 		assert.equal(dom.root.style.colorScheme, '');
 
-		appearance.set({ mode: 'medium' });
-		assert.equal(dom.attrs.get('data-theme'), 'medium');
+		appearance.set({ mode: 'dim' });
+		assert.equal(dom.attrs.get('data-theme'), 'dim');
 		assert.equal(dom.root.style.colorScheme, 'dark');
-		assert.deepEqual(JSON.parse(dom.store.get('puzzle:appearance')), { scheme: 'void', mode: 'medium' });
+		assert.deepEqual(JSON.parse(dom.store.get('puzzle:appearance')), { scheme: 'void', mode: 'dim' });
+
+		appearance.set({ mode: 'mixed' });
+		assert.equal(dom.attrs.get('data-theme'), 'mixed');
+		assert.equal(dom.root.style.colorScheme, 'light');
 
 		appearance.set({ mode: null });
 		assert.equal(dom.attrs.has('data-theme'), false);

@@ -149,5 +149,6 @@ export const TOKEN_GROUPS = [
 /** Every custom property the demo reads, in order. */
 export const TOKEN_PROPS = TOKEN_GROUPS.flatMap((g) => g.tokens.map((t) => t.prop));
 
-export const SCHEMES = ['default', 'dim', 'warm', 'void'];
-export const MODES = ['light', 'medium', 'dark'];
+export const SCHEMES = ['default', 'cool', 'warm', 'void'];
+/** The styles (the `data-theme` values), in picker order. */
+export const MODES = ['dark', 'dim', 'mixed', 'light'];

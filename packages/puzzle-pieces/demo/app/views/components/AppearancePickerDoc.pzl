@@ -4,10 +4,11 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Appearance Picker</h1>
         <p class="mt-2 text-body">
-          A controlled palette + mode picker. Each theme card is a live miniature of the app
+          A controlled palette + style picker. Each theme card is a live miniature of the app
           shell painted in the palette it offers — a real surface scoped with
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">data-scheme</code>,
-          not a picture — beside a Light / Medium / Dark / System radiogroup. It owns no state:
+          not a picture — and each style tile (Dark, Dim, Mixed, Light, plus System) is the
+          current palette painted in that style. It owns no state:
           pass the current choice and hear
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">@change</code>.
         </p>
@@ -56,7 +57,7 @@
           </div>
         </ExampleBox>
 
-        <ExampleBox id="subset" title="A subset of palettes, no System segment" code={ codeSubset }>
+        <ExampleBox id="subset" title="A subset of palettes, no System tile" code={ codeSubset }>
           <div class="w-full max-w-md">
             <AppearancePicker scheme={ localScheme } mode={ localMode } schemes={ twoSchemes } system={ false } @change={ applyLocal }/>
           </div>
@@ -114,12 +115,12 @@ const codeSubset = `<AppearancePicker
 const twoSchemes = SCHEMES.filter((s) => s.value === 'default' || s.value === 'warm');
 
 const props = [
-  { name: 'scheme', type: 'string', notes: "The current palette value ('default' | 'dim' | 'warm' | 'void', or any value in `schemes`)." },
-  { name: 'mode', type: 'string | null', notes: "'light' | 'medium' | 'dark'; null means follow the operating system and selects the System segment." },
+  { name: 'scheme', type: 'string', notes: "The current palette value ('default' | 'cool' | 'warm' | 'void', or any value in `schemes`)." },
+  { name: 'mode', type: 'string | null', notes: "The current style: 'dark' | 'dim' | 'mixed' | 'light'; null means follow the operating system and selects the System tile. Named mode because style is the HTML attribute." },
   { name: 'schemes', type: 'array', notes: '[{ value, label, description? }] — the cards. Defaults to the four bundled palettes.' },
-  { name: 'modes', type: 'array', notes: '[{ value, label, description? }] — defaults to light, medium, dark.' },
-  { name: 'system', type: 'boolean', notes: 'Show the System segment (default true). Picking it fires @change with mode: null.' },
-  { name: 'schemeLegend / modeLegend', type: 'string', notes: "Group headings (default 'Theme' / 'Mode')." },
+  { name: 'modes', type: 'array', notes: '[{ value, label, description? }] — the style tiles. Defaults to dark, dim, mixed, light.' },
+  { name: 'system', type: 'boolean', notes: 'Show the System tile (default true). Picking it fires @change with mode: null.' },
+  { name: 'schemeLegend / modeLegend', type: 'string', notes: "Group headings (default 'Theme' / 'Style')." },
   { name: '@change', type: '({ scheme, mode }) => void', notes: 'Fires on every pick with the full choice, value-first.' },
 ];
 
@@ -136,7 +137,7 @@ export default class AppearancePickerDoc extends PuzzleView {
     const live = current();
     const state = this.getData() || {};
     const localScheme = state.localScheme || 'warm';
-    const localMode = state.localMode === undefined ? 'medium' : state.localMode;
+    const localMode = state.localMode === undefined ? 'mixed' : state.localMode;
     return {
       scheme: live.scheme,
       mode: live.mode,

@@ -13,7 +13,7 @@
       </div>
     </div>
 
-    <div class="mt-3 grid grid-cols-3 gap-2">
+    <div class="mt-3 grid grid-cols-4 gap-2">
       {#for col in columns}
         <div key={ col.mode } class={ col.columnClass }>
           <p class="mb-1 text-2xs font-medium uppercase tracking-wide text-muted">{ col.label }</p>
@@ -40,12 +40,12 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 import CopyButton from '@/components/ui/CopyButton.pzl';
 
-// TokenCard — one theme token, shown in all three modes at once.
+// TokenCard — one theme token, shown in all four styles at once.
 //
 // Every swatch is its OWN live probe: the little block carries an inline
 // `background-color: var(--color-<name>)` (or `box-shadow: var(--shadow-…)`)
 // and sits inside a wrapper carrying `data-scheme` + `data-theme`, so the
-// browser resolves the token in that palette × mode. The card never paints a
+// browser resolves the token in that palette × style. The card never paints a
 // colour it was handed — the swatch itself is the truth, and the text under it
 // is only a readback of what the same var resolved to in the view's probe area.
 //
@@ -54,17 +54,18 @@ import CopyButton from '@/components/ui/CopyButton.pzl';
 // Props:
 //   token     one entry of TOKEN_GROUPS[].tokens —
 //             { name, prop, role, on?, min?, alpha?, shadow? }
-//   scheme    the palette this card shows ('default' | 'dim' | 'warm' | 'void')
-//   values    { light, medium, dark } formatted display strings; a mode may be
-//             undefined before the view's probe has run
-//   contrast  { light, medium, dark }, each { ratio, ground, pass } or null
-//   mode      the mode to highlight (the appearance the page is in)
+//   scheme    the palette this card shows ('default' | 'cool' | 'warm' | 'void')
+//   values    { dark, dim, mixed, light } formatted display strings; a style may
+//             be undefined before the view's probe has run
+//   contrast  { dark, dim, mixed, light }, each { ratio, ground, pass } or null
+//   mode      the style to highlight (the appearance the page is in)
 //
 // No state, no lifecycle: the owning view resolves everything and re-renders.
 const MODE_LABELS = [
-  { mode: 'light', label: 'Light' },
-  { mode: 'medium', label: 'Medium' },
   { mode: 'dark', label: 'Dark' },
+  { mode: 'dim', label: 'Dim' },
+  { mode: 'mixed', label: 'Mixed' },
+  { mode: 'light', label: 'Light' },
 ];
 
 const COLUMN = 'min-w-0 rounded-lg p-1.5';
