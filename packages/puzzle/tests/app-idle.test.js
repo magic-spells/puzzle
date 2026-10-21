@@ -345,6 +345,59 @@ describe('app.idle() (D185)', () => {
 		expect(el.querySelector('.hi').textContent).toBe('Hola');
 	});
 
+	it('clears the switch flag when a failed setLocale() restarts the startup load', async () => {
+		const held = gate();
+		vi.stubGlobal('fetch', async (url) => {
+			if (String(url).endsWith('en.json')) {
+				await held.promise;
+				return { ok: true, status: 200, json: async () => ({ hi: 'Hello' }) };
+			}
+			return { ok: false, status: 500, json: async () => ({}) };
+		});
+		class HiView extends PuzzleView {
+			render() {
+				return h('puzzle-view', { class: 'hi' }, [text(this.ctx.i18n.t('hi'))]);
+			}
+		}
+		let rejected = false;
+		const { app, el } = make({
+			routes: [{ path: '/', view: HiView }],
+			__i18n: {
+				manifest: { defaultLocale: 'en', locales: { en: 'locales/en.json', es: 'locales/es.json' } },
+				locale: 'en',
+			},
+			// Before any table has loaded: the es switch fails and restarts the en load.
+			async beforeMount(app) {
+				await app.i18n.setLocale('es').catch(() => (rejected = true));
+				held.open();
+			},
+		});
+		await app.mount();
+		await app.i18n.__ready();
+		expect(rejected).toBe(true);
+		expect(app.i18n.__busy).toBe(false);
+		expect(await app.idle({ timeout: 2000 })).toBe(true);
+		expect(el.querySelector('.hi').textContent).toBe('Hello');
+	});
+
+	it('a late rAF after the fallback timer does not start a second check chain', async () => {
+		const { app } = make({ routes: [{ path: '/', view: HomeView }] });
+		await app.mount();
+		const frames = [];
+		vi.stubGlobal('requestAnimationFrame', (cb) => frames.push(cb));
+		const idle = watch(app.idle());
+		// The first hop's fallback fires at 220 ms and runs the first quiet check.
+		await wait(260);
+		expect(idle.done).toBe(false);
+		// Now that hop's rAF arrives late. It must not count as a second frame.
+		frames[0]();
+		await wait(40);
+		expect(idle.done).toBe(false);
+		// The second hop's fallback supplies the second quiet check.
+		await vi.waitFor(() => expect(idle.done).toBe(true), { timeout: 1000 });
+		expect(idle.value).toBe(true);
+	});
+
 	it('falls back to the timer when a visible tab rAF never fires', async () => {
 		const { app } = make({ routes: [{ path: '/', view: HomeView }] });
 		await app.mount();

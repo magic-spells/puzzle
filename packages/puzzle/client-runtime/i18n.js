@@ -635,7 +635,12 @@ export function createI18n(options = {}) {
 				(err) => {
 					// A switch that superseded the startup load and then failed would leave
 					// no table at all: restart the startup load behind it.
-					if (my === token && !table) begin(initial);
+					// begin() takes the token, so this switch's own settle cannot clear
+					// the flag; the startup load it restarts is the mount's to await.
+					if (my === token && !table) {
+						service.__busy = false;
+						begin(initial);
+					}
 					throw err;
 				}
 			);

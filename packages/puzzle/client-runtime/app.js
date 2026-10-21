@@ -323,11 +323,12 @@ export class PuzzleApp {
 				// scheduler (D63): one timer in a hidden tab, and a fallback timer if rAF
 				// freezes mid-wait, cleared when the frame wins.
 				if (!document.hidden && typeof requestAnimationFrame === 'function') {
-					const fallback = setTimeout(check, 220);
-					requestAnimationFrame(() => {
-						clearTimeout(fallback);
-						setTimeout(check, 0);
-					});
+					// One-shot: only the first of the frame or the fallback proceeds, so a
+					// late rAF after the fallback cannot start a second chain of checks.
+					let done = 0;
+					const go = () => done++ || (clearTimeout(fallback), setTimeout(check, 0));
+					const fallback = setTimeout(go, 220);
+					requestAnimationFrame(go);
 				} else setTimeout(check, 0);
 			};
 			check();
