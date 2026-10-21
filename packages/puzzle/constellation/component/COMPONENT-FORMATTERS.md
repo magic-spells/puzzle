@@ -63,6 +63,11 @@ else they are "functions".
 
 ## Implementation gotchas
 
+- **Unreadable input**: `num` reads a number (missing, `''` and booleans are
+  NaN); `unread` decides what a number or date function prints when it cannot
+  read its input — a string as written, anything else (NaN, ±Infinity, an
+  Invalid Date, an object) nothing. `in_timezone` returns `''` for an invalid
+  date so a nested call prints nothing.
 - **Rounding**: `round`, `currency`, `percentage` share one helper that shifts the
   decimal string (`1.005` → `100.5`) and rounds half away from zero.
 - `truncate`/`capitalize` work on code points. `json` is hand-written (code-point key

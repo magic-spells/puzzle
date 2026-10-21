@@ -517,6 +517,14 @@ you see:
 
 ### Fixed
 
+- **Locale selection respects Chinese scripts (D175).** `zh-TW`, `zh-HK`,
+  `zh-MO` and `zh-Hant-*` match a configured `zh-Hant`; other Chinese tags match
+  `zh-Hans`. The first-visit redirect makes the same choice.
+- **Number and date functions no longer print `NaN`, `Invalid Date` or
+  `[object Object]` (D174).** Unreadable non-string input prints nothing,
+  including `date(in_timezone(...))` on a bad date; `round` of a missing value is
+  `NaN` (prints nothing) rather than `0` for `null`. A non-numeric or non-date
+  string still prints as written.
 - Production shell asset rewrites preserve deployment prefixes, queries and
   fragments across SPA, hybrid, static and locale pages. Missing compiler
   stylesheets fail before replacing `dist/`, and static pages strip the
