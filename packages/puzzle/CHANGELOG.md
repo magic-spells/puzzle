@@ -229,6 +229,15 @@ you see:
 
 ### Added
 
+- **`ctx.idle(options?)` (D189).** Components can await the app's bound idle
+  method, with the same timeout and boolean result as `app.idle()`. Under
+  `/testing`'s `mountView` it runs `settled()` and resolves `true`.
+- **Catch-all navigation results (D189).** A successful `push()` or `replace()`
+  result includes `catchAll: true` when the committed route is `path: '*'`,
+  including redirects and same-path no-ops; `ok` stays `true`.
+- **Public model lookup (D189).** `store.modelFor(type)` returns the registered
+  constructor (or `PuzzleModel` for an unknown type), including through adapter
+  view handles. It and the model's static `primaryKey()` are typed.
 - **Installed packages' `.pzl` files feed the usage scan (D89).** A package
   whose `package.json` lists `@magic-spells/puzzle` in `peerDependencies` (or
   `dependencies`) has its `.pzl` files read by the build's usage scan, from

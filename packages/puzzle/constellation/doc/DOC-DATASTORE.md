@@ -24,10 +24,11 @@ The per-app store at runtime: queries, identity, auto-fetching finds, merge and 
 
 ## Store API
 
-Views reach the store as `this.ctx.store`. `createRecord`, the finds, `observe` and `flush` are core; the rest exist only with the `/adapter` capability. Records returned by any read are the live instances, mutated in place.
+Views reach the store as `this.ctx.store`. `modelFor`, `createRecord`, the finds, `observe` and `flush` are core; the rest exist only with the `/adapter` capability. Records returned by any read are the live instances, mutated in place.
 
 | API | Behavior |
 | --- | --- |
+| `modelFor(type)` | The registered model class, or `PuzzleModel` for an unknown type (own registry keys only); `Model.primaryKey()` names its primary field (default `'id'`). Never subscribes or fetches (D189). |
 | `createRecord(type, data)` | Defaults, pk, validation, insert, notify ([[DOC-MODELS]]). |
 | `findOne(type, id)` | One record or `null`; subscribes the record key. May fetch (below). |
 | `findMany(type, { filter }?)` | Records in insertion order; `filter` always runs locally; subscribes the collection key. May fetch (below). |

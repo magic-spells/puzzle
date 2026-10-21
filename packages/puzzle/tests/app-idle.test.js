@@ -78,6 +78,36 @@ afterEach(() => {
 });
 
 describe('app.idle() (D185)', () => {
+	it.each([false, true])('exposes bound idle in nested component context (adapter: %s)', async (withAdapter) => {
+		let child;
+		class Child extends PuzzleView {
+			mounted() {
+				child = this;
+			}
+			render() {
+				return h('span', { class: 'child' }, [text(String(this.getData().n ?? 0))]);
+			}
+		}
+		class Parent extends PuzzleView {
+			render() {
+				return h('puzzle-view', {}, [h(Child)]);
+			}
+		}
+		const { app, el } = make({
+			routes: [{ path: '/', view: Parent }],
+			...(withAdapter ? { adapter } : {}),
+		});
+		await app.mount();
+		expect(child.ctx.idle).toBe(app.ctx.idle);
+		const { idle } = child.ctx;
+		child.setData({ n: 5 });
+		expect(await idle()).toBe(true);
+		expect(el.querySelector('.child').textContent).toBe('5');
+		expect(await idle({ timeout: 0 })).toBe(false);
+		app.unmount();
+		expect(await idle()).toBe(true);
+	});
+
 	it('is idle right after mount', async () => {
 		const { app } = make({ routes: [{ path: '/', view: HomeView }] });
 		await app.mount();
