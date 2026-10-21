@@ -81,6 +81,8 @@ failures report as `phase: 'error-view'` without recursion.
 
 A hand-written `render()` returning null clears its mounted tree and reserves the same position with a comment. Re-anchoring captures the sibling after `elementEnd`, outside the complete range even when the root is an empty or selected `<Component>`; repeated nulls reuse that position and later content remounts before trailing siblings.
 
+The internal `__moveTo` delegates relocation to the manager, preserving the live instance and updating its container when a conditional routed outlet parks or adopts it. Destruction releases pinned children even when this owner is still preloaded and has no manager; mounted owners release them through the manager's slot ownership.
+
 ## Refs and two-way binding
 
 Static `ref="name"` uses cached `__ref` callbacks. `__bind(target, key, spec)`

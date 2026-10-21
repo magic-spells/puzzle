@@ -2090,7 +2090,7 @@ export class Router {
 					{ key: keys[i] },
 					childVnode ? [childVnode] : []
 				);
-				if (i >= keep) vnode.instance = views[i]; // adopt, don't construct
+				vnode.instance = views[i]; // keep the routed pin even while its outlet is absent
 				childVnode = vnode;
 			}
 			const rootVnode = childVnode; // vnode for chain level 0

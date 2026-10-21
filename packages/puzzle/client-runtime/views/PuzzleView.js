@@ -19,7 +19,7 @@
  * - setData() → re-render only, data() does NOT re-run
  */
 
-import { ViewManager } from './viewManager.js';
+import { ViewManager, releasePins } from './viewManager.js';
 import { playAnimation, prefersReducedMotion, isValidSpec, warnOnceForSpec } from './animate.js';
 import { observeVisible } from './visibility.js';
 import { registerView, unregisterView } from '../devstate.js';
@@ -1011,6 +1011,17 @@ export class PuzzleView {
 	}
 
 	/**
+	 * Relocate a routed position while its outlet changes.
+	 * @param {Node} container
+	 * @param {Node | null} [ref]
+	 */
+	__moveTo(container, ref) {
+		this.#vm?.moveTo(container, ref);
+		if (this.__failedPlaceholder) container.insertBefore(this.__failedPlaceholder, ref);
+		this.#errorView?.__moveTo(container, this.__failedPlaceholder ?? ref);
+	}
+
+	/**
 	 * Whether the first data() result has committed (v1.8, D39). False while a
 	 * skeleton (or the anchor placeholder) holds this component's position.
 	 */
@@ -1757,6 +1768,9 @@ export class PuzzleView {
 		this.#currentAnimation = null;
 		this.ctx.store?.unsubscribe(this);
 		this.#vm?.clear();
+		// A view that never mounted (no outlet ever placed it) still owns the routed
+		// levels below it.
+		if (!this.#vm) releasePins(this.#children);
 		// Null every element ref (v1.39, D72 / SPEC §38: "nulled on removal"). The
 		// __ref removal setter bails while #destroyed is true, so #vm.clear()'s
 		// teardown removals above leave this.refs pointing at now-detached DOM;

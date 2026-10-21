@@ -103,6 +103,69 @@ let walking = false;
 let outgoing = null;
 let passes = 0;
 
+// Routed views (the router's `instance` pins) live as long as the routed chain,
+// not as long as their outlet. Every pin found in a slotChildren list during the
+// current outermost render pass maps to its newest vnode; null once this pass
+// has placed it, so a wrapper torn down later in the pass cannot park it again.
+/** @type {Map<PuzzleView, ViewNode | null> | null} */
+let retained = null;
+
+/**
+ * Call `fn` for each topmost routed pin in `nodes`.
+ * @param {ViewNode[]} nodes
+ * @param {(pin: PuzzleView, node: ViewNode) => unknown} fn
+ */
+function eachPin(nodes, fn) {
+	for (const node of nodes) {
+		if (node.instance && !((typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && node.takeoverPreloaded))
+			fn(node.instance, node);
+		else if (Array.isArray(node.children)) eachPin(node.children, fn);
+	}
+}
+
+/**
+ * Record a pin and its routed descendants as wanted by this pass.
+ * @param {PuzzleView} pin
+ * @param {ViewNode} node
+ */
+function retain(pin, node) {
+	retained ??= new Map();
+	if (!retained.has(pin)) retained.set(pin, node);
+	eachPin(/** @type {ViewNode[]} */ (node.children), retain);
+}
+
+/** @param {PuzzleView} pin an outlet in this pass holds it */
+function placed(pin) {
+	if (retained?.has(pin)) retained.set(pin, null);
+}
+
+/**
+ * Destroy a removed component, unless it is a pin this pass still wants.
+ * @param {PuzzleView | null} child
+ */
+function release(child) {
+	if (child && !parkRetained(child)) child.destroy();
+}
+
+/**
+ * Release the routed pins in an owner's slot content.
+ * @param {ViewNode[]} nodes
+ */
+export function releasePins(nodes) {
+	eachPin(nodes, release);
+}
+
+/**
+ * Detach a pin this pass still wants instead of destroying it.
+ * @param {PuzzleView} child
+ * @returns {boolean} whether the pin is retained
+ */
+function parkRetained(child) {
+	if (!retained?.has(child)) return false;
+	if (retained.get(child) && child.element) child.__moveTo(document.createDocumentFragment());
+	return true;
+}
+
 /** @param {ViewNode} vnode */
 function keepOutgoing(vnode) {
 	const copy = new ViewNode(vnode.tag, vnode.attrs, vnode.children);
@@ -206,10 +269,25 @@ export class ViewManager {
 	 */
 	render(rawTree, slotsExpanded = false) {
 		passes++;
+		eachPin(this.slotChildren, retain);
 		try {
-			return this.#render(rawTree, slotsExpanded);
+			const tree = this.#render(rawTree, slotsExpanded);
+			if (passes === 1 && retained) {
+				// A pin no outlet placed this pass still needs the newest chain below
+				// it: a parked parent that later re-renders must not mount stale levels.
+				for (const [pin, node] of retained) {
+					if (node) {
+						retained.set(pin, null);
+						pin.applyParentUpdate({ children: /** @type {ViewNode[]} */ (node.children) });
+					}
+				}
+			}
+			return tree;
 		} finally {
-			if (--passes === 0) outgoing = null;
+			if (--passes === 0) {
+				outgoing = null;
+				retained = null;
+			}
 		}
 	}
 
@@ -403,6 +481,25 @@ export class ViewManager {
 		return this.currentTree ? lastNode(this.currentTree) : this.anchor;
 	}
 
+	/**
+	 * Move an existing root without mounting it again.
+	 * @param {Node} container
+	 * @param {Node | null} [ref]
+	 */
+	moveTo(container, ref) {
+		const tree = this.currentTree;
+		// A component root moves itself, so its own manager follows too.
+		if (tree?.isComponent) tree.component.__moveTo(container, ref);
+		else if (((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) ||
+			(typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__)) && tree && lastNode(tree) !== tree.el) {
+			moveComponentSlot(container, tree, ref, lastNode(tree));
+			if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) && tree.tag === COMPONENT_SLOT_TAG) {
+				for (const child of /** @type {ViewNode[]} */ (tree.children)) child.component?.__moveTo(container, tree.slotEnd);
+			}
+		} else if (this.element) container.insertBefore(this.element, ref);
+		this.container = container;
+	}
+
 	/** Remove everything this manager mounted. */
 	clear() {
 		// A destroy that arrives BEFORE any replacement render still has to release the
@@ -413,6 +510,7 @@ export class ViewManager {
 			this.unknownTrees = null;
 		}
 		if (this.currentTree) unmount(this.currentTree);
+		releasePins(this.slotChildren);
 		if (this.anchor) {
 			this.anchor.remove();
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
@@ -538,6 +636,10 @@ function stripSlotAttr(vnode) {
 		if (k !== 'slot') attrs[k] = vnode.attrs[k];
 	}
 	const clone = new ViewNode(vnode.tag, attrs, vnode.children);
+	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) && vnode.tag === COMPONENT_SLOT_TAG) {
+		clone.children = /** @type {ViewNode[]} */ (vnode.children).map(stripSlotAttr);
+		clone.slotEnd = vnode.slotEnd;
+	}
 	slotClones.set(vnode, clone);
 	clone.key = vnode.key;
 	clone.el = vnode.el;
@@ -1043,6 +1145,13 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 	const child = pinned ?? new vnode.tag(ctx);
 	child.__retryParent = owner;
 	vnode.component = child;
+	placed(child);
+	if (pinned?.element) {
+		child.__moveTo(parent, ref);
+		child.applyParentUpdate({ children: /** @type {ViewNode[]} */ (vnode.children) });
+		vnode.el = child.element;
+		return vnode.el;
+	}
 	child
 		.mount(parent, { props: vnode.props, children: /** @type {ViewNode[]} */ (vnode.children), ref, preloaded })
 		// Two-arg then(): the recovery handler below is attached to the MOUNT step
@@ -1178,7 +1287,10 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 	if (oldVnode === newVnode) {
 		const live = newVnode.component;
 		if (live !== null ? !live.isDestroyed && !live.__walk : typeof newVnode.tag !== 'function' && !walking) {
-			if (live !== null) newVnode.el = live.element;
+			if (live !== null) {
+				newVnode.el = live.element;
+				placed(live);
+			}
 			// The `controls` list is what reaches controls under a cached ROW ROOT.
 			// It collects from the row vnode down, so a controlled row root is in its
 			// own list — hence `else`, never both. A cached control reached through an
@@ -1510,6 +1622,7 @@ function reassertSelectValue(el, attrs) {
  */
 function patchComponent(oldVnode, newVnode) {
 	const child = (newVnode.component = oldVnode.component);
+	placed(child);
 	const props = propsEqual(oldVnode.props, newVnode.props, child) ? undefined : newVnode.props;
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 		devperfComponentPatch(child, props === undefined);
@@ -1658,6 +1771,7 @@ function unmount(vnode, immediate = false) {
 	}
 	if (vnode.isComponent) {
 		const child = vnode.component;
+		if (child && parkRetained(child)) return;
 		// A component vnode that never got as far as an instance, holding only a
 		// comment placeholder: the takeoverFailed path in mountComponent returns
 		// before constructing a child, so `component` is still null. No instance to
@@ -1794,7 +1908,7 @@ function releaseSubtree(vnode) {
 		if (child.tag === PORTAL_TAG) {
 			if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
 				unmountPortal(child, unmount);
-		} else if (child.isComponent) child.component?.destroy();
+		} else if (child.isComponent) release(child.component);
 		else if (!child.isText) releaseSubtree(child);
 	}
 }
@@ -1837,7 +1951,7 @@ function releaseAborted(trees) {
 			if (tree.tag === PORTAL_TAG) {
 				if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
 					unmountPortal(tree, unmount);
-			} else if (tree.isComponent) tree.component?.destroy();
+			} else if (tree.isComponent) release(tree.component);
 			else if (!tree.isText) releaseSubtree(tree);
 		} catch (err) {
 			console.error('[puzzle] releasing an aborted render failed:', err);

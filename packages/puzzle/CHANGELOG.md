@@ -505,6 +505,17 @@ you see:
 - **`<html dir>` follows the active locale** in every app that configures
   `i18n` (D177).
 
+### Fixed
+
+- Conditional layout or parent-view `<Slot/>` outlets retain the current routed
+  instance across hide/show and wrapper swaps. Navigation while hidden updates
+  the child chain and releases superseded views; teardown also releases views
+  that have not mounted yet.
+- `<Component slot="x" is={ current }>` fills the named slot and strips the
+  consumed routing attribute from the selected component.
+- `raw` and `newline_to_br` ranges move safely when page translation wraps or
+  relocates their nodes; an unreachable range end cannot loop indefinitely.
+
 ## 0.8.1 — 2026-10-04 (Go module only)
 
 A Go-module-only release of the template language: the tag is
