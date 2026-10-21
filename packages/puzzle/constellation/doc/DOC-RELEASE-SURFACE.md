@@ -41,11 +41,12 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
 
 ## Package
 
+
 - **Root exports:** `PuzzleApp`, `PuzzleView`, `PuzzleModel`, `Puzzle`,
   `PuzzleValidationError`, `FormatterRegistry`, `lazy`, plus compiler-support
   exports a compiled module imports only when it emits them (`ViewNode`,
   `*_TAG` markers, `displayValue`, `listRows`, `loopItems`, `loopRange`,
-  `urlValue`).
+  `urlValue`, `dynamicComponent` for `<Component is>`).
 - **Subpaths** (each with `types/*.d.ts`):
   - `/adapter` — the frozen `adapter` capability (with `adapter.defaults()`,
     the app-wide dialect tier) and `PuzzleAdapterError`.
@@ -71,6 +72,7 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
 
 ## Configuration
 
+
 - **`new PuzzleApp({...})`:** `target`, `routes`, `models`, `formatters`
   (app functions), `apiURL`, `storage`, `adapter` (the `/adapter`
   capability), `beforeRequest`, `scrollBehavior`, `focusBehavior`,
@@ -86,8 +88,9 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   `name` (informational — no named-route navigation).
 - **`puzzle.config.js`:** `styles.use: ['tailwindcss']`, `build.dropConsole`
   (default true), `build.sourceMap` (default off; dev always has maps),
-  `build.splitting` (default off), `dev.proxy` (path prefix → backend
-  origin), `output` (`'hybrid'` | `'static'`; absent = SPA),
+  `build.splitting` (default off), `build.hashNames` (defaults to
+  `build.splitting`; see Build and output), `dev.proxy` (path prefix →
+  backend origin), `output` (`'hybrid'` | `'static'`; absent = SPA),
   `i18n: { locales, defaultLocale, routing?: 'prefix', detect?: boolean }`,
   `site` (the public origin, `'https://example.com'` — origin only; makes
   `hreflang` absolute and turns on the sitemap).
@@ -325,14 +328,16 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
 
 ## Build and output
 
-
 - Production: ES2022, minified, console stripped by default, tree-shaken
   function manifest, collected CSS. A usage scan over the project's `.pzl` and
   `.js`/`.ts`, plus the `.pzl` files of installed packages that list
   `@magic-spells/puzzle` in `peerDependencies` or `dependencies` (D89), and
   config facts gate optional runtime behind literal defines —
   `__PUZZLE_HAS_FLIP__`, `_PORTAL__`, `_RAW_AT__`, `_RAW_HTML__`,
-  `_RAW_SANITIZE__`, `_LAZY__`, `_SNIPPETS__`, `_I18N__`, `_LOCALE_ROUTING__`.
+  `_RAW_SANITIZE__`, `_LAZY__`, `_SNIPPETS__`, `_COMPONENT_SLOT__`
+  (`<Component is>`, D180), `_CONDITIONAL_SLOT__` (a hideable `<Slot/>`
+  outlet), `_LISTENER_OPTIONS__` (`passive`/`capture`, D187), and the config
+  facts `_I18N__` and `_LOCALE_ROUTING__`.
   A compiled `.pzl` the scan never read that needs a compiled-out feature or
   function fails the build, naming the file. Pre-compiled component packages
   are unsupported. Fixtures and the adapter are excluded structurally: nothing

@@ -217,68 +217,35 @@ enforced, not merely advised.
   declares is published on npm".
 - **`0.8.0` (2026-10-01, published — the current `latest`; tagged `v0.8.0`
   with `packages/puzzle-lang/v0.8.0`; `0.7.1` was never published and is
-  folded in):** D170
-  incremental rendering (persistent `{#for}` row blocks, static-subtree
-  caching, record render revisions); D171 `puzzle add theme` and the pieces
-  theme system (four palettes × three modes, `appearance-picker`, 102 pieces);
-  D172 one language, two dialects, with the template parser extracted into the
+  folded in):** one language, incremental rendering. D169 registry version
+  floors; D170 incremental rendering (persistent `{#for}` row blocks,
+  static-subtree caching, record render revisions); D171 `puzzle add theme`
+  and the pieces theme system (`appearance-picker`, 102 pieces); D172 one
+  language, two dialects, with the template parser extracted into the
   `packages/puzzle-lang` Go module (tagged `packages/puzzle-lang/vX.Y.Z` beside
   each `vX.Y.Z`); D173 core semantics (`?.` member guarding on every step,
-  loop domain, slot-filled rule, value printing, script-less components);
-  D174 the function library (19 standard functions plus PuzzleKit's `link`
-  and `timeago`; nine 0.7 formatter names dropped for the JS methods they
-  duplicated; the list formatters and `noescape` removed; sanitized `raw`;
-  apps still register under the `formatters` config key); D175 translations
-  (`t`, `ctx.i18n`); D176 the expression language — a closed
-  JavaScript-shaped grammar parsed once in `packages/puzzle-lang/expr` (a
-  Pratt parser with a method table as the boundary), functions instead of `|`
-  pipes, `.length` not `.size`, no `this`; it landed across PRs #164 (parser),
-  #167 (codegen lowering), #168 (runtime library) and #171 (corpus migration
-  and pipe removal), so the branch compiles only the new language, with the
-  `|` steer naming each removed formatter's replacement. PR #172 (P1b) then
-  made the section splitter skip `{#raw}` spans, made HTML void elements legal
-  without a closer, and fixed the second-`{:else}` position and the `{#svg}`
-  BOM; PR #173 ported the splitter change to the eslint/prettier plugins. The
-  final pre-tag review then landed #174 (the brace scanner no longer misreads
-  `/` after a non-ASCII name as a regex; `event` reads as data outside
-  handlers, with a compile error when one template also uses the DOM `event`)
-  and #175 (`Object.keys` on a missing value yields nothing, `puzzle check`
-  app calls type-check under `noUncheckedIndexedAccess`, a typo'd
-  `in_timezone` zone logs in development), then #176 (the plugin ports of the
-  scanner rule) and #177 (a component class or tag may carry any JavaScript
-  identifier name — `Übersicht`, `概要`, `Straßenkarte` — with a compile error
-  where the scanner cannot read a class name to its end). Then #178 (`puzzle
-  check` signatures match LibraryFunctions; TS 6, app paths, no-tsconfig
-  strict), #179 (locale switch waits for replace/pop, embed locale URLs,
-  locale BOM, `noescape` hint, nested-key event), #180 (release a nested
-  cached vnode's outgoing copy, D170), #181 (`await setLocale` inside `data()`
-  or a guard no longer deadlocks), #182 (stop checking a JavaScript handler's
-  inferred arity), #183 (`init --typescript` scaffolds a real TypeScript app,
-  D54), #184 (CI runs the live-tsc check and scaffold tests), #185
-  (`app/app.ts` build entry and TypeScript stubs from `puzzle generate`, D54),
-  #186 (constellation compacted), #187 (final polish: events comment, validate
-  options type, parser error text, keyed-move invariant), #188 (dev warning
-  for a non-arrow `events` handler that uses `this`), #189 (prettier applies
-  endOfLine once to script/style bodies), #190 (eslint template-tag imports,
-  BOM autofix, TS blocks in recommended), #191 (devtools panel connects after
-  a >500-event burst and on DevTools reopen), #192 (pieces review round:
-  appearance boot, stale theme hint, picker palettes, doc examples, snippet
-  subset, CI order), #193 (checkJs on the JS runtime, published `.d.ts`
-  guarded), #194 (review fixes F1–F6), and the pieces PRs #195 and #198
-  (avatar-group bite-mask cutout, `direction` prop), #196 (navigation-menu
-  mega panels, upstream bar look, 8px trigger gap) and #197 (tabs list/panel
-  gap, buttons variant, boxed panels). The three editor
-  grammars are swept for the 0.8.0 grammar (`0.4.0` on each repo's
-  `release/0.4.0`); the Go evaluator in Sites (P6) comes after the tag
-  (see DECISION-D176-EXPRESSION-LANGUAGE); D168 rewritten as the merged whitespace rule; plus D169 registry
-  version floors, the D76 background update notice, and the runtime preflight.
-  Heavily BREAKING for templates — the CHANGELOG opens the entry with an
-  "Upgrading from 0.7" checklist. Production sizes: hello-world **21.9 KB
-  gzip**, todos **26.0 KB gzip** (measured after the review-fix PR; the README banner
-  matches).
-- **`0.9.0` (in progress on `release/0.9.0`, NOT yet published — Cory tags
-  and publishes; there is no npm `0.8.1`, which was the Go-module-only
-  `packages/puzzle-lang/v0.8.1` tag):** multilingual static sites. D177
+  loop domain, slot-filled rule, value printing, script-less components); D174
+  the function library (19 standard functions plus PuzzleKit's `link` and
+  `timeago`; formatters that duplicated JS methods, the list formatters and
+  `noescape` removed; sanitized `raw`; apps still register under the
+  `formatters` config key); D175 translations (`t`, `ctx.i18n`); D176 the
+  expression language — a closed JavaScript-shaped grammar parsed once in
+  `packages/puzzle-lang/expr`, functions instead of `|` pipes (the `|` steer
+  names each removed formatter's replacement), `.length` not `.size`, no
+  `this`; D168 rewritten as the merged whitespace rule. Also in: any
+  JavaScript identifier as a component class or tag name, TypeScript apps
+  end to end (`init --typescript`, `app/app.ts`, typed `puzzle generate`
+  stubs, D54), `puzzle check` under TS 6 and `noUncheckedIndexedAccess`, the
+  D76 background update notice, the runtime preflight, and the plugin and
+  devtools ports of the splitter/scanner rules. The three editor grammars are
+  swept for the 0.8.0 grammar (`0.4.0` on each repo's `release/0.4.0`); the Go
+  evaluator in Sites (P6) comes after the tag (see
+  DECISION-D176-EXPRESSION-LANGUAGE). Heavily BREAKING for templates — the
+  CHANGELOG opens the entry with an "Upgrading from 0.7" checklist.
+  Production sizes: hello-world **21.9 KB gzip**, todos **26.0 KB gzip**.
+- **`0.9.0` (ready to publish (stamps bumped; Cory tags and publishes) —
+  until he does, `0.8.0` stays npm `latest`; there is no npm
+  `0.8.1`, which was the Go-module-only `packages/puzzle-lang/v0.8.1` tag):** multilingual static sites. D177
   locale URL prefixes (`i18n.routing: 'prefix'`, per-locale prerender in
   static and hybrid plus SPA path routing, `hreflang` + `site`, sitemap,
   first-visit redirect, `<html dir>`, translated `meta` titles; BREAKING:

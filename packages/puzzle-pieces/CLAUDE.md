@@ -164,7 +164,7 @@ CLI — it is unrelated and must not be bumped along with the release.
   `text-danger`, …). **No hex colors** inside components. `pieces.css` is a registry file —
   editing token VALUES there changes every consumer.
 
-## Themes — four schemes × four styles (2026-10-21; was palettes × modes, 2026-09-18)
+## Themes — four schemes × four styles
 
 - **The CSS files are the source of truth.** `registry/theme/pieces.css` (default palette:
   `@theme` block of `light-dark(light, dark)` pairs + a dim block + a mixed block + a

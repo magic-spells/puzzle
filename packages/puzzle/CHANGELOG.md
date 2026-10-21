@@ -161,7 +161,7 @@ Pick `<Children/>` if that position received content from the call site, or
 `'static'` now produces a genuinely static site — no router, no `app.js`. This
 one is *not* a compile error; it silently builds a different product.
 
-## 0.9.0 — unreleased
+## 0.9.0 — 2026-10-21
 
 Multilingual static sites. With `i18n.routing: 'prefix'` every language gets
 its own URLs (`/about`, `/es/about`) and its own prerendered HTML, with
@@ -171,7 +171,13 @@ dir>` for right-to-left languages and translated page titles (D177). A
 build time, so `/blog/:slug` becomes one page per post, per language (D179).
 `afterUpdate(prev)` receives what the previous render drew (D178). Two new
 pieces, `language-switcher` and `language-menu`, render the language list.
-There is no npm 0.8.1 (that release is the `packages/puzzle-lang` Go module
+`<Component is={ … }>` picks a component at runtime from constructors the
+caller imports (D180), and split production builds get content-hashed file
+names with modulepreload hints (D181). A set of small APIs lets tools and
+agents drive a running app: navigation results from `push()`/`replace()`
+(D182), `router.views` and the `agent` route field (D183),
+`store.observe()` (D184), `app.idle()` (D185), `this.renderTick()` (D188) and
+`ctx.idle()`/`store.modelFor()` (D189). There is no npm 0.8.1 (that release is the `packages/puzzle-lang` Go module
 only), so 0.9.0 follows 0.8.0 on npm.
 
 Production sizes: hello-world **23.0 KB gzip** (21.9 in 0.8.0), todos
@@ -221,7 +227,7 @@ Change the range to `^0.9.0`. Three changes can require an update:
    paints the default. A 0.8 store holding `mode: "mixed"` (Pyramid's
    name, which 0.8 read as `medium`) now paints the real Mixed style.
 
-Four behavior changes do not break anything that worked, but can change what
+Six behavior changes do not break anything that worked, but can change what
 you see:
 
 4. **`puzzle preview` and `puzzle dev` in static mode serve a nested 404
@@ -247,6 +253,15 @@ you see:
    threw `#html reached the DOM` (or rendered the function's input unchanged)
    in production. A component package fixes it by listing
    `@magic-spells/puzzle` in its `peerDependencies`.
+8. **`router.push()` and `router.replace()` never reject (D182).** They
+   resolve a `NavigationResult`; a failure inside the commit window that used
+   to reject the promise now resolves `{ ok: false, reason: 'error' }` and
+   reaches `onError`. A `.catch()` on a push no longer runs — check
+   `result.ok` instead. Only the first navigation still rejects `app.mount()`.
+9. **Dynamic URL bindings drop script schemes (D186).** A bound `href`, `src`
+   or other URL attribute whose value starts with `javascript:`, `vbscript:`
+   or an executable `data:` URL is omitted, with a development warning.
+   Author-written static attributes are untouched.
 
 ### Added
 
