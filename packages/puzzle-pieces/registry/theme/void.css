@@ -1,14 +1,16 @@
 /*
  * puzzle-pieces palette — void.
  *
- * VOID — "black, dark, like Vercel, higher contrast" (Cory, 2026-09-18).
+ * VOID — "black, dark, like Vercel, higher contrast" (Cory, 2026-09-18);
+ * "very black and some dark greys with white text" (2026-10-21). The grounds,
+ * lines and type are the Magic Spells Design System's Void column.
  * Truly neutral: no hue anywhere, so a tinted frame would be the only coloured
  * thing on screen. The dark ground is #000000, the brand is white (and black
  * in light), hairlines are translucent white. Nothing sits below black, so the
  * dark ladder is built UPWARD from the frame — the one palette whose panel is a
  * step lighter than its frame rather than a step darker than its page. On true
  * black a shadow does nothing, so the tiers are told apart by a stronger top
- * highlight and the translucent hairline. Medium is the same ladder lifted.
+ * highlight and the translucent hairline. Dim is the same ladder lifted.
  *
  * THIS FILE IS THE SOURCE OF TRUTH. Hand-written CSS — edit the values here,
  * then run `npm test`. It restates EVERY token pieces.css declares, aliases
@@ -25,24 +27,24 @@
  *
  * NOT anchored to `:root`: an Appearance picker paints each palette inside a
  * preview card by scoping `data-scheme` on the card, so the block has to match
- * any element. `color-scheme` is not set here — that is the MODE axis
+ * any element. `color-scheme` is not set here — that is the STYLE axis
  * (`data-theme`), owned by themes/default.css.
  */
 
 [data-scheme='void'] {
   /* Text — Ink ladders, strongest to faintest. */
   --color-ink: light-dark(#0b0b0b, #fafafa);
-  --color-body: light-dark(#333333, #d4d4d4);
-  --color-muted: light-dark(#4e4e4e, #a1a1a1);
-  --color-faint: light-dark(#a3a3a3, #4a4a4a);
+  --color-body: light-dark(#333333, #d0d0d0);
+  --color-muted: light-dark(#4e4e4e, #b0b0b0);
+  --color-faint: light-dark(#c9c9c9, #4a4a4a);
   --color-label-ink: var(--color-ink);
 
   /* Surfaces — The stacked grounds content sits on. */
-  --color-page: light-dark(#f5f5f5, #000000);
-  --color-surface: light-dark(#ffffff, #0a0a0a);
-  --color-surface-sunken: light-dark(#efefef, #141414);
-  --color-surface-raised: light-dark(#ffffff, #171717);
-  --color-surface-base: light-dark(#fafafa, #050505);
+  --color-page: light-dark(#f4f4f4, #080808);
+  --color-surface: light-dark(#ffffff, #0f0f0f);
+  --color-surface-sunken: light-dark(#f4f4f4, #161616);
+  --color-surface-raised: light-dark(#ffffff, #161616);
+  --color-surface-base: light-dark(#fafafa, #080808);
 
   /* Brand — The one accent everything keys off. */
   --color-brand: light-dark(#111111, #ffffff);
@@ -63,8 +65,8 @@
   --color-warning-tint: light-dark(#fdf3e2, #2a1c07);
 
   /* Lines & focus — Hairlines, the dashed outline and the focus ring. */
-  --color-border: light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.1));
-  --color-border-strong: light-dark(rgb(0 0 0 / 0.16), rgb(255 255 255 / 0.18));
+  --color-border: light-dark(rgb(0 0 0 / 0.05), rgb(255 255 255 / 0.09));
+  --color-border-strong: light-dark(rgb(0 0 0 / 0.12), rgb(255 255 255 / 0.14));
   --color-border-dashed: light-dark(#808080, #737373);
   --color-ring: light-dark(#767676, #ffffff);
 
@@ -83,9 +85,9 @@
   --color-frame-light: #eaeaea;
   --color-bar: var(--color-surface-frame);
   --color-bar-ink: light-dark(#0b0b0b, #f5f5f5);
-  --color-bar-muted: light-dark(#4e4e4e, #a1a1a1);
-  --color-bar-hover: light-dark(#ffffff, #1a1a1a);
-  --color-bar-line: light-dark(#d9d9d9, #262626);
+  --color-bar-muted: light-dark(#4e4e4e, #a0a0a0);
+  --color-bar-hover: light-dark(#ffffff, #2b2b2b);
+  --color-bar-line: light-dark(rgb(0 0 0 / 0.05), #333333);
   --color-surface-panel: light-dark(#ffffff, #080808);
   --color-surface-card: light-dark(#ffffff, #0f0f0f);
   --color-rail: var(--color-surface-frame);
@@ -120,35 +122,35 @@
   --shadow-popover: inset 0 1px 0 var(--color-edge-highlight), var(--shadow-contact), 0 24px 56px -16px var(--color-shadow-popover);
 }
 
-/* MEDIUM — the tokens whose medium value is not the dark one. */
-[data-scheme='void'][data-theme='medium'],
-[data-theme='medium'] [data-scheme='void']:not([data-theme]) {
+/* DIM — the tokens whose dim value is not the dark one. */
+[data-scheme='void'][data-theme='dim'],
+[data-theme='dim'] [data-scheme='void']:not([data-theme]) {
   color-scheme: dark;
 
   /* Text */
-  --color-ink: #e6e6e6;
-  --color-body: #c2c2c2;
-  --color-muted: #9c9c9c;
-  --color-faint: #5c5c5c;
+  --color-ink: #f2f2f2;
+  --color-body: #cdcdcd;
+  --color-muted: #bebebe;
+  --color-faint: #5d5d5d;
 
   /* Surfaces */
-  --color-page: #1a1a1a;
-  --color-surface: #232323;
-  --color-surface-sunken: #171717;
-  --color-surface-raised: #2a2a2a;
-  --color-surface-base: #1e1e1e;
+  --color-page: #212121;
+  --color-surface: #303030;
+  --color-surface-sunken: #1b1b1b;
+  --color-surface-raised: #303030;
+  --color-surface-base: #212121;
 
   /* Brand */
   --color-brand: #f5f5f5;
   --color-brand-dark: #dcdcdc;
-  --color-brand-tint: #333333;
+  --color-brand-tint: #3a3a3a;
   --color-brand-on-tint: #f0f0f0;
 
   /* Status */
-  --color-danger: #f56565;
+  --color-danger: #f87171;
   --color-danger-dark: #f98080;
   --color-danger-tint: #3a2222;
-  --color-danger-ink: #1a1a1a;
+  --color-danger-ink: #212121;
   --color-danger-on-tint: #f98080;
   --color-success: #2dc96a;
   --color-success-tint: #17301f;
@@ -156,17 +158,19 @@
   --color-warning-tint: #332409;
 
   /* Lines & focus */
+  --color-border: #434343;
+  --color-border-strong: #505050;
   --color-border-dashed: #7f7f7f;
   --color-ring: #f5f5f5;
 
   /* Shell */
-  --color-surface-frame: #141414;
-  --color-bar-ink: #e6e6e6;
-  --color-bar-muted: #9c9c9c;
-  --color-bar-hover: #242424;
-  --color-bar-line: #2e2e2e;
-  --color-surface-panel: #1d1d1d;
-  --color-surface-card: #252525;
+  --color-surface-frame: #181818;
+  --color-bar-ink: #f2f2f2;
+  --color-bar-muted: #bebebe;
+  --color-bar-hover: #333333;
+  --color-bar-line: #434343;
+  --color-surface-panel: #212121;
+  --color-surface-card: #303030;
   --color-shadow-contact: rgb(0 0 0 / 0.35);
 
   /* Alpha family */
@@ -180,4 +184,17 @@
   --color-shadow-popover: rgb(0 0 0 / 0.65);
   --color-shadow-inset: rgb(0 0 0 / 0.4);
   --color-text-shadow: rgb(0 0 0 / 0.4);
+}
+
+/* MIXED — the light half, with the frame and its bar roles dark. */
+[data-scheme='void'][data-theme='mixed'],
+[data-theme='mixed'] [data-scheme='void']:not([data-theme]) {
+  color-scheme: light;
+
+  /* Shell */
+  --color-surface-frame: #000000;
+  --color-bar-ink: #f5f5f5;
+  --color-bar-muted: #a0a0a0;
+  --color-bar-hover: #2b2b2b;
+  --color-bar-line: #333333;
 }

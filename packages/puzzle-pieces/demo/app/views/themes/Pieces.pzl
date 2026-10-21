@@ -207,7 +207,7 @@ export default class Pieces extends PuzzleView {
 		this.setData({
 			name: 'Acme',
 			email: 'ada@example.com',
-			notes: 'Adds the medium mode to every palette.',
+			notes: 'Adds the dim and mixed styles to every palette.',
 			digest: true,
 			calm: false,
 			dialogOpen: false,

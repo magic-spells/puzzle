@@ -17,13 +17,13 @@
         <path d="m20 20-4-4" />
       </svg>
       <span class="hidden min-w-0 flex-1 truncate text-left lg:block">Search…</span>
-      <!-- The span owns the display: Kbd's own `inline-flex` sorts after
-           `hidden` in Tailwind's output, so `hidden` on the Kbd never won. -->
-      <span class="hidden shrink-0 lg:inline-flex">
-        <Kbd class="gap-1 border-bar-line bg-bar-hover text-bar-muted">
-          <span data-search-shortcut>Ctrl</span><span>K</span>
-        </Kbd>
-      </span>
+      <!-- A plain <kbd> in the BAR's roles, not the Kbd piece: Kbd's own
+           bg-surface-sunken / text-muted are panel roles, and an override
+           class of the same specificity loses or wins by Tailwind's emit
+           order — in the Mixed style that painted a light chip on the dark bar. -->
+      <kbd class="hidden shrink-0 items-center gap-1 rounded border border-bar-line bg-bar-hover px-1.5 py-px font-sans text-xs text-bar-muted lg:inline-flex">
+        <span data-search-shortcut>Ctrl</span><span>K</span>
+      </kbd>
     </button>
 
     <dialog-panel ref="panel" morph-display="flex">

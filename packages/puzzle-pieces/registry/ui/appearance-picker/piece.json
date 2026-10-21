@@ -1,13 +1,13 @@
 {
   "name": "appearance-picker",
-  "description": "Controlled palette + mode picker — theme cards that are live miniatures of the shell painted in each palette (scoped data-scheme), and a Light / Medium / Dark / System radiogroup; fires @change({ scheme, mode }) for the app to persist with the appearance module",
+  "description": "Controlled palette + style picker — theme cards that are live miniatures of the shell painted in each palette (scoped data-scheme), and a Dark / Dim / Mixed / Light / System style group, each a live miniature too; fires @change({ scheme, mode }) for the app to persist with the appearance module",
   "files": [
     "AppearancePicker.pzl"
   ],
   "registryDependencies": [],
   "dependencies": [],
   "themes": [
-    "dim",
+    "cool",
     "warm",
     "void"
   ],

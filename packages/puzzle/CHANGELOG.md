@@ -181,7 +181,7 @@ prerendered HTML is pinned byte for byte by a golden test.
 
 ### Upgrading from 0.8
 
-Change the range to `^0.9.0`. Two changes can require an update:
+Change the range to `^0.9.0`. Three changes can require an update:
 
 1. **BREAKING: `i18n.locales` is `[{ locale, label, href, active }]`.** 0.8.0
    exposed a `string[]` of tags. `label` is the language's own name
@@ -200,25 +200,45 @@ Change the range to `^0.9.0`. Two changes can require an update:
    user `Component.pzl`, a tag import named `Component`, or a family rooted
    at `Component`. The compiler reports a positioned error with a rename
    hint. Other component names are unaffected.
+3. **puzzle-pieces themes are four schemes × four styles.** The `dim`
+   palette is now `cool` (`themes/dim.css` → `themes/cool.css`,
+   `data-scheme="cool"`), and `data-theme` takes `dark | dim | mixed | light`
+   where it took `light | medium | dark`: `medium` became `dim`, and `mixed`
+   is a real style now (a dark sidebar around a light panel). An app that
+   imports the package's theme files switches `themes/dim.css` to
+   `themes/cool.css`. An app that copied them re-copies with
+   `puzzle add theme default cool warm void --overwrite`, deletes
+   `app/styles/themes/dim.css`, and points its `@import` at
+   `./themes/cool.css`. Re-copy `appearance.js`, the inline pre-paint
+   snippet and `puzzle add piece appearance-picker --overwrite` together:
+   the 0.8 copies know neither `cool` nor `dim` as a style, and a 0.8
+   pre-paint beside a 0.9 `appearance.js` paints one choice before first
+   frame and `boot()` another. Stored choices read
+   forward — `appearance.js` and the pre-paint snippet map a stored `dim`
+   scheme to `cool` and a stored `medium` mode to `dim`, and so do the
+   snippet's `data-default-scheme` / `data-default-mode` — but a
+   hand-written `data-scheme="dim"` or `data-theme="medium"` in markup
+   paints the default. A 0.8 store holding `mode: "mixed"` (Pyramid's
+   name, which 0.8 read as `medium`) now paints the real Mixed style.
 
 Four behavior changes do not break anything that worked, but can change what
 you see:
 
-3. **`puzzle preview` and `puzzle dev` in static mode serve a nested 404
+4. **`puzzle preview` and `puzzle dev` in static mode serve a nested 404
    first.** A miss whose first URL segment names a `dist` folder holding its
    own `404.html` gets that page (`/es/missing` → `dist/es/404.html`) before
    the root `dist/404.html`. The rule reads the file layout, not the config,
    and the folder name must match the segment exactly. A `404.html` that
    `public/` copies into a first-level folder now answers for misses under it.
-4. **`<html dir>` follows the locale in every app that configures `i18n`.**
+5. **`<html dir>` follows the locale in every app that configures `i18n`.**
    An rtl locale (Arabic, Hebrew, Persian, Urdu, …) sets `dir="rtl"` on the
    prerendered page and on a client switch. An ltr locale removes only a
    `dir="rtl"`; any other `dir` the shell sets is kept.
-5. **The config's top-level `site` key is now read, and validated.** It must
+6. **The config's top-level `site` key is now read, and validated.** It must
    be an http(s) origin with no path (`'https://example.com'`); anything else
    fails the build. `i18n.routing` accepts only `'prefix'` and `i18n.detect`
    only a boolean.
-6. **A `.pzl` the usage scan never read can fail the build (D89).** When the
+7. **A `.pzl` the usage scan never read can fail the build (D89).** When the
    app imports a `.pzl` from a package that does not declare Puzzle, from a
    pruned directory (`dist/`, `build/`, `vendor/` at the project root, a
    dot-directory) or from a folder linked in from outside, and that file uses
@@ -492,6 +512,16 @@ you see:
     `<nav>`, with no dependencies.
   - `puzzle add piece language-menu`: a compact menu button showing the
     active language, built on `dropdown-menu`, with an `align` prop.
+- **Theme styles: Dark, Dim, Mixed, Light (puzzle-pieces).** The palettes
+  take the Magic Spells Design System's scheme × style grid: four schemes —
+  Default, Cool (the old `dim` palette, now "a little more blueish", after
+  Constellation's Observatory scheme), Warm and Void — each in four styles.
+  Dim is "between light and dark — lower contrast, more subtle"; Mixed is
+  "the darker sidebar with white main panel" (`color-scheme: light`, with
+  `surface-frame` and the `bar-*` roles at their dark values). Every scheme ×
+  style passes WCAG AA on every declared pair. The `appearance-picker` piece
+  offers the styles in that order as live miniatures painted in the current
+  palette, beside the scheme cards.
 
 - **`router.push()` and `router.replace()` resolve a `NavigationResult`
   (D182).** `await router.push('/account')` tells you what happened:

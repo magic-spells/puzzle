@@ -106,11 +106,12 @@ export const PROPS = ROLES.map((r) => r.prop);
 export const ROLE_BY_PROP = new Map(ROLES.map((r) => [r.prop, r]));
 
 /**
- * The tokens a medium block MUST re-declare: the grounds and the type that
- * define "soft dark". A palette whose medium block skips one of these has no
- * real medium mode — it is dark with a few colours moved.
+ * The tokens a DIM block MUST re-declare: the grounds and the type that define
+ * "between light and dark — lower contrast, more subtle". A palette whose dim
+ * block skips one of these has no real dim style — it is dark with a few
+ * colours moved.
  */
-export const MEDIUM_REQUIRED = [
+export const DIM_REQUIRED = [
 	'--color-ink',
 	'--color-body',
 	'--color-muted',
@@ -125,4 +126,17 @@ export const MEDIUM_REQUIRED = [
 	'--color-bar-line',
 	'--color-surface-panel',
 	'--color-surface-card',
+];
+
+/**
+ * The tokens a MIXED block re-declares — exactly these, each to its value in
+ * the palette's DARK half: the frame and the bar roles drawn on it (the rail-*
+ * roles alias them). Everything else is the light half, so the panel stays lit.
+ */
+export const MIXED_FRAME = [
+	'--color-surface-frame',
+	'--color-bar-ink',
+	'--color-bar-muted',
+	'--color-bar-hover',
+	'--color-bar-line',
 ];

@@ -139,7 +139,7 @@ export default [
 		name: 'themes-compare',
 		view: Compare,
 		layout: DefaultLayout,
-		meta: { title: 'Compare schemes × modes — Puzzle Pieces' },
+		meta: { title: 'Compare schemes × styles — Puzzle Pieces' },
 	},
 	{
 		path: '/themes/pieces',

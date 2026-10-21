@@ -1165,13 +1165,15 @@ or `dist/styles-<hash>.css` when production hashing is on;
 wire it with `puzzle add tailwind`). For puzzle-pieces apps, import the theme after
 `@import "tailwindcss"` — `@import "@magic-spells/puzzle-pieces/themes/default.css"`
 (or the copied `app/styles/pieces.css`) plus any palette you offer
-(`/themes/dim.css`, `/themes/warm.css`, `/themes/void.css`) — and style ONLY via
+(`/themes/cool.css`, `/themes/warm.css`, `/themes/void.css`) — and style ONLY via
 its semantic tokens (`bg-surface`, `text-ink`, `bg-brand`, `border-border`,
 shell roles `bg-bar` / `bg-rail` / `bg-surface-panel`…). Two attributes on
-`<html>` drive appearance: `data-scheme` is the palette (`dim | warm | void`;
-absent = default) and `data-theme` is the mode (`light | medium | dark`; absent
-follows the OS — medium is "soft dark"). Tokens are `light-dark()` pairs keyed
-on `color-scheme`, so the same markup is right in every scheme × mode; put both
+`<html>` drive appearance: `data-scheme` is the palette (`cool | warm | void`;
+absent = default) and `data-theme` is the style (`dark | dim | mixed | light`;
+absent follows the OS — dim is the softer dark, mixed a dark sidebar around a
+light panel, so anything on the frame uses the `bar-*` / `rail-*` roles). Tokens
+are `light-dark()` pairs keyed on `color-scheme`, so the same markup is right in
+every scheme × style; put both
 attributes on any element to scope a subtree. Copy a palette in with
 `puzzle add theme <name…>` (no name lists them with this app's install state);
 the default lands as `app/styles/pieces.css`, every other as

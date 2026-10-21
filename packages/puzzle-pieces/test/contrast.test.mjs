@@ -1,7 +1,8 @@
 /**
- * WCAG 2.2 AA over every palette × every mode, measured from the CSS the
+ * WCAG 2.2 AA over every palette × every style, measured from the CSS the
  * browser actually paints (test/lib/parse-theme.mjs splits the `light-dark()`
- * pairs and lays the medium block over the dark half).
+ * pairs and lays the dim block over the dark half, the mixed block over the
+ * light half).
  *
  * WHAT IS MEASURED — test/lib/roles.mjs declares it per role: text roles (ink,
  * body, muted, label-ink) ≥ 4.5:1 on every ground (page, surface, sunken,
@@ -17,25 +18,26 @@
  * their own note in pieces.css. A translucent GROUND (Void's borders, a tint)
  * is flattened over `--color-surface` first, as Pyramid's test does.
  *
- * Also here: THE MEDIUM RULE, measured — the frame-to-panel step in OKLCH
- * lightness must be smaller in medium than in dark and in light, so medium is
- * "soft dark" and not a black rail against a lit sheet.
+ * Also here: THE DIM RULE, measured — dim's grounds sit between dark's and
+ * light's, and its type is softer than dark's (lower ink-on-panel contrast), so
+ * dim is "between light and dark — lower contrast, more subtle". And THE MIXED
+ * RULE — the frame is the dark style's frame and the panel the light style's.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { ROLES } from './lib/roles.mjs';
-import { SCHEMES, MODES, fileFor, resolvedModes } from './lib/parse-theme.mjs';
+import { SCHEMES, STYLES, fileFor, resolvedStyles } from './lib/parse-theme.mjs';
 import { contrastRatio, flatten, parseColor, toOklch } from './lib/color.mjs';
 
 const FLATTEN_OVER = '--color-surface';
 
 for (const scheme of SCHEMES) {
-	const modes = resolvedModes(scheme);
+	const styles = resolvedStyles(scheme);
 
-	for (const mode of MODES) {
-		test(`${scheme} / ${mode}: every declared pair clears AA`, () => {
-			const values = modes[mode];
+	for (const style of STYLES) {
+		test(`${scheme} / ${style}: every declared pair clears AA`, () => {
+			const values = styles[style];
 			const failures = [];
 			let measured = 0;
 
@@ -62,22 +64,25 @@ for (const scheme of SCHEMES) {
 		});
 	}
 
-	test(`${scheme}: medium is soft dark — its frame-to-panel step is the smallest of the three`, () => {
-		const step = (mode) => {
-			const frame = toOklch(modes[mode].get('--color-surface-frame'));
-			const panel = toOklch(modes[mode].get('--color-surface-panel'));
-			return Math.abs(frame.l - panel.l);
-		};
-		const steps = { light: step('light'), medium: step('medium'), dark: step('dark') };
-		assert.ok(steps.medium < steps.dark, `${scheme}: medium frame step ${steps.medium.toFixed(3)} is not below dark's ${steps.dark.toFixed(3)}`);
-		assert.ok(steps.medium < steps.light, `${scheme}: medium frame step ${steps.medium.toFixed(3)} is not below light's ${steps.light.toFixed(3)}`);
+	test(`${scheme}: dim grounds sit between dark's and light's, and read as dark`, () => {
+		for (const prop of ['--color-page', '--color-surface', '--color-surface-panel', '--color-surface-frame']) {
+			const l = (style) => toOklch(styles[style].get(prop)).l;
+			assert.ok(l('dark') < l('dim'), `${scheme}: ${prop} dim (${l('dim').toFixed(2)}) is not lighter than dark (${l('dark').toFixed(2)})`);
+			assert.ok(l('dim') < 0.45, `${scheme}: ${prop} dim (${l('dim').toFixed(2)}) is too light to read as dark`);
+		}
 	});
 
-	test(`${scheme}: medium grounds sit between dark's and light's`, () => {
-		for (const prop of ['--color-page', '--color-surface', '--color-surface-frame']) {
-			const l = (mode) => toOklch(modes[mode].get(prop)).l;
-			assert.ok(l('dark') < l('medium'), `${scheme}: ${prop} medium (${l('medium').toFixed(2)}) is not lighter than dark (${l('dark').toFixed(2)})`);
-			assert.ok(l('medium') < 0.45, `${scheme}: ${prop} medium (${l('medium').toFixed(2)}) is too light to read as dark`);
+	test(`${scheme}: dim is lower contrast than dark — ink on the panel measures less`, () => {
+		const ratio = (style) => contrastRatio(styles[style].get('--color-ink'), styles[style].get('--color-surface-panel'));
+		assert.ok(ratio('dim') < ratio('dark'), `${scheme}: dim ink/panel ${ratio('dim').toFixed(2)}:1 is not below dark's ${ratio('dark').toFixed(2)}:1`);
+	});
+
+	test(`${scheme}: mixed is the dark frame around the light panel`, () => {
+		for (const prop of ['--color-surface-frame', '--color-bar', '--color-rail', '--color-bar-ink', '--color-rail-active']) {
+			assert.equal(styles.mixed.get(prop), styles.dark.get(prop), `${scheme}: mixed ${prop} is not the dark frame's`);
+		}
+		for (const prop of ['--color-page', '--color-surface', '--color-surface-panel', '--color-surface-card', '--color-ink', '--color-brand']) {
+			assert.equal(styles.mixed.get(prop), styles.light.get(prop), `${scheme}: mixed ${prop} is not the light panel's`);
 		}
 	});
 }

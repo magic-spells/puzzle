@@ -7,8 +7,9 @@
  *   - scheme selectors are unanchored (`[data-scheme='x']`, never
  *     `:root[data-scheme=…]`) so an Appearance picker can scope a preview card;
  *   - pieces.css keeps the marker line the `puzzle add` CLI keys on;
- *   - each medium block is real: it re-declares the grounds and type that make
- *     "soft dark" and never restates a value that is already the dark half;
+ *   - each dim block is real: it re-declares the grounds and type that make
+ *     the softer dark and never restates a value that is already the dark half;
+ *   - each mixed block re-declares exactly the frame roles, to their dark values;
  *   - the demo's static token list and the demo's copies of appearance.js and
  *     the pre-paint snippet match the registry byte for byte;
  *   - registry.json's themes array is truthful.
@@ -17,16 +18,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { PROPS, MEDIUM_REQUIRED, ROLE_BY_PROP } from './lib/roles.mjs';
+import { PROPS, DIM_REQUIRED, MIXED_FRAME, ROLE_BY_PROP } from './lib/roles.mjs';
 import {
 	SCHEMES,
+	STYLES,
 	fileFor,
 	readTheme,
 	pairBlock,
-	mediumBlock,
+	styleBlock,
 	declarations,
-	modeMaps,
-	resolvedModes,
+	styleMaps,
+	resolvedStyles,
 	half,
 } from './lib/parse-theme.mjs';
 import { TOKEN_PROPS, SCHEMES as DEMO_SCHEMES, MODES as DEMO_MODES } from '../demo/app/lib/tokenNames.js';
@@ -59,21 +61,21 @@ test('the alternate palettes name no token the default does not', () => {
 	}
 });
 
-test('no palette or mode block is anchored to :root', () => {
+test('no palette or style block is anchored to :root', () => {
 	for (const scheme of SCHEMES) {
 		const css = readTheme(scheme);
 		assert.equal([...css.matchAll(/^:root\[data-(scheme|theme)=/gm)].length, 0, `${fileFor(scheme)} anchors a block to :root`);
 	}
 });
 
-test('pieces.css sets color-scheme per mode and follows the OS with no attribute', () => {
+test('pieces.css sets color-scheme per style and follows the OS with no attribute', () => {
 	const css = readTheme('default');
 	assert.match(css, /:root \{\s*color-scheme: light dark;\s*\}/);
-	assert.match(css, /\[data-theme='light'\] \{\s*color-scheme: light;\s*\}/);
-	assert.match(css, /\[data-theme='dark'\],\s*\[data-theme='medium'\] \{\s*color-scheme: dark;\s*\}/);
+	assert.match(css, /\[data-theme='light'\],\s*\[data-theme='mixed'\] \{\s*color-scheme: light;\s*\}/);
+	assert.match(css, /\[data-theme='dark'\],\s*\[data-theme='dim'\] \{\s*color-scheme: dark;\s*\}/);
 });
 
-test('scheme files do not set color-scheme on their palette block (the mode axis owns it)', () => {
+test('scheme files do not set color-scheme on their palette block (the style axis owns it)', () => {
 	for (const scheme of SCHEMES.slice(1)) {
 		assert.doesNotMatch(pairBlock(scheme).body, /color-scheme/, `${fileFor(scheme)} sets color-scheme in its palette block`);
 	}
@@ -89,34 +91,55 @@ test('pieces.css restates the default palette on [data-scheme="default"] for pre
 	for (const [prop, value] of source) assert.equal(copy.get(prop), value, `${prop} drifted in the restated block`);
 });
 
-test('every palette has a real medium block', () => {
+/** The selector list a style block must carry, beyond its own first selector. */
+function assertScopedSelectors(scheme, style, block) {
+	const selectors = block.selector.split(',').map((x) => x.trim());
+	assert.ok(
+		selectors.includes(`[data-theme='${style}'] [data-scheme='${scheme}']:not([data-theme])`),
+		`${fileFor(scheme)}: ${style} block must also match a preview card scoped under a ${style} root`
+	);
+}
+
+test('every palette has a real dim block', () => {
 	for (const scheme of SCHEMES) {
-		const block = mediumBlock(scheme);
-		assert.ok(block, `${fileFor(scheme)} has no medium block`);
-		assert.match(block.body, /color-scheme:\s*dark/, `${fileFor(scheme)}: medium block must set color-scheme: dark`);
-		const selectors = block.selector.split(',').map((s) => s.trim());
-		assert.ok(
-			selectors.includes(`[data-theme='medium'] [data-scheme='${scheme}']:not([data-theme])`),
-			`${fileFor(scheme)}: medium block must also match a preview card scoped under a medium root`
-		);
+		const block = styleBlock(scheme, 'dim');
+		assert.ok(block, `${fileFor(scheme)} has no dim block`);
+		assert.match(block.body, /color-scheme:\s*dark/, `${fileFor(scheme)}: dim block must set color-scheme: dark`);
+		assertScopedSelectors(scheme, 'dim', block);
 
 		const decls = declarations(block.body);
 		const pairs = declarations(pairBlock(scheme).body);
-		for (const prop of MEDIUM_REQUIRED) {
-			assert.ok(decls.has(prop), `${fileFor(scheme)}: medium block does not re-declare ${prop}`);
+		for (const prop of DIM_REQUIRED) {
+			assert.ok(decls.has(prop), `${fileFor(scheme)}: dim block does not re-declare ${prop}`);
 		}
 		for (const [prop, value] of decls) {
-			assert.ok(pairs.has(prop), `${fileFor(scheme)}: medium block declares ${prop}, which the palette does not`);
-			assert.notEqual(value, half(pairs.get(prop), 'dark'), `${fileFor(scheme)}: medium ${prop} restates the dark value — drop the line or change it`);
-			assert.doesNotMatch(value, /light-dark\(/, `${fileFor(scheme)}: medium ${prop} must be a flat value, not a pair`);
+			assert.ok(pairs.has(prop), `${fileFor(scheme)}: dim block declares ${prop}, which the palette does not`);
+			assert.notEqual(value, half(pairs.get(prop), 'dark'), `${fileFor(scheme)}: dim ${prop} restates the dark value — drop the line or change it`);
+			assert.doesNotMatch(value, /light-dark\(/, `${fileFor(scheme)}: dim ${prop} must be a flat value, not a pair`);
+		}
+	}
+});
+
+test('every palette has a mixed block: exactly the frame roles, at their dark values', () => {
+	for (const scheme of SCHEMES) {
+		const block = styleBlock(scheme, 'mixed');
+		assert.ok(block, `${fileFor(scheme)} has no mixed block`);
+		assert.match(block.body, /color-scheme:\s*light/, `${fileFor(scheme)}: mixed block must set color-scheme: light`);
+		assertScopedSelectors(scheme, 'mixed', block);
+
+		const decls = declarations(block.body);
+		const pairs = declarations(pairBlock(scheme).body);
+		assert.deepEqual([...decls.keys()].sort(), [...MIXED_FRAME].sort(), `${fileFor(scheme)}: mixed block must re-declare exactly the frame roles`);
+		for (const [prop, value] of decls) {
+			assert.equal(value, half(pairs.get(prop), 'dark'), `${fileFor(scheme)}: mixed ${prop} must be the palette's dark ${prop}`);
 		}
 	}
 });
 
 test('every alias resolves to a colour inside its own palette, in every mode', () => {
 	for (const scheme of SCHEMES) {
-		const maps = modeMaps(scheme);
-		const resolved = resolvedModes(scheme);
+		const maps = styleMaps(scheme);
+		const resolved = resolvedStyles(scheme);
 		for (const mode of Object.keys(resolved)) {
 			for (const [prop, value] of resolved[mode]) {
 				const role = ROLE_BY_PROP.get(prop);
@@ -137,10 +160,10 @@ test('every alias resolves to a colour inside its own palette, in every mode', (
 	}
 });
 
-test('the demo token list equals the contract, and its scheme/mode lists match', () => {
+test('the demo token list equals the contract, and its scheme/style lists match', () => {
 	assert.deepEqual([...TOKEN_PROPS].sort(), [...PROPS].sort(), 'demo/app/lib/tokenNames.js has drifted from test/lib/roles.mjs');
 	assert.deepEqual(DEMO_SCHEMES, SCHEMES);
-	assert.deepEqual(DEMO_MODES, ['light', 'medium', 'dark']);
+	assert.deepEqual(DEMO_MODES, STYLES);
 });
 
 test('the demo copies of appearance.js and the pre-paint snippet match the registry', () => {
@@ -162,10 +185,10 @@ test('the demo copies of appearance.js and the pre-paint snippet match the regis
 	assert.ok(head.indexOf('</script>') < head.indexOf('<link href="./styles.css"'), 'pre-paint must come before the stylesheet');
 });
 
-test('registry.json lists the four themes truthfully, with the three modes', () => {
+test('registry.json lists the four themes truthfully, with the four styles', () => {
 	const registry = JSON.parse(readFileSync(new URL('../registry/registry.json', import.meta.url), 'utf8'));
 	assert.equal(registry.theme, 'theme/pieces.css');
-	assert.deepEqual(registry.modes, ['light', 'medium', 'dark']);
+	assert.deepEqual(registry.modes, STYLES);
 	assert.deepEqual(registry.themes.map((t) => t.name), SCHEMES);
 	for (const theme of registry.themes) {
 		assert.equal(theme.file, `theme/${fileFor(theme.name)}`);

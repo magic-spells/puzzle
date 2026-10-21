@@ -234,18 +234,18 @@
  * puzzle-pieces design tokens — imported straight from the registry, the way a
  * consuming app imports them from the package
  * (`@import "@magic-spells/puzzle-pieces/themes/default.css"`). pieces.css is
- * the default palette's `@theme` block plus the three mode blocks; the other
+ * the default palette's `@theme` block plus its dim and mixed blocks; the other
  * three files are `[data-scheme]` overrides, imported AFTER it so their
  * unlayered rules win. The registry files are the source of truth — there is
  * no demo-side copy to keep in step.
  *
- * Modes: data-theme="light" | "medium" | "dark" on <html>; absent = follow the
- * OS. Palettes: data-scheme="dim" | "warm" | "void"; absent = default. Both are
+ * Styles: data-theme="dark" | "dim" | "mixed" | "light" on <html>; absent =
+ * follow the OS. Palettes: data-scheme="cool" | "warm" | "void"; absent = default. Both are
  * set pre-paint by the inline script in public/index.html and at runtime by
  * app/lib/appearance.js.
  */
 @import "../../../registry/theme/pieces.css";
-@import "../../../registry/theme/dim.css";
+@import "../../../registry/theme/cool.css";
 @import "../../../registry/theme/warm.css";
 @import "../../../registry/theme/void.css";
 

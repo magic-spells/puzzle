@@ -130,7 +130,7 @@
   <div class="flex min-h-0 flex-1">
     <!-- RAIL — the sidebar piece in its `rail` variant: the frame's vertical arm.
          Items come from the docs nav config; the footer holds the live
-         scheme × mode switcher. -->
+         scheme × style switcher. -->
     <div class="hidden min-h-0 shrink-0 lg:flex">
       <!-- `collapsible={false}`: this rail is always open. The docs shell has one
            nav and no second pane to give room to, and the piece's icon-only mode

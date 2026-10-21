@@ -5,46 +5,50 @@
  *   import * as appearance from '@magic-spells/puzzle-pieces/appearance';
  * or copy the file into your app (the pieces demo keeps it at app/lib/).
  *
- * TWO AXES, NOT ONE. `scheme` picks a PALETTE (default | dim | warm | void);
- * `mode` picks how much of the window is lit (light | medium | dark). They are
- * independent — every palette ships all three modes — so a picker offers them
- * as two controls rather than twelve themes.
+ * TWO AXES, NOT ONE. `scheme` picks a PALETTE (default | cool | warm | void);
+ * `mode` picks the STYLE — how much of the window is lit (dark | dim | mixed |
+ * light). They are independent — every palette ships all four styles — so a
+ * picker offers them as two controls rather than sixteen themes. The field is
+ * still called `mode` (stored JSON, `data-default-mode`, the picker's prop):
+ * `style` would collide with the HTML attribute on a component tag.
  *
  * HOW IT IS APPLIED. Two attributes on <html> and one inline style, exactly
  * what themes/pre-paint.js writes before first paint:
  *
  *   data-scheme  the palette, ABSENT for the default
- *   data-theme   the mode
- *   colorScheme  `light` for light, `dark` for medium and dark — written
- *                inline so form controls, scrollbars and <dialog> backdrops
- *                follow without a class list
+ *   data-theme   the style
+ *   colorScheme  `light` for light and mixed, `dark` for dim and dark —
+ *                written inline so form controls, scrollbars and <dialog>
+ *                backdrops follow without a class list (mixed's dark frame is
+ *                drawn by tokens; the panel is the light one)
  *
  * A mode of `null` means "follow the OS": both are removed and the
  * stylesheet's `:root { color-scheme: light dark }` decides between light and
- * dark. Medium is never chosen by the OS.
+ * dark. Dim and mixed are never chosen by the OS.
  *
  * STORAGE. One localStorage key (default `puzzle:appearance`), one JSON object
  * `{ scheme, mode }`, written atomically. The key and the empty-store fallback
  * come from pre-paint.js's `data-key` / `data-default-*` attributes when it ran;
  * `configure({ storageKey, fallback })` overrides both. Reading is lenient: a stored `theme`
- * field is accepted as `scheme` (Pyramid's shape) and a stored `mixed` reads as
- * `medium` — the same two aliases pre-paint.js applies. CHANGE THEM THERE AND
- * CHANGE THEM HERE.
+ * field is accepted as `scheme` (Pyramid's shape), the old `dim` palette reads
+ * as `cool` (renamed 0.9.0) and the old `medium` mode reads as `dim` — the same
+ * three aliases pre-paint.js applies. CHANGE THEM THERE AND CHANGE THEM HERE.
  */
 
 /** The palettes, in picker order. */
 export const SCHEMES = [
-	{ value: 'default', label: 'Default', description: 'Cool near-black with a navy tint and an indigo accent — balanced, classy, premium.' },
-	{ value: 'dim', label: 'Dim', description: 'Blue-grey at half chroma with softer type — the low-contrast palette.' },
-	{ value: 'warm', label: 'Warm', description: 'Ivory, tan and brown with a clay-orange accent — the Claude palette.' },
-	{ value: 'void', label: 'Void', description: 'Monochrome from white to true black — borderless, high contrast, Vercel-like.' },
+	{ value: 'default', label: 'Default', description: 'Tasteful dark grey with a slight blue tint and an indigo accent.' },
+	{ value: 'cool', label: 'Cool', description: 'A little more blue — blue-black grounds and periwinkle type, a lit-blue accent.' },
+	{ value: 'warm', label: 'Warm', description: 'Browns and oranges — ivory and tan, brown-black, a clay accent.' },
+	{ value: 'void', label: 'Void', description: 'Very black, dark greys and white type — monochrome, high contrast.' },
 ];
 
-/** The modes, in picker order — lightest first, the way a dimmer reads. */
+/** The styles (the `mode` field), in picker order — darkest first. */
 export const MODES = [
-	{ value: 'light', label: 'Light', description: 'Everything lit — a light-grey frame with a white panel on it.' },
-	{ value: 'medium', label: 'Medium', description: 'Soft dark — dark structure with the grounds lifted to mid grey and the type dimmed a stop.' },
 	{ value: 'dark', label: 'Dark', description: 'Everything dark, the frame a step darker than the panel.' },
+	{ value: 'dim', label: 'Dim', description: 'Between light and dark — lower contrast, more subtle.' },
+	{ value: 'mixed', label: 'Mixed', description: 'The darker sidebar with a white main panel.' },
+	{ value: 'light', label: 'Light', description: 'Everything lit — a light-grey frame with a white panel on it.' },
 ];
 
 export const SCHEME_VALUES = SCHEMES.map((s) => s.value);
@@ -55,8 +59,11 @@ export const DEFAULT_SCHEME = 'default';
 
 export const DEFAULT_STORAGE_KEY = 'puzzle:appearance';
 
-/** Legacy spellings accepted on read. */
-const MODE_ALIASES = { mixed: 'medium' };
+/** Legacy spellings accepted on read (0.8.x names). */
+const SCHEME_ALIASES = { dim: 'cool' };
+const MODE_ALIASES = { medium: 'dim' };
+
+const own = (map, key) => Object.prototype.hasOwnProperty.call(map, key);
 
 // pre-paint.js leaves its <script> parameters on `window.__puzzleAppearance`
 // ({ key, scheme, mode }). Seeding from them is what keeps boot() from wiping
@@ -90,14 +97,15 @@ export function configure({ storageKey, fallback } = {}) {
 	return { ...config, fallback: { ...config.fallback } };
 }
 
-/** A palette name the UI has a row for, or null. */
+/** A palette name the UI has a row for — with `dim` mapped to `cool` — or null. */
 export function normalizeScheme(value) {
-	return SCHEME_VALUES.includes(value) ? value : null;
+	const mapped = own(SCHEME_ALIASES, value) ? SCHEME_ALIASES[value] : value;
+	return SCHEME_VALUES.includes(mapped) ? mapped : null;
 }
 
-/** A mode the UI has a row for — with `mixed` mapped to `medium` — or null. */
+/** A style the UI has a row for — with `medium` mapped to `dim` — or null. */
 export function normalizeMode(value) {
-	const mapped = Object.prototype.hasOwnProperty.call(MODE_ALIASES, value) ? MODE_ALIASES[value] : value;
+	const mapped = own(MODE_ALIASES, value) ? MODE_ALIASES[value] : value;
 	return MODE_VALUES.includes(mapped) ? mapped : null;
 }
 
@@ -178,9 +186,9 @@ export function current() {
 	return { ...live };
 }
 
-/** The `color-scheme` a mode resolves to: light for light, dark for the rest. */
+/** The `color-scheme` a style resolves to: light for light and mixed, dark for dim and dark. */
 export function resolveColorScheme(mode) {
-	return mode === 'light' ? 'light' : 'dark';
+	return mode === 'light' || mode === 'mixed' ? 'light' : 'dark';
 }
 
 /**

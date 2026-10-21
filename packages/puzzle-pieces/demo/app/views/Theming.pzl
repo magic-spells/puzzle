@@ -9,8 +9,8 @@
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">text-ink</code>,
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">border-border</code>,
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">shadow-panel</code> —
-          and never a colour of its own. The package ships four palettes and three modes,
-          twelve appearances in all, and nothing inside a piece changes when you switch
+          and never a colour of its own. The package ships four palettes and four styles,
+          sixteen appearances in all, and nothing inside a piece changes when you switch
           between them: the token names stay put, only their values move.
         </p>
       </header>
@@ -26,7 +26,7 @@
           <div>
             <dt class="font-mono text-code text-ink">data-scheme</dt>
             <dd class="mt-1">
-              The palette — <span class="font-mono text-code text-ink">dim</span>, <span class="font-mono text-code text-ink">warm</span> or <span class="font-mono text-code text-ink">void</span>. The default palette
+              The palette — <span class="font-mono text-code text-ink">cool</span>, <span class="font-mono text-code text-ink">warm</span> or <span class="font-mono text-code text-ink">void</span>. The default palette
               needs no attribute at all, because the
               <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">@theme</code>
               block is its values. Writing the attribute with the value <span class="font-mono text-code text-ink">default</span> is still valid, and
@@ -37,29 +37,40 @@
           <div>
             <dt class="font-mono text-code text-ink">data-theme</dt>
             <dd class="mt-1">
-              The mode — <span class="font-mono text-code text-ink">light</span>, <span class="font-mono text-code text-ink">medium</span> or <span class="font-mono text-code text-ink">dark</span>. With the attribute
-              absent the page follows the OS between light and dark; medium is never chosen
-              by the OS, only by a person.
+              The style — <span class="font-mono text-code text-ink">dark</span>, <span class="font-mono text-code text-ink">dim</span>, <span class="font-mono text-code text-ink">mixed</span> or <span class="font-mono text-code text-ink">light</span>. With the attribute
+              absent the page follows the OS between light and dark; dim and mixed are never
+              chosen by the OS, only by a person. (The runtime calls this field
+              <span class="font-mono text-code text-ink">mode</span>; the values are the styles.)
             </dd>
           </div>
         </dl>
         <p class="mb-3 text-sm/relaxed text-body">
           Every token is one
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">light-dark()</code>
-          pair, so a mode block only has to set
+          pair, so a style block only has to set
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">color-scheme</code>
           and both halves resolve for free. Having
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">color-scheme</code>
-          follow the mode is also what keeps native UI in step — form controls, scrollbars and
+          follow the style is also what keeps native UI in step — form controls, scrollbars and
           dialog backdrops agree with the page, with no duplicate dark-mode class list.
         </p>
         <p class="mb-4 text-sm/relaxed text-body">
-          Medium is <span class="text-ink">soft dark</span>: it runs on
+          Dim sits <span class="text-ink">between light and dark</span> — lower contrast,
+          more subtle. It runs on
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">color-scheme: dark</code>,
-          so every pair already resolves to its dark half, then lifts the grounds to mid grey
-          of the palette’s own hue and dims the type a stop. Each file’s medium block therefore
-          lists only the tokens whose medium value differs from dark — light text on grey
-          rather than on near-black, and a frame-to-panel contrast visibly softer than dark’s.
+          so every pair already resolves to its dark half, then lifts the grounds to dark grey
+          of the palette’s own hue and softens the type. Each file’s dim block therefore lists
+          only the tokens whose dim value differs from dark.
+        </p>
+        <p class="mb-4 text-sm/relaxed text-body">
+          Mixed is <span class="text-ink">the darker sidebar with a white main panel</span>. It
+          runs on <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">color-scheme: light</code>,
+          so every pair resolves to its light half, and its block re-declares only the frame:
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">surface-frame</code>
+          and the <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">bar-*</code> roles take
+          their dark values (the <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">rail-*</code>
+          roles alias them). Anything drawn on the frame must use those roles, never the panel’s
+          ink, or it disappears into the dark sidebar.
         </p>
         <CodeBlock code={ mechanismSnippet } lang="css"/>
       </section>
@@ -118,7 +129,9 @@
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">puzzle:appearance</code>,
           as the JSON object
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">{ storedShape }</code>;
-          a legacy stored mode of <span class="font-mono text-code text-ink">mixed</span> reads as <span class="font-mono text-code text-ink">medium</span>.
+          the 0.8 names still read — a stored palette of <span class="font-mono text-code text-ink">dim</span> is
+          <span class="font-mono text-code text-ink">cool</span> now, and a stored mode of
+          <span class="font-mono text-code text-ink">medium</span> is <span class="font-mono text-code text-ink">dim</span>.
         </p>
         <CodeBlock code={ runtimeSnippet } lang="js"/>
         <p class="mt-6 mb-4 text-sm/relaxed text-body">
@@ -128,7 +141,7 @@
           in the shell’s <span class="font-mono text-code text-ink">{ headTag }</span>, before
           the stylesheet, and configure it with data attributes on the script tag itself:
           <span class="font-mono text-code text-ink">data-key</span> is the storage key to
-          read (an app that owns another key passes it here), <span class="font-mono text-code text-ink">data-default-mode</span> the mode to
+          read (an app that owns another key passes it here), <span class="font-mono text-code text-ink">data-default-mode</span> the style to
           paint when nothing is stored — omit it and the page follows the OS — and <span class="font-mono text-code text-ink">data-default-scheme</span> the palette
           for that same case. A module arriving with <span class="font-mono text-code text-ink">app.js</span> is a frame too late: the
           page paints the default first, and that is the flash.
@@ -142,7 +155,7 @@
           The palette selectors are deliberately unanchored — not tied to
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">:root</code> —
           so putting both attributes on any element renders that whole subtree in another
-          palette and mode while the page around it keeps its own. That is the entire mechanism
+          palette and style while the page around it keeps its own. That is the entire mechanism
           behind this demo’s compare grid and scheme panels. Give a scoped preview an explicit
           ground and ink
           (<code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">bg-surface</code>,
@@ -192,7 +205,7 @@
         </div>
         <p class="mt-6 text-sm/relaxed text-body">
           The rule that holds all of this together: never write a colour in a piece. Reach for
-          the utility the token already generates, and the piece is right in all twelve
+          the utility the token already generates, and the piece is right in all sixteen
           appearances without knowing any of them.
         </p>
       </section>
@@ -212,7 +225,7 @@
         <p class="text-sm/relaxed text-body">
           Then run <span class="font-mono text-code text-ink">npm test</span>. It enforces
           that every palette declares an identical token set, and that every palette clears AA
-          in all three modes, so a half-finished palette fails loudly instead of shipping with
+          in all four styles, so a half-finished palette fails loudly instead of shipping with
           holes.
         </p>
       </section>
@@ -220,7 +233,7 @@
       <section id="contrast" class="mt-14 scroll-mt-20">
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Contrast</h2>
         <p class="text-sm/relaxed text-body">
-          Every palette in every mode passes WCAG 2.2 AA on every pair the token list declares —
+          Every palette in every style passes WCAG 2.2 AA on every pair the token list declares —
           4.5:1 for text roles against each ground they are allowed to sit on, 3:1 for non-text
           roles such as the focus ring and the dashed outline. The bar is part of the contract,
           not a review step: the tests measure it on each run, and the scheme panels in this
@@ -254,11 +267,12 @@ import { TOKEN_GROUPS } from '@/lib/tokenNames.js';
 //    { storedShape }); a closing script tag inside a template literal is
 //    written escaped, since an inline script ends at the first literal one.
 
-const mechanismSnippet = `/* The mode sets color-scheme; every token is one light-dark() pair. */
-:root                 { color-scheme: light dark; }  /* no attribute: the OS decides */
-[data-theme='light']  { color-scheme: light; }
+const mechanismSnippet = `/* The style sets color-scheme; every token is one light-dark() pair. */
+:root                { color-scheme: light dark; }  /* no attribute: the OS decides */
+[data-theme='light'],
+[data-theme='mixed'] { color-scheme: light; }
 [data-theme='dark'],
-[data-theme='medium'] { color-scheme: dark; }
+[data-theme='dim']   { color-scheme: dark; }
 
 @theme {
   --color-surface: light-dark(<light>, <dark>);
@@ -266,12 +280,18 @@ const mechanismSnippet = `/* The mode sets color-scheme; every token is one ligh
   /* …every token, one pair… */
 }
 
-/* Medium already resolves to the dark half, so its block re-declares only
-   the tokens whose medium value differs from dark: grounds lifted to mid
-   grey, type dimmed a stop. */
-[data-theme='medium'] {
-  --color-surface: <lifted mid grey>;
-  --color-ink:     <dimmed one stop>;
+/* Dim already resolves to the dark half, so its block re-declares only the
+   tokens whose dim value differs from dark: grounds lifted, type softened. */
+[data-theme='dim'] {
+  --color-surface: <lifted dark grey>;
+  --color-ink:     <softer ink>;
+}
+
+/* Mixed resolves to the light half and re-declares only the frame, dark. */
+[data-theme='mixed'] {
+  --color-surface-frame: <the dark frame>;
+  --color-bar-ink:       <the dark bar ink>;
+  /* …bar-muted, bar-hover, bar-line… */
 }
 
 /* A palette overrides values under its own attribute — unanchored, so the
@@ -293,7 +313,7 @@ const runtimeSnippet = `import * as appearance from '@magic-spells/puzzle-pieces
 // First thing in app.js — makes the module agree with what pre-paint painted.
 appearance.boot();
 
-appearance.set({ scheme: 'warm', mode: 'medium' }); // both axes
+appearance.set({ scheme: 'warm', mode: 'mixed' });  // palette + style
 appearance.set({ mode: null });                     // follow the OS
 appearance.current();                               // -> { scheme, mode }
 
@@ -314,9 +334,9 @@ const scopeSnippet = `<div data-scheme="void" data-theme="light" class="bg-surfa
 
 const exportRows = [
 	{ path: '@magic-spells/puzzle-pieces/themes/default.css', note: 'the default palette and the @theme block — always imported' },
-	{ path: '@magic-spells/puzzle-pieces/themes/dim.css', note: 'Dim — blue-grey at half chroma, type a stop softer' },
-	{ path: '@magic-spells/puzzle-pieces/themes/warm.css', note: 'Warm — ivory, tan and brown with a clay accent' },
-	{ path: '@magic-spells/puzzle-pieces/themes/void.css', note: 'Void — monochrome, borderless, high contrast' },
+	{ path: '@magic-spells/puzzle-pieces/themes/cool.css', note: 'Cool — a little more blue, after the Observatory scheme' },
+	{ path: '@magic-spells/puzzle-pieces/themes/warm.css', note: 'Warm — browns and oranges with a clay accent' },
+	{ path: '@magic-spells/puzzle-pieces/themes/void.css', note: 'Void — very black, dark greys, white type' },
 	{ path: '@magic-spells/puzzle-pieces/appearance', note: 'the runtime: boot, set, current, subscribe' },
 	{ path: '@magic-spells/puzzle-pieces/pre-paint', note: 'the anti-flash snippet, inlined in the shell head' },
 ];
@@ -330,7 +350,7 @@ const tokenRows = TOKEN_GROUPS.map((g) => ({
 
 const tokenLinks = [
 	{ href: '#/themes/default', label: 'Default' },
-	{ href: '#/themes/dim', label: 'Dim' },
+	{ href: '#/themes/cool', label: 'Cool' },
 	{ href: '#/themes/warm', label: 'Warm' },
 	{ href: '#/themes/void', label: 'Void' },
 	{ href: '#/themes/compare', label: 'Compare' },
@@ -338,7 +358,7 @@ const tokenLinks = [
 ];
 
 const addSteps = [
-	'Copy a scheme file in registry/theme/ to the new name and rename its selectors — the palette block and its medium block.',
+	'Copy a scheme file in registry/theme/ to the new name and rename its selectors — the palette block and its dim and mixed blocks.',
 	'Retune the values. Keep every token name; only values change.',
 	'Add { name, file, label, description } to the themes array in registry/registry.json.',
 	'Add the name to SCHEMES in registry/theme/appearance.js AND to SCHEMES in registry/theme/pre-paint.js — the two lists have to agree.',
