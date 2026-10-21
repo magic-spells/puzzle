@@ -25,6 +25,12 @@ connections:
   - DECISION-D179-STATIC-PATHS
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
   - DECISION-D184-STORE-OBSERVE
+notes:
+  - kind: state
+    text: >-
+      Build and output: the usage-scan defines also include `__PUZZLE_HAS_LISTENER_OPTIONS__`
+      (D187), set when any element listener writes `passive` or `capture`; off, the native-options
+      branch compiles out.
 ---
 
 # Puzzle release surface

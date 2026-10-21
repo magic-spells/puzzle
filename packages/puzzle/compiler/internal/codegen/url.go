@@ -21,6 +21,14 @@ func (c *compiler) urlAttr(tag, name, value string, parts []parser.Part, isCompo
 	case "href", "src", "action", "formaction", "xlink:href", "poster", "background",
 		"cite", "data", "codebase", "manifest", "longdesc", "profile", "usemap",
 		"srcset", "imagesrcset", "ping", "archive":
+	case "to", "from", "by", "values":
+		// An SVG animation can write href/xlink:href through these, so they are
+		// guarded on the animation elements whatever attributeName says.
+		switch strings.ToLower(tag) {
+		case "animate", "set", "animatemotion", "animatetransform":
+		default:
+			return value
+		}
 	default:
 		return value
 	}
@@ -34,6 +42,9 @@ func (c *compiler) urlAttr(tag, name, value string, parts []parser.Part, isCompo
 	if name == "srcset" || name == "imagesrcset" || name == "ping" || name == "archive" {
 		// A candidate list: every candidate carries its own scheme.
 		mode |= 2
+	} else if name == "values" {
+		// An animation's `;`-separated value list.
+		mode |= 4
 	} else if schemeFixed(parts) {
 		return value
 	}
@@ -68,4 +79,36 @@ func schemeFixed(parts []parser.Part) bool {
 		}
 	}
 	return false
+}
+
+// checkSrcdoc rejects a dynamic iframe srcdoc: it is a whole HTML document, so
+// data reaching it is script injection unless a static sandbox without
+// allow-scripts contains it (D186).
+func (c *compiler) checkSrcdoc(tag string, attrs []parser.Attr) error {
+	if strings.ToLower(tag) != "iframe" {
+		return nil
+	}
+	var pos *parser.Position
+	sandboxed := false
+	for _, a := range attrs {
+		switch at := a.(type) {
+		case *parser.StaticAttr:
+			if strings.EqualFold(at.Name, "sandbox") && !strings.Contains(strings.ToLower(at.Value), "allow-scripts") {
+				sandboxed = true
+			}
+		case *parser.DynamicAttr:
+			if strings.EqualFold(at.Name, "srcdoc") {
+				pos = &at.Pos
+			}
+		case *parser.MixedAttr:
+			if strings.EqualFold(at.Name, "srcdoc") {
+				pos = &at.Pos
+			}
+		}
+	}
+	if pos == nil || sandboxed {
+		return nil
+	}
+	return c.cgErr(*pos, "a dynamic srcdoc on <iframe> renders data as a full HTML document, which can run script. "+
+		"Add a static sandbox attribute without allow-scripts (sandbox=\"\"), or render the HTML with raw(), which sanitizes it")
 }

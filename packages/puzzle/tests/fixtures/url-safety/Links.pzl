@@ -8,6 +8,7 @@
     <iframe src={ url }></iframe>
     <object data={ url }></object>
     <svg><a xlink:href={ url }><text>Link</text></a></svg>
+    <svg class="anim"><a><set attributeName="href" to={ url }/><animate attributeName="href" values={ frames }/></a></svg>
     <p title={ url }>Text</p>
   </div>
 </puzzle-view>

@@ -9,6 +9,11 @@ connections:
   - DOC-VIEW-LIFECYCLE
 verified_at: '2026-08-14T05:01:28.843Z'
 verified_sha: d74916a0e021b6bb86394551171838fbab161347
+notes:
+  - kind: state
+    text: >-
+      §4 Reserved names, read-only API: `tick` (D188, `this.tick()`) is a PuzzleView member
+      alongside getData/setData/memo; a subclass member named `tick` overrides it.
 ---
 
 The contract for app shape: exports and entry points, the app config surface, `.pzl` file anatomy, the real-JavaScript `<script>` rule, component context, project layout, TypeScript scripts, scoped styles, and the `@` module alias. See [[DOC-SPEC]] for the section index.

@@ -77,3 +77,43 @@ func TestPassiveCaptureCodegen(t *testing.T) {
 		}
 	}
 }
+
+// D186: animation elements can write href, so their value attributes are
+// guarded whatever attributeName says; `values` is checked per `;` entry.
+func TestSVGAnimationValuesGuarded(t *testing.T) {
+	got, err := compileMarkup(t, `<puzzle-view><svg><a><animate attributeName="href" values={v} from={f}/><set attributeName="href" to={u}/><animateMotion by={b}/><animateTransform to={u} type="scale"/><rect to={u}/></a><set attributeName="href" to="javascript:author()"/></svg></puzzle-view>`, ModeView)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"values: __u(__d.v, 4)", "from: __u(__d.f)", "to: __u(__d.u)", "by: __u(__d.b)", "javascript:author()"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+	if strings.Count(got, "to: __u(") != 2 || !strings.Contains(got, "to: __d.u") {
+		t.Errorf("only animation elements guard `to`:\n%s", got)
+	}
+}
+
+func TestDynamicSrcdocNeedsStaticSandbox(t *testing.T) {
+	for _, tt := range []struct {
+		markup string
+		ok     bool
+	}{
+		{markup: `<iframe srcdoc={html}></iframe>`},
+		{markup: `<iframe srcdoc="<p>{html}</p>"></iframe>`},
+		{markup: `<iframe sandbox="allow-scripts" srcdoc={html}></iframe>`},
+		{markup: `<iframe sandbox={mode} srcdoc={html}></iframe>`},
+		{markup: `<iframe sandbox srcdoc={html}></iframe>`, ok: true},
+		{markup: `<iframe sandbox="allow-same-origin" srcdoc={html}></iframe>`, ok: true},
+		{markup: `<iframe srcdoc="<p>static</p>"></iframe>`, ok: true},
+	} {
+		_, err := compileMarkup(t, `<puzzle-view>`+tt.markup+`</puzzle-view>`, ModeView)
+		if tt.ok != (err == nil) {
+			t.Errorf("%s: err = %v, want ok=%v", tt.markup, err, tt.ok)
+		}
+		if err != nil && !strings.Contains(err.Error(), "sandbox") {
+			t.Errorf("%s: message should steer to sandbox: %v", tt.markup, err)
+		}
+	}
+}

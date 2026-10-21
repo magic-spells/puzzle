@@ -1649,6 +1649,11 @@ func (c *compiler) attrsMultiline(tag string, attrs []parser.Attr, tagStr string
 // (one attribute per line, trailing comma), per the precomputed decision.
 func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline bool, scope scopeMap, isComponent bool) (string, error) {
 	attrs = dropReservedLiteralAttrs(attrs)
+	if !isComponent {
+		if err := c.checkSrcdoc(tag, attrs); err != nil {
+			return "", err
+		}
+	}
 	bind := detectAutoBind(tag, attrs, scope)
 	attrCount := len(attrs)
 	if bind != nil {

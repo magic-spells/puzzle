@@ -120,4 +120,17 @@ describe('dynamic URL bindings (D186)', () => {
 		expect(result.pages[0].html).toContain('<a class="dynamic">');
 		expect(result.pages[0].html).toContain('<form>');
 	});
+
+	it('guards SVG animation values per `;` entry and to/from/by whatever attributeName says', async () => {
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
+		view = new Links();
+		view.setData({ url: 'javascript:run()', candidates: '', frames: '/a; JaVa\tScRiPt:run()' });
+		let html = await serialize(view.render());
+		expect(html).not.toMatch(/<set[^>]* to=/);
+		expect(html).not.toMatch(/<animate[^>]* values=/);
+		view.setData({ url: '/next', frames: '/a; /b' });
+		html = await serialize(view.render());
+		expect(html).toMatch(/<set[^>]* to="\/next"/);
+		expect(html).toMatch(/<animate[^>]* values="\/a; \/b"/);
+	});
 });

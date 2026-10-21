@@ -523,6 +523,9 @@ you see:
   static author-written attributes remain trusted. Blocked values warn only
   in development. Only dynamic URL bindings whose scheme the template leaves
   open pay for the check: `href="/users/{ id }"` compiles without it.
+  SVG animation `to`/`from`/`by`/`values` (each `;` entry) are guarded too,
+  and a dynamic `<iframe srcdoc>` is a compile error unless the iframe has a
+  static `sandbox` without `allow-scripts`.
 
 ## 0.8.1 — 2026-10-04 (Go module only)
 

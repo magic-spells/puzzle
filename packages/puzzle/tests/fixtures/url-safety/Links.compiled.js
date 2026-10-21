@@ -47,6 +47,18 @@ Links.prototype.render = function () {
         ]),
       ]),
     ]),
+    new ViewNode('svg', { class: 'anim' }, [
+      new ViewNode('a', {}, [
+        new ViewNode('set', {
+          attributeName: 'href',
+          to: __u(__d.url),
+        }, []),
+        new ViewNode('animate', {
+          attributeName: 'href',
+          values: __u(__d.frames, 4),
+        }, []),
+      ]),
+    ]),
     new ViewNode('p', { title: __d.url }, [
       new ViewNode('text', { value: 'Text' }),
     ]),
