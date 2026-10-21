@@ -988,6 +988,12 @@ export class Router {
 		if (this.#isCommittedNoop(key)) {
 			return Promise.resolve({ ok: true, route: this.current });
 		}
+		// The committed path, but not a no-op (a navigation in flight, or an
+		// invalidated chain): the app is already standing on this entry, so the
+		// navigation rewrites it rather than stacking a duplicate — no extra
+		// history entry, and in memory mode no [/a, /a] stack while a back() to
+		// another entry is still loading.
+		if (this.#state && key === sameNavKey(this.#state.path)) return this.replace(path);
 		// In-flight double-click guard: the COMMITTED #state check above misses a
 		// second click on the active link WHILE its navigation is still loading — the
 		// old route is still committed there. Without this, that second push bumps the
@@ -1558,7 +1564,7 @@ export class Router {
 							"Entry guards should return a redirect path (e.g. '/login') instead of " +
 							'false so first paint always has a route to render.'
 					);
-				} else if (pop) {
+				} else if (pop && cur) {
 					// A blocked POPSTATE: the browser already moved the address bar to the
 					// guarded entry before the guard ran, but the tree stayed on `cur`. Put
 					// the URL back so URL and mounted tree stay consistent. A plain push never

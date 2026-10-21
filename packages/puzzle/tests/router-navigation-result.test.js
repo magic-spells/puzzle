@@ -568,6 +568,140 @@ describe('router.push() — navigations that do not commit (D182)', () => {
 	});
 });
 
+describe('router.push() — the committed path when it is not a no-op (D182)', () => {
+	it('a push back to the committed path while another navigation loads adds no history entry', async () => {
+		const slow = gated();
+		const { router } = await boot([
+			{ path: '/', name: 'home', view: HomeView },
+			{ path: '/slow', name: 'slow', view: slow.View },
+		]);
+		const before = history.length;
+
+		const pSlow = router.push('/slow');
+		const pHome = router.push('/');
+		slow.release();
+
+		expect(await pSlow).toEqual({ ok: false, reason: 'superseded' });
+		expect((await pHome).ok).toBe(true);
+		expect(router.current.path).toBe('/');
+		expect(history.length).toBe(before);
+	});
+
+	it('clicking the active link after a failed view rebuilds it without a new history entry', async () => {
+		let failing = true;
+		let runs = 0;
+		class Flaky extends PuzzleView {
+			renderSkeleton() {
+				return h('puzzle-view', { class: 'skeleton' }, [text('…')]);
+			}
+			async data() {
+				runs++;
+				if (failing) throw new Error('data boom');
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'flaky' }, [text('OK')]);
+			}
+		}
+		const { router, el } = await boot(
+			[
+				{ path: '/', name: 'home', view: HomeView },
+				{ path: '/f', name: 'f', view: Flaky },
+			],
+			{ onError: () => {} }
+		);
+		await router.push('/f'); // a skeleton view commits, then its data() fails
+		await new Promise((r) => setTimeout(r, 0));
+		failing = false;
+		const before = history.length;
+
+		const result = await router.push('/f');
+		await new Promise((r) => setTimeout(r, 0));
+
+		expect(result.ok).toBe(true);
+		expect(runs).toBe(2);
+		expect(el.querySelector('.flaky')).not.toBeNull();
+		expect(history.length).toBe(before);
+	});
+
+	it('memory mode: push(committed) while back() loads leaves one entry for it', async () => {
+		let release;
+		let gate = Promise.resolve();
+		class Prev extends PuzzleView {
+			async data() {
+				await gate;
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'prev' }, [text('PREV')]);
+			}
+		}
+		const { router } = await boot(
+			[
+				{ path: '/prev', name: 'prev', view: Prev },
+				{ path: '/a', name: 'a', view: AboutView },
+			],
+			{ mode: memoryRouter({ initialPath: '/prev' }) }
+		);
+		await router.push('/a');
+		gate = new Promise((r) => (release = r));
+
+		const back = router.back(); // in flight to /prev
+		const result = await router.push('/a');
+		release();
+		await back;
+
+		expect(result.ok).toBe(true);
+		expect(router.current.path).toBe('/a');
+		// The stack is still [/prev, /a]: one back() reaches /prev, a second is a no-op.
+		await router.back();
+		expect(router.current.path).toBe('/prev');
+		expect(router.back()).toBeUndefined();
+	});
+});
+
+describe('router.push() — pops during navigation zero (D182)', () => {
+	it('a popped route whose guard throws during a guarded navigation zero is reported, not a crash', async () => {
+		let allow;
+		const errors = [];
+		const failure = new Error('guard boom');
+		history.replaceState({}, '', '/slow');
+		const el = document.createElement('div');
+		document.body.appendChild(el);
+		const context = { store: null, router: null, formatters: null };
+		setErrorConfig(context, (error) => errors.push(error), null);
+		const router = new Router([
+			{
+				path: '/slow',
+				name: 'slow',
+				view: view('slow'),
+				guard: () => new Promise((r) => (allow = r)),
+			},
+			{
+				path: '/bad',
+				name: 'bad',
+				view: view('bad'),
+				guard: () => {
+					throw failure;
+				},
+			},
+		]);
+		context.router = router;
+		routers.push({ router, context });
+		const started = router.start(el, context);
+		await new Promise((r) => setTimeout(r, 0));
+
+		// The browser moves to /bad and fires popstate while nothing is committed.
+		history.pushState({}, '', '/bad');
+		window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+		await new Promise((r) => setTimeout(r, 0));
+		allow(true);
+
+		await expect(started).resolves.toBe(router);
+		expect(errors).toEqual([failure]);
+	});
+});
+
 describe('router.push() — commit-window deferral (D182)', () => {
 	it('a push from mounted() resolves when the deferred navigation lands', async () => {
 		let deferred;

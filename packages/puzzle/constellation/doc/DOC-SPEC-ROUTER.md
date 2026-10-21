@@ -179,7 +179,10 @@ The location side effects — `pushState`/`replaceState`, `document.title`, the 
 **Navigation result (D182).** `push(path)` and `replace(path)` resolve a `NavigationResult` and never reject: `{ ok: true, route, redirectedFrom? }` or `{ ok: false, reason, error? }`.
 
 - `ok: true` — committed (the catch-all `*` included); `route` is the committed snapshot. A same-path push while that path is in flight returns the in-flight push's result.
-- **Same-path no-op:** a push or replace to the committed path resolves `ok: true` with the current route only when no navigation is in flight and the committed chain is intact. Otherwise it is an ordinary navigation: back to the committed path during a slow push, it supersedes that push (last push wins); after a failed position or a commit-window throw, it rebuilds. A guard redirect to the committed path stays a no-op (§48).
+- **Same-path no-op:** a push or replace to the committed path resolves `ok: true` with the current route only when no navigation is in flight and the committed chain is intact. Otherwise it is an ordinary navigation run with **replace semantics** (the app already stands on that entry, so no history entry or memory-stack entry is added):
+  - During a slow push, it supersedes that push (last push wins).
+  - After a failed position or a commit-window throw, it rebuilds the page.
+  - A guard redirect to the committed path stays a no-op (§48).
 - A guard redirect resolves the final navigation's result; when it is `ok`, `redirectedFrom` is the path originally requested (the first one across a chain).
 - `'blocked'` — a guard returned `false`. `'superseded'` — a later navigation won. `'not-found'` — no match and no catch-all (still warns). `'error'` plus `error` — anything reported to `onError` (phase `navigation`): a throwing guard, the redirect cycle cap, a lazy load, construction or `data()` failure, or a synchronous throw in the commit window.
 - `ok: false` means the navigation did not complete. Every reason except a commit-window throw leaves URL, DOM and `router.current` untouched. A commit-window throw can leave the URL and DOM on the target while `router.current` still names the old route; the next navigation, the same path included, rebuilds every level.
