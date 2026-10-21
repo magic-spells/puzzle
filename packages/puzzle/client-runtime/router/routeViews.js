@@ -61,6 +61,8 @@ export function routeViews(entries) {
 
 /** Warn once per message even when the SSG pass builds several routers. */
 const warned = new Set();
+/** Agent names already reported as duplicates — once per name, not per message. */
+const warnedNames = new Set();
 /** @param {string} message */
 function warnOnce(message) {
 	if (warned.has(message)) return;
@@ -103,7 +105,10 @@ export function checkAgentRoutes(entries, catchAll) {
 		}
 	}
 	if (!declared) return;
-	/** @type {Map<string, string>} */
+	// name → the agent objects that resolve to it and the leaves using it. Leaves
+	// inheriting ONE parent object share its name legitimately; only two
+	// different objects claiming one name is a conflict.
+	/** @type {Map<string, { agents: Set<object>, paths: string[] }>} */
 	const names = new Map();
 	/** @type {string[]} */
 	const silent = [];
@@ -112,13 +117,24 @@ export function checkAgentRoutes(entries, catchAll) {
 		if (agent === undefined) {
 			silent.push(fullPath);
 		} else if (agent) {
-			const first = names.get(agent.name);
-			if (first === undefined) names.set(agent.name, fullPath);
-			else {
-				warnOnce(
-					`[puzzle] agent name ${JSON.stringify(agent.name)} is used by both "${first}" and "${fullPath}"`
+			let use = names.get(agent.name);
+			if (!use)
+				names.set(
+					agent.name,
+					(use = { agents: new Set(), paths: [] })
 				);
-			}
+			use.agents.add(agent);
+			use.paths.push(fullPath);
+		}
+	}
+	for (const [name, { agents, paths }] of names) {
+		if (agents.size > 1 && !warnedNames.has(name)) {
+			warnedNames.add(name);
+			console.warn(
+				`[puzzle] agent name ${JSON.stringify(name)} is declared by more than one route: ${paths
+					.map((path) => `"${path}"`)
+					.join(', ')}`
+			);
 		}
 	}
 	if (silent.length) {

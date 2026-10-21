@@ -151,7 +151,7 @@ export type GuardFn = (nav: {
 }) => void | boolean | string | Promise<void | boolean | string>;
 
 /** A route's `agent` field (D183). */
-export type RouteAgent = false | { name: string; about?: string };
+export type RouteAgent = false | { name: string; about?: string; [key: string]: unknown };
 
 /**
  * One leaf route as `router.views` lists it (D183) — frozen, in declaration

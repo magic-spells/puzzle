@@ -351,7 +351,9 @@ routes.push(
 	{ path: '/admin', view: TodoListView, agent: false, children: [
 		{ path: 'help', view: TodoListView, agent: { name: 'admin-help', about: 'Admin help' } },
 	] },
-	{ path: '/inbox', view: TodoListView, agent: { name: 'inbox' } }
+	{ path: '/inbox', view: TodoListView, agent: { name: 'inbox' } },
+	// Extra keys pass through to router.views consumers.
+	{ path: '/reports', view: TodoListView, agent: { name: 'reports', about: 'Reports', states: ['weekly'] } }
 );
 // @ts-expect-error agent is false or an object with a string name
 routes.push({ path: '/bad-agent', view: TodoListView, agent: true });

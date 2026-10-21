@@ -307,31 +307,60 @@ describe('agent route field — dev checks', () => {
 		).not.toThrow();
 	});
 
-	it('warns once about a duplicate resolved name', () => {
+	it('warns once per name when different agent objects share it, listing every path', () => {
 		const warn = vi
 			.spyOn(console, 'warn')
 			.mockImplementation(() => {});
 		const routes = [
+			{ path: '/dup-a', view: Page, agent: { name: 'dup' } },
 			{
-				path: '/dup',
+				path: '/dup-b',
 				view: Shell,
-				agent: { name: 'dup' },
+				agent: { name: 'dup', about: 'Another' },
 				children: [
-					{ path: 'a', view: Page },
-					{ path: 'b', view: Page },
+					{ path: 'x', view: Page },
+					{ path: 'y', view: Page },
 				],
 			},
 		];
 		router(routes);
-		router(routes);
+		router([
+			...routes,
+			{ path: '/dup-c', view: Page, agent: { name: 'dup' } },
+		]);
 		const dupes = warn.mock.calls.filter(([m]) =>
 			m.includes('agent name')
 		);
 		expect(dupes).toEqual([
 			[
-				'[puzzle] agent name "dup" is used by both "/dup/a" and "/dup/b"',
+				'[puzzle] agent name "dup" is declared by more than one route: "/dup-a", "/dup-b/x", "/dup-b/y"',
 			],
 		]);
+	});
+
+	it('does not warn when several leaves inherit one agent object', () => {
+		const warn = vi
+			.spyOn(console, 'warn')
+			.mockImplementation(() => {});
+		const views = router([
+			{
+				path: '/shared',
+				view: Shell,
+				agent: { name: 'shared', about: 'One section' },
+				children: [
+					{ path: '', view: Page },
+					{ path: 'a', view: Page },
+					{ path: 'b/:id', view: Page },
+				],
+			},
+		]).views;
+		expect(views.map((v) => v.agent.name)).toEqual([
+			'shared',
+			'shared',
+			'shared',
+		]);
+		expect(new Set(views.map((v) => v.agent)).size).toBe(1);
+		expect(warn).not.toHaveBeenCalled();
 	});
 
 	it('once any route declares agent, warns once listing the leaves that resolve to nothing', () => {

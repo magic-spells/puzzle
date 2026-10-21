@@ -295,7 +295,8 @@ you see:
   `agent` resolves nearest-defined from the leaf up, so a child's own value
   beats its parent's. The router and the prerender never act on it — a hidden
   route still navigates and prerenders. In development an invalid value
-  throws at construction, a name two routes resolve to warns, and once any
+  throws at construction, a name declared by two different routes warns
+  (children inheriting one parent's `agent` share its name freely), and once any
   route uses `agent` one warning lists the routes that set neither `false`
   nor `{ name }`. Exported types: `RouteView`, `RouteAgent`.
 - **Locale URL prefixes: `i18n.routing: 'prefix'` (D177).**

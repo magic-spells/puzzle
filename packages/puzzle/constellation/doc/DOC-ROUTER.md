@@ -256,11 +256,13 @@ export default [
 
 const pages = router.views.filter((v) => v.agent);
 // [{ path: '/', params: [], name: 'home', meta: undefined, title: undefined, agent: { name: 'home', … }, chain: [...] }, …]
+
+const here = router.views.find((v) => v.chain.at(-1) === router.current.route); // the current page's entry
 ```
 
-Each entry is `{ path, params, name, meta, title, agent, chain }`: the full pattern, its `:param` names, the leaf's `name` and own `meta`, the title resolved the way the tab title is, the resolved `agent`, and the route definitions root → leaf. `agent` resolves nearest-defined from the leaf up, so a child's own value always beats its parent's. The router never acts on it — a hidden route still navigates and prerenders.
+Each entry is `{ path, params, name, meta, title, agent, chain }`: the full pattern, its `:param` names, the leaf's `name` and own `meta`, the title resolved the way the tab title is, the resolved `agent`, and the route definitions root → leaf. `agent` resolves nearest-defined from the leaf up, so a child's own value always beats its parent's, and children that set nothing share their parent's object (and name). The router never acts on it — a hidden route still navigates and prerenders.
 
-In development, an invalid `agent` value throws, a name two routes resolve to warns, and once any route uses `agent` one warning lists the routes that say neither `false` nor `{ name }`. Full contract: §9.
+In development, an invalid `agent` value throws, a name declared by two different `agent` objects warns once (listing every path that uses it), and once any route uses `agent` one warning lists the routes that say neither `false` nor `{ name }`. Full contract: §9.
 
 ## API
 
