@@ -160,7 +160,7 @@ function escapeAll(s, quote) {
  * @param {string} s
  * @returns {string}
  */
-function decodeRefs(s) {
+export function decodeRefs(s) {
 	return s.replace(/&(?:#(\d+)|#[xX]([\da-fA-F]+));?|&([A-Za-z][A-Za-z\d]*);/g, (m, dec, hex, name) => {
 		if (name) return Object.hasOwn(NAMED, name) ? NAMED[name] : m;
 		const code = dec ? parseInt(dec, 10) : parseInt(hex, 16);

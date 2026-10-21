@@ -229,6 +229,15 @@ you see:
 
 ### Added
 
+- **`passive` and `capture` event modifiers (D187).** `@wheel:passive` and
+  `@click:capture` pass native listener options, including when combined with
+  `outside` or `once`; listener removal preserves the capture flag. Combining
+  `passive` with `prevent` is a positioned compile error. Apps whose templates
+  use neither ship no code for them.
+- **`this.tick()` (D188).** A view method that resolves once every pending
+  store flush and scheduled render has landed, including the renders those
+  schedule, in hidden tabs too. It forces nothing and does not wait for async
+  `data()`, requests or navigation — that is `app.idle()`.
 - **`ctx.idle(options?)` (D189).** Components can await the app's bound idle
   method, with the same timeout and boolean result as `app.idle()`. Under
   `/testing`'s `mountView` it runs `settled()` and resolves `true`; on
@@ -517,6 +526,16 @@ you see:
 
 ### Fixed
 
+- **Dynamic URL bindings block script schemes (D186).** Brace-only and mixed
+  URL attributes omit `javascript:`, `vbscript:` and executable `data:` values
+  after entity, control-character and case normalization, in browser rendering
+  and prerendered HTML. Data URLs remain supported in image bindings;
+  static author-written attributes remain trusted. Blocked values warn only
+  in development. Only dynamic URL bindings whose scheme the template leaves
+  open pay for the check: `href="/users/{ id }"` compiles without it.
+  SVG animation `to`/`from`/`by`/`values` (each `;` entry) are guarded too,
+  and a dynamic `<iframe srcdoc>` is a compile error unless the iframe has a
+  static `sandbox` without `allow-scripts`.
 - **Locale selection respects Chinese scripts (D175).** `zh-TW`, `zh-HK`,
   `zh-MO` and `zh-Hant-*` match a configured `zh-Hant`; other Chinese tags match
   `zh-Hans`. The first-visit redirect makes the same choice.

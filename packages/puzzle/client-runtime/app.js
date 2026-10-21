@@ -44,6 +44,7 @@ import { devtoolsAppMounted, devtoolsAppUnmounted } from './devtools.js';
 import { reportError, setErrorConfig } from './errors.js';
 import { PuzzleView } from './views/PuzzleView.js';
 import { setPortalHost, teardownPortals } from './views/portal.js';
+import { frame } from './scheduler.js';
 
 /** @import { FormatterRegistry } from './formatters.js' */
 
@@ -320,17 +321,9 @@ export class PuzzleApp {
 				else if (++clear > 1) return resolve(true);
 				if (Date.now() >= end) return resolve(false);
 				// Check again after the next frame's callbacks (rAF, then a timer), so a
-				// setData() render scheduled before then has landed. The store's
-				// scheduler (D63): one timer in a hidden tab, and a fallback timer if rAF
-				// freezes mid-wait, cleared when the frame wins.
-				if (!document.hidden && typeof requestAnimationFrame === 'function') {
-					// One-shot: only the first of the frame or the fallback proceeds, so a
-					// late rAF after the fallback cannot start a second chain of checks.
-					let done = 0;
-					const go = () => done++ || (clearTimeout(fallback), setTimeout(check, 0));
-					const fallback = setTimeout(go, 220);
-					requestAnimationFrame(go);
-				} else setTimeout(check, 0);
+				// setData() render scheduled before then has landed. The store's D63
+				// scheduler: a timer in a hidden tab, a fallback timer if rAF freezes.
+				frame(() => setTimeout(check, 0));
 			};
 			check();
 		});

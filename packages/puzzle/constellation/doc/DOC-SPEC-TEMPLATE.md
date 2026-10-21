@@ -44,6 +44,7 @@ A form control with a path-shaped `value=`/`checked=` needs no handler — it tw
 
 ### Event modifiers
 
+
 `@event:modifier[:modifier…]={ handler }` adjusts dispatch declaratively. The handler stays a plain function; modifiers are encoded in the vnode key (`@keydown:enter:prevent`).
 
 | Modifier | Effect | Applies to |
@@ -52,11 +53,13 @@ A form control with a path-shaped `value=`/`checked=` needs no handler — it tw
 | `stop` | `event.stopPropagation()` | any event |
 | `once` | fires **once ever** for this binding; the spent marker survives per-patch handler swaps and clears only when the binding is removed | any event |
 | `outside` | listener on **`document`, capture phase**; runs only when the target is **outside** the bound element (§47) | any event |
+| `passive` | native listener option `passive: true` (D187) | any event |
+| `capture` | native listener option `capture: true`; removal uses the same flag (D187) | any event |
 | `enter` `escape` `tab` `space` `up` `down` `left` `right` `backspace` `delete` | runs only when `event.key` is `Enter`/`Escape`/`Tab`/`' '`/`ArrowUp`/`ArrowDown`/`ArrowLeft`/`ArrowRight`/`Backspace`/`Delete` | `keydown`/`keyup`/`keypress` |
 
-**Execution order is canonical, whatever the written order:** outside-gate → key-gate → once-spend → `preventDefault` → `stopPropagation` → handler. A gate that bails skips `preventDefault` (native behavior kept) and spends no `once`.
+**Execution order is canonical, whatever the written order:** outside-gate → key-gate → once-spend → `preventDefault` → `stopPropagation` → handler. A gate that bails skips `preventDefault` (native behavior kept) and spends no `once`. `passive` and `capture` change only how the listener is installed; `outside` is always capture and may also be passive.
 
-**Compile errors:** an unknown modifier, a key filter on a non-keyboard event, a duplicate modifier, more than one key filter, or any modifier on a **component callback prop** (D16).
+**Compile errors:** an unknown modifier, a key filter on a non-keyboard event, a duplicate modifier, more than one key filter, `passive` with `prevent` (in either order), or any modifier on a **component callback prop** (D16).
 
 ## 6. Template grammar
 

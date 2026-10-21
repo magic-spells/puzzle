@@ -114,10 +114,17 @@ built-in.
 
 **The import line is built per file from what it uses** — the tree-shaking contract:
 `ViewNode` always; then `SLOT_TAG`, `SNIPPET_TAG`, `PORTAL_TAG`, `displayValue as __s`,
-`dynamicComponent as __dc`, `listRows as __l`, `loopItems as __e`, `loopRange as __r` (in that order) only when
+`dynamicComponent as __dc`, `listRows as __l`, `loopItems as __e`, `loopRange as __r`,
+`urlValue as __u` (in that order) only when
 emitted. So `views/listBlock.js` must never be imported from inside `client-runtime/`
 ([[FILE-LIST-BLOCK]]).
 
+- **Dynamic URL attributes** (`url.go`, [[DECISION-D186-DYNAMIC-URL-SAFETY]]): `attrKV`
+  passes each brace-only or mixed DOM attribute through `urlAttr`, which wraps a URL
+  attribute's value as `__u(value, mode)` — mode bits from the tag and attribute (1 =
+  image position, 2 = candidate list). A mixed value whose literal head fixes the scheme
+  (`schemeFixed`: `/users/{ id }`, `mailto:{ x }`) is left bare; static values,
+  component props and marker args never reach it.
 - Markers emit `ViewNode(SLOT_TAG)` with `name`, per-render `args` and a lazy
   `fallback: () => […]` thunk (D141) that a filled marker never runs. `<Snippet>` emits
   `SNIPPET_TAG` with ordered `params` and a `fn({...params})` closure keeping caller

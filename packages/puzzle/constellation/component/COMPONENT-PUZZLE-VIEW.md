@@ -42,6 +42,11 @@ during its own evaluation, may fault (D161).
   commit and rerenders without rerunning `data()`. Keep raw local values and
   `data()`-derived display values under different keys, or the commit erases the raw
   one. Use `refresh()` when local state feeds `data()`.
+- A `setData()` render is scheduled through `schedule()` in `client-runtime/scheduler.js`
+  (the D63 frame/timer rule); `flushUpdates()` is a no-op once the flag has cleared, so a
+  frame that fires after an immediate render does nothing. `tick()` returns that module's
+  `tick()` — resolved once no store flush or view render is pending anywhere in the
+  runtime ([[DECISION-D188-TICK]]).
 - Async refresh is last-wins; a destroyed view can't be resubscribed by a late
   continuation. `prepareRefresh()` is the router's two-phase form for reused ancestors
   ([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]).

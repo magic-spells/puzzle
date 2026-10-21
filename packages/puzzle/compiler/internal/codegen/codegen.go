@@ -373,6 +373,9 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	if c.usesLoopRange {
 		imports = append(imports, "loopRange as __r")
 	}
+	if c.usesURL {
+		imports = append(imports, "urlValue as __u")
+	}
 	if c.usesDynamicComponent {
 		imports = append(imports, "dynamicComponent as __dc")
 	}
@@ -542,6 +545,7 @@ type compiler struct {
 	usesLoopItems            bool
 	usesLoopRange            bool
 	usesDynamicComponent     bool
+	usesURL                  bool
 	moduleBindings           map[string]int
 	mutableModuleBindings    map[string]bool
 	componentSelectorGetters []componentSelectorGetter
@@ -909,7 +913,7 @@ func (c *compiler) emitSlot(n *parser.Slot, ind int, scope scopeMap) (string, er
 	if len(n.Args) > 0 {
 		kvs := make([]string, 0, len(n.Args))
 		for _, arg := range n.Args {
-			kv, err := c.attrKV(arg, scope, false, true)
+			kv, err := c.attrKV("", arg, scope, false, true)
 			if err != nil {
 				return "", err
 			}
@@ -1629,7 +1633,7 @@ func (c *compiler) attrsMultiline(tag string, attrs []parser.Attr, tagStr string
 	if attrCount >= 2 || anyMixed(attrs) {
 		return true, nil
 	}
-	kv, err := c.attrKV(attrs[0], scope, isComponent, false)
+	kv, err := c.attrKV(tag, attrs[0], scope, isComponent, false)
 	if err != nil {
 		return false, err
 	}
@@ -1645,6 +1649,11 @@ func (c *compiler) attrsMultiline(tag string, attrs []parser.Attr, tagStr string
 // (one attribute per line, trailing comma), per the precomputed decision.
 func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline bool, scope scopeMap, isComponent bool) (string, error) {
 	attrs = dropReservedLiteralAttrs(attrs)
+	if !isComponent {
+		if err := c.checkSrcdoc(tag, attrs); err != nil {
+			return "", err
+		}
+	}
 	bind := detectAutoBind(tag, attrs, scope)
 	attrCount := len(attrs)
 	if bind != nil {
@@ -1656,7 +1665,7 @@ func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline
 	if !multiline {
 		kvs := make([]string, 0, attrCount)
 		for _, a := range attrs {
-			kv, err := c.attrKV(a, scope, isComponent, true)
+			kv, err := c.attrKV(tag, a, scope, isComponent, true)
 			if err != nil {
 				return "", err
 			}
@@ -1670,7 +1679,7 @@ func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline
 	var b strings.Builder
 	b.WriteString("{\n")
 	for _, a := range attrs {
-		kv, err := c.attrKV(a, scope, isComponent, true)
+		kv, err := c.attrKV(tag, a, scope, isComponent, true)
 		if err != nil {
 			return "", err
 		}
@@ -1693,7 +1702,7 @@ func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline
 // trial: only the real pass advances the D62 handler-cache counter, so the trial
 // reads the SAME site index the real emission will use (matching bytes for the
 // width decision) without consuming it.
-func (c *compiler) attrKV(a parser.Attr, scope scopeMap, isComponent bool, emit bool) (string, error) {
+func (c *compiler) attrKV(tag string, a parser.Attr, scope scopeMap, isComponent bool, emit bool) (string, error) {
 	switch at := a.(type) {
 	case *parser.StaticAttr:
 		// LiteralName means the name came from authored-literal markup rather than
@@ -1725,14 +1734,14 @@ func (c *compiler) attrKV(a parser.Attr, scope scopeMap, isComponent bool, emit 
 		if startsWithObjectLiteral(at.Expr) {
 			return "", c.cgErr(at.Pos, objectLiteralMsg)
 		}
-		return jsKey(at.Name) + ": " + c.value(at.ExprAST, scope), nil
+		return jsKey(at.Name) + ": " + c.urlAttr(tag, at.Name, c.value(at.ExprAST, scope), nil, isComponent), nil
 	case *parser.SpreadAttr:
 		if startsWithObjectLiteral(at.Expr) {
 			return "", c.cgErr(at.Pos, objectLiteralMsg)
 		}
 		return "...(" + c.value(at.ExprAST, scope) + ")", nil
 	case *parser.MixedAttr:
-		return jsKey(at.Name) + ": " + c.emitMixed(at.Parts, scope), nil
+		return jsKey(at.Name) + ": " + c.urlAttr(tag, at.Name, c.emitMixed(at.Parts, scope), at.Parts, isComponent), nil
 	case *parser.EventAttr:
 		facts := c.factSink()
 		ev, err := c.compileEvent(at, scope, facts)
