@@ -25,6 +25,12 @@ connections:
   - DECISION-D179-STATIC-PATHS
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
   - DECISION-D184-STORE-OBSERVE
+notes:
+  - kind: state
+    text: >-
+      Build and output: the usage-scan defines also include `__PUZZLE_HAS_LISTENER_OPTIONS__`
+      (D187), set when any element listener writes `passive` or `capture`; off, the native-options
+      branch compiles out.
 ---
 
 # Puzzle release surface
@@ -38,7 +44,8 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
 - **Root exports:** `PuzzleApp`, `PuzzleView`, `PuzzleModel`, `Puzzle`,
   `PuzzleValidationError`, `FormatterRegistry`, `lazy`, plus compiler-support
   exports a compiled module imports only when it emits them (`ViewNode`,
-  `*_TAG` markers, `displayValue`, `listRows`, `loopItems`, `loopRange`).
+  `*_TAG` markers, `displayValue`, `listRows`, `loopItems`, `loopRange`,
+  `urlValue`).
 - **Subpaths** (each with `types/*.d.ts`):
   - `/adapter` — the frozen `adapter` capability (with `adapter.defaults()`,
     the app-wide dialect tier) and `PuzzleAdapterError`.
@@ -110,6 +117,12 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
 - Dynamic, mixed and boolean attributes; controlled `value`, `checked`,
   `disabled`, `selected`. Void elements take no closer (`</input>` is a compile
   error). Attr namespaces are a compile error except `xml`/`xlink`/`xmlns`.
+- **Dynamic URL safety (D186):** a dynamic URL attribute (`href`, `src`,
+  `action`, `srcset`, …) drops `javascript:`/`vbscript:` values, and `data:`
+  outside image positions, after entity/control/case normalization — in the
+  browser and prerendered HTML alike, with a development warning. Static
+  author-written values stay as written; a mixed value whose literal head fixes
+  the scheme (`href="/users/{ id }"`) compiles without the check.
 - **Two-way binding:** a path-shaped `value=`/`checked=` on a plain form
   control writes back automatically (records via validated `update()`, locals
   via `setData`) unless an author `@input`/`@change`, static
@@ -120,8 +133,10 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   `{#svg 'path'}` compile-time inline SVG, and comments `{## … }` /
   `{#comment}…{/comment}`.
 - **Events:** `@event` handlers (bare or call) with `prevent`, `stop`,
-  `once`, `outside`, and key filters on key events. A handler is the only door
-  into the view's JavaScript; on a component it compiles to a callback prop.
+  `once`, `outside`, `passive` and `capture` (native listener options, D187;
+  `passive:prevent` is a compile error), and key filters on key events. A
+  handler is the only door into the view's JavaScript; on a component it
+  compiles to a callback prop.
 - **Components (D167):** a tag whose first character is not ASCII `a`–`z` is
   a component (`<Card>`, `<Übersicht>`); `<straße-karte>` is a custom element.
   Names validate as `Ident('.'Ident)*`. A dotted tag (`<Frame.Wrapper>`)
@@ -192,7 +207,11 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   `{ props, params, route, data }` of the previous render; a record in it is
   the same live object. Live members: `this.route` (pre-commit-safe snapshot),
   `this.element`, `this.refs`, `this.memo()`, `getData()`, `setData()`,
-  `refresh()`.
+  `refresh()`, `tick()`.
+- **`this.tick()` (D188):** resolves once no store flush or view render is
+  scheduled anywhere in the runtime, including the renders those schedule
+  (timers in a hidden tab). Forces nothing, no timeout; does not wait for
+  async `data()`, fetches or navigation — that is `app.idle()`.
 - **Incremental rendering (D170):** item `{#for}` rows cache their vnode
   subtree per key and static subtrees build once. A record prop carries a
   render revision, so a child refreshes on that record's store mutations; a
@@ -212,6 +231,9 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   or fetches nothing awaits (an event handler's unawaited `save()` or
   `loadMany()`), or a path- or hash-mode `back()`, `forward()` or `go()`
   before its `popstate` fires.
+- **`ctx.idle(options?)` (D189):** the same method bound to the app, on every
+  view's and component's `this.ctx`, so library components can wait for idle
+  without holding the app.
 
 ## Data layer
 
@@ -229,6 +251,10 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   outside a view and returns an idempotent `stop()`; `fn()` runs once per
   batched flush, never fetches (D184). `store.flush()` delivers pending
   notifications now.
+- **Model lookup (D189):** `store.modelFor(type)` returns the registered
+  model class (`PuzzleModel` for an unknown type); static
+  `Model.primaryKey()` names its primary field (default `'id'`). Never
+  subscribes or fetches; works through a view's adapter store handle too.
 - **Server sync is opt-in** via the `/adapter` capability passed once to
   `PuzzleApp`. A model's `static adapter` holds per-verb fetch functions
   (`endpoint` generates REST defaults); dispatch is model function →
@@ -254,9 +280,11 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   link interception; `router.url(path, options?)` / `link('/x')` for
   mode-agnostic hrefs.
 - **Navigation result (D182):** `push()`/`replace()` resolve
-  `{ ok: true, route, redirectedFrom? }` or
+  `{ ok: true, route, catchAll?, redirectedFrom? }` or
   `{ ok: false, reason: 'blocked' | 'superseded' | 'not-found' | 'error', error? }`
   and never reject; a push deferred from `mounted()` resolves when it runs.
+  `catchAll: true` marks a landing on the `*` route (D189), which stays
+  `ok`; `'not-found'` means no match and no catch-all.
 - **Route views (D183):** `router.views` lists every leaf route (catch-all
   excluded) as frozen `{ path, params, name, meta, title, agent, chain }`,
   built once on first read. The top-level `agent` route field — `false` or

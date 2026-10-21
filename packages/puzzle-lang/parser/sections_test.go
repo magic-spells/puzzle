@@ -820,3 +820,46 @@ func TestSplitSectionsStylesScopedErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestSplitSectionsQuotedSectionText(t *testing.T) {
+	for _, quote := range []string{`"`, `'`} {
+		t.Run(quote, func(t *testing.T) {
+			value := `{ flag ? ` + quote + `<script>` + quote + ` : ` + quote + `<style>` + quote + ` }`
+			src := `<puzzle-view title=` + quote + value + quote + `><p>kept</p></puzzle-view>` +
+				`<script>const kept = true;</script><style>.kept { color: red; }</style>`
+			sec, err := SplitSections(src, "Quoted.pzl")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if sec.TemplateContent != `<p>kept</p>` || sec.Scripts != `const kept = true;` || sec.Styles != `.kept { color: red; }` {
+				t.Fatalf("incorrect section boundaries: %#v", sec)
+			}
+			if _, err := ParseTemplate(sec, "Quoted.pzl"); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestSplitSectionsQuotedTemplateClose(t *testing.T) {
+	for _, section := range []string{"puzzle-view", "puzzle-skeleton"} {
+		t.Run(section, func(t *testing.T) {
+			body := `<p title="</` + section + `><script>literal</script><style>literal</style>">kept</p>`
+			src := `<` + section + `>` + body + `</` + section + `>`
+			if section == "puzzle-skeleton" {
+				src = `<puzzle-view></puzzle-view>` + src
+			}
+			sec, err := SplitSections(src, "Quoted.pzl")
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := sec.TemplateContent
+			if section == "puzzle-skeleton" {
+				got = sec.Skeleton
+			}
+			if got != body {
+				t.Fatalf("body = %q, want %q", got, body)
+			}
+		})
+	}
+}

@@ -124,6 +124,7 @@ const cards = { task: TaskCard, backtest: BacktestCard };
 
 ## Attributes
 
+
 ```html
 <!-- inline {#if} and interpolation inside a quoted value -->
 <span class="flex-1 {#if todo.completed}line-through text-gray-500{/if}">{ todo.text }</span>
@@ -135,6 +136,8 @@ const cards = { task: TaskCard, backtest: BacktestCard };
 ```
 
 A brace-only value controls the attribute: `false`, `null` and `undefined` remove it, `true` writes it empty, and a list becomes space-separated tokens with empty entries dropped. Write `\{` and `\}` for literal braces — `pattern="[0-9]\{5\}"`.
+
+A dynamic URL attribute (`href`, `src`, `action`, …) never carries `javascript:` or `vbscript:`, and `data:` only in image positions: a blocked value leaves the attribute off, in the browser and prerendered HTML alike, with a development warning. Static values you write yourself stay as written, and a quoted value whose literal start fixes the scheme (`href="/users/{ id }"`) compiles without the check. The full rule is [[DECISION-D186-DYNAMIC-URL-SAFETY]].
 
 ## Two-way form binding
 
@@ -155,6 +158,7 @@ The full trigger conditions and event matrix are in §6.
 
 ## Events
 
+
 ```html
 <form @submit={ addTodo(event) }>
 <button @click={ setFilter('all') }>All</button>
@@ -163,7 +167,7 @@ The full trigger conditions and event matrix are in §6.
 <div class="menu" @pointerdown:outside={ closeMenu }>…</div>
 ```
 
-A bare name gets the DOM event; a call gets exactly the arguments written; modifiers (`prevent`, `stop`, `once`, `outside`, key filters) stack. See [[DOC-EVENTS]] and §5.
+A bare name gets the DOM event; a call gets exactly the arguments written; modifiers (`prevent`, `stop`, `once`, `outside`, `passive`, `capture`, key filters) stack. `passive` and `capture` set native listener options; `passive:prevent` is a compile error. See [[DOC-EVENTS]] and §5.
 
 ## Components
 

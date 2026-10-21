@@ -42,6 +42,11 @@ during its own evaluation, may fault (D161).
   commit and rerenders without rerunning `data()`. Keep raw local values and
   `data()`-derived display values under different keys, or the commit erases the raw
   one. Use `refresh()` when local state feeds `data()`.
+- A `setData()` render is scheduled through `schedule()` in `client-runtime/scheduler.js`
+  (the D63 frame/timer rule); `flushUpdates()` is a no-op once the flag has cleared, so a
+  frame that fires after an immediate render does nothing. `tick()` returns that module's
+  `tick()` — resolved once no store flush or view render is pending anywhere in the
+  runtime ([[DECISION-D188-TICK]]).
 - Async refresh is last-wins; a destroyed view can't be resubscribed by a late
   continuation. `prepareRefresh()` is the router's two-phase form for reused ancestors
   ([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]).
@@ -51,8 +56,9 @@ during its own evaluation, may fault (D161).
   later no-adapter app in the same realm must be held back by its own store's `_a`
   (`tests/adapter-realm-isolation.test.js`); `_settleData` absent means the loop isn't in
   the bundle. A pass that queued fetches is not committed: await, unwind its
-  subscriptions, re-run; ten rounds throw naming the view and request keys. A sync
-  hit-only first pass stays sync. Mid-settle notifications coalesce into `_settleDirty`.
+  subscriptions, re-run. Every provisional pass counts toward the ten-round cap,
+  including a dirty re-pass with no fetches; exhaustion throws naming the view and
+  request keys. A clean final pass may commit, and a sync hit-only first pass stays sync. Mid-settle notifications coalesce into `_settleDirty`.
   A destroyed/leaving/superseded view stops after its current await (shared requests are
   not aborted); `unsubscribe()` clears the request slot but is not a latch —
   `_restoreFromLeaving()` restores faulting.

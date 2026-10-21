@@ -102,7 +102,7 @@ import { redirectScript } from './redirect.js';
  * The per-page build-time ctx (buildContext): the services PuzzleApp.mount()
  * wires, over the page's router facade.
  * @typedef {{ store: Store, router: Router | RouterStub, formatters: FormatterRegistry,
- *   i18n?: ReturnType<typeof createI18n> }} PrerenderContext
+ *   idle: () => Promise<boolean>, i18n?: ReturnType<typeof createI18n> }} PrerenderContext
  */
 
 // ---- translations (D175) ----------------------------------------------------
@@ -1555,7 +1555,7 @@ async function writeStaticDir({
 }) {
 	// The app-bundle tag is stripped once (the shell is identical for every page, up
 	// to its <html lang>) so a missing tag warns once, not per page.
-	const { shell: strippedShell, found } = stripAppBundle(shell);
+	const { shell: strippedShell, found } = stripAppBundle(shell, normalizeBase(config.routerBase));
 	const shells = localeShells(strippedShell);
 	if (!found) {
 		warnings.push(
@@ -1905,7 +1905,8 @@ async function buildContext(config, { router, i18n = null }) {
 	const registry = makeFormatterRegistry(formatters, (path, options) => router.url(path, options));
 
 	/** @type {PrerenderContext} */
-	const ctx = { store, router, formatters: registry };
+	// ctx.idle (D189): a build-time page has no app to wait on.
+	const ctx = { store, router, formatters: registry, idle: async () => true };
 	// The build's i18n service (D175), exactly as PuzzleApp wires it: ctx.i18n plus
 	// the service-bound `t` formatter, which an app `t` still overrides.
 	if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && i18n) {
@@ -2184,17 +2185,19 @@ export function injectShell(shell, { targetId, content, title, head, island = ''
 
 // Any `<script … src="/app.js" …></script>` — the SPA bundle tag. Static pages
 // have no router/app.js, so it is struck once (a missing tag warns; see
-// writeStaticDir). `\/?` tolerates a bare `app.js` too; the trailing group allows
-// attrs after src (type/defer/etc.) up to the tag close.
-const APP_BUNDLE_RE = /<script\b[^>]*\bsrc=["']\/?app\.js["'][^>]*><\/script>\s*/i;
+// writeStaticDir). Local fixed-name spellings and the app's deployment base
+// identify the entry; other scripts, including public vendor files, stay.
 
 /**
  * Strip the app-bundle `<script>` from the shell. `found` is false if none matched.
  * @param {string} shell
+ * @param {string} base
  * @returns {{ shell: string, found: boolean }}
  */
-function stripAppBundle(shell) {
-	const match = APP_BUNDLE_RE.exec(shell);
+function stripAppBundle(shell, base) {
+	const prefix = base ? `(?:\\.?/|${escapeRegExp(base)}/)?` : '(?:\\.?/)?';
+	const entry = new RegExp(`<script\\b[^>]*\\bsrc=(["'])${prefix}app\\.js(?:[?#][^"']*)?\\1[^>]*></script>\\s*`, 'i');
+	const match = entry.exec(shell);
 	if (!match) return { shell, found: false };
 	return {
 		shell: shell.slice(0, match.index) + shell.slice(match.index + match[0].length),

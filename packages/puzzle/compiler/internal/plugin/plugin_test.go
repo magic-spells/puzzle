@@ -687,6 +687,37 @@ export default class Home extends PuzzleView {}
 	}
 }
 
+// D187: only an element listener's `passive`/`capture` keeps the native-options
+// branch; other modifiers and a plain listener compile it out.
+func TestScanUsageListenerOptions(t *testing.T) {
+	const script = `<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {}
+</script>
+`
+	for _, tt := range []struct {
+		name     string
+		template string
+		want     bool
+	}{
+		{name: "absent", template: `<puzzle-view><button @click:once:prevent={ go }>x</button></puzzle-view>`},
+		{name: "passive", template: `<puzzle-view><div @wheel:passive={ go }></div></puzzle-view>`, want: true},
+		{name: "capture with outside", template: `<puzzle-view><div @click:outside:capture={ go }></div></puzzle-view>`, want: true},
+		{name: "nested in a loop", template: `<puzzle-view>{#for x in xs}<p @scroll:passive={ go }>{ x }</p>{/for}</puzzle-view>`, want: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := writeApp(t, map[string]string{"app/views/Home.pzl": tt.template + "\n" + script})
+			usage, err := ScanUsage(root)
+			if err != nil {
+				t.Fatalf("ScanUsage: %v", err)
+			}
+			if usage.HasListenerOptions != tt.want {
+				t.Errorf("HasListenerOptions = %v, want %v", usage.HasListenerOptions, tt.want)
+			}
+		})
+	}
+}
+
 // D163 lazy() route views are declared in app SCRIPTS, not templates, so the
 // walk reads .js/.ts-family files too. The bias is the scan's usual one: a false
 // positive leaves the resolver in a bundle that does not need it, a false
@@ -882,14 +913,15 @@ func TestPluginFeaturesCarryEveryUsageBit(t *testing.T) {
 		t.Errorf("fresh plugin Features() = %+v, want all false", got)
 	}
 	pl.SetUsage(Usage{
-		Formatters:  map[string]bool{"capitalize": true},
-		HasFlip:     true,
-		HasPortal:   true,
-		HasRawAt:    true,
-		HasLazy:     true,
-		HasSnippets: true,
+		Formatters:         map[string]bool{"capitalize": true},
+		HasFlip:            true,
+		HasPortal:          true,
+		HasRawAt:           true,
+		HasLazy:            true,
+		HasSnippets:        true,
+		HasListenerOptions: true,
 	})
-	want := Features{Flip: true, Portal: true, RawAt: true, Lazy: true, Snippets: true}
+	want := Features{Flip: true, Portal: true, RawAt: true, Lazy: true, Snippets: true, ListenerOpts: true}
 	if got := pl.Features(); got != want {
 		t.Errorf("Features() = %+v, want %+v", got, want)
 	}
@@ -1475,5 +1507,34 @@ export default class Home extends PuzzleView {}
 	}
 	if !found {
 		t.Errorf("expected a did-you-mean error; errors: %v", res.Errors)
+	}
+}
+
+func TestPluginScriptErrorPositions(t *testing.T) {
+	for _, tc := range []struct {
+		name, open, script string
+	}{
+		{"javascript multiline", "<script>\n", "import { PuzzleView } from '@magic-spells/puzzle';\nexport default class Home extends PuzzleView {\n  data() { const broken = ; }\n}\n"},
+		{"javascript inline", "<script>", "import { PuzzleView } from '@magic-spells/puzzle'; export default class Home extends PuzzleView { data() { const broken = ; } }"},
+		{"typescript multiline", "<script lang=\"ts\">\n", "import { PuzzleView } from '@magic-spells/puzzle';\nexport default class Home extends PuzzleView {\n  data() { const broken: string = ; }\n}\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "<puzzle-view>\n  <h1>Home</h1>\n</puzzle-view>\n\n" + tc.open + tc.script + "</script>"
+			root := writeApp(t, map[string]string{
+				"app/app.js":         "import Home from './views/Home.pzl'; export default Home;",
+				"app/views/Home.pzl": src,
+			})
+			res, _ := buildApp(t, root)
+			if len(res.Errors) != 1 {
+				t.Fatalf("errors = %v, want one syntax error", res.Errors)
+			}
+			loc := res.Errors[0].Location
+			off := strings.Index(src, "= ;") + 2
+			line := 1 + strings.Count(src[:off], "\n")
+			col := off - strings.LastIndex(src[:off], "\n") - 1
+			if loc == nil || loc.Line != line || loc.Column != col || !strings.HasSuffix(filepath.ToSlash(loc.File), "app/views/Home.pzl") {
+				t.Fatalf("location = %+v, want Home.pzl:%d:%d", loc, line, col)
+			}
+		})
 	}
 }

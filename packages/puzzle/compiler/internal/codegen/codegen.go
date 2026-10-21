@@ -373,6 +373,9 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	if c.usesLoopRange {
 		imports = append(imports, "loopRange as __r")
 	}
+	if c.usesURL {
+		imports = append(imports, "urlValue as __u")
+	}
 	if c.usesDynamicComponent {
 		imports = append(imports, "dynamicComponent as __dc")
 	}
@@ -542,6 +545,7 @@ type compiler struct {
 	usesLoopItems            bool
 	usesLoopRange            bool
 	usesDynamicComponent     bool
+	usesURL                  bool
 	moduleBindings           map[string]int
 	mutableModuleBindings    map[string]bool
 	componentSelectorGetters []componentSelectorGetter
@@ -909,7 +913,7 @@ func (c *compiler) emitSlot(n *parser.Slot, ind int, scope scopeMap) (string, er
 	if len(n.Args) > 0 {
 		kvs := make([]string, 0, len(n.Args))
 		for _, arg := range n.Args {
-			kv, err := c.attrKV(arg, scope, false, true)
+			kv, err := c.attrKV("", arg, scope, false, true)
 			if err != nil {
 				return "", err
 			}
@@ -1348,7 +1352,7 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 		if f.Counter != "" {
 			bodyScope, counter := c.bareBinding(scope, f.Counter)
 			c.mapDepth++
-			body, err := c.forBody(f, bodyScope, identNode(f.Counter), ind+2, nil)
+			body, err := c.forBody(f, bodyScope, counter, ind+2, nil)
 			c.mapDepth--
 			if err != nil {
 				return "", err
@@ -1359,7 +1363,7 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 		// Counterless range: the generated value binds as the compiler-private
 		// `__i` and keys the row.
 		c.mapDepth++
-		body, err := c.forBody(f, scopeAdd(scope, "__i"), identNode("__i"), ind+2, nil)
+		body, err := c.forBody(f, scope, "__i", ind+2, nil)
 		c.mapDepth--
 		if err != nil {
 			return "", err
@@ -1391,14 +1395,10 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 		bodyScope, counterParam = c.bareBinding(bodyScope, f.Counter)
 		params += ", " + counterParam
 	}
-	// The synthetic auto-key is `ViewNode.keyOf(<item>)`; ViewNode is a module
-	// identifier (always imported), so mark it in-scope to keep the expression
-	// resolver from rewriting it to `__d.ViewNode` (D58).
-	bodyScope = scopeAdd(bodyScope, "ViewNode")
 	// This body is NOT lowered: nothing inside it may take a site id or a cache
 	// slot, because the one it took would be shared by every iteration.
 	c.mapDepth++
-	body, err := c.forBody(f, bodyScope, keyOfNode(f.Item), ind+2, nil)
+	body, err := c.forBody(f, bodyScope, "ViewNode.keyOf("+itemParam+")", ind+2, nil)
 	c.mapDepth--
 	if err != nil {
 		return "", err
@@ -1418,7 +1418,7 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 // block's resolved `key: s.k`, because an explicit key has already moved into
 // the site meta's key function, so the author's attribute is dropped from the
 // root instead of suppressing the prepend (D170 emission contract).
-func (c *compiler) forBody(f *parser.For, scope scopeMap, keyExpr expr.Node, ind int, site *loopSite) (string, error) {
+func (c *compiler) forBody(f *parser.For, scope scopeMap, keyJS string, ind int, site *loopSite) (string, error) {
 	only, explicitKey, err := c.forBodyRoot(f, scope)
 	if err != nil {
 		return "", err
@@ -1426,7 +1426,11 @@ func (c *compiler) forBody(f *parser.For, scope scopeMap, keyExpr expr.Node, ind
 	if site != nil {
 		explicitKey = false
 	}
-	key := &parser.DynamicAttr{Name: "key", Expr: "key", ExprAST: keyExpr}
+	// The synthetic key has a compiler-only binding that no authored identifier
+	// can spell. Generated names must not enter the template's lexical scope.
+	const keyIdent = "\x00key"
+	key := &parser.DynamicAttr{Name: "key", Expr: "key", ExprAST: identNode(keyIdent)}
+	scope = scopeAddAs(scope, keyIdent, keyJS)
 	switch n := only.(type) {
 	case *parser.Element:
 		attrs := n.Attrs
@@ -1629,7 +1633,7 @@ func (c *compiler) attrsMultiline(tag string, attrs []parser.Attr, tagStr string
 	if attrCount >= 2 || anyMixed(attrs) {
 		return true, nil
 	}
-	kv, err := c.attrKV(attrs[0], scope, isComponent, false)
+	kv, err := c.attrKV(tag, attrs[0], scope, isComponent, false)
 	if err != nil {
 		return false, err
 	}
@@ -1645,6 +1649,11 @@ func (c *compiler) attrsMultiline(tag string, attrs []parser.Attr, tagStr string
 // (one attribute per line, trailing comma), per the precomputed decision.
 func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline bool, scope scopeMap, isComponent bool) (string, error) {
 	attrs = dropReservedLiteralAttrs(attrs)
+	if !isComponent {
+		if err := c.checkSrcdoc(tag, attrs); err != nil {
+			return "", err
+		}
+	}
 	bind := detectAutoBind(tag, attrs, scope)
 	attrCount := len(attrs)
 	if bind != nil {
@@ -1656,7 +1665,7 @@ func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline
 	if !multiline {
 		kvs := make([]string, 0, attrCount)
 		for _, a := range attrs {
-			kv, err := c.attrKV(a, scope, isComponent, true)
+			kv, err := c.attrKV(tag, a, scope, isComponent, true)
 			if err != nil {
 				return "", err
 			}
@@ -1670,7 +1679,7 @@ func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline
 	var b strings.Builder
 	b.WriteString("{\n")
 	for _, a := range attrs {
-		kv, err := c.attrKV(a, scope, isComponent, true)
+		kv, err := c.attrKV(tag, a, scope, isComponent, true)
 		if err != nil {
 			return "", err
 		}
@@ -1693,7 +1702,7 @@ func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline
 // trial: only the real pass advances the D62 handler-cache counter, so the trial
 // reads the SAME site index the real emission will use (matching bytes for the
 // width decision) without consuming it.
-func (c *compiler) attrKV(a parser.Attr, scope scopeMap, isComponent bool, emit bool) (string, error) {
+func (c *compiler) attrKV(tag string, a parser.Attr, scope scopeMap, isComponent bool, emit bool) (string, error) {
 	switch at := a.(type) {
 	case *parser.StaticAttr:
 		// LiteralName means the name came from authored-literal markup rather than
@@ -1725,14 +1734,14 @@ func (c *compiler) attrKV(a parser.Attr, scope scopeMap, isComponent bool, emit 
 		if startsWithObjectLiteral(at.Expr) {
 			return "", c.cgErr(at.Pos, objectLiteralMsg)
 		}
-		return jsKey(at.Name) + ": " + c.value(at.ExprAST, scope), nil
+		return jsKey(at.Name) + ": " + c.urlAttr(tag, at.Name, c.value(at.ExprAST, scope), nil, isComponent), nil
 	case *parser.SpreadAttr:
 		if startsWithObjectLiteral(at.Expr) {
 			return "", c.cgErr(at.Pos, objectLiteralMsg)
 		}
 		return "...(" + c.value(at.ExprAST, scope) + ")", nil
 	case *parser.MixedAttr:
-		return jsKey(at.Name) + ": " + c.emitMixed(at.Parts, scope), nil
+		return jsKey(at.Name) + ": " + c.urlAttr(tag, at.Name, c.emitMixed(at.Parts, scope), at.Parts, isComponent), nil
 	case *parser.EventAttr:
 		facts := c.factSink()
 		ev, err := c.compileEvent(at, scope, facts)
@@ -2279,8 +2288,12 @@ func anyMixed(attrs []parser.Attr) bool {
 }
 
 // jsKey emits an object key: bare when a valid identifier, single-quoted
-// otherwise (e.g. '@submit', 'fill-rule').
+// otherwise (e.g. '@submit', 'fill-rule'). The prototype key is computed so
+// the object receives an own property instead of changing its prototype.
 func jsKey(name string) string {
+	if name == "__proto__" {
+		return "['__proto__']"
+	}
 	if isJSIdentifier(name) {
 		return name
 	}
@@ -2346,21 +2359,10 @@ func scopeAddAs(scope scopeMap, name, js string) scopeMap {
 	return out
 }
 
-// identNode is a synthetic Identifier for a name the compiler itself reads —
-// a loop's generated key (`__i`, a range counter, the row block's key
-// sentinel). It has no source position; the render target never maps one.
+// identNode is a synthetic Identifier for a compiler-only binding. It has no
+// source position; the render target never maps one.
 func identNode(name string) *expr.Identifier {
 	return &expr.Identifier{Name: name}
-}
-
-// keyOfNode is the synthetic `ViewNode.keyOf(<item>)` key of a `.map` loop
-// row (D58). ViewNode is in the body scope, and a chain off it is never
-// guarded.
-func keyOfNode(item string) expr.Node {
-	return &expr.Call{
-		Callee: &expr.Member{Object: identNode("ViewNode"), Property: "keyOf"},
-		Args:   []expr.Node{identNode(item)},
-	}
 }
 
 var spaces = strings.Repeat(" ", 256)

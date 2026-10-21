@@ -31,6 +31,8 @@ only a fallback, so a `{#raw}` missing `{/raw}` still splits at the real close t
 `{` (each `scanBraceGroup` fails at EOF, then the loop advances one byte) — ~210 ms for
 4,000 `{ `, same in the eslint/prettier ports. Such a file is already a compile error.
 
+Opening-tag scans handle brace expressions before attribute quote delimiters, including expressions whose strings reuse the enclosing quote. Template close scans skip whole opening tags, keeping section-looking text inside their attribute values inert; the lint/format splitter ports use the same boundaries.
+
 ## Lexer and nodes
 
 The lexer emits elements/components, text, interpolation, if/unless/else-if, case/when,
@@ -41,6 +43,10 @@ brace-disabled HTML lexer builds ordinary nodes with raw-flagged text and static
 literal-name attrs (never events/directives; `{#svg}` roots get the same bit). Raw
 blocks don't nest and are rejected in attribute values. The synthetic root records that
 a raw block was parsed, for D89's `@` shim.
+
+`parseEventModifiers` keeps modifiers in written order. `passive` and `capture` are
+generic modifiers ([[DECISION-D187-PASSIVE-CAPTURE]]); `passive` with `prevent` is a
+positioned error in either order.
 
 **Braces inside nested `<style>`/`<script>` elements are template grammar** —
 `.a > .b { color: red }` is an interpolation and fails as an expression error. Authors
@@ -89,8 +95,9 @@ gotcha: in a `<script>`, a regex right after `...` or `for (x of` reads as divis
 - Attributes are static, dynamic, mixed, event, valueless or a standalone `SpreadAttr` (`{...expr}`). A spread stores one `ExprAST` with its source position; the expression grammar itself still rejects spread. Non-event names with `:`
   are reserved unless the prefix is `xml`/`xlink`/`xmlns`; `checkAttrNamespace` runs at
   the NAME in both attribute loops, before the `=` branch, so valued and valueless forms
-  reject alike. Event modifiers: `prevent`, `stop`, `once`, `outside` on any event; key
-  filters keyboard-only. Attribute names may carry non-ASCII letters.
+  reject alike. Event modifiers: `prevent`, `stop`, `once`, `outside`, `passive`,
+  `capture` on any event (`passive` with `prevent` is an error); key filters
+  keyboard-only. Attribute names may carry non-ASCII letters.
 - Also enforced here: static islands, literal inline SVG roots/paths (`ScanSVGFile`
   skips a BOM, positions in file coordinates), list identifiers/keys, unique static refs.
 - **Void elements** (`voidElements`: `area base br col embed hr img input link meta

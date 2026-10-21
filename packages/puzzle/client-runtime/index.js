@@ -28,5 +28,6 @@ export { lazy } from './router/lazy.js';
 // Not part of the SPEC §1 user-facing surface.
 export { ViewNode, SLOT_TAG, SNIPPET_TAG, PORTAL_TAG } from './views/ViewNode.js';
 export { displayValue } from './display.js';
+export { urlValue } from './url.js';
 export { listRows, loopItems, loopRange } from './views/listBlock.js';
 export { dynamicComponent } from './views/componentSlot.js';

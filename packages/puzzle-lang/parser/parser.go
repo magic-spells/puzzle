@@ -831,6 +831,8 @@ var eventGenericMods = map[string]bool{
 	"stop":    true,
 	"once":    true,
 	"outside": true,
+	"passive": true,
+	"capture": true,
 }
 
 // eventKeyboardEvents are the events on which key-filter modifiers are allowed.
@@ -899,6 +901,9 @@ func parseEventModifiers(raw string, npos Position, file string) (string, []stri
 		if !eventGenericMods[m] {
 			return "", nil, errAt(file, npos, "unknown event modifier :%s in @%s", m, raw)
 		}
+	}
+	if seen["passive"] && seen["prevent"] {
+		return "", nil, errAt(file, npos, "passive and prevent cannot be combined in @%s", raw)
 	}
 	return event, mods, nil
 }

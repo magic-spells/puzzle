@@ -46,7 +46,9 @@ datetimes) are unaffected.
   day has no instant to re-express; shifting any midnight anchor makes output
   viewer-dependent.
 - Absent values (`null`, `undefined`, `''`, booleans — `noDate`) render nothing
-  in every preset; numeric 0 is a real epoch timestamp.
+  in every preset, as does any other input that is not a valid date and not a
+  string (`NaN`, an Invalid Date); numeric 0 is a real epoch timestamp.
+  `in_timezone` returns `''` for an absent or invalid date.
 
 ## Consequences
 

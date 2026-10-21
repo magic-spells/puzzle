@@ -20,6 +20,23 @@ class Todo extends PuzzleModel {
 const makeStore = (options) => new Store({ todo: Todo }, options);
 
 describe('Store — records & models (SPEC §8)', () => {
+	it.each([false, true])('modelFor exposes constructors and primary keys (adapter: %s)', (withAdapter) => {
+		class Post extends PuzzleModel {
+			static schema = { slug: Puzzle.string().primary() };
+		}
+		const store = new Store({ post: Post }, withAdapter ? { adapter } : {});
+		const handle = withAdapter ? store._handleFor({}) : store;
+		const modelFor = withAdapter ? handle.modelFor : store.modelFor.bind(store);
+		expect(modelFor('post')).toBe(Post);
+		expect(modelFor('post').primaryKey()).toBe('slug');
+		for (const type of ['missing', 'constructor', 'toString', '__proto__']) {
+			expect(modelFor(type)).toBe(PuzzleModel);
+			expect(modelFor(type).primaryKey()).toBe('id');
+		}
+		expect(store.recordsByType.size).toBe(0);
+		expect(store.keysBySubscriber.size).toBe(0);
+	});
+
 	it('createRecord instantiates the registered model class with defaults and a generated primary key', () => {
 		const store = makeStore();
 		const todo = store.createRecord('todo', { text: 'ship v1' });

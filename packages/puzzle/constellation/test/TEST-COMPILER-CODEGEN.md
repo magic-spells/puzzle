@@ -66,3 +66,5 @@ and the runtime calling convention.
 
 Regenerate goldens only deliberately, and review the diff:
 `go test ./compiler/internal/codegen -update`.
+
+`binding_scope_test.go` pins loop-local selector precedence, generated loop-key names remaining data-scoped, comments around declaration names, and evaluated `__proto__` attribute objects. The check emitter's `TestLiveTSCComponentSelectorNamedRecord` checks declared `Record` constructors in both JavaScript and TypeScript scripts.

@@ -96,6 +96,7 @@ describe('router.push() — committed navigations (D182)', () => {
 		});
 		expect(result.route.route.name).toBe('user');
 		expect('redirectedFrom' in result).toBe(false);
+		expect('catchAll' in result).toBe(false);
 	});
 
 	it('a params-only navigation (the whole chain reused) also resolves ok', async () => {
@@ -120,8 +121,33 @@ describe('router.push() — committed navigations (D182)', () => {
 		const result = await router.push('/nowhere');
 
 		expect(result.ok).toBe(true);
+		expect(result.catchAll).toBe(true);
 		expect(result.route.route.name).toBe('not-found');
 		expect(result.route.path).toBe('/nowhere');
+	});
+
+	it.each(['push', 'replace'])('%s preserves the catch-all flag for reused routes and no-ops', async (verb) => {
+		const { router } = await boot([
+			{ path: '/', view: HomeView },
+			{ path: '*', view: view('nf') },
+		]);
+		for (const path of ['/missing', '/other-missing', '/other-missing']) {
+			const result = await router[verb](path);
+			expect(result).toEqual({ ok: true, route: router.current, catchAll: true });
+			expect(result.route.path).toBe(path);
+		}
+		expect(await router[verb]('/')).toEqual({ ok: true, route: router.current });
+	});
+
+	it('a redirect reports whether its final landing is the catch-all', async () => {
+		const { router } = await boot([
+			{ path: '/', view: HomeView },
+			{ path: '/redirect', view: AboutView, guard: () => '/missing' },
+			{ path: '*', view: view('nf') },
+		]);
+		expect(await router.push('/redirect')).toEqual({
+			ok: true, route: router.current, catchAll: true, redirectedFrom: '/redirect',
+		});
 	});
 
 	it('a same-path push is a no-op that resolves ok with the current route', async () => {

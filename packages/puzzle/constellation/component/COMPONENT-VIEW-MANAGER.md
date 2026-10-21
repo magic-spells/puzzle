@@ -155,12 +155,19 @@ Semantics: [[DOC-SPEC-TEMPLATE]] §24/§64.
   escape, never a literal NUL, or git treats the file as binary).
 - `outside` (D86) listens on `document` in the capture phase with one shared options
   object; `releaseSubtree` sweeps outside listeners on every removal shape.
+- `passive` / `capture` ([[DECISION-D187-PASSIVE-CAPTURE]]) become native listener
+  options in `setAttr`; `detachListener` removes a capture listener with `true`, so
+  replacement, null toggles and once spending match. The branch sits behind
+  `__PUZZLE_HAS_LISTENER_OPTIONS__` (usage scan); compiled out, listeners install exactly
+  as before.
 - Islands: children seeded once, never patched; own attrs/listeners still patch. Inline
   SVG uses the island path with string children.
 - `@@name` (an `@name` literal inside a D150 raw block) bypasses listeners and is
   attached as a parser-created `Attr` node, behind `__PUZZLE_HAS_RAW_AT__`.
 - `setAttr` (mirrored by `ssg/serialize.js`) omits `false`/`null`/`undefined` and plain
-  objects (dev warning), and joins arrays with spaces via `displayValue` — D173 V9.
+  objects (dev warning), and joins arrays with spaces via `displayValue` — D173 V9. URL
+  safety is not checked here: the compiler wraps the values that need it in `urlValue`
+  ([[DECISION-D186-DYNAMIC-URL-SAFETY]]), which turns a blocked URL into `null`.
 - **Live HTML** (`HTML_TAG = '#html'`, `views/html.js`, D174): the one vnode that owns
   several DOM nodes — `el` is an empty comment FIRST, `vnode.nodes` follow. Mount parses
   sanitized markup through an inert `<template>`; patch keeps `nodes` when value/br are

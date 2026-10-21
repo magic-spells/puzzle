@@ -153,8 +153,9 @@ plus exactly that page's classes via the codegen `__pzlModule` stamp; shared cod
 into `dist/_puzzle/chunks/`. `injectStaticShell` stamps `data-puzzle-static`, writes the
 store snapshot (`store._serializeAll()`) as a `data-puzzle-static-data` island, adds a
 `data-puzzle-static-read` island (`{ v: 1, complete, absent }`) only when the page
-settled reads through the adapter, and swaps `/app.js` for the page module (base-prefixed
-by `routerBase`). `beforeMount` and tracked-query faults run at build time: the API must
+settled reads through the adapter, and swaps the fixed app script for the page module (base-prefixed
+by `routerBase`). The app script may use a bare, `./`, `/` or normalized `routerBase`
+prefix with a query or fragment; public vendor scripts remain in the shell. `beforeMount` and tracked-query faults run at build time: the API must
 be reachable from Node, and a non-404 fault fails the build naming the route.
 
 - **Generated pages** ([[DECISION-D179-STATIC-PATHS]]): every page of a `staticPaths`

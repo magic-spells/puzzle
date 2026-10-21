@@ -90,7 +90,7 @@ describe('Store — hidden-tab flush fallback (D63)', () => {
 
 		vi.advanceTimersByTime(1); // cross the ~220ms boundary
 		expect(component.onStoreChange).toHaveBeenCalledTimes(1); // fallback delivered
-		expect(store._flushTimer).toBeNull(); // and cleared itself on the way out
+		expect(vi.getTimerCount()).toBe(0); // and cleared itself on the way out
 	});
 
 	it('flushes via rAF on the happy path and clears the fallback (delivered exactly once)', () => {
@@ -113,13 +113,14 @@ describe('Store — hidden-tab flush fallback (D63)', () => {
 		frame = null;
 		setHidden(false);
 
+		const timers = vi.getTimerCount();
 		store.findOne('todo', 't1').update({ text: 'y' });
 		expect(component.onStoreChange).not.toHaveBeenCalled(); // frame not fired yet
-		expect(store._flushTimer).not.toBeNull(); // fallback armed alongside the rAF
+		expect(vi.getTimerCount()).toBe(timers + 1); // fallback armed alongside the rAF
 
 		frame(); // the frame fires → rAF flush
 		expect(component.onStoreChange).toHaveBeenCalledTimes(1);
-		expect(store._flushTimer).toBeNull(); // rAF flush cleared the fallback
+		expect(vi.getTimerCount()).toBe(timers); // the frame cleared the fallback
 
 		// Advancing every remaining timer must NOT re-deliver: the fallback was
 		// cleared, and flush() is idempotent even if a stray timer fired.

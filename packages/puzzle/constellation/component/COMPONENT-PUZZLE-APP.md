@@ -32,7 +32,8 @@ The constructor is a side-effect-free config store; only `errorView` is validate
 
 `mount()` validates hooks, then builds Store → FormatterRegistry (with a router-bound
 `link` registered if absent, its closure reading `this.router` lazily, D79) → Router;
-`ctx = { store, router, formatters }` (+ `i18n` when configured). `focusBehavior`,
+`ctx = { store, router, formatters, idle }` (+ `i18n` when configured), where `idle` is
+`this.idle.bind(this)` ([[DECISION-D189-AGENT-HOOKS]]). `focusBehavior`,
 `routerMode`, `routerBase`, `transitionMode` are forwarded only when set.
 `onError`/`errorView` are stored in a WeakMap keyed by the app ctx (so ctx stays exactly
 those services; lookups resolve through the per-view ctx's prototype chain), deleted at
@@ -86,14 +87,17 @@ teardown ([[DECISION-D145-ERROR-BOUNDARIES]]).
 - `setMorphHandler(handler)` stashes the integration before or after mount and forwards
   it to [[COMPONENT-ROUTER]]; a re-mount re-arms a disposed handler.
 - `idle({ timeout })` ([[DECISION-D185-APP-IDLE]]) checks once per frame (after the
-  frame's callbacks; one timer in a hidden tab) and resolves `true` after two clear checks
+  frame's callbacks, stepped by the shared D63 `frame()` in `scheduler.js`; one timer in
+  a hidden tab) and resolves `true` after two clear checks
   in a row: no `#mountPromise`, no `_flushScheduled`, no `_asyncTrackingChain`, no
   adapter read in flight (`store._reading?.()`), no navigation (`navigating(router)`, the
   router's static-block accessor), and no locale switch (`i18n.__busy`, behind
-  `__PUZZLE_HAS_I18N__`). It never rejects.
+  `__PUZZLE_HAS_I18N__`). It never rejects. The app has no `tick()`: that render wait is
+  a view method ([[DECISION-D188-TICK]]).
 - `mount()` is a no-op outside a DOM (the app entry stays importable by
   [[COMPONENT-SSG]]) and under `__PUZZLE_CAPTURE__` (a static page entry imports the app
   only to read `app.config`; [[DECISION-D157-ADAPTER-SUBPATH]]).
 - `app.store`/`router`/`formatters`/`ctx` expose the live services. The root package
   exports `PuzzleApp`, `PuzzleView`, `PuzzleModel`, `Puzzle`, `PuzzleValidationError` and
-  compiler-support values; `PuzzleAdapterError` lives in `/adapter`.
+  compiler-support values (including `urlValue`, [[DECISION-D186-DYNAMIC-URL-SAFETY]]);
+  `PuzzleAdapterError` lives in `/adapter`.

@@ -202,10 +202,11 @@ export interface RouteSnapshot {
 /**
  * What `router.push()` / `router.replace()` resolve (D182); the promise never
  * rejects. `ok: true` carries the committed snapshot (or the current route for
- * a same-path no-op); `redirectedFrom` names the originally requested path when
- * a guard redirected. `ok: false` says the navigation did not complete: a guard
- * returned `false` (`'blocked'`), a later navigation won (`'superseded'`), no
- * route and no catch-all matched (`'not-found'`), or something failed and was
+ * a same-path no-op); `catchAll: true` marks a committed `path: '*'` route and
+ * is omitted for ordinary routes. `redirectedFrom` names the originally
+ * requested path when a guard redirected. `ok: false` says the navigation did
+ * not complete: a guard returned `false` (`'blocked'`), a later navigation won
+ * (`'superseded'`), no route and no catch-all matched (`'not-found'`), or something failed and was
  * reported to `onError` (`'error'`, with the error) — a throwing guard, the
  * guard-redirect cycle cap, a lazy load, view construction, `data()`, or a
  * throw inside the commit window. Every reason but that last one leaves the
@@ -214,7 +215,7 @@ export interface RouteSnapshot {
  * and the next navigation rebuilds every level.
  */
 export type NavigationResult =
-	| { ok: true; route: RouteSnapshot; redirectedFrom?: string }
+	| { ok: true; route: RouteSnapshot; catchAll?: true; redirectedFrom?: string }
 	| { ok: false; reason: 'blocked' | 'superseded' | 'not-found' | 'error'; error?: unknown };
 
 /**
@@ -398,6 +399,12 @@ export interface StoreOptions {
  * queries made inside `data()` auto-subscribe the component.
  */
 export interface Store {
+	/**
+	 * The registered model constructor, or PuzzleModel for an unregistered type.
+	 * Only own registry keys match. Never subscribes or fetches; also available
+	 * through the adapter's per-view store handle.
+	 */
+	modelFor(type: string): typeof PuzzleModel;
 	/** Create a record; applies schema defaults, validates, inserts. */
 	createRecord(type: string, data?: Record<string, any>): any;
 	/**
@@ -609,6 +616,8 @@ export interface PuzzleContext {
 	store: Store;
 	router: Router;
 	formatters: FormatterRegistry;
+	/** The app's bound idle method: true when quiet, false on timeout (D185/D189). */
+	idle: PuzzleApp['idle'];
 	/**
 	 * The translation service (D175) — present only when `puzzle.config.js`
 	 * configures `i18n`, so it is optional here.
@@ -742,6 +751,12 @@ export declare class PuzzleView {
 	/** Merge local UI state and schedule a re-render (does NOT re-run data()). */
 	setData(key: string, value: any): void;
 	setData(partial: Record<string, any>): void;
+	/**
+	 * Wait for every pending store flush and scheduled view render to land,
+	 * including the ones they schedule (D188). Forces nothing, and does not await
+	 * async data(), fetches or navigation — that is app.idle().
+	 */
+	tick(): Promise<void>;
 
 	/**
 	 * Reference-stable derived value (D64). Per-instance cache keyed by
@@ -855,6 +870,9 @@ export declare class PuzzleModel {
 
 	/** API adapter — per-verb fetch functions, optionally filled by `{ endpoint }` REST shorthand. */
 	static adapter?: ModelAdapter;
+
+	/** The first schema field marked primary, or 'id' when none is declared. */
+	static primaryKey(): string;
 
 	/**
 	 * Validate a plain data object against the schema (non-throwing).
@@ -1093,6 +1111,9 @@ export declare class PuzzleApp {
  * `sep`, a list prints its items joined by it, dropping `false` and empty items.
  */
 export declare function displayValue(value: unknown, expression?: string | 0, sep?: string): string;
+
+/** @internal Compiler-support guard for dynamic URL attribute values. */
+export declare function urlValue(value: unknown, mode?: number): unknown;
 
 /** One node of the virtual tree — compiled render functions build these. */
 export declare class ViewNode {

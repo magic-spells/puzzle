@@ -15,7 +15,7 @@ connections:
 
 # shell.go
 
-Shared production HTML helpers for the shell and generated static pages. The shell's emitted entry is matched by its source EntryPoint; its CSS bundle and the composed stylesheet supply the other rename targets. Fixed names remain no-op renames. Only script/link start-tag src/href attributes referencing the three supported local spellings are renamed.
+Shared production HTML helpers for the shell and generated static pages. The shell's emitted entry is matched by its source EntryPoint; its CSS bundle and the composed stylesheet supply the other rename targets. Fixed names remain no-op renames. Local script/link src/href references preserve deployment prefixes, queries and fragments; remote URLs stay unchanged. Copied public files take precedence over compiler names, including when their URL carries a deployment prefix. A reference to a fixed compiler asset with no emitted output fails the build before the staging swap.
 
 Metafile output keys and import paths resolve against the emitting pass's working directory and the symlink-resolved staging tree. The SPA pass uses cwd; the page pass anchors at staging. Import arrays preserve breadth-first preload order; dynamic/external edges never enter the closure.
 

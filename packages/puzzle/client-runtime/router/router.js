@@ -389,6 +389,15 @@ const SCROLL_MAX_ENTRIES = 50;
 const fail = (reason, error) => ({ ok: false, reason, error });
 const SUPERSEDED = Object.freeze(fail('superseded'));
 
+/**
+ * @param {RouteSnapshot} route
+ * @returns {NavigationResult}
+ */
+const succeed = (route) =>
+	route.route.path === '*'
+		? { ok: true, route, catchAll: true }
+		: { ok: true, route };
+
 // Whether a router has a navigation in flight, for PuzzleApp.idle() (D185). Bound
 // in Router's static block, so app.js reads #pendingNavPromise without a public
 // member. Declared ahead of the class: the block runs when the class is defined.
@@ -1002,7 +1011,7 @@ export class Router {
 		// "already there", so it navigates.
 		const key = sameNavKey(path);
 		if (this.#isCommittedNoop(key)) {
-			return Promise.resolve({ ok: true, route: this.current });
+			return Promise.resolve(succeed(this.current));
 		}
 		// In-flight double-click guard: the COMMITTED #state check above misses a
 		// second click on the active link WHILE its navigation is still loading — the
@@ -1038,7 +1047,7 @@ export class Router {
 			// promise; one tick later the slot holds the in-flight navigation.
 			return (
 				this.#pendingNavPromise ??
-				Promise.resolve().then(() => this.#pendingNavPromise ?? { ok: true, route: this.current })
+				Promise.resolve().then(() => this.#pendingNavPromise ?? succeed(this.current))
 			);
 		}
 		// The committed path, but not a no-op (a navigation in flight, or an
@@ -1098,7 +1107,7 @@ export class Router {
 		// Same-path no-op, exactly push()'s guard: replacing the committed entry
 		// with itself would re-run data() and rewrite an identical URL for nothing.
 		if (this.#isCommittedNoop(sameNavKey(path))) {
-			return Promise.resolve({ ok: true, route: this.current });
+			return Promise.resolve(succeed(this.current));
 		}
 		return this.#trackNav(this.#token, this.#navigate(path, { push: false, replace: true }));
 	}
@@ -2063,7 +2072,7 @@ export class Router {
 					focus: replace ? null : focus,
 				});
 				if (layout) this.#refreshLogged(layout, params, to);
-				return { ok: true, route: to };
+				return succeed(to);
 			}
 
 			// Assemble the FULL chain LEAF-UP into nested keyed component vnodes — all
@@ -2531,7 +2540,7 @@ export class Router {
 			// unchanged — morph-enter above still runs before this.
 			this.#runPendingPush();
 		}
-		return { ok: true, route: next.to };
+		return succeed(next.to);
 	}
 
 	/**

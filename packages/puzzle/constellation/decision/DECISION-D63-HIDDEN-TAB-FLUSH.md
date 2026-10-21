@@ -27,10 +27,15 @@ adds two guards:
 
 1. If `document.hidden` (or no rAF, as in node/tests), schedule with
    `setTimeout(0)`.
-2. When scheduling via rAF, also arm a ~220ms fallback timer that `flush()`
-   clears — covers a tab hiding between scheduling and the next frame.
+2. When scheduling via rAF, also arm a ~220ms fallback timer, cleared when the
+   frame wins — covers a tab hiding between scheduling and the next frame.
 
-`flush()` is idempotent, so rAF and the fallback never double-deliver.
+The rule lives once, as `frame(run)` in `client-runtime/scheduler.js`: whichever
+of the frame or the timer fires first runs, and the other does nothing. Store
+flushes, `PuzzleView` `setData()` renders and `app.idle()` checks all use it;
+store flushes and view renders go through `schedule(job)`, which also counts
+them for `tick()` ([[DECISION-D188-TICK]]). A frame that fires after an explicit
+`flush()` finds nothing pending, since `flush()` is idempotent.
 
 ## Alternatives
 

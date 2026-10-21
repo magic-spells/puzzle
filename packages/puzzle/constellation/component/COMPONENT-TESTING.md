@@ -43,8 +43,10 @@ runner. Author contract: [[DOC-SPEC-BUILD]] §53, [[DOC-TESTING]].
 ## Entry points
 
 - **`mountView(ViewClass, options)`** mounts one view into a detached container with a
-  full `{ store, router, formatters }` ctx and no app boot; absent services are built, and
+  full `{ store, router, formatters, idle }` ctx and no app boot; absent services are built, and
   the default router is inert (`url()` is identity, navigation resolves doing nothing).
+  With no app to observe, `ctx.idle()` runs `settled()` and resolves `true` (a caller
+  `ctx.idle` wins; [[DECISION-D189-AGENT-HOOKS]]).
   `route` (or `preloaded: true`) takes the preload-then-mount path so the first `data()`
   sees a route. `i18n: { locale, strings }` builds a service into the ctx and installs `t`
   (a caller `ctx.i18n` wins), awaiting `__ready()` before construction.

@@ -56,6 +56,9 @@ type Usage struct {
 	// HasConditionalSlot: a <Slot>/<Children> marker can leave and re-enter
 	// the tree (see conditionalSlot), which keeps the routed-outlet parking code.
 	HasConditionalSlot bool
+	// HasListenerOptions: some element listener carries the `passive` or
+	// `capture` modifier (D187), which keeps the native-options branch.
+	HasListenerOptions bool
 	// HasRawHTML: a template calls `raw` or `newline_to_br` (D174) as a text
 	// interpolation's outermost call, which keeps the live-HTML node and the
 	// sanitizer in the bundle.
@@ -110,6 +113,7 @@ type Features struct {
 	RawSanitize     bool
 	ComponentSlot   bool
 	ConditionalSlot bool
+	ListenerOpts    bool
 }
 
 // Features projects the scan result onto the define bits. It is exported for
@@ -126,6 +130,7 @@ func (u Usage) Features() Features {
 		RawSanitize:     u.HasRawSanitize,
 		ComponentSlot:   u.HasComponentSlot,
 		ConditionalSlot: u.HasConditionalSlot,
+		ListenerOpts:    u.HasListenerOptions,
 	}
 }
 
@@ -296,6 +301,9 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 		if hasFlipAttr(node.Attrs) {
 			usage.HasFlip = true
 		}
+		if hasListenerOptions(node.Attrs) {
+			usage.HasListenerOptions = true
+		}
 		collectAttrCalls(node.Attrs, usage, allow)
 		for _, child := range node.Children {
 			collectUsage(child, usage, allow)
@@ -454,6 +462,22 @@ func hasFlipAttr(attrs []parser.Attr) bool {
 		case *parser.MixedAttr:
 			if a.Name == "flip" {
 				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasListenerOptions reports whether an element listener carries `passive` or
+// `capture` (D187). Component callback props reject every modifier, so only
+// element attrs are read.
+func hasListenerOptions(attrs []parser.Attr) bool {
+	for _, attr := range attrs {
+		if ev, ok := attr.(*parser.EventAttr); ok {
+			for _, m := range ev.Modifiers {
+				if m == "passive" || m == "capture" {
+					return true
+				}
 			}
 		}
 	}

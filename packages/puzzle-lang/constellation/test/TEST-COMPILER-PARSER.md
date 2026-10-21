@@ -85,6 +85,10 @@ loosening one fails a test on purpose.
   unbalanced braces, a literal `</puzzle-view>`, the whitespace-tolerant closer);
   a `{#raw}` with no closer still splits at the real close tag and reports
   "unterminated {#raw}" at the opener (`TestSplitSectionsUnterminatedRawBlock`).
+  `TestSplitSectionsQuotedSectionText` pins both quote styles around interpolated root
+  attributes containing section tags. `TestSplitSectionsQuotedTemplateClose` pins literal
+  section closers inside quoted child attributes in both the view and skeleton; both
+  `split.js` ports carry the same regressions.
 - **Division vs regex** (`lexskip_test.go`): `TestLexPlainEndsExpr` pins which
   bytes end an expression; `TestParseDivisionInEveryTemplatePosition` parses
   `café / 2`, `金額 / 2`, `価格new / 2`, `5. / 2`, `of / 2` in every position; a

@@ -51,8 +51,9 @@ export const LOCALE_STORAGE_KEY = '__puzzleLocale';
 /**
  * Pick the active locale (D175 Locale selection): the stored choice when it is
  * still configured, then each of the viewer's languages in order — the exact tag
- * (case-insensitively), its base language (`es-CO` → `es`), then the first
- * configured tag with the same base (`pt` → `pt-BR`) — then the default.
+ * (case-insensitively), its Chinese script (`zh-TW` → `zh-Hant`, `zh-CN` →
+ * `zh-Hans`), its base language (`es-CO` → `es`), then the first configured tag
+ * with the same base (`pt` → `pt-BR`) — then the default.
  *
  * @param {string[]} tags configured locales, in config order
  * @param {string} defaultLocale
@@ -72,7 +73,10 @@ export function selectLocale(tags, defaultLocale, stored, languages = []) {
 	for (const lang of languages) {
 		if (typeof lang !== 'string' || !lang) continue;
 		const base = baseOf(lang);
-		const hit = find(lang) ?? find(base) ?? tags.find((t) => baseOf(t) === base);
+		// A Chinese tag's script, named or implied by the region: TW, HK and MO
+		// read Traditional, the rest Simplified.
+		const script = /^zh-(hant|tw|hk|mo)\b/i.test(lang) ? 'zh-Hant' : base === 'zh' ? 'zh-Hans' : lang;
+		const hit = find(lang) ?? find(script) ?? find(base) ?? tags.find((t) => baseOf(t) === base);
 		if (hit) return hit;
 	}
 	return defaultLocale;
