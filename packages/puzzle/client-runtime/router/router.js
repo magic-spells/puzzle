@@ -389,6 +389,12 @@ const SCROLL_MAX_ENTRIES = 50;
 const fail = (reason, error) => ({ ok: false, reason, error });
 const SUPERSEDED = Object.freeze(fail('superseded'));
 
+// Whether a router has a navigation in flight, for PuzzleApp.idle() (D185). Bound
+// in Router's static block, so app.js reads #pendingNavPromise without a public
+// member. Declared ahead of the class: the block runs when the class is defined.
+/** @type {(router: Router) => boolean} */
+export let navigating;
+
 export class Router {
 	/** @type {RouteEntry[]} */
 	#routes = []; // compiled leaf Entries, in declaration order (depth-first)
@@ -429,6 +435,9 @@ export class Router {
 	// Whether the navigation that owns the token is a pop (D182: a push to the
 	// committed path over a path/hash-mode pop is a real push, not a rewrite).
 	#popInFlight = false;
+	static {
+		navigating = (router) => router.#pendingNavPromise != null;
+	}
 	// Guard redirects re-enter the normal pipeline through push()/replace() — the
 	// redirect inherits the denied navigation's verb — so every destination gets its
 	// own inherited guard chain and the denied URL never commits (and never enters

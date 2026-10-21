@@ -201,6 +201,17 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   contained error; `errorView` mounts in place of a failed view or component
   with `{ error, info, retry }` (retry re-runs the owner's rebuild; never
   automatic). Event-handler errors surface uncaught.
+- **`app.idle({ timeout })` (D185):** resolves `true` once two consecutive
+  frames find no mount or navigation in flight, no pending store flush, no
+  async `data()` running, no `setLocale()` switch loading and (with the
+  adapter) no tracked find's fetch; `false` on timeout (default 10000 ms);
+  never rejects. Timers in a hidden tab, where `setData()` renders also run
+  on timers; `true` at once when not mounted. Observes existing state only,
+  unlike `/testing`'s `settled()`, which drives work to a fixed point. It
+  cannot see user timers, animations, IntersectionObserver triggers, writes
+  or fetches nothing awaits (an event handler's unawaited `save()` or
+  `loadMany()`), or a path- or hash-mode `back()`, `forward()` or `go()`
+  before its `popstate` fires.
 
 ## Data layer
 

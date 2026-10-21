@@ -38,7 +38,7 @@ import {
 	viewerLanguages,
 } from './i18n.js';
 import manifestData from '@magic-spells/puzzle/i18n/manifest';
-import { Router, localePage, normalizeBase } from './router/router.js';
+import { Router, localePage, navigating, normalizeBase } from './router/router.js';
 import { snapshotToStorage, restoreStoreFromStorage, restoreViewsFromStorage } from './devstate.js';
 import { devtoolsAppMounted, devtoolsAppUnmounted } from './devtools.js';
 import { reportError, setErrorConfig } from './errors.js';
@@ -270,6 +270,69 @@ export class PuzzleApp {
 		};
 		p.then(clear, clear);
 		return p;
+	}
+
+	/**
+	 * Wait for the app to go quiet (D185): resolves true once two consecutive
+	 * frames find no mount or navigation in flight, no store notification or flush
+	 * pending, no async data() running, no setLocale() switch loading, and — with
+	 * the adapter — no tracked find's fetch in flight; false when `timeout` (ms,
+	 * default 10000) runs out first. A check runs after its frame's callbacks, so
+	 * a setData() render scheduled before it has landed. Frames follow the store's
+	 * scheduler (D63): timers in a hidden tab. An app neither mounted nor mounting
+	 * resolves true at once. Never rejects. It reads state the runtime already
+	 * keeps, so it cannot see user timers, animations, IntersectionObserver
+	 * triggers, writes or fetches nothing awaits (an event handler's unawaited
+	 * `save()` or `loadMany()`), or a path- or hash-mode `back()`, `forward()` or
+	 * `go()` before its `popstate` fires.
+	 *
+	 * @param {{ timeout?: number }} [options]
+	 * @returns {Promise<boolean>}
+	 */
+	idle({ timeout = 10000 } = {}) {
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (typeof timeout !== 'number' || !(timeout >= 0 && timeout < Infinity)) {
+				console.error(
+					`[puzzle] app.idle() timeout must be a finite number of ms ≥ 0 (got ${String(timeout)}) — using 10000`
+				);
+				timeout = 10000;
+			}
+		}
+		const end = Date.now() + timeout;
+		return new Promise((resolve) => {
+			// -1: the first, synchronous check settles only an app with nothing
+			// mounted; a quiet verdict takes two clear checks after it.
+			let clear = -1;
+			const check = () => {
+				if (!this.#mountPromise && !this._mounted) return resolve(true);
+				// Mounted (and not mounting) means the store and router are wired.
+				const store = /** @type {Store} */ (this.#store);
+				if (
+					this.#mountPromise ||
+					store._flushScheduled ||
+					store._asyncTrackingChain ||
+					store._reading?.() ||
+					navigating(/** @type {Router} */ (this.router)) ||
+					((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n?.__busy)
+				)
+					clear = 0;
+				else if (++clear > 1) return resolve(true);
+				if (Date.now() >= end) return resolve(false);
+				// Check again after the next frame's callbacks (rAF, then a timer), so a
+				// setData() render scheduled before then has landed. The store's
+				// scheduler (D63): one timer in a hidden tab, and a fallback timer if rAF
+				// freezes mid-wait, cleared when the frame wins.
+				if (!document.hidden && typeof requestAnimationFrame === 'function') {
+					// One-shot: only the first of the frame or the fallback proceeds, so a
+					// late rAF after the fallback cannot start a second chain of checks.
+					let done = 0;
+					const go = () => done++ || (clearTimeout(fallback), setTimeout(check, 0));
+					const fallback = setTimeout(go, 220);
+					requestAnimationFrame(go);
+				} else setTimeout(check, 0);
+			};
+			check();
+		});
 	}
 
 	async #mount() {

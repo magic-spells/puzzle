@@ -120,6 +120,20 @@ await settled();
   does not advance user timers or skeleton `min-duration`, resolve promises
   `data()` never awaited, fire IntersectionObserver callbacks, or finish
   fire-and-forget enter animations.
+- `app.idle({ timeout })` (D185) is the production counterpart, a core
+  `PuzzleApp` method rather than a testing helper. `settled()` *drives*: it
+  patches view and router prototypes on first use, forces `store.flush()` and
+  `flushUpdates()`, awaits each tracked promise, and throws when work does not
+  converge. `idle()` only *observes*: it reads the mount, navigation,
+  scheduled-flush, async-`data()`, locale-switch and adapter read state the
+  runtime keeps, waits real frames (timers in a hidden tab) until two in a row
+  are clear, and resolves `false` on timeout instead of throwing. Use
+  `settled()` in unit tests (no real frames needed, a precise failure); use
+  `idle()` from code driving a real app (end-to-end scripts, agent bridges).
+  `idle()` cannot see user timers, animations, IntersectionObserver triggers,
+  writes or fetches nothing awaits (an event handler's unawaited `save()` or
+  `loadMany()`), or a path- or hash-mode `back()`, `forward()` or `go()`
+  before its `popstate` fires.
 - `type(target, text)` sets the value, dispatches `input` and `change`, then
   settles — the way to drive two-way bindings. It throws on a checkbox or
   radio; use `click()`.
