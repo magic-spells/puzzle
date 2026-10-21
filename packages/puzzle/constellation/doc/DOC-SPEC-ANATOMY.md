@@ -59,6 +59,14 @@ app.mount();
 
 The whole config surface: `target`, `routes`, `models`, `formatters`, `apiURL`, plus the optional `adapter` (§58), `beforeRequest` (§49), `storage` (a Storage-like object for persistence, §8), `scrollBehavior` (§14), `focusBehavior` (§51), `routerMode` (an imported mode object, §15), `routerBase` (§23), `transitionMode` (§26), `beforeMount`/`mounted`/`beforeUnmount` (§34), and `onError`/`errorView` (§60). Translations are configured in `puzzle.config.js`, not here (§66). The `formatters` key registers the app's template **functions** (§6); a function named like a standard one (`pluralize`, `currency`, …) replaces it, with a development warning (D174). App-level `settings`, `computed`, global `events` and `methods` are rejected ([[DOC-SPEC]] cut list).
 
+### `app.idle()` — wait for the app to go quiet
+
+```js
+const quiet = await app.idle({ timeout: 10000 }); // true when idle; false on timeout
+```
+
+`idle()` resolves `true` once two consecutive frames find no `mount()` or navigation in flight, no store notification or flush pending, no async `data()` running, and — with the adapter — no tracked find's fetch in flight (D185). Each check runs after its frame's callbacks, so a `setData()` render scheduled before it has landed. It resolves `false` when `timeout` ms (default 10000) run out first, and never rejects; a timeout that is not a finite number ≥ 0 logs a development error and uses 10000. In a hidden tab it steps on timers, as the store's flush does (D63). An app neither mounted nor mounting — never mounted, or after `unmount()` — resolves `true` at once. It reads only state the runtime already keeps, so it cannot see user timers, animations, observers, or fetches nothing awaits (an event handler's unawaited `save()`). The testing module's `settled()` drives work to a fixed point instead ([[DOC-TESTING]]).
+
 ## 3. `.pzl` file anatomy
 
 ```html

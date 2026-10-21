@@ -85,6 +85,11 @@ teardown ([[DECISION-D145-ERROR-BOUNDARIES]]).
   have moved it), unregister must run for the instance that registered.
 - `setMorphHandler(handler)` stashes the integration before or after mount and forwards
   it to [[COMPONENT-ROUTER]]; a re-mount re-arms a disposed handler.
+- `idle({ timeout })` ([[DECISION-D185-APP-IDLE]]) polls once per frame (after the
+  frame's callbacks; timers in a hidden tab) and resolves `true` after two clear checks
+  in a row: no `#mountPromise`, no `_flushScheduled`, no `_asyncTrackingChain`, no
+  adapter read in flight (`store._reading?.()`), and no navigation (`navigating(router)`,
+  the router's static-block accessor). It reads only existing state; never rejects.
 - `mount()` is a no-op outside a DOM (the app entry stays importable by
   [[COMPONENT-SSG]]) and under `__PUZZLE_CAPTURE__` (a static page entry imports the app
   only to read `app.config`; [[DECISION-D157-ADAPTER-SUBPATH]]).

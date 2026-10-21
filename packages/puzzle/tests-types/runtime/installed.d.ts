@@ -19,6 +19,8 @@ declare module '../../client-runtime/datastore/store.js' {
 			init: RequestInit,
 			context: { type: string; method: string; url: string }
 		): Promise<Response>;
+		/** Whether a tracked find's fetch is in flight — read by PuzzleApp.idle() (D185). */
+		_reading?(): boolean;
 	}
 }
 

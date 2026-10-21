@@ -1132,6 +1132,16 @@ class AdapterStoreMethods {
 	}
 
 	/**
+	 * Whether a tracked find's fetch is in flight. PuzzleApp.idle() asks through
+	 * an optional call, so core reads this state without importing it (D185).
+	 * @this {AdapterStore}
+	 */
+	_reading() {
+		const state = readStateByStore.get(this);
+		return !!state && state.one.size + state.many.size > 0;
+	}
+
+	/**
 	 * @this {AdapterStore}
 	 * @param {unknown} result a verb's return: a payload, a Response, or a promise of either
 	 * @returns {Promise<any>}

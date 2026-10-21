@@ -280,6 +280,19 @@ you see:
   adapter apps too, and works through a view's `this.ctx.store`. `stop()`
   removes exactly that observation and is safe to call twice. `store.flush()`
   is now declared on the `Store` type as well.
+- **`app.idle()` (D185).** Wait for a running app to go quiet:
+
+  ```js
+  const quiet = await app.idle({ timeout: 10000 }); // true when idle; false on timeout
+  ```
+
+  It resolves `true` once two consecutive frames find no mount or navigation
+  in flight, no pending store flush, no async `data()` running and, on adapter
+  apps, no tracked find's fetch in flight. It never rejects, steps on timers in
+  a hidden tab, and resolves `true` at once when the app is not mounted. It
+  only observes state the runtime already keeps, so unlike `/testing`'s
+  `settled()` it forces nothing — and like it, it cannot see user timers,
+  animations, or fetches nothing awaits.
 - **Locale URL prefixes: `i18n.routing: 'prefix'` (D177).**
 
   ```js
