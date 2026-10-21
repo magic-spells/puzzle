@@ -943,7 +943,7 @@ store hydrates at startup and persists snapshots after changes, fail-soft.
 Store flushes and view renders land on the next frame (a timer in a hidden
 tab). Two awaits observe that work; neither forces it:
 
-- `await this.tick()` in a view resolves once every scheduled store flush and
+- `await this.renderTick()` in a view resolves once every scheduled store flush and
   view render has landed, including the renders those schedule. Use it after
   `setData()` before measuring `this.refs`. It does not wait for async
   `data()`, fetches or navigation.

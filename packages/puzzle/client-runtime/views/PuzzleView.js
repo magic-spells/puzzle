@@ -435,7 +435,7 @@ export class PuzzleView {
 	 * navigation are outside it — see app.idle().
 	 * @returns {Promise<void>}
 	 */
-	tick() {
+	renderTick() {
 		return tick();
 	}
 

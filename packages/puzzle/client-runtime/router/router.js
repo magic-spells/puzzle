@@ -1068,26 +1068,17 @@ export class Router {
 			!!this.#state &&
 			key === sameNavKey(this.#state.path) &&
 			!(this.#pendingNavPromise && this.#popInFlight && !this.#mode?.urlless);
-		const token = this.#token;
-		const nav = this.#navigate(path, asReplace ? { push: false, replace: true } : { push: true });
-		if (asReplace) {
-			// #navigate records no target for a replace; claim the slot for this push
-			// only when it took the token and no re-entrant navigation claimed it.
-			// The claim happens after #navigate returned, so a navigation that already
-			// ended (a view constructor throwing synchronously) must not stay latched:
-			// release the slot once it settles, or every later push gets its result.
-			if (this.#token !== token && this.#pendingNavPromise == null) {
-				this.#pendingNavPath = path;
-				this.#pendingNavPromise = nav;
-				nav.then(() => {
-					if (this.#pendingNavPromise === nav) this.#pendingNavPath = this.#pendingNavPromise = null;
-				});
-			}
-			return nav;
-		}
+		// `track` makes the replace record its target at the token bump, as a push
+		// does, BEFORE #navigate runs into preload()/created(): a same-path push
+		// from created() then joins this navigation (the in-flight guard above)
+		// instead of no-opping against the old snapshot or, over an invalidated
+		// chain, re-entering asReplace once per fresh view until the stack overflows.
+		const nav = this.#navigate(path, asReplace ? { push: false, replace: true, track: true } : { push: true });
 		// #navigate runs synchronously up to its first await, so it has already
 		// recorded this push's target in #pendingNavPath (or left it null: an
-		// unmatched path warns and returns before the token bump). Pair the promise
+		// unmatched path warns and returns before the token bump, and a navigation
+		// that already ended — a view constructor throwing synchronously — cleared
+		// it on the way out, so it never stays latched). Pair the promise
 		// with it here — the only place the promise exists — but ONLY while the slot
 		// still names THIS push: a re-entrant push fired synchronously from inside
 		// that stretch owns the slot instead, and its own pairing must stand.
@@ -1137,7 +1128,9 @@ export class Router {
 			!!st &&
 			!st.chainInvalid &&
 			key === sameNavKey(st.path) &&
-			(this.#guardRedirecting || this.#pendingNavPromise == null)
+			// #pendingNavPath too: a push from created() runs before push() pairs the
+			// promise, while the slot already names the navigation in flight.
+			(this.#guardRedirecting || (this.#pendingNavPromise == null && this.#pendingNavPath == null))
 		);
 	}
 
@@ -1464,7 +1457,7 @@ export class Router {
 	/**
 	 * @param {string} rawPath
 	 * @param {{ push: boolean, pop?: boolean, replace?: boolean,
-	 *   savedPosition?: ScrollPosition | null, memoryIndex?: number | null,
+	 *   savedPosition?: ScrollPosition | null, memoryIndex?: number | null, track?: boolean,
 	 *   retryView?: PuzzleView | { __retryErrorView?: undefined } | null }} options the verb flags;
 	 *   `retryView` is the failed view whose error view pressed retry, or the REBUILD marker
 	 * @returns {Promise<NavigationResult>} what push()/replace() resolve (D182)
@@ -1488,6 +1481,9 @@ export class Router {
 			// it, and the failure catches' `retryView.__retryErrorView?.()` is a no-op
 			// on the marker.
 			retryView = null,
+			// push()'s replace-semantics form (a push to the committed path): record
+			// the target like a push so a same-path push mid-flight joins it.
+			track = false,
 		}
 	) {
 		const matchPath = stripPath(rawPath);
@@ -1529,7 +1525,8 @@ export class Router {
 		// re-entry continues one logical navigation and must keep the count (D87). The
 		// flag is consumed here so it only tags the immediately-following re-entry.
 		//
-		// Track the target ONLY for genuine pushes: the double-click guard must NOT
+		// Track the target ONLY for genuine pushes (push()'s replace-semantics form
+		// included, via `track`): the double-click guard must NOT
 		// suppress a push that SUPERSEDES an in-flight pop/replace to the same path —
 		// memory-mode back()-then-push('/same') is push-vs-pop (truncate+append vs
 		// index move), a real navigation despite the shared path. A pop/replace/initial
@@ -1540,7 +1537,7 @@ export class Router {
 		// yet inside #navigate, and leaving the PREVIOUS navigation's promise
 		// standing next to a fresh target would hand a re-entrant same-path push a
 		// promise for a navigation that is already over.
-		this.#pendingNavPath = push ? rawPath : null;
+		this.#pendingNavPath = push || track ? rawPath : null;
 		this.#pendingNavPromise = null;
 		// Read by push() only while #pendingNavPromise is set, so a stale value from
 		// a finished navigation is never consulted. A guard redirect re-enters as a

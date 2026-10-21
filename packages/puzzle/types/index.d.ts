@@ -756,7 +756,7 @@ export declare class PuzzleView {
 	 * including the ones they schedule (D188). Forces nothing, and does not await
 	 * async data(), fetches or navigation — that is app.idle().
 	 */
-	tick(): Promise<void>;
+	renderTick(): Promise<void>;
 
 	/**
 	 * Reference-stable derived value (D64). Per-instance cache keyed by

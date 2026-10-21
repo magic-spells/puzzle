@@ -61,16 +61,16 @@ afterEach(async () => {
 	vi.unstubAllGlobals();
 });
 
-describe('tick() (D188)', () => {
+describe('renderTick() (D188)', () => {
 	it('is a view method that resolves void when nothing is scheduled', async () => {
-		expect(await new PuzzleView().tick()).toBeUndefined();
+		expect(await new PuzzleView().renderTick()).toBeUndefined();
 	});
 
 	it('waits for a scheduled local render, with concurrent callers', async () => {
 		const { app, view, el } = await mount(Local);
 		view.setData('n', 1);
-		const a = view.tick();
-		const b = view.tick();
+		const a = view.renderTick();
+		const b = view.renderTick();
 		const state = watch(a);
 		await Promise.resolve();
 		expect(state.done).toBe(false);
@@ -90,7 +90,7 @@ describe('tick() (D188)', () => {
 		}
 		const { app, view, el } = await mount(Cascade);
 		view.setData('n', 1);
-		const pending = view.tick();
+		const pending = view.renderTick();
 		const state = watch(pending);
 		await frame();
 		expect(el.textContent).toBe('1');
@@ -111,7 +111,7 @@ describe('tick() (D188)', () => {
 		}
 		const { app, view, el } = await mount(Cascade);
 		view.setData('n', 1);
-		const pending = view.tick();
+		const pending = view.renderTick();
 		const state = watch(pending);
 		await frame();
 		expect(state.done).toBe(false);
@@ -119,7 +119,7 @@ describe('tick() (D188)', () => {
 		await pending;
 		expect(el.textContent).toBe('2');
 		view.setData('n', 3);
-		const next = view.tick();
+		const next = view.renderTick();
 		await frame();
 		await next;
 		expect(el.textContent).toBe('3');
@@ -135,7 +135,7 @@ describe('tick() (D188)', () => {
 		}
 		const { app, view, el } = await mount(Notes);
 		app.store.createRecord('note', { id: 'a', text: 'first' });
-		const pending = view.tick();
+		const pending = view.renderTick();
 		const state = watch(pending);
 		await frame();
 		expect(el.textContent).toBe('1:false');
@@ -152,7 +152,7 @@ describe('tick() (D188)', () => {
 			if (++deliveries === 1) app.store.createRecord('note', { id: 'b', text: 'second' });
 		} }, () => app.store.findMany('note'));
 		app.store.createRecord('note', { id: 'a', text: 'first' });
-		const pending = view.tick();
+		const pending = view.renderTick();
 		const state = watch(pending);
 		await frame();
 		expect(deliveries).toBe(1);
@@ -173,7 +173,7 @@ describe('tick() (D188)', () => {
 		}
 		const { app, view, el } = await mount(Parent);
 		view.setData('changed', true);
-		const pending = view.tick();
+		const pending = view.renderTick();
 		await frame();
 		await frame();
 		await pending;
@@ -187,7 +187,7 @@ describe('tick() (D188)', () => {
 		vi.stubGlobal('requestAnimationFrame', raf);
 		app.store.createRecord('note', { id: 'a', text: 'first' });
 		view.setData('n', 4);
-		const pending = view.tick();
+		const pending = view.renderTick();
 		await vi.runAllTimersAsync();
 		await pending;
 		expect(raf).not.toHaveBeenCalled();
@@ -199,7 +199,7 @@ describe('tick() (D188)', () => {
 		const { app, view, el } = await mount(Local);
 		const render = vi.spyOn(view, 'render');
 		view.setData('n', 5);
-		const pending = view.tick();
+		const pending = view.renderTick();
 		const state = watch(pending);
 		await vi.advanceTimersByTimeAsync(219);
 		expect(state.done).toBe(false);
@@ -215,7 +215,7 @@ describe('tick() (D188)', () => {
 		const render = vi.spyOn(view, 'render');
 		view.setData('n', 1);
 		app.store.createRecord('note', { id: 'a', text: 'first' });
-		const pending = view.tick();
+		const pending = view.renderTick();
 		app.store.flush();
 		view.destroy();
 		await frame();
@@ -228,7 +228,7 @@ describe('tick() (D188)', () => {
 		const { view, el } = await mount(Local);
 		const render = vi.spyOn(view, 'render');
 		view.setData('n', 1);
-		const pending = view.tick();
+		const pending = view.renderTick();
 		view.flushUpdates();
 		expect(el.textContent).toBe('1');
 		await frame();
@@ -244,13 +244,13 @@ describe('tick() (D188)', () => {
 		}
 		const { app, view } = await mount(Broken);
 		view.setData('n', 1);
-		const pending = view.tick();
+		const pending = view.renderTick();
 		await frame();
 		await pending;
 		expect(view.isDestroyed).toBe(true);
 		const { view: next, el } = await mount(Local);
 		next.setData('n', 2);
-		const nextTick = next.tick();
+		const nextTick = next.renderTick();
 		await frame();
 		await nextTick;
 		expect(el.textContent).toBe('2');
@@ -269,7 +269,7 @@ describe('tick() (D188)', () => {
 		}
 		const { app, view, el } = await mount(Slow);
 		app.store.createRecord('note', { id: 'a', text: 'first' });
-		const pending = view.tick();
+		const pending = view.renderTick();
 		await frame();
 		await pending;
 		expect(app.store._asyncTrackingChain).not.toBeNull();
@@ -286,7 +286,7 @@ describe('tick() (D188)', () => {
 			{ path: '/next', view: Local, guard: () => gate },
 		] });
 		const navigation = app.router.push('/next');
-		expect(await new PuzzleView().tick()).toBeUndefined();
+		expect(await new PuzzleView().renderTick()).toBeUndefined();
 		expect(app.router.current.path).toBe('/');
 		open(true);
 		await navigation;

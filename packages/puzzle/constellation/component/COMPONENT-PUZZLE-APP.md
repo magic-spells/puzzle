@@ -92,8 +92,8 @@ teardown ([[DECISION-D145-ERROR-BOUNDARIES]]).
   in a row: no `#mountPromise`, no `_flushScheduled`, no `_asyncTrackingChain`, no
   adapter read in flight (`store._reading?.()`), no navigation (`navigating(router)`, the
   router's static-block accessor), and no locale switch (`i18n.__busy`, behind
-  `__PUZZLE_HAS_I18N__`). It never rejects. The app has no `tick()`: that render wait is
-  a view method ([[DECISION-D188-TICK]]).
+  `__PUZZLE_HAS_I18N__`). It never rejects. The app has no `renderTick()`: that render
+  wait is a view method ([[DECISION-D188-TICK]]).
 - `mount()` is a no-op outside a DOM (the app entry stays importable by
   [[COMPONENT-SSG]]) and under `__PUZZLE_CAPTURE__` (a static page entry imports the app
   only to read `app.config`; [[DECISION-D157-ADAPTER-SUBPATH]]).

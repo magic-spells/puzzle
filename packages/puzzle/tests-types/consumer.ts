@@ -93,9 +93,9 @@ const renderedNull: string = displayValue(null);
 const renderedNamedValue: string = displayValue(0, 'count');
 // A list prints its items joined by `sep` (the attribute-value path).
 const renderedList: string = displayValue(['a', false, 'b'], 0, ' ');
-const viewFence: Promise<void> = new PuzzleView().tick();
-// @ts-expect-error tick has no options; app.idle owns the timeout surface
-new PuzzleView().tick({ timeout: 1 });
+const viewFence: Promise<void> = new PuzzleView().renderTick();
+// @ts-expect-error renderTick has no options; app.idle owns the timeout surface
+new PuzzleView().renderTick({ timeout: 1 });
 const generatedSnippetNode = new ViewNode(SNIPPET_TAG, {
 	fits: 'row',
 	params: ['item'],
