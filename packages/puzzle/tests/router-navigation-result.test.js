@@ -657,6 +657,39 @@ describe('router.push() — the committed path when it is not a no-op (D182)', (
 		});
 	}
 
+	it('row 4 — a pop redirected by a guard is still a pop: the push keeps the popped entry', async () => {
+		const Login = loadingView('login');
+		let redirect = false;
+		const { router } = await boot([
+			{
+				path: '/',
+				name: 'home',
+				view: HomeView,
+				guard: () => (redirect ? ((redirect = false), '/login') : true),
+			},
+			{ path: '/login', name: 'login', view: Login },
+			{ path: '/a', name: 'a', view: AboutView },
+		]);
+		await router.push('/a');
+		Login.gate = new Promise(() => {}); // the redirect target never finishes loading
+		redirect = true;
+		history.back(); // pop to '/', whose guard redirects (as a replace) to /login
+		await tick();
+		await tick();
+		expect(router.current.path).toBe('/a');
+		expect(location.pathname).toBe('/'); // the browser stands on the popped entry
+
+		const pushState = vi.spyOn(history, 'pushState');
+		const replaceState = vi.spyOn(history, 'replaceState');
+		expect((await router.push('/a')).ok).toBe(true);
+
+		// An ordinary push over the popped entry, never a rewrite of it.
+		expect(pushState).toHaveBeenCalledTimes(1);
+		expect(replaceState.mock.calls.some(([, , url]) => url === '/a')).toBe(false);
+		expect(router.current.path).toBe('/a');
+		Login.gate = null;
+	});
+
 	it('row 6 — called twice: one promise and one data() run (push in flight, failed view, memory pop)', async () => {
 		const A = loadingView('a');
 		const Other = loadingView('other');

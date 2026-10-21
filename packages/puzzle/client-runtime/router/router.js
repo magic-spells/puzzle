@@ -1500,8 +1500,10 @@ export class Router {
 		this.#pendingNavPath = push ? rawPath : null;
 		this.#pendingNavPromise = null;
 		// Read by push() only while #pendingNavPromise is set, so a stale value from
-		// a finished navigation is never consulted.
-		this.#popInFlight = pop;
+		// a finished navigation is never consulted. A guard redirect re-enters as a
+		// replace but continues the denied navigation, so it keeps that one's flag:
+		// a redirected pop still has the browser on the popped entry.
+		this.#popInFlight = this.#guardRedirecting ? this.#popInFlight : pop;
 		// Locale prefix routing (D177): every verb's target, for localePage — a
 		// setLocale from this navigation's guard or data() reloads the page it is
 		// headed to, not the one the address bar still shows. Cleared where
