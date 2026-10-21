@@ -53,6 +53,7 @@ export default [
 | `meta` | `title`, `description`, `canonical`, `socialImage` — static strings or `null` (§45). |
 | `transitionMode` | `'sequential'` or `'overlap'` for navigations *into* this route (§33). |
 | `prerender` | `false` anywhere in the chain makes hybrid/static builds write the plain shell at that path instead of prerendered HTML. |
+| `agent` | `false` hides the route (and its children) from tools reading `router.views`; `{ name, about }` names and describes it. The router itself ignores it (below). |
 
 Order matters: the first match wins, so declare `/user/new` before `/user/:id` (the router warns in development when a route is shadowed).
 
@@ -236,6 +237,33 @@ With `i18n` configured, `this.ctx.i18n.setLocale('es')` loads the new strings an
 
 Declare a `path: '*'` route; it is matched last wherever it sits. Without one, an unmatched URL logs a warning and the current view stays. Prerendered builds write it to `dist/404.html`.
 
+## Listing routes for tools: `router.views` and `agent`
+
+`router.views` lists every leaf route as frozen data, in declaration order, without the catch-all (D183). An agent panel, a sitemap widget or a command palette reads it instead of walking the route table:
+
+```js
+export default [
+  { path: '/', name: 'home', view: HomeView, agent: { name: 'home', about: 'Dashboard' } },
+  {
+    path: '/admin', view: AdminShell, agent: false,       // hides /admin and every child…
+    children: [
+      { path: '',     view: AdminHome },
+      { path: 'help', view: AdminHelp, agent: { name: 'admin-help', about: 'How to use admin' } }, // …except this one
+    ],
+  },
+  { path: '/tasks/:taskId', name: 'task', view: TaskView, meta: { title: 'Task' }, agent: { name: 'task' } },
+];
+
+const pages = router.views.filter((v) => v.agent);
+// [{ path: '/', params: [], name: 'home', meta: undefined, title: undefined, agent: { name: 'home', … }, chain: [...] }, …]
+
+const here = router.views.find((v) => v.chain.at(-1) === router.current.route); // the current page's entry
+```
+
+Each entry is `{ path, params, name, meta, title, agent, chain }`: the full pattern, its `:param` names, the leaf's `name` and own `meta`, the title resolved the way the tab title is, the resolved `agent`, and the route definitions root → leaf. `agent` resolves nearest-defined from the leaf up, so a child's own value always beats its parent's, and children that set nothing share their parent's object (and name). The router never acts on it — a hidden route still navigates and prerenders.
+
+In development, an invalid `agent` value throws, a name declared by two different `agent` objects warns once (listing every path that uses it), and once any route uses `agent` one warning lists the routes that say neither `false` nor `{ name }`. Full contract: §9.
+
 ## API
 
 `this.ctx.router` (also `app.router`):
@@ -247,6 +275,7 @@ Declare a `path: '*'` route; it is matched last wherever it sits. Without one, a
 | `go(n)` / `back()` / `forward()` | History movement in every mode. |
 | `url(path)` | Mode- and base-correct href for a path (what `link()` calls). |
 | `current` | The committed snapshot `{ path, pathname, query, hash, route, params, chain }`. |
+| `views` | Every leaf route as frozen `{ path, params, name, meta, title, agent, chain }` entries, catch-all excluded (D183). |
 
 `await router.push(path)` tells you what happened (D182):
 
