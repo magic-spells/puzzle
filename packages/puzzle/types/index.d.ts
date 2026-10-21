@@ -366,6 +366,20 @@ export interface Store {
 	 * already; the filter always runs locally (D161).
 	 */
 	findMany(type: string, options?: FindManyOptions): any[];
+	/**
+	 * Observe every record of a type, or one record by primary key, from outside
+	 * a view (D184). `fn` runs with no arguments after the batched flush that
+	 * carries a matching change, at most once per flush. Never fetches. Returns
+	 * `stop()`, which removes exactly this observation and is idempotent.
+	 */
+	observe(type: string, fn: () => unknown): () => void;
+	observe(type: string, id: any, fn: () => unknown): () => void;
+	/**
+	 * Deliver pending change notifications now (each subscriber once), then write
+	 * the batched storage snapshot if the store is dirty. Safe when nothing is
+	 * pending.
+	 */
+	flush(): void;
 	// Adapter methods are attached by the app's adapter capability and declared through
 	// module augmentation in types/adapter.d.ts.
 	// `seed()` and `resetFixtureSeed()` are NOT declared here: the core Store does

@@ -445,6 +445,14 @@ const config: PuzzleAppConfig = {
 	},
 	beforeUnmount(app) {
 		void app.store.findMany('todo');
+		// D184: both observe forms return a stop function; flush() is core public.
+		const stopAll: () => void = app.store.observe('todo', () => {});
+		const stopOne: () => void = app.store.observe('todo', 7, async () => {});
+		stopAll();
+		stopOne();
+		app.store.flush();
+		// @ts-expect-error observe needs a callback
+		app.store.observe('todo', 7);
 	},
 	onError(error, info) {
 		const typedInfo: PuzzleErrorInfo = info;

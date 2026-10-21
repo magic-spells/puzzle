@@ -803,6 +803,44 @@ export class Store {
 		}
 	}
 
+	/**
+	 * Observe a collection (`observe(type, fn)`) or one record
+	 * (`observe(type, id, fn)`) from outside any view (D184). `fn()` runs with no
+	 * arguments after the batched flush that carries a matching change — at most
+	 * once per flush, isolated like every other subscriber. Returns `stop()`,
+	 * which removes exactly this observation and is idempotent.
+	 *
+	 * The function is linked straight onto the key — no withTracking, so no
+	 * transactional reset and no fetch, on adapter apps too. Each call wraps `fn`
+	 * in its own closure, so observing the same function twice gives two
+	 * independent observations. The record key is spelled exactly as
+	 * _findOneLocal and _notify spell it, so `observe('task', '7', fn)` and a
+	 * change to task 7 meet on the same key, and a record that does not exist yet
+	 * fires when it is created.
+	 * @param {string} type
+	 * @param {unknown} id a primary key, or the callback for a collection observation
+	 * @param {() => unknown} [fn]
+	 * @returns {() => void}
+	 */
+	observe(type, id, fn) {
+		const one = fn !== undefined;
+		const cb = one ? fn : id;
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (typeof type !== 'string' || typeof cb !== 'function' || (one && id == null)) {
+				throw new Error(
+					'[puzzle] store.observe(type, [id,] fn) needs a model type string, an optional non-null id, and a callback function'
+				);
+			}
+		}
+		const key = one ? type + REC_SEP + id : type;
+		// A function subscriber: delivery calls it as `sub()` (see _deliverNotifications).
+		const sub = /** @type {Subscriber} */ (/** @type {unknown} */ (() => /** @type {Function} */ (cb)()));
+		if (!this.subscribersByKey.has(key)) this.subscribersByKey.set(key, new Set());
+		this.subscribersByKey.get(key).add(sub);
+		this.keysBySubscriber.set(sub, new Set([key]));
+		return () => this._dropSubscription(key, sub);
+	}
+
 	/** @param {string} key */
 	_subscribe(key) {
 		const subscriber = this._tracking;
@@ -972,7 +1010,7 @@ export class Store {
 				// earlier subscriber in this same batch may have unsubscribed this one
 				// (a parent's data() destroying a child, an app callback removing
 				// another). Delivering to a subscriber that asked to stop is a bug the
-				// gather pass cannot see — a plain `store.subscribe(fn)` callback has no
+				// gather pass cannot see — a `store.observe()` callback has no
 				// destroyed-guard of its own, so this is its only protection. The test
 				// is the set this subscriber was GATHERED from, which is what
 				// unsubscribe() empties, rather than the keysBySubscriber side index.

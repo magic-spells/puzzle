@@ -249,6 +249,18 @@ you see:
   to keep fixed names with preloads, or `build: { hashNames: true }` to hash
   without splitting. A static build with neither key keeps fixed names and gains
   preloads. Development output stays unchanged; `public/` files are never renamed.
+- **`store.observe()` (D184).** Watch the store from outside a view:
+
+  ```js
+  const stop = store.observe('task', fn);      // any task created, updated or removed
+  const stop = store.observe('task', id, fn);  // one record, even before it exists
+  ```
+
+  `fn()` runs with no arguments after the batched flush, at most once per
+  flush, with errors isolated like any other subscriber. It never fetches, on
+  adapter apps too, and works through a view's `this.ctx.store`. `stop()`
+  removes exactly that observation and is safe to call twice. `store.flush()`
+  is now declared on the `Store` type as well.
 - **Locale URL prefixes: `i18n.routing: 'prefix'` (D177).**
 
   ```js

@@ -24,6 +24,7 @@ connections:
   - FLOW-REACTIVITY
   - DECISION-D179-STATIC-PATHS
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
+  - DECISION-D184-STORE-OBSERVE
 ---
 
 # Puzzle release surface
@@ -202,6 +203,7 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
 
 ## Data layer
 
+
 - Schema builders: string, number, boolean, date, object, array, belongsTo,
   hasMany, with defaults, primary keys and required/min/max/oneOf/custom
   validation. Records are model instances (getters, methods, immutable
@@ -211,6 +213,10 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   `findOne`/`findMany` miss fetches through the adapter and reruns `data()`
   until reads settle; a committed `null` means not found. Reads outside
   `data()` never fetch.
+- `store.observe(type, [id,] fn)` watches a collection or one record from
+  outside a view and returns an idempotent `stop()`; `fn()` runs once per
+  batched flush, never fetches (D184). `store.flush()` delivers pending
+  notifications now.
 - **Server sync is opt-in** via the `/adapter` capability passed once to
   `PuzzleApp`. A model's `static adapter` holds per-verb fetch functions
   (`endpoint` generates REST defaults); dispatch is model function →
