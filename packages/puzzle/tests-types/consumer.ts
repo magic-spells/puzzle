@@ -260,6 +260,20 @@ class TodoListView extends PuzzleView {
 	}
 
 	mounted(): void {
+		const { idle } = this.ctx;
+		const quiet: Promise<boolean> = idle({ timeout: 500 });
+		void quiet;
+		// @ts-expect-error the idle timeout is milliseconds
+		idle({ timeout: '500' });
+		const Model = this.ctx.store.modelFor('todo');
+		const primaryKey: string = Model.primaryKey();
+		const modelClass: typeof PuzzleModel = Model;
+		const defaultKey: string = PuzzleModel.primaryKey();
+		// @ts-expect-error modelFor takes a registry type name
+		this.ctx.store.modelFor(7);
+		// @ts-expect-error primaryKey returns the field name
+		const numericKey: number = Model.primaryKey();
+		void [primaryKey, modelClass, defaultKey, numericKey];
 		// router is on ctx; push/go/replace are path-shaped in all modes.
 		this.ctx.router.push('/todos');
 		this.ctx.router.replace('/todos?tab=2'); // v1.49, D83
@@ -269,6 +283,8 @@ class TodoListView extends PuzzleView {
 			if (result.ok) {
 				const landed: RouteSnapshot = result.route;
 				const from: string | undefined = result.redirectedFrom;
+				const catchAll: true | undefined = result.catchAll;
+				void catchAll;
 				void landed;
 				void from;
 			} else {

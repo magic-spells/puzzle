@@ -102,7 +102,7 @@ import { redirectScript } from './redirect.js';
  * The per-page build-time ctx (buildContext): the services PuzzleApp.mount()
  * wires, over the page's router facade.
  * @typedef {{ store: Store, router: Router | RouterStub, formatters: FormatterRegistry,
- *   i18n?: ReturnType<typeof createI18n> }} PrerenderContext
+ *   idle: () => Promise<boolean>, i18n?: ReturnType<typeof createI18n> }} PrerenderContext
  */
 
 // ---- translations (D175) ----------------------------------------------------
@@ -1905,7 +1905,8 @@ async function buildContext(config, { router, i18n = null }) {
 	const registry = makeFormatterRegistry(formatters, (path, options) => router.url(path, options));
 
 	/** @type {PrerenderContext} */
-	const ctx = { store, router, formatters: registry };
+	// ctx.idle (D189): a build-time page has no app to wait on.
+	const ctx = { store, router, formatters: registry, idle: async () => true };
 	// The build's i18n service (D175), exactly as PuzzleApp wires it: ctx.i18n plus
 	// the service-bound `t` formatter, which an app `t` still overrides.
 	if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && i18n) {

@@ -25,16 +25,16 @@ A caller that awaits `router.push()` or `router.replace()` cannot tell whether t
 
 ```ts
 type NavigationResult =
-  | { ok: true; route: RouteSnapshot; redirectedFrom?: string }
+  | { ok: true; route: RouteSnapshot; catchAll?: true; redirectedFrom?: string }
   | { ok: false; reason: 'blocked' | 'superseded' | 'not-found' | 'error'; error?: unknown };
 ```
 
-- **`ok: true`** — the navigation committed, the catch-all `*` included. `route` is the navigation's frozen snapshot (the same object its guards saw as `to`, equal to `router.current` at commit).
+- **`ok: true`** — the navigation committed, the catch-all `*` included. `route` is the navigation's frozen snapshot (the same object its guards saw as `to`, equal to `router.current` at commit). `catchAll: true` is set exactly when the committed leaf is the `path: '*'` route and omitted otherwise (D189). It lives on the result, not the snapshot, and follows the final landing across redirects, reused-chain commits and same-path no-ops.
 - **`push()` to the committed path** follows one table. Each row has its own test in `tests/router-navigation-result.test.js`.
 
   | Situation | Behaviour |
   | --- | --- |
-  | Nothing in flight, chain intact | No-op, `ok` with the current route |
+  | Nothing in flight, chain intact | No-op, `ok` with the current route (`catchAll: true` on the catch-all) |
   | Nothing in flight, chain invalid (a failed view, a commit-window throw) | Rebuild with replace semantics; history unchanged |
   | A push or replace in flight (the URL has not moved yet) | Supersede it; rebuild with replace semantics; history unchanged |
   | A pop in flight, path or hash mode (the browser already moved onto the popped entry) | An ordinary push (`pushState`), so the popped entry survives |
@@ -58,7 +58,7 @@ type NavigationResult =
 - **Commit-window deferral.** A push or replace from `mounted()`/`viewWillShow` is parked in the single last-wins slot together with its promise's resolver. The promise adopts the re-dispatched navigation's result when `#runPendingPush` runs it. An entry displaced by a later deferral, or dropped by `stop()`, resolves `'superseded'`.
 - `go()`, `back()` and `forward()` keep their `void | Promise<void>` contract.
 
-Bytes: two module-level helpers (`fail(reason, error)` and one frozen `SUPERSEDED`), two private methods (`#defer`, shared by push, replace and go, and `#isCommittedNoop`), and one private field (`#popInFlight`). Every other change reuses an existing exit.
+Bytes: three module-level helpers (`fail(reason, error)`, `succeed(route)`, which every success exit calls and which adds `catchAll`, and one frozen `SUPERSEDED`), two private methods (`#defer`, shared by push, replace and go, and `#isCommittedNoop`), and one private field (`#popInFlight`). Every other change reuses an existing exit.
 
 ## Alternatives rejected
 

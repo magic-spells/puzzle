@@ -198,6 +198,9 @@ export class Store {
 	// ---- model plumbing ----------------------------------------------------
 
 	/**
+	 * The registered model constructor, or PuzzleModel for an unregistered type.
+	 * Model.primaryKey() returns its primary field name (default 'id').
+	 * Lookup is local and never subscribes or fetches.
 	 * @param {string} type
 	 * @returns {typeof PuzzleModel}
 	 */
