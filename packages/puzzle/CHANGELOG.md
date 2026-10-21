@@ -298,6 +298,25 @@ you see:
   before its `popstate` fires. A view's `setData()` render now uses the
   store's hidden-tab scheduler too, so it lands in a background tab instead of
   waiting for the tab to come back.
+- **`router.views` and the `agent` route field (D183).** `router.views` lists
+  every leaf route, catch-all excluded, as frozen
+  `{ path, params, name, meta, title, agent, chain }` entries, built once on
+  first read; `title` resolves leaf to root like the tab title. A new
+  top-level route field describes a route to tools that read the list:
+
+  ```js
+  { path: '/admin', view: AdminShell, agent: false, children: [   // hides the section…
+    { path: 'help', view: AdminHelp, agent: { name: 'admin-help', about: 'How to use admin' } }, // …but not this page
+  ] }
+  ```
+
+  `agent` resolves nearest-defined from the leaf up, so a child's own value
+  beats its parent's. The router and the prerender never act on it — a hidden
+  route still navigates and prerenders. In development an invalid value
+  throws at construction, a name declared by two different routes warns
+  (children inheriting one parent's `agent` share its name freely), and once any
+  route uses `agent` one warning lists the routes that set neither `false`
+  nor `{ name }`. Exported types: `RouteView`, `RouteAgent`.
 - **Locale URL prefixes: `i18n.routing: 'prefix'` (D177).**
 
   ```js

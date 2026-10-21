@@ -283,6 +283,7 @@ import {
 	validateTopLevelPath,
 } from './routePath.js';
 import { walkRouteTree } from './routeTree.js';
+import { checkAgentRoutes, routeViews } from './routeViews.js';
 // D163's resolver, reached ONLY through `typeof __PUZZLE_HAS_LAZY__ …` probes
 // (the D89 gate). The build's usage scan sets the define false for a project
 // whose source never calls lazy(); MinifySyntax then folds all three call sites
@@ -399,6 +400,8 @@ export class Router {
 	#routes = []; // compiled leaf Entries, in declaration order (depth-first)
 	/** @type {RouteEntry | null} */
 	#catchAll = null; // synthetic single-node Entry for path:'*' (matched last)
+	/** @type {readonly import('../../types/index.js').RouteView[] | null} */
+	#views = null; // router.views, built on first read (D183)
 	/** @type {Element | null} */
 	#container = null;
 	/** @type {Record<string, any> | null} */
@@ -702,6 +705,7 @@ export class Router {
 		}
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			warnShadowedPaths(findShadowedPaths(this.#routes));
+			checkAgentRoutes(this.#routes, this.#catchAll);
 		}
 		// Locale prefix routing (D177). The options are read off `arguments`, not
 		// the destructuring above: esbuild keeps an unused destructured key, so every
@@ -1278,6 +1282,15 @@ export class Router {
 	 */
 	get routeEntries() {
 		return this.#routes;
+	}
+
+	/**
+	 * The route table as frozen data (D183): one entry per leaf in declaration
+	 * order, the catch-all left out — `{ path, params, name, meta, title, agent,
+	 * chain }`. Built once, on first read; see routeViews.js.
+	 */
+	get views() {
+		return (this.#views ??= routeViews(this.#routes));
 	}
 
 	/**

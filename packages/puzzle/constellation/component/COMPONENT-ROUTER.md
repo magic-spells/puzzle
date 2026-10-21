@@ -27,6 +27,12 @@ notes:
       intact, and nothing in flight (#guardRedirecting exempt). The #pendingPush slot carries the
       caller's resolver, so anything that clears the slot (a displacing #defer, stop()) must resolve
       the old entry SUPERSEDED, or that caller waits forever.
+  - kind: state
+    text: >-
+      `router.views` (D183) is a getter over `#routes` cached in `#views`, built by `routeViews()`
+      in router/routeViews.js; the `agent` field's dev checks (`checkAgentRoutes`) run in the
+      constructor's existing __PUZZLE_DEV__ block beside warnShadowedPaths. The router never reads
+      `agent` on navigation. `routeEntries` stays the SSG's internal matcher view.
 ---
 
 # Router

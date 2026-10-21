@@ -74,8 +74,9 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   `children`, `guard`, `meta` (`title`/`description`/`canonical`/`socialImage`
   plus free custom keys; `title`/`description` may be `{ t: 'key' }`),
   `transitionMode`, `prerender: false`, `staticPaths` (build-only, leaf
-  `:param` routes — see Build and output), `name` (informational — no
-  named-route navigation).
+  `:param` routes — see Build and output), `agent` (`false` or
+  `{ name, about? }`, read only by `router.views` consumers — see Routing),
+  `name` (informational — no named-route navigation).
 - **`puzzle.config.js`:** `styles.use: ['tailwindcss']`, `build.dropConsole`
   (default true), `build.sourceMap` (default off; dev always has maps),
   `build.splitting` (default off), `dev.proxy` (path prefix → backend
@@ -256,6 +257,13 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   `{ ok: true, route, redirectedFrom? }` or
   `{ ok: false, reason: 'blocked' | 'superseded' | 'not-found' | 'error', error? }`
   and never reject; a push deferred from `mounted()` resolves when it runs.
+- **Route views (D183):** `router.views` lists every leaf route (catch-all
+  excluded) as frozen `{ path, params, name, meta, title, agent, chain }`,
+  built once on first read. The top-level `agent` route field — `false` or
+  `{ name, about? }` — resolves nearest-defined leaf→root (a parent's `false`
+  hides its subtree; a child's own object re-exposes it). The router and
+  prerender never act on it; development checks validate it, warn on
+  duplicate names, and list undescribed leaves once any route uses it.
 - **Locale URL prefixes (D177):** `i18n.routing: 'prefix'` (path routing
   only) puts every non-default locale under `/<tag>` (default unprefixed).
   App paths stay locale-free; `link()`/`router.url()` add the active prefix,

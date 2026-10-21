@@ -84,7 +84,8 @@ func TestBundleOutputsAndStaticClosure(t *testing.T) {
 	}
 	rel, err := filepath.Rel(cwd, alias)
 	if err != nil {
-		t.Fatal(err)
+		// Windows runners keep the temp dir on a different drive than the checkout.
+		t.Skipf("no relative path to temp dir: %v", err)
 	}
 	const metafile = `{"outputs": {
 		"DIST/app-HASH.js": {"entryPoint":"app/app.js", "cssBundle":"DIST/app-CSS.css", "imports": [
