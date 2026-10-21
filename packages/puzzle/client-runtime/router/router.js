@@ -1087,11 +1087,15 @@ export class Router {
 		if (this.#isCommittedNoop(key)) {
 			return Promise.resolve(succeed(this.current));
 		}
-		// A replace to the path a push (or a push's rebuild) already has in flight
-		// joins it, as a second push does: a replace from created() of the view that
-		// rebuild is constructing would otherwise supersede it and construct a fresh
-		// view, whose created() replaces again, until the stack overflows (D182).
-		return this.#joinInFlight(key) || this.#trackNav(this.#token, this.#navigate(path, { push: false, replace: true }));
+		// A replace to the COMMITTED path while a push's rebuild of it is in flight
+		// joins that rebuild, as a second push does: a replace from created() of the
+		// view the rebuild is constructing would otherwise supersede it and construct
+		// a fresh view, whose created() replaces again, until the stack overflows
+		// (D182). Any other path keeps an ordinary replace that supersedes.
+		return (
+			(this.#state && key === sameNavKey(this.#state.path) && this.#joinInFlight(key)) ||
+			this.#trackNav(this.#token, this.#navigate(path, { push: false, replace: true }))
+		);
 	}
 
 	/**

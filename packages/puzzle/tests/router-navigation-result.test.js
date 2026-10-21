@@ -1049,6 +1049,23 @@ describe('router.push() — the committed path when it is not a no-op (D182)', (
 		expect(router.current.path).toBe('/f');
 	});
 
+	it('replace() to an uncommitted path a plain push has in flight supersedes it', async () => {
+		const { View: Slow, release } = gated();
+		const { router } = await boot([
+			{ path: '/', name: 'home', view: HomeView },
+			{ path: '/y', name: 'y', view: Slow },
+		]);
+		const pushed = router.push('/y');
+		const replaced = router.replace('/y');
+		expect(replaced).not.toBe(pushed);
+		release();
+		expect(await pushed).toEqual({ ok: false, reason: 'superseded' });
+		const result = await replaced;
+		expect(result.ok).toBe(true);
+		expect(result.route.path).toBe('/y');
+		expect(router.current.path).toBe('/y');
+	});
+
 	it('a same-path replace() from created() during a rebuild over an invalidated chain joins it once', async () => {
 		let router;
 		let failing = true;
