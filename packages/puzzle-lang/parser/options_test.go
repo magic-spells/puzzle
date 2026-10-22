@@ -143,6 +143,14 @@ func TestOptionsDefaultIsPuzzleKit(t *testing.T) {
 			if noneErr != zeroErr || !sameTree(none, zero) {
 				t.Errorf("%s: no options and Options{} differ", path)
 			}
+			// Pipes only gives meaning to a `|` the default parse rejects, so
+			// every file that parses parses to the same tree with them on.
+			if noneErr == "" {
+				pipes, pipesErr := parseBoth(src, path, Options{Pipes: true})
+				if pipesErr != "" || !sameTree(none, pipes) {
+					t.Errorf("%s: Pipes changes a file that parses: %q", path, pipesErr)
+				}
+			}
 			if strings.Contains(src, "{#let") {
 				return nil
 			}

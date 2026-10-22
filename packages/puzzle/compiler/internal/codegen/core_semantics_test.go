@@ -108,7 +108,7 @@ func TestPipeIsACompileErrorInEveryHeader(t *testing.T) {
 		}
 		want := "T.pzl:2:"
 		if msg := err.Error(); !strings.Contains(msg, want) ||
-			!strings.Contains(msg, "`| name` pipes were removed — write `name(value)`; bitwise OR is not available") {
+			!strings.Contains(msg, "`| name` pipes are Sites theme syntax — in a Puzzle app write `name(value)`") {
 			t.Errorf("%s (%s): error %q", tc.body, tc.header, msg)
 		}
 	}
