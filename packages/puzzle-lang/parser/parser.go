@@ -1200,7 +1200,7 @@ func parseWhenValues(raw string, pos, valPos Position, file string, sc exprScope
 
 // whenPipeMessage replaces the expression language's `|` steer inside a
 // {:when} value, where a `|` is an attempt to list alternatives.
-const whenPipeMessage = "a {:when} lists its alternatives with commas — write {:when 'a', 'b'}; there is no `|` in template expressions"
+const whenPipeMessage = "a {:when} lists its alternatives with commas — write {:when 'a', 'b'}; `|` does not separate alternatives"
 
 // splitWhenValues is parseWhenValues' template half: the trimmed values and
 // the untrimmed span of each in raw.

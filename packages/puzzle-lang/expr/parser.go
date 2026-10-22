@@ -425,11 +425,11 @@ func (p *parser) parseBinary(minBP int) Node {
 					return left
 				}
 				if t.text == "|" {
-					name := ""
+					msg := msgPipe + "; bitwise OR is not available"
 					if next := p.peek(1); next.kind == tIdent {
-						name = next.text
+						msg = pipeMessage(next.text)
 					}
-					panic(bailout{&Error{Pos: t.pos, Message: pipeMessage(name), Code: CodePipe}})
+					panic(bailout{&Error{Pos: t.pos, Message: msg, Code: CodePipe}})
 				}
 				if msg, ok := excludedOperators[t.text]; ok {
 					p.fail(t.pos, msg)

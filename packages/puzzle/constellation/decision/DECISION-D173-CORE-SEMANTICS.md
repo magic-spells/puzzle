@@ -24,9 +24,10 @@ redefine.** This card fixes the meaning of the 18 shared constructs (V1–V18)
 where PuzzleKit and Sites once differed. All of it is built in PuzzleKit; the
 expression items (V1, V4, V7, V8) are the expression language,
 [[DECISION-D176-EXPRESSION-LANGUAGE]]; the function library is
-[[DECISION-D174-STANDARD-FORMATTERS]]. **Sites has adopted none of it yet**
-(see *Sites, pending*); until it does, [[DOC-LANGUAGE-CORE]] keeps each
-host's behavior and its "Known divergences" entries stay open.
+[[DECISION-D174-STANDARD-FORMATTERS]]. Sites evaluates the expression
+language in Go in `internal/pzleval` (its own repo; see *Sites*);
+[[DOC-LANGUAGE-CORE]] keeps each host's behavior, and its "Known
+divergences" entries track any construct that still differs.
 
 ## How a rule is chosen
 
@@ -49,8 +50,8 @@ V3's strict comparison, V5, V15, V17 and the V18 styles.
   attribute values, props, marker arguments, every condition header, `{#for}`
   collections and range bounds, PuzzleKit `@event` arguments; Sites adds
   `{#let}`) parses as one D176 expression by one parser
-  (`packages/puzzle-lang/expr`), which PuzzleKit lowers to JS and Sites will
-  evaluate in Go. A display transform is a function call —
+  (`packages/puzzle-lang/expr`), which PuzzleKit lowers to JS and Sites
+  evaluates in Go (`internal/pzleval`). A display transform is a function call —
   `{ currency(price) }`, `{ t('cart.items', { count: items.length }) }` — and
   works in every position, headers included. In Sites `x | f` is sugar for
   `f(x)` (D176 §4); in PuzzleKit a `|` is a positioned error
@@ -170,13 +171,15 @@ Grammar changes (V1, V13) must reach the vendored ports in `puzzle-eslint` /
 (`packages/puzzle-lang/conformance`) are the proof a unified item matches in
 both hosts.
 
-## Sites, pending
+## Sites
 
-Evaluator: D176 grammar + D174 library in Go, loose equality (V2), UTF-16
+Evaluator (`internal/pzleval`, the Sites repo): the D176 grammar (parsed
+with `Pipes` on) + D174 library in Go, loose equality (V2), UTF-16
 `.length` and JS-exact string methods (V7), printing (V6), `Object.*`
-default (V4). Renderer: whitespace (V10), raw escaping (V11), loop bounds
-(V12), filled rule (V14), `{#svg}` prefix error (V18), dotted-tag error
-(V16). Flag it if Sites treats a Date as a printable scalar (V6).
+default (V4). Renderer rules it must match: whitespace (V10), raw escaping
+(V11), loop bounds (V12), filled rule (V14), `{#svg}` prefix error (V18),
+dotted-tag error (V16). Flag it if Sites treats a Date as a printable
+scalar (V6).
 
 ## Alternatives rejected
 

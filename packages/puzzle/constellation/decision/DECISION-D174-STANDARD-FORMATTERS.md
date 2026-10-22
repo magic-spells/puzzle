@@ -22,8 +22,8 @@ The template function library: what each standard function does, which
 names are host-only, how `raw` sanitizes, and how apps register their own.
 Expression semantics are [[DECISION-D173-CORE-SEMANTICS]]; call syntax is
 [[DECISION-D176-EXPRESSION-LANGUAGE]]. Built in PuzzleKit
-(`client-runtime/formatters/builtins.js`); Sites' Go half
-(`sites/engine/engine/formatters/`) is pending. [[DOC-LANGUAGE-CORE]]'s
+(`client-runtime/formatters/builtins.js`); Sites' Go half is its evaluator,
+`internal/pzleval` in the Sites repo. [[DOC-LANGUAGE-CORE]]'s
 function table tracks where each host stands.
 
 ## Principles

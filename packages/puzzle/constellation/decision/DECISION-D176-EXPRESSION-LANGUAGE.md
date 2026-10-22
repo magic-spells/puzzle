@@ -250,9 +250,11 @@ date takes only `< <= > >=` and binary `-` (milliseconds) in both hosts.
   TS 5.0); `toSorted`/`toReversed` type only from TS 5.2.
 - **Sites** (`internal/pzleval`, its own repo): a tree-walking Go
   evaluator — value model (string, float64, bool, nil, `[]any`,
-  `map[string]any`, records), the method table, the library, JS number
-  formatting. It parses with `Pipes` on and evaluates a pipe as the call it
-  is.
+  `map[string]any`, records), the library, JS number formatting. It parses
+  with `Pipes` on and evaluates a pipe as the call it is. The method table is
+  switched off in Sites (§5, D172): `value | name` is its transform spelling,
+  and the call form stays legal for lookups such as `t`, `url` and
+  `image_tag`.
 - **Identifier classes** come from `jsident.IsIDStart`/`IsIDContinue`
   (`packages/puzzle-lang/jsident`, Go's `unicode` tables), used by `expr`'s
   lexer, template tag names (D167) and PuzzleKit's `<script>` scan
@@ -292,7 +294,7 @@ attribute `{...props}` is an attribute form whose operand is one expression, not
 | count | `x.length` |
 | math | `+ - * / %`, `Math.*`, then a function to present |
 | fallback | `x ?? y` |
-| transform a value | a method or function: `name.toUpperCase()`, `currency(price)` (Sites also `price \| currency`) |
+| transform a value | PuzzleKit: a method or function, `name.toUpperCase()`, `currency(price)`. Sites: methods are off; a pipe, `price \| currency` (call form stays legal for lookups like `t`, `url`, `image_tag`) |
 | shape a list | array methods |
 | app display logic | a registered function |
 | a browser value | read it in `data()` |
