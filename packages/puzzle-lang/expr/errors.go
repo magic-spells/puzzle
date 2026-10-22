@@ -15,7 +15,8 @@ type Error struct {
 	Code string
 }
 
-// CodePipe is the Code of the error for a `|` in an expression.
+// CodePipe is the Code of the error for a `|` in an expression: the steer
+// when pipes are off, and the missing-function-name error when they are on.
 const CodePipe = "pipe"
 
 func (e *Error) Error() string {
@@ -55,7 +56,8 @@ const (
 	msgAssign          = "assignment is not available in template expressions — a template reads values; it never changes them (to compare, write `===`)"
 	msgUpdate          = "`++` and `--` are not available in template expressions — a template reads values; it never changes them"
 	msgBitwise         = "bitwise operators are not available in template expressions — use `&&` / `||` for logic"
-	msgPipe            = "`| name` pipes were removed — write `name(value)`; bitwise OR is not available"
+	msgPipe            = "`| name` pipes are Sites theme syntax — in a Puzzle app write `name(value)`"
+	msgPipeName        = "expected a function name after `|`"
 	msgExponent        = "`**` is not available in template expressions — use `Math.pow(a, b)`"
 	msgRegex           = "regular expression literals are not available in template expressions — use `includes()`, `startsWith()`, or `endsWith()`"
 	msgComment         = "comments are not available in template expressions"
@@ -148,11 +150,12 @@ var RemovedFormatters = map[string]string{
 	"noescape":   "a plain `{ value }`",
 }
 
-// pipeMessage is the error for a `|` followed by name: the removed
-// formatter's replacement when name is one, else the general steer.
+// pipeMessage is the error for a `|` followed by name when pipes are off (a
+// Puzzle app): the removed formatter's replacement when name is one, else the
+// general steer toward the call form.
 func pipeMessage(name string) string {
 	if alt, ok := RemovedFormatters[name]; ok {
-		return "the `" + name + "` formatter was removed — write " + alt + "; there are no `|` pipes in template expressions"
+		return "the `" + name + "` formatter was removed — write " + alt + "; `| name` pipes are Sites theme syntax"
 	}
 	return msgPipe
 }

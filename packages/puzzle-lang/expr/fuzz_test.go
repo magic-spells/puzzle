@@ -18,14 +18,20 @@ import (
 // counter, and a bound `event` that shadows a handler's DOM event.
 var fuzzBindings = []string{"item", "i", "event"}
 
-// fuzzOptions maps the fuzzed mode to the three ways a host parses: a plain
-// value, an @event handler, and a value inside binding constructs.
+// fuzzModes is the number of ways fuzzOptions parses.
+const fuzzModes = 4
+
+// fuzzOptions maps the fuzzed mode to the ways a host parses: a plain value,
+// an @event handler, a value inside binding constructs, and a Sites value
+// with `|` pipes on inside binding constructs.
 func fuzzOptions(mode uint8) expr.Options {
-	switch mode % 3 {
+	switch mode % fuzzModes {
 	case 1:
 		return expr.Options{Handler: true}
 	case 2:
 		return expr.Options{Bindings: fuzzBindings}
+	case 3:
+		return expr.Options{Bindings: fuzzBindings, Pipes: true}
 	}
 	return expr.Options{}
 }
@@ -66,9 +72,22 @@ func FuzzParse(f *testing.F) {
 		f.Fatalf("expressions-parse.json: %v", err)
 	}
 	for _, c := range table.Cases {
-		for mode := uint8(0); mode < 3; mode++ {
+		for mode := uint8(0); mode < fuzzModes; mode++ {
 			f.Add(c.Src, mode)
 		}
+	}
+	// Pipe chains in every nesting position, parsed with pipes on.
+	for _, src := range []string{
+		"title | strip | truncate(40) | upcase",
+		"a ? b | f : c | g",
+		"h(x | f, y)",
+		"list.map(i => i.name | upcase)",
+		"`${ x | f(1) }`",
+		"[x | f, { k: y | g }]",
+		"(x | f).length",
+		"a || b | f(c ?? d)",
+	} {
+		f.Add(src, uint8(3))
 	}
 	f.Fuzz(func(t *testing.T, src string, mode uint8) {
 		opts := fuzzOptions(mode)

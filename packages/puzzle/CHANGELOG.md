@@ -569,6 +569,9 @@ you see:
   that fails is retried by the next click. Both rewrite
   the current history entry rather than adding one; over a Back that is still
   loading, the push is an ordinary push so the entry Back moved to survives.
+- **`puzzle-lang`: `expr.Options.Pipes` / `parser.Options.Pipes` (D176).** The
+  Sites dialect's `|` pipe, parsed as sugar for the call it names. Off in
+  Puzzle apps; the `|` error now says pipes are Sites syntax.
 
 ### Changed
 

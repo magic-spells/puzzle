@@ -62,6 +62,9 @@ type exprScope struct {
 	// maxDepth caps inline-{#if} nesting inside an attribute value (attr.go):
 	// ParseMarkup's nesting limit, 0 everywhere else.
 	maxDepth int
+	// pipes turns on the Sites dialect's `|` pipe (Options.Pipes) for every
+	// expression in this scope.
+	pipes bool
 }
 
 // manyBindings is the scope size past which an expression gets the map
@@ -70,7 +73,7 @@ type exprScope struct {
 const manyBindings = 32
 
 func (s exprScope) opts() expr.Options {
-	o := expr.Options{Bindings: s.bindings}
+	o := expr.Options{Bindings: s.bindings, Pipes: s.pipes}
 	if s.first != nil && len(s.bindings) > manyBindings {
 		first, n := s.first, len(s.bindings)
 		o.IsBinding = func(name string) bool {
@@ -95,7 +98,7 @@ func (s exprScope) handlerOpts() expr.Options {
 // used only while its prefix of the stack is intact — scopes nest — so the
 // shared first map answers for it.
 func (p *parser) scope() exprScope {
-	return exprScope{bindings: p.bound[:len(p.bound):len(p.bound)], first: p.first, maxDepth: p.maxDepth}
+	return exprScope{bindings: p.bound[:len(p.bound):len(p.bound)], first: p.first, maxDepth: p.maxDepth, pipes: p.opts.Pipes}
 }
 
 // bind pushes the names a {#for}, <Snippet> or {#let} binds for the nodes

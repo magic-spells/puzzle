@@ -6,7 +6,7 @@ language: go
 summary: >-
   Public surface for a host with its own file layout: ParseMarkup (wrapper-less fragment at a file
   position) plus the exported section/lexer scanners a host splitter needs. options.go holds
-  parser.Options (Let, SkipIslandCheck, SkipSlotCheck, SkipRefCheck) whose zero value is PuzzleKit's
+  parser.Options (Let, Pipes, SkipIslandCheck, SkipSlotCheck, SkipRefCheck) whose zero value is PuzzleKit's
   grammar.
 connections:
   - FILE-PARSER
@@ -57,6 +57,9 @@ How a host other than PuzzleKit uses the parser without vendoring it (D172:
 one parser, per-host switches). Added in the Go-only `packages/puzzle-lang/v0.8.1`.
 
 - **`Options`** (`options.go`): `Let` turns on `{#let}` ([[FILE-PARSER-LET]]);
+  `Pipes` turns on the Sites `|` pipe in every expression position (it rides
+  `exprScope` into `expr.Options.Pipes`; `x | f(a)` parses to the call
+  `f(x, a)`, D176 §4);
   `SkipIslandCheck`/`SkipSlotCheck`/`SkipRefCheck` turn off the post-parse
   `validateIslands`/`validateSlots`/`validateRefs` passes. Every entry point
   (`Parse`, `ParseTemplate`, `ParseSkeleton`, `ParseFile`, `ParseMarkup`) takes
@@ -88,7 +91,8 @@ Sites' mapping from its vendored internals: `newLexer`+`newParser`+
 `newAttrLexer`+`Next`+`tokPos` → `AttrNames`; `posAt`/`posErr`/`errAt` →
 `Position.Advance` and a `ParseError` literal. Not covered on purpose: the 0.7
 pipe splitter (`parseFormatter`, `splitTopLevel` with skip-doubled) behind
-Sites' 0.7→0.8 pipe migration — pipes are not in the 0.8 grammar.
+Sites' 0.7→0.8 pipe migration — Sites pipes are now parsed by `expr` itself
+(`Options.Pipes`), so no host-side splitter is needed.
 
 `parser/host_test.go` (package `parser_test`) is a full wrapper-less splitter
 built from the exports alone, running the Sites splitter's own tests.

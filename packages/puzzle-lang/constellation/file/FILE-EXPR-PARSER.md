@@ -34,7 +34,17 @@ DOC-LANGUAGE-CORE in the framework plan state the grammar). `errors.go` holds th
   marks an `@event` value (the free name `event` is the DOM event there, and a
   chain rooted at it skips the method table); `Options.Bindings` lists names
   enclosing `{#for}`/`<Snippet>` bind, readable but never callable;
-  `Options.CallArgument` lets an arrow stand at the top level.
+  `Options.CallArgument` lets an arrow stand at the top level; `Options.Pipes`
+  (Sites) turns on the `|` pipe.
+- **Pipes (`parsePipes`).** With `Options.Pipes`, `parseExpr` runs
+  `parseBinary(0)` and then loops over `| name` / `| name(args)` links before
+  the `?` check, so a pipe binds looser than every binary and logical operator
+  and tighter than `?:`. Each link builds the `*Call` its written form
+  `name(x, args…)` produces — no pipe node; the Call starts at the piped value.
+  The name must be a plain function name (a bare global function such as
+  `Number` becomes its `Global` callee), else "expected a function name after
+  `|`" on that token (Code `CodePipe`); an arrow parameter fails in `callee`, a
+  template binding in `checkBindingCalls`, as a written call does.
 - **`event` outside a handler is an ordinary data name** (`event.title` is a
   member read, `{ event }` an object shorthand, `event.preventDefault()` hits the
   method-table error). A template that reads `event` as data and also uses it in a
@@ -52,8 +62,9 @@ DOC-LANGUAGE-CORE in the framework plan state the grammar). `errors.go` holds th
   (`location`, `localStorage` included) is an ordinary data read.
 - **Inline checks:** a method name must be in the table ([[FILE-EXPR-METHODS]]),
   and match the receiver's type when syntax fixes it; `??` mixed with `&&`/`||`
-  without parentheses names both fixes; a `|` is rejected with "`| name` pipes
-  were removed — write `name(value)`; bitwise OR is not available" (naming the JS
+  without parentheses names both fixes; with pipes off a `|` is rejected with
+  "`| name` pipes are Sites theme syntax — in a Puzzle app write `name(value)`"
+  (plus "; bitwise OR is not available" when no name follows, and naming the JS
   replacement when the name is a removed function); other excluded operators and
   keywords each have their own message.
 - **Messages are contract.** House form: "… is not available in template
@@ -61,7 +72,8 @@ DOC-LANGUAGE-CORE in the framework plan state the grammar). `errors.go` holds th
   pins them word for word with positions, so both hosts show the same text at the
   same column.
 - **Fuzzed.** `FuzzParse` (`expr/fuzz_test.go`) seeds from every
-  `expressions-parse.json` row in plain, handler and bindings modes and requires a
+  `expressions-parse.json` row in four modes — plain, handler, bindings, and
+  pipes (bindings with `Pipes` on) — plus pipe-chain seeds, and requires a
   tree or an `*expr.Error` (never a panic or neither), in-source positions, and a
   stable reprint. `go test` runs the seeds only; fuzz by hand:
   `go test -run '^$' -fuzz=FuzzParse -fuzztime=60s ./expr`.
