@@ -107,13 +107,14 @@ func TestParseInterpolationExpressions(t *testing.T) {
 	}
 }
 
-// TestPipeIsTheSteerError: there are no formatter pipes (D176). A 0.7
-// template's `| name` fails in every expression position with the one steer
-// toward a call, positioned at the `|` itself, and `||` stays logical OR.
+// TestPipeIsTheSteerError: a Puzzle app has no `|` pipes (D176; they are the
+// Sites dialect's Options.Pipes). A `| name` fails in every expression
+// position with the one steer toward a call, positioned at the `|` itself,
+// and `||` stays logical OR.
 func TestPipeIsTheSteerError(t *testing.T) {
-	const want = "`| name` pipes were removed — write `name(value)`; bitwise OR is not available"
+	const want = "`| name` pipes are Sites theme syntax — in a Puzzle app write `name(value)`"
 	removed := func(name, alt string) string {
-		return "the `" + name + "` formatter was removed — write " + alt + "; there are no `|` pipes in template expressions"
+		return "the `" + name + "` formatter was removed — write " + alt + "; `| name` pipes are Sites theme syntax"
 	}
 	cases := []struct{ name, src, want string }{
 		{"text", "<p>{ price | currency }</p>", want},

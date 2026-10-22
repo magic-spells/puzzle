@@ -58,10 +58,14 @@ unary `! - +`; `* / %`; `+ -`; `< <= > >=`; `== != === !==`; `&&`; `||`;
 bitwise operators, `**`, assignment, `++`/`--`, the comma operator, `new`,
 `typeof`, `in`, `instanceof`, regex literals, spread, comments, statements,
 `this` — is a positioned error that names the construct and, where there is
-one, what to write instead. There are no formatter pipes: a `|` is the steer
-"`| name` pipes were removed — write `name(value)`", or, after a formatter that
-is no longer a function (`| upcase`), the JavaScript that replaces it
-(`RemovedFormatters`), so a 0.7 template fails at the pipe itself. A read of
+one, what to write instead. `|` pipes are a Sites dialect switch
+(`expr.Options.Pipes`, `parser.Options.Pipes`): `x | f(a)` parses to exactly
+the tree `f(x, a)` produces, binding looser than every binary and logical
+operator and tighter than `?:`. Off — the zero Options, a Puzzle app — a `|`
+is the steer "`| name` pipes are Sites theme syntax — in a Puzzle app write
+`name(value)`", or, after a formatter that is no longer a function
+(`| upcase`), the JavaScript that replaces it (`RemovedFormatters`), so the
+error lands on the pipe itself. A read of
 the browser's global objects — `window`, `document`, `globalThis` — is an
 error too, unless a template binding or an arrow parameter owns the name:
 `data()` reads them. Other browser globals (`location`, `console`, …) are

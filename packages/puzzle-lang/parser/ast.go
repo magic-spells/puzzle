@@ -95,7 +95,8 @@ type Text struct {
 }
 
 // Interpolation is `{ expr }`: one expression (D176). A display transform is a
-// call inside it — `{ currency(price) }` — never a pipe.
+// call inside it — `{ currency(price) }`; a Sites pipe (`{ price | currency }`,
+// Options.Pipes) parses to that same call.
 //
 // Every expression string in this AST has a parsed sibling (…AST, an
 // expr.Node with file positions) filled during parsing; the string is the

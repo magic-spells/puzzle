@@ -515,6 +515,23 @@ describe('0.8.0 template expressions ride through verbatim', () => {
 		}
 	});
 
+	it('passes Sites `|` pipes through verbatim and finds the section close', async () => {
+		// A Sites pipe (puzzle-lang's Options.Pipes) is a plain `|` operator to
+		// the lexer: the name after it ends an expression, so a following `/` is
+		// division and the regex in <script> does not move the boundary.
+		for (const tpl of [
+			'<h2>{ title | truncate(40) }</h2>',
+			'<p title={ price * qty | currency }>{ total / 2 | round(1) }</p>',
+			'{#for p in posts | ordered}<i>{ p.title | truncate(40) }</i>{/for}',
+		]) {
+			const src = `<puzzle-view>${tpl}</puzzle-view>\n<script>\nconst re = /}/;\n</script>\n`;
+			const b = sectionMap(await format(src));
+			expect(Object.keys(b).sort(), tpl).toEqual(['puzzle-view', 'script']);
+			expect(b['puzzle-view'].inner, tpl).toBe(tpl);
+			expect(b['script'].inner, tpl).toBe('\nconst re = /}/;\n');
+		}
+	});
+
 	it('hands back template values the compiler rejects, untouched', async () => {
 		// A method outside the method table, `this`, `new`, a bitwise `|`, and an
 		// expression that starts with an object literal are positioned compile

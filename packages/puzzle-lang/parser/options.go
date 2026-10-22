@@ -20,6 +20,12 @@ type Options struct {
 	// in data() instead.
 	Let bool
 
+	// Pipes turns on the `|` pipe in every expression position
+	// (expr.Options.Pipes): `{ price | currency }` parses to the same tree as
+	// `{ currency(price) }`. Sites turns it on; off, a `|` is the steer error
+	// toward the call form PuzzleKit writes.
+	Pipes bool
+
 	// SkipIslandCheck skips the post-parse `island` rules (island.go). A host
 	// with no islands — Sites renders on the server and drops the attribute —
 	// diagnoses `island` itself.

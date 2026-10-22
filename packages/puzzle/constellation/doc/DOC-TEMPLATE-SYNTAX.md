@@ -52,7 +52,7 @@ A function formats a value for display. Call it with the value first; calls nest
 The built-ins: `round`, `currency`, `percentage`, `number_with_delimiter`, `compact_number`, `capitalize`, `truncate`, `strip_html`, `strip_newlines`, `pluralize`, `escape`, `raw`, `newline_to_br`, `json`, `date`, `time`, `datetime` (presets `short`, `medium`, `long`, `iso`), `in_timezone`, `t` (translations), plus `link` (router-aware href) and `timeago`. Each one's contract is in §6.
 
 - What JavaScript already spells is not a function: count with `.length`, do math with the operators and `Math.*`, fall back with `??`, transform text with methods (`.toUpperCase()`, `.trim()`, `.replaceAll(a, b)`, `.split(',')`).
-- There is no `|` pipe: `{ price | currency }` is a compile error that says to write `currency(price)`.
+- `|` pipes are Sites theme syntax: `{ price | currency }` is a compile error here that says to write `currency(price)`.
 - Register your own in the app config — `formatters: { byline: (name) => … }` — and call them the same way: `{ byline(post.author) }`. A function must be pure: rows in a cached `{#for}` do not re-run it.
 - A misspelled function doesn't crash: the value renders unchanged and the console names it, with a did-you-mean.
 

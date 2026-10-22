@@ -623,6 +623,22 @@ describe('splitSections — 0.8.0 template expressions', () => {
 		}
 	});
 
+	it('carves Sites `|` pipes without opening a regex', () => {
+		// A Sites pipe (puzzle-lang's Options.Pipes) is a plain `|` operator to
+		// the splitter: the name after it ends an expression, so a following
+		// `/` is division and the regex in <script> does not swallow a boundary.
+		for (const tpl of [
+			'<h2>{ title | truncate(40) }</h2>',
+			'<p title={ price * qty | currency }>{ total / 2 | round(1) }</p>',
+			'{#for p in posts | ordered}<i>{ p.title | truncate(40) }</i>{/for}',
+		]) {
+			const { sections, errors } = splitSections(wrap(tpl, closingScript), 'x.pzl');
+			expect(errors, tpl).toEqual([]);
+			expect(sections.view.content, tpl).toBe(tpl);
+			expect(sections.scripts.content, tpl).toBe('\nconst re = /}/;\n');
+		}
+	});
+
 	it('carves template values the compiler rejects without an opinion', () => {
 		// A method outside the method table, `this`, `new`, a bitwise `|` and a
 		// leading object literal are positioned COMPILE errors (D176), one stage

@@ -37,6 +37,13 @@ type Options struct {
 	// scan per lookup would make the whole parse quadratic. It must report
 	// exactly the names in Bindings.
 	IsBinding func(name string) bool
+	// Pipes turns on the Sites dialect's `|` pipe: `x | f` and `x | f(a, b)`
+	// parse to exactly the call `f(x)` and `f(x, a, b)` produce — there is no
+	// pipe node. A pipe binds looser than every binary and logical operator
+	// and tighter than the conditional: `price * qty | currency` is
+	// `currency(price * qty)`, `a ? b | f : c` is `a ? f(b) : c`. Off (the
+	// zero value, PuzzleKit) a `|` is the steer error toward the call form.
+	Pipes bool
 }
 
 // maxDepth caps syntactic nesting (groups, unary operators, conditionals,
@@ -326,6 +333,9 @@ func (p *parser) parseExpr() Node {
 	p.enter(p.cur().pos)
 	defer p.leave()
 	test := p.parseBinary(0)
+	if p.opts.Pipes {
+		test = p.parsePipes(test)
+	}
 	q := p.cur()
 	if !isPunct(q, "?") {
 		return test
@@ -342,6 +352,58 @@ func (p *parser) parseExpr() Node {
 	p.advance()
 	alt := p.parseExpr()
 	return &Conditional{Start: test.Pos(), Test: test, Consequent: cons, Alternate: alt}
+}
+
+// parsePipes parses the `| name` and `| name(args)` links after left, each
+// desugared to the call it names with the piped value as its first argument.
+// The name is a plain function name: a member (`| a.b`), a namespace
+// (`| Math.abs`), a literal word or an operator keyword is an error on the
+// token after the `|`. A statement word is a function name here — `default`
+// is a Sites function, and nothing after a `|` is JavaScript — so
+// `x | default(0)` is the call `default(x, 0)`. A bound name is checked as a
+// written callee is — an arrow parameter here (callee), a template binding
+// on the finished tree (checkBindingCalls).
+func (p *parser) parsePipes(left Node) Node {
+	for isPunct(p.cur(), "|") {
+		p.advance()
+		t := p.cur()
+		if t.kind != tIdent || !isPipeName(t.text) || isGlobalNamespace(t.text) || isPunct(p.peek(1), ".") || isPunct(p.peek(1), "?.") {
+			if t.kind == tError {
+				panic(bailout{t.ext.err})
+			}
+			panic(bailout{&Error{Pos: t.pos, Message: msgPipeName, Code: CodePipe}})
+		}
+		var callee Node
+		if IsGlobalFunction("", t.text) {
+			// A bare global function (`| Number`) is the Global node its
+			// written call (`Number(x)`) produces.
+			callee = &Global{Start: t.pos, Name: t.text}
+		} else {
+			callee = p.callee(&Identifier{Start: t.pos, Name: t.text}, t, false)
+		}
+		p.advance()
+		args := []Node{left}
+		if open := p.cur(); isPunct(open, "(") {
+			p.advance()
+			args = append(args, p.parseArgs(open)...)
+		}
+		left = &Call{Start: left.Pos(), Callee: callee, Args: args}
+	}
+	return left
+}
+
+// isPipeName reports whether an identifier token may name the function after
+// a `|`: any name but a literal word and the operator keywords. The statement
+// words (`default`, `if`, …) are allowed; a function may carry such a name.
+func isPipeName(name string) bool {
+	if _, ok := keywordMessages[name]; ok {
+		return false
+	}
+	switch name {
+	case "true", "false", "null", "undefined", "NaN", "Infinity":
+		return false
+	}
+	return true
 }
 
 // binaryPrecedence is the binding power of each binary operator the grammar
@@ -375,12 +437,15 @@ func (p *parser) parseBinary(minBP int) Node {
 		if t.kind == tPunct {
 			bp = binaryPrecedence[t.text]
 			if bp == 0 {
+				if t.text == "|" && p.opts.Pipes {
+					return left
+				}
 				if t.text == "|" {
-					name := ""
+					msg := msgPipe + "; bitwise OR is not available"
 					if next := p.peek(1); next.kind == tIdent {
-						name = next.text
+						msg = pipeMessage(next.text)
 					}
-					panic(bailout{&Error{Pos: t.pos, Message: pipeMessage(name), Code: CodePipe}})
+					panic(bailout{&Error{Pos: t.pos, Message: msg, Code: CodePipe}})
 				}
 				if msg, ok := excludedOperators[t.text]; ok {
 					p.fail(t.pos, msg)
