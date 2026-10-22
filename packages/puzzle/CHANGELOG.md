@@ -227,7 +227,7 @@ Change the range to `^0.9.0`. Three changes can require an update:
    paints the default. A 0.8 store holding `mode: "mixed"` (Pyramid's
    name, which 0.8 read as `medium`) now paints the real Mixed style.
 
-Six behavior changes do not break anything that worked, but can change what
+Seven behavior changes do not break anything that worked, but can change what
 you see:
 
 4. **`puzzle preview` and `puzzle dev` in static mode serve a nested 404
@@ -262,6 +262,14 @@ you see:
    or other URL attribute whose value starts with `javascript:`, `vbscript:`
    or an executable `data:` URL is omitted, with a development warning.
    Author-written static attributes are untouched.
+10. **Split builds hash their file names (D181).** `build.hashNames` follows
+    `build.splitting`, so an app with `splitting: true` now emits
+    `app-<hash>.js` and `styles-<hash>.css` and rewrites the shell's
+    references to them. A shell that loads the entry from script instead of
+    a `<script src>` tag (`el.src = prefix + 'app.js'`) has no reference to
+    rewrite, so the build stops and names the fix: set
+    `build: { hashNames: false }` to keep fixed names. A deploy script that
+    copies `dist/app.js` by name needs the same flag.
 
 ### Added
 
