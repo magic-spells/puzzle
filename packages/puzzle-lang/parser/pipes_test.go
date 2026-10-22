@@ -124,3 +124,22 @@ func TestPipeErrorsWithPipesOn(t *testing.T) {
 		})
 	}
 }
+
+// A statement word names a function after a `|` — `default` is a Sites
+// function — while the written call keeps JavaScript's reading of the word.
+func TestPipeToAStatementWord(t *testing.T) {
+	sites := Options{Pipes: true, Let: true}
+	wrap := func(s string) []byte { return []byte("<puzzle-view>" + s + "</puzzle-view>") }
+	piped, err := Parse(wrap("<p>{ settings.x | default(0) | currency }</p>"), "t.pzl", sites)
+	if err != nil {
+		t.Fatalf("piped: %v", err)
+	}
+	if got := strings.Join(exprTrees(piped), "\n"); !strings.Contains(got, "(call currency (call default (. settings x) 0))") {
+		t.Errorf("tree %q", got)
+	}
+	_, err = Parse(wrap("<p>{ default(settings.x, 0) }</p>"), "t.pzl", sites)
+	pe, ok := err.(*ParseError)
+	if !ok || !strings.Contains(pe.Message, "`default` begins a statement") {
+		t.Fatalf("called form: got %v", err)
+	}
+}

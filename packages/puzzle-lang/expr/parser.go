@@ -357,15 +357,17 @@ func (p *parser) parseExpr() Node {
 // parsePipes parses the `| name` and `| name(args)` links after left, each
 // desugared to the call it names with the piped value as its first argument.
 // The name is a plain function name: a member (`| a.b`), a namespace
-// (`| Math.abs`), a literal or a reserved word is an error on the token after
-// the `|`. A bound name is checked as a written callee is — an arrow
-// parameter here (callee), a template binding on the finished tree
-// (checkBindingCalls).
+// (`| Math.abs`), a literal word or an operator keyword is an error on the
+// token after the `|`. A statement word is a function name here — `default`
+// is a Sites function, and nothing after a `|` is JavaScript — so
+// `x | default(0)` is the call `default(x, 0)`. A bound name is checked as a
+// written callee is — an arrow parameter here (callee), a template binding
+// on the finished tree (checkBindingCalls).
 func (p *parser) parsePipes(left Node) Node {
 	for isPunct(p.cur(), "|") {
 		p.advance()
 		t := p.cur()
-		if t.kind != tIdent || reservedMessage(t.text) != "" || isGlobalNamespace(t.text) || isPunct(p.peek(1), ".") || isPunct(p.peek(1), "?.") {
+		if t.kind != tIdent || !isPipeName(t.text) || isGlobalNamespace(t.text) || isPunct(p.peek(1), ".") || isPunct(p.peek(1), "?.") {
 			if t.kind == tError {
 				panic(bailout{t.ext.err})
 			}
@@ -388,6 +390,20 @@ func (p *parser) parsePipes(left Node) Node {
 		left = &Call{Start: left.Pos(), Callee: callee, Args: args}
 	}
 	return left
+}
+
+// isPipeName reports whether an identifier token may name the function after
+// a `|`: any name but a literal word and the operator keywords. The statement
+// words (`default`, `if`, …) are allowed; a function may carry such a name.
+func isPipeName(name string) bool {
+	if _, ok := keywordMessages[name]; ok {
+		return false
+	}
+	switch name {
+	case "true", "false", "null", "undefined", "NaN", "Infinity":
+		return false
+	}
+	return true
 }
 
 // binaryPrecedence is the binding power of each binary operator the grammar

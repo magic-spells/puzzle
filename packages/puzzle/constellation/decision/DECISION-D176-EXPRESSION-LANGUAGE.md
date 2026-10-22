@@ -152,9 +152,14 @@ The call form is the core and both hosts accept it.
   bodies, `${ }` substitutions, array and object members, groups
   (`(x | f).length`).
 - **The name after `|` is a plain function name**: a member (`| a.b`),
-  a namespace (`| Math.abs`), a literal or anything else is "expected a
+  a namespace (`| Math.abs`), a literal word or anything else is "expected a
   function name after `|`" on that token. A template binding or arrow
-  parameter after `|` gets the same error as calling it.
+  parameter after `|` gets the same error as calling it. JavaScript's
+  statement words are function names here — nothing after a `|` is
+  JavaScript, and `default` is a Sites function — so `x | default(0)` is
+  `default(x, 0)` while the written call `default(x, 0)` stays the
+  statement-word error (2026-10-22, found in the Sites review; `default` is
+  pipe-only).
 - **PuzzleKit has no pipes.** With the switch off a `|` is the positioned
   steer "`| name` pipes are Sites theme syntax — in a Puzzle app write
   `name(value)`"; when `name` is a removed formatter (`RemovedFormatters` in
