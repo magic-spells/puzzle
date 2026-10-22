@@ -100,6 +100,14 @@
   --color-danger-tint: light-dark(#fdecec, #2a1215);
   --color-danger-ink: light-dark(#ffffff, #030406);
   --color-danger-on-tint: light-dark(#a41616, #f87171);
+  /* The solid danger BUTTON: the same darker red and white text in every
+     scheme and style (Cory, 2026-10-21: "the delete buttons should always be
+     the darker red with the white text on all color schemes"). Constant on
+     purpose: no light-dark(), and no dim or mixed block overrides them.
+     `danger` stays the per-scheme red for danger text and outlines. */
+  --color-danger-solid: #d11f1f;
+  --color-danger-solid-hover: #a41616;
+  --color-danger-solid-ink: #ffffff;
   --color-success: light-dark(#0f7a3d, #22c55e);
   --color-success-tint: light-dark(#e6f6ec, #122616);
   --color-warning: light-dark(#a45300, #f59e0b);
@@ -283,6 +291,9 @@
   --color-danger-tint: light-dark(#fdecec, #2a1215);
   --color-danger-ink: light-dark(#ffffff, #030406);
   --color-danger-on-tint: light-dark(#a41616, #f87171);
+  --color-danger-solid: #d11f1f;
+  --color-danger-solid-hover: #a41616;
+  --color-danger-solid-ink: #ffffff;
   --color-success: light-dark(#0f7a3d, #22c55e);
   --color-success-tint: light-dark(#e6f6ec, #122616);
   --color-warning: light-dark(#a45300, #f59e0b);

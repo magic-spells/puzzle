@@ -38,7 +38,7 @@ const VARIANT = {
   secondary: 'bg-surface-sunken text-ink hover:bg-border',
   outline: 'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken',
   ghost: 'text-body hover:bg-surface-sunken hover:text-ink',
-  destructive: 'bg-danger text-danger-ink hover:bg-danger-dark',
+  destructive: 'bg-danger-solid text-danger-solid-ink hover:bg-danger-solid-hover',
 };
 
 // Height, split from Button's SIZE so the caret can reuse it without the

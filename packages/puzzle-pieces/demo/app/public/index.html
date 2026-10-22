@@ -86,12 +86,18 @@
 	// would paint the default and let boot() strip it: the very flash this
 	// file exists to prevent). Only a missing or unknown mode takes the default.
 	var mode = pick.mode === null ? null : toMode(pick.mode) || toMode(attr('data-default-mode'));
-	if (scheme && scheme !== 'default') {
-		root.setAttribute('data-scheme', scheme);
-	}
+	// Write both attributes the way appearance.js apply() does, removing as well
+	// as setting: an app shell that stamps `data-theme="dark"` on <html> must
+	// not keep it for a follow-the-OS account, or a light OS paints dark until
+	// boot() strips it — a flash.
+	if (scheme && scheme !== 'default') root.setAttribute('data-scheme', scheme);
+	else root.removeAttribute('data-scheme');
 	if (mode) {
 		root.setAttribute('data-theme', mode);
 		root.style.colorScheme = mode === 'light' || mode === 'mixed' ? 'light' : 'dark';
+	} else {
+		root.removeAttribute('data-theme');
+		root.style.colorScheme = '';
 	}
 })();
 </script>

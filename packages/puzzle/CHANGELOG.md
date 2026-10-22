@@ -577,6 +577,15 @@ you see:
   `app.idle()` and `this.renderTick()` share `client-runtime/scheduler.js`, so a
   view's `setData()` render lands in a background tab instead of waiting for
   the tab to come back.
+- **Destructive buttons are the same dark red with white text in every
+  scheme and style (puzzle-pieces).** The pieces use three new constant tokens:
+  `--color-danger-solid` (#d11f1f), `--color-danger-solid-hover` (#a41616) and
+  `--color-danger-solid-ink` (#ffffff). They paint `button` `destructive`,
+  `split-button` `destructive`, the `alert-dialog` destructive confirm and the
+  `popconfirm` danger confirm. Before, dark styles used near-black text on
+  #ef4444, and the hover went lighter. `--color-danger` is unchanged and still
+  paints danger text and outlines. Run `puzzle add theme default` (or re-copy
+  your palettes) together with the pieces.
 
 ### Fixed
 
@@ -643,6 +652,13 @@ you see:
   the whole circle. That slice draws two paths, and both were keyed by the
   slice's `id`. Each path now has its own key, and `bar-chart` binds its
   per-bar keys the same way.
+- **The pre-paint snippet removes a stale `data-theme` (puzzle-pieces).** When
+  the stored choice follows the OS, the snippet now removes a `data-theme`
+  that the app shell stamped on `<html>`, and it clears `color-scheme`. For
+  the default palette it also removes `data-scheme`. This is what
+  `appearance.js` `apply()` does. Before, a shell with `data-theme="dark"`
+  painted dark first on a light OS, then flashed when `boot()` removed the
+  attribute. Re-copy the inline snippet.
 
 Re-add a piece with `puzzle add piece <name> --overwrite` to pick up these
 fixes.

@@ -8,6 +8,17 @@ connections:
   - FEATURE-THEMES
   - DOC-REGISTRY
   - DOC-DEMO-DOCS-SITE
+notes:
+  - kind: gotcha
+    text: >-
+      pre-paint.js now writes the attributes the same way as appearance.js apply(), removing them as
+      well as setting them. A resolved `null` mode removes `data-theme` and clears `colorScheme`.
+      The default scheme removes `data-scheme`. The bug it fixes: an app shell that stamped
+      `data-theme="dark"` on <html> kept that stamp for a follow-the-OS account, so a light OS
+      painted dark until boot() stripped it, which caused a flash. In test/appearance.test.mjs,
+      fakeDom takes `htmlAttrs` to seed stamped attributes. One case stamps data-theme="dark" with
+      data-scheme="warm" and asserts two things: pre-paint removes both, and boot() leaves the
+      result unchanged. The demo index.html inline copy was re-synced byte for byte.
 ---
 
 # Appearance styles — Cool scheme, Dark/Dim/Mixed/Light, picker previews

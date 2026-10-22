@@ -10,8 +10,9 @@ import vm from 'node:vm';
 
 const prePaint = readFileSync(new URL('../registry/theme/pre-paint.js', import.meta.url), 'utf8');
 
-function fakeDom({ stored, raw, throws = false, scriptAttrs = {} } = {}) {
-	const attrs = new Map();
+function fakeDom({ stored, raw, throws = false, scriptAttrs = {}, htmlAttrs = {} } = {}) {
+	// htmlAttrs: attributes the app shell already stamped on <html>.
+	const attrs = new Map(Object.entries(htmlAttrs));
 	const root = {
 		style: {},
 		setAttribute: (k, v) => attrs.set(k, String(v)),
@@ -67,7 +68,21 @@ test('pre-paint: stored mode null (follow OS) paints no mode even with data-defa
 	const dom = runPrePaint({ stored: { scheme: 'warm', mode: null }, scriptAttrs: { 'data-default-mode': 'dark' } });
 	assert.equal(dom.attrs.get('data-scheme'), 'warm');
 	assert.equal(dom.attrs.has('data-theme'), false, 'data-theme must stay absent for a stored null mode');
-	assert.equal(dom.root.style.colorScheme, undefined);
+	assert.equal(dom.root.style.colorScheme, '');
+});
+
+test('pre-paint: a follow-the-OS account REMOVES a data-theme / data-scheme the app shell stamped, as apply() does', async () => {
+	const htmlAttrs = { 'data-theme': 'dark', 'data-scheme': 'warm' };
+	const dom = runPrePaint({ stored: { scheme: 'default', mode: null }, htmlAttrs });
+	assert.equal(dom.attrs.has('data-theme'), false, 'a stamped data-theme="dark" survived pre-paint: a light OS flashes dark');
+	assert.equal(dom.attrs.has('data-scheme'), false, 'a stamped data-scheme survived pre-paint for the default palette');
+	assert.equal(dom.root.style.colorScheme, '');
+	// boot() on the same page leaves it exactly as pre-paint painted it.
+	const painted = new Map(dom.attrs);
+	const { booted } = await bootAfterPrePaint(dom, 'stamped-null');
+	assert.deepEqual(booted, { scheme: 'default', mode: null });
+	assert.deepEqual(dom.attrs, painted);
+	assert.equal(dom.root.style.colorScheme, '');
 });
 
 test('pre-paint: an EMPTY store takes data-default-mode; an unknown mode does too', () => {

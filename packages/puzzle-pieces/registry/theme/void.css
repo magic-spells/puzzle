@@ -59,6 +59,9 @@
   --color-danger-tint: light-dark(#fdecec, #2a1414);
   --color-danger-ink: light-dark(#ffffff, #000000);
   --color-danger-on-tint: light-dark(#b02222, #ff8585);
+  --color-danger-solid: #d11f1f;
+  --color-danger-solid-hover: #a41616;
+  --color-danger-solid-ink: #ffffff;
   --color-success: light-dark(#0f7a3d, #22c55e);
   --color-success-tint: light-dark(#e6f6ec, #10261a);
   --color-warning: light-dark(#a45300, #f59e0b);

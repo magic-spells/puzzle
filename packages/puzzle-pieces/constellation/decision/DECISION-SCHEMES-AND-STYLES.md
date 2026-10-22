@@ -9,6 +9,23 @@ connections:
   - FEATURE-APPEARANCE-STYLES
   - DOC-REGISTRY
   - DOC-DEMO-DOCS-SITE
+notes:
+  - kind: decision
+    text: >-
+      2026-10-21, Cory: "the delete buttons should always be the darker red with the white text on
+      all color schemes". There are three new CONSTANT tokens: `--color-danger-solid: #d11f1f`,
+      `--color-danger-solid-hover: #a41616` and `--color-danger-solid-ink: #ffffff`. They have the
+      same values in every scheme and style, with no light-dark(), and no dim or mixed block
+      overrides them. Each palette block states them (pieces.css @theme plus the
+      [data-scheme='default'] restatement, and cool/warm/void), as the token-set parity rule
+      requires. Every solid danger fill now uses them: Button `destructive`, SplitButton Action/Menu
+      `destructive`, the AlertDialog destructive confirm, the Popconfirm danger confirm, and the
+      delete buttons in the Dialog, Sheet and BottomSheet docs. `--color-danger`, `-dark`, `-ink`
+      and `-on-tint` stay per-scheme, for danger text, outlines, tints and indicator fills (Meter,
+      Timeline). contrast.test.mjs measures danger-solid-ink on danger-solid (5.35:1) and on
+      danger-solid-hover (7.76:1) in all 16 cells. This matches Pyramid 656aa2f6. The rejected
+      alternative was a dark-half pair: dark's #ef4444 with near-black text, whose hover went
+      LIGHTER (#f87171).
 ---
 
 # Appearance is four schemes × four styles
