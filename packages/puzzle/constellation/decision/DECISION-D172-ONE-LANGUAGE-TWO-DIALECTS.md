@@ -61,7 +61,8 @@ core that Shopify extends.
   closed JavaScript-shaped grammar parsed by the shared `expr` package — paths,
   `.length`, literals, arithmetic, comparison, `&&`/`||`/`??`, ternary, arrow
   arguments, and calls to library functions, table methods and global
-  namespaces. No pipes, `new`, `typeof`, regex or bitwise operators.
+  namespaces. No `new`, `typeof`, regex or bitwise operators; `|` pipes are a
+  Sites switch.
   Semantics per construct: [[DECISION-D173-CORE-SEMANTICS]].
 
 **The dialects** add to or restrict the core:
@@ -70,7 +71,7 @@ core that Shopify extends.
 |---|---|---|
 | File structure | `<puzzle-view>`/`<puzzle-skeleton>` wrapper + `<script>` class (layouts too) | No wrapper; directory decides the kind; top-level `<schema>` |
 | Adds | `@event` + modifiers, `<Portal>`, `ref`/`key`/`flip`/`island`, implicit binding | `{#let}`, implicit props |
-| Expressions | The core; an `@event` handler is the one door into the view's JS; `this` is not a template identifier | The core |
+| Expressions | The core; an `@event` handler is the one door into the view's JS; `this` is not a template identifier | The core, plus `\|` pipes (a dialect switch that desugars to calls); the method table is switched off in Sites |
 | Naming a computed value | a `data()` field | `{#let}` |
 | Restricts | — | `@event`, `<Portal>` rejected; dotted tags rejected for now (D173 V16) |
 

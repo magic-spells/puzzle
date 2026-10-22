@@ -1,7 +1,7 @@
 ---
 name: >-
   D176 — The expression language: JavaScript-shaped, one closed grammar parsed in puzzle-lang, a
-  method table, functions instead of pipes
+  method table, functions in PuzzleKit, pipes in Sites
 status: built
 connections:
   - DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS
@@ -22,7 +22,7 @@ connections:
 Template expressions are JavaScript-shaped, defined by **one closed grammar
 and a method table**, parsed once in `packages/puzzle-lang/expr`, and
 implemented by each host: PuzzleKit lowers the AST to JavaScript; Sites
-(pending, its own repo) evaluates it in Go. Semantics are
+(its own repo) evaluates it in Go (`internal/pzleval`). Semantics are
 [[DECISION-D173-CORE-SEMANTICS]], the function library
 [[DECISION-D174-STANDARD-FORMATTERS]], translations
 [[DECISION-D175-TRANSLATIONS]].
@@ -40,7 +40,7 @@ method table, evaluable in Go), not Vue's (whatever JS the compiler accepts).
 ## 1. The grammar (`packages/puzzle-lang/expr`)
 
 Lexer, Pratt parser, AST, method table, printer. The template parser calls
-`expr.Parse(src, base, Options{Handler, Bindings})` once per expression
+`expr.Parse(src, base, Options{Handler, Bindings, Pipes})` once per expression
 position and stores the tree. Every node carries a file position (same
 line:col in both hosts); parsing is linear. Anything outside the grammar is a
 positioned compile error naming the construct and the alternative.
@@ -87,9 +87,8 @@ positioned compile error naming the construct and the alternative.
   ops, `**` (→ `Math.pow`), `in`, `instanceof`, `typeof`, `void`, `delete`,
   `new`, comma, assignment, `++`/`--`, regex literals, comments, statements,
   `function`, classes, `await`/`yield`, tagged templates, spread.
-- **No pipe.** Any `|` → "`| name` pipes were removed — write `name(value)`;
-  bitwise OR is not available" (naming the replacement when `name` is a
-  removed formatter — `RemovedFormatters` in `expr/errors.go`, D174).
+- **`|` is a pipe in Sites and nothing else** (§4). Bitwise OR does not
+  exist; `||` is logical OR in both hosts.
 
 ## 2. JavaScript semantics, two shared deviations
 
@@ -129,10 +128,39 @@ reimplementation, pinned by conformance. **Nothing mutates its receiver.**
 - Not in v1: `localeCompare`, `normalize`, `entries`, `keys`, `toPrecision`.
 - **Exception:** a chain rooted at the DOM `event` in a handler (§7).
 
-## 4. Functions instead of pipes
+## 4. Two spellings of a display transform: calls, and pipes in Sites
 
 A display transform is a call: `{ currency(price) }`, `{ b(a(x)) }`. The
 library holds only what no method, operator or `Math` global covers (D174).
+The call form is the core and both hosts accept it.
+
+- **`|` pipes are a Sites dialect switch** (`expr.Options.Pipes`,
+  `parser.Options.Pipes`, D172). A pipe is sugar with no AST node of its own:
+  `x | f` and `x | f(a, b)` parse to exactly the `*expr.Call` that `f(x)` and
+  `f(x, a, b)` produce — callee `*expr.Identifier{f}`, the piped value as the
+  first argument, the Call positioned at the piped value and the name at its
+  token. The printer, the Sites evaluator and PuzzleKit codegen never see a
+  pipe. Cory's reason: Sites authors come from the theme-format world, where
+  pipes are the idiom, and a visible split in the transform layer tells a
+  reader which host a file targets.
+- **Precedence.** A pipe binds looser than every binary and logical
+  operator and tighter than `?:`: `price * qty | currency` is
+  `currency(price * qty)`, `a ?? b | f` is `f(a ?? b)`, `a | f ? b : c` is
+  `f(a) ? b : c`, and each conditional branch carries its own pipes
+  (`a ? b | f : c | g`). Chains apply left to right (`x | f | g(1)` is
+  `g(f(x), 1)`). Every expression position takes them — arguments, arrow
+  bodies, `${ }` substitutions, array and object members, groups
+  (`(x | f).length`).
+- **The name after `|` is a plain function name**: a member (`| a.b`),
+  a namespace (`| Math.abs`), a literal or anything else is "expected a
+  function name after `|`" on that token. A template binding or arrow
+  parameter after `|` gets the same error as calling it.
+- **PuzzleKit has no pipes.** With the switch off a `|` is the positioned
+  steer "`| name` pipes are Sites theme syntax — in a Puzzle app write
+  `name(value)`"; when `name` is a removed formatter (`RemovedFormatters` in
+  `expr/errors.go`, D174) the message names the JavaScript replacement first
+  and ends "`| name` pipes are Sites theme syntax". Inside a `{:when}` list a
+  failed `|` is the commas-list steer in both hosts.
 
 - **Resolution.** A bare call resolves to the library; a bare read resolves
   to `data()`, except for module scope in the `<Component>` `is` attribute (§67, D180). They never resolve to each other (so a data field sharing a
@@ -220,9 +248,11 @@ date takes only `< <= > >=` and binary `-` (milliseconds) in both hosts.
   needs regardless of the app's `target` (`es2021.string`,
   `es2022.array/string` from TS 4.9, the oldest supported; `es2023.array` from
   TS 5.0); `toSorted`/`toReversed` type only from TS 5.2.
-- **Sites** (pending): a tree-walking Go evaluator — value model (string,
-  float64, bool, nil, `[]any`, `map[string]any`, records), the method table,
-  the library, JS number formatting — built on its `engine/expr` allow-list.
+- **Sites** (`internal/pzleval`, its own repo): a tree-walking Go
+  evaluator — value model (string, float64, bool, nil, `[]any`,
+  `map[string]any`, records), the method table, the library, JS number
+  formatting. It parses with `Pipes` on and evaluates a pipe as the call it
+  is.
 - **Identifier classes** come from `jsident.IsIDStart`/`IsIDContinue`
   (`packages/puzzle-lang/jsident`, Go's `unicode` tables), used by `expr`'s
   lexer, template tag names (D167) and PuzzleKit's `<script>` scan
@@ -236,7 +266,7 @@ date takes only `< <= > >=` and binary `-` (milliseconds) in both hosts.
 - **Conformance** (`packages/puzzle-lang/conformance`, `go:embed`ed so Sites
   pins rows at the language tag): `expressions-parse.json` pins every
   expression's S-expression tree with positions, or its positioned error
-  (plain, handler and bindings modes; `conformance.ExpressionsParse` +
+  (plain, handler, bindings and `pipes` modes; `conformance.ExpressionsParse` +
   `expr.Print`); `functions.json` pins the library. A corpus proof parses
   every `.pzl` expression in the monorepo. `FuzzParse`
   (`expr/fuzz_test.go`) fuzzes from the rows (tree or positioned error, all
@@ -262,7 +292,7 @@ attribute `{...props}` is an attribute form whose operand is one expression, not
 | count | `x.length` |
 | math | `+ - * / %`, `Math.*`, then a function to present |
 | fallback | `x ?? y` |
-| transform a value | a method or function: `name.toUpperCase()`, `currency(price)` |
+| transform a value | a method or function: `name.toUpperCase()`, `currency(price)` (Sites also `price \| currency`) |
 | shape a list | array methods |
 | app display logic | a registered function |
 | a browser value | read it in `data()` |
@@ -283,6 +313,10 @@ attribute `{...props}` is an attribute form whose operand is one expression, not
 - **Each host accepts its own subset** — two parsers drift; Sites only
   switches entries off.
 - **Keep `upcase`/`trim`/`join`… as functions** — two ways to say one thing.
+- **Pipes in both hosts** — PuzzleKit chose JavaScript's shape (Vue's move,
+  dropping filters); a second spelling there is two ways to say one thing.
+- **A pipe AST node** — the evaluator and codegen would learn a node that
+  means exactly a call.
 - **`===` only** — `==` keeps its JS meaning; Go implements the coercion.
 - **Method call on a missing value as an error** — guarded like a member read.
 - **Library wins a bare call in `@event`**, or as a fallback when no handler

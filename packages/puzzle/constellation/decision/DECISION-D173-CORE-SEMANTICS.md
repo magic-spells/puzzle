@@ -52,9 +52,10 @@ V3's strict comparison, V5, V15, V17 and the V18 styles.
   (`packages/puzzle-lang/expr`), which PuzzleKit lowers to JS and Sites will
   evaluate in Go. A display transform is a function call —
   `{ currency(price) }`, `{ t('cart.items', { count: items.length }) }` — and
-  works in every position, headers included. A `|` is a positioned error
-  (`` `| name` pipes were removed — write `name(value)`; bitwise OR is not
-  available ``). `{#unless c}` is stored as `Unary !` over the condition.
+  works in every position, headers included. In Sites `x | f` is sugar for
+  `f(x)` (D176 §4); in PuzzleKit a `|` is a positioned error
+  (`` `| name` pipes are Sites theme syntax — in a Puzzle app write
+  `name(value)` ``). `{#unless c}` is stored as `Unary !` over the condition.
 - **V2 — `==`/`!=` are JavaScript loose equality** (`IsLooselyEqual`) in both
   hosts. No compiler warning; strict-equality teams use an optional
   `eqeqeq`-style `puzzle-eslint` rule.

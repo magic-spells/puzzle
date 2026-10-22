@@ -72,7 +72,9 @@ The parser owns each position's structure (where a brace group ends, header shap
   write into one); calling a binding is an error. `Handler` (an `@event` value) makes the
   free name `event` the DOM event and lets the handler's own call name a view handler.
   Elsewhere `event` is an ordinary data name.
-- A `|` anywhere is expr's positioned "`| name` pipes were removed" error. `this`,
+- `Options.Pipes` (Sites) threads into every expression position, where `x | f(a)`
+  parses to the call `f(x, a)` (D176 §4). Off (PuzzleKit), a `|` anywhere is expr's
+  positioned "`| name` pipes are Sites theme syntax" steer. `this`,
   `window`/`document`/`globalThis` as a data root, and anything outside the grammar are
   expr errors. A leading object literal is rejected by codegen, not here.
 - `parseForHeader`: a bare identifier on the left of a range (`{#for i in 1...5}`) is a
