@@ -161,6 +161,32 @@ Pick `<Children/>` if that position received content from the call site, or
 `'static'` now produces a genuinely static site — no router, no `app.js`. This
 one is *not* a compile error; it silently builds a different product.
 
+## 0.9.1 — 2026-10-22 (Go module only)
+
+A Go-module-only release of the template language: the tag is
+`packages/puzzle-lang/v0.9.1`. **The npm packages are unchanged** — no
+`@magic-spells/puzzle`, `puzzle-pieces`, `puzzle-eslint` or `puzzle-prettier`
+0.9.1 is published, and PuzzleKit compiles, diagnoses and renders exactly as
+0.9.0 does. It exists so Magic Spells Sites can turn on `|` pipes in its
+themes (D176 §4): one parser, with the pipe as a per-host switch (D172).
+
+### Added
+
+- **`expr.Options.Pipes` / `parser.Options.Pipes` (D176).** With the switch
+  on, `x | f(a)` is sugar for the call `f(x, a)`: the parser produces the
+  same `Call` node the written call does, so an evaluator or code generator
+  sees no new construct. A pipe binds looser than every binary and logical
+  operator and tighter than `?:`; chains apply left to right; every
+  expression position takes one. The name after `|` is a plain function
+  name — a member, a namespace, a literal or an operator keyword is "expected
+  a function name after `|`" — and JavaScript's statement words are function
+  names there (`x | default(0)`), since nothing after a `|` is JavaScript.
+  Off (PuzzleKit's default) every file parses as before; the `|` error now
+  reads "`| name` pipes are Sites theme syntax — in a Puzzle app write
+  `name(value)`" (that text reaches the npm compiler with the next npm
+  release). Conformance: a `pipes` mode in `expressions-parse.json`, and the
+  eslint and prettier plugins pin that a pipe carves and formats unchanged.
+
 ## 0.9.0 — 2026-10-21
 
 Multilingual static sites. With `i18n.routing: 'prefix'` every language gets
@@ -569,9 +595,6 @@ you see:
   that fails is retried by the next click. Both rewrite
   the current history entry rather than adding one; over a Back that is still
   loading, the push is an ordinary push so the entry Back moved to survives.
-- **`puzzle-lang`: `expr.Options.Pipes` / `parser.Options.Pipes` (D176).** The
-  Sites dialect's `|` pipe, parsed as sugar for the call it names. Off in
-  Puzzle apps; the `|` error now says pipes are Sites syntax.
 
 ### Changed
 
