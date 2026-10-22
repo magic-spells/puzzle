@@ -67,8 +67,8 @@ enforced, not merely advised.
 - Published: `0.1.0` (2026-07-21), `0.1.1` (2026-07-22, D77 init prompts),
   `0.1.2` (the embedded agent skill + `puzzle add skills`, D78/v1.45), `0.2.0`
   (2026-07-24), `0.3.0` (2026-07-25), `0.3.1` (2026-07-25), `0.4.0`
-  (2026-07-28), `0.5.0` (2026-08-07), `0.6.0` (2026-08-15), and **`0.7.0`
-  (2026-09-09, the current `latest`)** are live on
+  (2026-07-28), `0.5.0` (2026-08-07), `0.6.0` (2026-08-15), `0.7.0`
+  (2026-09-09), and **`0.8.0` (2026-10-01, the current `latest`)** are live on
   npm (six packages since 0.7.0 — the root plus five platform binaries — MIT,
   manual publish via
   `npm run release:prep` — there is no CI publish). Everything from D88 onward
@@ -165,8 +165,7 @@ enforced, not merely advised.
   profile pointing at the pieces registry — now
   `packages/puzzle-pieces/registry` in this monorepo; unset it when smoke-testing
   the npm transport.
-- **`0.7.0` (2026-09-09, published and `verify:published`-clean — the current
-  `latest`;** registry metadata pins all five platform packages including the
+- **`0.7.0` (2026-09-09, published and `verify:published`-clean;** registry metadata pins all five platform packages including the
   NEW `@magic-spells/puzzle-win32-x64` — the first Windows release — a temp-dir
   install runs `puzzle version 0.7.0`, and a fresh-app `puzzle add piece`
   resolves `npm:@magic-spells/puzzle-pieces@0.7.0`. A fresh-app smoke went
@@ -216,67 +215,64 @@ enforced, not merely advised.
   version-floor mechanism closes the gap as D169 (0.8.0): each piece manifest
   now pins the floor it needs, so the gate becomes "every floor a manifest
   declares is published on npm".
-- **`0.8.0` (in progress on `release/0.8.0`, NOT yet published — Cory tags
-  and publishes; `0.7.1` was never published and is folded in):** D170
-  incremental rendering (persistent `{#for}` row blocks, static-subtree
-  caching, record render revisions); D171 `puzzle add theme` and the pieces
-  theme system (four palettes × three modes, `appearance-picker`, 102 pieces);
-  D172 one language, two dialects, with the template parser extracted into the
+- **`0.8.0` (2026-10-01, published — the current `latest`; tagged `v0.8.0`
+  with `packages/puzzle-lang/v0.8.0`; `0.7.1` was never published and is
+  folded in):** one language, incremental rendering. D169 registry version
+  floors; D170 incremental rendering (persistent `{#for}` row blocks,
+  static-subtree caching, record render revisions); D171 `puzzle add theme`
+  and the pieces theme system (`appearance-picker`, 102 pieces); D172 one
+  language, two dialects, with the template parser extracted into the
   `packages/puzzle-lang` Go module (tagged `packages/puzzle-lang/vX.Y.Z` beside
   each `vX.Y.Z`); D173 core semantics (`?.` member guarding on every step,
-  loop domain, slot-filled rule, value printing, script-less components);
-  D174 the function library (19 standard functions plus PuzzleKit's `link`
-  and `timeago`; nine 0.7 formatter names dropped for the JS methods they
-  duplicated; the list formatters and `noescape` removed; sanitized `raw`;
-  apps still register under the `formatters` config key); D175 translations
-  (`t`, `ctx.i18n`); D176 the expression language — a closed
-  JavaScript-shaped grammar parsed once in `packages/puzzle-lang/expr` (a
-  Pratt parser with a method table as the boundary), functions instead of `|`
-  pipes, `.length` not `.size`, no `this`; it landed across PRs #164 (parser),
-  #167 (codegen lowering), #168 (runtime library) and #171 (corpus migration
-  and pipe removal), so the branch compiles only the new language, with the
-  `|` steer naming each removed formatter's replacement. PR #172 (P1b) then
-  made the section splitter skip `{#raw}` spans, made HTML void elements legal
-  without a closer, and fixed the second-`{:else}` position and the `{#svg}`
-  BOM; PR #173 ported the splitter change to the eslint/prettier plugins. The
-  final pre-tag review then landed #174 (the brace scanner no longer misreads
-  `/` after a non-ASCII name as a regex; `event` reads as data outside
-  handlers, with a compile error when one template also uses the DOM `event`)
-  and #175 (`Object.keys` on a missing value yields nothing, `puzzle check`
-  app calls type-check under `noUncheckedIndexedAccess`, a typo'd
-  `in_timezone` zone logs in development), then #176 (the plugin ports of the
-  scanner rule) and #177 (a component class or tag may carry any JavaScript
-  identifier name — `Übersicht`, `概要`, `Straßenkarte` — with a compile error
-  where the scanner cannot read a class name to its end). Then #178 (`puzzle
-  check` signatures match LibraryFunctions; TS 6, app paths, no-tsconfig
-  strict), #179 (locale switch waits for replace/pop, embed locale URLs,
-  locale BOM, `noescape` hint, nested-key event), #180 (release a nested
-  cached vnode's outgoing copy, D170), #181 (`await setLocale` inside `data()`
-  or a guard no longer deadlocks), #182 (stop checking a JavaScript handler's
-  inferred arity), #183 (`init --typescript` scaffolds a real TypeScript app,
-  D54), #184 (CI runs the live-tsc check and scaffold tests), #185
-  (`app/app.ts` build entry and TypeScript stubs from `puzzle generate`, D54),
-  #186 (constellation compacted), #187 (final polish: events comment, validate
-  options type, parser error text, keyed-move invariant), #188 (dev warning
-  for a non-arrow `events` handler that uses `this`), #189 (prettier applies
-  endOfLine once to script/style bodies), #190 (eslint template-tag imports,
-  BOM autofix, TS blocks in recommended), #191 (devtools panel connects after
-  a >500-event burst and on DevTools reopen), #192 (pieces review round:
-  appearance boot, stale theme hint, picker palettes, doc examples, snippet
-  subset, CI order), #193 (checkJs on the JS runtime, published `.d.ts`
-  guarded), #194 (review fixes F1–F6), and the pieces PRs #195 and #198
-  (avatar-group bite-mask cutout, `direction` prop), #196 (navigation-menu
-  mega panels, upstream bar look, 8px trigger gap) and #197 (tabs list/panel
-  gap, buttons variant, boxed panels). The three editor
-  grammars are swept for the 0.8.0 grammar (`0.4.0` on each repo's
-  `release/0.4.0`); the Go evaluator in Sites (P6) comes after the tag
-  (see DECISION-D176-EXPRESSION-LANGUAGE); D168 rewritten as the merged whitespace rule; plus D169 registry
-  version floors, the D76 background update notice, and the runtime preflight.
-  Heavily BREAKING for templates — the CHANGELOG opens the entry with an
-  "Upgrading from 0.7" checklist. Production sizes: hello-world **21.9 KB
-  gzip**, todos **26.0 KB gzip** (measured after the review-fix PR; the README banner
-  matches). Cards truthed through D176; the next free
-  decision number is **D177**.
+  loop domain, slot-filled rule, value printing, script-less components); D174
+  the function library (19 standard functions plus PuzzleKit's `link` and
+  `timeago`; formatters that duplicated JS methods, the list formatters and
+  `noescape` removed; sanitized `raw`; apps still register under the
+  `formatters` config key); D175 translations (`t`, `ctx.i18n`); D176 the
+  expression language — a closed JavaScript-shaped grammar parsed once in
+  `packages/puzzle-lang/expr`, functions instead of `|` pipes (the `|` steer
+  names each removed formatter's replacement), `.length` not `.size`, no
+  `this`; D168 rewritten as the merged whitespace rule. Also in: any
+  JavaScript identifier as a component class or tag name, TypeScript apps
+  end to end (`init --typescript`, `app/app.ts`, typed `puzzle generate`
+  stubs, D54), `puzzle check` under TS 6 and `noUncheckedIndexedAccess`, the
+  D76 background update notice, the runtime preflight, and the plugin and
+  devtools ports of the splitter/scanner rules. The three editor grammars are
+  swept for the 0.8.0 grammar (`0.4.0` on each repo's `release/0.4.0`); the Go
+  evaluator in Sites (P6) comes after the tag (see
+  DECISION-D176-EXPRESSION-LANGUAGE). Heavily BREAKING for templates — the
+  CHANGELOG opens the entry with an "Upgrading from 0.7" checklist.
+  Production sizes: hello-world **21.9 KB gzip**, todos **26.0 KB gzip**.
+- **`0.9.0` (ready to publish (stamps bumped; Cory tags and publishes) —
+  until he does, `0.8.0` stays npm `latest`; there is no npm
+  `0.8.1`, which was the Go-module-only `packages/puzzle-lang/v0.8.1` tag):** multilingual static sites. D177
+  locale URL prefixes (`i18n.routing: 'prefix'`, per-locale prerender in
+  static and hybrid plus SPA path routing, `hreflang` + `site`, sitemap,
+  first-visit redirect, `<html dir>`, translated `meta` titles; BREAKING:
+  `i18n.locales` is `{ locale, label, href, active }[]`); D178
+  `afterUpdate(prev)`; D179 `staticPaths`; and the `language-switcher` and
+  `language-menu` pieces; D180 `<Component>` for runtime selection
+  from constructors imported by the caller (`is={ current }` or
+  `is={ cards[key] }` forwards children as the normal default slot; nullish
+  selection renders nothing; BREAKING: `Component` is a reserved tag/family
+  root); and D181 content-hashed production entry/CSS/page
+  module names and static-import modulepreloads (`build.hashNames` follows
+  `build.splitting`, with a `false` opt-out). The agent/tooling APIs:
+  D182 `push()`/`replace()` resolve a never-rejecting `NavigationResult`;
+  D183 `router.views` and the `agent` route field; D184 `store.observe()`;
+  D185 `app.idle()`; D186 dynamic URL bindings drop script schemes; D187
+  `passive`/`capture` modifiers; D188 `this.renderTick()` (the method is
+  `renderTick`, never `tick`) on the one shared frame scheduler
+  (`client-runtime/scheduler.js`); D189 `ctx.idle()`, `catchAll: true` on
+  catch-all results, and `store.modelFor()`. D89 now also reads installed
+  packages' `.pzl` files (packages declaring `@magic-spells/puzzle`), and a
+  `.pzl` the scan never read that uses a compiled-out feature fails the
+  build. Pieces: four schemes × four styles (`dim` palette → `cool`;
+  `data-theme` is `dark | dim | mixed | light`, BREAKING for copied theme
+  files) and every item-form `{#for}` row keyed. Production sizes: hello-world
+  **23.0 KB gzip**, todos **27.0 KB gzip** (about +1 KB each over 0.8.0,
+  mostly the D182–D189 built-in APIs). The next free decision number is
+  **D190**.
 - Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
   amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74, D160 = v1.75,
@@ -428,11 +424,15 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   unmount, HMR restore, morph-handler forwarding.
 - `router/router.js`: path/hash/memory routing, nested route chains,
   load-then-atomic-commit navigation, layouts/outlets, scroll restoration,
-  transitions, SSG takeover.
+  transitions, SSG takeover; `router/routeViews.js` builds `router.views`
+  and checks `agent` fields (D183).
 - `views/PuzzleView.js`: model/local state layers, tracked `data()`, refresh,
   lifecycle, refs, memoization, skeletons, animation hooks.
 - `views/ViewNode.js` + `views/viewManager.js`: vnode representation, DOM
   mount/patch, keyed reconciliation, components, slots, islands, refs, events.
+- `views/componentSlot.js`: D180 compiler-support `dynamicComponent`
+  helper for `<Component>`; ordinary component vnodes inside
+  a stable comment-bracketed range, gated by `__PUZZLE_HAS_COMPONENT_SLOT__`.
 - `views/listBlock.js`: one persistent row state per key for an item-form
   `{#for}` site — the row's item, index, stored record revision, live handler
   scope, cached vnode subtree and nested blocks; returns the cached subtree for
@@ -443,6 +443,9 @@ puzzle-devtools repos are archived on GitHub, never deleted.
 - `renderRev.js`: the `RENDER_REV` Symbol alone, with no imports — `store.js`
   stamps a record's last notification sequence onto it, `views/` compares
   against it, and neither side may import the other.
+- `scheduler.js`: the one frame scheduler shared by store flushes, view
+  renders, `app.idle()` and `renderTick()`; steps on timers in a hidden tab
+  (D63, D185, D188).
 - `views/animate.js` + `views/visibility.js`: WAAPI animation normalization and
   shared IntersectionObserver scheduling for visible-trigger enters.
 - `datastore/store.js` + `model.js`: core records, schema builders, validation,
@@ -520,6 +523,24 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   component name is validated as `Ident('.'Ident)*` with JavaScript
   identifier rules, so the dotted family form `<Frame.Wrapper>` is legal and
   `<Frame-x>`, `<Frame:Wrapper>`, and `<Slot.Foo>` are not (D167).
+- `<Component>` selects only compiled constructors already imported by its
+  caller (D180, SPEC §67). `is={ value }` forwards normal default children;
+  nullish is empty. `is={ cards[key] }` reads an ordinary map of imported
+  constructors. Only `is` may read imports and simple module declarations
+  directly (template locals → module bindings
+  → data); destructured bindings need an alias or `data()` exposure. Other props,
+  ordered `{...props}` spreads and children keep data scope; `name` and
+  `from` are ordinary forwarded props. Missing or non-expression `is` is a
+  compile error. A constructor swap completely tears down the old instance
+  before mounting the new one
+  with current props. `Component` is reserved as a tag/family root; rename a
+  user file or import used under that name. No registry or runtime module
+  lookup; component `bind:` remains unsupported (D147).
+- Opt-in runtime features (`flip`, `raw()`, `<Portal>`, snippets,
+  `<Component>`, library functions) ship only when the `.pzl` usage scan sees
+  them written in a template (D89). A `flip` passed through a `{...spread}` is
+  invisible to the scan, so write `flip` directly on the row; `flip` on
+  `<Component>` is a compile error (wrap it in an element).
 - DOM listeners are per-node and patch-managed. Component `@event` bindings
   are callback props, not custom DOM events; there is no `$emit`.
 - Template text is not HTML-entity decoded and interpolations become text

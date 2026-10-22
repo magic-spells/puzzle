@@ -1,6 +1,7 @@
 package build
 
 import (
+	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/locales"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 )
@@ -29,10 +30,11 @@ type passContext struct {
 	// lifetime is this struct's, which is this Build call's.
 	cache *plugin.CompileCache
 
-	// i18n and locales are the build's D175 translation state: whether the config
-	// turns i18n on (the __PUZZLE_HAS_I18N__ define) and the loaded locale files
-	// whose manifest every pass serves. locales is nil without i18n.
-	i18n    bool
+	// i18n and locales are the build's D175 translation state: the config's i18n
+	// block (nil = off; it drives __PUZZLE_HAS_I18N__ and, with prefix routing,
+	// __PUZZLE_HAS_LOCALE_ROUTING__) and the loaded locale files whose manifest
+	// every pass serves. locales is nil without i18n.
+	i18n    *config.I18n
 	locales *locales.Result
 }
 

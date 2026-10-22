@@ -42,7 +42,7 @@
         <ExampleBox id="ratios" title="Common ratios" tall={ false } code={ codeRatios }>
           <div class="grid w-full grid-cols-2 gap-6 sm:grid-cols-4">
             {#for r in commonRatios}
-              <AspectRatio ratio={ r.value } class="overflow-hidden rounded-lg border border-border">
+              <AspectRatio key={ r.label } ratio={ r.value } class="overflow-hidden rounded-lg border border-border">
                 <div class="flex items-center justify-center bg-surface-sunken text-xs font-medium text-muted">{ r.label }</div>
               </AspectRatio>
             {/for}

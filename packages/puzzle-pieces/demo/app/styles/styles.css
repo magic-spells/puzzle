@@ -175,8 +175,8 @@
   --text-micro--line-height: 1rem;
   --text-code: 0.8125rem;            /* 13px — inline code, token names */
   --text-code--line-height: 1.25rem;
-  --text-brand: 0.9375rem;           /* 15px — the shell's wordmark */
-  --text-brand--line-height: 1.25rem;
+  --text-wordmark: 0.9375rem;          /* 15px — the shell's wordmark */
+  --text-wordmark--line-height: 1.25rem;
   /* A corner popover may never outgrow the window: viewport minus the corner
      insets, so it scrolls inside instead of losing its bottom edge. */
   --spacing-popover: calc(100dvh - 1.5rem);
@@ -234,18 +234,18 @@
  * puzzle-pieces design tokens — imported straight from the registry, the way a
  * consuming app imports them from the package
  * (`@import "@magic-spells/puzzle-pieces/themes/default.css"`). pieces.css is
- * the default palette's `@theme` block plus the three mode blocks; the other
+ * the default palette's `@theme` block plus its dim and mixed blocks; the other
  * three files are `[data-scheme]` overrides, imported AFTER it so their
  * unlayered rules win. The registry files are the source of truth — there is
  * no demo-side copy to keep in step.
  *
- * Modes: data-theme="light" | "medium" | "dark" on <html>; absent = follow the
- * OS. Palettes: data-scheme="dim" | "warm" | "void"; absent = default. Both are
+ * Styles: data-theme="dark" | "dim" | "mixed" | "light" on <html>; absent =
+ * follow the OS. Palettes: data-scheme="cool" | "warm" | "void"; absent = default. Both are
  * set pre-paint by the inline script in public/index.html and at runtime by
  * app/lib/appearance.js.
  */
 @import "../../../registry/theme/pieces.css";
-@import "../../../registry/theme/dim.css";
+@import "../../../registry/theme/cool.css";
 @import "../../../registry/theme/warm.css";
 @import "../../../registry/theme/void.css";
 

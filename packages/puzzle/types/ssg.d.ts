@@ -78,6 +78,15 @@ export interface PrerenderedPage {
 	route?: object;
 	/** Enumerated but deliberately not rendered by a subset render (D155). */
 	reused?: boolean;
+	/** The locale the page was rendered in — under `i18n.routing: 'prefix'` only (D177). */
+	locale?: string;
+	/**
+	 * On a page a `staticPaths` route generated (D179): the route's full path
+	 * (`/blog/:slug`); `path` is then the page's own (`/blog/cookies`).
+	 */
+	pattern?: string;
+	/** On a generated page (D179): its param values, as strings. */
+	params?: Record<string, string>;
 }
 
 /** One leaf entry from `enumerateRoutes` — the prerenderer's per-page unit. */
@@ -91,7 +100,8 @@ export interface RouteEntry {
 }
 
 /**
- * A route skipped by the prerender step: v1 skips `:param` routes and any `*`
+ * A route skipped by the prerender step: a `:param` route without `staticPaths`
+ * (D179) — or one whose list was empty — and any `*`
  * that is NOT the top-level catch-all (the bare `path: '*'` renders to 404.html).
  */
 export interface SkippedRoute {
@@ -130,6 +140,17 @@ export interface WrittenPage {
 	 * exist — the caller supplies the previous render's copy (D155).
 	 */
 	reused?: boolean;
+	/**
+	 * The page's locale — under `i18n.routing: 'prefix'` only (D177), where every
+	 * route is written once per locale and a route's pages share one `entry`.
+	 */
+	locale?: string;
+	/**
+	 * On a page a `staticPaths` route generated (D179): the route's full path.
+	 * Every page of one route shares its `entry`; the page's own path and params
+	 * ride in its `data-puzzle-static-route` island.
+	 */
+	pattern?: string;
 }
 
 /** The summary returned by `prerenderToDir`. */
@@ -194,6 +215,13 @@ export interface PrerenderToDirOptions {
 	 * exporting no default); the KEY's absence is what means "no such module".
 	 */
 	adapterModule?: unknown;
+	/**
+	 * The app's public origin (`'https://example.com'`, the config's `site`,
+	 * D177): `hreflang` alternates become absolute, an absolute canonical on it is
+	 * localized per locale, and `outDir/sitemap.xml` is written — unless the
+	 * public folder already put one there, which wins.
+	 */
+	site?: string;
 }
 
 /**
@@ -239,6 +267,11 @@ export declare function injectShell(
 		head?: ResolvedRouteHead | null;
 		/** Markup inserted before the shell's `</body>` — the build's locale island (D175). */
 		island?: string;
+		/**
+		 * Markup appended to the shell head after the managed tags, with a resolved
+		 * `head` only — the build's `hreflang` alternates and locale redirect (D177).
+		 */
+		headExtra?: string;
 	}
 ): string;
 
@@ -253,6 +286,12 @@ export declare function injectShell(
 export declare function injectStaticShell(
 	shell: string,
 	fields: {
+		/**
+		 * A generated page's own path and params (D179), written as a
+		 * `data-puzzle-static-route` island its shared per-page module reads.
+		 * Omitted or null (every fixed route) writes nothing.
+		 */
+		route?: { path: string; params: Record<string, string> } | null;
 		targetId: string;
 		content: string | null;
 		title: string | null;
@@ -273,5 +312,10 @@ export declare function injectStaticShell(
 		base?: string;
 		/** Markup inserted before the shell's `</body>` — the build's locale island (D175). */
 		island?: string;
+		/**
+		 * Markup appended to the shell head after the managed tags, with a resolved
+		 * `head` only — the build's `hreflang` alternates and locale redirect (D177).
+		 */
+		headExtra?: string;
 	}
 ): string;

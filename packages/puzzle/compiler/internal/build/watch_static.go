@@ -113,8 +113,10 @@ type StaticWatchBuilder struct {
 	// "render everything".
 	graph *routeGraph
 
-	// routeCount is how many pages the last render enumerated — the denominator
-	// in the profile's partial-render row.
+	// routeCount is how many routes the last render wrote pages for — the
+	// denominator in the profile's partial-render row, whose numerator is the
+	// route filter. Routes, not pages: under prefix routing (D177) every route
+	// writes one page per locale.
 	routeCount int
 
 	// nextGraph and nextRouteCount hold what the in-flight rebuild captured,
@@ -198,8 +200,10 @@ func NewStaticWatchBuilder(root string, opts StaticWatchOptions) (*StaticWatchBu
 
 	// Route `meta` on an SPA-only route is dead in static output — a one-shot
 	// build warns about it once, and so does a dev session (once, at startup,
-	// rather than on every save).
+	// rather than on every save). So does a translated route title in an app
+	// without i18n.
 	warnDeadSPARouteMeta(absRoot, "static", os.Stderr)
+	warnUntranslatedRouteMeta(absRoot, opts.Config.I18n, os.Stderr)
 
 	b := &StaticWatchBuilder{
 		root:     absRoot,
@@ -301,7 +305,7 @@ func (b *StaticWatchBuilder) buildContexts() error {
 	}
 
 	adapterModule := findStaticModule(b.root, "app/adapter.js", "app/adapter.ts")
-	preStdin, err := staticPrerenderStdin(b.root, b.entry, adapterModule)
+	preStdin, err := staticPrerenderStdin(b.root, b.entry, adapterModule, b.cfg.Site)
 	if err != nil {
 		appCtx.Dispose()
 		return err
@@ -348,7 +352,7 @@ func (b *StaticWatchBuilder) newPlugin(usage plugin.Usage) *plugin.Plugin {
 	pl := plugin.New(b.root)
 	pl.SetUsage(usage)
 	pl.SetCompileCache(b.cache)
-	applyI18n(pl, b.cfg.I18nEnabled(), b.locales)
+	applyI18n(pl, b.cfg.I18n, b.locales)
 	return pl
 }
 
@@ -421,7 +425,7 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 		b.locales = res
 		for _, pl := range []*plugin.Plugin{b.appPl, b.prePl, b.pagesPl} {
 			if pl != nil {
-				applyI18n(pl, true, res)
+				applyI18n(pl, b.cfg.I18n, res)
 			}
 		}
 	}
@@ -740,7 +744,7 @@ func (b *StaticWatchBuilder) captureGraph(summary staticSummary, pagesMetafile, 
 		if err != nil {
 			return
 		}
-		entryRoutes[filepath.Join(entriesDir, slug+".js")] = page.Path
+		entryRoutes[filepath.Join(entriesDir, slug+".js")] = page.routeKey()
 		addChainRoots(page.Modules)
 	}
 	// A SKIPPED route ships no page and so has no entry to attribute anything to,
@@ -760,7 +764,17 @@ func (b *StaticWatchBuilder) captureGraph(summary staticSummary, pagesMetafile, 
 		return
 	}
 	b.nextGraph = graph
-	b.nextRouteCount = len(summary.Written)
+	b.nextRouteCount = writtenRoutes(summary.Written)
+}
+
+// writtenRoutes counts the distinct routes among the written pages — a
+// `staticPaths` route counts once, however many pages it generated (D179).
+func writtenRoutes(written []staticPage) int {
+	paths := make(map[string]bool, len(written))
+	for _, page := range written {
+		paths[page.routeKey()] = true
+	}
+	return len(paths)
 }
 
 // prerenderOnlyArgs renders the route filter as the generated prerender entry's
@@ -883,21 +897,21 @@ func (b *StaticWatchBuilder) syncPageEntries(summary staticSummary) ([]string, e
 		return nil, fmt.Errorf("puzzle build --static: creating entry dir: %w", err)
 	}
 
+	pages, err := uniqueEntryPages(summary.Written)
+	if err != nil {
+		return nil, err
+	}
 	var entryFiles []string
 	live := map[string]bool{}
-	for _, page := range summary.Written {
-		slug, err := slugFromEntry(page.Entry)
+	for _, page := range pages {
+		src, err := staticEntrySource(b.root, b.entry, page.staticPage, summary, modelsModule, formattersModule, adapterModule)
 		if err != nil {
 			return nil, err
 		}
-		src, err := staticEntrySource(b.root, b.entry, page, summary, modelsModule, formattersModule, adapterModule)
-		if err != nil {
-			return nil, err
-		}
-		file := filepath.Join(entriesDir, slug+".js")
+		file := filepath.Join(entriesDir, page.slug+".js")
 		if prev, err := os.ReadFile(file); err != nil || string(prev) != src {
 			if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
-				return nil, fmt.Errorf("puzzle build --static: writing entry %s: %w", slug, err)
+				return nil, fmt.Errorf("puzzle build --static: writing entry %s: %w", page.slug, err)
 			}
 		}
 		entryFiles = append(entryFiles, file)

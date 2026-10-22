@@ -104,7 +104,10 @@ type ssgSummary struct {
 // returned error surfaces node's stderr/stdout and staging is discarded by
 // Build's defer, so the previous dist/ is untouched. appEntry is the entry
 // Build resolved (ResolveEntry); the generated module imports it by path.
-func prerenderHybrid(absRoot, appEntry, staging string, publicFiles map[string]bool, pc *passContext) error {
+//
+// site is the config's `site` origin (D177), handed to prerenderToDir as its
+// `site` option when set (prerenderSiteOption).
+func prerenderHybrid(absRoot, appEntry, staging, site string, publicFiles map[string]bool, pc *passContext) error {
 	// A public/ asset copied to staging/.puzzle-prerender would be overwritten by
 	// the prerender bundle and then deleted with it — reject it before any of that
 	// happens. copyPublic has already run, so the collision is observable here.
@@ -112,26 +115,10 @@ func prerenderHybrid(absRoot, appEntry, staging string, publicFiles map[string]b
 		return err
 	}
 
-	// The generated prerender entry (the SSG contract): import the app's default
-	// export + prerenderToDir, run it against the outDir/shellPath passed on argv
-	// in the 'hybrid' mode (passed explicitly so the JS side is unambiguous — it
-	// is also the JS default), and print the JSON summary behind the sentinel.
-	// The app entry path is JSON-encoded so a root with spaces/quotes stays a
-	// valid JS string literal.
-	entry, err := json.Marshal(filepath.ToSlash(appEntry))
+	stdin, err := hybridPrerenderStdin(appEntry, site)
 	if err != nil {
-		return fmt.Errorf("encoding prerender entry path: %w", err)
+		return err
 	}
-	stdin := fmt.Sprintf(
-		"import app from %s;\n"+
-			"import { prerenderToDir } from '@magic-spells/puzzle/ssg';\n"+
-			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3], mode: 'hybrid' });\n"+
-			// created() may leave a live handle (SSG never runs destroyed(), SPEC
-			// §36), so exit rather than wait for the loop to drain — in the write
-			// callback, because exiting before the pipe flushes truncates the JSON.
-			"process.stdout.write('\\n%s' + JSON.stringify(summary), () => process.exit(0));\n",
-		string(entry), prerenderSentinel,
-	)
 
 	outfile := filepath.Join(staging, prerenderDir, "prerender.mjs")
 	if err := bundlePrerenderEntry(absRoot, stdin, outfile, "--hybrid", pc); err != nil {
@@ -160,6 +147,34 @@ func prerenderHybrid(absRoot, appEntry, staging string, publicFiles map[string]b
 		return fmt.Errorf("puzzle build --hybrid: cleaning %s: %w", prerenderDir, err)
 	}
 	return nil
+}
+
+// hybridPrerenderStdin is the generated prerender entry (the SSG contract):
+// import the app's default export + prerenderToDir, run it against the
+// outDir/shellPath passed on argv in the 'hybrid' mode (passed explicitly so the
+// JS side is unambiguous — it is also the JS default), and print the JSON
+// summary behind the sentinel. The app entry path is JSON-encoded so a root with
+// spaces/quotes stays a valid JS string literal. site rides along as in
+// staticPrerenderStdin.
+func hybridPrerenderStdin(appEntry, site string) (string, error) {
+	entry, err := json.Marshal(filepath.ToSlash(appEntry))
+	if err != nil {
+		return "", fmt.Errorf("encoding prerender entry path: %w", err)
+	}
+	siteOption, err := prerenderSiteOption(site)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(
+		"import app from %s;\n"+
+			"import { prerenderToDir } from '@magic-spells/puzzle/ssg';\n"+
+			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3], mode: 'hybrid'%s });\n"+
+			// created() may leave a live handle (SSG never runs destroyed(), SPEC
+			// §36), so exit rather than wait for the loop to drain — in the write
+			// callback, because exiting before the pipe flushes truncates the JSON.
+			"process.stdout.write('\\n%s' + JSON.stringify(summary), () => process.exit(0));\n",
+		string(entry), siteOption, prerenderSentinel,
+	), nil
 }
 
 // publicOwnership folds copyPublic's result into the lookup the collision check

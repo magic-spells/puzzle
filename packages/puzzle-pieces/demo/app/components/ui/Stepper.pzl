@@ -1,7 +1,7 @@
 <puzzle-view>
   <ol class={ rootClass } role="list" aria-label={ navLabel }>
     {#for step in steps}
-      <li class={ step.itemClass } aria-current={ step.currentAttr }>
+      <li class={ step.itemClass } aria-current={ step.currentAttr } key={ step.key }>
         <div class={ step.gutterClass }>
           {#if step.interactive}
             <button
@@ -70,7 +70,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   <Stepper steps={ steps } value={ current } clickable @stepChange={ goToStep } />
 //
 // PROPS
-//   steps        [{ label, description? }]  the ordered steps.
+//   steps        [{ label, description?, id? }]  the ordered steps. An id, when
+//                         given, is the row key (the position otherwise).
 //   value        number   the current step index. OPTIONAL-CONTROLLED (Sidebar's
 //                         shape): omit it and the Stepper owns `current` internally
 //                         (seeded to 0), advanced by clicks in `clickable` mode;
@@ -154,6 +155,8 @@ export default class Stepper extends PuzzleView {
       const isLast = i === last;
 
       return {
+        // The caller's id when it gives one, else the position.
+        key: s?.id ?? '#' + i,
         index: i,
         number: String(i + 1),
         label: s && s.label != null ? String(s.label) : '',

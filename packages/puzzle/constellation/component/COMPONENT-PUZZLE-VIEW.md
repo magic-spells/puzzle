@@ -21,7 +21,7 @@ verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 Plain base class (views/PuzzleView.js) for every component, view and layout. It owns
 state, lifecycle, tracked `data()` evaluation, refresh tokens, animations, refs and
 update scheduling; [[COMPONENT-VIEW-MANAGER]] owns the DOM. The author-facing class
-contract is [[DOC-SPEC-ANATOMY]] §4 and [[DOC-SPEC-VIEW]].
+contract is [[DOC-SPEC-ANATOMY]] §4 and [[DOC-SPEC-VIEW]]. The internal `elementEnd` getter follows the live manager or error view to the end of a component's complete DOM range, recursively through component-root selections; `element` remains its first node.
 
 ## The per-view ctx
 
@@ -42,6 +42,11 @@ during its own evaluation, may fault (D161).
   commit and rerenders without rerunning `data()`. Keep raw local values and
   `data()`-derived display values under different keys, or the commit erases the raw
   one. Use `refresh()` when local state feeds `data()`.
+- A `setData()` render is scheduled through `schedule()` in `client-runtime/scheduler.js`
+  (the D63 frame/timer rule); `flushUpdates()` is a no-op once the flag has cleared, so a
+  frame that fires after an immediate render does nothing. `renderTick()` returns that
+  module's internal `tick()` — resolved once no store flush or view render is pending
+  anywhere in the runtime ([[DECISION-D188-TICK]]).
 - Async refresh is last-wins; a destroyed view can't be resubscribed by a late
   continuation. `prepareRefresh()` is the router's two-phase form for reused ancestors
   ([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]).
@@ -51,8 +56,9 @@ during its own evaluation, may fault (D161).
   later no-adapter app in the same realm must be held back by its own store's `_a`
   (`tests/adapter-realm-isolation.test.js`); `_settleData` absent means the loop isn't in
   the bundle. A pass that queued fetches is not committed: await, unwind its
-  subscriptions, re-run; ten rounds throw naming the view and request keys. A sync
-  hit-only first pass stays sync. Mid-settle notifications coalesce into `_settleDirty`.
+  subscriptions, re-run. Every provisional pass counts toward the ten-round cap,
+  including a dirty re-pass with no fetches; exhaustion throws naming the view and
+  request keys. A clean final pass may commit, and a sync hit-only first pass stays sync. Mid-settle notifications coalesce into `_settleDirty`.
   A destroyed/leaving/superseded view stops after its current await (shared requests are
   not aborted); `unsubscribe()` clears the request slot but is not a latch —
   `_restoreFromLeaving()` restores faulting.
@@ -78,6 +84,10 @@ reports once, keeps the exact position and destroys the instance. With an app
 single-flight, and delegates to the Router (routed) or the parent's `refresh()`
 (child). A routed retry keeps the error view up until a rebuild commits. Error-view
 failures report as `phase: 'error-view'` without recursion.
+
+A hand-written `render()` returning null clears its mounted tree and reserves the same position with a comment. Re-anchoring captures the sibling after `elementEnd`, outside the complete range even when the root is an empty or selected `<Component>`; repeated nulls reuse that position and later content remounts before trailing siblings.
+
+The internal `__moveTo` delegates relocation to the manager, preserving the live instance and updating its container when a conditional routed outlet parks or adopts it. Destruction releases pinned children even when this owner is still preloaded and has no manager; mounted owners release them through the manager's slot ownership.
 
 ## Refs and two-way binding
 

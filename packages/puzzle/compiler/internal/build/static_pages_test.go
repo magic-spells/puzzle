@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -80,6 +81,78 @@ func TestSlugFromEntry(t *testing.T) {
 		if _, err := slugFromEntry(bad); err == nil {
 			t.Errorf("slugFromEntry(%q) should have errored", bad)
 		}
+	}
+}
+
+// TestUniqueEntryPages: one entry per slug, first page wins, summary order kept
+// — under prefix routing (D177) a route's locale pages repeat its slug and the
+// `locale` field decodes; a single-locale summary passes through unchanged.
+// TestWrittenRoutes: the dev profile's partial-render denominator counts routes,
+// like its numerator, not one page per locale (D177).
+func TestWrittenRoutes(t *testing.T) {
+	written := []staticPage{
+		{Path: "/", Locale: "en"}, {Path: "/about", Locale: "en"}, {Path: "*", Locale: "en"},
+		{Path: "/", Locale: "es"}, {Path: "/about", Locale: "es"}, {Path: "*", Locale: "es"},
+	}
+	if got := writtenRoutes(written); got != 3 {
+		t.Fatalf("writtenRoutes = %d, want 3", got)
+	}
+	if got := writtenRoutes(written[:2]); got != 2 {
+		t.Fatalf("single-locale writtenRoutes = %d, want 2", got)
+	}
+}
+
+func TestUniqueEntryPages(t *testing.T) {
+	var summary staticSummary
+	if err := json.Unmarshal([]byte(`{"written":[
+		{"path":"/","file":"/d/index.html","entry":"_puzzle/index.js","locale":"en"},
+		{"path":"/about","file":"/d/about/index.html","entry":"_puzzle/about.js","locale":"en"},
+		{"path":"/","file":"/d/es/index.html","entry":"_puzzle/index.js","locale":"es"},
+		{"path":"/about","file":"/d/es/about/index.html","entry":"_puzzle/about.js","locale":"es"}
+	]}`), &summary); err != nil {
+		t.Fatal(err)
+	}
+	pages, err := uniqueEntryPages(summary.Written)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pages) != 2 || pages[0].slug != "index" || pages[1].slug != "about" || pages[0].Locale != "en" || pages[1].File != "/d/about/index.html" {
+		t.Fatalf("pages = %+v, want index then about, first locale each", pages)
+	}
+
+	single := []staticPage{{Path: "/", Entry: "_puzzle/index.js"}, {Path: "/a", Entry: "_puzzle/a.js"}}
+	pages, err = uniqueEntryPages(single)
+	if err != nil || len(pages) != 2 || pages[0].staticPage.Path != "/" || pages[1].slug != "a" || pages[1].Locale != "" {
+		t.Fatalf("single-locale pages = %+v (%v)", pages, err)
+	}
+	if _, err := uniqueEntryPages([]staticPage{{Entry: "_puzzle/a/b.js"}}); err == nil {
+		t.Fatal("a malformed entry must still error")
+	}
+
+	// Pages sharing a slug must name the same modules: one entry imports one chain.
+	layout, other := "app/layouts/Default.pzl", "app/layouts/Other.pzl"
+	home := staticModules{Views: []string{"app/views/Home.pzl"}, Layout: &layout}
+	same := staticModules{Views: []string{"app/views/Home.pzl"}, Layout: &layout}
+	for name, mods := range map[string]staticModules{
+		"another view":   {Views: []string{"app/views/Other.pzl"}, Layout: &layout},
+		"another layout": {Views: []string{"app/views/Home.pzl"}, Layout: &other},
+		"no layout":      {Views: []string{"app/views/Home.pzl"}},
+		"a longer chain": {Views: []string{"app/views/Home.pzl", "app/views/Child.pzl"}, Layout: &layout},
+	} {
+		_, err := uniqueEntryPages([]staticPage{
+			{Path: "/", Entry: "_puzzle/index.js", Modules: home, Locale: "en"},
+			{Path: "/", Entry: "_puzzle/index.js", Modules: mods, Locale: "es"},
+		})
+		if err == nil || !strings.Contains(err.Error(), "share the entry _puzzle/index.js but name different modules") {
+			t.Errorf("%s: err = %v, want a shared-entry module mismatch", name, err)
+		}
+	}
+	pages, err = uniqueEntryPages([]staticPage{
+		{Path: "/", Entry: "_puzzle/index.js", Modules: home, Locale: "en"},
+		{Path: "/", Entry: "_puzzle/index.js", Modules: same, Locale: "es"},
+	})
+	if err != nil || len(pages) != 1 {
+		t.Fatalf("equal modules: pages = %+v (%v), want one entry", pages, err)
 	}
 }
 
@@ -295,13 +368,53 @@ func TestStaticCapturedIgnoresAdapterlessApps(t *testing.T) {
 	}
 }
 
+// The config's site origin (D177) reaches the prerender as prerenderToDir's
+// `site` option; without it the generated entry has no trace of the key.
+func TestStaticPrerenderStdinCarriesSite(t *testing.T) {
+	root := filepath.FromSlash("/abs/app-root")
+	without, err := staticPrerenderStdin(root, filepath.Join(root, "app", "app.js"), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(without, "site") {
+		t.Errorf("no site configured, but the prerender entry names one:\n%s", without)
+	}
+	with, err := staticPrerenderStdin(root, filepath.Join(root, "app", "app.js"), "", "https://example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(with, `mode: 'static', only, site: "https://example.com" });`) {
+		t.Errorf("prerender entry does not pass the site option:\n%s", with)
+	}
+}
+
+// The hybrid prerender entry carries the site origin the same way (D177), and
+// without it stays byte-identical to the pre-D177 entry.
+func TestHybridPrerenderStdinCarriesSite(t *testing.T) {
+	entry := filepath.FromSlash("/abs/app-root/app/app.js")
+	without, err := hybridPrerenderStdin(entry, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(without, "site") || !strings.Contains(without, `mode: 'hybrid' });`) {
+		t.Errorf("no site configured, but the hybrid entry is not the plain one:\n%s", without)
+	}
+	with, err := hybridPrerenderStdin(entry, "https://example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(with, `mode: 'hybrid', site: "https://example.com" });`) {
+		t.Errorf("hybrid prerender entry does not pass the site option:\n%s", with)
+	}
+}
+
 // The conventional module is imported by the PRERENDER entry too — that import
 // is the only place the identity answer can come from. A missing module leaves
 // the generated source byte-identical to the pre-D157 one.
 func TestStaticPrerenderStdinImportsTheAdapterModule(t *testing.T) {
 	root := filepath.FromSlash("/abs/app-root")
 
-	without, err := staticPrerenderStdin(root, filepath.Join(root, "app", "app.js"), "")
+	without, err := staticPrerenderStdin(root, filepath.Join(root, "app", "app.js"), "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +422,7 @@ func TestStaticPrerenderStdinImportsTheAdapterModule(t *testing.T) {
 		t.Errorf("no app/adapter module on disk, but the prerender entry names one:\n%s", without)
 	}
 
-	with, err := staticPrerenderStdin(root, filepath.Join(root, "app", "app.js"), "app/adapter.js")
+	with, err := staticPrerenderStdin(root, filepath.Join(root, "app", "app.js"), "app/adapter.js", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -365,6 +478,52 @@ func TestStaticEntrySourceMinimal(t *testing.T) {
 		if strings.Contains(src, absent) {
 			t.Errorf("generated minimal entry should not contain %q\n---\n%s", absent, src)
 		}
+	}
+}
+
+// TestStaticEntrySourceStaticPaths: a route whose pages `staticPaths` generated
+// (D179) shares one entry, so the entry merges the page's own path and params
+// from its data-puzzle-static-route island into the pattern-shaped route JSON.
+// A fixed route's entry never reads the island.
+func TestStaticEntrySourceStaticPaths(t *testing.T) {
+	root := "/abs/app-root"
+	s := cannedSummary()
+	route := `{"path":"/blog/:slug","params":{},"chain":[{"path":"/blog/:slug"}]}`
+	page := staticPage{
+		Path:      "/blog/cookies",
+		Pattern:   "/blog/:slug",
+		Prerender: true,
+		Entry:     "_puzzle/blog--_slug.js",
+		Modules:   staticModules{Views: []string{"app/views/Post.pzl"}},
+		Route:     json.RawMessage(route),
+	}
+	src, err := staticEntrySource(root, root+"/app/app.js", page, s, "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "  route: Object.assign(" + route +
+		", JSON.parse(document.querySelector('script[data-puzzle-static-route]').textContent)),\n"
+	if !strings.Contains(src, want) {
+		t.Errorf("generated entry missing %q\n---\n%s", want, src)
+	}
+	fixed, err := staticEntrySource(root, root+"/app/app.js", s.Written[0], s, "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(fixed, "data-puzzle-static-route") || strings.Contains(fixed, "Object.assign") {
+		t.Errorf("a fixed route's entry must not read a route island\n---\n%s", fixed)
+	}
+	if page.routeKey() != "/blog/:slug" || s.Written[0].routeKey() != "/" {
+		t.Errorf("routeKey: got %q and %q", page.routeKey(), s.Written[0].routeKey())
+	}
+	// Two pages of one route share the entry; the route count counts the route once.
+	other := page
+	other.Path = "/blog/cake"
+	if _, err := uniqueEntryPages([]staticPage{page, other}); err != nil {
+		t.Errorf("pages of one staticPaths route must share an entry: %v", err)
+	}
+	if n := writtenRoutes([]staticPage{s.Written[0], page, other}); n != 2 {
+		t.Errorf("writtenRoutes = %d, want 2", n)
 	}
 }
 
@@ -531,6 +690,141 @@ func TestBuildStaticEmitsPages(t *testing.T) {
 	// The prerender scaffolding never ships.
 	if _, err := os.Stat(filepath.Join(dist, prerenderDir)); !os.IsNotExist(err) {
 		t.Errorf("%s must be deleted before the swap; it survived in dist/ (err=%v)", prerenderDir, err)
+	}
+}
+
+// The per-page pass always splits, so production pages preload their shared
+// chunks even when the app never opts into hashed output. Development keeps
+// fixed names and emits no preloads, including with hashNames on.
+func TestBuildStaticProductionPreloads(t *testing.T) {
+	requireStaticRuntime(t)
+	for _, tc := range []struct {
+		name   string
+		config string
+		dev    bool
+	}{
+		{name: "production defaults"},
+		{name: "development with hashing configured", config: "export default { build: { hashNames: true } };\n", dev: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			files := baseSSGFixture()
+			files["app/routes.js"] = strings.Replace(files["app/routes.js"], "name: 'about',", "name: 'about', prerender: false,", 1)
+			if tc.config != "" {
+				files["puzzle.config.js"] = tc.config
+			}
+			root := writeSSGFixture(t, files)
+			if err := Build(root, Options{Development: tc.dev, Output: "static"}); err != nil {
+				t.Fatalf("static Build failed: %v", err)
+			}
+			dist := filepath.Join(root, "dist")
+			for _, page := range []struct{ file, slug string }{
+				{"index.html", "index"}, {"about/index.html", "about"}, {"404.html", "404"},
+			} {
+				htmlPath := filepath.Join(dist, filepath.FromSlash(page.file))
+				html := readFile(t, htmlPath)
+				entry := emittedAsset(t, dist, htmlPath, "_puzzle/"+page.slug+".js")
+				if entry != filepath.Join(dist, staticPagesDir, page.slug+".js") {
+					t.Errorf("%s entry = %s, want its fixed name", page.file, entry)
+				}
+				style := emittedAsset(t, dist, htmlPath, "styles.css")
+				if style != filepath.Join(dist, "styles.css") {
+					t.Errorf("%s stylesheet = %s, want styles.css", page.file, style)
+				}
+				for _, asset := range []string{entry, style} {
+					if _, err := os.Stat(asset); err != nil {
+						t.Errorf("%s asset %s does not exist: %v", page.file, asset, err)
+					}
+				}
+				hrefs := modulepreloadHrefs(html)
+				if tc.dev {
+					if len(hrefs) != 0 {
+						t.Errorf("development page %s gained preloads: %v", page.file, hrefs)
+					}
+					continue
+				}
+				if len(hrefs) == 0 {
+					t.Fatalf("production page %s has no shared-chunk preloads", page.file)
+				}
+				seen := make(map[string]bool)
+				for _, href := range hrefs {
+					if !strings.HasPrefix(href, "/_puzzle/chunks/") || seen[href] {
+						t.Errorf("%s has an invalid or repeated preload %q", page.file, href)
+					}
+					seen[href] = true
+					if _, err := os.Stat(filepath.Join(dist, filepath.FromSlash(strings.TrimPrefix(href, "/")))); err != nil {
+						t.Errorf("%s preload %s does not exist: %v", page.file, href, err)
+					}
+				}
+			}
+		})
+	}
+}
+
+// Locale pages share a module slug, but each HTML file needs the emitted name
+// and its preloads. routerBase prefixes those URLs without becoming part of the
+// output directory; the same module serves every language under either base.
+func TestBuildStaticHashedLocalePages(t *testing.T) {
+	requireStaticRuntime(t)
+	hashedEntry := regexp.MustCompile(`^_puzzle/(index|about|404)-[A-Z2-7]{8}\.js$`)
+	hashedStyle := regexp.MustCompile(`^styles-[A-Z2-7]{8}\.css$`)
+	for _, base := range []string{"", "/docs"} {
+		t.Run("base="+base, func(t *testing.T) {
+			files := i18nFixture()
+			files["puzzle.config.js"] = "export default { output: 'static', build: { hashNames: true }, i18n: { locales: ['en', 'es'], defaultLocale: 'en', routing: 'prefix', detect: false } };\n"
+			files["app/app.js"] = strings.Replace(files["app/app.js"], "target: '#app', routes", "target: '#app', routerBase: '"+base+"', routes", 1)
+			root := writeSSGFixture(t, files)
+			if err := Build(root, Options{}); err != nil {
+				t.Fatalf("hashed static Build failed: %v", err)
+			}
+			dist := filepath.Join(root, "dist")
+			firstEntries := make(map[string]string)
+			for _, locale := range []string{"", "es"} {
+				for _, page := range []struct{ file, slug string }{
+					{"index.html", "index"}, {"about/index.html", "about"}, {"404.html", "404"},
+				} {
+					htmlPath := filepath.Join(dist, locale, filepath.FromSlash(page.file))
+					html := readFile(t, htmlPath)
+					entryPath := emittedAsset(t, dist, htmlPath, "_puzzle/"+page.slug+".js")
+					entry := "_puzzle/" + filepath.Base(entryPath)
+					if !strings.Contains(html, `src="`+base+"/"+entry+`"`) {
+						t.Fatalf("%s has no per-page module under base %q:\n%s", htmlPath, base, html)
+					}
+					if !hashedEntry.MatchString(entry) {
+						t.Fatalf("%s module %s does not have a hashed name", htmlPath, entry)
+					}
+					if first, ok := firstEntries[page.slug]; ok && first != entry {
+						t.Errorf("locale %q entry %s differs from the default locale's %s", locale, entry, first)
+					}
+					firstEntries[page.slug] = entry
+					style := emittedAsset(t, dist, htmlPath, "styles.css")
+					if !hashedStyle.MatchString(filepath.Base(style)) {
+						t.Errorf("%s stylesheet %s does not have a hashed name", htmlPath, style)
+					}
+					for _, asset := range []string{entryPath, style} {
+						if _, err := os.Stat(asset); err != nil {
+							t.Errorf("%s asset %s does not exist: %v", htmlPath, asset, err)
+						}
+					}
+					hrefs := modulepreloadHrefs(html)
+					if len(hrefs) == 0 {
+						t.Fatalf("%s has no shared-chunk preloads", htmlPath)
+					}
+					for _, href := range hrefs {
+						if !strings.HasPrefix(href, base+"/_puzzle/chunks/") {
+							t.Errorf("%s preload %s does not preserve base %q", htmlPath, href, base)
+						}
+						if _, err := os.Stat(filepath.Join(dist, filepath.FromSlash(strings.TrimPrefix(href, base+"/")))); err != nil {
+							t.Errorf("%s preload %s does not exist: %v", htmlPath, href, err)
+						}
+					}
+				}
+			}
+			for _, pattern := range []string{"app*.js", "styles.css", "_puzzle/index.js", "_puzzle/about.js", "_puzzle/404.js"} {
+				if files, err := filepath.Glob(filepath.Join(dist, filepath.FromSlash(pattern))); err != nil || len(files) != 0 {
+					t.Errorf("hashed static build left %s: %v (err=%v)", pattern, files, err)
+				}
+			}
+		})
 	}
 }
 

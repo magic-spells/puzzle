@@ -53,6 +53,8 @@ import InputOtpDoc from './views/components/InputOtpDoc.pzl';
 import KanbanDoc from './views/components/KanbanDoc.pzl';
 import KbdDoc from './views/components/KbdDoc.pzl';
 import LabelDoc from './views/components/LabelDoc.pzl';
+import LanguageMenuDoc from './views/components/LanguageMenuDoc.pzl';
+import LanguageSwitcherDoc from './views/components/LanguageSwitcherDoc.pzl';
 import LineChartDoc from './views/components/LineChartDoc.pzl';
 import MarkdownDoc from './views/components/MarkdownDoc.pzl';
 import MarkdownEditorDoc from './views/components/MarkdownEditorDoc.pzl';
@@ -137,7 +139,7 @@ export default [
 		name: 'themes-compare',
 		view: Compare,
 		layout: DefaultLayout,
-		meta: { title: 'Compare schemes × modes — Puzzle Pieces' },
+		meta: { title: 'Compare schemes × styles — Puzzle Pieces' },
 	},
 	{
 		path: '/themes/pieces',
@@ -488,6 +490,20 @@ export default [
 		view: LabelDoc,
 		layout: DefaultLayout,
 		meta: { title: 'Label — Puzzle Pieces' },
+	},
+	{
+		path: '/components/language-menu',
+		name: 'language-menu',
+		view: LanguageMenuDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Language Menu — Puzzle Pieces' },
+	},
+	{
+		path: '/components/language-switcher',
+		name: 'language-switcher',
+		view: LanguageSwitcherDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Language Switcher — Puzzle Pieces' },
 	},
 	{
 		path: '/components/line-chart',

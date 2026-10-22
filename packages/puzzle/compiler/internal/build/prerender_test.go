@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -282,6 +283,80 @@ func TestBuildHybridViaConfig(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "dist", "about", "index.html")); err != nil {
 		t.Errorf("output:'hybrid' should prerender routes without a flag; dist/about/index.html missing: %v", err)
 	}
+}
+
+// Every hybrid route inherits the rewritten production shell, including an
+// unprerendered SPA island. Its static imports preload once; the lazy route's
+// own chunk stays behind the dynamic import.
+func TestBuildHybridHashedEntriesAndPreloads(t *testing.T) {
+	requireSSGRuntime(t)
+	files := lazyRouteFixture("export default { output: 'hybrid', build: { splitting: true } };\n")
+	files["app/routes.js"] = strings.Replace(files["app/routes.js"], "  { path: '*',", "  { path: '/client-only', name: 'client-only', view: Home, layout: DefaultLayout, prerender: false },\n  { path: '*',", 1)
+	root := writeSSGFixture(t, files)
+	if err := Build(root, Options{}); err != nil {
+		t.Fatalf("hybrid Build failed: %v", err)
+	}
+	dist := filepath.Join(root, "dist")
+	hashedApp := regexp.MustCompile(`^app-[A-Z2-7]{8}\.js$`)
+	hashedStyle := regexp.MustCompile(`^styles-[A-Z2-7]{8}\.css$`)
+	var firstPreloads []string
+	for _, page := range []string{"index.html", "about/index.html", "404.html", "client-only/index.html"} {
+		htmlPath := filepath.Join(dist, filepath.FromSlash(page))
+		html := readFile(t, htmlPath)
+		app := emittedAsset(t, dist, htmlPath, "app.js")
+		if !hashedApp.MatchString(filepath.Base(app)) {
+			t.Errorf("%s entry %s does not have a hashed name", page, app)
+		}
+		style := emittedAsset(t, dist, htmlPath, "styles.css")
+		if !hashedStyle.MatchString(filepath.Base(style)) {
+			t.Errorf("%s stylesheet %s does not have a hashed name", page, style)
+		}
+		for _, asset := range []string{app, style} {
+			if _, err := os.Stat(asset); err != nil {
+				t.Errorf("%s asset %s does not exist: %v", page, asset, err)
+			}
+		}
+		hrefs := modulepreloadHrefs(html)
+		if len(hrefs) == 0 {
+			t.Fatalf("%s has no shared-chunk preloads", page)
+		}
+		if firstPreloads == nil {
+			firstPreloads = hrefs
+		} else if strings.Join(hrefs, "\n") != strings.Join(firstPreloads, "\n") {
+			t.Errorf("%s preloads %v differ from the shared shell's %v", page, hrefs, firstPreloads)
+		}
+		seen := make(map[string]bool)
+		for _, href := range hrefs {
+			if !strings.HasPrefix(href, "/chunks/") || seen[href] {
+				t.Errorf("%s has an invalid or repeated preload %q", page, href)
+			}
+			seen[href] = true
+			chunk := filepath.Join(dist, filepath.FromSlash(strings.TrimPrefix(href, "/")))
+			if strings.Contains(readFile(t, chunk), lazyRouteViewMarker) {
+				t.Errorf("%s preloads the lazy route chunk %s", page, href)
+			}
+		}
+	}
+	foundLazy := false
+	for _, chunk := range globChunks(t, filepath.Join(dist, chunksDirName)) {
+		if strings.Contains(readFile(t, chunk), lazyRouteViewMarker) {
+			foundLazy = true
+		}
+	}
+	if !foundLazy {
+		t.Fatal("hybrid build did not emit the lazy route chunk")
+	}
+	if _, err := os.Stat(filepath.Join(dist, "app.js")); !os.IsNotExist(err) {
+		t.Errorf("hashed hybrid build must not ship app.js (err=%v)", err)
+	}
+}
+
+func modulepreloadHrefs(html string) []string {
+	var hrefs []string
+	for _, match := range regexp.MustCompile(`<link rel="modulepreload" href="([^"]+)"[^>]*>`).FindAllStringSubmatch(html, -1) {
+		hrefs = append(hrefs, match[1])
+	}
+	return hrefs
 }
 
 // TestBuildStaticPrerenderFailureLeavesDistIntact proves a prerender failure (a

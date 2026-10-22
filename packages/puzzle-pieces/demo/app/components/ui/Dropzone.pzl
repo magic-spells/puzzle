@@ -38,7 +38,7 @@
     {#if hasFiles}
       <ul class="mt-3 flex flex-col gap-2">
         {#for f in fileRows, i}
-          <li>
+          <li key={ f.key }>
             <ChatAttachment
               name={ f.name }
               size={ f.size }
@@ -57,8 +57,8 @@
         <p id={ descId } class="mt-1.5 text-sm text-danger">{ error }</p>
       {:else if hasRejections}
         <ul id={ descId } class="mt-1.5 flex flex-col gap-1">
-          {#for m in rejectionMessages}
-            <li class="text-sm text-danger">{ m }</li>
+          {#for m in rejectionMessages, i}
+            <li class="text-sm text-danger" key={ i }>{ m }</li>
           {/for}
         </ul>
       {:else if hint}
@@ -157,7 +157,10 @@ export default class Dropzone extends PuzzleView {
     const described = !!(error || hint || hasRejections);
 
     const files = Array.isArray(props.files) ? props.files : [];
-    const fileRows = files.map((f) => ({
+    // Files carry no id, and two can share a name and a size (removal is by index for
+    // the same reason, see onRemove), so the position is the row key.
+    const fileRows = files.map((f, i) => ({
+      key: i,
       name: f.name || '',
       size: formatBytes(f.size),
       type: f.type && !String(f.type).includes('/') ? f.type : '',

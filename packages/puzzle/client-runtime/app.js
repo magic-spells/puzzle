@@ -17,7 +17,7 @@
  * ownership chain (APP_ANATOMY §2–§3):
  *
  *   Store(models, {apiURL, storage}) ─┐
- *   FormatterRegistry (+ config)      ├─▶ ctx = { store, router, formatters }
+ *   FormatterRegistry (+ config)      ├─▶ ctx = { store, router, formatters, idle }
  *   Router(routes)                    ─┘         │ injected into every view
  *   router.start(el, ctx)  → runs navigation #0 (initial paint)
  *
@@ -27,13 +27,24 @@
 import { isAdapterCapability } from './capabilities.js';
 import { Store } from './datastore/store.js';
 import { makeFormatterRegistry } from './formatters.js';
-import { createI18n, installTranslate } from './i18n.js';
-import { Router, normalizeBase } from './router/router.js';
+import {
+	assignSameOrigin,
+	createI18n,
+	installTranslate,
+	localePath,
+	readStoredLocale,
+	selectLocale,
+	urlLocale,
+	viewerLanguages,
+} from './i18n.js';
+import manifestData from '@magic-spells/puzzle/i18n/manifest';
+import { Router, localePage, navigating, normalizeBase } from './router/router.js';
 import { snapshotToStorage, restoreStoreFromStorage, restoreViewsFromStorage } from './devstate.js';
 import { devtoolsAppMounted, devtoolsAppUnmounted } from './devtools.js';
 import { reportError, setErrorConfig } from './errors.js';
 import { PuzzleView } from './views/PuzzleView.js';
 import { setPortalHost, teardownPortals } from './views/portal.js';
+import { frame, scheduled } from './scheduler.js';
 
 /** @import { FormatterRegistry } from './formatters.js' */
 
@@ -47,9 +58,10 @@ import { setPortalHost, teardownPortals } from './views/portal.js';
  */
 
 /**
- * The ctx injected into every view: the three services, plus `i18n` when
- * translations are configured (D175).
+ * The ctx injected into every view: the three services and bound `idle`, plus
+ * `i18n` when translations are configured (D175).
  * @typedef {{ store: Store, router: Router, formatters: FormatterRegistry,
+ *   idle: (options?: { timeout?: number }) => Promise<boolean>,
  *   i18n?: import('./i18n.js').I18nService }} AppContext
  */
 
@@ -246,7 +258,9 @@ export class PuzzleApp {
 	 * services, and runs the initial navigation. Returns a promise that resolves
 	 * to `this` once the initial route has rendered (router.start is async).
 	 * Calls made while a mount is still in flight share that mount's promise, so
-	 * they settle with it — resolution or rejection — rather than early.
+	 * they settle with it — resolution or rejection — rather than early. Under
+	 * locale prefix routing (D177), a first-visit redirect leaves it pending for
+	 * good: the page is being replaced and nothing was wired.
 	 */
 	mount() {
 		if (this.#mountPromise) return this.#mountPromise;
@@ -258,6 +272,62 @@ export class PuzzleApp {
 		};
 		p.then(clear, clear);
 		return p;
+	}
+
+	/**
+	 * Wait for the app to go quiet (D185): resolves true once two consecutive
+	 * frames find no mount or navigation in flight, no store notification, flush
+	 * or view render pending, no async data() running, no setLocale() switch
+	 * loading, and — with the adapter — no tracked find's fetch in flight; false
+	 * when `timeout` (ms, default 10000; a bad value falls back to it) runs out
+	 * first. A check runs after its frame's callbacks, so
+	 * a setData() render scheduled before it has landed. Frames follow the store's
+	 * scheduler (D63): timers in a hidden tab. An app neither mounted nor mounting
+	 * resolves true at once. Never rejects. It reads state the runtime already
+	 * keeps, so it cannot see user timers, animations, IntersectionObserver
+	 * triggers, writes or fetches nothing awaits (an event handler's unawaited
+	 * `save()` or `loadMany()`), or a path- or hash-mode `back()`, `forward()` or
+	 * `go()` before its `popstate` fires.
+	 *
+	 * @param {{ timeout?: number }} [options]
+	 * @returns {Promise<boolean>}
+	 */
+	idle({ timeout = 10000 } = {}) {
+		if (typeof timeout !== 'number' || !(timeout >= 0 && timeout < Infinity)) {
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+				console.error(
+					`[puzzle] app.idle() timeout must be a finite number of ms ≥ 0 (got ${String(timeout)}) — using 10000`
+				);
+			timeout = 10000;
+		}
+		const end = Date.now() + timeout;
+		return new Promise((resolve) => {
+			// -1: the first, synchronous check settles only an app with nothing
+			// mounted; a quiet verdict takes two clear checks after it.
+			let clear = -1;
+			const check = () => {
+				if (!this.#mountPromise && !this._mounted) return resolve(true);
+				// Mounted (and not mounting) means the store and router are wired.
+				const store = /** @type {Store} */ (this.#store);
+				if (
+					this.#mountPromise ||
+					scheduled() ||
+					store._flushScheduled ||
+					store._asyncTrackingChain ||
+					store._reading?.() ||
+					navigating(/** @type {Router} */ (this.router)) ||
+					((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n?.__busy)
+				)
+					clear = 0;
+				else if (++clear > 1) return resolve(true);
+				if (Date.now() >= end) return resolve(false);
+				// Check again after the next frame's callbacks (rAF, then a timer), so a
+				// setData() render scheduled before then has landed. The store's D63
+				// scheduler: a timer in a hidden tab, a fallback timer if rAF freezes.
+				frame(() => setTimeout(check, 0));
+			};
+			check();
+		});
 	}
 
 	async #mount() {
@@ -320,6 +390,36 @@ export class PuzzleApp {
 
 		// 1. Resolve the mount element — a selector string or an Element.
 		const el = this.#resolveTarget(target);
+
+		// Locale prefix routing (D177), before anything is wired. Hash and memory
+		// routing have no path to carry a locale prefix, and the compiler cannot read
+		// this file to reject them at build time. Then the first-visit redirect, for
+		// the plain SPA: it has no prerendered page to carry the build's inline
+		// redirect script, so it decides here, before navigation #0. A prerendered
+		// page (its container still carries `data-puzzle-ssg`) skips it: its inline
+		// script already ran in the head on the same decision table, and either
+		// redirected (a second location.replace would restart that navigation) or
+		// declined, as this would.
+		if (typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) {
+			const routing = prefixRouting(this.config);
+			if (routing) {
+				if (routerMode) {
+					throw new Error(
+						"[puzzle] i18n.routing: 'prefix' needs path routing — remove routerMode (hash and memory URLs have no path for a locale prefix)"
+					);
+				}
+				const to = !el.hasAttribute('data-puzzle-ssg') && firstVisitRedirect(routing.manifest, routerBase);
+				if (to) {
+					assignSameOrigin(to, true);
+					// Never settle: the page is being replaced, and code after
+					// `await app.mount()` must not run against an app that wired nothing
+					// (app.router.push() would throw into an error tracker on every
+					// redirected first visit).
+					return /** @type {Promise<never>} */ (new Promise(() => {}));
+				}
+			}
+		}
+
 		this._container = el;
 		// Portal outlet host (D144): portals teleport into a framework-created
 		// element appended NEXT TO the mount container, so it survives the
@@ -363,14 +463,30 @@ export class PuzzleApp {
 						: normalizeBase(routerBase) + '/' + path,
 				lang: routerMode?.name !== 'memory',
 				refresh: () => this.router?.__failedView(null, true),
+				// `i18n.locales[].href` (D177): the committed page, as the router encodes
+				// it ('' — the current document — before navigation #0).
+				page: () => (this.router?.current ? this.router.url(this.router.current.path) : ''),
+				// The page carries routerBase in front of any locale prefix; prefix
+				// routing swaps the prefix after it (`/docs/es/about`, not `/es/docs/about`).
+				routerBase: normalizeBase(routerBase),
+				// Locale prefix routing (D177): the URL's locale, setLocale as a page
+				// load. Spread last so the URL beats the seam's `locale`. The spread
+				// folds away entirely without the define.
+				...((typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) &&
+					prefixI18nOptions(this)),
 			});
 		}
 
 		// 3. Formatters: shared built-in/custom wiring plus the live-router-backed
 		//    `link` encoder. The closure reads this.router lazily so a re-mount never
 		//    keeps a stale Router, and a custom `link` formatter still wins.
-		this.formatters = makeFormatterRegistry(formatters, (path) =>
-			this.router ? this.router.url(path) : path
+		this.formatters = makeFormatterRegistry(
+			formatters,
+			// Locale prefix routing (D177) hands link()'s options ({ locale: 'es' },
+			// { locale: false }) to router.url; without it the one-argument form ships.
+			typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__
+				? (path, options) => (this.router ? this.router.url(path, options) : path)
+				: (path) => (this.router ? this.router.url(path) : path)
 		);
 		// The service-bound `t` formatter (D175); an app `t` still wins.
 		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n)
@@ -381,7 +497,14 @@ export class PuzzleApp {
 		//    (path routing, inline) stands otherwise — mirroring how `storage` is
 		//    conditionally passed to the Store above (D34/D159).
 		/** @type {NonNullable<ConstructorParameters<typeof Router>[1]>} */
-		const routerOptions = { scrollBehavior };
+		const routerOptions = {
+			scrollBehavior,
+			// Locale prefix routing (D177): the page's locale and the configured ones,
+			// so the router reads and writes URLs under the locale's prefix. Folds
+			// away without the define.
+			...((typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) &&
+				prefixRouterOptions(this.config)),
+		};
 		// focusBehavior → Router `focusBehavior`, passed through ONLY when set so the
 		// Router's own default (focus the committed leaf root + announce the title)
 		// stands otherwise (v1.56, D93) — mirroring the conditional passthroughs below.
@@ -404,7 +527,12 @@ export class PuzzleApp {
 			this.router.setMorphHandler(this.#morphHandler);
 		}
 
-		this.ctx = { store: this.#store, router: this.router, formatters: this.formatters };
+		this.ctx = {
+			store: this.#store,
+			router: this.router,
+			formatters: this.formatters,
+			idle: this.idle.bind(this),
+		};
 		// ctx gains `i18n` only when translations are configured (D175) — beside the
 		// store and router, reached as this.ctx.i18n.
 		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n)
@@ -705,6 +833,107 @@ export class PuzzleApp {
 			'[puzzle] mount target must be a CSS selector string or a DOM Element (config.target)'
 		);
 	}
+}
+
+// ---- Locale prefix routing (D177) -------------------------------------------
+// Called only behind the inline __PUZZLE_HAS_LOCALE_ROUTING__ probe, so an app
+// without `i18n.routing` ships none of these. Each call re-reads the manifest
+// and the URL rather than threading a value through mount(): a local would
+// survive the fold as a declaration, and nothing between the calls awaits.
+
+/**
+ * The locale manifest when it routes by prefix (the build's, or the `__i18n`
+ * seam's), with the page's locale — the URL's prefix, else the default. The URL
+ * decides: it beats the stored choice and the browser's languages.
+ *
+ * @param {Record<string, any>} config the PuzzleApp config
+ * @returns {{ manifest: import('./i18n.js').I18nManifest, locale: string } | null}
+ */
+function prefixRouting(config) {
+	/** @type {import('./i18n.js').I18nManifest | null} */
+	const manifest = config.__i18n?.manifest ?? manifestData;
+	if (manifest?.routing !== 'prefix') return null;
+	return {
+		manifest,
+		locale: urlLocale(location.pathname, config.routerBase, manifest) ?? manifest.defaultLocale,
+	};
+}
+
+/**
+ * createI18n options under prefix routing: the URL's locale; the page from the
+ * router — the target of a navigation in flight, so a setLocale from its guard
+ * or data() reloads the page it is headed to (the address bar moves only at
+ * commit), else the committed page — or the address bar before the router has
+ * one; and setLocale as a same-origin page load — no in-place rebuild, so the
+ * router's base never changes while the app runs. A seam-supplied `navigate`
+ * (tests) stands.
+ *
+ * @param {PuzzleApp} app
+ */
+function prefixI18nOptions(app) {
+	/** @type {Record<string, any>} */
+	const config = app.config;
+	const routing = prefixRouting(config);
+	return (
+		routing && {
+			locale: routing.locale,
+			page: () =>
+				(app.router && localePage(app.router)) ?? location.pathname + location.search + location.hash,
+			navigate: config.__i18n?.navigate ?? assignSameOrigin,
+		}
+	);
+}
+
+/**
+ * Router options under prefix routing: the page's locale and every configured
+ * one, so the router composes the locale prefix into its base.
+ *
+ * @param {Record<string, any>} config
+ */
+function prefixRouterOptions(config) {
+	const routing = prefixRouting(config);
+	return (
+		routing && {
+			locale: routing.locale,
+			defaultLocale: routing.manifest.defaultLocale,
+			locales: Object.keys(routing.manifest.locales),
+		}
+	);
+}
+
+/**
+ * The SPA's first-visit redirect: the same page under the viewer's locale's
+ * prefix (query and fragment kept), or null. It redirects only when the URL has
+ * no locale prefix, the visitor did not come from this site (a deliberate click
+ * to another language is never bounced back), and the wanted locale — the stored
+ * choice, else the first `navigator.languages` match, both through selectLocale —
+ * is not the default (a stored default choice therefore suppresses it).
+ * `i18n: { detect: false }` turns it off.
+ *
+ * @param {import('./i18n.js').I18nManifest} manifest
+ * @param {string | undefined} routerBase
+ * @returns {string | null}
+ */
+function firstVisitRedirect(manifest, routerBase) {
+	if (manifest.detect === false || urlLocale(location.pathname, routerBase, manifest)) return null;
+	let from = null;
+	try {
+		from = new URL(document.referrer).origin;
+	} catch {
+		// No referrer (a typed URL, a bookmark) or an unparsable one: not this site.
+	}
+	if (from === location.origin) return null;
+	const want = selectLocale(
+		Object.keys(manifest.locales),
+		manifest.defaultLocale,
+		readStoredLocale(),
+		viewerLanguages()
+	);
+	if (want === manifest.defaultLocale) return null;
+	const here = location.pathname + location.search + location.hash;
+	const to = localePath(here, routerBase, want, manifest);
+	// A page outside routerBase has no locale URL: localePath hands it back as is.
+	return to === here ? null : to;
 }
 
 export default PuzzleApp;

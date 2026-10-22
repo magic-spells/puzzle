@@ -73,6 +73,15 @@ Other static-mode rules:
   declaring the same path skip the second with reason `duplicate`.
 - `staging/.puzzle-prerender` and `_puzzle` are reserved in public output (both
   modes).
+- **Locale prefix routing** ([[DECISION-D177-LOCALE-URL-PREFIXES]]): every route
+  is written once per locale (`dist/<locale>/…`, default locale at the root),
+  each `WrittenPage` carrying its `locale`. A route's locale pages share one
+  slug and one entry module (`uniqueEntryPages` takes the first per slug; a
+  slug whose pages name different modules is an error). The kernel takes the
+  page's locale from the URL prefix, then its table island, and wraps the stub
+  with `localizeRouterStub` so hrefs carry the prefix. Default-locale pages
+  (404 included) carry the inline first-visit redirect script
+  (`ssg/redirect.js`) unless `i18n.detect: false`.
 
 ## Alternatives
 

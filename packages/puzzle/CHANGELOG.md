@@ -11,14 +11,22 @@ numbered `Dnn` cards, referenced below.
 
 ## Upgrading across versions
 
-Nine breaking changes are easy to miss on a multi-version jump. Most fail
-loudly — a compile error, a constructor throw, an unresolvable import. Five are
+Ten breaking changes are easy to miss on a multi-version jump. Most fail
+loudly — a compile error, a constructor throw, an unresolvable import. Six are
 quiet: the 0.8.0 template semantics change output without an error;
-`output: 'static'` (renamed, 0.2.0) and `errorContent()` (removed, 0.6.0)
-are greppable; the stricter write-response guard (0.6.0) is not — it depends on
-what your server returns, so it surfaces at runtime on the first save — and
-neither is the behavior change under auto-fetching finds (0.7.0), which turns
-some reads that used to be local into requests.
+`i18n.locales` (reshaped, 0.9.0), `output: 'static'` (renamed, 0.2.0) and
+`errorContent()` (removed, 0.6.0) are greppable; the stricter write-response
+guard (0.6.0) is not — it depends on what your server returns, so it surfaces
+at runtime on the first save — and neither is the behavior change under
+auto-fetching finds (0.7.0), which turns some reads that used to be local into
+requests.
+
+**`i18n.locales` lists entries, not tags (0.9.0, D177).** Only apps that
+configure `i18n` are affected. `ctx.i18n.locales` was a `string[]`; it is now
+one `{ locale, label, href, active }` per configured locale, in config order.
+Nothing fails at build time: a switcher built on the old list prints nothing
+where a tag was, and handing an entry to `setLocale` throws a `RangeError`.
+Where code wants the tags, write `i18n.locales.map((l) => l.locale)`.
 
 **Template expressions change syntax, and templates print differently (0.8.0,
 D176, D168, D173, D174).** The syntax half is loud: a formatter pipe is a
@@ -152,6 +160,590 @@ Pick `<Children/>` if that position received content from the call site, or
 0.2.0, rename it to `output: 'hybrid'` to keep the behavior you had. The name
 `'static'` now produces a genuinely static site — no router, no `app.js`. This
 one is *not* a compile error; it silently builds a different product.
+
+## 0.9.0 — 2026-10-21
+
+Multilingual static sites. With `i18n.routing: 'prefix'` every language gets
+its own URLs (`/about`, `/es/about`) and its own prerendered HTML, with
+`hreflang` alternates, a sitemap, a first-visit language redirect, `<html
+dir>` for right-to-left languages and translated page titles (D177). A
+`:param` route can now be prerendered too: `staticPaths` lists its pages at
+build time, so `/blog/:slug` becomes one page per post, per language (D179).
+`afterUpdate(prev)` receives what the previous render drew (D178). Two new
+pieces, `language-switcher` and `language-menu`, render the language list.
+`<Component is={ … }>` picks a component at runtime from constructors the
+caller imports (D180), and split production builds get content-hashed file
+names with modulepreload hints (D181). A set of small APIs lets tools and
+agents drive a running app: navigation results from `push()`/`replace()`
+(D182), `router.views` and the `agent` route field (D183),
+`store.observe()` (D184), `app.idle()` (D185), `this.renderTick()` (D188) and
+`ctx.idle()`/`store.modelFor()` (D189). There is no npm 0.8.1 (that release is the `packages/puzzle-lang` Go module
+only), so 0.9.0 follows 0.8.0 on npm.
+
+Production sizes: hello-world **23.0 KB gzip** (21.9 in 0.8.0), todos
+**27.0 KB gzip** (26.0), about a kilobyte each, mostly the new built-in
+APIs of D182–D189. Apps without `i18n.routing` get no added code: every prefix branch sits behind a build-time define, and their
+prerendered HTML is pinned byte for byte by a golden test.
+
+### Upgrading from 0.8
+
+Change the range to `^0.9.0`. Three changes can require an update:
+
+1. **BREAKING: `i18n.locales` is `[{ locale, label, href, active }]`.** 0.8.0
+   exposed a `string[]` of tags. `label` is the language's own name
+   (`Español`), `href` the current page in that language and `active` marks
+   the current one, so a switcher can render the list as it is. Code that
+   wants the tags:
+
+   ```js
+   const tags = this.ctx.i18n.locales.map((l) => l.locale);
+   ```
+
+   Nothing fails at build time. A switcher built on the old list prints
+   nothing where a tag was, and `setLocale(entry)` throws a `RangeError`.
+
+2. **`Component` is a reserved built-in tag/family root (D180).** Rename a
+   user `Component.pzl`, a tag import named `Component`, or a family rooted
+   at `Component`. The compiler reports a positioned error with a rename
+   hint. Other component names are unaffected.
+3. **puzzle-pieces themes are four schemes × four styles.** The `dim`
+   palette is now `cool` (`themes/dim.css` → `themes/cool.css`,
+   `data-scheme="cool"`), and `data-theme` takes `dark | dim | mixed | light`
+   where it took `light | medium | dark`: `medium` became `dim`, and `mixed`
+   is a real style now (a dark sidebar around a light panel). An app that
+   imports the package's theme files switches `themes/dim.css` to
+   `themes/cool.css`. An app that copied them re-copies with
+   `puzzle add theme default cool warm void --overwrite`, deletes
+   `app/styles/themes/dim.css`, and points its `@import` at
+   `./themes/cool.css`. Re-copy `appearance.js`, the inline pre-paint
+   snippet and `puzzle add piece appearance-picker --overwrite` together:
+   the 0.8 copies know neither `cool` nor `dim` as a style, and a 0.8
+   pre-paint beside a 0.9 `appearance.js` paints one choice before first
+   frame and `boot()` another. Stored choices read
+   forward — `appearance.js` and the pre-paint snippet map a stored `dim`
+   scheme to `cool` and a stored `medium` mode to `dim`, and so do the
+   snippet's `data-default-scheme` / `data-default-mode` — but a
+   hand-written `data-scheme="dim"` or `data-theme="medium"` in markup
+   paints the default. A 0.8 store holding `mode: "mixed"` (Pyramid's
+   name, which 0.8 read as `medium`) now paints the real Mixed style.
+
+Six behavior changes do not break anything that worked, but can change what
+you see:
+
+4. **`puzzle preview` and `puzzle dev` in static mode serve a nested 404
+   first.** A miss whose first URL segment names a `dist` folder holding its
+   own `404.html` gets that page (`/es/missing` → `dist/es/404.html`) before
+   the root `dist/404.html`. The rule reads the file layout, not the config,
+   and the folder name must match the segment exactly. A `404.html` that
+   `public/` copies into a first-level folder now answers for misses under it.
+5. **`<html dir>` follows the locale in every app that configures `i18n`.**
+   An rtl locale (Arabic, Hebrew, Persian, Urdu, …) sets `dir="rtl"` on the
+   prerendered page and on a client switch. An ltr locale removes only a
+   `dir="rtl"`; any other `dir` the shell sets is kept.
+6. **The config's top-level `site` key is now read, and validated.** It must
+   be an http(s) origin with no path (`'https://example.com'`); anything else
+   fails the build. `i18n.routing` accepts only `'prefix'` and `i18n.detect`
+   only a boolean.
+7. **A `.pzl` the usage scan never read can fail the build (D89).** When the
+   app imports a `.pzl` from a package that does not declare Puzzle, from a
+   pruned directory (`dist/`, `build/`, `vendor/` at the project root, a
+   dot-directory) or from a folder linked in from outside, and that file uses
+   a feature or library function the build compiled out, the build stops
+   with an error naming the file and the feature. 0.8.0 built it and the page
+   threw `#html reached the DOM` (or rendered the function's input unchanged)
+   in production. A component package fixes it by listing
+   `@magic-spells/puzzle` in its `peerDependencies`.
+8. **`router.push()` and `router.replace()` never reject (D182).** They
+   resolve a `NavigationResult`; a failure inside the commit window that used
+   to reject the promise now resolves `{ ok: false, reason: 'error' }` and
+   reaches `onError`. A `.catch()` on a push no longer runs — check
+   `result.ok` instead. Only the first navigation still rejects `app.mount()`.
+9. **Dynamic URL bindings drop script schemes (D186).** A bound `href`, `src`
+   or other URL attribute whose value starts with `javascript:`, `vbscript:`
+   or an executable `data:` URL is omitted, with a development warning.
+   Author-written static attributes are untouched.
+
+### Added
+
+- **`passive` and `capture` event modifiers (D187).** `@wheel:passive` and
+  `@click:capture` pass native listener options, including when combined with
+  `outside` or `once`; listener removal preserves the capture flag. Combining
+  `passive` with `prevent` is a positioned compile error. Apps whose templates
+  use neither ship no code for them.
+- **`this.renderTick()` (D188).** A view method that resolves once every pending
+  store flush and scheduled render has landed, including the renders those
+  schedule, in hidden tabs too. It forces nothing and does not wait for async
+  `data()`, requests or navigation — that is `app.idle()`.
+- **`ctx.idle(options?)` (D189).** Components can await the app's bound idle
+  method, with the same timeout and boolean result as `app.idle()`. Under
+  `/testing`'s `mountView` it runs `settled()` and resolves `true`; on
+  prerendered and `output: 'static'` pages it resolves `true` at once.
+- **Catch-all navigation results (D189).** A successful `push()` or `replace()`
+  result includes `catchAll: true` when the committed route is `path: '*'`,
+  including redirects and same-path no-ops; `ok` stays `true`.
+- **Public model lookup (D189).** `store.modelFor(type)` returns the registered
+  constructor (or `PuzzleModel` for an unknown type), including through adapter
+  view handles. It and the model's static `primaryKey()` are typed.
+- **Installed packages' `.pzl` files feed the usage scan (D89).** A package
+  whose `package.json` lists `@magic-spells/puzzle` in `peerDependencies` (or
+  `dependencies`) has its `.pzl` files read by the build's usage scan, from
+  the `node_modules` of the project and of every parent directory, so its
+  `raw()`, `flip`, `<Portal>`, snippets, `<Component>` and library functions
+  reach the bundle like the app's own. Only `.pzl` files are read in a
+  package, never its JavaScript. Linked and store-layout installs are read
+  once by their real path. A shim component that used each feature once in
+  the app's own tree is no longer needed. `puzzle dev` reads packages at
+  startup; restart it after installing one.
+- **Runtime component selection: `<Component is={ expr }>` (D180).** Select an
+  imported compiled component directly or through a script map
+  (`is={ cards[embed.type] }`). Every candidate must be
+  imported by the caller; there is no registry or runtime module lookup.
+  Changing the constructor completely tears down the old instance before
+  mounting with current reactive props and callbacks. A `null`/`undefined`
+  selection renders nothing. Children are normal default-slot content.
+  Both prerender modes serialize the selected component or nothing.
+
+  Only `is` may read imports and simple module declarations, so
+  `is={ TaskCard }` and `is={ cards[key] }` work: template locals win, then
+  module bindings, then data. Other props/children retain data scope;
+  `name` and `from` are ordinary forwarded props.
+  Component attribute spreads (`{...embed.props}`) merge in written order;
+  later attrs or spreads win. `bind:` remains unsupported on components.
+  `Component` is now a reserved tag/family root; user files or tag imports
+  with that name get a compile error and rename hint. Missing or
+  non-expression `is` is a positioned error.
+
+- **Content-hashed production output and modulepreload (D181).**
+  `build.hashNames` defaults to `build.splitting`: split SPA/hybrid builds emit
+  `app-<hash>.js`, `styles-<hash>.css`, and `app-<hash>.css` when the entry imports
+  CSS, with shell references rewritten automatically. Static page modules become
+  `_puzzle/<slug>-<hash>.js` under the same setting. Split SPA/hybrid shells and
+  every production static page preload their transitive static-import chunks;
+  lazy chunks stay on demand. Set `build: { splitting: true, hashNames: false }`
+  to keep fixed names with preloads, or `build: { hashNames: true }` to hash
+  without splitting. A static build with neither key keeps fixed names and gains
+  preloads. Development output stays unchanged; `public/` files are never renamed.
+- **`store.observe()` (D184).** Watch the store from outside a view:
+
+  ```js
+  const stop = store.observe('task', fn);      // any task created, updated or removed
+  const stop = store.observe('task', id, fn);  // one record, even before it exists
+  ```
+
+  `fn()` runs with no arguments after the batched flush, at most once per
+  flush, with errors isolated like any other subscriber. It never fetches, on
+  adapter apps too, and works through a view's `this.ctx.store`. `stop()`
+  removes exactly that observation and is safe to call twice. `store.flush()`
+  is now declared on the `Store` type as well.
+- **`app.idle()` (D185).** Wait for a running app to go quiet:
+
+  ```js
+  const quiet = await app.idle({ timeout: 10000 }); // true when idle; false on timeout
+  ```
+
+  It resolves `true` once two consecutive frames find no mount or navigation
+  in flight, no pending store flush or view render, no async `data()` running,
+  no `setLocale()` switch loading and, on adapter apps, no tracked find's fetch
+  in flight. It never rejects, steps on timers in a hidden tab, and resolves
+  `true` at once when the app is not mounted. A `timeout` that is not a finite
+  number ≥ 0 falls back to 10000 (development also logs it). It only observes
+  state the runtime already keeps, so unlike `/testing`'s `settled()` it forces
+  nothing.
+  It cannot see user timers, animations, IntersectionObserver triggers, writes
+  or fetches nothing awaits (an event handler's unawaited `save()` or
+  `loadMany()`), or a path- or hash-mode `back()`, `forward()` or `go()`
+  before its `popstate` fires.
+- **`router.views` and the `agent` route field (D183).** `router.views` lists
+  every leaf route, catch-all excluded, as frozen
+  `{ path, params, name, meta, title, agent, chain }` entries, built once on
+  first read; `title` resolves leaf to root like the tab title. A new
+  top-level route field describes a route to tools that read the list:
+
+  ```js
+  { path: '/admin', view: AdminShell, agent: false, children: [   // hides the section…
+    { path: 'help', view: AdminHelp, agent: { name: 'admin-help', about: 'How to use admin' } }, // …but not this page
+  ] }
+  ```
+
+  `agent` resolves nearest-defined from the leaf up, so a child's own value
+  beats its parent's. The router and the prerender never act on it — a hidden
+  route still navigates and prerenders. In development an invalid value
+  throws at construction, a name declared by two different routes warns
+  (children inheriting one parent's `agent` share its name freely), and once any
+  route uses `agent` one warning lists the routes that set neither `false`
+  nor `{ name }`. Exported types: `RouteView`, `RouteAgent`.
+- **Locale URL prefixes: `i18n.routing: 'prefix'` (D177).**
+
+  ```js
+  i18n: { locales: ['en', 'es', 'pt-BR'], defaultLocale: 'en', routing: 'prefix' }
+  ```
+
+  The default locale stays unprefixed (`/blog/cookies`); every other locale
+  lives under its tag, matched exactly on a segment boundary
+  (`/es/blog/cookies`, `/pt-BR/…`). Under `routerBase` the URL is
+  `base + /<locale> + path`; locale files, page modules and assets stay on the
+  bare base, emitted once. Works in `output: 'static'`, `output: 'hybrid'` and
+  the SPA with path routing. Hash and memory routing have no path to prefix:
+  hybrid already rejects them, static ignores `routerMode`, and the SPA throws
+  in `mount()`.
+  - **One page per locale.** The prerender renders every page once per locale,
+    the default locale at the dist root and the others under `dist/<locale>/`,
+    the catch-all's `404.html` included. Each page has its own `<html lang>`,
+    carries only its own locale's table, and formats numbers and dates in its
+    own locale. `beforeMount`'s build facade gains `locale`, since it runs once
+    per locale. In hybrid output the SPA takes over each page in its own
+    locale, and a fallback page (`/es/product/1` served the root shell) sets
+    `<html lang>` from the URL.
+  - **Links.** `link(path)` and `router.url(path)` add the active locale's
+    prefix, at build time and in the browser, so templates and script never
+    write one; `router.push('/about')` stays locale-free. `{ locale: 'es' }`
+    forces a locale (an unconfigured tag is a `RangeError`, and in a static
+    build a build error); `{ locale: false }` skips the prefix and still
+    applies `routerBase`, for files that exist once:
+    `link('/files/resume.pdf', { locale: false })`. A click on another
+    locale's link is a real page load.
+  - **The URL decides the locale.** A prefix beats the stored choice and
+    `navigator.languages`. `setLocale(tag)` stores the choice, then loads the
+    same page under the other prefix, query and fragment kept. During a
+    navigation it targets the page being navigated to.
+  - **Build errors for collisions:** a route whose first segment equals a
+    non-default locale tag (case-insensitive), and a top-level
+    `public/<locale>/` folder. The Router constructor throws on the route
+    collision too.
+  - **Development.** `puzzle dev` re-renders an edited route in every locale.
+    `router.push('/es/about')` routes as written and warns.
+- **`hreflang` alternates and the `site` config (D177).** Under prefix routing
+  every prerendered page except the 404 pages gets
+  `<link rel="alternate" hreflang>` for each locale plus `x-default`. Set
+  `site: 'https://example.com'` at the top of `puzzle.config.js` to make them
+  absolute; without it they are root-relative and the build warns once. A
+  root-relative or same-origin `canonical` is localized per page.
+- **A sitemap (D177).** Every prerendering build that sets `site` writes
+  `dist/sitemap.xml`, listing every prerendered page except the 404 pages and
+  `prerender: false` routes. Under prefix routing each entry names its
+  alternates. A `public/sitemap.xml` wins, with a warning. It works without
+  `i18n`.
+- **A first-visit language redirect (D177).** A visitor who lands on an
+  unprefixed default-locale page from outside the site (another site, or
+  directly), and whose stored choice or first matching `navigator.languages`
+  entry is another locale, is sent to that locale's URL. A click from your own
+  site never bounces, and a stored default-locale choice suppresses it. Prerendered pages carry it as a
+  small inline script (under 1 KB for three locales); a page that was not
+  prerendered runs the same decision at the top of `mount()`.
+  `i18n: { detect: false }` removes both. Under a CSP without
+  `unsafe-inline` the inline script is blocked, and prerendered pages do not
+  redirect.
+- **`i18n.dir` and `<html dir>` (D177).** `i18n.dir` is `'rtl'` for a
+  right-to-left locale, else `'ltr'`, decided from the tag's language and
+  script. `<html dir>` follows it on every prerendered page and on a switch,
+  with or without prefix routing.
+- **Translated page titles (D177).** A route's `meta.title` and
+  `meta.description` may be a translation key, `meta: { title: { t:
+  'about.title' } }`, resolved in the prerender and in the browser, so the tab
+  title follows a locale switch. It works with or without prefix routing, and
+  on a client-rendered (`prerender: false`) static page too. A
+  `{ t }` value in an app with no `i18n` block is a build warning.
+- **A build warning for a bare `href` (D177).** Under prefix routing a literal
+  root-relative `href="/about"` on an `<a>` or `<area>` skips `link()` and so
+  never gets a prefix; the build warns at its position. A protocol-relative
+  `//host`, a dynamic value, a `{#raw}` body and a path whose last segment has
+  a file extension are skipped.
+- **`staticPaths`: prerender a `:param` route (D179).** A leaf route lists the
+  pages to prerender, in `output: 'static'` and `output: 'hybrid'`:
+
+  ```js
+  {
+    path: '/blog/:slug',
+    view: BlogPost,
+    staticPaths: async ({ store }) => {
+      const posts = await store.loadMany('post');
+      return posts.map((post) => ({ slug: post.slug }));
+    },
+  }
+  // shorthand: one page per record of a model, params from its fields
+  { path: '/principles/:id', view: Principle, staticPaths: 'principle' }
+  ```
+
+  The value is an array, a function (sync or async) returning one, or a model
+  name. Each entry holds every param of the route's full path. The function
+  receives `{ store, config, locale }`, runs after `beforeMount`, and runs once
+  per locale under prefix routing, so a site can list different posts per
+  language. The browser never calls it. Each entry becomes a page rendered
+  like a fixed route with those params: `dist/blog/cookies/index.html`, and
+  `dist/es/blog/cookies/index.html`. Types: `StaticPathsEntry`,
+  `StaticPathsContext`, `StaticPathsFn`.
+  - **The model shorthand** loads the model through the adapter when one is
+    configured, then reads the store, so records seeded in `beforeMount` count
+    too. An unregistered model, or a param with no same-named field in the
+    model's schema, is a build error. Records with an empty field are skipped
+    with one warning per route.
+  - **Build errors:** `staticPaths` on a route with children or with no
+    `:param` (the `*` catch-all included); an entry missing a param; a value
+    of `.` or `..`, or one holding `/`, `?` or `#` (the message says to slugify
+    it); a function that throws or returns something other than an array. Any
+    other value is encoded as one path segment (`a b` → `a%20b`).
+  - **Warnings:** duplicate entries render once. An empty list renders nothing.
+    A `:param` route without `staticPaths` is still skipped, and the warning
+    now names the field.
+  - **Static output:** all pages of a route share one page module; each page
+    carries its path and params in a small JSON island, so the page's `route`
+    and `preload` see the params without reading `location`. An unlisted value
+    is a 404. A fixed route keeps its own page over a generated one, with a
+    warning.
+  - **Hybrid output:** an unlisted value still works — the SPA takes over and
+    fetches in the browser. A generated path an earlier route would match
+    first is skipped as `shadowed`, with a warning, so takeover never renders a
+    different view than the prerender.
+  - **With locale prefixes,** `hreflang` alternates, the redirect script and
+    the sitemap name only the locales whose lists contain the page.
+  - **Keep heavy sources out of the bundle.** In SPA and hybrid apps the route
+    table ships to the browser, and with it anything `staticPaths` imports at
+    module level. Load the list inside the function, with `fetch` or
+    `await import()`.
+  - See `examples/static-docs` (`/principles/:id`).
+- **`afterUpdate(prev)` (D178).** The hook receives a frozen, shallow snapshot
+  of what the previous render drew: `props`, `params`, `route` and the merged
+  `data`.
+
+  ```js
+  afterUpdate(prev) {
+    if (prev.props.center !== this.props.center) this.map.setCenter(this.props.center);
+  }
+  ```
+
+  A record in `prev` is the same live object, so `!==` catches a different
+  record, not an edit to the same one: return the field from `data()` and
+  compare that. Existing `afterUpdate()` overrides keep working, and only a
+  class that overrides the hook takes the snapshot. Type: `PrevViewState`.
+- **Two language pieces.** Both take the parent's `i18n.locales` as a
+  `locales` prop. Read the list in the layout's or view's `data()` and pass it
+  down: a component inside a persistent layout runs `data()` once and would
+  keep the first page's links. Under prefix routing each language is a real
+  link with `hreflang`. A plain click calls `setLocale`, so the choice is
+  stored; a modified or middle click stays native. Without prefix routing the
+  rows are buttons that call `setLocale`. Both take `label` and `class`, and
+  fire `@change(locale)` before switching.
+  - `puzzle add piece language-switcher`: an inline row of pills in a
+    `<nav>`, with no dependencies.
+  - `puzzle add piece language-menu`: a compact menu button showing the
+    active language, built on `dropdown-menu`, with an `align` prop.
+- **Theme styles: Dark, Dim, Mixed, Light (puzzle-pieces).** The palettes
+  take the Magic Spells Design System's scheme × style grid: four schemes —
+  Default, Cool (the old `dim` palette, now "a little more blueish", after
+  Constellation's Observatory scheme), Warm and Void — each in four styles.
+  Dim is "between light and dark — lower contrast, more subtle"; Mixed is
+  "the darker sidebar with white main panel" (`color-scheme: light`, with
+  `surface-frame` and the `bar-*` roles at their dark values). Every scheme ×
+  style passes WCAG AA on every declared pair. The `appearance-picker` piece
+  offers the styles in that order as live miniatures painted in the current
+  palette, beside the scheme cards.
+
+- **`router.push()` and `router.replace()` resolve a `NavigationResult`
+  (D182).** `await router.push('/account')` tells you what happened:
+  `{ ok: true, route, redirectedFrom? }` when the navigation committed (the
+  catch-all `*` and a same-path no-op included; `redirectedFrom` is the path
+  you asked for when a guard redirected), or `{ ok: false, reason, error? }`
+  with `reason` `'blocked'` (a guard returned `false`), `'superseded'` (a
+  later navigation won), `'not-found'` (no route and no catch-all) or
+  `'error'` (anything sent to `onError`: a throwing guard, the redirect cycle
+  cap, a lazy load, construction or `data()` failure). The promise never
+  rejects: a throw inside the commit window, which used to reject the push,
+  now resolves `'error'` and reaches `onError` (only the first navigation
+  still rejects `app.mount()`). A push made from `mounted()` resolves once
+  that deferred navigation has run. A push to the path already loading
+  returns that navigation's promise, or `'superseded'` when a push made in
+  between took over. `go()`, `back()` and `forward()` are
+  unchanged. Exported type: `NavigationResult`.
+- **A push back to the current path while another navigation is loading is a
+  real navigation (D182).** It supersedes the loading one (last push wins)
+  instead of resolving as a no-op that the loading navigation then overrode.
+  Clicking the active link after a failed page also rebuilds it, and a rebuild
+  that fails is retried by the next click. Both rewrite
+  the current history entry rather than adding one; over a Back that is still
+  loading, the push is an ordinary push so the entry Back moved to survives.
+
+### Changed
+
+- **BREAKING: `i18n.locales` is `[{ locale, label, href, active }]` (D177).**
+  It was a `string[]` in 0.8.0. `label` comes from `Intl.DisplayNames`; `href`
+  is the current page in that locale under prefix routing, and the current
+  page for every entry without it. See Upgrading from 0.8.
+- **`puzzle preview` and static `puzzle dev` try `dist/<first-segment>/404.html`
+  before `dist/404.html`** for a miss (D177), so a miss under `/es/` gets the
+  Spanish 404 page.
+- **`<html dir>` follows the active locale** in every app that configures
+  `i18n` (D177).
+- **One frame scheduler (D63, D185, D188).** Store flushes, view renders,
+  `app.idle()` and `this.renderTick()` share `client-runtime/scheduler.js`, so a
+  view's `setData()` render lands in a background tab instead of waiting for
+  the tab to come back.
+- **Destructive buttons are the same dark red with white text in every
+  scheme and style (puzzle-pieces).** The pieces use three new constant tokens:
+  `--color-danger-solid` (#d11f1f), `--color-danger-solid-hover` (#a41616) and
+  `--color-danger-solid-ink` (#ffffff). They paint `button` `destructive`,
+  `split-button` `destructive`, the `alert-dialog` destructive confirm and the
+  `popconfirm` danger confirm. Before, dark styles used near-black text on
+  #ef4444, and the hover went lighter. `--color-danger` is unchanged and still
+  paints danger text and outlines. Run `puzzle add theme default` (or re-copy
+  your palettes) together with the pieces.
+
+### Fixed
+
+- **Dynamic URL bindings block script schemes (D186).** Brace-only and mixed
+  URL attributes omit `javascript:`, `vbscript:` and executable `data:` values
+  after entity, control-character and case normalization, in browser rendering
+  and prerendered HTML. Data URLs remain supported in image bindings;
+  static author-written attributes remain trusted. Blocked values warn only
+  in development. Only dynamic URL bindings whose scheme the template leaves
+  open pay for the check: `href="/users/{ id }"` compiles without it.
+  SVG animation `to`/`from`/`by`/`values` (each `;` entry) are guarded too,
+  and a dynamic `<iframe srcdoc>` is a compile error unless the iframe's only
+  `sandbox` attributes are static ones without `allow-scripts`.
+- **Locale selection respects Chinese scripts (D175).** `zh-TW`, `zh-HK`,
+  `zh-MO` and `zh-Hant-*` match a configured `zh-Hant`; other Chinese tags match
+  `zh-Hans`. The first-visit redirect makes the same choice.
+- **Number and date functions no longer print `NaN`, `Invalid Date` or
+  `[object Object]` (D174).** Unreadable non-string input prints nothing,
+  including `date(in_timezone(...))` on a bad date; `round` of a missing value is
+  `NaN` (prints nothing) rather than `0` for `null`. A non-numeric or non-date
+  string still prints as written.
+- Production shell asset rewrites preserve deployment prefixes, queries and
+  fragments across SPA, hybrid, static and locale pages. Missing compiler
+  stylesheets fail before replacing `dist/`, and static pages strip the
+  base-prefixed app script while retaining public scripts (D51/D177/D181).
+  Tags inside HTML comments are left as written, so a commented-out
+  `<link href="/app.css">` no longer fails a hashed build.
+- Adapter settlement counts dirty re-passes toward the ten-round cap, preventing
+  repeated store notifications from starving a view's `data()` run (D161).
+- A data field whose name matches one the compiler uses internally for loop
+  keys (such as `__i` or `ViewNode`) now reads the data value inside loop
+  bodies and explicit keys, instead of the compiler's own binding.
+- `__proto__` attributes emit ordinary own properties for elements and components
+  instead of invoking the special object-literal prototype setter.
+- Comments between `class`/`function` and the declaration name preserve module
+  bindings used by `<Component is={...}>` (D180).
+- `puzzle check` accepts a selector class named `Record` in JavaScript and
+  TypeScript components without shadowing a generated utility type (D165).
+- Native script syntax diagnostics report the authored `.pzl` line and column
+  for multiline JavaScript/TypeScript and same-line scripts.
+- Section splitting keeps section-like text inside quoted attributes inert,
+  including expressions whose strings reuse the attribute's quote and literal
+  section closers. The editor splitter ports share the same boundaries.
+- Conditional layout or parent-view `<Slot/>` outlets retain the current routed
+  instance across hide/show and wrapper swaps. Navigation while hidden updates
+  the child chain and releases superseded views; teardown also releases views
+  that have not mounted yet. The usage scan keeps this code only in apps whose
+  templates can hide an outlet (`__PUZZLE_HAS_CONDITIONAL_SLOT__`); a wrapper
+  component given a `{...spread}` counts, since the spread may carry a `key`.
+- `<Component slot="x" is={ current }>` fills the named slot and strips the
+  consumed routing attribute from the selected component.
+- `raw` and `newline_to_br` ranges move safely when page translation wraps or
+  relocates their nodes; an unreachable range end cannot loop indefinitely.
+- **Pieces no longer log `{#for} item (Object) has no usable key`.** Nine
+  pieces looped over rows with no `key` and no `.id`, so each list fell back
+  to positional diffing and the app's console warned once per session. Every
+  item-form `{#for}` row in the registry now has a key. `radio-group` keys by
+  the option's `value`, `time-picker` by the column, `chat-attachment` by the
+  icon path and `spinner` by the part's index. `breadcrumb`, `stepper` and
+  `timeline` key by an item's `id` when the caller gives one, and by position
+  otherwise. `sidebar` and `dropzone` key by position, because their items
+  carry no id.
+- **`pie-chart` no longer warns about a duplicate key** when one slice fills
+  the whole circle. That slice draws two paths, and both were keyed by the
+  slice's `id`. Each path now has its own key, and `bar-chart` binds its
+  per-bar keys the same way.
+- **The pre-paint snippet removes a stale `data-theme` (puzzle-pieces).** When
+  the stored choice follows the OS, the snippet now removes a `data-theme`
+  that the app shell stamped on `<html>`, and it clears `color-scheme`. For
+  the default palette it also removes `data-scheme`. This is what
+  `appearance.js` `apply()` does. Before, a shell with `data-theme="dark"`
+  painted dark first on a light OS, then flashed when `boot()` removed the
+  attribute. Re-copy the inline snippet.
+
+Re-add a piece with `puzzle add piece <name> --overwrite` to pick up these
+fixes.
+
+## 0.8.1 — 2026-10-04 (Go module only)
+
+A Go-module-only release of the template language: the tag is
+`packages/puzzle-lang/v0.8.1`. **The npm packages are unchanged** — no
+`@magic-spells/puzzle`, `puzzle-pieces`, `puzzle-eslint` or `puzzle-prettier`
+0.8.1 is published, and PuzzleKit compiles, diagnoses and renders exactly as
+0.8.0 does. It exists so Magic Spells Sites can import the parser from the
+module instead of keeping a vendored copy (D172: one parser that knows every
+construct, with per-host switches).
+
+### Added
+
+- **Host options for the parser** (`parser.Options`). Every entry point —
+  `Parse`, `ParseTemplate`, `ParseSkeleton`, `ParseFile`, and the new
+  `ParseMarkup` — takes an optional trailing `Options`. The zero value is
+  PuzzleKit's grammar, so existing callers are untouched. Every new feature is
+  off by default:
+  - `Let` turns on the `{#let name = expression}` block (Sites dialect): a
+    void block, single-line or one assignment per line, whose bindings are
+    sequential and scoped to the enclosing child list with shadowing. Each
+    right-hand side is one expression, and the names reach later expressions as
+    bindings, as `{#for}` names do. Diagnostics are positioned per line, with a
+    did-you-mean for `{#assign}`, `{#set}`, `{#var}` and similar spellings.
+    Off, `{#let}` is the same unknown-block error as before.
+  - `SkipIslandCheck`, `SkipSlotCheck` and `SkipRefCheck` turn off the
+    post-parse `island`, composition-marker and `ref` rules for a host that
+    applies its own.
+  - `MaxDepth` caps `ParseMarkup`'s nesting (default `DefaultMaxDepth`, 200).
+- **Wrapper-less markup** (`parser.ParseMarkup`): parses a markup fragment at a
+  given file position, for a host whose files have no `<puzzle-view>` wrapper.
+  Nesting past the limit is a positioned error found before parsing, so an
+  untrusted file cannot exhaust the parser's stack.
+- **Scanners for a host's own splitter**, the ones the section splitter and
+  lexer use: `ScanOpenTag`, `TagNameAt`, `FindScriptClose`, `FindStyleClose`,
+  `FindTemplateClose`, `ScanBraceGroup`, `SkipBraceGroup`, `AttrNames`,
+  `ParseAttrString`, `ParseScriptLang` and `ParseStyleScoped`. Indexes are
+  absolute, out-of-range input never panics, and errors are positioned.
+- **`expr.Options.IsBinding`**: an optional O(1) membership test for
+  `Bindings`, which the template parser passes once a scope grows long, so a
+  long `{#let}` block parses in linear time.
+
+### Fixed
+
+- An attribute value maps its expression positions in one forward pass. A
+  value with many braces was quadratic. Parse results are unchanged.
+
+### puzzle-pieces
+
+**Changed — `rich-text-editor`'s toolbar is one row.** The block-style picker
+(Normal text, Heading 1–4) is now the first item INSIDE the bordered Toolbar,
+followed by a separator and the formatting buttons — one box, one height. It
+was a separate bordered dropdown beside the toolbar and shorter than it. The
+picker is a ghost item with a stable width, sits in the toolbar's roving tab
+order (Left/Right reach it), opens with Up/Down or a click, and keeps its
+listbox semantics (`aria-haspopup`, `aria-expanded`, `aria-activedescendant`).
+Purely visual for apps that render the editor; re-copy the piece
+(`puzzle add piece rich-text-editor --overwrite`) to pick it up.
+
+**Added — `toolbar` items can open a popup.** Optional item fields `class`,
+`trailingIcon`, `haspopup`, `expanded`, `controls` and `activedescendant`;
+while `expanded` is true the item's arrow / Home / End keys belong to its
+popup. Items without them render exactly as before.
+
+**Added — `rich-text-editor` `chrome="blocks"`**, a Notion-style page modelled
+on the Grimoire example: no toolbar and no frame; a gutter handle on hover
+(click: turn into / delete; drag: move the block); a `/` command menu; a
+one-row selection bar (style picker, marks, lists, link) that pins to the top
+of the visible area on long selections (`floatingOffsetTop`); compact block
+spacing; and `blockPlaceholder`. Menus render in the top layer. New registry
+lib `lib/rich-text-blocks.js`.
+
+**Added — images and link previews** in `lib/rich-text-doc.js`
+(`image` / `link-preview` root-level nodes, `safePreviewUrl`, `plainText`,
+`imageRefs`, `docLimits`, `validateDoc`, `RICH_TEXT_COMPACT`), the editor
+(`resolveImage`, `uploadImage`, `fetchLinkPreview`, `tools`, `@imageError`) and
+`rich-text` (`resolveImage`, `compact`, `@imageError`).
+
+**Changed — `tools` also governs typing shortcuts.** When `tools` is passed,
+a group it leaves out loses its markdown input rules and keyboard shortcuts as
+well as its button (`> ` makes no quote without `'quote'`). Omitting `tools`
+keeps every shortcut, as before.
 
 ## 0.8.0 — 2026-10-01
 

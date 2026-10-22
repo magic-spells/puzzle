@@ -392,7 +392,7 @@ const codeGallery = `// Flip src and the piece refits automatically: it re-attac
 
 // thumbnails
 {#for shot in shots}
-  <button type="button" aria-pressed={ shot.pressed } @click={ selectShot(shot.src) }>
+  <button key={ shot.src } type="button" aria-pressed={ shot.pressed } @click={ selectShot(shot.src) }>
     <img src={ shot.thumb } alt={ shot.alt }/>
   </button>
 {/for}`;

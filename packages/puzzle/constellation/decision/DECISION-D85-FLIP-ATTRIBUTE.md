@@ -26,6 +26,8 @@ position; inserts and removes keep their own enter/leave paths. Spec:
 
 ## Decision
 
+
+
 - **A directive attribute, not a namespace.** `flip` parses as an ordinary
   attribute and joins `key`/`island`/`ref` as a framework-owned vnode attr
   (`reservedVnodeAttrs`): stripped by `setAttr`/`removeAttr` and the SSG
@@ -41,12 +43,18 @@ position; inserts and removes keep their own enter/leave paths. Spec:
   on settle so author CSS stays authoritative.
 - `prefers-reduced-motion` or no WAAPI → zero measurement work; a list without
   `flip` costs one scan of the pair list.
-- **Per-app inclusion (D89):** the build's `.pzl` usage scan detects `flip` in
-  element attrs, **component props** (a component vnode's props are its attrs —
+- **Per-app inclusion (D89):** the build's `.pzl` usage scan (the project, plus
+  installed packages that declare Puzzle) detects `flip` in element attrs,
+  **component props** (a component vnode's props are its attrs —
   `<PostCard … flip>` is a real flip row) and slot children, and emits
-  `__PUZZLE_HAS_FLIP__`; with none, `flip.js` tree-shakes out. A `flip` seen at
-  runtime when support was compiled out (e.g. only in `node_modules`, which the
-  scan skips) logs a dev-only warning once.
+  `__PUZZLE_HAS_FLIP__`; with none, `flip.js` tree-shakes out. A compiled `.pzl`
+  the scan never read that uses `flip` fails the build.
+- **`flip` must be written in the template.** A `flip` key passed inside a
+  `{...spread}` or set by pre-compiled component JavaScript is invisible to the
+  scan; if no template writes `flip`, support is compiled out and that row
+  reorders without animating. This is a deliberate limit, not a gap to close:
+  FLIP is an authored choice on the row, not a dynamic value. A `flip` seen at
+  runtime when support was compiled out logs a dev-only warning once.
 
 ## Alternatives
 

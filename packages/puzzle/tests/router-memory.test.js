@@ -1015,7 +1015,7 @@ describe('route snapshot — pathname/query/hash (v1.49, D83)', () => {
 
 	it('malformed percent input never throws — undecodable bytes stay verbatim', async () => {
 		const { router } = await bootMemory(routes);
-		await expect(router.push('/list?bad=%zz&ok=1')).resolves.toBeUndefined();
+		await expect(router.push('/list?bad=%zz&ok=1')).resolves.toMatchObject({ ok: true });
 		expect(router.current.route.name).toBe('list'); // the navigation committed
 		expect(router.current.query.bad).toBe('%zz');
 		expect(router.current.query.ok).toBe('1');

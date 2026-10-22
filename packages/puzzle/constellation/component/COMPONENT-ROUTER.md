@@ -11,6 +11,28 @@ connections:
   - DECISION-D163-LAZY-ROUTE-VIEWS
 verified_at: '2026-09-25T10:47:50.423Z'
 verified_sha: 5c21245a984c2fe5c86abf097189af44266f3b13
+notes:
+  - kind: gotcha
+    text: >-
+      Every #navigate exit returns a NavigationResult (D182, [[DECISION-D182-NAVIGATION-RESULT]]). A
+      new exit path must return one too (fail(reason, err), SUPERSEDED, or { ok: true, route: to }),
+      or push() resolves undefined. Reported to onError means 'error': #runGuards returns an { error
+      } marker for a throwing guard and for the redirect cap, never false. The outer catch around
+      the load/#swap block handles a synchronous commit-window throw. It may land after
+      #commitLocation, while #state still names the old route, so when it owns the token it clears
+      #pendingNavPath, #pendingNavPromise and the locale target, and sets #state.chainInvalid. It
+      then rethrows only for `initial` (start()'s verb-less navigation zero, or a guard redirect
+      whose chain box has `start`), so app.mount() keeps its teardown; every other navigation
+      resolves. #isCommittedNoop gates the push()/replace() same-path no-op: committed path, chain
+      intact, and nothing in flight (#guardRedirecting exempt). The #pendingPush slot carries the
+      caller's resolver, so anything that clears the slot (a displacing #defer, stop()) must resolve
+      the old entry SUPERSEDED, or that caller waits forever.
+  - kind: state
+    text: >-
+      `router.views` (D183) is a getter over `#routes` cached in `#views`, built by `routeViews()`
+      in router/routeViews.js; the `agent` field's dev checks (`checkAgentRoutes`) run in the
+      constructor's existing __PUZZLE_DEV__ block beside warnShadowedPaths. The router never reads
+      `agent` on navigation. `routeEntries` stays the SSG's internal matcher view.
 ---
 
 # Router
@@ -39,6 +61,38 @@ validation survives the `__PUZZLE_HAS_LAZY__` fold), `lazy.js` (D163 resolver),
 - Path/hash modes intercept safe same-origin unmodified links; hash keeps app paths
   base-free in the fragment; `routerBase` is inert in memory mode, which owns an entry
   stack and has no URL/title/scroll effects.
+- `#syncHead` is `syncTitle(headText(resolveHeadField(chain, 'title'), ctx.i18n))`; the
+  `headText` branch sits behind `__PUZZLE_HAS_I18N__` so `{ t: 'key' }` titles translate
+  without changing the bytes of apps without i18n ([[DECISION-D84-HEAD-MANAGEMENT]]).
+
+## Locale prefix routing (D177)
+
+[[DECISION-D177-LOCALE-URL-PREFIXES]]; every branch sits behind the inline
+`__PUZZLE_HAS_LOCALE_ROUTING__` probe, so apps without `i18n.routing` ship none of it.
+
+- **Composed `#base`.** In path mode with prefix routing the constructor composes
+  `#base = localeBase(routerBase, locale, defaultLocale)` once (`routerBase + /<locale>`
+  for a non-default locale). Reading, writing and click interception all use it; route
+  matching and `this.route` stay locale-free. It never changes while the app runs —
+  `setLocale` is a page load. The constructor throws for a route whose first segment is
+  a non-default locale tag.
+- **`localeRouting` WeakMap** (module level, last in the module): Router →
+  `{ base, locale, defaultLocale, locales, target, page }` — the bare `routerBase`, the
+  configured tags, the in-flight navigation's path (`setLocaleTarget`, set for every
+  verb in `#navigate`, cleared at commit or failure) and a `page()` closure that reads
+  `target ?? #state.path`. A WeakMap rather than private fields, which would ship in
+  every app. `localePage(router)` returns `router.url(page())`: the page `setLocale`
+  reloads — the navigation's target when one is in flight, else the committed page.
+- **`url(path)` options** are read from `arguments[1]` (`{ locale: 'es' }` or
+  `{ locale: false }`, through `linkLocale`), so the method keeps one declared
+  parameter; a JSDoc `@overload` types the second. The base comes from `localeBase` over
+  `routing.base`.
+- **Click interception:** after the mode's own `clickLink`, a link is taken only when
+  `localeBase(routing.base, pathLocale(url.pathname, …), defaultLocale)` equals the
+  router's `#base`; a link into another locale's pages (another prefix, or the default
+  locale's unprefixed URL from a prefixed page) is a real page load.
+- `push('/es/…')` routes as written and warns in development (app paths are
+  locale-free). `pathLocale` is the single prefix matcher, shared with `i18n.js`.
 
 ## Route table
 
@@ -70,14 +124,17 @@ it has no `lazy()` marker, its class array — lazy-free apps pay nothing per na
    D83). The D39 skeleton gate must start all gated loads before any skeleton-exempt
    preload opens its tracking scope.
 4. **Commit** (`#commitState`, one synchronous window): location/history, title
-   (`syncTitle(resolveHeadField(chain, 'title'))` — the other head fields are
-   build-time only, D84), scroll bookkeeping, mounted tree, `current`, and the dev-only
-   D100 route emit ([[FILE-DEVTOOLS]]), after `#commitLocation`.
+   (`syncTitle(headText(resolveHeadField(chain, 'title'), ctx.i18n))`, the `headText`
+   call behind `__PUZZLE_HAS_I18N__` — the other head fields are build-time only, D84),
+   scroll bookkeeping, mounted tree, `current`, and the dev-only D100 route emit
+   ([[FILE-DEVTOOLS]]), after `#commitLocation`.
 
-Same-path push when committed is a no-op; while in flight it returns that navigation's
-promise, so both callers settle at commit. The route announcement reads
-`document.title`, falling back to the route name/path (aria-live announces only on
-change). Trailing `/` is insignificant.
+A same-path push or replace is a no-op (`#isCommittedNoop`) only when the committed chain
+is intact and nothing is in flight; otherwise it navigates and supersedes (D182). A
+same-key push while that key is in flight returns that navigation's promise, so both
+callers get its result. The route announcement reads `document.title`, falling back to
+the route name/path (aria-live announces only on change). Trailing `/` is
+insignificant.
 
 ## Failure invariants
 

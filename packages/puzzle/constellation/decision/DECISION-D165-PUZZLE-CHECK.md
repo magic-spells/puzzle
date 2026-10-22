@@ -39,7 +39,7 @@ app/views/Profile.pzl:14:22: Property 'nmae' does not exist on type 'User'.
 ## Decision
 
 **Virtual files.** Each `.pzl` under `app/` becomes files under `.puzzle/check/src/` (D153 scratch dir), mirroring the tree; `Generate` rebuilds the workspace each run so deleted files leave no ghost.
-- `lang="ts"`: one `.pzl.ts` — the script verbatim, then a never-executed `void function (this: InstanceType<typeof Class> & Record<string, any>): void { const __d = this; … }` giving every template expression a typed home.
+- `lang="ts"`: one `.pzl.ts` — the script verbatim, then a never-executed `void function (this: InstanceType<typeof Class> & { [key: string]: any }): void { const __d = this; … }` giving every template expression a typed home.
 - JavaScript: a pair — `<name>.pzl.script.js` (unchecked mirror, `checkJs: false`) and the checked `<name>.pzl.ts` wrapper that imports it. The `.script` infix is load-bearing: without it TS extension substitution resolves `./X.pzl.js` to the wrapper itself.
 
 **Template lowering** uses codegen's own lowerer (`WriteCheckValue`/`WriteCheckEvent`, D176 rule 8), from the parser's tree:
@@ -63,7 +63,7 @@ app/views/Profile.pzl:14:22: Property 'nmae' does not exist on type 'User'.
 
 **tsc is resolved, never installed, always run under `node`:** `node <app>/node_modules/typescript/bin/tsc …` (works under npm, pnpm, yarn). Messages: `puzzle check needs TypeScript: npm install -D typescript` and `puzzle check needs Node.js on PATH: …`. "Not in a Puzzle project" is checked first. The `.bin` shims are avoided on purpose: the Windows `tsc.cmd` must run via `cmd.exe /s`, which strips the quotes around a path with a space.
 
-**Scope of typing.** Expressions check against the class's declared fields; `data()`-derived keys fall through `Record<string, any>` and are unchecked (under `noPropertyAccessFromIndexSignature` a dotted `data()`-only read is itself a diagnostic — known gap). For a JS component, `this` is `__PuzzleCheckJSView<InstanceType<typeof Class>> & Record<string, any>`, which types each `events` handler `(...args: any[]) => any`: arity is not checked (so `@click={ play(event) }` against `play: () => {}` passes), but handler names are — `plya(event)` is reported, and a handler attached at runtime rather than declared in `events` is reported. `lang="ts"` components are checked against their declared handlers. `--js` (checking JS script bodies) is reserved and errors as not implemented.
+**Scope of typing.** The fallback is an inline index signature so an authored selector class named `Record` cannot capture a generated utility-type reference. Expressions check against the class's declared fields; `data()`-derived keys fall through `{ [key: string]: any }` and are unchecked (under `noPropertyAccessFromIndexSignature` a dotted `data()`-only read is itself a diagnostic — known gap). For a JS component, `this` is `__PuzzleCheckJSView<InstanceType<typeof Class>> & { [key: string]: any }`, which types each `events` handler `(...args: any[]) => any`: arity is not checked (so `@click={ play(event) }` against `play: () => {}` passes), but handler names are — `plya(event)` is reported, and a handler attached at runtime rather than declared in `events` is reported. `lang="ts"` components are checked against their declared handlers. `--js` (checking JS script bodies) is reserved and errors as not implemented.
 
 ## Alternatives
 

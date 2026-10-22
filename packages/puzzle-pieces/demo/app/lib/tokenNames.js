@@ -58,6 +58,9 @@ export const TOKEN_GROUPS = [
 			{ name: 'danger-tint', role: 'Soft error backgrounds' },
 			{ name: 'danger-ink', role: 'Text / icons on solid danger', on: ['danger', 'danger-dark'], min: 4.5 },
 			{ name: 'danger-on-tint', role: 'Text / icons on danger-tint', on: ['danger-tint'], min: 4.5 },
+			{ name: 'danger-solid', role: 'Destructive buttons — one red in every scheme and style' },
+			{ name: 'danger-solid-hover', role: 'Hover / active' },
+			{ name: 'danger-solid-ink', role: 'Text / icons on danger-solid', on: ['danger-solid', 'danger-solid-hover'], min: 4.5 },
 			{ name: 'success', role: 'Positive deltas, "up is good"', on: ['page', 'surface'], min: 4.5 },
 			{ name: 'success-tint', role: 'Soft positive backgrounds' },
 			{ name: 'warning', role: 'Caution band — meters, gauges, alerts', on: ['page', 'surface'], min: 4.5 },
@@ -149,5 +152,6 @@ export const TOKEN_GROUPS = [
 /** Every custom property the demo reads, in order. */
 export const TOKEN_PROPS = TOKEN_GROUPS.flatMap((g) => g.tokens.map((t) => t.prop));
 
-export const SCHEMES = ['default', 'dim', 'warm', 'void'];
-export const MODES = ['light', 'medium', 'dark'];
+export const SCHEMES = ['default', 'cool', 'warm', 'void'];
+/** The styles (the `data-theme` values), in picker order. */
+export const MODES = ['dark', 'dim', 'mixed', 'light'];

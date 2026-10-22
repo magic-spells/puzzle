@@ -1,0 +1,12 @@
+<puzzle-view>
+  {#for row in rows}<Component is={cards[row.type]} {...row.props} title={row.title}/>{/for}
+  {#for row in rows}<Component is={current} key={row.slug} {...row.props}/>{/for}
+  {#for row in rows}<Card {...row.props} title={row.title}/>{/for}
+</puzzle-view>
+
+<script>
+import Card from './Card.pzl';
+const cards = { card: Card };
+let current = Card;
+export default class Slots extends Object {}
+</script>

@@ -208,3 +208,43 @@ describe('encodeURL parity with Router.url()', () => {
 		}
 	});
 });
+
+// D177 — under locale prefix routing each locale's pages encode under
+// `routerBase + /<locale>`, in both prerender modes: the static stub is
+// localized per page and the hybrid router's url() shadow is re-made per locale
+// pass, so the second locale never inherits the first one's prefix.
+describe('prerender — routerBase plus a locale prefix (D177)', () => {
+	const i18n = {
+		manifest: {
+			defaultLocale: 'en',
+			locales: { en: 'locales/en.json', es: 'locales/es.json', 'pt-BR': 'locales/pt-BR.json' },
+			routing: 'prefix',
+		},
+		table: {},
+		tables: { en: {}, es: {}, 'pt-BR': {} },
+	};
+
+	for (const mode of ['static', 'hybrid']) {
+		it(`${mode}: link() and router.url() carry each page's locale prefix after the base`, async () => {
+			const cfg = config({
+				routerBase: 'docs/',
+				routes: [
+					{ path: '/', view: Nav },
+					{ path: '/c', view: Direct },
+				],
+			});
+			const { pages } = await prerender(cfg, { mode, i18n });
+			const html = (path, locale) => pages.find((p) => p.path === path && p.locale === locale).html;
+			for (const [locale, prefix] of [
+				['en', '/docs'],
+				['es', '/docs/es'],
+				['pt-BR', '/docs/pt-BR'],
+			]) {
+				expect(html('/', locale)).toContain(`href="${prefix}/about"`);
+				expect(html('/', locale)).toContain('href="https://example.com"');
+				expect(html('/c', locale)).toContain(`href="${prefix}/contact"`);
+				expect(html('/c', locale)).toContain('data-current="/c"');
+			}
+		});
+	}
+});

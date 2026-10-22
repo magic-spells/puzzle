@@ -22,8 +22,8 @@ export const SCHEME_PANELS = SCHEMES.map((s) => ({
 }));
 
 export const THEMES = [
-	{ title: 'Compare', path: '/themes/compare', description: 'All four schemes × three modes as mini shells, one screen.' },
-	{ title: 'Pieces', path: '/themes/pieces', description: 'The registry pieces in the current scheme and mode.' },
+	{ title: 'Compare', path: '/themes/compare', description: 'All four schemes × four styles as mini shells, one screen.' },
+	{ title: 'Pieces', path: '/themes/pieces', description: 'The registry pieces in the current scheme and style.' },
 ];
 
 // SVG path `d` strings on a 24×24 stroked grid — the Sidebar piece's icon
@@ -97,7 +97,7 @@ export const SECTIONS = [
 		{ name: "rating", title: "Rating", path: "/components/rating",
 			description: "Star rating — read-only display with half-star support and an interactive radiogroup input mode with keyboard nav and hover preview" },
 		{ name: "rich-text-editor", title: "Rich Text Editor", path: "/components/rich-text-editor",
-			description: "Rich text editor on Tiptap/ProseMirror — a block-style dropdown (Normal text, Heading 1-4) plus Toolbar-driven bold/italic/underline/strike, alignment, lists, blockquote, code block, and links, emitting a controlled Shopify-style JSON document tree via @change; render stored docs with the rich-text piece" },
+			description: "Rich text editor on Tiptap/ProseMirror — one Toolbar row (block-style picker for Normal text / Heading 1-4, bold/italic/underline/strike, alignment, lists, blockquote, code block, links), or chrome=\"blocks\" for a Notion-style page (hover handle, / commands, selection bar); optional images (uploadImage) and pasted-URL link previews (fetchLinkPreview); emits a controlled Shopify-style JSON document tree via @change; render stored docs with the rich-text piece" },
 		{ name: "search-field", title: "Search Field", path: "/components/search-field",
 			description: "Search input with a leading magnifier icon and a trailing clear button; submits on Enter" },
 		{ name: "select", title: "Select", path: "/components/select",
@@ -235,6 +235,10 @@ export const SECTIONS = [
 			description: "Config-first controlled Kanban board — pointer and keyboard card movement, insertion placeholders, aria-live announcements, a value-first @move intent, and caller-owned card and column-header snippets that preserve piece-owned drag mechanics" },
 		{ name: "kbd", title: "Kbd", path: "/components/kbd",
 			description: "Keyboard-key hint rendered in a native <kbd> with a keycap shadow" },
+		{ name: "language-menu", title: "Language Menu", path: "/components/language-menu",
+			description: "Compact language menu over the app's i18n.locales list — a menu button showing the active language over dropdown-menu, with hreflang link rows under locale prefix routing and setLocale button rows without it" },
+		{ name: "language-switcher", title: "Language Switcher", path: "/components/language-switcher",
+			description: "Inline language switcher over the app's i18n.locales list — real hreflang links under locale prefix routing (a plain click stores the choice through setLocale, a modified click opens natively) and setLocale buttons without it, with no dependencies" },
 		{ name: "markdown", title: "Markdown", path: "/components/markdown",
 			description: "Renders a markdown string as semantic HTML — a marked-lexer token walker building DOM with createElement/createTextNode, so markdown can never inject markup; CommonMark plus GFM tables, task lists, and strikethrough" },
 		{ name: "marquee", title: "Marquee", path: "/components/marquee",
@@ -244,7 +248,7 @@ export const SECTIONS = [
 		{ name: "panel-stack", title: "Panel Stack", path: "/components/panel-stack",
 			description: "Nested-panel navigation family — drill-down menus, settings flows and wizards, with the stack, the slide or stack transitions, inert handling, focus restoration, declarative push/pop triggers and Escape composition coming from the panel-stack web component" },
 		{ name: "rich-text", title: "Rich Text", path: "/components/rich-text",
-			description: "Renders a stored rich text document — RichTextEditor's Shopify-style JSON tree — as semantic HTML with the shared typography classes; XSS-safe tree walker with zero npm dependencies" },
+			description: "Renders a stored rich text document — RichTextEditor's Shopify-style JSON tree, images and link previews included (sources via resolveImage) — as semantic HTML with the shared typography classes (compact spacing to match chrome=\"blocks\"); XSS-safe tree walker with zero npm dependencies" },
 		{ name: "scroll-area", title: "Scroll Area", path: "/components/scroll-area",
 			description: "Overlay-scrollbar wrapper — native scrolling with a fading, draggable custom thumb in vertical, horizontal, or both orientations" },
 		{ name: "scroll-stack", title: "Scroll Stack", path: "/components/scroll-stack",
@@ -279,7 +283,7 @@ export const SECTIONS = [
 		label: "Layouts",
 		items: [
 		{ name: "appearance-picker", title: "Appearance Picker", path: "/components/appearance-picker",
-			description: "Controlled palette + mode picker — theme cards that are live miniatures of the shell painted in each palette (scoped data-scheme), and a Light / Medium / Dark / System radiogroup; fires @change({ scheme, mode }) for the app to persist with the appearance module" },
+			description: "Controlled palette + style picker — theme cards that are live miniatures of the shell painted in each palette (scoped data-scheme), and a Dark / Dim / Mixed / Light / System style group, each a live miniature too; fires @change({ scheme, mode }) for the app to persist with the appearance module" },
 		{ name: "masonry", title: "Masonry", path: "/components/masonry",
 			description: "Responsive CSS-columns masonry/gallery grid — slot children flow into a responsive column count with a gap prop" },
 		{ name: "split-panel", title: "Split Panel", path: "/components/split-panel",

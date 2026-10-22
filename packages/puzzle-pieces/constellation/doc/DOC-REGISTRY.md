@@ -65,6 +65,22 @@ notes:
     text: >-
       0.8.0 adds `hamburger` (PR #148) — registry now 102 pieces; README count bumped. See
       [[COMPONENT-HAMBURGER]].
+  - kind: gotcha
+    text: >-
+      Every item-form `{#for}` row needs a key. With no `key={ … }` on the row root the runtime keys
+      by `.id` (ViewNode.keyOf); a row without one drops the list to positional diffing and the
+      CONSUMER's console logs `[puzzle] {#for} item (Object) has no usable key` once per session.
+      Nine pieces needed explicit keys: sidebar, radio-group, breadcrumb, dropzone, stepper,
+      timeline, time-picker (columns), chat-attachment and spinner. Convention: precompute a `key`
+      in data() and bind `key={ row.key }`; key by a real identity (option value, column, path
+      string) and fall back to the position only when items carry no id (Sidebar keeps its existing
+      `index`, which already owns the open map and ids). breadcrumb, stepper and timeline key by the
+      caller's `id` when it gives one and by `'#' + index` otherwise, so a partial set of numeric
+      ids cannot collide with a position. Loops whose rows carry an `id` may stay implicit — but
+      pie-chart's full-circle slice draws two paths from one slice, so marks bind their own per-path
+      `m.key` (bar-chart binds `m.key` the same way). `test/for-keys.test.js` strips HTML comments,
+      then fails on any keyless loop not listed in its per-file ID_KEYED allow-list (with a count
+      for each loop name), and on stale allow-list entries.
 ---
 
 # The registry — source of truth
@@ -93,18 +109,19 @@ The manifest schema and per-field meaning live in CLAUDE.md; the load-bearing ru
 ## registry.json is generated
 
 
-`registry.json` is not hand-maintained per entry — it is the aggregation of all `piece.json` manifests, pieces alphabetical, with a top-level `theme` pointer and `version`. **Regenerate it whenever a piece is added or renamed** (re-run the aggregation; lib files are represented via their consumers' `registryDependencies`, e.g. `lib/date-math.js`). Current count: **102 pieces** — keep the README count in sync when it changes (the demo shell's `Introduction.pzl`, `ComponentsIndex.pzl` and header badge compute `pieceCount`, so they follow on their own).
+
+`registry.json` is not hand-maintained per entry — it is the aggregation of all `piece.json` manifests, pieces alphabetical, with a top-level `theme` pointer and `version`. **Regenerate it whenever a piece is added or renamed** (re-run the aggregation; lib files are represented via their consumers' `registryDependencies`, e.g. `lib/date-math.js`). Current count: **104 pieces** — keep the README count in sync when it changes (the demo shell's `Introduction.pzl`, `ComponentsIndex.pzl` and header badge compute `pieceCount`, so they follow on their own).
 
 ## theme/pieces.css is the token source
 
 
-Every piece styles itself exclusively through the semantic utilities the `@theme` tokens generate (`bg-surface`, `text-ink`, `border-border`, `bg-brand`, `text-danger`, shell roles `bg-bar` / `bg-rail` / `bg-surface-panel`, …) — no hex inside components. Since 2026-09-18 ([[DECISION-THEMES-IN-PIECES]], [[FEATURE-THEMES]]) `registry/theme/` holds **four hand-written palette files and the runtime**:
+Every piece styles itself exclusively through the semantic utilities the `@theme` tokens generate (`bg-surface`, `text-ink`, `border-border`, `bg-brand`, `text-danger`, shell roles `bg-bar` / `bg-rail` / `bg-surface-panel`, …) — no hex inside components. Since 2026-09-18 ([[DECISION-THEMES-IN-PIECES]], [[FEATURE-THEMES]]), reshaped 2026-10-21 into four schemes × four styles ([[DECISION-SCHEMES-AND-STYLES]], [[FEATURE-APPEARANCE-STYLES]]), `registry/theme/` holds **four hand-written palette files and the runtime**:
 
-- `pieces.css` — the default palette: `:root { color-scheme: light dark }` + `[data-theme]` color-scheme blocks, the Tailwind v4 `@theme` block where every token is a `light-dark(light, dark)` pair, a `[data-theme='medium']` block (only the tokens that differ from dark), and a `[data-scheme='default']` restatement. Line 2 is the CLI's installed-detection marker — do not reword it.
-- `dim.css`, `warm.css`, `void.css` — every token restated inside `[data-scheme='x']`, plus that scheme's medium block. Inert until `data-scheme` selects them.
-- `appearance.js` (export `./appearance`) and `pre-paint.js` (export `./pre-paint`); `registry.json` lists `themes` (`{ name, file, label, description }`) and `modes`.
+- `pieces.css` — the default palette: `:root { color-scheme: light dark }` + `[data-theme]` color-scheme blocks (light and mixed → light, dark and dim → dark), the Tailwind v4 `@theme` block where every token is a `light-dark(light, dark)` pair, a `[data-theme='dim']` block (only the tokens that differ from dark), a `[data-theme='mixed']` block (exactly the frame roles, at their dark values), and a `[data-scheme='default']` restatement. Line 2 is the CLI's installed-detection marker — do not reword it.
+- `cool.css`, `warm.css`, `void.css` — every token restated inside `[data-scheme='x']`, plus that scheme's dim and mixed blocks. Inert until `data-scheme` selects them. (`cool.css` was `dim.css` before 0.9.0.)
+- `appearance.js` (export `./appearance`) and `pre-paint.js` (export `./pre-paint`); `registry.json` lists `themes` (`{ name, file, label, description }`) and `modes` (the styles).
 
-Two attributes drive it: `data-scheme` = palette, `data-theme` = mode (`light | medium | dark`). Selectors are unanchored so any element can scope a subtree. The files ARE the source of truth (no generator, no JSON); `test/themes.test.mjs` holds the four to one identical token set and `test/contrast.test.mjs` holds every palette × mode to WCAG 2.2 AA over the pairs in `test/lib/roles.mjs`. Token NAMES are what Pyramid and Sites already use and are frozen. Consumers import the package exports (or copy the files) after `@import "tailwindcss"`.
+Two attributes drive it: `data-scheme` = palette, `data-theme` = style (`dark | dim | mixed | light`; the runtime field is still called `mode`). Selectors are unanchored so any element can scope a subtree. The files ARE the source of truth (no generator, no JSON); `test/themes.test.mjs` holds the four to one identical token set and the dim/mixed block shapes, and `test/contrast.test.mjs` holds every palette × style to WCAG 2.2 AA over the pairs in `test/lib/roles.mjs`. Token NAMES are what Pyramid and Sites already use and are frozen. Consumers import the package exports (or copy the files) after `@import "tailwindcss"`.
 
 ## lib/ convention
 

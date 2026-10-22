@@ -50,7 +50,8 @@ type Options struct {
 
 	// Metafile receives esbuild's JSON metafile when non-nil. It is primarily a
 	// build-test seam for proving an input contributes zero production bytes;
-	// normal CLI builds leave it nil and pay nothing.
+	// production builds also use it internally to rewrite shell references and
+	// preload statically imported chunks.
 	Metafile *string
 
 	// Config is an ALREADY-LOADED puzzle.config.js. Non-nil, Build uses it as-is
@@ -133,6 +134,7 @@ func Build(root string, opts Options) error {
 		return err
 	}
 	warnDeadSPARouteMeta(absRoot, mode, os.Stderr)
+	warnUntranslatedRouteMeta(absRoot, cfg.I18n, os.Stderr)
 
 	// --fixtures (D98): validate and generate the wrapper entry that installs the
 	// fixtures module ahead of the app module. Checking mode (not opts.Output)
@@ -156,6 +158,9 @@ func Build(root string, opts Options) error {
 	// Resolved here, before ValidatePublic, because it decides whether dist/chunks
 	// is a reserved output name for this build.
 	splitting := cfg.Splitting() && mode != "static"
+	hash := !opts.Development && cfg.HashNames()
+	hashEntry := hash && mode != "static"
+	preloadShell := !opts.Development && splitting
 
 	// Translations (D175): read, validate, flatten, and fill every locale up
 	// front, so a broken locale file fails the build before dist/ is touched and
@@ -172,7 +177,7 @@ func Build(root string, opts Options) error {
 
 	// Reject a public/ tree that would clobber compiler output BEFORE touching
 	// dist/ — a config error must never destroy the last good build.
-	if err := ValidatePublic(absRoot, splitting, cfg.I18nEnabled()); err != nil {
+	if err := ValidatePublic(absRoot, splitting, cfg.I18n); err != nil {
 		return err
 	}
 
@@ -228,7 +233,7 @@ func Build(root string, opts Options) error {
 	if scanErr != nil {
 		return scanErr
 	}
-	pc.i18n = cfg.I18nEnabled()
+	pc.i18n = cfg.I18n
 	pc.locales = localeRes
 	printI18nWarnings(os.Stderr, i18nWarnings(absRoot, cfg, pc.usage, localeRes))
 	// The hashed locale files go into staging before any pass runs: the prerender
@@ -249,8 +254,9 @@ func Build(root string, opts Options) error {
 		Dev:       opts.Development,
 		Takeover:  mode == "hybrid",
 		Splitting: splitting,
+		HashEntry: hashEntry,
 	})
-	buildOpts.Metafile = opts.Metafile != nil
+	buildOpts.Metafile = opts.Metafile != nil || !opts.Development
 	if opts.Fixtures {
 		buildOpts.Plugins = append(buildOpts.Plugins, fixtures.Plugin())
 	}
@@ -312,14 +318,18 @@ func Build(root string, opts Options) error {
 		return tailwindErr
 	}
 
-	// Styles → one global stylesheet (index.html links /styles.css): the
+	// Styles → one global stylesheet (the shell follows its emitted name): the
 	// Tailwind layer (when puzzle.config.js declares it) followed by the
 	// collected <style> blocks. A declared-but-unrunnable Tailwind fails the
 	// build — the pipeline is never silently skipped. Written into staging, not
 	// dist/, so a Tailwind failure above never touches the last good build.
 	endStyles := prof.phase("styles compose")
 	final := styles.Compose(tailwindCSS, pl.CSS())
-	writeErr := os.WriteFile(filepath.Join(staging, "styles.css"), []byte(final), 0o644)
+	stylesheet := "styles.css"
+	if hash {
+		stylesheet = "styles-" + fsutil.ContentHash([]byte(final)) + ".css"
+	}
+	writeErr := os.WriteFile(filepath.Join(staging, stylesheet), []byte(final), 0o644)
 	endStyles()
 	if writeErr != nil {
 		return fmt.Errorf("writing styles.css: %w", writeErr)
@@ -335,6 +345,12 @@ func Build(root string, opts Options) error {
 		return fmt.Errorf("copying public assets: %w", err)
 	}
 
+	if hash || preloadShell {
+		if err := rewriteShell(staging, result.Metafile, stylesheet, entry, hashEntry, preloadShell, publicFiles); err != nil {
+			return err
+		}
+	}
+
 	// Prerender modes (D67 hybrid / D81 static): render each route inside staging,
 	// AFTER the shell (public/index.html) has been copied in — the prerender
 	// injects into it — and BEFORE the swap, so a prerender failure discards
@@ -343,7 +359,7 @@ func Build(root string, opts Options) error {
 	switch mode {
 	case "hybrid":
 		endHybrid := prof.phase("prerender (hybrid)")
-		hybridErr := prerenderHybrid(absRoot, entry, staging, publicFiles, pc)
+		hybridErr := prerenderHybrid(absRoot, entry, staging, cfg.Site, publicFiles, pc)
 		endHybrid()
 		if hybridErr != nil {
 			return hybridErr
@@ -575,9 +591,13 @@ func publicDir(root string) string {
 // same class of collision the static pass rejects for _puzzle
 // (prerender_pages.go). Off, that name belongs to the app again.
 //
-// i18n does the same for the root-level locales/ entry, which the build owns
-// while puzzle.config.js configures translations (D175).
-func ValidatePublic(root string, splitting, i18n bool) error {
+// i18n (the config's block, nil without translations) does the same for the
+// root-level locales/ entry, which the build owns while puzzle.config.js
+// configures translations (D175). Under prefix routing (D177) it also reserves
+// one root entry per non-default locale tag: that locale's pages are written to
+// dist/<tag>/, so a public/<tag> folder or file would be merged into or
+// clobbered by them.
+func ValidatePublic(root string, splitting bool, i18n *config.I18n) error {
 	src := publicDir(root)
 	if src == "" {
 		return nil
@@ -594,11 +614,21 @@ func ValidatePublic(root string, splitting, i18n bool) error {
 				filepath.Join(src, name), chunksDirName,
 			)
 		}
-		if i18n && strings.EqualFold(name, locales.OutDirName) {
+		if i18n != nil && strings.EqualFold(name, locales.OutDirName) {
 			return fmt.Errorf(
 				"public asset %s would overwrite compiler output dist/%s (a reserved output name while i18n is configured); rename or remove it",
 				filepath.Join(src, name), locales.OutDirName,
 			)
+		}
+		if i18n.PrefixRouting() {
+			for _, tag := range i18n.Locales {
+				if tag != i18n.DefaultLocale && strings.EqualFold(name, tag) {
+					return fmt.Errorf(
+						"public asset %s collides with the /%s/ locale prefix — with i18n.routing: 'prefix' the build writes that locale's pages to dist/%s/; rename or remove it",
+						filepath.Join(src, name), tag, tag,
+					)
+				}
+			}
 		}
 		if e.IsDir() {
 			continue

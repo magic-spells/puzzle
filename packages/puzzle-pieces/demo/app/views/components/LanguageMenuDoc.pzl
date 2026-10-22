@@ -1,0 +1,199 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Language Menu</h1>
+        <p class="mt-2 text-body">
+          The compact form of
+          <a class="text-brand underline underline-offset-2" href="#/components/language-switcher">Language Switcher</a>:
+          a menu button showing the active language, over a
+          <a class="text-brand underline underline-offset-2" href="#/components/dropdown-menu">Dropdown Menu</a>.
+          Same
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">i18n.locales</code>
+          input, same clicks: real hreflang links under locale prefix routing, with a plain click
+          going through
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">setLocale</code>,
+          and buttons without it. The web component owns the menu role, the arrow keys, typeahead
+          and Escape.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          This docs site has no i18n configured, so the examples use a sample list whose links
+          point at this page with a
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">?lang=</code>
+          query, and the page marks the active entry from it.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="flex w-full justify-end pb-56">
+          <LanguageMenu locales={ routedLocales } align="end"/>
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app. It pulls
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">dropdown-menu</code>
+          and the shared
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">dropdown-panel</code>
+          base along with it:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          That base wraps a web component, so install it and merge its stylesheet into your app’s
+          style entry:
+        </p>
+        <CodeBlock code={ installDep }/>
+        <CodeBlock code={ installCss } class="mt-3"/>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <p class="mb-3 text-sm text-body">
+          Read
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">this.ctx.i18n.locales</code>
+          in the layout or view’s own
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">data()</code>
+          and pass it down: every entry’s link is <em>this page</em> in that language, and only the
+          layout’s
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-code text-ink">data()</code>
+          re-runs on each navigation.
+        </p>
+        <CodeBlock code={ usageMarkup }/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="no-prefix" title="Without prefix routing" code={ codeButtons }>
+          <div class="flex w-full justify-center pb-56">
+            <LanguageMenu locales={ sharedLocales } @change={ choose }/>
+          </div>
+        </ExampleBox>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+          <div class="text-sm">
+            {#for row in propRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import LanguageMenu from '@/components/ui/LanguageMenu.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for LanguageMenu. The demo app configures no i18n, so the live
+// examples render a sample shaped like `i18n.locales` whose links carry a
+// ?lang= query on this page; the active entry comes from that query. Code
+// samples live as template-literal consts because literal tag names would be
+// parsed as template syntax in prose.
+const installCmd = 'puzzle add piece language-menu';
+const installDep = 'npm install @magic-spells/dropdown-panel@^2.1.1';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dropdown-panel/css" layer(components);`;
+
+const usageMarkup = `<!-- app/layouts/Default.pzl -->
+<header class="flex items-center justify-between">
+  <a href="{ link('/') }">{ t('brand') }</a>
+  <LanguageMenu locales={ locales } label={ t('language') } align="end"/>
+</header>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import LanguageMenu from '@/components/ui/LanguageMenu.pzl';
+
+export default class DefaultLayout extends PuzzleView {
+  // The layout's data() re-runs for every navigation, so the list always
+  // names the page being shown. The menu only receives it.
+  data() {
+    return { locales: this.ctx.i18n.locales };
+  }
+}
+</script>`;
+
+const codeHero = `<LanguageMenu locales={ locales } align="end"/>
+
+// this.ctx.i18n.locales, under i18n.routing: 'prefix', on /about:
+// [
+//   { locale: 'en', label: 'English',  href: '/about',    active: true  },
+//   { locale: 'es', label: 'Español',  href: '/es/about', active: false },
+//   …
+// ]`;
+
+const codeButtons = `// no i18n.routing: every entry's href is the current page, so the
+// rows are buttons; a click calls this.ctx.i18n.setLocale(locale)
+<LanguageMenu locales={ locales }/>`;
+
+const propRows = [
+  { name: 'locales', desc: "The parent's this.ctx.i18n.locales: [{ locale, label, href, active }]. Read it in the layout or view's data() and pass it down." },
+  { name: 'label', desc: "The trigger's sr-only prefix, read as \"Language: English\". Default 'Language'; pass your own translation." },
+  { name: 'align', desc: "'start' (default) | 'end', for a menu near the right edge." },
+  { name: 'class', desc: 'Merged onto the dropdown component host.' },
+  { name: '@change(locale)', desc: 'A hook fired on a plain click, before setLocale. It never changes what the click does.' },
+];
+
+const LANGS = [
+  ['en', 'English'],
+  ['es', 'Español'],
+  ['fr', 'Français'],
+  ['ja', '日本語'],
+];
+const PATH = '/components/language-menu';
+
+export default class LanguageMenuDoc extends PuzzleView {
+  data() {
+    const lang = this.route?.query?.lang;
+    const current = LANGS.some(([locale]) => locale === lang) ? lang : 'en';
+    return {
+      routedLocales: LANGS.map(([locale, label]) => ({
+        locale,
+        label,
+        href: `#${PATH}?lang=${locale}`,
+        active: locale === current,
+      })),
+      sharedLocales: LANGS.map(([locale, label]) => ({
+        locale,
+        label,
+        href: `#${PATH}`,
+        active: locale === current,
+      })),
+      installCmd,
+      installDep,
+      installCss,
+      usageMarkup,
+      codeHero,
+      codeButtons,
+      propRows,
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Without prefix routing', href: '#no-prefix' },
+        { label: 'Reference', href: '#reference' },
+      ],
+    };
+  }
+
+  events = {
+    // No i18n here, so a button row does nothing but fire the hook; the page
+    // moves the query itself to stand in for setLocale.
+    choose: (locale) => this.ctx.router.replace(`${PATH}?lang=${locale}`),
+  };
+}
+</script>

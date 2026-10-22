@@ -31,6 +31,7 @@ compiled fixtures come from `npm run pretest`.
 
 - inline component rendering, prop reactivity, teardown on child removal, keyed
   component lists, and the pre-first-commit slot-update guard.
+- `conditional-router-slot`: hide/show through direct, element and component wrappers; hidden navigation, reused nested chains, initially absent outlets, wrapper relocation, single mounts and complete teardown.
 - named slots through routing, slotted components crossing control flow,
   reserved-name buckets, and keyed reconciliation inside a slotted region.
 - default-slot forwarding through an intermediate component, through the
@@ -47,3 +48,5 @@ compiled fixtures come from `npm run pretest`.
   diagnostics, serialization, and warning-free hybrid/static takeover.
 - Portal mounting into the framework outlet, teardown, and its interaction with
   the `outside` modifier.
+
+- `component-slot` (D180 / §67): children fill the selected component's normal default slot. An empty selection leaves an enclosing default marker unfilled. Indexed-map expressions, nullish selection and nested slots follow normal composition rules. A selected component's outer range carries named-slot routing metadata; consumed metadata is stripped from the selected child, while an unconsumed ordinary `slot` prop still forwards.

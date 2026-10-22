@@ -1,0 +1,14 @@
+<puzzle-view>
+  <h1 class="product">{ t('product', { id }) }</h1>
+  <a class="about" href={ link('/about') }>{ t('about') }</a>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Product extends PuzzleView {
+  data(params) {
+    return { id: params.id };
+  }
+}
+</script>

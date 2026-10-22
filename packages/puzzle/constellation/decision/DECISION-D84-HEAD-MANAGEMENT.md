@@ -35,28 +35,40 @@ page's HTML; the browser only keeps `document.title` in sync. Spec:
 
 ## Decision
 
-- **Values** are static strings or `null`. Each field resolves independently
-  (`resolveHeadField` in `head.js`), walking the destination chain leaf → root:
+- **Values** are static strings or `null`; `title` and `description` may also
+  be a translation reference `{ t: 'key' }`
+  ([[DECISION-D177-LOCALE-URL-PREFIXES]]), resolved by `headText(value, i18n)`
+  in `head.js` through the app's (or prerender pass's) i18n service — with no
+  service it prints nothing and warns once in dev. Each field resolves
+  independently (`resolveHeadField`), walking the destination chain leaf → root:
   `undefined`/omitted inherits, explicit `null` stops the walk and suppresses. A
   resolved-null title leaves `document.title` / the shell `<title>` as they are
   (never blanked). No functions, data-derived values, raw HTML or tag arrays;
   other `meta` keys are untouched. Canonical is emitted as given (supply
-  absolute URLs).
+  absolute URLs); under locale prefix routing a root-relative or same-origin
+  canonical is localized per page.
 - **Generated tags:** `title` → `<title>` + `og:title` + `twitter:title`;
   `description` → `description` + `og:`/`twitter:description`; `canonical` →
   `<link rel="canonical">` + `og:url`; `socialImage` → `og:image` +
   `twitter:image` + `twitter:card=summary_large_image`. Each managed tag carries
   `data-puzzle-head="<field>"`; the framework only touches tags bearing it.
+- **hreflang alternates** (prefix routing only): `<link rel="alternate"
+  hreflang>` per locale plus `x-default`, tagged
+  `data-puzzle-head="alternate"`. They are a managed *set*: every shell
+  alternate is stripped and the page's own set inserted.
 - **Build time** (`ssg/index.js` + `headTags.js`'s `MANAGED_TAGS`): the SSG
   resolves all fields (`resolveHead`) and string-injects the escaped tags into
   the shell — replace same-identity tags, insert the rest before `</head>`, no
   HTML parser. `headTags.js`, `resolveHead` and `HEAD_FIELDS` never reach a
   browser bundle (plain tree-shaking, no define).
 - **Browser:** the router's `#syncHead` is
-  `syncTitle(resolveHeadField(entry.chain, 'title'))` inside the D61 commit
-  window, so a failed or superseded navigation never touches it. Ungated, every
-  navigation, every mode except memory (D42 — an embed never touches the host's
-  head). No title resolved → `document.title` untouched.
+  `syncTitle(headText(resolveHeadField(entry.chain, 'title'), i18n))` inside
+  the D61 commit window, so a failed or superseded navigation never touches it
+  (`headText` only behind `__PUZZLE_HAS_I18N__`). `syncTitle` stays
+  string-only. Ungated, every navigation, every mode except memory (D42 — an
+  embed never touches the host's head). No title resolved → `document.title`
+  untouched. The static kernel syncs a `{ t }` title on load and after a
+  locale remount.
 - **Crawlers never client-navigate**, so the baked per-page tags are what they
   read. After a client navigation in hybrid, managed tags in the live DOM keep
   navigation zero's values — pinned by `tests/router-head.test.js`. SEO is what
@@ -65,9 +77,6 @@ page's HTML; the browser only keeps `document.title` in sync. Spec:
   `warnDeadSPARouteMeta` (`route_head_warning.go`) warns with file:line:col. It
   lexes only `app/**/routes.{js,ts}` (comment/string/regex/template aware,
   key-position match inside a `meta: { … }` object), so prose never trips it.
-
-Root routes should set defaults so children can't inherit stale values
-(guidance, not enforced).
 
 ## Alternatives
 

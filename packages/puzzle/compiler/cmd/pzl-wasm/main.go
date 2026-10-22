@@ -78,7 +78,9 @@ const (
 	// portals, and block bodies each count as one level). Real components live
 	// around a dozen levels deep; codegen starts allocating quadratically well
 	// before this and reaches an unrecoverable OOM a few hundred levels past it.
-	maxNestingDepth = 200
+	// It is the parser's own ParseMarkup default, so both untrusted-input paths
+	// share one number.
+	maxNestingDepth = parser.DefaultMaxDepth
 )
 
 var exportedFuncs []js.Func

@@ -5,7 +5,7 @@ A SPA-first JavaScript framework with single-file components, reactive data bind
 **[▶ Live demo](https://puzzle-music-demo.vercel.app/)** — the [music example app](examples/music) built with Puzzle.
 
 - **~200 ms production builds** — compile, bundle, Tailwind, and minify, end to end (todos example, Apple Silicon)
-- **Small apps, honestly measured** — a minimal app is 21.9 KB gzip with the router, store, and validation included, not just a view layer; the complete todos example ships at 26.0 KB gzip. Regenerated every release by `npm run measure:size`
+- **Small apps, honestly measured** — a minimal app is 23.0 KB gzip with the router, store, and validation included, not just a view layer; the complete todos example ships at 27.0 KB gzip. Regenerated every release by `npm run measure:size`
 - **Zero JavaScript toolchain** — the CLI is one prebuilt Go binary; no Babel, no bundler config, no postinstall scripts
 
 ## Quick start
@@ -34,7 +34,7 @@ client runtime and the CLI:
 npm install -D @magic-spells/puzzle
 ```
 
-> **Status: 0.8.0** — the current release. The browser runtime, Go
+> **Status: 0.9.0** — the current release. The browser runtime, Go
 > compiler, static generator, and CLI are implemented and covered by Go,
 > Vitest/jsdom, type, package, example, and browser-focused checks.
 >
@@ -43,7 +43,7 @@ npm install -D @magic-spells/puzzle
 > [CHANGELOG.md](CHANGELOG.md#upgrading-across-versions) before upgrading.
 >
 > **[constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) is the canonical, frozen v1
-> contract** — it indexes the numbered sections (§1–§66) across six domain
+> contract** — it indexes the numbered sections (§1–§67) across six domain
 > cards, and they are the source of truth for exactly what ships; if anything
 > here conflicts with it, the spec wins.
 
@@ -58,8 +58,12 @@ npm install -D @magic-spells/puzzle
 - **Server data with no loading code** — `findOne`/`findMany` inside a view's `data()` fetch whatever the store is missing and settle before the view commits, so a committed `null` always means "does not exist", never "still loading"
 - **Template expressions that are JavaScript** — `{ truncate(title.toLowerCase(), 40) }`, `{#for t in todos.filter(t => !t.done)}`: one closed grammar and method table, parsed once and shared with Magic Spells Sites, with display functions called like any function
 - **Translations** — `{ t('cart.title') }` with one `app/locales/<tag>.json` per language: nested files, CLDR plurals through `Intl.PluralRules`, missing keys filled from the default at build time, and only the active locale's hashed file downloaded; `this.ctx.i18n.setLocale('es')` switches in place. Apps without `i18n` configured ship none of it
+- **Multilingual static sites** — `i18n.routing: 'prefix'` gives every non-default language its own URLs (`/es/about`) and its own prerendered pages, with `hreflang` alternates, a `sitemap.xml` once `site` is set, a first-visit language redirect, `<html dir>` for right-to-left locales and translated page titles
 - **Raw template blocks** — `{#raw}…{/raw}` turns off template-expression parsing so JSON, JavaScript, CSS, and syntax examples with literal braces compile as-is (HTML inside still renders normally)
 - **Nested routing** with view slots — path routing by default, hash/memory via `hashRouter()`/`memoryRouter()` from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` function
+- **Prerendered `:param` routes** — `staticPaths` lists a route's pages at build time (`/blog/:slug` becomes one page per post, per language), as an array, a function, or a model name
+- **Runtime component selection** — `<Component is={ cards[embed.type] }>` picks one of the constructors the file imports; no registry, no runtime module lookup
+- **Hooks for tests and tools** — `router.push()` resolves a `NavigationResult` instead of rejecting, `router.views` lists every page (with an optional `agent` description per route), `store.observe()` watches records from outside a view, and `await app.idle()` waits for the app to go quiet
 - **On-demand route views** — `view: lazy(() => import('./views/Admin.pzl'))` in the route table downloads a view or layout the first time a navigation needs it, guards first
 - **Virtual DOM** with efficient diffing, pk-aware list keying, and `{#for}` rows and static markup cached between renders
 - **Built-in view & component animations** (Web Animations API), including visibility-triggered enters and app lifecycle hooks
@@ -288,14 +292,17 @@ See [constellation/doc/DOC-TEMPLATE-SYNTAX.md](constellation/doc/DOC-TEMPLATE-SY
 <!-- A one-member path writes the record itself, through validated update() -->
 <input type="checkbox" checked={ todo.completed } />
 
-<!-- Event modifiers: prevent / stop / once + key filters, and they stack -->
+<!-- Event modifiers: prevent / stop / once / passive / capture + key filters, and they stack -->
 <input @keydown:enter={ handleSubmit } @keydown:escape:prevent={ cancelEdit } />
 <button @click:once={ claimReward }>Claim</button>
+<div @wheel:passive={ onScroll }>…</div>
 ```
 
 **Two-way binding** (D147): `value=` and `checked=` on a plain `<input>`, `<textarea>`, or `<select>` bind in both directions when the expression is a bare identifier or a one-member path — the compiler synthesizes the write-back handler. A bare identifier writes local state; a path writes the record through validated `update()`. Opt out with your own `@input`/`@change`, a non-path expression (`value={ x ?? '' }`), or a static `readonly`. Handlers on other events (`@blur`, `@keydown:enter`) coexist with the bind.
 
-**Event modifiers** (`prevent`, `stop`, `once`, and key filters like `:enter`/`:escape`) stack; the canonical order is key-gate → once-spend → preventDefault → stopPropagation → handler. See [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §5.
+**Event modifiers** (`prevent`, `stop`, `once`, and key filters like `:enter`/`:escape`) stack; the canonical order is key-gate → once-spend → preventDefault → stopPropagation → handler. `passive` and `capture` set the native listener options (D187); `passive` with `prevent` is a compile error.
+
+**Dynamic URL attributes** (`href={ url }`, `src="{ path }"`, …) never carry `javascript:` or `vbscript:`, and `data:` only in image positions: a blocked value leaves the attribute off, in the browser and in prerendered HTML alike, with a warning in development (D186). Static attributes you write yourself are left as written. See [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §5.
 
 ### Slots & Nested Routing
 
@@ -468,6 +475,13 @@ languages with
 `this.ctx.i18n.setLocale('es')`: the new file loads first, then the page
 rebuilds in place and the choice is remembered. See `examples/i18n`.
 
+Add `routing: 'prefix'` to the `i18n` block and every non-default locale gets
+its own URLs under its tag (`/es/about`; the default stays unprefixed), with one
+prerendered page per locale in static and hybrid output. `link()` adds the
+active prefix for you, and `this.ctx.i18n.locales` is a list of
+`{ locale, label, href, active }` entries a language switcher can render as is
+(the `language-switcher` and `language-menu` pieces do).
+
 ## Single-File Components
 
 ```html
@@ -526,6 +540,18 @@ rebuilds in place and the choice is remembered. See `examples/i18n`.
   var(--primary-color); color: white; } .btn--medium { font-size: 1rem; }
 </style>
 ```
+
+### Waiting for a render
+
+`await this.renderTick()` resolves once every pending store flush and scheduled render has landed, including renders those schedule (D188):
+
+```js
+this.setData({ editing: true });
+await this.renderTick();
+this.refs.editor.focus();
+```
+
+It forces nothing and does not wait for async `data()`, requests or navigation; `app.idle()` waits for the whole app to go quiet.
 
 ### Imports
 
@@ -682,21 +708,39 @@ puzzle add skills
 puzzle upgrade skills
 ```
 
-Every command above is built and verified today. `puzzle build` compiles `.pzl` files and produces a working bundle; `puzzle dev` watches `app/`, rebuilds on change, and delivers full-page live reload over SSE (the reload client is injected into `index.html` at serve time). Both run the declared style pipeline automatically — `styles: { use: ['tailwindcss'] }` in `puzzle.config.js` (tailwindcss-only in v1) — so Tailwind output is included in the served/built `styles.css`.
+Every command above is built and verified today. `puzzle build` compiles `.pzl` files and produces a working bundle; `puzzle dev` watches `app/`, rebuilds on change, and delivers full-page live reload over SSE (the reload client is injected into `index.html` at serve time). Both run the declared style pipeline automatically — `styles: { use: ['tailwindcss'] }` in `puzzle.config.js` (tailwindcss-only in v1) — so Tailwind output is included in the served/built stylesheet.
 
 By default a build emits one `dist/app.js`, and a dynamic `import()` is inlined
 into it. Set `build: { splitting: true }` in `puzzle.config.js` and each dynamic
 `import()` becomes a lazy chunk under `dist/chunks/` that the browser fetches
 only when that code path runs — the way to keep a heavy on-demand dependency (a
-chart library, a diagram renderer, an editor) off the first page load. The entry
-keeps its `app.js` name, static imports are unaffected, and total shipped bytes
-do not grow: esbuild's ESM splitting has no chunk-loader runtime. The build's
+chart library, a diagram renderer, an editor) off the first page load.
+Production split builds name the entry `app-<hash>.js`, the stylesheet
+`styles-<hash>.css`, and any CSS imported by the entry `app-<hash>.css`. The build
+rewrites the shell's references and adds `modulepreload` links for the entry's
+transitive static-import chunks; lazy chunks stay on demand. esbuild's ESM
+splitting has no chunk-loader runtime, so it adds no runtime bytes. The build's
 size banner also names your largest dependencies and, in production builds,
 flags any single one over 200 KB (the threshold assumes minified bytes, so dev
 builds never warn).
 
+`build.hashNames` defaults to `build.splitting`. Set
+`build: { splitting: true, hashNames: false }` to keep `app.js` and `styles.css`
+while retaining preloads, or `build: { hashNames: true }` to hash without
+splitting. Development builds always keep fixed names and add no preloads.
+Files copied from `public/` are never renamed. A hashed SPA or hybrid build
+requires the shell to reference `app.js` as `/app.js`, `./app.js` or `app.js`;
+use `hashNames: false` when another page needs the fixed URL.
+
+`output: 'hybrid'` uses the same entry and stylesheet names as the SPA, with
+prerendered HTML under `dist/<path>/index.html`. `output: 'static'` ships no
+app entry: each page loads `dist/_puzzle/<slug>.js`, or
+`dist/_puzzle/<slug>-<hash>.js` when hashing is on, and preloads its shared
+`dist/_puzzle/chunks/`. A static build with no `splitting` or `hashNames` key
+keeps fixed page-module names and `styles.css`, with preloads in production.
+
 Splitting adds one deployment rule: chunk filenames are content-hashed, so a
-new deploy writes new ones, and a tab still holding the previous `app.js` will
+new deploy writes new ones, and a tab still holding the previous entry will
 ask for the chunk names that entry graph was built with. Keep the previous
 `dist/chunks/` files available for a support window after a deploy, or deploy
 immutably (each build to its own directory, with the old one still served). If a
@@ -723,7 +767,8 @@ Its optional argument is the **project** directory (its `dist/` is found for
 you), not the output directory.
 It serves per the resolved output mode: an SPA gets history-API fallback, hybrid
 serves the prerendered page first and the shell otherwise, and static gets clean
-URLs and a real `404.html` rather than the shell. It defaults to port 4000 so it
+URLs and a real `404.html` rather than the shell — a folder's own `404.html`
+first, so a miss under `/es/` gets `dist/es/404.html`. It defaults to port 4000 so it
 runs alongside `puzzle dev`.
 
 `puzzle upgrade` updates the CLI you are running, resolved from the executable's

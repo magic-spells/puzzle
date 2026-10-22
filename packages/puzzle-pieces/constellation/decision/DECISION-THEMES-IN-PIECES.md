@@ -30,6 +30,14 @@ notes:
       equal, undocumented). Tested in test/appearance.test.mjs (pre-paint then fresh-import boot in
       the same fake DOM). The picker's manifest `themes: [dim, warm, void]` makes `add piece
       appearance-picker` print `puzzle add theme dim warm void` (framework D171).
+  - kind: decision
+    text: >-
+      2026-10-21 (0.9.0): the palette list and the MODE axis here are superseded by
+      DECISION-SCHEMES-AND-STYLES — schemes default | cool | warm | void (dim.css renamed cool.css)
+      and styles dark | dim | mixed | light on data-theme (medium became dim; mixed is a real style:
+      light half + dark frame). Values now come from the Magic Spells Design System Figma grid. The
+      rest of this record (hand-written CSS, unanchored selectors, frozen token names, runtime
+      files) stands.
 ---
 
 # Themes live in pieces as hand-written CSS, four palettes × three modes

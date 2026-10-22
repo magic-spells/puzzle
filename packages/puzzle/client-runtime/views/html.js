@@ -92,7 +92,11 @@ export function patchHtml(oldVnode, newVnode) {
  */
 export function htmlTail(vnode) {
 	const nodes = vnode.nodes;
-	return nodes?.length ? nodes[nodes.length - 1] : vnode.el;
+	let tail = nodes?.length ? nodes[nodes.length - 1] : vnode.el;
+	const parent = vnode.el?.parentNode;
+	// Translation may wrap the original tail text in a new element.
+	while (tail?.parentNode && tail.parentNode !== parent) tail = tail.parentNode;
+	return tail?.parentNode === parent ? tail : vnode.el;
 }
 
 /**

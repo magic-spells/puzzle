@@ -112,6 +112,31 @@ func TestPreviewStaticServes404Page(t *testing.T) {
 	}
 }
 
+// TestPreviewStaticServesLocale404Page proves a miss under a locale prefix
+// (D177) answers with that locale's own dist/<locale>/404.html, at status 404,
+// while the locale's pages and every other miss behave as before.
+func TestPreviewStaticServesLocale404Page(t *testing.T) {
+	dist := writeDist(t, map[string]string{
+		"index.html":    `<html><body>HOME</body></html>`,
+		"404.html":      `<html><body>ROOT_404</body></html>`,
+		"es/index.html": `<html lang="es"><body>INICIO</body></html>`,
+		"es/404.html":   `<html lang="es"><body>ES_404</body></html>`,
+	})
+
+	for path, want := range map[string]string{"/es/nope": "ES_404", "/nope": "ROOT_404", "/ES/nope": "ROOT_404"} {
+		rec := get(t, dist, serve.ModeStatic, path)
+		if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("static %s = %d %q, want %s at 404", path, rec.Code, rec.Body.String(), want)
+		}
+	}
+	for _, path := range []string{"/es", "/es/"} {
+		rec := get(t, dist, serve.ModeStatic, path)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "INICIO") {
+			t.Errorf("static %s = %d %q, want the es home page", path, rec.Code, rec.Body.String())
+		}
+	}
+}
+
 func TestCheckDistErrors(t *testing.T) {
 	root := t.TempDir()
 	missing := filepath.Join(root, "dist")
@@ -139,11 +164,20 @@ func TestCheckDistErrors(t *testing.T) {
 // TestShapeWarning proves a dist/ whose shape disagrees with the configured mode
 // is called out (and, per the command's contract, still served per the config).
 func TestShapeWarning(t *testing.T) {
-	spaShaped := writeDist(t, map[string]string{"index.html": "x", "app.js": "x"})
 	staticShaped := writeDist(t, map[string]string{"index.html": "x", "_puzzle/index.js": "x"})
 
-	if got := shapeWarning(spaShaped, serve.ModeStatic); !strings.Contains(got, "app.js") {
-		t.Errorf("static config + SPA-shaped dist warning = %q", got)
+	for _, appName := range []string{"app.js", "app-ABCDEFG2.js"} {
+		t.Run(appName, func(t *testing.T) {
+			spaShaped := writeDist(t, map[string]string{"index.html": "x", appName: "x"})
+			if got := shapeWarning(spaShaped, serve.ModeStatic); !strings.Contains(got, "dist/"+appName) {
+				t.Errorf("static config + SPA-shaped dist warning = %q", got)
+			}
+			for _, mode := range []string{serve.ModeSPA, serve.ModeHybrid} {
+				if got := shapeWarning(spaShaped, mode); got != "" {
+					t.Errorf("matching %s shape warned: %q", mode, got)
+				}
+			}
+		})
 	}
 	if got := shapeWarning(staticShaped, serve.ModeSPA); !strings.Contains(got, "app.js") {
 		t.Errorf("SPA config + static-shaped dist warning = %q", got)
@@ -151,11 +185,12 @@ func TestShapeWarning(t *testing.T) {
 	if got := shapeWarning(staticShaped, serve.ModeHybrid); !strings.Contains(got, "hybrid") {
 		t.Errorf("hybrid config + static-shaped dist warning = %q", got)
 	}
-	if got := shapeWarning(spaShaped, serve.ModeSPA); got != "" {
-		t.Errorf("matching SPA shape warned: %q", got)
-	}
 	if got := shapeWarning(staticShaped, serve.ModeStatic); got != "" {
 		t.Errorf("matching static shape warned: %q", got)
+	}
+	lookalike := writeDist(t, map[string]string{"index.html": "x", "app-settings.js": "x"})
+	if got := shapeWarning(lookalike, serve.ModeSPA); got == "" {
+		t.Error("non-entry app-*.js hid the missing app entry")
 	}
 }
 

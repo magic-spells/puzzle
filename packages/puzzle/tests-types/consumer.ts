@@ -45,8 +45,16 @@ import type {
 	LazyView,
 	PuzzleViewConstructor,
 	PuzzleI18n,
+	PuzzleLocale,
+	LinkOptions,
 	LibraryFunctions,
 	DatePreset,
+	StaticPathsContext,
+	StaticPathsEntry,
+	StaticPathsFn,
+	NavigationResult,
+	RouteView,
+	RouteAgent,
 } from '@magic-spells/puzzle';
 import { adapter, PuzzleAdapterError } from '@magic-spells/puzzle/adapter';
 import type {
@@ -85,6 +93,9 @@ const renderedNull: string = displayValue(null);
 const renderedNamedValue: string = displayValue(0, 'count');
 // A list prints its items joined by `sep` (the attribute-value path).
 const renderedList: string = displayValue(['a', false, 'b'], 0, ' ');
+const viewFence: Promise<void> = new PuzzleView().renderTick();
+// @ts-expect-error renderTick has no options; app.idle owns the timeout surface
+new PuzzleView().renderTick({ timeout: 1 });
 const generatedSnippetNode = new ViewNode(SNIPPET_TAG, {
 	fits: 'row',
 	params: ['item'],
@@ -252,10 +263,40 @@ class TodoListView extends PuzzleView {
 	}
 
 	mounted(): void {
+		const { idle } = this.ctx;
+		const quiet: Promise<boolean> = idle({ timeout: 500 });
+		void quiet;
+		// @ts-expect-error the idle timeout is milliseconds
+		idle({ timeout: '500' });
+		const Model = this.ctx.store.modelFor('todo');
+		const primaryKey: string = Model.primaryKey();
+		const modelClass: typeof PuzzleModel = Model;
+		const defaultKey: string = PuzzleModel.primaryKey();
+		// @ts-expect-error modelFor takes a registry type name
+		this.ctx.store.modelFor(7);
+		// @ts-expect-error primaryKey returns the field name
+		const numericKey: number = Model.primaryKey();
+		void [primaryKey, modelClass, defaultKey, numericKey];
 		// router is on ctx; push/go/replace are path-shaped in all modes.
 		this.ctx.router.push('/todos');
 		this.ctx.router.replace('/todos?tab=2'); // v1.49, D83
 		this.ctx.router.go(-1);
+		// push/replace resolve a NavigationResult (D182), narrowed on `ok`.
+		void this.ctx.router.push('/about').then((result: NavigationResult) => {
+			if (result.ok) {
+				const landed: RouteSnapshot = result.route;
+				const from: string | undefined = result.redirectedFrom;
+				const catchAll: true | undefined = result.catchAll;
+				void catchAll;
+				void landed;
+				void from;
+			} else {
+				const reason: 'blocked' | 'superseded' | 'not-found' | 'error' = result.reason;
+				const error: unknown = result.error;
+				void reason;
+				void error;
+			}
+		});
 
 		// element is Element | Comment | null (the anchor Comment during async data()).
 		const node: Element | Comment | null = this.element;
@@ -309,7 +350,53 @@ const routes: Route[] = [
 		guard: requireAuth,
 		children: [{ path: 'edit', name: 'todo-edit', view: TodoListView, guard: requireAdmin }],
 	},
+	{
+		path: '/products',
+		view: TodoListView,
+		// D177: title and description may be translation references.
+		meta: { title: { t: 'products.title' }, description: { t: 'products.description' } },
+	},
+	{
+		path: '/files',
+		view: TodoListView,
+		// canonical and socialImage are URLs: strings only.
+		// @ts-expect-error a translation reference is not a canonical URL
+		meta: { canonical: { t: 'files.url' } },
+	},
 ];
+
+// D183: the top-level `agent` field hides (false) or names and describes a route.
+routes.push(
+	{ path: '/admin', view: TodoListView, agent: false, children: [
+		{ path: 'help', view: TodoListView, agent: { name: 'admin-help', about: 'Admin help' } },
+	] },
+	{ path: '/inbox', view: TodoListView, agent: { name: 'inbox' } },
+	// Extra keys pass through to router.views consumers.
+	{ path: '/reports', view: TodoListView, agent: { name: 'reports', about: 'Reports', states: ['weekly'] } }
+);
+// @ts-expect-error agent is false or an object with a string name
+routes.push({ path: '/bad-agent', view: TodoListView, agent: true });
+// @ts-expect-error an agent object needs a name
+routes.push({ path: '/no-name', view: TodoListView, agent: { about: 'x' } });
+
+function readViews(router: import('@magic-spells/puzzle').Router): void {
+	const views: readonly RouteView[] = router.views;
+	for (const v of views) {
+		const path: string = v.path;
+		const params: readonly string[] = v.params;
+		const name: string | undefined = v.name;
+		const title: string | { t: string } | undefined = v.title;
+		const agent: RouteAgent | undefined = v.agent;
+		const listed = agent !== false && agent !== undefined ? agent.name + (agent.about ?? '') : null;
+		const leaf: Route = v.chain[v.chain.length - 1];
+		void [path, params, name, title, listed, leaf, v.meta?.title];
+	}
+	// @ts-expect-error views is read-only
+	router.views = [];
+	// @ts-expect-error entries are frozen
+	views[0].path = '/x';
+}
+void readViews;
 
 // D163: lazy route views/layouts are explicit branded markers. A loader may
 // resolve to a class directly or to the module-namespace shape import() returns.
@@ -322,6 +409,22 @@ routes.push({ path: '/lazy', view: lazyClass, layout: lazyNamespace });
 // A bare loader never occupies a view position — lazy() is the explicit API.
 // @ts-expect-error a loader function is not a PuzzleView constructor or LazyView.
 routes.push({ path: '/bare-loader', view: async () => TodoListView });
+
+// D179: staticPaths lists a :param route's build-time pages — an array, a
+// (sync or async) function of the build facade, or a model name.
+const listPosts: StaticPathsFn = async ({ store, config, locale }: StaticPathsContext) => {
+	const entries: StaticPathsEntry[] = store.findMany('todo').map((todo) => ({ slug: String(todo.id) }));
+	void [config.routes, locale?.toUpperCase()];
+	return entries;
+};
+routes.push(
+	{ path: '/blog/:slug', view: TodoListView, staticPaths: listPosts },
+	{ path: '/tags/:tag', view: TodoListView, staticPaths: [{ tag: 'news' }, { tag: 7 }] },
+	{ path: '/notes/:id', view: TodoListView, staticPaths: () => [{ id: 'n1' }] },
+	{ path: '/todo/:id', view: TodoListView, staticPaths: 'todo' }
+);
+// @ts-expect-error a staticPaths value is a string or a number, not an object
+routes.push({ path: '/bad/:id', view: TodoListView, staticPaths: [{ id: { nested: true } }] });
 
 // The marker brand cannot be forged by a structural look-alike.
 // @ts-expect-error only lazy() produces LazyView.
@@ -411,6 +514,14 @@ const config: PuzzleAppConfig = {
 	},
 	beforeUnmount(app) {
 		void app.store.findMany('todo');
+		// D184: both observe forms return a stop function; flush() is core public.
+		const stopAll: () => void = app.store.observe('todo', () => {});
+		const stopOne: () => void = app.store.observe('todo', 7, async () => {});
+		stopAll();
+		stopOne();
+		app.store.flush();
+		// @ts-expect-error observe needs a callback
+		app.store.observe('todo', 7);
 	},
 	onError(error, info) {
 		const typedInfo: PuzzleErrorInfo = info;
@@ -725,7 +836,13 @@ class LocaleSwitcher extends PuzzleView {
 		const label: string = i18n ? i18n.t('cart.items', { count: 3 }) : '';
 		const welcome: string = i18n ? i18n.t('welcome', profile) : '';
 		void welcome;
-		const tags: readonly string[] = i18n?.locales ?? [];
+		const tags: readonly string[] = i18n?.locales.map((entry) => entry.locale) ?? [];
+		const switcher: readonly PuzzleLocale[] = i18n?.locales ?? [];
+		const first = switcher[0];
+		const parts: [string, string, string, boolean] | undefined = first
+			? [first.locale, first.label, first.href, first.active]
+			: undefined;
+		void parts;
 		return { label, tags, current: i18n?.locale, fallback: i18n?.defaultLocale };
 	}
 	choose(tag: string): Promise<void> | undefined {
@@ -754,6 +871,9 @@ void translatedTests;
 function libraryCalls(lib: LibraryFunctions, price: number, when: Date, tags: string[]): void {
 	const texts: string[] = [
 		lib.link('/about'),
+		// Locale prefix routing (D177): force a locale, or skip the prefix.
+		lib.link('/about', { locale: 'es' }),
+		lib.link('/files/cv.pdf', { locale: false }),
 		lib.t('cart.title'),
 		lib.t('cart.items', { count: tags.length }),
 		lib.t(404, null),
@@ -813,8 +933,12 @@ function libraryCalls(lib: LibraryFunctions, price: number, when: Date, tags: st
 	const roundedText: string = lib.round(1.5);
 	// @ts-expect-error json takes one argument.
 	lib.json({}, 2);
-	// @ts-expect-error link takes one argument.
+	// @ts-expect-error link's second argument is { locale }, not a path.
 	lib.link('/a', '/b');
+	// @ts-expect-error locale is a tag or false, never true.
+	lib.link('/a', { locale: true });
+	const linkOptions: LinkOptions = { locale: false };
+	void linkOptions;
 	// @ts-expect-error raw takes one argument.
 	lib.raw('<b>', true);
 	// @ts-expect-error timeago takes one argument.

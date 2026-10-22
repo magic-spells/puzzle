@@ -49,6 +49,17 @@ render time.
   fail-soft: nullish → `''`, otherwise `url(String(value))`.
 - Prerender and the static kernel wire the same registry, so prerendered hrefs
   match the client's.
+- **Locale prefixes** ([[DECISION-D177-LOCALE-URL-PREFIXES]]): under
+  `i18n.routing: 'prefix'` `link(path)` / `router.url(path)` add the active
+  locale's prefix. `link(path, { locale: 'es' })` encodes for that configured
+  tag (matched case-insensitively; an unconfigured one throws a `RangeError`);
+  `{ locale: false }` skips the prefix and keeps `routerBase` — for a file that
+  exists once. `linkLocale` reads the option; **`localeBase(routerBase, locale,
+  defaultLocale)`** composes the base, and all four encoders call it —
+  `Router.url`, the router's write side (its composed `#base`), the static stub
+  (`localizeRouterStub`) and the hybrid prerender's `url` shadow. A parity test
+  pins them. Without prefix routing `link` ships the one-argument form and the
+  options are not read.
 
 ## Alternatives
 

@@ -17,6 +17,7 @@ import { FormatterRegistry } from '../client-runtime/formatters.js';
 import { memoryRouter } from '../client-runtime/router/modes.js';
 import { HTML_TAG, ViewNode } from '../client-runtime/views/ViewNode.js';
 import { ViewManager } from '../client-runtime/views/viewManager.js';
+import { moveComponentSlot } from '../client-runtime/views/componentSlot.js';
 import RawHost from './fixtures/raw-html/RawHost.compiled.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
@@ -119,6 +120,61 @@ describe('live-HTML node — ViewManager contract', () => {
 
 		vm.render(h('div', {}, [html('<b>new</b>'), row(2)]));
 		expect(markup(el)).toBe('<div><b>new</b><span>2</span></div>');
+	});
+
+	it.each(['raw', 'newline_to_br'])('terminates a %s range move after translation wraps its last node', (kind) => {
+		const el = container();
+		const vm = new ViewManager(el);
+		const range = () => kind === 'raw' ? html('first <b>bold</b> last') : brText('first\nlast');
+		const row = (id) => h('i', { key: id }, [text(id)]);
+		vm.render(h('div', {}, [row('a'), range(), row('b'), row('c')]));
+		const parent = el.firstChild;
+		const vnode = vm.currentTree.children[1];
+		for (const node of vnode.nodes) {
+			if (node.nodeType !== Node.TEXT_NODE) continue;
+			const wrapper = document.createElement('font');
+			node.replaceWith(wrapper);
+			wrapper.append(node);
+		}
+		// Fail promptly on the buggy rotating-sibling loop instead of hanging the worker.
+		const insert = parent.insertBefore.bind(parent);
+		let moves = 0;
+		vi.spyOn(parent, 'insertBefore').mockImplementation((node, ref) => {
+			if (++moves > 20) throw new Error('range move did not terminate');
+			return insert(node, ref);
+		});
+		expect(() => vm.render(h('div', {}, [row('c'), range(), row('a'), row('b')]))).not.toThrow();
+		expect([...parent.querySelectorAll('i')].map((node) => node.textContent)).toEqual(['c', 'a', 'b']);
+		expect(parent.textContent).toBe(kind === 'raw' ? 'cfirst bold lastab' : 'cfirstlastab');
+		vm.clear();
+		expect(el.childNodes).toHaveLength(0);
+	});
+
+	it.each(['wrapped', 'removed', 'preceding'])('bounds the range mover when its supplied end is %s', (shape) => {
+		const el = container();
+		const vm = new ViewManager(el);
+		vm.render(h('div', {}, [h('i', {}, [text('before')]), html('first<br>last'), h('i', {}, [text('after')])]));
+		const parent = el.firstChild;
+		const vnode = vm.currentTree.children[1];
+		const end = vnode.nodes.at(-1);
+		if (shape === 'wrapped') {
+			const wrapper = document.createElement('span');
+			end.replaceWith(wrapper);
+			wrapper.append(end);
+		} else if (shape === 'removed') end.remove();
+		else parent.insertBefore(end, vnode.el);
+		const siblings = [...parent.querySelectorAll('i')];
+		const insert = parent.insertBefore.bind(parent);
+		let moves = 0;
+		vi.spyOn(parent, 'insertBefore').mockImplementation((node, ref) => {
+			if (++moves > 20) throw new Error('range move did not terminate');
+			return insert(node, ref);
+		});
+		expect(() => moveComponentSlot(parent, vnode, null, end)).not.toThrow();
+		expect(moves).toBe(1);
+		expect(parent.lastChild).toBe(vnode.el);
+		expect([...parent.querySelectorAll('i')]).toEqual(siblings);
+		vm.clear();
 	});
 
 	it('with the sanitizer compiled out, newline_to_br still renders and raw renders nothing', () => {

@@ -1,7 +1,7 @@
 {
   "name": "@magic-spells/puzzle-pieces",
-  "version": "0.8.0",
-  "description": "UI component registry for the Puzzle framework: copy-in pieces fetched by `puzzle add piece`, plus importable design tokens — four palettes × three modes as CSS, with the appearance helper and pre-paint snippet.",
+  "version": "0.9.0",
+  "description": "UI component registry for the Puzzle framework: copy-in pieces fetched by `puzzle add piece`, plus importable design tokens — four palettes × four styles as CSS, with the appearance helper and pre-paint snippet.",
   "license": "MIT",
   "type": "module",
   "files": [
@@ -9,7 +9,7 @@
   ],
   "exports": {
     "./themes/default.css": "./registry/theme/pieces.css",
-    "./themes/dim.css": "./registry/theme/dim.css",
+    "./themes/cool.css": "./registry/theme/cool.css",
     "./themes/warm.css": "./registry/theme/warm.css",
     "./themes/void.css": "./registry/theme/void.css",
     "./appearance": "./registry/theme/appearance.js",

@@ -15,6 +15,7 @@ connections:
   - FILE-BUILD-WATCH
   - FILE-BUILD-PRERENDER
   - DECISION-D160-SPA-CODE-SPLITTING
+  - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
 verified_at: '2026-08-24T21:11:50.859Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
@@ -27,27 +28,36 @@ orchestration → esbuild with [[COMPONENT-ESBUILD-PLUGIN]] → section parsing
 
 ## Production build
 
+
 1. Runtime preflight, sweep stale transient dirs, load config, and validate public assets
    before touching existing output. Generated names (`app.js`, its map, `styles.css`, and
    `chunks/` when splitting, [[DECISION-D160-SPA-CODE-SPLITTING]]) are reserved
    case-insensitively at the public ROOT only — nested files with those names copy fine
    (`TestBuildAllowsNestedReservedNames`).
-2. Run the usage scan once and hand it to every pass (`passContext`).
+2. Run the usage scan once and hand it to every pass (`passContext`). It walks the
+   project, then the `.pzl` files of installed packages that declare
+   `@magic-spells/puzzle` ([[DECISION-D89-FEATURE-USAGE-TREESHAKE]]).
 3. Bundle the entry (`app/app.ts` or `app/app.js`), compiling each reachable `.pzl`
    through the build-scoped compile cache
    ([[DECISION-D152-BUILD-SCOPED-COMPILE-CACHE]]); `<script>` bytes stay as authored
    (TypeScript is transpile-only). Tailwind runs concurrently; browser errors are
-   reported before Tailwind errors.
-4. Compose `styles.css` (Tailwind output, then collected component styles, deterministic
-   order).
+   reported before Tailwind errors. Each pass ends with the per-file usage check: a
+   compiled `.pzl` the scan never read that needs a compiled-out feature or function
+   fails the pass, before anything is swapped.
+4. Compose the global stylesheet: Tailwind output, then collected component styles in
+   deterministic order. Production hashing names it `styles-<ContentHash>.css`;
+   otherwise it is `styles.css`.
 5. Copy public assets and write the bundle (split into `chunks/` when `build.splitting`
    is on) into staging under `.puzzle/tmp/` ([[DECISION-D153-PUZZLE-SCRATCH-DIR]]).
-6. For `hybrid`/`static` output, bundle for Node and run [[COMPONENT-SSG]] into staging.
-7. Atomically replace `dist/` (the previous output is renamed into `.puzzle/tmp/`, then
+6. In production, [[FILE-BUILD-SHELL]] follows emitted entry/CSS names and inserts
+   the split entry's static-import modulepreloads into the copied shell. Missing hashed
+   entry references or closing head fail before the swap; public files retain their names.
+7. For `hybrid`/`static` output, bundle for Node and run [[COMPONENT-SSG]] into staging.
+8. Atomically replace `dist/` (the previous output is renamed into `.puzzle/tmp/`, then
    removed). A failed build leaves the last good output intact.
 
-Production output is minified ES2022 ESM with linked source maps and console calls
-removed unless config opts out.
+Production output is minified ES2022 ESM with console calls removed unless config opts
+out. Linked production source maps are opt-in.
 
 ## Development build
 

@@ -47,6 +47,7 @@ export { installFixtures } from '../fixtures/index.js';
  * @property {Store} store
  * @property {Router | InertRouter} router
  * @property {FormatterRegistry} formatters
+ * @property {(options?: { timeout?: number }) => Promise<boolean>} idle
  * @property {I18nService} [i18n]
  */
 
@@ -232,10 +233,18 @@ function makeContext(options) {
 	const formatters =
 		supplied.formatters ??
 		makeFormatterRegistry(options.formatters ?? {}, (path) => router.url(path));
+	// ctx.idle (D189): with no app to observe, it drives work to a fixed point.
+	const idle = supplied.idle ?? (() => settled().then(() => true));
 	/** @type {TestContext} */
-	const ctx = { store, router, formatters };
+	const ctx = { store, router, formatters, idle };
 	// `i18n: { locale, strings }` (D175): a translated view renders with no fetch.
-	const i18n = supplied.i18n ?? (options.i18n ? createTestI18n(options.i18n) : null);
+	const i18n =
+		supplied.i18n ??
+		(options.i18n
+			? createTestI18n(options.i18n, () =>
+					router.current?.path ? router.url(router.current.path) : ''
+				)
+			: null);
 	if (i18n) {
 		ctx.i18n = i18n;
 		installTranslate(formatters, i18n);
@@ -259,9 +268,12 @@ function testI18nOptions({ locale = 'en', strings = {} } = {}) {
 	};
 }
 
-/** @param {TestI18nOptions} options */
-function createTestI18n(options) {
-	return createI18n(testI18nOptions(options));
+/**
+ * @param {TestI18nOptions} options
+ * @param {() => string} page the current page, for `i18n.locales[].href` (D177)
+ */
+function createTestI18n(options, page) {
+	return createI18n({ ...testI18nOptions(options), page });
 }
 
 /**

@@ -74,15 +74,24 @@ dynamic `import()` is inlined into it — a heavy on-demand dependency (mermaid,
 chart library, an editor) is paid for on every page load. Set
 `build: { splitting: true }` and each dynamic `import()` becomes a lazy chunk
 under `dist/chunks/`, fetched by the browser only when that code path runs.
-The entry keeps its stable `app.js` name, so the shell HTML is unchanged, and
-esbuild's ESM splitting has no chunk-loader runtime, so total bytes do not grow.
-Static imports are untouched — an app with no dynamic `import()` builds to the
-same single file as before. Notes:
+Production split builds emit `app-<hash>.js`, `styles-<hash>.css`, and
+`app-<hash>.css` when the entry imports CSS. The build rewrites the shell's
+references and adds `modulepreload` links for the entry's transitive
+static-import chunks; lazy chunks stay on demand. esbuild's ESM splitting has
+no chunk-loader runtime, so it adds no runtime bytes. Notes:
 
+- **`build.hashNames` defaults to `build.splitting`.** Set
+  `build: { splitting: true, hashNames: false }` for fixed names with preloads,
+  or `build: { hashNames: true }` to hash without splitting. Development builds
+  keep fixed names and add no preloads. `public/` files are never renamed.
+- A hashed SPA/hybrid build needs a shell reference to `/app.js`, `./app.js` or
+  `app.js`. A shell with no entry reference fails the build and points to
+  `build.hashNames: false`; choose that when another page needs a fixed URL.
 - **`chunks/` becomes a reserved output name** while the flag is on: a
   root-level `public/chunks` asset fails the build (as `app.js` already does).
-- `output: 'static'` ignores the flag — those pages get their own already-split
-  per-page bundles and no `app.js` ships. `hybrid` splits like the SPA.
+- `output: 'static'` always splits its own per-page bundles and ships no app
+  entry. Its hashing default still follows the configured `build.splitting`.
+  `hybrid` splits like the SPA.
 - The build's size banner prints a **largest-dependencies** breakdown from
   esbuild's metafile and, in production, flags any single dependency over
   200 KB — the signal to move it behind a dynamic `import()`. Your own code and
@@ -135,7 +144,8 @@ grammar off inside — literal braces compile as-is, HTML still parses; no
 nesting, and attribute-value use is a compile error; a single literal brace
 anywhere, attribute values included, is `\{` / `\}` — e.g. `pattern="[0-9]\{5\}"`),
 `@event={ handler }` with modifiers, component imports used as capitalized tags
-(dotted family members too — `<Frame.Wrapper>`). A range loop binds its
+(dotted family members too — `<Frame.Wrapper>`), and `<Component>` for runtime
+selection from imported constructors (puzzle ≥ 0.9.0; below). A range loop binds its
 counter after the range: `{#for 1...n, i}`. HTML void elements (`<br>`,
 `<img …>`, `<input …>`) need no `/>`, and a closer such as `</br>` is a
 compile error.
@@ -242,6 +252,15 @@ sanitized** — there is no unsanitized escape hatch, by design:
   uses `raw` (the sanitizer), ~0.4 KB in one that only uses `newline_to_br`,
   nothing otherwise.
 
+**Dynamic URLs are guarded** (puzzle ≥ 0.9.0). A brace or mixed `href`,
+`src`, `action`, `srcset` (and the other URL attributes) drops a
+`javascript:` or `vbscript:` value, and `data:` outside image positions: the
+attribute is omitted, and development warns. Static attributes are trusted,
+and a literal head that fixes the scheme (`href="/users/{ id }"`) skips the
+check. A dynamic `srcdoc` on `<iframe>` is a compile error unless every
+`sandbox` attribute on that iframe is static and none allows scripts
+(`sandbox=""`); for user HTML, prefer the sanitized `raw` function.
+
 Rules that bite:
 
 - **Text is text.** Template text is NOT HTML-entity decoded and interpolations
@@ -314,7 +333,8 @@ Rules that bite:
   `address` is missing instead of throwing (`?.` is legal but unnecessary),
   and a method call on a missing value prints nothing too (dev warning). A
   bare call names the library, so a data field is never callable; a bare read
-  names `data()`. A missing collection or a non-list loops zero times (dev
+  names `data()`, except the `<Component>` `is` attribute may read script module
+  bindings directly. A missing collection or a non-list loops zero times (dev
   warns on a non-list; range bounds truncate to whole numbers), so a string's
   characters are `{#for c in text.split('')}`. `==` keeps its
   JavaScript meaning; `x == null` is the absence test. Object literals work as
@@ -378,7 +398,7 @@ Rules that bite:
 - **Component families are dotted tags + a barrel** (puzzle ≥ 0.7.0). A
   capitalized tag must be `Ident('.'Ident)*` — `<Card>` or `<Frame.Wrapper>`;
   a dash, a colon, or an empty segment is a compile error, and a marker name
-  (`Children`/`Slot`/`Snippet`/`Portal`) cannot be a family root. A dotted tag
+  (`Children`/`Slot`/`Snippet`/`Portal`/`Component`) cannot be a family root. A dotted tag
   is a plain member expression resolved against module scope, so group the
   family in a directory with a plain JS barrel — `.pzl` stays ONE class per
   file, and there is no registry or compiler magic:
@@ -399,6 +419,58 @@ Rules that bite:
   ```
 
   `puzzle generate component Frame --family Wrapper,Content` scaffolds it all.
+
+- **`<Component>` chooses an imported constructor** (puzzle ≥ 0.9.0). Every
+  possible component must already be imported by this file. There is no lazy
+  manifest, global registry or runtime string-to-module lookup.
+
+  ```html
+  <puzzle-view>
+    <div>
+      <Component is={ current } title={ title } @close={ close }>
+        <p>Default content for the selected card</p>
+      </Component>
+
+      <Component is={ cards[embed.type] } {...embed.props}/>
+    </div>
+  </puzzle-view>
+
+  <script>
+  import { PuzzleView } from '@magic-spells/puzzle';
+  import TaskCard from './TaskCard.pzl';
+  import BacktestCard from './BacktestCard.pzl';
+  const cards = { task: TaskCard, backtest: BacktestCard };
+
+  export default class EmbedHost extends PuzzleView {
+    data(params, props) { return props; }
+    events = { close: () => {} };
+  }
+  </script>
+  ```
+
+  `current` may be a constructor returned by `data()`; `is={ TaskCard }`
+  also reads the import directly. `is` forwards children as the selected
+  component's normal default slot; `null`/`undefined` renders nothing.
+  `is={ cards[embed.type] }` selects through an ordinary script map. A missing
+  map entry evaluates to `undefined`, so it renders nothing too.
+
+  Only `is` may read imports and simple script declarations
+  directly (including later `const`/`let`/`var` declarators). Destructured
+  bindings need a simple module alias or exposure through `data()`. Template
+  loop/snippet/arrow bindings win, then module bindings, then data fields.
+  Other props, including `name` and `from`, spread operands and child
+  expressions keep ordinary data scope. `{...props}` merges props in written
+  attribute order; later attrs or spreads win. This is attribute syntax, not
+  spread inside expressions.
+  Use a variable or parenthesized object literal for its operand; the
+  leading-object-literal restriction still applies.
+  Reactive props and callback props work as on a normal component; `bind:`
+  remains unsupported. A constructor swap destroys the old instance and its
+  subscriptions/listeners/refs before mounting with current props; a stable
+  constructor retains its instance. Both prerender modes emit selected HTML
+  or nothing. Missing or non-expression `is` is a compile error; a spread
+  cannot supply it. `Component` is a reserved tag/family root: rename a
+  user `Component.pzl` or tag import named `Component`.
 
 - **`<Portal>` teleports overlays.** `<Portal>…</Portal>` (paired-only,
   attribute-free) mounts its children into a framework-created outlet beside
@@ -446,6 +518,10 @@ Rules that bite:
   unmount — never hand-roll `document.addEventListener` for dismissal again.
   Works on any event: `@click:outside`, `@focusin:outside` (focus left the
   widget).
+- **`passive` and `capture`** (puzzle ≥ 0.9.0) pass native listener options:
+  `@wheel:passive`, `@touchmove:passive`, `@click:capture`. They stack with
+  the other modifiers (`@pointerdown:outside:passive`). `passive` with
+  `prevent` is a compile error: a passive listener cannot cancel.
 - On COMPONENT tags, `@save={ savePost }` is NOT a DOM event — it's a **callback
   prop**. The child invokes it as `this.props.save(...)`. There is no `$emit`
   and no event bubbling between components; child→parent communication is
@@ -565,6 +641,26 @@ Form controls bind themselves — write NO input handler:
 - Navigation loads before commit: URL, title/head, history, mounted tree, and
   scroll save land atomically together — a failed or superseded navigation
   commits nothing.
+- **`push()`/`replace()` resolve a result and never reject** (puzzle ≥ 0.9.0).
+  `const r = await router.push('/account')`: `r.ok` is true when it committed,
+  with `r.route` the committed snapshot, `r.redirectedFrom` the path you asked
+  for when a guard redirected, and `r.catchAll` when the `*` route caught it.
+  Otherwise `r.reason` is `'blocked'` (a guard returned `false`),
+  `'superseded'` (a later navigation won), `'not-found'` (no route, no
+  catch-all) or `'error'` (`r.error`, also sent to `onError`). Read the result
+  instead of polling `router.current`. A push to the current path is a no-op
+  that resolves ok; a push to the path already loading returns that
+  navigation's promise. `go()`/`back()`/`forward()` return nothing useful.
+- **`router.views` and the `agent` route field** (puzzle ≥ 0.9.0).
+  `router.views` lists every leaf route (catch-all excluded) as frozen
+  entries with `path`, `params`, `name`, `meta`, `title`, `agent` and `chain`:
+  the page map a tool or agent reads. The top-level `agent` route field
+  describes a route to those readers: `agent: false` hides the route and its
+  children, `agent: { name: 'admin-help', about: 'How to use admin' }` names
+  it, and the nearest value from the leaf up wins. The router and the
+  prerender never act on it, so a hidden route still navigates and
+  prerenders. Development throws on an invalid value and, once any route sets
+  `agent`, warns about routes that set neither `false` nor a `name`.
 - Write template hrefs **path-shaped through the built-in `link` function**:
   `href="{ link('/todos/' + t.id) }"`. It emits the mode-appropriate href
   (plain path in path mode, base-prefixed under `routerBase`, `#/...` in
@@ -687,6 +783,13 @@ Views reach the store as `this.ctx.store`:
   GET/POST/PUT/DELETE transports. Override only the verbs your API changes, or
   omit `endpoint` for a fully custom adapter. `store.request()` remains the
   endpoint-prefixed JSON escape hatch.
+- Watch from outside a view (puzzle ≥ 0.9.0): `store.observe('task', fn)`
+  fires when any task is created, updated or removed, and
+  `store.observe('task', id, fn)` for one record (even before it exists).
+  `fn()` takes no arguments, runs at most once per batched flush, and never
+  fetches. Both return `stop()`; call it on teardown.
+- `store.modelFor(type)` returns the registered model class (`PuzzleModel`
+  for an unknown type), and `Model.primaryKey()` names its primary field.
 
 ### Server data: one rule
 
@@ -835,6 +938,23 @@ The reactivity contract — the three methods are not interchangeable:
 Persistence: give the app config a `storage` (e.g. localStorage-backed); the
 store hydrates at startup and persists snapshots after changes, fail-soft.
 
+## Waiting for renders and for quiet (puzzle ≥ 0.9.0)
+
+Store flushes and view renders land on the next frame (a timer in a hidden
+tab). Two awaits observe that work; neither forces it:
+
+- `await this.renderTick()` in a view resolves once every scheduled store flush and
+  view render has landed, including the renders those schedule. Use it after
+  `setData()` before measuring `this.refs`. It does not wait for async
+  `data()`, fetches or navigation.
+- `await app.idle()` (or `this.ctx.idle()` from any view or component)
+  resolves `true` once two consecutive frames find no mount, navigation,
+  store flush, view render, async `data()`, locale load or tracked fetch in
+  flight, and `false` when the timeout (`app.idle({ timeout: 5000 })`,
+  default 10000 ms) runs out. It never rejects. It cannot see your own
+  timers, animations or an unawaited `save()`. In tests prefer `settled()`,
+  which also drives the work.
+
 ## Testing (`@magic-spells/puzzle/testing`)
 
 Puzzle ships its own test utilities — do NOT hand-roll a harness, and do not
@@ -964,18 +1084,23 @@ Working example: `examples/kanban-morph` in the framework repo.
 ## Prerendered output — THE RULES (bugs happen when these are missed)
 
 Two output modes, chosen in puzzle.config.js or by flag. Both emit
-`dist/<path>/index.html` per static route + `styles.css`; top-level `*` renders
-to `dist/404.html`; the route's `meta.title` is injected via a leaf→root walk.
+`dist/<path>/index.html` per static route + `styles.css` (or
+`styles-<hash>.css` with `build.hashNames` on); top-level `*` renders to
+`dist/404.html`; the route's `meta.title` is injected via a leaf→root walk.
 
 - **`output: 'static'`** / `puzzle build --static` — a TRUE static site. No
   router, no SPA, no `app.js` in `dist/`. Each page ships a small module
-  (`/_puzzle/<slug>.js`) that mounts only that page's components over the
-  prerendered markup, so `@event` handlers and local state work; navigation is
-  plain `<a href="/path/">` page loads. Pick this for docs/marketing/blogs.
+  (`/_puzzle/<slug>.js`, or `/_puzzle/<slug>-<hash>.js` with hashing on) that mounts
+  only that page's components over the prerendered markup, so `@event` handlers
+  and local state work; navigation is
+  plain `<a href="/path/">` page loads. Every production page preloads its shared
+  `/_puzzle/chunks/`, including with fixed names. With no `splitting` or
+  `hashNames` key, names stay fixed. Pick this for docs/marketing/blogs.
 - **`output: 'hybrid'`** / `puzzle build --hybrid` — prerendered first paint,
   then the full SPA bundle takes over on load and re-renders (not true
   DOM-adoption hydration); all later navigation is client-side (transitions,
-  morphs work). Pick this for apps that want SEO'd entry pages.
+  morphs work). Entry/CSS names and preloads follow the SPA rules above. Pick
+  this for apps that want SEO'd entry pages.
 
 `puzzle dev` on a static-mode project serves the REAL static output (clean
 URLs, full page loads, real 404s, prerender on every rebuild); hybrid projects
@@ -1035,17 +1160,20 @@ production-host semantics for any mode (SPA deep-link fallback, static real
 ## Styling
 
 Tailwind v4 is the supported pipeline (`styles: { use: ['tailwindcss'] }` — the
-CLI folds Tailwind output + collected `<style>` blocks into `dist/styles.css`;
+CLI folds Tailwind output + collected `<style>` blocks into `dist/styles.css`
+or `dist/styles-<hash>.css` when production hashing is on;
 wire it with `puzzle add tailwind`). For puzzle-pieces apps, import the theme after
 `@import "tailwindcss"` — `@import "@magic-spells/puzzle-pieces/themes/default.css"`
 (or the copied `app/styles/pieces.css`) plus any palette you offer
-(`/themes/dim.css`, `/themes/warm.css`, `/themes/void.css`) — and style ONLY via
+(`/themes/cool.css`, `/themes/warm.css`, `/themes/void.css`) — and style ONLY via
 its semantic tokens (`bg-surface`, `text-ink`, `bg-brand`, `border-border`,
 shell roles `bg-bar` / `bg-rail` / `bg-surface-panel`…). Two attributes on
-`<html>` drive appearance: `data-scheme` is the palette (`dim | warm | void`;
-absent = default) and `data-theme` is the mode (`light | medium | dark`; absent
-follows the OS — medium is "soft dark"). Tokens are `light-dark()` pairs keyed
-on `color-scheme`, so the same markup is right in every scheme × mode; put both
+`<html>` drive appearance: `data-scheme` is the palette (`cool | warm | void`;
+absent = default) and `data-theme` is the style (`dark | dim | mixed | light`;
+absent follows the OS — dim is the softer dark, mixed a dark sidebar around a
+light panel, so anything on the frame uses the `bar-*` / `rail-*` roles). Tokens
+are `light-dark()` pairs keyed on `color-scheme`, so the same markup is right in
+every scheme × style; put both
 attributes on any element to scope a subtree. Copy a palette in with
 `puzzle add theme <name…>` (no name lists them with this app's install state);
 the default lands as `app/styles/pieces.css`, every other as

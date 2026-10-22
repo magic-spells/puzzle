@@ -111,6 +111,28 @@ type staticPage struct {
 	// exist and the caller must supply the previous render's copy. Always false in
 	// a one-shot build, which never passes a route filter.
 	Reused bool `json:"reused"`
+	// Locale is the page's locale under prefix routing (D177), "" otherwise. The
+	// prerender writes one page per locale per route, and all of a route's pages
+	// share its Entry slug — one module serves every language — so the entry
+	// generators take the first page per slug (uniqueEntryPages).
+	Locale string `json:"locale,omitempty"`
+	// Pattern is set on a page a `staticPaths` route generated (D179): the
+	// route's full path ("/blog/:slug"), while Path is the page's own
+	// ("/blog/cookies"). Every page of the route shares its Entry and its
+	// pattern-shaped Route; the page's path and params ride in its
+	// data-puzzle-static-route island, which the entry merges into Route.
+	Pattern string `json:"pattern,omitempty"`
+}
+
+// routeKey is the route a written page belongs to: its pattern for a page a
+// `staticPaths` route generated (D179), else its path. It is the unit the dev
+// builder's route filter (D155) names — the prerender matches `only` against
+// route paths, never against generated page paths.
+func (p staticPage) routeKey() string {
+	if p.Pattern != "" {
+		return p.Pattern
+	}
+	return p.Path
 }
 
 // staticModules names the app-relative source paths (the codegen __pzlModule
@@ -155,7 +177,7 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 	// 1. Node prerender pass in mode 'static': the JS side renders each static
 	//    route, captures its store payload into the page's data island, strips the
 	//    app.js tag, and returns the extended summary behind the sentinel.
-	stdin, err := staticPrerenderStdin(absRoot, appEntry, adapterModule)
+	stdin, err := staticPrerenderStdin(absRoot, appEntry, adapterModule, cfg.Site)
 	if err != nil {
 		return err
 	}
@@ -185,24 +207,25 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 		}
 	}
 
-	// 2. Generate one mountStatic entry file per written page.
+	// 2. Generate one mountStatic entry file per entry slug (one per written page
+	//    unless prefix routing repeats a route's slug across locales).
 	entriesDir := filepath.Join(staging, prerenderDir, "entries")
 	if err := os.MkdirAll(entriesDir, 0o755); err != nil {
 		return fmt.Errorf("puzzle build --static: creating entry dir: %w", err)
 	}
+	pages, err := uniqueEntryPages(summary.Written)
+	if err != nil {
+		return err
+	}
 	var entryFiles []string
-	for _, page := range summary.Written {
-		slug, err := slugFromEntry(page.Entry)
+	for _, page := range pages {
+		src, err := staticEntrySource(absRoot, appEntry, page.staticPage, summary, modelsModule, formattersModule, adapterModule)
 		if err != nil {
 			return err
 		}
-		src, err := staticEntrySource(absRoot, appEntry, page, summary, modelsModule, formattersModule, adapterModule)
-		if err != nil {
-			return err
-		}
-		file := filepath.Join(entriesDir, slug+".js")
+		file := filepath.Join(entriesDir, page.slug+".js")
 		if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
-			return fmt.Errorf("puzzle build --static: writing entry %s: %w", slug, err)
+			return fmt.Errorf("puzzle build --static: writing entry %s: %w", page.slug, err)
 		}
 		entryFiles = append(entryFiles, file)
 	}
@@ -227,10 +250,16 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 	//    render (no static routes).
 	if len(entryFiles) > 0 {
 		endPages := prof.phase("per-page bundles")
-		pagesErr := bundleStaticPages(absRoot, entryFiles, filepath.Join(staging, staticPagesDir), cfg, dev, pc)
+		metafile, pagesErr := bundleStaticPages(absRoot, entryFiles, filepath.Join(staging, staticPagesDir), cfg, dev, pc)
 		endPages()
 		if pagesErr != nil {
 			return pagesErr
+		}
+
+		if !dev {
+			if err := rewriteStaticPages(staging, metafile, summary.Written); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -246,6 +275,38 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 	}
 
 	printStaticSummary(summary, len(entryFiles))
+	return nil
+}
+
+func rewriteStaticPages(staging, metafile string, written []staticPage) error {
+	outputs, err := bundleOutputs(metafile, staging, staging)
+	if err != nil {
+		return err
+	}
+	entries := make(map[string]string)
+	for name, output := range outputs {
+		if output.EntryPoint != "" && filepath.Ext(name) == ".js" {
+			entries[output.EntryPoint] = name
+		}
+	}
+	for _, page := range written {
+		entry := filepath.ToSlash(filepath.Join(prerenderDir, "entries", filepath.Base(page.Entry)))
+		output, ok := entries[entry]
+		if !ok {
+			return fmt.Errorf("puzzle build --static: per-page bundle has no output for %s", page.Entry)
+		}
+		html, err := os.ReadFile(page.File)
+		if err != nil {
+			return fmt.Errorf("puzzle build --static: reading page %s: %w", page.File, err)
+		}
+		rewritten, err := rewriteStaticPage(string(html), page.Entry, output, staticImportClosure(outputs, output))
+		if err != nil {
+			return fmt.Errorf("puzzle build --static: rewriting page %s: %w", page.File, err)
+		}
+		if err := os.WriteFile(page.File, []byte(rewritten), 0o644); err != nil {
+			return fmt.Errorf("puzzle build --static: writing page %s: %w", page.File, err)
+		}
+	}
 	return nil
 }
 
@@ -272,10 +333,17 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 // source change would throw that context's cache away, which is the whole thing
 // being bought. A one-shot build passes three arguments and renders everything,
 // so this line is inert there.
-func staticPrerenderStdin(absRoot, appEntry, adapterModule string) (string, error) {
+//
+// site is the config's `site` origin (D177), passed as prerenderToDir's `site`
+// option for hreflang alternates; "" adds nothing (see prerenderSiteOption).
+func staticPrerenderStdin(absRoot, appEntry, adapterModule, site string) (string, error) {
 	entry, err := json.Marshal(filepath.ToSlash(appEntry))
 	if err != nil {
 		return "", fmt.Errorf("encoding prerender entry path: %w", err)
+	}
+	siteOption, err := prerenderSiteOption(site)
+	if err != nil {
+		return "", err
 	}
 	adapterImport, adapterOption := "", ""
 	if adapterModule != "" {
@@ -291,12 +359,29 @@ func staticPrerenderStdin(absRoot, appEntry, adapterModule string) (string, erro
 			"%s"+
 			"import { prerenderToDir } from '@magic-spells/puzzle/ssg';\n"+
 			"const only = process.argv[4] ? JSON.parse(process.argv[4]) : undefined;\n"+
-			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3], mode: 'static', only%s });\n"+
+			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3], mode: 'static', only%s%s });\n"+
 			// Same forced exit as the hybrid entry: created() may leave a live
 			// handle, and the write callback keeps the payload from truncating.
 			"process.stdout.write('\\n%s' + JSON.stringify(summary), () => process.exit(0));\n",
-		string(entry), adapterImport, adapterOption, prerenderSentinel,
+		string(entry), adapterImport, adapterOption, siteOption, prerenderSentinel,
 	), nil
+}
+
+// prerenderSiteOption renders the config's `site` origin (D177) as an extra
+// prerenderToDir option, `, site: "https://example.com"`, or "" when unset so
+// the generated entry is byte-identical without it. It rides in the entry
+// source rather than the i18n manifest because only the build needs it — the
+// manifest also ships in every browser bundle. Config is loaded once per dev
+// session, so it cannot go stale in the dev builder's persistent context.
+func prerenderSiteOption(site string) (string, error) {
+	if site == "" {
+		return "", nil
+	}
+	enc, err := json.Marshal(site)
+	if err != nil {
+		return "", fmt.Errorf("encoding site: %w", err)
+	}
+	return ", site: " + string(enc), nil
 }
 
 // slugFromEntry extracts the page slug from an "_puzzle/<slug>.js" entry path
@@ -311,6 +396,57 @@ func slugFromEntry(entry string) (string, error) {
 		return "", fmt.Errorf("puzzle build --static: prerender returned a malformed entry path %q", entry)
 	}
 	return e, nil
+}
+
+// entryPage is a written page paired with its entry slug.
+type entryPage struct {
+	staticPage
+	slug string
+}
+
+// uniqueEntryPages returns the written pages that each need an entry module:
+// the first page per slug, in summary order. Without prefix routing every slug
+// is already unique, so this is the summary itself; with it (D177) a route's
+// locale pages repeat one slug and share one module. Two pages that share a
+// slug must name the same modules — one entry cannot import two chains — so a
+// mismatch is a contract violation between the Go and JS sides and an error.
+func uniqueEntryPages(written []staticPage) ([]entryPage, error) {
+	out := make([]entryPage, 0, len(written))
+	first := make(map[string]int, len(written))
+	for _, page := range written {
+		slug, err := slugFromEntry(page.Entry)
+		if err != nil {
+			return nil, err
+		}
+		if i, ok := first[slug]; ok {
+			if !sameModules(out[i].Modules, page.Modules) {
+				return nil, fmt.Errorf(
+					"puzzle build --static: pages %q and %q share the entry %s but name different modules",
+					out[i].Path, page.Path, page.Entry,
+				)
+			}
+			continue
+		}
+		first[slug] = len(out)
+		out = append(out, entryPage{staticPage: page, slug: slug})
+	}
+	return out, nil
+}
+
+// sameModules reports whether two pages name the same view chain and layout.
+func sameModules(a, b staticModules) bool {
+	if len(a.Views) != len(b.Views) || (a.Layout == nil) != (b.Layout == nil) {
+		return false
+	}
+	if a.Layout != nil && *a.Layout != *b.Layout {
+		return false
+	}
+	for i := range a.Views {
+		if a.Views[i] != b.Views[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // staticEntrySource builds the mountStatic entry module for one page. Import
@@ -377,6 +513,14 @@ func staticEntrySource(absRoot, appEntry string, page staticPage, summary static
 	routeJSON := "null"
 	if len(page.Route) > 0 {
 		routeJSON = string(page.Route)
+	}
+	// A route whose pages `staticPaths` generated (D179) shares this one module
+	// across all of them, so the route JSON is the pattern's; each page's own
+	// path and params come from its island. Fixed routes keep the plain literal,
+	// so their entries are byte-identical to before.
+	if page.Pattern != "" {
+		routeJSON = "Object.assign(" + routeJSON +
+			", JSON.parse(document.querySelector('script[data-puzzle-static-route]').textContent))"
 	}
 	apiURLJSON := "null"
 	if len(summary.APIURL) > 0 {
@@ -518,11 +662,12 @@ func staticPagesSourcemap(cfg config.Config, dev bool) api.SourceMap {
 
 // bundleStaticPages runs the browser-platform, Splitting esbuild pass over the
 // generated per-page entries into outdir (staging/_puzzle). Target/minify/define
-// and the dropConsole policy match the main app.js pass exactly; EntryNames is
-// the bare slug so the emitted /_puzzle/<slug>.js matches the URLs the shell
-// surgery injected, and shared code splits into _puzzle/chunks/. The CSS this
-// fresh plugin collects is discarded — styles.css was composed by the main pass.
-func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg config.Config, dev bool, pc *passContext) error {
+// and the dropConsole policy match the main app.js pass exactly. EntryNames is
+// the slug, hashed in production when build.hashNames is on; the production
+// page rewrite resolves the injected URLs through the returned metafile. Shared
+// code splits into _puzzle/chunks/. The CSS this fresh plugin collects is
+// discarded — the main pass already composed the stylesheet.
+func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg config.Config, dev bool, pc *passContext) (string, error) {
 	result := api.Build(staticPagesBundleOptions(absRoot, entryFiles, outdir, cfg, dev, pc.plugin(absRoot)))
 	if len(result.Errors) > 0 {
 		lines := api.FormatMessages(result.Errors, api.FormatMessagesOptions{
@@ -530,9 +675,9 @@ func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg c
 			Color:         ui.New(os.Stderr).Enabled(),
 			TerminalWidth: 0,
 		})
-		return fmt.Errorf("puzzle build --static: per-page bundle failed:\n%s", strings.Join(lines, "\n"))
+		return "", fmt.Errorf("puzzle build --static: per-page bundle failed:\n%s", strings.Join(lines, "\n"))
 	}
-	return nil
+	return result.Metafile, nil
 }
 
 // staticPagesBundleOptions assembles the per-page pass's BuildOptions. Split out
@@ -580,6 +725,10 @@ func staticPagesBundleOptions(absRoot string, entryFiles []string, outdir string
 	// Production (dev=false) matches the main bundle: minify everything and strip
 	// console.* unless build.dropConsole: false opts out.
 	if !dev {
+		buildOpts.Metafile = true
+		if cfg.HashNames() {
+			buildOpts.EntryNames = "[name]-[hash]"
+		}
 		buildOpts.MinifyWhitespace = true
 		buildOpts.MinifyIdentifiers = true
 		buildOpts.MinifySyntax = true

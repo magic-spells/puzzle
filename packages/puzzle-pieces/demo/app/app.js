@@ -2,6 +2,7 @@ import { PuzzleApp } from '@magic-spells/puzzle';
 import { hashRouter } from '@magic-spells/puzzle/router-modes';
 import routes from './routes.js';
 import { boot as bootAppearance } from './lib/appearance.js';
+import { ignoreAutofill } from './lib/no-autofill.js';
 
 // Appearance first: pre-paint.js (inline in public/index.html) has already
 // painted the stored scheme + mode; boot() makes the module agree with the
@@ -30,5 +31,6 @@ const app = new PuzzleApp({
 
 // Start the app
 app.mount();
+ignoreAutofill();
 
 export default app;

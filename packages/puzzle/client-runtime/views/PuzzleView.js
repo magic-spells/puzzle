@@ -19,13 +19,14 @@
  * - setData() → re-render only, data() does NOT re-run
  */
 
-import { ViewManager } from './viewManager.js';
+import { ViewManager, releasePins, moveManager } from './viewManager.js';
 import { playAnimation, prefersReducedMotion, isValidSpec, warnOnceForSpec } from './animate.js';
 import { observeVisible } from './visibility.js';
 import { registerView, unregisterView } from '../devstate.js';
 import { getErrorView, reportError } from '../errors.js';
 import { warnHandlerShadows } from '../formatters.js';
 import { RENDER_REV } from '../renderRev.js';
+import { schedule, tick } from '../scheduler.js';
 import {
 	devperfCanRender,
 	devperfMarkCause,
@@ -44,7 +45,7 @@ import {
 
 /** @import { ViewNode } from './ViewNode.js' */
 /** @import { ErrorInfo, ErrorSite } from '../errors.js' */
-/** @import { AnimationSpec, RouteSnapshot } from '../../types/index.js' */
+/** @import { AnimationSpec, PrevViewState, RouteSnapshot } from '../../types/index.js' */
 
 /**
  * The { params, props, route } a prepared data() run evaluates against (D146).
@@ -147,6 +148,11 @@ export class PuzzleView {
 	// it survives store-change refreshes and stays null off-router.
 	/** @type {RouteSnapshot | null} */
 	#route = null;
+	// What the last landed render drew — afterUpdate(prev)'s argument for the next
+	// update (D178). Null until the first render, and always null for a view whose
+	// class does not override afterUpdate.
+	/** @type {PrevViewState | null} */
+	#prev = null;
 	/** @type {ViewNode[]} */
 	#children = [];
 	// Per-instance memo cache (v1.29, D64): key → { deps, value } for
@@ -369,7 +375,7 @@ export class PuzzleView {
 	/** @type {unknown[] | null} */
 	#prevRoots = null;
 
-	/** @param {Record<string, any>} [ctx] exactly { store, router, formatters } (SPEC §10) */
+	/** @param {Record<string, any>} [ctx] { store, router, formatters, idle } (SPEC §10) */
 	constructor(ctx = {}) {
 		// D161 tracked-read attribution. On an adapter app this view reads the store
 		// through its OWN handle: only reads made through `this.ctx.store`, by this
@@ -421,6 +427,16 @@ export class PuzzleView {
 			this.#data[/** @type {string} */ (key)] = value;
 		}
 		this.#scheduleRender();
+	}
+
+	/**
+	 * Wait for every pending store flush and scheduled view render to land,
+	 * including the ones they schedule (D188). Async data(), fetches and
+	 * navigation are outside it — see app.idle().
+	 * @returns {Promise<void>}
+	 */
+	renderTick() {
+		return tick();
 	}
 
 	/**
@@ -993,6 +1009,29 @@ export class PuzzleView {
 			this.#vm?.element ??
 			null
 		);
+	}
+
+	/** @returns {Node | null} The end of this component's DOM range. */
+	get elementEnd() {
+		return (
+			this.#errorView?.elementEnd ??
+			(this.__failedPlaceholder?.parentNode ? this.__failedPlaceholder : null) ??
+			this.#vm?.elementEnd ??
+			null
+		);
+	}
+
+	/**
+	 * Relocate a routed position while its outlet changes.
+	 * @param {Node} container
+	 * @param {Node | null} [ref]
+	 */
+	__moveTo(container, ref) {
+		if (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) {
+			if (this.#vm) moveManager(this.#vm, container, ref);
+			if (this.__failedPlaceholder) container.insertBefore(this.__failedPlaceholder, ref);
+			this.#errorView?.__moveTo(container, this.__failedPlaceholder ?? ref);
+		}
 	}
 
 	/**
@@ -1742,6 +1781,9 @@ export class PuzzleView {
 		this.#currentAnimation = null;
 		this.ctx.store?.unsubscribe(this);
 		this.#vm?.clear();
+		// A view that never mounted (no outlet ever placed it) still owns the routed
+		// levels below it.
+		if ((typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) && !this.#vm) releasePins(this.#children);
 		// Null every element ref (v1.39, D72 / SPEC §38: "nulled on removal"). The
 		// __ref removal setter bails while #destroyed is true, so #vm.clear()'s
 		// teardown removals above leave this.refs pointing at now-detached DOM;
@@ -1791,7 +1833,13 @@ export class PuzzleView {
 	created() {}
 	mounted() {}
 	beforeUpdate() {}
-	afterUpdate() {}
+	/**
+	 * After every update render (never the first — that is mounted()).
+	 *
+	 * @param {PrevViewState} prev frozen, shallow: the props, params, route and
+	 *   merged data the previous render drew (D178)
+	 */
+	afterUpdate(prev) {}
 	destroyed() {}
 
 	/**
@@ -2717,7 +2765,25 @@ export class PuzzleView {
 		// Timestamp the FIRST actual skeleton render so the hold measures from when
 		// the skeleton became visible, not from mount (v1.20, D52). Set once.
 		if (showSkeleton && this.#skeletonShownAt === 0) this.#skeletonShownAt = Date.now();
-		if (isUpdate) this.afterUpdate();
+		// afterUpdate(prev) (D178). The snapshot is taken HERE, as each render lands,
+		// and handed to the NEXT update — not at the start of that update — because
+		// the inputs move before the render that shows them: setData() writes #data
+		// at call time and refresh() swaps #props/#params/#route before data() even
+		// runs. #data is mutated in place, so it is copied; props, params and route
+		// are replaced wholesale on update and are referenced as they are. Only a
+		// class that overrides the hook pays for this (the prerender never gets here:
+		// it has no ViewManager). A hook installed on the instance after its last
+		// render has no history and sees the current state.
+		if (this.afterUpdate !== PuzzleView.prototype.afterUpdate) {
+			const prev = this.#prev;
+			const next = (this.#prev = Object.freeze({
+				props: this.#props,
+				params: this.#params,
+				route: this.#route,
+				data: Object.freeze({ ...this.#data }),
+			}));
+			if (isUpdate) this.afterUpdate(prev ?? next);
+		}
 	}
 
 	/**
@@ -2811,9 +2877,9 @@ export class PuzzleView {
 			// the manager REUSABLE (currentTree/anchor both null, so a later render()
 			// takes its first-mount branch again).
 			//
-			// Re-anchor at the SAME position afterwards, capturing the departing root's
-			// nextSibling first: clear() alone would leave this.element null and drop the
-			// spot, so a parent's insertion refs (patch()/patchComponent read
+			// Re-anchor at the SAME position afterwards, capturing the sibling AFTER
+			// the departing root's complete range: clear() alone would leave this.element
+			// null and drop the spot, so a parent's insertion refs (patch()/patchComponent read
 			// child.element) would go stale and the later truthy render would APPEND to
 			// the end of a container it may share with siblings. The comment anchor is
 			// exactly the placeholder mount() uses while async data() is in flight; the
@@ -2822,7 +2888,7 @@ export class PuzzleView {
 			// Gated on currentTree: null on the FIRST render is a no-op (nothing mounted,
 			// the mount-time anchor still holds the position) and repeated nulls never
 			// stack up comment nodes.
-			const ref = this.#vm.element?.nextSibling ?? null;
+			const ref = this.#vm.elementEnd?.nextSibling ?? null;
 			this.#vm.clear();
 			this.#vm.anchorAt(ref);
 		}
@@ -2867,11 +2933,8 @@ export class PuzzleView {
 			devperfRenderScheduled(this, 'local-state');
 		}
 
-		/** @type {(cb: () => void) => void} */
-		const schedule =
-			typeof requestAnimationFrame === 'function'
-				? requestAnimationFrame
-				: (cb) => setTimeout(cb, 0);
+		// D63 frame/timer scheduling; flushUpdates() is a no-op once the flag has
+		// cleared (an immediate render ran first).
 		schedule(() => this.flushUpdates());
 	}
 

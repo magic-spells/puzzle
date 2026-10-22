@@ -10,6 +10,19 @@ summary: >-
   classification and name validation (with lexer.go's Unicode tag-name lexing).
 verified_at: '2026-09-25T10:41:32.868Z'
 verified_sha: a602784a9822fa3ff63123e597f72624b3c9ffff
+notes:
+  - kind: state
+    text: >-
+      0.8.1 (Go-only): the parser carries host options (FILE-PARSER-HOST). `parser` holds `opts
+      Options`; `newParser` takes it and the nested {#raw} parser inherits it.
+      Parse/ParseTemplate/ParseSkeleton/ParseFile take an optional trailing `Options` (zero =
+      PuzzleKit), and their three post-parse checks run through `Options.validate`. `parseBlock` has
+      a `case "let"` that hands to `parseLet` (FILE-PARSER-LET) only when `Let` is on; the
+      unknown-block message comes from `unknownBlockErr`, unchanged for PuzzleKit. `parseChildren`
+      now defers `p.unbind(len(p.bound))` so a child list is the scope of the {#let} names inside it
+      — a no-op when nothing was bound. `nodePos` knows `*Let`.
+connections:
+  - FILE-PARSER-COMPONENT
 ---
 
 # parser.go
@@ -27,6 +40,7 @@ is relative to `packages/puzzle-lang`.
   (`parseForHeader` → `peelForCounter`/`splitForIn`), which splits
   `item in collection, i` or `a...b, x` and hands each piece to `expr`. This file
   never reads inside an expression; a `|` is rejected by `expr.Parse` itself.
+- **Component selectors and spread props (D180).** `<Component>` remains a `Component` AST node with its reserved name. [[FILE-PARSER-COMPONENT]] validates the required expression-valued `is`; `name` and `from` stay ordinary props. `parseAttrs` accepts the lexer's existing `TokAttrBrace` with a leading `...` as `SpreadAttr`, parses the remaining expression with its original file position, and rejects spreads on elements and composition markers. No expression grammar or lexer token change is needed. `Component` cannot be a dotted family root.
 - **`{#unless c}`** stores `!` over the parsed condition — one tree shape.
 - **A second `{:else}`** in `{#if}`/`{#unless}`/`{#case}` is reported at the stray
   clause ("a second {:else} in {#if} opened at L:C — {:else} must be the last

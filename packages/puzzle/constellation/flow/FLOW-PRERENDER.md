@@ -29,6 +29,7 @@ connections:
   - DECISION-D161-AUTO-FETCHING-FINDS
   - FLOW-BUILD
   - DOC-SPEC-BUILD
+  - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
 verified_at: '2026-08-24T21:39:23.520Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
 ---
@@ -49,7 +50,9 @@ Runtime detail is [[COMPONENT-SSG]].
    with `output` is a hard error. A plain SPA build warns per `routes.js|.ts` that sets
    `meta.description`/`canonical`/`socialImage` (tags only exist at prerender time).
 2. **Prerender after the shell and public assets are in staging, before the swap** — the
-   shell is the injection template; a failure must leave the last good `dist/`.
+   production entry/CSS references and shell preloads are already rewritten by
+   [[FILE-BUILD-SHELL]]. The shell is the injection template; a failure must leave the
+   last good `dist/`.
 3. **Go generates a Node entry, bundles it, runs it — Go never renders.** The summary
    follows the LAST stdout sentinel (user logging is harmless). Missing `node`, non-zero
    exit, timeout or missing sentinel fail the build with stderr surfaced.
@@ -71,8 +74,13 @@ Runtime detail is [[COMPONENT-SSG]].
 9. **Go post-checks**: a route page may not overwrite a `public/` asset (case-folded; only
    `/` writing the shell over itself is sanctioned); the scratch dir is reserved, then
    removed.
-10. **Static only**: a browser-platform pass bundles the per-page entries with splitting;
-    `app.js` and its map are deleted.
+10. **Static only**: a browser-platform pass bundles the per-page entries with
+    splitting. Its production metafile maps each generated entryPoint to its output; every
+    Written page (absolute File, including locale/generated pages sharing an entry) gets
+    its emitted module src and static-import preloads through [[FILE-BUILD-SHELL]].
+    Hashing follows Config.HashNames(), preloads are unconditional in production, and the
+    JS summary entry stays fixed. Development skips this rewrite. `app.js` and its map are
+    deleted.
 11. **Swap** staging over `dist/` atomically.
 
 ## Load time

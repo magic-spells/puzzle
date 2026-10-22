@@ -37,14 +37,17 @@ deep links while serving the shell for missing static routes.
 1. **`puzzle preview [dir] [--port N] [--strict-port]`** serves an existing
    `dist/` the way the host will, per output mode: SPA → history fallback;
    hybrid → prerendered page first, shell otherwise; static → clean URLs and a
-   real 404 (the built `404.html`), never the shell. No watcher, SSE,
-   injection or `dev.proxy`. Default port 4000 so it runs beside dev (3000).
+   real 404, never the shell. The 404 is `dist/<first-segment>/404.html` when
+   that folder (exact case) holds one — a locale's own 404 under
+   [[DECISION-D177-LOCALE-URL-PREFIXES]] — else the root `404.html`. No
+   watcher, SSE, injection or `dev.proxy`. Default port 4000 so it runs beside
+   dev (3000).
 2. **`puzzle dev` on `output: 'static'` runs the real pipeline**: every rebuild
    is a complete static build (bundle + Tailwind + prerender + per-page
-   modules) staged and atomically swapped, served with static-host semantics.
-   Never an in-place patch of the served `dist/`. Making it warm is
-   [[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]. Hybrid dev stays the SPA loop (a
-   hybrid site is the SPA after takeover).
+   modules) staged and atomically swapped, served with static-host semantics
+   (the same 404 rule). Never an in-place patch of the served `dist/`. Making
+   it warm is [[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]. Hybrid dev stays the
+   SPA loop (a hybrid site is the SPA after takeover).
 
 Rules:
 

@@ -22,18 +22,32 @@ intent stays on [[COMPONENT-ESBUILD-PLUGIN]]; the user-facing keys are in
 
 Traps:
 
-- **Tri-state scalars.** `build.*` keys such as `build.splitting` and
+- **Tri-state scalars.** `build.splitting`, `build.hashNames` and
   `build.dropConsole` are held as `json.RawMessage` and read through the shared
   `unset()` helper, so JSON `null` means unset, not `false`. Pointer storage
-  keeps "absent" distinguishable from "false", so a default can flip in the
-  accessor (`Config.Splitting()`) without changing what a stored config means.
+  keeps "absent" distinguishable from "false". `Config.HashNames()` alone owns
+  its default: absent/null follows the configured `Config.Splitting()`.
+  Explicit true/false overrides it; non-booleans fail with the key's "must be a
+  boolean" error. Build callers apply the production-only gate.
 - **`dev.proxy`** keys must be absolute `/`-prefixed paths and targets absolute
   http(s) URLs; `/` and colliding normalized prefixes are errors
   ([[FEATURE-DEV-PROXY]]).
 - **`i18n`** ([[DECISION-D175-TRANSLATIONS]]): `Config.I18n` is nil when absent
   (`I18nEnabled()`). Errors: not an object; `locales` missing, not an array or
-  empty; a tag failing `ValidLocaleTag` (`^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$`,
-  with a `_`→`-` suggestion); a case-insensitive duplicate; `defaultLocale`
-  missing (the message names the key `defaultLocale`, not `default`), not a
-  string, or not in `locales`. `ValidLocaleTag` is exported for the locales
-  package's file-name check.
+  empty; a tag failing `ValidLocaleTag` (2–3 letter language, optional 4-letter
+  script, optional 2-letter or 3-digit region, non-repeated variants; the error
+  names the subtag, with a `_`→`-` suggestion); a case-insensitive duplicate;
+  `defaultLocale` missing (the message names the key `defaultLocale`, not
+  `default`), not a string, or not in `locales`. `ValidLocaleTag` is exported for
+  the locales package's file-name check.
+- **`I18n.Routing` / `I18n.Detect`** ([[DECISION-D177-LOCALE-URL-PREFIXES]]):
+  `Routing` is `""` (absent) or `RoutingPrefix` (`'prefix'`) — any other value is
+  an error; read through the nil-safe `PrefixRouting()`. `Detect` is a tri-state
+  `*bool` (nil = absent, default on) and must be a boolean; it means something only
+  with prefix routing. Unknown keys inside `i18n` stay silently ignored.
+- **`site`** (D177): a top-level string, validated by `validateSite` — an absolute
+  http/https URL with a host name (`Hostname()`, so `https://:80` fails; a bare
+  trailing `:` fails too), origin only: a path other than `/`, a query, fragment or
+  user info is an error that points at `routerBase`. Stored as `scheme://host`
+  without a trailing slash; `""` when absent. The prerender receives it as an
+  option to make `hreflang` alternates absolute and to write the sitemap.

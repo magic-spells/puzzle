@@ -1187,6 +1187,29 @@ func TestStaticModeMissIsARealNotFound(t *testing.T) {
 	}
 }
 
+// TestStaticModeLocaleMissServesLocale404 proves dev answers a miss under a
+// locale prefix (D177) with that locale's dist/<locale>/404.html, exactly as
+// preview does, reload client included.
+func TestStaticModeLocaleMissServesLocale404(t *testing.T) {
+	dist := writeStaticDist(t)
+	if err := os.MkdirAll(filepath.Join(dist, "es"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dist, "es", "404.html"), []byte(`<!doctype html><html lang="es"><body>ES_NOT_FOUND</body></html>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv := newStaticTestServer(t, dist)
+
+	rec := httptest.NewRecorder()
+	srv.handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://puzzle.test/es/nope", nil))
+	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "ES_NOT_FOUND") {
+		t.Fatalf("locale miss = %d %q, want es/404.html at 404", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "EventSource") {
+		t.Fatalf("locale 404 lost the reload client: %q", rec.Body.String())
+	}
+}
+
 // TestStaticModeMissWithoutBuilt404 proves the dev-only 404 page still carries
 // the reload client when the app has no catch-all route.
 func TestStaticModeMissWithoutBuilt404(t *testing.T) {

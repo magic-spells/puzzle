@@ -28,9 +28,11 @@ import {
 	PORTAL_TAG,
 	SNIPPET_TAG,
 	HTML_TAG,
+	COMPONENT_SLOT_TAG,
 	metadataTagError,
 } from './ViewNode.js';
-import { mountHtml, patchHtml, htmlTail, moveHtml, unmountHtml } from './html.js';
+import { mountHtml, patchHtml, htmlTail, unmountHtml } from './html.js';
+import { mountComponentSlot, patchComponentSlot, moveComponentSlot, unmountComponentSlot } from './componentSlot.js';
 import { beginFlip, playFlip } from './flip.js';
 import {
 	mountPortal,
@@ -101,6 +103,89 @@ let walking = false;
 let outgoing = null;
 let passes = 0;
 
+// Routed views (the router's `instance` pins) live as long as the routed chain,
+// not as long as their outlet. Every pin found in a slotChildren list during the
+// current outermost render pass maps to its newest vnode; null once this pass
+// has placed it, so a wrapper torn down later in the pass cannot park it again.
+/** @type {Map<PuzzleView, ViewNode | null> | null} */
+let retained = null;
+
+/**
+ * Call `fn` for each topmost routed pin in `nodes`.
+ * @param {ViewNode[]} nodes
+ * @param {(pin: PuzzleView, node: ViewNode) => unknown} fn
+ */
+function eachPin(nodes, fn) {
+	for (const node of nodes) {
+		if (node.instance && !((typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && node.takeoverPreloaded))
+			fn(node.instance, node);
+		else if (Array.isArray(node.children)) eachPin(node.children, fn);
+	}
+}
+
+/**
+ * Record a pin and its routed descendants as wanted by this pass.
+ * @param {PuzzleView} pin
+ * @param {ViewNode} node
+ */
+function retain(pin, node) {
+	retained ??= new Map();
+	if (!retained.has(pin)) retained.set(pin, node);
+	eachPin(/** @type {ViewNode[]} */ (node.children), retain);
+}
+
+/** @param {PuzzleView} pin an outlet in this pass holds it */
+function placed(pin) {
+	if (retained?.has(pin)) retained.set(pin, null);
+}
+
+/**
+ * Destroy a removed component, unless it is a pin this pass still wants.
+ * @param {PuzzleView | null} child
+ */
+function release(child) {
+	if (child && !parkRetained(child)) child.destroy();
+}
+
+/**
+ * Release the routed pins in an owner's slot content.
+ * @param {ViewNode[]} nodes
+ */
+export function releasePins(nodes) {
+	eachPin(nodes, release);
+}
+
+/**
+ * Detach a pin this pass still wants instead of destroying it.
+ * @param {PuzzleView} child
+ * @returns {boolean} whether the pin is retained
+ */
+function parkRetained(child) {
+	if (!retained?.has(child)) return false;
+	if (retained.get(child) && child.element) child.__moveTo(document.createDocumentFragment());
+	return true;
+}
+
+/**
+ * Move a manager's existing root without mounting it again (conditional outlets).
+ * @param {ViewManager} vm
+ * @param {Node} container
+ * @param {Node | null} [ref]
+ */
+export function moveManager(vm, container, ref) {
+	const tree = vm.currentTree;
+	// A component root moves itself, so its own manager follows too.
+	if (tree?.isComponent) tree.component.__moveTo(container, ref);
+	else if (((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) ||
+		(typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__)) && tree && lastNode(tree) !== tree.el) {
+		moveComponentSlot(container, tree, ref, lastNode(tree));
+		if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) && tree.tag === COMPONENT_SLOT_TAG) {
+			for (const child of /** @type {ViewNode[]} */ (tree.children)) child.component?.__moveTo(container, tree.slotEnd);
+		}
+	} else if (vm.element) container.insertBefore(vm.element, ref);
+	vm.container = container;
+}
+
 /** @param {ViewNode} vnode */
 function keepOutgoing(vnode) {
 	const copy = new ViewNode(vnode.tag, vnode.attrs, vnode.children);
@@ -110,6 +195,8 @@ function keepOutgoing(vnode) {
 	copy.instance = vnode.instance;
 	if (vnode.tag === HTML_TAG) copy.nodes = vnode.nodes;
 	else if (vnode.tag === PORTAL_TAG) copy.portal = vnode.portal;
+	else if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
+		vnode.tag === COMPONENT_SLOT_TAG) copy.slotEnd = vnode.slotEnd;
 	(outgoing ??= new Map()).set(vnode, copy);
 }
 
@@ -123,6 +210,20 @@ function outgoingOf(vnode) {
 	if (copy === undefined) return vnode;
 	outgoing.delete(vnode);
 	return copy;
+}
+
+/**
+ * Resolve a range's end through component roots, including nested selections.
+ * @param {ViewNode} vnode
+ * @returns {Node | null}
+ */
+function lastNode(vnode) {
+	if (vnode.isComponent) return vnode.component?.elementEnd ?? vnode.el;
+	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
+		vnode.tag === COMPONENT_SLOT_TAG) return vnode.slotEnd;
+	if ((typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__) &&
+		vnode.tag === HTML_TAG) return htmlTail(vnode);
+	return vnode.el;
 }
 
 export class ViewManager {
@@ -188,10 +289,27 @@ export class ViewManager {
 	 */
 	render(rawTree, slotsExpanded = false) {
 		passes++;
+		// Conditional outlets (D30) are gated on __PUZZLE_HAS_CONDITIONAL_SLOT__: an
+		// app whose templates never hide a slot keeps one routed lifetime per outlet.
+		if (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) eachPin(this.slotChildren, retain);
 		try {
-			return this.#render(rawTree, slotsExpanded);
+			const tree = this.#render(rawTree, slotsExpanded);
+			if ((typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) && passes === 1 && retained) {
+				// A pin no outlet placed this pass still needs the newest chain below
+				// it: a parked parent that later re-renders must not mount stale levels.
+				for (const [pin, node] of retained) {
+					if (node) {
+						retained.set(pin, null);
+						pin.applyParentUpdate({ children: /** @type {ViewNode[]} */ (node.children) });
+					}
+				}
+			}
+			return tree;
 		} finally {
-			if (--passes === 0) outgoing = null;
+			if (--passes === 0) {
+				outgoing = null;
+				if (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) retained = null;
+			}
 		}
 	}
 
@@ -271,7 +389,7 @@ export class ViewManager {
 			const el = this.currentTree.el ?? null;
 			const bracketed = el != null && el.parentNode === this.container;
 			const before = bracketed ? el.previousSibling : null;
-			const after = bracketed ? el.nextSibling : null;
+			const after = bracketed ? lastNode(this.currentTree)?.nextSibling ?? null : null;
 			const outer = walking;
 			walking = walk;
 			try {
@@ -380,6 +498,11 @@ export class ViewManager {
 		return /** @type {Element | Comment | null} */ (this.currentTree?.el ?? this.anchor ?? null);
 	}
 
+	/** The last DOM node occupying this subtree's position (or null). */
+	get elementEnd() {
+		return this.currentTree ? lastNode(this.currentTree) : this.anchor;
+	}
+
 	/** Remove everything this manager mounted. */
 	clear() {
 		// A destroy that arrives BEFORE any replacement render still has to release the
@@ -390,6 +513,7 @@ export class ViewManager {
 			this.unknownTrees = null;
 		}
 		if (this.currentTree) unmount(this.currentTree);
+		if (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) releasePins(this.slotChildren);
 		if (this.anchor) {
 			this.anchor.remove();
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
@@ -515,6 +639,10 @@ function stripSlotAttr(vnode) {
 		if (k !== 'slot') attrs[k] = vnode.attrs[k];
 	}
 	const clone = new ViewNode(vnode.tag, attrs, vnode.children);
+	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) && vnode.tag === COMPONENT_SLOT_TAG) {
+		clone.children = /** @type {ViewNode[]} */ (vnode.children).map(stripSlotAttr);
+		clone.slotEnd = vnode.slotEnd;
+	}
 	slotClones.set(vnode, clone);
 	clone.key = vnode.key;
 	clone.el = vnode.el;
@@ -585,6 +713,11 @@ function expandNode(vnode, parts) {
 
 	const clone = new ViewNode(vnode.tag, vnode.attrs, out);
 	clone.key = vnode.key;
+	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
+		vnode.tag === COMPONENT_SLOT_TAG) {
+		clone.el = vnode.el;
+		clone.slotEnd = vnode.slotEnd;
+	}
 	if (vnode.isComponent) {
 		// Mirror stripSlotAttr's clone: preserve the live links so patch/teardown
 		// keep working if this vnode has already been mounted (fresh render-tree
@@ -722,7 +855,7 @@ function fill(out, nodes, k, parts) {
 	if (
 		nodes &&
 		((!k.attrs.fallback && !k.children.length) ||
-			nodes.some((n) => n.tag !== PLACEHOLDER_TAG && (!n.isText || /\S/.test(n.attrs.value))))
+			nodes.some(fillsSlot))
 	) {
 		for (const n of nodes) out.push(n);
 		return;
@@ -739,6 +872,15 @@ function fill(out, nodes, k, parts) {
 		return;
 	}
 	for (const fb of k.children) out.push(expandNode(fb, parts));
+}
+
+/** @param {ViewNode} node @returns {boolean} */
+function fillsSlot(node) {
+	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
+		node.tag === COMPONENT_SLOT_TAG) {
+		return /** @type {ViewNode[]} */ (node.children).some(fillsSlot);
+	}
+	return node.tag !== PLACEHOLDER_TAG && (!node.isText || /\S/.test(node.attrs.value));
 }
 
 const UNKNOWN_SNIPPET_OWNER = {};
@@ -850,6 +992,10 @@ export function mount(vnode, parent, ref, ctx, owner = null) {
 	// tree (see keepOutgoing).
 	if (vnode.el != null) keepOutgoing(vnode);
 	if (vnode.isComponent) return mountComponent(vnode, parent, ref, ctx, owner);
+	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
+		vnode.tag === COMPONENT_SLOT_TAG) {
+		return mountComponentSlot(vnode, parent, ref, ctx, owner, mount);
+	}
 
 	if (vnode.tag === PORTAL_TAG) {
 		if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
@@ -1002,6 +1148,13 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 	const child = pinned ?? new vnode.tag(ctx);
 	child.__retryParent = owner;
 	vnode.component = child;
+	// A parked routed view (D30 conditional outlet) moves in instead of mounting.
+	if ((typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) && (placed(child), pinned?.element)) {
+		child.__moveTo(parent, ref);
+		child.applyParentUpdate({ children: /** @type {ViewNode[]} */ (vnode.children) });
+		vnode.el = child.element;
+		return vnode.el;
+	}
 	child
 		.mount(parent, { props: vnode.props, children: /** @type {ViewNode[]} */ (vnode.children), ref, preloaded })
 		// Two-arg then(): the recovery handler below is attached to the MOUNT step
@@ -1137,7 +1290,10 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 	if (oldVnode === newVnode) {
 		const live = newVnode.component;
 		if (live !== null ? !live.isDestroyed && !live.__walk : typeof newVnode.tag !== 'function' && !walking) {
-			if (live !== null) newVnode.el = live.element;
+			if (live !== null) {
+				newVnode.el = live.element;
+				if (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) placed(live);
+			}
 			// The `controls` list is what reaches controls under a cached ROW ROOT.
 			// It collects from the row vnode down, so a controlled row root is in its
 			// own list — hence `else`, never both. A cached control reached through an
@@ -1173,25 +1329,22 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 		// — while the old one leaks its subscriptions, and releaseSubtree would sweep
 		// the NEW element's document-level `outside` listeners.
 		//
-		// The insertion reference is captured BEFORE the unmount and resolved after
-		// it, so both removal shapes keep today's placement: an element animating out
-		// (D58/D85 destroyAnimated, registered in leavingEls) is still in the DOM, so
-		// the new element is inserted before it exactly as it was; a synchronous
-		// removal leaves the captured next sibling as the ref.
-		// A live-HTML range (D174) ends at its last parsed node, not at its comment.
-		const next =
-			((typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__) &&
-			oldVnode.tag === HTML_TAG
-				? htmlTail(oldVnode)
-				: anchor
-			)?.nextSibling ?? null;
+		// Capture the complete old range before unmount. Selection comments disappear
+		// immediately, including through dispatcher component roots, while a child's
+		// leaving element can remain. Replace before the first surviving range node;
+		// synchronous removal falls back to the sibling after the range. Live HTML
+		// (D174) also ends at its last parsed node rather than its start comment.
+		const end = lastNode(oldVnode);
+		const next = end?.nextSibling ?? null;
+		const oldNodes = [];
+		for (let node = anchor; node; node = node.nextSibling) {
+			oldNodes.push(node);
+			if (node === end) break;
+		}
 		unmount(oldVnode);
 		const ref =
-			anchor && anchor.isConnected
-				? anchor
-				: next && next.parentNode === parent
-					? next
-					: null;
+			oldNodes.find((node) => node.parentNode === parent) ??
+			(next?.parentNode === parent ? next : null);
 		mount(newVnode, parent, ref, ctx, owner);
 		return;
 	}
@@ -1243,6 +1396,11 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 	}
 
 	const el = (newVnode.el = oldVnode.el);
+	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
+		newVnode.tag === COMPONENT_SLOT_TAG) {
+		patchComponentSlot(oldVnode, newVnode, parent, ctx, owner, mount, patchChildren, unmount);
+		return;
+	}
 
 	// Placeholder → placeholder (sameNode already matched tag '#' + null key):
 	// transfer the comment el, nothing to patch. A placeholder ↔ real node swap is
@@ -1467,6 +1625,7 @@ function reassertSelectValue(el, attrs) {
  */
 function patchComponent(oldVnode, newVnode) {
 	const child = (newVnode.component = oldVnode.component);
+	if (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) placed(child);
 	const props = propsEqual(oldVnode.props, newVnode.props, child) ? undefined : newVnode.props;
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 		devperfComponentPatch(child, props === undefined);
@@ -1571,15 +1730,30 @@ function propsEqual(a, b, child) {
  */
 const leavingEls = new WeakSet();
 
+// A selection swap also destroys descendants whose rendered root is another
+// component. Carry synchronous teardown through their own ViewManager.clear().
+let immediateUnmount = false;
+
 /**
  * Removing an element vnode detaches one DOM node, but component instances
  * anywhere in the subtree still hold store subscriptions and lifecycle state —
  * destroy them all, not just a top-level component vnode.
  *
  * @param {ViewNode} vnode
+ * @param {boolean} [immediate] bypass leave animations for a dynamic selection swap
  */
-function unmount(vnode) {
+function unmount(vnode, immediate = false) {
+	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) && immediate) {
+		const previous = immediateUnmount;
+		immediateUnmount = true;
+		try { return unmount(vnode); }
+		finally { immediateUnmount = previous; }
+	}
 	if (outgoing !== null) vnode = outgoingOf(vnode);
+	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
+		vnode.tag === COMPONENT_SLOT_TAG) {
+		return unmountComponentSlot(vnode, unmount);
+	}
 	if (
 		(typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__) &&
 		vnode.tag === HTML_TAG
@@ -1600,6 +1774,7 @@ function unmount(vnode) {
 	}
 	if (vnode.isComponent) {
 		const child = vnode.component;
+		if ((typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) && child && parkRetained(child)) return;
 		// A component vnode that never got as far as an instance, holding only a
 		// comment placeholder: the takeoverFailed path in mountComponent returns
 		// before constructing a child, so `component` is still null. No instance to
@@ -1649,7 +1824,8 @@ function unmount(vnode) {
 		// takes the instant, synchronous destroy() — 0.6.0's behaviour, and the
 		// timing every non-animating removal already has. playOut() carries the same
 		// rule for the router's leave paths, which never come through here.
-		if (child.__isMounted && (child?.animations?.out || child?.__hasHideHooks)) {
+		if (!((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) && immediateUnmount) &&
+			child.__isMounted && (child?.animations?.out || child?.__hasHideHooks)) {
 			const leavingEl = child.element;
 			if (leavingEl && leavingEl.nodeType === 1 /* ELEMENT_NODE */) {
 				leavingEls.add(leavingEl);
@@ -1735,7 +1911,7 @@ function releaseSubtree(vnode) {
 		if (child.tag === PORTAL_TAG) {
 			if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
 				unmountPortal(child, unmount);
-		} else if (child.isComponent) child.component?.destroy();
+		} else if (child.isComponent) (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) ? release(child.component) : child.component?.destroy();
 		else if (!child.isText) releaseSubtree(child);
 	}
 }
@@ -1778,7 +1954,7 @@ function releaseAborted(trees) {
 			if (tree.tag === PORTAL_TAG) {
 				if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
 					unmountPortal(tree, unmount);
-			} else if (tree.isComponent) tree.component?.destroy();
+			} else if (tree.isComponent) (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) ? release(tree.component) : tree.component?.destroy();
 			else if (!tree.isText) releaseSubtree(tree);
 		} catch (err) {
 			console.error('[puzzle] releasing an aborted render failed:', err);
@@ -1939,25 +2115,26 @@ function warnDuplicateKey(key) {
 	);
 }
 
-// D89's usage scan prunes node_modules/dist/vendor/dot-dirs, so a `flip` attr
-// arriving from an INSTALLED .pzl component is invisible to it: the define lands
-// false, flip.js tree-shakes out, and the reorder animation silently never plays.
-// The formatter half of the same scan degrades LOUDLY (D43's unknown-formatter
-// error) — this is flip's equivalent, dev-only and once per session.
+// D89's usage scan reads .pzl source only — the project's and declaring
+// packages' — and the build fails on any compiled .pzl it did not read that
+// needs flip. A `flip` attr can still arrive from code no .pzl compile saw
+// (pre-compiled component JavaScript, a hand-built vnode): the define lands
+// false, flip.js tree-shakes out, and the reorder animation silently never
+// plays. This is the dev-only, once-per-session warning for that case.
 let warnedFlipCompiledOut = false;
 function warnFlipCompiledOut() {
 	if (warnedFlipCompiledOut) return;
 	warnedFlipCompiledOut = true;
 	console.warn(
 		'[puzzle] a `flip` attribute is present at runtime, but flip support was compiled out — ' +
-			'the build scan found no `flip` in project templates (it does not scan node_modules or ' +
-			'build output), so the reorder animation will not play. Use `flip` on an element in ' +
-			'project source to keep the runtime in, or remove the attribute.'
+			'the build scan found no `flip` written in a template, so the reorder animation will not play. ' +
+			'Write `flip` directly on the row in the template: it is not detected inside a `{...spread}` ' +
+			'or in pre-compiled component JavaScript.'
 	);
 }
 
-// Same false-negative posture as flip: installed/generated templates are
-// outside the first-party usage walk, so a Portal vnode can still arrive after
+// Same false-negative posture as flip: a vnode from code no .pzl compile saw is
+// outside the usage scan, so a Portal vnode can still arrive after
 // __PUZZLE_HAS_PORTAL__ was baked false. Warn once in development; mount() keeps
 // an inert placeholder so production never throws.
 let warnedPortalCompiledOut = false;
@@ -1966,9 +2143,9 @@ function warnPortalCompiledOut() {
 	warnedPortalCompiledOut = true;
 	console.warn(
 		'[puzzle] a `<Portal>` vnode is present at runtime, but Portal support was compiled out — ' +
-			'the build scan found no `<Portal>` in project templates (it does not scan node_modules ' +
-			'or build output), so the portal content will not render. Use `<Portal>` in project ' +
-			'source to keep the runtime in, or remove the vnode.'
+			'the build scan found no `<Portal>` in the .pzl source it reads (the project and installed ' +
+			'packages that declare @magic-spells/puzzle), so the portal content will not render. ' +
+			'Pre-compiled component JavaScript is not scanned: import the .pzl source, or remove the vnode.'
 	);
 }
 
@@ -2120,19 +2297,15 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail = nul
 		const [oldChild, newChild] = pairs[i];
 		if (oldChild) {
 			patch(oldChild, newChild, el, ctx, owner);
-			// A live-HTML range (D174) is compared by its last node and moved whole.
-			// The probe stays inline in the condition so a build without it folds
-			// this arm away and keeps only the original single-node move.
-			if (
-				(typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__) &&
-				newChild.tag === HTML_TAG
-			) {
-				if (nextPersistentSibling(htmlTail(newChild)) !== ref) {
-					moveHtml(el, newChild, ref);
-					if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+			const end = lastNode(newChild);
+			if (nextPersistentSibling(end) !== ref) {
+				if (((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) ||
+					(typeof __PUZZLE_HAS_RAW_HTML__ === 'undefined' || __PUZZLE_HAS_RAW_HTML__)) &&
+					end !== newChild.el) {
+					moveComponentSlot(el, newChild, ref, end);
+				} else {
+					el.insertBefore(newChild.el, ref);
 				}
-			} else if (nextPersistentSibling(newChild.el) !== ref) {
-				el.insertBefore(newChild.el, ref);
 				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 					devperfMutation();
 				}
@@ -2194,8 +2367,21 @@ function setAttr(el, name, value, owner = null) {
 		// so a panel mounted synchronously mid-dispatch attaches AFTER document's
 		// capture phase already passed (the open interaction can't instantly close
 		// it). The element only anchors the containment gate (withModifiers).
+		// `passive`/`capture` (D187) are native listener options, compiled out
+		// when no template writes either. The probe stays inline in each condition:
+		// hoisted into a local, the minifier keeps both branches.
 		const target = mods.includes('outside') ? document : el;
-		const opts = target === el ? undefined : OUTSIDE_OPTS;
+		const capture =
+			target !== el ||
+			((typeof __PUZZLE_HAS_LISTENER_OPTIONS__ === 'undefined' || __PUZZLE_HAS_LISTENER_OPTIONS__) &&
+				mods.includes('capture'));
+		const opts =
+			(typeof __PUZZLE_HAS_LISTENER_OPTIONS__ === 'undefined' || __PUZZLE_HAS_LISTENER_OPTIONS__) &&
+			mods.includes('passive')
+				? { capture, passive: true }
+				: capture
+					? OUTSIDE_OPTS
+					: undefined;
 		const listeners = (el[LISTENERS] ??= {});
 		detachListener(el, name, event, mods, listeners);
 		if (typeof value === 'function') {
@@ -2348,6 +2534,12 @@ function detachListener(el, name, event, mods, listeners) {
 	const handler = listeners[name];
 	if (!handler) return;
 	if (mods.includes('outside')) document.removeEventListener(event, handler, OUTSIDE_OPTS);
+	// Removal matches on the capture flag alone (D187).
+	else if (
+		(typeof __PUZZLE_HAS_LISTENER_OPTIONS__ === 'undefined' || __PUZZLE_HAS_LISTENER_OPTIONS__) &&
+		mods.includes('capture')
+	)
+		el.removeEventListener(event, handler, true);
 	else el.removeEventListener(event, handler);
 	delete listeners[name];
 }

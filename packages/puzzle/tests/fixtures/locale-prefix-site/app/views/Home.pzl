@@ -1,0 +1,4 @@
+<puzzle-view>
+  <h1>{ t('title') }</h1>
+  <a href={ link('/about') }>{ t('about') }</a>
+</puzzle-view>

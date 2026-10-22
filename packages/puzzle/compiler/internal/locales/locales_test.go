@@ -159,6 +159,42 @@ func TestLoadEmitsMinifiedHashedFilesAndManifest(t *testing.T) {
 	}
 }
 
+// TestManifestRoutingFields pins the manifest bytes (D177): without prefix
+// routing they are exactly D175's — an explicit detect: false included, since it
+// means nothing there — and with it `routing` (plus `detect:false` when set)
+// sits between the locale map and `base`.
+func TestManifestRoutingFields(t *testing.T) {
+	root := writeLocales(t, map[string]string{"en.json": `{"a":"A"}`, "es.json": `{"a":"Á"}`})
+	off, on := false, true
+	paths := ""
+	for _, tc := range []struct {
+		name    string
+		routing string
+		detect  *bool
+		extra   string
+	}{
+		{"no routing", "", nil, ""},
+		{"detect without routing", "", &off, ""},
+		{"prefix", "prefix", nil, `,"routing":"prefix"`},
+		{"prefix, detect true", "prefix", &on, `,"routing":"prefix"`},
+		{"prefix, detect false", "prefix", &off, `,"routing":"prefix","detect":false`},
+	} {
+		c := cfg("en", "en", "es")
+		c.Routing, c.Detect = tc.routing, tc.detect
+		res, err := Load(root, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if paths == "" {
+			paths = `"en":"` + res.Manifest.Paths["en"] + `","es":"` + res.Manifest.Paths["es"] + `"`
+		}
+		want := `export default {"defaultLocale":"en","locales":{` + paths + `}` + tc.extra + `,"base":` + manifestBase + "};\n"
+		if got := res.Manifest.JS(); got != want {
+			t.Errorf("%s: manifest JS = %s\nwant %s", tc.name, got, want)
+		}
+	}
+}
+
 func TestLoadFillsFromDefaultAndWarns(t *testing.T) {
 	root := writeLocales(t, map[string]string{
 		"en.json": `{ "greeting": "Hello", "nav": { "home": "Home" }, "cart": { "empty": "Empty" } }`,

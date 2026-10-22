@@ -25,7 +25,7 @@
     <div class="-ml-1 flex min-w-0 flex-1 items-center gap-3">
       <a
         href="#/"
-        class="flex min-w-0 items-center gap-3 rounded-md px-3 py-1.5 text-brand font-semibold tracking-tight text-bar-ink transition-colors hover:bg-bar-hover outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
+        class="flex min-w-0 items-center gap-3 rounded-md px-3 py-1.5 text-wordmark font-semibold tracking-tight text-bar-ink transition-colors hover:bg-bar-hover outline-ring focus-visible:outline-2 focus-visible:outline-offset-2">
         <span class="flex size-5 shrink-0 items-center justify-center rounded-md bg-brand text-2xs font-bold text-brand-ink" aria-hidden="true">P</span>
         <span class="truncate">Puzzle Pieces</span>
       </a>
@@ -130,7 +130,7 @@
   <div class="flex min-h-0 flex-1">
     <!-- RAIL — the sidebar piece in its `rail` variant: the frame's vertical arm.
          Items come from the docs nav config; the footer holds the live
-         scheme × mode switcher. -->
+         scheme × style switcher. -->
     <div class="hidden min-h-0 shrink-0 lg:flex">
       <!-- `collapsible={false}`: this rail is always open. The docs shell has one
            nav and no second pane to give room to, and the piece's icon-only mode
@@ -195,7 +195,7 @@ import { GETTING_STARTED, SECTIONS, COMPONENTS, THEMES, SCHEME_PANELS, ICONS } f
 // Rail items: the Sidebar piece takes hrefs, and the demo is hash-routed, so
 // every href is `#` + path and the active match is `#` + the current path.
 // Shown in the bar; bump with package.json (the bundler has no JSON import).
-const VERSION = '0.8.0';
+const VERSION = '0.9.0';
 
 const KEYS = { '/': 'introduction', '/components': 'components', '/theming': 'theming' };
 

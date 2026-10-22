@@ -47,6 +47,7 @@ type bundleFlags struct {
 	// writes (prerender.go), and the static-mode SPA pass's output is deleted
 	// before the swap, so splitting it would strand chunks nothing imports.
 	Splitting bool
+	HashEntry bool
 }
 
 // newBundleOptions assembles the shared esbuild BuildOptions. All runtime probes
@@ -78,9 +79,9 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 		buildOpts.Sourcemap = api.SourceMapLinked
 	}
 	if flags.Splitting {
-		// The entry keeps its stable app.js name (EntryNames is left alone), so the
-		// shell HTML is unchanged; everything a dynamic import() pulls in lands in
-		// the reserved chunks/ directory beside it, imported with native ESM. There
+		// Everything a dynamic import() pulls in lands in the reserved chunks/
+		// directory, imported with native ESM. Production entries can also be
+		// hashed (HashEntry); the shell rewrite follows the emitted names. There
 		// is no chunk-loader runtime to pay for.
 		//
 		// AbsWorkingDir is deliberately NOT anchored here, unlike the static-pages
@@ -92,6 +93,10 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 		// app.js has always carried — and production minifies them away.
 		buildOpts.Splitting = true
 		buildOpts.ChunkNames = chunksDirName + "/[name]-[hash]"
+	}
+
+	if flags.HashEntry {
+		buildOpts.EntryNames = "[name]-[hash]"
 	}
 
 	configureRuntime(absRoot, &buildOpts, pl)
@@ -126,13 +131,16 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 	f := pl.Features()
 	return map[string]string{
-		"__PUZZLE_DEV__":          strconv.FormatBool(flags.Dev),
-		"__PUZZLE_HAS_FLIP__":     strconv.FormatBool(f.Flip),
-		"__PUZZLE_HAS_PORTAL__":   strconv.FormatBool(f.Portal),
-		"__PUZZLE_HAS_RAW_AT__":   strconv.FormatBool(f.RawAt),
-		"__PUZZLE_HAS_LAZY__":     strconv.FormatBool(f.Lazy),
-		"__PUZZLE_HAS_SNIPPETS__": strconv.FormatBool(f.Snippets),
-		"__PUZZLE_HAS_RAW_HTML__": strconv.FormatBool(f.RawHTML),
+		"__PUZZLE_DEV__":                  strconv.FormatBool(flags.Dev),
+		"__PUZZLE_HAS_FLIP__":             strconv.FormatBool(f.Flip),
+		"__PUZZLE_HAS_PORTAL__":           strconv.FormatBool(f.Portal),
+		"__PUZZLE_HAS_RAW_AT__":           strconv.FormatBool(f.RawAt),
+		"__PUZZLE_HAS_LAZY__":             strconv.FormatBool(f.Lazy),
+		"__PUZZLE_HAS_SNIPPETS__":         strconv.FormatBool(f.Snippets),
+		"__PUZZLE_HAS_COMPONENT_SLOT__":   strconv.FormatBool(f.ComponentSlot),
+		"__PUZZLE_HAS_CONDITIONAL_SLOT__": strconv.FormatBool(f.ConditionalSlot),
+		"__PUZZLE_HAS_LISTENER_OPTIONS__": strconv.FormatBool(f.ListenerOpts),
+		"__PUZZLE_HAS_RAW_HTML__":         strconv.FormatBool(f.RawHTML),
 		// The sanitizer alone: only `raw` needs it, not `newline_to_br` (D174).
 		"__PUZZLE_HAS_RAW_SANITIZE__": strconv.FormatBool(f.RawSanitize),
 		"__PUZZLE_TAKEOVER__":         strconv.FormatBool(flags.Takeover),
@@ -142,6 +150,10 @@ func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 		// because the plugin also serves the locale manifest, so the define and the
 		// module can never disagree about whether translations exist.
 		"__PUZZLE_HAS_I18N__": strconv.FormatBool(pl.I18nEnabled()),
+		// Also a config fact: i18n.routing === 'prefix' (D177). Every locale-prefix
+		// branch in the runtime sits behind it, so an app without routing ships the
+		// same bytes it did before prefixes existed.
+		"__PUZZLE_HAS_LOCALE_ROUTING__": strconv.FormatBool(pl.LocaleRoutingEnabled()),
 	}
 }
 

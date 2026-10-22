@@ -6,7 +6,7 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import { RICH_TEXT_CLASSES as C, isEmpty, safeLinkUrl } from '../../lib/rich-text-doc.js';
+import { RICH_TEXT_CLASSES as C, richTextClasses, isEmpty, safeLinkUrl, safePreviewUrl } from '../../lib/rich-text-doc.js';
 
 // RichText — renders a stored rich text document (the RichTextEditor's
 // Shopify-style JSON tree, see lib/rich-text-doc.js for the format) as
@@ -24,6 +24,25 @@ import { RICH_TEXT_CLASSES as C, isEmpty, safeLinkUrl } from '../../lib/rich-tex
 //   doc    the document tree ({ type:'root', children:[…] }); null/empty
 //          renders nothing
 //   class  appended to the root
+//   compact  tighter block spacing (lines ~4px apart, Notion-style) — the
+//          spacing RichTextEditor uses in chrome="blocks", so a note reads the
+//          same in both
+//   resolveImage(ref, node) → url | null
+//          the ONLY source of an image's src: called with an image's `ref`
+//          (node = the image node) and a link preview's `imageRef` (node =
+//          the link-preview node). The doc never carries a URL. Without it,
+//          or on null, an image renders as a placeholder box holding its alt
+//          text and a preview renders without its picture. Sources are
+//          re-resolved on every render even when the doc is unchanged, so
+//          pass a NEW function when the URLs behind your refs change.
+// Callbacks:
+//   @imageError(ref)  an image failed to load (an expired signed URL, say)
+//
+// Images render as <figure><img><figcaption>, width/height reserving the box;
+// link previews as one card link through safePreviewUrl, target="_blank"
+// rel="noopener noreferrer". Both are honored at the top level only, as the
+// format defines. All of their text (alt, caption, title, description, site
+// name) is set as text, never parsed as markup.
 //
 // The walk happens in mounted()/afterUpdate() inside an `island` (built DOM
 // lives outside the vdom), which means content renders CLIENT-SIDE ONLY —
@@ -89,11 +108,113 @@ function alignStyle(el, node) {
 	}
 }
 
-function blockDom(node) {
+// The image's media: an <img> when the host resolved a src, else a
+// placeholder box holding the alt text (sized from width/height when known).
+function imageMedia(url, node, ctx) {
+	if (url) {
+		const img = document.createElement('img');
+		img.className = ctx.C.image;
+		img.src = url;
+		img.alt = node.alt || '';
+		img.loading = 'lazy';
+		img.decoding = 'async';
+		if (node.width > 0) img.width = node.width;
+		if (node.height > 0) img.height = node.height;
+		img.addEventListener('error', () => ctx.onError(node.ref));
+		return img;
+	}
+	const box = document.createElement('div');
+	box.className = ctx.C.imagePlaceholder;
+	box.textContent = node.alt || 'Image unavailable';
+	if (node.width > 0 && node.height > 0) box.style.aspectRatio = `${node.width} / ${node.height}`;
+	return box;
+}
+
+function imageDom(node, ctx) {
+	const figure = document.createElement('figure');
+	figure.className = ctx.C.figure;
+	const media = document.createElement('div');
+	figure.appendChild(media);
+	// Registered, not filled: _syncImages resolves the src now and on every
+	// later render, swapping only what changed.
+	ctx.images.push({
+		ref: node.ref,
+		node,
+		url: undefined,
+		apply: (url) => {
+			media.textContent = '';
+			media.appendChild(imageMedia(url, node, ctx));
+		},
+	});
+	if (node.caption) {
+		const cap = document.createElement('figcaption');
+		cap.className = ctx.C.caption;
+		cap.textContent = node.caption;
+		figure.appendChild(cap);
+	}
+	return figure;
+}
+
+function previewDom(node, ctx) {
+	const href = safePreviewUrl(node.url);
+	const card = document.createElement(href ? 'a' : 'div');
+	card.className = ctx.C.preview;
+	if (href) {
+		card.href = href;
+		card.target = '_blank';
+		card.rel = 'noopener noreferrer';
+	}
+	let hostname = '';
+	try {
+		hostname = new URL(node.url).hostname;
+	} catch {
+		hostname = '';
+	}
+	const body = document.createElement('div');
+	body.className = ctx.C.previewBody;
+	const line = (cls, text) => {
+		const d = document.createElement('div');
+		d.className = cls;
+		d.textContent = text;
+		body.appendChild(d);
+	};
+	line(ctx.C.previewSite, node.siteName || hostname);
+	line(ctx.C.previewTitle, node.title || node.url || '');
+	if (node.description) line(ctx.C.previewDescription, node.description);
+	card.appendChild(body);
+	if (node.imageRef) {
+		let img = null;
+		ctx.images.push({
+			ref: node.imageRef,
+			node,
+			url: undefined,
+			apply: (url) => {
+				img?.remove();
+				img = null;
+				if (!url) return;
+				img = document.createElement('img');
+				img.className = ctx.C.previewImage;
+				img.src = url;
+				img.alt = '';
+				img.loading = 'lazy';
+				img.decoding = 'async';
+				img.addEventListener('error', () => ctx.onError(node.imageRef));
+				card.appendChild(img);
+			},
+		});
+	}
+	return card;
+}
+
+function blockDom(node, ctx, atRoot = false) {
 	switch (node.type) {
+		case 'image':
+			return atRoot ? imageDom(node, ctx) : document.createDocumentFragment();
+		case 'link-preview':
+			return atRoot ? previewDom(node, ctx) : document.createDocumentFragment();
 		case 'paragraph': {
 			const p = document.createElement('p');
-			p.className = C.paragraph;
+			p.className = ctx.C.paragraph;
 			alignStyle(p, node);
 			const inline = inlineDom(node.children);
 			// ProseMirror keeps empty paragraphs open with a <br>; match it so
@@ -120,16 +241,16 @@ function blockDom(node) {
 		}
 		case 'list': {
 			const list = document.createElement(node.listType === 'ordered' ? 'ol' : 'ul');
-			list.className = `${C.list} ${node.listType === 'ordered' ? C.orderedList : C.bulletList}`;
+			list.className = `${ctx.C.list} ${node.listType === 'ordered' ? ctx.C.orderedList : ctx.C.bulletList}`;
 			for (const item of node.children || []) {
 				const li = document.createElement('li');
-				li.className = C.listItem;
+				li.className = ctx.C.listItem;
 				// A list-item mixes inline content and nested lists; preserve their order.
 				let inlineNodes = [];
 				for (const child of item.children || []) {
 					if (child.type === 'list') {
 						if (inlineNodes.length) li.appendChild(inlineDom(inlineNodes));
-						li.appendChild(blockDom(child));
+						li.appendChild(blockDom(child, ctx));
 						inlineNodes = [];
 					} else {
 						inlineNodes.push(child);
@@ -142,13 +263,13 @@ function blockDom(node) {
 		}
 		case 'blockquote': {
 			const bq = document.createElement('blockquote');
-			bq.className = C.blockquote;
-			for (const child of node.children || []) bq.appendChild(blockDom(child));
+			bq.className = ctx.C.blockquote;
+			for (const child of node.children || []) bq.appendChild(blockDom(child, ctx));
 			return bq;
 		}
 		case 'code-block': {
 			const pre = document.createElement('pre');
-			pre.className = C.codeBlock;
+			pre.className = ctx.C.codeBlock;
 			const code = document.createElement('code');
 			code.textContent = (node.children || []).map((t) => t.value || '').join('');
 			pre.appendChild(code);
@@ -168,21 +289,61 @@ export default class RichText extends PuzzleView {
 		};
 	}
 
+	_resolve(ref, node) {
+		const fn = this.props.resolveImage;
+		if (typeof fn !== 'function' || !ref) return null;
+		try {
+			const url = fn(ref, node);
+			return typeof url === 'string' && url !== '' ? url : null;
+		} catch {
+			return null;
+		}
+	}
+
+	_ctx() {
+		return {
+			C: richTextClasses(!!this.props.compact),
+			images: [],
+			onError: (ref) => {
+				const { imageError } = this.props;
+				if (typeof imageError === 'function') imageError(ref);
+			},
+		};
+	}
+
+	// Image sources come from resolveImage, which can change while the doc
+	// does not — so every render re-resolves and swaps only what changed.
+	_syncImages() {
+		for (const entry of this._images || []) {
+			const url = this._resolve(entry.ref, entry.node);
+			if (url === entry.url) continue;
+			entry.url = url;
+			entry.apply(url);
+		}
+	}
+
 	_render() {
 		const host = this.refs.host;
 		if (!host) return;
 		const doc = this.props.doc;
-		const key = JSON.stringify(doc ?? null);
-		if (key === this._renderedKey) return;
+		const key = `${this.props.compact ? 'c' : ''}${JSON.stringify(doc ?? null)}`;
+		if (key === this._renderedKey) {
+			this._syncImages();
+			return;
+		}
 		host.textContent = '';
+		this._images = [];
 		if (isEmpty(doc)) {
 			this._renderedKey = key;
 			return;
 		}
+		const ctx = this._ctx();
 		const frag = document.createDocumentFragment();
-		for (const block of doc.children) frag.appendChild(blockDom(block));
+		for (const block of doc.children) frag.appendChild(blockDom(block, ctx, true));
 		host.appendChild(frag);
 		this._renderedKey = key;
+		this._images = ctx.images;
+		this._syncImages();
 	}
 
 	mounted() {

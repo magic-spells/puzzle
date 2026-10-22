@@ -36,16 +36,26 @@ Puzzle prerenders routes at build time in two output modes — `output: 'hybrid'
 `@magic-spells/puzzle/ssg`: `prerender()` is DOM/filesystem-free; `prerenderToDir()`
 writes output for the Go build's node prerender bundle. The orchestrator builds
 Store/Router/Formatter services, calls `beforeMount` with one `{ store, config }` facade
-(receiver and argument), enumerates static route chains, and `assembleChain` preloads
-each chain (`created()` + awaited `data()`, `this.route` set, no `mounted()` or
-animations) into the same nested keyed vnode tree the router's `#navigate` builds. The
-route snapshot has the D83 seven-key shape (static pathname, empty frozen query, `''`
-hash).
+(receiver and argument; plus `locale` when translations are on), enumerates static route
+chains, and `assembleChain` preloads each chain (`created()` + awaited `data()`,
+`this.route` set, no `mounted()` or animations) into the same nested keyed vnode tree the
+router's `#navigate` builds. The route snapshot has the D83 seven-key shape (static
+pathname, empty frozen query, `''` hash).
 
-- **Output paths**: `<path>/index.html`; a top-level catch-all writes `404.html`;
-  dynamic/splat routes are skipped with warnings; `prerender: false` writes the plain
-  shell. Route guards (D87) never run at build time: hybrid warns per rendered page whose
-  chain has a guard, static warns once.
+- **Pass structure** (`ssg/index.js`): `planRoutes` makes each route's
+  skip/reuse/shell/render decision once; then each locale pass runs `entriesFor` (one entry
+  for a fixed route, one per listed value for a `staticPaths` route,
+  [[DECISION-D179-STATIC-PATHS]]) → `renderEntry`. `pageFile(routePath)` is the one
+  route-path → file mapping, and also the identity a generated page is compared against the
+  fixed pages by (static: the fixed page keeps its file, warned). A generated page carries
+  `pattern` (its route as authored) on `Page`/`WrittenPage`, and `params` on its route JSON.
+- **Output paths**: `<path>/index.html`; a top-level catch-all writes `404.html`; a
+  `:param` route without `staticPaths` is skipped with a warning naming the field (skip
+  reason `'empty staticPaths'` when its list is empty); `prerender: false` writes the plain
+  shell. Hybrid also skips a generated path an earlier route matches first in the live
+  router, reason `shadowed` (`findShadowedPaths` is the first-match check), so takeover never
+  renders a different view. Route guards (D87) never run at build time: hybrid warns per
+  rendered page whose chain has a guard, static warns once.
 - **Serializer** mirrors ViewManager: escaped text/attrs, controlled initial state,
   wrapperless components, shared `expandSlots`, SVG seeds verbatim, framework
   attrs/events/keys/refs omitted, placeholders → nothing, `@@name` → literal `@name`,
@@ -54,8 +64,9 @@ hash).
   escape (`escapeScriptJson`, shared by the data islands); other script/style content
   fails the build on `</script`/`</style` or the `<!--`+`<script` pair.
 - **Head** ([[DECISION-D84-HEAD-MANAGEMENT]]): fields resolve leaf → root through the
-  `head.js` resolver the router shares. `MANAGED_TAGS` (headTags.js) is used ONLY here —
-  the browser syncs only `document.title`. Injection replaces/removes/inserts
+  `head.js` resolver the router shares; a `{ t: 'key' }` title/description resolves
+  through the pass's i18n service (`headText`). `MANAGED_TAGS` (headTags.js) is used ONLY
+  here — the browser syncs only `document.title`. Injection replaces/removes/inserts
   `data-puzzle-head` tags by escaped string surgery, confined to the shell's head region.
 - **Shell plan** ([[DECISION-D151-SHELL-HEAD-OWNERSHIP]]): the shell is read once and
   compiled into build-constant offsets (head span, `<title>`, marker spans, target,
@@ -71,12 +82,35 @@ hash).
 - **Translations** (D175): `loadBuildI18n` reads the staged default-locale table, builds
   one service per pass (which also calls `setFormatLocale(defaultLocale)`), sets
   `ctx.i18n`/`t`, adds a `data-puzzle-locale` JSON island at `</body>` on every page, and
-  `withHtmlLang` rewrites `<html lang>`. Apps without i18n emit byte-identical HTML.
+  `withHtmlLang` rewrites `<html lang>` (and `dir`). Apps without i18n emit byte-identical
+  HTML.
+- **Locale prefix routing** ([[DECISION-D177-LOCALE-URL-PREFIXES]]): `BuildI18n.tables`
+  holds every locale's table and is required — a missing one fails the build. The pass
+  runs locale by locale, default first, creating each locale's service right before its
+  pages (the format locale is module state) and restoring it after; page-module slugs
+  are per route path, shared by every locale. `pageDressing` gives each page its folder
+  (`dist/<locale>/…`), its own island, its `hreflang` alternates (`data-puzzle-head=
+  "alternate"`, a managed set — shell alternates are stripped; none on `*` or
+  `prerender: false` pages) and, on default-locale pages, the first-visit redirect from
+  `ssg/redirect.js` (one function's source text, inlined; the build fails if it contains
+  `</script` or `<!--`; omitted under `detect: false`). A generated page's alternates and
+  redirect name only the locales whose `staticPaths` lists contain it; `redirectFor` caches
+  one script per distinct locale set, and a page only the default locale has gets none.
+  A root-relative or same-origin
+  canonical is localized per locale. `site` arrives as a prerender option, making
+  alternates absolute (warned once when absent). `WrittenPage.locale` tags each page.
+- **Sitemap**: with `site`, `prerenderToDir` writes `outDir/sitemap.xml` — every
+  prerendered page except 404 and `prerender: false`, with `xhtml:link` alternates under
+  prefix routing — unless the public folder already shipped one (warned).
 - **Generated entries force-exit** in the summary write's callback
   (`process.stdout.write(…, () => process.exit(0))`): SSG runs `created()` but never
   `destroyed()`, so a timer from `created()` would pin the subprocess until the 120 s
   timeout. The callback is load-bearing — a bare `exit()` after a pipe write truncates
   the payload.
+
+## Runtime component selection (D180)
+
+Both prerender modes traverse the `#component` range's ordinary selected constructor vnode and assemble it with the normal props/data/slot machinery. Serialization emits the range's children without a visible wrapper: selected component HTML, or nothing for nullish selection. Children fill the normal default slot. Indexed-map `is` expressions follow ordinary expression semantics. The DOM-free path creates no global registry or runtime module lookup. Selection ranges must recurse through the same assembly and serialization walkers as ordinary nested children.
 
 ## `ctx.router` parity
 
@@ -85,14 +119,20 @@ A prerendered `href` (`link(path)` reads `router.url`) must match the client's.
 - **Static**: `makeRouterStub` over the page snapshot — navigation throws, `current` is
   the snapshot, `url()` is hard-coded to history encoding (static pages are path-shaped
   files with no router, so a hash href would be dead; [[DECISION-D81-STATIC-PAGES-MODE]]);
-  a configured `routerMode` warns; `routerBase` applies.
+  a configured `routerMode` warns; `routerBase` applies. Under prefix routing
+  `localizeRouterStub` (`ssg/assemble.js`) replaces `url` with a locale-aware
+  `url(path, options)` for the page's locale — kept apart from `makeRouterStub` because
+  esbuild keeps unused destructured parameters, so apps without routing ship the
+  one-argument stub. The browser kernel calls the same function.
 - **Hybrid**: the real unstarted memory Router (the takeover needs its compiled table,
   and `current` reads private fields so it can't be wrapped), with `url()` shadowed to
   history encoding over the real `routerBase` and `current` shadowed per page
-  ([[DECISION-D142-HYBRID-ROUTE-SNAPSHOT]]). `prerender()` throws for hybrid + a
-  hash/memory `routerMode`.
-- All three paths call the single `encodeURL(path, mode, base)` (and `normalizeBase`)
-  exported from `router/router.js` — one encoder makes parity structural.
+  ([[DECISION-D142-HYBRID-ROUTE-SNAPSHOT]]); under prefix routing the `url` shadow is
+  re-set per locale. `prerender()` throws for hybrid + a hash/memory `routerMode`.
+- All paths call the single `encodeURL(path, mode, base)` (and `normalizeBase`) exported
+  from `router/router.js`; under prefix routing the base comes from `localeBase` and the
+  option from `linkLocale`, both from the same module. One encoder makes parity
+  structural; `tests/router-locale-prefix.test.js` pins the four encoders per locale.
 
 ## Hybrid mode (D67)
 
@@ -113,15 +153,22 @@ plus exactly that page's classes via the codegen `__pzlModule` stamp; shared cod
 into `dist/_puzzle/chunks/`. `injectStaticShell` stamps `data-puzzle-static`, writes the
 store snapshot (`store._serializeAll()`) as a `data-puzzle-static-data` island, adds a
 `data-puzzle-static-read` island (`{ v: 1, complete, absent }`) only when the page
-settled reads through the adapter, and swaps `/app.js` for the page module (base-prefixed
-by `routerBase`). `beforeMount` and tracked-query faults run at build time: the API must
+settled reads through the adapter, and swaps the fixed app script for the page module (base-prefixed
+by `routerBase`). The app script may use a bare, `./`, `/` or normalized `routerBase`
+prefix with a query or fragment; public vendor scripts remain in the shell. `beforeMount` and tracked-query faults run at build time: the API must
 be reachable from Node, and a non-404 fault fails the build naming the route.
 
+- **Generated pages** ([[DECISION-D179-STATIC-PATHS]]): every page of a `staticPaths`
+  route shares ONE module, slugged from its `pattern` with `:` → `_` (`blog--_slug`), and
+  carries a `data-puzzle-static-route` JSON island (its path and params) that the shared
+  entry merges into the pattern-shaped route JSON. Fixed-route modules are byte-identical.
 - **`only` subset** ([[DECISION-D155-ROUTE-LEVEL-INVALIDATION]]): the dev loop passes a
   route subset on `argv[4]` (not in the source — dev keeps one esbuild context over those
   bytes). Every route is still enumerated and claims its path and slug (so slugs never
   renumber) and appears in `written` (`reused`), but no context is built for it. An empty
-  subset renders nothing and skips the zero-page `beforeMount` fail-fast.
+  subset renders nothing and skips the zero-page `beforeMount` fail-fast. A `staticPaths`
+  route outside the subset still re-runs its list (and so `beforeMount`) to enumerate its
+  reused pages.
 - Static reports `modules` for SKIPPED routes too (chain roots for invalidation); a
   missing `__pzlModule` stamp there is dropped, not raised.
 - **Browser kernel** ([[FILE-STATIC-MOUNT]], `mountStatic`): same ctx (Store, formatters,

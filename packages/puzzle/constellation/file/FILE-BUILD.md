@@ -25,3 +25,10 @@ pass's `app.js` before the swap, so splitting it would strand chunks nothing
 imports. `ValidatePublic` takes that boolean and reserves the root-level
 `chunks/` entry only while splitting is on; an app that never opts in keeps its
 `public/chunks/` assets, which is why the name is not in `reservedOutputNames`.
+
+Production resolves `hash := !dev && cfg.HashNames()`, keeps static mode's discarded
+SPA entry fixed, and captures the browser metafile for the shell rewrite. The composed
+stylesheet is content-hashed even when unlinked. After copying public assets,
+[[FILE-BUILD-SHELL]] rewrites compiler references and inserts the splitting pass's
+static-import preloads before either prerender mode reads the shell. Errors preserve
+the last good output. Public files retain their names; development skips the rewrite.

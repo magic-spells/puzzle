@@ -4,7 +4,7 @@
       <a href={ href } download title={ name } class={ contentClass }>
         <svg class="size-5 shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           {#for d in iconPaths}
-            <path d={ d } />
+            <path d={ d } key={ d } />
           {/for}
         </svg>
         <span class="min-w-0 flex flex-col">
@@ -18,7 +18,7 @@
       <span class={ contentClass } title={ name }>
         <svg class="size-5 shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           {#for d in iconPaths}
-            <path d={ d } />
+            <path d={ d } key={ d } />
           {/for}
         </svg>
         <span class="min-w-0 flex flex-col">
@@ -90,7 +90,8 @@ const EXT_TYPE = {
   zip: 'archive', rar: 'archive', '7z': 'archive', tar: 'archive', gz: 'archive', tgz: 'archive',
 };
 
-// Icon path sets per resolved type — every d string strokes currentColor.
+// Icon path sets per resolved type — every d string strokes currentColor. The d
+// string is also the row key, so the strings within one set must stay unique.
 const ICONS = {
   file: [
     'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z',

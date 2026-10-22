@@ -31,6 +31,8 @@ only a fallback, so a `{#raw}` missing `{/raw}` still splits at the real close t
 `{` (each `scanBraceGroup` fails at EOF, then the loop advances one byte) — ~210 ms for
 4,000 `{ `, same in the eslint/prettier ports. Such a file is already a compile error.
 
+Opening-tag scans handle brace expressions before attribute quote delimiters, including expressions whose strings reuse the enclosing quote. Template close scans skip whole opening tags, keeping section-looking text inside their attribute values inert; the lint/format splitter ports use the same boundaries.
+
 ## Lexer and nodes
 
 The lexer emits elements/components, text, interpolation, if/unless/else-if, case/when,
@@ -41,6 +43,10 @@ brace-disabled HTML lexer builds ordinary nodes with raw-flagged text and static
 literal-name attrs (never events/directives; `{#svg}` roots get the same bit). Raw
 blocks don't nest and are rejected in attribute values. The synthetic root records that
 a raw block was parsed, for D89's `@` shim.
+
+`parseEventModifiers` keeps modifiers in written order. `passive` and `capture` are
+generic modifiers ([[DECISION-D187-PASSIVE-CAPTURE]]); `passive` with `prevent` is a
+positioned error in either order.
 
 **Braces inside nested `<style>`/`<script>` elements are template grammar** —
 `.a > .b { color: red }` is an interpolation and fails as an expression error. Authors
@@ -86,11 +92,12 @@ gotcha: in a `<script>`, a regex right after `...` or `for (x of` reads as divis
 
 ## Attributes and markup
 
-- Attributes are static, dynamic, mixed, event or valueless. Non-event names with `:`
+- Attributes are static, dynamic, mixed, event, valueless or a standalone `SpreadAttr` (`{...expr}`). A spread stores one `ExprAST` with its source position; the expression grammar itself still rejects spread. Non-event names with `:`
   are reserved unless the prefix is `xml`/`xlink`/`xmlns`; `checkAttrNamespace` runs at
   the NAME in both attribute loops, before the `=` branch, so valued and valueless forms
-  reject alike. Event modifiers: `prevent`, `stop`, `once`, `outside` on any event; key
-  filters keyboard-only. Attribute names may carry non-ASCII letters.
+  reject alike. Event modifiers: `prevent`, `stop`, `once`, `outside`, `passive`,
+  `capture` on any event (`passive` with `prevent` is an error); key filters
+  keyboard-only. Attribute names may carry non-ASCII letters.
 - Also enforced here: static islands, literal inline SVG roots/paths (`ScanSVGFile`
   skips a BOM, positions in file coordinates), list identifiers/keys, unique static refs.
 - **Void elements** (`voidElements`: `area base br col embed hr img input link meta
@@ -106,6 +113,10 @@ gotcha: in a `<script>`, a regex right after `...` or `for (x of` reads as divis
   `*Component` construction site, requires `Ident('.'Ident)*` (`$`-free segments); a
   dotted name starting with a marker name (`<Slot.Foo>`) gets a steering error. Not
   checked inside `{#raw}`.
+
+## Runtime component selection (D180)
+
+`parser/component.go` validates the reserved `<Component>` tag while retaining `*Component{Name: "Component"}` in the AST. A required expression-valued `is` is the only selector; missing, valueless, string, number, boolean, template-literal or duplicate `is` steers, including non-component literals inside braces. Nullish selectors remain valid. An authored `flip` attribute is a positioned error steering to a wrapping keyed element. Every other attr is a normal component attr, including `name`, `from` and standalone spreads. `Component.*` is a reserved family error; the compiler owns user filename/import rename diagnostics. The tag is forbidden in islands like every component. The `is` module scope and normal default-slot semantics are compiler/runtime contracts in [[DECISION-D180-COMPONENT-SLOT]] / SPEC §67.
 
 ## Composition markers
 

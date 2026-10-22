@@ -34,11 +34,19 @@ type Plugin struct {
 	cssRevision uint64            // moves only when the effective css map changes
 	formatters  map[string]bool
 	features    Features // DCE define bits from the most recent SetUsage
-	runtimeDir  string
+	// usageSet, scanned and unscanned back the per-file usage check
+	// (usagecheck.go): whether a SetUsage has happened, the .pzl files that
+	// scan read, and the usage of each compiled .pzl it did not.
+	usageSet   bool
+	scanned    map[string]bool
+	unscanned  map[string]fileUsage
+	runtimeDir string
 	// i18nEnabled/i18nManifest back the D175 locale manifest module and the
 	// __PUZZLE_HAS_I18N__ define (see SetI18n).
 	i18nEnabled  bool
 	i18nManifest string
+	// localeRouting backs __PUZZLE_HAS_LOCALE_ROUTING__ (D177; SetLocaleRouting).
+	localeRouting bool
 	// cache is the build-scoped .pzl transform memo shared with this build's
 	// other esbuild passes, or nil for "transform every time" (WatchBuilder).
 	cache *CompileCache
@@ -58,6 +66,7 @@ func New(appRoot string) *Plugin {
 		assetsDir:  filepath.Join(appRoot, "app", "assets"),
 		css:        map[string]string{},
 		formatters: map[string]bool{"escape": true},
+		unscanned:  map[string]fileUsage{},
 	}
 }
 
@@ -73,6 +82,10 @@ func (p *Plugin) setup(build api.PluginBuild) {
 	// {#svg} dedup virtual modules (D46 amendment) — resolve/serve one shared
 	// factory module per unique asset so esbuild stores each icon once.
 	p.setupSVGAssets(build)
+
+	// After every pass: fail when a compiled .pzl the usage scan never read
+	// needs a feature this pass compiled out (usagecheck.go).
+	build.OnEnd(p.checkUsageOnEnd(build.InitialOptions.AbsWorkingDir))
 
 	build.OnResolve(api.OnResolveOptions{Filter: "^" + ManifestSpecifier + "$"}, func(args api.OnResolveArgs) (api.OnResolveResult, error) {
 		return api.OnResolveResult{
@@ -158,6 +171,7 @@ func (p *Plugin) setup(build api.PluginBuild) {
 			p.cssRevision++
 		}
 		p.mu.Unlock()
+		p.noteCompiled(args.Path, src)
 
 		out := res.js
 		return api.OnLoadResult{
@@ -241,6 +255,11 @@ func (p *Plugin) transformPZL(path string, src []byte) pzlResult {
 		return out
 	}
 	out.js = res.JS
+	if sec.Scripts != "" {
+		// Codegen keeps the script first and verbatim. Padding its original
+		// position makes native JS/TS diagnostics refer to the .pzl source.
+		out.js = strings.Repeat("\n", sec.ScriptsPos.Line-1) + strings.Repeat(" ", sec.ScriptsPos.Col-1) + out.js
+	}
 
 	// Out-of-band codegen warnings (e.g. a template expression referencing a
 	// <script> import). The bundle build runs at LogLevelSilent, so print

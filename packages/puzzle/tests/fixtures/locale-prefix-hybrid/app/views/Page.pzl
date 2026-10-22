@@ -1,0 +1,20 @@
+<puzzle-view>
+  <h1>{ t('title') }</h1>
+  <a class="about" href={ link('/about') }>{ t('about') }</a>
+  <a class="cv" href={ link('/cv.pdf', { locale: false }) }>CV</a>
+  <nav>
+    {#for entry in locales}
+      <a key={ entry.locale } href={ entry.href } hreflang={ entry.locale }>{ entry.label }</a>
+    {/for}
+  </nav>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Page extends PuzzleView {
+  data() {
+    return { locales: this.ctx.i18n.locales };
+  }
+}
+</script>

@@ -7,8 +7,8 @@ read change. The router, the store, schema validation, animations and
 translations all come in the box.
 
 A Go compiler with esbuild inside turns the app into one small bundle. A
-minimal app is **21.9 KB gzip** with the router, store and validation
-included, and the complete todos example is **26.0 KB gzip**. The CLI is a
+minimal app is **23.0 KB gzip** with the router, store and validation
+included, and the complete todos example is **27.0 KB gzip**. The CLI is a
 single prebuilt binary: no Babel, no bundler config, no postinstall scripts.
 
 **[Live demo: Puzzle Sounds](https://puzzle-music-demo.vercel.app/)**, a
@@ -292,7 +292,10 @@ Polish with a live locale switch.
 `puzzle build` produces a single-page app by default. Two optional prerender
 modes are there when you need HTML up front: `output: 'hybrid'` prerenders each
 page and the SPA takes over, and `output: 'static'` emits plain static pages
-with no router and no `app.js`. There is no request-time server.
+with no router and no `app.js`. Both prerender a `:param` route from the
+pages its `staticPaths` lists, and with `i18n.routing: 'prefix'` they write
+one page per language under its own URL prefix, with `hreflang` alternates
+and a sitemap. There is no request-time server.
 
 ## Examples
 

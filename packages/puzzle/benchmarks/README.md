@@ -916,7 +916,7 @@ rejections, exit 0. Wall time ~13 minutes per suite.
 - **No cross-framework comparison.** The `keyed-list` op set follows
   js-framework-benchmark shapes, but the driver, the machine and the
   measurement window all differ. These numbers are **not** comparable to
-  published React/Vue/Svelte figures.
+  other frameworks' published figures.
 - **The absolute numbers are not comparable to `examples/stress/README.md`.**
   Those were hand-run single measurements in a real Chrome window; these are
   harness medians in headless Chromium with a forced GC per iteration. They

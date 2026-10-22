@@ -49,7 +49,16 @@ type Config struct {
 	// state — no locale files are emitted, __PUZZLE_HAS_I18N__ is false, and the
 	// bundles stay byte-identical to an app that never heard of translations.
 	I18n *I18n
+	// Site is the top-level `site` key (D177): the app's public origin
+	// ('https://example.com'), normalized without a trailing slash, or "" when
+	// absent. Only the origin — routerBase carries any path. The prerender uses
+	// it to make hreflang alternates absolute.
+	Site string
 }
+
+// RoutingPrefix is the one accepted i18n.routing value (D177): every non-default
+// locale lives under its own URL prefix (/es/…).
+const RoutingPrefix = "prefix"
 
 // I18n mirrors the `i18n` block of puzzle.config.js (D175). The compiler owns the
 // locale files end to end (app/locales/<tag>.json → dist/locales/<tag>.<hash>.json),
@@ -62,6 +71,19 @@ type I18n struct {
 	// DefaultLocale is one of Locales. Its table fills every other locale's missing
 	// keys at build time, and the prerender renders in it.
 	DefaultLocale string
+	// Routing is i18n.routing (D177): "" (absent — D175's one URL per page,
+	// client-side switch) or RoutingPrefix.
+	Routing string
+	// Detect is the tri-state i18n.detect: nil when absent (default on), else the
+	// explicit value. It controls the first-visit language redirect, so it means
+	// something only with prefix routing.
+	Detect *bool
+}
+
+// PrefixRouting reports whether locale URL prefixes are on (D177). Safe on a
+// nil receiver, so callers holding cfg.I18n need no separate nil check.
+func (i *I18n) PrefixRouting() bool {
+	return i != nil && i.Routing == RoutingPrefix
 }
 
 // Styles mirrors the `styles` block of puzzle.config.js.
@@ -87,6 +109,10 @@ type Build struct {
 	// value. Pointer storage so a later release can flip the default in the
 	// accessor without changing stored semantics.
 	Splitting *bool
+
+	// HashNames is the tri-state build.hashNames setting: nil follows Splitting(),
+	// a non-nil pointer is the explicit user value. It applies to production only.
+	HashNames *bool
 }
 
 // Dev mirrors the `dev` block of puzzle.config.js.
@@ -128,6 +154,15 @@ func (c Config) Splitting() bool {
 	return c.Build.Splitting != nil && *c.Build.Splitting
 }
 
+// HashNames reports whether production output names should carry content hashes.
+// When unset, it follows the configured build.splitting value.
+func (c Config) HashNames() bool {
+	if c.Build.HashNames == nil {
+		return c.Splitting()
+	}
+	return *c.Build.HashNames
+}
+
 // rawConfig is the permissive shape used to decode the JSON that node prints.
 // styles.use entries are kept as raw messages so object entries (deferred) can
 // be distinguished from strings and reported precisely; build booleans are raw
@@ -140,6 +175,7 @@ type rawConfig struct {
 		DropConsole json.RawMessage `json:"dropConsole"`
 		SourceMap   json.RawMessage `json:"sourceMap"`
 		Splitting   json.RawMessage `json:"splitting"`
+		HashNames   json.RawMessage `json:"hashNames"`
 	} `json:"build"`
 	Dev Dev `json:"dev"`
 	// Output is kept raw so a non-string or unsupported value can be named
@@ -147,6 +183,7 @@ type rawConfig struct {
 	Output json.RawMessage `json:"output"`
 	// I18n is kept raw for the same reason: every shape error names its key.
 	I18n json.RawMessage `json:"i18n"`
+	Site json.RawMessage `json:"site"`
 }
 
 // LoadConfig loads and validates puzzle.config.js from appRoot.
@@ -326,6 +363,19 @@ func validate(raw rawConfig) (Config, error) {
 		cfg.Build.Splitting = &split
 	}
 
+	// build.hashNames: an explicit boolean overrides the splitting-based default.
+	// Anything non-boolean is rejected; null means unset.
+	if !unset(raw.Build.HashNames) {
+		var hash bool
+		if err := json.Unmarshal(raw.Build.HashNames, &hash); err != nil {
+			return Config{}, fmt.Errorf(
+				"%s: build.hashNames must be a boolean; got %s",
+				ConfigFileName, strings.TrimSpace(string(raw.Build.HashNames)),
+			)
+		}
+		cfg.Build.HashNames = &hash
+	}
+
 	// dev.proxy is consumed only by puzzle dev. Prefixes stay intact when
 	// forwarded, so each key must be an absolute request path prefix and each
 	// target must name an http(s) backend origin.
@@ -410,7 +460,36 @@ func validate(raw rawConfig) (Config, error) {
 		cfg.I18n = i18n
 	}
 
+	if !unset(raw.Site) {
+		site, err := validateSite(raw.Site)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.Site = site
+	}
+
 	return cfg, nil
+}
+
+// validateSite checks the top-level `site` key (D177): a string naming an
+// absolute http(s) origin. A trailing slash is dropped; any path, query or
+// fragment is rejected rather than ignored, since routerBase is where a path
+// belongs and a silently dropped one would put the wrong URL in every hreflang.
+func validateSite(raw json.RawMessage) (string, error) {
+	var site string
+	if err := json.Unmarshal(raw, &site); err != nil {
+		return "", fmt.Errorf("%s: site must be a string like 'https://example.com'; got %s", ConfigFileName, strings.TrimSpace(string(raw)))
+	}
+	u, err := url.Parse(site)
+	// Hostname, not Host: "https://:80" has a Host and no host name. A trailing
+	// colon with no port ("https://example.com:") is refused with it.
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || strings.HasSuffix(u.Host, ":") || u.Opaque != "" {
+		return "", fmt.Errorf("%s: site must be an absolute http or https origin like 'https://example.com'; got %q", ConfigFileName, site)
+	}
+	if u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.HasSuffix(site, "#") {
+		return "", fmt.Errorf("%s: site must be the origin only (got %q) — write %q; a path prefix belongs in routerBase", ConfigFileName, site, u.Scheme+"://"+u.Host)
+	}
+	return u.Scheme + "://" + u.Host, nil
 }
 
 // ValidLocaleTag reports whether tag is a well-formed locale tag, and when it is
@@ -551,10 +630,33 @@ func validateI18n(raw json.RawMessage) (*I18n, error) {
 	if err := json.Unmarshal(rawDefault, &def); err != nil {
 		return nil, fmt.Errorf("%s: i18n.defaultLocale must be a string; got %s", ConfigFileName, strings.TrimSpace(string(rawDefault)))
 	}
+	listed := false
 	for _, tag := range locales {
 		if tag == def {
-			return &I18n{Locales: locales, DefaultLocale: def}, nil
+			listed = true
+			break
 		}
 	}
-	return nil, fmt.Errorf("%s: i18n.defaultLocale %q is not in i18n.locales (%s)", ConfigFileName, def, strings.Join(locales, ", "))
+	if !listed {
+		return nil, fmt.Errorf("%s: i18n.defaultLocale %q is not in i18n.locales (%s)", ConfigFileName, def, strings.Join(locales, ", "))
+	}
+	out := &I18n{Locales: locales, DefaultLocale: def}
+
+	// routing (D177): only 'prefix' exists. Any other value — a typo such as
+	// 'prefixed' included — is an error, never a silent fall-back to one URL.
+	if rawRouting, ok := block["routing"]; ok && !unset(rawRouting) {
+		var routing string
+		if err := json.Unmarshal(rawRouting, &routing); err != nil || routing != RoutingPrefix {
+			return nil, fmt.Errorf("%s: i18n.routing accepts only '%s'; got %s", ConfigFileName, RoutingPrefix, strings.TrimSpace(string(rawRouting)))
+		}
+		out.Routing = routing
+	}
+	if rawDetect, ok := block["detect"]; ok && !unset(rawDetect) {
+		var detect bool
+		if err := json.Unmarshal(rawDetect, &detect); err != nil {
+			return nil, fmt.Errorf("%s: i18n.detect must be a boolean; got %s", ConfigFileName, strings.TrimSpace(string(rawDetect)))
+		}
+		out.Detect = &detect
+	}
+	return out, nil
 }

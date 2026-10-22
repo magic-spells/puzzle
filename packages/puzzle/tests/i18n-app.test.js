@@ -10,7 +10,9 @@ import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { hashRouter, memoryRouter } from '../client-runtime/router/modes.js';
 import { createTestApp, mountView } from '../client-runtime/testing/index.js';
 import { installFakeAnimate } from './helpers/fake-waapi.js';
+import { back } from './helpers/history.js';
 import { formatLocale } from '../client-runtime/formatters/locale.js';
+import { REDIRECT_CASES, REDIRECT_MANIFEST, SAME_ORIGIN } from './fixtures/locale-redirect-cases.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -156,12 +158,28 @@ describe('PuzzleApp + i18n', () => {
 		await app.mount();
 		expect(app.i18n).toBeTruthy();
 		expect(app.ctx.i18n).toBe(app.i18n);
-		expect(app.i18n.locales).toEqual(['en', 'es']);
+		// The switcher list (D177): config order, own-language names, the committed
+		// page (under routerBase) for every entry without prefix routing.
+		expect(app.i18n.locales).toEqual([
+			{ locale: 'en', label: 'English', href: '/shop/', active: true },
+			{ locale: 'es', label: 'Español', href: '/shop/', active: false },
+		]);
 		expect(app.i18n.defaultLocale).toBe('en');
 		expect(typeof app.formatters.getAll().t).toBe('function');
 		expect(fetch.mock.calls[0][0]).toBe('/shop/locales/en.AAAA.json');
 		app.unmount();
 		expect(app.i18n).toBe(null);
+	});
+
+	it('under prefix routing, locales hrefs swap the prefix after routerBase (D177)', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN });
+		const { app } = make({
+			routerBase: '/docs/',
+			__i18n: { manifest: { ...MANIFEST, routing: 'prefix' }, locale: 'en' },
+		});
+		history.replaceState({}, '', '/docs/about?tab=2');
+		await app.mount();
+		expect(app.i18n.locales.map((entry) => entry.href)).toEqual(['/docs/about?tab=2', '/docs/es/about?tab=2']);
 	});
 
 	it('hash and memory modes resolve manifest paths next to the entry module', async () => {
@@ -390,16 +408,20 @@ describe('PuzzleApp + i18n', () => {
 	// the pop commits and the rebuild runs there — never over the entry it left.
 	function gatedHome() {
 		let gate = Promise.resolve();
+		const state = { loading: false };
 		class SlowHome extends Home {
 			async data() {
+				state.loading = true;
 				await gate;
 				return super.data();
 			}
 		}
 		return {
+			state,
 			hold() {
 				let release;
 				gate = new Promise((r) => (release = r));
+				state.loading = false;
 				return release;
 			},
 			routes: [
@@ -416,8 +438,7 @@ describe('PuzzleApp + i18n', () => {
 		await app.mount();
 		await app.router.push('/about');
 		const release = slow.hold();
-		history.back();
-		for (let i = 0; i < 5; i++) await tick();
+		await back(() => slow.state.loading); // the pop is loading, held by the gate
 		// Resolves once the strings are active — before the pop lands.
 		await app.i18n.setLocale('es');
 		expect(location.pathname).toBe('/');
@@ -442,8 +463,7 @@ describe('PuzzleApp + i18n', () => {
 		await app.router.push('/about');
 		const release = slow.hold();
 		const switched = app.i18n.setLocale('es');
-		history.back();
-		for (let i = 0; i < 5; i++) await tick();
+		await back(() => slow.state.loading); // the pop is loading, held by the gate
 		releaseEs();
 		await tick();
 		release();
@@ -889,6 +909,306 @@ describe('PuzzleApp + i18n', () => {
 		expect(el.textContent).toBe('plain');
 		expect(app.i18n ?? null).toBe(null);
 		expect('i18n' in (app.ctx ?? {})).toBe(false);
+	});
+});
+
+// D177 — the SPA under locale prefix routing: the URL picks the locale, the
+// router reads and writes under its prefix, link()/router.url() take options,
+// setLocale is a page load, mount() redirects a first visit, and hash/memory
+// routing is refused.
+describe('PuzzleApp + locale prefix routing (D177)', () => {
+	const ROUTED = { ...MANIFEST, routing: 'prefix' };
+	const STORE_KEY = '__puzzleLocale';
+
+	// `location` with assign/replace spied: everything else reads the real one,
+	// so the router still sees replaceState/pushState.
+	function spyLocation() {
+		const calls = { assign: vi.fn(), replace: vi.fn() };
+		const real = window.location;
+		// A plain target: Location's own assign/replace are non-configurable, so a
+		// proxy over it may not report anything else for them.
+		vi.stubGlobal('location', new Proxy({}, { get: (_, k) => (k in calls ? calls[k] : real[k]) }));
+		return calls;
+	}
+	const setReferrer = (value) => Object.defineProperty(document, 'referrer', { value, configurable: true });
+	const setLanguages = (value) => Object.defineProperty(navigator, 'languages', { value, configurable: true });
+
+	afterEach(() => {
+		delete document.referrer;
+		delete navigator.languages;
+	});
+
+	it('the URL locale beats the stored choice; the router reads under the prefix', async () => {
+		localStorage.setItem(STORE_KEY, 'en');
+		const fetch = stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		history.replaceState({}, '', '/shop/es/about');
+		const { app, el } = make({ routerBase: '/shop', __i18n: { manifest: ROUTED, locale: 'en' } });
+		await app.mount();
+		expect(app.i18n.locale).toBe('es');
+		expect(app.router.current.path).toBe('/about');
+		expect(el.querySelector('h1').textContent).toBe('Acerca de');
+		expect(document.documentElement.lang).toBe('es');
+		// Locale files stay on the bare routerBase, never under the prefix.
+		expect(fetch.mock.calls.map(([url]) => url)).toEqual(['/shop/locales/es.BBBB.json']);
+	});
+
+	it('an unprefixed URL is the default locale, whatever was stored', async () => {
+		localStorage.setItem(STORE_KEY, 'es');
+		setReferrer(location.origin + '/es/'); // same-origin: no first-visit redirect
+		stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		history.replaceState({}, '', '/about');
+		const { app, el } = make({ __i18n: { manifest: ROUTED } });
+		await app.mount();
+		expect(app.i18n.locale).toBe('en');
+		expect(el.querySelector('h1').textContent).toBe('About');
+	});
+
+	it('push writes under the prefix; link() and router.url() carry it and take options', async () => {
+		stubFetch({ 'locales/es.BBBB.json': ES });
+		history.replaceState({}, '', '/es/about');
+		const { app } = make({ __i18n: { manifest: ROUTED } });
+		await app.mount();
+		await app.router.push('/?q=1');
+		expect(location.pathname + location.search).toBe('/es/?q=1');
+		expect(app.router.current.path).toBe('/?q=1');
+		const link = app.formatters.getAll().link;
+		expect(link('/about')).toBe('/es/about');
+		expect(link('/about', { locale: 'en' })).toBe('/about');
+		expect(link('/files/cv.pdf', { locale: false })).toBe('/files/cv.pdf');
+		expect(app.router.url('/about', { locale: 'en' })).toBe('/about');
+		expect(app.i18n.locales.map((entry) => entry.href)).toEqual(['/?q=1', '/es/?q=1']);
+	});
+
+	it('setLocale stores the choice and loads the same page under the other prefix', async () => {
+		const fetch = stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+		history.replaceState({}, '', '/es/about?x=1#team');
+		const { app, el } = make({ __i18n: { manifest: ROUTED } });
+		await app.mount();
+		const loc = spyLocation();
+		await app.i18n.setLocale('en');
+		expect(loc.assign).toHaveBeenCalledWith(location.origin + '/about?x=1#team');
+		expect(localStorage.getItem(STORE_KEY)).toBe('en');
+		// No fetch and no in-place rebuild: the page load does the switch.
+		expect(fetch).toHaveBeenCalledTimes(1);
+		expect(app.i18n.locale).toBe('es');
+		expect(el.querySelector('h1').textContent).toBe('Acerca de');
+		// The active locale again navigates nowhere, and is still remembered.
+		await app.i18n.setLocale('es');
+		expect(loc.assign).toHaveBeenCalledTimes(1);
+		expect(localStorage.getItem(STORE_KEY)).toBe('es');
+	});
+
+	it('setLocale in beforeMount navigates from the URL, before navigation #0', async () => {
+		stubFetch({ 'locales/es.BBBB.json': ES });
+		history.replaceState({}, '', '/es/about?x=1');
+		const loc = spyLocation();
+		const { app } = make({
+			__i18n: { manifest: ROUTED },
+			beforeMount: (a) => a.i18n.setLocale('en'),
+		});
+		await app.mount();
+		expect(loc.assign).toHaveBeenCalledWith(location.origin + '/about?x=1');
+	});
+
+	// setLocale from a guard or data() (D175) runs while the address bar still
+	// shows the page being left: it must reload the page being navigated TO.
+	describe('setLocale during a navigation', () => {
+		class Switching extends PuzzleView {
+			data() {
+				this.ctx.i18n.setLocale('es');
+				return {};
+			}
+			render() {
+				return h('puzzle-view', {}, [text('switching')]);
+			}
+		}
+		const switchGuard = (app) => () => {
+			app.i18n.setLocale('es');
+			return true;
+		};
+
+		function boot(extraRoutes, url = '/about') {
+			stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+			history.replaceState({}, '', url);
+			const navigate = vi.fn();
+			const holder = {};
+			const { app, el } = make({
+				routes: [...routes(), ...extraRoutes(holder)],
+				__i18n: { manifest: ROUTED, navigate },
+			});
+			holder.app = app;
+			return { app, el, navigate };
+		}
+
+		it('from a guard: the pushed page, query and fragment included', async () => {
+			const { app, navigate } = boot((h) => [{ path: '/account', view: About, guard: () => switchGuard(h.app)() }]);
+			await app.mount();
+			await app.router.push('/account?tab=2#plan');
+			expect(navigate).toHaveBeenCalledExactlyOnceWith('/es/account?tab=2#plan');
+		});
+
+		it('from data(): the pushed page, and the replaced one', async () => {
+			const { app, navigate } = boot(() => [{ path: '/account', view: Switching }]);
+			await app.mount();
+			await app.router.push('/account?x=1');
+			expect(navigate).toHaveBeenLastCalledWith('/es/account?x=1');
+			await app.router.push('/');
+			await app.router.replace('/account?y=2');
+			expect(navigate).toHaveBeenLastCalledWith('/es/account?y=2');
+		});
+
+		it('from a superseded navigation: the page that superseded it', async () => {
+			let releaseSlow;
+			const slowGate = new Promise((r) => (releaseSlow = r));
+			let releaseNext;
+			const nextGate = new Promise((r) => (releaseNext = r));
+			class Slow extends PuzzleView {
+				async data() {
+					await slowGate;
+					this.ctx.i18n.setLocale('es');
+					return {};
+				}
+				render() {
+					return h('puzzle-view', {}, [text('slow')]);
+				}
+			}
+			class Next extends PuzzleView {
+				async data() {
+					await nextGate;
+					return {};
+				}
+				render() {
+					return h('puzzle-view', {}, [text('next')]);
+				}
+			}
+			const { app, navigate } = boot(() => [
+				{ path: '/slow', view: Slow },
+				{ path: '/next', view: Next },
+			]);
+			await app.mount();
+			const slow = app.router.push('/slow');
+			const next = app.router.push('/next?n=1');
+			releaseSlow();
+			await slow;
+			expect(navigate).toHaveBeenCalledExactlyOnceWith('/es/next?n=1');
+			releaseNext();
+			await next;
+		});
+
+		it('after a blocked navigation: the committed page again', async () => {
+			const { app, navigate } = boot(() => [{ path: '/account', view: About, guard: () => false }]);
+			await app.mount();
+			await app.router.push('/account');
+			expect(app.router.current.path).toBe('/about');
+			await app.i18n.setLocale('es');
+			expect(navigate).toHaveBeenCalledExactlyOnceWith('/es/about');
+		});
+
+		it('on navigation #0: the page being loaded', async () => {
+			const { app, navigate } = boot(
+				(h) => [{ path: '/account', view: About, guard: () => switchGuard(h.app)() }],
+				'/account?x=1#top'
+			);
+			await app.mount();
+			expect(navigate).toHaveBeenCalledExactlyOnceWith('/es/account?x=1#top');
+		});
+	});
+
+	// The shared decision table (tests/fixtures/locale-redirect-cases.js), which
+	// the prerendered pages' inline script runs too, plus `detect: false`.
+	describe('first-visit redirect', () => {
+		const ORIGIN = 'http://localhost:3000'; // jsdom's test origin; asserted below
+		it.each([
+			...REDIRECT_CASES,
+			{ name: 'detect: false', url: '/about', languages: ['es'], detect: false, expected: null },
+		])('$name', async ({ url, routerBase, stored, languages, referrer, manifest: rowManifest, detect, expected }) => {
+			expect(location.origin).toBe(ORIGIN);
+			vi.spyOn(console, 'warn').mockImplementation(() => {}); // outside routerBase warns
+			if (stored) localStorage.setItem(STORE_KEY, stored);
+			setLanguages(languages);
+			setReferrer(referrer === SAME_ORIGIN ? ORIGIN + '/es/' : (referrer ?? ''));
+			history.replaceState({}, '', url);
+			const fetch = stubFetch({ 'locales/en.AAAA.json': EN, 'locales/es.BBBB.json': ES });
+			const loc = spyLocation();
+			const manifest = detect === false ? { ...REDIRECT_MANIFEST, detect } : (rowManifest ?? REDIRECT_MANIFEST);
+			const { app, el } = make({ routerBase, __i18n: { manifest } });
+			const mounted = app.mount();
+			if (expected) {
+				expect(loc.replace).toHaveBeenCalledExactlyOnceWith(ORIGIN + expected);
+				// Nothing boots behind the redirect, and mount() never settles.
+				expect(await outcome(mounted)).toBe('pending');
+				expect(app._mounted).toBe(false);
+				expect(fetch).not.toHaveBeenCalled();
+				expect(el.innerHTML).toBe('');
+			} else {
+				await mounted;
+				expect(loc.replace).not.toHaveBeenCalled();
+				expect(app._mounted).toBe(true);
+			}
+		});
+
+		// The decision runs synchronously inside mount(), so one macrotask is
+		// enough for a settled promise to have reported.
+		const outcome = (p) =>
+			Promise.race([
+				p.then(
+					() => 'resolved',
+					() => 'rejected'
+				),
+				new Promise((resolve) => setTimeout(() => resolve('pending'), 0)),
+			]);
+
+		it('a redirect leaves mount() pending, so code after `await app.mount()` never runs', async () => {
+			setLanguages(['es']);
+			history.replaceState({}, '', '/about');
+			stubFetch({});
+			const loc = spyLocation();
+			const { app } = make({ __i18n: { manifest: ROUTED } });
+			let after = false;
+			const boot = (async () => {
+				await app.mount();
+				after = true;
+				app.router.push('/'); // would throw: nothing was wired
+			})();
+			expect(await outcome(boot)).toBe('pending');
+			expect(after).toBe(false);
+			expect(loc.replace).toHaveBeenCalledTimes(1);
+			expect(app.router).toBe(null);
+			// A second mount() shares the same pending promise rather than booting.
+			expect(await outcome(app.mount())).toBe('pending');
+			expect(loc.replace).toHaveBeenCalledTimes(1);
+		});
+
+		it('a prerendered page skips it: its inline script already decided', async () => {
+			setLanguages(['es']);
+			history.replaceState({}, '', '/about');
+			stubFetch({ 'locales/en.AAAA.json': EN });
+			const loc = spyLocation();
+			const { app, el } = make({ __i18n: { manifest: ROUTED } });
+			el.setAttribute('data-puzzle-ssg', '');
+			await app.mount();
+			expect(loc.replace).not.toHaveBeenCalled();
+			expect(app.i18n.locale).toBe('en');
+			expect(el.querySelector('h1').textContent).toBe('About');
+		});
+	});
+
+	it('hash and memory routing are refused at mount', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN });
+		for (const routerMode of [hashRouter(), memoryRouter()]) {
+			const { app, el } = make({ routerMode, __i18n: { manifest: ROUTED } });
+			await expect(app.mount()).rejects.toThrow(/i18n\.routing: 'prefix' needs path routing/);
+			expect(el.innerHTML).toBe('');
+		}
+	});
+
+	it('a route on a locale prefix is refused at mount', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN });
+		const { app } = make({
+			routes: [...routes(), { path: '/es/promo', view: About }],
+			__i18n: { manifest: ROUTED },
+		});
+		await expect(app.mount()).rejects.toThrow(/route "\/es\/promo" collides with the locale prefix "es"/);
 	});
 });
 

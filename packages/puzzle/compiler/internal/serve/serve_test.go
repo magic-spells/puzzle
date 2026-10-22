@@ -117,6 +117,61 @@ func TestResolveStaticUses404Page(t *testing.T) {
 	}
 }
 
+// TestResolveStaticLocale404 proves a miss under a locale folder that carries
+// its own 404.html (D177 prefix routing) serves that page, read from the file
+// layout alone: the root 404.html answers everywhere else, the folder must match
+// the segment's exact case, and the locale's own index still resolves.
+func TestResolveStaticLocale404(t *testing.T) {
+	dist := writeTree(t, map[string]string{
+		"index.html":          "home",
+		"404.html":            "root not found",
+		"es/index.html":       "inicio",
+		"es/404.html":         "no encontrado",
+		"pt-BR/404.html":      "não encontrado",
+		"docs/index.html":     "docs",
+		"es/about/index.html": "acerca",
+	})
+	root404 := filepath.Join(dist, "404.html")
+
+	for path, want := range map[string]string{
+		"/es/nope":       filepath.Join(dist, "es", "404.html"),
+		"/es/nope/deep":  filepath.Join(dist, "es", "404.html"),
+		"/es/about/nope": filepath.Join(dist, "es", "404.html"),
+		"/pt-BR/nope":    filepath.Join(dist, "pt-BR", "404.html"),
+		"/nope":          root404,
+		"/esp/nope":      root404,
+		"/docs/nope":     root404, // a folder without its own 404.html
+		"/ES/nope":       root404, // segments match the folder exactly
+		"/pt-br/nope":    root404,
+		"/es/../nope":    root404, // cleaned to /nope before the segment is read
+	} {
+		res := Resolve(dist, ModeStatic, path)
+		if res.Status != 404 || !res.HTML || res.File != want {
+			t.Errorf("static %s = %+v, want %s at 404", path, res, want)
+		}
+	}
+
+	for _, path := range []string{"/es", "/es/", "/es/index.html"} {
+		res := Resolve(dist, ModeStatic, path)
+		if res.Status != 200 || res.File != filepath.Join(dist, "es", "index.html") {
+			t.Errorf("static %s = %+v, want es/index.html", path, res)
+		}
+	}
+	if res := Resolve(dist, ModeStatic, "/es/404.html"); res.Status != 200 {
+		t.Errorf("static /es/404.html = %+v, want the file itself at 200", res)
+	}
+
+	// Without a root 404.html a locale miss still finds its own page, and a
+	// non-locale miss is the bare 404.
+	bare := writeTree(t, map[string]string{"index.html": "home", "es/404.html": "no encontrado"})
+	if res := Resolve(bare, ModeStatic, "/es/x"); res.File != filepath.Join(bare, "es", "404.html") || res.Status != 404 {
+		t.Errorf("static /es/x without a root 404 = %+v", res)
+	}
+	if res := Resolve(bare, ModeStatic, "/x"); res.File != "" || res.Status != 404 {
+		t.Errorf("static /x without a root 404 = %+v, want a bare 404", res)
+	}
+}
+
 // TestResolveRejectsTraversal proves an escaping path never resolves to a file
 // outside dist in any mode.
 func TestResolveRejectsTraversal(t *testing.T) {

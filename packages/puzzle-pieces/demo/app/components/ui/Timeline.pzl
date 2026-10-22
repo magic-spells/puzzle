@@ -1,7 +1,7 @@
 <puzzle-view>
   <ol class={ listClass } aria-label={ label }>
     {#for item in items}
-      <li class={ item.rowClass }>
+      <li class={ item.rowClass } key={ item.key }>
         {#if !item.isLast}
           <span aria-hidden="true" class="absolute left-3 top-3 bottom-0 w-px -translate-x-1/2 bg-border"></span>
         {/if}
@@ -63,7 +63,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   `number` overrides the auto value; marker precedence is icon > number > dot,
 //   so a single step can still show a checkmark while its siblings show digits.
 //
-// items: [{ title, time?, description?, status?, icon?, number? }]
+// items: [{ title, time?, description?, status?, icon?, number?, id? }]
+//   id, when given, is the row key (the position otherwise).
 //   title        the event heading (text-ink font-medium)
 //   time         PREFORMATTED time string — this piece never formats dates; the
 //                consumer passes "9:41 AM", "2h ago", "Mar 4", … rendered in <time>
@@ -127,6 +128,8 @@ export default class Timeline extends PuzzleView {
       const hasOwnNumber = it.number !== undefined && it.number !== null && it.number !== '';
       const number = hasOwnNumber ? it.number : numbered ? i + 1 : '';
       return {
+        // The caller's id when it gives one, else the position.
+        key: it.id ?? '#' + i,
         title: it.title || '',
         time: it.time || '',
         description: it.description || '',

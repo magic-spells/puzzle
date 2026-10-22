@@ -56,7 +56,8 @@ type Result struct {
 //     router owns whatever was not prerendered.
 //   - static: an existing regular file, else the clean-URL <path>/index.html,
 //     else a real 404 (dist/404.html when the catch-all route wrote one, which is
-//     the file GitHub Pages / Netlify / Cloudflare serve). No index.html
+//     the file GitHub Pages / Netlify / Cloudflare serve; a locale's own
+//     dist/<locale>/404.html first under it, see missing). No index.html
 //     fallback: a static host has no router to fall back to.
 func Resolve(dist, mode, urlPath string) Result {
 	index := filepath.Join(dist, "index.html")
@@ -67,7 +68,7 @@ func Resolve(dist, mode, urlPath string) Result {
 			if isFile(index) {
 				return Result{File: index, HTML: true, Status: 200}
 			}
-			return missing(dist)
+			return missing(dist, clean)
 		}
 		return Result{File: index, Shell: true, HTML: true, Status: 200}
 	}
@@ -97,19 +98,50 @@ func Resolve(dist, mode, urlPath string) Result {
 	}
 
 	if mode == ModeStatic {
-		return missing(dist)
+		return missing(dist, clean)
 	}
 	return Result{File: index, Shell: true, HTML: true, Status: 200}
 }
 
-// missing is the static-mode miss: the built 404 page when the app's catch-all
-// route wrote one (SPEC §36), else a bare 404 the caller renders itself.
-func missing(dist string) Result {
+// missing is the static-mode miss for the cleaned URL path: the built 404 page
+// when the app's catch-all route wrote one (SPEC §36), else a bare 404 the
+// caller renders itself.
+//
+// Under i18n.routing: 'prefix' the catch-all is written once per locale, the
+// non-default ones at dist/<locale>/404.html (D177), so a miss under /es/ gets
+// the Spanish page. That is read from the file layout, not the config: when the
+// URL's first segment names a folder in dist that holds its own 404.html, that
+// page answers before the root one. The folder name must match the segment
+// exactly, as it does on the case-sensitive hosts a static site deploys to (a
+// case-insensitive disk would otherwise answer /ES/x with dist/es/404.html).
+func missing(dist, clean string) Result {
+	seg, _, _ := strings.Cut(strings.TrimPrefix(clean, "/"), "/")
+	if seg != "" && seg != "." && seg != ".." {
+		page := filepath.Join(dist, seg, "404.html")
+		if withinDir(dist, page) && isFile(page) && hasEntryNamed(dist, seg) && withinDirResolved(dist, page) {
+			return Result{File: page, HTML: true, Status: 404}
+		}
+	}
 	page := filepath.Join(dist, "404.html")
 	if isFile(page) {
 		return Result{File: page, HTML: true, Status: 404}
 	}
 	return Result{Status: 404}
+}
+
+// hasEntryNamed reports whether dir holds an entry spelled exactly name — the
+// case check os.Stat cannot make on a case-insensitive filesystem.
+func hasEntryNamed(dir, name string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.Name() == name {
+			return true
+		}
+	}
+	return false
 }
 
 func isFile(path string) bool {

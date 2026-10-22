@@ -2,7 +2,8 @@
  * puzzle-pieces palette — warm.
  *
  * WARM — "inspired by claude and anthropic for a warm tan, brown, and orange
- * color" (Cory, 2026-09-18). The clay is #CC785C. Ivory and tan in the light,
+ * color" (Cory, 2026-09-18); "browns and oranges" (2026-10-21). The grounds,
+ * lines and type are the Magic Spells Design System's Warm column. The clay is #CC785C. Ivory and tan in the light,
  * brown-black in the dark, and the clay carries near-black ink on a dark ground
  * (the fill is too light for white). In light mode the clay could do neither
  * job — white ink on it was 3.28:1 — so the light half is one step deeper, the
@@ -24,24 +25,24 @@
  *
  * NOT anchored to `:root`: an Appearance picker paints each palette inside a
  * preview card by scoping `data-scheme` on the card, so the block has to match
- * any element. `color-scheme` is not set here — that is the MODE axis
+ * any element. `color-scheme` is not set here — that is the STYLE axis
  * (`data-theme`), owned by themes/default.css.
  */
 
 [data-scheme='warm'] {
   /* Text — Ink ladders, strongest to faintest. */
-  --color-ink: light-dark(#141413, #f0efea);
-  --color-body: light-dark(#35352f, #cfccc2);
-  --color-muted: light-dark(#5a5950, #a09c92);
-  --color-faint: light-dark(#a8a49a, #5e5b53);
+  --color-ink: light-dark(#141413, #f3f2ee);
+  --color-body: light-dark(#35352f, #d2d0c7);
+  --color-muted: light-dark(#4a4a43, #bcbab1);
+  --color-faint: light-dark(#c9c8c2, #4a4945);
   --color-label-ink: var(--color-ink);
 
   /* Surfaces — The stacked grounds content sits on. */
-  --color-page: light-dark(#f5f3ec, #1f1e1d);
+  --color-page: light-dark(#f7f6f2, #1f1e1d);
   --color-surface: light-dark(#ffffff, #262624);
-  --color-surface-sunken: light-dark(#efede6, #1a1918);
-  --color-surface-raised: light-dark(#ffffff, #30302e);
-  --color-surface-base: light-dark(#faf9f5, #232221);
+  --color-surface-sunken: light-dark(#f0f0eb, #1a1918);
+  --color-surface-raised: light-dark(#ffffff, #302f2c);
+  --color-surface-base: light-dark(#fbfbf9, #1f1e1d);
 
   /* Brand — The one accent everything keys off. */
   --color-brand: light-dark(#a85b42, #cc785c);
@@ -56,14 +57,17 @@
   --color-danger-tint: light-dark(#faeeec, #3a221e);
   --color-danger-ink: light-dark(#ffffff, #1f1e1d);
   --color-danger-on-tint: light-dark(#a83e35, #ef8d82);
+  --color-danger-solid: #d11f1f;
+  --color-danger-solid-hover: #a41616;
+  --color-danger-solid-ink: #ffffff;
   --color-success: light-dark(#3b6d1e, #6fbf5a);
   --color-success-tint: light-dark(#eaf1e0, #1f2e1a);
   --color-warning: light-dark(#9a5a05, #e0a43a);
   --color-warning-tint: light-dark(#fbf1dd, #33260f);
 
   /* Lines & focus — Hairlines, the dashed outline and the focus ring. */
-  --color-border: light-dark(#e6e3da, #3a3936);
-  --color-border-strong: light-dark(#d1cdc0, #4c4b47);
+  --color-border: light-dark(#e5e4df, #3a3936);
+  --color-border-strong: light-dark(#cfcec5, #4c4b47);
   --color-border-dashed: light-dark(#83806f, #7d7b73);
   --color-ring: light-dark(#a85b42, #cc785c);
 
@@ -78,13 +82,13 @@
   --color-chart-8: light-dark(#e34948, #e66767);
 
   /* Shell — The frame, the bar, the rail, the panel and the card. */
-  --color-surface-frame: light-dark(#ece9e0, #121110);
-  --color-frame-light: #ece9e0;
+  --color-surface-frame: light-dark(#edebe4, #161513);
+  --color-frame-light: #edebe4;
   --color-bar: var(--color-surface-frame);
   --color-bar-ink: light-dark(#141413, #f0efea);
-  --color-bar-muted: light-dark(#5a5950, #a8a49b);
+  --color-bar-muted: light-dark(#4a4a43, #a8a49b);
   --color-bar-hover: light-dark(#ffffff, #2a2825);
-  --color-bar-line: light-dark(#dad6ca, #33312c);
+  --color-bar-line: light-dark(#e5e4df, #33312c);
   --color-surface-panel: light-dark(#ffffff, #1f1e1d);
   --color-surface-card: light-dark(#ffffff, #262624);
   --color-rail: var(--color-surface-frame);
@@ -119,30 +123,30 @@
   --shadow-popover: inset 0 1px 0 var(--color-edge-highlight), var(--shadow-contact), 0 24px 56px -16px var(--color-shadow-popover);
 }
 
-/* MEDIUM — the tokens whose medium value is not the dark one. */
-[data-scheme='warm'][data-theme='medium'],
-[data-theme='medium'] [data-scheme='warm']:not([data-theme]) {
+/* DIM — the tokens whose dim value is not the dark one. */
+[data-scheme='warm'][data-theme='dim'],
+[data-theme='dim'] [data-scheme='warm']:not([data-theme]) {
   color-scheme: dark;
 
   /* Text */
-  --color-ink: #e6e3db;
-  --color-body: #c4c0b5;
-  --color-muted: #aaa69b;
-  --color-faint: #67635a;
+  --color-ink: #edece8;
+  --color-body: #d0cec5;
+  --color-muted: #c7c5bd;
+  --color-faint: #5f5e59;
 
   /* Surfaces */
-  --color-page: #2b2926;
-  --color-surface: #343230;
-  --color-surface-sunken: #262422;
-  --color-surface-raised: #3a3733;
-  --color-surface-base: #2f2d2a;
+  --color-page: #302e2b;
+  --color-surface: #403f3c;
+  --color-surface-sunken: #2a2826;
+  --color-surface-raised: #403f3c;
+  --color-surface-base: #302e2b;
 
   /* Brand */
   --color-brand-tint: #4f3b31;
   --color-brand-on-tint: #eabca9;
 
   /* Status */
-  --color-danger: #eb8377;
+  --color-danger: #ee9285;
   --color-danger-dark: #f19589;
   --color-danger-tint: #432824;
   --color-danger-on-tint: #f19589;
@@ -150,18 +154,18 @@
   --color-warning-tint: #3a2c14;
 
   /* Lines & focus */
-  --color-border: #45423d;
-  --color-border-strong: #55514a;
-  --color-border-dashed: #8b877c;
+  --color-border: #5c5a56;
+  --color-border-strong: #6c6a65;
+  --color-border-dashed: #928e83;
 
   /* Shell */
-  --color-surface-frame: #262421;
-  --color-bar-ink: #e6e3db;
-  --color-bar-muted: #aaa69b;
-  --color-bar-hover: #33302c;
-  --color-bar-line: #403d38;
-  --color-surface-panel: #2d2b28;
-  --color-surface-card: #363330;
+  --color-surface-frame: #272623;
+  --color-bar-ink: #edece8;
+  --color-bar-muted: #c7c5bd;
+  --color-bar-hover: #43423f;
+  --color-bar-line: #5c5a56;
+  --color-surface-panel: #302e2b;
+  --color-surface-card: #403f3c;
   --color-shadow-contact: rgb(0 0 0 / 0.35);
 
   /* Alpha family */
@@ -175,4 +179,17 @@
   --color-shadow-popover: rgb(0 0 0 / 0.65);
   --color-shadow-inset: rgb(0 0 0 / 0.4);
   --color-text-shadow: rgb(0 0 0 / 0.4);
+}
+
+/* MIXED — the light half, with the frame and its bar roles dark. */
+[data-scheme='warm'][data-theme='mixed'],
+[data-theme='mixed'] [data-scheme='warm']:not([data-theme]) {
+  color-scheme: light;
+
+  /* Shell */
+  --color-surface-frame: #161513;
+  --color-bar-ink: #f0efea;
+  --color-bar-muted: #a8a49b;
+  --color-bar-hover: #2a2825;
+  --color-bar-line: #33312c;
 }

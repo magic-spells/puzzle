@@ -47,25 +47,41 @@ watch set.
 - Scoped styles wrap via `codegen.ScopedCSS` with the same symlink-normalized
   app-relative name as codegen.
 
+- Generated modules retain the opaque script at its original file line and byte column by padding its start with whitespace. Native JS/TS syntax and import diagnostics therefore use `.pzl` coordinates without rewriting script bytes; `TestPluginScriptErrorPositions` covers multiline JS/TS and same-line JS scripts.
+
 ## Usage scan and defines
 
-`scanFileUsage` walks first-party sources fail-soft and over-inclusive (D31): unreadable
-or unparseable files are skipped, generated/vendor trees pruned. `.pzl` ASTs yield the
+
+`scanFileUsage` reads sources fail-soft and over-inclusive (D31): unreadable
+or unparseable files are skipped. Two walks feed it (D89): the project walk
+(generated/vendor trees and `node_modules` pruned) and the package walk
+(`scanpkg.go`), which reads only the `.pzl` files of installed packages whose
+`package.json` lists `@magic-spells/puzzle` in `peerDependencies` or
+`dependencies`, in the `node_modules` under the root and its ancestors, by
+real path. `.pzl` ASTs yield the
 library functions called (the formatter virtual module), `t` literal keys
 (`Usage.TKeys`, key → files, for the missing-key warning; runtime-built keys skipped), and
 the feature facts behind `__PUZZLE_HAS_FLIP__` (a `flip` attr or prop),
-`__PUZZLE_HAS_PORTAL__`, `__PUZZLE_HAS_RAW_AT__` (any raw block). `__PUZZLE_HAS_LAZY__`
-comes from reading `.js`/`.ts`-family files (and each `.pzl`'s whole source, before its
+`__PUZZLE_HAS_PORTAL__`, `__PUZZLE_HAS_COMPONENT_SLOT__` (a reserved `<Component>` tag, including nested/skeleton content), `__PUZZLE_HAS_RAW_AT__` (any raw block). `__PUZZLE_HAS_LAZY__`
+comes from reading the project's `.js`/`.ts`-family files (and each `.pzl`'s whole source, before its
 parse) as TEXT for a `lazy(`-shaped call or a `lazy` specifier imported from
 `@magic-spells/puzzle` — `lazy()` lives in `routes.js`, where no template parse reaches.
 There is no managed-head gate (managed head tags are build-time only, D84).
 
-- `plugin.UsageScanner` memoizes per file (path + mtime + size); `ScanUsage` is a
+- `plugin.UsageScanner` memoizes per file (path + mtime + size) and per package
+  manifest; `ScanUsage` is a
   one-shot over the same function, so they cannot disagree. The scan runs ONCE per
   `build.Build` and is threaded to every pass through `passContext` — a pass must never
   start from an unscanned zero `Usage`. Long-lived builders re-scan only on a watched
   change and replace the context when any bit changes. Esbuild re-runs the formatter
   module's `OnLoad` every rebuild (`TestFormatterManifestFreshAcrossIncrementalRebuilds`).
+- **Per-file usage check** (`usagecheck.go`): `Usage.PZLFiles` names the `.pzl`
+  files the scan read. OnLoad records the usage of every other compiled `.pzl`
+  in a per-path map (it must outlive esbuild's cached OnLoad, like the CSS map),
+  and an OnEnd callback fails the pass when one needs a compiled-out gate or a
+  function missing from the manifest, naming the file, the features, the
+  `peerDependencies` fix and the dev restart. Records are filtered by the
+  pass's metafile graph. The check is off until `SetUsage` runs.
 - **i18n** (D175): a second virtual module, `@magic-spells/puzzle/i18n/manifest`;
   `SetI18n(enabled, manifestJS)` sets `__PUZZLE_HAS_I18N__` and the manifest source
   (`export default null` when off), re-read on every OnLoad.

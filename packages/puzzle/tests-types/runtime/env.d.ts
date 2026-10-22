@@ -12,13 +12,17 @@ declare const __PUZZLE_DEV__: boolean;
 declare const __PUZZLE_TAKEOVER__: boolean;
 declare const __PUZZLE_CAPTURE__: boolean;
 declare const __PUZZLE_HAS_I18N__: boolean;
+declare const __PUZZLE_HAS_LOCALE_ROUTING__: boolean;
 declare const __PUZZLE_HAS_PORTAL__: boolean;
+declare const __PUZZLE_HAS_COMPONENT_SLOT__: boolean;
+declare const __PUZZLE_HAS_CONDITIONAL_SLOT__: boolean;
 declare const __PUZZLE_HAS_SNIPPETS__: boolean;
 declare const __PUZZLE_HAS_RAW_HTML__: boolean;
 declare const __PUZZLE_HAS_RAW_AT__: boolean;
 declare const __PUZZLE_HAS_RAW_SANITIZE__: boolean;
 declare const __PUZZLE_HAS_LAZY__: boolean;
 declare const __PUZZLE_HAS_FLIP__: boolean;
+declare const __PUZZLE_HAS_LISTENER_OPTIONS__: boolean;
 
 interface Window {
 	/** The mounted app, published in dev builds for the DevTools bridge. */
@@ -43,11 +47,12 @@ declare module '@magic-spells/morph-engine' {
 // check. These shims cover exactly the calls the SSG makes.
 declare module 'node:fs' {
 	function readFileSync(path: string, encoding: 'utf8'): string;
+	function existsSync(path: string): boolean;
 	const promises: {
 		mkdir(path: string, options?: { recursive?: boolean }): Promise<string | undefined>;
 		writeFile(path: string, data: string): Promise<void>;
 	};
-	const fs: { readFileSync: typeof readFileSync; promises: typeof promises };
+	const fs: { readFileSync: typeof readFileSync; existsSync: typeof existsSync; promises: typeof promises };
 	export default fs;
 }
 

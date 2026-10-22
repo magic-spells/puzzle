@@ -13,7 +13,9 @@
   <section class="mt-12 grid gap-4">
     {#for principle in principles}
       <article class="rounded-2xl border border-line bg-surface p-6">
-        <h2 class="font-display text-2xl text-ink">{ principle.title }</h2>
+        <h2 class="font-display text-2xl text-ink">
+          <a href="{ link('/principles/' + principle.id) }" class="hover:text-accent">{ principle.title }</a>
+        </h2>
         <p class="mt-2 text-muted leading-relaxed">{ principle.body }</p>
       </article>
     {/for}

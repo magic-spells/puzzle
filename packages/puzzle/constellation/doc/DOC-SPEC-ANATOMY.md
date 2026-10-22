@@ -9,6 +9,11 @@ connections:
   - DOC-VIEW-LIFECYCLE
 verified_at: '2026-08-14T05:01:28.843Z'
 verified_sha: d74916a0e021b6bb86394551171838fbab161347
+notes:
+  - kind: state
+    text: >-
+      §4 Reserved names, read-only API: `renderTick` (D188, `this.renderTick()`) is a PuzzleView
+      member alongside getData/setData/memo; a subclass member named `renderTick` overrides it.
 ---
 
 The contract for app shape: exports and entry points, the app config surface, `.pzl` file anatomy, the real-JavaScript `<script>` rule, component context, project layout, TypeScript scripts, scoped styles, and the `@` module alias. See [[DOC-SPEC]] for the section index.
@@ -36,6 +41,7 @@ The root also exports `PuzzleValidationError` (§20) and, for compiled modules o
 
 ## 2. App configuration
 
+
 ```js
 // app.js
 import { PuzzleApp } from '@magic-spells/puzzle';
@@ -58,6 +64,18 @@ app.mount();
 ```
 
 The whole config surface: `target`, `routes`, `models`, `formatters`, `apiURL`, plus the optional `adapter` (§58), `beforeRequest` (§49), `storage` (a Storage-like object for persistence, §8), `scrollBehavior` (§14), `focusBehavior` (§51), `routerMode` (an imported mode object, §15), `routerBase` (§23), `transitionMode` (§26), `beforeMount`/`mounted`/`beforeUnmount` (§34), and `onError`/`errorView` (§60). Translations are configured in `puzzle.config.js`, not here (§66). The `formatters` key registers the app's template **functions** (§6); a function named like a standard one (`pluralize`, `currency`, …) replaces it, with a development warning (D174). App-level `settings`, `computed`, global `events` and `methods` are rejected ([[DOC-SPEC]] cut list).
+
+### `app.idle()` — wait for the app to go quiet
+
+```js
+const quiet = await app.idle({ timeout: 10000 }); // true when idle; false on timeout
+```
+
+`idle()` resolves `true` once two consecutive frames find no `mount()` or navigation in flight, no store notification or flush pending, no async `data()` running, no `setLocale()` switch loading, and — with the adapter — no tracked find's fetch in flight (D185). Each check runs after its frame's callbacks, so a `setData()` render scheduled before it has landed. It resolves `false` when `timeout` ms (default 10000) run out first, and never rejects; a timeout that is not a finite number ≥ 0 logs a development error and uses 10000. In a hidden tab it steps on timers, as the store's flush and a view's `setData()` render do (D63). An app neither mounted nor mounting — never mounted, or after `unmount()` — resolves `true` at once. It reads state the runtime already keeps, so it cannot see user timers, animations, IntersectionObserver triggers, writes or fetches nothing awaits (an event handler's unawaited `save()` or `loadMany()`), or a path- or hash-mode `back()`, `forward()` or `go()` before its `popstate` fires. The testing module's `settled()` drives work to a fixed point instead ([[DOC-TESTING]]).
+
+### `this.renderTick()` — wait for a render
+
+`await this.renderTick()` in view code resolves once no store flush or view render is scheduled anywhere in the runtime, including the renders those schedule (D188) — the point to read `this.refs` or measure the DOM after `setData()` or a store write. It is a `PuzzleView` method, so it needs no import. It forces nothing, has no timeout, and does not wait for async `data()`, fetches, navigation, locale loading, animations or user timers; that wider question is `app.idle()`.
 
 ## 3. `.pzl` file anatomy
 
@@ -147,7 +165,7 @@ export default class TodoHome extends PuzzleView {
 
 ## 10. Component context
 
-`this.ctx` holds three services: `store`, `router`, `formatters` (the function registry). A fourth, `i18n`, is present only when `puzzle.config.js` configures translations (§66, [[DECISION-D175-TRANSLATIONS]]). `this.$app`, `this.$events`, `ctx.utils` and a global event bus are rejected ([[DOC-SPEC]] cut list).
+`this.ctx` holds three services, `store`, `router`, `formatters` (the function registry), and `idle(options?)`, the app's `idle()` bound to the app (§2, D189), so a component can await it (or destructure it) without holding the app. `i18n` is present only when `puzzle.config.js` configures translations (§66, [[DECISION-D175-TRANSLATIONS]]). `this.$app`, `this.$events`, `ctx.utils` and a global event bus are rejected ([[DOC-SPEC]] cut list).
 
 ## 11. Project layout & build
 

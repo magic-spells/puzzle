@@ -27,6 +27,7 @@ import {
 } from '../model.js';
 import { devtoolsFlush } from '../devtools.js';
 import { RENDER_REV } from '../renderRev.js';
+import { schedule } from '../scheduler.js';
 import {
 	devperfStoreFlushEnd,
 	devperfStoreFlushNotifications,
@@ -182,7 +183,6 @@ export class Store {
 		// data() run.
 		this._flushSeq = 0;
 		this._flushScheduled = false;
-		this._flushTimer = null; // armed fallback timer (D63); cleared by flush()
 		this._persistPending = false; // dirty flag: storage write is batched into flush()
 		// Both authoring guards run BEFORE _installRelationships so a relationship
 		// named after a model method is caught rather than quietly replacing that
@@ -198,6 +198,9 @@ export class Store {
 	// ---- model plumbing ----------------------------------------------------
 
 	/**
+	 * The registered model constructor, or PuzzleModel for an unregistered type.
+	 * Model.primaryKey() returns its primary field name (default 'id').
+	 * Lookup is local and never subscribes or fetches.
 	 * @param {string} type
 	 * @returns {typeof PuzzleModel}
 	 */
@@ -803,6 +806,61 @@ export class Store {
 		}
 	}
 
+	/**
+	 * Observe a collection (`observe(type, fn)`) or one record
+	 * (`observe(type, id, fn)`) from outside any view (D184). `fn()` runs with no
+	 * arguments after the batched flush that carries a matching change — at most
+	 * once per flush, isolated like every other subscriber. Returns `stop()`,
+	 * which removes exactly this observation and is idempotent.
+	 *
+	 * The function is linked straight onto the key — no withTracking, so no
+	 * transactional reset and no fetch, on adapter apps too. Each call wraps `fn`
+	 * in its own closure, so observing the same function twice gives two
+	 * independent observations. The record key is spelled exactly as
+	 * _findOneLocal and _notify spell it, so `observe('task', '7', fn)` and a
+	 * change to task 7 meet on the same key, and a record that does not exist yet
+	 * fires when it is created.
+	 * @param {string} type
+	 * @param {unknown} id a primary key, or the callback for a collection observation
+	 * @param {() => unknown} [fn]
+	 * @returns {() => void}
+	 */
+	observe(type, id, fn) {
+		const one = fn !== undefined;
+		const cb = one ? fn : id;
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (typeof type !== 'string' || typeof cb !== 'function' || (one && id == null)) {
+				throw new Error(
+					'[puzzle] store.observe(type, [id,] fn) needs a model type string, an optional non-null id, and a callback function'
+				);
+			}
+		}
+		const key = one ? type + REC_SEP + id : type;
+		// A function subscriber: delivery calls it as `sub()` (see _deliverNotifications).
+		// The callback runs UNTRACKED: a flush can land while an async data() sits
+		// at an await with `_tracking` still pointing at its view, and reads inside
+		// the callback must not be credited to that view.
+		const sub = /** @type {Subscriber} */ (
+			/** @type {unknown} */ (
+				() => {
+					const tracking = this._tracking;
+					const added = this._trackingAdded;
+					this._tracking = this._trackingAdded = null;
+					try {
+						return /** @type {Function} */ (cb)();
+					} finally {
+						this._tracking = tracking;
+						this._trackingAdded = added;
+					}
+				}
+			)
+		);
+		if (!this.subscribersByKey.has(key)) this.subscribersByKey.set(key, new Set());
+		this.subscribersByKey.get(key).add(sub);
+		this.keysBySubscriber.set(sub, new Set([key]));
+		return () => this._dropSubscription(key, sub);
+	}
+
 	/** @param {string} key */
 	_subscribe(key) {
 		const subscriber = this._tracking;
@@ -857,26 +915,15 @@ export class Store {
 	 * save whose 204 body changes nothing observable — still guarantees the
 	 * pending storage write lands.
 	 *
-	 * D63: rAF stays the primary scheduler (frame-aligned batching — one flush
-	 * per frame however many records changed), but Chrome suspends rAF entirely
-	 * in hidden tabs, so a backgrounded app would queue mutations forever behind
-	 * one frozen rAF. When hidden (or in node/tests with no rAF), take the timer
-	 * queue directly; when visible, ALSO arm a fallback timer so a flush
-	 * scheduled at the visibility boundary — the tab hiding after we schedule but
-	 * before the next frame — still delivers. flush() clears the fallback and is
-	 * idempotent, so the rAF and the timer can never double-deliver.
+	 * D63: frame-aligned batching (one flush per frame however many records
+	 * changed), with a timer in hidden tabs — see scheduler.js. A frame that fires
+	 * after an explicit flush() finds nothing pending.
 	 */
 	_scheduleFlush() {
 		if (this._flushScheduled) return;
 		this._flushScheduled = true;
 
-		const hidden = typeof document !== 'undefined' && document.hidden;
-		if (!hidden && typeof requestAnimationFrame === 'function') {
-			requestAnimationFrame(() => this.flush());
-			this._flushTimer = setTimeout(() => this.flush(), 220);
-		} else {
-			setTimeout(() => this.flush(), 0);
-		}
+		schedule(() => this.flush());
 	}
 
 	/**
@@ -891,12 +938,6 @@ export class Store {
 			devperfStoreFlushStart(this);
 		}
 		this._flushScheduled = false;
-		// Clear any armed D63 fallback timer — whichever scheduler (rAF or the
-		// timer) reached flush() first cancels the other, so delivery is once-only.
-		if (this._flushTimer) {
-			clearTimeout(this._flushTimer);
-			this._flushTimer = null;
-		}
 
 		this._deliverNotifications();
 
@@ -972,7 +1013,7 @@ export class Store {
 				// earlier subscriber in this same batch may have unsubscribed this one
 				// (a parent's data() destroying a child, an app callback removing
 				// another). Delivering to a subscriber that asked to stop is a bug the
-				// gather pass cannot see — a plain `store.subscribe(fn)` callback has no
+				// gather pass cannot see — a `store.observe()` callback has no
 				// destroyed-guard of its own, so this is its only protection. The test
 				// is the set this subscriber was GATHERED from, which is what
 				// unsubscribe() empties, rather than the keysBySubscriber side index.

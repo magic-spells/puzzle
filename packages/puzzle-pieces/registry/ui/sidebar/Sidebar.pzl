@@ -6,7 +6,7 @@
 
     <ul class="flex-1 min-h-0 space-y-0.5 overflow-y-auto overflow-x-hidden p-2">
       {#for item in items}
-        <li class={ item.rowClass }>
+        <li class={ item.rowClass } key={ item.index }>
           {#if item.kind === 'divider'}
             <div class={ dividerClass } role="separator" aria-hidden="true"></div>
 
@@ -60,7 +60,7 @@
               inert={ !item.visualOpen }>
               <ul class={ item.submenuClass }>
                 {#for child in item.children}
-                  <li>
+                  <li key={ child.index }>
                     <a
                       href={ child.href }
                       class={ child.linkClass }
@@ -86,7 +86,7 @@
                 <p class={ flyoutHeadingClass }>{ item.label }</p>
                 <ul class="space-y-0.5">
                   {#for child in item.children}
-                    <li>
+                    <li key={ child.index }>
                       <a
                         href={ child.href }
                         class={ child.flyoutLinkClass }
@@ -230,8 +230,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //                       the shell roles every theme file declares — bg-rail, text-rail-ink /
 //                       text-rail-muted, bg-rail-active on hover and the active row, and
 //                       border-rail-edge for every hairline — so it reads as one flat
-//                       surface with a top bar (bg-bar) in all three modes: dark frame
-//                       in dark and medium, light-grey frame in light. The flyout stays a
+//                       surface with a top bar (bg-bar) in every style: dark frame
+//                       in dark, dim and mixed, light-grey frame in light. The flyout stays a
 //                       surface popover in both variants (it floats over content).
 //   collapsible bool    OPTIONAL, default true. `false` removes the edge toggle from
 //                       the DOM, ignores `collapsed`, and keeps the rail at its full
@@ -411,7 +411,9 @@ const flyoutLinkClass = (active, v) =>
 
 // Normalize the raw items prop into tagged rows the template branches on, resolving
 // active state against activePath. The array index is kept as a stable key for the
-// per-parent open map and the submenu/trigger ids.
+// per-parent open map, the submenu/trigger ids and the {#for} row keys. Children
+// carry their own index for the same reason: an href is not unique (a missing one
+// falls back to '#'), and a keyless row would warn and diff positionally anyway.
 function normalizeItems(items, activePath) {
   const list = Array.isArray(items) ? items : [];
   return list.map((it, i) => {
@@ -421,9 +423,10 @@ function normalizeItems(items, activePath) {
     }
 
     const children = Array.isArray(it && it.children)
-      ? it.children.map((c) => {
+      ? it.children.map((c, ci) => {
           const href = (c && c.href) || '#';
           return {
+            index: ci,
             label: c && c.label != null ? String(c.label) : '',
             href,
             badge: c && c.badge != null ? String(c.badge) : '',

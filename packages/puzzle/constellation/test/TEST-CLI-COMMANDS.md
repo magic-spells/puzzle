@@ -40,7 +40,9 @@ projects. Packages: `compiler/cmd/puzzle` and
 - **Scaffolding and generation:** the embedded templates (JS and `-ts` variants)
   and the view/component/layout/model generators. Generated `.pzl` is compiled in
   test, so a template that drifts from the grammar fails here, not in a user's
-  first `puzzle dev`.
+  first `puzzle dev`. `TestGenerateRejectsReservedComponentName` pins the D180
+  rejection and rename hint for component/view/layout/family-root/family-member
+  scaffolds in JS and TS apps, and verifies the refusal creates no files.
 - **The embedded agent skill:** `skill_examples_test.go` compiles every template
   example `skills/puzzle/SKILL.md` presents as working (each ```` ```html ````
   block and each inline template span) and requires the spans it shows as

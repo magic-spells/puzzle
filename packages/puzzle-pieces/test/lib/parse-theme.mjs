@@ -1,19 +1,26 @@
 /**
  * Read registry/theme/*.css the way the browser does — into one value map per
- * mode — so the tests measure what actually paints. Test-only: the demo reads
+ * style — so the tests measure what actually paints. Test-only: the demo reads
  * its colour cards from live computed styles, never from this parser.
  *
  * pieces.css   `@theme { … }` holds the default palette's `light-dark()` pairs;
- *              its medium block is the one whose selector list starts with
- *              `[data-theme='medium']:not([data-scheme])`.
- * <scheme>.css `[data-scheme='x'] { … }` holds the pairs; the medium block's
- *              selector list starts with `[data-scheme='x'][data-theme='medium']`.
+ *              its dim / mixed blocks are the ones whose selector list starts
+ *              with `[data-theme='dim']:not([data-scheme])` (or 'mixed').
+ * <scheme>.css `[data-scheme='x'] { … }` holds the pairs; the dim / mixed
+ *              blocks' selector lists start with `[data-scheme='x'][data-theme='dim']`.
+ *
+ * Dark and light are the two halves of the pairs. DIM lays its block over the
+ * dark half (it runs on `color-scheme: dark`); MIXED lays its block over the
+ * LIGHT half (`color-scheme: light`, the frame re-declared dark).
  */
 import { readFileSync } from 'node:fs';
 
 export const THEME_DIR = new URL('../../registry/theme/', import.meta.url);
-export const SCHEMES = ['default', 'dim', 'warm', 'void'];
-export const MODES = ['light', 'medium', 'dark'];
+export const SCHEMES = ['default', 'cool', 'warm', 'void'];
+/** The styles, in picker order (the `data-theme` values). */
+export const STYLES = ['dark', 'dim', 'mixed', 'light'];
+/** The half of every `light-dark()` pair each style's color-scheme resolves. */
+export const BASE_HALF = { dark: 'dark', dim: 'dark', mixed: 'light', light: 'light' };
 
 export const fileFor = (scheme) => (scheme === 'default' ? 'pieces.css' : `${scheme}.css`);
 export const readTheme = (scheme) => readFileSync(new URL(fileFor(scheme), THEME_DIR), 'utf8');
@@ -42,17 +49,17 @@ export function blocks(css) {
 }
 
 const pairBlockSelector = (scheme) => (scheme === 'default' ? '@theme' : `[data-scheme='${scheme}']`);
-const mediumBlockPrefix = (scheme) =>
-	scheme === 'default' ? `[data-theme='medium']:not([data-scheme])` : `[data-scheme='${scheme}'][data-theme='medium']`;
+const styleBlockPrefix = (scheme, style) =>
+	scheme === 'default' ? `[data-theme='${style}']:not([data-scheme])` : `[data-scheme='${scheme}'][data-theme='${style}']`;
 
 /** The block holding the palette's light-dark pairs, or null. */
 export function pairBlock(scheme, css = readTheme(scheme)) {
 	return blocks(css).find((b) => b.selector === pairBlockSelector(scheme)) || null;
 }
 
-/** The block holding the palette's medium re-declarations, or null. */
-export function mediumBlock(scheme, css = readTheme(scheme)) {
-	return blocks(css).find((b) => b.selector.startsWith(mediumBlockPrefix(scheme))) || null;
+/** The block holding the palette's re-declarations for `dim` or `mixed`, or null. */
+export function styleBlock(scheme, style, css = readTheme(scheme)) {
+	return blocks(css).find((b) => b.selector.startsWith(styleBlockPrefix(scheme, style))) || null;
 }
 
 /** Split on commas NOT inside parentheses — `light-dark(rgb(0 0 0 / 0.2), #fff)`. */
@@ -84,25 +91,22 @@ export function half(value, side) {
 }
 
 /**
- * `{ light, medium, dark }` for one palette, each a Map prop → raw value with
- * pairs split per mode and the medium block laid over the dark half.
+ * `{ dark, dim, mixed, light }` for one palette, each a Map prop → raw value
+ * with pairs split per style's half and that style's block laid over it.
  */
-export function modeMaps(scheme, css = readTheme(scheme)) {
+export function styleMaps(scheme, css = readTheme(scheme)) {
 	const pairs = pairBlock(scheme, css);
 	if (!pairs) throw new Error(`${fileFor(scheme)}: no ${pairBlockSelector(scheme)} block`);
-	const medium = mediumBlock(scheme, css);
 	const pairDecls = declarations(pairs.body);
-	const mediumDecls = medium ? declarations(medium.body) : new Map();
-
-	const light = new Map();
-	const dark = new Map();
-	const med = new Map();
-	for (const [prop, value] of pairDecls) {
-		light.set(prop, half(value, 'light'));
-		dark.set(prop, half(value, 'dark'));
-		med.set(prop, mediumDecls.has(prop) ? mediumDecls.get(prop) : half(value, 'dark'));
+	const out = {};
+	for (const style of STYLES) {
+		const block = style === 'dim' || style === 'mixed' ? styleBlock(scheme, style, css) : null;
+		const over = block ? declarations(block.body) : new Map();
+		const map = new Map();
+		for (const [prop, value] of pairDecls) map.set(prop, over.has(prop) ? over.get(prop) : half(value, BASE_HALF[style]));
+		out[style] = map;
 	}
-	return { light, medium: med, dark };
+	return out;
 }
 
 /** Follow `var(--…)` aliases inside one mode map; a hop limit turns a cycle into null. */
@@ -114,12 +118,12 @@ export function resolve(map, prop, hops = 0) {
 	return hops > 8 ? null : resolve(map, alias[1], hops + 1);
 }
 
-/** Every mode map resolved: `{ light, medium, dark }` of Map prop → colour string. */
-export function resolvedModes(scheme, css = readTheme(scheme)) {
-	const maps = modeMaps(scheme, css);
+/** Every style map resolved: `{ dark, dim, mixed, light }` of Map prop → colour string. */
+export function resolvedStyles(scheme, css = readTheme(scheme)) {
+	const maps = styleMaps(scheme, css);
 	const out = {};
-	for (const mode of MODES) {
-		out[mode] = new Map([...maps[mode].keys()].map((prop) => [prop, resolve(maps[mode], prop)]));
+	for (const style of STYLES) {
+		out[style] = new Map([...maps[style].keys()].map((prop) => [prop, resolve(maps[style], prop)]));
 	}
 	return out;
 }

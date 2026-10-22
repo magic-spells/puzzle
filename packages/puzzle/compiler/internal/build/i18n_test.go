@@ -133,12 +133,59 @@ func TestValidatePublicReservesLocalesWithI18n(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "app", "public", "locales"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidatePublic(root, false, false); err != nil {
+	if err := ValidatePublic(root, false, nil); err != nil {
 		t.Fatalf("locales/ belongs to the app without i18n: %v", err)
 	}
-	err := ValidatePublic(root, false, true)
+	err := ValidatePublic(root, false, enI18n)
 	if err == nil || !strings.Contains(err.Error(), "dist/locales") {
 		t.Fatalf("expected a reserved-name error, got %v", err)
+	}
+}
+
+// TestValidatePublicReservesLocalePrefixes: under prefix routing (D177) a
+// top-level public entry — folder or file — named after a non-default locale
+// collides with that locale's dist/<tag>/ pages, case-insensitively. The
+// default locale's tag, nested entries, and apps without routing are untouched.
+func TestValidatePublicReservesLocalePrefixes(t *testing.T) {
+	prefix := &config.I18n{Locales: []string{"en", "es", "pt-BR"}, DefaultLocale: "en", Routing: config.RoutingPrefix}
+	for _, tc := range []struct {
+		name  string
+		dir   bool
+		clash string
+	}{
+		{"es", true, "/es/"},
+		{"ES", true, "/es/"},
+		{"pt-br", false, "/pt-BR/"},
+		{"en", true, ""},
+		{"esp", true, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			pub := filepath.Join(root, "app", "public")
+			if tc.dir {
+				if err := os.MkdirAll(filepath.Join(pub, tc.name, "nested"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if err := os.MkdirAll(pub, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				write(t, filepath.Join(pub, tc.name), "x")
+			}
+			if err := ValidatePublic(root, false, enI18n); err != nil {
+				t.Fatalf("without routing %s belongs to the app: %v", tc.name, err)
+			}
+			err := ValidatePublic(root, false, prefix)
+			if tc.clash == "" {
+				if err != nil {
+					t.Fatalf("%s must not collide: %v", tc.name, err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.clash) || !strings.Contains(err.Error(), tc.name) {
+				t.Fatalf("expected a %s prefix collision naming %s, got %v", tc.clash, tc.name, err)
+			}
+		})
 	}
 }
 
@@ -180,6 +227,69 @@ func TestI18nWarnings(t *testing.T) {
 	}
 }
 
+// TestI18nRoutingWarnings: the scan's root-relative hrefs become positioned
+// warnings only under prefix routing, sorted by position (D177); detect set
+// without routing warns that it does nothing.
+func TestI18nRoutingWarnings(t *testing.T) {
+	root := t.TempDir()
+	res := &locales.Result{Manifest: locales.Manifest{DefaultLocale: "en"}}
+	usage := plugin.Usage{Formatters: map[string]bool{}, RootHrefs: []plugin.RootHref{
+		{File: "app/views/Z.pzl", Line: 1, Col: 4, Href: "/z"},
+		{File: "app/views/A.pzl", Line: 9, Col: 2, Href: "/blog/", Mixed: true},
+		{File: "app/views/A.pzl", Line: 3, Col: 7, Href: "/it's"},
+	}}
+	if got := i18nWarnings(root, config.Config{I18n: enI18n}, usage, res); len(got) != 0 {
+		t.Fatalf("no routing must print no href warning: %q", got)
+	}
+
+	prefix := &config.I18n{Locales: []string{"en", "es"}, DefaultLocale: "en", Routing: config.RoutingPrefix}
+	got := i18nWarnings(root, config.Config{I18n: prefix}, usage, res)
+	want := []string{
+		`app/views/A.pzl:3:7: href="/it's" skips the locale prefix, so it always opens the default-language page under i18n.routing: 'prefix' — write href={ link('/it\'s') }, or link('/it\'s', { locale: false }) for a file that exists once`,
+		`app/views/A.pzl:9:2: href="/blog/…" skips the locale prefix, so it always opens the default-language page under i18n.routing: 'prefix' — build it with link() — link(path), or link(path, { locale: false }) for a file that exists once`,
+		`app/views/Z.pzl:1:4: href="/z" skips the locale prefix, so it always opens the default-language page under i18n.routing: 'prefix' — write href={ link('/z') }, or link('/z', { locale: false }) for a file that exists once`,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("warnings:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+
+	off := false
+	detectOnly := &config.I18n{Locales: []string{"en"}, DefaultLocale: "en", Detect: &off}
+	got = i18nWarnings(root, config.Config{I18n: detectOnly}, plugin.Usage{Formatters: map[string]bool{}}, res)
+	if len(got) != 1 || !strings.Contains(got[0], "i18n.detect has no effect without i18n.routing: 'prefix'") {
+		t.Fatalf("detect without routing: %q", got)
+	}
+	prefix.Detect = &off
+	if got := i18nWarnings(root, config.Config{I18n: prefix}, plugin.Usage{Formatters: map[string]bool{}}, res); len(got) != 0 {
+		t.Fatalf("detect with routing is meaningful: %q", got)
+	}
+}
+
+// TestLocaleRoutingDefine: __PUZZLE_HAS_LOCALE_ROUTING__ is true only under
+// prefix routing, and every pass's plugin carries it (the app, prerender and
+// page passes all build theirs through passContext.plugin and bundleDefines).
+func TestLocaleRoutingDefine(t *testing.T) {
+	root := t.TempDir()
+	prefix := &config.I18n{Locales: []string{"en", "es"}, DefaultLocale: "en", Routing: config.RoutingPrefix}
+	for _, tc := range []struct {
+		i18n       *config.I18n
+		i18nOn, on string
+	}{
+		{nil, "false", "false"},
+		{enI18n, "true", "false"},
+		{prefix, "true", "true"},
+	} {
+		pc := &passContext{cache: plugin.NewCompileCache(), i18n: tc.i18n}
+		for _, flags := range []bundleFlags{{}, {Takeover: true, Capture: true}} {
+			d := bundleDefines(pc.plugin(root), flags)
+			if d["__PUZZLE_HAS_I18N__"] != tc.i18nOn || d["__PUZZLE_HAS_LOCALE_ROUTING__"] != tc.on {
+				t.Errorf("i18n %+v: HAS_I18N=%s HAS_LOCALE_ROUTING=%s, want %s/%s",
+					tc.i18n, d["__PUZZLE_HAS_I18N__"], d["__PUZZLE_HAS_LOCALE_ROUTING__"], tc.i18nOn, tc.on)
+			}
+		}
+	}
+}
+
 // TestBuildStaticI18n: static output prerenders in the default locale, carries
 // the island on every page, and ships the locale files.
 func TestBuildStaticI18n(t *testing.T) {
@@ -203,6 +313,32 @@ func TestBuildStaticI18n(t *testing.T) {
 	pages := staticPageBundleSources(t, dist)
 	if !strings.Contains(pages, "data-puzzle-locale") {
 		t.Error("static page bundles lost the i18n runtime")
+	}
+}
+
+// TestBuildStaticLocaleRouting: a static build with prefix routing and a site
+// stays green while the JS half is unbuilt, and its page bundles carry the
+// manifest's routing field (D177); without routing that field is absent.
+func TestBuildStaticLocaleRouting(t *testing.T) {
+	requireStaticRuntime(t)
+	routingField := regexp.MustCompile(`"?routing"?:\s*"prefix"`)
+	for _, on := range []bool{false, true} {
+		root := writeSSGFixture(t, i18nFixture())
+		i18n := *enI18n
+		if on {
+			i18n.Routing = config.RoutingPrefix
+		}
+		cfg := config.Config{Output: "static", I18n: &i18n, Site: "https://example.com"}
+		if err := Build(root, Options{Config: &cfg, Development: true}); err != nil {
+			t.Fatalf("static Build (routing %v): %v", on, err)
+		}
+		dist := filepath.Join(root, "dist")
+		if home := readFile(t, filepath.Join(dist, "index.html")); !strings.Contains(home, "<h1>Welcome</h1>") {
+			t.Errorf("routing %v: home not prerendered:\n%s", on, home)
+		}
+		if got := routingField.MatchString(staticPageBundleSources(t, dist)); got != on {
+			t.Errorf("routing %v: page bundles carry the routing field = %v", on, got)
+		}
 	}
 }
 

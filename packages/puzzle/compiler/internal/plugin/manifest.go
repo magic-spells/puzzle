@@ -36,6 +36,8 @@ func (p *Plugin) SetUsage(usage Usage) {
 
 	p.setFormattersLocked(usage.Formatters)
 	p.features = usage.Features()
+	p.usageSet = true
+	p.scanned = usage.PZLFiles
 }
 
 func (p *Plugin) setFormattersLocked(used map[string]bool) {
@@ -104,6 +106,21 @@ func (p *Plugin) I18nEnabled() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.i18nEnabled
+}
+
+// SetLocaleRouting records whether i18n.routing is 'prefix' (D177), which drives
+// the __PUZZLE_HAS_LOCALE_ROUTING__ define. A config fact, set beside SetI18n.
+func (p *Plugin) SetLocaleRouting(on bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.localeRouting = on
+}
+
+// LocaleRoutingEnabled reports whether locale URL prefixes are on.
+func (p *Plugin) LocaleRoutingEnabled() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.localeRouting
 }
 
 func (p *Plugin) i18nManifestSource() string {

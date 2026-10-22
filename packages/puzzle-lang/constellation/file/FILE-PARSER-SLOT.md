@@ -9,6 +9,9 @@ summary: >-
   (validateSlots/walkSlots/walkBranches).
 verified_at: '2026-09-25T10:41:32.868Z'
 verified_sha: a602784a9822fa3ff63123e597f72624b3c9ffff
+connections:
+  - FILE-PARSER-COMPONENT
+  - TEST-COMPILER-PARSER
 ---
 
 # slot.go
@@ -30,3 +33,5 @@ DECISION-D173-CORE-SEMANTICS (V13), all in the framework plan (`repo=puzzle`).
 - **Call-site `slot=` rules** on a component invocation's direct children: a
   dynamic `slot={expr}` is an error, and so is a control-flow block whose
   top-level nodes carry `slot`.
+
+- **D180:** `<Component is={value}>` keeps ordinary direct-child slot validation and forwarding. Its only selection control is validated by [[FILE-PARSER-COMPONENT]]; its children follow the same composition rules as an ordinary component.

@@ -13,6 +13,14 @@ connections:
   - FILE-EXPR-METHODS
   - FILE-PARSER-EXPRS
   - TEST-COMPILER-PARSER
+notes:
+  - kind: state
+    text: >-
+      `Options.IsBinding func(string) bool` (0.8.1) is an optional O(1) membership test that
+      `isBinding` consults in place of scanning `Bindings`, and it must agree with `Bindings`. The
+      template parser passes it only once a scope holds more than 32 names, which in practice means
+      a long `{#let}` block. Every other caller, and PuzzleKit's usual scopes, keep the scan, so
+      nothing about trees or errors changes.
 ---
 
 # expr/parser.go (+ errors.go)

@@ -54,6 +54,14 @@ export declare function lazy(
 ): LazyView;
 
 /**
+ * A translated route head text (D177): `meta: { title: { t: 'products.title' } }`
+ * resolves the key through the app's i18n service (D175), like `t('products.title')`.
+ */
+export interface HeadTranslation {
+	t: string;
+}
+
+/**
  * A route definition (constellation/doc/DOC-SPEC.md §9). `view`/`layout` are
  * PuzzleView subclasses (constructors) or `lazy()` markers (D163). `.pzl`
  * default exports and compiled classes are typed `any` by the compiler shim, so
@@ -67,11 +75,24 @@ export interface Route {
 	/** Route-entry guard (D87), inherited root → leaf and run before views load. */
 	guard?: GuardFn;
 	/**
+	 * How the route reads to an agent or other tool listing `router.views`
+	 * (D183): `false` hides it, `{ name, about }` names and describes it. It
+	 * resolves nearest-defined leaf→root, so `false` on a parent hides the
+	 * subtree and a child's own object re-exposes that child. Puzzle never acts
+	 * on it — navigation and the prerender ignore it.
+	 */
+	agent?: RouteAgent;
+	/**
 	 * Route metadata. Four RESERVED head fields (D84 —
 	 * constellation/doc/DOC-SPEC.md §45): each resolves independently,
 	 * nearest-defined walking the destination chain leaf→root; `undefined`
 	 * inherits from a parent, `null` explicitly suppresses an inherited value.
-	 * Static strings only (no functions/HTML).
+	 * Static strings only (no functions/HTML). `title` and `description` may
+	 * instead be a translation reference, `{ t: 'products.title' }` (D177),
+	 * resolved through the app's i18n service at build time and in the
+	 * browser's title sync; a missing key prints the key itself. Without `i18n`
+	 * configured the build emits no text for it and the browser leaves the tab
+	 * title as it is.
 	 *
 	 * Delivery is split (D84): the managed `data-puzzle-head` tags derived from
 	 * `description`/`canonical`/`socialImage` (og:/twitter:/description/canonical)
@@ -82,15 +103,45 @@ export interface Route {
 	 * the framework.
 	 */
 	meta?: {
-		title?: string | null;
-		description?: string | null;
+		title?: string | HeadTranslation | null;
+		description?: string | HeadTranslation | null;
 		canonical?: string | null;
 		socialImage?: string | null;
 		[key: string]: any;
 	};
 	children?: Route[];
+	/**
+	 * Build-time list of the param values to prerender for a `:param` route
+	 * (D179), in `output: 'static'` and `'hybrid'` — one page per entry. An array
+	 * of params objects, a function (sync or async) returning one, or the name
+	 * of a registered model: `'post'` loads every `post` record and takes each
+	 * param from the record's same-named field. Declared on the leaf route; each
+	 * entry holds every param of the route's full path, inherited ones included.
+	 * The browser never calls it, but the route table ships in SPA and hybrid
+	 * bundles — keep a heavy list source behind `await import()` in the function.
+	 */
+	staticPaths?: ReadonlyArray<StaticPathsEntry> | StaticPathsFn | string;
 	[key: string]: any;
 }
+
+/** One `staticPaths` entry (D179): a value for every param of the route's full path. */
+export type StaticPathsEntry = Record<string, string | number>;
+
+/**
+ * The build facade a `staticPaths` function receives (D179) — the one
+ * `beforeMount` gets at build time, after `beforeMount` has run on its store.
+ */
+export interface StaticPathsContext {
+	store: Store;
+	config: PuzzleAppConfig;
+	/** The locale being prerendered, when translations are configured (D177). */
+	locale?: string;
+}
+
+/** A `staticPaths` function (D179): runs once per prerender pass (once per locale under prefix routing). */
+export type StaticPathsFn = (
+	context: StaticPathsContext
+) => ReadonlyArray<StaticPathsEntry> | Promise<ReadonlyArray<StaticPathsEntry>>;
 
 /** A route guard (D87): allow, block, or redirect before navigation loads. */
 export type GuardFn = (nav: {
@@ -98,6 +149,30 @@ export type GuardFn = (nav: {
 	from: RouteSnapshot | null;
 	ctx: PuzzleContext;
 }) => void | boolean | string | Promise<void | boolean | string>;
+
+/** A route's `agent` field (D183). */
+export type RouteAgent = false | { name: string; about?: string; [key: string]: unknown };
+
+/**
+ * One leaf route as `router.views` lists it (D183) — frozen, in declaration
+ * order, the catch-all left out.
+ */
+export interface RouteView {
+	/** The full path pattern, e.g. `'/:workspace/tasks/:taskId'` — base- and locale-free. */
+	readonly path: string;
+	/** The pattern's `:param` names, in order. */
+	readonly params: readonly string[];
+	/** The leaf route's `name`. */
+	readonly name: string | undefined;
+	/** The leaf route's own `meta` object, as defined (not inherited). */
+	readonly meta: Route['meta'];
+	/** `meta.title` resolved leaf→root like the tab title (D84); `undefined` when none or suppressed. */
+	readonly title: string | HeadTranslation | undefined;
+	/** The `agent` field resolved nearest-defined leaf→root; `undefined` when no level sets it. */
+	readonly agent: RouteAgent | undefined;
+	/** The route definitions, root→leaf. */
+	readonly chain: readonly Route[];
+}
 
 /** A window scroll position. */
 export interface ScrollPosition {
@@ -123,6 +198,25 @@ export interface RouteSnapshot {
 	params: Record<string, string>;
 	chain: Route[];
 }
+
+/**
+ * What `router.push()` / `router.replace()` resolve (D182); the promise never
+ * rejects. `ok: true` carries the committed snapshot (or the current route for
+ * a same-path no-op); `catchAll: true` marks a committed `path: '*'` route and
+ * is omitted for ordinary routes. `redirectedFrom` names the originally
+ * requested path when a guard redirected. `ok: false` says the navigation did
+ * not complete: a guard returned `false` (`'blocked'`), a later navigation won
+ * (`'superseded'`), no route and no catch-all matched (`'not-found'`), or something failed and was
+ * reported to `onError` (`'error'`, with the error) — a throwing guard, the
+ * guard-redirect cycle cap, a lazy load, view construction, `data()`, or a
+ * throw inside the commit window. Every reason but that last one leaves the
+ * URL, DOM and `router.current` untouched; a commit-window throw can leave the
+ * URL and DOM on the target while `router.current` still names the old route,
+ * and the next navigation rebuilds every level.
+ */
+export type NavigationResult =
+	| { ok: true; route: RouteSnapshot; catchAll?: true; redirectedFrom?: string }
+	| { ok: false; reason: 'blocked' | 'superseded' | 'not-found' | 'error'; error?: unknown };
 
 /**
  * Custom scroll behavior (D33): return a position to scroll to, or a
@@ -180,6 +274,21 @@ export interface PuzzleErrorViewProps {
 
 /** Constructor accepted by PuzzleAppConfig.errorView. */
 export type PuzzleViewConstructor = new (ctx?: PuzzleContext) => PuzzleView;
+
+/**
+ * What `afterUpdate(prev)` receives (D178): the state the previous render
+ * drew, frozen shallowly. `data` is a copy of the merged `getData()` result;
+ * `props`, `params` and `route` are the objects that render saw. The snapshot
+ * is shallow and a record keeps its identity across its own mutations (D170),
+ * so `prev.data.post` is the same live record: to catch an edit, return the
+ * field from `data()` (`title: post.title`) and compare that.
+ */
+export interface PrevViewState {
+	readonly props: any;
+	readonly params: Record<string, string>;
+	readonly route: RouteSnapshot | null;
+	readonly data: Readonly<Record<string, any>>;
+}
 
 /** A single enter/leave animation spec (constellation/doc/DOC-SPEC.md §12). */
 export interface AnimationSpec {
@@ -290,6 +399,12 @@ export interface StoreOptions {
  * queries made inside `data()` auto-subscribe the component.
  */
 export interface Store {
+	/**
+	 * The registered model constructor, or PuzzleModel for an unregistered type.
+	 * Only own registry keys match. Never subscribes or fetches; also available
+	 * through the adapter's per-view store handle.
+	 */
+	modelFor(type: string): typeof PuzzleModel;
 	/** Create a record; applies schema defaults, validates, inserts. */
 	createRecord(type: string, data?: Record<string, any>): any;
 	/**
@@ -308,6 +423,20 @@ export interface Store {
 	 * already; the filter always runs locally (D161).
 	 */
 	findMany(type: string, options?: FindManyOptions): any[];
+	/**
+	 * Observe every record of a type, or one record by primary key, from outside
+	 * a view (D184). `fn` runs with no arguments after the batched flush that
+	 * carries a matching change, at most once per flush. Never fetches. Returns
+	 * `stop()`, which removes exactly this observation and is idempotent.
+	 */
+	observe(type: string, fn: () => unknown): () => void;
+	observe(type: string, id: any, fn: () => unknown): () => void;
+	/**
+	 * Deliver pending change notifications now (each subscriber once), then write
+	 * the batched storage snapshot if the store is dirty. Safe when nothing is
+	 * pending.
+	 */
+	flush(): void;
 	// Adapter methods are attached by the app's adapter capability and declared through
 	// module augmentation in types/adapter.d.ts.
 	// `seed()` and `resetFixtureSeed()` are NOT declared here: the core Store does
@@ -338,20 +467,25 @@ export interface MorphHandler {
  * `this.ctx.router`. The public API is path-shaped in all router modes.
  */
 export interface Router {
-	/** Navigate to a path (push a history entry). */
-	push(path: string): void | Promise<void>;
-	/** Navigate to a path REPLACING the current history entry — no new entry, scroll left alone by default (D83). */
-	replace(path: string): void | Promise<void>;
+	/** Navigate to a path (push a history entry); resolves the outcome (D182). */
+	push(path: string): Promise<NavigationResult>;
+	/** Navigate to a path REPLACING the current history entry — no new entry, scroll left alone by default (D83); resolves the outcome (D182). */
+	replace(path: string): Promise<NavigationResult>;
 	/** Move `n` entries in history (negative = back). All modes (D42). */
 	go(n: number): void | Promise<void>;
 	/** Go back one entry. */
 	back(): void | Promise<void>;
 	/** Go forward one entry. */
 	forward(): void | Promise<void>;
-	/** Path-shaped route in, mode-encoded href out (`'/x'` path mode, `'#/x'` hash, unchanged memory); strings not starting with `/` pass through (D79). */
-	url(path: string): string;
+	/**
+	 * Path-shaped route in, mode-encoded href out (`'/x'` path mode, `'#/x'` hash, unchanged memory); strings not starting with `/` pass through (D79).
+	 * Under `i18n.routing: 'prefix'` the href carries the page's locale prefix; `{ locale: 'es' }` forces one locale, `{ locale: false }` skips the prefix for a file that exists once (D177).
+	 */
+	url(path: string, options?: LinkOptions | null): string;
 	/** The current route snapshot, or null before the first navigation. */
 	readonly current: RouteSnapshot | null;
+	/** Every leaf route as frozen data (D183), built once on first read; the catch-all is left out. */
+	readonly views: readonly RouteView[];
 	/** Register the shared-element morph handler (D55); null unregisters. */
 	setMorphHandler(handler: MorphHandler | null): void;
 	[key: string]: any;
@@ -397,6 +531,14 @@ export type DatePreset = 'short' | 'medium' | 'long' | 'iso';
 export type LocaleArgument = string | readonly string[];
 
 /**
+ * Options for `link(path, options)` under locale prefix routing (D177):
+ * `{ locale: 'es' }` links to that configured locale's page, `{ locale: false }`
+ * skips the locale prefix (a file that exists once) but keeps `routerBase`.
+ * Without `i18n.routing: 'prefix'` there is no prefix, and they are ignored.
+ */
+export type LinkOptions = { locale?: string | false };
+
+/**
  * library signatures — every built-in function a template calls as
  * `name(args)` (D176 §4), with the arguments the runtime takes. `puzzle check`
  * types a template's library calls against this interface, so it moves with
@@ -407,8 +549,13 @@ export type LocaleArgument = string | readonly string[];
  * not listed here.
  */
 export interface LibraryFunctions {
-	/** The URL for an app path in the active routing mode (D79). */
-	link(path: unknown): string;
+	/**
+	 * The URL for an app path in the active routing mode (D79). Under
+	 * `i18n.routing: 'prefix'` it adds the active locale's prefix; `locale`
+	 * forces one locale, and `locale: false` skips the prefix for a file that
+	 * exists once (D177).
+	 */
+	link(path: unknown, options?: LinkOptions | null): string;
 	/**
 	 * The translation for `key` in the active locale (D175), `{name}`
 	 * placeholders filled from `vars`, a `count` choosing the plural form; a
@@ -469,6 +616,8 @@ export interface PuzzleContext {
 	store: Store;
 	router: Router;
 	formatters: FormatterRegistry;
+	/** The app's bound idle method: true when quiet, false on timeout (D185/D189). */
+	idle: PuzzleApp['idle'];
 	/**
 	 * The translation service (D175) — present only when `puzzle.config.js`
 	 * configures `i18n`, so it is optional here.
@@ -491,9 +640,18 @@ export type TranslationVars = object;
 export interface PuzzleI18n {
 	/** The active locale tag. */
 	readonly locale: string;
-	/** Every configured locale, in config order. */
-	readonly locales: readonly string[];
+	/**
+	 * Every configured locale, in config order, as a language switcher renders
+	 * it (D177). Rebuilt on each read, so `href` is the page shown now.
+	 */
+	readonly locales: readonly PuzzleLocale[];
 	readonly defaultLocale: string;
+	/**
+	 * The active locale's text direction (D177), from its tag's script or
+	 * language: `'rtl'` for Arabic, Hebrew, Persian, Urdu and the like, `'ltr'`
+	 * otherwise. `<html dir>` follows it.
+	 */
+	readonly dir: 'rtl' | 'ltr';
 	/**
 	 * Look `key` up in the active locale. A missing key prints the key itself;
 	 * `vars` fill `{name}` placeholders in one pass, and a numeric `count` picks
@@ -505,9 +663,30 @@ export interface PuzzleI18n {
 	 * rebuild the page at the same location. Rejects (changing nothing) when the
 	 * fetch fails; overlapping calls resolve last-wins, and a call a later one
 	 * overtook settles with the later call's outcome. Throws a RangeError for a
-	 * tag that is not configured.
+	 * tag that is not configured. Under `i18n.routing: 'prefix'` (D177) on a
+	 * static page it instead stores the choice and loads the same page under
+	 * the new locale's prefix, resolving once that navigation is issued.
 	 */
 	setLocale(tag: string): Promise<void>;
+}
+
+/** One entry of `i18n.locales` (D177). */
+export interface PuzzleLocale {
+	/** The configured tag (`'pt-BR'`). */
+	readonly locale: string;
+	/**
+	 * The language's own name (`'Español'`), from `Intl.DisplayNames`; the tag
+	 * itself where the browser cannot name it.
+	 */
+	readonly label: string;
+	/**
+	 * The current page in this locale: under `i18n.routing: 'prefix'` the same
+	 * page under this locale's prefix; otherwise the current page for every
+	 * entry (switch with `setLocale(entry.locale)`).
+	 */
+	readonly href: string;
+	/** Whether this is the active locale. */
+	readonly active: boolean;
 }
 
 // ----------------------------------------------------------------------------
@@ -545,6 +724,8 @@ export declare class PuzzleView {
 	 * type is `Element | Comment`, not `Element` alone.
 	 */
 	readonly element: Element | Comment | null;
+	/** @internal Last DOM node of the rendered component range. */
+	readonly elementEnd: Node | null;
 
 	/**
 	 * Live element refs (D72): `ref="name"` in the template exposes the
@@ -570,6 +751,12 @@ export declare class PuzzleView {
 	/** Merge local UI state and schedule a re-render (does NOT re-run data()). */
 	setData(key: string, value: any): void;
 	setData(partial: Record<string, any>): void;
+	/**
+	 * Wait for every pending store flush and scheduled view render to land,
+	 * including the ones they schedule (D188). Forces nothing, and does not await
+	 * async data(), fetches or navigation — that is app.idle().
+	 */
+	renderTick(): Promise<void>;
 
 	/**
 	 * Reference-stable derived value (D64). Per-instance cache keyed by
@@ -600,7 +787,8 @@ export declare class PuzzleView {
 	created(): void;
 	mounted(): void;
 	beforeUpdate(): void;
-	afterUpdate(): void;
+	/** After every update render; `prev` is what the previous render drew (D178). */
+	afterUpdate(prev: PrevViewState): void;
 	destroyed(): void;
 
 	// ---- enter/leave hooks (D28) ----
@@ -682,6 +870,9 @@ export declare class PuzzleModel {
 
 	/** API adapter — per-verb fetch functions, optionally filled by `{ endpoint }` REST shorthand. */
 	static adapter?: ModelAdapter;
+
+	/** The first schema field marked primary, or 'id' when none is declared. */
+	static primaryKey(): string;
 
 	/**
 	 * Validate a plain data object against the schema (non-throwing).
@@ -830,6 +1021,11 @@ export interface PuzzleAppConfig {
 	 * ctx services (store/router/formatters) are wired but BEFORE navigation #0,
 	 * and is awaited — store seeding here is visible to the first `data()`. A
 	 * throw aborts the mount (`mount()` rejects; `beforeUnmount` is skipped).
+	 *
+	 * In a prerender (`output: 'hybrid'`/`'static'`) it runs at build time for
+	 * every page with a `{ store, config }` facade (argument and `this`) instead
+	 * of the app — plus `locale`, the page's locale, when translations are
+	 * configured (under `i18n.routing: 'prefix'` each locale's pages, D177).
 	 */
 	beforeMount?: (this: PuzzleApp, app: PuzzleApp) => void | Promise<void>;
 	/**
@@ -877,10 +1073,27 @@ export declare class PuzzleApp {
 	i18n?: PuzzleI18n | null;
 	/** The shared context injected into every view (null before mount). */
 	ctx: PuzzleContext | null;
-	/** Boot the app and run the initial navigation. */
+	/**
+	 * Boot the app and run the initial navigation. Under `i18n.routing: 'prefix'`,
+	 * when the first-visit redirect sends the visitor to their language's URL, the
+	 * promise never settles: the page is being replaced and nothing was wired (D177).
+	 */
 	mount(): Promise<this>;
 	/** Tear down the app. Idempotent. */
 	unmount(): this;
+	/**
+	 * Wait for the app to go quiet (D185). Resolves `true` once two consecutive
+	 * frames find no mount or navigation in flight, no store notification or
+	 * flush pending, no async `data()` running, no `setLocale()` switch loading,
+	 * and (with the adapter) no tracked find's fetch in flight; `false` when
+	 * `timeout` ms (default 10000) run out first. In a hidden tab it steps on
+	 * timers. An app neither mounted nor mounting resolves `true` at once. Never
+	 * rejects. It cannot see user timers, animations, IntersectionObserver
+	 * triggers, writes or fetches nothing awaits (an event handler's unawaited
+	 * `save()` or `loadMany()`), or a path- or hash-mode `back()`, `forward()` or
+	 * `go()` before its `popstate` fires.
+	 */
+	idle(options?: { timeout?: number }): Promise<boolean>;
 	/**
 	 * Register the shared-element morph handler (D55) — the app-level
 	 * face of Router.setMorphHandler, safe to call before OR after mount().
@@ -898,6 +1111,9 @@ export declare class PuzzleApp {
  * `sep`, a list prints its items joined by it, dropping `false` and empty items.
  */
 export declare function displayValue(value: unknown, expression?: string | 0, sep?: string): string;
+
+/** @internal Compiler-support guard for dynamic URL attribute values. */
+export declare function urlValue(value: unknown, mode?: number): unknown;
 
 /** One node of the virtual tree — compiled render functions build these. */
 export declare class ViewNode {
@@ -930,6 +1146,9 @@ export declare const SNIPPET_TAG: string;
 
 /** Reserved tag marking a `<Portal>…</Portal>` teleport (D144). */
 export declare const PORTAL_TAG: string;
+
+/** Compiler support for <Component is={...}>; children are normal slot content. */
+export declare function dynamicComponent(value: unknown, props?: Record<string, any>, children?: ViewNode[]): ViewNode;
 
 /**
  * Render one item-form `{#for}` site (D170). A compiled module imports this as

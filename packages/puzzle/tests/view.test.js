@@ -290,6 +290,170 @@ describe('PuzzleView — lifecycle', () => {
 	});
 });
 
+describe('PuzzleView — afterUpdate(prev) (D178)', () => {
+	// `prev` is what the PREVIOUS render drew — frozen, shallow — not whatever the
+	// instance held when the update started: setData writes #data at call time and
+	// refresh swaps props/params/route before data() runs.
+
+	it('setData: prev.data is the drawn state, frozen and separate from the live data', async () => {
+		const seen = [];
+		class V extends PuzzleView {
+			data() { return { label: 'model' }; }
+			afterUpdate(prev) { seen.push({ prev, now: this.getData() }); }
+			render() { return h('p', {}, [text(`${this.getData().label}:${this.getData().count ?? 0}`)]); }
+		}
+		const props = { tone: 'calm' };
+		const v = await new V().mount(container(), { props });
+
+		v.setData('count', 1);
+		v.flushUpdates();
+		v.setData('count', 2);
+		v.flushUpdates();
+
+		expect(seen).toHaveLength(2);
+		expect(seen[0].prev.data).toEqual({ label: 'model' });
+		expect(seen[0].now.count).toBe(1);
+		expect(seen[1].prev.data).toEqual({ label: 'model', count: 1 });
+		expect(seen[1].now.count).toBe(2);
+
+		const { prev } = seen[1];
+		expect(Object.isFrozen(prev)).toBe(true);
+		expect(Object.isFrozen(prev.data)).toBe(true);
+		expect(() => { prev.data.count = 99; }).toThrow(TypeError);
+		expect(() => { prev.extra = 1; }).toThrow(TypeError);
+		expect(v.getData().count).toBe(2); // the copy is not the live layer
+		// Props are referenced, never copied or frozen.
+		expect(prev.props).toBe(props);
+		expect(Object.isFrozen(props)).toBe(false);
+		expect(Object.keys(prev).sort()).toEqual(['data', 'params', 'props', 'route']);
+	});
+
+	it('refresh(): prev.data is the previous data() commit', async () => {
+		let source = 'a';
+		const seen = [];
+		class V extends PuzzleView {
+			data() { return { value: source }; }
+			afterUpdate(prev) { seen.push([prev.data.value, this.getData().value]); }
+			render() { return h('p', {}, [text(this.getData().value)]); }
+		}
+		const v = await new V().mount(container());
+		source = 'b';
+		v.refresh();
+		source = 'c';
+		v.refresh();
+		expect(seen).toEqual([['a', 'b'], ['b', 'c']]);
+	});
+
+	it('an async refresh({ props }) hands the props of the last render, not those refresh swapped in', async () => {
+		const seen = [];
+		class V extends PuzzleView {
+			async data(params, props) {
+				await Promise.resolve();
+				return { n: props.n };
+			}
+			afterUpdate(prev) { seen.push({ prevN: prev.props.n, nowN: this.props.n, prevData: prev.data.n }); }
+			render() { return h('p', {}, [text(String(this.getData().n))]); }
+		}
+		const v = await new V().mount(container(), { props: { n: 1 } });
+		const pending = v.refresh({ props: { n: 2 } });
+		expect(v.props.n).toBe(2); // already swapped, but not yet drawn
+		await pending;
+		expect(seen).toEqual([{ prevN: 1, nowN: 2, prevData: 1 }]);
+	});
+
+	it('parent-driven prop change: prev.props is the object the previous render received', async () => {
+		const seen = [];
+		class Child extends PuzzleView {
+			data(params, props) { return { doubled: props.n * 2 }; }
+			afterUpdate(prev) { seen.push({ prev, props: this.props, data: this.getData() }); }
+			render() { return h('span', {}, [text(String(this.getData().doubled))]); }
+		}
+		class Parent extends PuzzleView {
+			created() { this.setData('n', 1); }
+			render() { return h('div', {}, [comp(Child, { n: this.getData().n })]); }
+		}
+		const el = container();
+		const parent = await new Parent().mount(el);
+		parent.setData('n', 5);
+		parent.flushUpdates();
+
+		expect(el.textContent).toBe('10');
+		expect(seen).toHaveLength(1);
+		const [{ prev, props, data }] = seen;
+		expect(prev.props.n).toBe(1);
+		expect(props.n).toBe(5);
+		expect(prev.props).not.toBe(props);
+		expect(prev.data.doubled).toBe(2);
+		expect(data.doubled).toBe(10);
+	});
+
+	it('store notification: prev.data holds the pre-change derived values; the record keeps identity', async () => {
+		const store = new Store({ todo: Todo });
+		store.createRecord('todo', { id: 't1', text: 'first' });
+		const seen = [];
+		class V extends PuzzleView {
+			data() {
+				const todo = this.ctx.store.findOne('todo', 't1');
+				return { todo, text: todo.text };
+			}
+			afterUpdate(prev) { seen.push({ prev, now: this.getData() }); }
+			render() { return h('p', {}, [text(this.getData().text)]); }
+		}
+		await new V(ctxWith(store)).mount(container());
+
+		store.findOne('todo', 't1').update({ text: 'second' });
+		store.flush();
+
+		expect(seen).toHaveLength(1);
+		const [{ prev, now }] = seen;
+		expect(prev.data.text).toBe('first');
+		expect(now.text).toBe('second');
+		// D170: the same record, so identity alone does not show an edit.
+		expect(prev.data.todo).toBe(now.todo);
+	});
+
+	it('a view without the hook takes no snapshot', async () => {
+		class Plain extends PuzzleView {
+			render() { return h('p', {}, [text(String(this.getData().n ?? 0))]); }
+		}
+		class Hooked extends Plain {
+			afterUpdate() {}
+		}
+		const plain = await new Plain().mount(container());
+		const hooked = await new Hooked().mount(container());
+		// The snapshot is the only freeze of a { props, params, route, data } object
+		// (the dev profiler freezes its own render records, so count by shape).
+		const freeze = vi.spyOn(Object, 'freeze');
+		const snapshots = () =>
+			freeze.mock.calls.filter(([o]) => o && typeof o === 'object' && 'props' in o && 'data' in o && 'route' in o)
+				.length;
+		try {
+			plain.setData('n', 1);
+			plain.flushUpdates();
+			expect(snapshots()).toBe(0);
+
+			hooked.setData('n', 1);
+			hooked.flushUpdates();
+			expect(snapshots()).toBe(1); // the hooked control does snapshot
+		} finally {
+			freeze.mockRestore();
+		}
+	});
+
+	it('an afterUpdate() override with no parameter still fires once per update', async () => {
+		const calls = [];
+		class V extends PuzzleView {
+			afterUpdate() { calls.push(arguments.length); }
+			render() { return h('p', {}, [text(String(this.getData().n ?? 0))]); }
+		}
+		const v = await new V().mount(container());
+		expect(calls).toEqual([]); // not on the first render
+		v.setData('n', 1);
+		v.flushUpdates();
+		expect(calls).toEqual([1]);
+	});
+});
+
 describe('PuzzleView — setData semantics (SPEC §4)', () => {
 	class Counter extends PuzzleView {
 		data() { return { count: this.getData().count ?? 0 }; }

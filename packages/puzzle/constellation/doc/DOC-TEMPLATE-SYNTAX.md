@@ -80,6 +80,32 @@ The built-ins: `round`, `currency`, `percentage`, `number_with_delimiter`, `comp
 
 `{:else}` comes last. `{#unless}` takes `{:else}` but not `{:else if}`. `{#case}` matches with `===`; commas list alternatives; the first match wins with no fallthrough.
 
+## Runtime component selection: `<Component>`
+
+Choose one of the compiled Puzzle components imported by this file (§67). All candidates are loaded before rendering; there is no runtime module-name lookup.
+
+```html
+<script>
+import TaskCard from './TaskCard.pzl';
+import BacktestCard from './BacktestCard.pzl';
+const cards = { task: TaskCard, backtest: BacktestCard };
+</script>
+
+<!-- current is a constructor returned by data(); it may also be null -->
+<Component is={ current } title={ title } @close={ close }>
+  <p>Default content for the selected card</p>
+</Component>
+
+<Component is={ cards[embed.type] } {...embed.props} />
+```
+
+- **`is` chooses a value.** It must be an imported compiled component constructor; `null`/`undefined` renders nothing. Children become the selected component's normal default slot.
+- **Only `is` may read imports and simple script declarations directly.** `is={ TaskCard }` and `is={ cards[key] }` work without returning those bindings from `data()`. Loop/snippet bindings win, then module bindings, then data fields. Destructured bindings need a simple module alias or a value returned by `data()`. Other props, spread operands and child expressions read normal template data.
+- Imports and `const` selector bindings preserve cached rows. Mutating a const map's entries in place is not observed by a cached row; a module `let`/`var` selector is re-evaluated on each parent render.
+- Props and callback props are reactive as on any component. `name` and `from` are ordinary forwarded props when `is` exists. `{...embed.props}` passes the current object's props; later written attributes override earlier spreads and vice versa. A loop row's resolved key always wins over spreads. `bind:` is unsupported on components; `flip` on `<Component>` is a compile error, so put it on a wrapping keyed element.
+- Changing the constructor fully destroys the old instance and descendants before mounting the new one at the same position, with current props. A stable constructor reuses the instance. Removing the tag itself runs the child's ordinary hide hooks and leave transition; only a constructor swap tears it down immediately. Prerender applies the same selection rule to its HTML.
+- Missing or non-expression `is`, or a string, number, boolean or template-literal selector inside braces, is a compile error. Nullish selectors are valid. `Component` is a reserved tag/family root: rename a user `Component.pzl` or a tag import named `Component`.
+
 ## Loops
 
 ```html
@@ -98,6 +124,7 @@ The built-ins: `round`, `currency`, `percentage`, `number_with_delimiter`, `comp
 
 ## Attributes
 
+
 ```html
 <!-- inline {#if} and interpolation inside a quoted value -->
 <span class="flex-1 {#if todo.completed}line-through text-gray-500{/if}">{ todo.text }</span>
@@ -109,6 +136,8 @@ The built-ins: `round`, `currency`, `percentage`, `number_with_delimiter`, `comp
 ```
 
 A brace-only value controls the attribute: `false`, `null` and `undefined` remove it, `true` writes it empty, and a list becomes space-separated tokens with empty entries dropped. Write `\{` and `\}` for literal braces — `pattern="[0-9]\{5\}"`.
+
+A dynamic URL attribute (`href`, `src`, `action`, …) never carries `javascript:` or `vbscript:`, and `data:` only in image positions: a blocked value leaves the attribute off, in the browser and prerendered HTML alike, with a development warning. Static values you write yourself stay as written, and a quoted value whose literal start fixes the scheme (`href="/users/{ id }"`) compiles without the check. The full rule is [[DECISION-D186-DYNAMIC-URL-SAFETY]].
 
 ## Two-way form binding
 
@@ -129,6 +158,7 @@ The full trigger conditions and event matrix are in §6.
 
 ## Events
 
+
 ```html
 <form @submit={ addTodo(event) }>
 <button @click={ setFilter('all') }>All</button>
@@ -137,7 +167,7 @@ The full trigger conditions and event matrix are in §6.
 <div class="menu" @pointerdown:outside={ closeMenu }>…</div>
 ```
 
-A bare name gets the DOM event; a call gets exactly the arguments written; modifiers (`prevent`, `stop`, `once`, `outside`, key filters) stack. See [[DOC-EVENTS]] and §5.
+A bare name gets the DOM event; a call gets exactly the arguments written; modifiers (`prevent`, `stop`, `once`, `outside`, `passive`, `capture`, key filters) stack. `passive` and `capture` set native listener options; `passive:prevent` is a compile error. See [[DOC-EVENTS]] and §5.
 
 ## Components
 

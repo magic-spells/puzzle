@@ -18,7 +18,7 @@ verified_sha: 5c21245a984c2fe5c86abf097189af44266f3b13
 DOM/component links, plus helpers for text, list keys (`keyOf`), slot markers and
 placeholders. `ViewManager` (views/viewManager.js) mounts, diffs, patches and tears
 those trees down. Satellite modules: `html.js` (live-HTML ranges), `flip.js`,
-`portal.js` ([[FILE-PORTAL]]), `listBlock.js` ([[FILE-LIST-BLOCK]]).
+`portal.js` ([[FILE-PORTAL]]), `componentSlot.js` ([[FILE-COMPONENT-SLOT]]), `listBlock.js` ([[FILE-LIST-BLOCK]]).
 
 ## Reconciliation
 
@@ -43,8 +43,10 @@ those trees down. Satellite modules: `html.js` (live-HTML ranges), `flip.js`,
   uses `nextPersistentSibling`, so a fade-out never reorders survivors.
 - **Replace arm unmounts before it mounts.** Since D170 a list row or `__c[n]` subtree is
   the SAME object in both trees, so mounting first would let the outgoing unmount destroy
-  the new child. The insertion ref (`anchor` + its `nextSibling`) is captured before the
-  unmount and resolved after it.
+  the new child. The old range's nodes and its following sibling are captured before unmount;
+  the insertion ref is the first range node still in the parent afterward, or that
+  following sibling if none survive. A component-root range resolves
+  its end recursively through the component's current tree.
 - **Invariant: `newChild.el` is never null at the keyed move guard**, which is why it
   reads `el` unchecked. Every child reaches the guard straight out of `patch()` or
   `mount()`, and both set `el` on every branch. `mount()` creates a node for every
@@ -62,6 +64,14 @@ those trees down. Satellite modules: `html.js` (live-HTML ranges), `flip.js`,
 - Controlled `value`/`checked` re-sync from the new value on every patch, including
   browser-drifted values (`syncControl`, the one implementation shared with
   `patchAttrs`/`reassertSelectValue`).
+
+## Runtime component slots (D180)
+
+Named-slot routing metadata stays on the outer selection vnode. When a named bucket consumes it, `stripSlotAttr` clones the selected child without that metadata too; outside composition it remains an ordinary prop.
+
+`dynamicComponent` wraps the selected ordinary component vnode in a stable `COMPONENT_SLOT_TAG` (`#component`) range with start/end comments. It remains one sibling position whether selection is empty or contains a selected component. Keyed moves move the whole range, including when a component vnode's template root is a selection range. The same recursive range end keeps replacements between their siblings and brackets the complete error-recovery sweep. A same-constructor patch delegates to normal `patchChildren` / `patchComponent`, preserving prop reactivity, event callbacks, async mounts and DevTools parentage.
+
+Changing `attrs.selected` unmounts the outgoing children immediately before mounting the replacement, so subscriptions/effects, refs and listeners are gone even when an out animation would delay ordinary removal. Removing the slot itself uses the selected child's ordinary hide/leave path, allowing its hooks and out transition to finish. A conditional replacement anchors before the first node of the old range still in its parent after unmount, including through dispatcher and nested component roots. A leaving child stays after its replacement, matching plain component placement; immediate removal falls back to the sibling after the complete range. Nullish `is` leaves an empty range; children are normal default-slot content. Indexed module maps are ordinary `is` expressions; the runtime consumes the resulting constructor. `__PUZZLE_HAS_COMPONENT_SLOT__` gates the manager's range branches.
 
 ## Identity short-circuit (D170)
 
@@ -109,6 +119,8 @@ anchors and resolve insertion refs from the live element.
 
 ## Composition markers
 
+Routed slot content keeps its pinned instance while a conditional outlet is absent. Each outermost render pass records every routed pin found in a `slotChildren` list. Unmount, subtree release and owner `clear()` park a recorded pin off-document instead of destroying it. Mount adopts a parked root by moving it into the new position and pushing its children, with no second mount or enter. Every outlet that reaches a pin (mount, `patchComponent`, and the D170 identity short-circuit) marks it as placed, so a wrapper torn down later in the pass cannot park it again. A pin no outlet placed gets the newest child chain pushed at the end of the pass. Superseded routed views are still torn down by the router's out phase. An owner that is destroyed (or that never mounted) releases the pins in its slot content.
+
 `SLOT_TAG` + shared `expandSlots` (also used by SSG/static): `<Children/>` → default
 bucket, `<Slot name>` → named, `<Slot/>` → router outlet; `SNIPPET_TAG` children form a
 bucket keyed by `fits`, and an args-bearing marker stamps the Snippet function per render.
@@ -127,8 +139,14 @@ Semantics: [[DOC-SPEC-TEMPLATE]] §24/§64.
 - A marker makes its subtree dynamic, so `expandSlots` never clones a cached static
   subtree — only the path down to a marker.
 - Any `#`-prefixed metadata tag reaching element creation or the SSG serializer throws
-  `metadataTagError` in every build (the long D89 explanation is dev-only) — it means a
-  build whose usage scan missed a feature ([[DECISION-D89-FEATURE-USAGE-TREESHAKE]]).
+  `metadataTagError` in every build (the long D89 explanation is dev-only). The build
+  already fails on any compiled `.pzl` the usage scan never read that needs a
+  compiled-out feature, so this throw means vnodes from pre-compiled component
+  JavaScript, which the scan does not read
+  ([[DECISION-D89-FEATURE-USAGE-TREESHAKE]]). The dev text names the supported input:
+  `.pzl` source from the app and from packages that list `@magic-spells/puzzle` in
+  `peerDependencies`. A compiled-out `#component` diagnostic names `<Component>` and
+  `__PUZZLE_HAS_COMPONENT_SLOT__`.
 
 ## Host behavior
 
@@ -137,16 +155,24 @@ Semantics: [[DOC-SPEC-TEMPLATE]] §24/§64.
   escape, never a literal NUL, or git treats the file as binary).
 - `outside` (D86) listens on `document` in the capture phase with one shared options
   object; `releaseSubtree` sweeps outside listeners on every removal shape.
+- `passive` / `capture` ([[DECISION-D187-PASSIVE-CAPTURE]]) become native listener
+  options in `setAttr`; `detachListener` removes a capture listener with `true`, so
+  replacement, null toggles and once spending match. The branch sits behind
+  `__PUZZLE_HAS_LISTENER_OPTIONS__` (usage scan); compiled out, listeners install exactly
+  as before.
 - Islands: children seeded once, never patched; own attrs/listeners still patch. Inline
   SVG uses the island path with string children.
 - `@@name` (an `@name` literal inside a D150 raw block) bypasses listeners and is
   attached as a parser-created `Attr` node, behind `__PUZZLE_HAS_RAW_AT__`.
 - `setAttr` (mirrored by `ssg/serialize.js`) omits `false`/`null`/`undefined` and plain
-  objects (dev warning), and joins arrays with spaces via `displayValue` — D173 V9.
+  objects (dev warning), and joins arrays with spaces via `displayValue` — D173 V9. URL
+  safety is not checked here: the compiler wraps the values that need it in `urlValue`
+  ([[DECISION-D186-DYNAMIC-URL-SAFETY]]), which turns a blocked URL into `null`.
 - **Live HTML** (`HTML_TAG = '#html'`, `views/html.js`, D174): the one vnode that owns
   several DOM nodes — `el` is an empty comment FIRST, `vnode.nodes` follow. Mount parses
   sanitized markup through an inert `<template>`; patch keeps `nodes` when value/br are
-  unchanged; the replace and keyed-move paths use `htmlTail`/`moveHtml`. Every branch
+  unchanged; replacements resolve `htmlTail` through the shared `lastNode`, and keyed
+  moves reuse `moveComponentSlot` with that range end, including component wrappers. `htmlTail` resolves translator-created wrappers to a real sibling; the mover snapshots before writing and moves only the start if the end is unreachable, preventing a rotating-sibling loop. Every branch
   sits behind `__PUZZLE_HAS_RAW_HTML__` with the probe INSIDE each condition (hoisting it
   kept the helpers alive, +151 B). SSG emits the markup without the comment.
 - **FLIP** (D85, `flip.js`): a `flip` attr on row roots; First-measure before removals

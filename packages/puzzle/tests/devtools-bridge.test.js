@@ -323,6 +323,17 @@ describe('devtools bridge — requests', () => {
 		expect(held).toEqual({});
 	});
 
+	it('snapshot:subscriptions shows a store.observe() observer as a function subscriber', async () => {
+		const hook = installHook();
+		const app = await bootApp();
+		const stop = app.store.observe('todo', 't9', () => {});
+		const { byKey, byView } = hook.request('snapshot:subscriptions');
+		expect(byKey['todo t9']).toEqual(['fn']);
+		expect(byView.fn).toContain('todo t9');
+		stop();
+		expect(hook.request('snapshot:subscriptions').byKey['todo t9']).toBeUndefined();
+	});
+
 	it('snapshot:subscriptions separates the keys a prepared, uncommitted run holds', async () => {
 		const hook = installHook();
 		const app = await bootApp();

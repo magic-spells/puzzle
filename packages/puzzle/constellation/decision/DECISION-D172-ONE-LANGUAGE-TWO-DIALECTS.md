@@ -11,6 +11,18 @@ connections:
   - DECISION-D32-CLI-TOOLING
   - DOC-RELEASE-SURFACE
   - DECISION-D166-SNIPPETS
+notes:
+  - kind: state
+    text: >-
+      puzzle-lang v0.8.1 (Go-only) builds the dialect switches as `parser.Options` (puzzle-lang
+      plan: FILE-PARSER-HOST, FILE-PARSER-LET): `Let` turns on {#let};
+      `SkipIslandCheck`/`SkipSlotCheck`/`SkipRefCheck` turn off PuzzleKit's post-parse rules;
+      `ParseMarkup` parses wrapper-less markup at a file position, and the splitter scanners are
+      exported so Sites keeps only its `<schema>` lifting and migration tools. Every switch is OFF
+      in the zero value, which is PuzzleKit's grammar. Deviation from this card: with {#let} off the
+      error stays the old generic "unknown block {#let} (expected …)" rather than "{#let} is a Sites
+      feature …", because PuzzleKit output must not change in a patch; the friendlier message is a
+      later, deliberate change.
 ---
 
 # D172 — One language, two dialects, one public name

@@ -16,12 +16,12 @@ release branches, feature PRs, and CI are the monorepo's, the framework root is 
 (not a sibling checkout), and the monorepo's `release:prep` asserts this package's
 version stamps at release time.
 
-**Why pieces can't ship as npm imports:** plain-JS npm packages work fine in a Puzzle app,
-but `.pzl` files inside `node_modules` are unsupported — the compiler's formatter scan prunes
-`node_modules` (out of scope for v1 per the compiler source), and the app's Tailwind
-`@source` scan only covers `app/`, so a package-shipped piece would render unstyled. So
-pieces must land in the app's own `app/components/ui/`, where the consumer's `puzzle build`
-compiles them and their Tailwind scan picks up the classes. This is the whole reason the
+**Why pieces don't ship as npm imports:** a Puzzle app can import `.pzl` files from an
+installed package that lists `@magic-spells/puzzle` in `peerDependencies` (the usage scan
+reads them, framework D89), but the app's Tailwind `@source` scan only covers `app/`, so a
+package-shipped piece would render unstyled, and an installed piece is not the app's to
+edit. So pieces land in the app's own `app/components/ui/`, where the consumer's
+`puzzle build` compiles them and their Tailwind scan picks up the classes. This is why the
 repo is shaped as a copyable registry.
 
 ## Topology — registry is source of truth, demo is downstream
@@ -29,7 +29,7 @@ repo is shaped as a copyable registry.
 ```
 registry/                     # SOURCE OF TRUTH
 ├── registry.json             # aggregated index of every piece manifest
-├── theme/*.css               # hand-written theme files: pieces.css (default palette, @theme + medium) + dim/warm/void overrides
+├── theme/*.css               # hand-written theme files: pieces.css (default palette, @theme + dim + mixed) + cool/warm/void overrides
 ├── theme/appearance.js       # runtime: read/persist/apply { scheme, mode } (exported as ./appearance)
 ├── theme/pre-paint.js        # inline anti-flash snippet for <head> (exported as ./pre-paint)
 ├── lib/*.js                  # shared plain-JS helpers (date-math.js, chart-math.js, …)
@@ -38,7 +38,7 @@ registry/                     # SOURCE OF TRUTH
     └── piece.json            # per-piece manifest
 demo/                         # Puzzle docs-site app (port 3070) — CONSUMES copies
 ├── app/components/ui/*.pzl   # COPIES of registry pieces (downstream)
-├── app/lib/*.js              # COPIES of registry/lib files (+ appearance.js copy, demo-only tokenNames.js and contrast.js)
+├── app/lib/*.js              # COPIES of registry/lib files (+ appearance.js copy, demo-only tokenNames.js, contrast.js and no-autofill.js)
 ├── app/styles/styles.css     # imports the four registry/theme/*.css DIRECTLY (not copies)
 ├── app/views/themes/*.pzl    # design-system panels: SchemePanel, Compare, Pieces
 ├── app/views/components/*Doc.pzl  # one docs page per piece
@@ -105,7 +105,7 @@ Rules that follow from this:
   CLI still accepts a bare name (third-party registries) and prints it bare, but nothing
   in this registry may ship one.
 - `themes` — optional palette names (`registry.json` `themes` entries) the piece needs to be
-  useful; `appearance-picker` lists `dim`, `warm`, `void`. Print-only: `add piece` prints
+  useful; `appearance-picker` lists `cool`, `warm`, `void`. Print-only: `add piece` prints
   `puzzle add theme <names…>` for the ones the app has neither on disk nor package-imported.
   Deliberately NOT `registryDependencies` — an older CLI would read the name as a piece.
   `test/registry-deps.test.js` checks every name is a shipped palette.
@@ -164,24 +164,33 @@ CLI — it is unrelated and must not be bumped along with the release.
   `text-danger`, …). **No hex colors** inside components. `pieces.css` is a registry file —
   editing token VALUES there changes every consumer.
 
-## Themes — four palettes × three modes (2026-09-18)
+## Themes — four schemes × four styles
 
 - **The CSS files are the source of truth.** `registry/theme/pieces.css` (default palette:
-  `@theme` block of `light-dark(light, dark)` pairs + a medium block + a
-  `[data-scheme='default']` restatement) and `dim.css` / `warm.css` / `void.css` (every
-  token restated inside `[data-scheme='x']`, plus that scheme's medium block). Hand-written
+  `@theme` block of `light-dark(light, dark)` pairs + a dim block + a mixed block + a
+  `[data-scheme='default']` restatement) and `cool.css` / `warm.css` / `void.css` (every
+  token restated inside `[data-scheme='x']`, plus that scheme's dim and mixed blocks). Hand-written
   — there is NO generator, NO JS token source and NO `tokens.json` (Cory, 2026-09-18: "we
   just need a .css theme file with the css vars in it"). Edit values in the files.
-- **Attributes:** `data-scheme` = palette (`dim | warm | void`; absent or `default` = the
-  `@theme` values), `data-theme` = mode (`light | medium | dark`; absent = follow the OS).
-  The `color-scheme` blocks and every scheme/medium block are deliberately UNANCHORED (not
-  `:root`) so any element can scope a subtree: `<div data-scheme="warm" data-theme="medium">`.
-- **Medium is "soft dark"** — `color-scheme: dark`, grounds lifted to mid grey, type dimmed
-  a stop. A medium block lists ONLY tokens whose value differs from the dark half; the
-  medium frame→panel OKLCH lightness step must be the smallest of the three modes
-  (`test/contrast.test.mjs`). Selectors: `[data-scheme='x'][data-theme='medium'],
-  [data-theme='medium'] [data-scheme='x']:not([data-theme])`; pieces.css additionally
-  `[data-theme='medium']:not([data-scheme])`.
+- **Values come from the Magic Spells Design System** Figma library (Color Schemes page,
+  "Scheme (draft)" × "Style (draft)" variables). Brand and status colours are pieces' own
+  per scheme (the Figma draft has one indigo accent for every scheme).
+- **Attributes:** `data-scheme` = palette (`cool | warm | void`; absent or `default` = the
+  `@theme` values), `data-theme` = style (`dark | dim | mixed | light`; absent = follow the
+  OS). The runtime field keeps the name `mode` (stored JSON, `data-default-mode`, the
+  picker's prop) — `style` would collide with the HTML attribute on a component tag.
+  The `color-scheme` blocks and every scheme/style block are deliberately UNANCHORED (not
+  `:root`) so any element can scope a subtree: `<div data-scheme="warm" data-theme="dim">`.
+- **Dim** ("between light and dark — lower contrast, more subtle") — `color-scheme: dark`,
+  grounds lifted, type softened. A dim block lists ONLY tokens whose value differs from the
+  dark half; dim grounds must sit between dark's and light's and dim ink-on-panel must
+  measure lower than dark's (`test/contrast.test.mjs`).
+- **Mixed** ("the darker sidebar with white main panel") — `color-scheme: light`; its block
+  re-declares EXACTLY `surface-frame` + `bar-ink/-muted/-hover/-line` at the palette's DARK
+  values (rail-* alias them), tested. Anything drawn on the frame must use bar-*/rail-*.
+- Selectors: `[data-scheme='x'][data-theme='dim'], [data-theme='dim']
+  [data-scheme='x']:not([data-theme])` (same for mixed); pieces.css additionally
+  `[data-theme='dim']:not([data-scheme])`.
 - **Token NAMES are frozen** — they are what Pyramid and Sites already use (`--color-ink`,
   `--color-surface-frame`, `--color-bar-*`, `--color-rail-*`, `--shadow-panel`, …). All four
   files must declare the identical set (`test/themes.test.mjs`); aliases (`--color-bar:
@@ -189,18 +198,19 @@ CLI — it is unrelated and must not be bumped along with the release.
 - **Marker line:** line 2 of `pieces.css` must stay ` * puzzle-pieces design tokens
   (Tailwind v4 @theme).` — the Go CLI keys installed-detection on it.
 - **Exports** (`package.json`): `./themes/default.css` → `registry/theme/pieces.css`,
-  `./themes/{dim,warm,void}.css`, `./appearance` (`boot/set/current/subscribe/apply/read`,
-  storage key `puzzle:appearance`, JSON `{ scheme, mode }`, legacy `mixed` → `medium`),
+  `./themes/{cool,warm,void}.css`, `./appearance` (`boot/set/current/subscribe/apply/read`,
+  storage key `puzzle:appearance`, JSON `{ scheme, mode }`, read aliases scheme `dim` →
+  `cool` and mode `medium` → `dim`, identical in pre-paint.js),
   `./pre-paint` (inline in `<head>`, params `data-key`, `data-default-mode`,
   `data-default-scheme` — handed to appearance.js on `window.__puzzleAppearance`, which
   seeds its key and fallback so `boot()` keeps the painted default; `configure()` wins). `registry.json` carries `modes` and a `themes` array
   (`{ name, file, label, description }`); the Go `Registry` struct reads both for
   `puzzle add theme`.
-- **Contrast:** every palette × mode must pass WCAG 2.2 AA on every declared pair in
+- **Contrast:** every palette × style must pass WCAG 2.2 AA on every declared pair in
   `test/lib/roles.mjs` (4.5 text, 3 non-text; translucent grounds flattened over
   `--color-surface`). `border`/`border-strong` are decorative and exempt; `border-dashed`
   and `ring` are held to 3:1.
-- **Adding a palette:** copy `registry/theme/dim.css` → `x.css`, rename the selectors,
+- **Adding a palette:** copy `registry/theme/cool.css` → `x.css`, rename the selectors,
   retune every value, add `{ name, file, label, description }` to `registry.json.themes`,
   add it to `SCHEMES` in `appearance.js` AND `pre-paint.js` (they must agree), to
   `SCHEMES` in `test/lib/parse-theme.mjs` and `demo/app/lib/tokenNames.js`, export it in
@@ -288,6 +298,11 @@ CLI — it is unrelated and must not be bumped along with the release.
   variant (`open:flex`).
 - **`{#for}` bodies need a single element root** — precompute per-row role/class in `data()`,
   or wrap in a `display:contents` element.
+- **Every item-form `{#for}` row needs a key.** Precompute a `key` in `data()` and bind
+  `key={ row.key }` on the row root, keyed by a real identity (option value, locale, path)
+  and by position only when the items carry no id. A row with neither a `key` nor an `.id`
+  makes the consumer's console log `{#for} item … has no usable key`.
+  `test/for-keys.test.js` fails on a new keyless loop.
 - `inert={ !open }` compiles fine; `aria-hidden` needs the **string** form.
 - **Focus flash:** Tailwind's `transition-colors` animates `outline-color`, so an outline
   color set only under `focus-visible:` flashes from the default on every focus. Set the

@@ -10,6 +10,7 @@ const copies = [
 		'../demo/app/components/ui/RichTextEditor.pzl',
 	],
 	['rich-text-doc.js', '../registry/lib/rich-text-doc.js', '../demo/app/lib/rich-text-doc.js'],
+	['rich-text-blocks.js', '../registry/lib/rich-text-blocks.js', '../demo/app/lib/rich-text-blocks.js'],
 ];
 
 test('registry and demo rich text files stay byte-identical', async () => {

@@ -9,7 +9,7 @@
       aria-haspopup="dialog"
       aria-expanded={ open ? 'true' : 'false' }
       aria-controls={ panelId }
-      title="Appearance — theme and mode"
+      title="Appearance — palette and style"
       @click={ toggle }>
       <!-- THE MARK IS A size-5 BOX with the dot centred in it, and the box is
            what matters: at `px-2` inside the footer's `px-3` gutter it lands on

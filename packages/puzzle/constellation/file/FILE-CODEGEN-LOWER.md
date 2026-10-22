@@ -26,7 +26,7 @@ the file:
 
 - **Nothing reads an expression's source string.** Names resolve from the tree:
   an arrow parameter shadows a template binding, which shadows the handler's
-  `event`; every other name is `__d.<name>`. A binding a persistent list row
+  `event`; every other name is `__d.<name>` outside the D180 `<Component>` `is` module scope. A binding a persistent list row
   rewrites (`todo` → `s.item`, the counter → `s.i`) comes from the scope map
   threaded through emission.
 - **Every member step, index step and method call is guarded** (`?.`), handler
@@ -42,6 +42,7 @@ the file:
   standard library call as the shim's `__puzzle_fn.name(…)`, any other bare call
   (an app function) as `__puzzle_app_fn("name")(…)`, and a method call with an
   arrow argument taking its receiver through `__puzzle_check_list(…)`.
+- **D180 selector check scope:** `WriteCheckSelectorValue` augments the check scope with the private module getter references after template locals; arrow parameters keep their normal shadowing. It shares the existing lowerer and source-position writer, so hygienic module reads and mapped diagnostics do not introduce a second expression grammar.
 - **Render facts come from the same tree** (`exprFacts`): which parent data roots
   a loop body reads, which members it reads off the row item, and whether it is
   volatile (a `timeago` call) — the inputs to D170 list blocks — plus the D62

@@ -47,11 +47,18 @@ func builtinAllowlist() (map[string]bool, error) {
 
 // Usage is the build-wide feature set discovered by ScanUsage.
 type Usage struct {
-	Formatters  map[string]bool
-	HasFlip     bool
-	HasPortal   bool
-	HasRawAt    bool
-	HasSnippets bool
+	Formatters       map[string]bool
+	HasFlip          bool
+	HasPortal        bool
+	HasRawAt         bool
+	HasSnippets      bool
+	HasComponentSlot bool
+	// HasConditionalSlot: a <Slot>/<Children> marker can leave and re-enter
+	// the tree (see conditionalSlot), which keeps the routed-outlet parking code.
+	HasConditionalSlot bool
+	// HasListenerOptions: some element listener carries the `passive` or
+	// `capture` modifier (D187), which keeps the native-options branch.
+	HasListenerOptions bool
 	// HasRawHTML: a template calls `raw` or `newline_to_br` (D174) as a text
 	// interpolation's outermost call, which keeps the live-HTML node and the
 	// sanitizer in the bundle.
@@ -67,6 +74,24 @@ type Usage struct {
 	// `t('cart.title')` — to the app-relative files that use it, for the build's missing-key warning. It
 	// is diagnostics only and never feeds a define.
 	TKeys map[string][]string
+	// RootHrefs are the literal root-relative `href`s on <a>/<area> (D177), in
+	// walk order. Always collected — the scan cannot see the config — and printed
+	// by the build only under prefix routing. Diagnostics only.
+	RootHrefs []RootHref
+	// PZLFiles is every .pzl the walk read, by absolute real path. The plugin's
+	// per-file check skips these: their usage is already in the bits above, so
+	// only a compiled .pzl the scan never saw can need a feature that is off.
+	PZLFiles map[string]bool
+}
+
+// RootHref is one literal root-relative link: `href="/about"`, or a mixed value
+// whose literal head is root-relative (`href="/blog/{ slug }"`, Mixed set and
+// Href holding that head). Position is the attribute's, in file coordinates.
+type RootHref struct {
+	File      string
+	Line, Col int
+	Href      string
+	Mixed     bool
 }
 
 // UsesT reports whether any template calls the `t` function.
@@ -79,13 +104,16 @@ func (u Usage) UsesT() bool {
 // WatchBuilder can decide with one == whether the Define set frozen into its
 // esbuild context went stale.
 type Features struct {
-	Flip        bool
-	Portal      bool
-	RawAt       bool
-	Lazy        bool
-	Snippets    bool
-	RawHTML     bool
-	RawSanitize bool
+	Flip            bool
+	Portal          bool
+	RawAt           bool
+	Lazy            bool
+	Snippets        bool
+	RawHTML         bool
+	RawSanitize     bool
+	ComponentSlot   bool
+	ConditionalSlot bool
+	ListenerOpts    bool
 }
 
 // Features projects the scan result onto the define bits. It is exported for
@@ -93,17 +121,20 @@ type Features struct {
 // whether the Defines frozen into an esbuild context went stale.
 func (u Usage) Features() Features {
 	return Features{
-		Flip:        u.HasFlip,
-		Portal:      u.HasPortal,
-		RawAt:       u.HasRawAt,
-		Lazy:        u.HasLazy,
-		Snippets:    u.HasSnippets,
-		RawHTML:     u.HasRawHTML,
-		RawSanitize: u.HasRawSanitize,
+		Flip:            u.HasFlip,
+		Portal:          u.HasPortal,
+		RawAt:           u.HasRawAt,
+		Lazy:            u.HasLazy,
+		Snippets:        u.HasSnippets,
+		RawHTML:         u.HasRawHTML,
+		RawSanitize:     u.HasRawSanitize,
+		ComponentSlot:   u.HasComponentSlot,
+		ConditionalSlot: u.HasConditionalSlot,
+		ListenerOpts:    u.HasListenerOptions,
 	}
 }
 
-// ScanUsage walks scanRoot for first-party source usage that controls runtime
+// ScanUsage walks scanRoot for the source usage that controls runtime
 // tree-shaking. Two kinds of file contribute:
 //
 //   - .pzl templates are fully parsed for library function calls, flip
@@ -116,11 +147,19 @@ func (u Usage) Features() Features {
 //     the bundle, and .pzl script sections are covered because a .pzl is read
 //     whole before it is split.
 //
-// The scan deliberately errs toward OVER-inclusion: it walks the whole project
-// (not just app/) so a component imported from a sibling directory still
-// contributes its usage, and it SKIPS files it cannot read or parse rather than
-// failing. Rationale: a false positive only leaves a small runtime module in the
-// bundle, whereas a false negative silently removes a used feature. Since v1.12
+// Two walks feed one Usage. The project walk reads both kinds of file across
+// the whole project (not just app/), so a component imported from a sibling
+// directory still contributes its usage. The package walk (scanpkg.go) reads
+// only the .pzl files of installed packages that declare
+// "@magic-spells/puzzle" in peerDependencies or dependencies, found in the
+// node_modules under the scan root and its ancestors; their functions reach
+// the formatter manifest exactly like the app's own. Pre-compiled component
+// JavaScript is not scanned and not supported.
+//
+// The scan deliberately errs toward OVER-inclusion, and it SKIPS files it
+// cannot read or parse rather than failing. Rationale: a false positive only
+// leaves a small runtime module in the bundle, whereas a false negative
+// silently removes a used feature. Since v1.12
 // (D43) an unseeded builtin no longer crashes the render — codegen wraps every
 // call in the __missing typo-guard, so the value passes through with a
 // console.error — but the scan still seeds every USED builtin so the guard stays
@@ -128,7 +167,11 @@ func (u Usage) Features() Features {
 // to the real formatter, not the pass-through. A genuinely broken .pzl that the
 // app actually imports is still reported — with position info — by the esbuild
 // .pzl OnLoad pass; the scan must not preempt that by failing the build over a
-// file nothing imports. See DOC-COMPILER-DESIGN §b.
+// file nothing imports. A .pzl the app imports that NEITHER walk read (an
+// undeclared package, a pruned directory, a linked folder outside every
+// node_modules) is caught by the plugin after the pass instead: when it uses a
+// feature this build compiled out, the build fails naming the file and the
+// feature (Plugin.featureMismatches). See DOC-COMPILER-DESIGN §b.
 //
 // A long-lived dev builder calls UsageScanner.Scan (scanmemo.go) instead, which
 // is this same walk with a per-file memo in front of the parse; both share
@@ -227,10 +270,11 @@ func scanScriptUsage(src string, usage *fileUsage) {
 	}
 }
 
-// skipScanDir reports whether a directory should be pruned from the usage scan:
-// installed packages, build output, vendor trees, and dot-directories hold no
-// first-party source worth scanning (installed .pzl component packages are out
-// of scope for v1 — see ScanUsage). node_modules and dot-directories are pruned
+// skipScanDir reports whether a directory should be pruned from the PROJECT
+// walk: installed packages, build output, vendor trees, and dot-directories
+// hold no first-party source worth scanning. Installed packages are the package
+// walk's job (scanpkg.go), which reads only the .pzl files of the ones that
+// declare Puzzle. node_modules and dot-directories are pruned
 // at any depth; `dist`, `build` and `vendor` only directly under the scan root
 // (atRoot), because deeper down a folder of that name is the app's own source —
 // pruning app/components/vendor/ compiled `raw` and its formatters out of a
@@ -257,11 +301,17 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 		if hasFlipAttr(node.Attrs) {
 			usage.HasFlip = true
 		}
+		if hasListenerOptions(node.Attrs) {
+			usage.HasListenerOptions = true
+		}
 		collectAttrCalls(node.Attrs, usage, allow)
 		for _, child := range node.Children {
 			collectUsage(child, usage, allow)
 		}
 	case *parser.Component:
+		if node.Name == "Component" {
+			usage.HasComponentSlot = true
+		}
 		// Components carry `flip` too: a component vnode's PROPS are its attrs
 		// (ViewNode `get props()` aliases `attrs`), so the keyed patcher's
 		// `'flip' in newChild.attrs` fast path fires for `<PostCard … flip>`
@@ -330,6 +380,74 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 	}
 }
 
+// conditionalSlot reports whether a <Slot>/<Children> marker sits where its
+// position can leave the tree and come back: under {#if}/{#case}/{#for}, in a
+// snippet body or a marker fallback, under a <Component> selection, or under an
+// element or component carrying a `key` or a spread. under starts true for a skeleton (the
+// real template replaces it). Over-inclusive on purpose: a false positive costs
+// the runtime's outlet-parking bytes; a false negative brings back a routed view
+// that a hidden outlet destroys while the router still holds it.
+func conditionalSlot(n parser.Node, under bool) bool {
+	walk := func(nodes []parser.Node, under bool) bool {
+		for _, child := range nodes {
+			if conditionalSlot(child, under) {
+				return true
+			}
+		}
+		return false
+	}
+	switch node := n.(type) {
+	case *parser.Slot:
+		// An args-bearing marker stamps snippets (D166); it never receives the
+		// routed vnode, so only a plain marker counts.
+		return (under && len(node.Args) == 0) || walk(node.Children, true)
+	case *parser.Element:
+		return walk(node.Children, under || hasKeyAttr(node.Attrs))
+	case *parser.Component:
+		return walk(node.Children, under || node.Name == "Component" || hasKeyAttr(node.Props))
+	case *parser.Portal:
+		return walk(node.Children, under)
+	case *parser.Snippet:
+		return walk(node.Body, true)
+	case *parser.If:
+		return walk(node.Then, true) || walk(node.Else, true)
+	case *parser.Case:
+		for _, clause := range node.Clauses {
+			if walk(clause.Body, true) {
+				return true
+			}
+		}
+		return walk(node.Else, true)
+	case *parser.For:
+		return walk(node.Body, true)
+	}
+	return false
+}
+
+// hasKeyAttr reports whether a node may carry a `key`. A `{...spread}` counts:
+// the spread object can hold one, and a false negative is the costly side.
+func hasKeyAttr(attrs []parser.Attr) bool {
+	for _, attr := range attrs {
+		switch a := attr.(type) {
+		case *parser.SpreadAttr:
+			return true
+		case *parser.StaticAttr:
+			if a.Name == "key" {
+				return true
+			}
+		case *parser.DynamicAttr:
+			if a.Name == "key" {
+				return true
+			}
+		case *parser.MixedAttr:
+			if a.Name == "key" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // hasFlipAttr reports whether any attribute/prop in the list is the D85 `flip`
 // directive — bare (`flip`), dynamic (`flip={ … }`), or interpolated. Used for
 // BOTH element attrs and component props: the runtime keyed patcher tests
@@ -354,6 +472,22 @@ func hasFlipAttr(attrs []parser.Attr) bool {
 	return false
 }
 
+// hasListenerOptions reports whether an element listener carries `passive` or
+// `capture` (D187). Component callback props reject every modifier, so only
+// element attrs are read.
+func hasListenerOptions(attrs []parser.Attr) bool {
+	for _, attr := range attrs {
+		if ev, ok := attr.(*parser.EventAttr); ok {
+			for _, m := range ev.Modifiers {
+				if m == "passive" || m == "capture" {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 func collectAttrCalls(attrs []parser.Attr, usage *Usage, allow map[string]bool) {
 	for _, attr := range attrs {
 		switch a := attr.(type) {
@@ -361,6 +495,8 @@ func collectAttrCalls(attrs []parser.Attr, usage *Usage, allow map[string]bool) 
 			collectPartCalls(a.Parts, usage, allow)
 		case *parser.DynamicAttr:
 			// A brace-only attribute, prop or marker argument.
+			collectExprCalls(a.ExprAST, nil, usage, allow)
+		case *parser.SpreadAttr:
 			collectExprCalls(a.ExprAST, nil, usage, allow)
 		case *parser.EventAttr:
 			// The handler's own call names a view handler, never the library
@@ -495,6 +631,8 @@ func collectAttrTKeys(attrs []parser.Attr, keys map[string]bool) {
 			collectPartTKeys(a.Parts, keys)
 		case *parser.DynamicAttr:
 			exprTKeys(a.ExprAST, keys)
+		case *parser.SpreadAttr:
+			exprTKeys(a.ExprAST, keys)
 		case *parser.EventAttr:
 			exprTKeysSkipping(a.ExprAST, handlerOwnCalls(a.ExprAST), keys)
 		}
@@ -517,6 +655,120 @@ func collectPartTKeys(parts []parser.Part, keys map[string]bool) {
 }
 
 func exprTKeys(n expr.Node, keys map[string]bool) { exprTKeysSkipping(n, nil, keys) }
+
+// collectRootHrefs records every literal root-relative `href` on an <a> or
+// <area> (D177's build warning): under prefix routing such a link skips the
+// locale prefix and sends every viewer to the default language. Skipped: a
+// fully dynamic value (no literal to judge), a protocol-relative `//host`, a
+// literal whose last path segment has a file extension (a file that exists once,
+// where the default URL is the right one), and authored literal markup ({#raw}),
+// where link() cannot be written. Like collectTKeys it is its own walk.
+func collectRootHrefs(nodes []parser.Node, out *[]RootHref) {
+	for _, n := range nodes {
+		switch node := n.(type) {
+		case *parser.Element:
+			if node.Tag == "a" || node.Tag == "area" {
+				for _, attr := range node.Attrs {
+					if h, ok := rootHref(attr); ok {
+						*out = append(*out, h)
+					}
+				}
+			}
+			collectRootHrefs(node.Children, out)
+		case *parser.Component:
+			collectRootHrefs(node.Children, out)
+		case *parser.Slot:
+			collectRootHrefs(node.Children, out)
+		case *parser.Snippet:
+			collectRootHrefs(node.Body, out)
+		case *parser.Portal:
+			collectRootHrefs(node.Children, out)
+		case *parser.If:
+			collectRootHrefs(node.Then, out)
+			collectRootHrefs(node.Else, out)
+		case *parser.Case:
+			for _, clause := range node.Clauses {
+				collectRootHrefs(clause.Body, out)
+			}
+			collectRootHrefs(node.Else, out)
+		case *parser.For:
+			collectRootHrefs(node.Body, out)
+		}
+	}
+}
+
+// rootHref reports whether attr is a literal root-relative href worth warning
+// about, and the entry to record (File is filled in by the caller's file).
+func rootHref(attr parser.Attr) (RootHref, bool) {
+	switch a := attr.(type) {
+	case *parser.StaticAttr:
+		if a.Name != "href" || a.Valueless || a.LiteralName || !isRootRelative(a.Value) || hasFileExtension(a.Value) {
+			return RootHref{}, false
+		}
+		return RootHref{Line: a.Pos.Line, Col: a.Pos.Col, Href: a.Value}, true
+	case *parser.MixedAttr:
+		if a.Name != "href" || len(a.Parts) == 0 {
+			return RootHref{}, false
+		}
+		head, ok := a.Parts[0].(*parser.StaticPart)
+		if !ok || !isRootRelative(head.Text) {
+			return RootHref{}, false
+		}
+		if hasFileExtension(mixedPathTail(a.Parts)) {
+			return RootHref{}, false
+		}
+		return RootHref{Line: a.Pos.Line, Col: a.Pos.Col, Href: head.Text, Mixed: true}, true
+	}
+	return RootHref{}, false
+}
+
+// mixedPathTail returns the static text that ends a mixed value's PATH, for the
+// extension check: the static part that opens the query or fragment, cut at its
+// `?`/`#` (empty when the path itself ends in an expression), else the last
+// static part. `/files/{ n }.pdf?v={ q }` gives `.pdf`, which the value's final
+// part — an expression — never shows.
+func mixedPathTail(parts []parser.Part) string {
+	tail := ""
+	for _, part := range parts {
+		p, ok := part.(*parser.StaticPart)
+		if !ok {
+			tail = ""
+			continue
+		}
+		if i := strings.IndexAny(p.Text, "?#"); i >= 0 {
+			return p.Text[:i]
+		}
+		tail = p.Text
+	}
+	return tail
+}
+
+// isRootRelative: starts with one `/`, not `//` or `/\` (both protocol-relative
+// to a browser).
+func isRootRelative(v string) bool {
+	return strings.HasPrefix(v, "/") && !strings.HasPrefix(v, "//") && !strings.HasPrefix(v, `/\`)
+}
+
+// hasFileExtension reports whether v's last path segment (query and fragment
+// dropped) ends in a dot and one or more letters or digits — `/files/resume.pdf`,
+// or the `.pdf` tail of `/files/{ name }.pdf`. A heuristic that only quiets the
+// warning, so a wrong guess costs one missed warning, never a broken link.
+func hasFileExtension(v string) bool {
+	if i := strings.IndexAny(v, "?#"); i >= 0 {
+		v = v[:i]
+	}
+	seg := v[strings.LastIndexByte(v, '/')+1:]
+	dot := strings.LastIndexByte(seg, '.')
+	if dot < 0 || dot == len(seg)-1 {
+		return false
+	}
+	for _, r := range seg[dot+1:] {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+			return false
+		}
+	}
+	return true
+}
 
 // exprTKeysSkipping records the string-literal first argument of every `t`
 // call in n, skipping the calls in skip (an event handler's own call).

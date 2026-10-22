@@ -27,20 +27,24 @@ func loadLocales(absRoot string, cfg config.Config) (*locales.Result, error) {
 	return locales.Load(absRoot, cfg.I18n)
 }
 
-// applyI18n points a plugin at the build's locale state: the define turns on
-// with the config, and the manifest module serves res's hashed paths.
-func applyI18n(pl *plugin.Plugin, enabled bool, res *locales.Result) {
+// applyI18n points a plugin at the build's locale state: the defines turn on
+// with the config (i18n nil = off), and the manifest module serves res's hashed
+// paths.
+func applyI18n(pl *plugin.Plugin, i18n *config.I18n, res *locales.Result) {
 	manifest := ""
 	if res != nil {
 		manifest = res.Manifest.JS()
 	}
-	pl.SetI18n(enabled, manifest)
+	pl.SetI18n(i18n != nil, manifest)
+	pl.SetLocaleRouting(i18n.PrefixRouting())
 }
 
 // i18nWarnings collects every translation warning for one build: the locale
 // loader's own (filled keys, stray keys, unlisted files), a literal `t` key the
 // default locale does not define, and the two "translations are half set up"
-// cases — `t` used, or app/locales/ present, with no i18n in the config.
+// cases — `t` used, or app/locales/ present, with no i18n in the config. Under
+// prefix routing (D177) it adds each literal root-relative href, and i18n.detect
+// set without routing warns that it does nothing.
 func i18nWarnings(absRoot string, cfg config.Config, usage plugin.Usage, res *locales.Result) []string {
 	if !cfg.I18nEnabled() {
 		var out []string
@@ -60,6 +64,12 @@ func i18nWarnings(absRoot string, cfg config.Config, usage plugin.Usage, res *lo
 		return nil
 	}
 	out := append([]string(nil), res.Warnings...)
+	if cfg.I18n.Detect != nil && !cfg.I18n.PrefixRouting() {
+		out = append(out, "i18n.detect has no effect without i18n.routing: 'prefix' — it only switches off the first-visit redirect to a locale-prefixed URL")
+	}
+	if cfg.I18n.PrefixRouting() {
+		out = append(out, rootHrefWarnings(usage.RootHrefs)...)
+	}
 	keys := make([]string, 0, len(usage.TKeys))
 	for key := range usage.TKeys {
 		if !res.DefaultKeys[key] {
@@ -86,6 +96,41 @@ func i18nWarnings(absRoot string, cfg config.Config, usage plugin.Usage, res *lo
 			strings.Join(files, ", "), key, locales.DirName, res.Manifest.DefaultLocale, hint))
 	}
 	return out
+}
+
+// rootHrefWarnings turns the scan's literal root-relative links into positioned
+// warnings (D177): under prefix routing such a link skips the locale prefix, so
+// a viewer reading /es/… is sent to the default language. Sorted by position so
+// the dev builders' print-on-change comparison is stable.
+func rootHrefWarnings(hrefs []plugin.RootHref) []string {
+	sorted := append([]plugin.RootHref(nil), hrefs...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		a, b := sorted[i], sorted[j]
+		if a.File != b.File {
+			return a.File < b.File
+		}
+		if a.Line != b.Line {
+			return a.Line < b.Line
+		}
+		return a.Col < b.Col
+	})
+	out := make([]string, 0, len(sorted))
+	for _, h := range sorted {
+		fix := fmt.Sprintf("write href={ link(%s) }, or link(%s, { locale: false }) for a file that exists once", jsQuote(h.Href), jsQuote(h.Href))
+		shown := h.Href
+		if h.Mixed {
+			shown += "…"
+			fix = "build it with link() — link(path), or link(path, { locale: false }) for a file that exists once"
+		}
+		out = append(out, fmt.Sprintf("%s:%d:%d: href=%q skips the locale prefix, so it always opens the default-language page under i18n.routing: 'prefix' — %s",
+			h.File, h.Line, h.Col, shown, fix))
+	}
+	return out
+}
+
+// jsQuote renders s as a single-quoted JavaScript string for a suggested fix.
+func jsQuote(s string) string {
+	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(s) + "'"
 }
 
 // printI18nWarnings writes each warning on its own line, in the plain

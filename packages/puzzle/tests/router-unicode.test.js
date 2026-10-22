@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Router } from '../client-runtime/router/router.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
+import { back } from './helpers/history.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -105,8 +106,7 @@ describe('Router — non-ASCII literal paths use encoded pathname form', () => {
 		await router.push('/café');
 		await router.push('/');
 
-		history.back();
-		await delay(20);
+		await back(() => router.current.path === '/caf%C3%A9');
 
 		expect(location.pathname).toBe('/caf%C3%A9');
 		expect(router.current.path).toBe('/caf%C3%A9');

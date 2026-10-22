@@ -394,11 +394,9 @@ describe('flip is a framework directive — never markup (D85)', () => {
 });
 
 describe('compiled-out flip warning (D89 amendment, D118 round)', () => {
-	// The D89 usage scan prunes node_modules/dist/vendor/dot-dirs, so a `flip`
-	// attr arriving from an installed .pzl component compiles the runtime OUT
-	// while the attr is still present at patch time. That degrade was silent —
-	// the formatter half of the same scan errors loudly (D43). The runtime now
-	// warns once, dev-only. The define is a bare global identifier in tests, so
+	// The D89 usage scan reads .pzl source only, so a `flip` attr arriving from
+	// pre-compiled component JavaScript compiles the runtime OUT while the attr
+	// is still present at patch time. The runtime warns once, dev-only. The define is a bare global identifier in tests, so
 	// stub it on globalThis (typeof-guarded in the source) and clean up.
 	afterEach(() => {
 		delete globalThis.__PUZZLE_HAS_FLIP__;

@@ -55,14 +55,6 @@ import (
 // silently landing in the wrong bit.
 const maxRootBits = 31
 
-// rowKeyIdent is the sentinel binding forBody uses to put `key: s.k` on a
-// lowered row root. The key attribute travels through the ordinary attribute
-// emitter, which lowers it as an Identifier, so the row scope has to be
-// reachable as a binding — and binding the scope object's real name (`s`)
-// would capture a data field of that name inside every loop body. The sentinel
-// cannot collide with an authored identifier.
-const rowKeyIdent = "__pzlRowKey"
-
 // loopSite is one lowered {#for}: its identity in the emitted module plus the
 // facts collected from its body while that body is emitted.
 type loopSite struct {
@@ -191,7 +183,7 @@ func (c *compiler) absorb(f *exprFacts, scope scopeMap) {
 
 // siteOwning returns the lowered loop whose item or counter `name` currently
 // resolves to, or nil when the binding is something else (a range variable, a
-// snippet parameter, `ViewNode`, `event`).
+// snippet parameter, `event`).
 func siteOwning(loops []*loopSite, scope scopeMap, name string) *loopSite {
 	if i := siteIndexOwning(loops, scope, name); i >= 0 {
 		return loops[i]
@@ -294,10 +286,9 @@ func (c *compiler) emitListCall(f *parser.For, ind int, scope scopeMap, keyArrow
 	if f.Counter != "" {
 		bodyScope = scopeAddAs(bodyScope, f.Counter, name+".i")
 	}
-	bodyScope = scopeAddAs(bodyScope, rowKeyIdent, name+".k")
 
 	c.loops = append(c.loops, site)
-	body, err := c.forBody(f, bodyScope, identNode(rowKeyIdent), ind+2, site)
+	body, err := c.forBody(f, bodyScope, name+".k", ind+2, site)
 	c.loops = c.loops[:len(c.loops)-1]
 	if err != nil {
 		return "", err
@@ -328,13 +319,13 @@ func (c *compiler) listKeyArrow(f *parser.For, scope scopeMap) (arrow string, lo
 		return "(" + f.Item + ") => ViewNode.keyOf(" + f.Item + ")", true, nil
 	}
 
-	// The arrow's scope is its OWN parameters plus the module's ViewNode import
-	// — deliberately NOT the enclosing render scope. A key reading anything else
+	// The arrow's scope is its OWN parameters, not the enclosing render scope.
+	// A key reading anything else
 	// (an enclosing row's local, a snippet parameter, a range variable) lowers
 	// to `__d.<name>` here and bails out below, rather than emitting a
 	// module-scope arrow that closes over a binding only render() has. Arrow
 	// parameters inside the key are its own and stay bare.
-	keyScope := scopeMap{f.Item: "", "ViewNode": ""}
+	keyScope := scopeMap{f.Item: ""}
 	if f.Counter != "" {
 		keyScope[f.Counter] = ""
 	}
