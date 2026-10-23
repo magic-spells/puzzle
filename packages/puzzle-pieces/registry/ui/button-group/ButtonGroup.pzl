@@ -104,7 +104,8 @@ export default class ButtonGroup extends PuzzleView {
 
     const items = source.map((it, i) => {
       const iconOnly = !!it.iconOnly;
-      // Rounding: only the ends round; -ml-px collapses shared borders.
+      // Rounding: only the ends round; -ml-px collapses outline's shared borders
+      // (secondary has none, and the overlap would tint a seam).
       const rounding =
         i === 0
           ? source.length === 1
@@ -113,7 +114,7 @@ export default class ButtonGroup extends PuzzleView {
           : i === last
             ? 'rounded-r-md'
             : 'rounded-none';
-      const overlap = i === 0 ? '' : '-ml-px';
+      const overlap = i === 0 || variant !== 'outline' ? '' : '-ml-px';
       return {
         value: it.value,
         label: it.label,

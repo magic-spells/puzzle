@@ -178,6 +178,8 @@ one is *not* a compile error; it silently builds a different product.
   buttons, the `dropdown-menu` button trigger and the `pagination` current
   page. Brand stays on focus rings, selection, links and active indicators.
   `contrast.test` holds the new pairs in all 16 cells.
+  In the `mixed` style, a button placed on the dark frame now paints dark on
+  dark; use a frame-specific look there.
 - **The `select` trigger is 36px, the height of every other field and of a
   `md` button (puzzle-pieces).** It was 38px, so it sat 2px taller than a
   button beside it.
