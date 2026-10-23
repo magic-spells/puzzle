@@ -8,6 +8,10 @@
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@press</code>
           callback; disabled and loading both block it.
         </p>
+        <p class="mt-2 text-body">
+          The variants are quiet on purpose: primary is solid ink, secondary an ink tint that
+          reads on any ground, and the brand colour is kept for focus rings, selection and links.
+        </p>
       </header>
 
       <ExampleBox code={ codeHero }>

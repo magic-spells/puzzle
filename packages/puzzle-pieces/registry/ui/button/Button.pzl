@@ -29,11 +29,25 @@ const BASE =
   'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
   'disabled:opacity-50 disabled:pointer-events-none';
 
+// Quiet by design (Cory, 2026-10-22: "the blue buttons really stand out and
+// when there are a lot of buttons on the screen it's too much to look at").
+// No brand fill: brand stays for focus rings, selection and links.
+//   primary    solid ink, the page colour as its text — near-black on light,
+//              white on dark — softening a step on hover.
+//   secondary  an ink TINT, not a surface token: 6% ink reads as a small,
+//              visible step off any ground (page, panel, raised card) in every
+//              style, where surface-sunken nearly vanished in dark.
+//   outline    transparent with a strong hairline, the same tint on hover, so
+//              it sits on any ground too.
+//   ghost      no chrome until hover, then the same tint.
+// The tint is translucent, so on a frame drawn in bar-* colours (the mixed
+// style's dark rail) it inherits the panel's ink, not the bar's — style
+// buttons placed on the frame with bar-* utilities.
 const VARIANT = {
-  primary: 'bg-brand text-brand-ink hover:bg-brand-dark',
-  secondary: 'bg-surface-sunken text-ink hover:bg-border',
-  outline: 'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken',
-  ghost: 'text-body hover:bg-surface-sunken hover:text-ink',
+  primary: 'bg-ink text-page hover:bg-ink/85',
+  secondary: 'bg-ink/6 text-ink hover:bg-ink/10',
+  outline: 'border border-border-strong text-ink hover:bg-ink/6',
+  ghost: 'text-body hover:bg-ink/6 hover:text-ink',
   destructive: 'bg-danger-solid text-danger-solid-ink hover:bg-danger-solid-hover',
 };
 

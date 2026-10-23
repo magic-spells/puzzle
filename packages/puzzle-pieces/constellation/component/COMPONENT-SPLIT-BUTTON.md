@@ -25,8 +25,14 @@ connections:
   - DECISION-WRAP-WEB-COMPONENTS
   - DECISION-CONFIG-FIRST-API
   - DOC-REGISTRY
+notes:
+  - kind: state
+    text: >-
+      2026-10-22: Action and Menu carry Button's quiet recipes (primary solid ink, secondary ink
+      tint, outline transparent with border-border-strong, ghost tint hover); see the quiet-buttons
+      note on DECISION-SCHEMES-AND-STYLES. They are still verbatim copies of Button.pzl's VARIANT
+      map and must change with it.
 ---
-
 
 A D167 family in `registry/ui/split-button/SplitButton/`: `SplitButton` (layout shell),
 `.Action` (the primary `<button>`), `.Menu` (the caret half, composing

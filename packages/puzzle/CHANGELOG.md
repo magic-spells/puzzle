@@ -161,6 +161,32 @@ Pick `<Children/>` if that position received content from the call site, or
 `'static'` now produces a genuinely static site — no router, no `app.js`. This
 one is *not* a compile error; it silently builds a different product.
 
+## 0.10.0 — unreleased
+
+### Changed
+
+- **Buttons are quiet: no brand fill (puzzle-pieces).** A screen with many
+  buttons no longer reads as a wall of indigo. `button` `primary` is solid ink
+  with the page colour as its text (`bg-ink text-page hover:bg-ink/85`):
+  near-black on light, white on dark. `secondary` is an ink tint
+  (`bg-ink/6 text-ink hover:bg-ink/10`), a small visible step off any ground
+  in every style, where `bg-surface-sunken` nearly vanished in dark.
+  `outline` is transparent with a `border-border-strong` hairline and the same
+  tint on hover, and `ghost` hovers on that tint too. `destructive` and the
+  variant names are unchanged. The same recipes now paint `split-button`,
+  `button-group`, `copy-button`, the `alert-dialog` and `popconfirm` confirm
+  buttons, the `dropdown-menu` button trigger and the `pagination` current
+  page. Brand stays on focus rings, selection, links and active indicators.
+  `contrast.test` holds the new pairs in all 16 cells.
+  In the `mixed` style, a button placed on the dark frame now paints dark on
+  dark; use a frame-specific look there.
+- **The `select` trigger is 36px, the height of every other field and of a
+  `md` button (puzzle-pieces).** It was 38px, so it sat 2px taller than a
+  button beside it.
+
+Re-add a piece with `puzzle add piece <name> --overwrite` to pick up these
+changes.
+
 ## 0.9.1 — 2026-10-22 (Go module only)
 
 A Go-module-only release of the template language: the tag is

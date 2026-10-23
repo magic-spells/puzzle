@@ -81,8 +81,8 @@ const ITEM_BASE =
 
 // Variant recipes lifted verbatim from Button.pzl.
 const VARIANT = {
-  outline: 'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken',
-  secondary: 'bg-surface-sunken text-ink hover:bg-border',
+  outline: 'border border-border-strong text-ink hover:bg-ink/6',
+  secondary: 'bg-ink/6 text-ink hover:bg-ink/10',
 };
 
 // Size scale lifted verbatim from Button.pzl.
@@ -104,7 +104,8 @@ export default class ButtonGroup extends PuzzleView {
 
     const items = source.map((it, i) => {
       const iconOnly = !!it.iconOnly;
-      // Rounding: only the ends round; -ml-px collapses shared borders.
+      // Rounding: only the ends round; -ml-px collapses outline's shared borders
+      // (secondary has none, and the overlap would tint a seam).
       const rounding =
         i === 0
           ? source.length === 1
@@ -113,7 +114,7 @@ export default class ButtonGroup extends PuzzleView {
           : i === last
             ? 'rounded-r-md'
             : 'rounded-none';
-      const overlap = i === 0 ? '' : '-ml-px';
+      const overlap = i === 0 || variant !== 'outline' ? '' : '-ml-px';
       return {
         value: it.value,
         label: it.label,

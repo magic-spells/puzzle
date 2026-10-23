@@ -24,8 +24,13 @@ connections:
   - DECISION-WRAP-WEB-COMPONENTS
   - DECISION-CONFIG-FIRST-API
   - DOC-REGISTRY
+notes:
+  - kind: state
+    text: >-
+      2026-10-22: Trigger's `button` variant is Button's outline at md (`border border-border-strong
+      text-ink hover:bg-ink/6`, transparent), no longer the bg-surface pill, so it matches an
+      outline Button beside it.
 ---
-
 
 A D167 compound family in `registry/ui/dropdown-menu/DropdownMenu/`: root plus `.Trigger`,
 `.Content`, `.Item`, `.Link`, `.Group`, `.Label`, `.Separator`, `.Shortcut`, `.Sub` and an

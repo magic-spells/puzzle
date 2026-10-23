@@ -151,13 +151,13 @@ const CELL_BASE =
   'inline-flex items-center justify-center size-9 rounded-lg text-sm font-medium select-none ' +
   'transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
 
-// Current page — solid brand treatment, matching Button's primary variant.
-const PAGE_ACTIVE = 'bg-brand text-brand-ink cursor-default';
+// Current page — solid ink, matching Button's primary variant.
+const PAGE_ACTIVE = 'bg-ink text-page cursor-default';
 // Other pages — ghost hover, matching Button's ghost variant.
-const PAGE_INACTIVE = 'text-body cursor-pointer hover:bg-surface-sunken hover:text-ink';
+const PAGE_INACTIVE = 'text-body cursor-pointer hover:bg-ink/6 hover:text-ink';
 // Prev/next icon buttons — ghost hover; disabled at the ends (real attr + styles).
 const NAV_BTN =
-  'text-body cursor-pointer hover:bg-surface-sunken hover:text-ink ' +
+  'text-body cursor-pointer hover:bg-ink/6 hover:text-ink ' +
   'disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed';
 
 const ELLIPSIS = 'inline-flex items-center justify-center size-9 text-muted';
