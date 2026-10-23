@@ -23,11 +23,16 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   <Button @press={ save }>Save</Button>
 //   <Button variant="destructive" size="sm" @press={ remove }>Delete</Button>
 //   <Button variant="outline" loading={ saving }>Saving…</Button>
+//
+// A disabled button keeps the pointer (a not-allowed cursor, not
+// pointer-events-none) so its `title` tooltip still shows; every hover is
+// written `not-disabled:hover:` so it stays off. A disabled <button> fires no
+// click, and the press handler re-checks as a backstop.
 const BASE =
   'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
   'rounded-lg font-medium cursor-pointer transition-colors ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
-  'disabled:opacity-50 disabled:pointer-events-none';
+  'disabled:opacity-50 disabled:cursor-not-allowed';
 
 // Quiet by design (Cory, 2026-10-22: "the blue buttons really stand out and
 // when there are a lot of buttons on the screen it's too much to look at").
@@ -44,11 +49,11 @@ const BASE =
 // style's dark rail) it inherits the panel's ink, not the bar's — style
 // buttons placed on the frame with bar-* utilities.
 const VARIANT = {
-  primary: 'bg-ink text-page hover:bg-ink/85',
-  secondary: 'bg-ink/6 text-ink hover:bg-ink/10',
-  outline: 'border border-border-strong text-ink hover:bg-ink/6',
-  ghost: 'text-body hover:bg-ink/6 hover:text-ink',
-  destructive: 'bg-danger-solid text-danger-solid-ink hover:bg-danger-solid-hover',
+  primary: 'bg-ink text-page not-disabled:hover:bg-ink/85',
+  secondary: 'bg-ink/6 text-ink not-disabled:hover:bg-ink/10',
+  outline: 'border border-border-strong text-ink not-disabled:hover:bg-ink/6',
+  ghost: 'text-body not-disabled:hover:bg-ink/6 not-disabled:hover:text-ink',
+  destructive: 'bg-danger-solid text-danger-solid-ink not-disabled:hover:bg-danger-solid-hover',
 };
 
 const SIZE = {

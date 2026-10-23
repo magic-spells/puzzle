@@ -46,6 +46,15 @@ notes:
       OKLCH L (observed min 1.10 and 0.036, Cool light). Gotcha: the tint and primary are panel-ink
       based, so a Button drawn on the mixed style's dark frame paints dark-on-dark; anything on the
       frame must use bar-*/rail-* utilities. Pyramid's controls.css and the Figma library follow.
+  - kind: decision
+    text: >-
+      2026-10-22: the button family's disabled look mirrors Pyramid's house CSS:
+      `disabled:opacity-50 disabled:cursor-not-allowed` (no `disabled:pointer-events-none`), and
+      every hover is written `not-disabled:hover:…` (compiles to `:not(:disabled):hover`). Why:
+      pointer-events-none killed the `title` tooltip, so apps wrapped disabled buttons in `<span
+      title>`. Applies to button, button-group, split-button Action, copy-button, alert-dialog and
+      popconfirm buttons, pagination prev/next, toggle, toggle-group. Non-<button> triggers
+      (split-button Menu, dropdown-menu Trigger) cannot match :disabled and are unchanged.
 ---
 
 # Appearance is four schemes × four styles

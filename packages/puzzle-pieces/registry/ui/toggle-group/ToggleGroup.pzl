@@ -69,10 +69,10 @@ const ITEM_BASE =
   // Negative offset keeps the focus ring inside the clipped (overflow-hidden)
   // container instead of getting cropped away.
   'focus-visible:outline-2 focus-visible:-outline-offset-2 outline-ring focus-visible:outline-ring ' +
-  'disabled:opacity-50 disabled:pointer-events-none';
+  'disabled:opacity-50 disabled:cursor-not-allowed';
 
-const OFF = 'bg-surface text-body hover:bg-surface-sunken hover:text-ink';
-const ON = 'bg-faint text-ink hover:bg-faint';
+const OFF = 'bg-surface text-body not-disabled:hover:bg-surface-sunken not-disabled:hover:text-ink';
+const ON = 'bg-faint text-ink not-disabled:hover:bg-faint';
 
 export default class ToggleGroup extends PuzzleView {
   data(params, props) {

@@ -32,6 +32,15 @@ notes:
       tint, outline transparent with border-border-strong, ghost tint hover); see the quiet-buttons
       note on DECISION-SCHEMES-AND-STYLES. They are still verbatim copies of Button.pzl's VARIANT
       map and must change with it.
+  - kind: state
+    text: >-
+      Action now follows the button family's disabled rule (shared with button, button-group,
+      copy-button, alert-dialog/popconfirm buttons, pagination prev/next, toggle, toggle-group):
+      `disabled:cursor-not-allowed` instead of `disabled:pointer-events-none`, so a disabled
+      button's `title` tooltip shows, and every hover is `not-disabled:hover:…` so it stays flat. A
+      native disabled <button> fires no click; onPress still re-checks. Menu deliberately keeps
+      `opacity-50 pointer-events-none`: its <dropdown-trigger> is not a <button> (never matches
+      :disabled), and pointer-events-none is the only thing stopping a click from opening the menu.
 ---
 
 A D167 family in `registry/ui/split-button/SplitButton/`: `SplitButton` (layout shell),

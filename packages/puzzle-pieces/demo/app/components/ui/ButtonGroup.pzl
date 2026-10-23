@@ -77,12 +77,12 @@ const ITEM_BASE =
   'font-medium cursor-pointer transition-colors ' +
   'focus-visible:z-10 ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
-  'disabled:opacity-50 disabled:pointer-events-none';
+  'disabled:opacity-50 disabled:cursor-not-allowed';
 
 // Variant recipes lifted verbatim from Button.pzl.
 const VARIANT = {
-  outline: 'border border-border-strong text-ink hover:bg-ink/6',
-  secondary: 'bg-ink/6 text-ink hover:bg-ink/10',
+  outline: 'border border-border-strong text-ink not-disabled:hover:bg-ink/6',
+  secondary: 'bg-ink/6 text-ink not-disabled:hover:bg-ink/10',
 };
 
 // Size scale lifted verbatim from Button.pzl.
