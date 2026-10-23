@@ -34,10 +34,10 @@ const BUTTON_BASE =
 
 // Variant recipes lifted verbatim from Button.pzl.
 const VARIANT = {
-  primary: 'bg-brand text-brand-ink hover:bg-brand-dark',
-  secondary: 'bg-surface-sunken text-ink hover:bg-border',
-  outline: 'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken',
-  ghost: 'text-body hover:bg-surface-sunken hover:text-ink',
+  primary: 'bg-ink text-page hover:bg-ink/85',
+  secondary: 'bg-ink/6 text-ink hover:bg-ink/10',
+  outline: 'border border-border-strong text-ink hover:bg-ink/6',
+  ghost: 'text-body hover:bg-ink/6 hover:text-ink',
   destructive: 'bg-danger-solid text-danger-solid-ink hover:bg-danger-solid-hover',
 };
 

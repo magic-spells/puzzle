@@ -64,6 +64,37 @@ for (const scheme of SCHEMES) {
 		});
 	}
 
+	// THE QUIET BUTTONS (Cory, 2026-10-22). Button's primary is `bg-ink
+	// text-page hover:bg-ink/85`; secondary is `bg-ink/6 text-ink
+	// hover:bg-ink/10`, and outline/ghost hover on the same 6% tint. The tints
+	// are translucent, so each is flattened over every ground a button sits on.
+	// The page colour must read on solid ink and its hover at 4.5:1; ink must
+	// read on the tint at 4.5:1; and the 6% tint must be a visible step off the
+	// ground — at least 1.08:1 and 0.03 OKLCH lightness — so secondary never
+	// vanishes the way surface-sunken did in dark.
+	for (const style of STYLES) {
+		test(`${scheme} / ${style}: the quiet button fills read on page, surface and raised`, () => {
+			const values = styles[style];
+			const ink = values.get('--color-ink');
+			const page = values.get('--color-page');
+			const over = (alpha, ground) => flatten({ ...parseColor(ink), a: alpha }, values.get(ground));
+			const failures = [];
+			const atLeast = (label, ratio, min) => {
+				if (!(ratio >= min)) failures.push(`${label} — ${ratio.toFixed(2)}, needs ${min}`);
+			};
+			atLeast('page on ink (primary)', contrastRatio(page, ink), 4.5);
+			for (const ground of ['--color-page', '--color-surface', '--color-surface-raised']) {
+				const g = values.get(ground);
+				atLeast(`page on ink/85 over ${ground} (primary hover)`, contrastRatio(page, over(0.85, ground)), 4.5);
+				atLeast(`ink on ink/6 over ${ground} (secondary)`, contrastRatio(ink, over(0.06, ground)), 4.5);
+				atLeast(`ink on ink/10 over ${ground} (secondary hover)`, contrastRatio(ink, over(0.1, ground)), 4.5);
+				atLeast(`ink/6 against ${ground} (secondary step)`, contrastRatio(over(0.06, ground), g), 1.08);
+				atLeast(`ink/6 against ${ground} (secondary lightness step)`, Math.abs(toOklch(over(0.06, ground)).l - toOklch(g).l), 0.03);
+			}
+			assert.deepEqual(failures, [], `\n  ${failures.join('\n  ')}\n`);
+		});
+	}
+
 	test(`${scheme}: dim grounds sit between dark's and light's, and read as dark`, () => {
 		for (const prop of ['--color-page', '--color-surface', '--color-surface-panel', '--color-surface-frame']) {
 			const l = (style) => toOklch(styles[style].get(prop)).l;

@@ -26,6 +26,26 @@ notes:
       danger-solid-hover (7.76:1) in all 16 cells. This matches Pyramid 656aa2f6. The rejected
       alternative was a dark-half pair: dark's #ef4444 with near-black text, whose hover went
       LIGHTER (#f87171).
+  - kind: decision
+    text: >-
+      2026-10-22, quiet buttons. Cory: "the blue buttons really stand out and when there are a lot
+      of buttons on the screen it's too much to look at" and "we still want these buttons to be a
+      little different from the bg color so they stand out". Button fills no longer use brand.
+      primary = `bg-ink text-page hover:bg-ink/85`; secondary = `bg-ink/6 text-ink hover:bg-ink/10`
+      (an ink TINT, not a surface token, so it is a visible step off page, panel and raised in every
+      style; surface-sunken nearly vanished in dark); outline = `border border-border-strong
+      text-ink hover:bg-ink/6` (transparent so it sits on any ground; border-border was too faint
+      without the old bg-surface fill); ghost hovers on the same 6% tint; destructive unchanged. No
+      new tokens. Copies of the recipes changed with it: SplitButton Action/Menu, ButtonGroup,
+      CopyButton, AlertDialog and Popconfirm confirm buttons, the DropdownMenu `button` trigger,
+      Pagination's current page (now ink) and its hovers. Brand stays for focus rings, selection,
+      links, active indicators (Tabs `buttons` selected tab, Calendar selected day, Stepper
+      complete, Checkbox/Switch/Radio, chip remove hovers were left on brand as selection/badge
+      uses). contrast.test.mjs measures, per cell: page on ink and on ink/85 over
+      page/surface/raised ≥4.5; ink on ink/6 and ink/10 ≥4.5; ink/6 vs its ground ≥1.08:1 and ≥0.03
+      OKLCH L (observed min 1.10 and 0.036, Cool light). Gotcha: the tint and primary are panel-ink
+      based, so a Button drawn on the mixed style's dark frame paints dark-on-dark; anything on the
+      frame must use bar-*/rail-* utilities. Pyramid's controls.css and the Figma library follow.
 ---
 
 # Appearance is four schemes × four styles

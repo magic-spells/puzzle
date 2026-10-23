@@ -50,11 +50,11 @@ import DropdownPanel from '../DropdownPanel/index.js';
 const FOCUS =
   'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
 
-// The menu-button pill — today's flat-port TRIGGER recipe, verbatim.
+// The menu-button pill — Button's outline variant at size md.
 const BUTTON =
   'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
   'rounded-lg font-medium cursor-pointer transition-colors h-9 px-4 text-sm ' +
-  'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken ' +
+  'border border-border-strong text-ink hover:bg-ink/6 ' +
   FOCUS;
 
 // A submenu row: Item's box, with the chevron pushed to the trailing edge.
