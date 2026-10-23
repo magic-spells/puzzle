@@ -40,7 +40,7 @@ const BASE =
   'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
   'rounded-lg font-medium cursor-pointer transition-colors ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
-  'disabled:opacity-50 disabled:pointer-events-none';
+  'disabled:opacity-50 disabled:cursor-not-allowed';
 
 // Size scale mirrors Button (sm/md/lg → same heights and text sizes).
 const SIZE = {
@@ -53,12 +53,12 @@ const SIZE = {
 // text-ink); unpressed is transparent and only raises a surface on hover.
 const VARIANT = {
   default: {
-    off: 'bg-transparent text-body hover:bg-surface-sunken hover:text-ink',
-    on: 'bg-faint text-ink hover:bg-faint',
+    off: 'bg-transparent text-body not-disabled:hover:bg-surface-sunken not-disabled:hover:text-ink',
+    on: 'bg-faint text-ink not-disabled:hover:bg-faint',
   },
   outline: {
-    off: 'border border-border bg-transparent text-body hover:bg-surface-sunken hover:text-ink',
-    on: 'border border-border bg-faint text-ink hover:bg-faint',
+    off: 'border border-border bg-transparent text-body not-disabled:hover:bg-surface-sunken not-disabled:hover:text-ink',
+    on: 'border border-border bg-faint text-ink not-disabled:hover:bg-faint',
   },
 };
 

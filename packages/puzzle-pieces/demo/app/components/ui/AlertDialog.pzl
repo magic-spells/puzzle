@@ -177,11 +177,11 @@ const BTN_BASE =
   'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
   'rounded-lg font-medium cursor-pointer transition-colors ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
-  'disabled:opacity-50 disabled:pointer-events-none h-9 px-4 text-sm';
-const BTN_PRIMARY = 'bg-ink text-page hover:bg-ink/85';
-const BTN_DESTRUCTIVE = 'bg-danger-solid text-danger-solid-ink hover:bg-danger-solid-hover';
+  'disabled:opacity-50 disabled:cursor-not-allowed h-9 px-4 text-sm';
+const BTN_PRIMARY = 'bg-ink text-page not-disabled:hover:bg-ink/85';
+const BTN_DESTRUCTIVE = 'bg-danger-solid text-danger-solid-ink not-disabled:hover:bg-danger-solid-hover';
 const BTN_OUTLINE =
-  'border border-border-strong text-ink hover:bg-ink/6';
+  'border border-border-strong text-ink not-disabled:hover:bg-ink/6';
 
 export default class AlertDialog extends PuzzleView {
   #id = `alert-dialog-${++uid}`;

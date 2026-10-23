@@ -108,12 +108,12 @@ const BTN_BASE =
   'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
   'rounded-lg font-medium cursor-pointer transition-colors ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring ' +
-  'disabled:opacity-50 disabled:pointer-events-none h-8 px-3 text-sm';
-const BTN_PRIMARY = 'bg-ink text-page hover:bg-ink/85';
-const BTN_DANGER = 'bg-danger-solid text-danger-solid-ink hover:bg-danger-solid-hover';
-const BTN_SECONDARY = 'bg-ink/6 text-ink hover:bg-ink/10';
+  'disabled:opacity-50 disabled:cursor-not-allowed h-8 px-3 text-sm';
+const BTN_PRIMARY = 'bg-ink text-page not-disabled:hover:bg-ink/85';
+const BTN_DANGER = 'bg-danger-solid text-danger-solid-ink not-disabled:hover:bg-danger-solid-hover';
+const BTN_SECONDARY = 'bg-ink/6 text-ink not-disabled:hover:bg-ink/10';
 const BTN_OUTLINE =
-  'border border-border-strong text-ink hover:bg-ink/6';
+  'border border-border-strong text-ink not-disabled:hover:bg-ink/6';
 
 // The base Panel carries the card chrome; a confirmation wants a fixed, readable
 // column rather than the menu's min-width.

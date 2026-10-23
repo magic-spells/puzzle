@@ -183,6 +183,14 @@ one is *not* a compile error; it silently builds a different product.
 - **The `select` trigger is 36px, the height of every other field and of a
   `md` button (puzzle-pieces).** It was 38px, so it sat 2px taller than a
   button beside it.
+- **A disabled button shows its `title` tooltip and a not-allowed cursor
+  (puzzle-pieces).** The button family (`button`, `button-group`,
+  `split-button`'s action, `copy-button`, the `alert-dialog` and `popconfirm`
+  buttons, `pagination`'s prev/next, `toggle`, `toggle-group`) drops
+  `disabled:pointer-events-none` for `disabled:cursor-not-allowed`, so a hint
+  no longer needs a wrapping `<span title>`. Every hover is written
+  `not-disabled:hover:…`, so a disabled button stays flat; it still fires no
+  click.
 
 Re-add a piece with `puzzle add piece <name> --overwrite` to pick up these
 changes.
