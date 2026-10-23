@@ -21,8 +21,13 @@ connections:
   - DECISION-WRAP-WEB-COMPONENTS
   - DECISION-CONFIG-FIRST-API
   - COMPONENT-DROPDOWN-PANEL
+notes:
+  - kind: state
+    text: >-
+      2026-10-22: the stock trigger is `min-h-9 … py-1.5` (36px), the height of every other field
+      and of a md Button. It was `py-2` with text-sm, 38px, 2px taller than a button beside it.
+      min-h rather than h so a custom slot trigger may grow.
 ---
-
 
 `Select` · `Select.Option` · `Select.Label` · `Select.Divider`, a D167 family over
 `@magic-spells/select-dropdown` 0.3.0 (0.7.0, feat/select-marquee-quantity). Replaced the
