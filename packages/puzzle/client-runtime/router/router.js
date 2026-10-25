@@ -2357,35 +2357,11 @@ export class Router {
 				this.#startOverlapLeave(oldAnimator, next.to);
 			} else {
 				this.#pendingOut = oldAnimator;
-				// Morph-leave (v1.23, D55): starts synchronously alongside the WAAPI out.
-				// Keeping the outgoing unit in the DOM until the blob lands back on its
-				// counterpart is the WINNER's obligation ONLY (see the two token checks
-				// below). Swallow any rejection at creation so a superseded transition
-				// that walks away from the promise never raises an unhandled rejection; a
-				// throwing handler is logged. Morph must never wedge navigation.
-				let morphOut = null;
-				if (this.#morphHandler) {
-					try {
-						const p = this.#morphHandler.leave(oldAnimator.element);
-						if (p) {
-							morphOut = Promise.resolve(p).catch((err) =>
-								reportError(this.#ctx, err, {
-									phase: 'transition',
-									view: oldAnimator,
-									route: next.to,
-								})
-							);
-						}
-					} catch (err) {
-						reportError(
-							this.#ctx,
-							err,
-							{ phase: 'transition', view: oldAnimator, route: next.to },
-							'[puzzle] morph leave handler threw',
-							err
-						);
-					}
-				}
+				// Morph-leave (v1.23, D55; #leaveMorph): starts synchronously alongside
+				// the WAAPI out. Keeping the outgoing unit in the DOM until the blob lands
+				// back on its counterpart is the WINNER's obligation ONLY (see the two
+				// token checks below).
+				const morphOut = this.#leaveMorph(oldAnimator, next.to);
 				// A user viewWillHide()/viewDidHide() hook can throw, rejecting playOut().
 				// Guard it: log and CONTINUE as if the out settled. Unguarded, the
 				// rejection propagates out of #swap → out of #navigate (whose try/catch
@@ -2725,6 +2701,39 @@ export class Router {
 	}
 
 	/**
+	 * Morph-leave (v1.23, D55), shared by the sequential and overlap out phases:
+	 * start the morph handler's leave synchronously and return its promise with a
+	 * rejection observer attached at creation, so a superseded transition that
+	 * walks away from it never raises an unhandled rejection. A throwing handler is
+	 * logged and yields null. Morph must never wedge navigation. Pinning, token
+	 * checks, waiting, and destruction stay with the caller.
+	 *
+	 * @param {PuzzleView} oldAnimator
+	 * @param {RouteSnapshot} route
+	 * @returns {Promise<unknown> | null}
+	 */
+	#leaveMorph(oldAnimator, route) {
+		if (!this.#morphHandler) return null;
+		try {
+			const pending = this.#morphHandler.leave(oldAnimator.element);
+			return pending
+				? Promise.resolve(pending).catch((err) =>
+						reportError(this.#ctx, err, { phase: 'transition', view: oldAnimator, route })
+					)
+				: null;
+		} catch (err) {
+			reportError(
+				this.#ctx,
+				err,
+				{ phase: 'transition', view: oldAnimator, route },
+				'[puzzle] morph leave handler threw',
+				err
+			);
+			return null;
+		}
+	}
+
+	/**
 	 * Overlap mode (v1.24, D56, constellation/doc/DOC-SPEC.md §26): start the
 	 * outgoing unit's out phase and return IMMEDIATELY so #swap proceeds straight
 	 * to the IN phase — old `out` and new `in` play concurrently (cross-fade).
@@ -2754,31 +2763,8 @@ export class Router {
 	#startOverlapLeave(oldAnimator, route) {
 		this.#pendingOut = oldAnimator;
 		this.#pinLeaver(oldAnimator.element);
-		// Morph-leave (v1.23, D55): same posture as the sequential path — start it
-		// alongside the WAAPI out, swallow rejections, log a throwing handler.
-		let morphOut = null;
-		if (this.#morphHandler) {
-			try {
-				const p = this.#morphHandler.leave(oldAnimator.element);
-				if (p) {
-					morphOut = Promise.resolve(p).catch((err) =>
-						reportError(this.#ctx, err, {
-							phase: 'transition',
-							view: oldAnimator,
-							route,
-						})
-					);
-				}
-			} catch (err) {
-				reportError(
-					this.#ctx,
-					err,
-					{ phase: 'transition', view: oldAnimator, route },
-					'[puzzle] morph leave handler threw',
-					err
-				);
-			}
-		}
+		// Morph-leave (v1.23, D55; #leaveMorph): started alongside the WAAPI out.
+		const morphOut = this.#leaveMorph(oldAnimator, route);
 		// Fire-and-forget: the out runs concurrently with the incoming in. On settle
 		// destroy the leaver (idempotent — converges with a reused-layout patch's own
 		// destroyAnimated) and release #pendingOut only if this leaver still owns it.

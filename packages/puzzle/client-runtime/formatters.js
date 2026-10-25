@@ -147,9 +147,12 @@ export class FormatterRegistry {
 		// PuzzleApp reports its own typos and test cases don't leak a "warned"
 		// flag into one another (a module-level Set would silence a second app or
 		// a second test that hits the same name). Matches the malformed-animation /
-		// duplicate-key warn-once pattern.
-		/** @type {Set<string>} */
-		this._warnedMissing = new Set();
+		// duplicate-key warn-once pattern. Dev-only, like its sole reader in
+		// __missing below: a production build allocates no ledger.
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			/** @type {Set<string>} */
+			this._warnedMissing = new Set();
+		}
 
 		for (const [name, fn] of Object.entries(seedMap || {})) {
 			this.register(name, fn);

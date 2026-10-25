@@ -101,14 +101,7 @@ const hashMode = {
 	readPath(base) {
 		const hash = location.hash;
 		if (hash === '' || hash === '#') return '/';
-		if (base) {
-			if (hash === '#' + base) return '/';
-			if (hash.startsWith('#' + base + '?')) return '/' + hash.slice(1 + base.length);
-			if (hash.startsWith('#' + base + '/')) return hash.slice(1 + base.length);
-			return null; // '#/...' outside the base is a non-route fragment (D51)
-		}
-		if (hash.startsWith('#/')) return hash.slice(1);
-		return null;
+		return pathFromHash(hash, base);
 	},
 
 	/**
@@ -151,11 +144,30 @@ const hashMode = {
 };
 
 /**
- * Route a clicked fragment if it names an in-app path (D34/D51). With a base the
+ * The in-app path a hash fragment names (D34/D51), or `null`. With a base the
  * fragment must be exactly `'#' + base` (→ `'/'`), the base followed directly by
- * a query, or under `'#' + base + '/'`; base-less, any `'#/...'` is a route. A
- * bare `'#anchor'` matches nothing and is left to the browser. preventDefault is
- * called HERE, before push.
+ * a query, or under `'#' + base + '/'` (so `/app` never matches `/application`);
+ * base-less, any `'#/...'` is a route. A bare `'#'` or `'#anchor'` matches
+ * nothing. Pure — shared by hashMode.readPath and tryHashFragment.
+ *
+ * @param {string} fragment
+ * @param {string} base
+ * @returns {string | null}
+ */
+function pathFromHash(fragment, base) {
+	if (base) {
+		if (fragment === '#' + base) return '/';
+		if (fragment.startsWith('#' + base + '?')) return '/' + fragment.slice(1 + base.length);
+		if (fragment.startsWith('#' + base + '/')) return fragment.slice(1 + base.length);
+		return null; // '#/...' outside the base is a non-route fragment (D51)
+	}
+	return fragment.startsWith('#/') ? fragment.slice(1) : null;
+}
+
+/**
+ * Route a clicked fragment if it names an in-app path (pathFromHash). A bare
+ * `'#'` or `'#anchor'` matches nothing and is left to the browser.
+ * preventDefault is called HERE, before push.
  *
  * @param {string} fragment
  * @param {MouseEvent} e
@@ -163,26 +175,10 @@ const hashMode = {
  * @param {Router} router
  */
 function tryHashFragment(fragment, e, base, router) {
-	if (base) {
-		if (fragment === '#' + base) {
-			e.preventDefault();
-			router.push('/');
-			return;
-		}
-		if (fragment.startsWith('#' + base + '?')) {
-			e.preventDefault();
-			router.push('/' + fragment.slice(1 + base.length));
-			return;
-		}
-		if (fragment.startsWith('#' + base + '/')) {
-			e.preventDefault();
-			router.push(fragment.slice(1 + base.length));
-		}
-		return;
-	}
-	if (fragment.startsWith('#/')) {
+	const path = pathFromHash(fragment, base);
+	if (path !== null) {
 		e.preventDefault();
-		router.push(fragment.slice(1));
+		router.push(path);
 	}
 }
 
