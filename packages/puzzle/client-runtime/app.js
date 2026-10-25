@@ -39,10 +39,10 @@ import {
 } from './i18n.js';
 import manifestData from '@magic-spells/puzzle/i18n/manifest';
 import { Router, localePage, navigating, normalizeBase } from './router/router.js';
+import { isViewClass } from './router/viewClass.js';
 import { snapshotToStorage, restoreStoreFromStorage, restoreViewsFromStorage } from './devstate.js';
 import { devtoolsAppMounted, devtoolsAppUnmounted } from './devtools.js';
 import { reportError, setErrorConfig } from './errors.js';
-import { PuzzleView } from './views/PuzzleView.js';
 import { setPortalHost, teardownPortals } from './views/portal.js';
 import { frame, scheduled } from './scheduler.js';
 
@@ -203,11 +203,7 @@ export class PuzzleApp {
 			);
 		}
 		const ErrorView = config.errorView;
-		if (
-			ErrorView != null &&
-			(typeof ErrorView !== 'function' ||
-				(ErrorView !== PuzzleView && !(ErrorView.prototype instanceof PuzzleView)))
-		) {
+		if (ErrorView != null && !isViewClass(ErrorView)) {
 			throw new Error('[puzzle] config.errorView must be a PuzzleView constructor when set');
 		}
 		this.config = config;
@@ -657,32 +653,7 @@ export class PuzzleApp {
 		// awaited — a post-success hook must never turn into a spurious mount()
 		// rejection (same "logged, never wedges" posture as morph-handler errors,
 		// D55). Both a sync throw and an async rejection are caught and logged.
-		if (mounted != null) {
-			const errorCtx = this.ctx;
-			const route = this.router?.current;
-			try {
-				const ret = mounted.call(this, this);
-				if (ret != null && typeof ret.then === 'function') {
-					ret.catch((/** @type {unknown} */ err) =>
-						reportError(
-							errorCtx,
-							err,
-							{ phase: 'app-mount', route },
-							'[puzzle] mounted hook error:',
-							err
-						)
-					);
-				}
-			} catch (err) {
-				reportError(
-					errorCtx,
-					err,
-					{ phase: 'app-mount', route },
-					'[puzzle] mounted hook error:',
-					err
-				);
-			}
-		}
+		this.#callHook(mounted, 'app-mount', '[puzzle] mounted hook error:');
 		return this;
 	}
 
@@ -714,41 +685,38 @@ export class PuzzleApp {
 		// is not awaited and cannot delay teardown; a throw is caught and logged and
 		// teardown always proceeds. Read from config (not destructured in mount())
 		// so a re-mounted instance re-fires it. It does NOT fire on the beforeMount
-		// abort path — that calls #teardown() directly.
+		// abort path — that calls #teardown() directly. A returned thenable that
+		// REJECTS is still observed (Change B), never left unobserved.
 		const { beforeUnmount } = this.config;
-		if (beforeUnmount != null) {
-			const errorCtx = this.ctx;
-			const route = this.router?.current;
-			try {
-				// Synchronous: teardown does NOT await a returned promise. But a
-				// returned thenable that REJECTS would otherwise be an unobserved
-				// rejection (Change B) — observe it with the same logged/never-wedges
-				// posture as the mounted hook. The sync throw is caught below.
-				const ret = beforeUnmount.call(this, this);
-				if (ret != null && typeof ret.then === 'function') {
-					ret.catch((/** @type {unknown} */ err) =>
-						reportError(
-							errorCtx,
-							err,
-							{ phase: 'app-unmount', route },
-							'[puzzle] beforeUnmount hook error:',
-							err
-						)
-					);
-				}
-			} catch (err) {
-				reportError(
-					errorCtx,
-					err,
-					{ phase: 'app-unmount', route },
-					'[puzzle] beforeUnmount hook error:',
-					err
-				);
-			}
-		}
+		this.#callHook(beforeUnmount, 'app-unmount', '[puzzle] beforeUnmount hook error:');
 
 		this.#teardown();
 		return this;
+	}
+
+	/**
+	 * Run a non-awaited app lifecycle hook (`mounted`, `beforeUnmount`; D66) with
+	 * the shared "logged, never wedges" policy: the hook runs synchronously as
+	 * `hook.call(app, app)`, a sync throw is reported, and a returned thenable's
+	 * rejection is observed and reported — never awaited. The context and route
+	 * are captured BEFORE the call, because a rejection can land after teardown
+	 * or a re-mount has replaced them.
+	 * @param {Function | null | undefined} hook
+	 * @param {'app-mount' | 'app-unmount'} phase error phase reported to onError
+	 * @param {string} message console diagnostic prefix
+	 */
+	#callHook(hook, phase, message) {
+		if (hook == null) return;
+		const errorCtx = this.ctx;
+		const route = this.router?.current;
+		const failed = (/** @type {unknown} */ err) =>
+			reportError(errorCtx, err, { phase, route }, message, err);
+		try {
+			const ret = hook.call(this, this);
+			if (ret != null && typeof ret.then === 'function') ret.catch(failed);
+		} catch (err) {
+			failed(err);
+		}
 	}
 
 	/**
