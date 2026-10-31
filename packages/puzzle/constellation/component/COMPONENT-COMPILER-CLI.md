@@ -61,18 +61,20 @@ the per-feature sections it points to; this card holds implementation rules.
 
 ## Commands
 
-- **`build [dir] [--mode] [--static|--hybrid]`** — production/development SPA, true
+- **`build [dir] [-m mode] [--static|--hybrid] [-q]`** — production/development SPA, true
   static (D81) or hybrid prerender (D67). The two output flags are exclusive and must
   agree with any `output` config. The entry is `app/app.ts` or `app/app.js`. Prints
   raw/gzip sizes, a per-dependency composition report (warns past 200 KB,
-  [[DECISION-D160-SPA-CODE-SPLITTING]]) and prerender summaries. `--profile-build` (or
+  [[DECISION-D160-SPA-CODE-SPLITTING]]) and prerender summaries. `-q/--quiet` drops the
+  summary, the static/hybrid page report and the update notice (`build.Options.Quiet`);
+  warnings, skipped routes and errors still print. `--profile-build` (or
   `PUZZLE_PROFILE_BUILD=1`, which is how a dev static rebuild gets profiled) prints phase
   tables to **stderr**, keeping the stdout summary scripts parse untouched; disabled, the
   profiler is a nil pointer.
-- **`dev [dir] --port`** — [[COMPONENT-DEV-SERVER]]. A busy port scans upward
+- **`dev [dir] -p/--port [--host] [-o]`** — [[COMPONENT-DEV-SERVER]]. A busy port scans upward
   (`--strict-port` = bind-or-fail, [[DECISION-D90-DEV-PORT-SCAN]]); an `output: 'static'`
   project runs the real prerender per rebuild ([[DECISION-D148-PREVIEW-AND-STATIC-DEV]],
-  [[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]).
+  [[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]). `--host` rules are in the notes below.
 - **Runtime preflight**: `build` and `dev` call `build.PreflightRuntime` before any
   esbuild work. It first `os.Stat`s the directory (`directory not found` / `is not a
   directory`, not bypassable by `PUZZLE_RUNTIME`), then requires one of the three runtime
@@ -81,7 +83,7 @@ the per-feature sections it points to; this card holds implementation rules.
   Rejected: auto-installing (the CLI never touches node_modules or the network, would guess
   the manager, and could install a mismatched runtime). `check`/`generate`/`preview` never
   bundle and are not gated.
-- **`preview [dir] [--port N] [--strict-port]`** (D148) — serves an existing `dist/` with
+- **`preview [dir] [-p N] [--host] [--strict-port]`** (D148) — serves an existing `dist/` with
   production-host semantics per output mode via `internal/preview` over the shared
   `internal/serve` resolver; no watcher. Default port 4000; missing `dist/` is a hard
   error; a flag-only build's mode is read back from the `data-puzzle-static`/
@@ -98,14 +100,15 @@ the per-feature sections it points to; this card holds implementation rules.
   (≥ 6 clears `baseUrl`/`moduleResolution`; below keeps node resolution and pins
   `module: ESNext`). No app tsconfig ⇒ `strict: false`. A missing tsc is checked AFTER
   the not-a-project test; an uncompilable `.pzl` is its own diagnostic, not an abort.
-  `--js` is registered and errors as not implemented.
+  `--js` is registered but hidden and errors as not implemented.
 - **`--fixtures`** on `build`/`dev` (D98): a generated two-module wrapper entry under
   `.puzzle/` installs `/fixtures` before the app entry; requires `app/fixtures.js`,
   rejected with static/hybrid output. `.puzzle/` is the compiler's self-ignoring scratch
   root (`tmp/`, `check/`, a `*` `.gitignore`; [[DECISION-D153-PUZZLE-SCRATCH-DIR]]).
-- **`init <name>`** — embedded `default`/`todos` trees (+ TypeScript variants). On a TTY
-  it prompts for what wasn't given (D77); non-TTY never prompts. Targets must be
-  npm-valid and empty.
+- **`init [app-name] [-t template] [-y]`** — embedded `default`/`todos` trees (+ TypeScript
+  variants). The argument is a path (create-vite style), resolved against the hidden
+  `--dir`. On a TTY it prompts for what wasn't given (D77); non-TTY never prompts.
+  Targets must be npm-valid and empty.
 - **`generate` / `g`** — component/view/layout/model stubs; in a TypeScript app (a root
   `tsconfig.json`, `IsTypeScriptApp`) every stub is TypeScript and a model is
   `app/models/<name>.ts`. Model generation prints registry wiring instead of editing JS.
@@ -113,7 +116,8 @@ the per-feature sections it points to; this card holds implementation rules.
   an `index.js`/`index.ts` barrel; names are PascalCase and reserved marker names are
   refused for components. `Component` is refused for every `.pzl` scaffold, including
   views, layouts, family roots and members (D180), with a rename hint before any write.
-  Collisions are all-or-nothing and `--force` rewrites only the family's files. The `--path` containment guard resolves symlinks
+  Collisions are all-or-nothing and `-f/--force` rewrites only the family's files. `--dir`
+  names the app root like `add --dir`. The `--path` containment guard resolves symlinks
   (`evalSymlinksAllowMissing`, in lockstep with pieces).
 - **`add tailwind`** writes missing canonical files or prints the snippet for
   user-owned config.
@@ -121,7 +125,8 @@ the per-feature sections it points to; this card holds implementation rules.
   `npm:@magic-spells/puzzle-pieces`; sources are `npm:` specs, directories or URLs. The npm
   transport picks the newest release sharing the CLI's major.minor (no prereleases),
   falls back to an older minor with a notice, `--pieces-version` pins. Then: transitive
-  piece and `lib/` deps, did-you-mean, all-or-nothing overwrite pre-flight, theme and npm
+  piece and `lib/` deps, did-you-mean, all-or-nothing overwrite pre-flight (`-f/--force`;
+  `--overwrite` is a hidden alias through 0.10.x), theme and npm
   next steps, sha256 `pieces.lock`. **Every manifest path is validated before any write**
   (no `.`/`..`/empty segments, no absolute or drive paths) and rejected, never cleaned; a
   `files` entry with a `/` installs path-preserving (the only compound-piece signal).
@@ -135,24 +140,26 @@ the per-feature sections it points to; this card holds implementation rules.
   `app/styles/themes/<name>.css`. A palette already imported from
   `@magic-spells/puzzle-pieces/themes/` is skipped; `styles.css` is never edited (the
   `@import` and `data-scheme` switch are printed). An unmodified older copy (matches its
-  lock hash) is refreshed; a modified one needs `--overwrite`.
+  lock hash) is refreshed; a modified one needs `--force`.
 - **`add skills`** ([[DECISION-D78-AGENT-SKILL-DISTRIBUTION]]) installs the embedded agent
   skill into detected `~/.claude`/`~/.codex`/`~/.cursor` dirs (TTY multi-select, non-TTY
   installs to all; `--skill-root` pins). The `.puzzle-skill-version` stamp classifies
-  existing installs; symlinked destinations are skipped unless `--overwrite` (then written
+  existing installs; symlinked destinations are skipped unless `--force` (then written
   through, never removed). **`upgrade skills`** refreshes existing installs from the
-  running binary.
+  running binary. `-y/--yes` is persistent on `init`, `add` and `upgrade`.
 - **`upgrade`** (D76) resolves the install context from the RUNNING EXECUTABLE (project →
   lockfile manager; global → `npm -g`/`pnpm -g`; `go install` → instructions; a hoisted
   workspace binary → refusal naming the member command), confirms the version, then offers
-  to refresh installed skills by re-execing the NEW binary. `--check` only reports.
+  to refresh installed skills by re-execing the NEW binary with `add skills --force`.
+  `--check` only reports.
 - **Passive update notice** (`internal/update`, on `build`/`dev`): prints from a 1 h
   cache and NEVER fetches in-process. When stale (and no `failed_at` backoff), it spawns a
   detached helper — the binary re-execing the hidden `update-check` subcommand
   (`updatecheck.go`, 3 s budget) — because `puzzle build` exits before an in-process
   fetch could land. Cache writes are atomic (parallel builds). TTY-only; skipped under
   `CI`/`PUZZLE_NO_UPDATE_CHECK` (re-checked by the helper); `PUZZLE_REGISTRY` overrides.
-- `doctor`, `info`, `--version` — diagnostics.
+- **`doctor`, `info` (both `--json`), `version` / `--version` / `-v`** — diagnostics.
+  Global `--no-color` (also read from argv before parse) sets `NO_COLOR=1`.
 
 ## Rules
 
