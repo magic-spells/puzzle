@@ -61,7 +61,7 @@ has a `tsconfig.json`),
   binary. `puzzle upgrade` also offers the refresh after it installs a new
   version. Re-running `puzzle add skills` skips an install that is already
   current and asks before replacing an older one (a non-interactive run needs
-  `--overwrite` for that).
+  `--force` for that).
 
 Production builds default to ES2022, minification, and **console stripping** —
 set `build: { dropConsole: false }` in puzzle.config.js to keep console calls.
@@ -1194,14 +1194,14 @@ piece imports the registry package (only the optional theme CSS and the
 `appearance`/`pre-paint` helpers under Styling come from it). Use
 `puzzle add piece <name…>` (copies each
 piece + its transitive piece/lib dependencies verbatim, records hashes in
-`pieces.lock`; refuses to overwrite any existing file unless `--overwrite`;
+`pieces.lock`; refuses to overwrite any existing file unless `--force` (`-f`);
 never runs npm or edits styles.css: required npm packages and the theme
 merge are printed as next steps). When the app has no theme yet it writes
 `app/styles/pieces.css` and prints the `@import` line. When the app's
 `pieces.css` differs from the registry's, it prints a hint: run
 `puzzle add theme default` for an unmodified older copy (0.8 pieces use
 tokens a 0.7 theme lacks, such as `surface-frame`, `bar-*` and `rail-*`),
-or hand-merge / `--overwrite` an edited one. A piece that needs extra
+or hand-merge / `--force` an edited one. A piece that needs extra
 palettes prints `puzzle add theme <names…>` for the missing ones. The printed install line carries each
 package's version floor — `npm install @magic-spells/collapsible-content@^1.2.0`
 — so a piece never resolves against an npm `latest` older than the component it

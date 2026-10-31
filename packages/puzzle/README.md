@@ -676,11 +676,13 @@ full project context and build better plans without re-deriving earlier work.
 ## CLI Commands
 
 ```bash
-# Development server with live reload
+# Development server with live reload (-p is --port; --host exposes it on the LAN)
 puzzle dev --port 3000
+puzzle dev -p 3000 --host --open
 
-# Production build (default)
+# Production build (default); -m development for readable output, -q skips the summary and update notice
 puzzle build
+puzzle build -m development -q
 
 # True static pages (no router, no app.js; per-page mount module)
 puzzle build --static
@@ -702,6 +704,9 @@ puzzle dev --profile-build
 # Upgrade the installed CLI, or only check what is available
 puzzle upgrade
 puzzle upgrade --check
+
+# Print the CLI version (same as --version / -v)
+puzzle version
 
 # Install the Puzzle agent skill for your coding tools, or refresh it later
 puzzle add skills
@@ -802,9 +807,9 @@ is how you refresh it:
 - An older one asks before it is replaced. Declining leaves it alone but still
   installs anywhere that has no skill yet.
 - On a non-interactive terminal an older install is refused rather than asked
-  about, and needs `--overwrite`.
+  about, and needs `--force` (or `--yes` to accept the update).
 - A symlinked install (a dev checkout linked into your config dir) is reported
-  and left alone unless you pass `--overwrite`.
+  and left alone unless you pass `--force`.
 
 `puzzle upgrade skills` refreshes only the installs you already have, and
 `puzzle upgrade` offers the same refresh automatically after it installs a new
@@ -820,9 +825,11 @@ its script body left alone.
 The full CLI surface (see [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §13): `init`, `generate`, `add`, `check`, `doctor`, and `info` join `dev` and `build`.
 
 ```bash
-# Scaffold a project; omitting the name prompts only in an interactive terminal
+# Scaffold a project; omitting the name prompts only in an interactive terminal.
+# The argument may be a path: ../apps/my-app creates my-app inside ../apps.
 puzzle init my-app --template todos
-puzzle init my-app --template todos --typescript
+puzzle init my-app -t todos --typescript
+puzzle init ../apps/my-app -y
 
 # Generate a stub (component, view, layout, or model) — TypeScript stubs in an
 # app with a tsconfig.json
@@ -834,7 +841,44 @@ puzzle add piece <name>
 puzzle add theme <name>
 puzzle add skills
 puzzle doctor
+
+# Machine-readable environment and health reports
+puzzle info --json
+puzzle doctor --json
 ```
+
+### Flag reference
+
+Every command takes `-h` / `--help` and the global `--no-color` (the same
+switch as `NO_COLOR=1`). Renamed spellings stay accepted: `add --overwrite`
+and `init --dir` still work as hidden compatibility aliases (no notice in
+0.10.x; they will be deprecated in a later release).
+
+| Command | Flags |
+| --- | --- |
+| `puzzle` | `-v, --version`, `--no-color` |
+| `version` | (none) |
+| `init [app-name]` | `-t, --template <default\|todos>`, `--typescript`, `-y, --yes` |
+| `dev [dir]` | `-p, --port <n>` (3000), `--strict-port`, `--host [ip]` / `--host=<addr>`, `-o, --open`, `--fixtures`, `--profile-build` |
+| `build [dir]` | `-m, --mode <production\|development>`, `--static`, `--hybrid`, `--fixtures`, `-q, --quiet`, `--profile-build` |
+| `preview [dir]` | `-p, --port <n>` (4000), `--strict-port`, `--host [ip]` / `--host=<addr>` |
+| `check [dir]` | (none) |
+| `generate <type> <Name>` (alias `g`) | `--path <dir>`, `--family <A,B>`, `-f, --force`, `--dir <app-root>` |
+| `add <integration\|piece\|theme\|skills> [name…]` | `-f, --force`, `-y, --yes`, `--dir <app-root>`, `--registry <source>`, `--pieces-version <v>`, `--skill-root <dir>` |
+| `upgrade` | `--check`, `-y, --yes` |
+| `upgrade skills` | `-y, --yes` |
+| `doctor [dir]` | `--json` |
+| `info [dir]` | `--json` |
+
+`--host` alone listens on every interface and the banner adds a `Network:` URL
+per LAN address. `--host <ip>` (an IPv4 or IPv6 literal, or `localhost`, right
+after the flag) or `--host=<addr>` binds that address. Hostnames need the `=`
+form: `--host=my.lan`.
+`-y` takes every prompt's default without asking. `--json` keys are stable:
+`info` prints `puzzle`, `platform`, `node` (null when node is missing),
+`projectRoot`, `sourceDir`, `outputDir` and `styles`; `doctor` prints `dir`,
+`ok`, `failures` and `checks` (each `{name, status, detail}`, status `pass`,
+`fail` or `warn`).
 
 ## License
 

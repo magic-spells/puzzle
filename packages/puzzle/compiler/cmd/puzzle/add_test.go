@@ -518,7 +518,7 @@ func TestAddSkillsOverwriteRefusalAndSuccess(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected existing skill directory to be refused")
 	}
-	if !strings.Contains(err.Error(), "--overwrite") || !strings.Contains(err.Error(), filepath.Dir(skillPath)) {
+	if !strings.Contains(err.Error(), "--force") || !strings.Contains(err.Error(), filepath.Dir(skillPath)) {
 		t.Fatalf("overwrite error should include the hint and destination, got: %v", err)
 	}
 	afterRefusal, err := os.ReadFile(skillPath)
@@ -761,14 +761,14 @@ func TestAddSkillsUpToDateInstallIsSkippedWithoutPrompting(t *testing.T) {
 	if !strings.Contains(out, "up to date") {
 		t.Errorf("expected an up-to-date line, got:\n%s", out)
 	}
-	if !strings.Contains(out, "puzzle add skills --overwrite") {
+	if !strings.Contains(out, "puzzle add skills --force") {
 		t.Errorf("expected the reinstall-anyway hint, got:\n%s", out)
 	}
 
 	// --overwrite is the documented escape, and must not need a version bump.
 	buf.Reset()
 	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", "", true, env); err != nil {
-		t.Fatalf("add skills --overwrite: %v", err)
+		t.Fatalf("add skills --force: %v", err)
 	}
 	restored, err := os.ReadFile(filepath.Join(dest, "SKILL.md"))
 	if err != nil {
@@ -863,7 +863,7 @@ func TestAddSkillsOverwriteWritesThroughSymlink(t *testing.T) {
 		skillRoots:  []string{root},
 	}
 	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", "", true, env); err != nil {
-		t.Fatalf("add skills --overwrite: %v", err)
+		t.Fatalf("add skills --force: %v", err)
 	}
 	got, err := os.ReadFile(filepath.Join(checkout, "SKILL.md"))
 	if err != nil {
@@ -900,7 +900,7 @@ func TestAddSkillsOverwritePrunesFilesTheEmbeddedTreeDropped(t *testing.T) {
 		skillRoots:  []string{root},
 	}
 	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", "", true, env); err != nil {
-		t.Fatalf("add skills --overwrite: %v", err)
+		t.Fatalf("add skills --force: %v", err)
 	}
 	if fsFileExists(orphan) {
 		t.Errorf("%s survived a reinstall", orphan)
@@ -1114,13 +1114,13 @@ func TestAddUnknownIntegrationListsTheme(t *testing.T) {
 	}
 }
 
-// TestAddOverwriteHelpNamesThemes: --overwrite applies to `add theme` too, and
-// its help line says so.
-func TestAddOverwriteHelpNamesThemes(t *testing.T) {
-	usage := addCmd.Flags().Lookup("overwrite").Usage
+// TestAddForceHelpNamesThemes: --force applies to `add theme` too, and its help
+// line says so.
+func TestAddForceHelpNamesThemes(t *testing.T) {
+	usage := addCmd.Flags().Lookup("force").Usage
 	for _, want := range []string{"pieces", "themes", "skills"} {
 		if !strings.Contains(usage, want) {
-			t.Errorf("--overwrite help %q does not mention %s", usage, want)
+			t.Errorf("--force help %q does not mention %s", usage, want)
 		}
 	}
 }

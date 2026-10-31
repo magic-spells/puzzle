@@ -55,7 +55,18 @@ func newWithEnv(f *os.File, getenv func(string) string) *Printer {
 }
 
 func colorEnabled(mode os.FileMode, getenv func(string) string) bool {
-	return mode&os.ModeCharDevice != 0 && getenv("NO_COLOR") == "" && getenv("TERM") != "dumb"
+	return mode&os.ModeCharDevice != 0 && colorAllowed(getenv)
+}
+
+func colorAllowed(getenv func(string) string) bool {
+	return getenv("NO_COLOR") == "" && getenv("TERM") != "dumb"
+}
+
+// ColorAllowed reports whether the environment permits color at all (NO_COLOR
+// unset — which is also what --no-color sets — and TERM not "dumb"). A Printer
+// additionally needs a terminal stream.
+func ColorAllowed() bool {
+	return colorAllowed(os.Getenv)
 }
 
 // Enabled reports whether this printer emits ANSI escapes.

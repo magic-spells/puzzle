@@ -23,6 +23,34 @@ notes:
       neither on disk nor package-imported. `pieces.lock` is read before `planTheme` so the hint can
       tell an older registry copy from an edit. `add theme` with no names marks an installed palette
       whose bytes differ from the registry's `installed · outdated`.
+  - kind: state
+    text: >-
+      0.10.0 flag conventions (feat/cli-conventions; full surface in DOC-SPEC-BUILD §13). Overwrite
+      is `--force`/`-f` on `add` and `generate`; wherever this card's body says `--overwrite`, read
+      `--force`. `add --overwrite` still parses as a hidden, deprecated alias (MarkDeprecated, same
+      bound var), and upgrade's skill re-exec now passes `--force`. New: `puzzle version` subcommand
+      (shares versionTemplate with --version/-v, version.go); `-p` port (dev/preview), `--host
+      [address]` (dev/preview, serveflags.go + serve.ListenHost/Banner), `dev -o/--open` (wires the
+      dev.Options.Open that had no flag), `build -m` and `-q/--quiet`, `init -t`, `-y/--yes` on init
+      / add / upgrade (persistent, so `upgrade skills -y`), `--json` on info and doctor (infoFacts /
+      doctorReport, additive-only keys), global `--no-color` (root PersistentPreRunE sets NO_COLOR,
+      so no subcommand may define its own PersistentPreRunE without chaining it). `init [app-name]`
+      accepts a path (create-vite); `init --dir` is hidden/deprecated and is the base a relative
+      argument resolves against. `generate --dir` names the app root like `add --dir`. `check --js`
+      is hidden. Tests: cmd/puzzle/cli_conventions_test.go.
+  - kind: decision
+    text: >-
+      Supersedes two details in the previous note, after the PR #240 review. (1) `add --overwrite`
+      and `init --dir` use MarkHidden, not MarkDeprecated, through 0.10.x. A 0.9 `puzzle upgrade`
+      re-execs the new binary with `add skills --overwrite`, and a deprecation notice would land in
+      the upgrade's output. Deprecate them in a later release. (2) `--host` is strict. `main()`
+      rewrites `--host <ip>` to `--host=<ip>` before cobra parses (`normalizeHostArgs`), and only
+      for the token IMMEDIATELY after a bare `--host` that is an IP literal or `localhost`, even if
+      a directory has that name. A custom `hostValue` (NoOptDefVal sentinel "true", Type "bool" so
+      help shows no `[=…]`) records a bare `--host`. An explicit `=` value is never overridden. A
+      bare `--host` that leaves too many positionals errors with "--host takes a hostname only as
+      --host=<name>". `--no-color` is also detected in argv in `main()`, so usage errors print
+      uncoloured too. `ui.ColorAllowed()` exposes the env gate.
 ---
 
 # Compiler CLI

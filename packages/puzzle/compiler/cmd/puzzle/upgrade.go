@@ -28,11 +28,13 @@ var upgradeCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		check, _ := cmd.Flags().GetBool("check")
+		yes, _ := cmd.Flags().GetBool("yes")
 		executable, _ := os.Executable()
 		return runUpgrade(os.Stdout, os.Stderr, ui.New(os.Stdout), executable, check, upgradeEnvironment{
 			homeDir:     os.UserHomeDir,
 			input:       os.Stdin,
-			interactive: ui.IsTerminal(os.Stdin),
+			interactive: ui.IsTerminal(os.Stdin) && !yes,
+			yes:         yes,
 		})
 	},
 }
@@ -54,20 +56,24 @@ the running binary already holds the payload that matches it.
 Only config dirs that already carry a skill are refreshed — first installs belong to
 ` + "`puzzle add skills`" + `. A symlinked installation is a dev checkout link: it is
 reported and left alone. On a non-TTY the refresh runs without prompting, because the
-command names the intent; ` + "`puzzle add skills`" + ` still requires --overwrite there,
+command names the intent; ` + "`puzzle add skills`" + ` still requires --force there,
 where clobbering would be a side effect rather than the request.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		yes, _ := cmd.Flags().GetBool("yes")
 		return runUpgradeSkills(os.Stdout, ui.New(os.Stdout), upgradeEnvironment{
 			homeDir:     os.UserHomeDir,
 			input:       os.Stdin,
-			interactive: ui.IsTerminal(os.Stdin),
+			interactive: ui.IsTerminal(os.Stdin) && !yes,
+			yes:         yes,
 		})
 	},
 }
 
 func init() {
 	upgradeCmd.Flags().Bool("check", false, "Report the current and latest versions without upgrading")
+	// Persistent so `puzzle upgrade skills -y` takes it too.
+	upgradeCmd.PersistentFlags().BoolP("yes", "y", false, "Accept the defaults without prompting: refresh the installed agent skills without asking")
 	upgradeCmd.AddCommand(upgradeSkillsCmd)
 	rootCmd.AddCommand(upgradeCmd)
 }
@@ -103,7 +109,7 @@ func runUpgradeSkills(w io.Writer, out *ui.Printer, env upgradeEnvironment) erro
 		stale = append(stale, target)
 	}
 	if len(stale) == 0 {
-		fmt.Fprintf(w, "Run %s to reinstall anyway.\n", out.Bold("puzzle add skills --overwrite"))
+		fmt.Fprintf(w, "Run %s to reinstall anyway.\n", out.Bold("puzzle add skills --force"))
 		return nil
 	}
 
@@ -165,6 +171,9 @@ type upgradeEnvironment struct {
 	homeDir     func() (string, error)
 	input       io.Reader
 	interactive bool
+	// yes (--yes) answers the skill-refresh prompt with its default, Yes,
+	// without showing it. The caller also clears interactive.
+	yes bool
 }
 
 func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, executable string, check bool, env upgradeEnvironment) error {
@@ -300,14 +309,18 @@ func refreshSkills(stdout, stderr io.Writer, out *ui.Printer, ctx installContext
 		return
 	}
 
-	if !env.interactive {
+	switch {
+	case env.yes:
+		// --yes: the prompt's default answer is Yes, so refresh without asking.
+	case !env.interactive:
 		fmt.Fprintf(stdout, "%s Puzzle skill installed at %s — run %s to update it.\n",
 			out.Yellow("!"), skillDestinations(targets), out.Bold("puzzle upgrade skills"))
 		return
-	}
-	confirmed, err := confirmSkillUpdate(env.input, stdout, targets, latest)
-	if err != nil || !confirmed {
-		return
+	default:
+		confirmed, err := confirmSkillUpdate(env.input, stdout, targets, latest)
+		if err != nil || !confirmed {
+			return
+		}
 	}
 
 	binary, err := upgradedBinary(ctx, latest)
@@ -316,7 +329,9 @@ func refreshSkills(stdout, stderr io.Writer, out *ui.Printer, ctx installContext
 			out.Yellow("!"), err, out.Bold("puzzle upgrade skills"))
 		return
 	}
-	args := []string{"add", "skills", "--overwrite"}
+	// --force, the current spelling: the upgraded binary is newer than this one,
+	// so it has it. (--overwrite remains a hidden alias for older callers.)
+	args := []string{"add", "skills", "--force"}
 	for _, target := range targets {
 		args = append(args, "--skill-root", target.Root)
 	}

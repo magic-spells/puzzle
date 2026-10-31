@@ -483,7 +483,7 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 
 		// A symlinked destination is a deliberate link (a dev checkout, a shared
 		// palette): report and skip it rather than silently replacing what it
-		// points at. --overwrite is explicit intent and writes THROUGH the link
+		// points at. --force is explicit intent and writes THROUGH the link
 		// (abs is already the resolved target), never over it. The Lstat is on the
 		// UNRESOLVED path — containedWritePath has followed the link by now, so
 		// stat-ing abs would only ever see the target.
@@ -544,7 +544,7 @@ func AddThemes(opts ThemeOptions) (*ThemeResult, error) {
 	// Nothing has been written at this point.
 	if len(refusals) > 0 {
 		sort.Strings(refusals)
-		return nil, fmt.Errorf("refusing to overwrite modified file(s) (use --overwrite to replace):\n  %s",
+		return nil, fmt.Errorf("refusing to overwrite modified file(s) (use --force to replace):\n  %s",
 			strings.Join(refusals, "\n  "))
 	}
 

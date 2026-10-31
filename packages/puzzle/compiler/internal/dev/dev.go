@@ -207,6 +207,10 @@ type Options struct {
 	// — container mappings, OAuth redirect URIs, proxy configs — and silently
 	// moving to a neighbour breaks whatever depends on the number.
 	StrictPort bool
+	// Host is the address to bind (`--host`). Empty or "localhost" keeps the
+	// server on loopback; "0.0.0.0" exposes it on every interface and the
+	// banner adds the LAN URLs. See serve.ListenHost.
+	Host string
 	// Open, when true, best-effort opens the app in the default browser once
 	// the server is listening.
 	Open bool
@@ -662,7 +666,7 @@ func Serve(root string, opts Options) error {
 	// dead port. A port already in use is not a failure — listenDev scans upward
 	// for a free one — but an exhausted scan still lands here.
 	endServerBind := startupProfile.Phase("server bind")
-	ln, err := serve.Listen(opts.Port, opts.StrictPort)
+	ln, err := serve.ListenHost(opts.Host, opts.Port, opts.StrictPort)
 	endServerBind()
 	if err != nil {
 		return fmt.Errorf("dev server: %w", err)
@@ -722,14 +726,14 @@ func Serve(root string, opts Options) error {
 		quitCh = keys.Listen(ctx, os.Stdin)
 	}
 
-	url := fmt.Sprintf("http://localhost:%d/", port)
+	url, network := serve.Banner(opts.Host, port)
 	outputStatus := ""
 	if staticMode {
 		outputStatus = "static (prerendered pages, no router)"
 	}
 	startupProfile.Report(os.Stderr)
 	startupReported = true
-	printReady(stdout, url, watchLabel(absRoot, appDir), stylesStatus, outputStatus, time.Since(serveStart), quitCh != nil)
+	printReady(stdout, url, network, watchLabel(absRoot, appDir), stylesStatus, outputStatus, time.Since(serveStart), quitCh != nil)
 	if opts.OnReady != nil {
 		opts.OnReady()
 	}
@@ -1558,7 +1562,7 @@ func pollFile(ctx context.Context, path string, interval time.Duration, onChange
 	}
 }
 
-func printReady(p *ui.Printer, url, watching, stylesText, outputText string, elapsed time.Duration, showQuitHint bool) {
+func printReady(p *ui.Printer, url string, network []string, watching, stylesText, outputText string, elapsed time.Duration, showQuitHint bool) {
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintf(
 		os.Stdout,
@@ -1568,6 +1572,9 @@ func printReady(p *ui.Printer, url, watching, stylesText, outputText string, ela
 		p.Bold(formatReadyMillis(elapsed)),
 	)
 	printInfoLine(p, "Local:", p.Cyan(url))
+	for _, u := range network {
+		printInfoLine(p, "Network:", p.Cyan(u))
+	}
 	printInfoLine(p, "Watching:", p.Dim(watching))
 	if stylesText != "" {
 		printInfoLine(p, "Styles:", p.Dim(stylesText))

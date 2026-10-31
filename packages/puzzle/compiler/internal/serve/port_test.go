@@ -133,3 +133,70 @@ func TestListenRejectsOutOfRangePorts(t *testing.T) {
 		})
 	}
 }
+
+func TestBindHost(t *testing.T) {
+	for host, want := range map[string]string{
+		"":          "127.0.0.1",
+		"localhost": "127.0.0.1",
+		"LocalHost": "127.0.0.1",
+		"0.0.0.0":   "0.0.0.0",
+		"10.0.0.5":  "10.0.0.5",
+		"::":        "::",
+	} {
+		if got := BindHost(host); got != want {
+			t.Errorf("BindHost(%q) = %q, want %q", host, got, want)
+		}
+	}
+}
+
+func TestBannerURLs(t *testing.T) {
+	local, network := Banner("", 3000)
+	if local != "http://localhost:3000/" || network != nil {
+		t.Errorf("default banner = %q %v, want localhost only", local, network)
+	}
+	local, network = Banner("0.0.0.0", 3000)
+	if local != "http://localhost:3000/" {
+		t.Errorf("all-interfaces local = %q", local)
+	}
+	for _, u := range network {
+		if !strings.HasPrefix(u, "http://") || !strings.HasSuffix(u, ":3000/") || strings.Contains(u, "127.0.0.1") {
+			t.Errorf("bad network URL %q", u)
+		}
+	}
+	if local, network = Banner("10.1.2.3", 4000); local != "http://10.1.2.3:4000/" || network != nil {
+		t.Errorf("specific host banner = %q %v", local, network)
+	}
+	if local, _ = Banner("::1", 4000); local != "http://[::1]:4000/" {
+		t.Errorf("IPv6 banner must bracket the address, got %q", local)
+	}
+}
+
+// TestListenHostAllInterfaces binds every interface and is reachable over
+// loopback, the address a --host server is still opened at locally.
+func TestListenHostAllInterfaces(t *testing.T) {
+	ln, err := ListenHost(AllInterfacesHost, 0, false)
+	if err != nil {
+		t.Skipf("cannot bind 0.0.0.0 here: %v", err)
+	}
+	defer ln.Close()
+	addr := ln.Addr().(*net.TCPAddr)
+	if !addr.IP.IsUnspecified() {
+		t.Errorf("bound %v, want the unspecified address", addr.IP)
+	}
+	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", addr.Port))
+	if err != nil {
+		t.Fatalf("dial loopback: %v", err)
+	}
+	conn.Close()
+}
+
+func TestListenDefaultStaysOnLoopback(t *testing.T) {
+	ln, err := ListenHost("", 0, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	if ip := ln.Addr().(*net.TCPAddr).IP; !ip.IsLoopback() {
+		t.Errorf("default bind %v is not loopback", ip)
+	}
+}

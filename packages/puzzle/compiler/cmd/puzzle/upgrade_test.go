@@ -1009,7 +1009,7 @@ func TestUpgradeSkillRefreshRunsUpgradedBinary(t *testing.T) {
 		t.Fatalf("prompt targets = %#v, want the two installed roots", asked)
 	}
 	want := []string{
-		"add", "skills", "--overwrite",
+		"add", "skills", "--force",
 		"--skill-root", filepath.Join(home, ".claude"),
 		"--skill-root", filepath.Join(home, ".cursor"),
 	}
@@ -1164,7 +1164,7 @@ func TestUpgradeSkillsUpToDateAndSymlinkAndEmptyHomes(t *testing.T) {
 			t.Fatalf("upgrade skills: %v", err)
 		}
 		out := buf.String()
-		if !strings.Contains(out, "up to date") || !strings.Contains(out, "puzzle add skills --overwrite") {
+		if !strings.Contains(out, "up to date") || !strings.Contains(out, "puzzle add skills --force") {
 			t.Errorf("expected an up-to-date line and the reinstall hint, got:\n%s", out)
 		}
 		if fsFileExists(filepath.Join(dest, "SKILL.md")) {
@@ -1219,6 +1219,13 @@ func TestUpgradeSkillsUpToDateAndSymlinkAndEmptyHomes(t *testing.T) {
 // node_modules/.bin/puzzle stub when a test needs a different one.
 func runUpgradeWithStubs(t *testing.T, home string, interactive bool, seedProject func(project string)) string {
 	t.Helper()
+	return runUpgradeWithStubsEnv(t, home, upgradeEnvironment{interactive: interactive}, seedProject)
+}
+
+// runUpgradeWithStubsEnv is runUpgradeWithStubs with the prompt-related
+// environment (interactive, yes) taken from env; homeDir is always home.
+func runUpgradeWithStubsEnv(t *testing.T, home string, env upgradeEnvironment, seedProject func(project string)) string {
+	t.Helper()
 
 	oldFetchLatest := fetchLatest
 	fetchLatest = func(time.Duration) (string, error) { return testLatest, nil }
@@ -1254,10 +1261,7 @@ func runUpgradeWithStubs(t *testing.T, home string, interactive bool, seedProjec
 	}
 
 	var stdout, stderr bytes.Buffer
-	env := upgradeEnvironment{
-		homeDir:     func() (string, error) { return home, nil },
-		interactive: interactive,
-	}
+	env.homeDir = func() (string, error) { return home, nil }
 	if err := runUpgrade(&stdout, &stderr, plainPrinter(), executable, false, env); err != nil {
 		t.Fatalf("runUpgrade: %v\nstderr: %s", err, stderr.String())
 	}

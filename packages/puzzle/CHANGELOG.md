@@ -233,8 +233,42 @@ one is *not* a compile error; it silently builds a different product.
   `not-disabled:hover:…`, so a disabled button stays flat; it still fires no
   click.
 
-Re-add a piece with `puzzle add piece <name> --overwrite` to pick up these
+Re-add a piece with `puzzle add piece <name> --force` to pick up these
 changes.
+
+### CLI
+
+The CLI now answers to the flags people type from npm, gh, vite and cargo
+habit. Nothing existing breaks: renamed spellings stay accepted.
+
+- **`puzzle version`** prints exactly what `--version` and `-v` print
+  (`puzzle version <v>`).
+- **Overwrite is `--force` / `-f` everywhere.** `add` gains it; `--overwrite`
+  still works as a hidden compatibility alias (silent in 0.10.x, to be
+  deprecated in a later release). `generate --force` gains `-f`.
+- **Short flags:** `-p` for `--port` (`dev`, `preview`), `-t` for `--template`
+  (`init`), `-m` for `--mode` (`build`), and `-o` for the new `dev --open`,
+  which opens the browser once the server is ready.
+- **`init` takes a path:** `puzzle init ../apps/my-app` creates `my-app` inside
+  `../apps`, like create-vite. Usage reads `init [app-name]`. `--dir` still
+  works as a hidden compatibility alias (to be deprecated later); given both,
+  the path resolves against `--dir`.
+- **`-y` / `--yes`** on `init`, `add` and `upgrade` (and `upgrade skills`)
+  takes every prompt's default without asking.
+- **`--host`** on `dev` and `preview`: a bare `--host` listens on every
+  interface and the banner adds a `Network:` URL per LAN address. `--host <ip>`
+  (an IP literal or `localhost` right after the flag) or `--host=<addr>` binds
+  that address; hostnames need `--host=<name>`. The default is still localhost
+  only.
+- **`--json`** on `info` and `doctor` prints the same facts as one JSON object
+  with stable keys (listed in each command's `--help`). `doctor --json` exits
+  non-zero on a failed check, like the table form.
+- **`build -q` / `--quiet`** skips the build summary and the update notice.
+  Errors, warnings and the `--static`/`--hybrid` page report still print.
+- **`--no-color`** on every command, the same switch as `NO_COLOR=1`.
+- **`generate --dir`** names the app root the way `add --dir` does.
+- `check --js` is hidden from `--help` until it does something. It is still
+  accepted.
 
 ## 0.9.1 — 2026-10-22 (Go module only)
 
