@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -102,8 +103,12 @@ func requireHidden(t *testing.T, cmd *cobra.Command, name string) {
 	if !f.Hidden {
 		t.Errorf("%s --%s should be hidden", cmd.Name(), name)
 	}
-	if help := helpText(t, cmd); strings.Contains(help, "--"+name+" ") {
-		t.Errorf("%s --help lists hidden flag --%s:\n%s", cmd.Name(), name, help)
+	// Only the Flags: listing counts — the long description may still mention a
+	// deprecated spelling to explain it.
+	help := helpText(t, cmd)
+	_, flags, _ := strings.Cut(help, "\nFlags:\n") // no section: nothing listed
+	if strings.Contains(flags, "--"+name+" ") {
+		t.Errorf("%s --help lists hidden flag --%s:\n%s", cmd.Name(), name, flags)
 	}
 }
 
@@ -317,5 +322,78 @@ func TestCheckJSHiddenButAccepted(t *testing.T) {
 	parse(t, checkCmd, "--js")
 	if err := checkCmd.RunE(checkCmd, nil); err == nil || !strings.Contains(err.Error(), "not yet implemented") {
 		t.Fatalf("check --js error = %v, want not yet implemented", err)
+	}
+}
+
+func TestInitUsageAndFlags(t *testing.T) {
+	if initCmd.Use != "init [app-name]" {
+		t.Errorf("init Use = %q, want %q", initCmd.Use, "init [app-name]")
+	}
+	requireShorthand(t, initCmd, "template", "t")
+	requireShorthand(t, initCmd, "yes", "y")
+	requireHidden(t, initCmd, "dir")
+	parse(t, initCmd, "-t", "todos", "-y")
+	if got, _ := initCmd.Flags().GetString("template"); got != "todos" {
+		t.Errorf("-t todos parsed as %q", got)
+	}
+	if got, _ := initCmd.Flags().GetBool("yes"); !got {
+		t.Error("-y should set yes")
+	}
+}
+
+func TestInitTarget(t *testing.T) {
+	abs := filepath.Join(t.TempDir(), "abs-app")
+	tests := []struct {
+		arg, dir             string
+		wantParent, wantName string
+		wantErr              bool
+	}{
+		{"my-app", "", ".", "my-app", false},
+		{"my-app/", "", ".", "my-app", false},
+		{filepath.Join("..", "apps", "foo"), "", filepath.Join("..", "apps"), "foo", false},
+		{"foo", "apps", "apps", "foo", false}, // the pre-path --dir spelling
+		{filepath.Join("nested", "foo"), "apps", filepath.Join("apps", "nested"), "foo", false},
+		{abs, "", filepath.Dir(abs), "abs-app", false},
+		{abs, "apps", "", "", true}, // absolute path and --dir: ambiguous
+		{"  ", "", "", "", true},
+	}
+	for _, tt := range tests {
+		parent, name, err := initTarget(tt.arg, tt.dir)
+		if tt.wantErr {
+			if err == nil {
+				t.Errorf("initTarget(%q, %q) should error", tt.arg, tt.dir)
+			}
+			continue
+		}
+		if err != nil || parent != tt.wantParent || name != tt.wantName {
+			t.Errorf("initTarget(%q, %q) = (%q, %q, %v), want (%q, %q)", tt.arg, tt.dir, parent, name, err, tt.wantParent, tt.wantName)
+		}
+	}
+}
+
+// TestInitPositionalPathCreatesInParent: `puzzle init <parent>/<name>` creates
+// the app inside parent (made if missing), named by the last segment.
+func TestInitPositionalPathCreatesInParent(t *testing.T) {
+	r, w, err := os.Pipe() // non-TTY stdin: nothing is prompted
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	orig := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = orig; r.Close() })
+
+	base := t.TempDir()
+	target := filepath.Join(base, "apps", "path-app")
+	parse(t, initCmd)
+	if err := initCmd.RunE(initCmd, []string{target}); err != nil {
+		t.Fatalf("init %s: %v", target, err)
+	}
+	pkg, err := os.ReadFile(filepath.Join(target, "package.json"))
+	if err != nil {
+		t.Fatalf("app not created at %s: %v", target, err)
+	}
+	if !strings.Contains(string(pkg), `"name": "path-app"`) {
+		t.Errorf("package name should be the last path segment:\n%s", pkg)
 	}
 }
