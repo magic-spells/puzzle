@@ -34,10 +34,11 @@ scripts and CI the flag defaults are used silently and nothing is prompted.
 --yes (-y) skips every prompt on a TTY too and takes the defaults, so the app
 name must then be given.
 
-The older --dir <parent> flag still works but is deprecated: pass the path
-positionally instead. When both are given, the positional path is resolved
-against --dir (puzzle init foo --dir apps creates apps/foo); an absolute
-positional path together with --dir is an error.`,
+The older --dir <parent> flag still works as a hidden compatibility alias (to
+be deprecated in a later release): pass the path positionally instead. When
+both are given, the positional path is resolved against --dir (puzzle init foo
+--dir apps creates apps/foo); an absolute positional path together with --dir
+is an error.`,
 	// MaximumNArgs(1), not ExactArgs(1): the name may be omitted and prompted
 	// for interactively (see RunE). Zero args on a non-TTY still errors (D32
 	// scriptability — puzzle init must stay non-interactive under pipes/CI).
@@ -126,8 +127,10 @@ positional path together with --dir is an error.`,
 func init() {
 	initCmd.Flags().StringP("template", "t", scaffold.DefaultTemplate,
 		fmt.Sprintf("Starter template (%s)", strings.Join(scaffold.Templates, "|")))
-	initCmd.Flags().String("dir", "", "Parent directory to create the app in (deprecated: pass a path as the argument)")
-	_ = initCmd.Flags().MarkDeprecated("dir", "pass the path as the argument instead (puzzle init ../apps/my-app)")
+	// Hidden compatibility alias for the pre-path spelling (no notice in 0.10.x;
+	// to be deprecated in a later release). The positional path replaces it.
+	initCmd.Flags().String("dir", "", "Parent directory to create the app in (compatibility alias: pass a path as the argument)")
+	_ = initCmd.Flags().MarkHidden("dir")
 	initCmd.Flags().BoolP("yes", "y", false, "Skip the prompts and take the defaults (the app name is then required)")
 	initCmd.Flags().Bool("typescript", false, "Scaffold a TypeScript app: <script lang=\"ts\"> components, .ts modules, a strict tsconfig.json, and an npm run check script (puzzle check)")
 	rootCmd.AddCommand(initCmd)
@@ -135,7 +138,7 @@ func init() {
 
 // initTarget splits init's positional argument into the parent directory and
 // app name, create-vite style: the last path segment is the name and the rest is
-// the parent. A deprecated --dir, when given, is the base a relative argument
+// the parent. The hidden --dir alias, when given, is the base a relative argument
 // resolves against, so the pre-path spelling `puzzle init foo --dir apps` keeps
 // meaning apps/foo; an absolute argument alongside --dir is ambiguous and
 // refused. The name itself is validated later by scaffold.Create.

@@ -141,18 +141,21 @@ directory, or an http(s) URL; --pieces-version pins the npm release exactly.`,
 	},
 }
 
-// addForce backs both --force and its deprecated --overwrite alias.
+// addForce backs both --force and its hidden --overwrite alias.
 var addForce bool
 
 func init() {
 	addCmd.Flags().String("registry", "", "Piece registry source: npm:<package>[@version], a local directory, or an http(s) URL (default: $PUZZLE_PIECES_REGISTRY or the @magic-spells/puzzle-pieces npm package)")
 	addCmd.Flags().String("pieces-version", "", "Exact @magic-spells/puzzle-pieces release to fetch (default: the newest release matching this CLI's major.minor)")
 	// --force / -f is the overwrite spelling every other CLI uses (and `puzzle
-	// generate` already did). --overwrite stays accepted as a hidden, deprecated
-	// alias bound to the same variable, so existing scripts keep working.
+	// generate` already did). --overwrite stays accepted as a hidden alias bound
+	// to the same variable, for compatibility. Hidden, not deprecated, through
+	// 0.10.x: a 0.9 `puzzle upgrade` re-execs the new binary with
+	// `add skills --overwrite`, and a deprecation notice would land in that
+	// upgrade's output. Deprecate it in a later release.
 	addCmd.Flags().BoolVarP(&addForce, "force", "f", false, "Overwrite existing destination files when adding pieces, themes, or skills")
-	addCmd.Flags().BoolVar(&addForce, "overwrite", false, "Deprecated alias for --force")
-	_ = addCmd.Flags().MarkDeprecated("overwrite", "use --force (-f) instead")
+	addCmd.Flags().BoolVar(&addForce, "overwrite", false, "Compatibility alias for --force")
+	_ = addCmd.Flags().MarkHidden("overwrite")
 	addCmd.Flags().BoolP("yes", "y", false, "Accept the defaults without prompting: install the skill to every detected target and replace older installs")
 	addCmd.Flags().String("dir", "", "App root to add pieces into (default: walk up from the current directory for package.json/puzzle.config.js)")
 	addCmd.Flags().StringArray("skill-root", nil, "Config dir to install the skill into (repeatable); skips detection and the target prompt")

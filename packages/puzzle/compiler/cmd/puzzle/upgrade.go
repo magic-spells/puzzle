@@ -329,9 +329,8 @@ func refreshSkills(stdout, stderr io.Writer, out *ui.Printer, ctx installContext
 			out.Yellow("!"), err, out.Bold("puzzle upgrade skills"))
 		return
 	}
-	// --force, not the deprecated --overwrite: the upgraded binary is newer than
-	// this one, so it has the new spelling, and the alias would print a
-	// deprecation notice into the upgrade output.
+	// --force, the current spelling: the upgraded binary is newer than this one,
+	// so it has it. (--overwrite remains a hidden alias for older callers.)
 	args := []string{"add", "skills", "--force"}
 	for _, target := range targets {
 		args = append(args, "--skill-root", target.Root)
