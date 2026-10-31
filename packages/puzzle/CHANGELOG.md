@@ -11,15 +11,26 @@ numbered `Dnn` cards, referenced below.
 
 ## Upgrading across versions
 
-Ten breaking changes are easy to miss on a multi-version jump. Most fail
-loudly — a compile error, a constructor throw, an unresolvable import. Six are
-quiet: the 0.8.0 template semantics change output without an error;
+Eleven breaking changes are easy to miss on a multi-version jump. Most fail
+loudly — a compile error, a constructor throw, an unresolvable import. Seven are
+quiet: hashed production filenames (0.10.0) break only what names the old
+files outside the build; the 0.8.0 template semantics change output without an error;
 `i18n.locales` (reshaped, 0.9.0), `output: 'static'` (renamed, 0.2.0) and
 `errorContent()` (removed, 0.6.0) are greppable; the stricter write-response
 guard (0.6.0) is not — it depends on what your server returns, so it surfaces
 at runtime on the first save — and neither is the behavior change under
 auto-fetching finds (0.7.0), which turns some reads that used to be local into
 requests.
+
+**Production builds hash their output names (0.10.0, D181).** With no
+`build.hashNames` key, a production build now writes `app-<hash>.js`,
+`styles-<hash>.css` and, in `output: 'static'`, `_puzzle/<slug>-<hash>.js`
+instead of the fixed names. The build rewrites `public/index.html` and every
+prerendered page, so the app itself keeps working; what breaks is anything
+outside the build that names the old files: a host rule, cache header, CDN
+purge, service worker list or deploy script. Point those at the new names (or
+patterns such as `styles-*.css`), or set `build: { hashNames: false }` to keep
+the old ones.
 
 **`i18n.locales` lists entries, not tags (0.9.0, D177).** Only apps that
 configure `i18n` are affected. `ctx.i18n.locales` was a `string[]`; it is now
@@ -180,8 +191,18 @@ one is *not* a compile error; it silently builds a different product.
   are never renamed. When hashing is on by default and `public/index.html`
   cannot follow a name (no `<script src>` loading `app.js`, or no tag
   referencing `styles.css`), that file keeps its fixed name and the build
-  prints one warning for it instead of failing; an explicit
-  `hashNames: true` still fails on a shell with no entry reference.
+  prints one warning for it instead of failing (a missing `public/index.html`
+  falls back for both files). The same applies when another `public/` HTML
+  page (a hand-written `404.html`, `embed.html`, `offline.html`) names `app.js`,
+  `app.css` or `styles.css` by its fixed name: that file keeps the fixed name and
+  the warning names the page, so no copied page ships a dead link. An app with no
+  CSS at all is not warned about its empty `styles.css`. An explicit
+  `hashNames: true` is strict: it still fails on a shell with no entry
+  reference or a reference to an output that was not emitted (such as a stale
+  `/app.css`), rewrites other public HTML pages to the hashed names, and hashes
+  an unlinked stylesheet. Apps with `splitting: true` and no `hashNames` key
+  used to hard-fail on a shell the build could not rewrite; they now warn and
+  fall back like everyone else.
 
 ### Changed
 

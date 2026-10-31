@@ -35,8 +35,10 @@ Production builds content-hash their names (app-<hash>.js, styles-<hash>.css,
 and app-<hash>.css for JavaScript-imported CSS) and rewrite the shell's
 references to match. Set build.hashNames: false to keep the fixed app.js and
 styles.css. With build.hashNames unset, a file public/index.html does not
-reference keeps its fixed name with a warning; an explicit hashNames: true
-fails when the shell does not load app.js. With build.splitting enabled, lazy chunks land under
+reference (both, when the shell is missing), or that another public/ HTML page
+names, keeps its fixed name with a warning. An explicit hashNames: true fails
+when the shell does not load app.js, rewrites the other public/ HTML pages,
+and hashes the stylesheet even when nothing links it. With build.splitting enabled, lazy chunks land under
 dist/chunks/ and the shell gets modulepreload links for its static-import
 chunks. Development builds keep fixed names and add no preloads; public/
 assets are never renamed.

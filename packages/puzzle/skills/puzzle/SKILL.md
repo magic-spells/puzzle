@@ -85,9 +85,10 @@ no chunk-loader runtime, so it adds no runtime bytes. Notes:
   stay on with splitting). Development builds keep fixed names and add no
   preloads. `public/` files are never renamed.
 - Hashing needs a shell reference to `/app.js`, `./app.js` or `app.js` (and the
-  same for `styles.css`). With `hashNames` unset, an unreferenced file keeps
-  its fixed name and the build warns once for it; an explicit
-  `hashNames: true` fails on a shell with no entry reference. Choose
+  same for `styles.css`). With `hashNames` unset, an unreferenced file (or one
+  another `public/*.html` page names by its fixed name) keeps its fixed name and
+  the build warns once for it; an explicit `hashNames: true` fails on a shell
+  with no entry reference and rewrites the other public pages. Choose
   `hashNames: false` when another page or a host rule needs a fixed URL.
 - **`chunks/` becomes a reserved output name** while the flag is on: a
   root-level `public/chunks` asset fails the build (as `app.js` already does).

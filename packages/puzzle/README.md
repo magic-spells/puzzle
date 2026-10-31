@@ -733,9 +733,15 @@ and add no preloads. Files copied from `public/` are never renamed.
 Hashing needs the shell to reference `app.js` as `/app.js`, `./app.js` or
 `app.js`, and `styles.css` the same way. With `hashNames` unset, a file the
 shell does not reference keeps its fixed name and the build prints one warning
-for it; with an explicit `hashNames: true`, a shell with no entry reference
-fails the build. Use `hashNames: false` when another page or a host rule needs
-the fixed URL.
+for it; a missing `public/index.html` falls back for both files. The same holds
+when another HTML page in `public/` (a hand-written `404.html`, an
+`embed.html`) names `app.js`, `app.css` or `styles.css`: that file keeps its
+fixed name, and the warning names the page. An app with no CSS gets no
+stylesheet warning. An explicit `hashNames: true` is strict instead: a shell
+with no entry reference, or one naming an output the build did not emit, fails
+the build; other public HTML pages are rewritten to the hashed names; and a
+stylesheet nothing links still ships as `styles-<hash>.css`. Use
+`hashNames: false` when a host rule or another site needs the fixed URL.
 
 `output: 'hybrid'` uses the same entry and stylesheet names as the SPA, with
 prerendered HTML under `dist/<path>/index.html`. `output: 'static'` ships no
