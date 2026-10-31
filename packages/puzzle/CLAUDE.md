@@ -256,8 +256,9 @@ enforced, not merely advised.
   `is={ cards[key] }` forwards children as the normal default slot; nullish
   selection renders nothing; BREAKING: `Component` is a reserved tag/family
   root); and D181 content-hashed production entry/CSS/page
-  module names and static-import modulepreloads (`build.hashNames` follows
-  `build.splitting`, with a `false` opt-out). The agent/tooling APIs:
+  module names and static-import modulepreloads (`build.hashNames` is on
+  by default in production, with a `false` opt-out; a shell that cannot follow
+  a default-hashed name keeps the fixed name with a warning). The agent/tooling APIs:
   D182 `push()`/`replace()` resolve a never-rejecting `NavigationResult`;
   D183 `router.views` and the `agent` route field; D184 `store.observe()`;
   D185 `app.idle()`; D186 dynamic URL bindings drop script schemes; D187

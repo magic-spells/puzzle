@@ -74,19 +74,22 @@ dynamic `import()` is inlined into it — a heavy on-demand dependency (mermaid,
 chart library, an editor) is paid for on every page load. Set
 `build: { splitting: true }` and each dynamic `import()` becomes a lazy chunk
 under `dist/chunks/`, fetched by the browser only when that code path runs.
-Production split builds emit `app-<hash>.js`, `styles-<hash>.css`, and
-`app-<hash>.css` when the entry imports CSS. The build rewrites the shell's
-references and adds `modulepreload` links for the entry's transitive
+The build adds `modulepreload` links to the shell for the entry's transitive
 static-import chunks; lazy chunks stay on demand. esbuild's ESM splitting has
 no chunk-loader runtime, so it adds no runtime bytes. Notes:
 
-- **`build.hashNames` defaults to `build.splitting`.** Set
-  `build: { splitting: true, hashNames: false }` for fixed names with preloads,
-  or `build: { hashNames: true }` to hash without splitting. Development builds
-  keep fixed names and add no preloads. `public/` files are never renamed.
-- A hashed SPA/hybrid build needs a shell reference to `/app.js`, `./app.js` or
-  `app.js`. A shell with no entry reference fails the build and points to
-  `build.hashNames: false`; choose that when another page needs a fixed URL.
+- **Production names are content-hashed by default, split or not:**
+  `app-<hash>.js`, `styles-<hash>.css`, and `app-<hash>.css` when the entry
+  imports CSS; the shell's references are rewritten to match. Set
+  `build: { hashNames: false }` for the fixed `app.js` / `styles.css` (preloads
+  stay on with splitting). Development builds keep fixed names and add no
+  preloads. `public/` files are never renamed.
+- Hashing needs a shell reference to `/app.js`, `./app.js` or `app.js` (and the
+  same for `styles.css`). With `hashNames` unset, an unreferenced file (or one
+  another `public/*.html` page names by its fixed name) keeps its fixed name and
+  the build warns once for it; an explicit `hashNames: true` fails on a shell
+  with no entry reference and rewrites the other public pages. Choose
+  `hashNames: false` when another page or a host rule needs a fixed URL.
 - **`chunks/` becomes a reserved output name** while the flag is on: a
   root-level `public/chunks` asset fails the build (as `app.js` already does).
 - `output: 'static'` always splits its own per-page bundles and ships no app
@@ -1084,18 +1087,18 @@ Working example: `examples/kanban-morph` in the framework repo.
 ## Prerendered output — THE RULES (bugs happen when these are missed)
 
 Two output modes, chosen in puzzle.config.js or by flag. Both emit
-`dist/<path>/index.html` per static route + `styles.css` (or
-`styles-<hash>.css` with `build.hashNames` on); top-level `*` renders to
+`dist/<path>/index.html` per static route + `styles-<hash>.css` (`styles.css`
+with `build: { hashNames: false }` or in development); top-level `*` renders to
 `dist/404.html`; the route's `meta.title` is injected via a leaf→root walk.
 
 - **`output: 'static'`** / `puzzle build --static` — a TRUE static site. No
   router, no SPA, no `app.js` in `dist/`. Each page ships a small module
-  (`/_puzzle/<slug>.js`, or `/_puzzle/<slug>-<hash>.js` with hashing on) that mounts
+  (`/_puzzle/<slug>-<hash>.js`, or `/_puzzle/<slug>.js` with `hashNames: false`) that mounts
   only that page's components over the prerendered markup, so `@event` handlers
   and local state work; navigation is
   plain `<a href="/path/">` page loads. Every production page preloads its shared
-  `/_puzzle/chunks/`, including with fixed names. With no `splitting` or
-  `hashNames` key, names stay fixed. Pick this for docs/marketing/blogs.
+  `/_puzzle/chunks/`, including with fixed names. Pick this for
+  docs/marketing/blogs.
 - **`output: 'hybrid'`** / `puzzle build --hybrid` — prerendered first paint,
   then the full SPA bundle takes over on load and re-renders (not true
   DOM-adoption hydration); all later navigation is client-side (transitions,

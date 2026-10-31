@@ -160,6 +160,40 @@ func Build(root string, opts Options) error {
 	splitting := cfg.Splitting() && mode != "static"
 	hash := !opts.Development && cfg.HashNames()
 	hashEntry := hash && mode != "static"
+	hashStyles := hash
+	// Hashing on by default (build.hashNames unset) must never fail a build, or
+	// ship a dangling link, that the app's public HTML cannot follow: when
+	// public/index.html does not reference a file in a rewritable tag, or another
+	// public page names it by its fixed name, that file keeps its fixed name with
+	// one warning. An explicit hashNames: true is strict instead: rewriteShell
+	// errors on a missing entry reference and rewrites the other pages.
+	strictHash := cfg.Build.HashNames != nil
+	var stylesFallback string
+	if hash && !strictHash {
+		plan := shellHashSupport(absRoot)
+		if hashEntry {
+			reason := ""
+			switch {
+			case !plan.entry:
+				reason = "public/index.html has no <script src> loading app.js"
+			case len(plan.entryPages) > 0:
+				reason = strings.Join(plan.entryPages, ", ") + " names app.js or app.css by its fixed name"
+			}
+			if reason != "" {
+				hashEntry = false
+				fmt.Fprint(os.Stderr, hashFallbackWarning("app.js", reason))
+			}
+		}
+		switch {
+		case !plan.styles:
+			stylesFallback = "public/index.html has no <link> or <script> referencing styles.css"
+		case len(plan.stylesPages) > 0:
+			stylesFallback = strings.Join(plan.stylesPages, ", ") + " names styles.css by its fixed name"
+		}
+		if stylesFallback != "" {
+			hashStyles = false
+		}
+	}
 	preloadShell := !opts.Development && splitting
 
 	// Translations (D175): read, validate, flatten, and fill every locale up
@@ -326,8 +360,12 @@ func Build(root string, opts Options) error {
 	endStyles := prof.phase("styles compose")
 	final := styles.Compose(tailwindCSS, pl.CSS())
 	stylesheet := "styles.css"
-	if hash {
+	if hashStyles {
 		stylesheet = "styles-" + fsutil.ContentHash([]byte(final)) + ".css"
+	} else if stylesFallback != "" && final != "" {
+		// An app with no CSS at all (an empty stylesheet nothing links) has
+		// nothing to warn about.
+		fmt.Fprint(os.Stderr, hashFallbackWarning("styles.css", stylesFallback))
 	}
 	writeErr := os.WriteFile(filepath.Join(staging, stylesheet), []byte(final), 0o644)
 	endStyles()
@@ -346,7 +384,7 @@ func Build(root string, opts Options) error {
 	}
 
 	if hash || preloadShell {
-		if err := rewriteShell(staging, result.Metafile, stylesheet, entry, hashEntry, preloadShell, publicFiles); err != nil {
+		if err := rewriteShell(staging, result.Metafile, stylesheet, entry, hashEntry, preloadShell, strictHash, publicFiles); err != nil {
 			return err
 		}
 	}

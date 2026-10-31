@@ -337,8 +337,8 @@ func TestLoadConfigHashNames(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if cfg.HashNames() || cfg.Build.HashNames != nil {
-			t.Fatal("hashNames must be unset and default to false without a config file")
+		if !cfg.HashNames() || cfg.Build.HashNames != nil {
+			t.Fatal("hashNames must be unset and default to true without a config file")
 		}
 	})
 
@@ -349,11 +349,11 @@ func TestLoadConfigHashNames(t *testing.T) {
 		want bool
 		set  bool
 	}{
-		{name: "absent means false", body: "export default {};\n"},
-		{name: "absent follows splitting true", body: "export default { build: { splitting: true } };\n", want: true},
-		{name: "absent follows splitting false", body: "export default { build: { splitting: false } };\n"},
-		{name: "null means unset", body: "export default { build: { hashNames: null } };\n"},
-		{name: "null follows splitting", body: "export default { build: { splitting: true, hashNames: null } };\n", want: true},
+		{name: "absent means true", body: "export default {};\n", want: true},
+		{name: "absent with splitting true", body: "export default { build: { splitting: true } };\n", want: true},
+		{name: "absent ignores splitting false", body: "export default { build: { splitting: false } };\n", want: true},
+		{name: "null means unset", body: "export default { build: { hashNames: null } };\n", want: true},
+		{name: "explicit false without splitting", body: "export default { build: { hashNames: false } };\n", set: true},
 		{name: "explicit true without splitting", body: "export default { build: { hashNames: true } };\n", want: true, set: true},
 		{name: "explicit false overrides splitting", body: "export default { build: { splitting: true, hashNames: false } };\n", set: true},
 	} {

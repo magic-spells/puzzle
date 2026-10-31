@@ -694,16 +694,19 @@ func TestBuildStaticEmitsPages(t *testing.T) {
 }
 
 // The per-page pass always splits, so production pages preload their shared
-// chunks even when the app never opts into hashed output. Development keeps
-// fixed names and emits no preloads, including with hashNames on.
+// chunks whether or not names are hashed. Production hashes page entries and
+// the stylesheet by default and keeps fixed names with hashNames: false;
+// development keeps fixed names and emits no preloads, even with hashNames on.
 func TestBuildStaticProductionPreloads(t *testing.T) {
 	requireStaticRuntime(t)
 	for _, tc := range []struct {
 		name   string
 		config string
 		dev    bool
+		hashed bool
 	}{
-		{name: "production defaults"},
+		{name: "production defaults", hashed: true},
+		{name: "production opt out", config: "export default { build: { hashNames: false } };\n"},
 		{name: "development with hashing configured", config: "export default { build: { hashNames: true } };\n", dev: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -723,12 +726,21 @@ func TestBuildStaticProductionPreloads(t *testing.T) {
 				htmlPath := filepath.Join(dist, filepath.FromSlash(page.file))
 				html := readFile(t, htmlPath)
 				entry := emittedAsset(t, dist, htmlPath, "_puzzle/"+page.slug+".js")
-				if entry != filepath.Join(dist, staticPagesDir, page.slug+".js") {
-					t.Errorf("%s entry = %s, want its fixed name", page.file, entry)
+				fixedEntry := filepath.Join(dist, staticPagesDir, page.slug+".js")
+				if (entry != fixedEntry) != tc.hashed {
+					t.Errorf("%s entry = %s, hashed want %v", page.file, entry, tc.hashed)
 				}
 				style := emittedAsset(t, dist, htmlPath, "styles.css")
-				if style != filepath.Join(dist, "styles.css") {
-					t.Errorf("%s stylesheet = %s, want styles.css", page.file, style)
+				fixedStyle := filepath.Join(dist, "styles.css")
+				if (style != fixedStyle) != tc.hashed {
+					t.Errorf("%s stylesheet = %s, hashed want %v", page.file, style, tc.hashed)
+				}
+				if tc.hashed {
+					for _, fixed := range []string{fixedEntry, fixedStyle} {
+						if _, err := os.Stat(fixed); !os.IsNotExist(err) {
+							t.Errorf("hashed build still emits fixed %s: %v", fixed, err)
+						}
+					}
 				}
 				for _, asset := range []string{entry, style} {
 					if _, err := os.Stat(asset); err != nil {

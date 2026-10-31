@@ -28,21 +28,26 @@ var rootCmd = &cobra.Command{
 var buildCmd = &cobra.Command{
 	Use:   "build [dir]",
 	Short: "Compile the app and produce a bundle in dist/",
-	Long: `Compile .pzl components and package the app into dist/ (by default app.js,
-styles.css, and the copied public/ assets).
+	Long: `Compile .pzl components and package the app into dist/: the app bundle,
+the stylesheet, and the copied public/ assets.
 
-With build.splitting enabled, production builds emit app-<hash>.js,
-styles-<hash>.css and lazy chunks under dist/chunks/. The shell references are
-rewritten and its static-import chunks get modulepreload links. build.hashNames
-defaults to build.splitting. Set build.hashNames: false to keep fixed names, or
-true to enable hashing without splitting. JavaScript-imported CSS is hashed too.
-Development builds keep fixed names and add no preloads; public/ assets are never
-renamed.
+Production builds content-hash their names (app-<hash>.js, styles-<hash>.css,
+and app-<hash>.css for JavaScript-imported CSS) and rewrite the shell's
+references to match. Set build.hashNames: false to keep the fixed app.js and
+styles.css. With build.hashNames unset, a file public/index.html does not
+reference (both, when the shell is missing), or that another public/ HTML page
+names, keeps its fixed name with a warning. An explicit hashNames: true fails
+when the shell does not load app.js, rewrites the other public/ HTML pages,
+and hashes the stylesheet even when nothing links it. With build.splitting enabled, lazy chunks land under
+dist/chunks/ and the shell gets modulepreload links for its static-import
+chunks. Development builds keep fixed names and add no preloads; public/
+assets are never renamed.
 
 With --static, additionally emit true static pages: each static route becomes
 its own dist/<path>/index.html plus a small per-page module bundle under
 dist/_puzzle/ — no router, no SPA takeover. Production pages preload their
-shared chunks; with build.hashNames on, page modules are <slug>-<hash>.js.
+shared chunks, and page modules are <slug>-<hash>.js unless build.hashNames is
+false.
 With --hybrid, prerender each static route to dist/<path>/index.html that the
 full SPA runtime takes over on load (the mode formerly spelled --static).
 Either flag has a puzzle.config.js

@@ -26,9 +26,12 @@ Traps:
   `build.dropConsole` are held as `json.RawMessage` and read through the shared
   `unset()` helper, so JSON `null` means unset, not `false`. Pointer storage
   keeps "absent" distinguishable from "false". `Config.HashNames()` alone owns
-  its default: absent/null follows the configured `Config.Splitting()`.
-  Explicit true/false overrides it; non-booleans fail with the key's "must be a
-  boolean" error. Build callers apply the production-only gate.
+  its default: absent/null is **true**, independent of `Config.Splitting()`
+  ([[DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD]]). Explicit true/false
+  overrides it; non-booleans fail with the key's "must be a boolean" error.
+  Build callers apply the production-only gate, and read the raw
+  `Build.HashNames` pointer to tell default-on (falls back with a warning when
+  the shell cannot follow a name) from an explicit `true` (errors).
 - **`dev.proxy`** keys must be absolute `/`-prefixed paths and targets absolute
   http(s) URLs; `/` and colliding normalized prefixes are errors
   ([[FEATURE-DEV-PROXY]]).

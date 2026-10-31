@@ -32,7 +32,12 @@ func TestRewriteShellReferences(t *testing.T) {
 			t.Fatalf("entry found = %v, error = %v", found, err)
 		}
 	}
-	if _, _, err := rewriteShellHTML(`<script src="app.js"></script>`, renames, nil, nil); err == nil || !strings.Contains(err.Error(), "</head>") {
+	// </head> is only needed to place preloads: a shell that omits the optional
+	// end tag still rewrites when there are none, and fails when there are.
+	if got, _, err := rewriteShellHTML(`<script src="app.js"></script>`, renames, nil, nil); err != nil || got != `<script src="app-HASH.js"></script>` {
+		t.Fatalf("rewrite without </head> = %q, %v", got, err)
+	}
+	if _, _, err := rewriteShellHTML(`<script src="app.js"></script>`, renames, []string{"chunks/a.js"}, nil); err == nil || !strings.Contains(err.Error(), "</head>") {
 		t.Fatalf("missing head error = %v", err)
 	}
 }
@@ -190,7 +195,7 @@ func TestRewriteShellReadErrors(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(staging, "index.html"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	err := rewriteShell(staging, "", "styles.css", "app/app.js", true, false, nil)
+	err := rewriteShell(staging, `{"outputs":{}}`, "styles.css", "app/app.js", true, false, true, nil)
 	if err == nil || !strings.Contains(err.Error(), "reading public/index.html:") || strings.Contains(err.Error(), "hashNames") {
 		t.Fatalf("shell read error = %v", err)
 	}
