@@ -23,6 +23,21 @@ notes:
       neither on disk nor package-imported. `pieces.lock` is read before `planTheme` so the hint can
       tell an older registry copy from an edit. `add theme` with no names marks an installed palette
       whose bytes differ from the registry's `installed · outdated`.
+  - kind: state
+    text: >-
+      0.10.0 flag conventions (feat/cli-conventions; full surface in DOC-SPEC-BUILD §13). Overwrite
+      is `--force`/`-f` on `add` and `generate`; wherever this card's body says `--overwrite`, read
+      `--force`. `add --overwrite` still parses as a hidden, deprecated alias (MarkDeprecated, same
+      bound var), and upgrade's skill re-exec now passes `--force`. New: `puzzle version` subcommand
+      (shares versionTemplate with --version/-v, version.go); `-p` port (dev/preview), `--host
+      [address]` (dev/preview, serveflags.go + serve.ListenHost/Banner), `dev -o/--open` (wires the
+      dev.Options.Open that had no flag), `build -m` and `-q/--quiet`, `init -t`, `-y/--yes` on init
+      / add / upgrade (persistent, so `upgrade skills -y`), `--json` on info and doctor (infoFacts /
+      doctorReport, additive-only keys), global `--no-color` (root PersistentPreRunE sets NO_COLOR,
+      so no subcommand may define its own PersistentPreRunE without chaining it). `init [app-name]`
+      accepts a path (create-vite); `init --dir` is hidden/deprecated and is the base a relative
+      argument resolves against. `generate --dir` names the app root like `add --dir`. `check --js`
+      is hidden. Tests: cmd/puzzle/cli_conventions_test.go.
 ---
 
 # Compiler CLI

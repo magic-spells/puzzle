@@ -7,6 +7,17 @@ connections:
   - FILE-DEV-SERVER
 verified_at: '2026-08-24T21:11:50.859Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: decision
+    text: >-
+      0.10.0 lifts "loopback only, no host option in v1": `dev`/`preview --host [address]`
+      (serve.ListenHost). Default is unchanged (127.0.0.1, banner says localhost). A bare `--host`
+      or `--host 0.0.0.0` binds all interfaces and the banner adds a Network: URL per non-loopback,
+      non-link-local IPv4 address (vite's behaviour). Any other address is bound and printed as
+      itself, never as localhost, since localhost may not resolve to it. The port scan and
+      --strict-port apply to whichever host is bound. Gotcha: pflag only attaches an optional value
+      as `--host=<v>`, so `resolveHost` reclaims a following IP/`localhost` positional (not an
+      existing dir) when --host was given bare. Hostnames other than localhost need `=`.
 ---
 
 # D90 — `puzzle dev`/`preview` scan upward for a free port; `--strict-port` opts out
