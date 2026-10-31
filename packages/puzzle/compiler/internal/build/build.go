@@ -160,6 +160,22 @@ func Build(root string, opts Options) error {
 	splitting := cfg.Splitting() && mode != "static"
 	hash := !opts.Development && cfg.HashNames()
 	hashEntry := hash && mode != "static"
+	hashStyles := hash
+	// Hashing on by default (build.hashNames unset) must never fail a build the
+	// app's shell cannot follow: whatever public/index.html does not reference
+	// in a rewritable tag keeps its fixed name, with one warning per file. An
+	// explicit hashNames: true keeps rewriteShell's hard error for the entry.
+	if hash && cfg.Build.HashNames == nil {
+		entryOK, stylesOK := shellHashSupport(absRoot)
+		if hashEntry && !entryOK {
+			hashEntry = false
+			fmt.Fprint(os.Stderr, hashFallbackWarning("app.js", "public/index.html has no <script src> loading app.js"))
+		}
+		if !stylesOK {
+			hashStyles = false
+			fmt.Fprint(os.Stderr, hashFallbackWarning("styles.css", "public/index.html has no <link> or <script> referencing styles.css"))
+		}
+	}
 	preloadShell := !opts.Development && splitting
 
 	// Translations (D175): read, validate, flatten, and fill every locale up
@@ -326,7 +342,7 @@ func Build(root string, opts Options) error {
 	endStyles := prof.phase("styles compose")
 	final := styles.Compose(tailwindCSS, pl.CSS())
 	stylesheet := "styles.css"
-	if hash {
+	if hashStyles {
 		stylesheet = "styles-" + fsutil.ContentHash([]byte(final)) + ".css"
 	}
 	writeErr := os.WriteFile(filepath.Join(staging, stylesheet), []byte(final), 0o644)

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -158,7 +159,16 @@ func shellRenames(outputs map[string]bundleOutput, stylesheet, entryPoint string
 // rewriteShellHTML follows emitted filenames and reads the entry tag before
 // renaming it, so preload URLs and credentials match the app's own script.
 func rewriteShellHTML(source string, renames map[string]string, chunks []string, publicFiles map[string]bool) (string, bool, error) {
+	rewritten, entryFound, _, err := rewriteShellHTMLRefs(source, renames, chunks, publicFiles)
+	return rewritten, entryFound, err
+}
+
+// rewriteShellHTMLRefs is rewriteShellHTML that also reports the compiler
+// filenames (app.js, app.css, styles.css) the shell references from a script
+// src or link href it can rewrite.
+func rewriteShellHTMLRefs(source string, renames map[string]string, chunks []string, publicFiles map[string]bool) (string, bool, map[string]bool, error) {
 	entryFound := false
+	refs := map[string]bool{}
 	var entryPrefix, crossorigin string
 	var assetErr error
 	rewritten := shellTagRE.ReplaceAllStringFunc(source, func(match string) string {
@@ -188,6 +198,9 @@ func rewriteShellHTML(source string, renames map[string]string, chunks []string,
 			}
 			raw := tag[a[6]:a[7]]
 			prefix, name, suffix := shellReference(attrValue(raw), publicFiles)
+			if name == "app.js" || name == "app.css" || name == "styles.css" {
+				refs[name] = true
+			}
 			if isScript && strings.EqualFold(attr, "src") && name == "app.js" && !entryFound {
 				entryFound, entryPrefix, crossorigin = true, prefix, tagCrossorigin
 			}
@@ -204,22 +217,61 @@ func rewriteShellHTML(source string, renames map[string]string, chunks []string,
 		return tag + body
 	})
 	if assetErr != nil {
-		return "", entryFound, assetErr
+		return "", entryFound, refs, assetErr
 	}
 	if !entryFound {
 		chunks = nil
 	}
 	rewritten, err := insertModulepreloads(rewritten, entryPrefix, chunks, crossorigin)
-	return rewritten, entryFound, err
+	return rewritten, entryFound, refs, err
+}
+
+// shellHashSupport reports, before anything is bundled, whether the app's
+// public/index.html can follow hashed names: entry when a <script src> loads
+// app.js, styles when a <script>/<link> references styles.css. A missing or
+// unreadable shell supports neither. Build uses it only when hashing is on by
+// default (build.hashNames unset), to fall back to the fixed name for whatever
+// the shell cannot follow instead of failing the build.
+func shellHashSupport(root string) (entry, styles bool) {
+	src := publicDir(root)
+	if src == "" {
+		return false, false
+	}
+	source, err := os.ReadFile(filepath.Join(src, "index.html"))
+	if err != nil {
+		return false, false
+	}
+	publicFiles := map[string]bool{}
+	_ = filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if rel, err := filepath.Rel(src, path); err == nil {
+			publicFiles[filepath.ToSlash(rel)] = true
+		}
+		return nil
+	})
+	// nil renames: nothing is rewritten, only the references are read. The
+	// error (a shell with no </head>) is irrelevant to which names it loads.
+	_, entry, refs, _ := rewriteShellHTMLRefs(string(source), nil, nil, publicFiles)
+	return entry, refs["styles.css"]
+}
+
+// hashFallbackWarning is the one-line notice printed when default-on hashing
+// keeps a fixed name because the shell cannot reference the hashed one.
+func hashFallbackWarning(file, reason string) string {
+	return fmt.Sprintf("warning: build.hashNames: %s, so %s keeps its fixed name; set build.hashNames to true or false to choose explicitly\n", reason, file)
 }
 
 func insertModulepreloads(source, prefix string, chunks []string, crossorigin string) (string, error) {
+	// Nothing to insert needs no </head>: a shell that omits the optional end
+	// tag still builds whenever there are no preloads to place.
+	if len(chunks) == 0 {
+		return source, nil
+	}
 	end := headEndRE.FindStringIndex(source)
 	if end == nil {
 		return "", fmt.Errorf("inserting modulepreload links: missing </head>")
-	}
-	if len(chunks) == 0 {
-		return source, nil
 	}
 	lineStart := strings.LastIndex(source[:end[0]], "\n") + 1
 	indent := source[lineStart:end[0]]

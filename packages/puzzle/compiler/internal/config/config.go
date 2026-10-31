@@ -110,8 +110,11 @@ type Build struct {
 	// accessor without changing stored semantics.
 	Splitting *bool
 
-	// HashNames is the tri-state build.hashNames setting: nil follows Splitting(),
-	// a non-nil pointer is the explicit user value. It applies to production only.
+	// HashNames is the tri-state build.hashNames setting: nil means the key was
+	// absent (hashed names by default), a non-nil pointer is the explicit user
+	// value. It applies to production only. The build reads the pointer itself
+	// to tell a default-on hash (which falls back to fixed names, with a warning,
+	// when the shell cannot be rewritten) from an explicit true (which fails).
 	HashNames *bool
 }
 
@@ -155,10 +158,11 @@ func (c Config) Splitting() bool {
 }
 
 // HashNames reports whether production output names should carry content hashes.
-// When unset, it follows the configured build.splitting value.
+// It defaults to true whatever build.splitting says; build: { hashNames: false }
+// is the opt-out.
 func (c Config) HashNames() bool {
 	if c.Build.HashNames == nil {
-		return c.Splitting()
+		return true
 	}
 	return *c.Build.HashNames
 }
@@ -363,7 +367,7 @@ func validate(raw rawConfig) (Config, error) {
 		cfg.Build.Splitting = &split
 	}
 
-	// build.hashNames: an explicit boolean overrides the splitting-based default.
+	// build.hashNames: an explicit boolean overrides the hashed-names default.
 	// Anything non-boolean is rejected; null means unset.
 	if !unset(raw.Build.HashNames) {
 		var hash bool
