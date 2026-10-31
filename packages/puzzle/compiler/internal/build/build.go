@@ -71,6 +71,10 @@ type Options struct {
 	// phase call is a nil check.
 	Profile bool
 
+	// Quiet suppresses the success report of the --static/--hybrid prerender
+	// passes (`puzzle build -q`); warnings and errors still print.
+	Quiet bool
+
 	// Profiler folds phases into a caller-owned table instead of printing a
 	// separate `puzzle build` report. The dev server uses this only for its
 	// non-incremental fallback so startup/rebuild still emits exactly one table.
@@ -397,7 +401,7 @@ func Build(root string, opts Options) error {
 	switch mode {
 	case "hybrid":
 		endHybrid := prof.phase("prerender (hybrid)")
-		hybridErr := prerenderHybrid(absRoot, entry, staging, cfg.Site, publicFiles, pc)
+		hybridErr := prerenderHybrid(absRoot, entry, staging, cfg.Site, publicFiles, opts.Quiet, pc)
 		endHybrid()
 		if hybridErr != nil {
 			return hybridErr
@@ -405,7 +409,7 @@ func Build(root string, opts Options) error {
 	case "static":
 		// The per-page pass decides its own source-map mode from cfg + dev
 		// (staticPagesSourcemap), so there is no generate-then-delete pass here.
-		if err := prerenderStaticPages(absRoot, entry, staging, publicFiles, cfg, opts.Development, prof, pc); err != nil {
+		if err := prerenderStaticPages(absRoot, entry, staging, publicFiles, cfg, opts.Development, opts.Quiet, prof, pc); err != nil {
 			return err
 		}
 	}

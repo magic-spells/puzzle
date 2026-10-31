@@ -263,8 +263,8 @@ habit. Nothing existing breaks: renamed spellings stay accepted.
 - **`--json`** on `info` and `doctor` prints the same facts as one JSON object
   with stable keys (listed in each command's `--help`). `doctor --json` exits
   non-zero on a failed check, like the table form.
-- **`build -q` / `--quiet`** skips the build summary and the update notice.
-  Errors, warnings and the `--static`/`--hybrid` page report still print.
+- **`build -q` / `--quiet`** skips the build summary, the `--static`/`--hybrid`
+  page report and the update notice. Warnings and errors still print.
 - **`--no-color`** on every command, the same switch as `NO_COLOR=1`.
 - **`generate --dir`** names the app root the way `add --dir` does.
 - `check --js` is hidden from `--help` until it does something. It is still

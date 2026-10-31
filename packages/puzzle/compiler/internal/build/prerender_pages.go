@@ -149,7 +149,7 @@ type staticModules struct {
 // same minify/define/dropConsole policy as the main app.js pass. prof may be nil
 // (profiling off); it splits this pass into its three expensive steps — the node
 // prerender bundle, the render run, and the per-page browser bundles.
-func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[string]bool, cfg config.Config, dev bool, prof *buildProfile, pc *passContext) error {
+func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[string]bool, cfg config.Config, dev, quiet bool, prof *buildProfile, pc *passContext) error {
 	// A public/ asset that already produced a staging/_puzzle would be clobbered
 	// by the per-page bundles — reject it up front (extends the reserved-output
 	// collision guard to the static tree). copyPublic has already run, so the
@@ -274,7 +274,7 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 		return fmt.Errorf("puzzle build --static: cleaning %s: %w", prerenderDir, err)
 	}
 
-	printStaticSummary(summary, len(entryFiles))
+	printStaticSummary(summary, len(entryFiles), quiet)
 	return nil
 }
 
@@ -743,8 +743,9 @@ func staticPagesBundleOptions(absRoot string, entryFiles []string, outdir string
 // printStaticSummary reports the static build result in the build-summary style:
 // the header, the prerendered-page count (with any prerender:false pages noted
 // as empty islands), the per-page bundle count, then advisory warnings and
-// skipped routes.
-func printStaticSummary(s staticSummary, bundleCount int) {
+// skipped routes. quiet (`puzzle build -q`) drops the header and counts; the
+// warning and skipped-route lines always print.
+func printStaticSummary(s staticSummary, bundleCount int, quiet bool) {
 	prerendered := 0
 	for _, w := range s.Written {
 		if w.Prerender {
@@ -754,20 +755,22 @@ func printStaticSummary(s staticSummary, bundleCount int) {
 	empties := len(s.Written) - prerendered
 
 	out := ui.New(os.Stdout)
-	detail := fmt.Sprintf("· %d page%s prerendered", prerendered, textutil.Plural(prerendered))
-	if empties > 0 {
-		// `prerender: false` pages get an empty, unmarked target the per-page
-		// script fills client-side.
-		detail += fmt.Sprintf(" (+%d empty island%s)", empties, textutil.Plural(empties))
+	if !quiet {
+		detail := fmt.Sprintf("· %d page%s prerendered", prerendered, textutil.Plural(prerendered))
+		if empties > 0 {
+			// `prerender: false` pages get an empty, unmarked target the per-page
+			// script fills client-side.
+			detail += fmt.Sprintf(" (+%d empty island%s)", empties, textutil.Plural(empties))
+		}
+		fmt.Fprintln(os.Stdout)
+		fmt.Fprintf(os.Stdout, "  %s %s\n",
+			out.Cyan(out.Bold("puzzle build · static")),
+			out.Dim(detail),
+		)
+		fmt.Fprintf(os.Stdout, "  %s\n",
+			out.Dim(fmt.Sprintf("· %d page bundle%s", bundleCount, textutil.Plural(bundleCount))),
+		)
 	}
-	fmt.Fprintln(os.Stdout)
-	fmt.Fprintf(os.Stdout, "  %s %s\n",
-		out.Cyan(out.Bold("puzzle build · static")),
-		out.Dim(detail),
-	)
-	fmt.Fprintf(os.Stdout, "  %s\n",
-		out.Dim(fmt.Sprintf("· %d page bundle%s", bundleCount, textutil.Plural(bundleCount))),
-	)
 	for _, w := range s.Warnings {
 		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"), w)
 	}

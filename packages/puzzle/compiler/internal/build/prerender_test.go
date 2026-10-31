@@ -1,6 +1,7 @@
 package build
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -487,4 +488,43 @@ func readFile(t *testing.T, path string) string {
 		t.Fatalf("reading %s: %v", path, err)
 	}
 	return string(data)
+}
+
+// TestBuildQuietSilencesPageReport pins `puzzle build -q` (Options.Quiet): the
+// static and hybrid success headers disappear, but the skipped-route warning
+// lines still print — downstream sites gate on them. Quiet:false keeps the
+// header so the assertion cannot pass by the report never printing at all.
+func TestBuildQuietSilencesPageReport(t *testing.T) {
+	cases := []struct {
+		output, header string
+		require        func(*testing.T)
+	}{
+		{"static", "puzzle build · static", requireStaticRuntime},
+		{"hybrid", "puzzle build · hybrid", requireSSGRuntime},
+	}
+	for _, tc := range cases {
+		for _, quiet := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s/quiet=%v", tc.output, quiet), func(t *testing.T) {
+				tc.require(t)
+				root := writeSSGFixture(t, baseSSGFixture())
+				oldStdout := os.Stdout
+				r, w, _ := os.Pipe()
+				os.Stdout = w
+				buildErr := Build(root, Options{Development: true, Output: tc.output, Quiet: quiet})
+				w.Close()
+				os.Stdout = oldStdout
+				captured, _ := io.ReadAll(r)
+				if buildErr != nil {
+					t.Fatalf("Build failed: %v", buildErr)
+				}
+				out := string(captured)
+				if got := strings.Contains(out, tc.header) || regexp.MustCompile(`\d+ pages? prerendered`).MatchString(out); got == quiet {
+					t.Errorf("quiet=%v: report header present=%v, got:\n%s", quiet, got, out)
+				}
+				if !strings.Contains(out, "skipped") {
+					t.Errorf("quiet=%v: skipped-route warning must still print, got:\n%s", quiet, out)
+				}
+			})
+		}
+	}
 }

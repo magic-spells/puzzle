@@ -111,11 +111,13 @@ dev' runs for an output: 'static' project.`,
 			Fixtures:    fixtures,
 			Profile:     profile,
 			Metafile:    &metafile,
+			Quiet:       quiet,
 		}); err != nil {
 			return err
 		}
 		if quiet {
-			// --quiet drops the summary and the update notice; errors still
+			// --quiet drops the summary, the page report (build.Options.Quiet)
+			// and the update notice; warnings print and errors still
 			// return above and print from main().
 			return nil
 		}
@@ -215,7 +217,7 @@ func outputFlag(static, hybrid bool) (string, error) {
 func init() {
 	rootCmd.PersistentFlags().Bool("no-color", false, "Disable colored output (same as setting NO_COLOR=1 or TERM=dumb)")
 	buildCmd.Flags().StringP("mode", "m", "production", "Build mode (production|development): minified, or readable")
-	buildCmd.Flags().BoolP("quiet", "q", false, "Skip the build summary and the update notice (errors, warnings and the --static/--hybrid page report still print)")
+	buildCmd.Flags().BoolP("quiet", "q", false, "Skip the build summary, the page report and the update notice (errors and warnings still print)")
 	buildCmd.Flags().Bool("static", false, "Emit true static pages: per-route HTML + a per-page module bundle, no SPA takeover")
 	buildCmd.Flags().Bool("hybrid", false, "Prerender each static route to dist/<path>/index.html that the SPA runtime takes over")
 	buildCmd.Flags().Bool("fixtures", false, "Install app/fixtures.js (or .ts) via the fixtures/mock runtime module; not valid with --static/--hybrid")

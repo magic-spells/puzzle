@@ -680,7 +680,7 @@ full project context and build better plans without re-deriving earlier work.
 puzzle dev --port 3000
 puzzle dev -p 3000 --host --open
 
-# Production build (default); -m development for readable output, -q skips the summary and update notice
+# Production build (default); -m development for readable output, -q skips the summary, the page report and the update notice
 puzzle build
 puzzle build -m development -q
 

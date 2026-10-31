@@ -706,7 +706,7 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 	b.nextCSS = candidateCSS
 	b.haveNextCSS = true
 
-	printStaticSummary(summary, len(entryFiles))
+	printStaticSummary(summary, len(entryFiles), false)
 	return nil
 }
 

@@ -107,7 +107,7 @@ type ssgSummary struct {
 //
 // site is the config's `site` origin (D177), handed to prerenderToDir as its
 // `site` option when set (prerenderSiteOption).
-func prerenderHybrid(absRoot, appEntry, staging, site string, publicFiles map[string]bool, pc *passContext) error {
+func prerenderHybrid(absRoot, appEntry, staging, site string, publicFiles map[string]bool, quiet bool, pc *passContext) error {
 	// A public/ asset copied to staging/.puzzle-prerender would be overwritten by
 	// the prerender bundle and then deleted with it — reject it before any of that
 	// happens. copyPublic has already run, so the collision is observable here.
@@ -140,7 +140,7 @@ func prerenderHybrid(absRoot, appEntry, staging, site string, publicFiles map[st
 		}
 	}
 
-	printPrerenderSummary(summary)
+	printPrerenderSummary(summary, quiet)
 
 	// Drop the prerender bundle before the swap so it never ships in dist/.
 	if err := os.RemoveAll(filepath.Join(staging, prerenderDir)); err != nil {
@@ -352,8 +352,9 @@ func prerenderDetail(stderr, stdout string, err error) string {
 // printPrerenderSummary reports the prerender result to stdout in the style of
 // the build summary: a header with the page count, then each skipped route and
 // each advisory warning as a dimmed/yellow line. It degrades cleanly on a
-// non-TTY (the ui.Printer no-ops color).
-func printPrerenderSummary(s ssgSummary) {
+// non-TTY (the ui.Printer no-ops color). quiet (`puzzle build -q`) drops the
+// header; the warning and skipped-route lines always print.
+func printPrerenderSummary(s ssgSummary, quiet bool) {
 	prerendered := 0
 	for _, w := range s.Written {
 		if w.Prerender {
@@ -363,16 +364,18 @@ func printPrerenderSummary(s ssgSummary) {
 	shells := len(s.Written) - prerendered
 
 	out := ui.New(os.Stdout)
-	detail := fmt.Sprintf("· %d page%s prerendered", prerendered, textutil.Plural(prerendered))
-	if shells > 0 {
-		// `prerender: false` islands get the plain SPA shell — written, not rendered.
-		detail += fmt.Sprintf(" (+%d SPA shell%s)", shells, textutil.Plural(shells))
+	if !quiet {
+		detail := fmt.Sprintf("· %d page%s prerendered", prerendered, textutil.Plural(prerendered))
+		if shells > 0 {
+			// `prerender: false` islands get the plain SPA shell — written, not rendered.
+			detail += fmt.Sprintf(" (+%d SPA shell%s)", shells, textutil.Plural(shells))
+		}
+		fmt.Fprintln(os.Stdout)
+		fmt.Fprintf(os.Stdout, "  %s %s\n",
+			out.Cyan(out.Bold("puzzle build · hybrid")),
+			out.Dim(detail),
+		)
 	}
-	fmt.Fprintln(os.Stdout)
-	fmt.Fprintf(os.Stdout, "  %s %s\n",
-		out.Cyan(out.Bold("puzzle build · hybrid")),
-		out.Dim(detail),
-	)
 	for _, w := range s.Warnings {
 		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"), w)
 	}
