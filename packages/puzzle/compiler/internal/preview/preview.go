@@ -44,6 +44,10 @@ type Options struct {
 	// StrictPort binds Port or fails, for the same reasons `puzzle dev` has it —
 	// container mappings and redirect URIs pin a number on purpose.
 	StrictPort bool
+	// Host is the address to bind (`--host`). Empty or "localhost" keeps the
+	// server on loopback; "0.0.0.0" exposes it on every interface and the
+	// banner adds the LAN URLs. See serve.ListenHost.
+	Host string
 	// OnReady runs after the ready banner is printed (test/CLI hook).
 	OnReady func()
 }
@@ -94,7 +98,7 @@ func Serve(root string, opts Options) error {
 		logWarning(stderr, "%s", warning)
 	}
 
-	ln, err := serve.Listen(opts.Port, opts.StrictPort)
+	ln, err := serve.ListenHost(opts.Host, opts.Port, opts.StrictPort)
 	if err != nil {
 		return fmt.Errorf("preview server: %w", err)
 	}
@@ -126,8 +130,8 @@ func Serve(root string, opts Options) error {
 		quitCh = keys.Listen(keysCtx, os.Stdin)
 	}
 
-	url := fmt.Sprintf("http://localhost:%d/", port)
-	printReady(stdout, url, modeLabel(mode), time.Since(start), quitCh != nil)
+	url, network := serve.Banner(opts.Host, port)
+	printReady(stdout, url, network, modeLabel(mode), time.Since(start), quitCh != nil)
 	if opts.OnReady != nil {
 		opts.OnReady()
 	}
@@ -287,7 +291,7 @@ func modeLabel(mode string) string {
 	}
 }
 
-func printReady(p *ui.Printer, url, mode string, elapsed time.Duration, showQuitHint bool) {
+func printReady(p *ui.Printer, url string, network []string, mode string, elapsed time.Duration, showQuitHint bool) {
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintf(
 		os.Stdout,
@@ -297,6 +301,9 @@ func printReady(p *ui.Printer, url, mode string, elapsed time.Duration, showQuit
 		elapsed.Round(time.Millisecond).Milliseconds(),
 	)
 	printInfoLine(p, "Local:", p.Cyan(url))
+	for _, u := range network {
+		printInfoLine(p, "Network:", p.Cyan(u))
+	}
 	printInfoLine(p, "Serving:", p.Dim("dist/"))
 	printInfoLine(p, "Mode:", p.Dim(mode))
 	// Only advertise 'q' when the key listener is actually active (a real TTY).

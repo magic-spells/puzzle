@@ -397,3 +397,126 @@ func TestInitPositionalPathCreatesInParent(t *testing.T) {
 		t.Errorf("package name should be the last path segment:\n%s", pkg)
 	}
 }
+
+// captureStdout runs fn with os.Stdout redirected to a pipe and returns what it
+// wrote (the build summary prints to os.Stdout, not cobra's output stream).
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Stdout
+	os.Stdout = w
+	done := make(chan []byte)
+	go func() { b, _ := io.ReadAll(r); done <- b }()
+	fn()
+	os.Stdout = orig
+	w.Close()
+	return string(<-done)
+}
+
+func TestBuildModeAndQuietShorthands(t *testing.T) {
+	requireShorthand(t, buildCmd, "mode", "m")
+	requireShorthand(t, buildCmd, "quiet", "q")
+	if usage := buildCmd.Flags().Lookup("mode").Usage; !strings.Contains(usage, "(production|development)") {
+		t.Errorf("--mode help should list production|development, got %q", usage)
+	}
+	parse(t, buildCmd, "-m", "development", "-q")
+	if got, _ := buildCmd.Flags().GetString("mode"); got != "development" {
+		t.Errorf("-m development parsed as %q", got)
+	}
+	if got, _ := buildCmd.Flags().GetBool("quiet"); !got {
+		t.Error("-q should set quiet")
+	}
+}
+
+// TestBuildQuietSuppressesSummary runs a real build of a minimal app twice: the
+// default prints the summary, -q prints nothing on success.
+func TestBuildQuietSuppressesSummary(t *testing.T) {
+	dir := healthyProject(t)
+	installRuntime(t, dir, repoRoot(t))
+
+	var err error
+	loud := captureStdout(t, func() { _, err = execRoot(t, "build", dir, "-m", "development") })
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if !strings.Contains(loud, "puzzle build") {
+		t.Fatalf("default build should print the summary, got:\n%s", loud)
+	}
+	quiet := captureStdout(t, func() { _, err = execRoot(t, "build", dir, "-m", "development", "-q") })
+	if err != nil {
+		t.Fatalf("build -q: %v", err)
+	}
+	if strings.TrimSpace(quiet) != "" {
+		t.Errorf("build -q should print nothing on success, got:\n%s", quiet)
+	}
+	if !fsFileExists(filepath.Join(dir, "dist", "app.js")) {
+		t.Error("build -q must still build")
+	}
+}
+
+func TestServerPortShorthandAndHostFlag(t *testing.T) {
+	for _, cmd := range []*cobra.Command{devCmd, previewCmd} {
+		requireShorthand(t, cmd, "port", "p")
+		f := cmd.Flags().Lookup("host")
+		if f == nil || f.DefValue != "localhost" || f.NoOptDefVal != "0.0.0.0" {
+			t.Fatalf("%s --host = %+v, want default localhost and bare value 0.0.0.0", cmd.Name(), f)
+		}
+	}
+	requireShorthand(t, devCmd, "open", "o")
+}
+
+func TestResolveHost(t *testing.T) {
+	existing := t.TempDir()
+	tests := []struct {
+		name     string
+		flags    []string
+		wantHost string
+		wantRest []string
+	}{
+		{"omitted", []string{"app"}, "localhost", []string{"app"}},
+		{"bare", []string{"--host"}, "0.0.0.0", []string{}},
+		{"bare then dir", []string{"--host", existing}, "0.0.0.0", []string{existing}},
+		{"equals", []string{"--host=192.168.1.5", "app"}, "192.168.1.5", []string{"app"}},
+		{"space-separated all interfaces", []string{"--host", "0.0.0.0"}, "0.0.0.0", []string{}},
+		{"space-separated address then dir", []string{"--host", "10.0.0.7", "app"}, "10.0.0.7", []string{"app"}},
+		{"dir then space-separated address", []string{"app", "--host", "::"}, "::", []string{"app"}},
+		{"space-separated localhost", []string{"--host", "localhost"}, "localhost", []string{}},
+		{"hostname is not reclaimed", []string{"--host", "myapp"}, "0.0.0.0", []string{"myapp"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := parse(t, devCmd, tt.flags...)
+			host, rest := resolveHost(devCmd, args)
+			if host != tt.wantHost || strings.Join(rest, ",") != strings.Join(tt.wantRest, ",") {
+				t.Errorf("resolveHost(%v) = %q %v, want %q %v", tt.flags, host, rest, tt.wantHost, tt.wantRest)
+			}
+			if err := serverArgs(devCmd, args); err != nil {
+				t.Errorf("serverArgs(%v): %v", args, err)
+			}
+		})
+	}
+	args := parse(t, previewCmd, "--host", "0.0.0.0", "a", "b")
+	if err := serverArgs(previewCmd, args); err == nil {
+		t.Error("two directories after reclaiming the host should still be a usage error")
+	}
+}
+
+// TestNoColorSetsNoColorEnv: --no-color is the NO_COLOR switch, so it reaches
+// every ui.Printer the command creates and the child processes it spawns.
+func TestNoColorSetsNoColorEnv(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	if f := rootCmd.PersistentFlags().Lookup("no-color"); f == nil {
+		t.Fatal("root needs a persistent --no-color flag")
+	}
+	var err error
+	captureStdout(t, func() { _, err = execRoot(t, "info", t.TempDir(), "--json", "--no-color") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if os.Getenv("NO_COLOR") == "" {
+		t.Error("--no-color should set NO_COLOR for the rest of the process")
+	}
+}

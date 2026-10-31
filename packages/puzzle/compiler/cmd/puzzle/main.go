@@ -23,6 +23,17 @@ var rootCmd = &cobra.Command{
 	// print the error once (SilenceErrors avoids cobra's duplicate print).
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	// --no-color is the same switch as NO_COLOR (https://no-color.org): setting
+	// the variable here, before any command prints, means every ui.Printer the
+	// command creates sees it, and so do the node / Tailwind child processes it
+	// spawns. No subcommand defines its own PersistentPreRunE, so this always
+	// runs.
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if noColor, _ := cmd.Flags().GetBool("no-color"); noColor {
+			return os.Setenv("NO_COLOR", "1")
+		}
+		return nil
+	},
 }
 
 var buildCmd = &cobra.Command{
@@ -65,6 +76,7 @@ dev' runs for an output: 'static' project.`,
 		}
 
 		mode, _ := cmd.Flags().GetString("mode")
+		quiet, _ := cmd.Flags().GetBool("quiet")
 		switch mode {
 		case "production", "development":
 		default:
@@ -97,6 +109,11 @@ dev' runs for an output: 'static' project.`,
 		}); err != nil {
 			return err
 		}
+		if quiet {
+			// --quiet drops the summary and the update notice; errors still
+			// return above and print from main().
+			return nil
+		}
 		out := ui.New(os.Stdout)
 		outdir := filepath.Join(dir, "dist")
 		printBuildSummary(out, outdir, mode, metafile, time.Since(start))
@@ -122,19 +139,23 @@ module so the served app seeds and mocks itself.
 
 With --profile-build, print per-phase startup and rebuild timing tables to
 stderr. PUZZLE_PROFILE_BUILD=1 enables the same profiling.`,
-	Args: cobra.MaximumNArgs(1),
+	Args: serverArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		dir := "."
-		if len(args) == 1 {
-			dir = args[0]
+		host, rest := resolveHost(cmd, args)
+		dir, err := serverDir(rest)
+		if err != nil {
+			return err
 		}
 		port, _ := cmd.Flags().GetInt("port")
 		strictPort, _ := cmd.Flags().GetBool("strict-port")
+		open, _ := cmd.Flags().GetBool("open")
 		fixtures, _ := cmd.Flags().GetBool("fixtures")
 		profile, _ := cmd.Flags().GetBool("profile-build")
 		return dev.Serve(dir, dev.Options{
 			Port:       port,
 			StrictPort: strictPort,
+			Host:       host,
+			Open:       open,
 			Fixtures:   fixtures,
 			Profile:    profile,
 			// OnReady runs after the ready banner, with the listener already
@@ -159,17 +180,19 @@ output: 'hybrid': the route's prerendered page when one exists, index.html
 otherwise. output: 'static': clean URLs (/about → /about/index.html) and a real
 404 — dist/404.html when the app's catch-all route wrote one — because that is
 what a static host does.`,
-	Args: cobra.MaximumNArgs(1),
+	Args: serverArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		dir := "."
-		if len(args) == 1 {
-			dir = args[0]
+		host, rest := resolveHost(cmd, args)
+		dir, err := serverDir(rest)
+		if err != nil {
+			return err
 		}
 		port, _ := cmd.Flags().GetInt("port")
 		strictPort, _ := cmd.Flags().GetBool("strict-port")
 		return preview.Serve(dir, preview.Options{
 			Port:       port,
 			StrictPort: strictPort,
+			Host:       host,
 		})
 	},
 }
@@ -191,20 +214,25 @@ func outputFlag(static, hybrid bool) (string, error) {
 }
 
 func init() {
-	buildCmd.Flags().String("mode", "production", "Build mode: production (minified) or development (readable)")
+	rootCmd.PersistentFlags().Bool("no-color", false, "Disable colored output (same as setting NO_COLOR=1 or TERM=dumb)")
+	buildCmd.Flags().StringP("mode", "m", "production", "Build mode (production|development): minified, or readable")
+	buildCmd.Flags().BoolP("quiet", "q", false, "Skip the build summary and the update notice (errors, warnings and the --static/--hybrid page report still print)")
 	buildCmd.Flags().Bool("static", false, "Emit true static pages: per-route HTML + a per-page module bundle, no SPA takeover")
 	buildCmd.Flags().Bool("hybrid", false, "Prerender each static route to dist/<path>/index.html that the SPA runtime takes over")
 	buildCmd.Flags().Bool("fixtures", false, "Install app/fixtures.js (or .ts) via the fixtures/mock runtime module; not valid with --static/--hybrid")
 	buildCmd.Flags().Bool("profile-build", false, "Print a per-phase build timing table to stderr (also enabled by PUZZLE_PROFILE_BUILD=1, which reaches `puzzle dev` rebuilds)")
-	devCmd.Flags().Int("port", 3000, "Port for the dev server (scans upward if busy)")
+	devCmd.Flags().IntP("port", "p", 3000, "Port for the dev server (scans upward if busy)")
 	devCmd.Flags().Bool("strict-port", false, "Fail if --port is busy instead of scanning for a free one")
+	addHostFlag(devCmd)
+	devCmd.Flags().BoolP("open", "o", false, "Open the app in the default browser once the server is ready")
 	devCmd.Flags().Bool("fixtures", false, "Install app/fixtures.js (or .ts) via the fixtures/mock runtime module")
 	devCmd.Flags().Bool("profile-build", false, "Print per-phase startup and rebuild timing tables to stderr (also enabled by PUZZLE_PROFILE_BUILD=1)")
 	// Preview defaults to a different port than dev on purpose: previewing a
 	// build while a dev server runs is the common case, and the scan silently
 	// moving off 3000 would hide which server answered.
-	previewCmd.Flags().Int("port", 4000, "Port for the preview server (scans upward if busy)")
+	previewCmd.Flags().IntP("port", "p", 4000, "Port for the preview server (scans upward if busy)")
 	previewCmd.Flags().Bool("strict-port", false, "Fail if --port is busy instead of scanning for a free one")
+	addHostFlag(previewCmd)
 
 	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(devCmd)

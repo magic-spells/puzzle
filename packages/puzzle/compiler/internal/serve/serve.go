@@ -1,6 +1,7 @@
 // Package serve holds the two pieces of HTTP plumbing `puzzle dev` and `puzzle
-// preview` must agree on: the loopback port scan (D90) and the mode-aware
-// mapping from a request path onto a built dist/ tree.
+// preview` must agree on: the port scan (D90; loopback unless --host says
+// otherwise) and the mode-aware mapping from a request path onto a built dist/
+// tree.
 //
 // The resolver exists because "what URL serves what file" is a property of the
 // OUTPUT MODE, not of the command: an SPA falls back to index.html for anything
@@ -18,6 +19,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -186,11 +188,20 @@ func withinDirResolved(dir, target string) bool {
 const PortScanLimit = 10
 
 // Listen binds the first free loopback port at or above `port`, returning the
-// listener. With strict set, only `port` itself is tried (D90).
+// listener. With strict set, only `port` itself is tried (D90). It is
+// ListenHost with the default host.
+func Listen(port int, strict bool) (net.Listener, error) {
+	return ListenHost("", port, strict)
+}
+
+// ListenHost binds the first free port at or above `port` on host, returning
+// the listener. With strict set, only `port` itself is tried (D90).
 //
-// Loopback only: the dev and preview servers are a local convenience, not a LAN
-// service. The banner prints localhost, so the bind must match. No host config
-// option in v1.
+// Loopback by default: host "" or "localhost" binds 127.0.0.1, because the dev
+// and preview servers are a local convenience and the banner prints localhost.
+// `--host` opts into anything else — "0.0.0.0" (or "::") for every interface,
+// the way Vite's --host exposes a dev server to the LAN, or one specific
+// address. BindHost does the mapping; Banner reports the matching URLs.
 //
 // Any bind failure advances the scan, and the FIRST error is what surfaces once
 // the range is exhausted — it belongs to the port the user actually asked for.
@@ -201,16 +212,17 @@ const PortScanLimit = 10
 //
 // Port 0 is passed through untouched — the kernel picks a free port and the one
 // attempt always succeeds, so there is nothing to scan.
-func Listen(port int, strict bool) (net.Listener, error) {
+func ListenHost(host string, port int, strict bool) (net.Listener, error) {
 	const maxPort = 65535
 
 	if port < 0 || port > maxPort {
 		return nil, fmt.Errorf("invalid port %d: must be between 0 and %d", port, maxPort)
 	}
+	bind := BindHost(host)
 
 	var firstErr error
 	for candidate := port; candidate <= maxPort; candidate++ {
-		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", candidate))
+		ln, err := net.Listen("tcp", net.JoinHostPort(bind, strconv.Itoa(candidate)))
 		if err == nil {
 			return ln, nil
 		}
@@ -222,6 +234,67 @@ func Listen(port int, strict bool) (net.Listener, error) {
 		}
 	}
 	return nil, firstErr
+}
+
+// DefaultHost is the --host value that keeps the servers on loopback.
+const DefaultHost = "localhost"
+
+// AllInterfacesHost is what a bare --host (no value) means: every interface.
+const AllInterfacesHost = "0.0.0.0"
+
+// BindHost maps a --host value onto the address to bind. The default ("" or
+// "localhost") is the IPv4 loopback the servers have always used, so the
+// banner's localhost URL and the bind never disagree over IPv6 resolution.
+func BindHost(host string) string {
+	if host == "" || strings.EqualFold(host, DefaultHost) {
+		return "127.0.0.1"
+	}
+	return host
+}
+
+// Banner returns the URLs the ready banner prints for a server bound with host
+// on port: local is the URL to open on this machine, network the URLs other
+// devices can reach. The default loopback bind prints http://localhost:<port>/
+// alone; an all-interfaces bind ("0.0.0.0" or "::") adds one network URL per
+// non-loopback IPv4 interface address; any other address is printed as itself,
+// since "localhost" might resolve somewhere it is not listening.
+func Banner(host string, port int) (local string, network []string) {
+	bind := BindHost(host)
+	if bind == "127.0.0.1" {
+		return hostURL("localhost", port), nil
+	}
+	if ip := net.ParseIP(bind); ip != nil && ip.IsUnspecified() {
+		return hostURL("localhost", port), lanURLs(port)
+	}
+	return hostURL(bind, port), nil
+}
+
+func hostURL(host string, port int) string {
+	return "http://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/"
+}
+
+// lanURLs lists one URL per non-loopback IPv4 address on an up interface —
+// what a phone on the same network would type. IPv6 and link-local addresses
+// are left out: they are rarely what anyone wants to type, and Vite omits them
+// too.
+func lanURLs(port int) []string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil
+	}
+	var urls []string
+	for _, addr := range addrs {
+		ipnet, ok := addr.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		ip4 := ipnet.IP.To4()
+		if ip4 == nil || ip4.IsLoopback() || ip4.IsLinkLocalUnicast() {
+			continue
+		}
+		urls = append(urls, hostURL(ip4.String(), port))
+	}
+	return urls
 }
 
 // BoundPort reports the port a listener actually bound, falling back to fallback
