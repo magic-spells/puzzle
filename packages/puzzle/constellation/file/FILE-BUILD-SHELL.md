@@ -11,6 +11,15 @@ connections:
   - FILE-BUILD-OPTIONS
   - DOC-SPEC-BUILD
   - TEST-BUILD-AND-DEV-PIPELINE
+notes:
+  - kind: state
+    text: >-
+      shellHashSupport now returns a shellHashPlan: entry/styles (index.html can follow) plus
+      entryPages/stylesPages (other public/**/*.html naming app.js|app.css / styles.css).
+      rewriteShellHTMLRefs takes `strict`; only strict (explicit hashNames: true) makes a
+      compiler-name reference with no emitted output an error. rewriteShell(…, strict, …) computes
+      renames first, runs rewritePublicPages over every other copied public .html (rewrites only
+      compiler-output references, no preloads, untouched when nothing changes), then the shell.
 ---
 
 # shell.go

@@ -11,6 +11,20 @@ connections:
   - FILE-BUILD-PRERENDER-PAGES
   - FILE-CONFIG
   - DOC-SPEC-BUILD
+notes:
+  - kind: decision
+    text: >-
+      Other public HTML pages and strictness (review of PR #239). With hashNames unset, the
+      pre-bundle check also scans every other public/**/*.html page: one naming app.js/app.css (or
+      styles.css) by its fixed name keeps that file's fixed name, with a warning naming the page, so
+      a hand-written 404.html/embed.html never ships a dead link. Explicit `true` is strict: it
+      rewrites those pages to the hashed names (no preloads; only the shell boots the app), fails on
+      a shell reference to an output that was not emitted (e.g. a stale /app.css), and fails on a
+      missing entry reference. Default builds leave a reference with no emitted output as written,
+      as unhashed builds always did. The styles.css fallback warning is skipped when the composed
+      stylesheet is empty (apps with no CSS). Rejected: rewriting other public pages by default too
+      — Cory's rule is that public/ files are verbatim, and relative references in nested pages
+      would be guessed; falling back keeps them byte-identical.
 ---
 
 ## Context

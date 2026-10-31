@@ -12,6 +12,14 @@ connections:
   - DECISION-D153-PUZZLE-SCRATCH-DIR
 verified_at: '2026-08-24T21:39:23.520Z'
 verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+notes:
+  - kind: state
+    text: >-
+      §59 addendum (PR #239 review): with hashNames unset, any other public/**/*.html page naming
+      app.js/app.css or styles.css by its fixed name also forces that file's fixed name (warning
+      names the page); a shell reference to a compiler output that was not emitted is left as
+      written; the styles.css warning is skipped when the stylesheet is empty. Explicit true
+      rewrites other public HTML pages to the hashed names and keeps the no-emitted-output error.
 ---
 
 The contract for the toolchain: the CLI surface, dev HMR and build-error reporting, the `hybrid`/`static` output modes, update notification and `puzzle upgrade`, interactive `puzzle init`, the `/testing` utilities, the `--fixtures` switch, the DevTools bridge, code splitting, and `puzzle check`. See [[DOC-SPEC]] for the section index.
