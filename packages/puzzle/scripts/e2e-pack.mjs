@@ -6,7 +6,7 @@
  * esbuild alias the examples lean on. The flow:
  *
  *   1. `npm pack` the repo into a temp dir OUTSIDE the repo tree.
- *   2. `puzzle init e2e-app --template todos --dir <tmp>` (the REPO compiler via
+ *   2. `puzzle init <tmp>/e2e-app -t todos` (the REPO compiler via
  *      `go run`, since the published binary doesn't exist pre-publish).
  *   3. Point the app's `@magic-spells/puzzle` dependency at the packed tarball
  *      (`file:…`) and `npm install`. Now the RUNTIME resolves from real
@@ -70,7 +70,7 @@ try {
 	console.log(`[e2e-pack] packed: ${tarball}`);
 
 	// 2. Scaffold a todos app with the REPO compiler.
-	run('go', ['run', './compiler/cmd/puzzle', 'init', APP_NAME, '--template', 'todos', '--dir', work], repoRoot);
+	run('go', ['run', './compiler/cmd/puzzle', 'init', join(work, APP_NAME), '-t', 'todos'], repoRoot);
 	const appDir = join(work, APP_NAME);
 	if (!existsSync(join(appDir, 'package.json'))) throw new Error(`init produced no app at ${appDir}`);
 
