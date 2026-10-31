@@ -141,11 +141,8 @@ With --profile-build, print per-phase startup and rebuild timing tables to
 stderr. PUZZLE_PROFILE_BUILD=1 enables the same profiling.`,
 	Args: serverArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		host, rest := resolveHost(cmd, args)
-		dir, err := serverDir(rest)
-		if err != nil {
-			return err
-		}
+		host := serverHost(cmd)
+		dir := serverDir(args)
 		port, _ := cmd.Flags().GetInt("port")
 		strictPort, _ := cmd.Flags().GetBool("strict-port")
 		open, _ := cmd.Flags().GetBool("open")
@@ -182,11 +179,8 @@ otherwise. output: 'static': clean URLs (/about → /about/index.html) and a rea
 what a static host does.`,
 	Args: serverArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		host, rest := resolveHost(cmd, args)
-		dir, err := serverDir(rest)
-		if err != nil {
-			return err
-		}
+		host := serverHost(cmd)
+		dir := serverDir(args)
 		port, _ := cmd.Flags().GetInt("port")
 		strictPort, _ := cmd.Flags().GetBool("strict-port")
 		return preview.Serve(dir, preview.Options{
@@ -240,6 +234,13 @@ func init() {
 }
 
 func main() {
+	args := os.Args[1:]
+	// Before parsing, so even a usage error (`puzzle dev --no-color --bogus`)
+	// prints uncoloured; the persistent pre-run only sees successful parses.
+	if hasNoColorFlag(args) {
+		_ = os.Setenv("NO_COLOR", "1")
+	}
+	rootCmd.SetArgs(normalizeHostArgs(args))
 	if err := rootCmd.Execute(); err != nil {
 		errOut := ui.New(os.Stderr)
 		if errOut.Enabled() {
@@ -249,6 +250,20 @@ func main() {
 		}
 		os.Exit(1)
 	}
+}
+
+// hasNoColorFlag reports whether --no-color appears among the CLI arguments
+// before any "--" terminator (a later one is a positional, not the flag).
+func hasNoColorFlag(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false
+		}
+		if a == "--no-color" || a == "--no-color=true" {
+			return true
+		}
+	}
+	return false
 }
 
 func formatMillis(d time.Duration) string {

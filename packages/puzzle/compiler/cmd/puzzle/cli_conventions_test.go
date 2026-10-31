@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/magic-spells/puzzle/compiler/internal/ui"
 	"github.com/magic-spells/puzzle/compiler/internal/version"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -195,8 +196,10 @@ func TestAddForceShorthandAndDeprecatedOverwriteAlias(t *testing.T) {
 	requireShorthand(t, addCmd, "force", "f")
 	requireShorthand(t, addCmd, "yes", "y")
 	requireHidden(t, addCmd, "overwrite")
-	if addCmd.Flags().Lookup("overwrite").Deprecated == "" {
-		t.Error("--overwrite should be marked deprecated in favour of --force")
+	// Hidden, not deprecated, through 0.10.x: a 0.9 upgrade re-execs the new
+	// binary with --overwrite, and a deprecation notice would land in its output.
+	if d := addCmd.Flags().Lookup("overwrite").Deprecated; d != "" {
+		t.Errorf("--overwrite should be a silent hidden alias in 0.10.x, got deprecation %q", d)
 	}
 	for _, args := range [][]string{{"-f"}, {"--force"}, {"--overwrite"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
@@ -419,8 +422,8 @@ func captureStdout(t *testing.T, fn func()) string {
 func TestBuildModeAndQuietShorthands(t *testing.T) {
 	requireShorthand(t, buildCmd, "mode", "m")
 	requireShorthand(t, buildCmd, "quiet", "q")
-	if usage := buildCmd.Flags().Lookup("mode").Usage; !strings.Contains(usage, "(production|development)") {
-		t.Errorf("--mode help should list production|development, got %q", usage)
+	if usage := buildCmd.Flags().Lookup("mode").Usage; !strings.Contains(usage, "production") || !strings.Contains(usage, "development") {
+		t.Errorf("--mode help should name both modes, got %q", usage)
 	}
 	parse(t, buildCmd, "-m", "development", "-q")
 	if got, _ := buildCmd.Flags().GetString("mode"); got != "development" {
@@ -461,62 +464,142 @@ func TestServerPortShorthandAndHostFlag(t *testing.T) {
 	for _, cmd := range []*cobra.Command{devCmd, previewCmd} {
 		requireShorthand(t, cmd, "port", "p")
 		f := cmd.Flags().Lookup("host")
-		if f == nil || f.DefValue != "localhost" || f.NoOptDefVal != "0.0.0.0" {
-			t.Fatalf("%s --host = %+v, want default localhost and bare value 0.0.0.0", cmd.Name(), f)
+		if f == nil || f.DefValue != "localhost" || f.NoOptDefVal != hostBareSentinel {
+			t.Fatalf("%s --host = %+v, want default localhost and an optional value", cmd.Name(), f)
+		}
+		_, flags, _ := strings.Cut(helpText(t, cmd), "\nFlags:\n")
+		if !strings.Contains(flags, "--host address ") || strings.Contains(flags, `[="`) {
+			t.Errorf("%s --help should show --host address with no [=…] suffix:\n%s", cmd.Name(), flags)
 		}
 	}
 	requireShorthand(t, devCmd, "open", "o")
 }
 
+// TestResolveHost pins the --host rule end to end: normalizeHostArgs over the
+// raw argv (what main does), cobra's flag parse, then the Args validator.
 func TestResolveHost(t *testing.T) {
-	existing := t.TempDir()
+	ipDir := filepath.Join(t.TempDir(), "10.0.0.1")
+	mustWrite(t, filepath.Join(ipDir, ".keep"), "")
+	chdir(t, filepath.Dir(ipDir)) // "10.0.0.1" now names an existing directory
+
 	tests := []struct {
 		name     string
-		flags    []string
+		argv     []string // after "dev"
 		wantHost string
-		wantRest []string
+		wantArgs []string
+		wantErr  string
 	}{
-		{"omitted", []string{"app"}, "localhost", []string{"app"}},
-		{"bare", []string{"--host"}, "0.0.0.0", []string{}},
-		{"bare then dir", []string{"--host", existing}, "0.0.0.0", []string{existing}},
-		{"equals", []string{"--host=192.168.1.5", "app"}, "192.168.1.5", []string{"app"}},
-		{"space-separated all interfaces", []string{"--host", "0.0.0.0"}, "0.0.0.0", []string{}},
-		{"space-separated address then dir", []string{"--host", "10.0.0.7", "app"}, "10.0.0.7", []string{"app"}},
-		{"dir then space-separated address", []string{"app", "--host", "::"}, "::", []string{"app"}},
-		{"space-separated localhost", []string{"--host", "localhost"}, "localhost", []string{}},
-		{"hostname is not reclaimed", []string{"--host", "myapp"}, "0.0.0.0", []string{"myapp"}},
+		{"omitted", []string{"app"}, "localhost", []string{"app"}, ""},
+		{"bare", []string{"--host"}, "0.0.0.0", nil, ""},
+		{"bare then dir", []string{"--host", "app"}, "0.0.0.0", []string{"app"}, ""},
+		{"equals", []string{"--host=192.168.1.5", "app"}, "192.168.1.5", []string{"app"}, ""},
+		{"space ip", []string{"--host", "0.0.0.0"}, "0.0.0.0", nil, ""},
+		{"space ip then dir", []string{"--host", "10.0.0.7", "app"}, "10.0.0.7", []string{"app"}, ""},
+		{"space ipv6 after dir", []string{"app", "--host", "::"}, "::", []string{"app"}, ""},
+		{"space localhost", []string{"--host", "localhost"}, "localhost", nil, ""},
+		{"ip-named dir right after --host is the address", []string{"--host", "10.0.0.1"}, "10.0.0.1", nil, ""},
+		{"equals is never overridden by an ip positional", []string{"--host=0.0.0.0", "10.0.0.1"}, "0.0.0.0", []string{"10.0.0.1"}, ""},
+		{"equals is never overridden by localhost", []string{"--host=0.0.0.0", "localhost"}, "0.0.0.0", []string{"localhost"}, ""},
+		{"ip before the flag is not reclaimed", []string{"10.0.0.1", "--host"}, "0.0.0.0", []string{"10.0.0.1"}, ""},
+		{"ip after another flag is not reclaimed", []string{"--host", "--strict-port", "10.0.0.1"}, "0.0.0.0", []string{"10.0.0.1"}, ""},
+		{"hostname after bare --host is an error", []string{"--host", "my.lan", "app"}, "", nil, "--host takes a hostname only as --host=<name>"},
+		{"two dirs without --host is the generic error", []string{"a", "b"}, "", nil, "accepts at most 1 arg"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			args := parse(t, devCmd, tt.flags...)
-			host, rest := resolveHost(devCmd, args)
-			if host != tt.wantHost || strings.Join(rest, ",") != strings.Join(tt.wantRest, ",") {
-				t.Errorf("resolveHost(%v) = %q %v, want %q %v", tt.flags, host, rest, tt.wantHost, tt.wantRest)
+			argv := normalizeHostArgs(append([]string{"dev"}, tt.argv...))[1:]
+			args := parse(t, devCmd, argv...)
+			err := serverArgs(devCmd, args)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("dev %v: error %v, want %q", tt.argv, err, tt.wantErr)
+				}
+				return
 			}
-			if err := serverArgs(devCmd, args); err != nil {
-				t.Errorf("serverArgs(%v): %v", args, err)
+			if err != nil {
+				t.Fatalf("dev %v: %v", tt.argv, err)
+			}
+			if host := serverHost(devCmd); host != tt.wantHost || strings.Join(args, ",") != strings.Join(tt.wantArgs, ",") {
+				t.Errorf("dev %v → host %q args %v, want %q %v", tt.argv, host, args, tt.wantHost, tt.wantArgs)
 			}
 		})
 	}
-	args := parse(t, previewCmd, "--host", "0.0.0.0", "a", "b")
-	if err := serverArgs(previewCmd, args); err == nil {
-		t.Error("two directories after reclaiming the host should still be a usage error")
+}
+
+func TestNormalizeHostArgsScope(t *testing.T) {
+	for _, tc := range []struct{ in, want []string }{
+		{[]string{"preview", "--host", "::1"}, []string{"preview", "--host=::1"}},
+		{[]string{"--no-color", "dev", "--host", "127.0.0.1"}, []string{"--no-color", "dev", "--host=127.0.0.1"}},
+		{[]string{"build", "--host", "10.0.0.1"}, []string{"build", "--host", "10.0.0.1"}},
+		{[]string{"dev", "--", "--host", "10.0.0.1"}, []string{"dev", "--", "--host", "10.0.0.1"}},
+	} {
+		if got := normalizeHostArgs(tc.in); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("normalizeHostArgs(%v) = %v, want %v", tc.in, got, tc.want)
+		}
 	}
 }
 
-// TestNoColorSetsNoColorEnv: --no-color is the NO_COLOR switch, so it reaches
-// every ui.Printer the command creates and the child processes it spawns.
-func TestNoColorSetsNoColorEnv(t *testing.T) {
+// TestNoColorReachesPrintersInRunE: --no-color turns color off for every
+// Printer a command creates, not just the environment variable.
+func TestNoColorReachesPrintersInRunE(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
+	t.Setenv("TERM", "xterm-256color")
 	if f := rootCmd.PersistentFlags().Lookup("no-color"); f == nil {
 		t.Fatal("root needs a persistent --no-color flag")
 	}
-	var err error
-	captureStdout(t, func() { _, err = execRoot(t, "info", t.TempDir(), "--json", "--no-color") })
-	if err != nil {
+	var allowed, enabled bool
+	probe := &cobra.Command{Use: "color-probe", RunE: func(cmd *cobra.Command, args []string) error {
+		allowed = ui.ColorAllowed()
+		enabled = ui.New(os.Stdout).Enabled()
+		return nil
+	}}
+	rootCmd.AddCommand(probe)
+	t.Cleanup(func() { rootCmd.RemoveCommand(probe) })
+
+	if _, err := execRoot(t, "color-probe"); err != nil {
 		t.Fatal(err)
 	}
-	if os.Getenv("NO_COLOR") == "" {
-		t.Error("--no-color should set NO_COLOR for the rest of the process")
+	if !allowed {
+		t.Fatal("without --no-color the environment should allow color")
+	}
+	if _, err := execRoot(t, "color-probe", "--no-color"); err != nil {
+		t.Fatal(err)
+	}
+	if allowed || enabled {
+		t.Errorf("under --no-color a Printer made in RunE must be uncoloured (allowed=%v enabled=%v)", allowed, enabled)
+	}
+}
+
+// TestHasNoColorFlag: main() checks argv before parsing, so a usage error is
+// uncoloured too.
+func TestHasNoColorFlag(t *testing.T) {
+	for args, want := range map[string]bool{
+		"dev --no-color --bogus": true,
+		"--no-color":             true,
+		"build --no-color=true":  true,
+		"build":                  false,
+		"dev -- --no-color":      false,
+	} {
+		if got := hasNoColorFlag(strings.Fields(args)); got != want {
+			t.Errorf("hasNoColorFlag(%q) = %v, want %v", args, got, want)
+		}
+	}
+}
+
+// TestDoctorJSONMissingDir: a directory that does not exist still yields valid
+// JSON, and the command exits non-zero.
+func TestDoctorJSONMissingDir(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "nope")
+	var err error
+	out := captureStdout(t, func() { _, err = execRoot(t, "doctor", missing, "--json") })
+	if err == nil {
+		t.Error("doctor --json on a missing dir should exit non-zero")
+	}
+	var got doctorReport
+	if jerr := json.Unmarshal([]byte(out), &got); jerr != nil {
+		t.Fatalf("doctor --json on a missing dir is not JSON: %v\n%s", jerr, out)
+	}
+	if got.OK || got.Failures == 0 || got.Dir != missing {
+		t.Errorf("want a failing report for %s, got %+v", missing, got)
 	}
 }
