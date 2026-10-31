@@ -163,6 +163,26 @@ one is *not* a compile error; it silently builds a different product.
 
 ## 0.10.0 — unreleased
 
+### Breaking
+
+- **BREAKING: production builds hash their output names by default (D181).**
+  `build.hashNames` no longer follows `build.splitting`: with the key unset,
+  every production build emits `app-<hash>.js` and `styles-<hash>.css`
+  (`app-<hash>.css` for CSS the entry imports), and `output: 'static'` emits
+  `_puzzle/<slug>-<hash>.js` page modules. The shell and every prerendered page
+  are rewritten to the new names, so a normal deploy needs no change, and a
+  deploy can never leave a browser holding a stale `styles.css` or page module
+  again. Output filenames change on upgrade: a host rule, cache header, CDN
+  purge, service worker or deploy script that names `styles.css`, `app.js` or
+  `_puzzle/<slug>.js` must follow the hashed names (or match `styles-*.css`,
+  `_puzzle/*.js`). Set `build: { hashNames: false }` to restore the old fixed
+  names. Development builds keep fixed names, and files copied from `public/`
+  are never renamed. When hashing is on by default and `public/index.html`
+  cannot follow a name (no `<script src>` loading `app.js`, or no tag
+  referencing `styles.css`), that file keeps its fixed name and the build
+  prints one warning for it instead of failing; an explicit
+  `hashNames: true` still fails on a shell with no entry reference.
+
 ### Changed
 
 - **Buttons are quiet: no brand fill (puzzle-pieces).** A screen with many

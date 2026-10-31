@@ -710,34 +710,38 @@ puzzle upgrade skills
 
 Every command above is built and verified today. `puzzle build` compiles `.pzl` files and produces a working bundle; `puzzle dev` watches `app/`, rebuilds on change, and delivers full-page live reload over SSE (the reload client is injected into `index.html` at serve time). Both run the declared style pipeline automatically — `styles: { use: ['tailwindcss'] }` in `puzzle.config.js` (tailwindcss-only in v1) — so Tailwind output is included in the served/built stylesheet.
 
-By default a build emits one `dist/app.js`, and a dynamic `import()` is inlined
-into it. Set `build: { splitting: true }` in `puzzle.config.js` and each dynamic
+By default a build emits one entry bundle (`dist/app-<hash>.js` in production,
+see below), and a dynamic `import()` is inlined into it. Set `build: { splitting: true }` in `puzzle.config.js` and each dynamic
 `import()` becomes a lazy chunk under `dist/chunks/` that the browser fetches
 only when that code path runs — the way to keep a heavy on-demand dependency (a
 chart library, a diagram renderer, an editor) off the first page load.
-Production split builds name the entry `app-<hash>.js`, the stylesheet
-`styles-<hash>.css`, and any CSS imported by the entry `app-<hash>.css`. The build
-rewrites the shell's references and adds `modulepreload` links for the entry's
-transitive static-import chunks; lazy chunks stay on demand. esbuild's ESM
-splitting has no chunk-loader runtime, so it adds no runtime bytes. The build's
-size banner also names your largest dependencies and, in production builds,
-flags any single one over 200 KB (the threshold assumes minified bytes, so dev
-builds never warn).
+Lazy chunks are content-hashed, and the build adds `modulepreload` links to the
+shell for the entry's transitive static-import chunks; lazy chunks stay on
+demand. esbuild's ESM splitting has no chunk-loader runtime, so it adds no
+runtime bytes. The build's size banner also names your largest dependencies
+and, in production builds, flags any single one over 200 KB (the threshold
+assumes minified bytes, so dev builds never warn).
 
-`build.hashNames` defaults to `build.splitting`. Set
-`build: { splitting: true, hashNames: false }` to keep `app.js` and `styles.css`
-while retaining preloads, or `build: { hashNames: true }` to hash without
-splitting. Development builds always keep fixed names and add no preloads.
-Files copied from `public/` are never renamed. A hashed SPA or hybrid build
-requires the shell to reference `app.js` as `/app.js`, `./app.js` or `app.js`;
-use `hashNames: false` when another page needs the fixed URL.
+Production builds content-hash their output names, split or not: the entry is
+`app-<hash>.js`, the stylesheet `styles-<hash>.css`, and any CSS imported by the
+entry `app-<hash>.css`. The build rewrites the shell's references to follow
+them, so a deploy never leaves a browser holding a stale stylesheet or bundle.
+Set `build: { hashNames: false }` to keep the fixed `app.js` and `styles.css`
+(preloads stay on when splitting). Development builds always keep fixed names
+and add no preloads. Files copied from `public/` are never renamed.
+
+Hashing needs the shell to reference `app.js` as `/app.js`, `./app.js` or
+`app.js`, and `styles.css` the same way. With `hashNames` unset, a file the
+shell does not reference keeps its fixed name and the build prints one warning
+for it; with an explicit `hashNames: true`, a shell with no entry reference
+fails the build. Use `hashNames: false` when another page or a host rule needs
+the fixed URL.
 
 `output: 'hybrid'` uses the same entry and stylesheet names as the SPA, with
 prerendered HTML under `dist/<path>/index.html`. `output: 'static'` ships no
-app entry: each page loads `dist/_puzzle/<slug>.js`, or
-`dist/_puzzle/<slug>-<hash>.js` when hashing is on, and preloads its shared
-`dist/_puzzle/chunks/`. A static build with no `splitting` or `hashNames` key
-keeps fixed page-module names and `styles.css`, with preloads in production.
+app entry: each page loads `dist/_puzzle/<slug>-<hash>.js` (or
+`dist/_puzzle/<slug>.js` with `hashNames: false`) and, in production, preloads
+its shared `dist/_puzzle/chunks/`.
 
 Splitting adds one deployment rule: chunk filenames are content-hashed, so a
 new deploy writes new ones, and a tab still holding the previous entry will
