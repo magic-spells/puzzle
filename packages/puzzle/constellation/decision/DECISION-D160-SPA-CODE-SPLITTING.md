@@ -23,7 +23,7 @@ SPA output has nowhere to split to, so one heavy on-demand dependency (e.g. `imp
 
 ## Decision
 
-`build: { splitting: true }` in `puzzle.config.js` makes a dynamic `import()` in the SPA bundle emit a lazy chunk under `dist/chunks/[name]-[hash]` instead of inlining it. Default off; `Config.Splitting()` is the only place the default lives. Production entry/CSS names follow `build.hashNames`, which defaults to this configured splitting value; the shell preloads the entry's transitive static-import chunks ([[DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD]]). Development keeps `app.js` and adds no preloads.
+`build: { splitting: true }` in `puzzle.config.js` makes a dynamic `import()` in the SPA bundle emit a lazy chunk under `dist/chunks/[name]-[hash]` instead of inlining it. Default off; `Config.Splitting()` is the only place the default lives. Production entry/CSS names follow `build.hashNames`, which is on by default independent of splitting; the shell preloads the entry's transitive static-import chunks when splitting ([[DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD]]). Development keeps `app.js` and adds no preloads.
 
 - **Static mode forces it off** (`cfg.Splitting() && mode != "static"`, resolved before `ValidatePublic`): static deletes `staging/app.js`, so its chunks would be orphans. Hybrid keeps splitting — its bundle is the shipped runtime after takeover. (The static per-page pass splits its own page entries independently.)
 - **Dev builder prunes.** With splitting on, `puzzle dev` runs the pass with `Write: false`, writes outputs itself via `writeSplitOutputs` (`fsutil.WriteFileAtomic` — lazy fetches can land mid-rebuild), and deletes only paths it wrote on the previous pass that this pass did not emit. With the flag off, the single-file dev path is unchanged.
@@ -34,7 +34,7 @@ SPA output has nowhere to split to, so one heavy on-demand dependency (e.g. `imp
 
 ## Alternatives
 
-- Splitting on by default — authors choose their lazy split points and opt into a multi-file dist. Hashing follows that explicit choice by default; `build.hashNames` can opt in or out independently.
+- Splitting on by default — authors choose their lazy split points and opt into a multi-file dist. Hashed names do not ride on this choice: `build.hashNames` is on by default in production either way (D181).
 - Permanent `chunks/` reservation — takes a directory name from every app to serve the ones that opt in.
 - Sweeping `dist/chunks` before each dev rebuild — races the browser mid-fetch; the output-set diff deletes only what went stale.
 - Splitting in static mode and deleting orphans after — means reimplementing reachability over the metafile.

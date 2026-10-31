@@ -72,7 +72,6 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
 
 ## Configuration
 
-
 - **`new PuzzleApp({...})`:** `target`, `routes`, `models`, `formatters`
   (app functions), `apiURL`, `storage`, `adapter` (the `/adapter`
   capability), `beforeRequest`, `scrollBehavior`, `focusBehavior`,
@@ -88,8 +87,8 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   `name` (informational — no named-route navigation).
 - **`puzzle.config.js`:** `styles.use: ['tailwindcss']`, `build.dropConsole`
   (default true), `build.sourceMap` (default off; dev always has maps),
-  `build.splitting` (default off), `build.hashNames` (defaults to
-  `build.splitting`; see Build and output), `dev.proxy` (path prefix →
+  `build.splitting` (default off), `build.hashNames` (default on in
+  production; see Build and output), `dev.proxy` (path prefix →
   backend origin), `output` (`'hybrid'` | `'static'`; absent = SPA),
   `i18n: { locales, defaultLocale, routing?: 'prefix', detect?: boolean }`,
   `site` (the public origin, `'https://example.com'` — origin only; makes
@@ -345,22 +344,24 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
 - `build.splitting` makes each dynamic `import()` a chunk under
   `dist/chunks/` (a reserved name while on); `output: 'static'` ignores it;
   dev prunes stale chunks.
-- In production `build.hashNames` defaults to the configured splitting value: app
+- In production `build.hashNames` is on by default (split or not): app
   entry/JS-imported CSS, the composed stylesheet and static page modules get
-  content-derived names; false opts out and true enables hashing without splitting.
-  Shell references follow emitted names. Split SPA/hybrid shells and all production
-  static pages preload their transitive static-import chunks, excluding lazy/external
-  edges (D181). Public files and all development output retain their names. The size
-  banner lists per-dependency bytes and
-  warns past 200 KB for one dependency in production.
+  content-derived names; false opts out. Shell references follow emitted names;
+  with the key unset, a file the shell does not reference keeps its fixed name
+  with one warning, while an explicit true fails on a shell with no entry tag.
+  Split SPA/hybrid shells and all production static pages preload their
+  transitive static-import chunks, excluding lazy/external edges (D181). Public
+  files and all development output retain their names. The size banner lists
+  per-dependency bytes and warns past 200 KB for one dependency in production.
 - Tailwind-first styles. Public assets copy with case-insensitive collision
   checks against generated names. One-shot builds stage and atomically swap
   `dist/`, keeping the last good build on failure.
 - **Output modes** (no SSR server or hydration): SPA by default.
-  `output: 'hybrid'` prerenders pages one shared app entry (fixed or hashed) takes over (path
-  routing required). `output: 'static'` ships no router or `app.js`: one
-  `dist/_puzzle/<slug>.js` (or `<slug>-[hash].js`) per page with build data and settled read state
-  inlined; `storage` is ignored. Both write directory-style pages plus
+  `output: 'hybrid'` prerenders pages one shared app entry (hashed, or fixed
+  with `hashNames: false`) takes over (path routing required). `output: 'static'`
+  ships no router or `app.js`: one `dist/_puzzle/<slug>-[hash].js` (or
+  `<slug>.js` with `hashNames: false`) per page with build data and settled read
+  state inlined; `storage` is ignored. Both write directory-style pages plus
   `404.html`, skip a `:param` route without `staticPaths` with a warning, and
   honor `prerender: false`. Under prefix routing every page is written once per
   locale (`dist/<tag>/…`, each with its own `lang`/`dir` and table) with

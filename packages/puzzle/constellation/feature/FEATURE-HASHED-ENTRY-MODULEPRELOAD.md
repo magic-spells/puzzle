@@ -26,6 +26,18 @@ connections:
   - TEST-BUILD-AND-DEV-PIPELINE
   - TEST-CLI-COMMANDS
   - FILE-BUILD-SHELL
+notes:
+  - kind: decision
+    text: >-
+      0.10.0 (feat/hash-names-default): the default flipped. `build.hashNames` unset now means
+      hashed names in every production build, independent of `build.splitting`; `false` is the
+      opt-out. Wherever this card says the default "follows build.splitting", or that a static app
+      with no keys keeps fixed names, read D181 instead. Default-on adds a pre-bundle shell check
+      (`shellHashSupport`): a file the shell cannot reference (no `<script src>` for app.js, no tag
+      for styles.css, or no shell) keeps its fixed name with one warning instead of failing;
+      explicit `true` keeps the hard error. Also: a shell without `</head>` no longer errors when
+      there are no preloads to insert. Rationale and the rejected "leave it opt-in" alternative are
+      in D181 (rewritten in place, per the one-decision-one-card rule).
 ---
 
 # Hashed entry, stylesheet and page-module names + modulepreload
