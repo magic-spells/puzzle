@@ -16,7 +16,7 @@ import (
 // that address; omitted, the server stays on localhost.
 func addHostFlag(cmd *cobra.Command) {
 	cmd.Flags().String("host", serve.DefaultHost,
-		"Address to bind; a bare --host (or --host 0.0.0.0) listens on every interface and prints the LAN URL")
+		"Bind `address`; a bare --host (or --host 0.0.0.0) listens on every interface and prints the LAN URL")
 	cmd.Flags().Lookup("host").NoOptDefVal = serve.AllInterfacesHost
 }
 

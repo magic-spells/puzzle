@@ -73,7 +73,7 @@ where clobbering would be a side effect rather than the request.`,
 func init() {
 	upgradeCmd.Flags().Bool("check", false, "Report the current and latest versions without upgrading")
 	// Persistent so `puzzle upgrade skills -y` takes it too.
-	upgradeCmd.PersistentFlags().BoolP("yes", "y", false, "Accept the defaults without prompting: refresh every installed agent skill after the upgrade")
+	upgradeCmd.PersistentFlags().BoolP("yes", "y", false, "Accept the defaults without prompting: refresh the installed agent skills without asking")
 	upgradeCmd.AddCommand(upgradeSkillsCmd)
 	rootCmd.AddCommand(upgradeCmd)
 }
