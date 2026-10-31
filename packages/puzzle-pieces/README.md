@@ -37,7 +37,7 @@ don't have them yet, and prints — never auto-runs — any npm install you need
 line carries a version floor per package (`npm install
 @magic-spells/collapsible-content@^1.2.0`) — the release the piece was built
 against — so run it as printed rather than installing the bare name.
-Existing files are never overwritten unless you pass `--overwrite`, and a
+Existing files are never overwritten unless you pass `--force` (`-f`), and a
 `pieces.lock` of content hashes is kept so a future `diff`/`update` command can tell
 upstream changes from your local edits.
 

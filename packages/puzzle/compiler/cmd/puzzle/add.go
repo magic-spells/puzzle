@@ -75,7 +75,7 @@ Pieces (copy-in components):
                                needs, and a hint when app/styles/pieces.css is
                                older than the registry's are printed as next
                                steps (D3). Refuses to overwrite existing files
-                               unless --overwrite is given.
+                               unless --force (-f) is given.
 
 Themes (palettes):
   puzzle add theme             lists the registry's palettes with this app's
@@ -91,7 +91,7 @@ Themes (palettes):
                                and the data-scheme switch are printed (D3). An
                                unmodified copy of an older registry version (it
                                still matches its pieces.lock hash) is refreshed; a
-                               locally modified copy is refused unless --overwrite
+                               locally modified copy is refused unless --force
                                is given.
 
 Agent skill:
@@ -103,9 +103,11 @@ Agent skill:
                                as up to date; an older one asks before being replaced
                                (declining still installs the targets that have none).
                                On a non-TTY an older install is refused, not asked, and
-                               still requires --overwrite. A symlinked destination is a
-                               dev checkout link: reported and skipped unless
-                               --overwrite is given. "skill" is accepted as an alias.
+                               still requires --force; --yes (-y) instead accepts the
+                               prompts' defaults (every detected target, replace older
+                               installs) without asking, TTY or not. A symlinked
+                               destination is a dev checkout link: reported and skipped
+                               unless --force is given. "skill" is accepted as an alias.
                                --skill-root <dir> (repeatable) pins the config dirs
                                instead of detecting them, and skips the target prompt.
                                See also: puzzle upgrade skills, which refreshes only
@@ -121,7 +123,8 @@ directory, or an http(s) URL; --pieces-version pins the npm release exactly.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		registry, _ := cmd.Flags().GetString("registry")
 		piecesVersion, _ := cmd.Flags().GetString("pieces-version")
-		overwrite, _ := cmd.Flags().GetBool("overwrite")
+		overwrite, _ := cmd.Flags().GetBool("force")
+		yes, _ := cmd.Flags().GetBool("yes")
 		dir, _ := cmd.Flags().GetString("dir")
 		if dir == "" {
 			dir = "."
@@ -131,16 +134,26 @@ directory, or an http(s) URL; --pieces-version pins the npm release exactly.`,
 		return runAddWithEnvironment(os.Stdout, out, dir, args, registry, piecesVersion, overwrite, addEnvironment{
 			homeDir:     os.UserHomeDir,
 			input:       os.Stdin,
-			interactive: ui.IsTerminal(os.Stdin),
+			interactive: ui.IsTerminal(os.Stdin) && !yes,
+			yes:         yes,
 			skillRoots:  skillRoots,
 		})
 	},
 }
 
+// addForce backs both --force and its deprecated --overwrite alias.
+var addForce bool
+
 func init() {
 	addCmd.Flags().String("registry", "", "Piece registry source: npm:<package>[@version], a local directory, or an http(s) URL (default: $PUZZLE_PIECES_REGISTRY or the @magic-spells/puzzle-pieces npm package)")
 	addCmd.Flags().String("pieces-version", "", "Exact @magic-spells/puzzle-pieces release to fetch (default: the newest release matching this CLI's major.minor)")
-	addCmd.Flags().Bool("overwrite", false, "Overwrite existing destination files when adding pieces, themes, or skills")
+	// --force / -f is the overwrite spelling every other CLI uses (and `puzzle
+	// generate` already did). --overwrite stays accepted as a hidden, deprecated
+	// alias bound to the same variable, so existing scripts keep working.
+	addCmd.Flags().BoolVarP(&addForce, "force", "f", false, "Overwrite existing destination files when adding pieces, themes, or skills")
+	addCmd.Flags().BoolVar(&addForce, "overwrite", false, "Deprecated alias for --force")
+	_ = addCmd.Flags().MarkDeprecated("overwrite", "use --force (-f) instead")
+	addCmd.Flags().BoolP("yes", "y", false, "Accept the defaults without prompting: install the skill to every detected target and replace older installs")
 	addCmd.Flags().String("dir", "", "App root to add pieces into (default: walk up from the current directory for package.json/puzzle.config.js)")
 	addCmd.Flags().StringArray("skill-root", nil, "Config dir to install the skill into (repeatable); skips detection and the target prompt")
 	rootCmd.AddCommand(addCmd)

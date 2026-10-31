@@ -305,8 +305,8 @@ func TestAddThemeDefaultImportedModifiedRefusesThenOverwrites(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a refusal for a locally modified, imported pieces.css")
 	}
-	if !strings.Contains(err.Error(), "app/styles/pieces.css") || !strings.Contains(err.Error(), "--overwrite") {
-		t.Errorf("refusal should name the file and --overwrite, got: %v", err)
+	if !strings.Contains(err.Error(), "app/styles/pieces.css") || !strings.Contains(err.Error(), "--force") {
+		t.Errorf("refusal should name the file and --force, got: %v", err)
 	}
 	if got, _ := os.ReadFile(dest); string(got) != mine {
 		t.Errorf("the refused run must not touch pieces.css, got %q", got)
@@ -495,8 +495,8 @@ func TestAddThemeDivergedRefusesThenOverwrites(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a refusal for a locally modified theme")
 	}
-	if !strings.Contains(err.Error(), "--overwrite") || !strings.Contains(err.Error(), "app/styles/themes/dim.css") {
-		t.Errorf("refusal should name the file and --overwrite, got: %v", err)
+	if !strings.Contains(err.Error(), "--force") || !strings.Contains(err.Error(), "app/styles/themes/dim.css") {
+		t.Errorf("refusal should name the file and --force, got: %v", err)
 	}
 	if got, _ := os.ReadFile(dest); string(got) != "/* my edit */\n" {
 		t.Errorf("the refused run must not touch the file, got %q", got)
@@ -820,8 +820,8 @@ func TestAddThemeDefaultModifiedRefusesThenOverwrites(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a refusal for a modified pieces.css")
 	}
-	if !strings.Contains(err.Error(), "app/styles/pieces.css") || !strings.Contains(err.Error(), "--overwrite") {
-		t.Errorf("refusal should name the file and --overwrite, got: %v", err)
+	if !strings.Contains(err.Error(), "app/styles/pieces.css") || !strings.Contains(err.Error(), "--force") {
+		t.Errorf("refusal should name the file and --force, got: %v", err)
 	}
 	dest := filepath.Join(app, "app", "styles", "pieces.css")
 	if got, _ := os.ReadFile(dest); string(got) != "/* my tokens */\n" {
@@ -979,7 +979,7 @@ func TestAddPieceHintsOlderRegistryTheme(t *testing.T) {
 	if !strings.Contains(res.ThemeHint, "older registry theme") || !strings.Contains(res.ThemeHint, "puzzle add theme default") {
 		t.Errorf("expected the stale-theme hint, got %q", res.ThemeHint)
 	}
-	if strings.Contains(res.ThemeHint, "--overwrite") {
+	if strings.Contains(res.ThemeHint, "--force") {
 		t.Errorf("an unmodified older copy refreshes without --overwrite, got %q", res.ThemeHint)
 	}
 	if !strings.Contains(render(res), res.ThemeHint) {
@@ -997,7 +997,7 @@ func TestAddPieceHintsModifiedThemeNeedsOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(res.ThemeHint, "--overwrite") || !strings.Contains(res.ThemeHint, "by hand") {
+	if !strings.Contains(res.ThemeHint, "--force") || !strings.Contains(res.ThemeHint, "by hand") {
 		t.Errorf("a copy matching neither lock nor registry needs the overwrite/merge wording, got %q", res.ThemeHint)
 	}
 }

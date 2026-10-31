@@ -393,7 +393,7 @@ with:
   the package is never installed. The old raw-GitHub default is gone as of 0.6.0.
 - Reads `registry.json`, resolves `registryDependencies` transitively (dedupe), copies each
   file to its manifest `targetDir` (`app/components/ui/` for pieces, `app/lib/` for lib
-  files). **Refuses to overwrite an existing target unless `--overwrite`** (all-or-nothing
+  files). **Refuses to overwrite an existing target unless `--force` (`-f`; `--overwrite` is the deprecated alias)** (all-or-nothing
   pre-flight). PRINTS — never auto-runs — npm installs for accumulated `dependencies`.
 - The printed line is `npm install <name>@<range> …`, one entry per package, sorted by
   package name (D169). Specs merge by NAME across the resolved set, so a package two
@@ -414,7 +414,7 @@ with:
   one-line `@import './pieces.css';` wiring step is printed (styles.css is user-owned).
   When an app's pieces.css exists but differs from the registry's, `add piece` prints a
   stale-theme hint: `puzzle add theme default` for an unmodified older copy (it still
-  matches its `pieces.lock` hash), a hand merge or `--overwrite` for an edited one.
+  matches its `pieces.lock` hash), a hand merge or `--force` for an edited one.
   Detection keys on the `puzzle-pieces design tokens` header comment in `pieces.css` —
   **don't reword that comment without updating the CLI's marker.** `registry.json`'s
   `themes` array (`{ name, file, label, description }`) and `modes` list the palettes;

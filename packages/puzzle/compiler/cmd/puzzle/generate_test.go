@@ -20,6 +20,7 @@ func runGenerate(t *testing.T, dir string, args ...string) error {
 	_ = generateCmd.Flags().Set("path", "")
 	_ = generateCmd.Flags().Set("force", "false")
 	_ = generateCmd.Flags().Set("family", "")
+	_ = generateCmd.Flags().Set("dir", "")
 	generateCmd.Flags().Lookup("family").Changed = false
 	rootCmd.SetArgs(append([]string{"generate"}, args...))
 	return rootCmd.Execute()

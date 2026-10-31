@@ -365,7 +365,7 @@ func checkConflicts(units []plannedUnit) error {
 		return nil
 	}
 	sort.Strings(conflicts)
-	return fmt.Errorf("refusing to overwrite existing file(s) (use --overwrite to replace):\n  %s",
+	return fmt.Errorf("refusing to overwrite existing file(s) (use --force to replace):\n  %s",
 		strings.Join(conflicts, "\n  "))
 }
 
@@ -486,13 +486,13 @@ func writePlannedTheme(theme *plannedTheme) error {
 // copy lacks — silently, unless we say so.
 const (
 	staleThemeHintLine    = "app/styles/pieces.css is an older registry theme — run `puzzle add theme default` to refresh it (new pieces use tokens it lacks)"
-	modifiedThemeHintLine = "app/styles/pieces.css differs from the registry theme — merge the new tokens in by hand, or run `puzzle add theme default --overwrite` to replace it (new pieces use tokens it may lack)"
+	modifiedThemeHintLine = "app/styles/pieces.css differs from the registry theme — merge the new tokens in by hand, or run `puzzle add theme default --force` to replace it (new pieces use tokens it may lack)"
 )
 
 // staleThemeHint compares an existing app/styles/pieces.css with the registry's
 // theme. Identical is quiet; a copy still matching its pieces.lock hash is an
 // unmodified older registry theme that `add theme default` refreshes as is;
-// anything else was edited, so the refresh needs --overwrite or a hand merge.
+// anything else was edited, so the refresh needs --force or a hand merge.
 // Tokens hand-merged into styles.css, or imported from the npm package, are not
 // this file's business (npm updates the package; the merge is the user's), and
 // no pieces.css at all is planTheme's state (b). Print-only (D3).

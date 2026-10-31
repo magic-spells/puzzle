@@ -792,9 +792,9 @@ is how you refresh it:
 - An older one asks before it is replaced. Declining leaves it alone but still
   installs anywhere that has no skill yet.
 - On a non-interactive terminal an older install is refused rather than asked
-  about, and needs `--overwrite`.
+  about, and needs `--force` (or `--yes` to accept the update).
 - A symlinked install (a dev checkout linked into your config dir) is reported
-  and left alone unless you pass `--overwrite`.
+  and left alone unless you pass `--force`.
 
 `puzzle upgrade skills` refreshes only the installs you already have, and
 `puzzle upgrade` offers the same refresh automatically after it installs a new

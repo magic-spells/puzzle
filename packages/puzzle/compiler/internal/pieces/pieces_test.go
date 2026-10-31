@@ -635,8 +635,8 @@ func TestAddOverwriteRefusalListsConflictsWritesNothing(t *testing.T) {
 	if !strings.Contains(err.Error(), "app/components/ui/Calendar.pzl") {
 		t.Errorf("error should list the conflicting path, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "--overwrite") {
-		t.Errorf("error should mention --overwrite, got: %v", err)
+	if !strings.Contains(err.Error(), "--force") {
+		t.Errorf("error should mention --force, got: %v", err)
 	}
 
 	// Pre-flight: NOTHING else was written, and the conflicting file is intact.

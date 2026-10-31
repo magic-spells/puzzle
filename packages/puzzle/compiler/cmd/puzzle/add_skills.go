@@ -31,6 +31,10 @@ type addEnvironment struct {
 	homeDir     func() (string, error)
 	input       io.Reader
 	interactive bool
+	// yes (--yes) accepts every prompt's default without asking: all detected
+	// targets, and replacing an older install. The caller also clears
+	// interactive, so no form is ever shown.
+	yes bool
 	// skillRoots pins the config dirs to install into (--skill-root). When set,
 	// home detection and the target prompt are both skipped: explicit roots are
 	// explicit intent. `puzzle upgrade` uses this to hand the freshly installed
@@ -59,7 +63,8 @@ var supportedSkillTargets = []struct {
 // addSkills installs the embedded skill into the resolved targets. Re-running the
 // command after a CLI upgrade is the normal way to refresh an install, so an
 // existing destination asks rather than refusing (D78): the refusal only survives
-// on a non-TTY, where a script must name the clobber with --overwrite.
+// on a non-TTY, where a script must name the clobber with --force (or accept the
+// prompt's default with --yes).
 func addSkills(w io.Writer, out *ui.Printer, overwrite bool, env addEnvironment) error {
 	selected, err := resolveSkillTargets(w, out, env)
 	if err != nil {
@@ -70,7 +75,7 @@ func addSkills(w io.Writer, out *ui.Printer, overwrite bool, env addEnvironment)
 		return nil
 	}
 
-	// --overwrite is explicit intent: write every selected target, symlinked
+	// --force is explicit intent: write every selected target, symlinked
 	// destinations included (the D78 upgrade refresh relies on exactly this).
 	if overwrite {
 		return installSkills(w, out, selected)
@@ -89,9 +94,12 @@ func addSkills(w io.Writer, out *ui.Printer, overwrite bool, env addEnvironment)
 	}
 
 	install := append([]skillTarget(nil), plan.fresh...)
-	if len(plan.stale) > 0 {
+	if len(plan.stale) > 0 && env.yes {
+		// --yes takes the refresh prompt's default answer, which is Yes.
+		install = append(install, plan.stale...)
+	} else if len(plan.stale) > 0 {
 		if !env.interactive {
-			return fmt.Errorf("refusing to overwrite existing skill installation(s) (use --overwrite to replace):\n  %s",
+			return fmt.Errorf("refusing to overwrite existing skill installation(s) (use --force to replace, or --yes to accept the update):\n  %s",
 				strings.Join(skillDestinationPaths(plan.stale), "\n  "))
 		}
 		confirmed, err := confirmSkillUpdate(env.input, w, plan.stale, version.Version)
@@ -109,7 +117,7 @@ func addSkills(w io.Writer, out *ui.Printer, overwrite bool, env addEnvironment)
 		// Everything selected was already current: say how to force a reinstall,
 		// which is also how you re-copy an edited payload without bumping the version.
 		if len(plan.current) > 0 && len(plan.stale) == 0 {
-			fmt.Fprintf(w, "Run %s to reinstall anyway.\n", out.Bold("puzzle add skills --overwrite"))
+			fmt.Fprintf(w, "Run %s to reinstall anyway.\n", out.Bold("puzzle add skills --force"))
 		}
 		return nil
 	}
@@ -284,7 +292,7 @@ func newSkillPromptForm(input io.Reader, output io.Writer, group *huh.Group) *hu
 // skillPlan splits selected targets by what is already sitting at their
 // destination. Only `stale` needs the user's consent: a missing destination is a
 // plain install, a matching stamp has nothing to replace, and a symlink is a dev
-// checkout link we refuse to write through without --overwrite (D78; the same rule `puzzle upgrade` applies).
+// checkout link we refuse to write through without --force (D78; the same rule `puzzle upgrade` applies).
 type skillPlan struct {
 	fresh   []skillTarget
 	current []skillTarget
@@ -342,7 +350,7 @@ func installedSkillVersion(dest string) (string, bool) {
 //
 // A symlinked destination is written THROUGH, never removed: os.RemoveAll on a
 // symlink deletes the link itself, quietly converting a dev checkout link into a
-// real directory. Only --overwrite reaches here with a symlink.
+// real directory. Only --force reaches here with a symlink.
 func installSkillTree(dest string) error {
 	info, err := os.Lstat(dest)
 	switch {

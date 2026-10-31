@@ -36,9 +36,11 @@ views and layouts use <script lang="ts"> with typed props and data(), a model
 is app/models/<name>.ts with a typed fields interface, and a family's barrel is
 index.ts. The model hint then points at app/models/index.ts.
 
-The output directory can be overridden with --path (relative to the project
-root; a family's directory is created inside it). Existing files are never
-overwritten unless --force is given.`,
+The project root is found by walking up from the current directory (or from
+--dir, when given) to the nearest package.json or puzzle.config.js — the same
+rule as ` + "`puzzle add`" + `. The output directory can be overridden with --path
+(relative to the project root; a family's directory is created inside it).
+Existing files are never overwritten unless --force (-f) is given.`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		kind, err := generate.ParseKind(args[0])
@@ -61,11 +63,15 @@ overwritten unless --force is given.`,
 			}
 		}
 
-		cwd, err := os.Getwd()
-		if err != nil {
-			return err
+		start, _ := cmd.Flags().GetString("dir")
+		if start == "" {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			start = cwd
 		}
-		root, err := generate.FindProjectRoot(cwd)
+		root, err := generate.FindProjectRoot(start)
 		if err != nil {
 			return err
 		}
@@ -100,7 +106,8 @@ overwritten unless --force is given.`,
 
 func init() {
 	generateCmd.Flags().String("path", "", "Output directory, relative to the project root (overrides the default)")
-	generateCmd.Flags().Bool("force", false, "Overwrite an existing file")
+	generateCmd.Flags().BoolP("force", "f", false, "Overwrite an existing file")
+	generateCmd.Flags().String("dir", "", "App root to generate into (default: walk up from the current directory for package.json/puzzle.config.js)")
 	generateCmd.Flags().String("family", "", "Comma-separated family members — scaffolds a component directory + index.js barrel (index.ts in a TypeScript app; component only)")
 	rootCmd.AddCommand(generateCmd)
 }

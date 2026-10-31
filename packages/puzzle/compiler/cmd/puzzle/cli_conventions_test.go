@@ -3,6 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"path/filepath"
+	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -179,5 +183,139 @@ func TestDoctorJSONParsesAndCountsFailures(t *testing.T) {
 	}
 	if rest := parse(t, doctorCmd, "--json"); len(rest) != 0 {
 		t.Errorf("unexpected positional args %v", rest)
+	}
+}
+
+func TestAddForceShorthandAndDeprecatedOverwriteAlias(t *testing.T) {
+	requireShorthand(t, addCmd, "force", "f")
+	requireShorthand(t, addCmd, "yes", "y")
+	requireHidden(t, addCmd, "overwrite")
+	if addCmd.Flags().Lookup("overwrite").Deprecated == "" {
+		t.Error("--overwrite should be marked deprecated in favour of --force")
+	}
+	for _, args := range [][]string{{"-f"}, {"--force"}, {"--overwrite"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			parse(t, addCmd, args...)
+			if got, _ := addCmd.Flags().GetBool("force"); !got {
+				t.Errorf("%v should set force", args)
+			}
+		})
+	}
+	if got, _ := addCmd.Flags().GetBool("force"); got {
+		t.Error("force should reset to false between parses")
+	}
+}
+
+// TestAddSkillsYesReplacesStaleWithoutPrompting: --yes takes the refresh
+// prompt's default (Yes) on a stale install instead of refusing like a bare
+// non-TTY run, and never shows a form.
+func TestAddSkillsYesReplacesStaleWithoutPrompting(t *testing.T) {
+	home := t.TempDir()
+	dest := filepath.Join(home, ".claude", "skills", "puzzle")
+	mustWrite(t, filepath.Join(dest, "SKILL.md"), "old skill\n") // no stamp: stale
+	prev := confirmSkillUpdate
+	confirmSkillUpdate = func(io.Reader, io.Writer, []skillTarget, string) (bool, error) {
+		t.Fatal("--yes must not prompt")
+		return false, nil
+	}
+	t.Cleanup(func() { confirmSkillUpdate = prev })
+
+	var buf bytes.Buffer
+	env := addEnvironment{homeDir: func() (string, error) { return home, nil }, yes: true}
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", "", false, env); err != nil {
+		t.Fatalf("add skills --yes: %v", err)
+	}
+	if got, ok := installedSkillVersion(dest); !ok || got != version.Version {
+		t.Errorf("stale install not replaced: stamp %q (%v)\n%s", got, ok, buf.String())
+	}
+}
+
+func TestUpgradeYesFlagIsPersistent(t *testing.T) {
+	f := upgradeCmd.PersistentFlags().Lookup("yes")
+	if f == nil || f.Shorthand != "y" {
+		t.Fatalf("upgrade needs a persistent --yes/-y, got %+v", f)
+	}
+	parse(t, upgradeSkillsCmd, "-y")
+	if got, _ := upgradeSkillsCmd.Flags().GetBool("yes"); !got {
+		t.Error("upgrade skills -y should set yes")
+	}
+}
+
+// TestUpgradeYesRefreshesSkillsWithoutPrompting: after an upgrade, --yes runs
+// the skill refresh the prompt would have offered, without asking.
+func TestUpgradeYesRefreshesSkillsWithoutPrompting(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	home := skillHome(t, ".claude")
+	skillArgs := filepath.Join(t.TempDir(), "skill-args")
+	t.Setenv("PUZZLE_TEST_SKILL_ARGS", skillArgs)
+	prev := confirmSkillUpdate
+	confirmSkillUpdate = func(io.Reader, io.Writer, []skillTarget, string) (bool, error) {
+		t.Fatal("--yes must not prompt")
+		return false, nil
+	}
+	t.Cleanup(func() { confirmSkillUpdate = prev })
+
+	runUpgradeWithStubsEnv(t, home, upgradeEnvironment{yes: true}, nil)
+
+	want := []string{"add", "skills", "--force", "--skill-root", filepath.Join(home, ".claude")}
+	if got := readLines(t, skillArgs); !reflect.DeepEqual(got, want) {
+		t.Fatalf("skill refresh argv = %#v, want %#v", got, want)
+	}
+}
+
+// TestUpgradeSkillsYesSkipsPrompt: `upgrade skills --yes` on what would be a
+// TTY refreshes without the confirm form.
+func TestUpgradeSkillsYesSkipsPrompt(t *testing.T) {
+	home := t.TempDir()
+	dest := filepath.Join(home, ".claude", "skills", "puzzle")
+	mustWrite(t, filepath.Join(dest, "SKILL.md"), "old skill\n")
+	prev := confirmSkillUpdate
+	confirmSkillUpdate = func(io.Reader, io.Writer, []skillTarget, string) (bool, error) {
+		t.Fatal("--yes must not prompt")
+		return false, nil
+	}
+	t.Cleanup(func() { confirmSkillUpdate = prev })
+	var buf bytes.Buffer
+	env := upgradeEnvironment{homeDir: func() (string, error) { return home, nil }, yes: true}
+	if err := runUpgradeSkills(&buf, plainPrinter(), env); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := installedSkillVersion(dest); !ok || got != version.Version {
+		t.Errorf("skill not refreshed: %q (%v)\n%s", got, ok, buf.String())
+	}
+}
+
+func TestGenerateForceShorthand(t *testing.T) {
+	requireShorthand(t, generateCmd, "force", "f")
+	root := stubProject(t)
+	if err := runGenerate(t, root, "view", "Home"); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	if err := runGenerate(t, root, "view", "Home", "-f"); err != nil {
+		t.Errorf("expected -f to overwrite: %v", err)
+	}
+}
+
+// TestGenerateDirFlagFindsRootFromElsewhere: --dir names the app root (walking
+// up from it), so generate works from outside the project like `add --dir`.
+func TestGenerateDirFlagFindsRootFromElsewhere(t *testing.T) {
+	root := stubProject(t)
+	nested := filepath.Join(root, "app", "views")
+	mustWrite(t, filepath.Join(nested, ".keep"), "")
+	if err := runGenerate(t, t.TempDir(), "component", "Badge", "--dir", nested); err != nil {
+		t.Fatalf("generate --dir: %v", err)
+	}
+	if !fsFileExists(filepath.Join(root, "app", "components", "Badge.pzl")) {
+		t.Error("--dir should resolve the project root by walking up from it")
+	}
+}
+
+func TestCheckJSHiddenButAccepted(t *testing.T) {
+	requireHidden(t, checkCmd, "js")
+	parse(t, checkCmd, "--js")
+	if err := checkCmd.RunE(checkCmd, nil); err == nil || !strings.Contains(err.Error(), "not yet implemented") {
+		t.Fatalf("check --js error = %v, want not yet implemented", err)
 	}
 }
