@@ -381,17 +381,21 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
 
 ## CLI
 
-- `puzzle init <name>` — `--template default|todos`, `--dir`,
-  `--typescript` (or the TTY prompt): `<script lang="ts">` components,
+- `puzzle version` (same as `--version` / `-v`). Global `--no-color`.
+- `puzzle init [app-name|path]` — a path such as `../apps/foo` creates `foo`
+  there; `-t/--template default|todos`, `-y/--yes` (no prompts), `--typescript`
+  (or the TTY prompt): `<script lang="ts">` components,
   `app/app.ts` entry, strict `tsconfig.json`, `typescript` devDependency and
   a `check` script.
-- `puzzle dev [dir]` — `--port` (3000), `--strict-port`, `--fixtures`,
-  `--profile-build`. `puzzle build [dir]` — `--mode production|development`,
-  `--static`, `--hybrid`, `--fixtures` (not with prerender), `--profile-build`
+- `puzzle dev [dir]` — `-p/--port` (3000), `--strict-port`, `--host`
+  (bare = every interface; `--host <ip>` or `--host=<addr>`), `-o/--open`,
+  `--fixtures`, `--profile-build`. `puzzle build [dir]` — `-m/--mode
+  production|development`, `--static`, `--hybrid`, `--fixtures` (not with
+  prerender), `-q/--quiet`, `--profile-build`
   (or `PUZZLE_PROFILE_BUILD=1`). Entry is `app/app.ts` else `app/app.js`
   (both is an error); `--fixtures` wires `app/fixtures.js|ts` first. Both
   stop early when `@magic-spells/puzzle` is not installed.
-- `puzzle preview [dir]` — `--port` (4000), `--strict-port`; serves `dist/`
+- `puzzle preview [dir]` — `-p/--port` (4000), `--strict-port`, `--host`; serves `dist/`
   with production-host semantics per output mode (a static miss serves
   `dist/<first-segment>/404.html` before the root one).
 - `puzzle check [dir]` — type-checks `.pzl` scripts and template
@@ -399,16 +403,16 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
   `node node_modules/typescript/bin/tsc --noEmit`, remapping diagnostics to
   `.pzl` positions; the generated tsconfig extends the app's. Missing
   TypeScript or `node` is a named error (Puzzle never installs TypeScript).
-  `--js` is reserved.
+  `--js` is reserved (hidden).
 - `puzzle generate|g <component|view|layout|model> <Name>` — `--path`,
-  `--force`, `--family A,B` (component only: a directory with one stub per
+  `-f/--force`, `--dir`, `--family A,B` (component only: a directory with one stub per
   member and an `index.js` barrel; members PascalCase, unique, not the root or
   a marker name; all-or-nothing). A `tsconfig.json` at the project root makes
   every stub TypeScript (`index.ts` barrel, `app/models/<name>.ts`).
 - `puzzle add tailwind | piece <name…> | theme [name…] | skills` — `--registry`
   (`npm:pkg[@version]`, local dir, or HTTPS; else `$PUZZLE_PIECES_REGISTRY`,
   else `npm:@magic-spells/puzzle-pieces` at the CLI's major.minor with an
-  older-only fallback), `--pieces-version`, `--overwrite`, `--dir`,
+  older-only fallback), `--pieces-version`, `-f/--force`, `-y/--yes`, `--dir`,
   `--skill-root <dir>` (repeatable).
   - `piece` copies pieces with their dependencies and records hashes in
     `pieces.lock`; nested `files` paths install path-preserving (families);
@@ -416,14 +420,14 @@ Decision cards hold rationale; git and CHANGELOG.md hold history.
     `npm install` line. Never runs npm or edits `styles.css`.
   - `theme` lists palettes or copies one (default → `app/styles/pieces.css`,
     others → `app/styles/themes/<name>.css`); a locally modified copy needs
-    `--overwrite`.
+    `--force`.
   - `skills` (alias `skill`) installs the embedded agent skill into detected
     `~/.claude` / `~/.codex` / `~/.cursor` dirs, version-stamped.
-- `puzzle upgrade [--check]`; `puzzle upgrade skills` refreshes existing
+- `puzzle upgrade [--check] [-y]`; `puzzle upgrade skills` refreshes existing
   skill installs. A successful upgrade offers the same refresh. `dev`/`build`
   show a passive TTY-only update notice from a cached answer refreshed by a
   detached helper (opt out `PUZZLE_NO_UPDATE_CHECK=1`; skipped in CI).
-- `puzzle doctor [dir]`, `puzzle info [dir]`, `puzzle --version`.
+- `puzzle doctor [dir]`, `puzzle info [dir]` (both `--json`), `puzzle --version`.
 
 ## Not shipped
 

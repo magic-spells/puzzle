@@ -18,6 +18,14 @@ notes:
       --strict-port apply to whichever host is bound. Gotcha: pflag only attaches an optional value
       as `--host=<v>`, so `resolveHost` reclaims a following IP/`localhost` positional (not an
       existing dir) when --host was given bare. Hostnames other than localhost need `=`.
+  - kind: decision
+    text: >-
+      Correction to the --host note above: the reclaim is no longer "first IP-like positional that
+      is not an existing dir". Only the token immediately after a bare `--host` is read as the
+      address, when it is an IP literal or `localhost`. It counts even if a directory of that name
+      exists, because failing toward 0.0.0.0 would bind wider than asked. `main()` rewrites it to
+      `--host=<ip>` before parsing (normalizeHostArgs). An explicit `--host=<addr>` is never
+      overridden, and hostnames need `=`.
 ---
 
 # D90 — `puzzle dev`/`preview` scan upward for a free port; `--strict-port` opts out

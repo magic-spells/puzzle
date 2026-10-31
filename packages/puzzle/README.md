@@ -680,7 +680,7 @@ full project context and build better plans without re-deriving earlier work.
 puzzle dev --port 3000
 puzzle dev -p 3000 --host --open
 
-# Production build (default); -m development for readable output, -q to print nothing on success
+# Production build (default); -m development for readable output, -q skips the summary and update notice
 puzzle build
 puzzle build -m development -q
 
@@ -841,16 +841,17 @@ puzzle doctor --json
 
 Every command takes `-h` / `--help` and the global `--no-color` (the same
 switch as `NO_COLOR=1`). Renamed spellings stay accepted: `add --overwrite`
-and `init --dir` still work, hidden from `--help` and deprecated.
+and `init --dir` still work as hidden compatibility aliases (no notice in
+0.10.x; they will be deprecated in a later release).
 
 | Command | Flags |
 | --- | --- |
 | `puzzle` | `-v, --version`, `--no-color` |
 | `version` | (none) |
 | `init [app-name]` | `-t, --template <default\|todos>`, `--typescript`, `-y, --yes` |
-| `dev [dir]` | `-p, --port <n>` (3000), `--strict-port`, `--host [address]`, `-o, --open`, `--fixtures`, `--profile-build` |
+| `dev [dir]` | `-p, --port <n>` (3000), `--strict-port`, `--host [ip]` / `--host=<addr>`, `-o, --open`, `--fixtures`, `--profile-build` |
 | `build [dir]` | `-m, --mode <production\|development>`, `--static`, `--hybrid`, `--fixtures`, `-q, --quiet`, `--profile-build` |
-| `preview [dir]` | `-p, --port <n>` (4000), `--strict-port`, `--host [address]` |
+| `preview [dir]` | `-p, --port <n>` (4000), `--strict-port`, `--host [ip]` / `--host=<addr>` |
 | `check [dir]` | (none) |
 | `generate <type> <Name>` (alias `g`) | `--path <dir>`, `--family <A,B>`, `-f, --force`, `--dir <app-root>` |
 | `add <integration\|piece\|theme\|skills> [name…]` | `-f, --force`, `-y, --yes`, `--dir <app-root>`, `--registry <source>`, `--pieces-version <v>`, `--skill-root <dir>` |
@@ -859,8 +860,10 @@ and `init --dir` still work, hidden from `--help` and deprecated.
 | `doctor [dir]` | `--json` |
 | `info [dir]` | `--json` |
 
-`--host` with no value (or `--host 0.0.0.0`) listens on every interface and the
-banner adds a `Network:` URL per LAN address; `--host <ip>` binds that address.
+`--host` alone listens on every interface and the banner adds a `Network:` URL
+per LAN address. `--host <ip>` (an IPv4 or IPv6 literal, or `localhost`, right
+after the flag) or `--host=<addr>` binds that address. Hostnames need the `=`
+form: `--host=my.lan`.
 `-y` takes every prompt's default without asking. `--json` keys are stable:
 `info` prints `puzzle`, `platform`, `node` (null when node is missing),
 `projectRoot`, `sourceDir`, `outputDir` and `styles`; `doctor` prints `dir`,

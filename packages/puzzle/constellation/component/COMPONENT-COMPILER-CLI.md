@@ -38,6 +38,19 @@ notes:
       accepts a path (create-vite); `init --dir` is hidden/deprecated and is the base a relative
       argument resolves against. `generate --dir` names the app root like `add --dir`. `check --js`
       is hidden. Tests: cmd/puzzle/cli_conventions_test.go.
+  - kind: decision
+    text: >-
+      Supersedes two details in the previous note, after the PR #240 review. (1) `add --overwrite`
+      and `init --dir` use MarkHidden, not MarkDeprecated, through 0.10.x. A 0.9 `puzzle upgrade`
+      re-execs the new binary with `add skills --overwrite`, and a deprecation notice would land in
+      the upgrade's output. Deprecate them in a later release. (2) `--host` is strict. `main()`
+      rewrites `--host <ip>` to `--host=<ip>` before cobra parses (`normalizeHostArgs`), and only
+      for the token IMMEDIATELY after a bare `--host` that is an IP literal or `localhost`, even if
+      a directory has that name. A custom `hostValue` (NoOptDefVal sentinel "true", Type "bool" so
+      help shows no `[=…]`) records a bare `--host`. An explicit `=` value is never overridden. A
+      bare `--host` that leaves too many positionals errors with "--host takes a hostname only as
+      --host=<name>". `--no-color` is also detected in argv in `main()`, so usage errors print
+      uncoloured too. `ui.ColorAllowed()` exposes the env gate.
 ---
 
 # Compiler CLI
