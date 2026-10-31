@@ -195,7 +195,7 @@ func TestRewriteShellReadErrors(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(staging, "index.html"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	err := rewriteShell(staging, "", "styles.css", "app/app.js", true, false, nil)
+	err := rewriteShell(staging, `{"outputs":{}}`, "styles.css", "app/app.js", true, false, true, nil)
 	if err == nil || !strings.Contains(err.Error(), "reading public/index.html:") || strings.Contains(err.Error(), "hashNames") {
 		t.Fatalf("shell read error = %v", err)
 	}

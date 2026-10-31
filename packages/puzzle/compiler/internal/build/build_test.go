@@ -2489,7 +2489,9 @@ func TestDefaultHashFallsBackToFixedNames(t *testing.T) {
 		{name: "no shell", missing: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			root := writeSplitFixture(t, "")
+			// A Tailwind layer makes the stylesheet non-empty: an app with no CSS
+			// never gets the styles.css warning (TestDefaultHashEmptyStylesheetIsQuiet).
+			root := writeSplitFixture(t, `export default { styles: { use: ['tailwindcss'] } };`)
 			shell := filepath.Join(root, "app", "public", "index.html")
 			if tt.missing {
 				if err := os.Remove(shell); err != nil {
@@ -2499,7 +2501,7 @@ func TestDefaultHashFallsBackToFixedNames(t *testing.T) {
 				t.Fatal(err)
 			}
 			var buildErr error
-			stderr := captureStderr(t, func() { buildErr = Build(root, Options{}) })
+			stderr := captureStderr(t, func() { buildErr = Build(root, Options{Runner: &fakeRunner{css: ".tw{color:red}"}}) })
 			if buildErr != nil {
 				t.Fatalf("default hashing must not fail the build: %v", buildErr)
 			}
@@ -2537,6 +2539,186 @@ func TestDefaultHashFallsBackToFixedNames(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// An app with no CSS at all (the composed stylesheet is empty) keeps an
+// unlinked, empty styles.css and prints nothing about it: there is nothing for
+// a browser to cache, so no warning is owed.
+func TestDefaultHashEmptyStylesheetIsQuiet(t *testing.T) {
+	requireNodeBin(t)
+	root := writeSplitFixture(t, "")
+	shell := `<html><head></head><body><script type="module" src="/app.js"></script></body></html>`
+	if err := os.WriteFile(filepath.Join(root, "app", "public", "index.html"), []byte(shell), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var buildErr error
+	stderr := captureStderr(t, func() { buildErr = Build(root, Options{}) })
+	if buildErr != nil {
+		t.Fatal(buildErr)
+	}
+	if strings.Contains(stderr, "build.hashNames") {
+		t.Errorf("an app with no CSS must not warn about styles.css:\n%s", stderr)
+	}
+	if _, err := os.Stat(filepath.Join(root, "dist", "styles.css")); err != nil {
+		t.Errorf("the empty stylesheet keeps its fixed name: %v", err)
+	}
+}
+
+// assertLocalAssetsResolve fails when any HTML page under dist references a
+// root-relative .js or .css file the build did not write.
+func assertLocalAssetsResolve(t *testing.T, dist string) {
+	t.Helper()
+	refRE := regexp.MustCompile(`(?:src|href)="(/[^"?#]+\.(?:js|css))[^"]*"`)
+	err := filepath.WalkDir(dist, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || filepath.Ext(path) != ".html" {
+			return err
+		}
+		for _, m := range refRE.FindAllStringSubmatch(readFile(t, path), -1) {
+			if _, statErr := os.Stat(filepath.Join(dist, filepath.FromSlash(m[1][1:]))); statErr != nil {
+				t.Errorf("%s references %s, which the build did not write", path, m[1])
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Other public HTML pages (a GitHub Pages 404.html copy of the shell, an
+// embed.html) are copied, not generated, so they must never ship a link to a
+// name the build no longer writes. Unset hashNames keeps the fixed names those
+// pages name, with a warning naming the page; an explicit true rewrites them.
+func TestPublicPagesFollowHashedNames(t *testing.T) {
+	requireNodeBin(t)
+	for _, tt := range []struct {
+		name, cfg string
+		hashed    bool
+	}{
+		{name: "default keeps fixed names", cfg: `export default { styles: { use: ['tailwindcss'] } };`},
+		{name: "explicit true rewrites pages", cfg: `export default { styles: { use: ['tailwindcss'] }, build: { hashNames: true } };`, hashed: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := writeSplitFixture(t, tt.cfg)
+			public := filepath.Join(root, "app", "public")
+			shell := readFile(t, filepath.Join(public, "index.html"))
+			if err := os.WriteFile(filepath.Join(public, "404.html"), []byte(shell), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(filepath.Join(public, "embed"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(public, "embed", "index.html"), []byte(`<link rel="stylesheet" href="/styles.css">`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			var buildErr error
+			stderr := captureStderr(t, func() { buildErr = Build(root, Options{Runner: &fakeRunner{css: ".tw{color:red}"}}) })
+			if buildErr != nil {
+				t.Fatal(buildErr)
+			}
+			dist := filepath.Join(root, "dist")
+			assertLocalAssetsResolve(t, dist)
+			for _, fixed := range []string{"app.js", "styles.css"} {
+				_, err := os.Stat(filepath.Join(dist, fixed))
+				if tt.hashed != os.IsNotExist(err) {
+					t.Errorf("%s: fixed name present = %v, want %v", fixed, err == nil, !tt.hashed)
+				}
+			}
+			if tt.hashed {
+				if strings.Contains(stderr, "build.hashNames") {
+					t.Errorf("explicit true must not warn:\n%s", stderr)
+				}
+				page := readFile(t, filepath.Join(dist, "404.html"))
+				if !regexp.MustCompile(`src="/app-[A-Z2-7]{8}\.js"`).MatchString(page) || modulepreloadHrefs(page) != nil {
+					t.Errorf("404.html must load the hashed entry and gain no preloads:\n%s", page)
+				}
+				return
+			}
+			for _, want := range []string{
+				"public/404.html names app.js or app.css by its fixed name, so app.js keeps its fixed name",
+				"public/404.html, public/embed/index.html names styles.css by its fixed name, so styles.css keeps its fixed name",
+			} {
+				if !strings.Contains(stderr, want) {
+					t.Errorf("stderr missing %q:\n%s", want, stderr)
+				}
+			}
+			if got, want := readFile(t, filepath.Join(dist, "404.html")), shell; got != want {
+				t.Errorf("a page that kept fixed names is copied verbatim; got:\n%s", got)
+			}
+		})
+	}
+}
+
+// A shell <link href="/app.css"> left over from an entry that no longer imports
+// CSS built before hashing became the default, and still does with hashNames
+// unset: the reference is left as written. Explicit true keeps the error.
+func TestStaleShellAssetOnlyFailsExplicitHash(t *testing.T) {
+	requireNodeBin(t)
+	shell := `<html><head><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/app.css"></head><body><script type="module" src="/app.js"></script></body></html>`
+	for _, tt := range []struct {
+		name, cfg string
+		wantErr   bool
+	}{
+		{name: "default", cfg: ""},
+		{name: "explicit true", cfg: `export default { build: { hashNames: true } };`, wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := writeSplitFixture(t, tt.cfg)
+			if err := os.WriteFile(filepath.Join(root, "app", "public", "index.html"), []byte(shell), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			err := Build(root, Options{})
+			if tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), `shell asset "/app.css" has no emitted output`) {
+					t.Fatalf("build error = %v, want the missing app.css output", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("default build must leave the stale reference alone: %v", err)
+			}
+			html := readFile(t, filepath.Join(root, "dist", "index.html"))
+			if !strings.Contains(html, `href="/app.css"`) || !regexp.MustCompile(`src="/app-[A-Z2-7]{8}\.js"`).MatchString(html) {
+				t.Errorf("want the entry hashed and /app.css left as written:\n%s", html)
+			}
+		})
+	}
+}
+
+// A shell without </head> builds while there is nothing to preload, but a split
+// build whose entry statically imports a shared chunk has preloads to place:
+// that fails, and the last good dist/ survives.
+func TestShellWithoutHeadFailsWhenPreloadsNeeded(t *testing.T) {
+	requireNodeBin(t)
+	root := writeSplitFixture(t, `export default { build: { splitting: true } };`)
+	for name, source := range map[string]string{
+		"app/app.js": `import { shared } from './lib/shared.js';
+globalThis.__shared = shared('entry');
+globalThis.__loadLazy = () => import('./lib/lazy.js');`,
+		"app/lib/shared.js": `export function shared(value) { return value + 'SHARED_MARKER'; }`,
+		"app/lib/lazy.js":   `import { shared } from './shared.js'; export const marker = shared('LAZY_MARKER_XYZ');`,
+	} {
+		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(name)), []byte(source), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Build(root, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	dist := filepath.Join(root, "dist")
+	before := readFile(t, filepath.Join(dist, "index.html"))
+	if len(modulepreloadHrefs(before)) == 0 {
+		t.Fatal("fixture must need a preload")
+	}
+	if err := os.WriteFile(filepath.Join(root, "app", "public", "index.html"), []byte(`<script type="module" src="/app.js"></script>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Build(root, Options{}); err == nil || !strings.Contains(err.Error(), "</head>") {
+		t.Fatalf("build error = %v, want the missing </head>", err)
+	}
+	if after := readFile(t, filepath.Join(dist, "index.html")); after != before {
+		t.Fatal("failed rewrite changed dist")
 	}
 }
 

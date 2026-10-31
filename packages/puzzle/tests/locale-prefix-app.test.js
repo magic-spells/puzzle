@@ -71,8 +71,9 @@ async function open(dist, file, url, { referrer = '', languages, stored } = {}) 
 	loc = spyLocation();
 	const inline = INLINE_RE.exec(html);
 	if (inline) new Function('window', inline[1])({ location, document, localStorage, navigator });
-	// Production entry names carry a content hash by default (build.hashNames).
-	const entry = fs.readdirSync(dist).find((name) => /^app(?:-[A-Z2-7]{8})?\.js$/.test(name));
+	// Production entry names carry a content hash by default (build.hashNames),
+	// so the entry is the one this page's own module tag loads.
+	const entry = /<script type="module"[^>]*\bsrc="\/?([^"?#]+)/.exec(html)[1];
 	const { default: app } = await import(pathToFileURL(path.join(dist, entry)).href + '?run=' + ++runs);
 	apps.push(app);
 	return app;

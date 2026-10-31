@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -159,14 +160,16 @@ func shellRenames(outputs map[string]bundleOutput, stylesheet, entryPoint string
 // rewriteShellHTML follows emitted filenames and reads the entry tag before
 // renaming it, so preload URLs and credentials match the app's own script.
 func rewriteShellHTML(source string, renames map[string]string, chunks []string, publicFiles map[string]bool) (string, bool, error) {
-	rewritten, entryFound, _, err := rewriteShellHTMLRefs(source, renames, chunks, publicFiles)
+	rewritten, entryFound, _, err := rewriteShellHTMLRefs(source, renames, chunks, publicFiles, renames != nil)
 	return rewritten, entryFound, err
 }
 
 // rewriteShellHTMLRefs is rewriteShellHTML that also reports the compiler
 // filenames (app.js, app.css, styles.css) the shell references from a script
-// src or link href it can rewrite.
-func rewriteShellHTMLRefs(source string, renames map[string]string, chunks []string, publicFiles map[string]bool) (string, bool, map[string]bool, error) {
+// src or link href it can rewrite. strict makes a reference to one of those
+// names with no emitted output an error; otherwise it is left as written (the
+// build.hashNames-unset path, where an unhashed build never checked it).
+func rewriteShellHTMLRefs(source string, renames map[string]string, chunks []string, publicFiles map[string]bool, strict bool) (string, bool, map[string]bool, error) {
 	entryFound := false
 	refs := map[string]bool{}
 	var entryPrefix, crossorigin string
@@ -210,7 +213,7 @@ func rewriteShellHTMLRefs(source string, renames map[string]string, chunks []str
 					value = raw[:1] + value + raw[:1]
 				}
 				tag = tag[:a[6]] + value + tag[a[7]:]
-			} else if renames != nil && (name == "app.js" || name == "app.css" || name == "styles.css") {
+			} else if strict && (name == "app.js" || name == "app.css" || name == "styles.css") {
 				assetErr = fmt.Errorf("shell asset %q has no emitted output", attrValue(raw))
 			}
 		}
@@ -226,35 +229,62 @@ func rewriteShellHTMLRefs(source string, renames map[string]string, chunks []str
 	return rewritten, entryFound, refs, err
 }
 
-// shellHashSupport reports, before anything is bundled, whether the app's
-// public/index.html can follow hashed names: entry when a <script src> loads
-// app.js, styles when a <script>/<link> references styles.css. A missing or
-// unreadable shell supports neither. Build uses it only when hashing is on by
-// default (build.hashNames unset), to fall back to the fixed name for whatever
-// the shell cannot follow instead of failing the build.
-func shellHashSupport(root string) (entry, styles bool) {
+// shellHashPlan is what the app's public HTML can follow, read before
+// anything is bundled. entry/styles: public/index.html loads app.js from a
+// <script src> / references styles.css from a script or link tag. entryPages /
+// stylesPages: the OTHER public/**/*.html files that name app.js or app.css /
+// styles.css by their fixed names (a hand-written 404.html, embed.html,
+// offline.html). Build uses it only when hashing is on by default
+// (build.hashNames unset): the shell must follow a hashed name, and no other
+// public page may depend on the fixed one, or that file keeps its fixed name.
+type shellHashPlan struct {
+	entry, styles           bool
+	entryPages, stylesPages []string
+}
+
+func shellHashSupport(root string) shellHashPlan {
+	var plan shellHashPlan
 	src := publicDir(root)
 	if src == "" {
-		return false, false
-	}
-	source, err := os.ReadFile(filepath.Join(src, "index.html"))
-	if err != nil {
-		return false, false
+		return plan
 	}
 	publicFiles := map[string]bool{}
+	var pages []string
 	_ = filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
 		}
 		if rel, err := filepath.Rel(src, path); err == nil {
-			publicFiles[filepath.ToSlash(rel)] = true
+			rel = filepath.ToSlash(rel)
+			publicFiles[rel] = true
+			if rel != "index.html" && strings.EqualFold(filepath.Ext(rel), ".html") {
+				pages = append(pages, rel)
+			}
 		}
 		return nil
 	})
+	sort.Strings(pages)
 	// nil renames: nothing is rewritten, only the references are read. The
 	// error (a shell with no </head>) is irrelevant to which names it loads.
-	_, entry, refs, _ := rewriteShellHTMLRefs(string(source), nil, nil, publicFiles)
-	return entry, refs["styles.css"]
+	if source, err := os.ReadFile(filepath.Join(src, "index.html")); err == nil {
+		var refs map[string]bool
+		_, plan.entry, refs, _ = rewriteShellHTMLRefs(string(source), nil, nil, publicFiles, false)
+		plan.styles = refs["styles.css"]
+	}
+	for _, page := range pages {
+		source, err := os.ReadFile(filepath.Join(src, filepath.FromSlash(page)))
+		if err != nil {
+			continue
+		}
+		_, _, refs, _ := rewriteShellHTMLRefs(string(source), nil, nil, publicFiles, false)
+		if refs["app.js"] || refs["app.css"] {
+			plan.entryPages = append(plan.entryPages, "public/"+page)
+		}
+		if refs["styles.css"] {
+			plan.stylesPages = append(plan.stylesPages, "public/"+page)
+		}
+	}
+	return plan
 }
 
 // hashFallbackWarning is the one-line notice printed when default-on hashing
@@ -292,7 +322,22 @@ func insertModulepreloads(source, prefix string, chunks []string, crossorigin st
 	return source[:lineStart] + links.String() + source[lineStart:], nil
 }
 
-func rewriteShell(staging, metafile, stylesheet, entryPoint string, hashEntry, preload bool, publicFiles map[string]bool) error {
+// rewriteShell rewrites staging/index.html, and every other copied public
+// HTML page that names a compiler output, to the emitted names. strict is an
+// explicit build.hashNames: true: a missing shell or entry reference, or a
+// reference to a compiler name with nothing emitted, fails the build. Without
+// it (hashNames unset) such references are left as written; Build has already
+// kept the fixed name for anything a public page could not follow.
+func rewriteShell(staging, metafile, stylesheet, entryPoint string, hashEntry, preload, strict bool, publicFiles map[string]bool) error {
+	// The browser pass leaves AbsWorkingDir unset, so an empty base means cwd.
+	outputs, err := bundleOutputs(metafile, "", staging)
+	if err != nil {
+		return err
+	}
+	renames, entry := shellRenames(outputs, stylesheet, entryPoint)
+	if err := rewritePublicPages(staging, renames, publicFiles, strict); err != nil {
+		return err
+	}
 	shellPath := filepath.Join(staging, "index.html")
 	source, err := os.ReadFile(shellPath)
 	if os.IsNotExist(err) {
@@ -304,17 +349,11 @@ func rewriteShell(staging, metafile, stylesheet, entryPoint string, hashEntry, p
 	if err != nil {
 		return fmt.Errorf("reading public/index.html: %w", err)
 	}
-	// The browser pass leaves AbsWorkingDir unset, so an empty base means cwd.
-	outputs, err := bundleOutputs(metafile, "", staging)
-	if err != nil {
-		return err
-	}
-	renames, entry := shellRenames(outputs, stylesheet, entryPoint)
 	var chunks []string
 	if preload {
 		chunks = staticImportClosure(outputs, entry)
 	}
-	rewritten, entryFound, err := rewriteShellHTML(string(source), renames, chunks, publicFiles)
+	rewritten, entryFound, _, err := rewriteShellHTMLRefs(string(source), renames, chunks, publicFiles, strict)
 	if hashEntry && !entryFound {
 		return fmt.Errorf("public/index.html must load app.js when entry names are hashed; set build.hashNames: false to keep fixed names")
 	}
@@ -323,6 +362,39 @@ func rewriteShell(staging, metafile, stylesheet, entryPoint string, hashEntry, p
 	}
 	if err := os.WriteFile(shellPath, []byte(rewritten), 0o644); err != nil {
 		return fmt.Errorf("writing rewritten public/index.html: %w", err)
+	}
+	return nil
+}
+
+// rewritePublicPages follows emitted names in the copied public HTML pages
+// other than the shell (a hand-written 404.html, embed.html, offline.html), so
+// none ships a link to a fixed name the build no longer writes. Only the
+// compiler-output references change; a page with none is never rewritten, and
+// no preloads are inserted (only the shell boots the app).
+func rewritePublicPages(staging string, renames map[string]string, publicFiles map[string]bool, strict bool) error {
+	var pages []string
+	for rel := range publicFiles {
+		if rel != "index.html" && strings.EqualFold(filepath.Ext(rel), ".html") {
+			pages = append(pages, rel)
+		}
+	}
+	sort.Strings(pages)
+	for _, rel := range pages {
+		path := filepath.Join(staging, filepath.FromSlash(rel))
+		source, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("reading public/%s: %w", rel, err)
+		}
+		rewritten, _, refs, err := rewriteShellHTMLRefs(string(source), renames, nil, publicFiles, strict)
+		if err != nil {
+			return fmt.Errorf("rewriting public/%s: %w", rel, err)
+		}
+		if len(refs) == 0 || rewritten == string(source) {
+			continue
+		}
+		if err := os.WriteFile(path, []byte(rewritten), 0o644); err != nil {
+			return fmt.Errorf("writing rewritten public/%s: %w", rel, err)
+		}
 	}
 	return nil
 }
