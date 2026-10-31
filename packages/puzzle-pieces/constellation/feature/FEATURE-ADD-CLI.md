@@ -5,6 +5,12 @@ connections:
   - DOC-REGISTRY
   - DECISION-REGISTRY-SHAPED-REPO
   - DECISION-COPY-IN-DISTRIBUTION
+notes:
+  - kind: state
+    text: >-
+      From framework 0.10.0 the overwrite flag is `puzzle add … --force` / `-f`; read `--overwrite`
+      in this card as `--force`. `--overwrite` still parses as a hidden, deprecated alias that
+      prints a notice. Refusal messages and the stale-theme hint now name `--force`.
 ---
 
 # The add CLI — resolver + copier
