@@ -72,7 +72,7 @@ func TestGenerateWorkspace(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := Generate(root, TypeScriptVersion{Major: 7})
+	result, err := Generate(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestGenerateRejectsSymlinkedScratchRoot(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 
-	if _, err := Generate(root, TypeScriptVersion{Major: 7}); err == nil {
+	if _, err := Generate(root); err == nil {
 		t.Fatal("Generate accepted a symlinked .puzzle")
 	} else if !strings.Contains(err.Error(), "symbolic link") {
 		t.Fatalf("error = %v, want it to name the symbolic link", err)
@@ -161,64 +161,44 @@ func TestGenerateRejectsSymlinkedScratchRoot(t *testing.T) {
 	}
 }
 
-// TypeScript 6 takes the TypeScript 7 shape: it deprecates baseUrl and node10
-// resolution. With no app tsconfig, strict is off — TypeScript 6 and 7 turn
-// it on by default, which reported `'__d.stats' is possibly 'undefined'` in a
-// plain-JavaScript app (examples/stress).
-func TestTsconfigVersionedDefaults(t *testing.T) {
-	cases := []struct {
-		name             string
-		major            int
-		baseURL          any
-		moduleResolution any
-		aliasTarget      string
-	}{
-		{"typescript-4", 4, "../..", "node", "app/*"},
-		{"typescript-5", 5, "../..", "node", "app/*"},
-		{"typescript-6", 6, nil, nil, "../../app/*"},
-		{"typescript-7", 7, nil, nil, "../../app/*"},
+// The generated config clears baseUrl and moduleResolution, both removed in
+// TypeScript 7, and resolves the @ alias from its own directory. With no app
+// tsconfig, strict is off — TypeScript 7 turns it on by default, which
+// reported `'__d.stats' is possibly 'undefined'` in a plain-JavaScript app
+// (examples/stress).
+func TestTsconfigDefaults(t *testing.T) {
+	data, err := tsconfig(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			data, err := tsconfig(t.TempDir(), tc.major)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var config map[string]any
-			if err := json.Unmarshal(data, &config); err != nil {
-				t.Fatal(err)
-			}
-			if _, ok := config["extends"]; ok {
-				t.Fatal("config without app tsconfig must not extend one")
-			}
-			opts := config["compilerOptions"].(map[string]any)
-			if got := opts["noImplicitAny"]; got != false {
-				t.Errorf("noImplicitAny = %v, want false", got)
-			}
-			if got := opts["strict"]; got != false {
-				t.Errorf("strict = %v, want false", got)
-			}
-			if got := opts["module"]; got != "ESNext" {
-				t.Errorf("module = %v, want ESNext", got)
-			}
-			if got := opts["allowJs"]; got != true {
-				t.Errorf("allowJs = %v, want true", got)
-			}
-			if got := opts["checkJs"]; got != false {
-				t.Errorf("checkJs = %v, want false", got)
-			}
-			if got, ok := opts["baseUrl"]; !ok || got != tc.baseURL {
-				t.Errorf("baseUrl = %v (present %v), want %v", got, ok, tc.baseURL)
-			}
-			if got, ok := opts["moduleResolution"]; !ok || got != tc.moduleResolution {
-				t.Errorf("moduleResolution = %v (present %v), want %v", got, ok, tc.moduleResolution)
-			}
-			paths := opts["paths"].(map[string]any)
-			alias := paths["@/*"].([]any)
-			if len(alias) != 1 || alias[0] != tc.aliasTarget {
-				t.Errorf("@/* paths = %v, want [%s]", alias, tc.aliasTarget)
-			}
-		})
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := config["extends"]; ok {
+		t.Fatal("config without app tsconfig must not extend one")
+	}
+	opts := config["compilerOptions"].(map[string]any)
+	for key, want := range map[string]any{
+		"noImplicitAny": false,
+		"strict":        false,
+		"module":        "ESNext",
+		"allowJs":       true,
+		"checkJs":       false,
+	} {
+		if got := opts[key]; got != want {
+			t.Errorf("%s = %v, want %v", key, got, want)
+		}
+	}
+	for _, key := range []string{"baseUrl", "moduleResolution"} {
+		if got, ok := opts[key]; !ok || got != nil {
+			t.Errorf("%s = %v (present %v), want an explicit null", key, got, ok)
+		}
+	}
+	paths := opts["paths"].(map[string]any)
+	alias := paths["@/*"].([]any)
+	if len(alias) != 1 || alias[0] != "../../app/*" {
+		t.Errorf("@/* paths = %v, want [../../app/*]", alias)
 	}
 }
 
@@ -227,33 +207,23 @@ func TestTsconfigVersionedDefaults(t *testing.T) {
 // .puzzle/check (from the app root, through the app's baseUrl when it set
 // one). The @ alias wins a clash, as it does in the build, where esbuild's
 // alias beats tsconfig paths. tsconfig's comments and trailing commas are
-// tolerated; an unreadable config leaves the @ alias. Before TypeScript 6 the
-// module is pinned to ESNext beside node resolution, so an app's nodenext
-// module no longer fails with TS5109, and default imports of `export =`
-// packages stay allowed as nodenext allowed them (TS1259 otherwise).
+// tolerated; an unreadable config leaves the @ alias. The app's module and
+// allowSyntheticDefaultImports are inherited, not pinned.
 func TestTsconfigMergesAppPaths(t *testing.T) {
 	jsonc := "\xef\xbb\xbf{\n  // an app alias\n  \"compilerOptions\": {\n    \"module\": \"nodenext\", /* the app's */\n" +
 		"    \"paths\": { \"~/*\": [\"./app/*\"], \"http://x/*\": [\"app/x/*\",], },\n  },\n}\n"
 	cases := []struct {
 		name   string
-		major  int
 		config string
-		module any
 		paths  map[string][]string
 	}{
-		{"jsonc-typescript-5", 5, jsonc, "ESNext", map[string][]string{
-			"@/*": {"app/*"}, "~/*": {"app/*"}, "http://x/*": {"app/x/*"},
-		}},
-		{"jsonc-typescript-7", 7, jsonc, nil, map[string][]string{
+		{"jsonc", jsonc, map[string][]string{
 			"@/*": {"../../app/*"}, "~/*": {"../../app/*"}, "http://x/*": {"../../app/x/*"},
 		}},
-		{"baseUrl-typescript-5", 5, `{"compilerOptions":{"baseUrl":"src","paths":{"@/*":["./*"],"lib":["../lib/index.ts"]}}}`, "ESNext", map[string][]string{
-			"@/*": {"app/*"}, "lib": {"lib/index.ts"},
-		}},
-		{"baseUrl-typescript-6", 6, `{"compilerOptions":{"baseUrl":"src","paths":{"@/*":["./*"],"lib":["../lib/index.ts"]}}}`, nil, map[string][]string{
+		{"baseUrl", `{"compilerOptions":{"baseUrl":"src","paths":{"@/*":["./*"],"lib":["../lib/index.ts"]}}}`, map[string][]string{
 			"@/*": {"../../app/*"}, "lib": {"../../lib/index.ts"},
 		}},
-		{"unparsable", 7, `{"compilerOptions": {"paths": `, nil, map[string][]string{"@/*": {"../../app/*"}}},
+		{"unparsable", `{"compilerOptions": {"paths": `, map[string][]string{"@/*": {"../../app/*"}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -261,7 +231,7 @@ func TestTsconfigMergesAppPaths(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(root, "tsconfig.json"), []byte(tc.config), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			data, err := tsconfig(root, tc.major)
+			data, err := tsconfig(root)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -283,15 +253,11 @@ func TestTsconfigMergesAppPaths(t *testing.T) {
 			if config.CompilerOptions.Strict != nil {
 				t.Errorf("strict = %v, want the app's", config.CompilerOptions.Strict)
 			}
-			if config.CompilerOptions.Module != tc.module {
-				t.Errorf("module = %v, want %v", config.CompilerOptions.Module, tc.module)
+			if config.CompilerOptions.Module != nil {
+				t.Errorf("module = %v, want the app's", config.CompilerOptions.Module)
 			}
-			var synthetic any // unset from TypeScript 6: the app's own setting applies
-			if tc.major < 6 {
-				synthetic = true
-			}
-			if config.CompilerOptions.Synthetic != synthetic {
-				t.Errorf("allowSyntheticDefaultImports = %v, want %v", config.CompilerOptions.Synthetic, synthetic)
+			if config.CompilerOptions.Synthetic != nil {
+				t.Errorf("allowSyntheticDefaultImports = %v, want the app's", config.CompilerOptions.Synthetic)
 			}
 			got, _ := json.Marshal(config.CompilerOptions.Paths)
 			want, _ := json.Marshal(tc.paths)
@@ -408,7 +374,7 @@ export default class Home extends PuzzleView {}
 	if err := os.WriteFile(filepath.Join(views, "Broken.pzl"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := Generate(root, TypeScriptVersion{Major: 7})
+	result, err := Generate(root)
 	if err != nil {
 		t.Fatal(err)
 	}

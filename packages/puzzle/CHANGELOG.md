@@ -203,6 +203,13 @@ one is *not* a compile error; it silently builds a different product.
   an unlinked stylesheet. Apps with `splitting: true` and no `hashNames` key
   used to hard-fail on a shell the build could not rewrite; they now warn and
   fall back like everyone else.
+- **BREAKING: `puzzle check` requires TypeScript 7 (D165).** An app with an
+  older `typescript` installed fails up front with `puzzle check needs
+  TypeScript 7 or later, found <version>: npm install -D typescript@latest`.
+  The pre-7 config variant (`baseUrl` + `node` resolution, pinned `module` and
+  `allowSyntheticDefaultImports`) and the version-gated lib references are
+  gone. `build` and `dev` are unaffected: they never type-check. Apps scaffolded
+  with `--typescript` since 0.8.0 already install `^7`.
 
 ### Changed
 

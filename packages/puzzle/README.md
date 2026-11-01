@@ -816,7 +816,7 @@ is how you refresh it:
 version.
 
 `puzzle check` type-checks every `.pzl` file with the TypeScript the app itself
-has installed — Puzzle never installs one for you. A `lang="ts"` script is
+has installed (7 or later) — Puzzle never installs one for you. A `lang="ts"` script is
 checked as written; every template expression is re-emitted as typed statements,
 so a typo in `{ user.nmae }` is a type error reported at its real `.pzl` line and
 column. A plain-JavaScript component gets its template expressions checked and

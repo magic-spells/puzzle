@@ -135,7 +135,7 @@ func TestPlainJSScriptUncheckedByDefault(t *testing.T) {
 	}
 }
 
-// With no app tsconfig the check is not strict. TypeScript 6 and 7 default
+// With no app tsconfig the check is not strict. TypeScript 7 defaults
 // strict on, and a JavaScript field first assigned in a lifecycle method is
 // inferred as possibly undefined — examples/stress failed with
 // `'__d.stats' is possibly 'undefined'`.
@@ -217,7 +217,7 @@ func TestTSCRunsUnderNodeFromAPathWithSpaces(t *testing.T) {
 	// A non-executable stand-in for tsc: nothing about the invocation may depend
 	// on the exec bit or on a `.bin` shim, only on node reading the file.
 	entry := filepath.Join(binDir, "tsc")
-	if err := os.WriteFile(entry, []byte("console.log('Version 5.7.3');\n"), 0o644); err != nil {
+	if err := os.WriteFile(entry, []byte("console.log('Version 7.0.2');\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	tool, err := resolveTSC(root)
@@ -227,12 +227,33 @@ func TestTSCRunsUnderNodeFromAPathWithSpaces(t *testing.T) {
 	if tool.entry != entry {
 		t.Fatalf("entry = %q, want the typescript package entry %q", tool.entry, entry)
 	}
-	version, err := readTypeScriptVersion(tool)
-	if err != nil {
-		t.Fatalf("readTypeScriptVersion: %v", err)
+	if err := requireTypeScript7(tool); err != nil {
+		t.Fatalf("requireTypeScript7: %v", err)
 	}
-	if version != (TypeScriptVersion{5, 7}) {
-		t.Fatalf("version = %+v, want 5.7", version)
+}
+
+// An older compiler stops the run before anything is generated: the config
+// puzzle check writes is a TypeScript 7 config.
+func TestRunRefusesTypeScriptBefore7(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not available on PATH")
+	}
+	root := t.TempDir()
+	binDir := filepath.Join(root, "node_modules", "typescript", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "tsc"), []byte("console.log('Version 5.9.2');\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeLiveView(t, root, plainJSComponent("value"))
+	_, err := Run(root)
+	want := "puzzle check needs TypeScript 7 or later, found 5.9.2: npm install -D typescript@latest"
+	if err == nil || err.Error() != want {
+		t.Fatalf("Run = %v, want %q", err, want)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".puzzle")); !os.IsNotExist(err) {
+		t.Fatalf("a refused run must not generate the workspace: %v", err)
 	}
 }
 
@@ -415,7 +436,7 @@ export default class Home extends PuzzleView {
 	if err := os.WriteFile(filepath.Join(viewDir, "Home.pzl"), []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := Generate(root, TypeScriptVersion{Major: 7})
+	result, err := Generate(root)
 	if err != nil {
 		t.Fatal(err)
 	}
