@@ -1,6 +1,6 @@
 ---
 name: '{#let} block (opt-in host extension)'
-status: built
+status: verified
 path: parser/let.go
 language: go
 summary: >-
@@ -12,38 +12,19 @@ connections:
   - FILE-PARSER-HOST
   - FILE-PARSER-EXPRS
   - TEST-COMPILER-PARSER
-notes:
-  - kind: gotcha
-    text: >-
-      A `{#let}` block parses in linear time, and three things keep it that way:
-
-      - Binding positions come from one `posCursor` over the header.
-
-      - Duplicate names are a map lookup.
-
-      - Once the binding stack grows past `manyBindings` (32), `parser.first` indexes each name's
-      lowest stack index. `exprScope.opts` then hands expr an `IsBinding` closure, so expr does not
-      scan the whole slice for every call. A name is in a snapshot scope when its first index is
-      below the snapshot's length, which is valid because scopes nest.
-
-
-      Before this, a 430 KB block took 5.6 s. `TestLargeLetBlockParsesWithinBudget` now allows 100
-      ms, or 300 ms in CI.
-
-
-      `depth.go` counts `{#let}` as void, like `{#svg}`.
+verified_at: '2026-11-01T19:25:05.616Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # let.go
 
-The `{#let}` block, a dialect extension (D172) that only parses when
+The `{#let}` block, a dialect extension (D172) that parses only when
 `Options.Let` is on. Sites turns it on; PuzzleKit never does (D176: a computed
-value is a `data()` field), so a PuzzleKit tree never holds a `Let` node. Ported
-from Sites' vendored `sites_let.go` (0.7) minus everything about formatter pipes.
+value is a `data()` field), so a PuzzleKit tree never holds a `Let` node.
 
 - **Void block.** `parseBlock`'s `case "let"` returns the node directly, like
-  `{#svg}`; there is no `{/let}` (`let` is not a known closer keyword, so a stray
-  `{/let}` lexes as an interpolation and fails as an expression at that brace).
+  `{#svg}`; there is no `{/let}` (a stray `{/let}` lexes as an interpolation and
+  fails as an expression at that brace). `depth.go` counts it as void too.
   Single-line `{#let a = 1}` or one assignment per line; lines split with
   `splitTopLevel(rest, '\n')`, so a newline inside brackets or a string stays in
   its binding.
@@ -53,21 +34,23 @@ from Sites' vendored `sites_let.go` (0.7) minus everything about formatter pipes
   `parseChildren` defers `p.unbind(len(p.bound))` at entry. An element's
   children, each `{#if}`/`{:else if}`/`{:else}` branch, each `{:when}` clause and
   a `{#for}` body are separate lists. A later block may re-bind a name
-  (shadowing); one block may not name it twice (that check moved here from Sites'
-  `template/pzl/validate.go`, same message).
+  (shadowing); one block may not name it twice.
 - **Names** follow the language's one binding rule: `expr.IsIdentifier`
   (Unicode, like `{#for}`), then `jsident.IsReservedBindingIdentifier`
-  ("is reserved", Sites' wording), then `expr.BindingNameReason` (literal words,
-  meaningful globals). Deviation from the vendored 0.7 port: Sites accepted only
-  ASCII names and allowed `Math`/`NaN`.
+  ("is reserved"), then `expr.BindingNameReason` (literal words, meaningful
+  globals such as `Math` and `NaN`).
 - **Value.** One `expr.Parse` at the value's own file position with the current
-  scope; stored as `LetBinding.Interp` (an `Interpolation` whose `Pos` is the
-  value's first byte, not a brace) so Sites' renderer keeps its shape.
+  scope, stored as `LetBinding.Interp` (an `Interpolation` whose `Pos` is the
+  value's first byte, not a brace), the shape Sites' renderer reads.
 - **Diagnostics** are positioned at the binding's own line (`restPos` comes from
   the lexer's `ValPos`, no source search). With Let on, the unknown-block message
-  lists `{#let}`, and `assign set var const lets let_` get a did-you-mean.
-  With Let off, every one of those is the exact pre-0.8.1 PuzzleKit message.
-  A `{#let}` between `{#case}` and its first `{:when}` is the case-lead error.
+  lists `{#let}`, and `assign set var const lets let_` get a did-you-mean; with
+  Let off, those are PuzzleKit's plain unknown-block errors. A `{#let}` between
+  `{#case}` and its first `{:when}` is the case-lead error.
+- **Linear time.** Binding positions come from one `posCursor` over the header,
+  duplicate names are a map lookup, and past 32 bindings `expr` gets an
+  `IsBinding` closure instead of scanning the stack ([[FILE-PARSER-EXPRS]]).
+  `TestLargeLetBlockParsesWithinBudget` guards it.
 
-Gotcha: the assignment `=` is the first top-level `=` not preceded by
+**Gotcha:** the assignment `=` is the first top-level `=` not preceded by
 `! < > = + - * / %` and not part of `==`; `a += 1` is therefore "missing '='".

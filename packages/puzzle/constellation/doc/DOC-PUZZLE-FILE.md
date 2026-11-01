@@ -1,7 +1,7 @@
 ---
 name: .pzl files — user guide
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-11-01T19:25:08.617Z'
 connections:
   - COMPONENT-PUZZLE-VIEW
   - DOC-SPEC
@@ -9,13 +9,15 @@ connections:
   - DOC-SPEC-VIEW
   - DOC-USER-GUIDE
   - DOC-DATASTORE
-  - DOC-COMPILATION-FLOW
   - DOC-ROUTER
+  - DOC-TEMPLATE-SYNTAX
+kind: guide
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
-What goes in a `.pzl` file and how its class works. The contract is [[DOC-SPEC-ANATOMY]] (§3 anatomy, §4 scripts, §10 context, §25 TypeScript, §29 scoped styles, §40 the `@` alias) and [[DOC-SPEC-VIEW]] (§12 animations, §16 skeletons).
-
 # `.pzl` files
+
+What goes in a `.pzl` file and how its class works. The contract is [[DOC-SPEC-ANATOMY]] (§3 anatomy, §4 scripts, §10 context, §25 TypeScript, §29 scoped styles, §40 the `@` alias) and [[DOC-SPEC-VIEW]] (§12 animations, §16 skeletons).
 
 A `.pzl` file bundles a template, its logic and optional styles:
 
@@ -63,15 +65,16 @@ The exported class extends `PuzzleView`:
 | --- | --- |
 | `data(params, props)` | Returns the model the template reads. May be `async`. |
 | `events` | A class field of arrow functions — the template's handlers ([[DOC-EVENTS]]). |
-| `created`, `mounted`, `beforeUpdate`, `afterUpdate`, `destroyed` | Lifecycle hooks, in that order. `viewWillShow`/`viewDidShow`/`viewWillHide`/`viewDidHide` bracket enter/leave animations. |
+| `created`, `mounted`, `beforeUpdate`, `afterUpdate(prev)`, `destroyed` | Lifecycle hooks, in that order. `viewWillShow`/`viewDidShow`/`viewWillHide`/`viewDidHide` bracket enter/leave animations. |
 | `animations` | A class field `{ in?, out? }` of Web Animations specs (§12). |
+| `this.renderTick()` | Resolves once no render is pending — the point to read `this.refs` or measure after `setData()` (§4). |
 | anything else | Your own helpers, called from hooks and handlers. |
 
-Class fields (`events`, `animations`) have no commas between them and other members. A few member names belong to the framework (`render`, `refresh`, `getData`, `setData`, `memo`, `refs`, and names starting `__`); the list is in §4.
+Class fields (`events`, `animations`) have no commas between them and other members. A few member names belong to the framework (`render`, `refresh`, `getData`, `setData`, `memo`, `renderTick`, `refs`, and names starting `__`); the list is in §4.
 
 ### `this.ctx`
 
-Every view and component gets `this.ctx` with three services: `store` (records), `router` (`this.ctx.router.push('/home')`), and `formatters` (the function registry, rarely needed). `i18n` joins them when the app configures translations.
+Every view and component gets `this.ctx`: `store` (records), `router` (`this.ctx.router.push('/home')`), `formatters` (the function registry, rarely needed) and `idle()` (resolves when the app has gone quiet). `i18n` joins them when the app configures translations.
 
 ## `data()` and state
 
@@ -133,7 +136,7 @@ A displayed expression reads what `data()` returns (the `<Component>` `is` modul
 - `min-duration` (ms, static) keeps a skeleton that has appeared on screen at least that long, so fast loads don't flash.
 - Only state seeded in `created()` is readable while it shows.
 - A routed view with a skeleton commits the navigation immediately and fills in; one without holds the previous page until its data is ready.
-- In a component, the skeleton needs a single plain root element; keep its tag equal to the template's root.
+- In a component, the skeleton needs a single plain root element; keep its tag equal to the template's root so the swap patches in place.
 - Load errors: return an error model from `data()` and branch in the template, or let the app's `errorView` handle it (§60).
 
 Full rules: [[DOC-SPEC-VIEW]] §16.

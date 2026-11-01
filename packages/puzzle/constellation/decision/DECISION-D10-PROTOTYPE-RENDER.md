@@ -1,7 +1,7 @@
 ---
 name: "D10 — Generated `render()` attached via prototype assignment"
 status: verified
-verified_at: '2026-08-24T18:51:05.833Z'
+verified_at: '2026-11-01T19:19:59.201Z'
 connections:
   - COMPONENT-CODEGEN
   - DOC-COMPILER-DESIGN
@@ -9,7 +9,7 @@ connections:
   - DOC-SPEC-ANATOMY
 code_refs:
   - compiler/internal/codegen/codegen.go
-verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D10 — Generated `render()` attached via prototype assignment

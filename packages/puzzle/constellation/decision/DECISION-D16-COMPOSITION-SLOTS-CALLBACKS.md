@@ -1,7 +1,7 @@
 ---
 name: 'D16 — Component composition: content markers + callback props; no `$emit`'
 status: verified
-verified_at: '2026-08-24T19:04:13.357Z'
+verified_at: '2026-11-01T19:19:59.201Z'
 connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-CODEGEN
@@ -13,7 +13,7 @@ connections:
   - DECISION-D166-SNIPPETS
 code_refs:
   - compiler/internal/codegen/codegen.go
-verified_sha: c809db6680eb9355961897756f54e97f1164b88f
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D16 — Component composition: content markers + callback props; no `$emit`

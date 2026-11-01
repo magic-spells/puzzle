@@ -6,8 +6,19 @@ language: javascript
 summary: Optional shared-element morph pairing, capture flights, and engine lifecycle.
 connections:
   - COMPONENT-MORPH
-verified_at: '2026-08-24T21:11:50.859Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-01T19:28:54.178Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
-Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `client-runtime/morph.js`.
+# morph.js
+
+The `@magic-spells/puzzle/morph` subpath ([[COMPONENT-MORPH]]): `enableMorph(app)`
+wires shared-element route transitions over `@magic-spells/morph-engine` (an
+**optional** peer dependency) through `app.setMorphHandler`. Nothing in the core
+runtime imports it, so an app that never calls `enableMorph` ships neither this
+file nor the engine.
+
+Two shapes resolved per transition: coexisting live pairs (both elements in the
+DOM at once) always win; otherwise a sibling swap flies a captured clone from the
+leaving view into the new one. `data-puzzle-morph`, `-trigger` (launch only) and
+`-target` (receive only) share one id namespace.

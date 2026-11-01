@@ -24,13 +24,15 @@ transitions:
   - from: idle
     to: matching
     guard: >-
-      not a same-path no-op, not a duplicate of the in-flight target, and not inside the commit
-      window
+      not a committed same-path no-op (resolves ok at once), not a duplicate of the in-flight target
+      (joins its promise), and not inside the commit window (deferred)
     action: a request from push(), replace(), an intercepted link click, popstate/go(), or navigation zero
   - from: matching
     to: unmatched
     guard: no leaf matcher hit and no top-level catch-all is declared
-    action: warn and stay; the token is deliberately NOT bumped, so an in-flight navigation survives
+    action: >-
+      warn and resolve not-found; the token is deliberately NOT bumped, so an in-flight navigation
+      survives
   - from: matching
     to: guarding
     guard: matched and the chain declares at least one inherited guard
@@ -38,16 +40,19 @@ transitions:
   - from: matching
     to: loading
     guard: matched with an empty guard chain
-    action: stay on the synchronous path through to view construction — no await, no microtask
+    action: claim the token and stay synchronous through view construction — no await, no microtask
   - from: guarding
     to: loading
     guard: every guard returned undefined or true
+    action: only now resolve lazy() markers, so a blocked or redirected route never downloads
   - from: guarding
     to: blocked
-    guard: a guard returned false, or threw
-    action: >-
-      restore a stalled leaver; a blocked popstate rewrites the address bar back to the committed
-      route
+    guard: a guard returned false
+    action: restore a stalled leaver; a blocked pop rewrites the address bar back to the committed route
+  - from: guarding
+    to: failed
+    guard: a guard threw, or an eleventh redirect ran without a commit
+    action: report phase 'navigation', restore a stalled leaver, repair a popped URL
   - from: guarding
     to: redirected
     guard: a guard returned a path string and fewer than ten redirects have run without a commit
@@ -90,13 +95,13 @@ transitions:
   - from: committing
     to: entering
     action: >-
-      one synchronous window moved location, title, history or memory stack, the outgoing scroll
+      one synchronous window moves location, title, history or memory stack, the outgoing scroll
       save, the mounted tree, router state, the prepared ancestors, the scroll landing, and focus
       plus announcement
   - from: entering
     to: idle
     guard: the enter animation is fire-and-forget — idle is reached without awaiting it
-    action: run any push a mounted() hook deferred during the commit window
+    action: run the push or replace a mounted() hook deferred during the commit window
 connections:
   - FLOW-NAVIGATION
   - STATE-VIEW-LIFECYCLE
@@ -118,17 +123,18 @@ connections:
   - DECISION-D83-QUERY-REPLACE
   - DECISION-D140-TAKEOVER-MOUNT-RESTORATION
   - DECISION-D159-ROUTER-MODE-FACTORIES
-verified_at: '2026-08-24T21:39:15.808Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - DECISION-D182-NAVIGATION-RESULT
+verified_at: '2026-11-01T19:24:02.433Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # Navigation state machine
 
-One navigation attempt, request to commit. The machine is the same in every router mode
-(path, hash, memory) — a mode owns only three seams (read URL, write URL, link
-interception), never the phase order. The step-by-step pipeline is
+One navigation attempt, request to commit, in `client-runtime/router/router.js`. The
+machine is the same in every router mode (path, hash, memory): a mode owns only reading
+the URL, writing it, and link interception. The step-by-step pipeline is
 [[FLOW-NAVIGATION]]; the per-instance machine LOAD and COMMIT drive is
-[[STATE-VIEW-LIFECYCLE]]; implementation is [[COMPONENT-ROUTER]].
+[[STATE-VIEW-LIFECYCLE]].
 
 ```mermaid
 stateDiagram-v2
@@ -138,7 +144,8 @@ stateDiagram-v2
   matching --> guarding: matched, chain declares guards
   matching --> loading: matched, no guards
   guarding --> loading: every guard allows
-  guarding --> blocked: false or throw
+  guarding --> blocked: false
+  guarding --> failed: throw, or redirect cap
   guarding --> redirected: path string
   guarding --> superseded: newer token
   loading --> committing: params-only (keep == chain length)
@@ -158,44 +165,55 @@ stateDiagram-v2
 
 ## The token is a navigation's identity
 
-A monotonic token is claimed after the match, never before — bumping on an unmatched path
-would doom a legitimate in-flight navigation, leaving its outgoing view played out over a
-router state that still claims it. Every await is followed by a token re-check; stale
-results are discarded. Last navigation wins, and the loser cleans up only what it built.
+A monotonic token is claimed after the match, never before: bumping on an unmatched path
+would doom a legitimate in-flight navigation. Every await is followed by a token re-check
+and stale results are discarded. Last navigation wins; the loser cleans up only what it
+built.
 
 ## The commit is atomic
 
-`committing` is one synchronous block: URL and history entry (or memory stack), `document.title`,
-the outgoing scroll save, the mounted tree, committed router state, every prepared
-reused-ancestor refresh (params, snapshot, model, subscriptions), the scroll landing, then
-focus and announcement. Rejected alternatives: committing the URL when loads resolve and
-then animating (phantom history entries for superseded navigations, URLs naming views that
-never mounted), and rollback (racier than never committing).
+`committing` is one synchronous block: URL and history entry (or memory stack),
+`document.title`, the outgoing scroll save, the mounted tree, committed router state,
+every prepared reused-ancestor refresh (params, snapshot, model, subscriptions), the
+scroll landing, then focus and announcement. Rejected: committing the URL when loads
+resolve and then animating (phantom history entries, URLs naming views that never
+mounted), and rollback (racier than never committing).
 
-## Terminal outcomes are different on purpose
+## Terminal outcomes
 
-- **unmatched** — nothing happened; no token, so an in-flight navigation is untouched.
-- **blocked** — a guard refused; nothing was constructed. A blocked pop repairs the address
-  bar (the browser moved it before the guard ran).
-- **redirected** — control passed to another navigation with the same verb class; awaiting
-  the denied navigation observes the redirect's commit.
-- **failed** — a pre-commit failure: fresh instances dropped/destroyed, prepared ancestors
-  discarded, stalled leaver restored, error reported, and a popped URL repaired with
-  `replaceState` so the address bar matches the DOM. This navigation owns the token, so it
-  owns cleanup.
-- **superseded** — a newer navigation owns the token. The loser must NOT touch shared state:
-  it abandons its fresh instances and leaves the outgoing unit for the winner (tearing it
-  down would rip it out from under a mid-flight morph).
+`push()` and `replace()` resolve a never-rejecting `NavigationResult` (D182):
+`{ ok: true, route, catchAll?, redirectedFrom? }` or
+`{ ok: false, reason: 'blocked' | 'superseded' | 'not-found' | 'error', error? }`.
+
+- **unmatched** → `not-found`. Nothing happened; no token, so an in-flight navigation is
+  untouched.
+- **blocked** → `blocked`. A guard returned `false`; nothing was constructed. A blocked pop
+  repairs the address bar (the browser moved it before the guard ran). An entry guard that
+  blocks navigation zero leaves the container empty and warns that it should redirect.
+- **redirected** → the redirect's own result, plus `redirectedFrom`. The redirect inherits
+  the denied verb (push mints its own entry; pop and navigation zero replace).
+- **failed** → `error`. A guard throw, the redirect cap, or a pre-commit load failure:
+  fresh instances dropped, prepared ancestors discarded, stalled leaver restored, error
+  reported, a popped URL repaired with `replaceState`. This navigation owns the token, so
+  it owns cleanup.
+- **superseded** → `superseded`. A newer navigation owns the token. The loser must not
+  touch shared state: it abandons its fresh instances and leaves the outgoing unit for the
+  winner (tearing it down would rip it out from under a mid-flight morph).
 
 ## Gotchas
 
+- Entry checks: a push to the committed path is a no-op only when nothing is in flight;
+  with a navigation in flight it supersedes (and rewrites the committed entry rather than
+  stacking a duplicate). A second push to the in-flight target returns the first push's
+  promise, so `await router.push(p)` always means "p landed or failed". Guard redirects are
+  exempt from the join, or a guard redirecting to its own path would await itself.
 - A pop is asymmetric: the browser already moved the URL, so commit contributes only title
   (and memory index); every non-committing exit on a pop must restore the committed URL.
-- `entering` isn't awaited — the machine is effectively idle when the commit window closes,
-  which is why a `mounted()` hook's push is parked in one last-wins slot and re-dispatched
-  afterwards.
+- `entering` isn't awaited, so the machine is idle when the commit window closes. A push or
+  replace from a `mounted()` hook lands in that window: it is parked in one last-wins slot
+  and re-dispatched afterwards, and its promise settles with that navigation.
 - A skeleton view opts out of the LOAD gate, not the machine: its failure lands after
   commit, so the URL names a page showing its loading state. On prerender takeover at
   navigation zero the exemption is suppressed.
 - Post-commit failures (render, `mounted()`) never re-enter this machine; they belong to
-  [[STATE-VIEW-LIFECYCLE]] — the commit stands and only the failed position is replaced.
+  [[STATE-VIEW-LIFECYCLE]]: the commit stands and only the failed position is replaced.

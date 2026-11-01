@@ -1,7 +1,7 @@
 ---
 name: Dev-server API proxy (dev.proxy)
 status: verified
-verified_at: '2026-08-24T21:11:50.859Z'
+verified_at: '2026-11-01T19:19:25.478Z'
 connections:
   - COMPONENT-DEV-SERVER
   - FILE-DEV-SERVER
@@ -9,8 +9,7 @@ connections:
   - DECISION-D08-MINIMAL-CONFIG
   - DECISION-D110-DEV-PROXY-PREFIX-VALIDATION
   - DOC-SPEC-BUILD
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
-release: RELEASE-V0-1-2
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 change: feature
 ---
 

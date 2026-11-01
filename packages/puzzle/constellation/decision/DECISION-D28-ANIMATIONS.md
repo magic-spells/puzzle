@@ -1,7 +1,7 @@
 ---
 name: "D28 — View & component animations: no-wrapper WAAPI, sequential transitions, fill-release"
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-11-01T19:19:59.201Z'
 connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-ROUTER
@@ -17,6 +17,7 @@ code_refs:
   - client-runtime/router/router.js
   - client-runtime/views/PuzzleView.js
   - client-runtime/views/viewManager.js
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D28 — View and component animations: no-wrapper WAAPI, fill-release, one animator

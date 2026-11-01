@@ -21,8 +21,8 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - FLOW-REACTIVITY
   - DOC-SPEC-TEMPLATE
-verified_at: '2026-08-24T21:39:23.520Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-01T19:19:25.478Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 code_refs:
   - client-runtime/views/PuzzleView.js
   - client-runtime/views/viewManager.js
@@ -142,14 +142,10 @@ row block re-asserts its collected control vnodes through the same
   a patch-side guard is not implemented.
 - **Islands** — a bind inside a [[DECISION-D44-DOM-ISLANDS]] subtree attaches at
   mount and survives the freeze.
-- **Upgrade audit** — a handler-less path-shaped `value=` that was display-only,
-  or paired only with key/blur handlers, now writes back. Edit buffers need a
-  non-path expression (`examples/music` Playlist rename uses
-  `playlist.name ?? ''`). Compile and grep for `__bind(`.
-
-Out of scope: radio groups, `<select multiple>`, file inputs,
-`contenteditable`, component-prop binding, deeper paths, debounce/lazy
-modifiers, dirty tracking.
+- **Display-only paths write back** — a handler-less path-shaped `value=` binds
+  even when meant for display or paired only with key/blur handlers. An edit
+  buffer needs a non-path expression (`value={ playlist.name ?? '' }` in
+  `examples/music` Playlist). Grep compiled output for `__bind(` to audit.
 
 ## Alternatives
 

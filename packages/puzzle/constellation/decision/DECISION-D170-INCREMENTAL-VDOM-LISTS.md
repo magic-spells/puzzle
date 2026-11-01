@@ -20,72 +20,73 @@ connections:
 
 # D170 — Persistent list blocks and an incremental virtual DOM
 
-The todos fixtures (`tests/fixtures/todos/*.compiled.js`) are the byte contract
-for what the compiler emits; the expects in `benchmarks/scenarios.mjs` are the
-work gates. [[DECISION-D17-RENDER-FUNCTIONS-VDOM]] carries the rendering
-decision this qualifies ("compiler-informed"); [[DECISION-D62-HANDLER-CACHING]]
-the handler half.
+Keep the virtual DOM and make it incremental: rows that did not change are
+not rebuilt or diffed, static subtrees are built once, and records carry a
+render revision. All the complexity lives in the compiler and runtime — no
+`.pzl` syntax, no change to hybrid/static output. The todos fixtures
+(`tests/fixtures/todos/*.compiled.js`) are the byte contract for what the
+compiler emits; the expects in `benchmarks/scenarios.mjs` are the work gates.
+[[DECISION-D17-RENDER-FUNCTIONS-VDOM]] is the rendering decision this
+qualifies; [[DECISION-D62-HANDLER-CACHING]] the handler half.
 
 ## Context
 
-Every view update rebuilt and diffed the whole `ViewNode` tree: a `{#for}` paid
-N × (row allocation + diff) per parent update, and static-heavy templates
-rebuilt thousands of vnodes for zero DOM writes. The goal: rows that update
-independently and fewer wasted diffs, with the complexity in the compiler, no
-`.pzl` syntax change, and no break to hybrid/static output.
+A plain VDOM rebuilds and diffs the whole `ViewNode` tree per update: a
+`{#for}` pays N × (row allocation + diff) per parent update, and static-heavy
+templates rebuild thousands of vnodes for zero DOM writes.
 
 ## Decision
-
-Keep the virtual DOM and make it incremental.
 
 1. **An item-form `{#for}` is a persistent list block.** Each site compiles to
    `__l(this, owner, id, coll, (s) => …, __L<id>)` instead of `.map`, backed by
    `client-runtime/views/listBlock.js` via the `listRows` export. `listRows as
-   __l` is imported **only by a file that lowers a site** (like
-   `displayValue as __s`), so loop-free apps don't bundle it; nothing in
-   `PuzzleView` imports it. The block keeps per-key row state (item, index,
-   stored record revision, live scope object `s`, last vnode subtree, static
-   caches, nested blocks) and returns the **cached subtree** for an unchanged
-   row; the returned array is spliced where `.map()`'s was, so keyed patching,
-   mixed keyed/unkeyed pairing, leaving rows and FLIP are untouched.
-   **A row is dirty when**: its item is a plain object/array/function (always);
-   a record's reference or revision changed; a primitive is `!==`; the body
-   reads the counter and the index moved; a parent root the body reads is set
-   in the per-render `__dirty` mask over `Class.__roots`; or the site is
-   `volatile` — it calls a clock function (codegen's `clockFunctions`:
-   `timeago`) or reads a loop local of an ENCLOSING site. Sites reading a
-   relation, computed getter or deep path are **conservative** (checked once
-   per model class against the schema) and never cache record rows. A null or
-   duplicate key builds uncached (duplicate warns once in dev). A nested
-   block's owner is the enclosing row, so inner blocks die with it.
+   __l` is imported **only by a file that lowers a site**, so loop-free apps
+   don't bundle it; `PuzzleView` must never import it. The block keeps per-key
+   row state (item, index, stored record revision, live scope object `s`, last
+   vnode subtree, static caches, nested blocks) and returns the **cached
+   subtree** for an unchanged row; the returned array is spliced where
+   `.map()`'s was, so keyed patching, mixed keyed/unkeyed pairing, leaving
+   rows and FLIP are untouched.
+   **A row is dirty when**: its item is a plain object/array/function
+   (always); a record's reference or revision changed; a primitive is `!==`;
+   the body reads the counter and the index moved; a parent root the body
+   reads is set in the per-render `__dirty` mask over `Class.__roots`; or the
+   site is `volatile` — it calls a clock function (codegen's
+   `clockFunctions`: `timeago`) or reads a loop local of an enclosing site.
+   Sites reading a relation, computed getter or deep path are
+   **conservative** (checked once per model class against the schema) and
+   never cache record rows. A null or duplicate key builds uncached
+   (duplicate warns once in dev). A nested block's owner is the enclosing
+   row, so inner blocks die with it.
 2. **`patch()` short-circuits when old and new are the same object**, except:
    a live component's `el` is refreshed from the instance, and a component
    vnode with no live instance falls through to recovery. Cached subtrees
    re-assert controlled form values from a `controls` list collected at build
-   (D147), including a vnode that is itself a controlled element.
-   `collectControls` stops at an `island`'s children and walks through
-   `<Portal>` children.
+   ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]), including a vnode that is
+   itself a controlled element. `collectControls` stops at an `island`'s
+   children and walks through `<Portal>` children.
 3. **Static subtrees are built once** per instance (`this.__c[n]`) or per row
    (`s.c[n]`): a maximal fully-static subtree of ≥3 vnodes, or a fully static
    `island` element's children at any size. A **dynamic** island seed is never
    cached — [[DECISION-D44-DOM-ISLANDS]] re-seeds on key-reset and hide/show
-   remount, and a per-instance cache would replay the first render's values.
-   Never cached: inside a snippet body, inside a non-lowered loop body, a
-   subtree holding controlled `value`/`checked`, or the render root.
+   remount, and a cache would replay the first render's values. Never cached:
+   inside a snippet body, inside a non-lowered loop body, a subtree holding
+   controlled `value`/`checked`, or the render root.
 4. **Records carry a render revision** — the store notification sequence of
-   the last mutation, under a Symbol from `client-runtime/renderRev.js` (its
-   own import-free module shared by `store.js` and `views/`), defined
+   the last mutation, under the `RENDER_REV` Symbol from
+   `client-runtime/renderRev.js` (an import-free module shared by `store.js`
+   and `views/`, neither of which may import the other), defined
    non-enumerable at `_instantiate` and written in `Store._notify`. A child
-   with a record prop compares against a **snapshot** (`__propRevs`, written at
-   mount and each props-carrying `applyParentUpdate`), never the old prop
+   with a record prop compares against a **snapshot** (`__propRevs`, written
+   at mount and each props-carrying `applyParentUpdate`), never the old prop
    object, which after an in-place mutation is the same advanced record.
 5. **Loop handlers are identity-stable**: a handler whose arguments read only
    loop locals (and `event`) is cached on the row (`(s.h<n> ??= …)`) and reads
    the current item at fire time (`remove(todo.id)` →
    `this.events.remove(s.item?.id)`). A handler reading a data root (`__d`) or
    calling a library function (`__f`) gets a fresh closure per render, and its
-   roots join the mask. Handler arguments add no other row facts (no fields,
-   deep, counter or volatility): `listRows` reassigns `s.item`/`s.i` every pass.
+   roots join the mask. Handler arguments add no other row facts:
+   `listRows` reassigns `s.item`/`s.i` every pass.
 6. **One flush, one `data()` run** for a child that both receives a record
    prop and queries it: `Store` publishes `_flushSeq` during delivery and a
    refresh inside it stamps `_settleMark`, reusing
@@ -142,32 +143,33 @@ counter, fallback loop local, snippet parameter, arrow parameter) becomes
   islandChildVnodesPerRender 20,000 (dynamic seed, uncached).
 - `deep-nest`: nodeDataRuns 1 of 1,536 for a single-node write.
 
-Bundle size is reported by `npm run measure:size` (hello-world, todos); no byte
-gate is enforced. A loop-free app pays for `__c`, `__dirty`/`__roots`,
-`__propRevs`/`propsEqual`, `RENDER_REV`, the identity short-circuit and
-`syncControl`, not `listBlock.js`.
+No byte gate; `npm run measure:size` reports bundle size. A loop-free app
+pays for `__c`, `__dirty`/`__roots`, `__propRevs`/`propsEqual`, `RENDER_REV`,
+the identity short-circuit and `syncControl`, not `listBlock.js`.
 
-## Alternatives
+## Alternatives rejected
 
 - **Compiled direct-DOM output (Svelte 5 / Solid)** — measured 25–27% larger
-  gzipped on five real templates even with every emitter lever (static HTML
-  strings compress worse than vnode literals; break-even ~13 templates), and
-  it meant rewriting router composition, takeover, prerender and DevTools.
+  gzipped on real templates (static HTML strings compress worse than vnode
+  literals; break-even ~13 templates), and it meant rewriting router
+  composition, takeover, prerender and DevTools.
 - **A runtime dependency layer** (per-row subscriptions, leases, a second
   scheduler) — the parent's `data()` re-runs anyway; a pull-based revision
   compare gives the same isolation.
 - **Signals / proxies on records** — against the plain-class model.
 - **Observing direct field assignment** (schema accessors) — changes record
-  shape (`toJSON`, `Object.keys`, hydration); the path to exact revisions later.
-- **Per-site memoization outside loops** — deferred pending measurement.
+  shape (`toJSON`, `Object.keys`, hydration); the path to exact revisions if
+  ever needed.
+- **Per-site memoization outside loops** — not built; needs measurement first.
 - **Full-depth pre-scan or pass-stamp release for shifted nested vnodes** —
-  O(tree) per level / cannot tell a vnode's own old element from an adopted one.
-- **Not built: dynamic island seed as a per-render thunk** evaluated at mount
-  only (one closure instead of N vnodes, correct on remount); needs ViewNode,
-  mount and the SSG serializer to accept thunk children.
+  O(tree) per level / cannot tell a vnode's own old element from an adopted
+  one.
+- **Possible follow-up, not built:** a dynamic island seed as a per-render
+  thunk evaluated at mount only (one closure instead of N vnodes, correct on
+  remount); needs ViewNode, mount and the SSG serializer to accept thunk
+  children.
 
 ## Consequences
-
 
 - Contracts ([[DOC-SPEC-TEMPLATE]] §28/§31, [[DOC-SPEC-ANATOMY]] §4): a record
   prop invalidates its child on the record's own mutations (related records
@@ -182,11 +184,11 @@ gate is enforced. A loop-free app pays for `__c`, `__dirty`/`__roots`,
   root past the cap is `volatile`. No parent-root reads → no `__roots`.
 - Reserved names: `__lists`, `__c`, `__dirty`, `__propRevs` on instances and
   `__roots` on the class are unenforced property reservations (SPEC §4;
-  `__rgen` is internal too but not listed there). The module-scope `__L<n>`
-  metas and the `__l` import are enforced by `scriptcollide.go`, only in files
-  that emit them. `__pzl<name>` is the mangling space.
+  `__rgen` is internal too). The module-scope `__L<n>` metas and the `__l`
+  import are enforced by `scriptcollide.go`, only in files that emit them.
+  `__pzl<name>` is the mangling space.
 - Tests: `component-prop-bailout`, `static-cache-shift`,
   `patch-replace-ordering`, `list-cache-invalidation`, `list-control-replay`
-  (vitest); `listblock_test.go`, `static_cache_test.go` (Go).
-- Dev counters in [[FILE-DEVPERF]] report rows cached / rebuilt / conservative
-  sites and static sites allocated.
+  (vitest); `listblock_test.go`, `static_cache_test.go` (Go). Dev counters in
+  [[FILE-DEVPERF]] report rows cached / rebuilt / conservative sites and
+  static sites allocated.

@@ -25,19 +25,16 @@ the `conformance` package that embeds the shared tables both hosts run
 ## Current state
 
 
-- This plan owns the language's **code binding**: the FILE cards for
-  `parser/parser.go`, `parser/exprs.go`, `parser/sections.go`,
-  `parser/scan.go`, `parser/slot.go`, `parser/let.go` (FILE-PARSER-LET) and
-  `parser/host.go` with `options.go` (FILE-PARSER-HOST); for `expr/lexer.go`
-  (with `ident.go`), `expr/parser.go` (with `errors.go`), `expr/ast.go`,
-  `expr/methods.go` and `expr/print.go`; and TEST-COMPILER-PARSER for the
-  module's `go test` suite. Paths are relative to this module root, so
-  `stale_report` here tracks real drift.
-- **Per-host switches (D172) are built** as `parser.Options`: the parser knows
-  every construct, PuzzleKit passes nothing (the zero value is its grammar), and
-  Sites turns on `Let` and skips the island/slot/ref checks, parsing its
-  wrapper-less theme files with `ParseMarkup`. Rule: a new host feature lands
-  OFF by default; PuzzleKit's no-options parse never changes.
+- This plan owns the language's **code binding**: the FILE cards for the
+  `parser` and `expr` packages and TEST-COMPILER-PARSER for the module's
+  `go test` suite. Paths are relative to this module root, so `stale_report`
+  here tracks real drift.
+- **Per-host switches (D172) are `parser.Options`**: the parser knows every
+  construct, PuzzleKit passes nothing (the zero value is its grammar), and Sites
+  turns on `Let` (`{#let}`) and `Pipes` (`|` pipes, which `expr` parses to the
+  same `Call` the written form produces), skips the island/slot/ref checks, and
+  parses its wrapper-less theme files with `ParseMarkup`. Rule: a new host feature
+  lands OFF by default; PuzzleKit's no-options parse never changes.
 - **`jsident` holds the shared identifier rules** (no FILE card of its own):
   `IsIDStart`/`IsIDContinue` — JavaScript's `ID_Start`/`ID_Continue` from Go's
   `unicode` tables — and `IsReservedBindingIdentifier`. `expr`'s lexer and
@@ -52,8 +49,9 @@ the `conformance` package that embeds the shared tables both hosts run
   connect cards across repos, so the FILE and TEST cards here name those
   handles in prose.
 - Versioned with the framework and tagged `packages/puzzle-lang/vX.Y.Z` next to
-  the framework's `vX.Y.Z`; Cory pushes the tags. A patch may be Go-only:
-  `v0.8.1` (host options for Sites) has no framework or npm release beside it.
+  the framework's `vX.Y.Z`; Cory pushes the tags. A patch may be Go-only — a
+  `packages/puzzle-lang` tag with no framework or npm release beside it — when
+  only Sites needs the change.
 
 ## Conventions
 

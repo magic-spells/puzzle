@@ -27,52 +27,51 @@ connections:
   - DOC-SPEC-BUILD
   - DOC-TESTING
   - DECISION-D179-STATIC-PATHS
-verified_at: '2026-08-24T21:39:23.520Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-01T19:24:02.433Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # Hybrid and static prerender output
 
-Both prerender modes ([[DOC-SPEC-BUILD]] §36) and the seam where the browser
-picks the markup up. Suites under `tests/`: `ssg-*`, `static-kernel`,
-`static-prerender`, `static-locale-remount`, `static-docs-example`,
-`prerender-router-base`, `route-tree-shared`. Run with
-`npx vitest run tests/ssg tests/static tests/prerender`.
+Both prerender modes ([[DOC-SPEC-BUILD]] §36) and the seam where the browser picks the
+markup up. Run with
+`npx vitest run tests/ssg tests/static-kernel tests/static-prerender tests/static-docs tests/prerender tests/route-tree-shared`
+(a bare `tests/static` filter also pulls in the unrelated `static-cache*` DOM suites).
 
-- **Serializer:** node-to-HTML emission, RAWTEXT elements, refs dropped, and the
-  equivalence suite that renders one tree through the serializer and through
-  [[COMPONENT-VIEW-MANAGER]] and demands they agree — the real guard against the
-  DOM-free path growing a second rendering dialect.
-- **Hybrid** (`output: 'hybrid'`): route prerender orchestration, router takeover
-  at navigation zero, mount restoration over prerendered markup, the route
-  snapshot that survives takeover, base-path hrefs matching `Router.url()`, and
-  hash apps rejected.
-- **Static** (`output: 'static'`): the per-page `mountStatic` kernel, its router
-  facade, base-prefixed page-module hrefs, hash and memory modes flattened or
-  refused, storage ignored with a warning, and the route-subset render used by
-  incremental rebuilds.
-- **`staticPaths`** ([[DECISION-D179-STATIC-PATHS]]): `static-prerender` covers the
-  value forms and model shorthand, the build errors (missing or unservable values,
-  non-array results, no `:param` or a parent route, a throwing function), duplicates,
-  empty lists, value encoding, fixed-route collisions in both modes, the hybrid
-  `shadowed` skip and the D155 subset re-list; `static-kernel` the
-  island-to-`route.params` threading; `ssg-router-takeover` hybrid takeover of a
-  generated page; `i18n-ssg` per-locale lists with their alternates, redirect and
-  sitemap; `static-docs-example` runs a built generated page of
-  `examples/static-docs`. Go: `static_pages_test.go` (pattern entries) and
-  `watch_static_test.go` (dev rebuilds keyed by pattern).
-- **D161 read state**, both sides. Emission: the envelope island beside the
-  record island, omitted for adapter-less and settled-nothing pages,
-  script-breakout escaping, a rejected tracked fault failing the build naming the
-  route, hybrid transferring nothing. Adoption: the kernel adopting the envelope,
-  faulting normally without one, ignoring an empty or foreign-version envelope,
-  dropping an absence whose record rode the data island, and surviving a corrupt
-  envelope without losing records.
-- **Build-time reads:** the prerender pass's global-`fetch` wrapper fails an
-  app-relative endpoint with a diagnostic naming the URL and both fixes, and
+- **Serializer** (`ssg-serialize`, `ssg-rawtext`, `ssg-equivalence`): node-to-HTML
+  emission, RAWTEXT elements, refs dropped, and the equivalence suite that renders one
+  tree through the serializer and through [[COMPONENT-VIEW-MANAGER]] and demands they
+  agree: the guard against the DOM-free path growing a second rendering dialect.
+  `<Component>` selections (`component-slot`, D180) serialize with no visible wrapper.
+- **Hybrid** (`output: 'hybrid'`; `ssg-prerender`, `ssg-router-takeover`,
+  `prerender-router-base`): route prerender orchestration, router takeover at navigation
+  zero, mount restoration over prerendered markup, the route snapshot that survives
+  takeover, base-path hrefs matching `router.url()`, hash apps rejected.
+- **Static** (`output: 'static'`; `static-kernel`, `static-prerender`,
+  `static-docs-example`): the per-page `mountStatic` kernel and its router facade,
+  base-prefixed page-module hrefs, hash and memory modes flattened or refused, storage
+  ignored with a warning, and the route-subset render used by incremental rebuilds.
+  `static-docs-example` runs a built `examples/static-docs` (pretest
+  `build:static-docs`).
+- **`staticPaths`** (D179): `static-prerender` covers the value forms and model
+  shorthand, the build errors (missing or unservable values, non-array results, no
+  `:param`, a parent route, a throwing function), duplicates, empty lists, encoding,
+  fixed-route collisions, the hybrid `shadowed` skip and the subset re-list;
+  `static-kernel` the island-to-`route.params` threading; `ssg-router-takeover` hybrid
+  takeover of a generated page. Go: `static_pages_test.go` and `watch_static_test.go`.
+- **D161 read state**: emission (the envelope island beside the record island, omitted
+  for adapter-less and settled-nothing pages, script-breakout escaping, a rejected
+  tracked fault failing the build naming the route, hybrid transferring nothing) and
+  adoption (the kernel adopting the envelope, faulting normally without one, ignoring an
+  empty or foreign-version envelope, surviving a corrupt one without losing records).
+- **Build-time reads** (`ssg-build-fetch`): the prerender pass's global-`fetch` wrapper
+  fails an app-relative endpoint with a diagnostic naming the URL and both fixes, and
   passes absolute URLs through.
-- **Head management:** per-field leaf-to-root resolution and managed-tag surgery
-  into both shells, landing before any JS. Head-tag injection is build-time only;
-  the tests keep it that way.
+- **Head management** (`ssg-head`): per-field leaf-to-root resolution and managed-tag
+  surgery into both shells, before any JS. Head-tag injection is build-time only; the
+  tests keep it that way.
+- **Route tree** (`route-tree-shared`): a drift guard that SSG enumeration and the router
+  table agree.
 
-- **D180:** `component-slot` serializes selected component HTML and default-slot content, indexed-map expressions and empty null selection through the shared DOM-free assembly/serializer. A selection range adds no visible wrapper; both prerender modes share this machinery.
+Locale prerendering is in [[TEST-I18N]]; the golden file
+`tests/fixtures/prerender-golden/golden.json` pins every prerendered file.

@@ -1,7 +1,7 @@
 ---
 name: 'D44 — DOM islands: the `island` attribute freezes an element''s children after mount'
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-11-01T19:23:24.972Z'
 connections:
   - COMPONENT-TEMPLATE-PARSER
   - COMPONENT-CODEGEN
@@ -13,6 +13,7 @@ connections:
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
 code_refs:
   - client-runtime/views/viewManager.js
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D44 — DOM islands: the `island` attribute
@@ -34,10 +35,13 @@ For code that **restructures or owns** children: `contenteditable` surfaces, car
 - **Seed caching** ([[DECISION-D170-INCREMENTAL-VDOM-LISTS]]): a fully **static** seed is a compiler cache site at any size. A dynamic seed must not be cached — `??=` caches per instance while a re-seed must use current values; winning that case back would need a per-render thunk the runtime evaluates at mount (not built).
 
 ## Compile errors (positioned)
-1. `island={ expr }` — must be static; toggling would resume patching against restructured DOM.
+
+1. `island={ expr }` or any valued `island="…"` — it must be bare and static. Toggling would resume patching against restructured DOM, and the runtime keys on presence, so `island="false"` would still freeze.
 2. `island` on a component tag — put it on a plain element inside the component.
-3. A component tag, `<Children/>` or `<Slot/>` anywhere inside an island — a live instance in browser-owned DOM can be destroyed out from under the framework, and a marker would splice parent-owned vnodes into an unreconciled subtree.
+3. A component tag, `<Children/>`, `<Slot/>`, `<Snippet>` or `<Portal>` anywhere inside an island — a live instance in browser-owned DOM can be destroyed out from under the framework, a marker would splice parent-owned vnodes into an unreconciled subtree, and a portal would never mount or tear down.
 4. `island` on the `<puzzle-view>` root — the navigation/animation boundary.
+
+Inside `{#raw}` an `island` attribute is authored sample markup, not the directive ([[DECISION-D150-RAW-TEMPLATE-BLOCK]]).
 
 ## Documented behavior
 Listeners on seeded children are wired at mount and never swapped: arrow handlers stay correct, but call-expression arguments are frozen at mount-time values. Programmatic changes to island content must update both the DOM (imperatively) and the store — the framework never syncs store → island after mount.

@@ -6,7 +6,7 @@ status: built
 connections:
   - DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS
   - DECISION-D173-CORE-SEMANTICS
-  - DECISION-D174-STANDARD-FORMATTERS
+  - DECISION-D174-FUNCTION-LIBRARY
   - COMPONENT-FORMATTERS
   - DOC-SPEC-TEMPLATE
   - DOC-LANGUAGE-CORE
@@ -24,7 +24,7 @@ connections:
   - FILE-CONFIG
   - FILE-STATIC-MOUNT
   - DECISION-D31-FORMATTER-TREESHAKE
-  - DECISION-D43-FORMATTER-MISSING-GUARD
+  - DECISION-D43-FUNCTION-MISSING-GUARD
   - DECISION-D79-LINK-FUNCTION
   - DECISION-D67-HYBRID-PRERENDER
   - DECISION-D81-STATIC-PAGES-MODE
@@ -40,18 +40,19 @@ connections:
 
 # D175 — Translations: `t(key, vars)`, one locale file per language
 
-`t` is a standard function ([[DECISION-D174-STANDARD-FORMATTERS]]) with one
-meaning in both hosts ([[DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS]]). PuzzleKit
-side is built: locale files, build output, loading, runtime API. Sites
-already has a flat-file `t` (lookup, `en` fallback, key-on-miss, single-pass
-substitution) and must adopt the rest (see *Sites, pending*).
+`t` is a standard function ([[DECISION-D174-FUNCTION-LIBRARY]]) with one
+meaning in both hosts ([[DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS]]). This
+card owns its semantics, locale files, build output, loading and the runtime
+service. Locale URL prefixes, translated route titles and `dir` are
+[[DECISION-D177-LOCALE-URL-PREFIXES]].
 
 ## Forces
 
-- **Bytes.** No `i18n` config → no added code. With it, ~1.3 KB gzip
-  (measured on `examples/i18n`), not a 10+ KB library.
+- **Bytes.** No `i18n` config → no added code. With it, a small service, not
+  a 10+ KB library.
 - **No flash.** First render is in the right language, or (prerendered
-  output only) the default language with one swap after load.
+  output without prefix routing) the default language with one swap after
+  load.
 - **The compiler never parses `<script>`**, so only template literals are
   visible to key analysis.
 - **Splitting is off by default and forced off in static mode**
@@ -80,12 +81,12 @@ substitution) and must adopt the rest (see *Sites, pending*).
 - **Plurals (Shopify model).** With `count` in vars, an entry may be an object
   of CLDR categories (`zero one two few many other`):
   `{ "item_count": { "one": "{count} item", "other": "{count} items" } }`.
-  PuzzleKit selects with `Intl.PluralRules(locale)` (cached per locale);
-  Sites with `golang.org/x/text/feature/plural`. A missing category falls
-  back to `other`. **An exact `count` of 0 uses `zero` when the entry has
-  one, in every locale** (Rails/Shopify rule; never contradicts CLDR). A
-  plural entry without `count` renders `other` with a dev warning; a string
-  entry with `count` just substitutes.
+  PuzzleKit selects with `Intl.PluralRules(locale)` (cached per locale); a Go
+  host with `golang.org/x/text/feature/plural`. A missing category falls back
+  to `other`. **An exact `count` of 0 uses `zero` when the entry has one, in
+  every locale** (Rails/Shopify rule; never contradicts CLDR). A plural entry
+  without `count` renders `other` with a dev warning; a string entry with
+  `count` just substitutes.
 - **`{count}` is locale-formatted** when a finite number (same helper as
   `pluralize` and `number_with_delimiter`); other vars print by V6.
 - **Output is text**; a translation never injects markup.
@@ -138,7 +139,7 @@ files or merges locales.
    (`compiler/internal/plugin/manifest.go`, fresh every rebuild), like D31's
    function manifest: `{ defaultLocale, locales: { en: 'locales/en.<hash>.json' }, base }`,
    locales in config order. The package `exports` default resolves to
-   `null` for vitest and other bundlers. Reuses an existing exclusion, so
+   `null` for vitest and other bundlers. It reuses an existing exclusion, so
    D89's ceiling of three holds.
 6. The usage scan checks every literal `t('…')` key (cooked) against the
    default table — warning when missing. Runtime-built keys are unchecked.
@@ -166,11 +167,10 @@ change it and `chunkFilePattern` in `locales.go` must follow.
   configured; the per-view derived ctx inherits via `Object.create`). It has
   `t(key, vars?)`, `locale`, `locales`, `defaultLocale`, `dir`, and
   `setLocale(tag)` → promise.
-- **`locales` is a switcher list** since 0.9.0: `[{ locale, label, href,
-  active }]` in config order (**breaking**: 0.8.0 returned `string[]`). Without
-  prefix routing every `href` is the current page; see
-  [[DECISION-D177-LOCALE-URL-PREFIXES]] for the prefix case and the rule to
-  read it in a `data()` that re-runs. `dir` is `'rtl'` or `'ltr'`.
+- **`locales` is a switcher list**: `[{ locale, label, href, active }]` in
+  config order, rebuilt on each read. Without prefix routing every `href` is
+  the current page; D177 covers the prefix case and reading it in a `data()`
+  that re-runs. `dir` is `'rtl'` or `'ltr'`.
 - **Template `t` is service-bound**: `installTranslate(registry, i18n)`
   registers it right after `makeFormatterRegistry` (so `formatters.js` never
   imports i18n) unless the app registered its own `t`, which wins with D174's
@@ -191,12 +191,9 @@ change it and `chunkFilePattern` in `locales.go` must follow.
 
 ## Locale selection
 
-This section describes apps without `i18n.routing`. Under `routing: 'prefix'`
-([[DECISION-D177-LOCALE-URL-PREFIXES]]) the URL decides — its prefix, then
-(static) the page's island tag, ahead of the stored choice and
-`navigator.languages`; the prerender runs once per locale; and `setLocale(tag)`
-stores the choice and loads the same page under the other prefix (a full page
-load, no fetch, no rebuild; it still throws the `RangeError` below).
+Without `i18n.routing`. (Under `routing: 'prefix'` the URL decides — see
+D177; `setLocale(tag)` then stores the choice and loads the same page under
+the other prefix, still throwing the `RangeError` below.)
 
 At startup: (1) `localStorage['__puzzleLocale']` (try/catch) if still
 configured; (2) each `navigator.languages` tag in order — exact
@@ -205,8 +202,8 @@ configured; (2) each `navigator.languages` tag in order — exact
 tag), then base language (`es-CO` → `es`), then the first configured tag with
 that base (`pt` → `pt-BR`); (3) `defaultLocale`. So `zh-TW` selects a
 configured `zh-Hant` even when `zh-Hans` is listed first. Prerender uses
-`defaultLocale`. The first-visit redirect script repeats this matching; the
-shared case table keeps the two in step.
+`defaultLocale`. D177's first-visit redirect script repeats this matching;
+the shared case table keeps the two in step.
 
 `setLocale(tag)`:
 
@@ -263,8 +260,8 @@ shared case table keeps the two in step.
   constructed, preloaded and `skipEnter()`ed before the swap; the old root
   stays until the new `mount(…, { preloaded: true })` resolves. A throwing
   mount restores the old DOM and rejects with the new locale active. An
-  overtaken remount destroys its routed and nested instances.
-  (`tests/static-locale-remount.test.js`)
+  overtaken remount destroys its routed and nested instances
+  (`tests/static-locale-remount.test.js`).
 - **URLs.** Manifest paths are relative to the dist root. Path mode resolves
   against normalized `routerBase`; hash/memory modes against the manifest's
   `base` (so a script-embedded widget served from elsewhere finds its files);
@@ -283,26 +280,22 @@ formatter when the slot moves. Every read sits behind the inline
 `setFormatLocale` checks it with `Intl.getCanonicalLocales` and stores
 `undefined` on failure; plural selection falls back to the viewer's rules.
 The slot is per page (two apps on one page share it; last switch wins —
-accepted). Prerender sets it to the default locale. **`currency` is not
+accepted). Prerender sets it to the page's locale. **`currency` is not
 locale-aware** (D174 identical-output).
 
 ## Static and hybrid output
 
 - Without `routing`, pages prerender in `defaultLocale` from the staged
-  default table (no fetch); the build rewrites the shell's `<html lang>`.
-- Under `routing: 'prefix'` every page prerenders once per locale
-  (`dist/<locale>/…`, default locale at the root), each with its own
-  `<html lang>`/`dir`, its own table island and its own format locale; see
-  [[DECISION-D177-LOCALE-URL-PREFIXES]].
+  default table (no fetch); the build rewrites the shell's `<html lang>`. A
+  viewer in another locale sees the default language first, then one swap
+  (hybrid: before navigation zero; static: before the kernel mount).
+- Under `routing: 'prefix'` every page prerenders once per locale (D177).
 - **Every prerendered page carries its table** as
   `<script type="application/json" data-puzzle-locale="en">` via
   `escapeScriptJson` ([[DECISION-D113-SSG-RAWTEXT-RULE]]) at the last
   `</body>` with the data island ([[DECISION-D151-SHELL-HEAD-OWNERSHIP]]).
   Static `prerender: false` pages carry it; a hybrid `prerender: false` page
   is the verbatim shell and fetches.
-- Without `routing`, a viewer in another locale sees the default language
-  first, then one swap (hybrid: before navigation zero; static: before the
-  kernel mount).
 - Plain SPA fetches the active file during `mount()`.
 
 ## Diagnostics
@@ -316,23 +309,11 @@ keys; non-default-only keys; empty objects; missing literal key; `t` without
 plural without `count`; non-object vars; the D43 hint "t() needs
 translations".
 
-## Future work (not built)
+## Not built
 
-- Rich-text translations (a link inside a sentence); key-union types for
-  `puzzle check`; per-route string splitting; SPA preload hint.
-
-Built since 0.8.0 in [[DECISION-D177-LOCALE-URL-PREFIXES]] (0.9.0): locale URL
-prefixes, translated route `meta.title`/`description` (`{ t: 'key' }`), and
-`<html dir>` / `i18n.dir`.
-
-## Sites, pending
-
-Call spelling `t(key, vars)` with the same key rule; plural entries via
-`x/text/feature/plural` with the `zero` rule and `other` fallbacks; `{count}`
-in the site locale's number format; nested files flattened with the same
-errors (`readLocales` in `engine/theme/compile.go` stops requiring a flat
-map); non-map vars warn instead of erroring; inherited-field names, never the
-prototype; the shared `t` conformance rows.
+Rich-text translations (a link inside a sentence); key-union types for
+`puzzle check`; per-route string splitting; an SPA preload hint for the
+locale file.
 
 ## Alternatives rejected
 

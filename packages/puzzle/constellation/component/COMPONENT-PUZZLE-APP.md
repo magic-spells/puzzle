@@ -7,97 +7,102 @@ connections:
   - COMPONENT-FORMATTERS
   - COMPONENT-DEVSTATE
   - COMPONENT-MORPH
+  - COMPONENT-SSG
   - DECISION-D66-APP-LIFECYCLE-HOOKS
+  - DECISION-D185-APP-IDLE
+  - DECISION-D189-AGENT-HOOKS
+  - DECISION-D145-ERROR-BOUNDARIES
   - FILE-PUZZLE-APP
   - FILE-RUNTIME-ENTRY
   - DOC-SPEC-ANATOMY
-verified_at: '2026-08-24T21:39:15.808Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-01T19:26:46.557Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # PuzzleApp
 
-`client-runtime/app.js` owns one application lifetime. Public config is
-[[DOC-SPEC-ANATOMY]] §2 (`target`, `routes`, `models`, `formatters`, `apiURL`, `storage`,
-`adapter`, `beforeRequest`, `scrollBehavior`, `focusBehavior`, `routerMode` — a mode
-object, strings throw (D159) —, `routerBase`, `transitionMode`, `i18n`, the lifecycle
-hooks, `onError`, `errorView`).
+`client-runtime/app.js` owns one application lifetime. The public config is
+[[DOC-SPEC-ANATOMY]] §2. Translations are not app config: the `i18n` service is
+built from the build-served `@magic-spells/puzzle/i18n/manifest`.
 
 ## Construction vs. mount
 
-The constructor is a side-effect-free config store; only `errorView` is validated there
-(must be a `PuzzleView` constructor). **The Store is created synchronously inside
-`mount()`**, so `app.store` throws before mount and after unmount — external wiring does
+The constructor stores config and validates only two keys: `adapter` must be the
+capability from `@magic-spells/puzzle/adapter`, and `errorView` must be a
+`PuzzleView` constructor. Everything else is checked in `mount()`: the hooks
+(`beforeMount`, `mounted`, `beforeUnmount`, `onError`) must be functions, and the
+Router it constructs throws on a `routerMode` string or a `routerBase` holding
+`#`/`?`.
+
+**The Store is created synchronously inside `mount()`**, so `app.store` throws
+before mount and after unmount. External wiring does
 `const p = app.mount(); wire(app.store); await p`, or lives in `beforeMount`.
 
-`mount()` validates hooks, then builds Store → FormatterRegistry (with a router-bound
-`link` registered if absent, its closure reading `this.router` lazily, D79) → Router;
-`ctx = { store, router, formatters, idle }` (+ `i18n` when configured), where `idle` is
-`this.idle.bind(this)` ([[DECISION-D189-AGENT-HOOKS]]). `focusBehavior`,
-`routerMode`, `routerBase`, `transitionMode` are forwarded only when set.
-`onError`/`errorView` are stored in a WeakMap keyed by the app ctx (so ctx stays exactly
-those services; lookups resolve through the per-view ctx's prototype chain), deleted at
-teardown ([[DECISION-D145-ERROR-BOUNDARIES]]).
+## Mount order
 
-## Lifecycle order
+1. Resolve the target. Under locale prefix routing ([[DECISION-D177-LOCALE-URL-PREFIXES]]),
+   a set `routerMode` throws, and a plain SPA's first-visit redirect leaves
+   `mount()` pending for good (the page is being replaced). A container carrying
+   `data-puzzle-ssg` skips that redirect; the prerendered head script already ran it.
+2. Portal host = the container's parent, else `document.body`
+   ([[DECISION-D144-PORTAL]]).
+3. Install the adapter capability, then build the Store. Dev warns when a model has
+   `static adapter` but no capability was passed. Core never imports the subpath.
+4. i18n (behind `__PUZZLE_HAS_I18N__`): `createI18n` starts loading now, so the
+   fetch overlaps `beforeMount`. Manifest paths resolve under `routerBase` in path
+   mode, else against the manifest's `base`; memory mode leaves `<html lang>`
+   alone. A locale switch re-runs the committed location via
+   `router.__failedView(null, true)`.
+5. FormatterRegistry with a router-bound `link` (reads `this.router` lazily; an
+   app `link` wins), then `installTranslate` for `t`.
+6. Router (`focusBehavior`, `routerMode`, `routerBase`, `transitionMode` forwarded
+   only when set). `ctx = { store, router, formatters, idle }`, plus `i18n` when
+   configured; `idle` is the bound `app.idle` ([[DECISION-D189-AGENT-HOOKS]]).
+   `onError`/`errorView` live in a WeakMap keyed by the app ctx, so ctx stays
+   exactly those services; per-view ctx lookups resolve through the prototype
+   chain ([[DECISION-D145-ERROR-BOUNDARIES]]).
+7. Claim `_mounted`, add the `pagehide` → `store.flush()` listener, and in dev
+   publish `window.__PUZZLE_APP__` and register with the DevTools bridge
+   ([[FILE-DEVTOOLS]]) before navigation zero.
+8. Await `beforeMount.call(app, app)`, then `i18n.__ready()`. A rejection of
+   either tears down (no `beforeUnmount`) and rejects `mount()`.
+9. Restore the dev store snapshot ([[COMPONENT-DEVSTATE]]), then await
+   `router.start()`; a rejection takes the same teardown-and-rethrow path.
+10. Restore view-local dev state; call `mounted.call(app, app)` un-awaited
+    (failures report as `app-mount`, never undo the mount).
 
-1. Validate hooks, wire services. With `config.adapter`, validate the opaque capability
-   and install it before the Store; dev warns when a model has `static adapter` but no
-   capability was passed. Core never imports the subpath.
-2. Await `beforeMount.call(app, app)`; a rejection tears services down, skips
-   `beforeUnmount`, and rejects `mount()`.
-3. i18n (D175): `createI18n({ manifest, url, refresh })` is built right after the Store
-   (loading overlaps `beforeMount`); `installTranslate` runs after the registry; after
-   `beforeMount`, `mount()` awaits `i18n.__ready()` (rejection → same teardown).
-   `refresh` is `router.__failedView(null, true)`. Manifest URLs resolve against
-   `normalizeBase(routerBase)` in path mode, else the manifest's `base`, else
-   `document.baseURI`; memory mode passes `lang: false`. Every line sits behind
-   `__PUZZLE_HAS_I18N__`. `config.__i18n` is an INTERNAL test seam
-   (`{ manifest, tables, locale }`), not public config.
-4. Restore the HMR store snapshot, then await `router.start()` so navigation zero reads
-   restored records; a rejected `start()` takes the same teardown-and-rethrow path (D136).
-5. Restore view-local HMR state; call `mounted.call(app, app)` un-awaited (failures
-   logged, never undo the mount).
-6. `unmount()` (idempotent): `beforeUnmount`, dev-bridge unregister, `router.stop()`,
-   dispose the morph handler, flush Store persistence (including writes from destroyed
-   hooks), tear down the portal outlet, clear the container, drop services.
+`unmount()` (idempotent): `beforeUnmount`, dev-bridge unregister, `router.stop()`,
+dispose the morph handler, flush Store persistence (including writes from
+`destroyed` hooks), tear down the portal outlet, clear the container, drop
+services. Unregister runs BEFORE `router.stop()`, so `app-unmounted` is the
+bridge's last message.
 
 ## Concurrency guards
 
-- Public `mount()` wraps private `#mount()` and latches its promise (`#mountPromise`)
-  until settlement, cleared in `#teardown()`: concurrent calls share it, so a second
-  `mount()` during navigation zero can't resolve early or swallow the first's rejection.
-- Each attempt claims `#mountEpoch`, burned by any teardown; a continuation after either
-  await checks it still owns the app, so unmount + remount around an await can't
-  double-start the router, double-fire `mounted`, or let a stale abort tear down the new
-  cycle (D118). `_mounted` only answers "is anything mounted".
+- `mount()` latches the private `#mount()` promise until it settles: concurrent
+  calls share it, so a second `mount()` during navigation zero can't resolve early
+  or swallow the first's rejection.
+- Each attempt claims `#mountEpoch`; any teardown burns it. Every continuation
+  after an await checks it still owns the app, so unmount + remount around an await
+  can't double-start the router, double-fire `mounted`, or let a stale abort tear
+  down the new cycle (D118). `_mounted` only answers "is anything mounted".
+
+## `idle()`
+
+Contract: [[DECISION-D185-APP-IDLE]], [[DOC-SPEC-ANATOMY]] §2. Each check runs
+after a frame's callbacks (`frame()` from `scheduler.js`, so a hidden tab steps on
+timers) and resolves `true` after two clear checks in a row. Busy means any of:
+`#mountPromise`, `scheduled()` (pending store flushes and view renders),
+`store._flushScheduled`, `store._asyncTrackingChain`, `store._reading?.()` (adapter
+reads), `navigating(router)`, or `i18n.__busy`. The app has no `renderTick()`;
+that is a view method ([[DECISION-D188-TICK]]).
 
 ## Other responsibilities
 
-- A window `pagehide` listener (registered once `_mounted` is claimed) calls
-  `store.flush()`, so a reload inside the batched-persistence window can't lose a write.
-- The Portal outlet host is the container's parent (else `document.body`), so teleported
-  content survives `replaceChildren()` ([[DECISION-D144-PORTAL]]); behind
-  `__PUZZLE_HAS_PORTAL__`.
-- Dev: publishes `window.__PUZZLE_APP__` and registers with the D100 bridge
-  ([[FILE-DEVTOOLS]]) after services are wired, before navigation zero. Teardown
-  unregisters BEFORE `router.stop()`, so `app-unmounted` is the last message. The two
-  gates differ on purpose: publish also checks `__PUZZLE_APP__` identity (a re-mount may
-  have moved it), unregister must run for the instance that registered.
-- `setMorphHandler(handler)` stashes the integration before or after mount and forwards
-  it to [[COMPONENT-ROUTER]]; a re-mount re-arms a disposed handler.
-- `idle({ timeout })` ([[DECISION-D185-APP-IDLE]]) checks once per frame (after the
-  frame's callbacks, stepped by the shared D63 `frame()` in `scheduler.js`; one timer in
-  a hidden tab) and resolves `true` after two clear checks
-  in a row: no `#mountPromise`, no `_flushScheduled`, no `_asyncTrackingChain`, no
-  adapter read in flight (`store._reading?.()`), no navigation (`navigating(router)`, the
-  router's static-block accessor), and no locale switch (`i18n.__busy`, behind
-  `__PUZZLE_HAS_I18N__`). It never rejects. The app has no `renderTick()`: that render
-  wait is a view method ([[DECISION-D188-TICK]]).
-- `mount()` is a no-op outside a DOM (the app entry stays importable by
-  [[COMPONENT-SSG]]) and under `__PUZZLE_CAPTURE__` (a static page entry imports the app
-  only to read `app.config`; [[DECISION-D157-ADAPTER-SUBPATH]]).
-- `app.store`/`router`/`formatters`/`ctx` expose the live services. The root package
-  exports `PuzzleApp`, `PuzzleView`, `PuzzleModel`, `Puzzle`, `PuzzleValidationError` and
-  compiler-support values (including `urlValue`, [[DECISION-D186-DYNAMIC-URL-SAFETY]]);
-  `PuzzleAdapterError` lives in `/adapter`.
+- `mount()` is a no-op outside a DOM (the entry stays importable by
+  [[COMPONENT-SSG]]) and under `__PUZZLE_CAPTURE__` (a static page entry imports
+  the app only to read `app.config`; [[DECISION-D157-ADAPTER-SUBPATH]]).
+- `setMorphHandler(handler)` works before or after mount and forwards to
+  [[COMPONENT-ROUTER]]; a re-mount re-arms a disposed handler ([[COMPONENT-MORPH]]).
+- `config.__i18n` (`{ manifest, tables, locale, navigate }`) is an internal seam
+  for the testing utilities and the static kernel, not public config.

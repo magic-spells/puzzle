@@ -1,57 +1,36 @@
 ---
-name: D63 — store flush scheduling gains a hidden-tab timer fallback
+name: D63 — One frame scheduler with a hidden-tab timer fallback
 status: verified
-verified_at: '2026-08-24T21:39:15.808Z'
+verified_at: '2026-11-01T19:23:12.785Z'
 connections:
   - COMPONENT-STORE
   - DOC-DATASTORE
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 code_refs:
+  - client-runtime/scheduler.js
   - client-runtime/datastore/store.js
   - client-runtime/app.js
 ---
 
-# D63 — store flush scheduling gains a hidden-tab timer fallback
+# D63 — One frame scheduler with a hidden-tab timer fallback
 
-## Context
-
-`Store` batches changed keys and flushes on `requestAnimationFrame`. Chrome
-suspends rAF in hidden tabs, so a backgrounded app would queue mutations behind
-one frozen rAF and no subscriber would hear anything until the tab was visible.
+Store flushes, view renders and `app.idle()` checks batch onto `requestAnimationFrame`. Chrome suspends rAF in hidden tabs, so without a fallback a backgrounded app would queue work behind a frozen frame and no subscriber would hear anything until the tab was shown.
 
 ## Decision
 
+- The rule lives once, as `frame(run)` in `client-runtime/scheduler.js`:
+  - hidden tab (`document.hidden`) or no rAF (Node, tests) → `setTimeout(0)`;
+  - otherwise rAF **plus** a 220ms fallback timer, covering a tab that hides before the frame.
+  - Whichever fires first runs `run`; the other does nothing.
+- `schedule(job)` wraps `frame` for store flushes (`Store._scheduleFlush`, which arms both subscriber delivery and batched persistence) and `setData()` renders, and counts them for `renderTick()` ([[DECISION-D188-TICK]]) and `app.idle()` (D185).
+- A frame that fires after an explicit `flush()` finds nothing pending; `flush()` is idempotent.
 
-rAF stays the primary scheduler. `_scheduleFlush` — the single arming point for
-both `_notify` (subscriber delivery) and `_persist` (batched storage write) —
-adds two guards:
+## Alternatives rejected
 
-1. If `document.hidden` (or no rAF, as in node/tests), schedule with
-   `setTimeout(0)`.
-2. When scheduling via rAF, also arm a ~220ms fallback timer, cleared when the
-   frame wins — covers a tab hiding between scheduling and the next frame.
+- **A `visibilitychange` listener that flushes on hide** — per-store listener lifecycle, and it misses work that starts while hidden (the schedule-time branch is needed anyway).
+- **Always `setTimeout`, drop rAF** — loses frame-aligned batching on the visible path.
 
-The rule lives once, as `frame(run)` in `client-runtime/scheduler.js`: whichever
-of the frame or the timer fires first runs, and the other does nothing. Store
-flushes, `PuzzleView` `setData()` renders and `app.idle()` checks all use it;
-store flushes and view renders go through `schedule(job)`, which also counts
-them for `renderTick()` ([[DECISION-D188-TICK]]). A frame that fires after an explicit
-`flush()` finds nothing pending, since `flush()` is idempotent.
+## Gotchas
 
-## Alternatives
-
-- **`visibilitychange` listener that flushes on hide** — rejected: per-store
-  listener lifecycle, and it misses notifies that start while hidden (the
-  schedule-time branch is needed anyway).
-- **Always `setTimeout`, drop rAF** — rejected: loses frame-aligned batching on
-  the visible path.
-
-## Consequences
-
-- Hidden-tab delivery is delayed (browser timer throttling: ≥1s, ~1/min after
-  5 min), never dropped.
-- If the main thread stalls past the fallback delay, the timer may flush before
-  the rAF — harmless by idempotence.
-- rAF-driven work outside the store (animation flights) is still frozen in
-  hidden tabs, so browser checks in a background tab can't be trusted for
-  timing.
+- Hidden-tab delivery is delayed by browser timer throttling (≥1s, ~1/min after 5 min), never dropped.
+- rAF-driven work outside the scheduler (animation flights) still freezes in hidden tabs, so browser checks run in a background tab can't be trusted for timing.

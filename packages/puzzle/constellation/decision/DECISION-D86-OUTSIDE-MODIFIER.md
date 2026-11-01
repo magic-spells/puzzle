@@ -10,8 +10,8 @@ connections:
   - DECISION-D38-EVENT-MODIFIERS
   - DECISION-D72-ELEMENT-REFS
   - FILE-VIEW-MANAGER
-verified_at: '2026-08-24T21:39:15.808Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-01T19:23:00.473Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D86 — The `outside` event modifier: `@event:outside`
@@ -23,15 +23,17 @@ cleanup. Spec: [[DOC-SPEC-TEMPLATE]] §5 and §47.
 
 ## Decision
 
-One entry in the D38 generic-modifier table, with these runtime semantics:
+`outside` is one entry in the D38 generic-modifier table, with these runtime
+semantics:
 
-- **Document + capture phase.** An unrelated `stopPropagation()` can't swallow
+- **Document, capture phase.** An unrelated `stopPropagation()` can't swallow
   the event, and the interaction that *opens* a panel can't instantly close it
-  (the panel's listener attaches after document capture has passed).
-- **Logical containment:** `portalAwareContains(el, target)` — `el.contains`
-  first; a target inside the portal outlet resolves to its owning portal's
-  placeholder and re-tests (iterating for nested portals), so content portaled by
-  a descendant counts as inside (D144). Zero cost with no live portals.
+  (the panel's listener attaches after document capture has passed). One shared
+  `{ capture: true }` options object, so add and remove always match.
+- **Logical containment:** `portalAwareContains(el, target)` (`views/portal.js`)
+  — `el.contains` first; a target inside the portal outlet resolves to its
+  owning portal's placeholder and re-tests (nested portals iterate), so content
+  portaled by a descendant counts as inside (D144). Free with no live portals.
 - **Modifier order:** outside-gate → key-gate → once-spend → `preventDefault` →
   `stopPropagation` → handler; a bailed event spends nothing.
 - **Framework-owned cleanup:** `releaseSubtree` (the walk that nulls D72 refs)
@@ -43,16 +45,18 @@ One entry in the D38 generic-modifier table, with these runtime semantics:
 - **Event-generic**, no allowed-event list. D38 rules stand: unknown or
   duplicate modifiers, and any modifier on a component callback prop, are
   compile errors.
+- Not gated by D89: it is inline branches, not a module.
 
-Limitations (documented): events inside an `<iframe>` never reach the parent
-document; on touch `pointerdown` fires at scroll start, so prefer
-`@click:outside` for scroll tolerance.
+## Gotchas
 
-## Alternatives
+Events inside an `<iframe>` never reach the parent document. On touch,
+`pointerdown` fires at scroll start, so prefer `@click:outside` for scroll
+tolerance.
 
-- **`use:clickOutside` element actions** — rejected: a directive namespace plus
-  lifecycle for what one modifier covers.
-- **Bubble-phase document listener** — rejected: defeated by `stopPropagation`
-  and races the opening interaction.
-- **`closest()` containment** — rejected: `contains` answers it cheaper.
-- **Pointer events only** — rejected: kills `@focusin:outside`.
+## Alternatives rejected
+
+- **`use:clickOutside` element actions** — a directive namespace plus lifecycle
+  for what one modifier covers.
+- **Bubble-phase document listener** — defeated by `stopPropagation` and races
+  the opening interaction.
+- **Pointer events only** — kills `@focusin:outside`.

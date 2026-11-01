@@ -1,7 +1,7 @@
 ---
 name: 'D21 — Server data: tracked finds fault in through the model''s adapter declaration'
 status: verified
-verified_at: '2026-08-24T18:51:34.759Z'
+verified_at: '2026-11-01T19:19:59.201Z'
 connections:
   - COMPONENT-STORE
   - COMPONENT-PUZZLE-MODEL
@@ -12,7 +12,7 @@ connections:
   - DECISION-D161-AUTO-FETCHING-FINDS
   - DECISION-D157-ADAPTER-SUBPATH
   - DECISION-D158-ADAPTER-FETCH-FUNCTIONS
-verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D21 — Server data: tracked finds fault in through the model's adapter declaration
@@ -28,5 +28,6 @@ The model file is the single source of truth for schema and server location (`st
 Writes stay explicit verbs ([[DECISION-D50-ADAPTER-WRITE-SYNC]]). Manual `fetch` in async `data()` remains supported.
 
 ## Alternatives rejected
-- Explicit-only loads (the whole read path through 0.6.0) — a load awaited inside `data()` re-triggers itself through its own upsert, so the only workable pattern was eager whole-collection seeding after `mount()`.
+
+- Explicit-only loads — a load awaited inside `data()` re-triggers itself through its own upsert, so the only workable pattern was eager whole-collection seeding after `mount()`.
 - A full ORM-style sync engine — far more surface than the framework needs.

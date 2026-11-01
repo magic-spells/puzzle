@@ -12,7 +12,7 @@ connections:
   - DECISION-D168-TEXT-RUN-WHITESPACE
   - DECISION-D141-MARKER-FALLBACK-BODIES
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
-  - DECISION-D174-STANDARD-FORMATTERS
+  - DECISION-D174-FUNCTION-LIBRARY
   - DECISION-D167-COMPONENT-FAMILIES
 ---
 
@@ -20,14 +20,13 @@ connections:
 
 [[DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS]] makes Puzzle one template language
 with two dialects under one rule: **a dialect may add or restrict, never
-redefine.** This card fixes the meaning of the 18 shared constructs (V1–V18)
-where PuzzleKit and Sites once differed. All of it is built in PuzzleKit; the
+redefine.** This card fixes the meaning of the shared constructs (V1–V18)
+where PuzzleKit and Sites could differ. All of it is built in PuzzleKit. The
 expression items (V1, V4, V7, V8) are the expression language,
 [[DECISION-D176-EXPRESSION-LANGUAGE]]; the function library is
-[[DECISION-D174-STANDARD-FORMATTERS]]. Sites evaluates the expression
-language in Go in `internal/pzleval` (its own repo; see *Sites*);
-[[DOC-LANGUAGE-CORE]] keeps each host's behavior, and its "Known
-divergences" entries track any construct that still differs.
+[[DECISION-D174-FUNCTION-LIBRARY]]. What each host does where the rules
+below leave it host-defined is in [[DOC-LANGUAGE-CORE]] "Host-specific by
+decision".
 
 ## How a rule is chosen
 
@@ -39,7 +38,8 @@ divergences" entries track any construct that still differs.
    PuzzleKit gets there by *lowering* template expressions in codegen (member
    guards, loop guards) — lowering may add safety, never change what a valid
    expression evaluates to when nothing is missing. No script byte changes.
-3. **When neither is safer, Sites changes** (unpublished; PuzzleKit is on npm).
+3. **When neither is safer, Sites changes** (Sites is unpublished; PuzzleKit is
+   on npm).
 
 Host-defined is allowed only where the difference is inherent to the host:
 V3's strict comparison, V5, V15, V17 and the V18 styles.
@@ -51,12 +51,11 @@ V3's strict comparison, V5, V15, V17 and the V18 styles.
   collections and range bounds, PuzzleKit `@event` arguments; Sites adds
   `{#let}`) parses as one D176 expression by one parser
   (`packages/puzzle-lang/expr`), which PuzzleKit lowers to JS and Sites
-  evaluates in Go (`internal/pzleval`). A display transform is a function call —
+  evaluates in Go. A display transform is a function call —
   `{ currency(price) }`, `{ t('cart.items', { count: items.length }) }` — and
   works in every position, headers included. In Sites `x | f` is sugar for
-  `f(x)` (D176 §4); in PuzzleKit a `|` is a positioned error
-  (`` `| name` pipes are Sites theme syntax — in a Puzzle app write
-  `name(value)` ``). `{#unless c}` is stored as `Unary !` over the condition.
+  `f(x)` (D176 §4); in PuzzleKit a `|` is a positioned error steering to
+  `name(value)`. `{#unless c}` is stored as `Unary !` over the condition.
 - **V2 — `==`/`!=` are JavaScript loose equality** (`IsLooselyEqual`) in both
   hosts. No compiler warning; strict-equality teams use an optional
   `eqeqeq`-style `puzzle-eslint` rule.
@@ -68,20 +67,20 @@ V3's strict comparison, V5, V15, V17 and the V18 styles.
   codegen guards every member step, index step and method call
   (`a?.b?.c`, `a?.[i]`, `a?.trim()`), handler arguments included; a
   handler's free `event` chain is the DOM event and is written as authored.
-  `Object.keys/values/entries` of a missing value return `[]` (render target
-  lowers the argument to `<arg> ?? {}`; `puzzle check` keeps the author's
-  spelling). The dev warning for an undefined interpolation stays; a method
-  call on a missing receiver draws none (it would need a production helper).
+  `Object.keys/values/entries` of a missing value return `[]` (codegen lowers
+  the argument to `<arg> ?? {}`; `puzzle check` keeps the author's spelling).
+  The dev warning for an undefined interpolation stays; a method call on a
+  missing receiver draws none (it would need a production helper).
 - **V5 — arithmetic on non-numbers: host-specific.** Core: `+ - * / %`,
   unary `-`, `< <= > >=` on numbers; `+` with a string concatenates; strings
   order with strings; a Date orders and subtracts to milliseconds. Any other
   mix is host-defined (PuzzleKit: JS coercion; Sites: missing value + warning).
   There are no arithmetic functions (D174).
 - **V7 — text units are JavaScript's.** `.length` counts UTF-16 code units;
-  D176's string methods keep their JS meaning (Sites must index by UTF-16
-  unit, use JS full case mapping and JS whitespace). `.size` is an ordinary
-  member read. `truncate` (D174) counts code points and never splits a
-  character, so it and `.length` disagree on non-BMP text by design.
+  D176's string methods keep their JS meaning (a Go host indexes by UTF-16
+  unit and uses JS full case mapping and JS whitespace). `.size` is an
+  ordinary member read. `truncate` (D174) counts code points and never splits
+  a character, so it and `.length` disagree on non-BMP text by design.
 - **V8 — object literals are core values**: name keys, quoted keys,
   shorthand. Computed keys, spread, methods, getters, numeric keys and the
   keys `__proto__`/`constructor`/`prototype` are positioned errors. An
@@ -132,13 +131,15 @@ V3's strict comparison, V5, V15, V17 and the V18 styles.
   not whitespace-only text.** A call-site `{#if}` that renders nothing or a
   `{#for}` over an empty list leaves it unfilled, so the
   [[DECISION-D141-MARKER-FALLBACK-BODIES]] fallback shows (free empty
-  states). Applies per snippet stamp too. A D180 `<Component>` range counts its rendered children, not its comment anchors, so an empty selection remains unfilled. PuzzleKit tests only when the
-  marker has a fallback (`fill()` in `viewManager.js`); without one it
-  splices the supplied nodes through, placeholders included, so arity stays
-  constant (pinned by `tests/slot-filled.test.js`). **Gotcha:** a fallback
-  whose node count differs from the content's still shifts following
-  siblings on each flip; authors keep such a fallback to one root element
-  (SPEC §24, D141, SKILL.md). Padding to fix it was rejected (+32 B gzip).
+  states). Applies per snippet stamp too. A D180 `<Component>` range counts
+  its rendered children, not its comment anchors, so an empty selection stays
+  unfilled. PuzzleKit tests only when the marker has a fallback (`fill()` in
+  `viewManager.js`); without one it splices the supplied nodes through,
+  placeholders included, so arity stays constant (`tests/slot-filled.test.js`).
+  **Gotcha:** a fallback whose node count differs from the content's still
+  shifts following siblings on each flip; authors keep such a fallback to one
+  root element (SPEC §24, D141, SKILL.md). Padding to fix it was rejected
+  (bytes on every marker for an authoring rule).
 - **V15 — props into scope: host-specific**, plus a script-less PuzzleKit
   component gets a synthesized `data(params, props)` returning its props, so
   `{ tone }` reads the prop as in Sites. With a script, `data()` decides.
@@ -166,20 +167,20 @@ V1/V4/V8: `packages/puzzle-lang/expr` + `compiler/internal/codegen/lower.go`.
 V6/V9: `client-runtime/display.js`, `setAttr`, `client-runtime/ssg/serialize.js`.
 V10: `codegen.go` (D168). V12: codegen loop guard + `client-runtime/views/listBlock.js`.
 V13: `puzzle-lang/parser/slot.go`. V14: `viewManager.js` `fill()`. V15: codegen.
-Grammar changes (V1, V13) must reach the vendored ports in `puzzle-eslint` /
-`puzzle-prettier` and the three editor grammars. Shared conformance fixtures
-(`packages/puzzle-lang/conformance`) are the proof a unified item matches in
-both hosts.
+`tests/core-semantics.test.js` pins the rendered cases. Grammar changes (V1,
+V13) must reach the vendored ports in `puzzle-eslint` / `puzzle-prettier` and
+the three editor grammars. Shared conformance fixtures
+(`packages/puzzle-lang/conformance`) are the proof an item matches in both
+hosts.
 
-## Sites
+## What a Go host must match
 
-Evaluator (`internal/pzleval`, the Sites repo): the D176 grammar (parsed
-with `Pipes` on) + D174 library in Go, loose equality (V2), UTF-16
-`.length` and JS-exact string methods (V7), printing (V6), `Object.*`
-default (V4). Renderer rules it must match: whitespace (V10), raw escaping
-(V11), loop bounds (V12), filled rule (V14), `{#svg}` prefix error (V18),
-dotted-tag error (V16). Flag it if Sites treats a Date as a printable
-scalar (V6).
+A Go evaluator of this language (Sites' `internal/pzleval`) parses with
+`Pipes` on and must match: the D174 library, loose equality (V2), UTF-16
+`.length` and JS-exact string methods (V7), printing (V6, including a Date
+printing nothing), the `Object.*` default (V4), whitespace (V10), raw escaping
+(V11), loop bounds (V12), the filled rule (V14), and the `{#svg}` prefix and
+dotted-tag errors (V18, V16).
 
 ## Alternatives rejected
 

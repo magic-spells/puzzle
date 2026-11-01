@@ -21,34 +21,39 @@ connections:
   - DECISION-D149-COMPUTED-GETTER-COLLISIONS
   - FEATURE-VALIDATE-PK-PARITY
   - DOC-TESTING
-verified_at: '2026-08-24T21:39:23.520Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - DECISION-D184-STORE-OBSERVE
+  - DECISION-D170-INCREMENTAL-VDOM-LISTS
+verified_at: '2026-11-01T19:24:02.433Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # Store, models, validation, and relationships
 
-The data layer with no server in the picture. Suites under `tests/`: `store*`,
-`model*`, `validation`, `relationships`, `flush-dedupe`,
-`record-render-rev`, `tracking-overlap`. Run with `npx vitest run tests/store tests/model tests/validation tests/relationships`.
+The data layer with no server in the picture. Run with
+`npx vitest run tests/store tests/model tests/validation tests/relationships tests/flush-dedupe tests/record-render-rev`.
 
-- **Store:** records and model registration, duplicate primary keys,
-  subscriptions and reactivity, optional persistence, the public
-  server-authoritative `upsert()` (identity-preserving, an unconditional
-  overwrite, one persist per array), and the server read path. Failure modes are
-  pinned as hard as the happy path — a corrupt storage blob cannot crash
-  startup, model lookup ignores the `Object` prototype chain, and the hidden-tab
-  fallback still flushes.
-- **Id key normalization** ([[DECISION-D112-STORE-ID-KEY-NORMALIZATION]]) has to
-  hold everywhere at once: lookup, relationships, duplicates differing only by id
-  type, the write path, and a persistence round trip.
-- **Models:** field builders, computed getters, a payload key shadowing a
-  computed getter, the model-name guards (reserved record fields,
-  `Object.prototype` methods), and the payload-safety matrix (an incoming key
-  colliding with a getter, a method, or a reserved internal).
-- **Validation** at every entry point: `Model.validate()` per rule without
-  throwing, collection/short-circuit/skip semantics, `record.validate()`,
-  `createRecord()` enforcement, and pk parity between validate and create
-  ([[FEATURE-VALIDATE-PK-PARITY]]).
-- **Relationships:** schema separation, `belongsTo`/`hasMany` resolution,
-  store-less records, reactivity through the normal subscription machinery, and
-  reserved property names.
+- **Store** (`store`, `store-flush`, `store-hydrate-failsoft`, `flush-dedupe`): records
+  and model registration, duplicate primary keys, subscriptions, optional persistence,
+  the public server-authoritative `upsert()` (identity-preserving, unconditional
+  overwrite, one persist per array), the server read path. Failure modes are pinned as
+  hard as the happy path: a corrupt storage blob cannot crash startup, model lookup
+  ignores the `Object` prototype chain, the hidden-tab fallback still flushes.
+- **`store.observe()`** (`store-observe`, D184), including on an adapter app.
+- **Id key normalization** (`store-id-coercion`, D112) has to hold everywhere at once:
+  lookup, relationships, duplicates differing only by id type, the write path, a
+  persistence round trip.
+- **Render revisions** (`record-render-rev`, D170): a record prop refreshes its child on
+  that record's own mutations through any store path.
+- **Models** (`model`, `model-computed-getter`, `model-payload-safety`,
+  `model-reserved-and-prototype-names`, `model-calendar-date-roundtrip`): field builders,
+  computed getters, a payload key shadowing a getter, reserved record fields and
+  `Object.prototype` names, the payload-safety matrix, and date-only fields round-tripping
+  byte-identically under any process time zone.
+- **Validation** at every entry point: `Model.validate()` per rule without throwing,
+  collection/short-circuit/skip semantics, `record.validate()`, `createRecord()`
+  enforcement, pk parity between validate and create ([[FEATURE-VALIDATE-PK-PARITY]]).
+- **Relationships**: schema separation, `belongsTo`/`hasMany` resolution, store-less
+  records, reactivity through the normal subscriptions, reserved property names.
+
+Record positions and their transitions: [[STATE-RECORD]]. Server sync is
+[[TEST-ADAPTER-SYNC]].

@@ -8,12 +8,16 @@ summary: >-
   teardown.
 connections:
   - COMPONENT-VIEW-MANAGER
-verified_at: '2026-08-24T21:39:15.808Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - DECISION-D180-COMPONENT-SLOT
+verified_at: '2026-11-01T19:25:05.957Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
-Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `client-runtime/views/viewManager.js`.
+# viewManager.js
 
-D180 immediate selection teardown carries a gated synchronous context through a selected component's own `ViewManager.clear()`. If its render root is another component, that descendant is destroyed before replacement creation even when hide hooks or out animations would otherwise defer removal.
+Render → diff → patch for ViewNode trees ([[COMPONENT-VIEW-MANAGER]]): DOM mount and patch, keyed reconciliation, inline component mounting (D20), slot expansion, portals, live-HTML and `<Component>` ranges, per-node listeners, islands, and teardown.
 
-Keyed moves, replacement insertion refs and unknown-tree recovery brackets use the complete vnode range, resolving recursively through component roots to selection or live-HTML ends. `PuzzleView.elementEnd` delegates to the owning manager recursively; keyed reconciliation reuses `moveComponentSlot(parent, vnode, ref, end)` for selected and live-HTML ranges, including ordinary component wrappers. Conditional replacement captures the complete old DOM range before unmount and anchors on its first node still in the parent afterward. This preserves plain-component leave order through direct selections, dispatcher roots and nested ranges even when their comments disappear; synchronous removal uses the sibling after the range.
+- **`ssg/serialize.js` imports `expandSlots` from here**, so slot expansion is identical in the browser and in prerendered HTML.
+- **Ranges, not nodes.** A vnode may span several DOM nodes (a `<Component>` selection, live HTML, a component whose root is either). Keyed moves, insertion refs and conditional replacement all use the vnode's complete range, resolved recursively through component roots (`PuzzleView.elementEnd` delegates to its own manager). Conditional replacement captures the old range before unmount and anchors on its first node still in the parent afterward.
+- **`<Component>` swaps unmount immediately** ([[DECISION-D180-COMPONENT-SLOT]]): a constructor swap tears the old instance down synchronously, bypassing hide hooks and leave animations, even through a nested component root, so the old instance is gone before the new one mounts.
+- Every `<Component>` path sits behind `__PUZZLE_HAS_COMPONENT_SLOT__`, so an app that never writes `<Component>` ships none of it.

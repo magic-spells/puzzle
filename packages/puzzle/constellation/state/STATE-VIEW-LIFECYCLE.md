@@ -128,23 +128,18 @@ connections:
   - DECISION-D118-LIFECYCLE-HOOK-CONTAINMENT
   - DECISION-D28-ANIMATIONS
   - DECISION-D73-SCROLL-TRIGGER-ANIMATIONS
-verified_at: '2026-08-24T18:49:30.658Z'
-verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
-notes:
-  - kind: gotcha
-    text: >-
-      Parking a routed view under a conditional outlet only works when the outlet disappears inside
-      a render pass. A wrapper component that has an out animation or hide hooks finishes its
-      teardown after the pass ends. Its clear() then destroys the routed view it held, and the next
-      show constructs a fresh view with no route. This is not covered yet.
+  - DECISION-D178-AFTERUPDATE-PREV
+  - DECISION-D161-AUTO-FETCHING-FINDS
+verified_at: '2026-11-01T19:24:02.433Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # PuzzleView lifecycle machine
 
-One instance, construction to teardown. Views, layouts and components all run it; only
-the owner differs (router for routed views/layouts, a parent's patch for components, the
-static kernel for a prerendered root), and ownership decides failure outcomes, not phases.
-Implementation: [[COMPONENT-PUZZLE-VIEW]].
+One instance, construction to teardown (`client-runtime/views/PuzzleView.js`). Views,
+layouts and components all run it; only the owner differs (router for routed
+views/layouts, a parent's patch for components, the static kernel for a prerendered
+root), and ownership decides failure outcomes, not phases.
 
 ```mermaid
 stateDiagram-v2
@@ -158,7 +153,7 @@ stateDiagram-v2
   loading --> mounted: data() resolved, first tree rendered
   loading --> destroyed: destroyed while data() was awaited
   mounted --> updating: store change / refresh / setData / parent update
-  updating --> mounted: beforeUpdate, patch, afterUpdate
+  updating --> mounted: beforeUpdate, patch, afterUpdate(prev)
   mounted --> preparing: prepareRefresh() for a gated navigation
   preparing --> mounted: commit — swap params, route, model, subscriptions
   preparing --> mounted: discard — nothing committed changes
@@ -173,33 +168,49 @@ stateDiagram-v2
 
 ## Phase notes
 
+- **loading**: `data(params, props)` runs inside the store's tracking scope, so its
+  queries become this instance's subscriptions. On an adapter-backed model a tracked find
+  that misses queues a fetch and re-runs the pass instead of committing (D161), so one
+  `loading` phase can span several fetch rounds.
 - **updating** is reached two ways that look the same in the DOM: a `data()` re-run
   (model layer replaced, subscriptions re-derived to exactly what the run queried) or
-  `setData()` (local layer only, no re-run). Trigger table: [[FLOW-REACTIVITY]].
+  `setData()` (local layer only, no re-run). `afterUpdate(prev)` gets a frozen shallow
+  copy of the props, params, route and merged data the previous render drew; it never
+  fires for the first render, which is `mounted()`. Trigger table: [[FLOW-REACTIVITY]].
 - **preloaded** makes the navigation commit atomic: `created()` + `data()` run with no
   ViewManager, so the later mount is synchronous (the commit window can't await). A
   parent-mounted component instead reserves its position with a comment anchor.
-  `mounted()` waits for a real first render — if a prop update supersedes the initial async
-  `data()`, completion (and any enter) defers to the render that commits.
+  `mounted()` waits for a real first render; if a prop update supersedes the initial
+  async `data()`, completion (and any enter) defers to the render that commits.
 - **preparing** (D146) runs `data()` against the destination while committed params,
   snapshot, model, DOM and subscriptions stay untouched; a store-change refresh in the same
   window still reads committed state. The handle is idempotent and discarded
   unconditionally on the way out (the only cover for a throw escaping the commit block); an
   unreleased hold fences the ancestor's store keys for the session.
 - **leaving** is inert: `playOut()` unsubscribes and ignores every later delivery; the
-  element stays until the caller removes it. It is reversible once — router recovery
+  element stays until the caller removes it. It is reversible once: router recovery
   cancels the retained out effect, refreshes to resubscribe, and fires `viewWillShow()` →
-  `viewDidShow()` at zero duration to re-open the show bracket `playOut()` closed (hooks are
-  lifecycle, D28). The out stays spent, so a later navigation swaps instantly. A throwing
-  restore hook is reported, never raised into the router's window, and a `viewWillShow`
-  throw doesn't skip `viewDidShow`.
+  `viewDidShow()` at zero duration to re-open the show bracket `playOut()` closed (hooks
+  are lifecycle, D28). The out stays spent, so a later navigation swaps instantly. A
+  throwing restore hook is reported, never raised into the router's window, and a
+  `viewWillShow` throw doesn't skip `viewDidShow`.
 - **failed** is a position, not a live instance: `destroy()` already ran; a placeholder
   holds the app `errorView` (`{ error, info, retry }`) or an invisible marker. Retry never
-  revives this instance — the router's same-location replace or a parent refresh builds a
+  revives this instance; the router's same-location replace or a parent refresh builds a
   new one from `constructed`, and the face is held until something refills the position.
   An error view failing reports once as `phase: 'error-view'` and stops.
 
-A conditional router outlet parks its current routed root without ending this instance's mounted lifetime. Returning the outlet relocates the live root without repeating `mounted()` or the enter bracket. Hidden navigation updates the pinned child chain and releases superseded instances; owner teardown also releases children that are still preloaded and have never acquired a ViewManager.
+## Conditional outlets
+
+A conditional router outlet parks its routed root (moves it into a fragment) without
+ending this instance's mounted lifetime; returning the outlet relocates the live root
+without repeating `mounted()` or the enter bracket. Hidden navigation updates the pinned
+child chain and releases superseded instances; owner teardown also releases children that
+are still preloaded and never acquired a ViewManager. Parking only works when the outlet
+disappears inside one render pass (`viewManager.js` tracks pins per outermost pass): a
+wrapper component with an out animation or hide hooks finishes its teardown after the
+pass, so its `clear()` destroys the routed view and the next show constructs a fresh view
+with no route. No test covers that case.
 
 ## Gotchas
 
@@ -207,6 +218,8 @@ A conditional router outlet parks its current routed root without ending this in
   keep current content until new data commits.
 - A `mounted()` throw resolves by owner: a component is destroyed and its position held for
   the next parent patch; a routed view stays committed (the URL already moved atomically).
+- `destroy()` while `data()` is awaited means `mounted()` never fires: a torn-down
+  instance must not re-subscribe, start timers, or take focus.
 - `destroy()` is synchronous, instant and idempotent; a throwing `destroyed()` is caught so
   the cascade completes.
 - A visible-trigger enter holds the element at `from` and defers the show bracket to the

@@ -14,8 +14,8 @@ connections:
   - COMPONENT-SSG
   - DOC-DATASTORE
   - DOC-SPEC-DATA
-verified_at: '2026-08-24T05:28:09.597Z'
-verified_sha: 22f27a91b0f62867d3a819c30f4456c66a811a6d
+verified_at: '2026-11-01T19:19:25.478Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 code_refs:
   - client-runtime/datastore/adapter.js
   - client-runtime/datastore/store.js

@@ -14,9 +14,9 @@ connections:
   - DECISION-D70-TEMPLATE-COMMENTS
   - DECISION-D113-SSG-RAWTEXT-RULE
   - DECISION-D167-COMPONENT-FAMILIES
-  - DECISION-D174-STANDARD-FORMATTERS
-verified_at: '2026-08-24T18:51:36.546Z'
-verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+  - DECISION-D174-FUNCTION-LIBRARY
+verified_at: '2026-11-01T19:19:25.478Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 code_refs:
   - client-runtime/views/viewManager.js
 ---
@@ -77,7 +77,7 @@ Use inside an attribute value is a positioned compile error.
   future syntax.
 - Entity-escape every prerendered body — corrupts script/style RAWTEXT.
 - `{#raw}` as dynamic raw HTML — dynamic markup is the sanitized `raw()`
-  function ([[DECISION-D174-STANDARD-FORMATTERS]]); the block stays static.
+  function ([[DECISION-D174-FUNCTION-LIBRARY]]); the block stays static.
 - Splitter scanning the raw body as brace groups — an unbalanced `{` or quote
   runs the JS-aware scan past `</puzzle-view>` and is quadratic on brace-heavy
   bodies.

@@ -1,7 +1,7 @@
 ---
 name: 'D34 — Hash routing: opt-in `hashRouter()`, path-shaped app API, popstate-only'
 status: verified
-verified_at: '2026-08-24T21:39:15.808Z'
+verified_at: '2026-11-01T19:19:59.201Z'
 connections:
   - COMPONENT-ROUTER
   - DOC-ROUTER
@@ -11,7 +11,7 @@ connections:
   - DECISION-D19-NAVIGATION-COMMIT
   - DECISION-D28-ANIMATIONS
   - DECISION-D30-NESTED-ROUTES
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 code_refs:
   - client-runtime/router/modes.js
   - client-runtime/router/router.js

@@ -13,9 +13,10 @@ connections:
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
   - DOC-SPEC-TEMPLATE
-verified_at: '2026-07-12T00:15:03.604Z'
+verified_at: '2026-11-01T19:23:24.972Z'
 code_refs:
   - client-runtime/views/viewManager.js
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D53 — Named slots: call-site `slot="…"`, runtime partition

@@ -1,6 +1,6 @@
 ---
 name: expression lowering
-status: built
+status: verified
 path: compiler/internal/codegen/lower.go
 language: go
 summary: >-
@@ -13,6 +13,8 @@ connections:
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
   - DECISION-D62-HANDLER-CACHING
   - TEST-COMPILER-CODEGEN
+verified_at: '2026-11-01T19:19:18.479Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # lower.go

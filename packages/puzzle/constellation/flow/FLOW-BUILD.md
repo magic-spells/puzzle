@@ -14,10 +14,13 @@ connections:
   - FILE-BUILD-OPTIONS
   - FILE-BUILD-WATCH
   - FILE-BUILD-PRERENDER
+  - FILE-BUILD-SHELL
+  - FLOW-DEV-REBUILD
+  - FLOW-PRERENDER
   - DECISION-D160-SPA-CODE-SPLITTING
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
-verified_at: '2026-08-24T21:11:50.859Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-01T19:26:04.240Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # Build flow
@@ -28,32 +31,34 @@ orchestration → esbuild with [[COMPONENT-ESBUILD-PLUGIN]] → section parsing
 
 ## Production build
 
-
 1. Runtime preflight, sweep stale transient dirs, load config, and validate public assets
-   before touching existing output. Generated names (`app.js`, its map, `styles.css`, and
-   `chunks/` when splitting, [[DECISION-D160-SPA-CODE-SPLITTING]]) are reserved
-   case-insensitively at the public ROOT only — nested files with those names copy fine
-   (`TestBuildAllowsNestedReservedNames`).
-2. Run the usage scan once and hand it to every pass (`passContext`). It walks the
-   project, then the `.pzl` files of installed packages that declare
-   `@magic-spells/puzzle` ([[DECISION-D89-FEATURE-USAGE-TREESHAKE]]).
-3. Bundle the entry (`app/app.ts` or `app/app.js`), compiling each reachable `.pzl`
-   through the build-scoped compile cache
-   ([[DECISION-D152-BUILD-SCOPED-COMPILE-CACHE]]); `<script>` bytes stay as authored
-   (TypeScript is transpile-only). Tailwind runs concurrently; browser errors are
-   reported before Tailwind errors. Each pass ends with the per-file usage check: a
-   compiled `.pzl` the scan never read that needs a compiled-out feature or function
-   fails the pass, before anything is swapped.
-4. Compose the global stylesheet: Tailwind output, then collected component styles in
-   deterministic order. Production hashing names it `styles-<ContentHash>.css`;
-   otherwise it is `styles.css`.
-5. Copy public assets and write the bundle (split into `chunks/` when `build.splitting`
-   is on) into staging under `.puzzle/tmp/` ([[DECISION-D153-PUZZLE-SCRATCH-DIR]]).
-6. In production, [[FILE-BUILD-SHELL]] follows emitted entry/CSS names and inserts
-   the split entry's static-import modulepreloads into the copied shell. Missing hashed
-   entry references or closing head fail before the swap; public files retain their names.
-7. For `hybrid`/`static` output, bundle for Node and run [[COMPONENT-SSG]] into staging.
-8. Atomically replace `dist/` (the previous output is renamed into `.puzzle/tmp/`, then
+   before touching existing output. Generated names (`app.js`, its map, `styles.css`;
+   `chunks/` when splitting, [[DECISION-D160-SPA-CODE-SPLITTING]]; `locales/` with i18n)
+   are reserved case-insensitively at the public ROOT only — nested files with those names
+   copy fine.
+2. With `build.hashNames` unset, read `public/` HTML to decide which fixed names the shell
+   and other public pages still need ([[DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD]]).
+3. Run the usage scan once and hand it to every pass (`passContext`). It walks the project,
+   then the `.pzl` files of installed packages that declare `@magic-spells/puzzle`
+   ([[DECISION-D89-FEATURE-USAGE-TREESHAKE]]).
+4. Bundle the entry (`app/app.ts` or `app/app.js`), compiling each reachable `.pzl` through
+   the build-scoped compile cache ([[DECISION-D152-BUILD-SCOPED-COMPILE-CACHE]]);
+   `<script>` bytes stay as authored (TypeScript is transpile-only). Tailwind runs
+   concurrently; browser errors are reported before Tailwind errors. Each pass ends with
+   the per-file usage check: a compiled `.pzl` the scan never read that needs a
+   compiled-out feature or function fails the pass, before anything is swapped.
+5. Compose the global stylesheet: Tailwind output, then collected component styles in
+   deterministic order — `styles-<ContentHash>.css` when hashed, else `styles.css`.
+6. Copy public assets and write the bundle (lazy chunks in `chunks/` under
+   `build.splitting`) into staging under `.puzzle/tmp/`
+   ([[DECISION-D153-PUZZLE-SCRATCH-DIR]]).
+7. In production, [[FILE-BUILD-SHELL]] rewrites the copied shell to the emitted entry/CSS
+   names and inserts the entry's static-import modulepreloads. Under an explicit
+   `hashNames: true` a missing entry reference fails here, before the swap; public files
+   keep their names.
+8. For `hybrid`/`static` output, bundle for Node and run [[COMPONENT-SSG]] into staging
+   ([[FLOW-PRERENDER]]).
+9. Atomically replace `dist/` (the previous output is renamed into `.puzzle/tmp/`, then
    removed). A failed build leaves the last good output intact.
 
 Production output is minified ES2022 ESM with console calls removed unless config opts
@@ -61,14 +66,9 @@ out. Linked production source maps are opt-in.
 
 ## Development build
 
-[[COMPONENT-DEV-SERVER]] runs an initial build, then keeps an incremental esbuild context
-and a warm Tailwind process while watching `app/` and `public/`. Each batch is classified
-so usage, public and CSS work runs only when that batch can affect it
-([[DECISION-D156-BUILD-PIPELINE-PERFORMANCE]]); successful rebuilds broadcast SSE reloads,
-failed ones report and keep serving the last good output. Static projects rebuild through
-the warm static builder with route-level invalidation. The reload client is injected at
-serve time, never written into artifacts. The dev-state runtime
-([[COMPONENT-DEVSTATE]]) carries store records and local view state across the reload.
+[[COMPONENT-DEV-SERVER]] runs an initial build, then keeps warm esbuild context(s) and a
+Tailwind child while watching `app/` and `public/`; the sequence is [[FLOW-DEV-REBUILD]].
+Development builds keep fixed names and add no preloads.
 
 ## Failure contract
 

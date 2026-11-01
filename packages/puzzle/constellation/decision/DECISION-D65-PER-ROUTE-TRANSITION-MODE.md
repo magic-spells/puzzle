@@ -1,7 +1,7 @@
 ---
-name: D65 — Per-route/per-view transitionMode override, resolved destination-only (amends D56)
+name: D65 — Per-route/per-view transitionMode, resolved destination-only
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-11-01T19:23:12.785Z'
 connections:
   - DECISION-D56-OVERLAP-TRANSITIONS
   - DECISION-D30-NESTED-ROUTES
@@ -13,52 +13,31 @@ connections:
   - DOC-SPEC
 code_refs:
   - client-runtime/router/router.js
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
-# D65 — Per-route/per-view transitionMode, resolved destination-only
+# D65 — Per-route/per-view `transitionMode`, resolved destination-only
 
-## Context
-
-`transitionMode: 'overlap' | 'sequential'` (D56) started as one app-wide
-switch. A per-view override looked ambiguous because a route transition spans
-two view instances — whose declaration wins when they disagree?
+`transitionMode: 'overlap' | 'sequential'` (D56) can be set per route, per view and per app. A route transition spans two view instances, so the rule that avoids ties is: only the destination is consulted.
 
 ## Decision
 
-Resolve per navigation, **destination only**, most specific first
-(`#resolveTransitionMode(entry, newAnimator)` in `#swap`):
+Resolved per navigation by `#resolveTransitionMode(entry, newAnimator)` in `#swap`, most specific first:
 
-1. **Route** — a top-level `transitionMode` on a route definition (sibling of
-   `layout`, not inside `meta`), found by a nearest-defined walk of the
-   destination chain leaf → root (the same walk as `meta.title`), so a parent
-   sets it for its subtree.
-2. **View/layout** — a `transitionMode` class field on the incoming animator
-   (the routed view or layout that D30's one-animator rule picks), beside
-   `animations`.
-3. **App** — the Router/PuzzleApp `transitionMode` option (default
-   `'sequential'`) as fallback.
+1. **Route** — a top-level `transitionMode` on a route definition (sibling of `layout`, not inside `meta`), found by a nearest-defined walk of the destination chain leaf → root, so a parent sets it for its subtree.
+2. **View/layout** — a `transitionMode` class field on the incoming animator (the routed view or layout D30's one-animator rule picks), beside `animations`.
+3. **App** — the PuzzleApp/Router `transitionMode` option (default `'sequential'`).
 
-The outgoing view/route is never consulted, so A→B reads only B and B→A reads
-only A — there is never a tie.
+- The outgoing view/route is never consulted: A→B reads only B, B→A reads only A.
+- An unknown route-level value throws at Router construction (`validateTransitionMode`). An unknown view-level value warns once per class in dev and falls through — one bad view must not crash navigation.
+- `playOut()`/`playIn()` stay mode-agnostic; D61's commit window and D55 morph pairing are unaffected.
 
-Validation: an unknown route-level value throws at Router construction
-(`validateTransitionMode`, like other route-shape errors). An unknown view-level
-value warns once per class and falls through to the next tier — one bad view
-must not crash navigation.
+## Alternatives rejected
 
-`playOut()`/`playIn()` stay mode-agnostic; D61's commit window, D55 morph
-pairing and interruption handling are unaffected.
+- **Per-view field with a merge rule** (either side opts in / outgoing wins) — reintroduces the tie.
+- **`transitionMode` inside `meta`** — `meta` is page metadata; `transitionMode` is structural like `layout`.
 
-## Alternatives
+## Gotchas
 
-- **Per-view field with a merge rule** (either side opts in / outgoing wins) —
-  rejected: reintroduces the tie destination-only resolution avoids.
-- **`transitionMode` inside `meta`** — rejected: `meta` is page metadata;
-  `transitionMode` is structural like `layout`.
-
-## Consequences
-
-- A field on a nested component (e.g. `Button.pzl`) is never read — only the
-  one animator is consulted.
-- Covered by the `D65` block in `tests/router-overlap.test.js` (precedence,
-  directionality, layout swap, chain walk, warn-and-fall-through).
+- A field on a nested component (e.g. `Button.pzl`) is never read — only the one animator is consulted.
+- Tests: the `D65` block in `tests/router-overlap.test.js`.

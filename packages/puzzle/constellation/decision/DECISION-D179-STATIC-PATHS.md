@@ -13,17 +13,15 @@ connections:
 
 # D179 — `staticPaths`
 
-Shipped in 0.9.0 (PR #216).
-
 ## Context
 
-The prerender skipped every route with a `:param` (with a warning), because it
-cannot know which values exist. "Static site" mostly means blogs, docs and
-product pages, so `/blog/:slug` is exactly the route people need prerendered —
-and with locale prefixes ([[DECISION-D177-LOCALE-URL-PREFIXES]]) a multilingual
-blog would otherwise get its fixed pages translated and none of its posts.
+The prerender cannot know which values a `:param` route has, so it skips
+those routes with a warning. Static sites are mostly blogs, docs and product
+pages, so `/blog/:slug` is exactly the route that needs prerendering, and with
+locale prefixes ([[DECISION-D177-LOCALE-URL-PREFIXES]]) a multilingual blog
+would otherwise get its fixed pages translated and none of its posts.
 
-Everything else already existed: the prerender runs each page's `data()` in
+Everything else already exists: the prerender runs each page's `data()` in
 Node, store reads that miss are fetched through the app's adapter, and the
 page carries the build's read state.
 
@@ -59,7 +57,7 @@ A route may declare `staticPaths`, in the route table (`app/routes.js`):
   is read, so records seeded in `beforeMount` count either way. Records with an
   empty or nullish field are skipped with one warning per route.
 - **Build only.** The browser never calls it. It runs once per prerender pass,
-  so once per locale under prefix routing — a site may list different posts
+  so once per locale under prefix routing; a site may list different posts
   per language.
 - **One page per entry**, rendered like a fixed route with those params:
   `dist/blog/cookies/index.html`, `dist/es/blog/cookies/index.html`.
@@ -67,7 +65,7 @@ A route may declare `staticPaths`, in the route table (`app/routes.js`):
   value, then the router's `encodeURL` runs, so `a b` → `a%20b`, `é` →
   `%C3%A9`, and the matcher decodes each back. A value equal to `.` or `..`,
   or containing `/`, `?` or `#`, is a build error naming route, entry, param
-  and value ("slugify it") — hosts decode those before the file lookup, and
+  and value ("slugify it"): hosts decode those before the file lookup, and
   dot segments would overwrite other pages.
 - **Errors and warnings**: an entry missing a param is a build error naming the
   route. Duplicates render once, with a warning. An empty list renders nothing
@@ -78,10 +76,8 @@ A route may declare `staticPaths`, in the route table (`app/routes.js`):
   carries `<script type="application/json" data-puzzle-static-route>` with its
   path and params; the generated entry merges it into the route JSON for these
   routes only, and the kernel threads `route.params` into the route snapshot
-  and every `preload` without reading `location`. Fixed-route modules are
-  byte-identical; the shared kernel chunk grew 16 B gzip. An unlisted value is
-  a 404.
-- **Hybrid output**: an unlisted value still works — the SPA shell takes over
+  and every `preload` without reading `location`. An unlisted value is a 404.
+- **Hybrid output**: an unlisted value still works: the SPA shell takes over
   and fetches in the browser. A generated path that an earlier route matches
   first in the live router is skipped with reason `shadowed` and a warning, so
   takeover never renders a different view than the prerender.
@@ -97,22 +93,22 @@ A route may declare `staticPaths`, in the route table (`app/routes.js`):
   dev route graph keys generated pages by it.
 - **Dev rebuilds** ([[DECISION-D155-ROUTE-LEVEL-INVALIDATION]]): a
   `staticPaths` route outside `only` still re-runs its list (and so
-  `beforeMount`) to enumerate the reused pages — the one exception to D155's
+  `beforeMount`) to enumerate the reused pages, the one exception to D155's
   skip. A new entry has no last-good page and falls back to a full render; a
   removed entry is dropped. A throwing list fails the rebuild naming the
   route.
 
 ## Alternatives rejected
 
-- **File-based enumeration** (a page per file on disk) — D67 rejected
+- **File-based enumeration** (a page per file on disk): D67 rejected
   file-based routing.
-- **A list in `puzzle.config.js`** — the config is read by the Go build, away
+- **A list in `puzzle.config.js`**: the config is read by the Go build, away
   from the route it describes, and cannot use the app's store or adapter.
-- **Crawling links from rendered pages** — misses unlinked pages and makes the
+- **Crawling links from rendered pages**: misses unlinked pages and makes the
   output depend on render order.
-- **A content pipeline (Markdown collections)** — a separate feature; this is
+- **A content pipeline (Markdown collections)**: a separate feature; this is
   only the enumeration hook it would build on.
-- **Writing `/ ? #` values as escaped file names** — no static host serves
+- **Writing `/ ? #` values as escaped file names**: no static host serves
   them; a build error with a slugify hint is honest.
 
 ## Consequences
@@ -122,7 +118,7 @@ A route may declare `staticPaths`, in the route table (`app/routes.js`):
 - Each page runs its own `data()` on a fresh store, so per-page fetches
   multiply by pages × locales.
 - Route `meta` (title, canonical) is static per route, so all pages of a route
-  share it unless `data()`-driven head work is added later.
+  share it.
 - `i18n.locales[].href` on a page that exists in only some locales still links
   the missing ones; a switcher there shows dead links.
 - In SPA and hybrid apps the route table ships to the browser, and so does
