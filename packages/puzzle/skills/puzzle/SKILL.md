@@ -366,7 +366,7 @@ Rules that bite:
   string and array libs whatever the app's `target`, so `.at()`,
   `.replaceAll()` and `.toSorted()` type in templates — and in that file's
   `<script>` too, which can hide a method your `target` lacks from the check
-  (the build is unaffected). `toSorted`/`toReversed` need TypeScript ≥ 5.2.
+  (the build is unaffected). `puzzle check` needs TypeScript 7 or later.
 - **Three marker tags, four meanings.** `<Children/>` marks where a component's
   default children render; `<Slot name="x"/>` declares a named region (the
   caller routes a direct child in with a static `slot="x"` attribute);

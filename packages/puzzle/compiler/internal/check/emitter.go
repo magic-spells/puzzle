@@ -139,35 +139,25 @@ var libraryFunctionSignatures = []struct{ name, signature string }{
 // JavaScript method, so its declaration must be in the program whatever the
 // app's own target: an app on `target: ES2020` would otherwise see `.at()`,
 // `.replaceAll()`, and `.toSorted()` reported as missing. A `/// <reference
-// lib>` adds a file without replacing the app's `lib` list. es2023.array
-// first ships with TypeScript 5.0, typing findLast, so it is referenced from
-// 5.0 on; toSorted and toReversed join that file only in 5.2, so on 5.0 and
-// 5.1 no lib reference can type them and they report as missing, as they
-// would in the app's own code. Every other file exists in 4.9, the oldest
-// compiler puzzle check supports.
-var languageLibs = []struct {
-	lib string
-	min TypeScriptVersion
-}{
-	{"es2016.array.include", TypeScriptVersion{}}, // includes
-	{"es2017.object", TypeScriptVersion{}},        // Object.values, Object.entries
-	{"es2017.string", TypeScriptVersion{}},        // padStart, padEnd
-	{"es2019.array", TypeScriptVersion{}},         // flat
-	{"es2019.string", TypeScriptVersion{}},        // trimStart, trimEnd
-	{"es2021.string", TypeScriptVersion{}},        // replaceAll
-	{"es2022.array", TypeScriptVersion{}},         // at
-	{"es2022.string", TypeScriptVersion{}},        // at
-	{"es2023.array", TypeScriptVersion{5, 0}},     // findLast; toSorted, toReversed from 5.2
+// lib>` adds a file without replacing the app's `lib` list.
+var languageLibs = []string{
+	"es2016.array.include", // includes
+	"es2017.object",        // Object.values, Object.entries
+	"es2017.string",        // padStart, padEnd
+	"es2019.array",         // flat
+	"es2019.string",        // trimStart, trimEnd
+	"es2021.string",        // replaceAll
+	"es2022.array",         // at
+	"es2022.string",        // at
+	"es2023.array",         // findLast, toSorted, toReversed
 }
 
-// shimSource is the shim for the app's TypeScript version, with the method
-// table's lib files and the library signatures filled in.
-func shimSource(ts TypeScriptVersion) string {
+// shimSource is the shim with the method table's lib files and the library
+// signatures filled in.
+func shimSource() string {
 	var libs strings.Builder
-	for _, l := range languageLibs {
-		if ts.AtLeast(l.min) {
-			libs.WriteString("/// <reference lib=\"" + l.lib + "\" />\n")
-		}
+	for _, lib := range languageLibs {
+		libs.WriteString("/// <reference lib=\"" + lib + "\" />\n")
 	}
 	var sigs strings.Builder
 	for _, fn := range libraryFunctionSignatures {
@@ -220,9 +210,8 @@ func sourceDir(root string) (string, error) {
 	return dir, nil
 }
 
-// Generate rebuilds <appRoot>/.puzzle/check from the .pzl files under app/
-// for the app's TypeScript compiler version.
-func Generate(appRoot string, ts TypeScriptVersion) (*Result, error) {
+// Generate rebuilds <appRoot>/.puzzle/check from the .pzl files under app/.
+func Generate(appRoot string) (*Result, error) {
 	root, err := filepath.Abs(appRoot)
 	if err != nil {
 		return nil, err
@@ -291,10 +280,10 @@ func Generate(appRoot string, ts TypeScriptVersion) (*Result, error) {
 		}
 	}
 
-	if err := os.WriteFile(filepath.Join(checkDir, "puzzle-check.d.ts"), []byte(shimSource(ts)), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(checkDir, "puzzle-check.d.ts"), []byte(shimSource()), 0o644); err != nil {
 		return nil, err
 	}
-	config, err := tsconfig(root, ts.Major)
+	config, err := tsconfig(root)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +293,7 @@ func Generate(appRoot string, ts TypeScriptVersion) (*Result, error) {
 	return result, nil
 }
 
-func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
+func tsconfig(appRoot string) ([]byte, error) {
 	appConfig, err := os.ReadFile(filepath.Join(appRoot, "tsconfig.json"))
 	hasAppConfig := err == nil
 	if err != nil && !os.IsNotExist(err) {
@@ -354,43 +343,24 @@ func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
 		"exclude": []string{},
 	}
 	opts := config["compilerOptions"].(map[string]any)
+	// JSON null deliberately clears either setting inherited from the app:
+	// TypeScript 7 removed baseUrl and node10/node module resolution. With no
+	// baseUrl, a paths target resolves from this config's directory.
+	opts["baseUrl"] = nil
+	opts["moduleResolution"] = nil
 	// Paths is always written here, never inherited: an inherited target is
 	// relative to the app's baseUrl or tsconfig, not to this config, and may be
 	// non-relative, which is illegal once baseUrl is cleared. The app's own
-	// entries are merged in with their targets rewritten from here — `prefix`
-	// is where the app root sits relative to the directory targets resolve from
-	// — and the @ alias is written over them last.
-	var aliasTarget, prefix string
-	if typescriptMajor >= 6 {
-		// JSON null deliberately clears either setting inherited from the app.
-		// TypeScript 7 removed baseUrl and node10/node module resolution, and
-		// TypeScript 6 deprecates both (an error unless the app silences it).
-		// With no baseUrl, a target resolves from this config's directory.
-		opts["baseUrl"] = nil
-		opts["moduleResolution"] = nil
-		aliasTarget, prefix = "../../app/*", "../.."
-	} else {
-		// Before TypeScript 6, module: ESNext defaults to classic resolution. Keep
-		// the proven node/baseUrl pair so package imports and the @ alias resolve
-		// under the oldest supported compiler (4.9). Module is pinned with it: an
-		// app's node16/nodenext module rejects node resolution (TS5109). Pinning
-		// it drops the default-import interop node16/nodenext imply, so a default
-		// import of an `export =` package would be TS1259; the check emits
-		// nothing, and esbuild interops those imports, so allow them.
-		opts["baseUrl"] = "../.."
-		opts["moduleResolution"] = "node"
-		opts["module"] = "ESNext"
-		opts["allowSyntheticDefaultImports"] = true
-		aliasTarget = "app/*"
-	}
+	// entries are merged in with their targets rewritten from here, and the @
+	// alias is written over them last.
 	paths := map[string]any{}
 	if hasAppConfig {
 		config["extends"] = "../../tsconfig.json"
-		for key, targets := range appPaths(appConfig, prefix) {
+		for key, targets := range appPaths(appConfig) {
 			paths[key] = targets
 		}
 	} else {
-		// TypeScript 6 and 7 turn strict on by default; a plain-JavaScript app
+		// TypeScript 7 turns strict on by default; a plain-JavaScript app
 		// with no tsconfig gets the lenient checking it had before, as it does
 		// for noImplicitAny.
 		opts["target"] = "ES2020"
@@ -400,7 +370,7 @@ func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
 	}
 	// Written after the app's entries: the build aliases @ to app/ in esbuild,
 	// which wins over tsconfig paths, so the check must resolve it the same way.
-	paths["@/*"] = []string{aliasTarget}
+	paths["@/*"] = []string{"../../app/*"}
 	opts["paths"] = paths
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
@@ -412,11 +382,11 @@ func tsconfig(appRoot string, typescriptMajor int) ([]byte, error) {
 // appPaths reads the app tsconfig's own compilerOptions.paths, each target
 // rewritten to resolve from the generated config: joined onto the app's
 // baseUrl (a target is relative to it when set, to the app root otherwise) and
-// then onto prefix. Only the app's tsconfig.json itself is read: `extends`
+// then onto the app root as seen from .puzzle/check. Only the app's tsconfig.json itself is read: `extends`
 // chains are not followed, so paths the app inherits from another config do
 // not reach the check, and neither does a baseUrl it inherits. A config this
 // cannot parse contributes nothing, leaving the @ alias.
-func appPaths(data []byte, prefix string) map[string][]string {
+func appPaths(data []byte) map[string][]string {
 	var config struct {
 		CompilerOptions struct {
 			BaseURL string              `json:"baseUrl"`
@@ -427,6 +397,7 @@ func appPaths(data []byte, prefix string) map[string][]string {
 		return nil
 	}
 	base := filepath.ToSlash(config.CompilerOptions.BaseURL)
+	prefix := "../.."
 	if path.IsAbs(base) || filepath.IsAbs(base) {
 		prefix = ""
 	}
