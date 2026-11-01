@@ -8,8 +8,8 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - DOC-SPEC-TEMPLATE
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
-verified_at: '2026-09-27T00:25:55.351Z'
-verified_sha: 3957beaf4eb72e0fe9fb06853a96761b66a209b8
+verified_at: '2026-11-01T19:19:25.478Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 code_refs:
   - client-runtime/views/viewManager.js
   - client-runtime/ssg/preload.js
@@ -67,13 +67,12 @@ entirely. Self-closing markers and empty paired bodies have no fallback.
 
 - Prop-opt-in defaults only — cannot express icon-as-default when the gating
   prop always has a value.
-- A public is-slot-filled probe — more API for the same need; still unclaimed.
+- A public is-slot-filled probe — more API for the same need.
 - Fallback on named slots only — would split the one Slot/Children mechanism
   and lose the empty-outlet case.
 - Eager fallback (body as the marker's children) — evaluated on every render,
   and its value-printing warnings fired for snippet-filled VirtualList rows
-  whose fallback never renders. Lazy: snippet-filled rows ~17% faster,
-  fallback-showing rows ~5% slower (1,000-row build+expand).
+  whose fallback never renders.
 - Silencing diagnostics during fallback construction — keeps the wasted work
   and hides real warnings when the fallback does render.
 

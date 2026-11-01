@@ -1,7 +1,7 @@
 ---
 name: D41 — Anchor-target scrolling + sessionStorage scroll persistence
 status: verified
-verified_at: '2026-08-24T18:49:19.449Z'
+verified_at: '2026-11-01T19:23:24.972Z'
 connections:
   - COMPONENT-ROUTER
   - DOC-ROUTER
@@ -12,7 +12,7 @@ connections:
   - DECISION-D39-SKELETON
 code_refs:
   - client-runtime/router/router.js
-verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D41 — Anchor-target scrolling + sessionStorage scroll persistence

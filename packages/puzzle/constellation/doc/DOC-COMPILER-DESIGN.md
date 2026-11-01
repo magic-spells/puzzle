@@ -3,93 +3,66 @@ name: Compiler design
 status: built
 connections:
   - DOC-SPEC
-  - DOC-COMPILATION-FLOW
+  - DOC-SPEC-BUILD
+  - COMPONENT-COMPILER-CLI
   - COMPONENT-TEMPLATE-PARSER
   - COMPONENT-CODEGEN
   - COMPONENT-ESBUILD-PLUGIN
+  - COMPONENT-FORMATTERS
   - FLOW-BUILD
   - FILE-CODEGEN
-  - FILE-CODEGEN-EXPRESSIONS
   - FILE-ESBUILD-PLUGIN
 ---
 
 # Compiler design
 
-The compiler turns `.pzl` modules into ordinary JavaScript modules for
-esbuild. Central constraint (D3): the user's `<script>` is real JavaScript,
-and Go never parses or rewrites its semantics.
+The contributor's map of how a `.pzl` file becomes JavaScript and an app becomes `dist/`. Each
+stage's contract lives in its own card; this one says how they fit and which rules hold across
+all of them.
 
-## Sections and template parser
+## The lane
 
+`puzzle build` / `puzzle dev` ([[COMPONENT-COMPILER-CLI]]) drive esbuild with the `.pzl`
+plugin ([[COMPONENT-ESBUILD-PLUGIN]]). `app/app.ts` or `app/app.js` is the entry; its imports
+discover routes, models and `.pzl` files, and `@/` resolves to `app/`. For each imported
+`.pzl` the plugin runs:
 
-[[COMPONENT-TEMPLATE-PARSER]] lives in `packages/puzzle-lang`. Every file
-holds one `<puzzle-view>` section (the template), optional `<script>` and
-`<style>`, and an optional `<puzzle-skeleton>`; order is free, and a
-duplicate, missing or malformed section fails with a source position. In
-view mode `<puzzle-view>` becomes the render root with its attributes; in
-component mode it renders nothing and its content must be one root. The
-section splitter is aware of strings, comments, regexes, template literals
-and `{#raw}` spans, so tag-like text inside them never ends a section.
+1. **Sections and template** — [[COMPONENT-TEMPLATE-PARSER]] (`packages/puzzle-lang/parser`)
+   splits `<puzzle-view>`, `<script>`, `<style>` and `<puzzle-skeleton>` and parses the
+   template, every expression going through the closed grammar in `packages/puzzle-lang/expr`
+   ([[DECISION-D176-EXPRESSION-LANGUAGE]]).
+2. **Emission** — [[COMPONENT-CODEGEN]] keeps the script bytes, adds one import line and
+   appends `Name.prototype.render` (and `renderSkeleton`)
+   ([[DECISION-D10-PROTOTYPE-RENDER]]).
+3. **Bundling** — esbuild owns JavaScript/TypeScript parsing, imports, aliases, source maps,
+   minification, console stripping, CSS collection and scoping, the function manifest
+   ([[COMPONENT-FORMATTERS]]) and dependency discovery. The Go template compiler duplicates
+   none of it ([[DECISION-D09-GO-ESBUILD-COMPILER]]).
 
-The parser builds an AST of host and component tags, attributes,
-interpolations, control-flow blocks, events, composition markers, `{#svg}`,
-`{#raw}`, islands and refs. Every expression is parsed by the closed
-expression grammar in `packages/puzzle-lang/expr` (D176). Block closure is
-structural. Attribute values have their own mixed text/interpolation grammar;
-an inline `{#if}` there may not contain elements or `{#for}`. The parser
-enforces marker spelling and placement, static ref/slot/island names,
-component and event forms, and directive nesting; single-root arity is a
-codegen gate.
+The build around it — usage scan, Tailwind, staging, prerender, atomic swap, the dev loop — is
+[[FLOW-BUILD]]; flags and output modes are [[DOC-SPEC-BUILD]].
 
-## Code generation
+## Rules that hold across the lane
 
-[[COMPONENT-CODEGEN]] keeps the script body byte-for-byte and appends
-`Name.prototype.render = function () { … }` (plus `renderSkeleton`). The
-class name is the first real `export default class X extends …` in the
-string/comment/regex-aware token stream; an anonymous default export or a
-missing `extends` is a build error. Render code builds ViewNode trees and
-resolves identifiers against loop and event scope before component data.
+- **The `<script>` is real JavaScript or TypeScript.** Go tokenizes it to find the class and
+  check reserved bindings, but never parses or rewrites it; TypeScript is transpile-only
+  ([[DECISION-D54-TYPESCRIPT-SCRIPTS]]).
+- **Templates never reach script scope**, with one exception: `<Component is>` may read the
+  script's imports and simple module declarations
+  ([[DECISION-D180-COMPONENT-SLOT]]). Every other expression reads `data()`.
+- **Text is text.** Interpolations become text nodes through the runtime's `displayValue`
+  ([[DECISION-D127-DISPLAY-COERCION-OWNER]], [[DECISION-D22-NO-ESCAPE-BY-DEFAULT]]); markup
+  enters only through `{#svg}` ([[DECISION-D46-INLINE-SVG]]) and the sanitized `raw()` /
+  escaped `newline_to_br()`.
+- **The emitted module imports only what it uses**, so opt-in runtime features cost nothing in
+  apps that don't write them.
+- **No partial output.** Parser and codegen errors carry file, line, column and an actionable
+  message and surface as esbuild errors; a failed build keeps the last good `dist/`.
+- **Prerendering is a build-time document optimization**: `hybrid` and `static` output run the
+  same compiled views in Node. There is no SSR server and no hydration protocol.
 
-Emission contracts:
+## Proof
 
-- **Reserved module-scope names.** The appended imports and declarations make
-  these names compiler-owned in a script: `ViewNode`; `SLOT_TAG`,
-  `SNIPPET_TAG`, `PORTAL_TAG` (when used); `__s` (display coercion); `__l`
-  (list blocks), `__L<n>` (list-block metadata), `__e` / `__r` (loop guards);
-  `__dc` (runtime component selection, only when emitted);
-  `__svg_N` (shared `{#svg}` assets). Binding one at module scope is a
-  positioned compile error (D133), found by a conservative top-level
-  declaration scan that never parses the script; misses fall through to
-  esbuild's duplicate-binding error. Function-scope scratch names (`__d`,
-  `__f`, `__ev`, `__i`, …) are not reserved — they only shadow. An alias
-  allocator for compiler imports stays rejected; D180 selector getters separately avoid collisions with render-local scopes.
-- **Library calls.** `const __f = this.ctx.formatters.getAll()` is emitted only
-  when a template calls a library function; each call goes through
-  `(__f["name"] || __f.__missing("name"))` (the D43 guard).
-- **Display coercion.** Interpolations route through the runtime's
-  `displayValue` as `__s(…)` (D127): the runtime owns the rule, `null` and
-  `undefined` print empty, and `undefined` warns once in development only.
-  Text nodes give structural injection safety.
-- **Caching (D170).** Data-independent handlers and ref setters are cached per
-  instance; an item-form `{#for}` lowers to a persistent list block with
-  row-scoped handler caches; maximal static subtrees are allocated once.
-- List rows get primary-key-aware automatic keys unless `key` overrides; the resolved row key follows component prop spreads and wins over them.
-- Conditionals emit placeholders to keep sibling arity stable.
-- **Runtime component selection (D180):** `is` lowers with loop/snippet/arrow bindings before script module bindings before data. Other props keep normal data scope; `{...props}` operands are ordinary expressions merged in written order. Emission imports `dynamicComponent as __dc` only when used, never a registry; children are ordinary default-slot content. `name` and `from` retain normal prop semantics. Imports/`const` selectors preserve row caching; module `let`/`var` reads make enclosing cached loops volatile. Mutating a const map's entries in place is not observed by cached rows. Non-component literal selectors and authored `flip` on `<Component>` are compile errors. `__PUZZLE_HAS_COMPONENT_SLOT__` gates stable range machinery.
-- Component children, named slots, snippets and router outlets share one
-  composition mechanism under distinct spellings.
-
-## Bundler boundary
-
-[[COMPONENT-ESBUILD-PLUGIN]] owns JavaScript/TypeScript parsing, imports, the
-`@/` alias, runtime aliases, source maps, minification, console stripping, CSS
-collection and scoping, the function manifest, and dependency discovery. The
-Go template compiler duplicates none of it.
-
-## Errors and proof
-
-Parser and codegen errors carry file, line, column and an actionable message,
-surface as esbuild errors, and never produce partial output. Go table tests
-cover the scanner, parser and codegen; golden fixtures pin byte-level
-emission; Vitest compiled-fixture suites prove generated modules behave like
-real views; example smoke builds exercise the whole lane.
+Go table tests cover the scanner, parser and codegen; golden fixtures pin byte-level emission
+(the todos output is the byte contract); Vitest compiled-fixture suites prove generated modules
+behave like real views; example builds and the Playwright smoke exercise the whole lane.

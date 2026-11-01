@@ -1,6 +1,6 @@
 ---
 name: literal date-argument check
-status: built
+status: verified
 path: compiler/internal/codegen/presets.go
 language: go
 summary: >-
@@ -10,8 +10,22 @@ connections:
   - COMPONENT-CODEGEN
   - DECISION-D174-STANDARD-FORMATTERS
   - TEST-COMPILER-CODEGEN
+verified_at: '2026-11-01T19:19:18.479Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
-Source binding for the owning component card. Behavioral intent stays in [[COMPONENT-CODEGEN]] and [[DECISION-D174-STANDARD-FORMATTERS]] (dates: an unknown preset); this card anchors that plan to `compiler/internal/codegen/presets.go`.
+# presets.go
 
-At run time an unknown preset renders the function's default and an unknown zone renders the date unshifted, so a typo such as `time(v, 'shrot')` would ship unnoticed. When the argument is a string literal the compiler knows the answer: `checkLiteralArgs` reports a positioned compile **warning** that names the valid presets (`short`, `medium`, `long`, `iso`), says to call `time(value)` for a retired preset name such as `date(v, 'time')`, or rejects a zone that cannot be an IANA name or a UTC offset (a space, an empty string, a leading digit). It is a warning, not an error, because an app may register its own function under any of those names. A dynamic argument stays the runtime's development error. `presets_test.go` covers every position the language reaches, handler arguments included.
+`checkLiteralArgs` (called from `markup.go`): a positioned compile **warning** for a
+string-literal argument the date functions cannot honor
+([[DECISION-D174-STANDARD-FORMATTERS]]) — an unknown `date`/`time`/`datetime` preset
+(it names `short`, `medium`, `long`, `iso`), a retired preset name such as
+`date(v, 'time')` (steers to `time(v)`), or an `in_timezone` zone that cannot be an
+IANA name or UTC offset.
+
+Why it exists: at run time an unknown preset silently renders the default and an
+unknown zone renders unshifted, so `time(v, 'shrot')` would ship unnoticed. It is a
+warning, not an error, because an app may register its own function under any of
+those names. A dynamic argument stays the runtime's development error.
+`presets_test.go` covers every position the language reaches, handler arguments
+included.

@@ -1,28 +1,27 @@
 ---
 name: ROUTER.md — routing reference
 status: verified
-verified_at: '2026-07-24T01:11:18.110Z'
 connections:
-  - COMPONENT-ROUTER
-  - DOC-SPEC
   - DOC-SPEC-ROUTER
+  - DOC-SPEC
   - DOC-VIEW-LIFECYCLE
-  - DOC-MODELS
   - DOC-DATASTORE
-  - DECISION-D28-ANIMATIONS
   - DECISION-D56-OVERLAP-TRANSITIONS
-  - DECISION-D68-CROSS-VIEW-MORPH
-  - DECISION-D69-MORPH-ROLES
-verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
+  - DECISION-D175-TRANSLATIONS
+  - DECISION-D177-LOCALE-URL-PREFIXES
+  - DECISION-D182-NAVIGATION-RESULT
+  - DECISION-D183-ROUTE-VIEWS-AGENT-FIELD
+verified_at: '2026-11-01T19:25:13.521Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
-A practical guide to Puzzle routing: defining routes, params, layouts, nested routes, navigation and links, URL-backed state, guards, scroll, router modes, base paths and 404s. The binding rules live in [[DOC-SPEC-ROUTER]] (§ numbers below point there); this card shows how to use them.
+How to route a Puzzle app: routes, params, layouts, nested routes, links, URL-backed state, guards, scroll, modes, base paths, locales and 404s. The binding rules are [[DOC-SPEC-ROUTER]]; the § numbers below point there.
 
 # Puzzle Router
 
-The router maps URLs to views, wraps them in layouts, hands `:param` segments to `data()`, and keeps history honest. It runs in the SPA and in `output: 'hybrid'` builds (after takeover); `output: 'static'` pages have no router — links are plain page loads and navigation methods throw.
+The router maps URLs to views, wraps them in layouts, hands `:param` segments to `data()`, and keeps history honest. It runs in the SPA and in `output: 'hybrid'` builds (after takeover). `output: 'static'` pages have no router: links are plain page loads and navigation methods throw.
 
-Path routing (the default) needs the server to serve `index.html` for every app route; `puzzle dev` and `puzzle preview` do this for you. On hosts where you can't configure that fallback, use hash mode.
+Path routing (the default) needs the server to serve `index.html` for every app route; `puzzle dev` and `puzzle preview` do this. On hosts where you can't set up that fallback, use hash mode.
 
 ## Defining routes
 
@@ -44,22 +43,23 @@ export default [
 
 | Field | Purpose |
 | ----- | ------- |
-| `path` | `/about`, `/user/:id`, or `'*'` (catch-all, top level only, always matched last). Top-level paths start with `/`. |
+| `path` | `/about`, `/user/:id`, or `'*'` (catch-all, top level only, matched last). Top-level paths start with `/`. |
 | `name` | Route identifier — match on it rather than on paths. |
 | `view` | The `.pzl` view class, or `lazy(() => import('./views/X.pzl'))` to load it on first visit (§62). |
-| `layout` | Wraps the view, which renders at the layout's `<Slot/>`. **Top-level routes only.** |
+| `layout` | Wraps the view, which renders at the layout's `<Slot/>`. Top-level routes only. |
 | `children` | Nested routes with relative paths (below). |
 | `guard` | `({ to, from, ctx }) => verdict`, covering this route and every child (§48). |
-| `meta` | `title`, `description`, `canonical`, `socialImage` — static strings or `null` (§45). |
+| `meta` | `title`, `description`, `canonical`, `socialImage` — static strings, `{ t: 'key' }` for title/description, or `null` (§45). |
 | `transitionMode` | `'sequential'` or `'overlap'` for navigations *into* this route (§33). |
-| `prerender` | `false` anywhere in the chain makes hybrid/static builds write the plain shell at that path instead of prerendered HTML. |
-| `agent` | `false` hides the route (and its children) from tools reading `router.views`; `{ name, about }` names and describes it. The router itself ignores it (below). |
+| `prerender` | `false` anywhere in the chain makes hybrid/static builds write the plain shell at that path. |
+| `staticPaths` | Build only: the param values to prerender for a `:param` route (§9, [[DECISION-D179-STATIC-PATHS]]). |
+| `agent` | `false` hides the route from tools reading `router.views`; `{ name, about }` names and describes it (below). |
 
-Order matters: the first match wins, so declare `/user/new` before `/user/:id` (the router warns in development when a route is shadowed).
+The first match wins, so declare `/user/new` before `/user/:id` (the router warns in development when a route is shadowed).
 
 ## Params in `data()`
 
-`:param` values arrive as strings in `data(params, props)`, and `data()` re-runs when they change — `/user/42` → `/user/7` keeps the same view instance:
+`:param` values arrive as strings in `data(params, props)`. `data()` re-runs when they change; `/user/42` → `/user/7` keeps the same view instance:
 
 ```js
 export default class UserView extends PuzzleView {
@@ -69,11 +69,11 @@ export default class UserView extends PuzzleView {
 }
 ```
 
-Store ids are number/string-insensitive, so the string param finds a numeric pk. With the adapter capability a missing record is fetched automatically before the view commits ([[DOC-SPEC-DATA]] §61). The router waits for `data()` before committing, so the old page stays until the new one is ready (unless the view declares a `<puzzle-skeleton>`).
+Store ids ignore number/string differences, so the string param finds a numeric key. With the adapter, a missing record is fetched before the view commits ([[DOC-SPEC-DATA]] §61). The router waits for `data()`, so the old page stays until the new one is ready (unless the view declares a `<puzzle-skeleton>`).
 
 ## Where am I? `this.route`
 
-Inside a routed `data()`, `this.route` describes the navigation being loaded — `{ path, pathname, query, hash, route, params, chain }`. `router.current` and `location` still describe the *old* page at that point, so use `this.route` for active-nav highlighting (§19):
+Inside a routed `data()`, `this.route` describes the navigation being loaded: `{ path, pathname, query, hash, route, params, chain }`. At that point `router.current` and `location` still describe the *old* page, so use `this.route` for active-nav highlighting (§19):
 
 ```js
 data() {
@@ -82,11 +82,11 @@ data() {
 }
 ```
 
-Compare route names (or `this.route.chain[0].name` for the section), not paths. Components the router doesn't manage get `this.route === null` — pass what they need as props.
+Compare route names (or `this.route.chain[0].name` for the section), not paths. Components the router doesn't manage get `this.route === null`; pass what they need as props.
 
 ## Layouts and `<Slot/>`
 
-A layout is an ordinary view whose template has one `<Slot/>` where the routed view renders. Consecutive routes that share a layout class reuse the instance (its `data()` re-runs; only the slot content swaps).
+A layout is an ordinary view with one `<Slot/>` where the routed view renders. Consecutive routes that share a layout class reuse the instance.
 
 ```html
 <puzzle-view class="min-h-screen flex flex-col">
@@ -95,7 +95,7 @@ A layout is an ordinary view whose template has one `<Slot/>` where the routed v
 </puzzle-view>
 ```
 
-`<Slot/>` is the router outlet. Components use `<Children/>` and `<Slot name="…"/>` for composition — see [[DOC-SPEC-TEMPLATE]].
+`<Slot/>` is the router outlet. Components use `<Children/>` and `<Slot name="…"/>` for composition ([[DOC-SPEC-TEMPLATE]]).
 
 ## Nested routes
 
@@ -111,11 +111,11 @@ A layout is an ordinary view whose template has one `<Slot/>` where the routed v
 }
 ```
 
-- The parent view renders its matched child at its own `<Slot/>`; every non-leaf view needs one (a dev warning fires otherwise).
+- The parent view renders its matched child at its own `<Slot/>`; a non-leaf view without one warns in development.
 - Child paths are relative. Add an index child (`path: ''`) or the parent's bare URL falls through to the catch-all.
-- Every level's `data(params)` receives the full merged params.
-- Moving between siblings keeps the shell instance (its `data()` re-runs before the URL commits) and swaps only the pane; the topmost swapped view is the one that animates.
-- A child cannot declare `layout`, a leading-`/` path, or `'*'`; a `:param` name may not repeat within one chain. Each is a constructor throw.
+- Every level's `data(params)` gets the full merged params.
+- Moving between siblings keeps the shell instance and swaps only the pane.
+- A child cannot declare `layout`, a leading-`/` path, or `'*'`, and a `:param` name may not repeat within one chain.
 
 ## Navigating
 
@@ -125,7 +125,7 @@ this.ctx.router.replace('/items?q=cabin');  // replace the current entry, keep s
 this.ctx.router.back();                     // also forward() and go(n)
 ```
 
-Plain `<a>` tags are intercepted — no link component. The browser keeps a click when it is modified (Cmd/Ctrl/Shift/Alt) or not a left click, the link has `download` or a `target` other than `_self`, it points to another origin, or it is `mailto:`/`tel:`.
+Plain `<a>` tags are intercepted — there is no link component. The browser keeps the click when it is modified (Cmd/Ctrl/Shift/Alt) or not a left click, the link has `download` or a `target` other than `_self`, it points to another origin, or it is `mailto:`/`tel:`.
 
 **Write hrefs with `link()`** so they are right in every mode and under any base path:
 
@@ -134,11 +134,27 @@ Plain `<a>` tags are intercepted — no link component. The browser keeps a clic
 <a href="{ link('/user/' + user.id) }">{ user.name }</a>
 ```
 
-`link` calls `router.url()`: `/about` in path mode (prefixed with `routerBase`), `#/about` in hash mode. Because the attribute itself is correct, new-tab and copy-link work. External URLs pass through unchanged.
+`link` calls `router.url()`: `/about` in path mode (with `routerBase`), `#/about` in hash mode. Because the attribute is a real URL, new-tab and copy-link work. External URLs pass through.
+
+`await router.push(path)` tells you what happened (§30):
+
+```js
+const result = await this.ctx.router.push('/account');
+if (result.ok) {
+  result.route.path;      // where it landed — '/login' if a guard redirected
+  result.redirectedFrom;  // '/account' after a redirect, else undefined
+  result.catchAll;        // true when it landed on the '*' route
+} else {
+  result.reason;          // 'blocked' | 'superseded' | 'not-found' | 'error'
+  result.error;           // the failure, for 'error' (also sent to onError)
+}
+```
+
+`push()` and `replace()` never reject. A push to the page you're on is a no-op that resolves `ok`, unless another navigation is loading.
 
 ## URL-backed state: `query` and `replace()`
 
-Filters, tabs, search and pagination belong in the URL. Read them from `this.route.query` (a frozen object; repeated keys become arrays, `?debug` is `''`) and write them with `replace()`, which adds no history entry and leaves scroll alone; a same-route replace also leaves focus where it is, so typing is never interrupted (§44, §51):
+Filters, tabs, search and pagination belong in the URL. Read them from `this.route.query` (frozen; repeated keys become arrays, `?debug` is `''`) and write them with `replace()`, which adds no history entry, leaves scroll alone, and on the same route leaves focus where it is, so typing is never interrupted (§44, §51):
 
 ```html
 <input value={ q } placeholder="Filter…" @input={ updateFilter(event) } />
@@ -163,7 +179,7 @@ Use `push()` when the change should be a Back-button stop (wizard steps). Query 
 
 ## Titles and head tags
 
-`meta.title` becomes `document.title` on each committed navigation; the nearest title on the chain wins (leaf → root). `description`, `canonical` and `socialImage` produce `og:`/`twitter:`/canonical tags **only in prerendered HTML** (hybrid and static builds) — the browser never syncs them, which is fine because crawlers fetch each URL fresh. Set root-route defaults for any field you use; `null` suppresses an inherited value. Titles are static strings.
+`meta.title` becomes `document.title` on each navigation; the nearest title up the chain wins. `description`, `canonical` and `socialImage` become `og:`/`twitter:`/canonical tags **only in prerendered HTML** (hybrid and static builds) — the browser never syncs them, which is fine because crawlers fetch each URL fresh. Set root-route defaults for any field you use; `null` suppresses an inherited value (§45).
 
 ## Route guards
 
@@ -187,18 +203,18 @@ export default [
 ];
 ```
 
-Return `undefined`/`true` to allow, `false` to stay put, or a path to redirect. Guards run root → leaf before anything loads, on every navigation including the first and query-only changes, so a denied page never constructs or flashes. They may be async. Restore sessions in `beforeMount` so guards can read the store synchronously, and finish login with:
+Return `undefined`/`true` to allow, `false` to stay put, or a path to redirect. Guards run root → leaf before anything loads, on every navigation including the first, so a denied page never constructs or flashes. They may be async. Restore sessions in `beforeMount` so guards can read the store synchronously, and finish login with:
 
 ```js
 const redirect = this.route.query.redirect;
 this.ctx.router.replace(typeof redirect === 'string' ? redirect : '/');
 ```
 
-Guards are UX, not security — authorize on the server. Hybrid builds warn for each prerendered guarded page (add `prerender: false`); static builds warn that guards never run. Full contract: §48.
+Guards are UX, not security — authorize on the server. Hybrid builds warn for each prerendered guarded page (add `prerender: false`); static builds warn that guards never run (§48).
 
 ## Transitions and morphs
 
-Declare `animations` on views and layouts; navigation plays the old view's `out`, then the new view's `in` ([[DOC-SPEC-VIEW]] §12). `transitionMode: 'overlap'` (app-wide, per route, or per view class) cross-fades instead (§26, §33). A `<puzzle-skeleton>` view commits immediately and shows its skeleton while data loads. Shared-element morphs between views come from `enableMorph(app)` and `data-puzzle-morph` attributes ([[DOC-SPEC-VIEW]] §37, `examples/music`, `examples/kanban-morph`).
+Declare `animations` on views and layouts; navigation plays the old view's `out`, then the new view's `in` ([[DOC-SPEC-VIEW]] §12). `transitionMode: 'overlap'` (app-wide, per route, or per view class) plays them together (§26, §33). A `<puzzle-skeleton>` view commits at once and shows its skeleton while data loads. Shared-element morphs come from `enableMorph(app)` and `data-puzzle-morph` attributes ([[DOC-SPEC-VIEW]] §37, `examples/music`, `examples/kanban-morph`).
 
 ## Scroll and focus
 
@@ -206,13 +222,11 @@ By default a push scrolls to the top, Back/Forward restores the saved position (
 
 ```js
 new PuzzleApp({
-  scrollBehavior: false,   // the shell scrolls an inner panel, leave window alone
+  scrollBehavior: false,   // the shell scrolls an inner panel; leave window alone
   // or: (to, from, savedPosition) => savedPosition ?? { x: 0, y: 0 }
   focusBehavior: (to) => document.querySelector('main h1'),
 });
 ```
-
-A custom `scrollBehavior` returns `{ x, y }` or a falsy value to leave scroll alone; `savedPosition` is set only on Back/Forward.
 
 ## Router modes
 
@@ -223,7 +237,7 @@ new PuzzleApp({ routerMode: hashRouter() });                          // #/user/
 new PuzzleApp({ routerMode: memoryRouter({ initialPath: '/dash' }) }); // no URL — tests and embeds
 ```
 
-Omit `routerMode` for path routing. A string like `'hash'` throws. App code stays path-shaped in every mode: routes, `push('/user/1')`, `current.path` and `link()` hrefs are unchanged. In hash mode avoid bare `#faq` links — they replace the route fragment. Memory mode touches no URL, title, scroll or `<html lang>`; use `router.back()` for history, and remember link interception is still document-wide (§15).
+Omit `routerMode` for path routing; a string like `'hash'` throws. App code is the same in every mode: routes, `push('/user/1')`, `current.path` and `link()` hrefs. In hash mode avoid bare `#faq` links — they replace the route fragment. Memory mode touches no URL, title, scroll or `<html lang>`, but link interception is still document-wide (§15).
 
 ## Base path
 
@@ -231,15 +245,17 @@ Omit `routerMode` for path routing. A string like `'hash'` throws. App code stay
 
 ## Switching locale
 
-With `i18n` configured, `this.ctx.i18n.setLocale('es')` loads the new strings and rebuilds the current page in place: same URL, no history entry, no scroll or focus change, no animations. Store records survive; `setData` state starts fresh, because every routed view is reconstructed. The promise rejects if the page could not be rebuilt (§9, [[DECISION-D175-TRANSLATIONS]], `examples/i18n`).
+With `i18n` configured, `this.ctx.i18n.setLocale('es')` loads the new strings and rebuilds the current page in place: same URL, no history entry, no scroll or focus change, no animations. Store records survive; `setData` state starts fresh. The promise rejects if the page could not be rebuilt (§9, `examples/i18n`).
+
+With `i18n.routing: 'prefix'` each non-default locale lives under its own URL prefix (`/es/about`) and `setLocale` loads that URL instead. Routes, `push()` and `this.route` stay prefix-free; `link()` adds the prefix (`link('/about', { locale: 'es' })` for another locale), and `ctx.i18n.locales` gives a switcher its `{ locale, label, href, active }` entries. Prefix routing needs path mode (§9, [[DECISION-D177-LOCALE-URL-PREFIXES]]).
 
 ## 404
 
-Declare a `path: '*'` route; it is matched last wherever it sits. Without one, an unmatched URL logs a warning and the current view stays. Prerendered builds write it to `dist/404.html`.
+Declare a `path: '*'` route; it is matched last wherever it sits. Without one, an unmatched URL logs a warning, the current view stays, and `push()` resolves `'not-found'`. Prerendered builds write it to `dist/404.html`.
 
 ## Listing routes for tools: `router.views` and `agent`
 
-`router.views` lists every leaf route as frozen data, in declaration order, without the catch-all (D183). An agent panel, a sitemap widget or a command palette reads it instead of walking the route table:
+`router.views` lists every leaf route as frozen data, in declaration order, without the catch-all. An agent panel, a sitemap widget or a command palette reads it instead of walking the route table:
 
 ```js
 export default [
@@ -255,14 +271,10 @@ export default [
 ];
 
 const pages = router.views.filter((v) => v.agent);
-// [{ path: '/', params: [], name: 'home', meta: undefined, title: undefined, agent: { name: 'home', … }, chain: [...] }, …]
-
 const here = router.views.find((v) => v.chain.at(-1) === router.current.route); // the current page's entry
 ```
 
-Each entry is `{ path, params, name, meta, title, agent, chain }`: the full pattern, its `:param` names, the leaf's `name` and own `meta`, the title resolved the way the tab title is, the resolved `agent`, and the route definitions root → leaf. `agent` resolves nearest-defined from the leaf up, so a child's own value always beats its parent's, and children that set nothing share their parent's object (and name). The router never acts on it — a hidden route still navigates and prerenders.
-
-In development, an invalid `agent` value throws, a name declared by two different `agent` objects warns once (listing every path that uses it), and once any route uses `agent` one warning lists the routes that say neither `false` nor `{ name }`. Full contract: §9.
+Each entry is `{ path, params, name, meta, title, agent, chain }`. `agent` resolves from the leaf up, so a child's own value beats its parent's. The router never acts on it — a hidden route still navigates and prerenders. In development an invalid `agent` throws, a name used by two different `agent` objects warns, and once any route uses `agent` a warning lists the routes that set neither `false` nor `{ name }` (§9).
 
 ## API
 
@@ -270,33 +282,11 @@ In development, an invalid `agent` value throws, a name declared by two differen
 
 | Member | Description |
 | ------ | ----------- |
-| `push(path)` | Navigate with a new history entry. Resolves a `NavigationResult` when the navigation settles, and never rejects. |
-| `replace(path)` | Same pipeline and result, replaces the current entry, leaves scroll alone. |
+| `push(path)` | Navigate with a new history entry. Resolves a `NavigationResult`; never rejects. |
+| `replace(path)` | Same, but replaces the current entry and leaves scroll alone. |
 | `go(n)` / `back()` / `forward()` | History movement in every mode. |
-| `url(path)` | Mode- and base-correct href for a path (what `link()` calls). |
+| `url(path, options?)` | Mode-, base- and locale-correct href (what `link()` calls). |
 | `current` | The committed snapshot `{ path, pathname, query, hash, route, params, chain }`. |
-| `views` | Every leaf route as frozen `{ path, params, name, meta, title, agent, chain }` entries, catch-all excluded (D183). |
-
-`await router.push(path)` tells you what happened (D182):
-
-```js
-const result = await this.ctx.router.push('/account');
-if (result.ok) {
-  result.route.path;      // where it landed — '/login' if a guard redirected
-  result.redirectedFrom;  // '/account' after a redirect, else undefined
-} else {
-  result.reason;          // 'blocked' | 'superseded' | 'not-found' | 'error'
-  result.error;           // the failure, for 'error' (also sent to onError)
-}
-```
-
-The results mean:
-
-- **A push to the current path** resolves `ok` with the current route, provided nothing else is loading. If another navigation is loading, the push is a real navigation and the last push wins.
-- **`'blocked'`**: a guard returned `false`.
-- **`'superseded'`**: a later navigation won.
-- **`'not-found'`**: no route matched and there is no `*` catch-all.
-- **`'error'`**: something failed and was sent to `onError`, such as a throwing guard or a failed `data()`.
-- **A push made from `mounted()`** resolves once that deferred navigation has run.
+| `views` | Every leaf route as frozen `{ path, params, name, meta, title, agent, chain }` entries. |
 
 Named-route navigation is not supported.

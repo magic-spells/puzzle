@@ -1,12 +1,13 @@
 ---
 name: 'D7 — Naming: `PuzzleApp`, `app.mount()`, the `formatters` config key'
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-11-01T19:19:59.201Z'
 connections:
   - COMPONENT-PUZZLE-APP
   - COMPONENT-FORMATTERS
   - DOC-SPEC
   - DOC-SPEC-ANATOMY
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D7 — Naming: `PuzzleApp`, `app.mount()`, the `formatters` config key

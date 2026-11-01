@@ -1,19 +1,20 @@
 ---
 name: Template syntax — user guide
 status: verified
-verified_at: '2026-07-22T00:04:06.109Z'
+verified_at: '2026-11-01T19:25:25.008Z'
 connections:
-  - COMPONENT-TEMPLATE-PARSER
-  - DOC-SPEC
   - DOC-SPEC-TEMPLATE
+  - DOC-LANGUAGE-CORE
   - DOC-PUZZLE-FILE
   - DOC-EVENTS
   - DOC-USER-GUIDE
+  - COMPONENT-TEMPLATE-PARSER
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # Puzzle template syntax
 
-A practical guide to the markup inside `<puzzle-view>`. The contract — every rule and error — is [[DOC-SPEC-TEMPLATE]] (§ numbers below), and the full expression grammar (method table, globals, operators) is [[DOC-LANGUAGE-CORE]] "Expressions". File anatomy is [[DOC-PUZZLE-FILE]]; handlers are [[DOC-EVENTS]]. Examples come from the todos app (`examples/todos`).
+A practical guide to the markup inside `<puzzle-view>`. The contract — every rule and error — is [[DOC-SPEC-TEMPLATE]] (the § numbers below), and the expression grammar (method table, globals, operators) is [[DOC-LANGUAGE-CORE]] "Expressions". File anatomy is [[DOC-PUZZLE-FILE]]; handlers are [[DOC-EVENTS]]. Examples come from the todos app (`examples/todos`).
 
 ## Interpolation
 
@@ -34,6 +35,7 @@ A practical guide to the markup inside `<puzzle-view>`. The contract — every r
 - Reading through a missing value never throws: `{ user.address.city }` prints nothing when `address` is missing.
 - `null` and `undefined` print nothing; an object prints nothing (print a field, or format it).
 - Anything outside the grammar — `new`, `typeof`, regexes, assignment, `window`, `this`, a method not in the table — is a positioned compile error that tells you what to write instead.
+- Names imported in `<script>` are not visible to the template (only `<Component is>` may read them). Return what the template needs from `data()`.
 
 Model getters work like fields: `{ user.fullName }`. When a value needs more than one expression, compute it in `data()` and read the field.
 
@@ -49,7 +51,7 @@ A function formats a value for display. Call it with the value first; calls nest
 <a href={ link('/about') } title={ currency(price) }>…</a>
 ```
 
-The built-ins: `round`, `currency`, `percentage`, `number_with_delimiter`, `compact_number`, `capitalize`, `truncate`, `strip_html`, `strip_newlines`, `pluralize`, `escape`, `raw`, `newline_to_br`, `json`, `date`, `time`, `datetime` (presets `short`, `medium`, `long`, `iso`), `in_timezone`, `t` (translations), plus `link` (router-aware href) and `timeago`. Each one's contract is in §6.
+The built-ins: `round`, `currency`, `percentage`, `number_with_delimiter`, `compact_number`, `capitalize`, `truncate`, `strip_html`, `strip_newlines`, `pluralize`, `escape`, `raw`, `newline_to_br`, `json`, `date`, `time`, `datetime` (presets `short`, `medium`, `long`, `iso`), `in_timezone`, `t` (translations, §66), plus `link` (router-aware href) and `timeago`. Each one's contract is in §6.
 
 - What JavaScript already spells is not a function: count with `.length`, do math with the operators and `Math.*`, fall back with `??`, transform text with methods (`.toUpperCase()`, `.trim()`, `.replaceAll(a, b)`, `.split(',')`).
 - `|` pipes are Sites theme syntax: `{ price | currency }` is a compile error here that says to write `currency(price)`.
@@ -80,32 +82,6 @@ The built-ins: `round`, `currency`, `percentage`, `number_with_delimiter`, `comp
 
 `{:else}` comes last. `{#unless}` takes `{:else}` but not `{:else if}`. `{#case}` matches with `===`; commas list alternatives; the first match wins with no fallthrough.
 
-## Runtime component selection: `<Component>`
-
-Choose one of the compiled Puzzle components imported by this file (§67). All candidates are loaded before rendering; there is no runtime module-name lookup.
-
-```html
-<script>
-import TaskCard from './TaskCard.pzl';
-import BacktestCard from './BacktestCard.pzl';
-const cards = { task: TaskCard, backtest: BacktestCard };
-</script>
-
-<!-- current is a constructor returned by data(); it may also be null -->
-<Component is={ current } title={ title } @close={ close }>
-  <p>Default content for the selected card</p>
-</Component>
-
-<Component is={ cards[embed.type] } {...embed.props} />
-```
-
-- **`is` chooses a value.** It must be an imported compiled component constructor; `null`/`undefined` renders nothing. Children become the selected component's normal default slot.
-- **Only `is` may read imports and simple script declarations directly.** `is={ TaskCard }` and `is={ cards[key] }` work without returning those bindings from `data()`. Loop/snippet bindings win, then module bindings, then data fields. Destructured bindings need a simple module alias or a value returned by `data()`. Other props, spread operands and child expressions read normal template data.
-- Imports and `const` selector bindings preserve cached rows. Mutating a const map's entries in place is not observed by a cached row; a module `let`/`var` selector is re-evaluated on each parent render.
-- Props and callback props are reactive as on any component. `name` and `from` are ordinary forwarded props when `is` exists. `{...embed.props}` passes the current object's props; later written attributes override earlier spreads and vice versa. A loop row's resolved key always wins over spreads. `bind:` is unsupported on components; `flip` on `<Component>` is a compile error, so put it on a wrapping keyed element.
-- Changing the constructor fully destroys the old instance and descendants before mounting the new one at the same position, with current props. A stable constructor reuses the instance. Removing the tag itself runs the child's ordinary hide hooks and leave transition; only a constructor swap tears it down immediately. Prerender applies the same selection rule to its HTML.
-- Missing or non-expression `is`, or a string, number, boolean or template-literal selector inside braces, is a compile error. Nullish selectors are valid. `Component` is a reserved tag/family root: rename a user `Component.pzl` or a tag import named `Component`.
-
 ## Loops
 
 ```html
@@ -119,11 +95,11 @@ const cards = { task: TaskCard, backtest: BacktestCard };
 - The trailing `, name` is optional: the 0-based index for item loops, the current number for ranges.
 - The collection can be any expression (`{#for t in todos.filter(t => !t.done)}`); a list the view reuses or that takes real logic belongs in `data()`.
 - Rows are keyed automatically by the record's primary key (or `.id`). Add `key={ … }` on the row root for other data (§28).
+- Unchanged rows are reused without re-rendering. Change records through `update()` or the store, never by assigning a field (`todo.done = true` is invisible).
 - A missing list renders nothing; a non-list renders nothing and warns in development.
 - `{#for i in 1...5}` is an error — write `{#for 1...5, i}`.
 
 ## Attributes
-
 
 ```html
 <!-- inline {#if} and interpolation inside a quoted value -->
@@ -137,11 +113,11 @@ const cards = { task: TaskCard, backtest: BacktestCard };
 
 A brace-only value controls the attribute: `false`, `null` and `undefined` remove it, `true` writes it empty, and a list becomes space-separated tokens with empty entries dropped. Write `\{` and `\}` for literal braces — `pattern="[0-9]\{5\}"`.
 
-A dynamic URL attribute (`href`, `src`, `action`, …) never carries `javascript:` or `vbscript:`, and `data:` only in image positions: a blocked value leaves the attribute off, in the browser and prerendered HTML alike, with a development warning. Static values you write yourself stay as written, and a quoted value whose literal start fixes the scheme (`href="/users/{ id }"`) compiles without the check. The full rule is [[DECISION-D186-DYNAMIC-URL-SAFETY]].
+A dynamic URL attribute (`href`, `src`, `action`, …) never carries `javascript:` or `vbscript:`, and `data:` only in image positions: a blocked value leaves the attribute off, with a development warning. A quoted value whose literal start fixes the scheme (`href="/users/{ id }"`) skips the check (§6, [[DECISION-D186-DYNAMIC-URL-SAFETY]]).
 
 ## Two-way form binding
 
-On a plain `<input>`, `<textarea>` or `<select>`, `value={ path }` and `checked={ path }` bind both ways when `path` is a bare name or a one-level path. No handler needed:
+On a plain `<input>`, `<textarea>` or `<select>`, `value={ path }` and `checked={ path }` bind both ways when `path` is a bare name or a one-level path. No handler, no `bind:` prefix:
 
 ```html
 <input type="text" placeholder="What needs doing?" value={ newTodoText } />
@@ -151,23 +127,21 @@ On a plain `<input>`, `<textarea>` or `<select>`, `value={ path }` and `checked=
 - A bare name writes local state (`setData` + `refresh`, so `data()`-derived values like `canAdd` stay current as you type).
 - A path writes its root: a store record through validated `update()`; a plain object is mutated. **Bind the path you want written.**
 - Numbers, checkboxes, dates and selects commit on `change`; text fields on `input`.
-- Opt out with your own `@input`/`@change`, a non-path expression (`value={ draft ?? '' }`), or static `readonly`. Other events (`@keydown:enter`, `@blur`) coexist with the bind.
+- Opt out with your own `@input`/`@change`, a non-path expression (`value={ draft ?? '' }`), or static `readonly`. Other events (`@keydown:enter`, `@blur`) coexist with the bind — [[DOC-EVENTS]] shows the patterns.
 - A bound plain object must keep its identity across `data()` runs — hold it in `created()` or `this.memo()`, not a fresh literal each run.
 
 The full trigger conditions and event matrix are in §6.
 
 ## Events
 
-
 ```html
 <form @submit={ addTodo(event) }>
 <button @click={ setFilter('all') }>All</button>
-<button @click={ clearCompleted }>Clear</button>
 <input @keydown:enter={ addTodo(event) } @keydown:escape:prevent={ cancelEdit } />
 <div class="menu" @pointerdown:outside={ closeMenu }>…</div>
 ```
 
-A bare name gets the DOM event; a call gets exactly the arguments written; modifiers (`prevent`, `stop`, `once`, `outside`, `passive`, `capture`, key filters) stack. `passive` and `capture` set native listener options; `passive:prevent` is a compile error. See [[DOC-EVENTS]] and §5.
+A bare name gets the DOM event; a call gets exactly the arguments written; modifiers stack. [[DOC-EVENTS]] covers handlers, modifiers and callback props; the contract is §5.
 
 ## Components
 
@@ -176,10 +150,35 @@ A tag that doesn't start with a lowercase letter is a component, imported in `<s
 ```html
 <TodoItem todo={ todo } @remove={ deleteTodo(todo) } />
 <Übersicht größe={ 3 } />
+<Card {...cardProps} title="Override" />
 <Frame><Frame.Wrapper>…</Frame.Wrapper></Frame>
 ```
 
-When a prop changes, the child's `data(params, props)` re-runs. `@name={ … }` on a component passes a callback prop. Dotted tags are **component families**: a directory of `.pzl` files with an `index.js` barrel (`export default Object.assign(Frame, { Wrapper, Content })`), scaffolded by `puzzle generate component Frame --family Wrapper,Content` (§65). A component without a `<script>` reads its props directly (`{ tone }`).
+- When a prop changes, the child's `data(params, props)` re-runs. `@name={ … }` passes a callback prop.
+- `{...obj}` spreads an object's properties as props; later attributes override earlier ones. Spreads work on component tags only.
+- A component without a `<script>` reads its props directly (`{ tone }`).
+- Dotted tags are **component families**: a directory of `.pzl` files with an `index.js` barrel (`export default Object.assign(Frame, { Wrapper, Content })`), scaffolded by `puzzle generate component Frame --family Wrapper,Content` (§65).
+
+## Choosing a component at runtime: `<Component>`
+
+Pick one of the components this file imports (§67). All candidates are bundled; there is no lookup by module name.
+
+```html
+<script>
+import TaskCard from './TaskCard.pzl';
+import BacktestCard from './BacktestCard.pzl';
+const cards = { task: TaskCard, backtest: BacktestCard };
+</script>
+
+<Component is={ cards[embed.type] } {...embed.props} @close={ close }>
+  <p>Default content for the selected card</p>
+</Component>
+```
+
+- `is` may read imports and simple `<script>` declarations directly; everything else reads `data()` as usual. `null`/`undefined` renders nothing.
+- Children become the selected component's default slot. Props, callbacks and spreads work as on any component.
+- Switching to a different component destroys the old one (its local state goes) and mounts the new one in place.
+- Put `flip` on a wrapping element, not on `<Component>`. Don't name your own component `Component`.
 
 ## Children, slots and snippets
 
@@ -214,7 +213,9 @@ When a prop changes, the child's `data(params, props)` re-runs. `@name={ … }` 
 <ul>{#for user in users}<li><Children user={ user }>{ user.name }</Children></li>{/for}</ul>
 ```
 
-Full rules: §24 (markers) and §64 (snippets).
+- **`<Portal>…</Portal>`** renders its children at the app root (out of any clipping or transformed ancestor) while they stay part of your component. Use `<dialog>` for focus-trapped modals.
+
+Full rules: §24 (markers, Portal) and §64 (snippets).
 
 ## Islands, refs and inline SVG
 
@@ -229,7 +230,7 @@ Full rules: §24 (markers) and §64 (snippets).
 <span class="inline-block size-5">{#svg 'icons/cart.svg'}</span>
 ```
 
-- `island` (§17): data flows out, never back in; change its `key` to reset it. No components or markers inside.
+- `island` (§17): data flows out, never back in; change its `key` to reset it. No components, markers or portals inside.
 - `ref="name"` (§38): static, on plain elements only — not on components (use an `@ready` callback prop), not inside `{#for}`, `<Snippet>` or `<puzzle-skeleton>`.
 - `{#svg 'path'}` (§18): a static path under `app/assets/`; the file is inert (no template syntax inside). Color it with `currentColor`, size it with a wrapper.
 
@@ -251,12 +252,7 @@ Comments and HTML comments are removed at compile time. `{#raw}` makes braces li
 
 - Indentation between tags doesn't leak into the page: whitespace with a line break between two elements disappears; between text and anything else it becomes one space. `<pre>` and `<textarea>` keep their text exactly.
 - `br`, `img`, `input` and the other void elements take no closing tag: `<br>`, `<img src="/logo.svg" alt="">`, `<input value={ x } readonly>`. `</input>` is an error.
-
-## Deferred
-
-- Refs inside loops, dynamic `ref`/`slot`/`island` values.
-- An unsanitized HTML injection syntax (`{@html expr}`) — use `raw()`.
-- Components or markers inside an island.
+- The compiler warns (without failing) on an `<img>` without `alt`, an `<a>` without `href`, an `<iframe>` without `title` and a positive `tabindex` (§43).
 
 ## Cheat sheet
 
@@ -276,9 +272,12 @@ Comments and HTML comments are removed at compile time. `{#raw}` makes braces li
 | Event | `@click={ clearCompleted }`, `@click={ setFilter('all') }` |
 | Modifiers | `@keydown:enter:prevent={ save }`, `@pointerdown:outside={ close }` |
 | Component | `<TodoItem todo={ todo } @remove={ deleteTodo(todo) } />` |
+| Spread props | `<Card {...cardProps} />` |
+| Runtime component | `<Component is={ cards[type] } />` |
 | Router outlet | `<Slot/>` |
 | Children / named slot | `<Children/>`, `<Slot name="header"/>` + `slot="header"` |
 | Fallback | `<Children>Nothing here yet</Children>` |
 | Snippet | `<Snippet user>{ user.name }</Snippet>` + `<Children user={ user }>` |
+| Portal | `<Portal>…</Portal>` |
 | Island / ref / SVG | `<div island>`, `ref="search"`, `{#svg 'icons/cart.svg'}` |
 | Comment / raw | `{## note }`, `{#comment}…{/comment}`, `{#raw}…{/raw}` |

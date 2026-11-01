@@ -6,8 +6,18 @@ language: go
 summary: In-memory pzl onLoad transform, CSS collection, and diagnostics.
 connections:
   - COMPONENT-ESBUILD-PLUGIN
-verified_at: '2026-08-24T21:11:50.859Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-01T19:28:54.178Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
-Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `compiler/internal/plugin/plugin.go`.
+# plugin.go
+
+The esbuild `onLoad` plugin for `*.pzl` ([[COMPONENT-ESBUILD-PLUGIN]]), all in
+memory per file: split sections → `codegen.Compile` → JS. Parse/codegen errors
+become positioned esbuild messages, and a failed file emits nothing.
+
+- `<style>` blocks go into a mutex-guarded map (esbuild runs `onLoad`
+  concurrently) and are joined sorted by path, so `CSS()` output is deterministic.
+- `relName` falls back to the absolute path for a `.pzl` outside the app root
+  (symlinks, monorepos); callers must accept absolute paths
+  ([[FILE-BUILD-PRERENDER-PAGES]]).

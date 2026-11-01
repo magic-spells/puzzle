@@ -1,13 +1,14 @@
 ---
 name: 'D40 — `{:else if}`: conditional chaining'
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-11-01T19:23:24.972Z'
 connections:
   - COMPONENT-TEMPLATE-PARSER
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
   - DOC-SPEC-TEMPLATE
   - DECISION-D36-UNLESS
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D40 — `{:else if}`: conditional chaining

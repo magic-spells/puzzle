@@ -21,10 +21,9 @@ connections:
 The template function library: what each standard function does, which
 names are host-only, how `raw` sanitizes, and how apps register their own.
 Expression semantics are [[DECISION-D173-CORE-SEMANTICS]]; call syntax is
-[[DECISION-D176-EXPRESSION-LANGUAGE]]. Built in PuzzleKit
-(`client-runtime/formatters/builtins.js`); Sites' Go half is its evaluator,
-`internal/pzleval` in the Sites repo. [[DOC-LANGUAGE-CORE]]'s
-function table tracks where each host stands.
+[[DECISION-D176-EXPRESSION-LANGUAGE]]. PuzzleKit:
+`client-runtime/formatters/builtins.js`; Sites: its Go evaluator.
+[[DOC-LANGUAGE-CORE]]'s function table tracks where each host stands.
 
 ## Principles
 
@@ -41,7 +40,7 @@ function table tracks where each host stands.
 
 ## The library
 
-A bare call `name(args)` resolves to the library (D176 rule 4); the presented
+A bare call `name(args)` resolves to the library (D176 §4); the presented
 value is the first argument. The library = standard set + host functions +
 app-registered functions.
 
@@ -66,18 +65,23 @@ app-registered functions.
 [[DECISION-D79-LINK-FUNCTION]]) and `timeago(v)` (reads the clock, so a row
 calling it is `volatile`, D170). An app may override either silently.
 
-**Sites-only**: `url`, `asset_url`, `menu_link`, `image_url`, `image_srcset`,
-`image_tag`, `class_map`. Sites' Liquid list formatters leave for the method
-table; `uniq`, `group_by`, `sort_natural` are undecided for Sites' evaluator.
+**Sites-only**: the platform helpers (`url`, `asset_url`, `menu_link`,
+`image_url`, `image_srcset`, `image_tag`, `class_map`) plus a Liquid-style
+pipe vocabulary (`upcase`, `downcase`, `strip`, `split`, `replace`, `slice`,
+`join`, `first`, `last`, `sort`, `where`, `map`, `find`, `reject`, `compact`,
+`uniq`, `reverse`, `contains`, `default`, `abs`, `ceil`, `floor`), because
+Sites switches the method table off (D172). Sites' own plan owns that list.
+Several of these names are removed from PuzzleKit (below); that is a
+restriction-plus-addition, not a redefinition, since no name means two things
+in one host.
 
 **Typing.** The compiler knows the 21 PuzzleKit names as
-`codegen.LibraryFunctionNames`; `puzzle check` types them from
-`libraryFunctionSignatures` in `compiler/internal/check/emitter.go` (kept
-equal by `TestLibrarySignaturesMatchCodegen`); `types/index.d.ts` publishes
-`LibraryFunctions` and `DatePreset`. An app function is typed
-`(...args: any[]) => any` through `__puzzle_app_fn("name")(…)`, not an index
-signature, so it passes `noUncheckedIndexedAccess`. Out-of-domain policy is
-host-defined (D173 V17); a returned value prints by D173 V6.
+`codegen.LibraryFunctionNames` (`lower.go`); `puzzle check` types them from
+`libraryFunctionSignatures` in `compiler/internal/check/emitter.go`;
+`types/index.d.ts` publishes `LibraryFunctions` and `DatePreset`. Two tests
+keep the three equal (D165). An app function is typed
+`(...args: any[]) => any` through `__puzzle_app_fn("name")(…)`. Out-of-domain
+policy is host-defined (D173 V17); a returned value prints by D173 V6.
 
 ## Behavior
 
@@ -89,16 +93,16 @@ host-defined (D173 V17); a returned value prints by D173 V6.
   which prints nothing (D173 V6).
 - **`currency(v, symbol = '$', places = 2)`** — `,` thousands, sign before
   the symbol (`-$1,234.50`), `round`'s rule; an amount that rounds to zero is
-  unsigned (`-0.001` → `$0.00`).
+  unsigned (`-0.001` → `$0.00`). Not locale-aware.
 - **`percentage(v, places = 0)`** — the number as written
   (`percentage(12.5, 1)` → `12.5%`); a ratio is `percentage(r * 100)`.
 - **`number_with_delimiter(v, delimiter?)`** — groups the whole part, keeps
   decimals. No delimiter: locale (PuzzleKit `Intl.NumberFormat`, `1.234,5` in
-  de-DE; Sites the site locale, en in v1). An explicit delimiter groups in
-  threes with `.` decimal point, identically in both hosts.
+  de-DE; Sites the site locale). An explicit delimiter groups in threes with
+  `.` decimal point, identically in both hosts.
 - **`compact_number(v)`** — `Intl.NumberFormat(locale, { notation:
   'compact' })` in PuzzleKit (`1.2K`, `3.4M`); Sites computes it from its own
-  suffix data (Go has no compact notation), English-only in v1.
+  suffix data (Go has no compact notation).
 - `currency`, `percentage`, `number_with_delimiter`, `compact_number` and
   `pluralize` print nothing for a missing, non-finite or object input and pass
   a non-numeric string through as text. Arithmetic is operators and `Math.*`.
@@ -111,12 +115,11 @@ host-defined (D173 V17); a returned value prints by D173 V6.
   splits a character, never longer than `length` (an over-long ellipsis is
   clipped). Disagrees with `.length` on non-BMP text by design (D173 V7).
 - **`strip_html(s)`** — quote-aware scanner; comments removed, a `<` not
-  followed by a tag name stays, entities not decoded. **Must stay linear**:
-  after the first tag scan that runs off the end it uses a precomputed
-  right-to-left "next unquoted `>`" table (tracking all three quote states),
-  and an unterminated `<!--` means no later one terminates
-  (`'<a'.repeat(40000)` ~5 ms; `tests/formatters-hardening.test.js`). Sites'
-  Go port must keep it linear.
+  followed by a tag name stays, entities not decoded. **Must stay linear** in
+  every host: after the first tag scan that runs off the end it uses a
+  precomputed right-to-left "next unquoted `>`" table (tracking all three
+  quote states), and an unterminated `<!--` means no later one terminates
+  (`tests/formatters-hardening.test.js` pins `'<a'.repeat(40000)`).
 - **`strip_newlines(s)`** — removes CR and LF.
 - **`pluralize(count, singular, plural = singular + 's')`** — prints the
   locale-formatted count and the word (`1 comment` / `3 comments`); the word
@@ -130,8 +133,8 @@ host-defined (D173 V17); a returned value prints by D173 V6.
 - **`in_timezone(v, zone = 'UTC')`** — returns a date whose wall clock reads
   as `zone`, for `date`/`time`/`datetime` to present. A `null`/`''` zone or
   an unresolvable one renders un-shifted; PuzzleKit logs a dev error once per
-  zone when `Intl` rejects it (stripped in production). An absent or invalid
-  date returns `''`, so `date(in_timezone(v))` prints nothing for it.
+  zone when `Intl` rejects it. An absent or invalid date returns `''`, so
+  `date(in_timezone(v))` prints nothing for it.
 
 ### Dates: `date`, `time`, `datetime`
 
@@ -163,9 +166,10 @@ host-defined (D173 V17); a returned value prints by D173 V6.
 - **`newline_to_br(s)`** — escapes `&`, `<`, `>`, then a real `<br>` per CR
   LF, CR or LF. Safe by construction; renders through `raw`'s markup path.
 - **`raw(html)`** — injects real HTML in both hosts, **always through an
-  allowlist sanitizer**. The allowlist, attribute rules and canonical output
-  are pinned by the `raw` conformance rows (rich text that must survive, then
-  an XSS corpus that must come out inert):
+  allowlist sanitizer** (PuzzleKit `client-runtime/sanitize.js`; Sites ports
+  the same tables and scan). The allowlist, attribute rules and canonical
+  output are pinned by the `raw` conformance rows (rich text that must
+  survive, then an XSS corpus that must come out inert):
   - **Tags kept:** `a abbr address b bdi bdo blockquote br caption cite code
     col colgroup dd del details dfn div dl dt em figcaption figure h1–h6 hr i
     img ins kbd li mark ol p pre q s samp small span strike strong sub summary
@@ -210,6 +214,10 @@ host-defined (D173 V17); a returned value prints by D173 V6.
     doctypes, CDATA, PIs, a tag cut off at the end, and stray end tags are
     dropped (in constant time: open tags counted per name); tags still open
     at the end are closed; NUL removed.
+  - Go-port gotchas: `x/net/html` decodes every reference and re-escapes
+    quotes (so it can't produce the canonical output), and
+    `strings.TrimSpace` misses U+0001–U+0008 and U+000E–U+001F in the scheme
+    check.
 - **Placement rule.** `raw` and `newline_to_br` may only be **the outermost
   call of a text interpolation, with one argument**: `{ raw(post.body) }`.
   Anywhere else is a positioned compile error in both hosts (nested in a call
@@ -227,29 +235,22 @@ host-defined (D173 V17); a returned value prints by D173 V6.
   `raw`/`newline_to_br` is unreachable and draws a dev warning). The node is
   a non-text sibling for D168 whitespace. `client-runtime/views/html.js`
   holds the position with an empty comment and owns the parsed nodes after
-  it (parsed via an inert `<template>`; unchanged value touches nothing;
+  it (parsed via an inert `<template>`; an unchanged value touches nothing;
   keyed moves carry the range; the patcher never reconciles inside).
   `__PUZZLE_HAS_RAW_HTML__` gates the node (either name called) and
-  `__PUZZLE_HAS_RAW_SANITIZE__` gates `client-runtime/sanitize.js` (`raw`
-  called; DOM-free tokenizer, no top-level side effects). Neither used →
-  nothing ships; `newline_to_br` only ≈ 0.4 KB gzip; `raw` ≈ 2.3 KB. A
+  `__PUZZLE_HAS_RAW_SANITIZE__` gates `sanitize.js` (`raw` called; DOM-free
+  tokenizer, no top-level side effects); neither used → nothing ships. A
   `'#html'` vnode in a build without the node define fails loudly; a `raw`
   vnode without the sanitizer renders nothing, never unsanitized markup. SSG
   (`client-runtime/ssg/serialize.js`) emits the same `htmlOf()` string.
   `raw`/`newline_to_br` stay in `builtins.js` for script code and
   conformance but never enter the function manifest.
-- **Sites, pending:** sanitize at render time (today it trusts save-time
-  `SanitizeRichText`) to the same rows — widen `SanitizeRichText` or
-  configure bluemonday (no default `rel="nofollow"`, no extra schemes). Go
-  gotchas: `x/net/html` decodes every reference and re-escapes quotes, so
-  pass well-formed references through; `strings.TrimSpace` misses
-  U+0001–U+0008 and U+000E–U+001F in the scheme check.
 
-## Removed names
+## Removed from PuzzleKit
 
-Removed outright (no deprecation release). A call reaches the unknown-name
-guard ([[DECISION-D43-FORMATTER-MISSING-GUARD]]), which passes the value
-through and names the replacement in development (`REMOVED_FORMATTERS` in
+No deprecation release. A call reaches the unknown-name guard
+([[DECISION-D43-FORMATTER-MISSING-GUARD]]), which passes the value through
+and names the replacement in development (`REMOVED_FORMATTERS` in
 `client-runtime/formatters.js`); a `| name` steers the same way
 (`RemovedFormatters` in `packages/puzzle-lang/expr/errors.go`). Keep the two
 tables in step:
@@ -260,7 +261,7 @@ function was `.split(a).join(b)`), `join` (→ `.join(', ')`; old default was
 `compact`/`first`/`last` (→ array methods, `.at()`), `uniq` (→ `data()`),
 `size` (→ `.length`), `plus`/`minus`/`times`/`divided_by`/`modulo` (→
 operators), `default` (→ `??`), `split` (→ `.split()`), `noescape` (→ a plain
-`{ value }`; Sites maps it to `raw`). Sites also drops `upper`/`lower`.
+`{ value }`).
 
 ## Registration and shadowing
 
@@ -286,21 +287,23 @@ operators), `default` (→ `??`), `split` (→ `.split()`), `noescape` (→ a pl
 `packages/puzzle-lang/conformance/functions.json`, embedded as
 `conformance.Functions` so Sites pins rows at the puzzle-lang tag;
 PuzzleKit's vitest imports it. Zone-bearing rows run one child process per
-`TZ`; no-preset date rows carry `locale: 'en'`. Not yet pinned (awaiting
-Sites confirmation): the unsigned zero `currency`, missing-input printing for
-the text-printing number functions, the calendar-date half of `iso`, `json`'s
-`undefined`/cycle → `null`, and the unknown-dynamic-preset default.
+`TZ`; no-preset date rows carry `locale: 'en'`. Not pinned cross-host
+(PuzzleKit's own tests cover them): the unsigned zero `currency`,
+missing-input printing for the text-printing number functions, the
+calendar-date half of `iso`, `json`'s `undefined`/cycle → `null`, and the
+unknown-dynamic-preset default.
 
 ## Alternatives rejected
 
-- **Formatter pipes / keeping duplicate names as functions** — two ways to say
-  one thing; the method table and operators already cover them.
+- **Formatter pipes / keeping duplicate names as functions in PuzzleKit** —
+  two ways to say one thing; the method table and operators already cover
+  them.
 - **Drop `round`** — `Math.round` takes no places; `.toFixed()` rounds the
   binary value (`1.005` → `1.00`) and returns a padded string.
 - **`in_timezone` PuzzleKit-only** — nothing else re-expresses an instant in
   another zone, and Sites has zones.
-- **Promote Sites' list formatters to standard** — list shaping is the method
-  table in both hosts.
+- **Promote Sites' list functions to standard** — list shaping is the method
+  table in PuzzleKit.
 - **`pluralize` returns the noun alone** — the count and word belong together
   and the count gets localized.
 - **`raw` Sites-only, or unsanitized** — rich text is a real need in both
@@ -321,4 +324,11 @@ the text-printing number functions, the calendar-date half of `iso`, `json`'s
 - **Fixed en-US/UTC output** — every reader would see a format not theirs.
 - **Throw when an app shadows a standard name** — too strict; dev warning.
 - **`percentage` as a ratio** — authors type `12.5`.
-- **Rename the registration key to `functions`** — kept `formatters` for now.
+- **Rename the registration key to `functions`** — kept `formatters`.
+
+## Open
+
+- **`tel:` in the `raw` allowlist** — kept on `<a href>`; unconfirmed as part
+  of the shared allowlist.
+- **`currency` delimiter** — fixed `,`; whether it should follow the locale
+  like `number_with_delimiter` is undecided.

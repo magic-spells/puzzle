@@ -10,10 +10,20 @@ summary: >-
 connections:
   - COMPONENT-CODEGEN
   - FILE-CODEGEN-LOWER
-verified_at: '2026-08-24T21:11:50.859Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-01T19:19:18.479Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
-Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `compiler/internal/codegen/expr.go`.
+# expr.go
 
-The file is small: `isJSIdentifier` (whether an attribute or prop name can be an unquoted object key — ASCII only, so `jsKey` quotes a non-ASCII prop name: `<Card größe={ 3 }>` emits the key `'größe'`) and `startsWithObjectLiteral` with its positioned error for an expression whose braces open with an object literal (`{ { a: 1 } }`, D173 V8 — pass it as a function argument or build it in `data()`). It also holds the two helpers that make the `<script>` scans read Unicode names ([[COMPONENT-CODEGEN]], D176 rule 8): `identRunEnd` continues an identifier run past the ASCII part `parser.LexSkip` consumed, through every non-ASCII rune `jsident.IsIDContinue` accepts, and `startsNonASCIIIdent` reports a run that opens with a non-ASCII `jsident.IsIDStart` rune. `tokenizeJS` and the `__d.` collision scan (scriptcollide.go) call both, so `Straßenkarte` and `金額` are one name. Template expressions are lowered from their AST in `lower.go` ([[FILE-CODEGEN-LOWER]]), which resolves every name from the tree.
+Small lexical helpers the emitters share; template expressions themselves are
+lowered from their AST in [[FILE-CODEGEN-LOWER]].
+
+- `isJSIdentifier` is ASCII-only on purpose: it decides whether a prop name can be
+  an unquoted object key, so `<Card größe={ 3 }>` emits the key `'größe'`.
+- `startsWithObjectLiteral` raises the positioned error for `{ { a: 1 } }` (D173
+  V8 — pass the object as a function argument or build it in `data()`).
+- `identRunEnd` / `startsNonASCIIIdent` extend `parser.LexSkip` (ASCII only)
+  through the non-ASCII runes `jsident` accepts, so the `<script>` scans
+  (`tokenizeJS` and the `__d.` collision scan in `scriptcollide.go`) read
+  `Straßenkarte` and `金額` as one name (D176 rule 8).

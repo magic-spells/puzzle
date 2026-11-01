@@ -7,8 +7,8 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ROUTER
   - DOC-VIEW-LIFECYCLE
-verified_at: '2026-08-16T04:33:06.308Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-11-01T19:19:25.478Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 A `mounted()` throw is handled by whoever owns the view's lifetime, and each

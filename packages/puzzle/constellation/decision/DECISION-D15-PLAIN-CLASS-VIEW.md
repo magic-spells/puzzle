@@ -1,13 +1,14 @@
 ---
 name: 'D15 — One component model: classes extending a plain `PuzzleView` (not a web component)'
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-11-01T19:19:59.201Z'
 connections:
   - COMPONENT-PUZZLE-VIEW
   - DECISION-D17-RENDER-FUNCTIONS-VDOM
   - DOC-SPEC-ANATOMY
 code_refs:
   - client-runtime/views/PuzzleView.js
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D15 — One component model: classes extending a plain `PuzzleView`

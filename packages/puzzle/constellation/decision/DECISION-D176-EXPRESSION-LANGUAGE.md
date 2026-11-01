@@ -14,7 +14,6 @@ connections:
   - COMPONENT-CODEGEN
   - COMPONENT-TEMPLATE-PARSER
   - COMPONENT-FORMATTERS
-  - RELEASE-V0-8-0
 ---
 
 # D176 — The expression language
@@ -22,9 +21,8 @@ connections:
 Template expressions are JavaScript-shaped, defined by **one closed grammar
 and a method table**, parsed once in `packages/puzzle-lang/expr`, and
 implemented by each host: PuzzleKit lowers the AST to JavaScript; Sites
-(its own repo) evaluates it in Go (`internal/pzleval`). Semantics are
-[[DECISION-D173-CORE-SEMANTICS]], the function library
-[[DECISION-D174-STANDARD-FORMATTERS]], translations
+evaluates it in Go. Semantics are [[DECISION-D173-CORE-SEMANTICS]], the
+function library [[DECISION-D174-STANDARD-FORMATTERS]], translations
 [[DECISION-D175-TRANSLATIONS]].
 
 ## Context
@@ -110,8 +108,9 @@ receiver type (a literal, template literal, array/object literal,
 `Math.PI`, `Number(x)`, `Object.keys(x)`…), the method is checked against
 that type at parse time (`'s'.filter(f)` is an error). On a data path the
 name need only be in the table; `puzzle check` then types it as the JS method
-and Sites checks the runtime type. Each entry is a JS method with an exact Go
-reimplementation, pinned by conformance. **Nothing mutates its receiver.**
+and a Go host checks the runtime type. Each entry is a JS method with an
+exact Go reimplementation, pinned by conformance. **Nothing mutates its
+receiver.**
 
 - **String:** `length at charAt includes startsWith endsWith indexOf
   lastIndexOf slice substring split(sep, limit) replace(str, str)
@@ -123,9 +122,10 @@ reimplementation, pinned by conformance. **Nothing mutates its receiver.**
   argument.
 - **Number:** `toFixed(d)`, `toString()` (no radix).
 - **Boolean/null/undefined:** none. **Records/objects:** property access only
-  (iterate with `Object.*`). **Map/Set:** not in v1; `.size` is an ordinary
-  member read.
-- Not in v1: `localeCompare`, `normalize`, `entries`, `keys`, `toPrecision`.
+  (iterate with `Object.*`). **Map/Set:** not supported; `.size` is an
+  ordinary member read.
+- Not supported: `localeCompare`, `normalize`, `entries`, `keys`,
+  `toPrecision`.
 - **Exception:** a chain rooted at the DOM `event` in a handler (§7).
 
 ## 4. Two spellings of a display transform: calls, and pipes in Sites
@@ -151,15 +151,14 @@ The call form is the core and both hosts accept it.
   `g(f(x), 1)`). Every expression position takes them — arguments, arrow
   bodies, `${ }` substitutions, array and object members, groups
   (`(x | f).length`).
-- **The name after `|` is a plain function name**: a member (`| a.b`),
-  a namespace (`| Math.abs`), a literal word or anything else is "expected a
+- **The name after `|` is a plain function name**: a member (`| a.b`), a
+  namespace (`| Math.abs`), a literal word or anything else is "expected a
   function name after `|`" on that token. A template binding or arrow
   parameter after `|` gets the same error as calling it. JavaScript's
   statement words are function names here — nothing after a `|` is
   JavaScript, and `default` is a Sites function — so `x | default(0)` is
-  `default(x, 0)` while the written call `default(x, 0)` stays the
-  statement-word error (2026-10-22, found in the Sites review; `default` is
-  pipe-only).
+  `default(x, 0)`, while the written call `default(x, 0)` stays the
+  statement-word error (`default` is pipe-only).
 - **PuzzleKit has no pipes.** With the switch off a `|` is the positioned
   steer "`| name` pipes are Sites theme syntax — in a Puzzle app write
   `name(value)`"; when `name` is a removed formatter (`RemovedFormatters` in
@@ -168,8 +167,9 @@ The call form is the core and both hosts accept it.
   failed `|` is the commas-list steer in both hosts.
 
 - **Resolution.** A bare call resolves to the library; a bare read resolves
-  to `data()`, except for module scope in the `<Component>` `is` attribute (§67, D180). They never resolve to each other (so a data field sharing a
-  function's name is not ambiguous and draws no warning, by design). An
+  to `data()`, except for module scope in the `<Component>` `is` attribute
+  (SPEC §67, D180). They never resolve to each other (so a data field sharing
+  a function's name is not ambiguous and draws no warning, by design). An
   unregistered name is the D43 guard: value passes through with a dev error
   (did-you-mean or the removed name's replacement).
 - **Apps register functions** through the `formatters` config map and call
@@ -187,13 +187,15 @@ The call form is the core and both hosts accept it.
   uncaught.
 - Date presets, unknown-preset warnings and zone handling: D174.
 
-## 5. One shared table; Sites switches entries off
+## 5. One shared table; a host switches entries off
 
 Grammar, method table, globals and standard library are one table in
-puzzle-lang, the superset. PuzzleKit accepts all of it; Sites may switch
-entries off (a positioned error saying so) — a D172 restriction, never a
-redefinition. Functions are the one open end (app or platform functions join
-by name).
+puzzle-lang, the superset. PuzzleKit accepts all of it. A host may switch
+entries off with a positioned error saying so — a D172 restriction, never a
+redefinition. Sites switches off every method and all but a few globals
+(`parseInt`, `parseFloat`, `encodeURIComponent`, `Math.min/max/PI/E`) and
+transforms with pipes into functions instead. Functions are the one open end
+(app or platform functions join by name).
 
 ## 6. Dates: limited
 
@@ -236,30 +238,24 @@ date takes only `< <= > >=` and binary `-` (milliseconds) in both hosts.
 - **PuzzleKit codegen** (`compiler/internal/codegen/lower.go`; its header
   carries the lowering table; [[COMPONENT-CODEGEN]]) lowers from the tree,
   never the source string: arrow params shadow template bindings, which
-  shadow the handler's `event`; every other name is `__d.<name>`. The PuzzleKit-only `<Component>` `is` selector scope also admits module bindings after loop/snippet/arrow bindings and before data (D180), without widening the grammar or calls. Every
-  member step, index step and method call gets `?.` (handler args too);
-  `Object.*` take `<arg> ?? {}`; a library call is
+  shadow the handler's `event`; every other name is `__d.<name>`. The
+  `<Component>` `is` selector scope also admits module bindings after
+  loop/snippet/arrow bindings and before data (D180), without widening the
+  grammar or calls. Every member step, index step and method call gets `?.`
+  (handler args too); `Object.*` take `<arg> ?? {}`; a library call is
   `(__f["name"] || __f.__missing("name"))(…)`; methods and `Math.*` stay as
   written. D170 row facts and D62 handler-caching verdicts come off the same
   tree.
-- **`puzzle check`** emits TypeScript from the same tree: no added guards or
-  `?? {}` (authored `?.` stays); a standard call as `__puzzle_fn.name(…)`
-  typed by `libraryFunctionSignatures`; any other bare call as
-  `__puzzle_app_fn("name")(…)` (a call, not an index signature, so it passes
-  `noUncheckedIndexedAccess`); a method call with an arrow argument takes its
-  receiver through `__puzzle_check_list(…)` so untyped receivers give `any`
-  params. Methods map 1:1 onto `lib.d.ts`, so a wrong method is a real TS
-  error at its `.pzl` column. The shim references the `lib` files the table
-  needs regardless of the app's `target` (`es2021.string`,
-  `es2022.array/string` from TS 4.9, the oldest supported; `es2023.array` from
-  TS 5.0); `toSorted`/`toReversed` type only from TS 5.2.
-- **Sites** (`internal/pzleval`, its own repo): a tree-walking Go
-  evaluator — value model (string, float64, bool, nil, `[]any`,
-  `map[string]any`, records), the library, JS number formatting. It parses
-  with `Pipes` on and evaluates a pipe as the call it is. The method table is
-  switched off in Sites (§5, D172): `value | name` is its transform spelling,
-  and the call form stays legal for lookups such as `t`, `url` and
-  `image_tag`.
+- **`puzzle check`** (D165) emits TypeScript from the same tree: no added
+  guards or `?? {}` (authored `?.` stays); standard calls typed by
+  `libraryFunctionSignatures`, app calls through `__puzzle_app_fn`. Methods
+  map 1:1 onto `lib.d.ts`, so a wrong method is a real TS error at its `.pzl`
+  column.
+- **Sites** (its own repo): a tree-walking Go evaluator — value model
+  (string, float64, bool, nil, `[]any`, `map[string]any`, records), the
+  library, JS number formatting. It parses with `Pipes` on and evaluates a
+  pipe as the call it is; the call form stays legal for lookups such as `t`,
+  `url` and `image_tag`.
 - **Identifier classes** come from `jsident.IsIDStart`/`IsIDContinue`
   (`packages/puzzle-lang/jsident`, Go's `unicode` tables), used by `expr`'s
   lexer, template tag names (D167) and PuzzleKit's `<script>` scan
@@ -273,13 +269,13 @@ date takes only `< <= > >=` and binary `-` (milliseconds) in both hosts.
 - **Conformance** (`packages/puzzle-lang/conformance`, `go:embed`ed so Sites
   pins rows at the language tag): `expressions-parse.json` pins every
   expression's S-expression tree with positions, or its positioned error
-  (plain, handler, bindings and `pipes` modes; `conformance.ExpressionsParse` +
-  `expr.Print`); `functions.json` pins the library. A corpus proof parses
-  every `.pzl` expression in the monorepo. `FuzzParse`
-  (`expr/fuzz_test.go`) fuzzes from the rows (tree or positioned error, all
-  positions in range, stable reparse); `go test` runs the seeds, the fuzzer
-  runs by hand. An *evaluation* table (expression + inputs → value) is still
-  planned, for Sites.
+  (plain, handler, bindings and pipes modes; `conformance.ExpressionsParse` +
+  `expr.Print`); `functions.json` pins the library. A corpus proof
+  (`parser/corpus_test.go`) parses every `.pzl` expression in the monorepo.
+  `FuzzParse` (`expr/fuzz_test.go`) fuzzes from the rows (tree or positioned
+  error, all positions in range, stable reparse); `go test` runs the seeds,
+  the fuzzer runs by hand. An *evaluation* table (expression + inputs →
+  value) is not built.
 - **Ports.** The eslint/prettier plugins and the pieces demo's highlighter
   speak this language; their vendored splitter and brace scanner must track
   `packages/puzzle-lang/parser` (e.g. `{#raw}` skipping, `/`-as-division
@@ -288,38 +284,32 @@ date takes only `< <= > >=` and binary `-` (milliseconds) in both hosts.
 
 ## 9. Around the expression
 
-Unchanged by this card: markers, snippets, `{#raw}`, D168 whitespace, keys,
-islands, the loop domain (D173 V12), D170 list blocks, V6 printing, the
-markup placement rule. Every expression position is one `expr.Parse`, so
-attribute `{...props}` is an attribute form whose operand is one expression, not spread inside this grammar (D180). Headers take any expression (`{#for t in todos.filter(t => !t.done)}`,
-`{#if items.length}`), and `{#unless c}` is `!` over the condition.
+Every expression position is one `expr.Parse`, so attribute `{...props}` is
+an attribute form whose operand is one expression, not spread inside this
+grammar (D180). Headers take any expression
+(`{#for t in todos.filter(t => !t.done)}`, `{#if items.length}`), and
+`{#unless c}` is `!` over the condition.
 
 | Need | Expression |
 |---|---|
 | count | `x.length` |
 | math | `+ - * / %`, `Math.*`, then a function to present |
 | fallback | `x ?? y` |
-| transform a value | PuzzleKit: a method or function, `name.toUpperCase()`, `currency(price)`. Sites: methods are off; a pipe, `price \| currency` (call form stays legal for lookups like `t`, `url`, `image_tag`) |
-| shape a list | array methods |
+| transform a value | PuzzleKit: a method or function, `name.toUpperCase()`, `currency(price)`. Sites: a pipe, `price \| currency` |
+| shape a list | array methods (PuzzleKit) |
 | app display logic | a registered function |
 | a browser value | read it in `data()` |
 | the view instance | never |
 | run view code | an `@event` handler (PuzzleKit only) |
 
-## Open
-
-- **`tel:` in the `raw` allowlist** — PuzzleKit keeps it on `<a href>`
-  (matching Sites' `SanitizeRichText`); unconfirmed for the shared allowlist.
-- **`currency` delimiter** — fixed `,` today; whether it should follow the
-  locale like `number_with_delimiter` is undecided.
-
 ## Alternatives rejected
 
 - **Full JS via an engine in Sites** — "it needs to be in Go."
 - **Vue's open-ended model** — a Go host cannot evaluate arbitrary JS.
-- **Each host accepts its own subset** — two parsers drift; Sites only
+- **Each host accepts its own subset** — two parsers drift; a host only
   switches entries off.
-- **Keep `upcase`/`trim`/`join`… as functions** — two ways to say one thing.
+- **Keep `upcase`/`trim`/`join`… as PuzzleKit functions** — two ways to say
+  one thing.
 - **Pipes in both hosts** — PuzzleKit chose JavaScript's shape (Vue's move,
   dropping filters); a second spelling there is two ways to say one thing.
 - **A pipe AST node** — the evaluator and codegen would learn a node that
@@ -344,6 +334,6 @@ attribute `{...props}` is an attribute form whose operand is one expression, not
 - **Mutating array methods** — an expression must not change what it reads.
 - **Unknown literal date preset as an error** — an app's own `date` may take
   presets the compiler cannot see; a warning still catches typos.
-- **A shipped `puzzle migrate` codemod** — no outside users; the 0.7 → 0.8
-  upgrade checklist is in the CHANGELOG.
+- **A shipped `puzzle migrate` codemod** — no outside users; the CHANGELOG
+  carries the upgrade checklist.
 - **`functions` config key / `app.function()`** — `formatters` keeps its name.

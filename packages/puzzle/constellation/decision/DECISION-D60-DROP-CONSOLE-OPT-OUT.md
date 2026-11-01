@@ -1,7 +1,7 @@
 ---
-name: 'D60 — build.dropConsole: production console-strip becomes opt-out'
+name: 'D60 — build.dropConsole: production console stripping is opt-out'
 status: verified
-verified_at: '2026-08-24T18:51:09.019Z'
+verified_at: '2026-11-01T19:23:12.785Z'
 connections:
   - COMPONENT-ESBUILD-PLUGIN
   - DECISION-D26-TAILWIND-PIPELINE
@@ -9,27 +9,24 @@ code_refs:
   - compiler/internal/config/config.go
   - compiler/internal/build/build.go
   - compiler/internal/build/prerender_pages.go
-verified_sha: 31e1b877e13b623c27f82efba25d6b3da8e7aede
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D60 — `build.dropConsole`: production console stripping is opt-out
 
+Production builds strip `console.*` calls (esbuild `Drop: api.DropConsole`) from the app bundle and from static-mode page modules. `build: { dropConsole: false }` in `puzzle.config.js` keeps them.
+
 ## Decision
-Production builds set esbuild `Drop: api.DropConsole` by default. esbuild removes the **entire** call expression, so `console.log(sideEffect())` loses its side effect too, and it applies to user code. `puzzle.config.js` offers the way out:
 
-```js
-export default { build: { dropConsole: false } }
-```
-
-- Key absent or no config → production strips `console.*`.
-- `dropConsole: false` → user console calls survive production builds.
-- Dev builds never drop console.
-- A non-boolean value is rejected at config load, naming `build.dropConsole`. Unknown keys inside `build` are ignored.
-- The config is loaded once per `Build()` ([[DECISION-D26-TAILWIND-PIPELINE]]), so a malformed config surfaces before the stale-`dist` prune.
-
-The framework's own warnings are dev-only by design (`__PUZZLE_DEV__`), so stripping only ever affects app code. `build` is the home for future build toggles.
+- Key absent or no config → production strips. `false` → user console calls survive. Dev builds never strip.
+- A non-boolean value is rejected at config load, naming `build.dropConsole`.
+- The framework's own warnings are dev-only (`__PUZZLE_DEV__`), so stripping only ever affects app code.
 
 ## Alternatives rejected
-- Keeping console by default — silently changes every app's production output and gives up the size win (~570 B gzip on examples/todos).
-- A `puzzle build --keep-console` flag — this is app configuration, and a flag drifts from CI scripts.
-- Removing stripping entirely — the default is a real size win; an escape hatch answers the side-effect concern.
+
+- Keeping console by default — gives up a real size win on every app.
+- A `puzzle build --keep-console` flag — this is app configuration; a flag drifts from CI scripts.
+
+## Gotchas
+
+- esbuild removes the **whole** call expression, so `console.log(sideEffect())` loses the side effect too.

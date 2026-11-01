@@ -1,12 +1,13 @@
 ---
 name: "D17 — Rendering model: compiled render functions + runtime virtual DOM; no shadow DOM"
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-11-01T19:19:59.201Z'
 connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-CODEGEN
   - DOC-VIEW-LIFECYCLE
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D17 — Compiled render functions + a runtime virtual DOM, on light DOM
@@ -20,5 +21,6 @@ Templates compile to render functions returning ViewNode trees; a runtime diff/p
 Isolation, styling and events all assume light DOM; isolation comes from per-component vdom subtrees.
 
 ## Alternatives rejected
+
 - **Shadow DOM / custom elements** — breaks Tailwind-first global styling, complicates events, buys nothing.
-- **Svelte-style compiled DOM mutations** — puts per-binding dependency tracking in the thin Go compiler. Measured 2026-09-10 on five real templates: +25–27% gzip even with every emitter lever, because the static HTML string compresses worse than vnode calls; break-even around 13 templates. D170 took most of its CPU win at no byte cost.
+- **Svelte-style compiled DOM mutations** — puts per-binding dependency tracking in the thin Go compiler, and measured larger bundles on real templates (static HTML strings compress worse than vnode calls) until an app has many templates. D170's incremental VDOM took most of the CPU win at no byte cost.

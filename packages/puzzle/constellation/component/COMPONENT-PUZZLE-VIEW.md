@@ -8,132 +8,128 @@ connections:
   - COMPONENT-ADAPTER
   - COMPONENT-DEVSTATE
   - FLOW-REACTIVITY
+  - DOC-VIEW-LIFECYCLE
   - FILE-PUZZLE-VIEW
   - DECISION-D39-SKELETON
   - DECISION-D52-SKELETON-ANTIFLASH
   - DECISION-D161-AUTO-FETCHING-FINDS
-verified_at: '2026-08-24T21:39:15.808Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+  - DECISION-D178-AFTERUPDATE-PREV
+  - DECISION-D188-TICK
+verified_at: '2026-11-01T19:26:46.557Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # PuzzleView
 
-Plain base class (views/PuzzleView.js) for every component, view and layout. It owns
-state, lifecycle, tracked `data()` evaluation, refresh tokens, animations, refs and
-update scheduling; [[COMPONENT-VIEW-MANAGER]] owns the DOM. The author-facing class
-contract is [[DOC-SPEC-ANATOMY]] §4 and [[DOC-SPEC-VIEW]]. The internal `elementEnd` getter follows the live manager or error view to the end of a component's complete DOM range, recursively through component-root selections; `element` remains its first node.
+`views/PuzzleView.js` is the one plain base class for components, views and
+layouts. It owns state, lifecycle, tracked `data()` evaluation, refresh tokens,
+animations, refs and update scheduling; [[COMPONENT-VIEW-MANAGER]] owns the DOM.
+Author contract: [[DOC-SPEC-ANATOMY]] §4 and [[DOC-SPEC-VIEW]]. States and
+triggers: [[DOC-VIEW-LIFECYCLE]] §3 and §5.
 
 ## The per-view ctx
 
-The constructor's one line `this.ctx = ctx.store?._deriveCtx?.(ctx, this) ?? ctx` is how
-a view gets its store handle. `_deriveCtx` lives in [[COMPONENT-ADAPTER]]; with the
-capability it returns a ctx whose `store` is a per-view Proxy and whose prototype is the
-app ctx (so `router`, `formatters` stay live); without it the view keeps the app ctx by
-identity ([[DECISION-D157-ADAPTER-SUBPATH]]). The derived ctx always chains off the BASE
-ctx (two deep at any nesting). Invariants: the handle binds forwarded methods to the RAW
-store ([[COMPONENT-STORE]]), and any WeakMap keyed by ctx must resolve through the
-prototype chain (as `errors.js` does). Only reads through this handle, by this view,
-during its own evaluation, may fault (D161).
+The constructor line `this.ctx = ctx.store?._deriveCtx?.(ctx, this) ?? ctx` is how
+a view gets its store handle. `_deriveCtx` lives in [[COMPONENT-ADAPTER]]: with
+the capability it returns a ctx whose `store` is a per-view Proxy and whose
+prototype is the app ctx (so `router`, `formatters`, `idle` stay live); without
+it the view keeps the app ctx by identity ([[DECISION-D157-ADAPTER-SUBPATH]]). The
+derived ctx always chains off the base ctx. Any WeakMap keyed by ctx must resolve
+through the prototype chain (as `errors.js` does). Only reads through this
+handle, by this view, during its own evaluation, may fault
+([[DECISION-D161-AUTO-FETCHING-FINDS]]).
 
 ## State and refresh
 
-- Two layers: a successful `data(params, props)` REPLACES the model layer (omitted keys
-  vanish); `setData()` writes a persistent local layer that wins until the next model
+- Two layers: a successful `data(params, props)` REPLACES the model layer;
+  `setData()` writes a persistent local layer that wins until the next model
   commit and rerenders without rerunning `data()`. Keep raw local values and
-  `data()`-derived display values under different keys, or the commit erases the raw
-  one. Use `refresh()` when local state feeds `data()`.
-- A `setData()` render is scheduled through `schedule()` in `client-runtime/scheduler.js`
-  (the D63 frame/timer rule); `flushUpdates()` is a no-op once the flag has cleared, so a
-  frame that fires after an immediate render does nothing. `renderTick()` returns that
-  module's internal `tick()` — resolved once no store flush or view render is pending
-  anywhere in the runtime ([[DECISION-D188-TICK]]).
+  `data()`-derived display values under different keys, or the commit erases the
+  raw one.
+- A `setData()` render goes through `schedule()` in `scheduler.js` (the shared
+  [[DECISION-D63-HIDDEN-TAB-FLUSH]] frame rule). A render that lands first clears
+  the flag, so the later frame is a no-op. `renderTick()` returns that module's
+  `tick()`: it resolves once no store flush or view render is pending anywhere in
+  the runtime ([[DECISION-D188-TICK]]).
 - Async refresh is last-wins; a destroyed view can't be resubscribed by a late
-  continuation. `prepareRefresh()` is the router's two-phase form for reused ancestors
-  ([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]).
-- **Settle loop** ([[DECISION-D161-AUTO-FETCHING-FINDS]]): `_settleData` is installed on
-  the prototype by the adapter. Core's only test, at refresh and prepareRefresh, is
-  `store._a && this._settleData` — BOTH halves matter: the install is realm-wide, so a
-  later no-adapter app in the same realm must be held back by its own store's `_a`
-  (`tests/adapter-realm-isolation.test.js`); `_settleData` absent means the loop isn't in
-  the bundle. A pass that queued fetches is not committed: await, unwind its
-  subscriptions, re-run. Every provisional pass counts toward the ten-round cap,
-  including a dirty re-pass with no fetches; exhaustion throws naming the view and
-  request keys. A clean final pass may commit, and a sync hit-only first pass stays sync. Mid-settle notifications coalesce into `_settleDirty`.
-  A destroyed/leaving/superseded view stops after its current await (shared requests are
-  not aborted); `unsubscribe()` clears the request slot but is not a latch —
-  `_restoreFromLeaving()` restores faulting.
-- **`onStoreChange(seq)` returns early when `seq <= _settleMark`.** The settle loop stamps
-  the store's `_notifySeq` from the start of an OWNING run's committed pass (never a
-  parked D146 run). A refresh started inside the store's delivery loop captures
-  `Store._flushSeq` and `#commit` stamps it as a MAX — so a child that is both
-  parent-updated and subscribed runs `data()` once per flush. No-argument calls never
-  skip.
+  continuation. `prepareRefresh()` is the router's two-phase form for reused
+  ancestors ([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]).
+- **Settle loop gate.** The adapter installs `_settleData` on the prototype
+  (realm-wide). Core enters the loop only when `store._a && this._settleData`:
+  both halves matter, because a later no-adapter app in the same realm must be
+  held back by its own store (`tests/adapter-realm-isolation.test.js`). The loop
+  itself (round cap, fault-in, supersession) is [[COMPONENT-ADAPTER]].
+- **`onStoreChange(seq)` returns early when `seq <= _settleMark`.** A refresh
+  started inside the store's delivery loop captures `Store._flushSeq`, and
+  `#commit` stamps it as a max with the settle loop's `_notifySeq` mark. So a child
+  that is both parent-updated and subscribed runs `data()` once per flush.
+  No-argument calls never skip.
+- `afterUpdate(prev)` ([[DECISION-D178-AFTERUPDATE-PREV]]): `#renderNowInner`
+  freezes `{ props, params, route, data }` as each render lands (`data` is a
+  shallow copy) and hands the previous one to the next update. Skipped entirely
+  unless the class overrides `afterUpdate`.
 
-## Lifecycle
+## Lifecycle and failures
 
-`created` → awaited/tracked `data` → render → `mounted`; `beforeUpdate`/`afterUpdate`
-around later patches; idempotent `destroyed`. `preload()` runs created/data off-DOM
-for the router, making the later mount synchronous. With `renderSkeleton`, the `#loaded`
-latch renders the skeleton, `mounted()` fires against it, and the mount resolves
-without awaiting `data()`, with a min-duration hold ([[DECISION-D39-SKELETON]],
+`preload()` runs `created`/`data` off-DOM for the router, so the later mount is
+synchronous. With `renderSkeleton`, the `#loaded` latch renders the skeleton,
+`mounted()` fires against it, and the mount resolves without awaiting `data()`,
+with an optional min-duration hold ([[DECISION-D39-SKELETON]],
 [[DECISION-D52-SKELETON-ANTIFLASH]]); all settle rounds count as one load.
 
-**Failures** ([[DECISION-D145-ERROR-BOUNDARIES]]): a contained mount/refresh failure
-reports once, keeps the exact position and destroys the instance. With an app
-`errorView`, a fresh view mounts there with `{ error, info, retry }`; retry is stable,
-single-flight, and delegates to the Router (routed) or the parent's `refresh()`
-(child). A routed retry keeps the error view up until a rebuild commits. Error-view
-failures report as `phase: 'error-view'` without recursion.
+A contained mount/refresh failure reports once, keeps the exact position and
+destroys the instance ([[DECISION-D145-ERROR-BOUNDARIES]]). With an app
+`errorView`, a fresh view mounts there with `{ error, info, retry }`. Retry is
+stable and single-flight, and delegates to the Router (routed) or the parent's
+`refresh()` (child). A component retry sets `owner.__walk` first, so the owner's
+next patch walks reused vnodes down to the destroyed child.
 
-A hand-written `render()` returning null clears its mounted tree and reserves the same position with a comment. Re-anchoring captures the sibling after `elementEnd`, outside the complete range even when the root is an empty or selected `<Component>`; repeated nulls reuse that position and later content remounts before trailing siblings.
-
-The internal `__moveTo` delegates relocation to the manager, preserving the live instance and updating its container when a conditional routed outlet parks or adopts it. Destruction releases pinned children even when this owner is still preloaded and has no manager; mounted owners release them through the manager's slot ownership.
+A hand-written `render()` returning null clears its tree and holds the position
+with a comment, anchored after `elementEnd` (the end of the component's complete
+DOM range, through `<Component>` roots); `element` is the first node. `__moveTo`
+relocates a live instance when a conditional routed outlet parks or adopts it.
+Destruction releases pinned routed children even for a preloaded owner with no
+manager.
 
 ## Refs and two-way binding
 
-Static `ref="name"` uses cached `__ref` callbacks. `__bind(target, key, spec)`
-([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]) is memoized like `__ref` (Map for local,
-WeakMap-of-Maps for member targets) so each (target, key, spec) has one handler
-identity; a primitive root gets one shared inert handler. The handler skips mid-IME
-events, coerces (`v` string, `vn` number with `''` → `null` and NaN skipped, `c`
-boolean), then `#bindWrite` picks: local → `setData` + `refresh`; record (duck-typed
-`update` + string `_type`; this file never imports model.js) → validated `update()`;
-plain object → mutate + repaint. Throws and rejections report as `phase: 'bind'`.
-Two dev-only diagnostics (behind `__PUZZLE_DEV__`, never allocated in production): a
-`data()` commit reverting a bound local key (`#bindPending`, value-compared so echoing
-your own write stays silent), and a bound plain object replaced without the value
-(`#bindMemberPending`, resolved only after the next COMPLETED render so loop order can't
-false-positive).
+`ref="name"` uses cached `__ref` setters. `__bind(target, key, spec)`
+([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]) is memoized the same way, so each
+(target, key, spec) has one handler identity. The handler skips mid-IME events,
+coerces (`v` string, `vn` number with `''` → `null` and NaN skipped, `c` boolean),
+then writes: local → `setData` + `refresh`; record (duck-typed `update` + string
+`_type`; this file never imports model.js) → validated `update()`; plain object →
+mutate + repaint. Failures report as `phase: 'bind'`. Two dev-only diagnostics:
+a `data()` commit reverting a bound local key, and a bound plain object replaced
+without the value (checked only after the next completed render).
 
-## Internal members (never spelled in templates, reserved in SPEC §4)
+## Internal members
 
-- `__h`, `__ref`, `__bind` — emitter handler/ref/bind caches.
-- **`__c`** — static-subtree cache, a declared field (one hidden class for every view).
-  An island's children are cached only when the seed is static (D44 re-seeds on remount).
-- **`__dirty`** — per-render mask over `constructor.__roots` (top-level `data()` keys a
-  loop body reads), computed after `beforeUpdate()` and before `render()`. Primitives
-  compare `!==`; objects/functions are always dirty; first render sets every bit; no
-  `__roots` → 0. Over 31 roots wraps conservatively.
-- **`__rgen`** — render counter bumped at the top of `#computeDirty`, BEFORE the
-  `__roots` bail-out. A list block records it per invocation and rebuilds every row if it
-  missed a render (the mask is only a per-render delta). `#makeRetry`'s component arm bumps
-  the OWNER's counter before `owner.refresh()` so a failed child under a cached row is
-  reached. Trees built outside `#renderNowInner` (prerender, takeover) leave it 0.
-- **`__propRevs`** — snapshot of record-prop render revisions, written at mount (from
-  committed props) and at each props-carrying `applyParentUpdate`; replaced wholesale,
-  null when no prop has a revision.
-- **`__lists`** — block registry allocated by the list block itself (on the view, or on
-  the enclosing row state for nested loops).
-- **No `__list` method, deliberately**: loops call `listRows` (imported as `__l`), so
-  `PuzzleView` must never import `views/listBlock.js` — loop-free apps would pay ~1 KB
-  gzip ([[FILE-LIST-BLOCK]]).
-- Dev-tooling readers `_localState()`, `_modelState()`, `_vnodeTree()` (DevTools bridge,
-  [[FILE-DEVTOOLS]]); adapter fields `_settleData`/`_settlingToken`/`_settleDirty`/
-  `_settleMark`. All D121/D170 profiler state lives in [[FILE-DEVPERF]] WeakMaps;
-  every class-method call site uses the inline positive `__PUZZLE_DEV__` probe.
+All are reserved by [[DOC-SPEC-ANATOMY]] §4 and never spelled in templates.
 
-`memo(key, deps, factory)` compares deps with `Object.is`. A store record prop needs no
-memo (it compares by render revision, D170); any other object literal rebuilt per run
-does. `this.route` is the frozen snapshot of the last COMMITTED navigation — an in-page
-anchor move doesn't update it (read `ctx.router.current.hash`). Dev builds register
-mounted views with [[COMPONENT-DEVSTATE]].
+- `__h`, `__ref`, `__bind`: emitter handler, ref and bind caches.
+- `__c`: static-subtree cache, a declared field (one hidden class per view). An
+  island's children are cached only when the seed is static.
+- `__dirty`: per-render mask over `constructor.__roots` (top-level `data()` keys a
+  loop body reads), computed after `beforeUpdate()` and before `render()`.
+  Primitives compare `!==`; objects and functions are always dirty; the first
+  render sets every bit. The compiler caps `__roots` at 31.
+- `__rgen`: render counter, bumped before the `__roots` bail-out. A list block
+  rebuilds every row if it missed a render. Trees built outside
+  `#renderNowInner` (prerender, takeover) leave it 0.
+- `__walk`: one-shot "walk, don't short-circuit" flag set after a child mount
+  failure or by a retry; the next render consumes it.
+- `__propRevs`: record-prop render revisions, written at mount and at each
+  props-carrying `applyParentUpdate`; null when no prop has one.
+- `__lists`: list-block registry, allocated by the block itself.
+- **No list method on the class, deliberately**: loops call `listRows` (imported
+  as `__l`), and `PuzzleView` must never import `views/listBlock.js`, or loop-free
+  apps pay for it ([[FILE-LIST-BLOCK]]).
+- Dev readers `_localState()`, `_modelState()`, `_vnodeTree()` serve the DevTools
+  bridge ([[FILE-DEVTOOLS]]); profiler state lives in [[FILE-DEVPERF]] WeakMaps
+  behind inline `__PUZZLE_DEV__` probes. Dev builds register mounted views with
+  [[COMPONENT-DEVSTATE]].
+
+`memo(key, deps, factory)` compares deps with `Object.is`. `this.route` is the
+frozen snapshot of the last committed navigation; an in-page anchor move doesn't
+update it (read `ctx.router.current.hash`).

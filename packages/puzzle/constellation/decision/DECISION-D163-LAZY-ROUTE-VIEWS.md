@@ -1,6 +1,6 @@
 ---
 name: 'D163 — Lazy route views: the branded lazy() marker, resolved after guards'
-status: built
+status: verified
 connections:
   - DECISION-D160-SPA-CODE-SPLITTING
   - DECISION-D159-ROUTER-MODE-FACTORIES
@@ -16,7 +16,8 @@ connections:
   - FILE-ROUTER
   - DOC-SPEC-ROUTER
   - DOC-RELEASE-SURFACE
-  - RELEASE-V0-7-0
+verified_at: '2026-11-01T19:19:25.478Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 ## Context

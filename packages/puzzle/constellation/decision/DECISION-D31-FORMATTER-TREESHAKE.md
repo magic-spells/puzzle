@@ -1,7 +1,7 @@
 ---
 name: 'D31 — Library tree-shaking: a manifest-seeded function registry pruned by a compile-time scan'
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-11-01T19:19:59.201Z'
 connections:
   - COMPONENT-FORMATTERS
   - COMPONENT-ESBUILD-PLUGIN
@@ -9,6 +9,7 @@ connections:
   - DECISION-D43-FORMATTER-MISSING-GUARD
   - DECISION-D174-STANDARD-FORMATTERS
   - DECISION-D89-FEATURE-USAGE-TREESHAKE
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D31 — Library tree-shaking: a manifest-seeded registry pruned by a compile-time scan

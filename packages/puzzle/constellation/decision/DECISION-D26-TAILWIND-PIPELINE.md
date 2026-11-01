@@ -3,7 +3,7 @@ name: >-
   D26 — Tailwind pipeline: config read by node, one-shot CLI per production build, one composition
   path
 status: verified
-verified_at: '2026-08-24T19:03:12.964Z'
+verified_at: '2026-11-01T19:19:59.201Z'
 connections:
   - COMPONENT-COMPILER-CLI
   - COMPONENT-DEV-SERVER
@@ -21,7 +21,7 @@ code_refs:
   - compiler/internal/styles/watch.go
   - compiler/internal/scaffold/templates/todos/package.json
   - compiler/internal/scaffold/templates/todos/puzzle.config.js
-verified_sha: c809db6680eb9355961897756f54e97f1164b88f
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D26 — Tailwind pipeline: node-read config, one-shot CLI per build, one composition path

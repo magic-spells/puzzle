@@ -5,9 +5,9 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - DOC-SPEC-TEMPLATE
   - DOC-SPEC-ROUTER
-verified_at: '2026-07-14T07:08:23.035Z'
-release: RELEASE-V0-1-0
+verified_at: '2026-11-01T19:19:25.478Z'
 change: chore
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # Virtual scrolling
@@ -15,8 +15,9 @@ change: chore
 No framework feature: stock Puzzle renders a bounded window of a long list.
 `examples/virtual-scroll/` is the reference (10,000 rows, ~27 row nodes in the
 DOM), and `tests/virtual-scroll-example.test.js` pins it. The reusable form is
-the `VirtualList` piece in `puzzle-pieces/registry/ui/virtual-list`, which hands
-each row back to the caller through a snippet ([[DOC-SPEC-TEMPLATE]] §64).
+the `VirtualList` piece in `packages/puzzle-pieces/registry/ui/virtual-list`,
+which hands each row back to the caller through a snippet
+([[DOC-SPEC-TEMPLATE]] §64).
 
 ## The recipe (fixed row height, window scroll inside one scroller)
 
@@ -32,5 +33,6 @@ each row back to the caller through a snippet ([[DOC-SPEC-TEMPLATE]] §64).
 Gotcha: `setData` does not re-run `data()`, so the derived window only
 recomputes through the explicit `refresh()`.
 
-Still out: variable-height auto-measurement, and router scroll restoration into
-an inner scroller (the router restores window scroll only, [[DOC-SPEC-ROUTER]] §14).
+Not covered: variable-height auto-measurement, and router scroll restoration
+into an inner scroller (the router restores window scroll only,
+[[DOC-SPEC-ROUTER]] §14).

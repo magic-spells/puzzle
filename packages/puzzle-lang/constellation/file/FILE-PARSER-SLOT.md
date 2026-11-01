@@ -7,8 +7,8 @@ summary: >-
   Composition-marker validation: <Children>/<Slot>/<Portal>/<Snippet> attribute shapes, call-site
   slot rules, and the D173 V13 per-render-path marker uniqueness pass
   (validateSlots/walkSlots/walkBranches).
-verified_at: '2026-09-25T10:41:32.868Z'
-verified_sha: a602784a9822fa3ff63123e597f72624b3c9ffff
+verified_at: '2026-11-01T19:25:05.616Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 connections:
   - FILE-PARSER-COMPONENT
   - TEST-COMPILER-PARSER
@@ -19,6 +19,7 @@ connections:
 Composition-marker validation. Behavioral contract: DOC-SPEC-TEMPLATE §24/§64,
 DECISION-D71-SLOT-FORWARDING, DECISION-D166-SNIPPETS and
 DECISION-D173-CORE-SEMANTICS (V13), all in the framework plan (`repo=puzzle`).
+A host can skip the whole pass with `Options.SkipSlotCheck` ([[FILE-PARSER-HOST]]).
 
 - **Marker attribute shapes.** `childrenMarkerAttrs`, `slotMarkerFromAttrs`
   (unnamed outlet/default marker vs a static named slot; `default`/`children`
@@ -32,6 +33,5 @@ DECISION-D173-CORE-SEMANTICS (V13), all in the framework plan (`repo=puzzle`).
   on one path, in one loop body, or in two separate `{#if}`s are an error.
 - **Call-site `slot=` rules** on a component invocation's direct children: a
   dynamic `slot={expr}` is an error, and so is a control-flow block whose
-  top-level nodes carry `slot`.
-
-- **D180:** `<Component is={value}>` keeps ordinary direct-child slot validation and forwarding. Its only selection control is validated by [[FILE-PARSER-COMPONENT]]; its children follow the same composition rules as an ordinary component.
+  top-level nodes carry `slot`. `<Component is={…}>` children follow the same
+  rules as any component's ([[FILE-PARSER-COMPONENT]]).

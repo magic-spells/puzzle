@@ -1,7 +1,7 @@
 ---
 name: 'D56 — Overlapping route transitions: opt-in `transitionMode: ''overlap''` with fixed-pin positioning'
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-11-01T19:23:24.972Z'
 connections:
   - DECISION-D28-ANIMATIONS
   - DECISION-D19-NAVIGATION-COMMIT
@@ -10,17 +10,19 @@ connections:
   - COMPONENT-ROUTER
   - COMPONENT-VIEW-MANAGER
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
 code_refs:
   - client-runtime/router/router.js
   - client-runtime/app.js
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D56 — Overlapping route transitions: opt-in `transitionMode: 'overlap'`
 
-The old view's `out` and the new view's `in` run concurrently (cross-fade, shared-axis slides). Sequential stays the default ([[DECISION-D28-ANIMATIONS]]).
+The old view's `out` and the new view's `in` run concurrently (cross-fade, shared-axis slides). Sequential stays the default ([[DECISION-D28-ANIMATIONS]]). See [[DOC-SPEC-ROUTER]] §26.
 
 ## Decision
-- **Opt-in.** `transitionMode: 'overlap'` in the `PuzzleApp` config (default `'sequential'`) sets the app baseline. Per-route and per-view overrides cascade over it and are resolved from the **destination only** ([[DECISION-D65-PER-ROUTE-TRANSITION-MODE]]).
+- **Opt-in.** `transitionMode: 'overlap'` in the `PuzzleApp` config (default `'sequential'`) sets the app baseline; any other value throws at construction. Per-route and per-view overrides cascade over it and are resolved from the **destination only** ([[DECISION-D65-PER-ROUTE-TRANSITION-MODE]]).
 - **Fixed-pin positioning, no wrapper.** At out-start the router measures the leaving animator root's `getBoundingClientRect()` and pins it with inline styles only — `position: fixed` at that rect, `margin: 0`, `pointer-events: none`. The incoming chain takes the layout slot in the same synchronous block, so in-flow content never stacks or jumps; the pinned leaver paints above it, and clicks land on the live view.
 - **Reordered `#swap`, convergent destroy.** Overlap pins the leaver, starts `playOut()` without awaiting, then mounts/patches and commits (the D19 commit point is unchanged — data was awaited before the swap). The leaver is destroyed when its out settles. On the reused-layout path the keyed patch's `unmount()` → `destroyAnimated()` drives the same memoized `playOut()`, and `destroy()` is idempotent, so both paths converge. A morph-leave promise ([[DECISION-D55-MORPH-TRANSITIONS]]) is still awaited before removal.
 - **Interruption stays instant.** At most one in-flight leaver (`#pendingOut`): a navigation mid-overlap destroys it synchronously and skips its own out, so at most two route elements coexist.
@@ -36,4 +38,4 @@ The old view's `out` and the new view's `in` run concurrently (cross-fade, share
 ## Alternatives rejected
 - The View Transitions API — snapshot-based (no live interaction mid-transition) and cannot express the `animations` field's WAAPI semantics.
 - Absolute positioning inside an injected wrapper — violates the no-wrapper rule.
-- Overlap as the default — changes every shipped app.
+- Overlap as the default — changes every existing app.

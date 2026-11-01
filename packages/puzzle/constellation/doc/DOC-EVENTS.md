@@ -1,7 +1,7 @@
 ---
 name: Event handling — user guide
 status: verified
-verified_at: '2026-07-17T23:27:05.542Z'
+verified_at: '2026-11-01T19:25:25.008Z'
 connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-CODEGEN
@@ -9,13 +9,12 @@ connections:
   - DOC-SPEC-TEMPLATE
   - DOC-TEMPLATE-SYNTAX
   - DOC-PUZZLE-FILE
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
-
-How components declare handlers, how templates bind them, how handlers update state, and how components talk to their parents. The contract is [[DOC-SPEC-TEMPLATE]] §5 (forms and modifiers), §31 (handler identity) and §47 (`outside`).
 
 # Puzzle event handling
 
-Examples come from the todos app (`examples/todos/app/views/Home.pzl`). For the template grammar around `@event={ … }`, see [[DOC-TEMPLATE-SYNTAX]].
+How components declare handlers, how templates bind them, how handlers update state, and how components talk to their parents. The contract is [[DOC-SPEC-TEMPLATE]] §5 (forms and modifiers), §31 (handler identity) and §47 (`outside`); the template grammar around `@event={ … }` is [[DOC-TEMPLATE-SYNTAX]]. Examples come from the todos app (`examples/todos/app/views/Home.pzl`).
 
 ## The `events` class field
 
@@ -41,7 +40,7 @@ export default class TodoHome extends PuzzleView {
 ```
 
 - `events` is a class field (`events = { … };`), with no commas between class members.
-- **Every handler must be an arrow function.** The field initializer runs during construction with `this` bound to the instance, so each arrow keeps the component as `this` forever. Method shorthand (`addTodo(event) { … }`) parses, but the runtime calls it as `this.events.addTodo(event)`, so `this` is the `events` object and `this.setData(...)` throws when the event fires. Nothing catches this at compile time, but a **development build warns** in the console at the view's first mount — once per view class, for each non-arrow handler (shorthand or `function`) that uses `this` — with the view, the handler and the fix. A shorthand handler that never touches `this` works and draws no warning. Production builds carry no check.
+- **Every handler must be an arrow function.** The runtime calls `this.events.addTodo(event)`, so method shorthand (`addTodo(event) { … }`) gets the `events` object as `this`, and `this.setData(...)` throws when the event fires. The compiler can't catch it; a development build warns at the view's first mount, once per view class, for each non-arrow handler that uses `this`. A shorthand handler that never touches `this` works.
 
 ## Binding handlers in templates
 
@@ -64,9 +63,8 @@ Three forms (§5):
 
 - Write `event` explicitly when the handler needs it; `@click={ setFilter('all') }` passes only `'all'`.
 - Loop variables are in scope, so `deleteTodo(todo)` gets that row's record.
-- Arguments are ordinary template expressions, and the handler's name always means your `events` entry. A handler can't use `this` in the template — it reaches the view through its own name.
+- Arguments are ordinary template expressions, and the handler's name always means your `events` entry. A template can't use `this`; it reaches the view through the handler's name.
 - Inside a handler, `event.target.value` and `event.target.closest('li')` work as written. If your data has a field named `event`, rename it: a template can't read `event` as data and also use the DOM `event` in a handler.
-- A form control rarely needs a handler: `value={ … }` and `checked={ … }` bind both ways on their own (below).
 
 ## Updating state
 
@@ -78,7 +76,7 @@ Three forms (§5):
 
 - `setData()` is cheap on purpose; it does not re-run store queries. When `data()` computes something from local state (like `filteredTodos` from `currentFilter`), call `this.refresh()` after it.
 - A `data()` commit replaces the model, so a view mixing local state and store data reads its local values back in `data()` with `this.getData()`.
-- Mutate records, not copies: a store mutation re-runs `data()` on every view that queried those records.
+- Mutate records through `update()` or the store, not by assigning fields or editing copies: a store mutation re-runs `data()` on every view that queried those records.
 
 ```js
 events = {
@@ -89,14 +87,9 @@ events = {
 };
 ```
 
-## Form binding: the handler you don't write
+## Form binding and your handlers
 
-`value={ … }` and `checked={ … }` on a plain `<input>`, `<textarea>` or `<select>` bind both ways when the expression is a bare name or a one-level path (§6):
-
-```html
-<input type="text" placeholder="What needs doing?" value={ newTodoText } />
-<input type="checkbox" checked={ todo.completed } />
-```
+`value={ … }` and `checked={ … }` on a plain form control bind both ways with no handler ([[DOC-TEMPLATE-SYNTAX]] "Two-way form binding"). How that meets your own handlers:
 
 - **Your `@input` or `@change` wins.** Either one, with any modifiers, means you own the write, and nothing is synthesized:
 
@@ -129,7 +122,6 @@ events = {
 
 ## Modifiers
 
-
 `@event:modifier[:modifier…]` adjusts dispatch (§5):
 
 | Modifier | Effect |
@@ -148,11 +140,11 @@ events = {
 <div @wheel:passive={ onScroll }>…</div>
 ```
 
-Order is fixed whatever you write: outside check, key check, once, `preventDefault`, `stopPropagation`, handler — so a non-matching key never prevents the browser's default. For a *sometimes* intercept (Backspace only at the caret's start), write a plain `@keydown` handler that checks and calls `event.preventDefault()` itself. `passive` and `capture` set the native listener options (D187); `passive:prevent` is a compile error, and `outside` always captures on document. Modifiers are DOM-only: any modifier on a component's callback prop is a compile error.
+Order is fixed whatever you write: outside check, key check, once, `preventDefault`, `stopPropagation`, handler — so a non-matching key never prevents the browser's default. For a *sometimes* intercept (Backspace only at the caret's start), write a plain `@keydown` handler that checks and calls `event.preventDefault()` itself. `passive:prevent` is a compile error. Modifiers are DOM-only: any modifier on a component's callback prop is a compile error.
 
 ## Outside-dismiss: `:outside`
 
-`@pointerdown:outside={ close }` runs the handler for presses **outside** the element (§47). The listener sits on `document` in the capture phase, so another component's `stopPropagation()` can't swallow it and the click that opens a panel can't close it. The framework attaches and detaches it with the element — no `mounted()`/`destroyed()` bookkeeping.
+`@pointerdown:outside={ close }` runs the handler for presses **outside** the element (§47). The listener sits on `document` in the capture phase, so another component's `stopPropagation()` can't swallow it and the click that opens a panel can't close it. Content a `<Portal>` inside the element moved elsewhere still counts as inside. The framework attaches and detaches the listener with the element — no `mounted()`/`destroyed()` bookkeeping.
 
 ```html
 <div class="relative">
@@ -182,7 +174,7 @@ The child gates and shapes; the parent does the work. A child with nothing to ad
 
 ## Imperative handles: `@ready`
 
-When a parent needs a child's imperative handle (a carousel's `.next()`, a library instance), the child delivers it up through a callback prop, conventionally `@ready`, from its `mounted()`:
+When a parent needs a child's imperative handle (a carousel's `.next()`, a library instance), the child delivers it through a callback prop, conventionally `@ready`, from its `mounted()`:
 
 ```html
 <TarotCarousel options={ carouselOptions } @ready={ carouselReady }>…</TarotCarousel>
@@ -199,7 +191,7 @@ Expect a new handle after the child remounts. For an element in your **own** tem
 
 ## Common mistakes
 
-1. **Method shorthand in `events`** — `this` is wrong at event time. Use arrows. In development the console warns about it at the view's first mount.
+1. **Method shorthand in `events`** — `this` is wrong at event time. Use arrows; development builds warn.
 2. **Curried handlers** — `(todo) => () => { … }` returns an unused inner function. Write `(todo) => { … }`; the template call passes the arguments.
-3. **Assigning to a variable or to the object `getData()` returned** — invisible to the renderer. Call `setData` or mutate the record.
+3. **Assigning to a variable, a record field, or the object `getData()` returned** — invisible to the renderer. Call `setData` or `record.update()`.
 4. **Commas between class members** — `events` is a class field; commas go only between handlers inside it.

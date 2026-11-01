@@ -8,19 +8,8 @@ summary: >-
   expr.Parse through exprs.go, the {#for}/{#case}/{:when} header shapes, {#unless} as a negated
   condition, HTML void elements closed at their start tag, binding-name checks, and D167 component
   classification and name validation (with lexer.go's Unicode tag-name lexing).
-verified_at: '2026-09-25T10:41:32.868Z'
-verified_sha: a602784a9822fa3ff63123e597f72624b3c9ffff
-notes:
-  - kind: state
-    text: >-
-      0.8.1 (Go-only): the parser carries host options (FILE-PARSER-HOST). `parser` holds `opts
-      Options`; `newParser` takes it and the nested {#raw} parser inherits it.
-      Parse/ParseTemplate/ParseSkeleton/ParseFile take an optional trailing `Options` (zero =
-      PuzzleKit), and their three post-parse checks run through `Options.validate`. `parseBlock` has
-      a `case "let"` that hands to `parseLet` (FILE-PARSER-LET) only when `Let` is on; the
-      unknown-block message comes from `unknownBlockErr`, unchanged for PuzzleKit. `parseChildren`
-      now defers `p.unbind(len(p.bound))` so a child list is the scope of the {#let} names inside it
-      — a no-op when nothing was bound. `nodePos` knows `*Let`.
+verified_at: '2026-11-01T19:25:05.616Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 connections:
   - FILE-PARSER-COMPONENT
 ---
@@ -28,9 +17,16 @@ connections:
 # parser.go
 
 The recursive-descent template parser and its grammar validation. Behavioral
-intent: COMPONENT-TEMPLATE-PARSER in the framework plan (`repo=puzzle`); `path`
-is relative to `packages/puzzle-lang`.
+intent: COMPONENT-TEMPLATE-PARSER in the framework plan (`repo=puzzle`).
 
+- **Entry points** `Parse`, `ParseTemplate`, `ParseSkeleton` and `ParseFile` each
+  take an optional trailing `Options` ([[FILE-PARSER-HOST]]); the zero value is
+  PuzzleKit's grammar. The parser holds `opts`, a nested `{#raw}` parser inherits
+  them, and the post-parse island/slot/ref checks run through `Options.validate`.
+  `parseBlock`'s `case "let"` hands to `parseLet` ([[FILE-PARSER-LET]]) only when
+  `Let` is on; otherwise `unknownBlockErr` gives PuzzleKit's message.
+  `parseChildren` defers `p.unbind(len(p.bound))`, so a child list scopes the
+  `{#let}` names inside it.
 - **Every expression position is one `expr.Parse`** (DECISION-D176-EXPRESSION-LANGUAGE,
   D173 V1), called through `parseExprAt` ([[FILE-PARSER-EXPRS]]) with the
   enclosing bindings in scope: interpolations, brace-only attribute values and
@@ -39,8 +35,14 @@ is relative to `packages/puzzle-lang`.
   value lists (`splitWhenValues`, top-level commas only), and the `{#for}` header
   (`parseForHeader` → `peelForCounter`/`splitForIn`), which splits
   `item in collection, i` or `a...b, x` and hands each piece to `expr`. This file
-  never reads inside an expression; a `|` is rejected by `expr.Parse` itself.
-- **Component selectors and spread props (D180).** `<Component>` remains a `Component` AST node with its reserved name. [[FILE-PARSER-COMPONENT]] validates the required expression-valued `is`; `name` and `from` stay ordinary props. `parseAttrs` accepts the lexer's existing `TokAttrBrace` with a leading `...` as `SpreadAttr`, parses the remaining expression with its original file position, and rejects spreads on elements and composition markers. No expression grammar or lexer token change is needed. `Component` cannot be a dotted family root.
+  never reads inside an expression; a `|` is `expr`'s business (a Sites pipe with
+  `Options.Pipes`, the steer error without).
+- **Component selectors and spread props (D180).** `<Component>` is a
+  `Component` AST node with a reserved name; [[FILE-PARSER-COMPONENT]] validates
+  its `is`. `parseAttrs` turns a `TokAttrBrace` with a leading `...` into a
+  `SpreadAttr` (expression parsed at its original file position) and rejects
+  spreads on elements and composition markers. `Component` cannot be a dotted
+  family root.
 - **`{#unless c}`** stores `!` over the parsed condition — one tree shape.
 - **A second `{:else}`** in `{#if}`/`{#unless}`/`{#case}` is reported at the stray
   clause ("a second {:else} in {#if} opened at L:C — {:else} must be the last
@@ -65,8 +67,9 @@ is relative to `packages/puzzle-lang`.
   marker as a family root (`<Slot.Foo>`).
 
 Siblings with no FILE card, whose contracts live on COMPONENT-TEMPLATE-PARSER:
-`depth.go` (`OverNestingDepth`, D164 — a token-level nesting scan for the
-playground that skips void start tags and stray void closers, so for a
-well-formed template it counts exactly the AST's containers) and `inlinesvg.go`
-(`ScanSVGFile`, D46 — skips a leading UTF-8 BOM, with error positions kept in
-file coordinates). [[TEST-COMPILER-PARSER]] covers both.
+`depth.go` (`OverNestingDepth` for the playground, D164, and the `scanNesting`
+token scan `ParseMarkup`'s depth guard reuses — void start tags, stray void
+closers, `{#svg}` and `{#let}` count no level, so for a well-formed template it
+counts exactly the AST's containers) and `inlinesvg.go` (`ScanSVGFile`, D46 —
+skips a leading UTF-8 BOM, error positions kept in file coordinates).
+[[TEST-COMPILER-PARSER]] covers both.

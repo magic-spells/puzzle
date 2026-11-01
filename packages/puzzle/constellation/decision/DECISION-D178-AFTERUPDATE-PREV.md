@@ -12,8 +12,8 @@ connections:
 
 `afterUpdate()` is where a view syncs things Puzzle does not render (a map, a
 chart, scroll, focus) after an update that came from outside the view.
-Deciding *what* changed means comparing against the old value, and today the
-view has to stash that value on the instance itself.
+Deciding *what* changed means comparing against the old value, which the view
+would otherwise have to stash on the instance itself.
 
 ## Decision
 
@@ -64,7 +64,6 @@ afterUpdate(prev) {
 
 ## Consequences
 
-
 For a view that defines the hook: one frozen object and one shallow copy of
-its data per render. About 30 bytes gzip in every bundle. Built in PR #208;
-tests in `tests/view.test.js` and `tests/router-ancestor-transaction.test.js`.
+its data per render. Tests: `tests/view.test.js` and
+`tests/router-ancestor-transaction.test.js`.

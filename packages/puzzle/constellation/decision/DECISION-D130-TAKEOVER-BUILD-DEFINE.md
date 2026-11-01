@@ -13,8 +13,8 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - COMPONENT-VIEW-MANAGER
   - DOC-SPEC-BUILD
-verified_at: '2026-07-27T04:56:00.000Z'
-verified_sha: c6b0dd9b8a28e8686d17b364150ae9b82912e92f
+verified_at: '2026-11-01T19:21:40.935Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D130 — SSG takeover is a build-mode feature: `__PUZZLE_TAKEOVER__`
@@ -24,18 +24,18 @@ adopt prerendered DOM"**, so plain SPA bundles don't ship the takeover path
 (`ssg/preload.js` plus the router's `data-puzzle-ssg` branches) that can never
 run there.
 
+## Decision
+
 | bundle | value | why |
 |---|---|---|
-| hybrid app bundle | `true` | the router adopts the `data-puzzle-ssg` container at navigation #0 (D67) |
+| hybrid app bundle | `true` | the router adopts the `data-puzzle-ssg` container at navigation zero (D67) |
 | static per-page | `true` | `mountStatic` adopts the prerendered page (D81) |
 | dev / watch | `true` | never regress `puzzle dev` |
 | plain SPA | `false` | nothing stamps the marker |
 | node prerender | `false` | generates markup, never adopts it |
 
-## Rules
-
-- Flags travel in a `bundleFlags` struct (`options.go`), not positional bools,
-  so no call site silently defaults a new define.
+- Flags travel in the `bundleFlags` struct (`compiler/internal/build/options.go`),
+  not positional bools, so no call site silently defaults a new define.
 - Probes are inline at each branch with the
   `typeof __PUZZLE_TAKEOVER__ === 'undefined' || …` idiom (absent = on, so vitest
   and foreign bundlers keep the path). A module-level const doesn't fold (D89).
@@ -47,20 +47,19 @@ run there.
   Bookkeeping is gated, never made lazy: conditional field assignment would give
   vnodes different hidden-class shapes; a folded literal keeps one shape per
   build.
-- With the define false **no `ssg/` module reaches a SPA bundle**, so "everything
-  under `ssg/` is build-time only" is enforceable.
-
-## Consequences
-
-- `app.js` is no longer mode-independent: a SPA-built bundle served against
+- With the define false, no `ssg/` module reaches a SPA bundle.
+- `app.js` is not mode-independent: a SPA-built bundle served against
   prerendered HTML clears the markup and renders client-side. Both prerender
   modes emit their own `app.js`, so bundle and markup always ship together.
-- **Verification:** property names like `takeoverPreloaded` aren't minified and
-  so aren't discriminating probes; use the `data-puzzle-ssg` literal and the sole
-  assignment to `__takeoverTree` (only in `preload.js`). Vitest never exercises
-  the gated-off path — the Go build tests are the only DCE check, each made
-  non-vacuous by forcing the define true.
 
-## Alternatives
+## Alternatives rejected
 
 - **Relocate `preload.js` out of `ssg/`** — tidier naming but removes no bytes.
+
+## Gotchas
+
+- Property names like `takeoverPreloaded` aren't minified, so they are useless
+  as DCE probes. Probe the `data-puzzle-ssg` literal and the sole assignment to
+  `__takeoverTree` (only in `preload.js`).
+- Vitest never exercises the gated-off path; the Go build tests are the only DCE
+  check, each made non-vacuous by forcing the define true.

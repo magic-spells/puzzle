@@ -7,8 +7,12 @@ summary: Warm Tailwind child process and lifecycle management.
 connections:
   - COMPONENT-ESBUILD-PLUGIN
   - COMPONENT-DEV-SERVER
-verified_at: '2026-08-24T21:11:50.859Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-01T19:25:05.957Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
-Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `compiler/internal/styles/watch.go`.
+# watch.go
+
+`TailwindWatcher`: one long-lived `tailwindcss --watch` child per `puzzle dev` session (D27) instead of a one-shot spawn per rebuild ([[COMPONENT-DEV-SERVER]]). The child rewrites a private output file; the dev loop watches that file and recomposes `dist/styles.css`. It is killed on context cancel or `Stop()`; `Done()` closes when the process exits for any reason, so the dev loop can fall back to one-shot composition instead of serving stale CSS.
+
+**Gotcha:** the watcher holds an unfed stdin pipe open for the child's lifetime. Tailwind v4's `--watch` exits when its stdin reaches EOF, and a detached child would otherwise inherit `/dev/null` and quit after its first build.

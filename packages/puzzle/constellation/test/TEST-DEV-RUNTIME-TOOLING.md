@@ -17,24 +17,27 @@ connections:
   - DECISION-D122-DEVTOOLS-PROFILER-PROTOCOL
   - DOC-SPEC-BUILD
   - DOC-TESTING
-verified_at: '2026-08-24T21:39:15.808Z'
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_at: '2026-11-01T19:24:02.433Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # Dev-only runtime tooling: HMR, profiler, DevTools bridge
 
-Three development-only surfaces that must vanish from production and stay
-harmless when their host is absent. Suites: `tests/hmr-dev-reload.test.js`,
-`tests/devperf.test.js`, `tests/devtools-bridge.test.js`; the production-erasure
-half is the Go build test `TestBuildDevDefineDCE`.
+Three development-only surfaces that must vanish from production and stay harmless when
+their host is absent. Run with
+`npx vitest run tests/hmr-dev-reload tests/devperf tests/devtools-bridge`; the
+production-erasure half is the Go build test `TestBuildDevDefineDCE`.
 
-- **HMR state transfer** ([[DOC-SPEC-BUILD]] §27): snapshot and restore across a
-  full reload, the two-phase restore, and the `safeState` filter that decides
-  what may survive.
-- **Dev performance instrumentation** (§56): render and store instrumentation,
-  the loop detector, and `measureRenders` — a shipped helper, so its report shape
-  is public surface, not an internal probe.
-- **DevTools bridge** (§55): emitted events, request handling, and the profiler
-  protocol. The critical case is the negative one: with no extension hook
-  installed every touchpoint is a no-op, which is what lets production DCE drop
-  the module entirely.
+- **HMR state transfer** (`hmr-dev-reload`, [[DOC-SPEC-BUILD]] §27): snapshot and
+  restore across a full reload, the two-phase restore, and the `safeState` filter that
+  decides what may survive.
+- **Dev performance instrumentation** (`devperf`, §56): render and store
+  instrumentation, the loop detector, and `measureRenders`, a shipped helper whose report
+  shape is public surface.
+- **DevTools bridge** (`devtools-bridge`, §55): emitted events, request handling, the
+  profiler protocol. The critical case is the negative one: with no extension hook
+  installed every touchpoint is a no-op, which is what lets production DCE drop the
+  module.
+
+The DevTools extension's own suite lives in `packages/puzzle-devtools` and runs against
+this working tree (`file:../puzzle`).

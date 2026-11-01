@@ -1,6 +1,6 @@
 ---
 name: 'D93 — Router focus management + route announcement: the focusBehavior option'
-status: built
+status: verified
 connections:
   - COMPONENT-ROUTER
   - DECISION-D33-ROUTER-SCROLL
@@ -16,6 +16,8 @@ connections:
 code_refs:
   - client-runtime/router/router.js
   - client-runtime/app.js
+verified_at: '2026-11-01T19:23:00.473Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 # D93 — Router focus management + route announcement: `focusBehavior`
@@ -27,8 +29,16 @@ out, a function `(to, from) => element` to choose the target. Spec: SPEC §51.
 
 ## Decision
 
-- **Timing:** `#applyFocus` runs last in `#commitState`, strictly after the
-  scroll block, in the same post-mount, pre-paint window.
+- **Gate before commit, target after mount.** `#resolveFocus` decides
+  *whether*: no for memory mode, `focusBehavior: false`, navigation #0
+  (`from == null` — including a guard redirect that re-enters #0 as a replace;
+  a user push superseding a slow #0 still focuses), a params-only *replace*
+  (D135), and a same-location locale rebuild (D175). Push, replace and pop all
+  move focus otherwise (browsers don't restore focus on client navigation).
+  `#applyFocus` runs last in `#commitState`, after the scroll landing, in the
+  same post-mount, pre-paint window; a custom function runs there so it can
+  query the committed DOM. A throw is reported through `onError` and treated as
+  falsy, as is a non-focusable return.
 - **`focus({ preventScroll: true })` is mandatory** — plain `focus()` would undo
   D33 restoration and D41 anchor landings.
 - **Transient `tabindex="-1"`:** a `<puzzle-view>` root isn't focusable, so the
@@ -36,39 +46,29 @@ out, a function `(to, from) => element` to choose the target. Spec: SPEC §51.
   D139 suppresses the focus ring for the same span. An author-set `tabindex` is
   never touched. With no live root on the leaf (a parent without `<Slot/>`) the
   target walks up the chain; none → no focus, still announce.
-- **Gate before commit, target after mount:** `#resolveFocus` decides *whether*
-  (memory mode is a no-op; navigation #0 — nothing committed yet, `from == null`,
-  including a guard redirect that re-enters as a replace — does nothing; a user
-  push superseding a slow nav #0 still focuses). The custom function runs after
-  mount so it can query the committed DOM; a throw is reported and treated as
-  falsy. Push, replace and pop all move focus (browsers don't restore focus on
-  client navigation); a params-only *replace* doesn't (D135).
 - **Focus before announce** — a polite update issued just before a focus change
   is routinely dropped. A declined focus still announces.
 - **One live region**, created in `start()`, removed in `stop()`:
-  `aria-live="polite"`, `aria-atomic="true"`, hidden by clip-rect
-  (`clip: rect(0, 0, 0, 0)` — the comma form; jsdom's parser drops the space
-  form). Never `display:none`/`visibility:hidden`, which silence it.
-- **What is announced:** `aria-live` only speaks on change, and title sync
-  leaves an unresolved title alone. So the router tracks `#announcedTitle`
-  (seeded at `start()` from the shipped title, cleared in `stop()`): the new
+  `aria-live="polite"`, `aria-atomic="true"`, hidden by `clip` +
+  `clip-path` — `clip: rect(0, 0, 0, 0)` in the comma form (jsdom drops the
+  space form). Never `display:none`/`visibility:hidden`, which silence it.
+- **What is announced:** `aria-live` only speaks on change, and a route with no
+  `meta.title` leaves the old title standing (D84). So the router tracks
+  `#announcedTitle` (seeded at `start()` from the shipped title): the new
   `document.title` is announced only when non-empty and different from the last
-  announcement; otherwise the committed leaf route's `name`, or its `path` when
-  the name would repeat.
-- **Known residual:** navigation #0 announces nothing, so `#announcedTitle`
-  still holds the shipped title after it. If #0 resolved a title (a titled home
-  route) and the next navigation resolves none, that first announcement reads
-  #0's leftover title once, because it differs from the seed.
+  one; otherwise the leaf route's `name`, or its `path` when the name would
+  repeat.
+- `output: 'static'` pages have no router, so no focus management or region.
 
-## Consequences
+## Gotchas
 
-- Default-on for every app. `output: 'static'` pages have no router, so no focus
-  management or live region.
-- jsdom can't observe `preventScroll`, visual hiding, or speech: tests assert
-  the `focus` argument, inline hiding styles, ARIA attributes, and region text.
-  Blur-cleanup on a *detached* root isn't asserted (blur doesn't fire reliably).
+- Navigation #0 announces nothing, so `#announcedTitle` still holds the shipped
+  title after it. If #0 resolved a title and the next navigation resolves none,
+  that first announcement reads #0's leftover title once.
+- jsdom can't observe `preventScroll`, visual hiding or speech: tests assert the
+  `focus` argument, inline hiding styles, ARIA attributes and region text.
 
-## Alternatives
+## Alternatives rejected
 
 - **Resolve the custom function pre-commit** like `scrollBehavior` — the DOM
   doesn't contain the incoming chain yet.

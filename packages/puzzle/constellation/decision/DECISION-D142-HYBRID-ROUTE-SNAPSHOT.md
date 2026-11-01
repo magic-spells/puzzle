@@ -5,8 +5,8 @@ connections:
   - COMPONENT-SSG
   - COMPONENT-ROUTER
   - DOC-SPEC-BUILD
-verified_at: '2026-08-16T04:37:41.221Z'
-verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+verified_at: '2026-11-01T19:19:25.478Z'
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
 
 The hybrid prerender context's `router.current` is the page's frozen route
@@ -33,12 +33,11 @@ three-way parity test in `tests/static-prerender.test.js`).
 
 ## Rationale
 
-Without a committed state, every `current` read in a hybrid build rendered its
-nothing-is-current branch into the shipped HTML: crawlers and no-JS visitors —
-the audience hybrid output exists for — only ever saw inactive nav and missing
-route-derived content, and real users saw a flash between first paint and
-takeover. Static mode already threaded the snapshot; the mode mismatch was the
-defect.
+Without a committed state, every `current` read in a hybrid build would render
+its nothing-is-current branch into the shipped HTML: crawlers and no-JS
+visitors — the audience hybrid output exists for — would only see inactive nav
+and missing route-derived content, and real users would see a flash between
+first paint and takeover.
 
 ## Alternatives rejected
 

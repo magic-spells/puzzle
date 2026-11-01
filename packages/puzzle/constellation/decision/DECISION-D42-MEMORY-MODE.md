@@ -1,7 +1,7 @@
 ---
 name: D42 — Memory routing (`memoryRouter()`, URL-less) + `go`/`back`/`forward` in every mode
 status: verified
-verified_at: '2026-08-24T21:39:15.808Z'
+verified_at: '2026-11-01T19:23:24.972Z'
 connections:
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-APP
@@ -12,7 +12,7 @@ connections:
   - DECISION-D33-ROUTER-SCROLL
   - DECISION-D19-NAVIGATION-COMMIT
   - DECISION-D159-ROUTER-MODE-FACTORIES
-verified_sha: b1a8642a73e5584ab1e44f807164c93017857db0
+verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 code_refs:
   - client-runtime/router/modes.js
   - client-runtime/router/router.js
@@ -24,10 +24,10 @@ code_refs:
 `routerMode: memoryRouter({ initialPath })` from `@magic-spells/puzzle/router-modes` ([[DECISION-D159-ROUTER-MODE-FACTORIES]]) keeps the route entirely in router state: `location` and `history` are never read or written. For tests (no jsdom history fakery) and embedded widgets that must not touch the host page's URL. See [[DOC-SPEC-ROUTER]] §15.
 
 ## Decision
-- **An in-memory entry stack replaces `history`.** Entries `{ path }` plus an index; `push()` truncates forward entries and appends. The whole pipeline — commit, tokens, transitions, nested chains — runs unchanged; only URL side effects vanish.
-- **`go(n)` / `back()` / `forward()` exist in every mode.** Memory mode moves the index and runs the pipeline as a pop (out-of-range `n` is a silent no-op); history/hash modes delegate to `history.go(n)`. App code stays mode-agnostic.
-- **No document-level side effects:** no popstate listener and no `document.title` from `meta.title` (a widget must not rename the host tab).
-- **Scroll management is inert** — `scrollBehavior` is accepted and ignored ([[DECISION-D33-ROUTER-SCROLL]]).
+
+- **An in-memory entry stack replaces `history`.** Entries `{ path }` plus an index; `push()` truncates forward entries and appends. The whole pipeline — commit, tokens, transitions, nested chains — runs unchanged; only URL side effects vanish. The stack lives on the mode instance, which `create()` makes once per Router, so two routers never share it.
+- **`go(n)` / `back()` / `forward()` exist in every mode.** Memory mode moves the index and runs the pipeline as a pop (out-of-range `n` is a silent no-op); path and hash routing delegate to `history.go(n)`. App code stays mode-agnostic.
+- **No document-level side effects** (the mode is `urlless`): no popstate listener, no scroll management (`scrollBehavior` is accepted and ignored, [[DECISION-D33-ROUTER-SCROLL]]), no focus move or route announcement, and no `document.title`/head sync (a widget must not rename the host tab).
 - **The click interceptor stays active**, so in-app `<a href="/about">` links route. Caveat (documented): it is document-global, so same-origin path links in a host page are intercepted too — the same trade hash mode makes.
 - **`initialPath`** (default `'/'`) rides the mode object, so it cannot be set in URL modes, which read the URL.
 
