@@ -6,7 +6,11 @@
           <caption class="caption-bottom px-4 py-3 text-left text-sm text-muted">{ caption }</caption>
         {/if}
         <thead>
-          <tr class="border-b border-border bg-surface-sunken">
+          <!-- The header sits a step LIGHTER than the rows: edge-highlight-strong
+               is a white sheen over bg-surface in the dark styles and plain
+               white in the light ones, so the header never reads as a darker
+               band in any palette x style. -->
+          <tr class="border-b border-border bg-edge-highlight-strong">
             {#if selectable}
               <th scope="col" class="w-10 px-4 py-3 align-middle">
                 <label class="relative inline-flex items-center align-middle">
