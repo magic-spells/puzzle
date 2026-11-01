@@ -8,7 +8,7 @@ summary: >-
   know, or a string-literal in_timezone zone that cannot be a zone id.
 connections:
   - COMPONENT-CODEGEN
-  - DECISION-D174-STANDARD-FORMATTERS
+  - DECISION-D174-FUNCTION-LIBRARY
   - TEST-COMPILER-CODEGEN
 verified_at: '2026-11-01T19:19:18.479Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
@@ -18,7 +18,7 @@ verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 
 `checkLiteralArgs` (called from `markup.go`): a positioned compile **warning** for a
 string-literal argument the date functions cannot honor
-([[DECISION-D174-STANDARD-FORMATTERS]]) — an unknown `date`/`time`/`datetime` preset
+([[DECISION-D174-FUNCTION-LIBRARY]]) — an unknown `date`/`time`/`datetime` preset
 (it names `short`, `medium`, `long`, `iso`), a retired preset name such as
 `date(v, 'time')` (steers to `time(v)`), or an `in_timezone` zone that cannot be an
 IANA name or UTC offset.

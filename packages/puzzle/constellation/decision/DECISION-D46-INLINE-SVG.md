@@ -37,4 +37,4 @@ verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 - `{@svg}` — `@` already means events.
 - A generic `{#asset}` — the contract is SVG-specific; JSON already imports through esbuild.
 - Parsing the file into vnodes — every icon would join diffing, and large SVGs bloat the AST and goldens.
-- An esbuild text loader + raw-HTML vnode — an unsanitized `innerHTML` node is an XSS hatch; runtime HTML goes only through the sanitized `raw()` function ([[DECISION-D174-STANDARD-FORMATTERS]]).
+- An esbuild text loader + raw-HTML vnode — an unsanitized `innerHTML` node is an XSS hatch; runtime HTML goes only through the sanitized `raw()` function ([[DECISION-D174-FUNCTION-LIBRARY]]).

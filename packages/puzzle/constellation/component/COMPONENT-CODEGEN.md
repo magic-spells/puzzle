@@ -10,7 +10,7 @@ connections:
   - FILE-CODEGEN-EXPRESSIONS
   - DECISION-D176-EXPRESSION-LANGUAGE
   - DECISION-D173-CORE-SEMANTICS
-  - DECISION-D174-STANDARD-FORMATTERS
+  - DECISION-D174-FUNCTION-LIBRARY
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
   - DECISION-D62-HANDLER-CACHING
   - DECISION-D133-RESERVED-SCRIPT-BINDINGS
@@ -85,7 +85,7 @@ table in `lower.go`'s header comment is the contract; the language rules are D17
   arguments included — except a handler's free `event` chain, written as authored.
   `Object.keys/values/entries` get `(<arg> ?? {})` (`objectGlobalArgs`, render only).
 - **Calls**: a bare call is the library, `(__f["name"] || __f.__missing("name"))(…)`
-  ([[DECISION-D43-FORMATTER-MISSING-GUARD]]; `const __f` only when used); methods and allowed
+  ([[DECISION-D43-FUNCTION-MISSING-GUARD]]; `const __f` only when used); methods and allowed
   globals are verbatim. Parentheses come from precedence, never source spacing. An expression
   position that STARTS with an object literal is an error (ambiguous with interpolation
   braces).
@@ -110,7 +110,7 @@ runtime mirrors them in `STANDARD_FORMATTERS` + `PUZZLEKIT_FORMATTERS` ([[COMPON
 
 `checkTemplateExprs` walks template + skeleton first so emitters can trust every tree:
 
-- **Markup placement** ([[DECISION-D174-STANDARD-FORMATTERS]]): `raw`/`newline_to_br` only as
+- **Markup placement** ([[DECISION-D174-FUNCTION-LIBRARY]]): `raw`/`newline_to_br` only as
   the outermost call of a text interpolation with one argument; an error anywhere else,
   inside a raw-text element (`<script>`, `<style>`, `<textarea>`, `<title>`, …) and in foreign
   content (`<svg>`/`<math>` down to `<foreignObject>`). Context carries through component

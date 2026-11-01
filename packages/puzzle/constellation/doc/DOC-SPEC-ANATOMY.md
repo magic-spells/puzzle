@@ -62,7 +62,7 @@ const app = new PuzzleApp({
 app.mount();
 ```
 
-**The whole `PuzzleApp` config:** `target` (required), `routes`, `models`, `formatters`, `apiURL`, `storage` (a Storage-like object for persistence, §8), `adapter` (§58), `beforeRequest` (§49), `scrollBehavior` (§14), `focusBehavior` (§51), `routerMode` (an imported mode object, §15), `routerBase` (§23), `transitionMode` (§26), `beforeMount`/`mounted`/`beforeUnmount` (§34), and `onError`/`errorView` (§60). The `formatters` key registers the app's template **functions** (§6); one named like a standard function (`pluralize`, `currency`, …) replaces it, with a development warning ([[DECISION-D174-STANDARD-FORMATTERS]]). App-level `settings`, `computed`, global `events` and `methods` are rejected ([[DOC-SPEC]] cut list).
+**The whole `PuzzleApp` config:** `target` (required), `routes`, `models`, `formatters`, `apiURL`, `storage` (a Storage-like object for persistence, §8), `adapter` (§58), `beforeRequest` (§49), `scrollBehavior` (§14), `focusBehavior` (§51), `routerMode` (an imported mode object, §15), `routerBase` (§23), `transitionMode` (§26), `beforeMount`/`mounted`/`beforeUnmount` (§34), and `onError`/`errorView` (§60). The `formatters` key registers the app's template **functions** (§6); one named like a standard function (`pluralize`, `currency`, …) replaces it, with a development warning ([[DECISION-D174-FUNCTION-LIBRARY]]). App-level `settings`, `computed`, global `events` and `methods` are rejected ([[DOC-SPEC]] cut list).
 
 **`puzzle.config.js`** is build config. The compiler reads it (`compiler/internal/config`); the runtime never does. Unknown keys are ignored.
 

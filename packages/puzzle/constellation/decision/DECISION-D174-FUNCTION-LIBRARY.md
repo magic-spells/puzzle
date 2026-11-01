@@ -10,7 +10,7 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - DECISION-D173-CORE-SEMANTICS
   - DECISION-D31-FORMATTER-TREESHAKE
-  - DECISION-D43-FORMATTER-MISSING-GUARD
+  - DECISION-D43-FUNCTION-MISSING-GUARD
   - DECISION-D114-CALENDAR-DATE-FORMATTERS
   - DECISION-D150-RAW-TEMPLATE-BLOCK
   - DECISION-D79-LINK-FUNCTION
@@ -70,10 +70,9 @@ calling it is `volatile`, D170). An app may override either silently.
 pipe vocabulary (`upcase`, `downcase`, `strip`, `split`, `replace`, `slice`,
 `join`, `first`, `last`, `sort`, `where`, `map`, `find`, `reject`, `compact`,
 `uniq`, `reverse`, `contains`, `default`, `abs`, `ceil`, `floor`), because
-Sites switches the method table off (D172). Sites' own plan owns that list.
-Several of these names are removed from PuzzleKit (below); that is a
-restriction-plus-addition, not a redefinition, since no name means two things
-in one host.
+Sites switches the method table off (D172). Sites keeps these Liquid-style
+filter names as pipe functions; PuzzleKit removed them in favor of JavaScript
+methods and operators (below).
 
 **Typing.** The compiler knows the 21 PuzzleKit names as
 `codegen.LibraryFunctionNames` (`lower.go`); `puzzle check` types them from
@@ -249,7 +248,7 @@ policy is host-defined (D173 V17); a returned value prints by D173 V6.
 ## Removed from PuzzleKit
 
 No deprecation release. A call reaches the unknown-name guard
-([[DECISION-D43-FORMATTER-MISSING-GUARD]]), which passes the value through
+([[DECISION-D43-FUNCTION-MISSING-GUARD]]), which passes the value through
 and names the replacement in development (`REMOVED_FORMATTERS` in
 `client-runtime/formatters.js`); a `| name` steers the same way
 (`RemovedFormatters` in `packages/puzzle-lang/expr/errors.go`). Keep the two

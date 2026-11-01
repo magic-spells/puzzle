@@ -44,8 +44,9 @@ core that Shopify extends.
   `header-group`, `footer-group`, `panel-group` and the plain `<Slot/>`
   exactly once each in a layout, and rejects any other layout slot name. No
   platform marker tags: platform-filled placeholders are slots.
-- **Snippets** ([[DECISION-D166-SNIPPETS]]) — core by this decision; Sites
-  does not support them yet (see Consequences).
+- **Snippets** ([[DECISION-D166-SNIPPETS]]) — core grammar. Sites switches
+  them off: its validator rejects `<Snippet>` and marker arguments and steers
+  to a component with props plus a named slot.
 - **The expression language** ([[DECISION-D176-EXPRESSION-LANGUAGE]]): one
   closed JavaScript-shaped grammar parsed by the shared `expr` package — paths,
   `.length`, literals, arithmetic, comparison, `&&`/`||`/`??`, ternary, arrow
@@ -61,6 +62,10 @@ core that Shopify extends.
 | Expressions | The core; an `@event` handler is the one door into the view's JS; `this` is not a template identifier | The core plus pipes (sugar for calls); the method table and most globals are switched off — transforms are pipes into functions |
 | Naming a computed value | a `data()` field | `{#let}` |
 | Restricts | — | `@event`, `<Portal>`, `<Snippet>` and marker arguments rejected; `ref`/`island` dropped with a warning; dotted tags rejected for now (D173 V16) |
+
+Sites keeps Liquid-style filter names (`upcase`, `join`, `default`, …) as pipe
+functions; PuzzleKit removed them in favor of JavaScript methods and operators
+([[DECISION-D174-FUNCTION-LIBRARY]]).
 
 **Architecture: one parser that knows every construct, with per-dialect
 switches** — `parser.Options` in `packages/puzzle-lang/parser/options.go`.
@@ -78,15 +83,17 @@ check on), so the compiler passes nothing:
   top-level blocks (Sites: `<schema>`, `<script>`, `<style>`) and reads the
   file exactly as the parser will.
 
-Core constructs are always on. An extension switched off is a positioned
-error: `|` steers to the call form ("`| name` pipes are Sites theme syntax —
-in a Puzzle app write `name(value)`"); `{#let}` with `Let` off is the ordinary
-unknown-block error. A new construct is built once and enabled per dialect.
+The parser always accepts core constructs; a host switches one off in its own
+validator (Sites does for `<Snippet>`). An extension switched off in the
+parser is a positioned error: `|` steers to the call form ("`| name` pipes are
+Sites theme syntax — in a Puzzle app write `name(value)`"); `{#let}` with
+`Let` off is the ordinary unknown-block error. A new construct is built once
+and enabled per dialect.
 
 **Dialects differ only by addition or restriction, never by redefinition.**
 A construct may move from a dialect into the core (as `<Snippet>` did), never
 back. A standard library function behaves the same in both hosts
-([[DECISION-D174-STANDARD-FORMATTERS]]); anything else is host-specific and
+([[DECISION-D174-FUNCTION-LIBRARY]]); anything else is host-specific and
 named so. Same spelling, different behavior per host → new spelling instead.
 
 **Public naming follows the Svelte pattern.** Everything markets **"Puzzle"**:
@@ -126,9 +133,6 @@ keep their names, `@magic-spells/puzzle` and `puzzle`.
   `puzzle-lang/conformance` (`expressions-parse.json`, `functions.json`), which
   both hosts run at the same tag. Template-level fixtures (`.pzl` → AST/errors
   per dialect) are not built.
-- **Sites rejects `<Snippet>` and marker arguments** ("use a component with
-  props and a named slot instead"). Either Sites builds them or snippets
-  become a PuzzleKit addition; until then the core claim is aspirational.
 - **Grammar changes are cross-host**: a core-construct change lands in
   `packages/puzzle-lang/parser`, the JS ports in puzzle-eslint /
   puzzle-prettier, the three editor grammars, and Sites' next puzzle-lang

@@ -6,7 +6,7 @@ status: built
 connections:
   - DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS
   - DECISION-D173-CORE-SEMANTICS
-  - DECISION-D174-STANDARD-FORMATTERS
+  - DECISION-D174-FUNCTION-LIBRARY
   - DECISION-D175-TRANSLATIONS
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
   - DOC-LANGUAGE-CORE
@@ -22,7 +22,7 @@ Template expressions are JavaScript-shaped, defined by **one closed grammar
 and a method table**, parsed once in `packages/puzzle-lang/expr`, and
 implemented by each host: PuzzleKit lowers the AST to JavaScript; Sites
 evaluates it in Go. Semantics are [[DECISION-D173-CORE-SEMANTICS]], the
-function library [[DECISION-D174-STANDARD-FORMATTERS]], translations
+function library [[DECISION-D174-FUNCTION-LIBRARY]], translations
 [[DECISION-D175-TRANSLATIONS]].
 
 ## Context

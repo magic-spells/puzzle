@@ -7,8 +7,8 @@ connections:
   - COMPONENT-CODEGEN
   - COMPONENT-ESBUILD-PLUGIN
   - DECISION-D31-FORMATTER-TREESHAKE
-  - DECISION-D43-FORMATTER-MISSING-GUARD
-  - DECISION-D174-STANDARD-FORMATTERS
+  - DECISION-D43-FUNCTION-MISSING-GUARD
+  - DECISION-D174-FUNCTION-LIBRARY
   - DECISION-D114-CALENDAR-DATE-FORMATTERS
   - FILE-FORMATTER-REGISTRY
   - FILE-FORMATTER-BUILTINS
@@ -18,7 +18,7 @@ verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 
 # Function library (the formatter registry)
 
-The runtime half of the template function library. [[DECISION-D174-STANDARD-FORMATTERS]] owns
+The runtime half of the template function library. [[DECISION-D174-FUNCTION-LIBRARY]] owns
 each function's contract, [[DECISION-D176-EXPRESSION-LANGUAGE]] rule 4 the call form. Code
 keeps the `formatters` names (`client-runtime/formatters.js`, `client-runtime/formatters/`,
 the `@magic-spells/puzzle/formatters/manifest` alias, the app's `formatters` config key)
@@ -59,7 +59,7 @@ are "functions".
 - **Unknown names** hit `__missing(name)`: dev reports once per registry + name with a
   did-you-mean (`nearestFormatter`, edit distance ≤ 2, reused by i18n), or the replacement from
   `REMOVED_FORMATTERS`, or the i18n hint for `t`; it returns a pass-through so the view still
-  renders ([[DECISION-D43-FORMATTER-MISSING-GUARD]]). All of it sits behind `__PUZZLE_DEV__`.
+  renders ([[DECISION-D43-FUNCTION-MISSING-GUARD]]). All of it sits behind `__PUZZLE_DEV__`.
 
 ## Implementation gotchas
 

@@ -6,7 +6,7 @@ status: built
 connections:
   - DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS
   - DECISION-D173-CORE-SEMANTICS
-  - DECISION-D174-STANDARD-FORMATTERS
+  - DECISION-D174-FUNCTION-LIBRARY
   - COMPONENT-FORMATTERS
   - DOC-SPEC-TEMPLATE
   - DOC-LANGUAGE-CORE
@@ -24,7 +24,7 @@ connections:
   - FILE-CONFIG
   - FILE-STATIC-MOUNT
   - DECISION-D31-FORMATTER-TREESHAKE
-  - DECISION-D43-FORMATTER-MISSING-GUARD
+  - DECISION-D43-FUNCTION-MISSING-GUARD
   - DECISION-D79-LINK-FUNCTION
   - DECISION-D67-HYBRID-PRERENDER
   - DECISION-D81-STATIC-PAGES-MODE
@@ -40,7 +40,7 @@ connections:
 
 # D175 — Translations: `t(key, vars)`, one locale file per language
 
-`t` is a standard function ([[DECISION-D174-STANDARD-FORMATTERS]]) with one
+`t` is a standard function ([[DECISION-D174-FUNCTION-LIBRARY]]) with one
 meaning in both hosts ([[DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS]]). This
 card owns its semantics, locale files, build output, loading and the runtime
 service. Locale URL prefixes, translated route titles and `dir` are

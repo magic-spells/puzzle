@@ -12,7 +12,7 @@ connections:
   - DECISION-D168-TEXT-RUN-WHITESPACE
   - DECISION-D141-MARKER-FALLBACK-BODIES
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
-  - DECISION-D174-STANDARD-FORMATTERS
+  - DECISION-D174-FUNCTION-LIBRARY
   - DECISION-D167-COMPONENT-FAMILIES
 ---
 
@@ -24,7 +24,7 @@ redefine.** This card fixes the meaning of the shared constructs (V1–V18)
 where PuzzleKit and Sites could differ. All of it is built in PuzzleKit. The
 expression items (V1, V4, V7, V8) are the expression language,
 [[DECISION-D176-EXPRESSION-LANGUAGE]]; the function library is
-[[DECISION-D174-STANDARD-FORMATTERS]]. What each host does where the rules
+[[DECISION-D174-FUNCTION-LIBRARY]]. What each host does where the rules
 below leave it host-defined is in [[DOC-LANGUAGE-CORE]] "Host-specific by
 decision".
 

@@ -75,7 +75,7 @@ Contract: §3–§6, §17, §18, §24, §28, §31, §43, §47, §57, §64–§67
 
 ## Function library
 
-[[DECISION-D174-STANDARD-FORMATTERS]], [[COMPONENT-FORMATTERS]].
+[[DECISION-D174-FUNCTION-LIBRARY]], [[COMPONENT-FORMATTERS]].
 
 - 19 standard functions shared with Sites — `round`, `currency`, `percentage`, `number_with_delimiter`, `compact_number`, `capitalize`, `truncate`, `strip_html`, `strip_newlines`, `pluralize`, `escape`, `raw`, `newline_to_br`, `json`, `date`, `time`, `datetime`, `in_timezone`, `t` — plus PuzzleKit-only `link` and `timeago`.
 - Calls nest. Apps register their own under the `formatters` config key; overriding a standard name warns in dev. A removed library name is a dev error naming the JS replacement.

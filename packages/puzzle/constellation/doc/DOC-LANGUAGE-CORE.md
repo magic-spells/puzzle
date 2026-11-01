@@ -7,7 +7,7 @@ status: built
 connections:
   - DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS
   - DECISION-D173-CORE-SEMANTICS
-  - DECISION-D174-STANDARD-FORMATTERS
+  - DECISION-D174-FUNCTION-LIBRARY
   - DECISION-D175-TRANSLATIONS
   - DECISION-D176-EXPRESSION-LANGUAGE
   - DECISION-D166-SNIPPETS
@@ -56,7 +56,7 @@ A **function** presents a value, called the JavaScript way with the value first 
 - A call is an ordinary expression, so it goes wherever a value goes; calls nest.
 - A standard function never duplicates an operator, a method or a `Math` global: a count is `.length`, arithmetic is the operators and `Math.*`, a fallback is `??`, a string or list transform is a method.
 - A bare call resolves to the function library and a bare name to data, so the two never shadow each other.
-- `raw` and `newline_to_br` return markup, so each may only be the outermost call of a text interpolation ([[DECISION-D174-STANDARD-FORMATTERS]]).
+- `raw` and `newline_to_br` return markup, so each may only be the outermost call of a text interpolation ([[DECISION-D174-FUNCTION-LIBRARY]]).
 - A function should be pure.
 
 ## Attributes
@@ -267,7 +267,7 @@ Which SPEC sections are core and which PuzzleKit. A **core** section can still c
 
 ## Standard functions
 
-[[DECISION-D174-STANDARD-FORMATTERS]] fixes the **standard library: 19 functions** with the same arguments and meaning in both hosts: `round`, `currency`, `percentage`, `number_with_delimiter`, `compact_number`, `pluralize`, `capitalize`, `truncate`, `strip_html`, `strip_newlines`, `escape`, `raw`, `newline_to_br`, `json`, `date`, `time`, `datetime`, `in_timezone`, and `t` ([[DECISION-D175-TRANSLATIONS]]). `packages/puzzle-lang/conformance/functions.json`, embedded by the language module's `conformance` package, pins the identical-output rows and the locale-independent rows of the rest; both hosts run it.
+[[DECISION-D174-FUNCTION-LIBRARY]] fixes the **standard library: 19 functions** with the same arguments and meaning in both hosts: `round`, `currency`, `percentage`, `number_with_delimiter`, `compact_number`, `pluralize`, `capitalize`, `truncate`, `strip_html`, `strip_newlines`, `escape`, `raw`, `newline_to_br`, `json`, `date`, `time`, `datetime`, `in_timezone`, and `t` ([[DECISION-D175-TRANSLATIONS]]). `packages/puzzle-lang/conformance/functions.json`, embedded by the language module's `conformance` package, pins the identical-output rows and the locale-independent rows of the rest; both hosts run it.
 
 - **PuzzleKit** ([[COMPONENT-FORMATTERS]]): `client-runtime/formatters/builtins.js` is the standard set without `t`, plus `timeago`; the registry adds the router-backed `link`, and the i18n service adds `t` when translations are configured (21 names). An app may register its own.
 - **Sites** implements all 19 in Go, plus its display transforms and platform functions; the library is fixed (no theme-registered functions) and has no `timeago` (a page's bytes must not depend on when it rendered) or `link` (Sites has `url`).
