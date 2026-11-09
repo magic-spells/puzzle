@@ -435,33 +435,22 @@ describe('SSG prerender (M1)', () => {
 	});
 
 	describe('injectShell', () => {
-		it('injects content + data-puzzle-ssg and replaces the title', () => {
-			const out = injectShell(SHELL, { targetId: 'app', content: '<h1>Home</h1>', title: 'Home' });
+		it('injects content + data-puzzle-ssg; no head keeps the shell title', () => {
+			const out = injectShell(SHELL, { targetId: 'app', content: '<h1>Home</h1>' });
 			expect(out).toContain('<div id="app" data-puzzle-ssg><h1>Home</h1></div>');
-			expect(out).toContain('<title>Home</title>');
-			expect(out).not.toContain('<title>Shell</title>');
-		});
-
-		it('keeps the shell title when no route title is resolved', () => {
-			const out = injectShell(SHELL, { targetId: 'app', content: '<h1>Home</h1>', title: null });
 			expect(out).toContain('<title>Shell</title>');
-		});
-
-		it('HTML-escapes the injected title', () => {
-			const out = injectShell(SHELL, { targetId: 'app', content: 'x', title: 'A & <B>' });
-			expect(out).toContain('<title>A &amp; &lt;B&gt;</title>');
 		});
 
 		it('throws a descriptive error when the target element is missing', () => {
 			const noTarget = '<!doctype html><html><body><main></main></body></html>';
-			expect(() => injectShell(noTarget, { targetId: 'app', content: 'x', title: null })).toThrow(
+			expect(() => injectShell(noTarget, { targetId: 'app', content: 'x' })).toThrow(
 				/target element not found or not empty/
 			);
 		});
 
 		it('throws when the target element is not empty', () => {
 			const filled = '<html><body><div id="app">stale</div></body></html>';
-			expect(() => injectShell(filled, { targetId: 'app', content: 'x', title: null })).toThrow(
+			expect(() => injectShell(filled, { targetId: 'app', content: 'x' })).toThrow(
 				/not found or not empty/
 			);
 		});
@@ -472,7 +461,7 @@ describe('SSG prerender (M1)', () => {
 			// real mount element is the SECOND, empty <div id="app">.
 			const shell =
 				'<html><body><div data-id="app" class="decoy"></div><div id="app"></div></body></html>';
-			const out = injectShell(shell, { targetId: 'app', content: '<h1>Home</h1>', title: null });
+			const out = injectShell(shell, { targetId: 'app', content: '<h1>Home</h1>' });
 			// The decoy is untouched (no marker); the marker + content land in the real element.
 			expect(out).toContain('<div data-id="app" class="decoy"></div>');
 			expect(out).toContain('<div id="app" data-puzzle-ssg><h1>Home</h1></div>');

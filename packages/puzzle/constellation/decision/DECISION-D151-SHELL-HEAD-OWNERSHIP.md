@@ -47,7 +47,7 @@ inside the shell's head region** (`client-runtime/ssg/index.js`).
   first `</title>`; neither anchor → no region, pending inserts warn and are
   skipped.
 - Unchanged: escaping, insert order, in-place replacement, duplicate collapse,
-  removal of non-resolving fields, the title-only path, and `prerender: false`
+  removal of non-resolving fields, and `prerender: false`
   (hybrid writes the shell verbatim; static does no head work).
 
 ## Alternatives

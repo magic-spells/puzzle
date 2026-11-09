@@ -627,7 +627,6 @@ describe('static prerender (D81)', () => {
 			const out = injectStaticShell(SHELL.replace('<script type="module" src="/app.js"></script>', ''), {
 				targetId: 'app',
 				content: '<p>x</p>',
-				title: null,
 				slug: 'index',
 				data: evil,
 			});
@@ -648,7 +647,6 @@ describe('static prerender (D81)', () => {
 			const out = injectStaticShell('<div id="app"></div>', {
 				targetId: 'app',
 				content: '<p>x</p>',
-				title: null,
 				slug: 'index',
 				data: {},
 			});
@@ -1154,7 +1152,6 @@ describe('static read-state island (D161)', () => {
 		const out = injectStaticShell(SHELL.replace('<script type="module" src="/app.js"></script>', ''), {
 			targetId: 'app',
 			content: '<p>x</p>',
-			title: null,
 			slug: 'index',
 			data: {},
 			readState: { v: 1, complete: [], absent: ['note </script><script>alert(1)</script>'] },

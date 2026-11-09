@@ -29,10 +29,6 @@ script body left alone — inference noise on untyped JavaScript is opt-in.`,
 		if len(args) == 1 {
 			dir = args[0]
 		}
-		js, _ := cmd.Flags().GetBool("js")
-		if js {
-			return fmt.Errorf("--js is not yet implemented")
-		}
 		files, err := check.Run(dir)
 		if err != nil {
 			return err
@@ -51,9 +47,5 @@ func pluralFiles(n int) string {
 }
 
 func init() {
-	checkCmd.Flags().Bool("js", false, "Also check JavaScript script bodies (not yet implemented)")
-	// Accepted (and rejected with a clear error) but kept out of --help until it
-	// does something: a listed flag that only errors is a dead end.
-	_ = checkCmd.Flags().MarkHidden("js")
 	rootCmd.AddCommand(checkCmd)
 }

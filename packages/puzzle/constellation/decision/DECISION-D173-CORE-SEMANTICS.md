@@ -140,9 +140,10 @@ V3's strict comparison, V5, V15, V17 and the V18 styles.
   shifts following siblings on each flip; authors keep such a fallback to one
   root element (SPEC §24, D141, SKILL.md). Padding to fix it was rejected
   (bytes on every marker for an authoring rule).
-- **V15 — props into scope: host-specific**, plus a script-less PuzzleKit
-  component gets a synthesized `data(params, props)` returning its props, so
-  `{ tone }` reads the prop as in Sites. With a script, `data()` decides.
+- **V15 — props into scope: host-specific.** In PuzzleKit the base
+  `PuzzleView.data(params, props)` returns its props, so `{ tone }` reads the
+  prop as in Sites for every component that does not override `data()`, with
+  or without a `<script>`; an overriding `data()` decides.
 - **V16 — dotted tags are a Sites restriction for now.** The shared parser
   accepts `<Frame.Wrapper>`; Sites rejects it with a positioned error.
   PuzzleKit families ([[DECISION-D167-COMPONENT-FAMILIES]]) are unaffected.
@@ -166,7 +167,7 @@ V3's strict comparison, V5, V15, V17 and the V18 styles.
 V1/V4/V8: `packages/puzzle-lang/expr` + `compiler/internal/codegen/lower.go`.
 V6/V9: `client-runtime/display.js`, `setAttr`, `client-runtime/ssg/serialize.js`.
 V10: `codegen.go` (D168). V12: codegen loop guard + `client-runtime/views/listBlock.js`.
-V13: `puzzle-lang/parser/slot.go`. V14: `viewManager.js` `fill()`. V15: codegen.
+V13: `puzzle-lang/parser/slot.go`. V14: `viewManager.js` `fill()`. V15: `PuzzleView.data()`.
 `tests/core-semantics.test.js` pins the rendered cases. Grammar changes (V1,
 V13) must reach the vendored ports in `puzzle-eslint` / `puzzle-prettier` and
 the three editor grammars. Shared conformance fixtures
@@ -196,4 +197,7 @@ dotted-tag errors (V18, V16).
   no empty-state behavior.
 - **Map dotted tags to Sites files now** — Sites has no need yet; lifting the
   restriction later is an addition.
+- **V15 as a codegen-synthesized `data()` for script-less components only** —
+  adding a `<script>` made the props vanish from the template, and every
+  such module carried the stub.
 - **Leave everything host-defined** — contradicts D172.

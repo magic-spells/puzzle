@@ -70,7 +70,6 @@ app/views/Profile.pzl:14:22: Property 'nmae' does not exist on type 'User'.
 - Expressions check against the class's declared fields; `data()`-derived keys fall through the inline `{ [key: string]: any }` and are unchecked (known gap: under `noPropertyAccessFromIndexSignature` a dotted `data()`-only read is itself a diagnostic). The fallback is an inline index signature, not `Record`, so an authored class named `Record` cannot capture it.
 - A JS component's `this` is `__PuzzleCheckJSView<InstanceType<typeof Class>> & { [key: string]: any }`, which types each declared `events` handler `(...args: any[]) => any`: arity is not checked (`@click={ play(event) }` against `play: () => {}` passes), but names are — `plya(event)`, or a handler attached at runtime instead of declared in `events`, is reported. `lang="ts"` components check against their declared handlers.
 - `PuzzleView.events` is optional in `types/index.d.ts` (the base class has none), so a template handler on a view that declares no `events` reports "possibly 'undefined'" — a real runtime TypeError.
-- `--js` (also checking JS script bodies) is a hidden flag that errors as not implemented.
 
 ## Alternatives rejected
 

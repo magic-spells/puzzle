@@ -216,16 +216,8 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	var className string
 	if strings.TrimSpace(scripts) == "" {
 		className = classNameFromFilename(opts.Filename)
-		// A script-less COMPONENT reads its props by name (D173 V15): the
-		// synthesized data() returns them, so `{ tone }` renders the `tone` prop
-		// as it does in Sites. A component with a script keeps PuzzleKit's rule —
-		// its own data() decides — and views and layouts have no props.
-		body := ""
-		if opts.Mode == ModeComponent {
-			body = "\n  data(params, props) {\n    return props;\n  }\n"
-		}
 		scripts = "import { PuzzleView } from '@magic-spells/puzzle';\n" +
-			"export default class " + className + " extends PuzzleView {" + body + "}\n"
+			"export default class " + className + " extends PuzzleView {}\n"
 	} else {
 		className, err = extractClassName(scripts, scriptToks, opts.Filename, sec.ScriptsPos)
 		if err != nil {

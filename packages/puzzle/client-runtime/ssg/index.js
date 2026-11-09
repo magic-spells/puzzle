@@ -1428,7 +1428,6 @@ async function writeHybridDir({ outDir, shell, targetId, pages, skipped, warning
 					: injectShell(shells(locale), {
 							targetId,
 							content: /** @type {string} */ (page.html),
-							title: page.title,
 							head: page.head,
 							island: dress.island(locale),
 							headExtra: dress.head(page),
@@ -1631,7 +1630,6 @@ async function writeStaticDir({
 				targetId,
 				base,
 				content: page.html, // null for a prerender:false page → empty, unmarked target
-				title: page.title,
 				head: page.head, // null for prerender:false → no head injection (D84)
 				slug,
 				data: page.data ?? {},
@@ -1807,8 +1805,6 @@ async function writeSitemap(outDir, written, dress, warnings) {
 		return;
 	}
 	const { routed } = dress;
-	const xml = (/** @type {string} */ s) =>
-		s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 	const seen = new Set();
 	let urls = '';
 	for (const page of written) {
@@ -1816,11 +1812,11 @@ async function writeSitemap(outDir, written, dress, warnings) {
 		const loc = dress.url(page.path, page.locale ?? null);
 		if (seen.has(loc)) continue;
 		seen.add(loc);
-		urls += `<url><loc>${xml(loc)}</loc>`;
+		urls += `<url><loc>${escapeAttr(loc)}</loc>`;
 		if (routed) {
 			for (const tag of dress.alternates(page.path)) {
 				const href = dress.url(page.path, tag === 'x-default' ? routed.defaultLocale : tag);
-				urls += `<xhtml:link rel="alternate" hreflang="${xml(tag)}" href="${xml(href)}"/>`;
+				urls += `<xhtml:link rel="alternate" hreflang="${escapeAttr(tag)}" href="${escapeAttr(href)}"/>`;
 			}
 		}
 		urls += '</url>\n';
@@ -2115,13 +2111,12 @@ function serializeRouteJSON(entry) {
 // ---- shell injection --------------------------------------------------------
 
 /**
- * Inject rendered markup and the resolved title/head into the app shell by STRING
+ * Inject rendered markup and the resolved head into the app shell by STRING
  * SURGERY (no HTML-parser dependency). Finds the EMPTY target element by its id,
  * rebuilds it with a `data-puzzle-ssg` marker (the router's takeover signal) and
  * the content inside, and rewrites the shell's head region in the same pass: with
  * a resolved `head` (D84) the title replacement AND the managed `data-puzzle-head`
- * tags are applied; with only a bare `title` (a direct API caller predating D84)
- * the title-only path runs — no managed tags, byte-compatible. Both read the
+ * tags are applied. Both read the
  * per-shell plan compiled ONCE per build (getShellPlan, D151), so a page costs
  * one splice over precomputed offsets rather than a document-wide rescan. A
  * missing or non-empty target element is a descriptive throw. `headExtra` (with a
@@ -2129,11 +2124,11 @@ function serializeRouteJSON(entry) {
  * `hreflang` alternates and locale redirect script (D177).
  *
  * @param {string} shell
- * @param {{ targetId: string, content: string, title?: string | null,
+ * @param {{ targetId: string, content: string,
  *   head?: ResolvedHead | null, island?: string, headExtra?: string }} page
  * @returns {string}
  */
-export function injectShell(shell, { targetId, content, title, head, island = '', headExtra = '' }) {
+export function injectShell(shell, { targetId, content, head, island = '', headExtra = '' }) {
 	const plan = getShellPlan(shell);
 	const target = findTarget(shell, plan, targetId);
 	if (!target) {
@@ -2150,8 +2145,7 @@ export function injectShell(shell, { targetId, content, title, head, island = ''
 			text: `<${target.tag}${target.attrs} data-puzzle-ssg>${content}</${target.tag}>`,
 		},
 	];
-	const headOp = headOperation(shell, plan, { head, title, headExtra });
-	if (headOp) ops.push(headOp);
+	if (head) ops.push({ start: plan.headStart, end: plan.headEnd, text: renderHeadRegion(shell, plan, head, headExtra) });
 	// The locale island (D175) rides at the SHELL's `</body>` anchor, the same
 	// fixed offset the static data island uses (D151); appended when there is none.
 	if (!island) return spliceShell(shell, ops);
@@ -2194,9 +2188,8 @@ function stripAppBundle(shell, base) {
  *  - injects, immediately before `</body>` (or appended if none): an inline JSON
  *    data island (`<` escaped to `<` so a `</script>` in a record can never
  *    break out of the script) and the per-page ES module `<script>`;
- *  - applies the title/head exactly as injectShell does (resolved `head` →
- *    the managed D84 tags, then `headExtra`; bare `title` → the pre-D84
- *    title-only path), scoped to the shell's head region (D151).
+ *  - applies the head exactly as injectShell does (resolved `head` → the
+ *    managed D84 tags, then `headExtra`), scoped to the shell's head region (D151).
  * The caller has already stripped the app-bundle tag from `shell`.
  *
  * A page a `staticPaths` route generated (D179) also carries its own `route`
@@ -2206,7 +2199,7 @@ function stripAppBundle(shell, base) {
  * page has none.
  *
  * @param {string} shell
- * @param {{ targetId: string, content: string | null, title?: string | null,
+ * @param {{ targetId: string, content: string | null,
  *   head?: ResolvedHead | null, slug: string, data?: object,
  *   readState?: Partial<ReadStateEnvelope> | null, base?: string, island?: string,
  *   headExtra?: string, route?: { path: string, params: Record<string, string> } | null }} page
@@ -2214,7 +2207,7 @@ function stripAppBundle(shell, base) {
  */
 export function injectStaticShell(
 	shell,
-	{ targetId, content, title, head, slug, data, readState = null, base = '', island = '', headExtra = '', route = null }
+	{ targetId, content, head, slug, data, readState = null, base = '', island = '', headExtra = '', route = null }
 ) {
 	const plan = getShellPlan(shell);
 	const ops = [];
@@ -2267,8 +2260,7 @@ export function injectStaticShell(
 		ops.push({ start: plan.bodyCloseIndex, end: plan.bodyCloseIndex, text: scripts });
 	}
 
-	const headOp = headOperation(shell, plan, { head, title, headExtra });
-	if (headOp) ops.push(headOp);
+	if (head) ops.push({ start: plan.headStart, end: plan.headEnd, text: renderHeadRegion(shell, plan, head, headExtra) });
 
 	const out = spliceShell(shell, ops);
 	return plan.bodyCloseIndex >= 0 ? out : out + scripts;
@@ -2405,7 +2397,6 @@ const shellPlans = new Map();
 /**
  * The per-shell offsets compileShellPlan computes once per build (D151).
  * @typedef {{ headStart: number, headEnd: number, hasAnchor: boolean,
- *   titleSpan: { start: number, end: number } | null,
  *   edits: Array<{ start: number, end: number, spec: number, first: boolean }>,
  *   markerCounts: number[], bodyCloseIndex: number,
  *   targets: Map<string, ShellTarget | null> }} ShellPlan
@@ -2461,14 +2452,10 @@ function compileShellPlan(shell) {
 
 	// `<title>` is matched case-sensitively (the historical replaceTitle regex);
 	// the `</title>` fallback anchor above stays case-insensitive, as it always was.
-	let titleSpan = null;
 	const titleMatch = TITLE_ELEMENT_RE.exec(region);
 	if (titleMatch) {
-		titleSpan = {
-			start: headStart + titleMatch.index,
-			end: headStart + titleMatch.index + titleMatch[0].length,
-		};
-		edits.push({ start: titleSpan.start, end: titleSpan.end, spec: -1, first: true });
+		const start = headStart + titleMatch.index;
+		edits.push({ start, end: start + titleMatch[0].length, spec: -1, first: true });
 	}
 
 	const markerCounts = new Array(MANAGED_TAGS.length).fill(0);
@@ -2502,7 +2489,6 @@ function compileShellPlan(shell) {
 		headStart,
 		headEnd,
 		hasAnchor,
-		titleSpan,
 		edits,
 		markerCounts,
 		bodyCloseIndex,
@@ -2567,33 +2553,6 @@ function spliceShell(shell, ops) {
 }
 
 // ---- managed head surgery (D84, D151) ---------------------------------------
-
-/**
- * The head-region rewrite as a single splice op, or null when there is nothing to
- * do. With a resolved `head` (D84) the whole region is rebuilt (renderHeadRegion);
- * with only a bare `title` (a direct API caller predating D84) just the shell's
- * `<title>` element is replaced — no managed tags, byte-compatible. Either way the
- * op is confined to the SHELL HEAD: a `<title>` or `data-puzzle-head` attribute in
- * rendered body markup is view output and is never touched (D151).
- *
- * @param {string} shell
- * @param {ShellPlan} plan
- * @param {{ head?: ResolvedHead | null, title?: string | null, headExtra?: string }} page
- * @returns {SpliceOp | null}
- */
-function headOperation(shell, plan, { head, title, headExtra = '' }) {
-	if (head) {
-		return { start: plan.headStart, end: plan.headEnd, text: renderHeadRegion(shell, plan, head, headExtra) };
-	}
-	if (title != null && plan.titleSpan) {
-		return {
-			start: plan.titleSpan.start,
-			end: plan.titleSpan.end,
-			text: `<title>${escapeText(String(title))}</title>`,
-		};
-	}
-	return null;
-}
 
 /**
  * Rebuild the shell's head region for one resolved head (head.js resolveHead) —

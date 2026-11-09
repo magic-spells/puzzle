@@ -168,7 +168,7 @@ For an always-mounted element, use the conditional form: `@pointerdown:outside={
 2. The child decides (disabled? what payload?) and calls `this.props.click(…)`.
 3. `savePost` runs **in the parent** — it's an arrow, so `this` is the parent.
 
-The child gates and shapes; the parent does the work. A child with nothing to add binds the prop straight through: `<button @click={ click(event) }>`. There is no `$emit`, no bubbling and no event bus.
+The child gates and shapes; the parent does the work. A child with nothing to add binds the prop straight through: `<button @click={ click(event) }>`. There is no `$emit`, no bubbling and no event bus. **A callback prop forwards exactly one argument:** the first value the child passes, which a bare handler receives and a call form reads as `event` (`@change={ pick(event) }`). A second argument the child passes never reaches the parent, so a child that needs to send more sends one object (`this.props.change({ value, index })`).
 
 **Handler identity (§31).** A bare handler, or a call whose arguments use only literals, `event` and globals, compiles to one cached function per instance — the child gets the same prop every render and doesn't re-run `data()` for it. Inside a `{#for}`, a call that uses only the loop's own variables (`@remove={ deleteTodo(todo) }`) caches per row. A call that reads other data (`@save={ save(draft) }`) or calls a function is fresh each render, so the child re-runs `data()` each parent render — pass the datum as its own prop and use a bare handler if that matters. When wiring a callback into a long-lived external library, read `this.props.name` at fire time rather than capturing it once.
 

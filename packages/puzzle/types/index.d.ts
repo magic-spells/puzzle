@@ -677,7 +677,8 @@ export interface PuzzleLocale {
 
 /**
  * Base class for every `.pzl` component, view, and layout
- * (constellation/doc/DOC-SPEC.md §4). Subclass it and implement `data()`;
+ * (constellation/doc/DOC-SPEC.md §4). Subclass it and override `data()` when
+ * the model is more than the props;
  * the compiler attaches `render()` from the template. State lives in
  * `getData()`/`setData()`; reactive sources (store, props, route params) flow
  * through `data()`.
@@ -723,7 +724,8 @@ export declare class PuzzleView {
 
 	/**
 	 * The component model. Runs on mount and whenever a subscribed store query,
-	 * prop, or route param changes. May be async. Override in every view.
+	 * prop, or route param changes. May be async. The base returns `props`;
+	 * override it when the model is more than the props.
 	 */
 	data(params?: Record<string, string>, props?: any): any | Promise<any>;
 

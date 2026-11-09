@@ -36,10 +36,6 @@ import CanvasShape from './CanvasShape.pzl';
 // frame, the child already handled it and we bail. Child presses are forwarded
 // untouched via `childPress`.
 export default class CanvasFrame extends PuzzleView {
-  data(params, props) {
-    return { node: props.node };
-  }
-
   events = {
     down: (event) => {
       if (event.button !== undefined && event.button !== 0) return;

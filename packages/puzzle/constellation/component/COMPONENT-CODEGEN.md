@@ -25,9 +25,8 @@ verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 (never rewritten), a compiler import line, and `ClassName.prototype.render = function () { … }`
 (plus `renderSkeleton`). Mode comes from the app-relative path: views/layouts keep the
 `<puzzle-view>` root with its attributes; inline components need exactly one render root and
-emit no wrapper. A script-less inline component ([[DECISION-D173-CORE-SEMANTICS]] V15) gets a
-synthesized class whose `data(params, props)` returns `props`; a script-less view or layout
-gets an empty class.
+emit no wrapper. A script-less file gets an empty synthesized class; the base `data()` returns
+the props ([[DECISION-D173-CORE-SEMANTICS]] V15).
 
 ## The script stream (`scriptcollide.go`, `classname.go`)
 

@@ -16,10 +16,6 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // concern — this component just reports pointerdown up through the `press`
 // callback prop with a { event, id } payload.
 export default class CanvasShape extends PuzzleView {
-  data(params, props) {
-    return { node: props.node };
-  }
-
   events = {
     down: (event) => {
       // Ignore non-primary buttons (right / middle). Phase 2 will branch here

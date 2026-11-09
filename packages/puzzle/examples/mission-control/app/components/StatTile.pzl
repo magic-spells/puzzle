@@ -13,10 +13,6 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // A small dashboard stat tile. A component (not a bare <div>) so it can stagger
 // in on the Overview — same delay-by-index pattern as ListRow.
 export default class StatTile extends PuzzleView {
-  data(params, props) {
-    return { stat: props.stat };
-  }
-
   get animations() {
     const i = this.props.index ?? 0;
     return {

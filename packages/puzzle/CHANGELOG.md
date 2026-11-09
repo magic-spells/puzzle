@@ -215,6 +215,9 @@ one is *not* a compile error; it silently builds a different product.
   `Store` and `Router` also lose their `[key: string]: any` index signature,
   so a misspelt member such as `router.pushh()` is now a type error in
   `lang="ts"` views and `puzzle check`.
+- **BREAKING: `injectShell` / `injectStaticShell` (`/ssg`) take no `title`.**
+  Pass the resolved `head` (`prerender()` returns it on every page); without
+  one the shell's head is left as it is.
 
 ### Changed
 
@@ -226,6 +229,9 @@ one is *not* a compile error; it silently builds a different product.
   is focused as before (also when the `autofocus` element cannot take focus,
   such as a button in a closed `<dialog>`). A `mounted()` hook that only
   focused an `autofocus` input can be deleted.
+- **A component reads its props without a `data()` (D173 V15).** The base
+  `PuzzleView.data()` returns its props, so adding a `<script>` with no
+  `data()` keeps `{ title }` reading the `title` prop.
 - **Back then Forward during a slow load keeps URL and view together.** Pressing
   Back while the popped entry was still loading, then Forward, used to leave the
   URL on one page and the view tree on another. The router now recovers the
@@ -313,8 +319,8 @@ habit. Nothing existing breaks: renamed spellings stay accepted.
   page report and the update notice. Warnings and errors still print.
 - **`--no-color`** on every command, the same switch as `NO_COLOR=1`.
 - **`generate --dir`** names the app root the way `add --dir` does.
-- `check --js` is hidden from `--help` until it does something. It is still
-  accepted.
+- `check --js`, a hidden flag that only ever errored as not implemented, is
+  gone.
 
 ## 0.9.1 — 2026-10-22 (Go module only)
 

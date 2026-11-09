@@ -21,12 +21,6 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // Renders a single post summary. The whole card is an <a>, so a plain click is
 // intercepted by the router for instant SPA navigation to /posts/:id.
 export default class PostCard extends PuzzleView {
-  data(params, props) {
-    return {
-      post: props.post
-    };
-  }
-
   // Staggered enter + leave animations (constellation/doc/DOC-SPEC.md §12). The
   // parent loop hands each card its position as an `index` prop, straight from
   // the loop counter (`{#for post in recentPosts, i}` → `index={ i }`); a child

@@ -41,7 +41,7 @@ this card holds the implementation rules behind it.
 - **Compatibility aliases.** `add --overwrite` (bound to the same var as `--force`) and
   `init --dir` use `MarkHidden`, not `MarkDeprecated`: a 0.9 `puzzle upgrade` re-execs the
   new binary with `add skills --overwrite`, and a deprecation notice would land in its
-  output. `check --js` is hidden and errors as not implemented. `-y/--yes` is a persistent
+  output. `-y/--yes` is a persistent
   flag on `upgrade` so `upgrade skills -y` works.
 - **Runtime preflight.** `build` and `dev` call `build.PreflightRuntime` before any esbuild
   work: first `os.Stat` the directory (`directory not found` / `is not a directory`, not

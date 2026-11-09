@@ -108,7 +108,7 @@ A tag whose name does **not** start with a lowercase ASCII letter is a component
 - The name is `Ident('.'Ident)*` of `$`-free JavaScript identifiers in any script; the dotted form is a **component family** member. §65, [[DECISION-D167-COMPONENT-FAMILIES]].
 - **Props are attributes**: static → a string, brace-only → the value (a list stays a list), quoted with interpolation → the assembled string. Prop names may use any script.
 - `Children`, `Slot`, `Snippet`, `Portal` and `Component` are reserved tag names (and cannot root a dotted name).
-- How a name finds its file and how a component reads props is host-defined (D173 V15): PuzzleKit resolves `<script>` imports and passes props to `data(params, props)`, and a script-less component's `data()` returns its props; Sites resolves `components/<Name>.pzl` and exposes props as bare names.
+- How a name finds its file and how a component reads props is host-defined (D173 V15): PuzzleKit resolves `<script>` imports and passes props to `data(params, props)`, whose default returns them; Sites resolves `components/<Name>.pzl` and exposes props as bare names.
 
 ## Slots
 

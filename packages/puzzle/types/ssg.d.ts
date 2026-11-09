@@ -252,18 +252,16 @@ export declare function prerenderToDir(
 ): Promise<PrerenderToDirResult>;
 
 /**
- * Inject rendered markup + a resolved title/head into an app shell by string
+ * Inject rendered markup + a resolved head into an app shell by string
  * surgery. Stamps `data-puzzle-ssg` on the target element; throws if it is
  * missing or non-empty. With a resolved `head` (D84) the managed
- * `data-puzzle-head` tags are replaced/inserted/removed alongside the title;
- * with only a bare `title` the pre-D84 title-only path runs (no managed tags).
+ * `data-puzzle-head` tags are replaced/inserted/removed alongside the title.
  */
 export declare function injectShell(
 	shell: string,
 	fields: {
 		targetId: string;
 		content: string;
-		title: string | null;
 		head?: ResolvedRouteHead | null;
 		/** Markup inserted before the shell's `</body>` — the build's locale island (D175). */
 		island?: string;
@@ -280,7 +278,7 @@ export declare function injectShell(
  * `content` is null — a prerender:false page keeps an empty, unmarked target), inject
  * the inline JSON data island (with `<` escaped so `</script>` can't break out), the
  * read-state island beside it when `readState` is non-empty (D161), and the per-page
- * `/_puzzle/<slug>.js` module script, and replace the title. The caller has already
+ * `/_puzzle/<slug>.js` module script, and apply the resolved `head`. The caller has already
  * stripped the app-bundle `<script>` from `shell`.
  */
 export declare function injectStaticShell(
@@ -294,7 +292,6 @@ export declare function injectStaticShell(
 		route?: { path: string; params: Record<string, string> } | null;
 		targetId: string;
 		content: string | null;
-		title: string | null;
 		head?: ResolvedRouteHead | null;
 		slug: string;
 		data: object;
