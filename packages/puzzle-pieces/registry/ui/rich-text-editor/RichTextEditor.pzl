@@ -1388,7 +1388,7 @@ export default class RichTextEditor extends PuzzleView {
 		// doc back as a fresh reference, which matches _applied and no-ops.
 		if (s !== this._applied) {
 			this._applied = s;
-			ed.commands.setContent(toTiptap(v), { emitUpdate: false }); // emitUpdate defaults to TRUE in Tiptap 3.30 — suppress the echo
+			ed.chain().setMeta('addToHistory', false).setContent(toTiptap(v), { emitUpdate: false }).run(); // off the undo stack; emitUpdate defaults to TRUE in Tiptap 3.30 — suppress the echo
 			this._pending.length = 0;
 			this.setData('empty', isEmpty(v));
 			this.refresh();
@@ -2300,10 +2300,10 @@ export default class RichTextEditor extends PuzzleView {
 			}
 			// Bare domains get a scheme; site-relative (/…) and hash (#…) pass through.
 			const url = /^([a-z][a-z0-9+.-]*:|\/|#)/i.test(raw) ? raw : `https://${raw}`;
-			// Blocks mode, nothing selected (the "/" Link command): insert the URL
-			// as linked text rather than setting an invisible stored mark.
+			// Nothing selected (a bare caret, or the "/" Link command): insert the
+			// URL as linked text rather than setting an invisible stored mark.
 			const ed = this._editor;
-			if (this._blocks() && ed && ed.state.selection.empty && !ed.isActive('link')) {
+			if (ed && ed.state.selection.empty && !ed.isActive('link')) {
 				if (safeLinkUrl(url) == null) return;
 				this._chain()
 					?.insertContent({ type: 'text', text: raw, marks: [{ type: 'link', attrs: { href: url } }] })
