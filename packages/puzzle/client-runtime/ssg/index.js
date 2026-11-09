@@ -315,12 +315,6 @@ function localizeCanonical(canonical, { base, locale, manifest, site }) {
  * miss every authored verb.
  */
 
-// Save/restore is depth-counted because prerenderToDir calls prerender: the
-// inner install must not swap the wrapper back out from under the outer one.
-let fetchPatchDepth = 0;
-/** @type {typeof fetch | null} */
-let nativeFetch = null;
-
 /**
  * Whether Node's `fetch` will reject this input for want of an origin. A string
  * with no scheme is exactly the case `new URL()` cannot parse on its own; a
@@ -357,26 +351,6 @@ function unresolvableEndpointError(url) {
 			`with no endpoint and no read verb never fetches — and seed the store in ` +
 			`\`beforeMount({ store })\`.`
 	);
-}
-
-/** Install the build-time `fetch` wrapper for one pass (nesting-safe). */
-function installBuildFetch() {
-	if (fetchPatchDepth++ > 0) return;
-	nativeFetch = globalThis.fetch;
-	// Captured at install, not at module load, so a test's stubbed global fetch
-	// is the function this wrapper delegates to.
-	const inner = nativeFetch;
-	globalThis.fetch = async (input, init) => {
-		if (isAppRelative(input)) throw unresolvableEndpointError(input);
-		return inner(input, init);
-	};
-}
-
-/** Restore the global `fetch` the matching install replaced. */
-function restoreBuildFetch() {
-	if (--fetchPatchDepth > 0) return;
-	globalThis.fetch = nativeFetch;
-	nativeFetch = null;
 }
 
 /**
@@ -429,8 +403,13 @@ export async function prerender(config, opts = {}) {
 	// Every build-time read in the pass below goes through the build-fetch
 	// wrapper, so an app-relative endpoint fails with a diagnostic naming the URL
 	// and the two ways to make the read answerable from the build machine — never
-	// with undici's bare "Failed to parse URL".
-	installBuildFetch();
+	// with undici's bare "Failed to parse URL". The wrapped fetch is read now, not
+	// at module load, so a test's stubbed global is the one it delegates to.
+	const nativeFetch = globalThis.fetch;
+	globalThis.fetch = async (input, init) => {
+		if (isAppRelative(input)) throw unresolvableEndpointError(input);
+		return nativeFetch(input, init);
+	};
 	// Each locale pass points the module-level format locale at its own (D175);
 	// the run hands back whatever was there before it, so one prerender never
 	// leaks its last locale into the next code in this process.
@@ -438,7 +417,7 @@ export async function prerender(config, opts = {}) {
 	try {
 		return await prerenderPass(config, opts);
 	} finally {
-		restoreBuildFetch();
+		globalThis.fetch = nativeFetch;
 		setFormatLocale(formatLocaleBefore);
 	}
 }
