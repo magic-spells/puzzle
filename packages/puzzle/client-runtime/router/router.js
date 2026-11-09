@@ -3137,10 +3137,12 @@ export class Router {
 	 * as falsy — the same posture a throwing scrollBehavior gets (D33): a broken
 	 * hook must never wedge a navigation that already committed.
 	 *
-	 * Default: the LEAF view's root element — unless the view already chose its
-	 * own focus: focus already inside the root (a mounted() focus call) is left
-	 * where it is, else its first [autofocus] element wins (browsers honour the
-	 * attribute on first load only). `.element` is legitimately null for a
+	 * Default: the LEAF view's root element — unless the view chose its own
+	 * focus. Focus already inside the root (a mounted() call) stays; otherwise its
+	 * first [autofocus] element is focused HERE (browsers honour the attribute on
+	 * first load only). Either way, null when focus is now inside the view; asking
+	 * the DOM where focus landed covers a hidden, disabled, inert or closed-<dialog>
+	 * autofocus target with no visibility logic. `.element` is legitimately null for a
 	 * view that never mounted — a parent whose template has no <Slot/> preloads its
 	 * routed child and then has nowhere to put it, the exact case warnMissingSlots
 	 * reports — so walk back UP the chain to the nearest live root, and return null
@@ -3170,18 +3172,19 @@ export class Router {
 		for (let i = views.length - 1; i >= 0; i--) {
 			const el = /** @type {HTMLElement | null} */ (views[i]?.element);
 			if (el && typeof el.focus === 'function') {
-				return el.contains(document.activeElement)
-					? null
-					: /** @type {HTMLElement} */ (el.querySelector('[autofocus]') || el);
+				el.contains(document.activeElement) ||
+					/** @type {HTMLElement | null} */ (el.querySelector('[autofocus]'))?.focus({
+						preventScroll: true,
+					});
+				return el.contains(document.activeElement) ? null : el;
 			}
 		}
 		return null;
 	}
 
 	/**
-	 * Focus the target, stamping one that is not natively focusable (a <puzzle-view>
-	 * root never is; an [autofocus] input already is, and keeps its own tab stop
-	 * and ring). tabindex="-1" makes it a PROGRAMMATIC-only target — it is
+	 * Focus an element that is probably not natively focusable (a <puzzle-view>
+	 * root never is). tabindex="-1" makes it a PROGRAMMATIC-only target — it is
 	 * focusable by script but never a Tab stop — and is taken back off at the
 	 * element's blur so the DOM accumulates no attribute debris across navigations
 	 * and the root cannot linger in anyone's mental model of the tab order. An
@@ -3203,7 +3206,7 @@ export class Router {
 	 * @param {HTMLElement} el
 	 */
 	#focusElement(el) {
-		if (el.tabIndex < 0 && !el.hasAttribute('tabindex')) {
+		if (!el.hasAttribute('tabindex')) {
 			el.setAttribute('tabindex', '-1');
 			const prior = ['outline', 'box-shadow'].map((prop) => [
 				prop,

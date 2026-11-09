@@ -31,6 +31,24 @@ notes:
       pop still loading". Open and NOT built: F1-B1 (overlap recover restores a dead leaver), and
       F1-B3 (nav #0 is invisible to the same-path rules; the fragment guard still needs a committed
       #state).
+  - kind: decision
+    text: >-
+      0.10.0 F3 (review 2026-11-08, V-features F3): the router focus step honours an element the
+      view already focused or marked autofocus. In the default target (`#resolveFocusTarget`, no
+      custom focusBehavior): if focus is not already inside the committed leaf root (a `mounted()`
+      focus call), it calls `focus({ preventScroll: true })` on the leaf's first `[autofocus]`
+      element itself; then it asks the DOM: focus inside the root → return null (no move, still
+      announces), else the root as before. Checking where focus actually landed covers a hidden,
+      disabled, inert or closed-`<dialog>` autofocus target (the pieces AlertDialog's Cancel button)
+      with no visibility logic, so `#focusElement` still only receives the root or a custom return
+      and its stamp rule is unchanged. Why: `#applyFocus` runs after mount, so it stole focus from
+      music Search's input on every client navigation; browsers only honour `autofocus` on first
+      load. Consequence for D135: a params-only PUSH from a control inside the reused leaf leaves
+      focus on that control when it survives the patch (D93's reason for moving focus is a stranded
+      keyboard position); if it is gone, the root is focused as before. No new option or API.
+      Rejected: returning the `[autofocus]` element as the target (a closed dialog's button takes no
+      focus, so focus fell to body); autofocus-only (a view focusing in mounted() would still lose
+      focus); a reused-view flag to keep D135's old push behaviour.
 ---
 
 # Router

@@ -182,11 +182,34 @@ describe('Router focus — the view chose its own focus (F3)', () => {
 
 		const input = el.querySelector('.q');
 		expect(document.activeElement).toBe(input);
-		// Natively focusable: keeps its own tab stop and focus ring (no D139 stamp).
+		// Focused directly, never stamped: keeps its own tab stop and focus ring (no D139).
 		expect(input.hasAttribute('tabindex')).toBe(false);
 		expect(input.style.getPropertyValue('outline')).toBe('');
 		expect(el.querySelector('puzzle-view.auto').hasAttribute('tabindex')).toBe(false);
 		expect(liveRegion().textContent).toBe('Auto');
+	});
+
+	it('falls back to the leaf root when the [autofocus] element cannot take focus', async () => {
+		// A disabled control (or a closed <dialog>'s autofocus button) ignores focus();
+		// the router asks the DOM where focus landed rather than trusting the attribute.
+		class DisabledAutoView extends PuzzleView {
+			render() {
+				return h('puzzle-view', { class: 'dis' }, [
+					h('input', { class: 'q', autofocus: true, disabled: true }),
+				]);
+			}
+		}
+		const { router, el } = await boot([
+			...ROUTES,
+			{ path: '/dis', name: 'dis', view: DisabledAutoView, meta: { title: 'Dis' } },
+		]);
+		await router.push('/dis');
+
+		const input = el.querySelector('.q');
+		expect(input.disabled && input.hasAttribute('autofocus')).toBe(true);
+		const leaf = el.querySelector('puzzle-view.dis');
+		expect(document.activeElement).toBe(leaf);
+		expect(leaf.getAttribute('tabindex')).toBe('-1');
 	});
 
 	it('leaves focus a mounted() hook already placed inside the leaf', async () => {
