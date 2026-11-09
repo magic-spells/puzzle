@@ -39,7 +39,7 @@ import DropdownMenu from '../DropdownMenu/index.js';
 //   flip    default true on a downward panel — open upward when there is no room
 //           below; default false on opens="right". Inert on the ROOT panel, which
 //           the component places and flips itself; it matters for a .Sub's panel.
-//   effect  'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
+//   effect  'fade' | 'slide' | 'scale' | 'blur' | 'bloom' | 'swing' (effects sheet only)
 //   class   merged onto <dropdown-panel>, after the padding
 
 export default class Content extends PuzzleView {

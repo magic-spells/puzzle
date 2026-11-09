@@ -230,7 +230,7 @@ const contentRows = [
   { name: 'align', desc: "'start' (default) | 'end'. end is left-auto right-0 — pure CSS, no measuring." },
   { name: 'wide', desc: 'A full-width panel spanning the nearest positioned ancestor.' },
   { name: 'opens', desc: "'down' (default) | 'right' for a nested submenu." },
-  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
+  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'bloom' | 'swing'. Needs the effects stylesheet." },
   { name: 'class', desc: 'Merged onto the panel, after the padding. Never overflow-hidden.' },
 ];
 

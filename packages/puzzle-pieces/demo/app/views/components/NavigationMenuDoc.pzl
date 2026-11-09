@@ -476,7 +476,7 @@ const contentRows = [
   { name: 'wide', desc: 'A full-width mega panel spanning the <nav>, with mega padding and gutters.' },
   { name: 'opens', desc: "'down' (default) | 'right' for a submenu." },
   { name: 'align', desc: "'start' (default) | 'end'. end is left-auto right-0 — pure CSS, no measuring." },
-  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
+  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'bloom' | 'swing'. Needs the effects stylesheet." },
   { name: 'class', desc: 'Merged onto <dropdown-panel>, after the layout classes. Never overflow-hidden.' },
 ];
 

@@ -36,6 +36,15 @@ notes:
       <dropdown-panel effect>) is the one effect source. Docs tables updated to match. The copyable
       Usage block no longer wires `@press` on rows alongside the root `@select` (same activation
       fires both).
+  - kind: state
+    text: >-
+      2026-11-08 (0.10.0, feat/0.10-pieces-overlays, review V-pieces-07-09 P09-B1): DropdownMenu.Sub
+      renders its nested root with `arrow="flip"`, and every Sub example (Sub/DropdownMenu/Trigger
+      headers, DropdownMenuDoc hero + snippet, ContextMenuDoc hero + snippet) writes the row as
+      `<DropdownMenu.Trigger variant="item" label="Export as"/>`. GOTCHA: a filled Trigger body
+      replaces the D141 fallback, and with it the `[data-dropdown-arrow]` span, so a children-form
+      submenu trigger has no chevron whatever `arrow` says — only the `label=` form renders the
+      hook. The top-level root still defaults `arrow="none"` (open question for Cory).
 ---
 
 A D167 compound family in `registry/ui/dropdown-menu/DropdownMenu/`: root plus `.Trigger`,

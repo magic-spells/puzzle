@@ -31,7 +31,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //       <DropdownMenu.Link href="/docs">Docs</DropdownMenu.Link>
 //       <DropdownMenu.Separator/>
 //       <DropdownMenu.Sub>
-//         <DropdownMenu.Trigger variant="item">Export as</DropdownMenu.Trigger>
+//         <DropdownMenu.Trigger variant="item" label="Export as"/>
 //         <DropdownMenu.Content opens="right">
 //           <DropdownMenu.Item value="pdf" @press={ run }>PDF</DropdownMenu.Item>
 //         </DropdownMenu.Content>

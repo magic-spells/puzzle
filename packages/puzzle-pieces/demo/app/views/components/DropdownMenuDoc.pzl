@@ -48,7 +48,7 @@
               <DropdownMenu.Separator/>
               <DropdownMenu.Group label="Export">
                 <DropdownMenu.Sub>
-                  <DropdownMenu.Trigger variant="item">Export as</DropdownMenu.Trigger>
+                  <DropdownMenu.Trigger variant="item" label="Export as"/>
                   <DropdownMenu.Content opens="right">
                     <DropdownMenu.Item value="pdf" @press={ run }>PDF</DropdownMenu.Item>
                     <DropdownMenu.Item value="csv" @press={ run }>CSV</DropdownMenu.Item>
@@ -222,7 +222,7 @@ const codeHero = `// One menu-button: a label, a disabled row, a group holding a
     <DropdownMenu.Separator />
     <DropdownMenu.Group label="Export">
       <DropdownMenu.Sub>
-        <DropdownMenu.Trigger variant="item">Export as</DropdownMenu.Trigger>
+        <DropdownMenu.Trigger variant="item" label="Export as"/>
         <DropdownMenu.Content opens="right">
           <DropdownMenu.Item value="pdf" @press={ run }>PDF</DropdownMenu.Item>
         </DropdownMenu.Content>
@@ -282,7 +282,7 @@ const reference = [
       { name: 'align', desc: "'start' (default) | 'end' for a menu near the right edge." },
       { name: 'opens', desc: "'down' (default) | 'right' for a Sub's panel." },
       { name: 'flip', desc: 'Opt in to opening upward when the panel would run past the bottom of the viewport.' },
-      { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
+      { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'bloom' | 'swing'. Needs the effects stylesheet." },
       { name: 'class', desc: 'Merged onto the panel, after the padding. Never overflow-hidden — it clips a Sub.' },
     ],
   },
