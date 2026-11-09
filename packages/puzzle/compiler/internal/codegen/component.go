@@ -174,19 +174,7 @@ func (c *compiler) componentSelectorRef(name string) string {
 	if !collision {
 		return ""
 	}
-	next := len(c.componentSelectorGetters)
-	var alias string
-	for {
-		alias = "__pzlComponentSelector" + strconv.Itoa(next)
-		next++
-		available := !strings.Contains(c.componentSelectorSource, alias)
-		for _, getter := range c.componentSelectorGetters {
-			available = available && alias != getter.alias
-		}
-		if available {
-			break
-		}
-	}
+	alias := "__pzlComponentSelector" + strconv.Itoa(len(c.componentSelectorGetters))
 	c.componentSelectorGetters = append(c.componentSelectorGetters, componentSelectorGetter{name: name, alias: alias})
 	return alias + "()"
 }
@@ -258,12 +246,6 @@ func (c *compiler) emitComponentSlot(node *parser.Component, ind int, scope scop
 	}
 	c.usesDynamicComponent = true
 	return "__dc(" + selector + ", " + attrs + ", " + array + ")", nil
-}
-
-func hasComponentSlot(nodes []parser.Node) bool {
-	found := false
-	walkComponentSlots(nodes, func(*parser.Component) { found = true })
-	return found
 }
 
 func walkComponentSlots(nodes []parser.Node, visit func(*parser.Component)) {

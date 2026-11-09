@@ -64,4 +64,3 @@ Links.prototype.render = function () {
     ]),
   ]);
 };
-Links.__pzlModule = 'Links.pzl';

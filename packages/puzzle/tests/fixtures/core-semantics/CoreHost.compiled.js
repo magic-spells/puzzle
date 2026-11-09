@@ -175,4 +175,3 @@ CoreHost.prototype.render = function () {
     ]),
   ]);
 };
-CoreHost.__pzlModule = 'CoreHost.pzl';

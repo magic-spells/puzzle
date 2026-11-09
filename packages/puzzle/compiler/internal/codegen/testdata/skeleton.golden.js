@@ -22,7 +22,6 @@ Skeleton.prototype.render = function () {
     ]),
   ]);
 };
-Skeleton.__pzlModule = 'skeleton.pzl';
 
 Skeleton.prototype.renderSkeleton = function () {
   const __d = this.getData();

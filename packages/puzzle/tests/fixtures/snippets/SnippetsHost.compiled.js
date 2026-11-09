@@ -60,4 +60,3 @@ SnippetsHost.prototype.render = function () {
     ]),
   ]);
 };
-SnippetsHost.__pzlModule = 'SnippetsHost.pzl';

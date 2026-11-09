@@ -49,7 +49,6 @@ HandlerFormsTs.prototype.render = function() {
     ])
   ]);
 };
-HandlerFormsTs.__pzlModule = "HandlerFormsTs.pzl";
 export {
   HandlerFormsTs as default
 };

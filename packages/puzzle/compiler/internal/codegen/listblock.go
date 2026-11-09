@@ -411,8 +411,9 @@ func dropKeyAttrs(attrs []parser.Attr) []parser.Attr {
 	return out
 }
 
-// isExplicitKeyAttr reports whether a is the author's `key` directive (the same
-// test hasKeyAttr applies, one attribute at a time).
+// isExplicitKeyAttr reports whether a is the author's `key` directive. A literal
+// `key` captured inside {#raw} or on a {#svg} asset root is authored markup, not
+// the directive, so it must not suppress the synthetic key.
 func isExplicitKeyAttr(a parser.Attr) bool {
 	switch at := a.(type) {
 	case *parser.StaticAttr:

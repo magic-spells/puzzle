@@ -58,4 +58,3 @@ RawHost.prototype.render = function () {
     ]),
   ]);
 };
-RawHost.__pzlModule = 'RawHost.pzl';

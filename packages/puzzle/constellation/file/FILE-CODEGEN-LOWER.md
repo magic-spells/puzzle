@@ -15,6 +15,14 @@ connections:
   - TEST-COMPILER-CODEGEN
 verified_at: '2026-11-01T19:19:18.479Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 codegen trims: ident()'s refData arm calls compiler.noteImport (once-per-name
+      import-collision warning at the identifier's own line:col). Deleted dead code: exprFacts.merge
+      (no caller), refThis (parser + checkTemplateExprs reject `this`), verbatimChain's
+      refBinding/ViewNode arm (no scope ever binds ViewNode), sortedKeys (now
+      slices.Sorted(maps.Keys)). exprWriter and CheckWriter merged into one exported ExprWriter.
 ---
 
 # lower.go

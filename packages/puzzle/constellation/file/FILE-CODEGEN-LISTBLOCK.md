@@ -9,6 +9,12 @@ connections:
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
 verified_at: '2026-11-01T19:28:54.178Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 codegen trims: isExplicitKeyAttr is now the single key-directive predicate;
+      codegen.go's hasKeyAttr is a loop over it. No list-block output changed (all D170 goldens
+      byte-identical).
 ---
 
 # listblock.go

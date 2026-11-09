@@ -25,4 +25,3 @@ TodoTitles.prototype.render = function () {
     ]),
   ]);
 };
-TodoTitles.__pzlModule = 'TodoTitles.pzl';

@@ -44,4 +44,3 @@ ClobberForm.prototype.render = function () {
     ]),
   ]);
 };
-ClobberForm.__pzlModule = 'ClobberForm.pzl';

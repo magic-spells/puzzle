@@ -37,4 +37,3 @@ ScopedSnippetNamed.prototype.render = function () {
     ]),
   ]);
 };
-ScopedSnippetNamed.__pzlModule = 'scoped_snippet_named.pzl';

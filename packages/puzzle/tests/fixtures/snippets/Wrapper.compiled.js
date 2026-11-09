@@ -22,4 +22,3 @@ Wrapper.prototype.render = function () {
     ]),
   ]);
 };
-Wrapper.__pzlModule = 'Wrapper.pzl';

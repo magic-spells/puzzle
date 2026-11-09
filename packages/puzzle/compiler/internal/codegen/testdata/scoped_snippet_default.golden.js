@@ -25,4 +25,3 @@ ScopedSnippetDefault.prototype.render = function () {
     ]),
   ]);
 };
-ScopedSnippetDefault.__pzlModule = 'scoped_snippet_default.pzl';

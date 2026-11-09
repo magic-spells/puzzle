@@ -26,4 +26,3 @@ ComponentFamily.prototype.render = function () {
     ]),
   ]);
 };
-ComponentFamily.__pzlModule = 'component_family.pzl';

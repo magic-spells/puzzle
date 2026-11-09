@@ -29,4 +29,3 @@ PrimitiveForm.prototype.render = function () {
     ]),
   ]);
 };
-PrimitiveForm.__pzlModule = 'PrimitiveForm.pzl';

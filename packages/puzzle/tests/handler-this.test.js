@@ -39,7 +39,7 @@ describe('events handler that is not an arrow and uses `this` (D03)', () => {
 
 		const messages = thisWarnings(warn);
 		expect(messages).toEqual([
-			'[puzzle] HandlerForms.pzl: handler `play` uses `this` but is not an arrow function — the runtime calls it as this.events.play(…), so `this` is the events object, not the component; write it as an arrow function: `play: (…) => { … }`',
+			'[puzzle] HandlerForms: handler `play` uses `this` but is not an arrow function — the runtime calls it as this.events.play(…), so `this` is the events object, not the component; write it as an arrow function: `play: (…) => { … }`',
 			expect.stringContaining('handler `legacy` uses `this` but is not an arrow function'),
 			expect.stringContaining('write it as an arrow function: `load: async (…) => { … }`'),
 		]);
@@ -65,7 +65,7 @@ describe('events handler that is not an arrow and uses `this` (D03)', () => {
 
 		const messages = thisWarnings(warn);
 		expect(messages).toHaveLength(2);
-		expect(messages[0]).toContain('[puzzle] HandlerFormsTs.pzl: handler `play` uses `this`');
+		expect(messages[0]).toContain('[puzzle] HandlerFormsTs: handler `play` uses `this`');
 		expect(messages[1]).toContain('handler `load` uses `this`');
 		expect(messages[1]).toContain('`load: async (…) => { … }`');
 

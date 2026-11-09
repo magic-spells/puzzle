@@ -76,4 +76,3 @@ LocalForm.prototype.render = function () {
     ]),
   ]);
 };
-LocalForm.__pzlModule = 'LocalForm.pzl';
