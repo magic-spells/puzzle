@@ -1352,17 +1352,13 @@ export class PuzzleView {
 				return;
 		}
 		const token = ++this.#runToken;
-		// Flush-sequence dedupe (D170). A child that both receives a
-		// record prop and queries that record gets TWO wake-ups from one store
-		// flush: the parent's applyParentUpdate during delivery, and its own
-		// onStoreChange later in the same delivery loop. Capture the sequence the
-		// store is delivering — non-zero only INSIDE that loop — before data() runs;
-		// #commit stamps it onto `_settleMark`, and the second wake-up then takes
-		// onStoreChange's existing `seq <= _settleMark` early return. The mutations
-		// in that batch already landed in the store before delivery started, so the
-		// model this pass commits reflects every one of them. The D161 settle loop
-		// keeps its own (higher, _notifySeq-based) stamping; #commit takes the max.
-		const mark = this.ctx.store?._flushSeq || 0;
+		// Notification dedupe (D161, D170). Every store mutation lands before its
+		// _notify, so each sequence already queued as data() starts is baked into
+		// the model this pass commits; #commit stamps it onto `_settleMark` and that
+		// batch's later delivery takes onStoreChange's `seq <= _settleMark` early
+		// return. Read before data() runs, so it can only under-stamp: a change
+		// queued later is delivered, never dropped.
+		const mark = this.ctx.store?._notifySeq || 0;
 		const run = () => {
 			const out =
 				typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
@@ -1551,6 +1547,7 @@ export class PuzzleView {
 		};
 
 		const store = this.ctx.store;
+		const mark = store?._notifySeq || 0; // see #refreshInner
 		const expectsAsync = this._dataAsyncShape || this.data.constructor.name === 'AsyncFunction';
 		// D161: a prepared run settles through the same loop. Intermediate passes are
 		// discarded as they are anywhere else; the FINAL pass's reconcile is parked on
@@ -1634,7 +1631,7 @@ export class PuzzleView {
 					// containment broken together). Every other refresh() caller funnels;
 					// so does this one.
 					try {
-						this.#commit(++this.#runToken, model);
+						this.#commit(++this.#runToken, model, mark);
 					} catch (err) {
 						this.#handleViewFailure(
 							'[puzzle] render failed during a prepared commit:',
@@ -2466,18 +2463,15 @@ export class PuzzleView {
 	/**
 	 * @param {number} token the run token the result belongs to
 	 * @param {any} model the data() result
-	 * @param {number} [mark] the store flush sequence this run evaluated under
+	 * @param {number} [mark] the store's `_notifySeq` as this run's data() began
 	 */
 	#commit(token, model, mark = 0) {
 		// superseded, torn down, or LEAVING — see #completeMount for why removal is
 		// now asynchronous for any view declaring a hide hook (D136 §3).
 		if (token !== this.#runToken || this.#destroyed || this.#leaving) return;
-		// Flush-sequence stamp (D170). This run evaluated data() while the
-		// store was delivering the batch ending at `mark`, and it is committing, so
-		// every notification in that batch is already on screen. MAX, never plain
-		// assignment: the D161 settle loop has already stamped its own (higher)
-		// _notifySeq-based mark for an adapter app's settled pass, and a prepared
-		// D146 commit passes no mark at all — neither may be walked backwards.
+		// Notification stamp (see #refreshInner). MAX, never plain assignment: the
+		// D161 settle loop may already have stamped its committing pass's (higher)
+		// mark, and that must not be walked backwards.
 		if (mark > this._settleMark) this._settleMark = mark;
 		// Two-layer state (Change C, SPEC §4). A successful data() result REPLACES the
 		// model layer wholesale — keys an earlier run returned but this one omits
