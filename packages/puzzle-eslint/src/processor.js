@@ -273,7 +273,6 @@ function blankOutside(src, start, end) {
 export const processor = {
 	meta: {
 		name: '@magic-spells/eslint-plugin-puzzle/processor',
-		version: '0.1.0',
 	},
 
 	supportsAutofix: true,

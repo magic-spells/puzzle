@@ -10,8 +10,8 @@
  *   port message   (source: 'puzzle-devtools-panel') →  window.postMessage
  *
  * MV3 service workers are recycled aggressively, which tears the port down. The
- * relay therefore reconnects: immediately on disconnect (bounded, so an
- * uninstalled extension does not spin) and lazily before any outbound message.
+ * relay therefore reconnects: after every disconnect (a dead extension context
+ * ends the loop) and lazily before any outbound message.
  */
 (function () {
 	'use strict';
@@ -21,14 +21,9 @@
 	var PORT_PAGE = 'puzzle-devtools-page';
 
 	var RECONNECT_DELAY_MS = 500;
-	// Consecutive failed reconnects before giving up. Reset whenever a message
-	// actually flows, so a long session that cycles the worker many times keeps
-	// working; an extension reload/uninstall stops the loop instead.
-	var MAX_RECONNECTS = 20;
 
 	var port = null;
 	var reconnectTimer = null;
-	var reconnects = 0;
 
 	function contextAlive() {
 		try {
@@ -58,8 +53,6 @@
 
 	function scheduleReconnect() {
 		if (reconnectTimer || !contextAlive()) return;
-		if (reconnects >= MAX_RECONNECTS) return;
-		reconnects += 1;
 		reconnectTimer = setTimeout(function () {
 			reconnectTimer = null;
 			ensurePort();
@@ -68,7 +61,6 @@
 
 	function fromExtension(data) {
 		if (!data || typeof data !== 'object' || data.source !== SOURCE_PANEL) return;
-		reconnects = 0;
 		try {
 			window.postMessage(data, '*');
 		} catch (err) {
@@ -88,7 +80,6 @@
 			if (!active) return;
 			try {
 				active.postMessage(data);
-				reconnects = 0;
 			} catch (err) {
 				if (port === active) port = null;
 				scheduleReconnect();

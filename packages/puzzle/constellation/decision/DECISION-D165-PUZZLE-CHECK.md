@@ -12,6 +12,17 @@ connections:
   - DECISION-D166-SNIPPETS
   - DOC-SPEC-BUILD
   - DOC-RELEASE-SURFACE
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 (feat/0.10-types-devtools, review F10 B2): the `[key: string]: any` index
+      signatures on the `Store` and `Router` interfaces in types/index.d.ts are gone, so
+      `this.ctx.store.findall()` / `this.ctx.router?.pushh()` in a lang="ts" view are now errors
+      ("Did you mean 'push'?") and fixture-only `seed()` type-checks only where
+      `@magic-spells/puzzle/fixtures` is imported (D98). The view-`this` index signature this card
+      describes is unchanged. `puzzle check` is clean on all 22 examples; test:types and
+      test:runtime-types pass. Also removed the unreferenced `StoreOptions` and `PuzzleValue`
+      exports (noted in the 0.10.0 CHANGELOG under Breaking).
 ---
 
 # D165 — `puzzle check`: virtual files + the app's own tsc
