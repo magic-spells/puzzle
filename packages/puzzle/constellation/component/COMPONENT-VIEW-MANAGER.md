@@ -14,6 +14,17 @@ connections:
   - DECISION-D180-COMPONENT-SLOT
 verified_at: '2026-11-01T19:26:46.557Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 runtime trims (feat/0.10-runtime-trims; review F2-Q1/Q4/Q6). One carryLinks(from,
+      to) helper (el/component/instance plus the takeover fields) is now what a clone must carry to
+      stay patchable. keepOutgoing, stripSlotAttr and expandNode all call it, and keepOutgoing adds
+      its nodes/portal/slotEnd range fields after. The redundant `key` copies are gone: the ViewNode
+      constructor derives key from attrs.key. Also removed: the `child?.` guards after the !child
+      early return, html.js's dead moveHtml (live-HTML ranges move through moveComponentSlot with
+      end = htmlTail), ViewNode's unused isPortal getter (and its types line), and the default
+      exports of viewManager/ViewNode/animate/visibility.
 ---
 
 # ViewManager and ViewNode

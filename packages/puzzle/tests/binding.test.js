@@ -330,7 +330,7 @@ describe('implicit binding — a primitive bind root', () => {
 describe('implicit binding — record arm', () => {
 	it('writes through update(), re-renders a subscribed sibling, and persists', async () => {
 		const storage = makeStorage();
-		const store = todoStore({ storage, storageKey: 'binding-test' });
+		const store = todoStore({ storage });
 		const view = await mount(RecordForm, { store });
 		const sibling = await mount(TodoTitles, { store });
 		expect(sibling.find('.titles').textContent).toBe('wash|fold');

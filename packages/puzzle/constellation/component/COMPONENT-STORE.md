@@ -16,6 +16,17 @@ connections:
   - DECISION-D189-AGENT-HOOKS
 verified_at: '2026-11-01T19:23:56.488Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 runtime trims (feat/0.10-runtime-trims; review F3-Q4/Q7/Q9). The never-wired
+      `storageKey` Store option is deleted (PuzzleApp never passed it and Store is not exported);
+      the persistence key is the constant 'puzzle-store'. Two apps with storage on one origin still
+      share that key: per-app keys are an open design question for Cory, not built. _load() is one
+      try/catch over getItem + JSON.parse + _hydrateAll; an unreadable or corrupt blob now warns in
+      dev (it was silent) and is still fail-soft. The stale `dead` field is gone from the
+      handle-context comment, and the orphaned DELETED_SAVE_MESSAGE JSDoc is gone from model.js (the
+      constant lives in adapter.js).
 ---
 
 # Store

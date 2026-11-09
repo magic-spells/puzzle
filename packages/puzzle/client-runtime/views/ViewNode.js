@@ -182,11 +182,6 @@ export class ViewNode {
 		return this.tag === SNIPPET_TAG;
 	}
 
-	/** A portal marker — children mount into the shared portal outlet. */
-	get isPortal() {
-		return this.tag === PORTAL_TAG;
-	}
-
 	// Internal surface (like SLOT_TAG): the compiled render() calls this for an
 	// item-form {#for}'s synthetic key; app code shouldn't. Resolves a row's
 	// reconciliation key when the real object is in hand — a store record keys by
@@ -213,5 +208,3 @@ export class ViewNode {
 		return this.attrs;
 	}
 }
-
-export default ViewNode;
