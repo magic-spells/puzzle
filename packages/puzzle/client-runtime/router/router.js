@@ -48,7 +48,7 @@
  *   reads a fresh `current`.
  * - Parsed URL state + replace() (v1.49, D83): the snapshot adds `pathname`
  *   (path minus query/hash — base-free, trailing slash kept byte-for-byte; the
- *   MATCHING normalization stays on stripPath/stripTrailingSlash), `query` (a
+ *   MATCHING normalization is stripTrailingSlash's alone), `query` (a
  *   FROZEN null-prototype object with URLSearchParams decoding semantics:
  *   single value → string, repeated key → frozen array in source order, a
  *   valueless key → ''), and `hash` ('' or the raw fragment INCLUDING the
@@ -860,9 +860,9 @@ export class Router {
 		// `/docs#faq`, and made a re-click on an anchored link a REAL navigation —
 		// push()'s sameNavKey compares the hash byte-for-byte against a committed
 		// path that never carried one, so a byte-identical URL got a duplicate
-		// history entry. Route MATCHING is unaffected: #navigate runs stripPath
-		// first, which drops query and hash alike (link-derived paths have always
-		// carried a fragment through it). Scroll is unaffected too: #resolveScroll
+		// history entry. Route MATCHING is unaffected: #navigate matches
+		// parseLocation's pathname, which drops query and hash alike (link-derived
+		// paths have always carried a fragment through it). Scroll is unaffected too: #resolveScroll
 		// leaves navigation #0 alone entirely, and a pop's saved position beats the
 		// D41 anchor by design.
 		const pathname = location.pathname;
@@ -1497,7 +1497,10 @@ export class Router {
 			track = false,
 		}
 	) {
-		const matchPath = stripPath(rawPath);
+		// Parsed ONCE per navigation (D83): the pathname to match, and the snapshot's
+		// URL parts below.
+		const loc = parseLocation(rawPath);
+		const matchPath = loc.pathname;
 		// Locale prefix routing (D177): app code never writes a locale prefix. A path
 		// that starts with one routes as written — no route can own that segment (the
 		// constructor's collision check), so it lands on the catch-all, just as a
@@ -1526,7 +1529,7 @@ export class Router {
 		// make that navigation's post-playOut token check #abandon: the outgoing
 		// unit sits fully played out (held invisible by the out animation's fill)
 		// with nothing mounted to replace it, until some LATER navigation cleans it
-		// up. Nothing above reads the token (stripPath/#match/current are pure over
+		// up. Nothing above reads the token (parseLocation/#match/current are pure over
 		// their inputs), so the bump commutes down safely.
 		const token = ++this.#token;
 		// Departure scroll, captured NOW — synchronously at navigation start, while
@@ -1604,9 +1607,8 @@ export class Router {
 		// The route snapshot for THIS navigation (v1.15, D47): same shape as
 		// `current`, built pre-commit and threaded through guards, every gated
 		// preload/refresh, and scrollBehavior. Frozen so no consumer can mutate the
-		// shared snapshot. parseLocation (v1.49, D83) runs ONCE here — before guard
+		// shared snapshot. Its URL parts are `loc`, parsed above — before guard
 		// execution and, critically, before any view/layout construction (D87).
-		const loc = parseLocation(rawPath);
 		const to = Object.freeze({
 			path: rawPath,
 			pathname: loc.pathname,
@@ -2023,7 +2025,7 @@ export class Router {
 			// Where the window should land once the new view is on screen (null =
 			// leave it alone). Resolved here, applied in #commitState. A `#anchor` suffix
 			// on the pushed path refines the default landing (D41): read off the fragment
-			// parseLocation already split (D83 — stripPath dropped it for matching).
+			// parseLocation already split (D83).
 			const anchor = loc.hash ? loc.hash.slice(1) : null;
 			// A same-location rebuild (D175, the REBUILD marker) lands nowhere: the
 			// window stays where it is, and a custom scrollBehavior is not consulted.
@@ -4064,23 +4066,13 @@ export function linkLocale(options, locale, locales) {
 }
 
 /**
- * Reduce a full path to the pathname used for matching (drop query + hash).
- * @param {string} rawPath
- * @returns {string}
- */
-function stripPath(rawPath) {
-	const path = rawPath.split('?')[0].split('#')[0];
-	return path || '/';
-}
-
-/**
  * Split a raw path-shaped navigation target into the snapshot's URL parts
  * (v1.49, D83): `pathname` (query + hash dropped; base-free like rawPath, any
  * trailing slash kept BYTE-FOR-BYTE — matching alone normalizes, via
- * stripPath/stripTrailingSlash), `query` (a FROZEN null-prototype object), and
+ * stripTrailingSlash), `query` (a FROZEN null-prototype object), and
  * `hash` ('' or the raw fragment INCLUDING the leading '#'). The hash is split
- * FIRST, so a '?' inside the fragment never starts a query — the same
- * precedence stripPath's split order and the URL grammar give it.
+ * FIRST, so a '?' inside the fragment never starts a query, as the URL grammar
+ * has it. #navigate matches on this `pathname` too.
  *
  * Query decoding is delegated to URLSearchParams (application/x-www-form-
  * urlencoded semantics: '+' is a space, percent-escapes decode): a single
@@ -4113,8 +4105,7 @@ function parseLocation(rawPath) {
 			if (Array.isArray(query[key])) Object.freeze(query[key]);
 		}
 	}
-	// `'' || '/'` mirrors stripPath's empty-path fallback (a bare '?q' / '#f'
-	// target still names the root).
+	// `'' || '/'`: a bare '?q' / '#f' target still names the root.
 	return { pathname: pathname || '/', query: Object.freeze(query), hash };
 }
 
