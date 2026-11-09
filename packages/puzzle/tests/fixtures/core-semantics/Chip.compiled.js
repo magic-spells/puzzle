@@ -1,9 +1,5 @@
 import { PuzzleView } from '@magic-spells/puzzle';
-export default class Chip extends PuzzleView {
-  data(params, props) {
-    return props;
-  }
-}
+export default class Chip extends PuzzleView {}
 
 import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 

@@ -15,10 +15,6 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class ArtistCard extends PuzzleView {
-  data(params, props) {
-    return { artist: props.artist };
-  }
-
   // The avatar is a morph TRIGGER (D69): the router pairs it with the Artist
   // header's matching data-puzzle-morph-target on the sibling view swap — forward
   // only, no click handler needed. Both ends are rounded-full, so the blob stays a

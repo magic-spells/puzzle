@@ -400,13 +400,8 @@ func TestCompileScriptless(t *testing.T) {
 			if !strings.Contains(out, "import { PuzzleView } from '@magic-spells/puzzle';") {
 				t.Errorf("missing synthesized PuzzleView import:\n%s", out)
 			}
-			// A script-less VIEW gets an empty class; a script-less COMPONENT gets
-			// a data() that returns its props, so `{ tone }` reads the prop
-			// (D173 V15).
+			// Both modes get an empty class: the base data() returns the props.
 			wantClass := "export default class " + name + " extends PuzzleView {}"
-			if tc.mode == ModeComponent {
-				wantClass = "export default class " + name + " extends PuzzleView {\n  data(params, props) {\n    return props;\n  }\n}"
-			}
 			if !strings.Contains(out, wantClass) {
 				t.Errorf("missing synthesized class declaration:\n%s", out)
 			}

@@ -25,7 +25,7 @@ verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 - The `extends` target is unrestricted (a component may extend an intermediate base class), but a class-level `extends` is required.
 - An anonymous default class is a build error ("name your component class").
 - `<Name>` is any JavaScript identifier, Unicode included, read with the shared `jsident` rules ([[DECISION-D176-EXPRESSION-LANGUAGE]]). A name the scan cannot read to its end (a `\u` escape, a letter newer than Go's Unicode tables) is a positioned build error, never an assignment against a truncated name.
-- A `.pzl` with no `<script>` is legal: codegen synthesizes the runtime import plus an empty `PuzzleView` subclass named from the filename (non-identifier runes become `_`). A script-less component's synthesized `data()` returns its props, so `{ tone }` renders the `tone` prop ([[DECISION-D173-CORE-SEMANTICS]]).
+- A `.pzl` with no `<script>` is legal: codegen synthesizes the runtime import plus an empty `PuzzleView` subclass named from the filename (non-identifier runes become `_`); the base `data()` returns its props, so `{ tone }` renders the `tone` prop ([[DECISION-D173-CORE-SEMANTICS]]).
 
 ## Alternatives rejected
 - Filename-derived naming — breaks the canonical app, where `Home.pzl` exports `class TodoHome`.

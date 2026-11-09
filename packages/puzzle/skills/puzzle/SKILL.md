@@ -445,7 +445,6 @@ Rules that bite:
   const cards = { task: TaskCard, backtest: BacktestCard };
 
   export default class EmbedHost extends PuzzleView {
-    data(params, props) { return props; }
     events = { close: () => {} };
   }
   </script>

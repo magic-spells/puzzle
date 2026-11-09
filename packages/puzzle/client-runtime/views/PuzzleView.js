@@ -1791,14 +1791,14 @@ export class PuzzleView {
 	// ---- hooks & overridables (SPEC §4 class contract) ---------------------------
 
 	/**
-	 * Component model. Compiled components and views override this.
+	 * Component model; defaults to the props, so a template reads `{ tone }`.
 	 *
 	 * @param {Record<string, any>} params
 	 * @param {Record<string, any>} props
 	 * @returns {any} the model object (or a promise of it)
 	 */
 	data(params, props) {
-		return {};
+		return props;
 	}
 
 	/**
