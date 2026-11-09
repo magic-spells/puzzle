@@ -69,11 +69,6 @@ export default class Sparkline extends PuzzleView {
     const linePathD = linePath(points);
     const areaPathD = props.area ? areaPath(points, height - PAD) : '';
 
-    // Default to text-chart-1, but step aside when the caller passes their own
-    // text color token so their `class` wins regardless of generated CSS order.
-    const cls = props.class || '';
-    const hasColor = /(?:^|\s)text-(?:chart-|brand|danger|success|muted|ink|body|faint)/.test(cls);
-
     return {
       width,
       height,
@@ -82,7 +77,8 @@ export default class Sparkline extends PuzzleView {
       linePathD,
       areaPathD,
       hasArea: !!props.area && !!areaPathD,
-      rootClass: [hasColor ? '' : 'text-chart-1', cls].filter(Boolean).join(' '),
+      // `:where()` zeroes the default's specificity, so any text colour in `class` wins.
+      rootClass: ['[:where(&)]:text-chart-1', props.class].filter(Boolean).join(' '),
     };
   }
 }

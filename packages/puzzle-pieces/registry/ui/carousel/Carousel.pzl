@@ -11,7 +11,7 @@
     @focusin={ onEnter }
     @focusout={ onFocusOut(event) }>
 
-    <div class="sr-only" aria-live="polite" data-carousel-status>{ statusText }</div>
+    <div class="sr-only" aria-live={ liveMode } data-carousel-status>{ statusText }</div>
 
     <div class={ trackClass } data-carousel-track @scroll={ onScroll }>
       <Slot/>
@@ -175,10 +175,11 @@ export default class Carousel extends PuzzleView {
       loop,
       ariaLabel: props.label || 'Carousel',
       statusText: n > 0 ? `Slide ${view + 1} of ${n}` : '',
+      liveMode: props.autoplay ? 'off' : 'polite',
       rootClass: [ROOT, FOCUS, props.class || ''].filter(Boolean).join(' '),
       trackClass: TRACK,
-      showControls: props.controls !== false,
-      showDots: props.dots !== false,
+      showControls: props.controls !== false && n > 1,
+      showDots: props.dots !== false && n > 1,
       prevDisabled: !loop && atStart,
       nextDisabled: !loop && atEnd,
       prevLabel: 'Previous slide',
