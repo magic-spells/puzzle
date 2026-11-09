@@ -1807,8 +1807,6 @@ async function writeSitemap(outDir, written, dress, warnings) {
 		return;
 	}
 	const { routed } = dress;
-	const xml = (/** @type {string} */ s) =>
-		s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 	const seen = new Set();
 	let urls = '';
 	for (const page of written) {
@@ -1816,11 +1814,11 @@ async function writeSitemap(outDir, written, dress, warnings) {
 		const loc = dress.url(page.path, page.locale ?? null);
 		if (seen.has(loc)) continue;
 		seen.add(loc);
-		urls += `<url><loc>${xml(loc)}</loc>`;
+		urls += `<url><loc>${escapeAttr(loc)}</loc>`;
 		if (routed) {
 			for (const tag of dress.alternates(page.path)) {
 				const href = dress.url(page.path, tag === 'x-default' ? routed.defaultLocale : tag);
-				urls += `<xhtml:link rel="alternate" hreflang="${xml(tag)}" href="${xml(href)}"/>`;
+				urls += `<xhtml:link rel="alternate" hreflang="${escapeAttr(tag)}" href="${escapeAttr(href)}"/>`;
 			}
 		}
 		urls += '</url>\n';
