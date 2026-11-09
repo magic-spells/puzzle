@@ -167,6 +167,74 @@ describe('Router focus — the committed leaf root (D93)', () => {
 	});
 });
 
+describe('Router focus — the view chose its own focus (F3)', () => {
+	it('focuses the leaf [autofocus] element, unstamped, instead of the root', async () => {
+		class AutoView extends PuzzleView {
+			render() {
+				return h('puzzle-view', { class: 'auto' }, [h('input', { class: 'q', autofocus: true })]);
+			}
+		}
+		const { router, el } = await boot([
+			...ROUTES,
+			{ path: '/auto', name: 'auto', view: AutoView, meta: { title: 'Auto' } },
+		]);
+		await router.push('/auto');
+
+		const input = el.querySelector('.q');
+		expect(document.activeElement).toBe(input);
+		// Natively focusable: keeps its own tab stop and focus ring (no D139 stamp).
+		expect(input.hasAttribute('tabindex')).toBe(false);
+		expect(input.style.getPropertyValue('outline')).toBe('');
+		expect(el.querySelector('puzzle-view.auto').hasAttribute('tabindex')).toBe(false);
+		expect(liveRegion().textContent).toBe('Auto');
+	});
+
+	it('leaves focus a mounted() hook already placed inside the leaf', async () => {
+		class MountFocusView extends PuzzleView {
+			mounted() {
+				this.element.querySelector('.r').focus();
+			}
+			render() {
+				return h('puzzle-view', { class: 'mf' }, [
+					h('input', { class: 'q', autofocus: true }),
+					h('input', { class: 'r' }),
+				]);
+			}
+		}
+		const { router, el } = await boot([
+			...ROUTES,
+			{ path: '/mf', name: 'mf', view: MountFocusView, meta: { title: 'MF' } },
+		]);
+		const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus');
+		await router.push('/mf');
+
+		// Wins over [autofocus] too: the view's own call is the latest word.
+		expect(document.activeElement).toBe(el.querySelector('.r'));
+		expect(focusSpy).toHaveBeenCalledTimes(1); // mounted()'s call only
+		expect(el.querySelector('puzzle-view.mf').hasAttribute('tabindex')).toBe(false);
+		expect(liveRegion().textContent).toBe('MF'); // still announces
+	});
+
+	it('params-only push leaves focus on a control inside the reused leaf', async () => {
+		class PageView extends PuzzleView {
+			render() {
+				return h('puzzle-view', { class: 'page' }, [h('button', { class: 'next' }, [text('>')])]);
+			}
+		}
+		const { router, el } = await boot([
+			...ROUTES,
+			{ path: '/page/:n', name: 'page', view: PageView, meta: { title: 'Page' } },
+		]);
+		await router.push('/page/1');
+		const next = el.querySelector('.next');
+		next.focus();
+
+		await router.push('/page/2');
+		// The control survived the patch, so the keyboard position is not stranded.
+		expect(document.activeElement).toBe(next);
+	});
+});
+
 describe('Router focus — tabindex hygiene (D93)', () => {
 	it('stamps tabindex="-1" before focusing', async () => {
 		const { router, el } = await boot();
