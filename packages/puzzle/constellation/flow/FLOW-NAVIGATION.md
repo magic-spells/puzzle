@@ -31,6 +31,16 @@ connections:
   - DECISION-D140-TAKEOVER-MOUNT-RESTORATION
 verified_at: '2026-11-01T19:25:13.521Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      History/scroll while a pop is still loading: the browser has already moved to the popped entry
+      and #scrollKey names it, but the window still shows the committed page. So (a) a popstate back
+      onto the committed entry (Back then Forward during a slow load) supersedes the pending pop and
+      settles as a D41 fragment pop, which restores the committed entry's saved position, and the
+      URL, tree and snapshot stay on the committed route; (b) step 3's departure capture is skipped
+      (null) and a second popstate saves nothing, so no entry is given a position from a page it
+      never showed. The committed page's position was saved when the first pop left it.
 ---
 
 # Navigation pipeline
