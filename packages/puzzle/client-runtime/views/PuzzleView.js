@@ -562,16 +562,17 @@ export class PuzzleView {
 	}
 
 	/**
-	 * Snapshot the render revisions of the record props just applied
+	 * Snapshot the render revisions of the record props a data() run is about to read
 	 * (D170, record render revision).
 	 *
 	 * `propsEqual` compares a record prop against THIS snapshot rather than
 	 * against the old prop object, because a record mutates in place: after an
 	 * update both sides hold the same object with the same (already advanced)
 	 * revision, and only a value stored at the time props were last applied can
-	 * say whether this view has seen it. Written at mount and at every
-	 * applyParentUpdate that carries props — the two moments a view's props become
-	 * current — and replaced wholesale, never merged.
+	 * say whether this view has seen it. Written as every refresh begins, before
+	 * data() runs (#refreshInner) — whichever wake-up came first, a parent's push
+	 * or the view's own notification — so it holds what the next committed
+	 * data() sees, never more; replaced wholesale, never merged.
 	 *
 	 * Null when no prop carries a revision, which is the overwhelmingly common
 	 * case and allocates nothing; `propsEqual` reads it with `?.`.
@@ -1120,12 +1121,6 @@ export class PuzzleView {
 			this.#params = params;
 			this.#props = props;
 		}
-		// Record-prop revisions as of this mount (D170, record render revision).
-		// Read from the COMMITTED props rather than the argument so a preloaded
-		// view — whose props were set in preload(), not here — is snapshotted too;
-		// without an entry a record prop would compare unequal on every later
-		// patch and re-run the child's data() for nothing.
-		this.#snapshotPropRevs(this.#props);
 		this.#children = children;
 		this.#vm.anchorAt(ref);
 
@@ -1260,13 +1255,6 @@ export class PuzzleView {
 			if (this.#vm) this.#vm.slotChildren = children;
 		}
 		if (props !== undefined) {
-			// The props the patcher just handed down are now this view's current
-			// props, so re-stamp their record revisions (D170, record render
-			// revision) BEFORE the refresh that will render them. Doing it here
-			// rather than inside #refreshInner keeps it to the one path where props
-			// are APPLIED — a router refresh carrying params only must not rewrite
-			// a snapshot it knows nothing about.
-			this.#snapshotPropRevs(props);
 			// Fire-and-forget: a data() failure is logged rather than escaping into
 			// the parent's patch path (mount's skeleton-path style). #refreshContained
 			// takes both arms — a rejecting async data() and a sync throw.
@@ -1359,6 +1347,7 @@ export class PuzzleView {
 		// return. Read before data() runs, so it can only under-stamp: a change
 		// queued later is delivered, never dropped.
 		const mark = this.ctx.store?._notifySeq || 0;
+		this.#snapshotPropRevs(this.#props);
 		const run = () => {
 			const out =
 				typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__

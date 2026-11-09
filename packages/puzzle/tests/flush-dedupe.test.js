@@ -21,6 +21,13 @@ import { ViewNode } from '../client-runtime/views/ViewNode.js';
 import { listRows } from '../client-runtime/views/listBlock.js';
 import { mountView, settled } from '../client-runtime/testing/index.js';
 
+class User extends PuzzleModel {
+	static schema = {
+		id: Puzzle.string().primary(),
+		name: Puzzle.string(),
+	};
+}
+
 class Todo extends PuzzleModel {
 	static schema = {
 		id: Puzzle.string().primary(),
@@ -54,7 +61,17 @@ class Row extends PuzzleView {
 	}
 }
 
+/** A row that takes the todo as a prop and queries a RELATED record. */
+class OwnerRow extends Row {
+	data() {
+		dataRuns.owner = (dataRuns.owner ?? 0) + 1;
+		return { text: this.ctx.store.findOne('user', 'u').name };
+	}
+}
+
 class List extends PuzzleView {
+	static Row = Row;
+
 	data() {
 		return { todos: this.ctx.store.findMany('todo') };
 	}
@@ -68,7 +85,7 @@ class List extends PuzzleView {
 				this,
 				0,
 				this.getData().todos,
-				(s) => new ViewNode(Row, { key: s.k, todo: s.item }, []),
+				(s) => new ViewNode(this.constructor.Row, { key: s.k, todo: s.item }, []),
 				KEY
 			)
 		);
@@ -140,5 +157,23 @@ describe('notification dedupe', () => {
 		expect(dataRuns).toEqual({ a: 1, b: 1 });
 		expect(view.find('[data-id="a"]').textContent).toBe('A!');
 		expect(view.find('[data-id="b"]').textContent).toBe('B!');
+	});
+
+	it('runs a related-record row once when its own notification is delivered first', async () => {
+		const store = new Store({ user: User, todo: Todo });
+		const user = store.createRecord('user', { id: 'u', name: 'Ann' });
+		const todo = store.createRecord('todo', { id: 'a', text: 'a' });
+		const view = await mountView(class extends List { static Row = OwnerRow; }, { store });
+		handles.push(view);
+		dataRuns = {};
+
+		// The user key is gathered before the list's todo key, so the row refreshes
+		// itself first; the list's re-render must not push the todo prop again.
+		user.update({ name: 'Bob' });
+		todo.update({ text: 'changed' });
+		await settled();
+
+		expect(dataRuns).toEqual({ owner: 1 });
+		expect(view.find('[data-id="a"]').textContent).toBe('Bob');
 	});
 });
