@@ -210,6 +210,11 @@ one is *not* a compile error; it silently builds a different product.
   `allowSyntheticDefaultImports`) and the version-gated lib references are
   gone. `build` and `dev` are unaffected: they never type-check. Apps scaffolded
   with `--typescript` since 0.8.0 already install `^7`.
+- **Removed types: `StoreOptions` and `PuzzleValue`.** Neither was used by any
+  other declaration; inline the shape or use `any` if you imported them.
+  `Store` and `Router` also lose their `[key: string]: any` index signature,
+  so a misspelt member such as `router.pushh()` is now a type error in
+  `lang="ts"` views and `puzzle check`.
 
 ### Changed
 

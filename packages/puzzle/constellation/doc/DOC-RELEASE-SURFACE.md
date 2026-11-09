@@ -27,6 +27,12 @@ connections:
   - DECISION-D184-STORE-OBSERVE
 verified_at: '2026-11-01T19:28:56.040Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      0.10.0 (feat/0.10-types-devtools): root type exports `StoreOptions` and `PuzzleValue` are
+      removed (published in 0.9.0, unreferenced anywhere in the repo family); `Store`/`Router` no
+      longer carry `[key: string]: any`. Recorded in CHANGELOG 0.10.0 Breaking.
 ---
 
 # Puzzle release surface
