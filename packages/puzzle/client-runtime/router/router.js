@@ -1815,8 +1815,10 @@ export class Router {
 			// and registerView in mount() — so they are dropped, not destroy()ed:
 			// destroy() would fire destroyed() for a view that never ran created().
 			this.#recoverFailedNavigation(token);
-			// Pop-only URL repair, same as the lazy rejection above — token-guarded for
-			// the same reason (a newer pop mid-load shares `cur`).
+			// Pop-only URL repair, same as the lazy rejection above. No await sits
+			// between the token check after the lazy load and here, so only a
+			// navigation a constructor fired synchronously before throwing can own the
+			// token now — that one owns the URL and the outcome.
 			if (pop && cur && token === this.#token && this.#state === cur)
 				this.#restoreCommittedUrl(cur.path);
 			if (retryView && token === this.#token) {
