@@ -262,6 +262,22 @@ one is *not* a compile error; it silently builds a different product.
   no longer needs a wrapping `<span title>`. Every hover is written
   `not-disabled:hover:…`, so a disabled button stays flat; it still fires no
   click.
+- **`calendar` drops `@monthChange` and gains an optional `month` prop
+  (puzzle-pieces).** `@monthChange` missed same-month year jumps and nothing
+  called it, so it is gone. `month` (an ISO date) picks the shown month without
+  painting a selection disc; without it `value` anchors the grid as before.
+- **`date-range-picker` two-month view and phone layout fixes
+  (puzzle-pieces).** With `months={ 2 }` the grids show the start month and the
+  month after it, instead of the same month twice or a jump back to today when
+  a new range starts. The shown months stay put while the panel is open, so
+  picking a day in the right grid no longer moves both grids or drops focus;
+  each open lands on the start month. Under `sm` the presets rail stacks above
+  the grids, so the panel fits a 375px screen.
+- **`image-zoom` `@change(scale)` takes one argument (puzzle-pieces).** The
+  documented second argument never arrived.
+- **`sheet` and `bottom-sheet` overlays use `--color-scrim`
+  (puzzle-pieces).** In light mode the scrim is the palette's slate at 0.4
+  instead of black at 0.5, so it reads lighter and tinted.
 
 Re-add a piece with `puzzle add piece <name> --force` to pick up these
 changes.

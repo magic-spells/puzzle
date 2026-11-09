@@ -100,7 +100,7 @@ test('no template binds an attribute the component reflects', async () => {
 
 test('the callbacks are value-first and there is no controlled scale prop', async () => {
 	const source = await readText(FILE);
-	assert.match(source, /this\.props\.change\?\.\(value, \{ translateX, translateY \}\)/);
+	assert.match(source, /this\.props\.change\?\.\(event\.detail\?\.scale\)/);
 	assert.match(source, /this\.props\.zoomStart\?\.\(event\.detail\?\.scale\)/);
 	assert.match(source, /this\.props\.zoomEnd\?\.\(event\.detail\?\.scale\)/);
 	assert.match(source, /this\.props\.ready\?\.\(this\.#host\)/);

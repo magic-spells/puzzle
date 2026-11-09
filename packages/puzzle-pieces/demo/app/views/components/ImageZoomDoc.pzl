@@ -410,7 +410,7 @@ const propRows = [
 ];
 
 const eventRows = [
-  { name: '@change', desc: '(scale, { translateX, translateY }) — any transform update. Fires per frame during a gesture; debounce anything expensive.' },
+  { name: '@change', desc: '(scale) — any transform update. Fires per frame during a gesture; debounce anything expensive. Read the pan from the element.translateX / translateY getters.' },
   { name: '@zoomStart', desc: '(scale) — a pinch began, or a double-tap / reset() / zoomTo() is about to commit. The scale is the one being left.' },
   { name: '@zoomEnd', desc: '(scale) — a gesture settled, or a programmatic change committed. Fires at commit time, not when the CSS transition ends.' },
   { name: '@ready', desc: "(element) — the upgraded element, once its module has landed. The imperative escape hatch." },

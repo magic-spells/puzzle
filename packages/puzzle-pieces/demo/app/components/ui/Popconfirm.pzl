@@ -117,7 +117,7 @@ const BTN_OUTLINE =
 
 // The base Panel carries the card chrome; a confirmation wants a fixed, readable
 // column rather than the menu's min-width.
-const PANEL = 'w-64 max-w-xs p-4';
+const PANEL = 'w-64 p-4';
 
 export default class Popconfirm extends PuzzleView {
   // The bubble does not close itself on a press inside the panel, so a button

@@ -76,6 +76,15 @@ notes:
       when 2.1.0 publishes. Piece headers and docs already tell consumers to install ^2.1.0.
   - kind: state
     text: >-
+      2026-11-08 (0.10.0 review, feat/0.10-pieces-date-range), consumers of this base: (1)
+      NavigationMenu — a nested-submenu Item renders an `<li>`, so the documented nested shape
+      (Item.pzl header, NavigationMenuDoc examples + code samples) now wraps just the nested Item in
+      a `<ul>` inside the Content; Links stay outside it. Doc-only, no code change. Upstream
+      #focusableItems queries the panel deeply, so arrow keys still reach the nested trigger
+      (checked in Chromium). (2) Popconfirm — dropped the dead `max-w-xs` from PANEL (`w-64` = 16rem
+      never hits a 20rem max).
+  - kind: state
+    text: >-
       2026-11-08 (0.10.0, feat/0.10-pieces-overlays, review V-pieces-12 B3): the DropdownPanel ROOT
       takes no `effect` — only DropdownPanel.Panel renders the attribute. Popover, DropdownMenu and
       DropdownMenu.Sub used to pass a root `effect` that did nothing; all three pass-throughs and
