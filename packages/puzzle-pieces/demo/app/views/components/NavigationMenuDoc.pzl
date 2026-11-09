@@ -76,14 +76,16 @@
                   <NavigationMenu.Link key={ row.href } href={ row.href } label={ row.label }/>
                 {/for}
 
-                <NavigationMenu.Item>
-                  <NavigationMenu.Trigger variant="card">By industry</NavigationMenu.Trigger>
-                  <NavigationMenu.Content opens="right" class="w-52">
-                    {#for row in industries}
-                      <NavigationMenu.Link key={ row.href } href={ row.href } label={ row.label }/>
-                    {/for}
-                  </NavigationMenu.Content>
-                </NavigationMenu.Item>
+                <ul>
+                  <NavigationMenu.Item>
+                    <NavigationMenu.Trigger variant="card">By industry</NavigationMenu.Trigger>
+                    <NavigationMenu.Content opens="right" class="w-52">
+                      {#for row in industries}
+                        <NavigationMenu.Link key={ row.href } href={ row.href } label={ row.label }/>
+                      {/for}
+                    </NavigationMenu.Content>
+                  </NavigationMenu.Item>
+                </ul>
               </NavigationMenu.Content>
             </NavigationMenu.Item>
 
@@ -202,13 +204,15 @@
                     <NavigationMenu.Link href="#about" label="About"/>
                     <NavigationMenu.Link href="#careers" label="Careers"/>
 
-                    <NavigationMenu.Item>
-                      <NavigationMenu.Trigger variant="card">Support</NavigationMenu.Trigger>
-                      <NavigationMenu.Content opens="right" class="w-48">
-                        <NavigationMenu.Link href="#contact" label="Contact us"/>
-                        <NavigationMenu.Link href="#help" label="Help center"/>
-                      </NavigationMenu.Content>
-                    </NavigationMenu.Item>
+                    <ul>
+                      <NavigationMenu.Item>
+                        <NavigationMenu.Trigger variant="card">Support</NavigationMenu.Trigger>
+                        <NavigationMenu.Content opens="right" class="w-48">
+                          <NavigationMenu.Link href="#contact" label="Contact us"/>
+                          <NavigationMenu.Link href="#help" label="Help center"/>
+                        </NavigationMenu.Content>
+                      </NavigationMenu.Item>
+                    </ul>
                   </NavigationMenu.Content>
                 </NavigationMenu.Item>
               </NavigationMenu>
@@ -391,13 +395,15 @@ const codeHero = `// A whole site header. The logo and the sign-in button are ba
     <NavigationMenu.Content class="w-60">
       <NavigationMenu.Link href="/startups" label="For startups" />
       …
-      <NavigationMenu.Item>
-        <NavigationMenu.Trigger variant="card">By industry</NavigationMenu.Trigger>
-        <NavigationMenu.Content opens="right" class="w-52">
-          <NavigationMenu.Link href="/retail" label="Retail" />
-          …
-        </NavigationMenu.Content>
-      </NavigationMenu.Item>
+      <ul>
+        <NavigationMenu.Item>
+          <NavigationMenu.Trigger variant="card">By industry</NavigationMenu.Trigger>
+          <NavigationMenu.Content opens="right" class="w-52">
+            <NavigationMenu.Link href="/retail" label="Retail" />
+            …
+          </NavigationMenu.Content>
+        </NavigationMenu.Item>
+      </ul>
     </NavigationMenu.Content>
   </NavigationMenu.Item>
 
@@ -428,16 +434,18 @@ const codeColumns = `// A flat run of links in a wide panel takes an explicit co
 
 const codeSubmenu = `// A submenu is just an Item nested in a Content with opens="right",
 // which moves the panel beside its trigger and rotates the hover
-// bridge onto the horizontal axis.
+// bridge onto the horizontal axis. An Item renders an <li>, so wrap it in a <ul>.
 <NavigationMenu.Content align="end" class="w-56">
   <NavigationMenu.Link href="/about" label="About" />
 
-  <NavigationMenu.Item>
-    <NavigationMenu.Trigger variant="card">Support</NavigationMenu.Trigger>
-    <NavigationMenu.Content opens="right" class="w-48">
-      <NavigationMenu.Link href="/contact" label="Contact us" />
-    </NavigationMenu.Content>
-  </NavigationMenu.Item>
+  <ul>
+    <NavigationMenu.Item>
+      <NavigationMenu.Trigger variant="card">Support</NavigationMenu.Trigger>
+      <NavigationMenu.Content opens="right" class="w-48">
+        <NavigationMenu.Link href="/contact" label="Contact us" />
+      </NavigationMenu.Content>
+    </NavigationMenu.Item>
+  </ul>
 </NavigationMenu.Content>`;
 
 const keyRows = [

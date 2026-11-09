@@ -76,8 +76,9 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   style    merged after the piece's own custom-property declarations.
 //
 // Callbacks (value-first, per the registry convention)
-//   @change(scale, { translateX, translateY })   any transform update. FIRES
-//            PER FRAME during a gesture — debounce anything expensive.
+//   @change(scale)     any transform update. FIRES PER FRAME during a gesture —
+//            debounce anything expensive. Read the pan from the @ready element's
+//            `translateX` / `translateY` getters.
 //   @zoomStart(scale)  a pinch began, or a double-tap / reset() / zoomTo() is
 //            about to commit. The scale is the one it is leaving.
 //   @zoomEnd(scale)    a gesture settled, or a programmatic change committed.
@@ -140,8 +141,7 @@ export default class ImageZoom extends PuzzleView {
   #live = false;
 
   #onChange = (event) => {
-    const { scale: value, translateX, translateY } = event.detail || {};
-    this.props.change?.(value, { translateX, translateY });
+    this.props.change?.(event.detail?.scale);
   };
 
   #onZoomStart = (event) => {

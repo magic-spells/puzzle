@@ -164,11 +164,11 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // KNOWN GAPS, all upstream:
 //   * TWO overlays paint at once on the published pair (bottom-sheet 2.0.2 +
-//     dialog-panel 2.0.1), verified in the browser. 2.0.2 still paints the
+//     dialog-panel 2.0.3), verified in the browser. 2.0.2 still paints the
 //     scrim on the dialog's native ::backdrop and tries to hide
 //     <dialog-backdrop> with a selector that dialog-panel's own
 //     [state='shown'] rule outranks on specificity — so dialog-panel's 30%
-//     backdrop paints beneath this piece's 50% one and the overlay reads
+//     backdrop paints beneath this piece's scrim and the overlay reads
 //     darker than the token says, while backdropClass has nothing visible to
 //     style. Cosmetic, and already fixed on the component's main branch, which
 //     moves the scrim onto <dialog-backdrop> the way sheet.css does.
@@ -193,14 +193,13 @@ function attr(value) {
 }
 
 // The whole design-token bridge. Panel and handle map onto pieces.css tokens so
-// the sheet follows the app's theme in light and dark; the overlay reproduces
-// the look the ported piece had (black at 50%, blurred) rather than the
-// component's slightly lighter default.
+// the sheet follows the app's theme in light and dark; the overlay takes the
+// --color-scrim token, blurred, rather than the component's lighter default.
 const THEME =
   '[--bs-panel-background:var(--color-surface)] ' +
   '[--bs-handle-color:var(--color-faint)] ' +
-  '[--bs-overlay-background:rgb(0_0_0_/_0.5)] ' +
-  '[--bs-overlay-blur:8px]';
+  '[--bs-overlay-background:var(--color-scrim)] ' +
+  '[--bs-overlay-blur:var(--blur-sm)]';
 
 // showGrabber={false}, expressed entirely in CSS. The pill is a pseudo-element
 // sized by these two properties alone, so zeroing them paints nothing; it is

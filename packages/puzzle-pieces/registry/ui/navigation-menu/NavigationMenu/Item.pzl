@@ -40,12 +40,14 @@ import DropdownPanel from '../DropdownPanel/index.js';
 // member that exists to render nothing.)
 //
 // NESTED SUBMENUS. An Item inside a Content is just another dropdown — give its
-// Content opens="right" and you are done:
+// Content opens="right" and wrap it in a <ul>, since an Item renders an <li>:
 //
-//   <NavigationMenu.Item>
-//     <NavigationMenu.Trigger variant="card">Support</NavigationMenu.Trigger>
-//     <NavigationMenu.Content opens="right">…</NavigationMenu.Content>
-//   </NavigationMenu.Item>
+//   <ul>
+//     <NavigationMenu.Item>
+//       <NavigationMenu.Trigger variant="card">Support</NavigationMenu.Trigger>
+//       <NavigationMenu.Content opens="right">…</NavigationMenu.Content>
+//     </NavigationMenu.Item>
+//   </ul>
 //
 // The `block` on the DropdownPanel below is why that works and is NOT cosmetic.
 // <dropdown-component> ships display: inline-block, so a nested one shrink-wraps

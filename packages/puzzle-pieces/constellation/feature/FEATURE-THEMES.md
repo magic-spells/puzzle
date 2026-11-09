@@ -32,6 +32,18 @@ notes:
       such runs on one line. Also: getComputedStyle().getPropertyValue('--color-x') returns the
       UNRESOLVED light-dark() text; the demo resolves colours by applying the var to a probe
       element's background-color and reading that.
+  - kind: state
+    text: >-
+      2026-11-08 (0.10.0 review Q5, feat/0.10-pieces-date-range): BottomSheet and Sheet now feed
+      their overlay from tokens: `[--bs-overlay-background:var(--color-scrim)]` /
+      `[--sheet-overlay-background:var(--color-scrim)]` and `[--*-overlay-blur:var(--blur-sm)]`
+      (8px). This replaces raw `rgb(0_0_0_/_0.5)` + `8px`, so the light scrim (slate/0.4) and the
+      palettes now apply. No new blur token was needed: Tailwind v4 keeps a default-theme var when
+      any generated utility (including an arbitrary property) references it via var(). Checked with
+      the demo's tailwindcss 4 CLI and in Chromium (`--blur-sm: 8px` emitted on :root). Still on
+      `bg-black/50` for a follow-up: Dialog.pzl:205, AlertDialog.pzl:157, Command.pzl:179 (their own
+      PRs) → `bg-scrim`. The `[--bs-handle-*:0px]` / `[--sheet-handle-*:0px]` zeros stay: zero is
+      not a design value, so a token for it would be noise.
 ---
 
 # Puzzle themes — four palettes × three modes, appearance runtime, design-system demo

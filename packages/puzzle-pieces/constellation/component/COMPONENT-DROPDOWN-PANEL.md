@@ -74,6 +74,15 @@ notes:
       @magic-spells/dropdown-panel at `file:../../../../../open-sourcery/dropdown-panel` (the 2.1.0
       working tree, branch feat/menu-mode) because ^2.0.0 has no menu mode — return it to `^2.1.0`
       when 2.1.0 publishes. Piece headers and docs already tell consumers to install ^2.1.0.
+  - kind: state
+    text: >-
+      2026-11-08 (0.10.0 review, feat/0.10-pieces-date-range), consumers of this base: (1)
+      NavigationMenu — a nested-submenu Item renders an `<li>`, so the documented nested shape
+      (Item.pzl header, NavigationMenuDoc examples + code samples) now wraps just the nested Item in
+      a `<ul>` inside the Content; Links stay outside it. Doc-only, no code change. Upstream
+      #focusableItems queries the panel deeply, so arrow keys still reach the nested trigger
+      (checked in Chromium). (2) Popconfirm — dropped the dead `max-w-xs` from PANEL (`w-64` = 16rem
+      never hits a 20rem max).
 ---
 
 The registry's shared base for every trigger-and-panel overlay. A D167 family —
