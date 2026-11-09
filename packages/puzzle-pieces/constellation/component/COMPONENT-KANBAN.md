@@ -34,6 +34,16 @@ notes:
       (Astra review F6) by moving the assignment to just before `_emitMove()`.
   - kind: state
     text: >-
+      2026-11-08 (review P03-B1, P03-Q1). Keyboard Escape on a held card now DROPS it where it is,
+      the same as Space/Enter, and announces "Dropped …". Each arrow press already emitted a
+      committed @move, so the old "Move cancelled." claimed a revert that never happened. Restoring
+      the origin (+4 lines) was rejected for the zero-code option. A pointer drag still cancels on
+      Escape, with no @move. KanbanCard is now content-only: no `card`/`ghost` variants, no
+      `variant`/`grabbed`/`disabled`/`class` props, no forwarded events, and a `contents` root.
+      Kanban mounts it bare. The card surface, ghost chrome and the touch-pinch-zoom rationale live
+      only in Kanban.pzl. KanbanCard is −82 lines, 1318 → 901 B min+gz.
+  - kind: state
+    text: >-
       2026-11-08 (feat/0.10-pieces-select-toast, review P08-B12): KanbanCard's assignee initials
       disc is hsl(hue 45% 32%), down from 45%, matching Avatar and ChatMessage. White initials at
       L45 failed WCAG AA on 181/360 hues (worst 2.57:1); L32 is the highest lightness at S45 where

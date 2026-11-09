@@ -32,6 +32,14 @@ notes:
       DOM-driven ancestor fallback (current panel removed) now reports too. Guarded by
       `test/layout-wrapper.test.js` ("PanelStack reports @change from the post-mutation
       panel-stack:change").
+  - kind: state
+    text: >-
+      2026-11-08 (review P03-B2). `@push`, `@pop` and `@reset` now receive the raw CustomEvent, not
+      `event.detail`. Upstream's detail is a plain `{ fromHandle, toHandle }` object, so the
+      documented `d.preventDefault()` threw inside dispatch and the push went ahead. Callers now
+      cancel with `event.preventDefault()` and read `event.detail.toHandle`. The header and the
+      PanelStackDoc API table were updated, and the stale "TODO switch to ^0.2.0" header lines were
+      deleted. `@change(handle)` is unchanged.
 ---
 
 `PanelStack` · `PanelStack.Panel`, a D167 family over

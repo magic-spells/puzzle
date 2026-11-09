@@ -116,7 +116,7 @@
             <li><span class="font-medium text-ink">Enter</span> — add the active option (query clears, popup stays open)</li>
             <li><span class="font-medium text-ink">Backspace</span> — on an empty input, remove the last chip</li>
             <li><span class="font-medium text-ink">Escape</span> — close the list</li>
-            <li><span class="font-medium text-ink">Tab</span> — close and move focus on naturally</li>
+            <li><span class="font-medium text-ink">Tab</span> — close and move focus on naturally; Shift+Tab reaches each chip's remove button</li>
           </ul>
           <ExampleBox code={ codeKeyboard }>
             <div class="w-72">

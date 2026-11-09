@@ -110,7 +110,7 @@
           </li>
           <li>
             <kbd class="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-xs text-ink">Esc</kbd>
-            cancels a pickup (pointer drags cancel on Escape too, with no move emitted).
+            drops a held card where it is, like Space (pointer drags cancel on Escape, with no move emitted).
           </li>
         </ul>
       </section>

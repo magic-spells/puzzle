@@ -71,18 +71,16 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // The stack fills its parent, so give it (or a wrapper) an explicit size.
 //
-// TODO: switch to ^0.2.0 once published — this repo's demo pins the package by
-// file: path while 0.2.0 is unreleased. Consumers install ^0.2.0.
-//
 // Props
 //   current         controlled: the handle of the panel that should be showing
 //   defaultCurrent  uncontrolled seed, frozen into the attribute once
 //   effect          'slide' (default) | 'stack'
 //   class           merged onto <panel-stack>
 //   @change(handle) value-first, once per settled transition (panel-stack:change)
-//   @push(detail)   raw { fromHandle, toHandle }; preventDefault() cancels
-//   @pop(detail)    raw { fromHandle, toHandle }
-//   @reset(detail)  raw { rootHandle }
+//   @push(event)    the raw event, detail { fromHandle, toHandle };
+//                   event.preventDefault() cancels
+//   @pop(event)     the raw event, detail { fromHandle, toHandle }
+//   @reset(event)   the raw event, detail { rootHandle }
 
 const ROOT = 'block';
 
@@ -122,15 +120,16 @@ export default class PanelStack extends PuzzleView {
     }
   }
 
-  // The raw push / pop / reset callbacks, reported synchronously — a
-  // preventDefault() on @push has to be able to cancel the navigation.
+  // The raw push / pop / reset events, reported synchronously and whole — a
+  // preventDefault() on @push has to be able to cancel the navigation, and only
+  // the event (not its plain-object detail) carries it.
   // #syncing first, then the target check: every panel-stack event bubbles and
   // is composed, so a nested stack's events pass straight through this element
   // on their way up.
   #report = (name) => (event) => {
     if (this.#syncing) return;
     if (event.target !== this.element) return;
-    this.props[name]?.(event.detail);
+    this.props[name]?.(event);
   };
 
   #onPush = this.#report('push');
