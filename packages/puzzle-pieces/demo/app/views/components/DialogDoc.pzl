@@ -257,25 +257,8 @@
           <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Known gaps</h3>
           <div class="space-y-3 text-sm text-body">
             <p>
-              A <strong class="font-medium text-ink">keyboard</strong> activation of a
-              data-action-hide-dialog button closes the dialog but reports result: null. A
-              pointerless click carries coordinates of 0,0, which dialog-panel reads as a click
-              outside the panel before the delegated handler runs. A mouse click reports the
-              data-result correctly. Fix pending upstream in dialog-panel; the piece already
-              watches for that click so a non-dismissible dialog still lets the button through.
-            </p>
-            <p>
               The hidden detail carries no reason, so @hide cannot tell Escape from a backdrop
               click. Only a data-action-hide-dialog close is distinguishable, through result.
-            </p>
-            <p>
-              <strong class="font-medium text-ink">title and description have to be stable.</strong>
-              They render in the header slot's fallback body, which the compiler paints once and
-              never patches — so a heading bound to state keeps whatever text it had when the view
-              mounted. Everything outside the slot (the size cap, class, aria-labelledby) updates
-              normally. A heading that has to change belongs in a filled header slot, where
-              ordinary call-site content patches as usual. Sheet and Bottom Sheet share the shape
-              and the gap.
             </p>
             <p>
               dialog-panel's drawer position attribute is deliberately not exposed. Its rules
@@ -403,10 +386,7 @@ const codeSizes = `<Button variant="outline" @press={ openSize('sm') }>Small</Bu
 
 // size is a max-width and nothing else: sm 24rem, md 32rem (default),
 // lg 42rem. Below the cap the panel is 90vw. Height is not a prop — the
-// panel caps at 85vh and scrolls inside its own rounded corners.
-// The title is a constant here on purpose: it renders in the header slot's
-// FALLBACK body, which the compiler paints once and never patches. A
-// heading that has to change belongs in a filled header slot.`;
+// panel caps at 85vh and scrolls inside its own rounded corners.`;
 
 const codeClose = `<Dialog
   open={ scrollOpen }

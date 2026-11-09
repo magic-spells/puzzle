@@ -166,16 +166,6 @@
           <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Known gaps</h3>
           <div class="space-y-3 text-sm text-body">
             <p>
-              A <strong class="font-medium text-ink">keyboard</strong> activation of either button
-              closes the prompt but reports result: null, so a confirm answered with Tab and Enter
-              is indistinguishable from Escape. A pointerless click carries coordinates of 0,0,
-              which dialog-panel reads as a click outside the panel before the delegated handler
-              runs. The piece already watches for that click so the button still closes against the
-              inert backdrop; recovering the result is pending upstream. Until it lands, write the
-              handler so a null result is treated as a cancel — which is what the examples on this
-              page do.
-            </p>
-            <p>
               role="alertdialog" requires an accessible name, so always pass title (or wire
               labelledby yourself). There is no runtime warning if you forget.
             </p>
