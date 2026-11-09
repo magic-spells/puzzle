@@ -44,7 +44,7 @@
                 <Menubar.Item value="open" @press={ run }>Open…<Menubar.Shortcut>⌘O</Menubar.Shortcut></Menubar.Item>
                 <Menubar.Separator/>
                 <Menubar.Menu>
-                  <Menubar.Trigger variant="item" label="Export as"/>
+                  <Menubar.Trigger variant="item">Export as</Menubar.Trigger>
                   <Menubar.Content opens="right">
                     <Menubar.Item value="export-pdf" @press={ run }>PDF</Menubar.Item>
                     <Menubar.Item value="export-html" @press={ run }>HTML</Menubar.Item>
@@ -193,7 +193,7 @@ const usageMarkup = `<Menubar label="Editor menu">
       <Menubar.Separator />
 
       <Menubar.Menu>
-        <Menubar.Trigger variant="item" label="Export as"/>
+        <Menubar.Trigger variant="item">Export as</Menubar.Trigger>
         <Menubar.Content opens="right">
           <Menubar.Item value="export-pdf" @press={ run }>PDF</Menubar.Item>
         </Menubar.Content>
@@ -211,7 +211,7 @@ const codeHero = `// One bar, three menus, one nested submenu. Hover switches be
       <Menubar.Item value="new" @press={ run }>New file<Menubar.Shortcut>⌘N</Menubar.Shortcut></Menubar.Item>
       <Menubar.Separator />
       <Menubar.Menu>
-        <Menubar.Trigger variant="item" label="Export as"/>
+        <Menubar.Trigger variant="item">Export as</Menubar.Trigger>
         <Menubar.Content opens="right">…</Menubar.Content>
       </Menubar.Menu>
       <Menubar.Item value="close" variant="danger" @press={ run }>Close project</Menubar.Item>
@@ -260,7 +260,6 @@ const reference = [
     summary: 'A top label, or the row that opens a submenu. Keep its content non-interactive — it is the control.',
     rows: [
       { name: 'variant', desc: "'bar' (default) for a top label, 'item' for an in-panel submenu row with a chevron." },
-      { name: 'label', desc: 'The fallback text. Filling the trigger replaces it and the chevron, so a submenu row takes its text as label.' },
       { name: 'class', desc: 'Merged onto the trigger, after the variant chrome.' },
     ],
   },

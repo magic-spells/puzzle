@@ -102,6 +102,18 @@ notes:
       chevron that flips on open, and bar labels still carry no glyph. Submenu examples use
       `<Menubar.Trigger variant="item" label="Export as"/>`, because a filled body replaces the
       hook. Verified in Chromium and WebKit on the MenubarDoc page.
+  - kind: state
+    text: >-
+      2026-11-08 (feat/0.10-pieces-dialog-chat, PR #249 review). This supersedes the previous note's
+      Trigger shape. Menubar.Trigger uses NavigationMenu's template: `<Children/>` followed by `{#if
+      arrow}<span data-dropdown-arrow aria-hidden="true"></span>{/if}`, where `arrow` is `variant
+      === 'item'`. It does NOT use a D141 fallback body, so it has no `label` prop. That means the
+      natural children form `<Menubar.Trigger variant="item">Export as</Menubar.Trigger>` keeps its
+      chevron: ITEM's justify-between lays out the bare text node and the span with no wrapper. A
+      fallback body would have dropped the hook as soon as the trigger was filled. Menubar.Menu
+      still leaves `arrow` unset (upstream default flip), so bar labels have no hook. Trigger is 575
+      B gzip (518 before). Verified in Chromium on MenubarDoc: "Export as" points right (-90deg) and
+      flips open (-40deg); File, Edit and Help have no hook.
 ---
 
 The registry's shared base for every trigger-and-panel overlay. A D167 family —

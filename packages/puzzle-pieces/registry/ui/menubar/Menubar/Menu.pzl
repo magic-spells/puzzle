@@ -28,7 +28,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //   <Menubar.Content>
 //     <Menubar.Item value="save" @press={ run }>Save</Menubar.Item>
 //     <Menubar.Menu>
-//       <Menubar.Trigger variant="item" label="Export as"/>
+//       <Menubar.Trigger variant="item">Export as</Menubar.Trigger>
 //       <Menubar.Content opens="right">…</Menubar.Content>
 //     </Menubar.Menu>
 //   </Menubar.Content>
