@@ -2775,18 +2775,13 @@ export class Router {
 	 * viewport, so no injected wrapper or positioned ancestor is needed (the app
 	 * must keep the container chain transform/filter/contain-free — the §26
 	 * containing-block constraint). Measured BEFORE the incoming mount reflows the
-	 * container. A missing element / getBoundingClientRect degrades to a no-op.
+	 * container. A missing element or a comment placeholder is a no-op.
 	 *
 	 * @param {Partial<HTMLElement> | null} el the leaver's root (a comment placeholder is skipped)
 	 */
 	#pinLeaver(el) {
-		if (!el || el.nodeType !== 1 /* ELEMENT_NODE */ || !el.style) return;
-		let rect;
-		try {
-			rect = el.getBoundingClientRect();
-		} catch {
-			return;
-		}
+		if (!el || el.nodeType !== 1 /* ELEMENT_NODE */) return;
+		const rect = el.getBoundingClientRect();
 		const s = el.style;
 		s.position = 'fixed';
 		s.top = rect.top + 'px';
@@ -2910,7 +2905,7 @@ export class Router {
 		} catch {
 			el = null; // malformed percent-encoding → fall back to top
 		}
-		if (!el || typeof el.getBoundingClientRect !== 'function') return { x: 0, y: 0 };
+		if (!el) return { x: 0, y: 0 };
 		const rect = el.getBoundingClientRect();
 		return { x: rect.left + (window.scrollX || 0), y: rect.top + (window.scrollY || 0) };
 	}
@@ -2924,7 +2919,7 @@ export class Router {
 		// (window.scrollTo, sessionStorage, scrollRestoration). scrollBehavior is
 		// accepted but inert.
 		if (this.#mode?.urlless) return false;
-		return this.#scrollBehavior !== false && typeof window.scrollTo === 'function';
+		return this.#scrollBehavior !== false;
 	}
 
 	/**
@@ -3291,7 +3286,7 @@ export class Router {
 	 * @param {SwapInput} next
 	 */
 	#abandon(next) {
-		for (let i = next.keep; i < next.views.length; i++) next.views[i]?.destroy();
+		for (let i = next.keep; i < next.views.length; i++) next.views[i].destroy();
 		if (next.layout && !next.reuseLayout) next.layout.destroy();
 		// D146: a navigation superseded during its out phase never reaches
 		// #commitState, so its prepared ancestor runs are unwound here — otherwise
