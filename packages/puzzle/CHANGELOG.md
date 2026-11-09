@@ -229,6 +229,9 @@ one is *not* a compile error; it silently builds a different product.
   is focused as before (also when the `autofocus` element cannot take focus,
   such as a button in a closed `<dialog>`). A `mounted()` hook that only
   focused an `autofocus` input can be deleted.
+- **A component reads its props without a `data()` (D173 V15).** The base
+  `PuzzleView.data()` returns its props, so adding a `<script>` with no
+  `data()` keeps `{ title }` reading the `title` prop.
 - **Buttons are quiet: no brand fill (puzzle-pieces).** A screen with many
   buttons no longer reads as a wall of indigo. `button` `primary` is solid ink
   with the page colour as its text (`bg-ink text-page hover:bg-ink/85`):
