@@ -820,18 +820,14 @@ export class Router {
 			this.#announcedTitle = document.title;
 		}
 
-		// A urlless mode (memory, D42) has no URL to read: it seeds its own entry
-		// stack and hands back navigation #0's path (push:false — the seed IS the
-		// entry, no extra push). #scrollEnabled() is false above, so none of the
-		// scroll/storage/scrollRestoration setup ran.
-		if (this.#mode?.urlless) {
-			await this.#trackNav(this.#navigate(this.#mode.start(), { push: false }));
-			return this;
-		}
-
-		// Initial nav reads the current URL for our mode; a hash-mode app loaded at
-		// a non-route fragment (or none) routes '/' (#currentPath → null).
-		await this.#trackNav(this.#navigate(this.#currentPath() ?? '/', { push: false }));
+		// Navigation #0 (push: false). A urlless mode (memory, D42) has no URL to
+		// read: it seeds its own entry stack and hands back the path (the seed IS the
+		// entry, no extra push); #scrollEnabled() is false above, so none of the
+		// scroll/storage/scrollRestoration setup ran. Otherwise the current URL for
+		// our mode — a hash-mode app loaded at a non-route fragment (or none) routes
+		// '/' (#currentPath → null).
+		const path = this.#mode?.urlless ? this.#mode.start() : (this.#currentPath() ?? '/');
+		await this.#trackNav(this.#navigate(path, { push: false }));
 		return this;
 	}
 
