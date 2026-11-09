@@ -56,4 +56,3 @@ LazyRows.prototype.render = function () {
     ),
   ]);
 };
-LazyRows.__pzlModule = 'LazyRows.pzl';

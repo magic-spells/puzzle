@@ -6,11 +6,10 @@
 
     <div class={ controlClass } data-tagsinput-control @click={ focusInput(event) }>
       {#for chip in chips}
-        <span class={ chipClass } role="listitem">
+        <span class={ chipClass }>
           <span class="truncate">{ chip.label }</span>
           <button
             type="button"
-            tabindex="-1"
             class={ chipRemoveClass }
             aria-label={ chip.removeLabel }
             disabled={ disabled }
@@ -90,6 +89,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // KEYBOARD. A delimiter key (default Enter or ",") commits the trimmed draft as a
 // new tag and clears the input; Backspace on an empty input removes the last tag.
+// Each chip's × is a tab stop: Enter/Space removes that tag and refocuses the input.
 // Pasting text that contains character delimiters splits into multiple tags.
 //
 // DEDUPE / MAX. By default duplicate tags are rejected (case-sensitive, trimmed);
@@ -106,7 +106,7 @@ const CONTROL_OK = 'border-border outline-ring focus-within:outline-ring';
 const CONTROL_ERROR = 'border-danger outline-danger focus-within:outline-danger';
 
 const INPUT_BASE =
-  'h-7 min-w-[6rem] flex-1 bg-transparent text-sm text-ink placeholder:text-muted ' +
+  'h-7 min-w-24 flex-1 bg-transparent text-sm text-ink placeholder:text-muted ' +
   'focus:outline-none disabled:cursor-not-allowed';
 
 const CHIP_CLASS =
@@ -114,7 +114,7 @@ const CHIP_CLASS =
   'text-xs font-medium text-brand';
 const CHIP_REMOVE_CLASS =
   'inline-flex size-4 shrink-0 items-center justify-center rounded-full text-brand ' +
-  'transition-colors hover:bg-brand hover:text-brand-ink ' +
+  'transition-colors hover:bg-brand hover:text-brand-ink outline-ring focus-visible:outline-2 ' +
   'disabled:pointer-events-none';
 
 export default class TagsInput extends PuzzleView {
@@ -283,8 +283,8 @@ export default class TagsInput extends PuzzleView {
       if (!delims.length || !delims.some((d) => text.includes(d))) return;
       event.preventDefault();
       const splitRe = new RegExp('[' + delims.map((d) => '\\' + d).join('') + ']');
-      const existing = this.getData().draft || '';
-      const parts = (existing + text).split(splitRe);
+      const el = event.target;
+      const parts = (el.value.slice(0, el.selectionStart) + text + el.value.slice(el.selectionEnd)).split(splitRe);
       let current = this._values(this.props);
       const before = current;
       const rejected = [];

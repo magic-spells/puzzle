@@ -249,7 +249,7 @@ const reference = [
     summary: 'One menu: a trigger and the panel it opens. Nest one inside a Content for a submenu.',
     rows: [
       { name: 'trigger', desc: "'hover' | 'click' | 'both' (default) — hover opens, a click latches." },
-      { name: 'arrow', desc: "'none' (default here) | 'flip' | 'static' — for a trigger that carries an arrow hook." },
+      { name: 'arrow', desc: "'flip' (default) | 'static' | 'none' — the chevron on a variant=\"item\" trigger. Bar labels carry none." },
       { name: 'open', desc: 'Optional-controlled and edge-triggered, forwarded to the base.' },
       { name: 'class', desc: 'Merged onto the host, after the load-bearing `block`.' },
       { name: '@show / @hide', desc: "Fired when THIS menu opens or closes; a nested submenu's events are filtered out." },
@@ -259,7 +259,7 @@ const reference = [
     title: 'Menubar.Trigger',
     summary: 'A top label, or the row that opens a submenu. Keep its content non-interactive — it is the control.',
     rows: [
-      { name: 'variant', desc: "'bar' (default) for a top label, 'item' for an in-panel submenu row." },
+      { name: 'variant', desc: "'bar' (default) for a top label, 'item' for an in-panel submenu row with a chevron." },
       { name: 'class', desc: 'Merged onto the trigger, after the variant chrome.' },
     ],
   },

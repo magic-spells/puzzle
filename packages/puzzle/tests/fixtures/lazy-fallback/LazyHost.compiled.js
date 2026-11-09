@@ -36,4 +36,3 @@ LazyHost.prototype.render = function () {
     ]),
   ]);
 };
-LazyHost.__pzlModule = 'LazyHost.pzl';

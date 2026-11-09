@@ -27,6 +27,12 @@ notes:
       byte-identical). Nothing in this repo ports sheet motion any more — every suite under test/
       that named a sheet lib is deleted; test/sheet-wrapper.test.js now carries the static wiring
       guards for BOTH wrapper pieces.
+  - kind: state
+    text: >-
+      2026-11-08: test/sheet-parity.test.js is gone — the eight hand-listed parity suites were
+      replaced by one generic test/registry-parity.test.js that walks registry.json (every piece
+      file plus registry/lib/*.js) and byte-compares each to its demo copy. The sheet and
+      bottom-sheet wrapper copies are covered there.
 ---
 
 # Port DOM-free sheet motion libraries

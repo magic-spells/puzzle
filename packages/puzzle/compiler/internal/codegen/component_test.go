@@ -182,20 +182,19 @@ func TestComponentSelectorHygiene(t *testing.T) {
 import __d from './Card.pzl';
 const __f = {prefix: 'card', cards: {card: __d}};
 let s = {card: __d}, s1 = s;
-const __pzlComponentSelector0 = 'authored';
 export default class Home extends Object {}
 </script>`
 	got := compileSrc(t, source)
 	for _, want := range []string{
-		"const __pzlComponentSelector1 = () => __d;",
-		"const __pzlComponentSelector2 = () => __f;",
-		"const __pzlComponentSelector3 = () => s;",
-		"const __pzlComponentSelector4 = () => s1;",
+		"const __pzlComponentSelector0 = () => __d;",
+		"const __pzlComponentSelector1 = () => __f;",
+		"const __pzlComponentSelector2 = () => s;",
+		"const __pzlComponentSelector3 = () => s1;",
 		"const __d = this.getData();", "const __f = this.ctx.formatters.getAll();",
-		"__dc(__pzlComponentSelector1(),",
-		"__dc(__pzlComponentSelector2()?.cards?.[__pzlComponentSelector2()?.prefix],",
-		"__dc(__pzlComponentSelector3()?.[s.item?.type],",
-		"__dc(__pzlComponentSelector4()?.[s1.item?.type],",
+		"__dc(__pzlComponentSelector0(),",
+		"__dc(__pzlComponentSelector1()?.cards?.[__pzlComponentSelector1()?.prefix],",
+		"__dc(__pzlComponentSelector2()?.[s.item?.type],",
+		"__dc(__pzlComponentSelector3()?.[s1.item?.type],",
 		"__dc(s1.item?.['card'],",
 	} {
 		if !strings.Contains(got, want) {
@@ -211,8 +210,8 @@ func TestComponentSelectorGettersAvoidAuthoredArrowBindings(t *testing.T) {
 	got := compileSrc(t, `<puzzle-view><Component is={[null].map(__pzlComponentSelector0 => __d)[0]}/></puzzle-view>
 <script>import __d from './Card.pzl'; export default class Home extends Object {}</script>`)
 	for _, want := range []string{
-		"const __pzlComponentSelector1 = () => __d;",
-		"(__pzl__pzlComponentSelector0) => __pzlComponentSelector1()",
+		"const __pzlComponentSelector0 = () => __d;",
+		"(__pzl__pzlComponentSelector0) => __pzlComponentSelector0()",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("selector getter captures authored arrow binding, missing %q:\n%s", want, got)

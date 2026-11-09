@@ -269,8 +269,8 @@
               data-result correctly. Fix pending upstream in dialog-panel.
             </p>
             <p>
-              On the currently published pair — bottom-sheet 2.0.2 with dialog-panel 2.0.1 — two
-              overlays paint at once, so the scrim reads darker than the 50% the piece sets:
+              On the currently published pair — bottom-sheet 2.0.2 with dialog-panel 2.0.3 — two
+              overlays paint at once, so the scrim reads darker than the token the piece sets:
               2.0.2 still paints its scrim on the dialog's native ::backdrop and tries to hide
               dialog-panel's own backdrop element with a rule that loses on specificity. It is
               cosmetic, backdropClass has nothing visible to style until it is settled, and the

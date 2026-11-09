@@ -83,6 +83,34 @@ notes:
       for each loop name), and on stale allow-list entries.
   - kind: state
     text: >-
+      2026-11-08 review fixes on feat/0.10-pieces-editor-kanban (pieces without their own card):
+
+      - RichTextEditor: an external value reset is kept off the undo stack (setMeta addToHistory
+      false). Link with a bare caret inserts linked text in both chromes. Links no longer get an
+      invented target="_blank" (Link HTMLAttributes target: null).
+
+      - RichTextEditor alignment: alignments are left/center/right only, so a pasted justify parses
+      to left, which is what the doc stores. The align shortcuts are swallowed when `tools` omits
+      'align'.
+
+      - RichTextEditor placeholder: one "visually empty" predicate (blankDoc: a single empty
+      textblock) drives both the placeholder and the blocks "/" hint, so the two never overlap.
+
+      - AspectRatio uses CSS `aspect-ratio` instead of the padding-bottom box, so a max-w cap or a
+      grid track keeps the ratio. The default `w-full` stays.
+
+      - MultiSelect: the listbox preventDefaults mousedown, so a pick no longer blurs the input.
+      Chip × buttons are tab stops with a focus ring. Chip keys use the value. min-w-16.
+
+      - PieChart: pointerleave is on each slice, so the tooltip clears off-slice.
+
+      - Checkbox: the disabled row's cursor is not-allowed; cursor-pointer and cursor-not-allowed
+      are now exclusive.
+
+      - PasswordField is documented as controlled only (claim 2: the bound value is re-applied on
+      every render), and the docs examples are now controlled.
+  - kind: state
+    text: >-
       P06 review batch (feat/0.10-pieces-sidebar-carousel). Sidebar: the brand left-stripe marker on
       the active submenu child is gone (owner's rule against coloured left-edge accent bars). The
       submenu guide is a neutral `border-l` + `v.line` again, and the active child is shown only by
@@ -102,6 +130,37 @@ notes:
       user's Next still announces. Pause state lives in data (`paused`), written through `_pause()`,
       which refreshes on change. It is no longer the `_paused` field.
     sha: a52e0c59
+  - kind: state
+    text: >-
+      2026-11-08 (feat/0.10-pieces-select-toast, review P08-Q1): demo-copy parity is ONE test,
+      test/registry-parity.test.js (~22 lines). It walks registry.json (every `files` entry of every
+      piece, family directories included) plus registry/lib/*.js and asserts the list of drifted
+      [source, copy] pairs is empty, so a new piece is covered with no test edit. It replaced the
+      eight hand-listed *-parity suites (337 lines: sheet, sidebar, dropdown-family,
+      collapsible-family, select-family, layout-family, rich-text, markdown), which skipped every
+      single-file piece and so missed the DataTable drift; the select ENOENT guard for the pre-0.7.0
+      flat Select.pzl was dropped as a migration leftover. Eight other suites still carry an inline
+      byte-compare (calendar-snippet, chart-math, hamburger, image-zoom-wrapper, language-switcher,
+      loading-pieces, puzzle-lang, split-text-wrapper) — now redundant, left for their owners to
+      trim.
+  - kind: state
+    text: >-
+      2026-11-08 (feat/0.10-pieces-select-toast, review P08/P10) piece fixes with no card of their
+      own: toast.js — the 66-line DismissTimer class is a ~20-line closure (no run token, no
+      _duration; it needs no fired state because firing calls dismiss(), which drops it), and a
+      store-level `paused` flag set by pauseAll/resumeAll means a toast that arrives while the stack
+      is hovered starts paused (P08-B5). Keyboard-focus pause (P08-B6) NOT built: it exceeds the
+      +3-line budget, and with one flag a focused toast dismissed by Enter fires no focusout, which
+      would leave every later toast paused. Stepper is CONTROLLED only — the uncontrolled clickable
+      mode could never move (P08-B11). Avatar/KanbanCard/ChatMessage initials discs are hsl(hue 45%
+      32%) so white initials pass AA on every hue (P08-B12). Badge outline uses ring-1 ring-inset
+      (no layout box), so all variants are 20px (P08-B13). NumberField step results round to
+      precision ?? 12 (P08-B8). EmojiPicker/EmojiPickerSimple morph panel is left-1/2 -ml-36,
+      centred on the trigger, still no horizontal clamp (P08-B4). TimePicker: one Escape fires @hide
+      once (column handler removed; the panel's onEscape covers it) and dead panelStyle is gone
+      (P10-B2/Q2). Progress binds false, not undefined, for absent aria-valuenow/aria-label and
+      shows no "0%" while indeterminate (P10-B4). ScrollArea min-h-6/min-w-6 (P10-Q4); Textarea
+      drops its dead child text (P10-Q7).
 ---
 
 # The registry — source of truth

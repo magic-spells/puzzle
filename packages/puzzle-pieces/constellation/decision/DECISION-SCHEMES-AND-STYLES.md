@@ -55,6 +55,15 @@ notes:
       title>`. Applies to button, button-group, split-button Action, copy-button, alert-dialog and
       popconfirm buttons, pagination prev/next, toggle, toggle-group. Non-<button> triggers
       (split-button Menu, dropdown-menu Trigger) cannot match :disabled and are unchanged.
+  - kind: state
+    text: >-
+      2026-11-08 (feat/0.10-pieces-dialog-chat, review P09-Q6 / P13-Q8): the token contract gains
+      one shadow, `--shadow-kbd: inset 0 -1px 0 var(--color-border)` (the keycap bottom seam used by
+      Kbd, DropdownMenu.Shortcut and Menubar.Shortcut). It is declared in pieces.css (@theme + the
+      [data-scheme='default'] restatement), cool/warm/void, test/lib/roles.mjs and demo
+      tokenNames.js. Existing token names are unchanged. An app whose pieces.css predates the token
+      renders keycaps without the seam until it runs `puzzle add theme default`, and `add piece`
+      prints that stale-theme hint.
 ---
 
 # Appearance is four schemes × four styles

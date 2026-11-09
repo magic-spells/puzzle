@@ -34,7 +34,7 @@ export default class TodoItem extends PuzzleView {
   };
 }
 
-import { ViewNode } from '@magic-spells/puzzle';
+import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
 TodoItem.prototype.render = function () {
   const __d = this.getData();
@@ -75,20 +75,22 @@ TodoItem.prototype.render = function () {
                   ]),
                 ])),
               ]
-            : []),
+            : [
+                new ViewNode('#'),
+              ]),
         ]),
       ]),
       new ViewNode('span', {
         class: `flex-1 truncate ${__d.todo?.completed ? 'text-faint line-through' : ''}${!__d.todo?.completed ? 'text-fg' : ''}`,
       }, [
-        new ViewNode('text', { value: String(__d.todo?.text) }),
+        new ViewNode('text', { value: __s(__d.todo?.text, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'todo.text' : 0) }),
       ]),
       new ViewNode('span', { class: 'ml-4 shrink-0 font-mono text-[11px] text-faint tabular-nums' }, [
-        new ViewNode('text', { value: String((__f["datetime"] || __f.__missing("datetime"))(__d.todo?.createdAt, 'short')) }),
+        new ViewNode('text', { value: __s((__f["datetime"] || __f.__missing("datetime"))(__d.todo?.createdAt, 'short'), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'datetime(todo.createdAt, \'short\')' : 0) }),
       ]),
       new ViewNode('button', {
         class: 'ml-3 w-7 h-7 shrink-0 rounded-md flex items-center justify-center text-xl leading-none text-faint hover:text-danger hover:bg-danger/10 opacity-0 group-hover:opacity-100 transition-all',
-        '@click': (event) => this.events.remove(event),
+        '@click': ((this.__h ??= {})[0] ??= (event) => this.events.remove(event)),
         title: 'Delete todo',
       }, [
         new ViewNode('text', { value: '×' }),

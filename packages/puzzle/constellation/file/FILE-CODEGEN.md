@@ -8,6 +8,22 @@ connections:
   - COMPONENT-CODEGEN
 verified_at: '2026-11-01T19:28:54.178Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 codegen trims (feat/0.10-codegen-trims, review F6/V-codegen):
+      SLOT_TAG/SNIPPET_TAG/PORTAL_TAG imports are now emission flags
+      (usesSlot/usesSnippet/usesPortal set in emitNode), like the other six imports; the
+      hasSlot/hasSnippet/hasPortal pre-walks are gone. The <script>-import collision warning is
+      raised by the lowerer at the read's own position (noteImport), so the post-hoc __d. re-lexer
+      is deleted. Module stamp is emitted only when Options.ModulePath is set (no basename
+      fallback); the plugin leaves it empty in production SPA builds, so pzlc output and the codegen
+      goldens carry no stamp. tplEscape → escapeTemplateText (a CR in a mixed attribute is now
+      spelled \r). Also: singleRoot helper for the three single-root checks, inlineIf helper, one
+      range emitFor arm, hasKeyAttr over isExplicitKeyAttr, sp via strings.Repeat, compile()'s
+      duplicate Component-reserved check removed (emitComponentSlot keeps it, positioned at the
+      <Component> use). TodoItem.compiled.js hand fixture regenerated from the compiler and pinned
+      by TestGoldenTodoItem.
 ---
 
 # codegen.go

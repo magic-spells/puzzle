@@ -49,4 +49,3 @@ SnippetChainHost.prototype.render = function () {
     ]),
   ]);
 };
-SnippetChainHost.__pzlModule = 'SnippetChainHost.pzl';

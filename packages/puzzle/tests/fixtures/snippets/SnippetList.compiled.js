@@ -51,5 +51,4 @@ SnippetList.prototype.render = function () {
     ]),
   ]);
 };
-SnippetList.__pzlModule = 'SnippetList.pzl';
 SnippetList.__roots = ['group'];

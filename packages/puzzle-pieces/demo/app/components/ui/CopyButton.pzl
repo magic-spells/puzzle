@@ -15,10 +15,7 @@
         <path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" />
       </svg>
     {/if}
-    {#if label}
-      <span>{ displayLabel }</span>
-    {/if}
-    <span class="sr-only" aria-live="polite">{ liveText }</span>
+    <span class={ textClass } aria-live="polite">{ text }</span>
   </button>
 </puzzle-view>
 
@@ -119,9 +116,10 @@ export default class CopyButton extends PuzzleView {
       // OVERRIDE the visible text ("Copy link" → "Copy Copy link"). A null
       // attribute value is removed by the patcher, so nothing is emitted.
       ariaLabel: iconOnly ? (copied ? 'Copied' : 'Copy') : null,
-      label,
-      displayLabel: copied ? 'Copied' : label,
-      liveText: copied ? 'Copied' : '',
+      // One live span: the visible label, or sr-only text when icon-only (where
+      // the aria-label above wins the name, so it never reads "Copied Copied").
+      text: copied ? 'Copied' : label,
+      textClass: iconOnly ? 'sr-only' : null,
       copied,
       iconClass: [ICON_GLYPH_SIZE[size], 'shrink-0'].join(' '),
     };

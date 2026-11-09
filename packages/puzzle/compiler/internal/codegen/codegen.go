@@ -108,10 +108,10 @@ type Options struct {
 	// .pzl (e.g. "app/views/Home.pzl"), stamped onto the compiled class as
 	// `Class.__pzlModule = "<path>"` so the static-pages build (D81) can map a
 	// route's view/layout classes back to their source modules for per-page entry
-	// generation. The esbuild plugin threads its app-relative `name` in here.
-	// Empty means "no app root is known" (the standalone pzlc single-file path and
-	// the codegen goldens): the stamp then falls back to the plain basename of
-	// Filename.
+	// generation, and dev diagnostics can name the file. The esbuild plugin
+	// threads its app-relative `name` in here except in a production SPA build,
+	// where nothing reads the stamp. Empty means no stamp (also the standalone
+	// pzlc path and the codegen goldens).
 	ModulePath string
 	// AssetsDir is the absolute (or test-relative) path of the app's assets dir
 	// ({#svg} paths resolve from here, v1.14 D46). Empty means "not configured":
@@ -213,10 +213,6 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	if filepath.Base(strings.ReplaceAll(opts.Filename, "\\", "/")) == "Component.pzl" {
 		return "", &parser.ParseError{File: opts.Filename, Line: 1, Col: 1, Message: "Component is a reserved built-in tag — rename Component.pzl (for example, Card.pzl) and its imports"}
 	}
-	if off, reserved := moduleBindings["Component"]; reserved && hasComponentSlot(root.Children) {
-		pos := sec.ScriptsPos.Advance(sec.Scripts[:off])
-		return "", &parser.ParseError{File: opts.Filename, Line: pos.Line, Col: pos.Col, Message: "Component is a reserved built-in tag — rename the user component or import named Component (for example, Card)"}
-	}
 	var className string
 	if strings.TrimSpace(scripts) == "" {
 		className = classNameFromFilename(opts.Filename)
@@ -230,15 +226,15 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	}
 
 	c := &compiler{
-		src:                     sec.Source,
-		file:                    opts.Filename,
-		svgDedup:                opts.SVGDedup,
-		svgCache:                opts.SVGCache,
-		assetReadsUnavailable:   opts.AssetReadsUnavailable,
-		warnings:                warnings,
-		moduleBindings:          moduleBindings,
-		mutableModuleBindings:   mutableModuleBindings,
-		componentSelectorSource: sec.Source + sec.Scripts,
+		src:                   sec.Source,
+		file:                  opts.Filename,
+		svgDedup:              opts.SVGDedup,
+		svgCache:              opts.SVGCache,
+		assetReadsUnavailable: opts.AssetReadsUnavailable,
+		warnings:              warnings,
+		moduleBindings:        moduleBindings,
+		mutableModuleBindings: mutableModuleBindings,
+		scriptImports:         scriptImportBindings(scriptToks),
 	}
 	scope := scopeMap{}
 
@@ -317,34 +313,14 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		return "", err
 	}
 
-	// <script>-import collision warnings (out-of-band; goldens unaffected). Scan
-	// the emitted render expressions for `__d.<name>` reads whose <name> is an
-	// import binding in <script> — those resolve to undefined at render (SPEC §6).
-	if imports := scriptImportBindings(scriptToks); len(imports) > 0 {
-		seen := map[string]bool{}
-		var hit []string
-		collectDataCollisions(rootExpr, imports, seen, &hit)
-		if skel != nil {
-			collectDataCollisions(skelExpr, imports, seen, &hit)
-		}
-		for _, name := range hit {
-			*warnings = append(*warnings, Warning{
-				File: opts.Filename, Line: root.Pos.Line, Col: root.Pos.Col,
-				Message: fmt.Sprintf(
-					"template expression references %q, which is imported in <script> — template expressions can only read data() fields; %q will be undefined",
-					name, name),
-			})
-		}
-	}
-
 	imports := []string{"ViewNode"}
-	if hasSlot(root.Children) || (skel != nil && hasSlot(skel.Children)) {
+	if c.usesSlot {
 		imports = append(imports, "SLOT_TAG")
 	}
-	if hasSnippet(root.Children) || (skel != nil && hasSnippet(skel.Children)) {
+	if c.usesSnippet {
 		imports = append(imports, "SNIPPET_TAG")
 	}
-	if hasPortal(root.Children) || (skel != nil && hasPortal(skel.Children)) {
+	if c.usesPortal {
 		imports = append(imports, "PORTAL_TAG")
 	}
 	if c.usesDisplayValue {
@@ -439,12 +415,11 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	// 3b. module stamp (v1.45, D81): the app-relative source path, stamped as a
 	//     static class field immediately after the render tail. The static-pages
 	//     build reads Class.__pzlModule off each route's view/layout classes to
-	//     emit per-page entry imports. With no app root known (pzlc, goldens) the
-	//     stamp is the plain basename. Inert for every non-static build path.
-	b.WriteString(className)
-	b.WriteString(".__pzlModule = ")
-	b.WriteString(jsString(moduleStampPath(opts)))
-	b.WriteString(";\n")
+	//     emit per-page entry imports, and dev diagnostics name the file with it.
+	//     No ModulePath (a production SPA build, pzlc, goldens), no stamp.
+	if opts.ModulePath != "" {
+		b.WriteString(className + ".__pzlModule = " + jsString(opts.ModulePath) + ";\n")
+	}
 	// 3c. root dirty-mask names (D170, root dirty mask): the parent data roots some
 	//     loop body reads, indexed by the `roots` bit each site meta carries.
 	//     Absent when no site carries a mask, which is the common case — a view
@@ -476,21 +451,6 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		}
 	}
 	return b.String(), nil
-}
-
-// moduleStampPath returns the value for the `Class.__pzlModule` stamp (D81):
-// the app-relative ModulePath when the plugin supplied one, else the plain
-// basename of Filename. Both are forward-slash-normalized so the stamp is
-// byte-stable across build OSes (parallel to ScopeID's normalization).
-func moduleStampPath(opts Options) string {
-	if opts.ModulePath != "" {
-		return strings.ReplaceAll(filepath.ToSlash(opts.ModulePath), "\\", "/")
-	}
-	norm := strings.ReplaceAll(filepath.ToSlash(opts.Filename), "\\", "/")
-	if i := strings.LastIndexByte(norm, '/'); i >= 0 {
-		norm = norm[i+1:]
-	}
-	return norm
 }
 
 type compiler struct {
@@ -527,13 +487,18 @@ type compiler struct {
 	// Position.Offset indexes. Empty when the Sections did not come from
 	// SplitSections.
 	src string
-	// warnings collects out-of-band diagnostics (Result.Warnings); nil in a
-	// compile that does not report them.
+	// warnings collects out-of-band diagnostics (Result.Warnings).
 	warnings *[]Warning
+	// scriptImports holds the <script> import bindings a template read has not
+	// yet warned about (noteImport).
+	scriptImports map[string]bool
 
-	// Set when a `.map` item loop (usesLoopItems) or a range loop
-	// (usesLoopRange) is emitted, so the runtime loop guards (D173 V12) are
-	// imported only by a module that calls them.
+	// Set where the code that needs each import is emitted, so the import line
+	// carries exactly what this file uses: a `.map` item loop or a range loop
+	// (the D173 V12 loop guards), a composition marker, a <Snippet>, a <Portal>.
+	usesSlot                 bool
+	usesSnippet              bool
+	usesPortal               bool
 	usesLoopItems            bool
 	usesLoopRange            bool
 	usesDynamicComponent     bool
@@ -541,7 +506,6 @@ type compiler struct {
 	moduleBindings           map[string]int
 	mutableModuleBindings    map[string]bool
 	componentSelectorGetters []componentSelectorGetter
-	componentSelectorSource  string
 
 	// Set when an emitted expression calls a library function, which is the
 	// only thing that reads __f. It gates
@@ -618,6 +582,21 @@ func (c *compiler) cgErr(pos parser.Position, msg string) error {
 	return &parser.ParseError{File: c.file, Line: pos.Line, Col: pos.Col, Message: msg}
 }
 
+// noteImport warns, once per name, at the first template read of a <script>
+// import: the read compiles to __d.<name>, which is undefined at render (SPEC §6).
+func (c *compiler) noteImport(id *expr.Identifier) {
+	if !c.scriptImports[id.Name] {
+		return
+	}
+	delete(c.scriptImports, id.Name)
+	*c.warnings = append(*c.warnings, Warning{
+		File: c.file, Line: id.Start.Line, Col: id.Start.Col,
+		Message: fmt.Sprintf(
+			"template expression references %q, which is imported in <script> — template expressions can only read data() fields; %q will be undefined",
+			id.Name, id.Name),
+	})
+}
+
 // noteEvent records the first place the template reads `event` as data (a
 // field or prop) and the first place a handler uses it as the DOM event. A
 // template binding or an arrow parameter named `event` is neither.
@@ -659,18 +638,9 @@ func (c *compiler) emitComponentRoot(root *parser.Element, startCol int, scope s
 	if err != nil {
 		return "", err
 	}
-	var only parser.Node
-	for _, it := range items {
-		if it.textOK {
-			return "", c.cgErr(root.Pos, "a component template must have a single root element (found stray text)")
-		}
-		if only != nil {
-			return "", c.cgErr(root.Pos, "a component template must have a single root element (found more than one)")
-		}
-		only = it.node
-	}
-	if only == nil {
-		return "", c.cgErr(root.Pos, "a component template must have a single root element (found none)")
+	only, why := singleRoot(items)
+	if why != "" {
+		return "", c.cgErr(root.Pos, "a component template must have a single root element (found "+why+")")
 	}
 	switch n := only.(type) {
 	case *parser.Element:
@@ -699,6 +669,25 @@ func (c *compiler) emitComponentRoot(root *parser.Element, startCol int, scope s
 	}
 }
 
+// singleRoot returns the one node in items, or why there is not exactly one:
+// "stray text", "more than one" or "none".
+func singleRoot(items []item) (parser.Node, string) {
+	var only parser.Node
+	for _, it := range items {
+		if it.textOK {
+			return nil, "stray text"
+		}
+		if only != nil {
+			return nil, "more than one"
+		}
+		only = it.node
+	}
+	if only == nil {
+		return nil, "none"
+	}
+	return only, ""
+}
+
 // emitSkeletonRoot emits the skeleton render's root expression (v1.8, D39).
 // View mode re-parents the skeleton children under the SAME <puzzle-view> root
 // and attributes as the real template, so the loaded swap patches children
@@ -717,18 +706,9 @@ func (c *compiler) emitSkeletonRoot(skel *parser.Element, viewAttrs []parser.Att
 	if err != nil {
 		return "", err
 	}
-	var only parser.Node
-	for _, it := range items {
-		if it.textOK {
-			return "", c.cgErr(skel.Pos, "a component skeleton must have a single root element (found stray text)")
-		}
-		if only != nil {
-			return "", c.cgErr(skel.Pos, "a component skeleton must have a single root element (found more than one)")
-		}
-		only = it.node
-	}
-	if only == nil {
-		return "", c.cgErr(skel.Pos, "a component skeleton must have a single root element (found none)")
+	only, why := singleRoot(items)
+	if why != "" {
+		return "", c.cgErr(skel.Pos, "a component skeleton must have a single root element (found "+why+")")
 	}
 	el, ok := only.(*parser.Element)
 	if !ok {
@@ -861,13 +841,16 @@ func (c *compiler) emitItem(it item, ind int, scope scopeMap) (string, error) {
 		}
 		return c.emitElement(n.Name, n.Props, n.Children, ind, ind, true, scope)
 	case *parser.Slot:
+		c.usesSlot = true
 		return c.emitSlot(n, ind, scope)
 	case *parser.Snippet:
+		c.usesSnippet = true
 		return c.emitSnippet(n, ind, scope)
 	case *parser.Portal:
 		// <Portal>…</Portal> (D144): one vnode carrying the teleported children;
 		// the runtime mounts them into the shared portal outlet and leaves a comment
 		// placeholder at this position. Attribute-free by grammar.
+		c.usesPortal = true
 		return c.emitElement("PORTAL_TAG", nil, n.Children, ind, ind, false, scope)
 	case *parser.If:
 		return c.emitIf(n, ind, scope)
@@ -1323,10 +1306,7 @@ func intLiteral(n expr.Node) (int, bool) {
 			return 0, false
 		}
 	}
-	v, err := strconv.Atoi(lit.Raw)
-	if err != nil {
-		return 0, false
-	}
+	v, _ := strconv.Atoi(lit.Raw) // ≤ 9 digits, all checked above
 	if neg {
 		v = -v
 	}
@@ -1340,27 +1320,19 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope scopeMap) (string, erro
 			c.usesLoopRange = true
 			gen = "__r(" + c.value(f.RangeFromAST, scope) + ", " + c.value(f.RangeToAST, scope) + ")"
 		}
-		gen += ".map(("
+		// The generated value binds as the counter, or as the compiler-private
+		// `__i` without one, and keys the row.
+		bodyScope, counter := scope, "__i"
 		if f.Counter != "" {
-			bodyScope, counter := c.bareBinding(scope, f.Counter)
-			c.mapDepth++
-			body, err := c.forBody(f, bodyScope, counter, ind+2, nil)
-			c.mapDepth--
-			if err != nil {
-				return "", err
-			}
-			return gen + counter + ") =>\n" +
-				sp(ind+2) + body + "\n" + sp(ind) + ")", nil
+			bodyScope, counter = c.bareBinding(scope, f.Counter)
 		}
-		// Counterless range: the generated value binds as the compiler-private
-		// `__i` and keys the row.
 		c.mapDepth++
-		body, err := c.forBody(f, scope, "__i", ind+2, nil)
+		body, err := c.forBody(f, bodyScope, counter, ind+2, nil)
 		c.mapDepth--
 		if err != nil {
 			return "", err
 		}
-		return gen + "__i) =>\n" +
+		return gen + ".map((" + counter + ") =>\n" +
 			sp(ind+2) + body + "\n" + sp(ind) + ")", nil
 	}
 	// Item form lowers to a persistent list block (D170, list blocks) unless the
@@ -1470,7 +1442,7 @@ func componentRowKeyAfterSpreads(props []parser.Attr) []parser.Attr {
 	ordered := make([]parser.Attr, 0, len(props))
 	var keys []parser.Attr
 	for _, prop := range props {
-		if hasKeyAttr([]parser.Attr{prop}) {
+		if isExplicitKeyAttr(prop) {
 			keys = append(keys, prop)
 		} else {
 			ordered = append(ordered, prop)
@@ -1514,14 +1486,8 @@ func (c *compiler) forBodyRoot(f *parser.For, scope scopeMap) (parser.Node, bool
 	if err != nil {
 		return nil, false, err
 	}
-	var only parser.Node
-	for _, it := range items {
-		if it.textOK || only != nil {
-			return nil, false, c.cgErr(f.Pos, "{#for} body must contain exactly one root element")
-		}
-		only = it.node
-	}
-	if only == nil {
+	only, why := singleRoot(items)
+	if why != "" {
 		return nil, false, c.cgErr(f.Pos, "{#for} body must contain exactly one root element")
 	}
 	switch n := only.(type) {
@@ -1534,29 +1500,13 @@ func (c *compiler) forBodyRoot(f *parser.For, scope scopeMap) (parser.Node, bool
 	}
 }
 
-// hasKeyAttr reports whether the attr list already carries a `key` (static,
-// dynamic, or mixed) — the author's explicit override suppresses the synthetic
-// key (D58). A MixedAttr (`key="row-{item.id}"`) is an explicit key too: without
-// this arm the synthetic keyOf was ALSO prepended, doubling the key property and
-// tripping the runtime duplicate-key warning.
+// hasKeyAttr reports whether the attr list carries the author's explicit `key`
+// (static, dynamic, or mixed `key="row-{item.id}"`), which suppresses the
+// synthetic key (D58).
 func hasKeyAttr(attrs []parser.Attr) bool {
 	for _, a := range attrs {
-		switch at := a.(type) {
-		case *parser.StaticAttr:
-			// A literal `key` captured inside {#raw} or on a {#svg} asset root is
-			// authored markup, not the directive, so it must not suppress the
-			// synthetic key.
-			if at.Name == "key" && !at.LiteralName {
-				return true
-			}
-		case *parser.DynamicAttr:
-			if at.Name == "key" {
-				return true
-			}
-		case *parser.MixedAttr:
-			if at.Name == "key" {
-				return true
-			}
+		if isExplicitKeyAttr(a) {
+			return true
 		}
 	}
 	return false
@@ -1811,30 +1761,28 @@ func (c *compiler) emitMixedFacts(parts []parser.Part, scope scopeMap, facts *ex
 	for _, p := range parts {
 		switch pp := p.(type) {
 		case *parser.StaticPart:
-			b.WriteString(tplEscape(pp.Text))
+			b.WriteString(escapeTemplateText(pp.Text))
 		case *parser.InterpPart:
 			js := c.valueInto(pp.Interp.ExprAST, scope, facts)
 			b.WriteString("${")
 			b.WriteString(c.displayValue(js, pp.Interp.Expr))
 			b.WriteString("}")
 		case *parser.InlineIfPart:
-			cond := c.cond(pp.CondAST, scope, facts)
-			thenS := c.branchToStr(pp.Then, scope, facts)
-			elseS := "''"
-			if pp.Else != nil {
-				elseS = c.branchToStr(pp.Else, scope, facts)
-			}
-			b.WriteString("${")
-			b.WriteString(cond)
-			b.WriteString(" ? ")
-			b.WriteString(thenS)
-			b.WriteString(" : ")
-			b.WriteString(elseS)
-			b.WriteString("}")
+			b.WriteString("${" + c.inlineIf(pp, scope, facts) + "}")
 		}
 	}
 	b.WriteByte('`')
 	return b.String()
+}
+
+// inlineIf lowers an inline `{#if}` attribute part to `cond ? then : else`;
+// a missing else is the empty string. The operands are built left to right.
+func (c *compiler) inlineIf(pp *parser.InlineIfPart, scope scopeMap, facts *exprFacts) string {
+	out := c.cond(pp.CondAST, scope, facts) + " ? " + c.branchToStr(pp.Then, scope, facts) + " : "
+	if pp.Else == nil {
+		return out + "''"
+	}
+	return out + c.branchToStr(pp.Else, scope, facts)
 }
 
 // branchToStr compiles an inline-if branch (static/interp/nested-if parts only)
@@ -1849,13 +1797,7 @@ func (c *compiler) branchToStr(parts []parser.Part, scope scopeMap, facts *exprF
 			js := c.valueInto(pp.Interp.ExprAST, scope, facts)
 			segs = append(segs, c.displayValue(js, pp.Interp.Expr))
 		case *parser.InlineIfPart:
-			cond := c.cond(pp.CondAST, scope, facts)
-			thenS := c.branchToStr(pp.Then, scope, facts)
-			elseS := "''"
-			if pp.Else != nil {
-				elseS = c.branchToStr(pp.Else, scope, facts)
-			}
-			segs = append(segs, "("+cond+" ? "+thenS+" : "+elseS+")")
+			segs = append(segs, "("+c.inlineIf(pp, scope, facts)+")")
 		}
 	}
 	if len(segs) == 0 {
@@ -2104,9 +2046,6 @@ func processText(raw string) (s string, keep, padL, padR bool) {
 	if trailingNL && strings.HasSuffix(s, " ") {
 		s, padR = s[:len(s)-1], true
 	}
-	if s == "" {
-		return "", false, padL, padR
-	}
 	return s, true, padL, padR
 }
 
@@ -2129,142 +2068,6 @@ func trailingWSHasNewline(s string) bool {
 		}
 		if s[i] != ' ' && s[i] != '\t' {
 			return false
-		}
-	}
-	return false
-}
-
-// hasPortal reports whether any <Portal> appears in the tree (→ PORTAL_TAG
-// import). Mirrors hasSlot's shape.
-func hasPortal(nodes []parser.Node) bool {
-	for _, n := range nodes {
-		switch t := n.(type) {
-		case *parser.Portal:
-			return true
-		case *parser.Slot:
-			if hasPortal(t.Children) {
-				return true
-			}
-		case *parser.Snippet:
-			if hasPortal(t.Body) {
-				return true
-			}
-		case *parser.Element:
-			if hasPortal(t.Children) {
-				return true
-			}
-		case *parser.Component:
-			if hasPortal(t.Children) {
-				return true
-			}
-		case *parser.If:
-			if hasPortal(t.Then) || hasPortal(t.Else) {
-				return true
-			}
-		case *parser.For:
-			if hasPortal(t.Body) {
-				return true
-			}
-		case *parser.Case:
-			for _, cl := range t.Clauses {
-				if hasPortal(cl.Body) {
-					return true
-				}
-			}
-			if hasPortal(t.Else) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// hasSlot reports whether any composition marker (<Children/> or <Slot/>) appears
-// in the tree (→ SLOT_TAG import). Both reserved tags parse as *parser.Slot.
-func hasSlot(nodes []parser.Node) bool {
-	for _, n := range nodes {
-		switch t := n.(type) {
-		case *parser.Slot:
-			return true
-		case *parser.Portal:
-			if hasSlot(t.Children) {
-				return true
-			}
-		case *parser.Snippet:
-			if hasSlot(t.Body) {
-				return true
-			}
-		case *parser.Element:
-			if hasSlot(t.Children) {
-				return true
-			}
-		case *parser.Component:
-			if hasSlot(t.Children) {
-				return true
-			}
-		case *parser.If:
-			if hasSlot(t.Then) || hasSlot(t.Else) {
-				return true
-			}
-		case *parser.Case:
-			for _, cl := range t.Clauses {
-				if hasSlot(cl.Body) {
-					return true
-				}
-			}
-			if hasSlot(t.Else) {
-				return true
-			}
-		case *parser.For:
-			if hasSlot(t.Body) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// hasSnippet reports whether any <Snippet> marker appears in the tree
-// (→ SNIPPET_TAG import). Every ordinary child-bearing node recurses so a
-// marker at any legal call-site depth retains the import.
-func hasSnippet(nodes []parser.Node) bool {
-	for _, n := range nodes {
-		switch t := n.(type) {
-		case *parser.Snippet:
-			return true
-		case *parser.Slot:
-			if hasSnippet(t.Children) {
-				return true
-			}
-		case *parser.Portal:
-			if hasSnippet(t.Children) {
-				return true
-			}
-		case *parser.Element:
-			if hasSnippet(t.Children) {
-				return true
-			}
-		case *parser.Component:
-			if hasSnippet(t.Children) {
-				return true
-			}
-		case *parser.If:
-			if hasSnippet(t.Then) || hasSnippet(t.Else) {
-				return true
-			}
-		case *parser.For:
-			if hasSnippet(t.Body) {
-				return true
-			}
-		case *parser.Case:
-			for _, cl := range t.Clauses {
-				if hasSnippet(cl.Body) {
-					return true
-				}
-			}
-			if hasSnippet(t.Else) {
-				return true
-			}
 		}
 	}
 	return false
@@ -2316,25 +2119,6 @@ func jsString(s string) string {
 	return b.String()
 }
 
-// tplEscape escapes text for inside a template literal.
-func tplEscape(s string) string {
-	var b strings.Builder
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch {
-		case c == '\\':
-			b.WriteString(`\\`)
-		case c == '`':
-			b.WriteString("\\`")
-		case c == '$' && i+1 < len(s) && s[i+1] == '{':
-			b.WriteString(`\$`)
-		default:
-			b.WriteByte(c)
-		}
-	}
-	return b.String()
-}
-
 // scopeAdd binds name as an ordinary lexical name (emitted bare).
 func scopeAdd(scope scopeMap, name string) scopeMap {
 	return scopeAddAs(scope, name, "")
@@ -2357,14 +2141,4 @@ func identNode(name string) *expr.Identifier {
 	return &expr.Identifier{Name: name}
 }
 
-var spaces = strings.Repeat(" ", 256)
-
-func sp(n int) string {
-	if n <= 0 {
-		return ""
-	}
-	for n > len(spaces) {
-		spaces += spaces
-	}
-	return spaces[:n]
-}
+func sp(n int) string { return strings.Repeat(" ", max(n, 0)) }

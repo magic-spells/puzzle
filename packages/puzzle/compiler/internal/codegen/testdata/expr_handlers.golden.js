@@ -63,4 +63,3 @@ ExprHandlers.prototype.render = function () {
     ),
   ]);
 };
-ExprHandlers.__pzlModule = 'expr_handlers.pzl';

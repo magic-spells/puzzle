@@ -232,6 +232,16 @@ one is *not* a compile error; it silently builds a different product.
 - **A component reads its props without a `data()` (D173 V15).** The base
   `PuzzleView.data()` returns its props, so adding a `<script>` with no
   `data()` keeps `{ title }` reading the `title` prop.
+- **Back then Forward during a slow load keeps URL and view together.** Pressing
+  Back while the popped entry was still loading, then Forward, used to leave the
+  URL on one page and the view tree on another. The router now recovers the
+  in-flight pop, and a scroll position is saved only for an entry that was on
+  screen.
+- **`app.idle()` and `Router.navigating()` settle after a navigation that fails
+  at its start.** A `replace()`, pop or first navigation whose start threw
+  synchronously left the in-flight slot pointing at the wrong navigation, so
+  `idle()` never resolved. The slot now latches a pending sentinel until the
+  navigation pairs with its own promise (D182).
 - **Buttons are quiet: no brand fill (puzzle-pieces).** A screen with many
   buttons no longer reads as a wall of indigo. `button` `primary` is solid ink
   with the page colour as its text (`bg-ink text-page hover:bg-ink/85`):
@@ -258,6 +268,22 @@ one is *not* a compile error; it silently builds a different product.
   no longer needs a wrapping `<span title>`. Every hover is written
   `not-disabled:hover:…`, so a disabled button stays flat; it still fires no
   click.
+- **`calendar` drops `@monthChange` and gains an optional `month` prop
+  (puzzle-pieces).** `@monthChange` missed same-month year jumps and nothing
+  called it, so it is gone. `month` (an ISO date) picks the shown month without
+  painting a selection disc; without it `value` anchors the grid as before.
+- **`date-range-picker` two-month view and phone layout fixes
+  (puzzle-pieces).** With `months={ 2 }` the grids show the start month and the
+  month after it, instead of the same month twice or a jump back to today when
+  a new range starts. The shown months stay put while the panel is open, so
+  picking a day in the right grid no longer moves both grids or drops focus;
+  each open lands on the start month. Under `sm` the presets rail stacks above
+  the grids, so the panel fits a 375px screen.
+- **`image-zoom` `@change(scale)` takes one argument (puzzle-pieces).** The
+  documented second argument never arrived.
+- **`sheet` and `bottom-sheet` overlays use `--color-scrim`
+  (puzzle-pieces).** In light mode the scrim is the palette's slate at 0.4
+  instead of black at 0.5, so it reads lighter and tinted.
 
 Re-add a piece with `puzzle add piece <name> --force` to pick up these
 changes.

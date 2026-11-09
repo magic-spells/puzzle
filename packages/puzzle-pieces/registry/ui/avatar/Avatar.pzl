@@ -70,7 +70,7 @@ export default class Avatar extends PuzzleView {
       showImg,
       hasName,
       initials: hasName ? initials(name) : '',
-      fallbackStyle: hasName ? `background:hsl(${hue} 45% 45%)` : '',
+      fallbackStyle: hasName ? `background:hsl(${hue} 45% 32%)` : '',
       rootClass: [ROOT_BASE, SIZE[props.size] || SIZE.md, tone, props.class || ''].join(' '),
     };
   }

@@ -91,8 +91,6 @@
           is current (ringed, carrying
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-current="step"</code>),
           and later steps are upcoming (muted).
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>
-          is optional-controlled: omit it and a clickable Stepper tracks the current step itself.
         </p>
       </div>
     </article>

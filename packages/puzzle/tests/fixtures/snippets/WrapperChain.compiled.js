@@ -22,4 +22,3 @@ WrapperChain.prototype.render = function () {
     ]),
   ]);
 };
-WrapperChain.__pzlModule = 'WrapperChain.pzl';

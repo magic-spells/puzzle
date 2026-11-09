@@ -43,4 +43,3 @@ CaseWhen.prototype.render = function () {
           ])(__d.order?.status)),
   ]);
 };
-CaseWhen.__pzlModule = 'case_when.pzl';

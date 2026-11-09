@@ -36,6 +36,10 @@ type passContext struct {
 	// every pass serves. locales is nil without i18n.
 	i18n    *config.I18n
 	locales *locales.Result
+
+	// stripStamps is true for a production SPA build, which has no reader for
+	// the D81 module stamp. One value per build: the passes share one cache.
+	stripStamps bool
 }
 
 // newPassContext runs the once-per-build source scans.
@@ -54,6 +58,7 @@ func (pc *passContext) plugin(absRoot string) *plugin.Plugin {
 	pl := plugin.New(absRoot)
 	pl.SetUsage(pc.usage)
 	pl.SetCompileCache(pc.cache)
+	pl.SetStripStamps(pc.stripStamps)
 	applyI18n(pl, pc.i18n, pc.locales)
 	return pl
 }

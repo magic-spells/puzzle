@@ -498,6 +498,45 @@ describe('router.push() — navigations that do not commit (D182)', () => {
 		expect(errors).toEqual([failure]);
 	});
 
+	it('a replace() whose constructor throws leaves nothing in flight', async () => {
+		let runs = 0;
+		const failure = new Error('constructor blew up');
+		const { router } = await boot(
+			[
+				{
+					path: '/',
+					name: 'home',
+					view: class extends PuzzleView {
+						data() {
+							runs++;
+							return {};
+						}
+						render() {
+							return h('puzzle-view', {}, [text('home')]);
+						}
+					},
+				},
+				{
+					path: '/boom',
+					name: 'boom',
+					view: class extends PuzzleView {
+						constructor(ctx) {
+							super(ctx);
+							throw failure;
+						}
+					},
+				},
+			],
+			{ onError: () => {} }
+		);
+
+		expect(await router.replace('/boom')).toEqual({ ok: false, reason: 'error', error: failure });
+		expect(Router.navigating(router)).toBe(false); // app.idle() can report idle (D185)
+		const before = runs;
+		expect((await router.push('/')).ok).toBe(true); // the committed path: a no-op
+		expect(runs).toBe(before);
+	});
+
 	it("never rejects: a synchronous commit throw resolves 'error' and is reported", async () => {
 		const errors = [];
 		const failure = new Error('afterUpdate boom');

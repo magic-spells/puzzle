@@ -20,7 +20,7 @@ const VARIANT = {
   default: 'bg-surface-sunken text-body',
   brand: 'bg-brand-tint text-brand',
   danger: 'bg-danger-tint text-danger',
-  outline: 'border border-border bg-transparent text-body',
+  outline: 'ring-1 ring-inset ring-border bg-transparent text-body',
 };
 
 export default class Badge extends PuzzleView {

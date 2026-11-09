@@ -44,4 +44,3 @@ RecordForm.prototype.render = function () {
     , __L0)
   );
 };
-RecordForm.__pzlModule = 'RecordForm.pzl';

@@ -81,4 +81,3 @@ HandlerForms.prototype.render = function () {
     ]),
   ]);
 };
-HandlerForms.__pzlModule = 'HandlerForms.pzl';

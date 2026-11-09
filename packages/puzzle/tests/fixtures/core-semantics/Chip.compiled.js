@@ -10,4 +10,3 @@ Chip.prototype.render = function () {
     new ViewNode('text', { value: __s(__d.tone, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'tone' : 0) }),
   ]);
 };
-Chip.__pzlModule = 'Chip.pzl';

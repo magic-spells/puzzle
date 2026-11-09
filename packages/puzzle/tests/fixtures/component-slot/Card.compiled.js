@@ -16,4 +16,3 @@ Card.prototype.render = function () {
     new ViewNode(SLOT_TAG),
   ]);
 };
-Card.__pzlModule = 'Card.pzl';

@@ -19,7 +19,6 @@ SkeletonInlineComponent.prototype.render = function () {
     ]),
   ]);
 };
-SkeletonInlineComponent.__pzlModule = 'skeleton_inline_component.pzl';
 
 SkeletonInlineComponent.prototype.renderSkeleton = function () {
   const __d = this.getData();

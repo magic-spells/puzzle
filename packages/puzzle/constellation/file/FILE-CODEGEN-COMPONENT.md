@@ -10,6 +10,14 @@ connections:
   - FILE-CHECK-COMPONENT
 verified_at: '2026-11-01T19:19:18.479Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 codegen trims: getter aliases are numbered by count (__pzlComponentSelector0, 1,
+      …); the loop that skipped an alias the user's own source already spelled is deleted (unusual
+      input, owner rule), along with componentSelectorSource and hasComponentSlot. The check
+      emitter's mirror (compiler/internal/check/component.go) still has its own skip loop; it was
+      out of this PR's scope.
 ---
 
 # component.go
@@ -24,8 +32,9 @@ read.
 
 - **Selector hygiene.** A selector binding that starts `__` or collides with a
   generated row scope (`s`, `s1`, …) is read through a fresh module-scope
-  `__pzlComponentSelectorN` getter — a getter, not a copy, so a mutable `let` is
-  read live; the name skips any authored occurrence. Template locals and arrow
+  `__pzlComponentSelectorN` getter (numbered by count) — a getter, not a copy, so a
+  mutable `let` is read live. `__pzl…` is compiler-reserved; an authored module
+  binding with that spelling is not defended against. Template locals and arrow
   parameters still win. Other module selectors stay direct lexical reads.
 - **Row caching (D170).** Imports and `const` selector bindings cache normally;
   only reassigned module `let`/`var` selector reads mark the enclosing row site

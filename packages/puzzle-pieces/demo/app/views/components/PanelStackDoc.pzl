@@ -280,9 +280,9 @@ const rootRows = [
   { name: 'effect', desc: "'slide' (default) | 'stack'." },
   { name: 'class', desc: 'Merged onto the panel-stack host. Give it a size — the stack fills its parent.' },
   { name: '@change(handle)', desc: 'Value-first, once per transition, derived from all three upstream events. A nested stack is filtered out by target.' },
-  { name: '@push(detail)', desc: 'Raw { fromHandle, toHandle }. Cancelable — preventDefault() blocks the push and the component restores itself.' },
-  { name: '@pop(detail)', desc: 'Raw { fromHandle, toHandle }.' },
-  { name: '@reset(detail)', desc: 'Raw { rootHandle }, when the stack collapses back to the root.' },
+  { name: '@push(event)', desc: 'The raw event; event.detail is { fromHandle, toHandle }. Cancelable — event.preventDefault() blocks the push and the component restores itself.' },
+  { name: '@pop(event)', desc: 'The raw event; event.detail is { fromHandle, toHandle }.' },
+  { name: '@reset(event)', desc: 'The raw event; event.detail is { rootHandle }, when the stack collapses back to the root.' },
 ];
 
 const panelRows = [

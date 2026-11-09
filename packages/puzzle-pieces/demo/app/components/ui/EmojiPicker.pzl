@@ -171,7 +171,7 @@ const TRIGGER_BASE =
 
 const PANEL_CARD =
   'absolute z-50 w-72 overflow-hidden rounded-xl border border-border bg-surface shadow-lg';
-const PANEL_MORPH = 'inset-x-0 mx-auto w-72';
+const PANEL_MORPH = 'left-1/2 -ml-36'; // half of w-72, transform-free
 
 // Horizontal anchoring, keyed off the relative root's edges (Popover's map).
 const ALIGN = {

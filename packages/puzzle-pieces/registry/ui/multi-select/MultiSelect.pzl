@@ -11,11 +11,10 @@
             <span class="truncate">{ chip.label }</span>
             <button
               type="button"
-              tabindex="-1"
               class={ chipRemoveClass }
               aria-label={ chip.removeLabel }
               disabled={ disabled }
-              @mousedown={ onRemoveDown(event) }
+              @mousedown={ keepFocus(event) }
               @click={ removeChip(chip, event) }>
               <svg
                 class="size-3"
@@ -57,10 +56,10 @@
         <button
           type="button"
           tabindex="-1"
-          class="absolute inset-y-0 right-0 flex items-center pr-3 text-muted disabled:opacity-50 disabled:pointer-events-none"
+          class="absolute inset-y-0 right-0 flex items-center pr-3 text-muted"
           aria-label="Toggle options"
           disabled={ disabled }
-          @mousedown={ onChevronDown(event) }
+          @mousedown={ keepFocus(event) }
           @click={ toggle(event) }>
           <svg
             class="size-4 transition-[rotate] {#if open}rotate-180{/if}"
@@ -80,7 +79,8 @@
           aria-multiselectable="true"
           aria-label={ listAria }
           data-multiselect-panel
-          style={ panelStyle }>
+          style={ panelStyle }
+          @mousedown={ keepFocus(event) }>
           {#if empty}
             <li role="presentation" class="px-3 py-6 text-center text-sm text-muted">{ emptyText }</li>
           {:else}
@@ -170,13 +170,15 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // FOCUS MODEL (Combobox's). DOM focus lives on the <input> the whole time; the
 // listbox is never focused. The active option is tracked purely with
-// aria-activedescendant, so the vdom never fights a browser focus move. Chip ×
-// buttons and the chevron preventDefault their mousedown to keep focus on input.
+// aria-activedescendant, so the vdom never fights a browser focus move. The
+// listbox, chip × buttons and chevron preventDefault their mousedown to keep focus
+// on the input, so picking several options in a row never blurs it.
 //
 // KEYBOARD. Type filters + opens; Down/Up move the active option (wrap, skip
 // disabled); Home/End jump; Enter ADDS the active option (query clears, popup
 // stays open); Escape closes; Backspace on an EMPTY input removes the last chip;
-// Tab closes and moves on. Clicking a chip's × removes that chip.
+// Tab closes and moves on. Each chip's × is a tab stop before the input (removing
+// a chip returns focus to the input); clicking it removes that chip.
 //
 // NO free-text / custom value (Combobox's strict-select stance): Enter with no
 // active option is a no-op. NO `morph`: the trigger IS the input being typed into,
@@ -188,11 +190,11 @@ const CONTROL_BASE =
   'relative flex min-h-9 w-full flex-wrap items-center gap-1.5 rounded-lg border bg-surface ' +
   'py-1 pl-2 pr-9 text-sm transition-colors ' +
   'focus-within:outline-2 focus-within:outline-offset-2';
-const CONTROL_OK = 'border-border outline-ring focus-within:outline-ring';
-const CONTROL_ERROR = 'border-danger outline-danger focus-within:outline-danger';
+const CONTROL_OK = 'border-border outline-ring';
+const CONTROL_ERROR = 'border-danger outline-danger';
 
 const INPUT_BASE =
-  'h-7 min-w-[4rem] flex-1 bg-transparent text-sm text-ink placeholder:text-muted ' +
+  'h-7 min-w-16 flex-1 bg-transparent text-sm text-ink placeholder:text-muted ' +
   'focus:outline-none disabled:cursor-not-allowed';
 
 const CHIP_CLASS =
@@ -200,7 +202,7 @@ const CHIP_CLASS =
   'text-xs font-medium text-brand';
 const CHIP_REMOVE_CLASS =
   'inline-flex size-4 shrink-0 items-center justify-center rounded-full text-brand ' +
-  'transition-colors hover:bg-brand hover:text-brand-ink ' +
+  'transition-colors hover:bg-brand hover:text-brand-ink outline-ring focus-visible:outline-2 ' +
   'disabled:pointer-events-none';
 
 const PANEL_BASE =
@@ -326,9 +328,9 @@ export default class MultiSelect extends PuzzleView {
       if (e == null || e.divider || e.group != null) continue;
       labelByValue.set(e.value, e.label != null ? String(e.label) : String(e.value ?? ''));
     }
-    return values.map((v, i) => {
+    return values.map((v) => {
       const label = labelByValue.has(v) ? labelByValue.get(v) : String(v ?? '');
-      return { id: `${this._base}-chip-${i}`, value: v, label, removeLabel: `Remove ${label}` };
+      return { id: `${this._base}-chip-${String(v)}`, value: v, label, removeLabel: `Remove ${label}` };
     });
   }
 
@@ -753,11 +755,7 @@ export default class MultiSelect extends PuzzleView {
   }
 
   events = {
-    onChevronDown: (event) => {
-      event.preventDefault();
-    },
-
-    onRemoveDown: (event) => {
+    keepFocus: (event) => {
       event.preventDefault();
     },
 

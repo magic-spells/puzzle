@@ -30,7 +30,7 @@ export function isDynamicSegment(segment) {
  * becomes `/caf%25C3%25A9`.
  *
  * '?' and '#' are deliberately NOT encoded: they are structural delimiters that
- * stripPath()/encodeURL() rely on to split query and fragment.
+ * parseLocation()/encodeURL() rely on to split query and fragment.
  *
  * @param {string} path
  * @returns {string}

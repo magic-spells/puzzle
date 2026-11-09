@@ -13,7 +13,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   Save with <Kbd>⌘</Kbd> <Kbd>S</Kbd>.
 const BASE =
   'inline-flex items-center rounded border border-border bg-surface-sunken px-1.5 py-px ' +
-  'font-sans text-xs text-muted shadow-[inset_0_-1px_0_var(--color-border)]';
+  'font-sans text-xs text-muted shadow-kbd';
 
 export default class Kbd extends PuzzleView {
   data(params, props) {

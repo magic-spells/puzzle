@@ -17,6 +17,15 @@ connections:
   - FILE-STYLES-WATCH
 verified_at: '2026-11-01T19:26:04.240Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 (feat/0.10-codegen-trims, review F6q-Q2): Plugin.SetStripStamps(bool) makes
+      transformPZL pass an empty ModulePath, so codegen omits the D81 Class.__pzlModule stamp.
+      build.Build sets it through passContext only for a production SPA build (output unset, not
+      --mode development); dev, static and hybrid builds and every other plugin.New caller keep the
+      stamp. It is per build, not per pass, because the passes share one CompileCache. Saves ~17 gz
+      bytes per .pzl module in SPA production (todos: −122 raw / −52 gz).
 ---
 
 # esbuild plugin and build pipeline

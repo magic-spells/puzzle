@@ -129,4 +129,3 @@ Binding.prototype.render = function () {
     new ViewNode('input', { value: __d.x?.a?.b }, []),
   ]);
 };
-Binding.__pzlModule = 'binding.pzl';

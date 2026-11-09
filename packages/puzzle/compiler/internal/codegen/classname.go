@@ -61,8 +61,8 @@ func extractClassName(scripts string, toks []jsTok, file string, scriptsPos pars
 // nameCut reports whether rest — the bytes right after the class name token —
 // may continue the name in JavaScript although the scan stopped: a `\u`
 // escape, or a non-ASCII character that is not white space, such as a letter
-// newer than Go's Unicode tables (U+30FB `・` in `データ・一覧`). The render tail
-// would bind to the cut name (`データ`) and the module would crash on load.
+// newer than the running toolchain's Unicode tables. The render tail would bind
+// to the cut name and the module would crash on load.
 func nameCut(rest string) bool {
 	switch {
 	case rest == "":

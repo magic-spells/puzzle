@@ -1,5 +1,5 @@
 <puzzle-view>
-  <DropdownPanel.Trigger class={ triggerClass }><Children/></DropdownPanel.Trigger>
+  <DropdownPanel.Trigger class={ triggerClass }><Children/>{#if arrow}<span data-dropdown-arrow aria-hidden="true"></span>{/if}</DropdownPanel.Trigger>
 </puzzle-view>
 
 <script>
@@ -27,8 +27,6 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //   variant  'bar' (default) — a top label in the bar
 //            'item' — an in-panel submenu row, matching Item's box, with the
 //                     chevron hook pushed to the trailing edge
-//   arrow    variant="item" only: true (default) renders the
-//            [data-dropdown-arrow] hook the effects stylesheet draws into
 //   class    merged onto <dropdown-trigger>, after the variant chrome
 
 const FOCUS =
@@ -47,6 +45,7 @@ const ITEM =
 export default class Trigger extends PuzzleView {
   data(params, props) {
     return {
+      arrow: props.variant === 'item',
       triggerClass: [props.variant === 'item' ? ITEM : BAR, props.class]
         .filter(Boolean)
         .join(' '),

@@ -73,4 +73,3 @@ ExprMethods.prototype.render = function () {
         ]),
   ]);
 };
-ExprMethods.__pzlModule = 'expr_methods.pzl';

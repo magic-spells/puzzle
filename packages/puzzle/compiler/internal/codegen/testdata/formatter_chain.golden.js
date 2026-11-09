@@ -22,4 +22,3 @@ FormatterChain.prototype.render = function () {
     ]),
   ]);
 };
-FormatterChain.__pzlModule = 'formatter_chain.pzl';

@@ -37,4 +37,3 @@ ObjectGlobals.prototype.render = function () {
     ]),
   ]);
 };
-ObjectGlobals.__pzlModule = 'ObjectGlobals.pzl';

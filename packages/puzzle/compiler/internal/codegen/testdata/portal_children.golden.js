@@ -14,4 +14,3 @@ PortalChildren.prototype.render = function () {
     ]),
   ]);
 };
-PortalChildren.__pzlModule = 'portal_children.pzl';

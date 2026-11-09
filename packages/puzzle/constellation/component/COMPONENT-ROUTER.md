@@ -101,7 +101,8 @@ Each leaf precomputes its guard chain (`entry.guards`, root → leaf) and, when 
 [[DECISION-D182-NAVIGATION-RESULT]].
 
 - **Every `#navigate` exit returns a `NavigationResult`** — `fail(reason, err)`, `SUPERSEDED`, or `succeed(route)`. A new exit path that forgets this makes `push()` resolve `undefined`.
-- `#isCommittedNoop` gates the same-path no-op: committed path, chain intact, nothing in flight (`#guardRedirecting` exempt). `#joinInFlight` hands a same-key push or replace the in-flight navigation's promise from `#pendingNavPath`/`#pendingNavPromise`; a guard redirect skips the join, or a guard redirecting to its own path would await itself forever.
+- **The in-flight slot.** `#navigate` opens `#pendingNavPromise` with the module-private `PENDING` promise at its token bump; every verb's caller pairs the real promise through `#trackNav`, which writes only over `PENDING`. A navigation that ended inside its synchronous start has already cleared the slot, so nothing latches and `navigating()` (D185) reads false.
+- `#isCommittedNoop` gates the same-path no-op: committed path, chain intact, nothing in flight (`#guardRedirecting` exempt). `#joinInFlight` hands a same-key push or replace the in-flight navigation's promise from `#pendingNavPath`/`#pendingNavPromise` (a `PENDING` slot is re-read one microtask later); a guard redirect skips the join, or a guard redirecting to its own path would await itself forever.
 - **Commit-window throws:** the outer catch around the load/`#swap` block may run after `#commitLocation`, while `#state` still names the old route. When it owns the token it clears `#pendingNavPath`, `#pendingNavPromise` and the locale target, and sets `#state.chainInvalid`. It rethrows only for navigation zero (or a guard redirect whose chain box has `start`), so `app.mount()` keeps its teardown.
 - **`#pendingPush`** (the commit-window deferral slot) carries the caller's resolver. Anything that clears the slot — a displacing `#defer`, `stop()` — must resolve the old entry `SUPERSEDED`, or that caller waits forever.
 
@@ -116,7 +117,7 @@ Each leaf precomputes its guard chain (`entry.guards`, root → leaf) and, when 
 
 `__failedView(null, true)` sets `chainInvalid`/`layoutInvalid` and re-navigates the committed path in replace mode with `retryView = REBUILD` (a module-private marker). The marker takes the skeleton-exempt path, skips scroll and focus, `skipEnter()`s fresh levels and parks the outgoing unit as `#pendingOut` (destroyed without its out animation). Every test of it sits behind the inline `__PUZZLE_HAS_I18N__` probe — a new class member would ship in every app.
 
-With a navigation pending (push, replace, pop and navigation zero all fill `#pendingNavPromise`) it schedules `pending.then(again, again)` and returns null, so `setLocale` never waits on a navigation whose `data()` or guard may be awaiting it; a switch from a layout's `data()` on first load rebuilds once navigation zero commits. With none pending, the promise resolves on the rebuilt commit and rejects on failure. Tests: `tests/i18n-app.test.js`.
+With a navigation in flight (`#pendingNavPromise` set — every verb pairs it, and it is cleared the moment a navigation ends, even inside its own synchronous start) it schedules `pending.then(again, again)` and returns null, so `setLocale` never waits on a navigation whose `data()` or guard may be awaiting it. A switch from inside a navigation's synchronous start (a layout's `data()` on first load) reads `PENDING`, which resolves one microtask later, by when the real promise is paired; it rebuilds once navigation zero commits. With none pending, the promise resolves on the rebuilt commit and rejects on failure. Tests: `tests/i18n-app.test.js`.
 
 ## Mounting and transitions
 
