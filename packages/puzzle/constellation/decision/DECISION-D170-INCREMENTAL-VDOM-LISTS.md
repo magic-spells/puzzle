@@ -78,8 +78,8 @@ templates rebuild thousands of vnodes for zero DOM writes.
    and `views/`, neither of which may import the other), defined
    non-enumerable at `_instantiate` and written in `Store._notify`. A child
    with a record prop compares against a **snapshot** (`__propRevs`, written
-   at mount and each props-carrying `applyParentUpdate`), never the old prop
-   object, which after an in-place mutation is the same advanced record.
+   as each refresh begins, before `data()` runs), never the old prop object,
+   which after an in-place mutation is the same advanced record.
 5. **Loop handlers are identity-stable**: a handler whose arguments read only
    loop locals (and `event`) is cached on the row (`(s.h<n> ??= …)`) and reads
    the current item at fire time (`remove(todo.id)` →
@@ -88,9 +88,11 @@ templates rebuild thousands of vnodes for zero DOM writes.
    roots join the mask. Handler arguments add no other row facts:
    `listRows` reassigns `s.item`/`s.i` every pass.
 6. **One flush, one `data()` run** for a child that both receives a record
-   prop and queries it: `Store` publishes `_flushSeq` during delivery and a
-   refresh inside it stamps `_settleMark`, reusing
-   [[DECISION-D161-AUTO-FETCHING-FINDS]]'s early return.
+   prop and queries it, in either delivery order. A refresh reads
+   `Store._notifySeq` and the prop revisions before `data()` runs, and
+   `#commit` stamps the sequence on `_settleMark`; whichever wake-up comes
+   second is skipped — the parent's push by `propsEqual`, the child's own
+   notification by [[DECISION-D161-AUTO-FETCHING-FINDS]]'s early return.
 
 **Non-lowered bodies** — a `<Snippet>` body, a range `{#for}` body, and an
 item body that fell back to `.map` — lower and cache nothing inside them
