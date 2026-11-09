@@ -21,23 +21,23 @@ func TestRewriteShellReferences(t *testing.T) {
 		{`<img src="app.js"><scripture src="app.js">text app.js`, `<img src="app.js"><scripture src="app.js">text app.js`},
 	} {
 		t.Run(tt.source, func(t *testing.T) {
-			got, _, err := rewriteShellHTML("<head>"+tt.source+"</head>", renames, nil, map[string]bool{"vendor/app.js": true})
+			got, _, _, err := rewriteShellHTMLRefs("<head>"+tt.source+"</head>", renames, nil, map[string]bool{"vendor/app.js": true}, true)
 			if err != nil || got != "<head>"+tt.want+"</head>" {
 				t.Fatalf("rewrite = %q, %v; want %q", got, err, tt.want)
 			}
 		})
 	}
 	for _, source := range []string{`<head></head>`, `<head><link href="app.js"></head>`} {
-		if _, found, err := rewriteShellHTML(source, renames, nil, nil); err != nil || found {
+		if _, found, _, err := rewriteShellHTMLRefs(source, renames, nil, nil, true); err != nil || found {
 			t.Fatalf("entry found = %v, error = %v", found, err)
 		}
 	}
 	// </head> is only needed to place preloads: a shell that omits the optional
 	// end tag still rewrites when there are none, and fails when there are.
-	if got, _, err := rewriteShellHTML(`<script src="app.js"></script>`, renames, nil, nil); err != nil || got != `<script src="app-HASH.js"></script>` {
+	if got, _, _, err := rewriteShellHTMLRefs(`<script src="app.js"></script>`, renames, nil, nil, true); err != nil || got != `<script src="app-HASH.js"></script>` {
 		t.Fatalf("rewrite without </head> = %q, %v", got, err)
 	}
-	if _, _, err := rewriteShellHTML(`<script src="app.js"></script>`, renames, []string{"chunks/a.js"}, nil); err == nil || !strings.Contains(err.Error(), "</head>") {
+	if _, _, _, err := rewriteShellHTMLRefs(`<script src="app.js"></script>`, renames, []string{"chunks/a.js"}, nil, true); err == nil || !strings.Contains(err.Error(), "</head>") {
 		t.Fatalf("missing head error = %v", err)
 	}
 }
@@ -46,7 +46,7 @@ func TestRewriteShellReferences(t *testing.T) {
 // checked against the emitted outputs, nor read as the entry script.
 func TestRewriteShellSkipsComments(t *testing.T) {
 	source := "<head><!-- <link rel=stylesheet href=/app.css> <script src=\"/app.js\"></script> --><!-- unterminated <link href=app.css></head>"
-	got, found, err := rewriteShellHTML(source, map[string]string{"app.js": "app-HASH.js", "styles.css": "styles-HASH.css"}, []string{"chunks/a.js"}, nil)
+	got, found, _, err := rewriteShellHTMLRefs(source, map[string]string{"app.js": "app-HASH.js", "styles.css": "styles-HASH.css"}, []string{"chunks/a.js"}, nil, true)
 	if err != nil || found || got != source {
 		t.Fatalf("rewrite = %q, found = %v, %v; want the shell unchanged", got, found, err)
 	}
@@ -62,7 +62,7 @@ func TestRewriteShellCommentMarkersInScriptsAndAttributes(t *testing.T) {
 		{`<meta content="<!--"><script src="/app.js"></script>`, `<meta content="<!--"><script src="/app-HASH.js"></script>`},
 		{`<script src="/app.js">if (a <!--b) {}</script>`, `<script src="/app-HASH.js">if (a <!--b) {}</script>`},
 	} {
-		got, found, err := rewriteShellHTML("<head>"+tt.source+"</head>", renames, nil, nil)
+		got, found, _, err := rewriteShellHTMLRefs("<head>"+tt.source+"</head>", renames, nil, nil, true)
 		if err != nil || !found || got != "<head>"+tt.want+"</head>" {
 			t.Errorf("rewrite = %q, found = %v, %v; want %q", got, found, err, tt.want)
 		}
@@ -73,7 +73,7 @@ func TestShellPreloads(t *testing.T) {
 	for _, cross := range []string{"", "crossorigin", `crossorigin = 'use-credentials'`} {
 		for _, prefix := range []string{"/", "./", "", "/docs/site/"} {
 			source := "<html>\n  <head>\n    <script " + cross + ` src="` + prefix + "app.js\"></script>\n  </head>\n</html>"
-			got, _, err := rewriteShellHTML(source, nil, []string{"chunks/first.js", "chunks/shared.js"}, nil)
+			got, _, _, err := rewriteShellHTMLRefs(source, nil, []string{"chunks/first.js", "chunks/shared.js"}, nil, false)
 			if err != nil {
 				t.Fatal(err)
 			}

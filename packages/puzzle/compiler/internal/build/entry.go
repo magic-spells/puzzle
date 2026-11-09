@@ -3,6 +3,8 @@ package build
 import (
 	"fmt"
 	"path/filepath"
+
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 )
 
 // The app's build entry, as app-root-relative slash paths (D54). A TypeScript
@@ -30,7 +32,7 @@ func ResolveEntry(root string) (string, error) {
 	}
 	ts := filepath.Join(absRoot, filepath.FromSlash(EntryTS))
 	js := filepath.Join(absRoot, filepath.FromSlash(EntryJS))
-	hasTS, hasJS := FileExists(ts), FileExists(js)
+	hasTS, hasJS := fsutil.FileExists(ts), fsutil.FileExists(js)
 	switch {
 	case hasTS && hasJS:
 		return "", fmt.Errorf(

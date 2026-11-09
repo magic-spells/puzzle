@@ -34,6 +34,38 @@ func RejectSymlink(path string) error {
 	return nil
 }
 
+// EvalSymlinksAllowMissing mirrors filepath.EvalSymlinks for a destination that
+// may not exist yet: resolve the nearest existing ancestor, then append the
+// missing suffix. A dangling symlink fails closed instead of being mistaken for
+// a missing ordinary path segment.
+func EvalSymlinksAllowMissing(name string) (string, error) {
+	current := name
+	var missing []string
+	for {
+		resolved, err := filepath.EvalSymlinks(current)
+		if err == nil {
+			for i := len(missing) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, missing[i])
+			}
+			return resolved, nil
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		if _, lerr := os.Lstat(current); lerr == nil {
+			return "", err
+		} else if !os.IsNotExist(lerr) {
+			return "", lerr
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", err
+		}
+		missing = append(missing, filepath.Base(current))
+		current = parent
+	}
+}
+
 // WriteFileAtomic writes data to a temporary file in the same directory as path
 // and then renames it over path. Because os.Rename within a directory is atomic
 // on POSIX (and replaces the destination on Windows via MoveFileEx), a concurrent

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/version"
 )
 
@@ -109,7 +110,7 @@ func (d *dirFetcher) Fetch(rel string) ([]byte, error) {
 }
 
 // contains reports whether p, after symlink resolution, stays under the
-// registry root. It resolves the nearest existing ancestor (evalSymlinksAllowMissing)
+// registry root. It resolves the nearest existing ancestor (fsutil.EvalSymlinksAllowMissing)
 // so a not-yet-existing target still has its `..` traversal caught, and a
 // dangling symlink fails closed.
 func (d *dirFetcher) contains(p string) (bool, error) {
@@ -117,7 +118,7 @@ func (d *dirFetcher) contains(p string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	root, err = evalSymlinksAllowMissing(root)
+	root, err = fsutil.EvalSymlinksAllowMissing(root)
 	if err != nil {
 		return false, err
 	}
@@ -125,7 +126,7 @@ func (d *dirFetcher) contains(p string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	abs, err = evalSymlinksAllowMissing(abs)
+	abs, err = fsutil.EvalSymlinksAllowMissing(abs)
 	if err != nil {
 		return false, err
 	}

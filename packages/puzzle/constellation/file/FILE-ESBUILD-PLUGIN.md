@@ -8,6 +8,12 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
 verified_at: '2026-11-01T19:28:54.178Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 trims: `ScanFormatters` and `(*Plugin).SetFormatters` are gone; `ScanUsage` +
+      `SetUsage` are the only entry points (SetUsage builds the formatter set inline, `escape`
+      always present). Plugin tests use a local `scanFormatters` helper over `ScanUsage`.
 ---
 
 # plugin.go

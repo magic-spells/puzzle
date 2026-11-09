@@ -10,6 +10,15 @@ connections:
   - FILE-BUILD-PRERENDER-PAGES
   - FILE-CONFIG
   - DOC-SPEC-BUILD
+notes:
+  - kind: gotcha
+    text: >-
+      Strictness is `strictHash := hash && cfg.Build.HashNames != nil` (build.go): only an explicit
+      `true` with hashing actually on is strict. Keying it on "the key was written" alone made `{
+      splitting: true, hashNames: false }` strict too, because splitting still enters rewriteShell
+      for preloads, so a stale `/app.css` link failed the build that the opt-out should have left
+      lenient (review F7-B1, 2026-11-08). `TestStaleShellAssetOnlyFailsExplicitHash` has an
+      `explicit false with splitting` row.
 ---
 
 # D181 — Hashed production output names and modulepreload
