@@ -16,10 +16,10 @@
       <ExampleBox code={ codeHero }>
         <div class="w-full max-w-sm space-y-2">
           <div class="flex items-center justify-between">
-            <Label>Volume</Label>
+            <p class="text-sm font-medium text-ink">Volume</p>
             <p class="text-sm text-muted">{ volume }</p>
           </div>
-          <Slider value={ volume } min={ 0 } max={ 100 } @input={ setVolume } @change={ setVolume } />
+          <Slider label="Volume" value={ volume } min={ 0 } max={ 100 } @input={ setVolume } @change={ setVolume } />
         </div>
       </ExampleBox>
 
@@ -44,10 +44,10 @@
         <ExampleBox id="range" title="Range" code={ codeRange }>
           <div class="w-full max-w-sm space-y-2">
             <div class="flex items-center justify-between">
-              <Label>Price range</Label>
+              <p class="text-sm font-medium text-ink">Price range</p>
               <p class="text-sm text-muted">${ priceMin } – ${ priceMax }</p>
             </div>
-            <Slider valueMin={ priceMin } valueMax={ priceMax } min={ 0 } max={ 1000 } step={ 10 } @input={ setPrice } @change={ setPrice } />
+            <Slider labelMin="Minimum price" labelMax="Maximum price" valueMin={ priceMin } valueMax={ priceMax } min={ 0 } max={ 1000 } step={ 10 } @input={ setPrice } @change={ setPrice } />
           </div>
         </ExampleBox>
 
@@ -55,17 +55,17 @@
           <div class="w-full max-w-sm space-y-6">
             <div class="space-y-2">
               <div class="flex items-center justify-between">
-                <Label>Step 10</Label>
+                <p class="text-sm font-medium text-ink">Step 10</p>
                 <p class="text-sm text-muted">{ stepped }</p>
               </div>
-              <Slider value={ stepped } min={ 0 } max={ 100 } step={ 10 } @input={ setStepped } @change={ setStepped } />
+              <Slider label="Step 10" value={ stepped } min={ 0 } max={ 100 } step={ 10 } @input={ setStepped } @change={ setStepped } />
             </div>
             <div class="space-y-2">
               <div class="flex items-center justify-between">
-                <Label>Continuous (step="any")</Label>
+                <p class="text-sm font-medium text-ink">Continuous (step="any")</p>
                 <p class="text-sm text-muted">{ fine }</p>
               </div>
-              <Slider value={ fine } min={ 0 } max={ 100 } step="any" @input={ setFine } @change={ setFine } />
+              <Slider label="Continuous" value={ fine } min={ 0 } max={ 100 } step="any" @input={ setFine } @change={ setFine } />
             </div>
           </div>
         </ExampleBox>
@@ -74,24 +74,24 @@
           <div class="w-full max-w-sm space-y-6">
             <div class="space-y-2">
               <div class="flex items-center justify-between">
-                <Label>Auto grid</Label>
+                <p class="text-sm font-medium text-ink">Auto grid</p>
                 <p class="text-sm text-muted">{ autoTicked }</p>
               </div>
-              <Slider value={ autoTicked } min={ 0 } max={ 100 } ticks={ true } @input={ setAutoTicked } @change={ setAutoTicked } />
+              <Slider label="Auto grid" value={ autoTicked } min={ 0 } max={ 100 } ticks={ true } @input={ setAutoTicked } @change={ setAutoTicked } />
             </div>
             <div class="space-y-2">
               <div class="flex items-center justify-between">
-                <Label>Explicit values</Label>
+                <p class="text-sm font-medium text-ink">Explicit values</p>
                 <p class="text-sm text-muted">{ quarter }</p>
               </div>
-              <Slider value={ quarter } min={ 0 } max={ 100 } step={ 25 } ticks={ quarterTicks } @input={ setQuarter } @change={ setQuarter } />
+              <Slider label="Explicit values" value={ quarter } min={ 0 } max={ 100 } step={ 25 } ticks={ quarterTicks } @input={ setQuarter } @change={ setQuarter } />
             </div>
             <div class="space-y-2">
               <div class="flex items-center justify-between">
-                <Label>Every 10, snapping</Label>
+                <p class="text-sm font-medium text-ink">Every 10, snapping</p>
                 <p class="text-sm text-muted">{ stepTen }</p>
               </div>
-              <Slider value={ stepTen } min={ 0 } max={ 100 } step={ 10 } ticks={ true } tickStep={ 10 } @input={ setStepTen } @change={ setStepTen } />
+              <Slider label="Every 10, snapping" value={ stepTen } min={ 0 } max={ 100 } step={ 10 } ticks={ true } tickStep={ 10 } @input={ setStepTen } @change={ setStepTen } />
             </div>
           </div>
         </ExampleBox>
@@ -100,17 +100,17 @@
           <div class="w-full max-w-sm space-y-6">
             <div class="space-y-2">
               <div class="flex items-center justify-between">
-                <Label>Labelled grid</Label>
+                <p class="text-sm font-medium text-ink">Labelled grid</p>
                 <p class="text-sm text-muted">{ labeled }</p>
               </div>
-              <Slider value={ labeled } min={ 0 } max={ 100 } step={ 20 } ticks={ true } tickStep={ 20 } tickLabels={ true } @input={ setLabeled } @change={ setLabeled } />
+              <Slider label="Labelled grid" value={ labeled } min={ 0 } max={ 100 } step={ 20 } ticks={ true } tickStep={ 20 } tickLabels={ true } @input={ setLabeled } @change={ setLabeled } />
             </div>
             <div class="space-y-2">
               <div class="flex items-center justify-between">
-                <Label>Formatted</Label>
+                <p class="text-sm font-medium text-ink">Formatted</p>
                 <p class="text-sm text-muted">{ zoom }%</p>
               </div>
-              <Slider value={ zoom } min={ 0 } max={ 200 } step={ 25 } ticks={ true } tickStep={ 50 } tickLabels={ percent } @input={ setZoom } @change={ setZoom } />
+              <Slider label="Formatted" value={ zoom } min={ 0 } max={ 200 } step={ 25 } ticks={ true } tickStep={ 50 } tickLabels={ percent } @input={ setZoom } @change={ setZoom } />
             </div>
           </div>
         </ExampleBox>
@@ -118,16 +118,16 @@
         <ExampleBox id="tick-position" title="Tick position" code={ codeTickPosition }>
           <div class="w-full max-w-sm space-y-8">
             <div class="space-y-2">
-              <Label>Below (default)</Label>
-              <Slider value={ posBelow } min={ 0 } max={ 100 } step={ 25 } ticks={ true } tickStep={ 25 } tickLabels={ true } @input={ setPosBelow } @change={ setPosBelow } />
+              <p class="text-sm font-medium text-ink">Below (default)</p>
+              <Slider label="Below" value={ posBelow } min={ 0 } max={ 100 } step={ 25 } ticks={ true } tickStep={ 25 } tickLabels={ true } @input={ setPosBelow } @change={ setPosBelow } />
             </div>
             <div class="space-y-2">
-              <Label>Above</Label>
-              <Slider value={ posAbove } min={ 0 } max={ 100 } step={ 25 } ticks={ true } tickStep={ 25 } tickLabels={ true } tickPosition="above" @input={ setPosAbove } @change={ setPosAbove } />
+              <p class="text-sm font-medium text-ink">Above</p>
+              <Slider label="Above" value={ posAbove } min={ 0 } max={ 100 } step={ 25 } ticks={ true } tickStep={ 25 } tickLabels={ true } tickPosition="above" @input={ setPosAbove } @change={ setPosAbove } />
             </div>
             <div class="space-y-2">
-              <Label>Inside</Label>
-              <Slider value={ posInside } min={ 0 } max={ 100 } step={ 25 } ticks={ true } tickStep={ 25 } tickLabels={ true } tickPosition="inside" @input={ setPosInside } @change={ setPosInside } />
+              <p class="text-sm font-medium text-ink">Inside</p>
+              <Slider label="Inside" value={ posInside } min={ 0 } max={ 100 } step={ 25 } ticks={ true } tickStep={ 25 } tickLabels={ true } tickPosition="inside" @input={ setPosInside } @change={ setPosInside } />
             </div>
           </div>
         </ExampleBox>
@@ -136,25 +136,25 @@
           <div class="w-full max-w-sm space-y-6">
             <div class="space-y-2">
               <div class="flex items-center justify-between">
-                <Label>Redline at 90</Label>
+                <p class="text-sm font-medium text-ink">Redline at 90</p>
                 <p class="text-sm text-muted">{ redline }</p>
               </div>
-              <Slider value={ redline } min={ 0 } max={ 100 } step={ 5 } ticks={ redlineTicks } tickLabels={ true } @input={ setRedline } @change={ setRedline } />
+              <Slider label="Redline at 90" value={ redline } min={ 0 } max={ 100 } step={ 5 } ticks={ redlineTicks } tickLabels={ true } @input={ setRedline } @change={ setRedline } />
             </div>
             <div class="space-y-2">
               <div class="flex items-center justify-between">
-                <Label>Named endpoints</Label>
+                <p class="text-sm font-medium text-ink">Named endpoints</p>
                 <p class="text-sm text-muted">{ mode }</p>
               </div>
-              <Slider value={ mode } min={ 0 } max={ 100 } step={ 25 } ticks={ modeTicks } tickLabels={ true } @input={ setMode } @change={ setMode } />
+              <Slider label="Named endpoints" value={ mode } min={ 0 } max={ 100 } step={ 25 } ticks={ modeTicks } tickLabels={ true } @input={ setMode } @change={ setMode } />
             </div>
           </div>
         </ExampleBox>
 
         <ExampleBox id="disabled" title="Disabled" code={ codeDisabled } tall={ false }>
           <div class="w-full max-w-sm space-y-2">
-            <Label>Disabled</Label>
-            <Slider value={ 40 } disabled />
+            <p class="text-sm font-medium text-ink">Disabled</p>
+            <Slider label="Disabled" value={ 40 } disabled />
           </div>
         </ExampleBox>
       </div>
@@ -167,14 +167,13 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Slider from '@/components/ui/Slider.pzl';
-import Label from '@/components/ui/Label.pzl';
 import ExampleBox from '@/components/docs/ExampleBox.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
 
 const installCmd = 'puzzle add piece slider';
 const usageImport = `import Slider from '@/components/ui/Slider.pzl';`;
-const usageMarkup = `<Slider value={ volume } min={ 0 } max={ 100 } @input={ setVolume } @change={ setVolume } />`;
+const usageMarkup = `<Slider label="Volume" value={ volume } min={ 0 } max={ 100 } @input={ setVolume } @change={ setVolume } />`;
 
 // Stable module references — tick arrays and formatters keep their identity
 // across re-renders, so the slider reuses its cached tick geometry.
@@ -183,7 +182,7 @@ const redlineTicks = [0, 25, 50, 75, { value: 90, class: 'bg-danger', labelClass
 const modeTicks = [{ value: 0, label: 'Off' }, 25, 50, 75, { value: 100, label: 'Max' }];
 const percent = (v) => v + '%';
 
-const codeHero = `<Slider value={ volume } min={ 0 } max={ 100 } @input={ setVolume } @change={ setVolume } />
+const codeHero = `<Slider label="Volume" value={ volume } min={ 0 } max={ 100 } @input={ setVolume } @change={ setVolume } />
 
 // parent — @input fires live during drag, @change on release
 events = {
@@ -191,7 +190,8 @@ events = {
 };`;
 
 const codeRange = `// the presence of valueMin / valueMax switches to dual-thumb range mode
-<Slider valueMin={ priceMin } valueMax={ priceMax } min={ 0 } max={ 1000 } step={ 10 }
+<Slider labelMin="Minimum price" labelMax="Maximum price"
+  valueMin={ priceMin } valueMax={ priceMax } min={ 0 } max={ 1000 } step={ 10 }
   @input={ setPrice } @change={ setPrice } />
 
 // parent — range callbacks receive { valueMin, valueMax }
@@ -266,7 +266,7 @@ const modeTicks = [
 <Slider value={ mode } min={ 0 } max={ 100 } step={ 25 }
   ticks={ modeTicks } tickLabels={ true } @change={ setMode } />`;
 
-const codeDisabled = `<Slider value={ 40 } disabled />`;
+const codeDisabled = `<Slider label="Disabled" value={ 40 } disabled />`;
 
 export default class SliderDoc extends PuzzleView {
   created() {

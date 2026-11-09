@@ -44,8 +44,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // literal markup, never an interpolation that changes: a re-render carrying new
 // text would patch against a DOM the element has already rewritten. Inline tags
 // (<em>, <strong>, <a>, <br>) are preserved by the splitter and are fine. To show
-// different text, change the text AND bump `play` in the same render — `play`
-// restores the element's own snapshot and re-splits from whatever is there now.
+// different text, remount the piece: branch it in an {#if}, or key it in a {#for}.
 //
 // ATTRIBUTES ARE READ ONCE, AT CONNECT. The element declares no
 // observedAttributes: `split`, `effect`, the three timings, `easing`, `trigger`

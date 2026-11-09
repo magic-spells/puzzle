@@ -5,7 +5,8 @@
     @pointerleave={ onPointerLeave }
     @focusin={ onFocusIn }
     @focusout={ onFocusOut(event) }
-    @keydown:escape={ onEscape(event) }>
+    @keydown:escape={ onEscape }
+    @keydown:escape:outside={ onEscape }>
     <Slot/>
     {#if visible}
       <span class={ panelClass } id={ tipId } role="tooltip" data-tooltip-panel>
@@ -40,8 +41,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // the overwhelmingly common case and this covers it.
 //
 // Timing: pointerenter starts a `delay` timer (cleared if the pointer leaves
-// before it fires); focusin shows immediately (keyboard users shouldn't wait);
-// hide is always immediate. Escape hides while visible.
+// before it fires); keyboard focus (:focus-visible) shows immediately, a click
+// focus does not; hide is always immediate. Escape hides it wherever focus is.
 
 // Per-instance id seed so each tooltip's id is unique across instances.
 let uid = 0;
@@ -69,7 +70,7 @@ const ARROW = {
   right: 'right-full top-1/2 -translate-y-1/2 translate-x-1/2',
 };
 
-const ARROW_BASE = 'pointer-events-none absolute size-2 rotate-45 rounded-[1px] bg-ink';
+const ARROW_BASE = 'pointer-events-none absolute size-2 rotate-45 bg-ink';
 
 export default class Tooltip extends PuzzleView {
   created() {
@@ -189,12 +190,12 @@ export default class Tooltip extends PuzzleView {
 
     // Keyboard focus: show immediately — no hover delay for keyboard users.
     onFocusIn: (event) => {
-      this._show();
+      if (event.target.matches(':focus-visible')) this._show();
     },
 
     onPointerLeave: () => {
       // Keyboard focus keeps the description visible (WCAG 1.4.13).
-      if (this.element && this.element.contains(document.activeElement)) return;
+      if (this.element?.querySelector(':focus-visible')) return;
       this._hide();
     },
 
@@ -204,9 +205,7 @@ export default class Tooltip extends PuzzleView {
       this._hide();
     },
 
-    onEscape: (event) => {
-      if (!this.getData().visible) return;
-      event.preventDefault();
+    onEscape: () => {
       this._hide();
     },
   };

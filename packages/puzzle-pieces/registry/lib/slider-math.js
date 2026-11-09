@@ -61,18 +61,18 @@ export function configFrom(props) {
 }
 
 /** Snap a value onto the step grid, measured FROM `min` (not from zero). */
-export function quantize(v, cfg) {
+function quantize(v, cfg) {
 	if (cfg.step === 'any') return v;
 	return cfg.min + Math.round((v - cfg.min) / cfg.step) * cfg.step;
 }
 
 /** Clamp into `[min, max]`. */
-export function clampBounds(v, cfg) {
+function clampBounds(v, cfg) {
 	return Math.max(cfg.min, Math.min(v, cfg.max));
 }
 
 /** Round to the precision the step implies, stripping float drift. */
-export function round(v, cfg) {
+function round(v, cfg) {
 	return parseFloat(v.toFixed(cfg.dec));
 }
 
@@ -81,12 +81,12 @@ export function round(v, cfg) {
  * round. Deterministic: `normalize(normalize(x)) === normalize(x)`, which is what
  * lets the pieces guard their update loops on value EQUALITY instead of flags.
  *
- * `thumb` is 'min' | 'max' | 'single'. Single-thumb callers can pass an empty
+ * `thumb` is 'min' | 'max' | 'single'. Single-thumb callers can omit
  * `committed` — neither crossover branch fires.
  * @param {number} value
  * @param {'min'|'max'|'single'} thumb
  * @param {object} cfg
- * @param {{valueMin?: number, valueMax?: number}} committed
+ * @param {{valueMin?: number, valueMax?: number}} [committed]
  */
 export function normalize(value, thumb, cfg, committed) {
 	let v = Number.isFinite(value) ? value : cfg.min;

@@ -86,9 +86,6 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 import {
   configFrom,
-  quantize,
-  clampBounds,
-  round,
   normalize,
   valueToPercent,
   percentToValue,
@@ -135,7 +132,7 @@ import {
 //   1. GESTURE ARMING — a press on a THUMB starts dragging immediately; a press
 //      on the TRACK only ARMS: >3px of horizontal movement promotes it to a drag
 //      on the nearest thumb (which jumps under the pointer), while vertical-first
-//      movement disarms so the page scrolls. Equal-value (stacked) range thumbs
+//      movement past it disarms so the page scrolls. Equal-value (stacked) thumbs
 //      defer the thumb choice to the first move's direction.
 //   2. TOUCH CAPTURE AVOIDANCE — setPointerCapture is called for mouse/pen ONLY;
 //      touch rides implicit capture (explicit capture mid-touch fires a spurious
@@ -430,15 +427,10 @@ export default class Slider extends PuzzleView {
   // each clamped to bounds first, then the pair is de-crossed (min<=max).
   _committed(props, cfg) {
     if (this._isRange(props)) {
-      const rawMin = Number(props.valueMin);
-      const rawMax = Number(props.valueMax);
-      let valueMin = round(clampBounds(quantize(Number.isFinite(rawMin) ? rawMin : cfg.min, cfg), cfg), cfg);
-      let valueMax = round(clampBounds(quantize(Number.isFinite(rawMax) ? rawMax : cfg.max, cfg), cfg), cfg);
-      if (valueMin > valueMax) valueMin = valueMax;
-      return { valueMin, valueMax };
+      const valueMax = normalize(Number(props.valueMax ?? cfg.max), 'single', cfg);
+      return { valueMin: Math.min(normalize(Number(props.valueMin), 'single', cfg), valueMax), valueMax };
     }
-    const raw = Number(props.value);
-    return { value: round(clampBounds(quantize(Number.isFinite(raw) ? raw : cfg.min, cfg), cfg), cfg) };
+    return { value: normalize(Number(props.value), 'single', cfg) };
   }
 
   _channel(state, thumb) {
@@ -645,12 +637,9 @@ export default class Slider extends PuzzleView {
     if (!drag.dragging) {
       const deltaX = Math.abs(event.clientX - drag.startX);
       const deltaY = Math.abs(event.clientY - drag.startY);
-      if (deltaY > deltaX) {
-        // vertical intent → hand the gesture back to the browser for scrolling
-        this._teardownGesture();
-        return;
-      }
-      if (deltaX <= DRAG_THRESHOLD) return;
+      if (Math.max(deltaX, deltaY) <= DRAG_THRESHOLD) return;
+      // vertical intent → hand the gesture back to the browser for scrolling
+      if (deltaY > deltaX) return this._teardownGesture();
       // promote: the nearest thumb jumps under the pointer
       drag.thumb = this._nearestThumb(this._percentFromClientX(event.clientX), committed, cfg);
       drag.startValue = this._channel(committed, drag.thumb);
