@@ -49,6 +49,12 @@ describe('examples/static-docs — a staticPaths route (D179)', () => {
 		expect(pageModule(read('index.html'))).toMatch(/^_puzzle\/index-[A-Z2-7]{8}\.js$/);
 	});
 
+	it('ships no router: no page module or chunk mentions popstate (D81)', () => {
+		const modules = fs.readdirSync(path.join(DIST, '_puzzle'), { recursive: true }).filter((name) => name.endsWith('.js'));
+		expect(modules.length).toBeGreaterThan(1);
+		for (const name of modules) expect(read(path.join('_puzzle', name)), name).not.toContain('popstate');
+	});
+
 	it('writes one page per principle record, sharing one module', () => {
 		const module = pageModule(read('principles/p1/index.html'));
 		expect(module).toMatch(/^_puzzle\/principles--_id-[A-Z2-7]{8}\.js$/);

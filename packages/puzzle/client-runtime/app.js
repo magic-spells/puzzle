@@ -38,7 +38,7 @@ import {
 	viewerLanguages,
 } from './i18n.js';
 import manifestData from '@magic-spells/puzzle/i18n/manifest';
-import { Router, localePage, navigating, normalizeBase } from './router/router.js';
+import { Router, localePage, normalizeBase } from './router/router.js';
 import { isViewClass } from './router/viewClass.js';
 import { snapshotToStorage, restoreStoreFromStorage, restoreViewsFromStorage } from './devstate.js';
 import { devtoolsAppMounted, devtoolsAppUnmounted } from './devtools.js';
@@ -311,7 +311,7 @@ export class PuzzleApp {
 					store._flushScheduled ||
 					store._asyncTrackingChain ||
 					store._reading?.() ||
-					navigating(/** @type {Router} */ (this.router)) ||
+					Router.navigating(/** @type {Router} */ (this.router)) ||
 					((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n?.__busy)
 				)
 					clear = 0;

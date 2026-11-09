@@ -16,6 +16,16 @@ connections:
   - TEST-PRERENDER-OUTPUT
   - FLOW-PRERENDER
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: verified
+    text: >-
+      "No router" holds in the shipped bytes again (2026-11-08, feat/0.10-static-router). A class
+      static block in router.js (D185) had pinned the whole Router into every static site's shared
+      chunk through the kernel's, SSG assembler's and i18n's path-helper imports; it is now a
+      tree-shakable static method. examples/static-docs shared chunk 25,606 → 18,452 gzip (−28%),
+      examples/i18n --static 29,182 → 21,586 gzip, and no page module or chunk contains
+      popstate/pushState/scrollRestoration. Guarded by the popstate-absent assertion in
+      tests/static-docs-example.test.js.
 ---
 
 # D81 — `output: 'static'`: a true static site
