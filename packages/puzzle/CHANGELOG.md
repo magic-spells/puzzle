@@ -218,6 +218,14 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Changed
 
+- **Router focus keeps a view's own choice (D93).** After a client-side
+  navigation the router used to focus the new view's root after `mounted()`
+  ran, taking focus away from an input the view had just focused. Now focus
+  already inside the new view stays put, an `autofocus` element is focused
+  (browsers honour the attribute on first load only), and otherwise the root
+  is focused as before (also when the `autofocus` element cannot take focus,
+  such as a button in a closed `<dialog>`). A `mounted()` hook that only
+  focused an `autofocus` input can be deleted.
 - **Buttons are quiet: no brand fill (puzzle-pieces).** A screen with many
   buttons no longer reads as a wall of indigo. `button` `primary` is solid ink
   with the page colour as its text (`bg-ink text-page hover:bg-ink/85`):

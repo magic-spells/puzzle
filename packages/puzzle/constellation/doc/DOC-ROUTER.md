@@ -218,7 +218,7 @@ Declare `animations` on views and layouts; navigation plays the old view's `out`
 
 ## Scroll and focus
 
-By default a push scrolls to the top, Back/Forward restores the saved position (even after a reload), `push('/docs#faq')` lands on `#faq`, and the first load is left to the browser. After each navigation focus moves to the new view and the title is announced to screen readers (§14, §51).
+By default a push scrolls to the top, Back/Forward restores the saved position (even after a reload), `push('/docs#faq')` lands on `#faq`, and the first load is left to the browser. After each navigation focus moves to the new view — to its `autofocus` element if it has one, and nowhere if the view already focused something in `mounted()` — and the title is announced to screen readers (§14, §51).
 
 ```js
 new PuzzleApp({

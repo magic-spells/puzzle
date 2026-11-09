@@ -3137,7 +3137,12 @@ export class Router {
 	 * as falsy — the same posture a throwing scrollBehavior gets (D33): a broken
 	 * hook must never wedge a navigation that already committed.
 	 *
-	 * Default: the LEAF view's root element. `.element` is legitimately null for a
+	 * Default: the LEAF view's root element — unless the view chose its own
+	 * focus. Focus already inside the root (a mounted() call) stays; otherwise its
+	 * first [autofocus] element is focused HERE (browsers honour the attribute on
+	 * first load only). Either way, null when focus is now inside the view; asking
+	 * the DOM where focus landed covers a hidden, disabled, inert or closed-<dialog>
+	 * autofocus target with no visibility logic. `.element` is legitimately null for a
 	 * view that never mounted — a parent whose template has no <Slot/> preloads its
 	 * routed child and then has nowhere to put it, the exact case warnMissingSlots
 	 * reports — so walk back UP the chain to the nearest live root, and return null
@@ -3165,9 +3170,14 @@ export class Router {
 			return el && typeof el.focus === 'function' ? el : null;
 		}
 		for (let i = views.length - 1; i >= 0; i--) {
-			/** @type {Partial<HTMLElement> | null} */
-			const el = views[i]?.element;
-			if (el && typeof el.focus === 'function') return /** @type {HTMLElement} */ (el);
+			const el = /** @type {HTMLElement | null} */ (views[i]?.element);
+			if (el && typeof el.focus === 'function') {
+				el.contains(document.activeElement) ||
+					/** @type {HTMLElement | null} */ (el.querySelector('[autofocus]'))?.focus({
+						preventScroll: true,
+					});
+				return el.contains(document.activeElement) ? null : el;
+			}
 		}
 		return null;
 	}
