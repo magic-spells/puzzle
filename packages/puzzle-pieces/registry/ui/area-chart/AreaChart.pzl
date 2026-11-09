@@ -4,7 +4,7 @@
       <div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
         {#for item in legend}
           <div class="flex items-center gap-1.5" key={ item.key }>
-            <span class="size-2 shrink-0 rounded-[2px] { item.swatchClass }"></span>
+            <span class="size-2 shrink-0 rounded-xs { item.swatchClass }"></span>
             <span class="text-sm text-body">{ item.label }</span>
           </div>
         {/for}
@@ -78,7 +78,7 @@
 
       {#if showTooltip}
         <div
-          class="pointer-events-none absolute z-10 min-w-[8rem] -translate-y-1/2 rounded-md border border-border bg-surface px-3 py-2 text-xs shadow-md"
+          class="pointer-events-none absolute z-10 min-w-32 -translate-y-1/2 rounded-md border border-border bg-surface px-3 py-2 text-xs shadow-md"
           style={ tooltipStyle }>
           <div class="mb-1 text-muted">{ tooltipX }</div>
           {#for row in tooltipRows}

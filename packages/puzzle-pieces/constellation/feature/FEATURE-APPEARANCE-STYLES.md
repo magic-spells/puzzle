@@ -19,6 +19,15 @@ notes:
       fakeDom takes `htmlAttrs` to seed stamped attributes. One case stamps data-theme="dark" with
       data-scheme="warm" and asserts two things: pre-paint removes both, and boot() leaves the
       result unchanged. The demo index.html inline copy was re-synced byte for byte.
+  - kind: state
+    text: >-
+      2026-11-08 review fix P11-B3 (feat/0.10-pieces-slider-editor): appearance-picker's style group
+      always keeps one tab stop. With `system={false}` and a null/omitted `mode`, no tile matched
+      `currentKey`, so every tile got tabindex -1 and the radiogroup was unreachable by Tab. The
+      roving tabindex now falls back to the first option when the current key is not among the
+      options; aria-checked stays honest (nothing checked). Verified in Chromium on
+      AppearancePickerDoc: after clicking System in the second group, the system={false} group reads
+      dark:0, others -1.
 ---
 
 # Appearance styles — Cool scheme, Dark/Dim/Mixed/Light, picker previews

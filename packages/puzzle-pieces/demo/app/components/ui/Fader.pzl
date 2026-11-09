@@ -41,9 +41,6 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 import {
   configFrom,
-  quantize,
-  clampBounds,
-  round,
   normalize,
   valueToPercent,
   percentToValue,
@@ -123,16 +120,10 @@ import {
 //     page, so it claims the axis outright (touch-none) and a touch that starts
 //     on it will never scroll the page. Put vertical faders in fixed panels and
 //     channel strips, not in the middle of a long scrolling page. A horizontal
-//     fader keeps touch-pan-y and hands a vertical-first gesture back to the
-//     browser — which is why disarming on cross-axis movement is gated on
-//     `yieldsToScroll` instead of firing for both orientations.
+//     fader keeps touch-pan-y, so a vertical touch swipe stays the browser's.
 //   Keyboard needs no branch at all: ArrowUp and ArrowRight both increase.
 
 const DRAG_THRESHOLD = 3;
-
-// normalize()'s crossover clamp only fires for the 'min' / 'max' thumbs, so a
-// single-thumb caller has no opposing value to hand it.
-const NO_PAIR = Object.freeze({});
 
 // edgeShift() is written for an axis anchored at its START (left): interior
 // marks pull back half their size, the far end pulls back fully. The vertical
@@ -156,20 +147,18 @@ const TICK_COLOR = 'bg-faint';
 const AXIS = {
   horizontal: {
     main: (e) => e.clientX,
-    cross: (e) => e.clientY,
     extent: (r) => r.width,
     origin: (r) => r.left,
     invert: false,
     // The cross axis IS the page-scroll axis, so leave panning to the browser.
     touch: 'touch-pan-y',
-    yieldsToScroll: true,
     size: 'h-10 w-full',
     cursor: 'cursor-ew-resize',
     ariaOrientation: 'horizontal',
     fillClass: 'absolute inset-y-0 left-0 bg-brand/25',
     fillStyle: (p) => `width:${p}%`,
     fillTrans: 'transition-[width] duration-150 ease-out',
-    handleClass: 'absolute inset-y-1 w-[3px] rounded-full bg-brand',
+    handleClass: 'absolute inset-y-1 w-0.75 rounded-full bg-brand',
     handleStyle: (p) => `left:${p}%;translate:${edgeShift(p)} 0`,
     handleTrans: 'transition-[left,translate] duration-150 ease-out',
     tickBase: 'absolute top-1/2 h-2 w-px',
@@ -180,21 +169,19 @@ const AXIS = {
   },
   vertical: {
     main: (e) => e.clientY,
-    cross: (e) => e.clientX,
     extent: (r) => r.height,
     origin: (r) => r.top,
     // Measured downward from rect.top, but the BOTTOM of the strip is min.
     invert: true,
     // Nothing to yield: this fader owns the vertical axis. See the header note.
     touch: 'touch-none',
-    yieldsToScroll: false,
     size: 'h-40 w-14 flex-col',
     cursor: 'cursor-ns-resize',
     ariaOrientation: 'vertical',
     fillClass: 'absolute inset-x-0 bottom-0 bg-brand/25',
     fillStyle: (p) => `height:${p}%`,
     fillTrans: 'transition-[height] duration-150 ease-out',
-    handleClass: 'absolute inset-x-1 h-[3px] rounded-full bg-brand',
+    handleClass: 'absolute inset-x-1 h-0.75 rounded-full bg-brand',
     handleStyle: (p) => `bottom:${p}%;translate:0 ${flipShift(edgeShift(p))}`,
     handleTrans: 'transition-[bottom,translate] duration-150 ease-out',
     tickBase: 'absolute left-1/2 h-px w-2',
@@ -312,8 +299,7 @@ export default class Fader extends PuzzleView {
 
   // The committed value straight from props, normalized.
   _committed(props, cfg) {
-    const raw = Number(props.value);
-    return round(clampBounds(quantize(Number.isFinite(raw) ? raw : cfg.min, cfg), cfg), cfg);
+    return normalize(Number(props.value), 'single', cfg);
   }
 
   _format(value, props) {
@@ -384,7 +370,6 @@ export default class Fader extends PuzzleView {
       armed: false,
       dragging: false,
       startMain: 0,
-      startCross: 0,
       startValue: 0,
     };
   }
@@ -471,17 +456,7 @@ export default class Fader extends PuzzleView {
     const axis = this._axis(props);
 
     if (!drag.dragging) {
-      const deltaMain = Math.abs(axis.main(event) - drag.startMain);
-      const deltaCross = Math.abs(axis.cross(event) - drag.startCross);
-      // Cross-axis-first intent hands the gesture back to the browser to scroll
-      // with — but ONLY when the cross axis is the page-scroll axis. A vertical
-      // fader already claimed the scroll axis (touch-none), so it has nothing to
-      // hand back and disarming there would just make it feel dead.
-      if (axis.yieldsToScroll && deltaCross > deltaMain) {
-        this._teardownGesture();
-        return;
-      }
-      if (deltaMain <= DRAG_THRESHOLD) return;
+      if (Math.abs(axis.main(event) - drag.startMain) <= DRAG_THRESHOLD) return;
       // promote: the value jumps under the pointer. There is no thumb to grab,
       // so this one rule covers every press.
       drag.startValue = this._committed(props, cfg);
@@ -491,7 +466,7 @@ export default class Fader extends PuzzleView {
     }
 
     const raw = percentToValue(this._percentFromEvent(event, axis), cfg);
-    const nv = normalize(raw, 'single', cfg, NO_PAIR);
+    const nv = normalize(raw, 'single', cfg);
     const d = this.getData();
     if (d.draftValue !== nv || !d.dragging) {
       this.setData({ dragging: true, draftValue: nv });
@@ -525,7 +500,7 @@ export default class Fader extends PuzzleView {
     } else if (armed && event.type === 'pointerup') {
       // row TAP (armed, never moved): the fill animates over (transitions are on
       // because dragging is false).
-      const nv = normalize(percentToValue(this._percentFromEvent(event, axis), cfg), 'single', cfg, NO_PAIR);
+      const nv = normalize(percentToValue(this._percentFromEvent(event, axis), cfg), 'single', cfg);
       this._suppressClick = true;
       if (nv !== committed) {
         this.setData({ dragging: false, draftValue: nv });
@@ -562,7 +537,6 @@ export default class Fader extends PuzzleView {
         armed: true,
         dragging: false,
         startMain: axis.main(event),
-        startCross: axis.cross(event),
         startValue: 0,
       };
       this._addWindowListeners();
@@ -603,7 +577,7 @@ export default class Fader extends PuzzleView {
           return;
       }
       event.preventDefault();
-      const nv = normalize(next, 'single', cfg, NO_PAIR);
+      const nv = normalize(next, 'single', cfg);
       if (nv === current) return;
       // Keys are commits (native <input type=range> parity): fire @input AND
       // @change. Overlay optimistically so the fill animates even before props

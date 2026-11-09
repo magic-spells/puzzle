@@ -74,8 +74,8 @@
           styles, a line break still breaks a line.
         </p>
         <p class="mb-3 text-sm text-body">
-          To show different text, change the text <em class="text-ink">and</em> bump <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">play</code> in the same render: the element restores its own snapshot, adopts whatever markup is
-          there now, and re-splits it.
+          To show different text, remount the piece instead of changing its content: branch it, or
+          render it from a keyed list whose key is the text.
         </p>
         <p class="text-sm text-muted">
           The same applies to the attributes. The element declares no observed attributes — <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">split</code>, <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-code text-ink">effect</code>,
