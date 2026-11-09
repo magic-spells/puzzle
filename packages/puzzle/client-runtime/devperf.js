@@ -254,11 +254,6 @@ export function devperfRenderEnd(view) {
 	if (DEV) renderEndImpl(view);
 }
 
-/** @param {PuzzleView} view */
-export function devperfRenderCancel(view) {
-	if (DEV) renderCancelImpl(view);
-}
-
 export function devperfMutation(count = 1) {
 	if (DEV) mutationImpl(count);
 }
@@ -809,11 +804,6 @@ function renderEndImpl(view) {
 		checkRunaway(mark, timestamp, wasted);
 	}
 	popScope(mark.scope);
-}
-
-/** @param {PuzzleView} view */
-function renderCancelImpl(view) {
-	renderEndImpl(view);
 }
 
 /** @param {number} count */

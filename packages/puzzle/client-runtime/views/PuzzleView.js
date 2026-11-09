@@ -32,7 +32,6 @@ import {
 	devperfMarkCause,
 	devperfMemo,
 	devperfPrepareData,
-	devperfRenderCancel,
 	devperfRenderEnd,
 	devperfRenderPrepare,
 	devperfRenderScheduled,
@@ -2756,7 +2755,7 @@ export class PuzzleView {
 			try {
 				this.#renderSpan(preparedTree, showSkeleton);
 			} catch (error) {
-				devperfRenderCancel(this);
+				devperfRenderEnd(this);
 				throw error;
 			}
 		} else {
