@@ -49,6 +49,15 @@ notes:
       removed and the two {#if name} blocks merged (Q2). Known trade-off: DRP no longer passes
       Calendar `value`, so the months/years drill-down no longer highlights the start's month/year
       as selected.
+  - kind: state
+    text: >-
+      2026-11-08 (PR #256 review fix). Supersedes the earlier note's "picking Sep 19 in the right
+      grid gives Sep/Oct": DateRangePicker's anchor is now fixed while the panel is open
+      (`this._anchor` kept while open, re-derived from start/end/today while closed). Chromium on
+      the Two months demo: open Jul|Aug; clicking Aug 19 in the right grid keeps Jul|Aug and focus
+      on that day; keyboard start pick in the right grid keeps focus, Escape closes and refocuses
+      the trigger; right-grid Next then a left-grid start pick keeps Aug|Oct; reopen lands on the
+      start month.
 ---
 
 `registry/ui/calendar/Calendar.pzl`, a port (not a wrapper) of the `@magic-spells/date-picker`
@@ -70,9 +79,12 @@ ask for one. Before 0.10.0 DateRangePicker anchored its two grids on `value: sta
 whenever a new range started (end `''`).
 
 DateRangePicker now passes only `month`: anchor = start, else end, else today clamped into
-min/max; the right grid gets `addMonths(anchor, 1)`. Endpoint discs come from `range`, so
-Calendar's own `value` stays unset there. The two grids still navigate independently after
-opening; shared prev/next is a documented gap.
+min/max; the right grid gets `addMonths(anchor, 1)`. The anchor is fixed while the panel is
+open and follows the value only while closed, so picking a day never moves the grids (a
+moving anchor re-seeded both Calendars and dropped focus to BODY) and each open lands on
+the start. Endpoint discs come from `range`, so Calendar's own `value` stays unset there.
+The two grids still navigate independently after opening; shared prev/next is a documented
+gap.
 
 ## Accessibility
 

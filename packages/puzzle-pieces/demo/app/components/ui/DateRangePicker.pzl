@@ -190,8 +190,9 @@ import { parseISODate, formatISODate, toDate, fromDate, addMonths, clampDate, co
 // MONTHS. `months={ 2 }` renders two frameless Calendars sharing the same `range` /
 // `previewDate` band. Both grids are anchored through Calendar's `month` prop on two
 // consecutive months: the left on start (else end, else today clamped into min/max), the
-// right one month later. They re-anchor when that anchor changes and otherwise navigate
-// INDEPENDENTLY. Coordinated shared prev/next across two grids would need more Calendar
+// right one month later. The anchor is fixed while the panel is open (picking a day never
+// moves the grids) and follows the value while closed, so each open lands on the start;
+// otherwise the grids navigate INDEPENDENTLY. Coordinated shared prev/next across two grids would need more Calendar
 // API and is intentionally out of scope — `months={ 1 }` is the default and the
 // fully-coordinated experience. (Documented gap.)
 //
@@ -309,7 +310,7 @@ export default class DateRangePicker extends PuzzleView {
     const placement = (open && prev.placement) || 'bottom';
 
     const twoMonths = Number(props.months) === 2;
-    const anchor = ps || pe || clampDate(fromDate(new Date()), parseISODate(props.min), parseISODate(props.max));
+    const anchor = (this._anchor = (open && this._anchor) || ps || pe || clampDate(fromDate(new Date()), parseISODate(props.min), parseISODate(props.max)));
     const calendars = twoMonths
       ? [
           { key: 'start', month: formatISODate(anchor), label: 'Range start month', autofocus: open },
