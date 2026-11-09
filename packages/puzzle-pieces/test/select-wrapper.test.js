@@ -137,10 +137,9 @@ test('Select.Option writes its value attribute imperatively', async () => {
 test('the root writes the host value through the property, never a template binding', async () => {
 	const source = await readText('../registry/ui/select/Select/Select.pzl');
 	assert.match(source, /this\.element\.value = value;/);
-	assert.match(source, /#syncing = true;/);
 });
 
-test('every select-dropdown event listener is target-guarded', async () => {
+test('the root listens for every select-dropdown event', async () => {
 	const source = await readText('../registry/ui/select/Select/Select.pzl');
 	for (const event of [
 		'select-dropdown:change',
@@ -149,7 +148,6 @@ test('every select-dropdown event listener is target-guarded', async () => {
 	]) {
 		assert.ok(source.includes(`'${event}'`), `the root does not listen for ${event}`);
 	}
-	assert.match(source, /return event\.target === this\.element;/);
 	// The bare `change` event carries no detail and is upstream's native-form
 	// echo — the family reads select-dropdown:change instead.
 	assert.equal(

@@ -59,10 +59,12 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // GROWTH IS WATCHED WITH A ResizeObserver on an inner wrapper around the slot —
 // NOT a MutationObserver — so it catches both new nodes and any reflow (images
-// loading, a message expanding) with one cheap callback. The scroll handler is
-// rAF-throttled and only calls setData when the pinned state actually changes,
-// so ordinary scrolling never thrashes the view. Observer + rAF are torn down
-// in destroyed(). On mount the viewport starts scrolled to the bottom.
+// loading, a message expanding) with one cheap callback. The scroll handler
+// samples directly — NOT through rAF: scroll fires once per frame, before rAF
+// callbacks, so the sample lands before the next streamed render appends (a
+// rAF sample measured that growth as the reader leaving, and unpinned). It
+// calls setData only when pinned flips. The observer is torn down in
+// destroyed(). On mount the viewport starts scrolled to the bottom.
 //
 // Props:
 //   height  viewport height in px (number) → inline style; default 384
@@ -76,7 +78,6 @@ const JUMP_RELEASE_MS = 2000;
 
 export default class ChatScroller extends PuzzleView {
   #ro = null;
-  #raf = null;
   // Suppresses scroll-driven unpinning during a programmatic smooth jump, so the
   // pill doesn't flicker back on mid-animation. See THE JUMP LATCH above for the
   // three ways it releases.
@@ -166,10 +167,6 @@ export default class ChatScroller extends PuzzleView {
       this.#ro.disconnect();
       this.#ro = null;
     }
-    if (this.#raf) {
-      cancelAnimationFrame(this.#raf);
-      this.#raf = null;
-    }
     this.#releaseJump();
     if (this.#scrollTarget) {
       this.#scrollTarget.removeEventListener('wheel', this.#onScrollIntent);
@@ -197,13 +194,7 @@ export default class ChatScroller extends PuzzleView {
   }
 
   events = {
-    onScroll: () => {
-      if (this.#raf) return;
-      this.#raf = requestAnimationFrame(() => {
-        this.#raf = null;
-        this.updatePinned();
-      });
-    },
+    onScroll: () => this.updatePinned(),
 
     jumpToLatest: () => {
       this.#releaseJump();

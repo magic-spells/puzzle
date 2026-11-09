@@ -42,6 +42,12 @@ notes:
       `variant`/`grabbed`/`disabled`/`class` props, no forwarded events, and a `contents` root.
       Kanban mounts it bare. The card surface, ghost chrome and the touch-pinch-zoom rationale live
       only in Kanban.pzl. KanbanCard is −82 lines, 1318 → 901 B min+gz.
+  - kind: state
+    text: >-
+      2026-11-08 (feat/0.10-pieces-select-toast, review P08-B12): KanbanCard's assignee initials
+      disc is hsl(hue 45% 32%), down from 45%, matching Avatar and ChatMessage. White initials at
+      L45 failed WCAG AA on 181/360 hues (worst 2.57:1); L32 is the highest lightness at S45 where
+      every hue passes (min 4.75:1). Keep the three copies of this formula in step.
 ---
 
 # Kanban

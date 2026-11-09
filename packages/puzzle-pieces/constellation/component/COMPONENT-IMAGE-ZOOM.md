@@ -39,6 +39,14 @@ notes:
       over it in the wrapper — per DECISION-WRAP-WEB-COMPONENTS, piece-only extras go upstream
       first. The window is short and needs a gesture inside it, so it is not a blocker for the 0.8.0
       piece.
+  - kind: state
+    text: >-
+      2026-11-08 (0.10.0 review, P14-B5, feat/0.10-pieces-date-range): `@change` now emits
+      `this.props.change?.(event.detail?.scale)`, matching zoomStart/zoomEnd. The documented second
+      argument `{ translateX, translateY }` never arrived (one-payload forwarding, D16) and a parent
+      following the docs threw a TypeError on the first gesture frame.
+      test/image-zoom-wrapper.test.js pins the new form; ImageZoomDoc's @change row points at the
+      element.translateX/translateY getters.
 ---
 
 Single-file wrapper over `@magic-spells/image-zoom` 0.1.0 (0.8.0,
@@ -75,11 +83,16 @@ notice. Zoom returns to `min` on a swap — what a gallery wants anyway.
 
 ## Not controlled
 
+
 Zoom is the element's for the whole duration of a gesture, so there is no `scale` prop —
 a bound one would fight every pinch frame the patcher rendered through. The piece reports
-instead (`@change(scale, { translateX, translateY })`, `@zoomStart(scale)`,
-`@zoomEnd(scale)`) and hands the upgraded element out through `@ready(element)` for
-`reset()` / `zoomTo()`. Same shape as the wrapped overlays.
+instead (`@change(scale)`, `@zoomStart(scale)`, `@zoomEnd(scale)`) and hands the upgraded
+element out through `@ready(element)` for `reset()` / `zoomTo()` and the `translateX` /
+`translateY` getters. Same shape as the wrapped overlays.
+
+`@change` carries the scale only: a component `@event` forwards ONE payload (framework D16),
+so the old `(scale, { translateX, translateY })` second argument never reached a parent.
+Read the pan from the element's getters.
 
 ## Gotchas
 

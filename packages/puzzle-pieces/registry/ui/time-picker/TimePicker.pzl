@@ -43,7 +43,6 @@
           aria-modal="false"
           aria-label={ dialogLabel }
           data-timepicker-panel
-          style={ panelStyle }
           @keydown:escape={ onEscape(event) }>
           <div class="flex items-stretch gap-1">
             {#for col in columns}
@@ -393,7 +392,6 @@ export default class TimePicker extends PuzzleView {
       rootClass: props.class || '',
       triggerClass: [TRIGGER_BASE, error ? TRIGGER_ERROR : TRIGGER_OK].join(' '),
       panelClass: [PANEL_CARD, placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'].join(' '),
-      panelStyle: '',
     };
   }
 
@@ -599,8 +597,8 @@ export default class TimePicker extends PuzzleView {
     },
 
     // Per-column keyboard. Up/Down/Home/End move within the column (each move
-    // emits); Left/Right move focus between columns; Enter/Space confirm + close;
-    // Escape closes. DOM focus stays on the <ul>; the active option is tracked via
+    // emits); Left/Right move focus between columns; Enter/Space confirm + close.
+    // Escape bubbles to the panel's onEscape. DOM focus stays on the <ul>; the active option is tracked via
     // aria-activedescendant.
     onColKey: (col, event) => {
       const options = col.options;
@@ -647,10 +645,6 @@ export default class TimePicker extends PuzzleView {
           this._requestClose({ restoreFocus: true });
           break;
         }
-        case 'Escape':
-          event.preventDefault();
-          this._requestClose({ restoreFocus: true });
-          break;
         case 'Tab':
           // Let focus move naturally out of the popover; close.
           this._requestClose({ restoreFocus: false });

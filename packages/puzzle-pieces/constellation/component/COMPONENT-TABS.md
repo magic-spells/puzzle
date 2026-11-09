@@ -17,6 +17,14 @@ variants:
 connections:
   - DECISION-WRAP-WEB-COMPONENTS
   - DECISION-CONFIG-FIRST-API
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 review P07-Q4 (feat/0.10-pieces-dialog-chat): deleted the false "TODO: switch to
+      ^1.2.0" header lines (1.2.0 is published and is the floor) and the dead `detail.currentIndex`
+      fallback in #onTabChange — tab-group 1.2.0 always sends `detail.currentTab`. Member tracking
+      (#members/#memberKey) is untouched: P07-B1's fix waits on an upstream tab-group `set active`
+      takeRecords() flush + floor bump.
 ---
 
 `Tabs` · `Tabs.List` · `Tabs.Tab` · `Tabs.Panel`, a D167 family over

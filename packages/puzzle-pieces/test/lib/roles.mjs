@@ -103,6 +103,7 @@ export const ROLES = [
 	shadow('shadow-panel', 'shadows'),
 	shadow('shadow-card', 'shadows'),
 	shadow('shadow-popover', 'shadows'),
+	shadow('shadow-kbd', 'shadows'),
 ];
 
 export const PROPS = ROLES.map((r) => r.prop);

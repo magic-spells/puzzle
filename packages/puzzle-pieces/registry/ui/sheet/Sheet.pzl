@@ -197,14 +197,13 @@ const MODES = ['edge', 'card'];
 const EFFECTS = ['slide', 'fade-scale', 'slide-fade'];
 
 // The whole design-token bridge. Panel and handle map onto pieces.css tokens so
-// the sheet follows the app's theme in light and dark; the overlay reproduces
-// the look the ported piece had (black at 50%, blurred) rather than the
-// component's slightly lighter default.
+// the sheet follows the app's theme in light and dark; the overlay takes the
+// --color-scrim token, blurred, rather than the component's lighter default.
 const THEME =
   '[--sheet-panel-background:var(--color-surface)] ' +
   '[--sheet-handle-color:var(--color-faint)] ' +
-  '[--sheet-overlay-background:rgb(0_0_0_/_0.5)] ' +
-  '[--sheet-overlay-blur:8px]';
+  '[--sheet-overlay-background:var(--color-scrim)] ' +
+  '[--sheet-overlay-blur:var(--blur-sm)]';
 
 // showGrabber={false}, expressed entirely in CSS. Zeroing the pill's own
 // dimensions makes it paint nothing; the two *-inset properties are what the

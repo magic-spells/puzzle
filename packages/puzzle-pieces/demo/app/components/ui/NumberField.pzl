@@ -212,7 +212,7 @@ export default class NumberField extends PuzzleView {
     const parsed = parseNum(el ? el.value : '');
     const base = parsed !== null ? parsed : value;
     const target = base === null ? (min != null ? min : 0) : base + delta;
-    const next = roundTo(clampNum(target, min, max), precision);
+    const next = roundTo(clampNum(target, min, max), precision ?? 12); // 12: no 0.1+0.2 noise
     if (el) el.value = format(next, precision);
     if (next !== value) this.emit(next, event);
   }

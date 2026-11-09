@@ -16,11 +16,10 @@
       <button
         type="button"
         class={ labelBtnClass }
-        id={ labelId }
         aria-label={ zoomLabel }
         aria-disabled={ zoomDisabled }
         @click={ onZoomOut(event) }>
-        <span>{ monthLabel }</span>
+        <span id={ labelId } aria-live="polite">{ monthLabel }</span>
         {#if showChevron}
           <svg class="size-4 text-muted" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
             <path d="M6 8l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
@@ -167,7 +166,7 @@ import {
 //   <Calendar value={ iso } @change={ setDate } />
 //   <Calendar value={ iso } min="2026-01-01" max="2026-12-31"
 //             disabledDates={ weekends } firstDayOfWeek={ 1 }
-//             @change={ setDate } @monthChange={ onMonth } />
+//             @change={ setDate } />
 //   <Calendar range={ { start, end } } previewDate={ hoveredIso }
 //             @change={ onEndpoint } />        // range shading (display-only)
 //   const eventDates = { '2026-08-12': true, '2026-08-19': true };
@@ -188,6 +187,7 @@ import {
 //   value          string   controlled ISO 'YYYY-MM-DD' (or '' / null = no selection).
 //                           Parent-owned — the calendar never mutates it; it fires
 //                           @change and the parent writes the new value back.
+//   month          string   ISO date whose month is shown (no disc painted); default `value`.
 //   min, max       string   inclusive ISO bounds. Out-of-bounds days render dim and
 //                           are not selectable (still keyboard-traversable).
 //   disabledDates  array|fn array of ISO strings, OR a predicate (iso, Date) => boolean.
@@ -235,12 +235,8 @@ import {
 //   @change(isoValue, date)      fires on day selection (single date). `date` is a
 //                                local-time Date. Only the days view ever fires it —
 //                                the months/years drill-down views are PURE NAVIGATION.
-//   @monthChange({ year, month }) fires whenever the DISPLAYED day-grid month changes
-//                                (1-based month). DatePicker reads this to sync its own
-//                                header / measurements.
 //
 // FOR THE FUTURE DatePicker (what it needs from this piece):
-//   - @monthChange exposes the current displayed month (1-based).
 //   - `autofocus` handles "focus lands on selected/today when the popover opens".
 //   - @change fires only on a real day selection, so DatePicker can close + commit there.
 //
@@ -348,8 +344,8 @@ export default class Calendar extends PuzzleView {
   created() {
     this._uid = ++uid;
     this._pendingFocus = null; // { type:'day'|'month'|'year', iso?/month?/year? }
-    this._lastValue = undefined; // tracks the value prop to detect external changes
-    // Seed the drill-down view; the month/year anchor is derived from `value` on the
+    this._lastAnchor = undefined; // tracks month || value to detect external changes
+    // Seed the drill-down view; the month/year anchor is derived from `month`/`value` on the
     // first data() run (props aren't available in created()).
     this.setData({ view: 'days', viewYear: null, viewMonth: null, focusedIso: null, monthCursor: null });
   }
@@ -418,11 +414,6 @@ export default class Calendar extends PuzzleView {
     return this.getData().viewMonth || today.month;
   }
 
-  _emitMonthChange(year, month) {
-    const { monthChange } = this.props;
-    if (typeof monthChange === 'function') monthChange({ year, month });
-  }
-
   _focusActiveCell() {
     const { view, focusedIso, monthCursor, viewYear } = this.getData();
     let sel;
@@ -454,16 +445,17 @@ export default class Calendar extends PuzzleView {
 
     // Resolve the displayed month + drill-down view + roving focus. These live in the
     // LOCAL layer (setData) so they survive data() re-runs; they're seeded from `value`
-    // (or today, clamped into range) on first run and re-anchored when `value` changes
-    // externally. Never RETURNED from data() — a returned key would let the model layer
-    // clobber the local one on the next unrelated re-render.
-    const valueChanged = props.value !== this._lastValue;
-    this._lastValue = props.value;
+    // (or today, clamped into range) on first run and re-anchored when `month || value`
+    // changes externally. Never RETURNED from data() — a returned key would let the model
+    // layer clobber the local one on the next unrelated re-render.
+    const anchorKey = props.month || props.value;
+    const anchorChanged = anchorKey !== this._lastAnchor;
+    this._lastAnchor = anchorKey;
 
     const seed = {};
     if (local.view == null) seed.view = 'days';
-    if (local.viewYear == null || valueChanged) {
-      const anchor = committed || clampDate(fromDate(new Date()), min, max);
+    if (local.viewYear == null || anchorChanged) {
+      const anchor = parseISODate(props.month) || committed || clampDate(fromDate(new Date()), min, max);
       seed.viewYear = anchor.year;
       seed.viewMonth = anchor.month;
       seed.focusedIso = formatISODate(anchor);
@@ -649,8 +641,8 @@ export default class Calendar extends PuzzleView {
         // `frameless` drops the card chrome for composition inside another
         // surface (DatePicker's panel owns the border/bg/shadow there).
         props.frameless
-          ? 'inline-block w-[17rem] max-w-full p-3'
-          : 'inline-block w-[17rem] max-w-full rounded-xl border border-border bg-surface p-3',
+          ? 'inline-block w-68 max-w-full p-3'
+          : 'inline-block w-68 max-w-full rounded-xl border border-border bg-surface p-3',
         props.class || '',
       ].join(' '),
       ariaLabel: props.label || 'Calendar',
@@ -679,23 +671,17 @@ export default class Calendar extends PuzzleView {
   // ---- internal navigation -------------------------------------------------
 
   _moveFocusTo(target) {
-    const { viewYear, viewMonth } = this.getData();
-    const monthChanged = target.year !== viewYear || target.month !== viewMonth;
     this.setData({ viewYear: target.year, viewMonth: target.month, focusedIso: formatISODate(target) });
     this._pendingFocus = { type: 'day', iso: formatISODate(target) };
     this.refresh();
-    if (monthChanged) this._emitMonthChange(target.year, target.month);
   }
 
   _selectDay(parts) {
     if (!parts || this._isDayDisabled(parts, this.props)) return;
-    const { viewYear, viewMonth } = this.getData();
     const iso = formatISODate(parts);
-    const monthChanged = parts.month !== viewMonth || parts.year !== viewYear;
     this.setData({ view: 'days', viewYear: parts.year, viewMonth: parts.month, focusedIso: iso, monthCursor: parts.month });
     this._pendingFocus = { type: 'day', iso };
     this.refresh();
-    if (monthChanged) this._emitMonthChange(parts.year, parts.month);
     const { change } = this.props;
     if (typeof change === 'function') change(iso, toDate(parts));
   }
@@ -703,16 +689,14 @@ export default class Calendar extends PuzzleView {
   // Months-view selection = pure navigation (date mode never commits here): drill down
   // to the days view of the chosen month, clamping the focused day into it.
   _selectMonth(month) {
-    const { viewYear, viewMonth, focusedIso } = this.getData();
+    const { viewYear, focusedIso } = this.getData();
     if (this._monthOutOfRange(viewYear, month, this.props)) return;
     const focused = parseISODate(focusedIso);
     const day = Math.min(focused ? focused.day : 1, daysInMonth(viewYear, month));
     const iso = formatISODate({ year: viewYear, month, day });
-    const monthChanged = month !== viewMonth;
     this.setData({ view: 'days', viewMonth: month, focusedIso: iso });
     this._pendingFocus = { type: 'day', iso };
     this.refresh();
-    if (monthChanged) this._emitMonthChange(viewYear, month);
   }
 
   // Years-view selection = pure navigation: drill down to months view of the chosen year.
@@ -737,7 +721,6 @@ export default class Calendar extends PuzzleView {
       // the day cell when min/max just disabled the arrow.
       this._pendingFocus = nowDisabled ? { type: 'day', iso: formatISODate(target) } : null;
       this.refresh();
-      this._emitMonthChange(target.year, target.month);
     } else if (view === 'months') {
       const ny = viewYear + delta;
       this.setData({ viewYear: ny });

@@ -87,10 +87,10 @@ const OVERFLOW = {
 const TRACK_BASE =
   'absolute z-10 opacity-0 transition-opacity duration-300 motion-reduce:transition-none';
 const THUMB_V =
-  'absolute left-0 top-0 w-full min-h-[24px] rounded-full bg-border-strong ' +
+  'absolute left-0 top-0 w-full min-h-6 rounded-full bg-border-strong ' +
   'hover:bg-muted transition-colors cursor-pointer';
 const THUMB_H =
-  'absolute top-0 left-0 h-full min-w-[24px] rounded-full bg-border-strong ' +
+  'absolute top-0 left-0 h-full min-w-6 rounded-full bg-border-strong ' +
   'hover:bg-muted transition-colors cursor-pointer';
 
 const IDLE_MS = 800;
