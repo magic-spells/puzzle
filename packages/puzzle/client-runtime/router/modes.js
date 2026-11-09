@@ -113,18 +113,10 @@ const hashMode = {
 		return '#' + base + path;
 	},
 
-	/**
-	 * A relative `'#…'` href: `'#/...'` IS a route here — intercept it; a bare
-	 * `'#anchor'` is still an in-page anchor and falls through to the browser.
-	 *
-	 * @param {string} fragment
-	 * @param {MouseEvent} e
-	 * @param {string} base
-	 * @param {Router} router
-	 */
-	clickFragment(fragment, e, base, router) {
-		tryHashFragment(fragment, e, base, router);
-	},
+	// A relative `'#…'` href: `'#/...'` IS a route here; a bare `'#anchor'` is
+	// still an in-page anchor and falls through to the browser. (A hoisted
+	// function declaration, so it exists when this object is built.)
+	clickFragment: tryHashFragment,
 
 	/**
 	 * A same-origin absolute URL: only a SAME-PAGE url carrying a route fragment

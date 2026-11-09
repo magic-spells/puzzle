@@ -13,6 +13,15 @@ connections:
   - DOC-ROUTER
   - DOC-RELEASE-SURFACE
   - TEST-ROUTER-NAVIGATION
+notes:
+  - kind: gotcha
+    text: >-
+      The in-flight slot is opened with PENDING (a real promise), so it is truthy during a
+      navigation's synchronous start. Two readers changed meaning with it: a push to the committed
+      path fired from created() during a POP's synchronous start is now an ordinary push (the D182
+      "pop in flight" row), and #navigate's departScroll reads null there (nothing departed over a
+      pop still loading). Test for the latch: tests/router-navigation-result.test.js "a replace()
+      whose constructor throws leaves nothing in flight".
 ---
 
 # D182 — push()/replace() resolve a NavigationResult
@@ -63,8 +72,9 @@ type NavigationResult =
 
 Each row has its own test in `tests/router-navigation-result.test.js`.
 
-- `#isCommittedNoop` gates the no-op: the committed path, an intact chain, and both `#pendingNavPath` and `#pendingNavPromise` empty. The path slot matters for a push fired from `created()` of a view being built: it runs before `push()` pairs the promise, while the slot already names the navigation in flight.
-- "Replace semantics" is `#navigate` in replace mode, tracked like a push: `push()` passes `track: true`, so `#navigate` records `#pendingNavPath` at its token bump, before it runs synchronously into `preload()`/`created()`, and `push()` pairs `#pendingNavPromise` when it returns. A same-path push from that `created()` therefore joins the rebuild instead of no-opping against the old snapshot or, over an invalidated chain, rebuilding again for each fresh view. Every clear point (commit, recovery, a commit-window throw, `stop()`) releases the record, so a navigation that ended synchronously (a view constructor throwing) leaves nothing latched.
+- `#isCommittedNoop` gates the no-op: the committed path, an intact chain, and `#pendingNavPromise` empty. `#navigate` opens that slot at its token bump with a module-private `PENDING` promise, so a push fired from `created()` of a view being built — before the caller pairs the real promise — already sees a navigation in flight.
+- "Replace semantics" is `#navigate` in replace mode, tracked like a push: `push()` passes `track: true`, so `#navigate` records `#pendingNavPath` at its token bump, before it runs synchronously into `preload()`/`created()`. A same-path push from that `created()` therefore joins the rebuild instead of no-opping against the old snapshot or, over an invalidated chain, rebuilding again for each fresh view.
+- **Pairing.** Every verb's caller (push, replace, pop, `go()`, retry, the locale rebuild, navigation zero) pairs its promise through `#trackNav`, which writes the slot only while it still reads `PENDING`. A navigation that ended inside its synchronous start (a constructor throw, a reused ancestor's synchronous `data()` throw) has already cleared the slot at a clear point (commit, recovery, a commit-window throw, `stop()`), and a re-entrant navigation fired inside that stretch has paired its own promise, so a finished navigation never latches: `navigating()` and `app.idle()` (D185) see it as over, and the locale rebuild never waits on a settled promise. One gap: a re-entrant push to a path no route matches (no catch-all) fired from inside another navigation's synchronous start opens no slot of its own, so its `'not-found'` promise pairs into the outer navigation's slot until that navigation ends.
 - `#popInFlight` says whether the in-flight navigation is a pop. Every `#navigate` that takes the token sets it, and it is read only while `#pendingNavPromise` is set.
 - A guard redirect to the committed path stays a no-op (D87's loop safety): the only navigation in flight is the one being redirected.
 - `replace()` to the committed path is a no-op under the same rule; otherwise it joins a push's rebuild of that path when one is in flight, and failing both it is an ordinary replace. A `replace()` to any other path is always an ordinary replace; during a plain `push()` to that same uncommitted path it supersedes the push, so the replace's history semantics hold.
