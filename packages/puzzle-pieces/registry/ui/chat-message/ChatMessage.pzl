@@ -124,7 +124,7 @@ export default class ChatMessage extends PuzzleView {
       author: props.author || '',
       time: props.time || '',
       initials: hasName ? initials(name) : '',
-      avatarStyle: hasName && !showImg ? `background:hsl(${hue} 45% 45%)` : '',
+      avatarStyle: hasName && !showImg ? `background:hsl(${hue} 45% 32%)` : '',
       avatarClass: [AVATAR_BASE, showImg ? '' : tone].join(' '),
       rowClass: [
         'flex gap-2.5',

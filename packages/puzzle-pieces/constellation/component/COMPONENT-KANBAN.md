@@ -32,6 +32,12 @@ notes:
       afterUpdate() consumes and clears the marker — so a marker set first was eaten by the
       announcement render and focus fell to <body> on the parent's real re-render. Fixed 2026-09-04
       (Astra review F6) by moving the assignment to just before `_emitMove()`.
+  - kind: state
+    text: >-
+      2026-11-08 (feat/0.10-pieces-select-toast, review P08-B12): KanbanCard's assignee initials
+      disc is hsl(hue 45% 32%), down from 45%, matching Avatar and ChatMessage. White initials at
+      L45 failed WCAG AA on 181/360 hues (worst 2.57:1); L32 is the highest lightness at S45 where
+      every hue passes (min 4.75:1). Keep the three copies of this formula in step.
 ---
 
 # Kanban

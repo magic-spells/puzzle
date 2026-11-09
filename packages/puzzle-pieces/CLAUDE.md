@@ -149,7 +149,7 @@ CLI — it is unrelated and must not be bumped along with the release.
   `registry/lib/`: the markdown and rich-text document models, the chart and slider math,
   an InputOTP suite, static wiring guards for the wrapper pieces (`*-wrapper.test.js`), the
   theme suites (`themes`, `contrast`, `appearance`), the `registry-deps` floor check, and
-  parity suites that assert the demo copies are byte-identical to their `registry/` sources. These are
+  `registry-parity`, which walks `registry.json` and asserts every demo copy is byte-identical to its `registry/` source. These are
   repo-internal — nothing under `test/` or the root `package.json` is ever copied to a
   consumer. `test/puzzle-lang.test.js` loads highlight.js from `demo/node_modules`: it
   skips locally and THROWS under `CI` when the demo isn't installed, so run the demo's

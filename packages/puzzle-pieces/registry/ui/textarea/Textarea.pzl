@@ -16,7 +16,7 @@
       aria-describedby={ describedby }
       @input={ handleInput(event) }
       @blur={ handleBlur(event) }
-      @focus={ handleFocus(event) }>{ value }</textarea>
+      @focus={ handleFocus(event) }></textarea>
     {#if error}
       <p id={ descId } class="mt-1.5 text-sm text-danger">{ error }</p>
     {:else if hint}
