@@ -342,7 +342,7 @@ Rules that bite:
   characters are `{#for c in text.split('')}`. `==` keeps its
   JavaScript meaning; `x == null` is the absence test. Object literals work as
   function arguments (`{ t('cart.count', { count: n }) }`) but cannot START an
-  expression. A component with no `<script>` reads its props by bare name
+  expression. A component with no `data()` reads its props by bare name
   (`{ tone }`).
 - **Handlers are the one door into the view.** `@click={ save(items.length - 1) }`
   calls the view's `save` with arguments in the same expression language,
