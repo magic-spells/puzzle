@@ -94,6 +94,14 @@ notes:
       colour in `class` wins. No retint regex remains (Tabs uses the same `[:where(&)]` idiom).
       DataTable: the demo copy is synced to the registry's 16cb42a7 header token.
     sha: 0c470749
+  - kind: state
+    text: >-
+      Correction to the P06 Carousel note: the live region is `off` only while autoplay is actually
+      running (an interval is set, `paused` is false in data, and reduced motion is off). When hover
+      or focus pauses it, or reduced motion disables it, the region is `polite`, so a keyboard
+      user's Next still announces. Pause state lives in data (`paused`), written through `_pause()`,
+      which refreshes on change. It is no longer the `_paused` field.
+    sha: a52e0c59
 ---
 
 # The registry — source of truth
