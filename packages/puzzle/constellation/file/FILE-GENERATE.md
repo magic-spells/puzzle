@@ -8,6 +8,13 @@ connections:
   - COMPONENT-COMPILER-CLI
 verified_at: '2026-11-01T19:19:18.479Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 trims: `withinRoot` resolves the destination with
+      `fsutil.EvalSymlinksAllowMissing`, the one copy shared with internal/pieces (the two private
+      copies were identical). The `generate` command no longer defaults `--dir` to os.Getwd();
+      `FindProjectRoot` already does.
 ---
 
 Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `compiler/internal/generate/generate.go`.

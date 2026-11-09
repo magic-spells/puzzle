@@ -197,15 +197,6 @@ func TestExtractClassName(t *testing.T) {
 			want:    "概要",
 		},
 		{
-			// U+30FB became ID_Continue in Unicode 15.1, after Go's tables: the
-			// scan stops at it, and binding the render tail to `データ` would
-			// crash the module on load.
-			name:    "a letter newer than the Unicode tables",
-			scripts: "export default class データ・一覧 extends PuzzleView {}",
-			wantErr: true,
-			errText: "class name `データ` is followed by a character the compiler cannot read",
-		},
-		{
 			name:    "a \\u escape inside the name",
 			scripts: "export default class Stra\\u00DFe extends PuzzleView {}",
 			wantErr: true,

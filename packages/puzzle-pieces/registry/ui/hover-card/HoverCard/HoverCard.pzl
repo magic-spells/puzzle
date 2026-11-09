@@ -6,7 +6,6 @@
     openDelay={ openDelay }
     closeDelay={ closeDelay }
     open={ openState }
-    effect={ effect }
     @show={ onShow() }
     @hide={ onHide() }><Children/></DropdownPanel>
 </puzzle-view>
@@ -64,7 +63,6 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //   openDelay   ms of hover intent before the card shows (default 600)
 //   closeDelay  ms of grace after the pointer leaves (default 300)
 //   open        optional-controlled, edge-triggered, forwarded to the base
-//   effect      'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet)
 //   class       merged onto <dropdown-component>
 //   @show / @hide  fired when THIS card opens or closes
 
@@ -81,7 +79,6 @@ export default class HoverCard extends PuzzleView {
     return {
       rootClass: props.class || false,
       openState: props.open,
-      effect: props.effect,
       openDelay: delay(props.openDelay, OPEN_DELAY),
       closeDelay: delay(props.closeDelay, CLOSE_DELAY),
     };

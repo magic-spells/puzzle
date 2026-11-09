@@ -23,6 +23,7 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/textutil"
@@ -149,12 +150,12 @@ type staticModules struct {
 // same minify/define/dropConsole policy as the main app.js pass. prof may be nil
 // (profiling off); it splits this pass into its three expensive steps — the node
 // prerender bundle, the render run, and the per-page browser bundles.
-func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[string]bool, cfg config.Config, dev, quiet bool, prof *buildProfile, pc *passContext) error {
+func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[string]bool, cfg config.Config, dev, quiet bool, prof *PhaseProfile, pc *passContext) error {
 	// A public/ asset that already produced a staging/_puzzle would be clobbered
 	// by the per-page bundles — reject it up front (extends the reserved-output
 	// collision guard to the static tree). copyPublic has already run, so the
 	// collision is observable here, before the splitting pass writes anything.
-	if pagesOut := filepath.Join(staging, staticPagesDir); dirExists(pagesOut) || FileExists(pagesOut) {
+	if pagesOut := filepath.Join(staging, staticPagesDir); dirExists(pagesOut) || fsutil.FileExists(pagesOut) {
 		return fmt.Errorf(
 			"public asset would overwrite compiler output dist/%s (a reserved output name in static mode); rename or remove it",
 			staticPagesDir,
@@ -183,14 +184,14 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 	}
 
 	outfile := filepath.Join(staging, prerenderDir, "prerender.mjs")
-	endPrerenderBundle := prof.phase("prerender bundle")
+	endPrerenderBundle := prof.Phase("prerender bundle")
 	bundleErr := bundlePrerenderEntry(absRoot, stdin, outfile, "--static", pc)
 	endPrerenderBundle()
 	if bundleErr != nil {
 		return bundleErr
 	}
 
-	endRender := prof.phase("prerender render")
+	endRender := prof.Phase("prerender render")
 	payload, err := runPrerender(outfile, staging, "--static")
 	endRender()
 	if err != nil {
@@ -249,7 +250,7 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 	//    land in _puzzle/chunks/ automatically. Skipped when there is nothing to
 	//    render (no static routes).
 	if len(entryFiles) > 0 {
-		endPages := prof.phase("per-page bundles")
+		endPages := prof.Phase("per-page bundles")
 		metafile, pagesErr := bundleStaticPages(absRoot, entryFiles, filepath.Join(staging, staticPagesDir), cfg, dev, pc)
 		endPages()
 		if pagesErr != nil {
@@ -619,7 +620,7 @@ const staticCaptureNote = "config.adapter is configured in the app entry, so eac
 // preferring JavaScript when both JavaScript and TypeScript variants are present.
 func findStaticModule(absRoot string, candidates ...string) string {
 	for _, candidate := range candidates {
-		if FileExists(filepath.Join(absRoot, filepath.FromSlash(candidate))) {
+		if fsutil.FileExists(filepath.Join(absRoot, filepath.FromSlash(candidate))) {
 			return candidate
 		}
 	}
@@ -670,12 +671,7 @@ func staticPagesSourcemap(cfg config.Config, dev bool) api.SourceMap {
 func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg config.Config, dev bool, pc *passContext) (string, error) {
 	result := api.Build(staticPagesBundleOptions(absRoot, entryFiles, outdir, cfg, dev, pc.plugin(absRoot)))
 	if len(result.Errors) > 0 {
-		lines := api.FormatMessages(result.Errors, api.FormatMessagesOptions{
-			Kind:          api.ErrorMessage,
-			Color:         ui.New(os.Stderr).Enabled(),
-			TerminalWidth: 0,
-		})
-		return "", fmt.Errorf("puzzle build --static: per-page bundle failed:\n%s", strings.Join(lines, "\n"))
+		return "", formatBuildErrors("puzzle build --static: per-page bundle failed", result.Errors)
 	}
 	return result.Metafile, nil
 }

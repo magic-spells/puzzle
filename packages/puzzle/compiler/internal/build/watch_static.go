@@ -382,7 +382,7 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 	// Which routes this save can reach, decided BEFORE the compile memo is
 	// evicted: the {#svg} edge classification depends on lives in that memo's
 	// asset index, and eviction is exactly what drops it.
-	endClassify := prof.phase("route classify")
+	endClassify := prof.Phase("route classify")
 	for _, p := range changed {
 		b.pending[p] = true
 	}
@@ -399,7 +399,7 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 	// its own; this eviction is what invalidates a .pzl whose bytes did NOT
 	// change but whose inlined {#svg} asset did (and it keeps the map from
 	// growing per save).
-	endEvict := prof.phase("cache evict")
+	endEvict := prof.Phase("cache evict")
 	b.cache.Evict(changed)
 	endEvict()
 
@@ -416,7 +416,7 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 	// a broken file keeps failing an unrelated later save until it is fixed. A
 	// broken file fails the rebuild and leaves the last good site serving.
 	if b.cfg.I18nEnabled() && (b.locales == nil || localesChanged(b.root, batch)) {
-		endLocales := prof.phase("locales")
+		endLocales := prof.Phase("locales")
 		res, err := locales.Load(b.root, b.cfg.I18n)
 		endLocales()
 		if err != nil {
@@ -436,7 +436,7 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 	// or deletes app/adapter.js, invalidates them, so rebuild before doing any
 	// work — still far cheaper than a cold build, and both cases are rare
 	// (EDITING that file is an ordinary graph input and changes nothing here).
-	endScan := prof.phase("usage scan")
+	endScan := prof.Phase("usage scan")
 	usage, err := scanUsageWith(b.root, b.scanner)
 	if err != nil {
 		endScan()
@@ -480,7 +480,7 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 		}
 	}
 
-	endSwap := prof.phase("staging swap")
+	endSwap := prof.Phase("staging swap")
 	swapErr := swapOutputWith(staging, b.outdir, b.workTmp, true)
 	endSwap()
 	if swapErr != nil {
@@ -520,7 +520,7 @@ func (b *StaticWatchBuilder) commitGraph() {
 // attempt assembles one complete staging tree for plan and returns it ready to
 // swap. Every failure path removes the tree it created, so the caller only ever
 // holds a directory it is about to swap in.
-func (b *StaticWatchBuilder) attempt(plan renderPlan, prof *buildProfile) (string, error) {
+func (b *StaticWatchBuilder) attempt(plan renderPlan, prof *PhaseProfile) (string, error) {
 	staging, err := os.MkdirTemp(b.workTmp, stagingPrefix+"*")
 	if err != nil {
 		return "", fmt.Errorf("creating build staging dir under %s: %w", b.workTmp, err)
@@ -547,14 +547,14 @@ func (e partialFallback) Unwrap() error { return e.cause }
 // rebuildInto assembles one complete static site inside staging. It mirrors the
 // one-shot pipeline's order and its guards; anything it returns discards
 // staging.
-func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, plan renderPlan) error {
+func (b *StaticWatchBuilder) rebuildInto(staging string, prof *PhaseProfile, plan renderPlan) error {
 	// Nothing this attempt captures is committed until its tree is swapped in, and
 	// a previous attempt's capture must never be: drop it up front so an early
 	// return here cannot leave one behind for commitGraph to adopt.
 	b.nextGraph = nil
 
 	// 1. The app pass — compile everything, collect <style>, report errors.
-	endBundle := prof.phase("browser bundle")
+	endBundle := prof.Phase("browser bundle")
 	appResult := b.appCtx.Rebuild()
 	endBundle()
 	if len(appResult.Errors) > 0 {
@@ -569,7 +569,7 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 
 	// 2. Public assets, into the private staging tree (plain writes, no atomic
 	//    dance: nothing can observe staging until the swap).
-	endPublic := prof.phase("public copy")
+	endPublic := prof.Phase("public copy")
 	publicFiles, err := copyPublic(b.root, staging, copyIntoStaging)
 	endPublic()
 	if err != nil {
@@ -585,7 +585,7 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 
 	// 3. The stylesheet, composed into staging rather than written over the
 	//    dist/styles.css the server is currently handing out.
-	endStyles := prof.phase("styles compose")
+	endStyles := prof.Phase("styles compose")
 	tailwindCSS := ""
 	if b.tailwind != nil {
 		tailwindCSS, err = b.tailwind()
@@ -603,7 +603,7 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 	// 4. The same reserved-name guards the one-shot build applies once public/
 	//    has landed: a public asset sitting at _puzzle/ or .puzzle-prerender/
 	//    would be silently consumed.
-	if pagesOut := filepath.Join(staging, staticPagesDir); dirExists(pagesOut) || FileExists(pagesOut) {
+	if pagesOut := filepath.Join(staging, staticPagesDir); dirExists(pagesOut) || fsutil.FileExists(pagesOut) {
 		return fmt.Errorf(
 			"public asset would overwrite compiler output dist/%s (a reserved output name in static mode); rename or remove it",
 			staticPagesDir,
@@ -616,7 +616,7 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 	// 5. The node prerender bundle, then the render run itself. The bundle lands
 	//    in the warm tree (a stable Outfile the context can own); the render
 	//    writes its pages into staging.
-	endPrerenderBundle := prof.phase("prerender bundle")
+	endPrerenderBundle := prof.Phase("prerender bundle")
 	preResult := b.preCtx.Rebuild()
 	endPrerenderBundle()
 	if len(preResult.Errors) > 0 {
@@ -635,16 +635,13 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 			only = []string{}
 		}
 	}
-	renderArgs, argErr := prerenderOnlyArgs(only, plan.full)
-	if argErr != nil {
-		return partialFallback{argErr}
-	}
+	renderArgs := prerenderOnlyArgs(only, plan.full)
 
 	renderPhase := "prerender render"
 	if !plan.full {
 		renderPhase = fmt.Sprintf("partial render (%d/%d routes)", len(only), b.routeCount)
 	}
-	endRender := prof.phase(renderPhase)
+	endRender := prof.Phase(renderPhase)
 	payload, err := runPrerender(filepath.Join(b.warm, prerenderDir, "prerender.mjs"), staging, "--static", renderArgs...)
 	endRender()
 	if err != nil {
@@ -667,7 +664,7 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 	//     means this staging tree would ship incomplete, so the whole rebuild
 	//     restarts as a full render.
 	if !plan.full {
-		endReuse := prof.phase(fmt.Sprintf("page reuse (%d/%d)", countReused(summary), len(summary.Written)))
+		endReuse := prof.Phase(fmt.Sprintf("page reuse (%d/%d)", countReused(summary), len(summary.Written)))
 		reuseErr := b.reusePages(staging, summary)
 		endReuse()
 		if reuseErr != nil {
@@ -676,7 +673,7 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 	}
 
 	// 6. Per-page entries, and the page context that bundles them.
-	endEntries := prof.phase("page entries")
+	endEntries := prof.Phase("page entries")
 	entryFiles, err := b.syncPageEntries(summary)
 	endEntries()
 	if err != nil {
@@ -685,7 +682,7 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 
 	pagesMetafile := ""
 	if len(entryFiles) > 0 {
-		endPages := prof.phase("per-page bundles")
+		endPages := prof.Phase("per-page bundles")
 		var pagesErr error
 		pagesMetafile, pagesErr = b.bundlePages(staging, entryFiles)
 		endPages()
@@ -700,7 +697,7 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 	//    filtered — so a partial rebuild leaves the next one just as well
 	//    informed. It is only STAGED here; commitGraph installs it once the swap
 	//    has put the matching tree in dist/.
-	endGraph := prof.phase("route graph")
+	endGraph := prof.Phase("route graph")
 	b.captureGraph(summary, pagesMetafile, preResult.Metafile)
 	endGraph()
 	b.nextCSS = candidateCSS
@@ -780,15 +777,12 @@ func writtenRoutes(written []staticPage) int {
 // prerenderOnlyArgs renders the route filter as the generated prerender entry's
 // argv[4]. A full render passes nothing at all, so the node command line is
 // byte-identical to the pre-D155 one.
-func prerenderOnlyArgs(only []string, full bool) ([]string, error) {
+func prerenderOnlyArgs(only []string, full bool) []string {
 	if full {
-		return nil, nil
+		return nil
 	}
-	encoded, err := json.Marshal(only)
-	if err != nil {
-		return nil, fmt.Errorf("encoding the route filter: %w", err)
-	}
-	return []string{string(encoded)}, nil
+	encoded, _ := json.Marshal(only) // a []string always encodes
+	return []string{string(encoded)}
 }
 
 // countReused reports how many of a summary's pages were not rendered.

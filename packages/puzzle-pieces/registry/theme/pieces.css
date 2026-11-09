@@ -171,6 +171,12 @@
   --shadow-popover: inset 0 1px 0 var(--color-edge-highlight), var(--shadow-contact), 0 24px 56px -16px var(--color-shadow-popover);
 }
 
+/* Type — scheme-agnostic, so outside the palette block the theme files restate. */
+@theme {
+  --text-code: 0.8125rem; /* 13px — code blocks, inline code */
+  --text-code--line-height: 1.25rem;
+}
+
 /*
  * DIM — `color-scheme: dark` resolves every pair above to its dark half; only
  * the tokens whose dim value differs are restated.

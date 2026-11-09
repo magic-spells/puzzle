@@ -22,15 +22,15 @@ func TestNilProfileIsInert(t *testing.T) {
 }
 
 func TestProfileReportListsPhasesInOrder(t *testing.T) {
-	prof := newBuildProfile(true)
+	prof := NewPhaseProfile(true, "puzzle build")
 	if prof == nil {
-		t.Fatal("newBuildProfile(true) returned nil")
+		t.Fatal("NewPhaseProfile(true, …) returned nil")
 	}
-	prof.phase("config load")()
-	prof.phase("browser bundle")()
+	prof.Phase("config load")()
+	prof.Phase("browser bundle")()
 
 	var buf bytes.Buffer
-	prof.report(&buf)
+	prof.Report(&buf)
 	out := buf.String()
 
 	for _, want := range []string{"puzzle build · profile", "config load", "browser bundle", "total"} {

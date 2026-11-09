@@ -581,6 +581,23 @@ func TestAddThemeQuietWhenStylesImportsPiecesCss(t *testing.T) {
 	}
 }
 
+// A comment that mentions pieces.css is not wiring: the palette is still copied.
+func TestAddPieceCommentMentionIsNotWired(t *testing.T) {
+	reg := themeFixture(t)
+	app := newApp(t, false)
+	styles := filepath.Join(app, "app", "styles", "styles.css")
+	if err := os.WriteFile(styles, []byte("@import \"tailwindcss\";\n/* TODO: move tokens to pieces.css */\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fileExists(filepath.Join(app, "app", "styles", "pieces.css")) || !strings.Contains(res.Theme, "@import './pieces.css';") {
+		t.Errorf("a mention must not count as wiring: want pieces.css copied and the advisory, got %q", res.Theme)
+	}
+}
+
 // State (c): pieces.css exists but styles.css neither carries the marker nor
 // imports it — advise only, never rewrite the existing pieces.css, and it is not
 // treated as an overwrite conflict.

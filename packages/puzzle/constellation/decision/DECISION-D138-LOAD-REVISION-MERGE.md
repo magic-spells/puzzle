@@ -37,7 +37,7 @@ server's.
   payload is meant to land.
 - `_synced = true` flips on every load merge (D50).
 
-**Dispatch order.** Every `_loadOne`/`_loadMany` takes a monotonic generation
+**Dispatch order.** Every `_loadOne`/`loadMany` takes a monotonic generation
 from the store's read state (`seq`) and hands it to `_upsert`. The module
 `WeakMap` `LOAD_GENERATIONS` records the highest generation landed per record; a
 lower one is dropped for that record — no merge, no `_notify`, `_synced`

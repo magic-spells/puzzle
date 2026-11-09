@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/textutil"
@@ -60,7 +61,7 @@ const prerenderDir = ".puzzle-prerender"
 // in the error, as elsewhere in this file.
 func checkPrerenderScratchCollision(absRoot, staging, label string) error {
 	scratch := filepath.Join(staging, prerenderDir)
-	if !dirExists(scratch) && !FileExists(scratch) {
+	if !dirExists(scratch) && !fsutil.FileExists(scratch) {
 		return nil
 	}
 	// Name the user's file where it can be resolved; the staging copy is a temp
@@ -237,12 +238,7 @@ func bundlePrerenderEntry(absRoot, stdin, outfile, label string, pc *passContext
 
 	result := api.Build(buildOpts)
 	if len(result.Errors) > 0 {
-		lines := api.FormatMessages(result.Errors, api.FormatMessagesOptions{
-			Kind:          api.ErrorMessage,
-			Color:         ui.New(os.Stderr).Enabled(),
-			TerminalWidth: 0,
-		})
-		return fmt.Errorf("puzzle build %s: prerender bundle failed:\n%s", label, strings.Join(lines, "\n"))
+		return formatBuildErrors("puzzle build "+label+": prerender bundle failed", result.Errors)
 	}
 	return nil
 }

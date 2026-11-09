@@ -142,7 +142,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   @import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
 //   @import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */
 // The first carries the positioning, the open/closed state and the hover
-// bridge — the piece does nothing without it. The second adds the five
+// bridge — the piece does nothing without it. The second adds the six
 // entrance effects and the drawn trigger arrow; skip it and `effect`, `arrow`
 // and `arrow-shape` are simply no-ops. The layer is not optional cosmetics:
 // both sheets use plain element selectors, and an unlayered import would
@@ -160,19 +160,6 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // BROWSER SUPPORT. Positioning depends on :has() and closed panels on `inert` —
 // Chrome/Edge 105+, Safari 15.5+, Firefox 121+. No polyfill is loaded.
-
-// A prop that was not passed renders no attribute — `false` is the compiler's
-// omit sentinel, so the component's own default stands.
-function oneOf(value, allowed) {
-  return allowed.includes(value) ? value : false;
-}
-
-// Same sentinel for the millisecond attributes: unset (or nonsense) renders no
-// attribute, so the component's own default stands.
-function ms(value) {
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? String(Math.round(n)) : false;
-}
 
 export default class DropdownPanel extends PuzzleView {
   #live = false;
@@ -213,11 +200,13 @@ export default class DropdownPanel extends PuzzleView {
       rootClass: props.class || false,
       rootStyle: declarations.length ? declarations.join(';') : false,
       menuAttr: props.menu ? true : false,
-      triggerAttr: oneOf(props.trigger, ['hover', 'click', 'both', 'contextmenu']),
-      openDelayAttr: ms(props.openDelay),
-      closeDelayAttr: ms(props.closeDelay),
-      arrowAttr: oneOf(props.arrow, ['flip', 'static', 'none']),
-      arrowShapeAttr: oneOf(props.arrowShape, ['chevron', 'triangle']),
+      // Passed straight through. `false` is the compiler's omit sentinel, so an
+      // unset prop renders no attribute; the component defaults unknown values.
+      triggerAttr: props.trigger || false,
+      openDelayAttr: props.openDelay ?? false,
+      closeDelayAttr: props.closeDelay ?? false,
+      arrowAttr: props.arrow || false,
+      arrowShapeAttr: props.arrowShape || false,
     };
   }
 

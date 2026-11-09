@@ -2657,11 +2657,13 @@ func TestStaleShellAssetOnlyFailsExplicitHash(t *testing.T) {
 	requireNodeBin(t)
 	shell := `<html><head><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/app.css"></head><body><script type="module" src="/app.js"></script></body></html>`
 	for _, tt := range []struct {
-		name, cfg string
-		wantErr   bool
+		name, cfg, entry string
+		wantErr          bool
 	}{
-		{name: "default", cfg: ""},
+		{name: "default", cfg: "", entry: `src="/app-[A-Z2-7]{8}\.js"`},
 		{name: "explicit true", cfg: `export default { build: { hashNames: true } };`, wantErr: true},
+		// D181: false opts out of hashing, so splitting's shell rewrite stays lenient.
+		{name: "explicit false with splitting", cfg: `export default { build: { splitting: true, hashNames: false } };`, entry: `src="/app\.js"`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			root := writeSplitFixture(t, tt.cfg)
@@ -2676,11 +2678,11 @@ func TestStaleShellAssetOnlyFailsExplicitHash(t *testing.T) {
 				return
 			}
 			if err != nil {
-				t.Fatalf("default build must leave the stale reference alone: %v", err)
+				t.Fatalf("a lenient build must leave the stale reference alone: %v", err)
 			}
 			html := readFile(t, filepath.Join(root, "dist", "index.html"))
-			if !strings.Contains(html, `href="/app.css"`) || !regexp.MustCompile(`src="/app-[A-Z2-7]{8}\.js"`).MatchString(html) {
-				t.Errorf("want the entry hashed and /app.css left as written:\n%s", html)
+			if !strings.Contains(html, `href="/app.css"`) || !regexp.MustCompile(tt.entry).MatchString(html) {
+				t.Errorf("want the entry as %s and /app.css left as written:\n%s", tt.entry, html)
 			}
 		})
 	}

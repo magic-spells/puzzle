@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 	"github.com/magic-spells/puzzle/compiler/internal/version"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/textutil"
@@ -305,7 +306,7 @@ func validateManifestPath(piece, field, value string) error {
 // points outside even when the final file does not exist yet.
 func containedWritePath(resolvedRoot, rel, piece, field, value string) (string, error) {
 	joined := filepath.Join(resolvedRoot, filepath.FromSlash(rel))
-	abs, err := evalSymlinksAllowMissing(joined)
+	abs, err := fsutil.EvalSymlinksAllowMissing(joined)
 	if err != nil {
 		return "", fmt.Errorf("piece %q has invalid %s %q: resolving destination: %w", piece, field, value, err)
 	}
@@ -314,38 +315,6 @@ func containedWritePath(resolvedRoot, rel, piece, field, value string) (string, 
 		return "", fmt.Errorf("piece %q has invalid %s %q: destination resolves outside the project root", piece, field, value)
 	}
 	return abs, nil
-}
-
-// evalSymlinksAllowMissing mirrors filepath.EvalSymlinks for a destination that
-// may not exist yet: resolve the nearest existing ancestor, then append the
-// missing suffix. A dangling symlink fails closed instead of being mistaken for
-// a missing ordinary path segment.
-func evalSymlinksAllowMissing(name string) (string, error) {
-	current := name
-	var missing []string
-	for {
-		resolved, err := filepath.EvalSymlinks(current)
-		if err == nil {
-			for i := len(missing) - 1; i >= 0; i-- {
-				resolved = filepath.Join(resolved, missing[i])
-			}
-			return resolved, nil
-		}
-		if !os.IsNotExist(err) {
-			return "", err
-		}
-		if _, lerr := os.Lstat(current); lerr == nil {
-			return "", err
-		} else if !os.IsNotExist(lerr) {
-			return "", lerr
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			return "", err
-		}
-		missing = append(missing, filepath.Base(current))
-		current = parent
-	}
 }
 
 // checkConflicts returns an error listing every existing destination path.
@@ -416,8 +385,8 @@ type plannedTheme struct {
 // states keyed off app/styles/styles.css and app/styles/pieces.css. It performs
 // every read and registry fetch but deliberately does not write:
 //
-//	(a) styles.css already carries the tokens — the manual-merge marker, or an
-//	    import that references pieces.css — nothing to do, no advisory.
+//	(a) styles.css already carries the tokens — the manual-merge marker, or a
+//	    live import of pieces.css — nothing to do, no advisory.
 //	(b) not wired AND app/styles/pieces.css is absent — copy the registry theme
 //	    verbatim to app/styles/pieces.css, return it as a Unit (so it's locked +
 //	    shown), and advise the import.
@@ -439,11 +408,12 @@ func planTheme(opts *Options, reg *Registry) (theme *plannedTheme, advisory stri
 		return nil, "", fmt.Errorf("reading %s: %w", stylesPath, readErr)
 	}
 
-	// (a) Already wired — a hand-merged token block, an import pulling pieces.css
-	// in, or the palette imported straight from the npm package (an app that does
-	// that owns its tokens through the package; copying pieces.css beside it would
-	// only start the drift `add theme` exists to stop).
-	if strings.Contains(styles, themeMarker) || strings.Contains(styles, "pieces.css") ||
+	// (a) Already wired — a hand-merged token block, a live import pulling
+	// pieces.css in (a comment that mentions it is not wiring), or the palette
+	// imported straight from the npm package (an app that does that owns its
+	// tokens through the package; copying pieces.css beside it would only start
+	// the drift `add theme` exists to stop).
+	if strings.Contains(styles, themeMarker) || piecesCssImported(styles) ||
 		themeImportedFromPackage(styles, defaultThemeName) {
 		return nil, "", nil
 	}

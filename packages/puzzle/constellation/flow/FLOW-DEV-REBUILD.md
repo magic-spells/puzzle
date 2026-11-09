@@ -92,8 +92,13 @@ snapshot keeps the last fully successful composition. The error is printed, reta
 broadcast; an SSE client registers with the hub BEFORE reading the retained error, so a
 racing transition can only duplicate, never be missed. With no `dist/index.html` and an
 error retained, the server answers 503 with an error shell carrying the reload client, so
-a first-ever failed build self-heals. A failure wipes the echo filter's memo, and static
-change paths stay pending until a rebuild lands.
+a first-ever failed build self-heals. A failure wipes the echo filter's memo.
+
+**A batch is consumed only when its effects land in dist**, in both builders: static
+change paths stay `pending` until `commitGraph`, and the SPA builder carries a failed
+batch in `refused` (every error return, not only the entry check) into the next rebuild,
+so a public asset saved alongside a failing `.pzl` is mirrored by the rebuild that fixes
+the `.pzl`.
 
 ## Ordering constraints that look arbitrary
 

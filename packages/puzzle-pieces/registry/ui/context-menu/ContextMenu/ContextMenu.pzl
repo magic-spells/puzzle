@@ -3,7 +3,6 @@
     class={ rootClass }
     menu={ true }
     trigger={ triggerMode }
-    effect={ effect }
     @show={ onShow }
     @hide={ onHide }
     @select={ onSelect }><Children/></DropdownPanel>
@@ -75,7 +74,6 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //             leaves the component with no trigger to find; expect one
 //             "requires <dropdown-trigger>" console warning per disabled
 //             instance while it waits for children that are not coming.
-//   effect    'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
 //   class     merged onto <dropdown-component>, after `inline-block`
 // Callbacks
 //   @show()                 the menu opened
@@ -100,7 +98,6 @@ export default class ContextMenu extends PuzzleView {
       // and never wires anything up. Nothing opens, and the native menu — which
       // only the contextmenu listener would have preventDefault'd — survives.
       triggerMode: props.disabled ? false : 'contextmenu',
-      effect: props.effect,
     };
   }
 

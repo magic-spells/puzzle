@@ -157,16 +157,10 @@ func shellRenames(outputs map[string]bundleOutput, stylesheet, entryPoint string
 	return renames, ""
 }
 
-// rewriteShellHTML follows emitted filenames and reads the entry tag before
-// renaming it, so preload URLs and credentials match the app's own script.
-func rewriteShellHTML(source string, renames map[string]string, chunks []string, publicFiles map[string]bool) (string, bool, error) {
-	rewritten, entryFound, _, err := rewriteShellHTMLRefs(source, renames, chunks, publicFiles, renames != nil)
-	return rewritten, entryFound, err
-}
-
-// rewriteShellHTMLRefs is rewriteShellHTML that also reports the compiler
-// filenames (app.js, app.css, styles.css) the shell references from a script
-// src or link href it can rewrite. strict makes a reference to one of those
+// rewriteShellHTMLRefs follows emitted filenames and reads the entry tag before
+// renaming it, so preload URLs and credentials match the app's own script. It
+// also reports the compiler filenames (app.js, app.css, styles.css) the shell
+// references from a script src or link href it can rewrite. strict makes a reference to one of those
 // names with no emitted output an error; otherwise it is left as written (the
 // build.hashNames-unset path, where an unhashed build never checked it).
 func rewriteShellHTMLRefs(source string, renames map[string]string, chunks []string, publicFiles map[string]bool, strict bool) (string, bool, map[string]bool, error) {

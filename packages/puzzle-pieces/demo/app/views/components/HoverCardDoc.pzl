@@ -229,7 +229,6 @@ const rootRows = [
   { name: 'openDelay', desc: 'Milliseconds of hover intent before the card shows. Defaults to 600. Needs dropdown-panel 2.1.0+.' },
   { name: 'closeDelay', desc: 'Milliseconds of grace after the pointer leaves. Defaults to 300. Needs dropdown-panel 2.1.0+.' },
   { name: 'open', desc: 'Optional-controlled and edge-triggered. Omit it and the component owns its own state.' },
-  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
   { name: 'class', desc: 'Merged onto the dropdown component host.' },
   { name: '@show / @hide', desc: 'Fired when THIS card opens or closes.' },
 ];
@@ -242,7 +241,7 @@ const triggerRows = [
 const contentRows = [
   { name: 'align', desc: "'start' (default) | 'end'." },
   { name: 'opens', desc: "'down' (default) | 'right'." },
-  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
+  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'bloom' | 'swing'. Needs the effects stylesheet." },
   { name: 'class', desc: 'Merged onto the panel, after the card box. Never overflow-hidden.' },
 ];
 

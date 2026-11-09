@@ -41,6 +41,17 @@ notes:
       native disabled <button> fires no click; onPress still re-checks. Menu deliberately keeps
       `opacity-50 pointer-events-none`: its <dropdown-trigger> is not a <button> (never matches
       :disabled), and pointer-events-none is the only thing stopping a click from opening the menu.
+  - kind: state
+    text: >-
+      2026-11-08 (0.10.0, feat/0.10-pieces-overlays, review V-pieces-12 B1/B2): every sample
+      (SplitButton/Menu/index headers, SplitButtonDoc usage + hero + variants) now wires rows
+      through the Menu's @select ONLY — Item @press and the root select fire on the same activation,
+      so wiring both ran each action twice. `SplitButton.Menu disabled` is documented as
+      click-blocking only: upstream <dropdown-trigger> keeps tabindex=0 and opens on
+      Enter/Space/ArrowDown with no disabled check (dropdown-panel 2.1.1 #handleTriggerKeydown). The
+      real fix is upstream — a `disabled` on <dropdown-trigger> (drop tabindex, aria-disabled,
+      ignore activation) — then one prop forwarded through DropdownMenu.Trigger. No piece-side
+      keydown guard by decision.
 ---
 
 A D167 family in `registry/ui/split-button/SplitButton/`: `SplitButton` (layout shell),

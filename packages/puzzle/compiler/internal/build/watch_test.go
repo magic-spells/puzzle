@@ -392,6 +392,38 @@ export default class Home extends PuzzleView {}
 	}
 }
 
+// A public asset saved in the same batch as a failing .pzl is mirrored by the
+// rebuild that fixes the .pzl: the failed batch is carried, not dropped.
+func TestWatchBuilderReplaysFailedBundleBatch(t *testing.T) {
+	root := scratchApp(t)
+	home := filepath.Join(root, "app", "views", "Home.pzl")
+	write(t, home, strings.ReplaceAll(viewTmpl, "%MARKER%", "HOME"))
+	write(t, filepath.Join(root, "app", "app.js"), "import Home from './views/Home.pzl';\nconsole.log(Home);\n")
+	logo := filepath.Join(root, "app", "public", "logo.txt")
+	write(t, logo, "v1")
+	b, err := NewWatchBuilder(root, WatchOptions{})
+	if err != nil {
+		t.Fatalf("NewWatchBuilder: %v", err)
+	}
+	defer b.Dispose()
+	if _, err := b.Rebuild(nil); err != nil {
+		t.Fatalf("first Rebuild: %v", err)
+	}
+
+	write(t, home, "<puzzle-view>{#if open}</puzzle-view>\n")
+	write(t, logo, "v2")
+	if _, err := b.Rebuild([]string{home, logo}); err == nil {
+		t.Fatal("expected the rebuild to fail on the unclosed {#if}")
+	}
+	write(t, home, strings.ReplaceAll(viewTmpl, "%MARKER%", "HOME"))
+	if _, err := b.Rebuild([]string{home}); err != nil {
+		t.Fatalf("Rebuild after the fix: %v", err)
+	}
+	if got := readFile(t, filepath.Join(root, "dist", "logo.txt")); got != "v2" {
+		t.Errorf("dist/logo.txt = %q, want the v2 saved with the failing batch", got)
+	}
+}
+
 // svgHomeTmpl is a view that inlines app/assets/icons/heart.svg via {#svg}.
 const svgHomeTmpl = `<puzzle-view>
   <span class="inline-block size-5">{#svg 'icons/heart.svg'}</span>

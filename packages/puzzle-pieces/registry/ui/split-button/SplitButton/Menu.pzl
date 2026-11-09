@@ -22,7 +22,7 @@ import DropdownMenu from '../DropdownMenu/index.js';
 // <dropdown-component> as its single root with no wrapper.
 //
 //   <SplitButton.Menu variant="primary" size="md" label="More save actions" @select={ run }>
-//     <SplitButton.Item value="save-as" @press={ run }>Save as…</SplitButton.Item>
+//     <SplitButton.Item value="save-as">Save as…</SplitButton.Item>
 //   </SplitButton.Menu>
 //
 // The children go straight into the menu's panel — write rows, not a Content;
@@ -43,8 +43,8 @@ import DropdownMenu from '../DropdownMenu/index.js';
 // Props
 //   variant   'primary' (default) | 'secondary' | 'outline' | 'ghost' | 'destructive'
 //   size      'sm' | 'md' (default) | 'lg'
-//   disabled  greys the caret out. It does not stop the menu opening on its own —
-//             disable the whole pair, or leave the panel empty.
+//   disabled  greys the caret out and blocks clicks only: the keyboard still
+//             opens it until dropdown-panel gives <dropdown-trigger> a disabled state.
 //   label     the accessible name, default 'More actions'
 //   class     merged onto <dropdown-trigger>, after the chrome
 // Callbacks
@@ -72,7 +72,7 @@ const CARET_W = { sm: 'w-8', md: 'w-9', lg: 'w-10' };
 const ICON = { sm: 'size-3.5', md: 'size-4', lg: 'size-4' };
 
 // <dropdown-trigger> is not a <button>, so `disabled:` variants do not apply —
-// the muted, unpressable treatment is spelled out instead.
+// the muted, click-blocking treatment is spelled out instead.
 const DISABLED = 'opacity-50 pointer-events-none';
 
 export default class Menu extends PuzzleView {

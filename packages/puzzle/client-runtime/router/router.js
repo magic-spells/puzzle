@@ -398,12 +398,6 @@ const succeed = (route) =>
 		? { ok: true, route, catchAll: true }
 		: { ok: true, route };
 
-// Whether a router has a navigation in flight, for PuzzleApp.idle() (D185). Bound
-// in Router's static block, so app.js reads #pendingNavPromise without a public
-// member. Declared ahead of the class: the block runs when the class is defined.
-/** @type {(router: Router) => boolean} */
-export let navigating;
-
 export class Router {
 	/** @type {RouteEntry[]} */
 	#routes = []; // compiled leaf Entries, in declaration order (depth-first)
@@ -444,8 +438,12 @@ export class Router {
 	// Whether the navigation that owns the token is a pop (D182: a push to the
 	// committed path over a path/hash-mode pop is a real push, not a rewrite).
 	#popInFlight = false;
-	static {
-		navigating = (router) => router.#pendingNavPromise != null;
+	// Whether a router has a navigation in flight, for PuzzleApp.idle() (D185). A
+	// method, not a static block: a block is a side effect that would keep the whole
+	// class in output:'static' bundles, which import only path helpers from here.
+	/** @param {Router} router */
+	static navigating(router) {
+		return router.#pendingNavPromise != null;
 	}
 	// Guard redirects re-enter the normal pipeline through push()/replace() — the
 	// redirect inherits the denied navigation's verb — so every destination gets its
@@ -1537,6 +1535,18 @@ export class Router {
 		// up. Nothing above reads the token (stripPath/#match/current are pure over
 		// their inputs), so the bump commutes down safely.
 		const token = ++this.#token;
+		// Departure scroll, captured NOW — synchronously at navigation start, while
+		// the outgoing page still has its full height. #commitLocation persists this
+		// captured value instead of reading window.scrollY at commit time: by then
+		// #swap has destroyed the outgoing view, the page has collapsed, and a real
+		// browser clamps scrollY to 0 (jsdom does no layout; only the Playwright
+		// suite sees the clamp). D61 atomicity holds: a superseded/failed nav never
+		// reaches #commitLocation, so the value is simply discarded. Over a pop still
+		// loading nothing is departed (#handlePopState): null, read before the reset.
+		const departScroll =
+			typeof window !== 'undefined' && !(this.#popInFlight && this.#pendingNavPromise)
+				? { x: window.scrollX || 0, y: window.scrollY || 0 }
+				: null;
 		// This navigation is now REAL (matched) and owns the token: record its target
 		// so a same-key push() arriving mid-flight no-ops instead of superseding (the
 		// double-click guard in push()), and reset the guard-redirect budget UNLESS
@@ -1593,19 +1603,6 @@ export class Router {
 		// Guard `from` is the same top-level-frozen route snapshot shape as `to`;
 		// nav #0 has no committed route and therefore receives null (D87).
 		const from = current == null ? null : Object.freeze(current);
-		// Departure scroll, captured NOW — synchronously at navigation start, while
-		// the outgoing page still has its full height. #commitLocation persists this
-		// captured value instead of reading window.scrollY at commit time: by then
-		// #swap has destroyed the outgoing view, the page has collapsed, and a real
-		// browser clamps scrollY to 0 — so every saved position was {0,0} and
-		// back-navigation restored to the top (caught by the Playwright suite; jsdom
-		// does no layout, so the vitest suite can't see the clamp). D61 atomicity
-		// holds: a superseded/failed nav never reaches #commitLocation, so the
-		// captured value is simply discarded.
-		const departScroll =
-			typeof window !== 'undefined'
-				? { x: window.scrollX || 0, y: window.scrollY || 0 }
-				: null;
 
 		const { entry, params } = matched;
 		const cur = this.#state;
@@ -2269,10 +2266,8 @@ export class Router {
 			// #state/current either way.
 			const url = this.#encodedUrl(rawPath);
 			if (this.#scrollEnabled()) {
-				// Persist the position captured at nav start (#navigate's departScroll):
-				// at commit time the outgoing view is already destroyed and the collapsed
-				// page clamps window.scrollY to 0 in a real browser.
-				this.#savePosition(next.departScroll);
+				// #navigate's departScroll, never a live read; null over a loading pop.
+				if (next.departScroll) this.#savePosition(next.departScroll);
 				this.#scrollKey = this.#newEntryKey();
 				history.pushState({ __puzzleScrollKey: this.#scrollKey }, '', url);
 			} else {
@@ -3465,14 +3460,15 @@ export class Router {
 		const path = this.#currentPath();
 		if (path == null) return;
 		// Scroll bookkeeping happens NOW, not at commit: the browser has already
-		// switched history entries, but #scrollKey still names the entry the
-		// window is showing — save the outgoing position under it, then adopt the
-		// target entry's key. This runs even if the navigation later fails or is
-		// superseded: the URL really moved, so the key must track it (the same
-		// soft violation D19 already accepts for a failed popstate load).
+		// switched entries, so save the outgoing position under #scrollKey and adopt
+		// the target's key — even if the navigation later fails or is superseded,
+		// the URL really moved (the soft violation D19 accepts for a failed pop).
+		// While a pop still loads, #scrollKey names ITS target, never on screen: the
+		// window shows the committed page, saved when that pop left it — no save.
+		const popping = this.#popInFlight && this.#pendingNavPromise;
 		let savedPosition = null;
 		if (this.#scrollEnabled()) {
-			this.#savePosition();
+			if (!popping) this.#savePosition();
 			this.#scrollKey = this.#adoptEntryKey();
 			savedPosition = this.#positions.get(this.#scrollKey) || null;
 		}
@@ -3495,6 +3491,8 @@ export class Router {
 		// on the element, moved focus to the leaf view root and announced the
 		// route — for a URL whose route, params and query never moved.
 		if (this.#state && sameDocKey(path) === sameDocKey(this.#state.path)) {
+			// Back-then-Forward home while that Back loads: the stale pop must not land.
+			if (popping) this.#recoverFailedNavigation(++this.#token);
 			this.#applyFragmentPop(path, savedPosition);
 			return;
 		}

@@ -141,7 +141,7 @@ function assertRenamedVerbs(models) {
  * Dev nudge (D161): the imperative loaders inside a tracked data() run are almost
  * always a leftover from hand-rolled loading — findOne/findMany fetch what is
  * missing and settle before the view commits. Once per store per verb; the
- * internal fault path calls _loadOne/_loadMany and never lands here.
+ * internal fault path calls the raw store and never lands here.
  *
  * Attributed by HANDLE IDENTITY, exactly as faulting is: only a call arriving
  * through a view's own store handle whose evaluation is open (`hctx.requests`
@@ -209,12 +209,7 @@ export class PuzzleAdapterError extends Error {
  * @returns {Promise<any>}
  */
 async function readBody(res) {
-	let text;
-	try {
-		text = await res.text();
-	} catch {
-		return undefined;
-	}
+	const text = await res.text();
 	if (text == null || text === '') return undefined;
 	try {
 		return JSON.parse(text);
@@ -247,7 +242,7 @@ async function responseData(response) {
 		throw new PuzzleAdapterError(
 			response.status,
 			response.statusText,
-			await readBody(response)
+			await readBody(response).catch(noop)
 		);
 	}
 	return readBody(response);
@@ -712,22 +707,13 @@ class AdapterStoreMethods {
 	 * escape hatch), unlike the deduplicated fault the tracked findMany queues.
 	 * Called with NO options it is a whole-collection load, so the type is marked
 	 * loaded — and exhaustive too when the generated transport made the request
-	 * (see _loadMany). An options-bearing call — `{}` included — is a partial,
+	 * (below). An options-bearing call — `{}` included — is a partial,
 	 * accumulating load and marks nothing (D161).
 	 * @this {AdapterStore}
 	 * @param {string} type
-	 * @param {AdapterLoadManyOptions} [options]
+	 * @param {AdapterLoadManyOptions} [options] absent = a whole-collection load
 	 */
-	loadMany(type, options) {
-		return this._loadMany(type, options);
-	}
-
-	/**
-	 * @this {AdapterStore}
-	 * @param {string} type
-	 * @param {AdapterLoadManyOptions} [options] absent = a whole-collection load (see loadMany)
-	 */
-	async _loadMany(type, options) {
+	async loadMany(type, options) {
 		const pk = this.modelFor(type).primaryKey();
 		// Dispatch order, so a response that lost the race cannot overwrite a newer
 		// one that already landed on the same record.
@@ -975,7 +961,7 @@ class AdapterStoreMethods {
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			trackedLoadMany = (type, options) => {
 				warnTrackedLoad(store, hctx, 'loadMany', 'findMany');
-				return store._loadMany(type, options);
+				return store.loadMany(type, options);
 			};
 			trackedLoadOne = (type, id) => {
 				warnTrackedLoad(store, hctx, 'loadOne', 'findOne');
@@ -1002,10 +988,6 @@ class AdapterStoreMethods {
 				const fn = value.bind(target);
 				bound.set(key, { raw: value, fn });
 				return fn;
-			},
-			set(target, key, value) {
-				/** @type {Record<string | symbol, any>} */ (target)[key] = value;
-				return true;
 			},
 		});
 
@@ -1119,10 +1101,10 @@ class AdapterStoreMethods {
 
 		const request = (async () => {
 			try {
-				await this._loadMany(type);
+				await this.loadMany(type);
 			} finally {
 				// Failure clears the in-flight entry WITHOUT marking the type complete
-				// (_loadMany marks it only on success), so a retry is a real retry.
+				// (loadMany marks it only on success), so a retry is a real retry.
 				if (state.many.get(type) === request) state.many.delete(type);
 			}
 		})();
@@ -1415,72 +1397,47 @@ class AdapterStoreMethods {
 		const map = this._typeMap(type);
 		if (map.get(requestKey) !== record) return record;
 
-		const isObject = body != null;
-		if (isObject) {
-			const responsePk = body[pk];
+		if (body != null) {
+			const { [pk]: responsePk, ...rest } = body;
 			// Same normalization the index uses: a server echoing numeric 1 for a record
-			// keyed '1' is NOT a pk change — it merges normally and the map key is
-			// identical either way (the field still adopts the server's type).
-			const pkDiffers = responsePk != null && recordKey(responsePk) !== recordKey(record[pk]);
+			// keyed '1' is NOT a pk change — it merges normally (the field still adopts
+			// the server's type) and the map key is identical either way.
+			const pkDiffers = recordKey(responsePk) !== requestKey;
 			if (pkDiffers && !wasSynced) {
 				// e. server pk adoption on a first save — the one sanctioned pk change,
-				// performed by the store. Re-key atomically: assign the new pk DIRECTLY
-				// (not via update(), which throws on pk change) and swap the map key.
-				// Collision guard: if the assigned pk already indexes a DIFFERENT record,
-				// reject with a plain Error — the HTTP request SUCCEEDED, only local
-				// reconciliation failed, so NOT a PuzzleAdapterError — and leave both
-				// records + the map untouched (the delete rides the success path only).
+				// performed by the store. Collision guard first: if the assigned pk already
+				// indexes a DIFFERENT record, reject with a plain Error — the HTTP request
+				// SUCCEEDED, only local reconciliation failed, so NOT a PuzzleAdapterError —
+				// and leave both records + the map untouched.
 				const occupant = map.get(recordKey(responsePk));
 				if (occupant && occupant !== record) {
 					throw new Error(
 						`[puzzle] save() response for '${type}' assigned primary key ${JSON.stringify(responsePk)}, which already belongs to a different record — refusing to overwrite it`
 					);
 				}
-				const oldId = record[pk];
-				map.delete(recordKey(oldId));
-				// The server-assigned pk is the sanctioned identity change and must
-				// always land. Reconcile every other field against requestRevision.
-				const { [pk]: adoptedPk, ...rest } = body;
-				safeMerge(record, { [pk]: adoptedPk });
-				safeMerge(record, rest, requestRevision);
-				map.set(recordKey(record[pk]), record);
-				clearAbsent(this, type, record[pk]); // the adopted identity is present now
-				record._synced = true;
-				stamp();
-				this._notify(type, oldId); // old key: subscribers of the gone id
-				this._notify(type, record[pk]); // new key + collection
-				this._persist();
-				return record;
-			}
-			if (pkDiffers && wasSynced) {
+				// Re-key atomically: assign the new pk DIRECTLY (not via update(), which
+				// throws on pk change) and swap the map key; subscribers of the gone id
+				// are notified on the old key.
+				map.delete(requestKey);
+				this._notify(type, record[pk]);
+				safeMerge(record, { [pk]: responsePk });
+				map.set(recordKey(responsePk), record);
+				clearAbsent(this, type, responsePk); // the adopted identity is present now
+			} else if (pkDiffers) {
 				// An update-save must never change the pk — warn and drop it, merge rest.
 				console.warn(
 					`[puzzle] save() response for '${type}' carried a different primary key ${JSON.stringify(responsePk)} — ignoring; primary keys are immutable after creation`
 				);
-				const { [pk]: _ignored, ...rest } = body;
-				safeMerge(record, rest, requestRevision);
-			} else if (responsePk == null && pk in body) {
-				// An explicit-null (or undefined) pk present in the body would blank the
-				// record's local pk while the type map still keys it under the old id —
-				// index desync + a _notify(type, null). Drop it; keep the local pk (normal,
-				// no warn — an absent/missing pk in the body is expected).
-				const { [pk]: _ignored, ...rest } = body;
-				safeMerge(record, rest, requestRevision);
-			} else {
-				safeMerge(record, body, requestRevision);
 			}
-			// _synced is server-provenance, not a clean/dirty bit: this request
-			// succeeded even when a newer local field was intentionally preserved.
-			// Keeping it true also makes a queued follow-up PUT instead of POSTing a
-			// duplicate after a successful first save.
-			record._synced = true;
-			stamp();
+			// Every other field reconciles against requestRevision; the pk rides along
+			// only when it names the same identity (a differing one was handled above).
+			safeMerge(record, pkDiffers ? rest : body, requestRevision);
 			this._notify(type, record[pk]);
-			this._persist();
-			return record;
 		}
-
-		// 204 / empty body: keep local state, mark synced.
+		// _synced is server-provenance, not a clean/dirty bit: this request succeeded
+		// even when a newer local field was intentionally preserved, and keeping it
+		// true makes a queued follow-up PUT instead of POSTing a duplicate. A 204 /
+		// empty body keeps local state and is marked synced the same way.
 		record._synced = true;
 		stamp();
 		this._persist();
@@ -1575,11 +1532,7 @@ class AdapterStoreMethods {
 			init.headers['Content-Type'] = 'application/json';
 		}
 		const url = this.apiURL + endpoint + path;
-		const res = await this._fetch(url, init, { type, method, url });
-		if (!res.ok) {
-			throw new PuzzleAdapterError(res.status, res.statusText, await readBody(res));
-		}
-		const parsed = await readBody(res);
+		const parsed = await responseData(await this._fetch(url, init, { type, method, url }));
 		return parsed === undefined ? null : parsed;
 	}
 }
