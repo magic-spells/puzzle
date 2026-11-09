@@ -862,26 +862,19 @@ export class Router {
 		// path that never carried one, so a byte-identical URL got a duplicate
 		// history entry. Route MATCHING is unaffected: #navigate matches
 		// parseLocation's pathname, which drops query and hash alike (link-derived
-		// paths have always carried a fragment through it). Scroll is unaffected too: #resolveScroll
-		// leaves navigation #0 alone entirely, and a pop's saved position beats the
-		// D41 anchor by design.
+		// paths have always carried a fragment through it). Scroll is unaffected
+		// too: #resolveScroll leaves navigation #0 alone entirely, and a pop's saved
+		// position beats the D41 anchor by design.
 		const pathname = location.pathname;
-		const fragment = location.hash;
-		if (this.#base) {
-			if (pathname === this.#base) return '/' + location.search + fragment;
-			if (pathname.startsWith(this.#base + '/')) {
-				return pathname.slice(this.#base.length) + location.search + fragment;
-			}
-			// Loaded outside the configured base (D51): pass the pathname through
-			// un-stripped (→ catch-all) and warn once so a misconfigured deploy is
-			// debuggable rather than silently misrouting. Dev-only (module helper +
-			// its once-state DCE away in production, §27 define pattern).
-			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-				warnOutsideBaseOnce(pathname, this.#base);
-			}
-			return pathname + location.search + fragment;
+		const stripped = stripBase(pathname, this.#base);
+		// Loaded outside the configured base (D51): pass the pathname through
+		// un-stripped (→ catch-all) and warn once so a misconfigured deploy is
+		// debuggable rather than silently misrouting. Dev-only (module helper +
+		// its once-state DCE away in production, §27 define pattern).
+		if (stripped == null && (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)) {
+			warnOutsideBaseOnce(pathname, this.#base);
 		}
-		return pathname + location.search + fragment;
+		return (stripped ?? pathname) + location.search + location.hash;
 	}
 
 	/**
@@ -3588,29 +3581,19 @@ export class Router {
 			}
 		}
 
-		// path mode: with a base (D51) intercept ONLY same-origin URLs UNDER the
-		// base (=== base or under base + '/') and push the base-STRIPPED path; a
-		// same-origin link outside the base is a real navigation away from the app
-		// and falls through to the browser (more correct than intercept-everything).
-		// A urlless mode keeps the base inert — the interceptor stays active but
-		// never strips (there is no URL to prefix), so it behaves exactly as the
-		// base-less path-mode path.
-		if (this.#base && !this.#mode) {
-			if (url.pathname !== this.#base && !url.pathname.startsWith(this.#base + '/')) {
-				return; // outside the app base — let the browser navigate away
-			}
-			const stripped = url.pathname === this.#base ? '/' : url.pathname.slice(this.#base.length);
-			e.preventDefault();
-			this.push(stripped + url.search + url.hash);
-			return;
-		}
-
-		// Preserve url.hash (D41): a `/docs#faq` link carries its anchor into the
-		// pushed path so the default landing can target the element. A bare
+		// path mode: with a base (D51) intercept ONLY same-origin URLs under the
+		// base and push the base-STRIPPED path; a same-origin link outside the base
+		// (stripBase → null) is a real navigation away from the app and falls
+		// through to the browser. A urlless mode keeps the base inert — the
+		// interceptor stays active but never strips (there is no URL to prefix).
+		// url.hash rides along (D41): a `/docs#faq` link carries its anchor into
+		// the pushed path so the default landing can target the element. A bare
 		// `#anchor` href never reaches here — it took the href.startsWith('#')
 		// branch above and fell through to the browser.
+		const pathname = this.#mode ? url.pathname : stripBase(url.pathname, this.#base);
+		if (pathname == null) return;
 		e.preventDefault();
-		this.push(url.pathname + url.search + url.hash);
+		this.push(pathname + url.search + url.hash);
 	}
 }
 
@@ -4006,8 +3989,7 @@ export function localeBase(routerBase, locale, defaultLocale) {
  * @returns {string | null}
  */
 export function pathLocale(pathname, routerBase, defaultLocale, locales) {
-	if (routerBase && pathname !== routerBase && !pathname.startsWith(routerBase + '/')) return null;
-	const segment = pathname.slice(routerBase.length).split(/[/?#]/)[1];
+	const segment = stripBase(pathname, routerBase)?.split(/[/?#]/)[1];
 	return segment && segment !== defaultLocale && locales.includes(segment) ? segment : null;
 }
 
@@ -4107,6 +4089,21 @@ function parseLocation(rawPath) {
 	}
 	// `'' || '/'`: a bare '?q' / '#f' target still names the root.
 	return { pathname: pathname || '/', query: Object.freeze(query), hash };
+}
+
+/**
+ * The app-facing pathname under a normalized base (D51): the base itself → '/',
+ * `base + '/…'` → the rest, no base → unchanged, and null for a pathname outside
+ * the base. The one copy of the rule for reading the URL (#currentPath),
+ * intercepting a click (#handleClick) and finding a locale prefix (pathLocale).
+ * @param {string} pathname
+ * @param {string} base
+ * @returns {string | null}
+ */
+function stripBase(pathname, base) {
+	if (!base) return pathname;
+	if (pathname === base) return '/';
+	return pathname.startsWith(base + '/') ? pathname.slice(base.length) : null;
 }
 
 /**
