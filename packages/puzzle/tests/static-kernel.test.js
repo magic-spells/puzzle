@@ -557,6 +557,31 @@ describe('static kernel — mountStatic (D81)', () => {
 		expect(nestedWillShow).toBe(1);
 	});
 
+	it('a prerender:false page plays its routed view enter, as the router initial nav', async () => {
+		// The topmost view animates in exactly once; the layout never does on first paint.
+		const shown = [];
+		const animated = (name, render) => {
+			const C = class extends PuzzleView {
+				animations = { in: { from: { opacity: 0 }, to: { opacity: 1 }, duration: 5 } };
+				viewWillShow() {
+					shown.push(name);
+				}
+			};
+			C.prototype.render = render;
+			return stamp(C, `app/${name}.pzl`);
+		};
+		const Page = animated('Page', () => h('p', {}, [text('page')]));
+		const Shell = animated('Shell', () => h('div', {}, [slot()]));
+		const cfg = { target: '#app', routes: [{ path: '/', view: Page, layout: Shell, prerender: false }] };
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		seedDocument({ content: '', data: pages[0].data });
+
+		await mountStatic({ target: '#app', views: [Page], layout: Shell, route: pages[0].route });
+		await tick();
+
+		expect(shown).toEqual(['Page']);
+	});
+
 	it('mounts a prerender:false page into the empty target (same code path)', async () => {
 		const cfg = {
 			target: '#app',

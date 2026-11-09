@@ -35,6 +35,15 @@ connections:
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
 verified_at: '2026-11-01T19:25:13.521Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: verified
+    text: >-
+      Review 2026-11-08 F5 B2: an unmarked `prerender: false` static page now plays the routed
+      chain's enter by the router's initial-nav rule (topmost view plays, layout and deeper views
+      skipEnter, nested components enter); a marked page still skips everything. Pinned by
+      static-kernel.test.js 'a prerender:false page plays its routed view enter'. Q1: the
+      build-fetch wrapper is inlined in prerender() (no depth counter; it had one caller). npm test
+      3298/3298, build:static-docs ok, test:runtime-types ok.
 ---
 
 # Prerender flow
