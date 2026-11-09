@@ -27,6 +27,14 @@ notes:
       dev (it was silent) and is still fail-soft. The stale `dead` field is gone from the
       handle-context comment, and the orphaned DELETED_SAVE_MESSAGE JSDoc is gone from model.js (the
       constant lives in adapter.js).
+  - kind: state
+    text: >-
+      Correction to the PR #248 note: after the `_load()` single try/catch, an unreadable storage
+      read, unparseable JSON or a hydration throw all warn via an ungated `console.warn`, in every
+      build (not dev-only). Before #248 only a hydration throw warned; the other two returned
+      silently. Still fail-soft: nothing throws out of the constructor and the call stays behind `if
+      (this.storage)`.
+    sha: 9b9c7687
 ---
 
 # Store
