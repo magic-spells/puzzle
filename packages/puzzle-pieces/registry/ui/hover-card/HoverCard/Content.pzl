@@ -28,7 +28,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 // Props (forwarded to DropdownPanel.Panel unless noted)
 //   align   'start' (default) | 'end'
 //   opens   'down' (default) | 'right'
-//   effect  'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
+//   effect  'fade' | 'slide' | 'scale' | 'blur' | 'bloom' | 'swing' (effects sheet only)
 //   class   merged onto <dropdown-panel>.
 //           Merging is not precedence: a utility of yours on a property the
 //           stock chrome already sets wins only if Tailwind emits it LATER in

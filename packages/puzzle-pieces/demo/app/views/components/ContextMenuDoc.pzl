@@ -44,7 +44,7 @@
               <ContextMenu.Item value="duplicate" disabled={ true } @press={ run }>Duplicate</ContextMenu.Item>
               <ContextMenu.Separator/>
               <ContextMenu.Sub>
-                <ContextMenu.Trigger variant="item">Share with</ContextMenu.Trigger>
+                <ContextMenu.Trigger variant="item" label="Share with"/>
                 <ContextMenu.Content opens="right">
                   <ContextMenu.Item value="share-link" @press={ run }>Copy link</ContextMenu.Item>
                   <ContextMenu.Item value="share-email" @press={ run }>Email…</ContextMenu.Item>
@@ -203,7 +203,7 @@ const codeHero = `// The surface is everything but the Content. A right-click op
     <ContextMenu.Item value="duplicate" disabled={ true } @press={ run }>Duplicate</ContextMenu.Item>
     <ContextMenu.Separator />
     <ContextMenu.Sub>
-      <ContextMenu.Trigger variant="item">Share with</ContextMenu.Trigger>
+      <ContextMenu.Trigger variant="item" label="Share with"/>
       <ContextMenu.Content opens="right">
         <ContextMenu.Item value="share-link" @press={ run }>Copy link</ContextMenu.Item>
       </ContextMenu.Content>
@@ -235,7 +235,6 @@ const reference = [
     summary: 'The root, and the right-clickable surface. Everything inside it except the Content is the surface.',
     rows: [
       { name: 'disabled', desc: "The menu is inert and the browser's own context menu comes back. It works by setting no trigger mode at all, so expect one \"requires <dropdown-trigger>\" console warning per disabled instance." },
-      { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
       { name: 'class', desc: 'Merged onto the host, after `inline-block`.' },
       { name: 'open', desc: 'NOT a prop, on purpose — the coordinates only exist at the moment of the gesture. To summon one yourself, call showAt(x, y) on a DropdownPanel.' },
       { name: '@show / @hide', desc: 'Report-only: the menu opened or closed.' },
@@ -247,7 +246,7 @@ const reference = [
     summary: 'The panel. Placed at the pointer and clamped by the component, so there is no align to give it.',
     rows: [
       { name: 'flip', desc: "Default true, and inert on the root panel — the component places and flips a pointer-positioned panel itself. It matters for a .Sub's downward panel inside a context menu. Pass flip={ false } to opt out." },
-      { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'." },
+      { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'bloom' | 'swing'." },
       { name: 'class', desc: 'Merged onto the panel, after the padding. Never overflow-hidden — it clips a Sub.' },
     ],
   },

@@ -273,7 +273,7 @@ export default class AreaChart extends PuzzleView {
 
     const tickLabels = domain.ticks.map((t) => formatTick(t));
     const maxTickChars = tickLabels.reduce((m, s) => Math.max(m, s.length), 1);
-    const marginLeft = Math.max(32, maxTickChars * 7 + 10);
+    const marginLeft = showGrid ? Math.max(32, maxTickChars * 7 + 10) : 8;
 
     const plotLeft = marginLeft;
     const plotRight = width - MARGIN_RIGHT;

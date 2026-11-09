@@ -16,9 +16,9 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   <SplitButton>
 //     <SplitButton.Action variant="primary" size="md" @press={ save }>Save</SplitButton.Action>
 //     <SplitButton.Menu variant="primary" size="md" label="More save actions" @select={ run }>
-//       <SplitButton.Item value="save-as" @press={ run }>Save as…</SplitButton.Item>
+//       <SplitButton.Item value="save-as">Save as…</SplitButton.Item>
 //       <SplitButton.Separator/>
-//       <SplitButton.Item value="discard" variant="danger" @press={ run }>Discard</SplitButton.Item>
+//       <SplitButton.Item value="discard" variant="danger">Discard</SplitButton.Item>
 //     </SplitButton.Menu>
 //   </SplitButton>
 //

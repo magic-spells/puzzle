@@ -60,7 +60,7 @@
           (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">app/styles/styles.css</code>).
           The first is required — the positioning, the open and closed states and the hover bridge
           all live there, so the piece does nothing without it. The second is optional: it adds the
-          five entrance effects and draws the trigger arrow, and without it
+          six entrance effects and draws the trigger arrow, and without it
           <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">effect</code>,
           <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">arrow</code>
           and
@@ -114,7 +114,7 @@
         <ExampleBox id="align" title="Alignment and effects" code={ codeAlign }>
           <div class="flex w-full flex-col items-stretch gap-3">
             <div class="relative flex w-full max-w-2xl items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
-              <DropdownPanel effect="slide">
+              <DropdownPanel>
                 <DropdownPanel.Trigger class={ triggerChrome }>Left aligned<span data-dropdown-arrow aria-hidden="true"></span></DropdownPanel.Trigger>
                 <DropdownPanel.Panel effect="slide">
                   {#for row in simple}
@@ -366,7 +366,7 @@ const triggerRows = [
 const panelRows = [
   { name: 'wide', desc: 'A full-width mega panel. The host goes position: static, so the panel spans the nearest POSITIONED ANCESTOR — give the bar it should span position: relative.' },
   { name: 'opens', desc: "'down' (default) | 'right'. right puts the panel beside its trigger and rotates the hover bridge onto the horizontal axis — what a submenu wants." },
-  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet; degrades to a plain fade under prefers-reduced-motion." },
+  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'bloom' | 'swing'. Needs the effects stylesheet; degrades to a plain fade under prefers-reduced-motion." },
   { name: 'align', desc: "'start' (default) | 'end'. end is left-auto right-0 — pure CSS, no measuring pass. Ignored on a wide panel and on opens=\"right\", where it is meaningless." },
   { name: 'class', desc: 'Merged onto <dropdown-panel> after the stock chrome, so your utilities win. Never overflow-hidden — it clips nested submenus.' },
 ];

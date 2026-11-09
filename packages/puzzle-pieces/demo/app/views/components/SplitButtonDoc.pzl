@@ -38,10 +38,10 @@
           <SplitButton>
             <SplitButton.Action @press={ onPrimary }>Save</SplitButton.Action>
             <SplitButton.Menu label="More save actions" @select={ onSelect }>
-              <SplitButton.Item value="save-as" @press={ run }>Save as…<SplitButton.Shortcut>⇧⌘S</SplitButton.Shortcut></SplitButton.Item>
-              <SplitButton.Item value="save-close" @press={ run }>Save and close</SplitButton.Item>
+              <SplitButton.Item value="save-as">Save as…<SplitButton.Shortcut>⇧⌘S</SplitButton.Shortcut></SplitButton.Item>
+              <SplitButton.Item value="save-close">Save and close</SplitButton.Item>
               <SplitButton.Separator/>
-              <SplitButton.Item value="discard" variant="danger" @press={ run }>Discard changes</SplitButton.Item>
+              <SplitButton.Item value="discard" variant="danger">Discard changes</SplitButton.Item>
             </SplitButton.Menu>
           </SplitButton>
 
@@ -92,8 +92,8 @@
               <SplitButton key={ v.variant }>
                 <SplitButton.Action variant={ v.variant } size={ v.size } @press={ onPrimary }>{ v.label }</SplitButton.Action>
                 <SplitButton.Menu variant={ v.variant } size={ v.size } label={ v.menuLabel } @select={ onSelect }>
-                  <SplitButton.Item value="duplicate" @press={ run }>Duplicate</SplitButton.Item>
-                  <SplitButton.Item value="archive" @press={ run }>Archive</SplitButton.Item>
+                  <SplitButton.Item value="duplicate">Duplicate</SplitButton.Item>
+                  <SplitButton.Item value="archive">Archive</SplitButton.Item>
                 </SplitButton.Menu>
               </SplitButton>
             {/for}
@@ -166,9 +166,9 @@ const usageMarkup = `<SplitButton>
   </SplitButton.Action>
 
   <SplitButton.Menu variant="primary" size="md" label="More save actions" @select={ run }>
-    <SplitButton.Item value="save-as" @press={ run }>Save as…</SplitButton.Item>
+    <SplitButton.Item value="save-as">Save as…</SplitButton.Item>
     <SplitButton.Separator />
-    <SplitButton.Item value="discard" variant="danger" @press={ run }>Discard</SplitButton.Item>
+    <SplitButton.Item value="discard" variant="danger">Discard</SplitButton.Item>
   </SplitButton.Menu>
 </SplitButton>`;
 
@@ -177,10 +177,10 @@ const codeHero = `// Two halves, two callbacks. Pass the SAME variant and size t
 <SplitButton>
   <SplitButton.Action @press={ onPrimary }>Save</SplitButton.Action>
   <SplitButton.Menu label="More save actions" @select={ onSelect }>
-    <SplitButton.Item value="save-as" @press={ run }>Save as…<SplitButton.Shortcut>⇧⌘S</SplitButton.Shortcut></SplitButton.Item>
-    <SplitButton.Item value="save-close" @press={ run }>Save and close</SplitButton.Item>
+    <SplitButton.Item value="save-as">Save as…<SplitButton.Shortcut>⇧⌘S</SplitButton.Shortcut></SplitButton.Item>
+    <SplitButton.Item value="save-close">Save and close</SplitButton.Item>
     <SplitButton.Separator />
-    <SplitButton.Item value="discard" variant="danger" @press={ run }>Discard changes</SplitButton.Item>
+    <SplitButton.Item value="discard" variant="danger">Discard changes</SplitButton.Item>
   </SplitButton.Menu>
 </SplitButton>`;
 
@@ -188,7 +188,7 @@ const codeVariants = `// Button's whole vocabulary, on both halves at once.
 <SplitButton>
   <SplitButton.Action variant="outline" size="sm" @press={ onPrimary }>Export</SplitButton.Action>
   <SplitButton.Menu variant="outline" size="sm" label="More export options" @select={ onSelect }>
-    <SplitButton.Item value="duplicate" @press={ run }>Duplicate</SplitButton.Item>
+    <SplitButton.Item value="duplicate">Duplicate</SplitButton.Item>
   </SplitButton.Menu>
 </SplitButton>`;
 
@@ -231,7 +231,7 @@ const reference = [
       { name: 'variant', desc: "Match Action's — there is no context to share it through." },
       { name: 'size', desc: "Match Action's." },
       { name: 'label', desc: "The caret's accessible name, default 'More actions'. Rendered as an sr-only span." },
-      { name: 'disabled', desc: 'Greys the caret out and makes it unpressable.' },
+      { name: 'disabled', desc: 'Greys the caret out and blocks clicks. The keyboard still opens the menu until dropdown-panel gives the trigger a disabled state.' },
       { name: 'class', desc: 'Merged onto the caret, after the chrome.' },
       { name: '@show / @hide', desc: 'The menu opened or closed.' },
       { name: '@select', desc: 'Value-first: select(value, event). Fires once; the menu then closes and focus returns to the caret.' },
@@ -241,7 +241,7 @@ const reference = [
     title: 'Rows — Item · Link · Group · Label · Separator · Shortcut · Sub',
     summary: 'Re-exported from the DropdownMenu family, so SplitButton.Item and DropdownMenu.Item are the same component. See the Dropdown Menu reference for their props.',
     rows: [
-      { name: 'value', desc: 'Passed to @press and reported by the Menu half\'s @select.' },
+      { name: 'value', desc: 'Reported by the Menu half\'s @select.' },
       { name: 'variant', desc: "'default' | 'danger'." },
       { name: 'disabled', desc: 'Greys the row out and takes it out of the keyboard walk.' },
     ],
@@ -285,7 +285,6 @@ export default class SplitButtonDoc extends PuzzleView {
       this.setData('last', `@select ${String(value)}`);
       this.refresh();
     },
-    run: () => {},
   };
 }
 </script>
