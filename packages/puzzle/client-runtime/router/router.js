@@ -1,277 +1,33 @@
 /**
- * Router — client-side navigation for Puzzle SPAs (nested routes, v1.3 / D30).
+ * Router — client-side navigation for Puzzle SPAs: nested route chains,
+ * load-then-atomic-commit navigation, layouts/outlets, transitions, scroll,
+ * focus, path routing inline plus the hash/memory modes of router/modes.js.
  *
- * Implements the D19 navigation state machine (D19/D28/D30,
- * constellation/doc/DOC-VIEW-LIFECYCLE.md §4, constellation/doc/DOC-APP-ANATOMY.md §5) generalized from a
- * flat "one view + optional layout" model to a **route CHAIN of arbitrary depth**.
+ * The contracts live on the cards, not here (constellation/):
+ * - COMPONENT-ROUTER — implementation contracts and traps; FLOW-NAVIGATION —
+ *   the ordered steps of one navigation; DOC-SPEC-ROUTER — the public contract.
+ * - Decisions: D19/D61 (atomic commit), D30 (nested chains, keep prefix,
+ *   leaf-up composition), D39 (skeleton exemption), D47/D83 (route snapshot,
+ *   query, replace), D28/D56/D65 (transitions, overlap, per-route mode),
+ *   D33/D41 (scroll, anchors, persistence), D93/D139 (focus, announcement),
+ *   D34/D42/D159 (modes), D51 (base path), D87 (guards), D182 (results),
+ *   D177 (locale prefixes), D183 (router.views).
  *
- * Route compilation: route definitions may nest via `children`; the tree is
- * flattened at construction (walkRouteTree, the shared routeTree.js walk the SSG
- * prerenderer also uses) into one Entry PER LEAF —
- *   { chain: [node0..nodeN], fullPaths, regex, paramNames, layout } —
- * where `chain` is the root→leaf list of definition objects, `fullPaths[i]` is
- * the accumulated path PATTERN at level i (used as the vnode KEY at that level),
- * `regex`/`paramNames` come from the leaf's full path, and `layout` is inherited
- * from the ROOT node only (layouts are root gates/shells; children share them).
- * Child paths are RELATIVE (`/settings` + `profile` → `/settings/profile`); an
- * index child (`path: ''`) composes to exactly the parent's path. A parent WITH
- * children but NO index child does not match its bare path (falls to catch-all).
- * Matching is depth-first in declaration order (first match wins), the same
- * contract flat routes had. Flat routes are chains of length 1 — byte-for-byte
- * today's behavior.
- *
- * Contract highlights:
- * - COMMIT is atomic and ordered (D19 + D61): every FRESH view's preload() AND
- *   every REUSED ancestor's refresh() (routed content, so AWAITED — it gates the
- *   commit) resolve FIRST; THEN, inside #swap's synchronous #committing window,
- *   #commitLocation (URL + memory stack + title/head, D84) runs immediately before the
- *   mount/patch + #commitState — location, DOM and #state all land TOGETHER. In
- *   SEQUENTIAL mode that window opens only AFTER the outgoing unit's out animation
- *   settles and both #swap token checks pass, so a push superseded or failed
- *   during the out touches neither URL nor view (D61 — closes the phantom-history-
- *   entry and URL/view-divergence holes D19's early commit left open). A push
- *   whose loads reject or is superseded changes neither URL nor view. A reused
- *   ROOT LAYOUT is chrome, not routed content: its refresh stays POST-commit
- *   (#refreshLogged, logged).
- *   Skeleton exemption (v1.8, D39): a FRESH instance declaring a
- *   <puzzle-skeleton> (renderSkeleton) does NOT gate — its preload starts but is
- *   not awaited, the commit proceeds, its mount renders the skeleton, and the
- *   real render patches in when data() commits (rejections are logged; the URL
- *   has already moved). Reused ancestors always gate.
- * - Route snapshot (v1.15, D47): every gated preload/refresh (and the layout's
- *   post-commit #refreshLogged) carries this navigation's frozen `to` object
- *   ({ path, pathname, query, hash, route, params, chain } — the shape of
- *   `current`); views read it as `this.route`, giving data() the navigation it
- *   is GATING — the only route source that is correct pre-commit
- *   (current/location still hold the old route there) and in all three modes. A
- *   reused layout's post-commit refresh now runs AFTER #commitState, so it also
- *   reads a fresh `current`.
- * - Parsed URL state + replace() (v1.49, D83): the snapshot adds `pathname`
- *   (path minus query/hash — base-free, trailing slash kept byte-for-byte; the
- *   MATCHING normalization is stripTrailingSlash's alone), `query` (a
- *   FROZEN null-prototype object with URLSearchParams decoding semantics:
- *   single value → string, repeated key → frozen array in source order, a
- *   valueless key → ''), and `hash` ('' or the raw fragment INCLUDING the
- *   leading '#'). Parsed ONCE per navigation (parseLocation) and stored on
- *   #state at commit, so the `current` getter never reparses. Query never
- *   merges into `params`; matching is untouched. `router.replace(path)` runs
- *   the SAME match/load/cancellation/atomic-commit pipeline as push() — a
- *   failed or superseded replace touches nothing — but #commitLocation swaps
- *   the CURRENT entry in place: history.replaceState (hash mode '#'-encoded,
- *   base-prefixed like push) with the existing __puzzleScrollKey preserved (no
- *   #savePosition, no new entry key — the entry keeps its identity), or in
- *   a urlless mode an in-place entry overwrite (no truncate, no append,
- *   no index move). Default scroll on a replace is LEAVE-ALONE (a
- *   filter-typing keystroke must not jump to top); an explicit `#anchor` on the
- *   replace target still lands like push's, and a custom scrollBehavior
- *   (savedPosition null) still overrides. The same-path no-op, the #committing
- *   commit-window deferral (via the shared #pendingPush slot), and
- *   pending-memory-pop supersession all mirror push() exactly.
- * - pushState fires for push()/link clicks ONLY, now via #commitLocation inside the
- *   synchronous commit window (D61) — never on the initial navigation or popstate
- *   (the browser already moved the URL).
- * - Rapid navigations cancel via a monotonic token; the loser's fresh instances
- *   are destroyed without mounting (last one wins).
- * - keep = shared chain PREFIX length by node object identity. Reused ancestors
- *   (views[0..keep-1]) and a matching-class layout are kept; fresh views
- *   (views[keep..N]) and a diverging layout are built new. keep === chain length
- *   is the params-only degenerate case (whole chain refreshes, zero new instances).
- *
- * Composition (constellation/doc/DOC-APP-ANATOMY.md §5): the chain is preloaded off-DOM, then
- * the WHOLE chain is assembled LEAF-UP into nested keyed component vnodes and
- * handed to the topmost host (layout, or the surviving root view) — each parent
- * hosts the next level at its <Slot/>, and the keyed patch cascades to the
- * divergence level. Rebuilding ALL levels (not just the fresh sub-chain) keeps
- * every host's slot content consistent with the new chain; swapping only at the
- * survivor would leave ancestors holding stale vnodes that a later re-render
- * (store change, setData) would push back down, reverting the swap.
- * Keys: a reused level keeps its COMMITTED key (tag+key match → patchComponent
- * reuses the instance, pushes children through, no data() re-run); a fresh level
- * gets its fullPaths PATTERN (never runtime params) stamped with the navigation
- * token — patchComponent ignores a preattached .instance on a key match, so a
- * fresh level must never collide with any old key, including the same pattern
- * re-entering after an interrupted teardown (sibling leaves sharing one view
- * class still swap correctly).
- *
- * View transitions (constellation/doc/DOC-SPEC.md §12, D28 generalized by D30): after the
- * gated loads resolve, the swap runs ASYNC and SEQUENTIAL in #swap(), and location
- * + title/head + mount + #state commit TOGETHER inside its #committing window (D61 —
- * #commitLocation, no longer split ahead of the swap; in sequential mode that is
- * AFTER the out animation). ONE ANIMATOR PER TRANSITION,
- * the **topmost swapped instance**; every fresh view BELOW it has its enter
- * SUPPRESSED (skipEnter — each nested mount auto-chains a playIn that must not
- * fire). By case:
- * - initial nav → the topmost view plays in exactly once (via the ViewManager's
- *   slot-child chain under a layout, or directly when bare); a layout never
- *   animates on first paint; deeper views skipEnter.
- * - layout swap (chain diverges at depth 0) → only the LAYOUT animates as a unit:
- *   the outgoing layout (or bare root view) plays out then destroys (cascading to
- *   its inner views, no inner hooks), and the WHOLE fresh chain skipEnters.
- * - reused layout / mid-chain swap (keep ≥ 0) → the topmost SWAPPED view
- *   (cur.views[keep]) plays out then destroys (cascade kills deeper old views);
- *   the fresh full chain then cascades from the topmost host, the new
- *   views[keep] plays in via the auto-chain, deeper fresh views skipEnter.
- * A newer navigation cancels an in-flight out (destroy() cancels the WAAPI
- * animation) and proceeds immediately. The pending-out unit and everything under
- * it is DOOMED: the winner clamps its reuse prefix so it never rebuilds on
- * instances inside that subtree (pendingOut === cur.layout → nothing survives;
- * cur.views[j] → keep ≤ j). Because an interrupted out may also be DEEPER than
- * the winner's own old-animator, on interruption we destroy #pendingOut AND, if
- * the winner's computed old-animator is a different still-live instance, destroy
- * it synchronously too (skip its out). The superseded transition drops its fresh
- * instances without mounting (#token guard, #abandon — never the reused prefix).
- *
- * Overlap transitions (v1.24, D56, constellation/doc/DOC-SPEC.md §26): opt in with
- * `{ transitionMode: 'overlap' }` (default `'sequential'` — byte-identical to
- * everything above). In overlap mode #swap does NOT await the out before the IN
- * phase: it PINS the outgoing animator's root in place with inline styles only
- * (position:fixed at its measured getBoundingClientRect, margin:0,
- * pointer-events:none — D28's no-wrapper rule holds, `fixed` needs no injected
- * ancestor), STARTS playOut() without awaiting, and proceeds straight to
- * mount/patch + #commitState (the D19 commit point is unchanged — data() was
- * already awaited pre-swap; the commit just no longer waits on the out). The
- * leaver is destroyed when its out (and morph-leave, D55) settles: #pendingOut
- * holds it for the overlap window and the settle-handler clears it (guarded on
- * still-pointing-here) + destroy()s it. On the reused-layout / mid-chain path the
- * keyed patch's own unmount() → destroyAnimated() drives the SAME memoised
- * playOut(), so the router's settle-handler and the patch path converge on one
- * idempotent destroy() — the pin (set BEFORE the patch mounts the incoming view
- * into the slot) keeps the leaver out of flow so leavingEls never needs it as an
- * insertion ref. Interruption is unchanged: a navigation arriving mid-overlap
- * tears the still-fading #pendingOut leaver down synchronously via the skipOut
- * path (at most two route elements ever coexist), and the stale leaver's own
- * settle-handler can't double-free or clear the newer nav's #pendingOut (the
- * === guard). Hooks in the window: willHide at out-start, then the new view's
- * mounted()/viewWillShow() during the fade; didHide/didShow as each settles, in
- * unspecified relative order. Unchanged in overlap mode: initial navigation (no
- * cur, no pin), params-only navigations (never reach #swap), reduced-motion
- * (zeroed durations → effectively instant), failure recovery (the out only ever
- * starts inside #swap, after preload succeeded — a doomed navigation never pins).
- *
- * Per-route / per-view transition mode (v1.30, D65, constellation/doc/DOC-SPEC.md §33):
- * `transitionMode` is resolvable at three tiers, most specific first —
- * (1) a `transitionMode` field on a route/child-route definition, nearest-defined
- * walking the DESTINATION chain leaf → root (#resolveTransitionMode, the same
- * walk #syncHead's resolveHeadField uses for meta.title); (2) a `transitionMode` field on the
- * incoming animator's VIEW or LAYOUT class (colocated with `animations` — layouts
- * qualify too, they are PuzzleView subclasses); (3) this constructor's
- * `transitionMode` option as the app-level default. Resolution is
- * DESTINATION-ONLY: for a navigation A→B only B's config is ever consulted,
- * never A's — "the card coming in" always controls the transition, so B→A
- * (leaving B) is resolved independently and may play differently. This was a
- * deliberate amendment to D56's app-only surface: D56 rejected a per-view
- * override because a transition spans two DIFFERENT instances with no shared
- * owner (whose field would win?) — resolving it directionally (destination
- * only) removes the ambiguity by construction, since it is never a live
- * negotiation between the two sides, only a lookup on the side being entered.
- * An app that sets none of this is byte-identical to v1.24–v1.28.
- *
- * Scroll behavior (v1.5, D33; anchors + persistence v1.10, D41): the router owns
- * window scroll across navigations. Default: push → top; back/forward → the
- * position that entry was at when left (saved under a per-entry key stamped into
- * history.state; the browser restoration is switched to 'manual' between
- * start()/stop()). Initial navigation never touches scroll. The landing happens
- * inside #commitState — synchronously after mount, before paint. Configure via
- * the Router options / PuzzleApp config: `scrollBehavior: false` disables it;
- * `(to, from, savedPosition) => {x,y}|null` customizes it (falsy return = leave
- * scroll alone).
- *
- * Anchor targets (v1.10, D41): a `#anchor` suffix on a PUSH target refines the
- * default landing — the window lands at document.getElementById(anchor) (id
- * decodeURIComponent-ed), falling back to top when no such element is in the
- * committed DOM (including a v1.8 skeleton view whose target hasn't rendered —
- * never re-applied when the real template lands). Element position can't be
- * computed off-DOM, so #resolveScroll returns a { anchor } SENTINEL pre-commit
- * that #commitState resolves AFTER mount (rect top/left + current scroll offsets).
- * A pop's saved position still wins over an anchor; a custom scrollBehavior still
- * wins over everything (the anchor rides verbatim in to.path). The path-mode
- * link interceptor now preserves url.hash (previously dropped); hash mode carries
- * the anchor inside the fragment (`#/docs#faq`), intercepted by the existing `#/`
- * rule, parsed by #currentPath into the path-shaped `/docs#faq`.
- *
- * Position persistence (v1.10, D41): the in-memory #positions Map stays the source
- * of truth, but every #savePosition mirrors the whole map to a single
- * sessionStorage key ('__puzzleScroll', a JSON object of key → {x,y}) and start()
- * hydrates the map from it before adopting the entry key. Because the per-entry
- * __puzzleScrollKey rides in history.state — which survives reloads — restore
- * lines up across a full reload. The map is capped at 50 entries (oldest evicted,
- * insertion order; a re-save re-inserts as newest). ALL storage access is
- * try/catch-wrapped — quota, disabled storage, or file:// oddities degrade to the
- * v1.5 in-memory behavior. `scrollBehavior: false` touches no storage.
- *
- * Focus management + route announcement (v1.56, D93): a client-side navigation
- * destroys the element focus was sitting on, so focus silently falls back to
- * <body> — keyboard users Tab from the top of the document again and screen
- * readers say nothing at all. The router therefore MOVES FOCUS and ANNOUNCES the
- * new route, in the SAME #commitState window scroll lands in (after mount, before
- * paint) and immediately AFTER the scroll block, so the scroll landing is
- * deterministic and unaffected. Default target: the committed LEAF view's root
- * element, walking back up the chain when a leaf rendered no element (`.element`
- * is legitimately null) and doing nothing when no level has one. The root is not
- * natively focusable, so tabindex="-1" is stamped before focusing and removed on
- * the element's blur — no permanent tab stop, no attribute debris. The stamp also
- * cuts both focus-ring channels (`outline` and `box-shadow`, inline + !important)
- * for its lifetime, restored on the same blur — a programmatic-only target is not
- * keyboard-operable, so a ring around the whole view is noise (D139). The focus()
- * call ALWAYS passes { preventScroll: true }: without it the browser scrolls the
- * element into view and fights the window.scrollTo above, breaking D33 restore
- * and D41 anchor landings. Announcement is a single framework-owned
- * <div aria-live="polite" aria-atomic="true">, created in start() and removed in
- * stop(), visually hidden by the clip-rect pattern (display:none/visibility:hidden
- * would remove it from the accessibility tree and suppress the announcement); on
- * each committed navigation its textContent becomes document.title, READ not
- * re-derived — #commitLocation (URL + title/head, D84) ran immediately before the
- * mount + #commitState, so the document already carries this navigation's title.
- * Skips mirror #scrollEnabled()/#resolveScroll exactly: memory mode is a full
- * no-op (an embed shares the window with a host page — stealing its focus is
- * strictly worse than stealing its scroll) and navigation #0 does nothing (the
- * browser owns first paint; that includes nav #0 of an `output: 'hybrid'`
- * takeover). push, replace AND pop all move focus — browsers do not restore focus
- * for client-side history moves, so back/forward needs it as much as a push.
- * Configure via `focusBehavior`: `false` disables everything including the live
- * region (none is created); `(to, from) => Element|null|false` picks the target
- * itself — it runs POST-mount so it may query the committed DOM, a falsy return
- * skips focusing for that navigation (the announcement still fires), and a throw
- * is logged and treated as falsy (the same posture a throwing scrollBehavior has).
- *
- * Routing modes (v1.6 D34 hash, v1.11 D42 memory, restructured by D159): PATH
- * routing is inline here and is the zero-config default. Hash and memory routing
- * are OPT-IN IMPORTS — `hashRouter()` / `memoryRouter({ initialPath })` from
- * `@magic-spells/puzzle/router-modes` (router/modes.js) — passed as the `mode`
- * option, so an app that does not use them never ships their code. The strings
- * `'hash'`/`'memory'`/`'history'` are a constructor throw pointing at the import.
- * The public API stays PATH-SHAPED and mode-agnostic in every mode:
- * push('/user/123'), current.path === '/user/123'.
- *
- * A mode object supplies ONLY the deviations from path routing, at the seams below —
- * `readPath` (URL read, #currentPath), `encode` (URL write, #encodedUrl/url()),
- * `clickFragment`/`clickLink` (the interceptor), and, for a `urlless` mode, the
- * entry bookkeeping `history` normally provides (`start`/`commit`/`go`/
- * `clearPending`/`reset`). `urlless` (memory) additionally gates out every
- * document-level side effect: no popstate listener, no scroll (#scrollEnabled),
- * no focus/announcement (#focusEnabled), no title/head (#syncHead) — an embed
- * shares the window with a host page the router has no claim on. Programmatic
- * history — go(n)/back()/forward() — works in all modes: path/hash delegate
- * to history.go(n) (the popstate path runs the pipeline); a urlless mode moves
- * its own index and runs the pipeline as a POP, the index moving ONLY at commit
- * (a superseded pop leaves it put — D19). Out-of-range n is a silent no-op
- * (browser history.go semantics). See router/modes.js for each mode's contract.
- *
- * Base path (v1.19, D51): `{ base: '/myapp' }` serves the app under a sub-path.
- * Applied at the path-shape boundary, mode-agnostically — the SAME three seams
- * the mode uses: READ (#currentPath strips the base after the mode-specific raw
- * read), WRITE (the #navigate pushState site prefixes the base before the mode-
- * specific encoding — path-mode url = base + path, hash url = '#' + base + path),
- * and the click interceptor (#handleClick takes only URLs under the base and
- * pushes the base-stripped path; outside-base same-origin links fall through to
- * the browser — a real navigation away). The app-facing surface stays base-free:
- * push(), matching, current, params, this.route never see the base — only the URL
- * (and <a href>, a real document URL) carries it. Normalization + config throw in
- * normalizeBase(): '', '/', undefined → no base (byte-identical to today); a base
- * with '#'/'?' throws. Inert in memory mode (no URL). The D41 anchor convention
- * composes untouched — the base rides ahead of the whole path-shaped fragment
- * ('#/myapp/docs#faq' → strip base → '/docs#faq' → existing anchor split) — and
- * scroll keys (D41) are unaffected: they ride history.state, not the URL.
+ * File map, in order:
+ * - Module state and typedefs; `fail`/`SUPERSEDED`/`PENDING`/`succeed`.
+ * - class Router: fields; constructor (route compile, option validation);
+ *   start/stop; the verbs push/replace/go/back/forward and their in-flight
+ *   bookkeeping (#joinInFlight, #isCommittedNoop, #trackNav, #defer);
+ *   url/current/views; #runGuards and failure recovery; #navigate (match →
+ *   token → guards → lazy → construct → load); #commitLocation and #swap (the
+ *   commit window); __failedView (error-view retry, locale rebuild); mount,
+ *   takeover, morph and overlap helpers; #commitState; scroll; focus and the
+ *   live region; #match; #resolveTransitionMode; #syncHead; popstate and
+ *   click interception.
+ * - Module functions: route-entry compile (makeEntry/finishEntry) and dev
+ *   warnings; base, URL and locale helpers (normalizeBase, encodeURL,
+ *   localeBase, pathLocale, localePage, linkLocale); parseLocation,
+ *   stripBase, stripTrailingSlash, sameNavKey, sameDocKey.
  */
 
 import { ViewNode } from '../views/ViewNode.js';
@@ -2283,8 +2039,8 @@ export class Router {
 	 * COMMITS location/title-head/memory-stack (#commitLocation, the FIRST statement
 	 * inside the #committing window — D61, so a superseded/failed out never moves
 	 * the URL), mounts the (preloaded) incoming sub-chain, and animates the animator
-	 * in — enforcing the one-animator rule documented in the file header
-	 * (constellation/doc/DOC-SPEC.md §12, D30). SEQUENTIAL by default (out awaited before
+	 * in — enforcing D30's one-animator rule (the topmost swapped instance
+	 * animates; every fresh instance below it skipEnter()s). SEQUENTIAL by default (out awaited before
 	 * the IN phase — location commits AFTER it); in OVERLAP mode (v1.24, D56, §26)
 	 * the out is pinned + started but NOT awaited, so the IN phase (and #commitLocation)
 	 * runs concurrently and the leaver tears down on its own out-settle.
