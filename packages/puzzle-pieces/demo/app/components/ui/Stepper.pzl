@@ -72,11 +72,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // PROPS
 //   steps        [{ label, description?, id? }]  the ordered steps. An id, when
 //                         given, is the row key (the position otherwise).
-//   value        number   the current step index. OPTIONAL-CONTROLLED (Sidebar's
-//                         shape): omit it and the Stepper owns `current` internally
-//                         (seeded to 0), advanced by clicks in `clickable` mode;
-//                         pass it and the PARENT owns it — the Stepper only reflects
-//                         the prop and asks to change via @stepChange.
+//   value        number   the current step index (default 0). CONTROLLED: the
+//                         Stepper only reflects it and asks to change via @stepChange.
 //   orientation  'horizontal' (default) | 'vertical'
 //   clickable    bool     when true, completed/current steps are buttons; upcoming
 //                         steps remain non-interactive.
@@ -116,33 +113,11 @@ const DISC_INTERACTIVE =
 const LABEL_BASE = 'text-sm leading-tight';
 
 export default class Stepper extends PuzzleView {
-  created() {
-    // Uncontrolled fallback for `value` (Sidebar's optional-controlled shape).
-    this.setData({ uncontrolledCurrent: 0 });
-  }
-
-  // ---- value: optional-controlled resolution --------------------------------
-
-  _controlled() {
-    return this.props.value !== undefined;
-  }
-
-  _current() {
-    if (this._controlled()) {
-      const v = Number(this.props.value);
-      return Number.isFinite(v) ? v : 0;
-    }
-    const d = this.getData();
-    return typeof d.uncontrolledCurrent === 'number' ? d.uncontrolledCurrent : 0;
-  }
-
-  // ---- render model ---------------------------------------------------------
-
   data(params, props) {
     const horizontal = props.orientation !== 'vertical';
     const clickable = !!props.clickable;
     const src = Array.isArray(props.steps) ? props.steps : [];
-    const current = this._current();
+    const current = Number(props.value) || 0;
     const last = src.length - 1;
 
     const steps = src.map((s, i) => {
@@ -213,12 +188,7 @@ export default class Stepper extends PuzzleView {
   }
 
   events = {
-    press: (index, event) => {
-      const { stepChange } = this.props;
-      if (typeof stepChange === 'function') stepChange(index, event);
-      // Uncontrolled: own the move. Controlled: the parent's prop change drives it.
-      if (!this._controlled()) this.setData({ uncontrolledCurrent: index });
-    },
+    press: (index, event) => this.props.stepChange?.(index, event),
   };
 }
 </script>

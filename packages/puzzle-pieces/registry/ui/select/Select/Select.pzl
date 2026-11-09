@@ -161,7 +161,6 @@ const PANEL =
 export default class Select extends PuzzleView {
   #live = false;
   #ready = false;
-  #syncing = false;
   #controlled = false;
   #openControlled = false;
   #last;
@@ -171,25 +170,7 @@ export default class Select extends PuzzleView {
   // before there IS any data — has something to read.
   #label = '';
 
-  // A cheap signature of the option set. Read from `data-value`, which the
-  // PATCHER writes while the children are being updated — reading the real
-  // `value` attribute here would depend on whether a member's afterUpdate ran
-  // before this one, which the framework does not promise.
-  #memberKey() {
-    if (!this.element) return '';
-    return [...this.element.querySelectorAll('select-option')]
-      .map((option) => option.getAttribute('data-value') ?? '')
-      .join(' ');
-  }
-
-  // Every select-dropdown:* event is dispatched on the host, but the guard costs
-  // nothing and states the intent: only THIS element's events are ours.
-  #mine(event) {
-    return event.target === this.element;
-  }
-
   #onChange = (event) => {
-    if (!this.#mine(event) || this.#syncing) return;
     const detail = event.detail || {};
     // Keep our own vdom in step with the textContent upstream just wrote.
     this.#setLabel(typeof detail.label === 'string' ? detail.label : '');
@@ -198,27 +179,14 @@ export default class Select extends PuzzleView {
     this.props.change?.(detail.value ?? '');
   };
 
-  #onShow = (event) => {
-    if (!this.#mine(event)) return;
-    this.props.show?.();
-  };
+  #onShow = () => this.props.show?.();
+  #onHide = () => this.props.hide?.();
 
-  #onHide = (event) => {
-    if (!this.#mine(event)) return;
-    this.props.hide?.();
-  };
-
-  // Drives the element to `value` without letting our own listener report the
-  // write back. Upstream dispatches nothing on a programmatic set, so the flag is
-  // belt and braces — and free, because the setter is synchronous.
+  // Drives the element to `value`. Upstream dispatches nothing on a programmatic
+  // set, so there is no echo for #onChange to filter.
   #apply(value) {
     if (!this.#ready || value === undefined || value === null) return;
-    this.#syncing = true;
-    try {
-      this.element.value = value;
-    } finally {
-      this.#syncing = false;
-    }
+    this.element.value = value;
   }
 
   // Re-read the component's own idea of the selected text. It runs on EVERY
@@ -231,17 +199,18 @@ export default class Select extends PuzzleView {
     if (typeof text === 'string') this.#setLabel(text);
   }
 
+  // refresh(), not setData: labelClass and triggerText derive from #label in
+  // data(), which setData never re-runs. The equality check ends the loop.
   #setLabel(text) {
     if (text === this.#label) return;
     this.#label = text;
-    this.setData({ label: text });
+    this.refresh();
   }
 
   data(params, props) {
     const label = this.#label;
     const placeholder = props.placeholder ?? 'Select…';
     return {
-      label,
       triggerText: label || placeholder,
       labelClass:
         'select-label-text min-w-0 flex-1 truncate text-left ' +

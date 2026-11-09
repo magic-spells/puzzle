@@ -102,7 +102,7 @@ function initials(label) {
 
 function avatarStyle(name) {
   const hue = [...String(name)].reduce((s, ch) => s + ch.charCodeAt(0), 0) % 360;
-  return `background:hsl(${hue} 45% 45%)`;
+  return `background:hsl(${hue} 45% 32%)`;
 }
 
 export default class KanbanCard extends PuzzleView {
