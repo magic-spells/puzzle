@@ -1530,18 +1530,6 @@ function syncControlChecked(el, value, owner) {
 }
 
 /**
- * Re-assert every controlled value in ONE element's attrs — the element-level
- * composition of the three live-DOM comparisons the ordinary patch path runs
- * across patchAttrs and the post-children select re-assert.
- *
- * patchAttrs deliberately keeps its own per-attr dispatch instead of calling
- * this: hoisting the whole element to one call would move the `value`/`checked`
- * writes out of the attrs iteration order, and <select> must keep asserting its
- * controlled value AFTER its <option> children patch (see reassertSelectValue),
- * not during the attr pass. A cached subtree has no attr pass and no children
- * pass at all, so for it the order is this function's order.
- */
-/**
  * The three form tags whose `value`/`checked` the patcher re-asserts against the
  * LIVE DOM. The same predicate listBlock's `collectControls` walks with — a
  * `<li value="3">` or a `<progress value=…>` is not a control and keeps the
@@ -1555,6 +1543,17 @@ function isControlTag(tag) {
 }
 
 /**
+ * Re-assert every controlled value in ONE element's attrs — the element-level
+ * composition of the three live-DOM comparisons the ordinary patch path runs
+ * across patchAttrs and the post-children select re-assert.
+ *
+ * patchAttrs deliberately keeps its own per-attr dispatch instead of calling
+ * this: hoisting the whole element to one call would move the `value`/`checked`
+ * writes out of the attrs iteration order, and <select> must keep asserting its
+ * controlled value AFTER its <option> children patch (see reassertSelectValue),
+ * not during the attr pass. A cached subtree has no attr pass and no children
+ * pass at all, so for it the order is this function's order.
+ *
  * @param {Node} el a control's live element (dispatched on nodeName)
  * @param {Record<string, any>} attrs
  * @param {PuzzleView | null} owner

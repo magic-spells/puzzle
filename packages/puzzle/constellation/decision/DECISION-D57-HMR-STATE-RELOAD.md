@@ -19,6 +19,14 @@ code_refs:
   - client-runtime/views/PuzzleView.js
   - client-runtime/datastore/store.js
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 review B1 (V-views): phase 2 used `setData(saved)` only, so `data()` keys derived
+      from local state stayed stale after a dev reload (todos Completed tab showed all rows, Add
+      stayed disabled with a restored draft). restoreViewsImpl now calls `view.refresh()` after
+      `setData`; no extra paint, 0 production bytes (DCE'd). Covered by the hmr-dev-reload "local
+      drafts" test (`hasDraft` derived key).
 ---
 
 # D57 — HMR is a state-preserving reload, not a per-module swap
@@ -29,13 +37,14 @@ verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 Warm rebuilds are fast ([[DECISION-D27-FAST-DEV-REBUILDS]]) and the app is one bundle, so on localhost the only real cost of a reload is lost state. Per-module swap needs a browser-side module registry, a per-module compile endpoint and import-map resolution — a large surface to save a fast reload.
 
 ## Decision
+
 - **Reload + transplant.** The new bundle always runs whole (no stale closures, no double listeners). The injected SSE client calls `window.__PUZZLE_APP__.__devSnapshot()` right before `location.reload()`, which writes a one-shot `sessionStorage` blob, `__puzzleHMR`; the reload happens even if the snapshot throws.
 - **Dev-only by define.** The build defines `__PUZZLE_DEV__` (`true` in dev, `false` in production, where minification strips every guarded branch — zero production bytes). The runtime probe treats an **undefined** define as dev, so the unbundled runtime (vitest, a foreign bundler) keeps the hooks present but inert. Never read `__PUZZLE_DEV__` bare — always through the `typeof` probe, or an unbundled run throws `ReferenceError`.
 - **Snapshot** (`client-runtime/devstate.js`), each step fail-soft:
   - the store's records in the `_persist()` wire shape, plus the adapter read state ([[DECISION-D161-AUTO-FETCHING-FINDS]]) so a save does not refetch complete collections; in-flight requests are not carried;
   - each live view's **local layer** only (`setData` + `created()` state, via `_localState()`), filtered to JSON-safe plain values — functions, DOM nodes, records and anything containing them are dropped, because `data()` re-derives them from the restored store. Keyed `${class name}:${per-class mount index}`, deterministic because the same URL mounts the same chain in the same order;
   - the route travels in the URL (path/hash). Memory mode has no dev-server story.
-- **Restore in two phases**, inside `PuzzleApp.mount()`: read and delete the blob (discard it if older than 10 s, so a manual F5 cold-starts); **before** the initial navigation, hydrate the store in replace mode (the snapshot overrides duplicate-pk records from configured `storage`) and then the read state; **after** it, `setData(saved)` into each live view whose key matches. Any failure means a cold start, never a crash.
+- **Restore in two phases**, inside `PuzzleApp.mount()`: read and delete the blob (discard it if older than 10 s, so a manual F5 cold-starts); **before** the initial navigation, hydrate the store in replace mode (the snapshot overrides duplicate-pk records from configured `storage`) and then the read state; **after** it, `setData(saved)` then `refresh()` into each live view whose key matches, so keys `data()` derives from local state (a filter tab, a `canAdd` flag) see the restored values. Any failure means a cold start, never a crash.
 - **The edited component restores too.** Keeping a form's state while editing that form is the point; keys the new `data()` no longer reads are inert.
 
 ## Known edges (dev-only, fail-soft)

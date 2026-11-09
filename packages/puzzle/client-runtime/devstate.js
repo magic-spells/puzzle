@@ -274,11 +274,12 @@ function snapshotImpl(app) {
 
 		// View state: each live view's LOCAL layer (setData + created()-seeded
 		// state) through the JSON-safe filter (Change D). Only genuinely-local state
-		// crosses the reload — store-derived values in the model layer are recomputed
-		// by data() against the transplanted store during navigation #0, so
-		// serializing the merged getData() would wrongly pin stale derived values as
-		// local overrides. _localState() is PuzzleView's internal reader for exactly
-		// this (same-package convention, like store._serializeAll).
+		// crosses the reload — derived values in the model layer are recomputed by
+		// data(): against the transplanted store during navigation #0, then again
+		// after phase 2 restores the local state it may read. Serializing the merged
+		// getData() would wrongly pin stale derived values as local overrides.
+		// _localState() is PuzzleView's internal reader for exactly this
+		// (same-package convention, like store._serializeAll).
 		for (const { key, view } of keyedViews()) {
 			try {
 				blob.views.push({ key, data: safeState(view._localState()) });
@@ -368,7 +369,8 @@ function restoreStoreImpl(app) {
  * Phase 2 of the two-phase HMR restore (D57 + Change D) — called by
  * PuzzleApp.mount() after the initial navigation has mounted the view chain,
  * with the blob returned by phase 1. Restores each saved view's LOCAL setData
- * state onto its live keyed counterpart (store already transplanted in phase 1).
+ * state onto its live keyed counterpart (store already transplanted in phase 1),
+ * then refreshes it so data()-derived keys see the restored state.
  * Fail-soft: a null blob (cold start / expired / corrupt) or a missing view is a
  * no-op, never a crash. No-op in production.
  *
@@ -389,7 +391,9 @@ function restoreViewsImpl(blob) {
 		for (const entry of blob.views) {
 			try {
 				const view = byKey.get(entry?.key);
-				if (view && entry.data && typeof entry.data === 'object') view.setData(entry.data);
+				if (!view || !entry.data || typeof entry.data !== 'object') continue;
+				view.setData(entry.data);
+				view.refresh();
 			} catch {
 				// a mis-shaped or missing view just cold-starts
 			}
