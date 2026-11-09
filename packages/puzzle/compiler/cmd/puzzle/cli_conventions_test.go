@@ -320,14 +320,6 @@ func TestGenerateDirFlagFindsRootFromElsewhere(t *testing.T) {
 	}
 }
 
-func TestCheckJSHiddenButAccepted(t *testing.T) {
-	requireHidden(t, checkCmd, "js")
-	parse(t, checkCmd, "--js")
-	if err := checkCmd.RunE(checkCmd, nil); err == nil || !strings.Contains(err.Error(), "not yet implemented") {
-		t.Fatalf("check --js error = %v, want not yet implemented", err)
-	}
-}
-
 func TestInitUsageAndFlags(t *testing.T) {
 	if initCmd.Use != "init [app-name]" {
 		t.Errorf("init Use = %q, want %q", initCmd.Use, "init [app-name]")

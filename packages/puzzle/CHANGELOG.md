@@ -293,8 +293,8 @@ habit. Nothing existing breaks: renamed spellings stay accepted.
   page report and the update notice. Warnings and errors still print.
 - **`--no-color`** on every command, the same switch as `NO_COLOR=1`.
 - **`generate --dir`** names the app root the way `add --dir` does.
-- `check --js` is hidden from `--help` until it does something. It is still
-  accepted.
+- `check --js`, a hidden flag that only ever errored as not implemented, is
+  gone.
 
 ## 0.9.1 — 2026-10-22 (Go module only)
 
