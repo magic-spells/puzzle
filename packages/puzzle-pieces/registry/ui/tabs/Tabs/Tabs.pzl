@@ -93,9 +93,6 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // STYLESHEET. Add it once to your style entry:
 //   @import "@magic-spells/tab-group/css" layer(components);
 //
-// TODO: switch to ^1.2.0 once published — this repo's demo pins the package by
-// file: path while 1.2.0 is unreleased. Consumers install ^1.2.0.
-//
 // Props
 //   value         controlled: the active tab's `value` string
 //   defaultValue  uncontrolled seed, applied once at mount
@@ -205,9 +202,7 @@ export default class Tabs extends PuzzleView {
     // through this element on its way up, and reporting it as ours would name a
     // tab this group does not own.
     if (event.target !== this.element) return;
-    const detail = event.detail || {};
-    const value =
-      detail.currentTab?.dataset?.value ?? this.#tabs()[detail.currentIndex]?.dataset?.value;
+    const value = event.detail?.currentTab?.dataset?.value;
     if (value === undefined) return;
     // #last is NEVER set from what we report — it tracks props.value only, so
     // an ignored @change leaves no stale edge behind.

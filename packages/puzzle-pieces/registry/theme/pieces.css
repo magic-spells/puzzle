@@ -169,6 +169,7 @@
   --shadow-panel: var(--shadow-contact), var(--shadow-float);
   --shadow-card: inset 0 1px 0 var(--color-edge-highlight), var(--shadow-contact), var(--shadow-float);
   --shadow-popover: inset 0 1px 0 var(--color-edge-highlight), var(--shadow-contact), 0 24px 56px -16px var(--color-shadow-popover);
+  --shadow-kbd: inset 0 -1px 0 var(--color-border);
 }
 
 /*
@@ -355,4 +356,5 @@
   --shadow-panel: var(--shadow-contact), var(--shadow-float);
   --shadow-card: inset 0 1px 0 var(--color-edge-highlight), var(--shadow-contact), var(--shadow-float);
   --shadow-popover: inset 0 1px 0 var(--color-edge-highlight), var(--shadow-contact), 0 24px 56px -16px var(--color-shadow-popover);
+  --shadow-kbd: inset 0 -1px 0 var(--color-border);
 }

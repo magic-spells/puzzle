@@ -30,6 +30,12 @@ notes:
       2026-10-22: Trigger's `button` variant is Button's outline at md (`border border-border-strong
       text-ink hover:bg-ink/6`, transparent), no longer the bg-surface pill, so it matches an
       outline Button beside it.
+  - kind: state
+    text: >-
+      2026-11-08 review P09-Q6 / P13-Q8 (feat/0.10-pieces-dialog-chat): DropdownMenu.Shortcut's raw
+      `shadow-[inset_0_-1px_0_var(--color-border)]` is now the `shadow-kbd` utility, backed by a new
+      `--shadow-kbd` token in all four theme files. Same swap in Menubar.Shortcut and Kbd, so the
+      keycap seam is one token. Only that class changed in this family.
 ---
 
 A D167 compound family in `registry/ui/dropdown-menu/DropdownMenu/`: root plus `.Trigger`,
