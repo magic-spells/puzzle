@@ -81,6 +81,34 @@ notes:
       `m.key` (bar-chart binds `m.key` the same way). `test/for-keys.test.js` strips HTML comments,
       then fails on any keyless loop not listed in its per-file ID_KEYED allow-list (with a count
       for each loop name), and on stale allow-list entries.
+  - kind: state
+    text: >-
+      2026-11-08 review fixes on feat/0.10-pieces-editor-kanban (pieces without their own card):
+
+      - RichTextEditor: an external value reset is kept off the undo stack (setMeta addToHistory
+      false). Link with a bare caret inserts linked text in both chromes. Links no longer get an
+      invented target="_blank" (Link HTMLAttributes target: null).
+
+      - RichTextEditor alignment: alignments are left/center/right only, so a pasted justify parses
+      to left, which is what the doc stores. The align shortcuts are swallowed when `tools` omits
+      'align'.
+
+      - RichTextEditor placeholder: one "visually empty" predicate (blankDoc: a single empty
+      textblock) drives both the placeholder and the blocks "/" hint, so the two never overlap.
+
+      - AspectRatio uses CSS `aspect-ratio` instead of the padding-bottom box, so a max-w cap or a
+      grid track keeps the ratio. The default `w-full` stays.
+
+      - MultiSelect: the listbox preventDefaults mousedown, so a pick no longer blurs the input.
+      Chip × buttons are tab stops with a focus ring. Chip keys use the value. min-w-16.
+
+      - PieChart: pointerleave is on each slice, so the tooltip clears off-slice.
+
+      - Checkbox: the disabled row's cursor is not-allowed; cursor-pointer and cursor-not-allowed
+      are now exclusive.
+
+      - PasswordField is documented as controlled only (claim 2: the bound value is re-applied on
+      every render), and the docs examples are now controlled.
 ---
 
 # The registry — source of truth

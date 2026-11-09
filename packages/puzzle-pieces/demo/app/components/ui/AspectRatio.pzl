@@ -1,5 +1,5 @@
 <puzzle-view>
-  <div class={ classes } style={ padStyle }>
+  <div class={ classes } style={ ratioStyle }>
     <div class={ wrapperClass }>
       <Slot/>
     </div>
@@ -9,12 +9,10 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
-// AspectRatio — constrains slotted content to a fixed width:height ratio while
-// filling the container's width. Uses the measurement-free padding-top box
-// technique: the root is relative/w-full with an inline padding-bottom equal
-// to (1/ratio)*100%, which reserves the box's height purely from its own
-// width — no ResizeObserver, no JS measurement, no layout thrash. Slotted
-// content sits in an absolute inset-0 wrapper that fills the reserved box.
+// AspectRatio — constrains slotted content to a fixed width:height ratio. The
+// root sets CSS `aspect-ratio`, so its height follows its OWN width: a
+// `max-w-*` cap on the box or a narrow grid/flex track keeps the ratio. `w-full` is the default width; slotted content sits in an absolute
+// inset-0 wrapper, so it never sets the box's height.
 //
 // The wrapper carries `[&>*]:size-full [&>img]:object-cover
 // [&>video]:object-cover` so a slotted <img>/<video> fills the box and crops
@@ -23,32 +21,16 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // (e.g. a centered card) simply ignores the object-fit rules and fills the
 // box via size-full.
 //
-// Deliberately does NOT also set a Tailwind `aspect-[<ratio>]` utility on the
-// same box: that sets the CSS `aspect-ratio` property, which computes height
-// from width independently of padding-bottom — stacking both on one element
-// double-counts the reserved height in browsers that honor `aspect-ratio`.
-// The padding-bottom box alone is correct in every browser and is the sole
-// load-bearing mechanism here.
-//
 // The root has no overflow rule — add `overflow-hidden` via `class` if you
 // want content clipped to the box (e.g. rounded media crops).
-//
-// SIZING — the box always fills its container's width; the padding-bottom
-// percentage resolves against that container width, so AspectRatio must span
-// its parent. To render it at a fixed size, size the CONTAINER, not the box —
-// wrapping it in a fixed-width block. (Putting a width utility directly on
-// AspectRatio, or making it a flex/grid item narrower than its track, breaks
-// the height: the percentage still resolves against the wider container.)
 //
 //   <AspectRatio ratio={ 16/9 } class="overflow-hidden rounded-xl">
 //     <img src="/cover.jpg" alt="" />
 //   </AspectRatio>
 //
-//   <div class="w-32 shrink-0">
-//     <AspectRatio ratio={ 1 } class="overflow-hidden rounded-md">
-//       <div class="flex items-center justify-center bg-surface-sunken">1:1</div>
-//     </AspectRatio>
-//   </div>
+//   <AspectRatio ratio={ 1 } class="max-w-32 overflow-hidden rounded-md">
+//     <div class="flex items-center justify-center bg-surface-sunken">1:1</div>
+//   </AspectRatio>
 const BASE = 'relative w-full';
 const WRAPPER = 'absolute inset-0 [&>*]:size-full [&>img]:object-cover [&>video]:object-cover';
 
@@ -58,7 +40,7 @@ export default class AspectRatio extends PuzzleView {
     return {
       classes: [BASE, props.class || ''].join(' '),
       wrapperClass: WRAPPER,
-      padStyle: `padding-bottom:${(1 / ratio) * 100}%`,
+      ratioStyle: `aspect-ratio:${ratio}`,
     };
   }
 }

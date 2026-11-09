@@ -195,7 +195,7 @@ import {
 //
 // Requires: npm install @tiptap/core @tiptap/pm @tiptap/starter-kit
 // @tiptap/extension-text-align (declared in piece.json), plus the toolbar
-// piece and lib/rich-text-doc.js registry files.
+// piece and the lib/rich-text-doc.js + lib/rich-text-blocks.js registry files.
 //
 //   <RichTextEditor value={ doc } @change={ setDoc } />
 //   <RichTextEditor label="Body" placeholder="Write something…"
@@ -773,6 +773,10 @@ function atomNodes(host) {
 	return [RootDocument, ImageNode, LinkPreviewNode, UploadPlaceholders];
 }
 
+// "Visually empty" — one empty textblock. The document placeholder and the
+// line hint below both key on it, so exactly one of them speaks.
+const blankDoc = (doc) => doc.childCount === 1 && doc.firstChild.isTextblock && !doc.firstChild.content.size;
+
 // chrome="blocks": the muted hint on the caret's empty top-level line. A widget
 // (not a CSS ::before) so no arbitrary-content utility is needed; `absolute`
 // with no insets keeps it at the line's start without taking width, so the
@@ -793,7 +797,7 @@ function emptyLineHint(host) {
 							const line = $from.parent;
 							if ($from.depth !== 1 || line.type.name !== 'paragraph' || line.content.size !== 0) return null;
 							// On an empty document the document placeholder speaks instead.
-							if (host.props.placeholder && doc.childCount === 1) return null;
+							if (host.props.placeholder && blankDoc(doc)) return null;
 							const text = host.props.blockPlaceholder ?? DEFAULT_BLOCK_PLACEHOLDER;
 							if (!text) return null;
 							return DecorationSet.create(doc, [
@@ -822,7 +826,8 @@ const TOOL_EXTENSIONS = {
 	marks: ['bold', 'italic', 'underline', 'strike'],
 };
 const TOOL_SHORTCUTS = {
-	style: ['Mod-Alt-1', 'Mod-Alt-2', 'Mod-Alt-3', 'Mod-Alt-4', 'Mod-Alt-5', 'Mod-Alt-6'],
+	style: ['Mod-Alt-1', 'Mod-Alt-2', 'Mod-Alt-3', 'Mod-Alt-4'],
+	align: ['Mod-Shift-l', 'Mod-Shift-e', 'Mod-Shift-r'],
 	lists: ['Mod-Shift-7', 'Mod-Shift-8'],
 	quote: ['Mod-Shift-b'],
 	codeBlock: ['Mod-Alt-c'],
@@ -1004,6 +1009,19 @@ export default class RichTextEditor extends PuzzleView {
 		const level = this._currentLevel();
 		const tools = new Set(Array.isArray(props.tools) ? props.tools : ALL_TOOLS);
 		const canUpload = typeof props.uploadImage === 'function';
+		// Shared by the toolbar and the blocks-mode selection bar.
+		const marks = tools.has('marks')
+			? [
+					toggle('bold', 'Bold', I.bold, a.bold),
+					toggle('italic', 'Italic', I.italic, a.italic),
+					toggle('underline', 'Underline', I.underline, a.underline),
+					toggle('strike', 'Strikethrough', I.strike, a.strike),
+				]
+			: [];
+		const lists = tools.has('lists')
+			? [toggle('ul', 'Bulleted list', I.ul, a.ul), toggle('ol', 'Numbered list', I.ol, a.ol)]
+			: [];
+		const link = tools.has('link') ? [{ type: 'button', value: 'link', label: 'Link', icon: I.link, iconOnly: true }] : [];
 		const styleOpen = !!g.styleOpen;
 		const styleActive = g.styleActive ?? -1;
 		const styleOptions = BLOCK_STYLES.map((s, i) => {
@@ -1045,14 +1063,7 @@ export default class RichTextEditor extends PuzzleView {
 						},
 					]
 				: [],
-			tools.has('marks')
-				? [
-						toggle('bold', 'Bold', I.bold, a.bold),
-						toggle('italic', 'Italic', I.italic, a.italic),
-						toggle('underline', 'Underline', I.underline, a.underline),
-						toggle('strike', 'Strikethrough', I.strike, a.strike),
-					]
-				: [],
+			marks,
 			tools.has('align')
 				? [
 						toggle('alignLeft', 'Align left', I.alignLeft, a.alignLeft),
@@ -1061,18 +1072,14 @@ export default class RichTextEditor extends PuzzleView {
 					]
 				: [],
 			[
-				...(tools.has('lists')
-					? [toggle('ul', 'Bulleted list', I.ul, a.ul), toggle('ol', 'Numbered list', I.ol, a.ol)]
-					: []),
+				...lists,
 				...(tools.has('quote') ? [toggle('quote', 'Blockquote', I.quote, a.quote)] : []),
 				...(tools.has('codeBlock')
 					? [toggle('codeBlock', 'Code block', I.codeBlock, a.codeBlock)]
 					: []),
 			],
 			[
-				...(tools.has('link')
-					? [{ type: 'button', value: 'link', label: 'Link', icon: I.link, iconOnly: true }]
-					: []),
+				...link,
 				...(canUpload && tools.has('image')
 					? [{ type: 'button', value: 'image', label: 'Image', icon: I.image, iconOnly: true }]
 					: []),
@@ -1097,20 +1104,9 @@ export default class RichTextEditor extends PuzzleView {
 						},
 					]
 				: [],
-			tools.has('marks')
-				? [
-						toggle('bold', 'Bold', I.bold, a.bold),
-						toggle('italic', 'Italic', I.italic, a.italic),
-						toggle('underline', 'Underline', I.underline, a.underline),
-						toggle('strike', 'Strikethrough', I.strike, a.strike),
-					]
-				: [],
-			tools.has('lists')
-				? [toggle('ul', 'Bulleted list', I.ul, a.ul), toggle('ol', 'Numbered list', I.ol, a.ol)]
-				: [],
-			tools.has('link')
-				? [{ type: 'button', value: 'link', label: 'Link', icon: I.link, iconOnly: true }]
-				: [],
+			marks,
+			lists,
+			link,
 		].filter((sec) => sec.length);
 		const bubbleItems = bubbleSections.flatMap((sec, i) => (i ? [{ type: 'separator' }, ...sec] : sec));
 		const menuRow = (cmd, i, active) => ({
@@ -1196,11 +1192,6 @@ export default class RichTextEditor extends PuzzleView {
 		const value = this.props.value || emptyDoc();
 		this._applied = JSON.stringify(value);
 		this._lastSeenValue = this.props.value;
-		// A mounted editor starts with no outstanding emissions from this instance.
-		this._pending = [];
-		// Seed the emptiness flag data() switches to post-mount, or a non-empty
-		// starting value would render under the placeholder until the first edit.
-		this.setData('empty', isEmpty(value));
 		// Block typography is fixed at mount: blocks mode uses the compact
 		// (Notion-style) spacing, toolbar mode the standard map.
 		const K = richTextClasses(this._blocks());
@@ -1219,7 +1210,7 @@ export default class RichTextEditor extends PuzzleView {
 					heading: { levels: [1, 2, 3, 4] },
 					link: {
 						openOnClick: false,
-						HTMLAttributes: { class: C.link },
+						HTMLAttributes: { class: C.link, target: null }, // Link defaults target to _blank
 						// Same URL policy the RichText renderer applies, so the editor
 						// refuses to create a link the renderer would refuse to link.
 						isAllowedUri: (url) => safeLinkUrl(url) != null,
@@ -1231,7 +1222,7 @@ export default class RichTextEditor extends PuzzleView {
 					blockquote: { HTMLAttributes: { class: K.blockquote } },
 					codeBlock: { HTMLAttributes: { class: K.codeBlock } },
 				}),
-				TextAlign.configure({ types: ['heading', 'paragraph'] }),
+				TextAlign.configure({ types: ['heading', 'paragraph'], alignments: ['left', 'center', 'right'] }), // what the doc stores
 				...atomNodes(this),
 				emptyLineHint(this),
 				shortcutGuard(this),
@@ -1298,7 +1289,7 @@ export default class RichTextEditor extends PuzzleView {
 				this._applied = serialized;
 				this._pending.push(serialized);
 				if (this._pending.length > EMITTED_LIMIT) this._pending.shift();
-				this.setData('empty', isEmpty(doc));
+				this.setData('empty', blankDoc(editor.state.doc));
 				this.refresh();
 				const { change } = this.props;
 				if (typeof change === 'function') change(doc);
@@ -1320,6 +1311,9 @@ export default class RichTextEditor extends PuzzleView {
 				this._syncBlocks(null);
 			},
 		});
+		// Seed the emptiness flag data() switches to post-mount, or a non-empty
+		// starting value would render under the placeholder until the first edit.
+		this.setData('empty', blankDoc(this._editor.state.doc));
 		this._syncActive();
 		window.addEventListener('scroll', this._onViewport, true);
 		window.addEventListener('resize', this._onViewport);
@@ -1389,8 +1383,7 @@ export default class RichTextEditor extends PuzzleView {
 		if (s !== this._applied) {
 			this._applied = s;
 			ed.chain().setMeta('addToHistory', false).setContent(toTiptap(v), { emitUpdate: false }).run(); // off the undo stack; emitUpdate defaults to TRUE in Tiptap 3.30 — suppress the echo
-			this._pending.length = 0;
-			this.setData('empty', isEmpty(v));
+			this.setData('empty', blankDoc(ed.state.doc));
 			this.refresh();
 		}
 	}
@@ -1973,10 +1966,8 @@ export default class RichTextEditor extends PuzzleView {
 		const row = this._blocks() && g.slashOpen ? this._slashList()[g.slashActive || 0] : null;
 		if (this._blocks() && g.slashOpen) {
 			dom.setAttribute('aria-controls', `${this._fallbackId}-slash-menu`);
-			dom.setAttribute('aria-expanded', 'true');
 		} else {
 			dom.removeAttribute('aria-controls');
-			dom.removeAttribute('aria-expanded');
 		}
 		if (row) dom.setAttribute('aria-activedescendant', `${this._fallbackId}-slash-${row.id}`);
 		else dom.removeAttribute('aria-activedescendant');

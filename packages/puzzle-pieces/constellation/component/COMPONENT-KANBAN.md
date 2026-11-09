@@ -32,6 +32,16 @@ notes:
       afterUpdate() consumes and clears the marker — so a marker set first was eaten by the
       announcement render and focus fell to <body> on the parent's real re-render. Fixed 2026-09-04
       (Astra review F6) by moving the assignment to just before `_emitMove()`.
+  - kind: state
+    text: >-
+      2026-11-08 (review P03-B1, P03-Q1). Keyboard Escape on a held card now DROPS it where it is,
+      the same as Space/Enter, and announces "Dropped …". Each arrow press already emitted a
+      committed @move, so the old "Move cancelled." claimed a revert that never happened. Restoring
+      the origin (+4 lines) was rejected for the zero-code option. A pointer drag still cancels on
+      Escape, with no @move. KanbanCard is now content-only: no `card`/`ghost` variants, no
+      `variant`/`grabbed`/`disabled`/`class` props, no forwarded events, and a `contents` root.
+      Kanban mounts it bare. The card surface, ghost chrome and the touch-pinch-zoom rationale live
+      only in Kanban.pzl. KanbanCard is −82 lines, 1318 → 901 B min+gz.
 ---
 
 # Kanban
