@@ -567,8 +567,8 @@ export class PuzzleView {
 	 * `propsEqual` compares a record prop against THIS snapshot rather than
 	 * against the old prop object, because a record mutates in place: after an
 	 * update both sides hold the same object with the same (already advanced)
-	 * revision, and only a value stored at the time props were last applied can
-	 * say whether this view has seen it. Written as every refresh begins, before
+	 * revision, and only a value stored as the last refresh began can say
+	 * whether this view has seen it. Written as every refresh begins, before
 	 * data() runs (#refreshInner) — whichever wake-up came first, a parent's push
 	 * or the view's own notification — so it holds what the next committed
 	 * data() sees, never more; replaced wholesale, never merged.

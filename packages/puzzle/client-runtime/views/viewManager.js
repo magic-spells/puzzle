@@ -1673,7 +1673,7 @@ function sameNode(a, b) {
  * What is new (D170, record render revision) is the second test on each value:
  * a store record mutates IN PLACE, so `!==` can never see it change. A value
  * carrying a numeric RENDER_REV therefore also compares against the SNAPSHOT
- * the child wrote the last time props were applied (`child.__propRevs`), and an
+ * the child wrote as its last refresh began (`child.__propRevs`), and an
  * advanced revision counts as a changed prop. That is what finally makes
  * `<TodoItem todo={todo}/>` refresh on the record's own mutations instead of
  * relying on a freshly allocated callback prop to do it by accident.

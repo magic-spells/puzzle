@@ -61,11 +61,11 @@ navigation and locale loads ([[DECISION-D185-APP-IDLE]]).
 
 **One flush, one `data()` run.** A child that both receives a record prop and
 queries it would be woken twice (parent's `applyParentUpdate` + its own
-`onStoreChange`). Each refresh reads `_notifySeq` and the record-prop revisions
-before `data()` runs and stamps both, so whichever wake-up lands second is
-skipped — the child's own notification by the `seq <= _settleMark` early
-return, the parent's push by `propsEqual`
-([[DECISION-D170-INCREMENTAL-VDOM-LISTS]]).
+`onStoreChange`). Each refresh reads `_notifySeq` before `data()` runs and stamps
+it at commit, and writes the record-prop revision snapshot as it begins, so
+whichever wake-up lands second is skipped — the child's own notification by the
+`seq <= _settleMark` early return, the parent's push by `propsEqual`
+([[DECISION-D170-INCREMENTAL-VDOM-LISTS]] §6).
 
 ## What a record prop observes
 
