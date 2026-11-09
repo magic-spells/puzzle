@@ -260,10 +260,10 @@ date takes only `< <= > >=` and binary `-` (milliseconds) in both hosts.
   (`packages/puzzle-lang/jsident`, Go's `unicode` tables), used by `expr`'s
   lexer, template tag names (D167) and PuzzleKit's `<script>` scan
   (`extractClassName`, `classNameFromFilename` — `Übersicht.pzl` is class
-  `Übersicht` — import bindings, the `__d.` collision scan). `puzzle check`
+  `Übersicht` — import bindings). `puzzle check`
   reads the class name back from codegen's render tail. A class name the scan
   cannot read to its end (a `\u` escape, or a character newer than Go's
-  Unicode tables, e.g. U+30FB) is a positioned error, never a cut name.
+  Unicode tables) is a positioned error, never a cut name.
   **PuzzleKit and Sites must build with the same Go minor**; identifier rows
   in `expressions-parse.json` fail on skew.
 - **Conformance** (`packages/puzzle-lang/conformance`, `go:embed`ed so Sites

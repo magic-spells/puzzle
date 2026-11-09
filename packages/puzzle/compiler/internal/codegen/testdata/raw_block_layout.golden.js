@@ -44,4 +44,3 @@ RawBlockLayout.prototype.render = function () {
     ]),
   ]);
 };
-RawBlockLayout.__pzlModule = 'raw_block_layout.pzl';

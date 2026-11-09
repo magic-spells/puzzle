@@ -44,4 +44,3 @@ PlainForm.prototype.render = function () {
     }, []),
   ]);
 };
-PlainForm.__pzlModule = 'PlainForm.pzl';

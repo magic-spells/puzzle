@@ -22,4 +22,3 @@ InlineComponent.prototype.render = function () {
     new ViewNode('text', { value: __s(__d.label, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'label' : 0) }),
   ]);
 };
-InlineComponent.__pzlModule = 'inline_component.pzl';

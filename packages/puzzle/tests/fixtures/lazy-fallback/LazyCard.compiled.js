@@ -41,4 +41,3 @@ LazyCard.prototype.render = function () {
     new ViewNode('input', { class: 'lazy-card-input' }, []),
   ]);
 };
-LazyCard.__pzlModule = 'LazyCard.pzl';

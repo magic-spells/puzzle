@@ -272,6 +272,7 @@ func Build(root string, opts Options) error {
 	}
 	pc.i18n = cfg.I18n
 	pc.locales = localeRes
+	pc.stripStamps = !opts.Development && mode == ""
 	printI18nWarnings(os.Stderr, i18nWarnings(absRoot, cfg, pc.usage, localeRes))
 	// The hashed locale files go into staging before any pass runs: the prerender
 	// (both output modes) reads the default table from staging/locales/.

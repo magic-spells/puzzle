@@ -30,4 +30,3 @@ UsesComponent.prototype.render = function () {
     ]),
   ]);
 };
-UsesComponent.__pzlModule = 'uses_component.pzl';

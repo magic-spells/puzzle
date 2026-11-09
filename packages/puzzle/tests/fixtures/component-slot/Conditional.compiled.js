@@ -38,4 +38,3 @@ Conditional.prototype.render = function () {
     new ViewNode('input', { class: 'after' }, []),
   ]);
 };
-Conditional.__pzlModule = 'Conditional.pzl';

@@ -783,9 +783,10 @@ describe('static kernel — mountStatic (D81)', () => {
 	// (ssg/serialize.js serializeAttrs) and only exists once something mounts. A
 	// static page has no router, so mountStatic is that something — the whole
 	// interactivity budget of `output: 'static'`. The view is the Go compiler's
-	// ACTUAL output (tests/fixtures/binding/LocalForm.compiled.js).
+	// ACTUAL output (tests/fixtures/binding/LocalForm.compiled.js); pzlc does not
+	// stamp it, so the test stamps it the way a static build's plugin does.
 	it('attaches the synthesized bind listener over prerendered markup (D147)', async () => {
-		const cfg = { target: '#app', routes: [{ path: '/', name: 'form', view: LocalForm }] };
+		const cfg = { target: '#app', routes: [{ path: '/', name: 'form', view: stamp(LocalForm, 'app/views/LocalForm.pzl') }] };
 		const { pages } = await prerender(cfg, { mode: 'static' });
 		const page = pages[0];
 

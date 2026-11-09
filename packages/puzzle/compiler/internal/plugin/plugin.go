@@ -50,6 +50,17 @@ type Plugin struct {
 	// cache is the build-scoped .pzl transform memo shared with this build's
 	// other esbuild passes, or nil for "transform every time" (WatchBuilder).
 	cache *CompileCache
+	// stripStamps drops the D81 Class.__pzlModule stamp (SetStripStamps).
+	stripStamps bool
+}
+
+// SetStripStamps compiles every .pzl without its Class.__pzlModule stamp. A
+// production SPA build sets it: only dev diagnostics and the static/hybrid
+// prerender read the stamp. Every pass sharing one CompileCache must agree.
+func (p *Plugin) SetStripStamps(strip bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.stripStamps = strip
 }
 
 // New creates a Plugin rooted at the app directory (the directory containing
@@ -195,6 +206,7 @@ func (p *Plugin) setup(build api.PluginBuild) {
 func (p *Plugin) transformPZL(path string, src []byte) pzlResult {
 	p.mu.Lock()
 	svgCache := p.cache.svgCache()
+	strip := p.stripStamps
 	p.mu.Unlock()
 
 	// App-relative filename: drives ModeForPath (app/views, app/layouts →
@@ -233,13 +245,17 @@ func (p *Plugin) transformPZL(path string, src []byte) pzlResult {
 		out.loader = api.LoaderTS
 	}
 
+	// The app-relative name is also the module stamp (D81): view/layout classes
+	// carry Class.__pzlModule so the static-pages build can map a route back to
+	// its source .pzl for per-page entry generation.
+	modulePath := name
+	if strip {
+		modulePath = ""
+	}
 	res, cerr := codegen.Compile(sec, codegen.Options{
-		Filename: name,
-		Mode:     codegen.ModeForPath(name),
-		// The app-relative name is also the module stamp (D81): view/layout
-		// classes carry Class.__pzlModule so the static-pages build can map a
-		// route back to its source .pzl for per-page entry generation.
-		ModulePath: name,
+		Filename:   name,
+		Mode:       codegen.ModeForPath(name),
+		ModulePath: modulePath,
 		AssetsDir:  p.assetsDir,
 		// Bundled builds dedup {#svg} into shared virtual modules (D46
 		// amendment); the standalone pzlc path leaves this off and inlines.

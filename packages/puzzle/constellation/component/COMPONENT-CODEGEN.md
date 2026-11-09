@@ -72,6 +72,9 @@ table in `lower.go`'s header comment is the contract; the language rules are D17
   otherwise a rewrite (row `todo` → `s.item`, counter → `s.i`, mangled `__pzl<name>`). Arrow
   params shadow bindings, which shadow a handler's `event`; every other name is
   `__d.<name>` — including `event` outside a handler.
+- **A `<script>` import read as data warns** (out of band; the read still compiles to
+  `__d.<name>`, undefined at render): `ident`'s data arm calls `noteImport`, which warns once
+  per name at the first read's own position — the same hook shape as `noteEvent`.
 - **Selector scope ([[DECISION-D180-COMPONENT-SLOT]]):** only `<Component>` `is` sees module
   imports and simple declared identifiers, below loop/snippet/arrow bindings and above data.
   The token scan includes later `const`/`let`/`var` declarators (an uninitialized final name
@@ -94,7 +97,7 @@ table in `lower.go`'s header comment is the contract; the language rules are D17
   `null`. `HandlerForms` is the ONE definition of an @event value's own calls, shared by the
   lowering, `checkHandler` and `plugin.handlerOwnCalls` — a second copy would let the usage
   scan count a view handler as a library call.
-- **Check target** (`WriteCheckValue`/`WriteCheckEvent`; `CheckWriter` maps every token back to
+- **Check target** (`WriteCheckValue`/`WriteCheckEvent`; `ExprWriter` maps every token back to
   its `.pzl` offset): no added guards or `?? {}`; standard call → `__puzzle_fn.name(…)`; app
   call → `__puzzle_app_fn("name")(…)` (a call, not an index signature, so it passes
   `noUncheckedIndexedAccess`); arrow-taking method receivers via `__puzzle_check_list(…)`;

@@ -36,4 +36,3 @@ LazyCardHost.prototype.render = function () {
     ]),
   ]);
 };
-LazyCardHost.__pzlModule = 'LazyCardHost.pzl';

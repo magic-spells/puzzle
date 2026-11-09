@@ -42,4 +42,3 @@ Host.prototype.render = function () {
     new ViewNode('input', { class: 'persistent' }, []),
   ]);
 };
-Host.__pzlModule = 'Host.pzl';

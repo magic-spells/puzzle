@@ -41,4 +41,3 @@ PortalHost.prototype.render = function () {
         ]),
   ]);
 };
-PortalHost.__pzlModule = 'portal.pzl';

@@ -17,4 +17,3 @@ Panel.prototype.render = function () {
     new ViewNode(SLOT_TAG),
   ]);
 };
-Panel.__pzlModule = 'Panel.pzl';
