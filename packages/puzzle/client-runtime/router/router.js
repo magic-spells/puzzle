@@ -3349,29 +3349,15 @@ export class Router {
 	 * @param {RouteSnapshot} route
 	 */
 	#refreshLogged(view, params, route) {
-		try {
-			const p = view.refresh({ params, route });
-			if (p && typeof p.catch === 'function') {
-				p.catch((/** @type {unknown} */ err) => {
-					const info = reportError(
-						this.#ctx,
-						err,
-						{ phase: 'refresh', view, route },
-						'[puzzle] layout refresh failed:',
-						err
-					);
-					view.__showErrorView?.(err, info);
-				});
-			}
-		} catch (err) {
-			const info = reportError(
-				this.#ctx,
+		const failed = (/** @type {unknown} */ err) =>
+			view.__showErrorView(
 				err,
-				{ phase: 'refresh', view, route },
-				'[puzzle] layout refresh failed:',
-				err
+				reportError(this.#ctx, err, { phase: 'refresh', view, route }, '[puzzle] layout refresh failed:', err)
 			);
-			view.__showErrorView?.(err, info);
+		try {
+			view.refresh({ params, route })?.catch(failed);
+		} catch (err) {
+			failed(err);
 		}
 	}
 
