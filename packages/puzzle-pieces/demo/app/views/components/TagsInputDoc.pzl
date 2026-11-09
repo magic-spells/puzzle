@@ -105,11 +105,12 @@
 
         <section id="keyboard" class="scroll-mt-20">
           <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
-          <p class="mb-3 text-sm text-body">Focus stays on the input; these keys drive the field:</p>
+          <p class="mb-3 text-sm text-body">These keys drive the field:</p>
           <ul class="mb-4 space-y-1.5 text-sm text-body">
             <li><span class="font-medium text-ink">Enter / comma</span> — commit the trimmed text as a new tag and clear the input</li>
             <li><span class="font-medium text-ink">Backspace</span> — on an empty input, remove the last tag</li>
             <li><span class="font-medium text-ink">Paste</span> — text with delimiters splits into several tags at once</li>
+            <li><span class="font-medium text-ink">Tab / Shift+Tab</span> — reach each chip's ×; Enter or Space drops that tag and returns focus to the input</li>
             <li><span class="font-medium text-ink">Chip ×</span> — click a chip's remove button to drop that tag</li>
           </ul>
           <ExampleBox code={ codeKeyboard }>

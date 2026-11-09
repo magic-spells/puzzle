@@ -102,6 +102,27 @@ notes:
       list six effects (fade, slide, scale, blur, bloom, swing). The dead root `effect` is now gone
       from all six roots — Popover, DropdownMenu, DropdownMenu.Sub, ContextMenu, HoverCard,
       Menubar.Menu — plus their root doc rows and DropdownPanelDoc's root `effect="slide"`.
+  - kind: state
+    text: >-
+      2026-11-08 (feat/0.10-pieces-dialog-chat, review P13-B8, same shape as #245's
+      DropdownMenu.Sub): Menubar.Menu no longer forces arrow="none". It leaves arrow unset, so
+      upstream defaults to flip. Menubar.Trigger gained a D141 fallback body: `{ label }`, plus the
+      [data-dropdown-arrow] hook for variant="item" only. So submenu rows draw a right-pointing
+      chevron that flips on open, and bar labels still carry no glyph. Submenu examples use
+      `<Menubar.Trigger variant="item" label="Export as"/>`, because a filled body replaces the
+      hook. Verified in Chromium and WebKit on the MenubarDoc page.
+  - kind: state
+    text: >-
+      2026-11-08 (feat/0.10-pieces-dialog-chat, PR #249 review). This supersedes the previous note's
+      Trigger shape. Menubar.Trigger uses NavigationMenu's template: `<Children/>` followed by `{#if
+      arrow}<span data-dropdown-arrow aria-hidden="true"></span>{/if}`, where `arrow` is `variant
+      === 'item'`. It does NOT use a D141 fallback body, so it has no `label` prop. That means the
+      natural children form `<Menubar.Trigger variant="item">Export as</Menubar.Trigger>` keeps its
+      chevron: ITEM's justify-between lays out the bare text node and the span with no wrapper. A
+      fallback body would have dropped the hook as soon as the trigger was filled. Menubar.Menu
+      still leaves `arrow` unset (upstream default flip), so bar labels have no hook. Trigger is 575
+      B gzip (518 before). Verified in Chromium on MenubarDoc: "Export as" points right (-90deg) and
+      flips open (-40deg); File, Edit and Help have no hook.
 ---
 
 The registry's shared base for every trigger-and-panel overlay. A D167 family —

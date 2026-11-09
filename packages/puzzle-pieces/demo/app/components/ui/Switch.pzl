@@ -30,11 +30,11 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // appearance-none, so native semantics and keyboard behavior come for free. The
 // input IS the track (bg-faint → checked:bg-brand); a pointer-events-none
 // sibling <span> is the thumb, slid across by peer-checked. The whole row is a
-// <label>, so a click anywhere toggles it — no id plumbing. `label` is optional.
+// <label>, so a click anywhere toggles it — no id plumbing.
 //
-// Layout: with a label this is a full-width settings row — text on the left,
-// switch pinned right (flex-1 on the text block pushes it there). Without a
-// label it collapses to just the inline switch.
+// Layout: a full-width settings row — text on the left, switch pinned right
+// (flex-1 on the text block pushes it there). Always pass `label`: it is the
+// switch's only accessible name.
 //
 // ARIA: role="switch" makes this announce as a switch (on/off) rather than a
 // checkbox (checked/unchecked). We deliberately DON'T add an explicit
@@ -44,7 +44,6 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 //   <Switch label="Wi-Fi" checked={ on } @change={ setOn }/>
 //   <Switch label="Email alerts" hint="Daily digest" checked={ sub } @change={ toggle }/>
-//   <Switch name="notify" checked={ on } @change={ toggle }/>
 const ROW = 'flex w-full items-center gap-3 select-none cursor-pointer';
 const BARE = 'inline-flex select-none cursor-pointer';
 
