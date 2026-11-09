@@ -198,12 +198,12 @@ const usageMarkup = `<DropdownMenu @select={ onSelect }>
   <DropdownMenu.Trigger>Options</DropdownMenu.Trigger>
   <DropdownMenu.Content align="end">
     <DropdownMenu.Label>Account</DropdownMenu.Label>
-    <DropdownMenu.Item value="profile" @press={ run }>
+    <DropdownMenu.Item value="profile">
       Profile<DropdownMenu.Shortcut>⌘P</DropdownMenu.Shortcut>
     </DropdownMenu.Item>
     <DropdownMenu.Link href="/docs">Documentation</DropdownMenu.Link>
     <DropdownMenu.Separator />
-    <DropdownMenu.Item value="delete" variant="danger" @press={ run }>
+    <DropdownMenu.Item value="delete" variant="danger">
       Delete account
     </DropdownMenu.Item>
   </DropdownMenu.Content>
@@ -261,7 +261,6 @@ const reference = [
       { name: 'trigger', desc: "'click' (default) | 'hover' | 'both'. A dropdown menu is a menu-button, not a hover menu." },
       { name: 'arrow', desc: "'none' (default) | 'flip' | 'static' — for a trigger carrying the arrow hook. Effects stylesheet only." },
       { name: 'open', desc: 'Optional-controlled and edge-triggered, forwarded to the base.' },
-      { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
       { name: 'class', desc: 'Merged onto the host, after the load-bearing `inline-block relative`.' },
       { name: '@show / @hide', desc: "Fired when THIS menu opens or closes; a Sub's are filtered out." },
       { name: '@select', desc: 'Value-first: select(value, event). Fires once per activation, submenus included. Return false to cancel the close.' },
@@ -314,7 +313,6 @@ const reference = [
     summary: 'A submenu: the nested host a Trigger + Content pair need. An Item is a <button> and cannot contain one.',
     rows: [
       { name: 'trigger', desc: "'both' (default) | 'hover' | 'click'. Hover or ArrowRight opens it." },
-      { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'." },
       { name: 'class', desc: 'Merged onto the host, after the load-bearing `block`.' },
     ],
   },

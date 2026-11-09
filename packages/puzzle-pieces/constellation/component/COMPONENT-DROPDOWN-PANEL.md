@@ -74,6 +74,13 @@ notes:
       @magic-spells/dropdown-panel at `file:../../../../../open-sourcery/dropdown-panel` (the 2.1.0
       working tree, branch feat/menu-mode) because ^2.0.0 has no menu mode — return it to `^2.1.0`
       when 2.1.0 publishes. Piece headers and docs already tell consumers to install ^2.1.0.
+  - kind: state
+    text: >-
+      2026-11-08 (0.10.0, feat/0.10-pieces-overlays, review V-pieces-12 B3): the DropdownPanel ROOT
+      takes no `effect` — only DropdownPanel.Panel renders the attribute. Popover, DropdownMenu and
+      DropdownMenu.Sub used to pass a root `effect` that did nothing; all three pass-throughs and
+      their doc rows are deleted. Effects are set on Content/Panel only. (Popover, Command and
+      LineChart have no cards of their own; this card carries the Popover note.)
 ---
 
 The registry's shared base for every trigger-and-panel overlay. A D167 family —

@@ -217,7 +217,6 @@ const codeControlled = `// Optional-controlled and EDGE-triggered: only a change
 
 const rootRows = [
   { name: 'open', desc: 'Optional-controlled and edge-triggered. Omit it and the component owns its own state, which is the normal case.' },
-  { name: 'effect', desc: "'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Needs the effects stylesheet." },
   { name: 'class', desc: 'Merged onto the dropdown component host.' },
   { name: '@show / @hide', desc: "Fired when THIS popover opens or closes; a nested dropdown's events are filtered out by the base." },
 ];

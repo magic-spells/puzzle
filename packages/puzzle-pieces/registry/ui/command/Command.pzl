@@ -303,13 +303,14 @@ export default class Command extends PuzzleView {
   data(params, props) {
     const prev = this.getData();
     const query = prev.query ?? '';
-    const activeIndex = prev.activeIndex ?? -1;
-
     const { rows, options } = this._build(props, query);
-    const activeOpt =
-      activeIndex >= 0 && options[activeIndex] && !options[activeIndex].disabled
-        ? options[activeIndex]
-        : null;
+
+    // -1 (each keystroke and open), a stale index or a disabled row: reseat.
+    let activeIndex = prev.activeIndex;
+    if (!options[activeIndex] || options[activeIndex].disabled) {
+      activeIndex = this._firstEnabled(options);
+    }
+    const activeOpt = options[activeIndex];
     if (activeOpt) activeOpt.active = true;
 
     // Precompute per-row presentation. The template renders every row through
@@ -457,9 +458,8 @@ export default class Command extends PuzzleView {
   }
 
   _resetForOpen() {
-    const { options } = this._build(this.props, '');
     this._scrollActive = false;
-    this.setData({ query: '', activeIndex: this._firstEnabled(options) });
+    this.setData({ query: '', activeIndex: -1 });
     this.refresh();
   }
 
@@ -503,14 +503,12 @@ export default class Command extends PuzzleView {
   }
 
   events = {
-    // Every keystroke re-filters and reseats the active row on the first enabled
-    // result (per spec). setData writes the local layer; refresh() re-runs data()
+    // Every keystroke re-filters, and activeIndex -1 tells data() to reseat the
+    // active row on the first enabled result (per spec). refresh() re-runs data()
     // so the ranked/grouped rows recompute.
     onInput: (event) => {
-      const query = event.target.value;
-      const { options } = this._build(this.props, query);
       this._scrollActive = false;
-      this.setData({ query, activeIndex: this._firstEnabled(options) });
+      this.setData({ query: event.target.value, activeIndex: -1 });
       this.refresh();
     },
 

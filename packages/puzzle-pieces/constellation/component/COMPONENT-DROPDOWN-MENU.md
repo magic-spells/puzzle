@@ -9,8 +9,6 @@ props:
     type: '''none'' | ''flip'' | ''static'''
   - name: open
     type: boolean
-  - name: effect
-    type: string
   - name: sub
     type: boolean
   - name: class
@@ -30,6 +28,14 @@ notes:
       2026-10-22: Trigger's `button` variant is Button's outline at md (`border border-border-strong
       text-ink hover:bg-ink/6`, transparent), no longer the bg-surface pill, so it matches an
       outline Button beside it.
+  - kind: state
+    text: >-
+      2026-11-08 (0.10.0, feat/0.10-pieces-overlays, review V-pieces-12 notes): the root `effect`
+      prop on DropdownMenu and DropdownMenu.Sub is deleted — it was forwarded to DropdownPanel,
+      whose data() never read it, so it was a no-op; `DropdownMenu.Content effect` (→ Panel →
+      <dropdown-panel effect>) is the one effect source. Docs tables updated to match. The copyable
+      Usage block no longer wires `@press` on rows alongside the root `@select` (same activation
+      fires both).
 ---
 
 A D167 compound family in `registry/ui/dropdown-menu/DropdownMenu/`: root plus `.Trigger`,
