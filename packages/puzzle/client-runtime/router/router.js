@@ -197,7 +197,7 @@ export class Router {
 	// promise, so the second caller settles when the in-flight navigation does; a
 	// locale rebuild (__failedView(null, true), D175) waits on it, so a replace or a
 	// Back pop still loading lands before the committed location is rebuilt.
-	// Cleared in #commitState, #recoverFailedNavigation and stop().
+	// Cleared in #commitState, #recoverFailedNavigation, the commit-window catch and stop().
 	/** @type {Promise<NavigationResult> | null} */
 	#pendingNavPromise = null;
 	// Whether the navigation that owns the token is a pop (D182: a push to the
@@ -309,7 +309,7 @@ export class Router {
 	// no-trailing-'/' prefix. Applied at the SAME path-shape boundary as the mode
 	// (constellation/doc/DOC-SPEC.md §23): READ strips it after the mode-specific raw read
 	// (#currentPath), WRITE prefixes it before the mode-specific encoding (the
-	// #navigate pushState site), and the click interceptor (#handleClick) only
+	// #commitLocation), and the click interceptor (#handleClick) only
 	// takes URLs under it. The app-facing surface — push(), matching, current,
 	// params, this.route — never sees the base; only the URL (and <a href>) carry
 	// it. Inert in a urlless mode (no URL exists), like scrollBehavior. '' ⇒ every

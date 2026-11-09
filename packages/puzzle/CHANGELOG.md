@@ -226,6 +226,16 @@ one is *not* a compile error; it silently builds a different product.
   is focused as before (also when the `autofocus` element cannot take focus,
   such as a button in a closed `<dialog>`). A `mounted()` hook that only
   focused an `autofocus` input can be deleted.
+- **Back then Forward during a slow load keeps URL and view together.** Pressing
+  Back while the popped entry was still loading, then Forward, used to leave the
+  URL on one page and the view tree on another. The router now recovers the
+  in-flight pop, and a scroll position is saved only for an entry that was on
+  screen.
+- **`app.idle()` and `Router.navigating()` settle after a navigation that fails
+  at its start.** A `replace()`, pop or first navigation whose start threw
+  synchronously left the in-flight slot pointing at the wrong navigation, so
+  `idle()` never resolved. The slot now latches a pending sentinel until the
+  navigation pairs with its own promise (D182).
 - **Buttons are quiet: no brand fill (puzzle-pieces).** A screen with many
   buttons no longer reads as a wall of indigo. `button` `primary` is solid ink
   with the page colour as its text (`bg-ink text-page hover:bg-ink/85`):
