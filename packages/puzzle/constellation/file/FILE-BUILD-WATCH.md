@@ -12,6 +12,16 @@ connections:
   - DECISION-D160-SPA-CODE-SPLITTING
 verified_at: '2026-11-01T19:19:18.479Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: gotcha
+    text: >-
+      `WatchBuilder.rebuild` sets `b.refused = changed` right after merging the carried batch and
+      clears it only just before `b.landed = true`, so EVERY error return (entry check, usage scan,
+      locales, bundle, split write, public copy) carries the batch into the next rebuild. Clearing
+      it after the entry check alone dropped a public asset saved in the same batch as a failing
+      .pzl: the fix rebuild computed syncPublic false and dist kept the old file (review F7-B2,
+      `TestWatchBuilderReplaysFailedBundleBatch`). Esbuild errors from every build path render
+      through `formatBuildErrors` (watch_static.go).
 ---
 
 # watch.go

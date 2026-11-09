@@ -36,18 +36,9 @@ type phaseTiming struct {
 	dur   time.Duration
 }
 
-// buildProfile keeps the existing build-package call sites compact while the
-// exported name lets the dev package use the same profiler.
-type buildProfile = PhaseProfile
-
 // noPhase is the shared closure returned by a disabled profiler. Package-level
-// so `defer prof.phase(…)()` on a nil profiler is allocation-free.
+// so `defer prof.Phase(…)()` on a nil profiler is allocation-free.
 var noPhase = func() {}
-
-// newBuildProfile returns a live profiler when enabled, nil otherwise.
-func newBuildProfile(enabled bool) *buildProfile {
-	return NewPhaseProfile(enabled, "puzzle build")
-}
 
 // NewPhaseProfile returns a labeled live profiler when enabled, nil otherwise.
 // Callers that accept both a flag and ProfileEnvVar should pass
@@ -57,13 +48,6 @@ func NewPhaseProfile(enabled bool, label string) *PhaseProfile {
 		return nil
 	}
 	return &PhaseProfile{start: time.Now(), label: label}
-}
-
-// profileEnabled reports whether this build should be profiled: the explicit
-// Options.Profile request, or PUZZLE_PROFILE_BUILD set to anything but the
-// obvious off values.
-func profileEnabled(opt bool) bool {
-	return ProfileEnabled(opt)
 }
 
 // ProfileEnabled reports whether profiling was explicitly requested or enabled
@@ -99,9 +83,6 @@ func (p *PhaseProfile) Phase(name string) func() {
 	}
 }
 
-// phase is the build-package spelling retained for existing call sites.
-func (p *PhaseProfile) phase(name string) func() { return p.Phase(name) }
-
 // Report prints the phase table. It goes to stderr, never stdout: stdout carries
 // the build summary that scripts and the skipped-route gate parse, and profiling
 // must not change it.
@@ -129,9 +110,6 @@ func (p *PhaseProfile) Report(w io.Writer) {
 	fmt.Fprintf(w, "  %s\n", strings.Repeat("─", nameW+10))
 	fmt.Fprintf(w, "  %-*s  %8s\n", nameW, "total", formatPhase(total))
 }
-
-// report is the build-package spelling retained for existing call sites.
-func (p *PhaseProfile) report(w io.Writer) { p.Report(w) }
 
 // formatPhase renders a duration in whole milliseconds — the resolution that
 // matters for a build, and stable enough to eyeball across runs.
