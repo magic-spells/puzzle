@@ -151,6 +151,17 @@ notes:
       disagreeing, or on drift from the demo. Practical consequence for the next wrapper: publish
       the component first, then wrap it at that version — and when you bump a component in the demo,
       bump the manifests in the same commit.
+  - kind: state
+    text: >-
+      ScrollStack no longer hand-copies upstream enums. Every attribute goes through `attr()` (omit
+      when unset, otherwise String), and <scroll-stack> validates and defaults its own values: it
+      warns on bad pin/easing/per-view, and direction/edges/snap fall back to defaults. A new
+      upstream value therefore needs no piece edit. Exception: `snap` keeps `props.snap === true ?
+      'start' : props.snap || false`. attr(false) would render "false", and upstream treats any
+      present snap attribute other than center/proximity as `start`, so it would turn snapping ON.
+      Upstream does NOT warn on an unknown `effect`: a typo now means upstream's no-effect, where it
+      used to mean the piece's silent default.
+    sha: 0c470749
 ---
 
 # Wrap @magic-spells web components; port only when wrapping can't work

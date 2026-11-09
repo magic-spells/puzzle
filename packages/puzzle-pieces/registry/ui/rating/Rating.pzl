@@ -99,11 +99,6 @@ const BUTTON =
   'transition-colors disabled:cursor-not-allowed disabled:opacity-50 ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
 
-// A text-* color the caller can pass to retint — deliberately excludes text-SIZE
-// utilities (text-sm/lg/…) so only real color tokens flip the default off.
-const COLOR_RE =
-  /(?:^|\s)text-(?:brand|danger|success|warning|ink|body|muted|faint|chart-|amber|yellow|orange|red|rose|pink|green|emerald|lime|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|slate|gray|zinc|neutral|stone|\[)/;
-
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(v, hi));
 }
@@ -123,10 +118,8 @@ export default class Rating extends PuzzleView {
     const rawValue = Number(props.value);
     const value = Number.isFinite(rawValue) ? clamp(rawValue, 0, max) : 0;
 
-    // Filled color: default text-brand unless the caller's class already sets one.
-    const cls = props.class || '';
-    const rootColor = COLOR_RE.test(cls) ? '' : 'text-brand';
-    const rootClass = ['inline-flex items-center gap-0.5 select-none', rootColor, cls]
+    // `:where()` zeroes the default's specificity, so any text colour in `class` wins.
+    const rootClass = ['inline-flex items-center gap-0.5 select-none [:where(&)]:text-brand', props.class]
       .filter(Boolean)
       .join(' ');
 

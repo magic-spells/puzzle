@@ -84,7 +84,7 @@
             <li><span class="font-medium text-ink">Home / End</span> — jump to the first / last slide</li>
             <li><span class="font-medium text-ink">Dots</span> — each dot is a real button; Tab to it and press Enter / Space to jump</li>
             <li><span class="font-medium text-ink">Autoplay</span> — pauses while the pointer is over the carousel or focus lives inside it, and is disabled entirely under <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">prefers-reduced-motion</code></li>
-            <li><span class="font-medium text-ink">Announcements</span> — a polite live region reports “Slide N of M” as the active slide changes</li>
+            <li><span class="font-medium text-ink">Announcements</span> — a polite live region reports “Slide N of M” as the active slide changes, and stays quiet while the carousel auto-rotates</li>
           </ul>
         </section>
       </div>

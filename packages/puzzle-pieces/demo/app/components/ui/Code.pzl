@@ -2,7 +2,7 @@
   <div class={ rootClass }>
     <div data-code-scroll class={ scrollClass } style={ scrollStyle } aria-hidden={ scrollHidden }>
       {#if numbers}
-        <pre aria-hidden="true" class="sticky left-0 z-10 shrink-0 select-none bg-surface py-4 pl-4 pr-3 text-right font-mono text-[13px]/relaxed text-faint whitespace-pre">{ lineNumbers }</pre>
+        <pre aria-hidden="true" class="sticky left-0 z-10 shrink-0 select-none bg-surface py-4 pl-4 pr-3 text-right font-mono text-code/relaxed text-faint whitespace-pre">{ lineNumbers }</pre>
       {/if}
       <pre island data-code-pre class={ codeClass }>{ code }</pre>
     </div>
@@ -193,7 +193,7 @@ export default class Code extends PuzzleView {
           ? `max-height:${props.maxHeight};`
           : '',
       codeClass: [
-        'flex-1 py-4 font-mono text-[13px]/relaxed text-body whitespace-pre',
+        'flex-1 py-4 font-mono text-code/relaxed text-body whitespace-pre',
         numbers ? 'pl-1' : 'pl-4',
         copy || collapsible ? 'pr-16' : 'pr-4',
       ].join(' '),
