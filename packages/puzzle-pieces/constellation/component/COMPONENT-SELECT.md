@@ -36,6 +36,14 @@ notes:
       value setter dispatches nothing, so there is no echo) and #mine (only the host dispatches
       select-dropdown:*), plus the unused `label` data key. test/select-wrapper.test.js no longer
       asserts #syncing or the target guard. 341→310 lines, 1581→1465 B min+gz.
+  - kind: gotcha
+    text: >-
+      2026-11-08 (#259 review, pre-existing, not fixed): when `options` arrive AFTER mount with a
+      preselected `value`, the label text is right but stays placeholder-grey. Upstream
+      select-dropdown applies the pending value in a microtask after `afterUpdate` and fires no
+      event, so the per-afterUpdate label mirror never sees it. Likewise a parent passing `''`
+      leaves the old label showing. Possible follow-up: derive the colour from upstream's DOM state
+      (`select-option[selected]`) instead of the mirrored label.
 ---
 
 `Select` · `Select.Option` · `Select.Label` · `Select.Divider`, a D167 family over
