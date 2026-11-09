@@ -39,6 +39,17 @@ out, a function `(to, from) => element` to choose the target. Spec: SPEC §51.
   same post-mount, pre-paint window; a custom function runs there so it can
   query the committed DOM. A throw is reported through `onError` and treated as
   falsy, as is a non-focusable return.
+- **Default target: the view's own choice, else its root.** Focus already
+  inside the leaf root is left where it is — the view put it there in
+  `mounted()`, or (params-only push) the control the user activated survived
+  the patch, so the keyboard position is not stranded. Otherwise the router
+  focuses the leaf's first `[autofocus]` element itself, then asks the DOM
+  where focus landed: inside the leaf → done; anywhere else → the leaf root.
+  Checking the result instead of trusting the attribute covers a hidden,
+  disabled, inert or closed-`<dialog>` autofocus element with no visibility
+  logic. Browsers honour `autofocus` on first load only; this makes the
+  standard attribute the way a routed view names its focus target on client
+  navigation, with no new API.
 - **`focus({ preventScroll: true })` is mandatory** — plain `focus()` would undo
   D33 restoration and D41 anchor landings.
 - **Transient `tabindex="-1"`:** a `<puzzle-view>` root isn't focusable, so the
@@ -47,7 +58,7 @@ out, a function `(to, from) => element` to choose the target. Spec: SPEC §51.
   never touched. With no live root on the leaf (a parent without `<Slot/>`) the
   target walks up the chain; none → no focus, still announce.
 - **Focus before announce** — a polite update issued just before a focus change
-  is routinely dropped. A declined focus still announces.
+  is routinely dropped. A declined focus, or one the view kept, still announces.
 - **One live region**, created in `start()`, removed in `stop()`:
   `aria-live="polite"`, `aria-atomic="true"`, hidden by `clip` +
   `clip-path` — `clip: rect(0, 0, 0, 0)` in the comma form (jsdom drops the
@@ -77,3 +88,12 @@ out, a function `(to, from) => element` to choose the target. Spec: SPEC §51.
 - **Region only, no focus move** — strands the keyboard position.
 - **Clear-and-refill the region to re-announce the same title** — duplicate
   speech and races AT debouncing.
+- **Always focus the leaf root** — ran after `mounted()`, so it stole focus a
+  view had placed itself (music Search's input on every client navigation).
+- **Return the `[autofocus]` element as the target** — the first match may be
+  unable to take focus (the pieces AlertDialog's closed `<dialog>` always holds
+  an autofocus Cancel button), so focus fell to body.
+- **Honour `[autofocus]` only** — any view focusing in `mounted()` would still
+  lose its focus.
+- **Track reused leaves to keep moving focus on a params-only push** — extra
+  state for a case where leaving the surviving control focused is correct.

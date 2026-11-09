@@ -210,9 +210,32 @@ one is *not* a compile error; it silently builds a different product.
   `allowSyntheticDefaultImports`) and the version-gated lib references are
   gone. `build` and `dev` are unaffected: they never type-check. Apps scaffolded
   with `--typescript` since 0.8.0 already install `^7`.
+- **Removed types: `StoreOptions` and `PuzzleValue`.** Neither was used by any
+  other declaration; inline the shape or use `any` if you imported them.
+  `Store` and `Router` also lose their `[key: string]: any` index signature,
+  so a misspelt member such as `router.pushh()` is now a type error in
+  `lang="ts"` views and `puzzle check`.
 
 ### Changed
 
+- **Router focus keeps a view's own choice (D93).** After a client-side
+  navigation the router used to focus the new view's root after `mounted()`
+  ran, taking focus away from an input the view had just focused. Now focus
+  already inside the new view stays put, an `autofocus` element is focused
+  (browsers honour the attribute on first load only), and otherwise the root
+  is focused as before (also when the `autofocus` element cannot take focus,
+  such as a button in a closed `<dialog>`). A `mounted()` hook that only
+  focused an `autofocus` input can be deleted.
+- **Back then Forward during a slow load keeps URL and view together.** Pressing
+  Back while the popped entry was still loading, then Forward, used to leave the
+  URL on one page and the view tree on another. The router now recovers the
+  in-flight pop, and a scroll position is saved only for an entry that was on
+  screen.
+- **`app.idle()` and `Router.navigating()` settle after a navigation that fails
+  at its start.** A `replace()`, pop or first navigation whose start threw
+  synchronously left the in-flight slot pointing at the wrong navigation, so
+  `idle()` never resolved. The slot now latches a pending sentinel until the
+  navigation pairs with its own promise (D182).
 - **Buttons are quiet: no brand fill (puzzle-pieces).** A screen with many
   buttons no longer reads as a wall of indigo. `button` `primary` is solid ink
   with the page colour as its text (`bg-ink text-page hover:bg-ink/85`):

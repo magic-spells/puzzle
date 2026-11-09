@@ -17,6 +17,38 @@ connections:
   - DECISION-D182-NAVIGATION-RESULT
 verified_at: '2026-11-01T19:25:13.521Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      Pop still loading (`#popInFlight && #pendingNavPromise`, the D182 pair push() already reads)
+      is now one rule in #handlePopState and #navigate: (1) a popstate home to the committed entry
+      (the D41 fragment branch, e.g. Back then Forward before the Back lands) supersedes the stale
+      pop with `#recoverFailedNavigation(++#token)` before #applyFragmentPop, so URL and tree stay
+      together (review C2#1); (2) no scroll save while a pop loads: #scrollKey already names the
+      popped entry, which was never on screen, so neither a second popstate nor a push over it files
+      the live position under that key (departScroll is null; #commitLocation skips the save)
+      (F1-B2/C2#2). No new state field. Regression tests: tests/router-fragment-pop.test.js "over a
+      pop still loading". Open and NOT built: F1-B1 (overlap recover restores a dead leaver), and
+      F1-B3 (nav #0 is invisible to the same-path rules; the fragment guard still needs a committed
+      #state).
+  - kind: decision
+    text: >-
+      0.10.0 F3 (review 2026-11-08, V-features F3): the router focus step honours an element the
+      view already focused or marked autofocus. In the default target (`#resolveFocusTarget`, no
+      custom focusBehavior): if focus is not already inside the committed leaf root (a `mounted()`
+      focus call), it calls `focus({ preventScroll: true })` on the leaf's first `[autofocus]`
+      element itself; then it asks the DOM: focus inside the root → return null (no move, still
+      announces), else the root as before. Checking where focus actually landed covers a hidden,
+      disabled, inert or closed-`<dialog>` autofocus target (the pieces AlertDialog's Cancel button)
+      with no visibility logic, so `#focusElement` still only receives the root or a custom return
+      and its stamp rule is unchanged. Why: `#applyFocus` runs after mount, so it stole focus from
+      music Search's input on every client navigation; browsers only honour `autofocus` on first
+      load. Consequence for D135: a params-only PUSH from a control inside the reused leaf leaves
+      focus on that control when it survives the patch (D93's reason for moving focus is a stranded
+      keyboard position); if it is gone, the root is focused as before. No new option or API.
+      Rejected: returning the `[autofocus]` element as the target (a closed dialog's button takes no
+      focus, so focus fell to body); autofocus-only (a view focusing in mounted() would still lose
+      focus); a reused-view flag to keep D135's old push behaviour.
 ---
 
 # Router
@@ -69,7 +101,8 @@ Each leaf precomputes its guard chain (`entry.guards`, root → leaf) and, when 
 [[DECISION-D182-NAVIGATION-RESULT]].
 
 - **Every `#navigate` exit returns a `NavigationResult`** — `fail(reason, err)`, `SUPERSEDED`, or `succeed(route)`. A new exit path that forgets this makes `push()` resolve `undefined`.
-- `#isCommittedNoop` gates the same-path no-op: committed path, chain intact, nothing in flight (`#guardRedirecting` exempt). `#joinInFlight` hands a same-key push or replace the in-flight navigation's promise from `#pendingNavPath`/`#pendingNavPromise`; a guard redirect skips the join, or a guard redirecting to its own path would await itself forever.
+- **The in-flight slot.** `#navigate` opens `#pendingNavPromise` with the module-private `PENDING` promise at its token bump; every verb's caller pairs the real promise through `#trackNav`, which writes only over `PENDING`. A navigation that ended inside its synchronous start has already cleared the slot, so nothing latches and `navigating()` (D185) reads false.
+- `#isCommittedNoop` gates the same-path no-op: committed path, chain intact, nothing in flight (`#guardRedirecting` exempt). `#joinInFlight` hands a same-key push or replace the in-flight navigation's promise from `#pendingNavPath`/`#pendingNavPromise` (a `PENDING` slot is re-read one microtask later); a guard redirect skips the join, or a guard redirecting to its own path would await itself forever.
 - **Commit-window throws:** the outer catch around the load/`#swap` block may run after `#commitLocation`, while `#state` still names the old route. When it owns the token it clears `#pendingNavPath`, `#pendingNavPromise` and the locale target, and sets `#state.chainInvalid`. It rethrows only for navigation zero (or a guard redirect whose chain box has `start`), so `app.mount()` keeps its teardown.
 - **`#pendingPush`** (the commit-window deferral slot) carries the caller's resolver. Anything that clears the slot — a displacing `#defer`, `stop()` — must resolve the old entry `SUPERSEDED`, or that caller waits forever.
 
@@ -84,7 +117,7 @@ Each leaf precomputes its guard chain (`entry.guards`, root → leaf) and, when 
 
 `__failedView(null, true)` sets `chainInvalid`/`layoutInvalid` and re-navigates the committed path in replace mode with `retryView = REBUILD` (a module-private marker). The marker takes the skeleton-exempt path, skips scroll and focus, `skipEnter()`s fresh levels and parks the outgoing unit as `#pendingOut` (destroyed without its out animation). Every test of it sits behind the inline `__PUZZLE_HAS_I18N__` probe — a new class member would ship in every app.
 
-With a navigation pending (push, replace, pop and navigation zero all fill `#pendingNavPromise`) it schedules `pending.then(again, again)` and returns null, so `setLocale` never waits on a navigation whose `data()` or guard may be awaiting it; a switch from a layout's `data()` on first load rebuilds once navigation zero commits. With none pending, the promise resolves on the rebuilt commit and rejects on failure. Tests: `tests/i18n-app.test.js`.
+With a navigation in flight (`#pendingNavPromise` set — every verb pairs it, and it is cleared the moment a navigation ends, even inside its own synchronous start) it schedules `pending.then(again, again)` and returns null, so `setLocale` never waits on a navigation whose `data()` or guard may be awaiting it. A switch from inside a navigation's synchronous start (a layout's `data()` on first load) reads `PENDING`, which resolves one microtask later, by when the real promise is paired; it rebuilds once navigation zero commits. With none pending, the promise resolves on the rebuilt commit and rejects on failure. Tests: `tests/i18n-app.test.js`.
 
 ## Mounting and transitions
 

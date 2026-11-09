@@ -370,7 +370,7 @@ export default class MarkdownEditor extends PuzzleView {
 		}
 		if (canonical != null && canonical === this._applied) return;
 		this._applied = canonical ?? raw;
-		ed.commands.setContent(raw, { contentType: 'markdown', emitUpdate: false });
+		ed.chain().setMeta('addToHistory', false).setContent(raw, { contentType: 'markdown', emitUpdate: false }).run();
 		this._pending.length = 0;
 		// emitUpdate defaults TRUE in Tiptap 3.30 — explicit false prevents an
 		// external set from echoing a spurious @change back to the parent.
@@ -487,8 +487,12 @@ export default class MarkdownEditor extends PuzzleView {
 			// the chain and applies nothing. Keep the row open with the text intact
 			// so a rejected URL reads as "that wasn't accepted, here's what I typed"
 			// instead of silently closing and discarding it — the surviving row is
-			// the whole error affordance.
-			const applied = this._chain()?.extendMarkRange('link').setLink({ href: url }).run();
+			// the whole error affordance. With nothing selected, insert the URL as
+			// linked text instead of setting an invisible stored mark.
+			const ed = this._editor;
+			const applied = ed?.state.selection.empty && !ed.isActive('link')
+				? isSafeUrl(url) && this._chain().insertContent({ type: 'text', text: raw, marks: [{ type: 'link', attrs: { href: url } }] }).run()
+				: this._chain()?.extendMarkRange('link').setLink({ href: url }).run();
 			if (!applied) return;
 			this.setData({ linkOpen: false, linkDraft: '' });
 			this.refresh();

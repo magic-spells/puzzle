@@ -126,9 +126,6 @@ directory, or an http(s) URL; --pieces-version pins the npm release exactly.`,
 		overwrite, _ := cmd.Flags().GetBool("force")
 		yes, _ := cmd.Flags().GetBool("yes")
 		dir, _ := cmd.Flags().GetString("dir")
-		if dir == "" {
-			dir = "."
-		}
 		skillRoots, _ := cmd.Flags().GetStringArray("skill-root")
 		out := ui.New(os.Stdout)
 		return runAddWithEnvironment(os.Stdout, out, dir, args, registry, piecesVersion, overwrite, addEnvironment{
@@ -201,13 +198,9 @@ func addPieces(w io.Writer, out *ui.Printer, dir, registry, piecesVersion string
 	if len(names) == 0 {
 		return fmt.Errorf("usage: puzzle add piece <name…>")
 	}
-	start, err := filepath.Abs(dir)
-	if err != nil {
-		return err
-	}
 	// Reuse generate's project-root convention: walk up for package.json /
 	// puzzle.config.js so `add piece` works from anywhere inside the app.
-	root, err := generate.FindProjectRoot(start)
+	root, err := generate.FindProjectRoot(dir)
 	if err != nil {
 		return err
 	}
@@ -240,11 +233,7 @@ func addPieces(w io.Writer, out *ui.Printer, dir, registry, piecesVersion string
 // with all resolve/copy/lock logic in internal/pieces. With no names it lists the
 // registry's palettes instead of copying one.
 func addThemes(w io.Writer, out *ui.Printer, dir, registry, piecesVersion string, overwrite bool, names []string) error {
-	start, err := filepath.Abs(dir)
-	if err != nil {
-		return err
-	}
-	root, err := generate.FindProjectRoot(start)
+	root, err := generate.FindProjectRoot(dir)
 	if err != nil {
 		return err
 	}

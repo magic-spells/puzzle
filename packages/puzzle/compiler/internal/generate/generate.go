@@ -18,6 +18,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 )
 
 // Kind selects which scaffold to emit.
@@ -434,7 +436,7 @@ func withinRoot(root, dest string) error {
 	if err != nil {
 		return err
 	}
-	absDest, err = evalSymlinksAllowMissing(absDest)
+	absDest, err = fsutil.EvalSymlinksAllowMissing(absDest)
 	if err != nil {
 		return err
 	}
@@ -443,38 +445,6 @@ func withinRoot(root, dest string) error {
 		return fmt.Errorf("refusing to write outside the project root: %s (--path is relative to the project root)", dest)
 	}
 	return nil
-}
-
-// evalSymlinksAllowMissing resolves the nearest existing ancestor before
-// appending a destination's missing tail. Keep this in lockstep with the sibling
-// containment helper in internal/pieces, which protects piece destinations and
-// registry reads with the same fail-closed behavior for dangling symlinks.
-func evalSymlinksAllowMissing(name string) (string, error) {
-	current := name
-	var missing []string
-	for {
-		resolved, err := filepath.EvalSymlinks(current)
-		if err == nil {
-			for i := len(missing) - 1; i >= 0; i-- {
-				resolved = filepath.Join(resolved, missing[i])
-			}
-			return resolved, nil
-		}
-		if !os.IsNotExist(err) {
-			return "", err
-		}
-		if _, lerr := os.Lstat(current); lerr == nil {
-			return "", err
-		} else if !os.IsNotExist(lerr) {
-			return "", lerr
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			return "", err
-		}
-		missing = append(missing, filepath.Base(current))
-		current = parent
-	}
 }
 
 func relOrAbs(root, p string) string {

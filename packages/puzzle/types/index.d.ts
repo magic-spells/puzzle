@@ -21,9 +21,6 @@ export type { RouterMode };
 // Shared shapes
 // ----------------------------------------------------------------------------
 
-/** A field/record value — the framework never constrains model field types. */
-export type PuzzleValue = any;
-
 declare const puzzleAdapterCapabilityBrand: unique symbol;
 
 /** Opaque shape accepted only from the `@magic-spells/puzzle/adapter` export. */
@@ -63,9 +60,8 @@ export interface HeadTranslation {
 
 /**
  * A route definition (constellation/doc/DOC-SPEC.md §9). `view`/`layout` are
- * PuzzleView subclasses (constructors) or `lazy()` markers (D163). `.pzl`
- * default exports and compiled classes are typed `any` by the compiler shim, so
- * they still assign cleanly. Nested via `children` (D30).
+ * PuzzleView subclasses (constructors) or `lazy()` markers (D163). Nested via
+ * `children` (D30).
  */
 export interface Route {
 	path: string;
@@ -381,18 +377,6 @@ export type BeforeRequestHook = (
 	context: AdapterRequestContext
 ) => RequestInit | void;
 
-/** Store construction options (wired by `PuzzleApp` from its config). */
-export interface StoreOptions {
-	/** Storage-like object for opt-in persistence. */
-	storage?: any;
-	/** Persistence key (default `'puzzle-store'`). */
-	storageKey?: string;
-	/** Base URL for the server read/write path. */
-	apiURL?: string;
-	/** Adapter request hook (D91). */
-	beforeRequest?: BeforeRequestHook;
-}
-
 /**
  * The reactive datastore (constellation/doc/DOC-SPEC.md §8). Reachable in views
  * as `this.ctx.store`. Records are instances of the registered model classes;
@@ -443,7 +427,6 @@ export interface Store {
 	// not have them (D98). They are attached by `installFixtures()` and declared
 	// through module augmentation in types/fixtures.d.ts, so they type-check only
 	// where `@magic-spells/puzzle/fixtures` is actually imported.
-	[key: string]: any;
 }
 
 // ----------------------------------------------------------------------------
@@ -488,7 +471,6 @@ export interface Router {
 	readonly views: readonly RouteView[];
 	/** Register the shared-element morph handler (D55); null unregisters. */
 	setMorphHandler(handler: MorphHandler | null): void;
-	[key: string]: any;
 }
 
 // ----------------------------------------------------------------------------
@@ -1134,7 +1116,6 @@ export declare class ViewNode {
 	readonly isComponent: boolean;
 	readonly isSlot: boolean;
 	readonly isSnippet: boolean;
-	readonly isPortal: boolean;
 	readonly props: Record<string, any>;
 }
 

@@ -616,16 +616,10 @@ export function timeago(v) {
 		['day', 86400],
 		['hour', 3600],
 		['minute', 60],
-		['second', 1]
 	];
 
 	for (const [unit, secs] of units) {
-		if (Math.abs(diff) >= secs || unit === 'second') {
-			return rtf.format(Math.trunc(diff / secs), unit);
-		}
+		if (Math.abs(diff) >= secs) return rtf.format(Math.trunc(diff / secs), unit);
 	}
-	// Unreachable today (the `unit === 'second'` guard always returns on the last
-	// iteration), but an explicit final return guarantees a refactor can never let
-	// this yield undefined — fall back to the raw value like the isNaN guard above.
-	return str(v);
+	return rtf.format(diff, 'second');
 }

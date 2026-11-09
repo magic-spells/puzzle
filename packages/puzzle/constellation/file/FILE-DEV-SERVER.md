@@ -9,6 +9,15 @@ connections:
   - COMPONENT-DEVSTATE
 verified_at: '2026-11-01T19:28:54.178Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 trims: dev.go has no path-containment helpers of its own; it calls
+      `serve.WithinDir` (exported), and `withinDirResolved` lives only in serve (its tests moved to
+      serve_test.go). The `rebuild` closure has one failure block: `ValidatePublic`'s error enters
+      the switch as its first `case err != nil`. `stylesChanged` has two arms (static builder, SPA
+      pipeline); the old one-shot static arm was dead because `tw` is nil whenever no builder
+      exists.
 ---
 
 # dev.go

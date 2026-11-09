@@ -3,7 +3,7 @@
     class={ rootClass }
     sub={ true }
     trigger={ triggerMode }
-    effect={ effect }><Children/></DropdownMenu>
+    arrow="flip"><Children/></DropdownMenu>
 </puzzle-view>
 
 <script>
@@ -16,7 +16,7 @@ import DropdownMenu from './DropdownMenu.pzl';
 //   <DropdownMenu.Content>
 //     <DropdownMenu.Item value="save" @press={ run }>Save</DropdownMenu.Item>
 //     <DropdownMenu.Sub>
-//       <DropdownMenu.Trigger variant="item">Export as</DropdownMenu.Trigger>
+//       <DropdownMenu.Trigger variant="item" label="Export as"/>
 //       <DropdownMenu.Content opens="right">
 //         <DropdownMenu.Item value="pdf" @press={ run }>PDF</DropdownMenu.Item>
 //       </DropdownMenu.Content>
@@ -27,7 +27,8 @@ import DropdownMenu from './DropdownMenu.pzl';
 // <button> cannot contain a <dropdown-component>. The nested trigger and panel
 // must be DIRECT children of that nested component, so something has to supply
 // exactly that host and nothing else. Sub is it — the same job Menubar.Menu does
-// one level up. Give the inner Content opens="right".
+// one level up. Give the inner Content opens="right", and give the Trigger its
+// text as `label`: only that form renders the chevron hook arrow="flip" draws.
 //
 // `block!` IS LOAD-BEARING, not cosmetic — and the `!` is too: the root's own
 // `inline-block` is emitted AFTER `.block` in Tailwind's display group, so it
@@ -58,7 +59,6 @@ import DropdownMenu from './DropdownMenu.pzl';
 //
 // Props
 //   trigger  'both' (default) | 'hover' | 'click', forwarded
-//   effect   'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
 //   class    merged onto the host, after the load-bearing `block!`
 
 export default class Sub extends PuzzleView {
@@ -66,7 +66,6 @@ export default class Sub extends PuzzleView {
     return {
       rootClass: ['block!', props.class].filter(Boolean).join(' '),
       triggerMode: props.trigger || 'both',
-      effect: props.effect,
     };
   }
 

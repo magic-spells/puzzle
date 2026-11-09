@@ -180,17 +180,6 @@ func ScanUsage(scanRoot string) (Usage, error) {
 	return NewUsageScanner().Scan(scanRoot)
 }
 
-// ScanFormatters preserves the original formatter-only API for focused callers
-// and tests. Build orchestration uses ScanUsage so every tree-shaking input is
-// refreshed together.
-func ScanFormatters(scanRoot string) (map[string]bool, error) {
-	usage, err := ScanUsage(scanRoot)
-	if err != nil {
-		return nil, err
-	}
-	return usage.Formatters, nil
-}
-
 // lazyCallRe matches a call to something NAMED lazy — `lazy(`, `lazy (`, and
 // `puzzle.lazy(` all count. It cannot match `lazyLoad(`, `isLazy(` or
 // `app_lazy(`: the `\b` and the immediate `(` pin the token exactly.

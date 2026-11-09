@@ -47,8 +47,8 @@ production.
     left routed children unmounted under fast clicking. `runawayUntil` is only
     the re-warn throttle. A dev instrument must not change what the app does.
 - **Scopes pop on every exit.** Every pushed scope is popped on all exits, throws
-  included (`#renderNow`'s dev branch calls `devperfRenderCancel` before
-  rethrowing). Per-subject marks are a **LIFO stack** wherever the operation can
+  included (`#renderNow`'s dev branch calls `devperfRenderEnd` from its catch
+  before rethrowing). Per-subject marks are a **LIFO stack** wherever the operation can
   re-enter — `activeStoreFlushes` (a subscriber may call `store.flush()`) and
   `activeRenders` (a ref callback or `connectedCallback` inside the render span
   can call `refresh()` with a sync `data()`). A single-slot mark leaks the outer

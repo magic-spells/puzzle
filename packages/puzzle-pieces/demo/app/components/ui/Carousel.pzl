@@ -11,7 +11,7 @@
     @focusin={ onEnter }
     @focusout={ onFocusOut(event) }>
 
-    <div class="sr-only" aria-live="polite" data-carousel-status>{ statusText }</div>
+    <div class="sr-only" aria-live={ liveMode } data-carousel-status>{ statusText }</div>
 
     <div class={ trackClass } data-carousel-track @scroll={ onScroll }>
       <Slot/>
@@ -104,7 +104,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // INDEX MODEL. `_committed` is the logical current slide (the source for @change
 // and prev/next math); data's `viewIndex` is the visual current slide (drives the
-// active dot, disabled ends, and the polite live-region status) and updates live
+// active dot, disabled ends, and the live-region status) and updates live
 // as the track scrolls. A programmatic scroll sets `_programmatic` so its trailing
 // scroll-settle doesn't re-fire; a native swipe's settle commits the nearest slide.
 const ROOT =
@@ -143,10 +143,9 @@ export default class Carousel extends PuzzleView {
     this._settle = null;
     this._timer = null;
     this._programmatic = false;
-    this._paused = false;
     this._committed = 0;
     this._autoplayMs = -1;
-    this.setData({ slideCount: 0, viewIndex: 0 });
+    this.setData({ slideCount: 0, viewIndex: 0, paused: false });
   }
 
   data(params, props) {
@@ -175,10 +174,11 @@ export default class Carousel extends PuzzleView {
       loop,
       ariaLabel: props.label || 'Carousel',
       statusText: n > 0 ? `Slide ${view + 1} of ${n}` : '',
+      liveMode: Number(props.autoplay) > 0 && !d.paused && !this._reducedMotion() ? 'off' : 'polite',
       rootClass: [ROOT, FOCUS, props.class || ''].filter(Boolean).join(' '),
       trackClass: TRACK,
-      showControls: props.controls !== false,
-      showDots: props.dots !== false,
+      showControls: props.controls !== false && n > 1,
+      showDots: props.dots !== false && n > 1,
       prevDisabled: !loop && atStart,
       nextDisabled: !loop && atEnd,
       prevLabel: 'Previous slide',
@@ -355,8 +355,15 @@ export default class Carousel extends PuzzleView {
 
   // ---- autoplay ------------------------------------------------------------
 
+  _pause(p) {
+    if (this.getData().paused !== p) {
+      this.setData('paused', p);
+      this.refresh();
+    }
+  }
+
   _autoTick() {
-    if (this._paused) return;
+    if (this.getData().paused) return;
     const n = this.getData().slideCount;
     if (n <= 1) return;
     this._commit((this._committed + 1) % n, { scroll: true });
@@ -440,12 +447,12 @@ export default class Carousel extends PuzzleView {
 
     // Autoplay pauses while hovered or focus lives inside the carousel.
     onEnter: () => {
-      this._paused = true;
+      this._pause(true);
     },
 
     onLeave: () => {
       if (this.element && this.element.contains(document.activeElement)) return;
-      this._paused = false;
+      this._pause(false);
     },
 
     onFocusOut: (event) => {
@@ -456,7 +463,7 @@ export default class Carousel extends PuzzleView {
       ) {
         return;
       }
-      this._paused = false;
+      this._pause(false);
     },
   };
 }

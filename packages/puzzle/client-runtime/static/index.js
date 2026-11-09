@@ -204,9 +204,9 @@ export async function mountStatic({
 		for (const instance of nested) instance.skipEnter();
 	}
 
-	// Initial paint must NOT animate — the content is already on screen (same posture
-	// as the SSG takeover: skipEnter every preloaded instance).
-	for (const instance of instances) instance.skipEnter();
+	// A takeover's chain is already on screen. An unmarked page is a first paint: as the
+	// router's initial nav, only the topmost view (instances[0]; layout last) plays in.
+	for (const instance of instances) if (isTakeover || instance !== instances[0]) instance.skipEnter();
 
 	// A locale switch (D175) rebuilds this page the way the SPA router's
 	// same-location rebuild does: preload a fresh chain — nested components too,

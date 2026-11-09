@@ -25,8 +25,10 @@ reason `#resolveScroll` leaves replace alone.
 - The params-only commit branch in `#commitState` passes
   `focus: replace ? null : focus`: no focus move, no announcement, and no custom
   `focusBehavior` call.
-- Params-only **pushes** keep full focus and announcement; a replace that changes
-  the leaf takes the normal path.
+- Params-only **pushes** keep the normal focus path and announcement; a replace
+  that changes the leaf takes the normal path. Under D93's default target a
+  params-only push from a control inside the reused leaf leaves focus on that
+  control when it survives the patch.
 - The carve-out sits at the commit site because `#resolveFocus` runs before
   `keep` is known.
 - `#announcedTitle` does not advance here. The next real navigation compares

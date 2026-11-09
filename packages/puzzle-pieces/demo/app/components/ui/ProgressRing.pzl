@@ -97,11 +97,6 @@ export default class ProgressRing extends PuzzleView {
     const hasLabel = typeof props.label === 'string' && props.label.trim() !== '';
     const label = hasLabel ? props.label : 'Progress';
 
-    // Default the arc to text-brand, but step aside if the caller passes their
-    // own text-color token so their `class` wins regardless of CSS order.
-    const cls = props.class || '';
-    const hasColor = /(?:^|\s)text-(?:chart-|brand|danger|success|muted|ink|body|faint)/.test(cls);
-
     return {
       max,
       now: value,
@@ -119,10 +114,10 @@ export default class ProgressRing extends PuzzleView {
       showCaption: showValue && hasLabel && size >= CAPTION_MIN,
       valueStyle: `font-size:${Math.round(size * 0.26)}px`,
       rootStyle: `width:${size}px;height:${size}px`,
+      // `:where()` zeroes the default's specificity, so any text colour in `class` wins.
       rootClass: [
-        'relative inline-flex items-center justify-center',
-        hasColor ? '' : 'text-brand',
-        cls,
+        'relative inline-flex items-center justify-center [:where(&)]:text-brand',
+        props.class,
       ]
         .filter(Boolean)
         .join(' '),

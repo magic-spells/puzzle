@@ -230,6 +230,26 @@ describe('save() — non-OK response', () => {
 		expect(todo._synced).toBe(false);
 		expect(store.findOne('todo', 't1')).toBe(todo);
 	});
+
+	it('an unreadable body fails the save: a 2xx is not mistaken for a 204, a 500 keeps its status', async () => {
+		// The connection drops after the headers: text() rejects.
+		const unreadable = (init) => ({
+			...makeRes(init),
+			text: async () => {
+				throw new TypeError('network error');
+			},
+		});
+		mockFetch(unreadable({ status: 201 }));
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+
+		await expect(todo.save()).rejects.toThrow('network error');
+		expect(todo._synced).toBe(false);
+
+		mockFetch(unreadable({ ok: false, status: 500 }));
+		await expect(todo.save()).rejects.toMatchObject({ name: 'PuzzleAdapterError', status: 500 });
+		expect(todo._synced).toBe(false);
+	});
 });
 
 describe('save() — 2xx response merge', () => {

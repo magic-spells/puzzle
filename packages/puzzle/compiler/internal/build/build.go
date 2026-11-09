@@ -19,7 +19,6 @@ import (
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/locales"
 	"github.com/magic-spells/puzzle/compiler/internal/styles"
-	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
 
 // Options configure a build.
@@ -87,8 +86,8 @@ type Options struct {
 func Build(root string, opts Options) error {
 	prof := opts.Profiler
 	if prof == nil {
-		prof = newBuildProfile(profileEnabled(opts.Profile))
-		defer prof.report(os.Stderr)
+		prof = NewPhaseProfile(ProfileEnabled(opts.Profile), "puzzle build")
+		defer prof.Report(os.Stderr)
 	}
 
 	absRoot, err := filepath.Abs(root)
@@ -120,7 +119,7 @@ func Build(root string, opts Options) error {
 	if opts.Config != nil {
 		cfg = *opts.Config
 	} else {
-		endConfig := prof.phase("config load")
+		endConfig := prof.Phase("config load")
 		loaded, err := config.LoadConfig(absRoot)
 		endConfig()
 		if err != nil {
@@ -171,7 +170,7 @@ func Build(root string, opts Options) error {
 	// public page names it by its fixed name, that file keeps its fixed name with
 	// one warning. An explicit hashNames: true is strict instead: rewriteShell
 	// errors on a missing entry reference and rewrites the other pages.
-	strictHash := cfg.Build.HashNames != nil
+	strictHash := hash && cfg.Build.HashNames != nil
 	var stylesFallback string
 	if hash && !strictHash {
 		plan := shellHashSupport(absRoot)
@@ -205,7 +204,7 @@ func Build(root string, opts Options) error {
 	// every esbuild pass below serves the same manifest. nil without i18n.
 	var localeRes *locales.Result
 	if cfg.I18nEnabled() {
-		endLocales := prof.phase("locales")
+		endLocales := prof.Phase("locales")
 		localeRes, err = loadLocales(absRoot, cfg)
 		endLocales()
 		if err != nil {
@@ -265,7 +264,7 @@ func Build(root string, opts Options) error {
 	// each used to redo it over identical bytes. passContext computes it once and
 	// hands the same immutable result to every pass's plugin, so the profiler
 	// reports a single "usage scan" row and the three passes cannot disagree.
-	endScan := prof.phase("usage scan")
+	endScan := prof.Phase("usage scan")
 	pc, scanErr := newPassContext(absRoot)
 	endScan()
 	if scanErr != nil {
@@ -324,14 +323,14 @@ func Build(root string, opts Options) error {
 	// esbuild, a runner-owned temporary file for Tailwind). Run them together when
 	// Tailwind is enabled, then join BOTH before inspecting either result so no
 	// worker can outlive Build and race staging cleanup on an error path.
-	endBundle := prof.phase("browser bundle")
+	endBundle := prof.Phase("browser bundle")
 	browser := func() api.BuildResult {
 		defer endBundle()
 		return api.Build(buildOpts)
 	}
 	var tailwind func() (string, error)
 	if cfg.TailwindEnabled() {
-		endTailwind := prof.phase("tailwind")
+		endTailwind := prof.Phase("tailwind")
 		tailwind = func() (string, error) {
 			defer endTailwind()
 			return runTailwind(absRoot, cfg, opts)
@@ -342,12 +341,7 @@ func Build(root string, opts Options) error {
 		*opts.Metafile = result.Metafile
 	}
 	if len(result.Errors) > 0 {
-		lines := api.FormatMessages(result.Errors, api.FormatMessagesOptions{
-			Kind:          api.ErrorMessage,
-			Color:         ui.New(os.Stderr).Enabled(),
-			TerminalWidth: 0,
-		})
-		return fmt.Errorf("puzzle build failed:\n%s", strings.Join(lines, "\n"))
+		return formatBuildErrors("puzzle build failed", result.Errors)
 	}
 	// Preserve the historical failure priority: if both concurrent lanes fail,
 	// the browser compile error above wins; Tailwind is surfaced only after the
@@ -361,7 +355,7 @@ func Build(root string, opts Options) error {
 	// collected <style> blocks. A declared-but-unrunnable Tailwind fails the
 	// build — the pipeline is never silently skipped. Written into staging, not
 	// dist/, so a Tailwind failure above never touches the last good build.
-	endStyles := prof.phase("styles compose")
+	endStyles := prof.Phase("styles compose")
 	final := styles.Compose(tailwindCSS, pl.CSS())
 	stylesheet := "styles.css"
 	if hashStyles {
@@ -380,7 +374,7 @@ func Build(root string, opts Options) error {
 	// Static assets: index.html and anything else under the app's public/ dir,
 	// copied into staging. Keep the copied set so prerender modes can distinguish
 	// public-owned files from generated output before writing the final dist tree.
-	endPublic := prof.phase("public copy")
+	endPublic := prof.Phase("public copy")
 	publicFiles, err := copyPublic(absRoot, staging, copyIntoStaging)
 	endPublic()
 	if err != nil {
@@ -400,7 +394,7 @@ func Build(root string, opts Options) error {
 	// compile failure). mode was resolved up front, before any work.
 	switch mode {
 	case "hybrid":
-		endHybrid := prof.phase("prerender (hybrid)")
+		endHybrid := prof.Phase("prerender (hybrid)")
 		hybridErr := prerenderHybrid(absRoot, entry, staging, cfg.Site, publicFiles, opts.Quiet, pc)
 		endHybrid()
 		if hybridErr != nil {
@@ -414,14 +408,10 @@ func Build(root string, opts Options) error {
 		}
 	}
 
-	// Everything succeeded — swap staging in for dist/. Guard the replace so only
-	// the computed absRoot/dist path is ever moved, never the app root or an
-	// unexpected location. The previous dist is renamed aside first; if installing
-	// staging fails, swapOutput restores it instead of leaving the app buildless.
-	if filepath.Dir(outdir) != absRoot || filepath.Base(outdir) != "dist" {
-		return fmt.Errorf("refusing to replace unexpected dist path: %s", outdir)
-	}
-	endSwap := prof.phase("staging swap")
+	// Everything succeeded — swap staging in for dist/. The previous dist is
+	// renamed aside first; if installing staging fails, swapOutput restores it
+	// instead of leaving the app buildless.
+	endSwap := prof.Phase("staging swap")
 	swapErr := swapOutput(staging, outdir, workTmpDir)
 	endSwap()
 	if swapErr != nil {
@@ -841,12 +831,6 @@ func PkgIsPuzzle(pkgPath string) bool {
 		return false
 	}
 	return pkg.Name == "@magic-spells/puzzle"
-}
-
-// FileExists exposes the build package's historical file probe while sharing
-// its implementation with the rest of the compiler.
-func FileExists(path string) bool {
-	return fsutil.FileExists(path)
 }
 
 func dirExists(path string) bool {

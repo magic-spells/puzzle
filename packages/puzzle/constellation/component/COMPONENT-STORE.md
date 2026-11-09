@@ -16,6 +16,25 @@ connections:
   - DECISION-D189-AGENT-HOOKS
 verified_at: '2026-11-01T19:23:56.488Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 runtime trims (feat/0.10-runtime-trims; review F3-Q4/Q7/Q9). The never-wired
+      `storageKey` Store option is deleted (PuzzleApp never passed it and Store is not exported);
+      the persistence key is the constant 'puzzle-store'. Two apps with storage on one origin still
+      share that key: per-app keys are an open design question for Cory, not built. _load() is one
+      try/catch over getItem + JSON.parse + _hydrateAll; an unreadable or corrupt blob now warns in
+      dev (it was silent) and is still fail-soft. The stale `dead` field is gone from the
+      handle-context comment, and the orphaned DELETED_SAVE_MESSAGE JSDoc is gone from model.js (the
+      constant lives in adapter.js).
+  - kind: state
+    text: >-
+      Correction to the PR #248 note: after the `_load()` single try/catch, an unreadable storage
+      read, unparseable JSON or a hydration throw all warn via an ungated `console.warn`, in every
+      build (not dev-only). Before #248 only a hydration throw warned; the other two returned
+      silently. Still fail-soft: nothing throws out of the constructor and the call stays behind `if
+      (this.storage)`.
+    sha: 9b9c7687
 ---
 
 # Store
@@ -45,7 +64,7 @@ Reactive record registry (`client-runtime/datastore/store.js`) for the configure
 - **`observe(type, [id,] fn)`** ([[DECISION-D184-STORE-OBSERVE]]) links a fresh wrapper closure straight into `subscribersByKey`/`keysBySubscriber` — a function subscriber outside `withTracking`, so no reset, no request map, no fetch. The wrapper clears `_tracking` while `fn` runs, so reads inside it are never credited to a suspended async `data()`. The key is spelled as `_findOneLocal`/`_notify` spell it. `stop()` is `_dropSubscription(key, wrapper)`. There is no observe-specific emission. DevTools reports observers as `'fn'`.
 - `flush()` delivers each subscriber once in isolation (sync throws and function-subscriber rejections are logged, delivery continues), writes pending persistence, then (dev) reports the batch to devperf and the DevTools bridge behind inline probes. Scheduling is the shared `scheduler.js` frame (rAF plus a 220 ms fallback timer; a timer alone when hidden).
 - **Render revision** (D170, `renderRev.js`): `_notify` stamps its sequence onto the record's `RENDER_REV` Symbol (defined non-enumerable at `_instantiate`, value 0, so every record has one hidden class). The revision never advances apart from a notification. A removal misses the lookup (deleted before notify), and the lookup uses `recordsByType`, not `_typeMap` (which would create a collection). `MUTATION_REVISIONS` (D125, model.js) answers a different question — which fields changed since a request went out.
-- **`_flushSeq`** is the sequence being delivered (0 outside delivery, reset in a `finally`); a view refreshing inside delivery stamps it on `_settleMark` to avoid a second `data()` run for the same batch. A re-entrant `flush()` leaves 0 for the outer loop — it loses the dedupe, never a notification.
+- **`_notifySeq` is also the dedupe mark** (D161, D170). Every mutation path (`update`, `createRecord`, `removeRecord`, `_upsert`, the save response) mutates first and calls `_notify` second, synchronously, so a `data()` run has seen every sequence at or below `_notifySeq` as read when it starts. Core refresh/prepare and the adapter's settle pass read it there; the committing view stamps it on `_settleMark`, and delivering a batch at or below the mark is skipped. Read before `data()`, the mark can only under-stamp: a change queued during the run is delivered.
 
 ## Persistence
 

@@ -16,6 +16,17 @@ connections:
   - DOC-SPEC-BUILD
 verified_at: '2026-11-01T19:19:18.479Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 (feat/0.10-types-devtools, review F10 B1/A1): extension side trimmed.
+      puzzle-devtools content-script relay no longer caps reconnects (MAX_RECONNECTS=20 removed):
+      Chrome recycles an idle MV3 worker every ~30s and an open port no longer resets the timer, so
+      a quiet tab used to exhaust the cap after ~10 min and the panel went dark; a dead extension
+      context (chrome.runtime.id gone) still ends the loop, matching panel-glue's uncapped
+      reconnect. hook.onRequest() now returns nothing (its off() was never called by this bridge,
+      which already drops the return value per the DevtoolsHook typedef); the 'unregisters cleanly'
+      test went with it.
 ---
 
 # devtools.js

@@ -109,6 +109,27 @@ notes:
 
       - PasswordField is documented as controlled only (claim 2: the bound value is re-applied on
       every render), and the docs examples are now controlled.
+  - kind: state
+    text: >-
+      P06 review batch (feat/0.10-pieces-sidebar-carousel). Sidebar: the brand left-stripe marker on
+      the active submenu child is gone (owner's rule against coloured left-edge accent bars). The
+      submenu guide is a neutral `border-l` + `v.line` again, and the active child is shown only by
+      the row's `v.active` tint and weight. Inline and flyout children share `childLinkClass`, and
+      `overflow-hidden` is back on ROW_BASE. Raw sizes are now `w-15` / `min-w-40` / `ml-5.5`.
+      Carousel: the live region is `aria-live="off"` whenever `autoplay` is set; with one slide it
+      renders no dots and no arrows. ProgressRing, Rating, Sparkline: the default colour is
+      `[:where(&)]:text-brand` (Sparkline: `text-chart-1`), which has zero specificity, so any text
+      colour in `class` wins. No retint regex remains (Tabs uses the same `[:where(&)]` idiom).
+      DataTable: the demo copy is synced to the registry's 16cb42a7 header token.
+    sha: 0c470749
+  - kind: state
+    text: >-
+      Correction to the P06 Carousel note: the live region is `off` only while autoplay is actually
+      running (an interval is set, `paused` is false in data, and reduced motion is off). When hover
+      or focus pauses it, or reduced motion disables it, the region is `polite`, so a keyboard
+      user's Next still announces. Pause state lives in data (`paused`), written through `_pause()`,
+      which refreshes on change. It is no longer the `_paused` field.
+    sha: a52e0c59
 ---
 
 # The registry — source of truth

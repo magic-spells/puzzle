@@ -188,3 +188,67 @@ func TestResolveRejectsTraversal(t *testing.T) {
 		}
 	}
 }
+
+// TestWithinDir locks in the lexical path-traversal guard: in-root paths are
+// allowed; anything that resolves outside the root is rejected. (URL decoding and
+// path.Clean run upstream in Resolve; WithinDir is the lexical backstop that
+// must reject a candidate that still resolves outside dist.)
+func TestWithinDir(t *testing.T) {
+	root := filepath.Clean(t.TempDir())
+	parent := filepath.Dir(root)
+	cases := []struct {
+		name   string
+		target string
+		want   bool
+	}{
+		{"in-root file", filepath.Join(root, "app.js"), true},
+		{"in-root nested", filepath.Join(root, "assets", "img", "logo.png"), true},
+		{"root itself", root, true},
+		{"dotdot traversal", filepath.Join(root, "..", "etc", "passwd"), false},
+		{"escapes to parent", filepath.Join(parent, "secret.txt"), false},
+		{"prefix-only sibling", root + "-evil", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := WithinDir(root, tc.target); got != tc.want {
+				t.Fatalf("WithinDir(%q, %q) = %v, want %v", root, tc.target, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestWithinDirResolvedSymlinkEscape proves the symlink-aware backstop rejects a
+// symlink that is lexically inside the root but resolves outside it, while still
+// allowing a genuine in-root file (also exercising a symlinked root prefix such
+// as macOS /tmp → /private/tmp).
+func TestWithinDirResolvedSymlinkEscape(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	secret := filepath.Join(outside, "secret.txt")
+	if err := os.WriteFile(secret, []byte("top secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	link := filepath.Join(root, "escape")
+	if err := os.Symlink(secret, link); err != nil {
+		t.Skipf("symlinks unsupported on this platform: %v", err)
+	}
+
+	// Lexically the link lives inside root, so the plain guard is fooled...
+	if !WithinDir(root, link) {
+		t.Fatalf("precondition: link should be lexically within root")
+	}
+	// ...but resolving symlinks reveals the escape, so it must be rejected.
+	if withinDirResolved(root, link) {
+		t.Fatalf("symlink escape not caught: %s -> %s", link, secret)
+	}
+
+	// A real in-root file resolves fine and stays allowed.
+	real := filepath.Join(root, "app.js")
+	if err := os.WriteFile(real, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !withinDirResolved(root, real) {
+		t.Fatalf("legitimate in-root file wrongly rejected: %s", real)
+	}
+}

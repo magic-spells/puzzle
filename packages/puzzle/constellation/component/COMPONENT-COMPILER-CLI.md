@@ -74,10 +74,15 @@ this card holds the implementation rules behind it.
   marker names are refused for components and `Component` for every `.pzl` scaffold
   (D180), with a rename hint before any write. Family collisions are all-or-nothing;
   `--force` rewrites only the family's files. The `--path` containment guard resolves
-  symlinks (`evalSymlinksAllowMissing`, in lockstep with pieces).
+  symlinks (`fsutil.EvalSymlinksAllowMissing`, shared with pieces). `generate` and `add`
+  hand `--dir` (empty = the working directory) straight to `generate.FindProjectRoot`,
+  which makes it absolute itself.
 - **`add piece` / `add theme`** (`internal/pieces`) — the theme fetch and `pieces.lock`
   parse finish before the first write; the lock is read before `planTheme` so the
-  stale-theme hint can tell an older registry copy from a local edit. Dependency specs
+  stale-theme hint can tell an older registry copy from a local edit. `planTheme` counts
+  only the hand-merge marker, a live `@import` of `pieces.css` (`piecesCssImported`; a
+  comment that mentions the file is not wiring) or the package import as "already wired",
+  so `add piece` and `add theme` agree about the same styles.css. Dependency specs
   carry a version floor (D169): split on the LAST `@`, merged by package name keeping the
   highest floor. `add theme` lives in `internal/pieces/themes.go`.
 - **`add skills` / `upgrade skills`** ([[DECISION-D78-AGENT-SKILL-DISTRIBUTION]]) —

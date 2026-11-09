@@ -12,6 +12,15 @@ connections:
   - DECISION-D153-PUZZLE-SCRATCH-DIR
 verified_at: '2026-11-01T19:19:18.479Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 trims: the "refusing to replace unexpected dist path" guard is gone (`outdir` is
+      always `filepath.Join(absRoot, "dist")`, so it could not fire); `build.FileExists` is gone
+      (callers use `fsutil.FileExists`); profile.go has one spelling per concept (`*PhaseProfile`,
+      `NewPhaseProfile`, `ProfileEnabled`, `.Phase`, `.Report`, no lowercase shims); every esbuild
+      error block calls `formatBuildErrors(prefix, errs)`; `prerenderOnlyArgs` returns `[]string`
+      only (marshalling a `[]string` cannot fail).
 ---
 
 # build.go

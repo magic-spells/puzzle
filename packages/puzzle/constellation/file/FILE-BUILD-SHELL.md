@@ -13,6 +13,12 @@ connections:
   - TEST-BUILD-AND-DEV-PIPELINE
 verified_at: '2026-11-01T19:19:18.479Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 trims: the test-only `rewriteShellHTML` wrapper is gone;
+      `rewriteShellHTMLRefs(source, renames, chunks, publicFiles, strict)` is the one rewriter, and
+      shell tests call it directly.
 ---
 
 # shell.go

@@ -94,7 +94,7 @@ after a frame's callbacks (`frame()` from `scheduler.js`, so a hidden tab steps 
 timers) and resolves `true` after two clear checks in a row. Busy means any of:
 `#mountPromise`, `scheduled()` (pending store flushes and view renders),
 `store._flushScheduled`, `store._asyncTrackingChain`, `store._reading?.()` (adapter
-reads), `navigating(router)`, or `i18n.__busy`. The app has no `renderTick()`;
+reads), `Router.navigating(router)`, or `i18n.__busy`. The app has no `renderTick()`;
 that is a view method ([[DECISION-D188-TICK]]).
 
 ## Other responsibilities

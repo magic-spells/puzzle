@@ -32,8 +32,14 @@ props:
 connections:
   - DECISION-WRAP-WEB-COMPONENTS
   - DOC-REGISTRY
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 review fix P05-B4 (feat/0.10-pieces-slider-editor): the "change the text AND bump
+      play" recipe is gone from the SplitText.pzl header and SplitTextDoc's "Content is static"
+      section — it replayed the OLD text (verifier reproduced). Both now say remount to change text.
+      No code change; the wrapper still has no content-sync path, deliberately.
 ---
-
 
 Single-file wrapper over `@magic-spells/split-text` 0.2.0 (0.8.0,
 feat/piece-split-text). A text reveal: the element splits its own text into words,
@@ -57,9 +63,12 @@ It is also the ONLY way a changed attribute reaches the screen: the element decl
 
 ## Gotchas
 
+
 - **Content must be static.** At connect the element REPLACES its own text nodes with
   nested spans, so Puzzle's patcher no longer owns that subtree. Literal markup only;
-  changing the text means changing it AND bumping `play` in the same render. Inline tags
+  to show different text, remount the piece (branch it in an `{#if}` or key it in a
+  `{#for}`). Bumping `play` does NOT pick up new text: the patcher writes into the
+  detached text node and `split()` restores the old snapshot. Inline tags
   (`<em>`, `<a>`, `<br>`) survive the split. An `island` would express this, but the
   compiler forbids a composition marker inside one, so the rule is documentation.
 - **`style` is not a prop.** The element writes `--split-text-delay` / `-stagger` /

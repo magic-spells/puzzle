@@ -160,7 +160,7 @@ import { parseISODate, toDate } from '../../lib/date-math.js';
 //                            a local-time Date.
 //   @show() / @hide()        fire on the user's open/close INTENT (trigger, Escape,
 //                            outside-click, or a committed selection) — like Dialog's
-//                            @close, so a controlled parent can flip `open`.
+//                            @hide, so a controlled parent can flip `open`.
 //
 // POSITIONING & FOCUS. Placement is decided synchronously from the trigger's viewport
 // room the moment it opens (the Calendar panel has a fixed height), so the first render

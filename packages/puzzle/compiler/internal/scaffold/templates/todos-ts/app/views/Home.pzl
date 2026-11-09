@@ -206,17 +206,6 @@ export default class TodoHome extends PuzzleView {
   // Component lifecycle
   mounted(): void {
     console.log('Todo app mounted!');
-
-    // Focus the input when component mounts. `element` is typed
-    // Element | Comment | null (a pending async data() mounts a Comment
-    // anchor), so narrow it before querying.
-    const root = this.element;
-    const input = root instanceof Element
-      ? root.querySelector<HTMLInputElement>('input[type="text"]')
-      : null;
-    if (input) {
-      input.focus();
-    }
   }
 
   beforeUpdate(): void {
