@@ -356,7 +356,7 @@ import { reportError } from '../errors.js';
  * @typedef {{ rawPath: string, pathname: string, query: RouteQuery, hash: string, entry: RouteEntry,
  *   params: Record<string, string>, views: PuzzleView[], keys: string[], layout: PuzzleView | null,
  *   layoutClass: LayoutClassValue, scroll: ScrollSpec | null, focus: FocusSpec | null,
- *   prepared?: PreparedRefresh[], layoutInvalid?: boolean, chainInvalid?: boolean }} CommitInput
+ *   prepared?: PreparedRefresh[] }} CommitInput
  */
 
 /**
@@ -547,7 +547,7 @@ export class Router {
 	// #swap out/in sequencing — every other path (matching, commit, interruption,
 	// failure recovery) is shared.
 	/** @type {'sequential' | 'overlap'} */
-	#defaultTransitionMode = 'sequential';
+	#defaultTransitionMode;
 	// ---- base path (v1.19, D51) ---------------------------------------------
 	// Serve the app under a sub-path. Normalized to '' (no base) or a leading-'/'
 	// no-trailing-'/' prefix. Applied at the SAME path-shape boundary as the mode
@@ -2826,7 +2826,7 @@ export class Router {
 	 * @param {CommitInput} next
 	 */
 	#commitState(next) {
-		const layoutInvalid = !!next.layoutInvalid || !!next.layout?.isDestroyed;
+		const layoutInvalid = !!next.layout?.isDestroyed;
 		this.#state = {
 			path: next.rawPath,
 			// The parsed URL parts (v1.49, D83), split ONCE by #navigate's
@@ -2840,8 +2840,7 @@ export class Router {
 			keys: next.keys,
 			layout: next.layout,
 			layoutClass: next.layoutClass,
-			chainInvalid:
-				layoutInvalid || !!next.chainInvalid || next.views.some((view) => view.isDestroyed),
+			chainInvalid: layoutInvalid || next.views.some((view) => view.isDestroyed),
 			layoutInvalid,
 		};
 		// A real commit ends any redirect chain. Blocks, failures, unmatched
@@ -3537,7 +3536,8 @@ export class Router {
 		// '_parent', '_top' and named frames all move a different browsing
 		// context — the browser has to do those. An explicit '_self' is the
 		// default spelled out (component libraries emit it), not an opt-out.
-		if (!isSelfTarget(a.getAttribute('target'))) return;
+		const target = a.getAttribute('target')?.trim().toLowerCase();
+		if (target && target !== '_self') return;
 		if (a.hasAttribute('download')) return;
 
 		const href = a.getAttribute('href');
@@ -3625,18 +3625,7 @@ export class Router {
  * Closed shadow roots never appear in the path, so links inside them stay
  * browser navigations. closest() stays as the fallback for synthetic events
  * carrying no composedPath.
- */
-/**
- * Whether a `target` names THIS frame: absent, empty, or '_self' (any case).
- * @param {string | null} target
- */
-function isSelfTarget(target) {
-	if (target == null) return true;
-	const t = target.trim().toLowerCase();
-	return t === '' || t === '_self';
-}
-
-/**
+ *
  * @param {MouseEvent} e
  * @returns {HTMLAnchorElement | null}
  */
