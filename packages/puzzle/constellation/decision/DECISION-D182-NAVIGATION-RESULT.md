@@ -13,6 +13,15 @@ connections:
   - DOC-ROUTER
   - DOC-RELEASE-SURFACE
   - TEST-ROUTER-NAVIGATION
+notes:
+  - kind: gotcha
+    text: >-
+      The in-flight slot is opened with PENDING (a real promise), so it is truthy during a
+      navigation's synchronous start. Two readers changed meaning with it: a push to the committed
+      path fired from created() during a POP's synchronous start is now an ordinary push (the D182
+      "pop in flight" row), and #navigate's departScroll reads null there (nothing departed over a
+      pop still loading). Test for the latch: tests/router-navigation-result.test.js "a replace()
+      whose constructor throws leaves nothing in flight".
 ---
 
 # D182 — push()/replace() resolve a NavigationResult
