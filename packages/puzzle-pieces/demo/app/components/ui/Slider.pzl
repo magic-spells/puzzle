@@ -131,8 +131,8 @@ import {
 // Gesture model (carried over from the source — the point of the port):
 //   1. GESTURE ARMING — a press on a THUMB starts dragging immediately; a press
 //      on the TRACK only ARMS: >3px of horizontal movement promotes it to a drag
-//      on the nearest thumb (which jumps under the pointer); a vertical touch
-//      swipe is the browser's (touch-pan-y, below). Equal-value (stacked) thumbs
+//      on the nearest thumb (which jumps under the pointer), while vertical-first
+//      movement past it disarms so the page scrolls. Equal-value (stacked) thumbs
 //      defer the thumb choice to the first move's direction.
 //   2. TOUCH CAPTURE AVOIDANCE — setPointerCapture is called for mouse/pen ONLY;
 //      touch rides implicit capture (explicit capture mid-touch fires a spurious
@@ -635,7 +635,11 @@ export default class Slider extends PuzzleView {
     const committed = this._committed(this.props, cfg);
 
     if (!drag.dragging) {
-      if (Math.abs(event.clientX - drag.startX) <= DRAG_THRESHOLD) return;
+      const deltaX = Math.abs(event.clientX - drag.startX);
+      const deltaY = Math.abs(event.clientY - drag.startY);
+      if (Math.max(deltaX, deltaY) <= DRAG_THRESHOLD) return;
+      // vertical intent → hand the gesture back to the browser for scrolling
+      if (deltaY > deltaX) return this._teardownGesture();
       // promote: the nearest thumb jumps under the pointer
       drag.thumb = this._nearestThumb(this._percentFromClientX(event.clientX), committed, cfg);
       drag.startValue = this._channel(committed, drag.thumb);

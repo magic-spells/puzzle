@@ -120,7 +120,8 @@ import {
 //     page, so it claims the axis outright (touch-none) and a touch that starts
 //     on it will never scroll the page. Put vertical faders in fixed panels and
 //     channel strips, not in the middle of a long scrolling page. A horizontal
-//     fader keeps touch-pan-y, so a vertical touch swipe stays the browser's.
+//     fader keeps touch-pan-y and hands a vertical-first gesture (decided past
+//     the drag threshold) back to the browser — gated on `yieldsToScroll`.
 //   Keyboard needs no branch at all: ArrowUp and ArrowRight both increase.
 
 const DRAG_THRESHOLD = 3;
@@ -147,11 +148,13 @@ const TICK_COLOR = 'bg-faint';
 const AXIS = {
   horizontal: {
     main: (e) => e.clientX,
+    cross: (e) => e.clientY,
     extent: (r) => r.width,
     origin: (r) => r.left,
     invert: false,
     // The cross axis IS the page-scroll axis, so leave panning to the browser.
     touch: 'touch-pan-y',
+    yieldsToScroll: true,
     size: 'h-10 w-full',
     cursor: 'cursor-ew-resize',
     ariaOrientation: 'horizontal',
@@ -169,12 +172,14 @@ const AXIS = {
   },
   vertical: {
     main: (e) => e.clientY,
+    cross: (e) => e.clientX,
     extent: (r) => r.height,
     origin: (r) => r.top,
     // Measured downward from rect.top, but the BOTTOM of the strip is min.
     invert: true,
     // Nothing to yield: this fader owns the vertical axis. See the header note.
     touch: 'touch-none',
+    yieldsToScroll: false,
     size: 'h-40 w-14 flex-col',
     cursor: 'cursor-ns-resize',
     ariaOrientation: 'vertical',
@@ -370,6 +375,7 @@ export default class Fader extends PuzzleView {
       armed: false,
       dragging: false,
       startMain: 0,
+      startCross: 0,
       startValue: 0,
     };
   }
@@ -456,7 +462,12 @@ export default class Fader extends PuzzleView {
     const axis = this._axis(props);
 
     if (!drag.dragging) {
-      if (Math.abs(axis.main(event) - drag.startMain) <= DRAG_THRESHOLD) return;
+      const deltaMain = Math.abs(axis.main(event) - drag.startMain);
+      const deltaCross = Math.abs(axis.cross(event) - drag.startCross);
+      if (Math.max(deltaMain, deltaCross) <= DRAG_THRESHOLD) return;
+      // Cross-axis intent hands the gesture back to the browser to scroll with —
+      // only where the cross axis IS the page-scroll axis (see ORIENTATION).
+      if (axis.yieldsToScroll && deltaCross > deltaMain) return this._teardownGesture();
       // promote: the value jumps under the pointer. There is no thumb to grab,
       // so this one rule covers every press.
       drag.startValue = this._committed(props, cfg);
@@ -537,6 +548,7 @@ export default class Fader extends PuzzleView {
         armed: true,
         dragging: false,
         startMain: axis.main(event),
+        startCross: axis.cross(event),
         startValue: 0,
       };
       this._addWindowListeners();

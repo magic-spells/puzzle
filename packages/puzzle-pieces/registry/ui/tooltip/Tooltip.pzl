@@ -70,7 +70,7 @@ const ARROW = {
   right: 'right-full top-1/2 -translate-y-1/2 translate-x-1/2',
 };
 
-const ARROW_BASE = 'pointer-events-none absolute size-2 rotate-45 rounded-xs bg-ink';
+const ARROW_BASE = 'pointer-events-none absolute size-2 rotate-45 bg-ink';
 
 export default class Tooltip extends PuzzleView {
   created() {
