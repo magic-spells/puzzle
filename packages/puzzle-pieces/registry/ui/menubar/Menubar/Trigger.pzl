@@ -1,5 +1,5 @@
 <puzzle-view>
-  <DropdownPanel.Trigger class={ triggerClass }><Children/></DropdownPanel.Trigger>
+  <DropdownPanel.Trigger class={ triggerClass }><Children>{ label }{#if arrow}<span data-dropdown-arrow aria-hidden="true"></span>{/if}</Children></DropdownPanel.Trigger>
 </puzzle-view>
 
 <script>
@@ -12,7 +12,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 // wrapper — the direct-children contract holds.
 //
 //   <Menubar.Trigger>File</Menubar.Trigger>
-//   <Menubar.Trigger variant="item">Export as</Menubar.Trigger>
+//   <Menubar.Trigger variant="item" label="Export as"/>
 //
 // To style the OPEN state, target the host the component owns —
 // `dropdown-component[visible] > dropdown-trigger` in your app CSS. The piece
@@ -27,8 +27,9 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //   variant  'bar' (default) — a top label in the bar
 //            'item' — an in-panel submenu row, matching Item's box, with the
 //                     chevron hook pushed to the trailing edge
-//   arrow    variant="item" only: true (default) renders the
-//            [data-dropdown-arrow] hook the effects stylesheet draws into
+//   label    the fallback body's text. Filling the body replaces all of it,
+//            and with it variant="item"'s [data-dropdown-arrow] chevron hook —
+//            so a submenu row takes its text as `label`.
 //   class    merged onto <dropdown-trigger>, after the variant chrome
 
 const FOCUS =
@@ -47,6 +48,8 @@ const ITEM =
 export default class Trigger extends PuzzleView {
   data(params, props) {
     return {
+      label: props.label != null ? String(props.label) : '',
+      arrow: props.variant === 'item',
       triggerClass: [props.variant === 'item' ? ITEM : BAR, props.class]
         .filter(Boolean)
         .join(' '),

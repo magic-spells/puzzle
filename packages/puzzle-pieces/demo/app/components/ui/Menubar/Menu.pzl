@@ -28,7 +28,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //   <Menubar.Content>
 //     <Menubar.Item value="save" @press={ run }>Save</Menubar.Item>
 //     <Menubar.Menu>
-//       <Menubar.Trigger variant="item">Export as</Menubar.Trigger>
+//       <Menubar.Trigger variant="item" label="Export as"/>
 //       <Menubar.Content opens="right">…</Menubar.Content>
 //     </Menubar.Menu>
 //   </Menubar.Content>
@@ -45,8 +45,8 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //
 // Props
 //   trigger  'hover' | 'click' | 'both' (default), forwarded
-//   arrow    'flip' | 'static' | 'none' (default here — bar labels carry no
-//            glyph; pass 'flip' if you add an arrow hook to the Trigger)
+//   arrow    'flip' (default) | 'static' | 'none' — drawn only into the hook
+//            a variant="item" Trigger renders; bar labels carry no glyph
 //   open     optional-controlled and edge-triggered, forwarded
 //   class    merged onto <dropdown-component>, after the load-bearing `block`
 //   @show / @hide  fired when THIS menu opens or closes; a nested submenu's
@@ -57,7 +57,7 @@ export default class Menu extends PuzzleView {
     return {
       rootClass: ['block', props.class].filter(Boolean).join(' '),
       triggerMode: props.trigger || 'both',
-      arrowMode: props.arrow || 'none',
+      arrowMode: props.arrow,
       openState: props.open,
     };
   }
