@@ -47,7 +47,7 @@ const RELS_INSTALLED = Symbol('puzzleRelationshipsInstalled');
 /**
  * D161 tracked-read attribution. A subscriber that reads the store through its
  * own HANDLE (a Proxy minted by `_handleFor`, adapter-side) carries that
- * handle's context here: `{ requests, dead }`. `withTracking` installs the
+ * handle's context here: `{ requests }`. `withTracking` installs the
  * evaluation's request map on the SUBSCRIBER'S context rather than on the
  * Store, so faulting is attributed by object identity — only reads made through
  * that handle, by that subscriber, during that evaluation can queue a fetch.
@@ -123,19 +123,18 @@ function assertModelSchemas(models) {
 export class Store {
 	/**
 	 * @param {object} models   type name → model class (from PuzzleApp config)
-	 * @param {{ storage?: Pick<Storage, 'getItem' | 'setItem'> | null, storageKey?: string, apiURL?: string,
+	 * @param {{ storage?: Pick<Storage, 'getItem' | 'setItem'> | null, apiURL?: string,
 	 *   adapter?: import('../capabilities.js').AdapterCapability, beforeRequest?: Function }} [options]
-	 *   { storage, storageKey, apiURL, adapter, beforeRequest } —
+	 *   { storage, apiURL, adapter, beforeRequest } —
 	 *   storage is any Storage-like object (getItem/setItem); pass
-	 *   window.localStorage to persist. apiURL is the base for the D21 server read
-	 *   path. adapter is the opaque app capability retained for the optional module;
+	 *   window.localStorage to persist under the key 'puzzle-store'. apiURL is
+	 *   the base for the D21 server read path. adapter is the opaque app capability retained for the optional module;
 	 *   core never imports or interprets it. beforeRequest is the adapter request
 	 *   hook (v1.55, D91) — see _fetch.
 	 */
 	constructor(models = {}, options = {}) {
 		this.models = /** @type {Record<string, typeof PuzzleModel>} */ (models);
 		this.storage = options.storage || null;
-		this.storageKey = options.storageKey || 'puzzle-store';
 		this.apiURL = options.apiURL || '';
 		this._a = options.adapter;
 		// Adapter request hook (v1.55, D91). Stored ONLY when it is a function, so
@@ -1098,37 +1097,25 @@ export class Store {
 	_persistNow() {
 		if (!this.storage) return;
 		try {
-			this.storage.setItem(this.storageKey, JSON.stringify(this._serializeAll()));
+			this.storage.setItem('puzzle-store', JSON.stringify(this._serializeAll()));
 		} catch {
 			// storage full / unavailable — persistence is best-effort
 		}
 	}
 
+	/**
+	 * Fail-soft end to end: _load() runs from the constructor, so anything it
+	 * throws — an unavailable storage, an unparseable blob, a hydration shape
+	 * _hydrateAll cannot recognise — would escape PuzzleApp construction and leave
+	 * a permanently blank page, with the bad blob still in storage so a reload
+	 * crashes again. Whatever hydrated before a failure is kept; the rest is
+	 * dropped with a warning. The HMR restore path calls _hydrateAll directly and
+	 * still propagates — that one is developer-facing.
+	 */
 	_load() {
-		let raw;
 		try {
-			raw = this.storage.getItem(this.storageKey);
-		} catch {
-			return;
-		}
-		if (!raw) return;
-
-		let data;
-		try {
-			data = JSON.parse(raw);
-		} catch {
-			return;
-		}
-		// Hydration is inside the guard too: _load() runs from the constructor, so
-		// anything it throws escapes PuzzleApp construction and leaves a permanently
-		// blank page — the bad blob is still in storage, so a reload crashes again.
-		// _hydrateAll's own fail-soft guards only cover shapes it can recognise
-		// (non-object data, per-record garbage); this catches the rest. Whatever
-		// hydrated before the failure is kept; the rest of the blob is dropped.
-		// The HMR restore path calls _hydrateAll directly and still propagates —
-		// that one is developer-facing.
-		try {
-			this._hydrateAll(data);
+			const raw = this.storage.getItem('puzzle-store');
+			if (raw) this._hydrateAll(JSON.parse(raw));
 		} catch (err) {
 			console.warn('[puzzle] ignoring corrupt persisted store:', err);
 		}

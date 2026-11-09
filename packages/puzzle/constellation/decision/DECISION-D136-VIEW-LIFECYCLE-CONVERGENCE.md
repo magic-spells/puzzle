@@ -15,6 +15,15 @@ connections:
   - FILE-VIEW-MANAGER
 verified_at: '2026-11-01T19:21:40.935Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 (feat/0.10-runtime-trims, review F2-Q3): the "spent-#outTask branch" is no longer
+      its own code path. playOut() runs one async task on `spent = #outTask !== null`. The rules
+      above hold unchanged: spent leaves still re-arm #leaving, unsubscribe and fire viewWillHide →
+      viewDidHide with zero duration, the task still rejects rather than throws, and viewDidHide is
+      still guarded on #leaving. Pinned by leave-inertness-and-hooks and router-transitions:
+      replaying the out animation on the spent case fails three tests.
 ---
 
 # D136 — anchor-race enter deferral, failure recovery, leave inertness, start-abort teardown

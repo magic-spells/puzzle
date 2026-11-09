@@ -792,11 +792,6 @@ export class PuzzleView {
 		return !!this.#errorView;
 	}
 
-	/** Preserve the manager's exact position before destroying this view. */
-	#plantFailurePlaceholder() {
-		return this.#vm?.plantFailurePlaceholder();
-	}
-
 	/** Tear down a replacement when its parent/router removes the position. */
 	#disposeFailurePosition() {
 		this.#errorView?.destroy();
@@ -821,7 +816,7 @@ export class PuzzleView {
 		if (this.#destroyed && !this.#errorView) return false;
 		if (this.#errorView) return true;
 
-		const placeholder = this.#plantFailurePlaceholder();
+		const placeholder = this.#vm?.plantFailurePlaceholder();
 		this.ctx.router?.__failedView?.(this);
 		this.destroy();
 		if (placeholder) this.__failedPlaceholder = placeholder;
@@ -1589,10 +1584,10 @@ export class PuzzleView {
 				// Torn down between prepare and commit: unwind the prepared subscriptions
 				// and touch nothing else (destroy() already dropped this subscriber).
 				if (this.#destroyed || this.#leaving) {
-					pending.reconcile?.(false);
+					pending.reconcile(false);
 					return;
 				}
-				pending.reconcile?.(true);
+				pending.reconcile(true);
 				this.#params = scope.params;
 				this.#props = scope.props;
 				this.#route = scope.route;
@@ -1649,7 +1644,7 @@ export class PuzzleView {
 				// Subscription-only unwind: drops just this run's own additions. No
 				// render, no lifecycle hook, no error-boundary/onStoreChange side effect —
 				// a discarded prepare must be invisible to the app (D145).
-				pending.reconcile?.(false);
+				pending.reconcile(false);
 			},
 		};
 	}
@@ -1734,7 +1729,7 @@ export class PuzzleView {
 			err
 		);
 		if (this.__errorViewFailed) {
-			const marker = this.#plantFailurePlaceholder();
+			const marker = this.#vm?.plantFailurePlaceholder();
 			this.__errorViewFailed();
 			marker?.remove();
 			return;
@@ -2239,77 +2234,41 @@ export class PuzzleView {
 		// Captured before #leaving is armed: #completeMount refuses to run on a
 		// leaving view, so this can never flip underneath the task below.
 		const shown = this.#mounted;
-		if (this.#outTask) {
-			// A restored view leaving for real. The out sequence is spent, so the
-			// animation must not replay — but D136's leave-inertness rule is about the
-			// LEAVE, not about the animation: re-arm #leaving and drop the subscription
-			// this view re-took during recovery, or it stays reactive on its way out.
-			//
-			// The HOOKS are not spent with it. viewWillHide/viewDidHide are lifecycle,
-			// not animation callbacks (D28), so a genuine departure fires them in order
-			// with zero-duration semantics — exactly the treatment a view declaring the
-			// hooks and no animation already gets. Without this, the only leave the user
-			// ever really made fired neither hook and went straight to destroyed().
-			// #outTask keeps naming the spent OUT so a third leave still skips the
-			// animation; #leaving names this interval and carries the hook bracket.
-			this.ctx.store?.unsubscribe(this);
-			let resolveLeaving;
-			let rejectLeaving;
-			this.#leaving = new Promise((resolve, reject) => {
-				resolveLeaving = resolve;
-				rejectLeaving = reject;
-			});
-			// An async task, not a bare call: a throwing user hook must REJECT the
-			// returned promise the way the full path does, never throw synchronously
-			// out of playOut() — #startOverlapLeave passes this straight into a
-			// Promise.all(), where a sync throw would escape its .catch entirely.
-			const spentTask = (async () => {
-				if (this.#destroyed || !shown) return;
-				this.viewWillHide();
-				await this.#runAnimation(undefined);
-				if (this.#destroyed || !this.#leaving) return;
-				this.viewDidHide();
-			})();
-			spentTask.then(resolveLeaving, rejectLeaving);
-			return this.#leaving;
-		}
+		// A restored view leaving for real finds its out sequence spent: the
+		// animation must not replay, but D136's leave-inertness and the D28 hide
+		// bracket still apply. #outTask keeps naming the spent OUT so a third leave
+		// still skips the animation; #leaving names this interval.
+		const spent = this.#outTask !== null;
 		let resolveLeaving;
 		let rejectLeaving;
 		this.#leaving = new Promise((resolve, reject) => {
 			resolveLeaving = resolve;
 			rejectLeaving = reject;
 		});
-		this.#outTask = this.#leaving;
+		if (!spent) this.#outTask = this.#leaving;
 		// Leaving views become inert immediately. Store.flush() snapshots its
 		// subscribers, so the method guards cover an already-snapshotted delivery;
 		// unsubscribing here prevents every later one. destroy() repeats this safely.
 		this.ctx.store?.unsubscribe(this);
-		// A new leave replaces any retained, finished out effect from an earlier
-		// run instead of accumulating another fill on the same root.
-		this._cancelOutAnimation();
-		const leavingTask = (async () => {
+		// A new leave replaces any retained, finished out effect from an earlier run.
+		if (!spent) this._cancelOutAnimation();
+		// An async task, not a bare call: a throwing user hook must REJECT the
+		// returned promise, never throw synchronously out of playOut() —
+		// #startOverlapLeave passes it straight into a Promise.all().
+		(async () => {
 			if (this.#destroyed) return;
-			// A held visible-trigger enter (D73) on this element must be unwound before
-			// the out animation runs on the same element — cancel the hold, proceed.
-			this.#abortEnter();
-			// …and #abortEnter only covers a VISIBLE-trigger enter. A mount-trigger enter
-			// still running is a live animation filling this same element (fill: 'both'),
-			// so the out spec would run CONCURRENTLY with it and #currentAnimation would
-			// simply be overwritten — the SPEC §12 one-animator rule. Cancel whatever
-			// still owns the element before the leave starts. That resolves the enter's
-			// finished promise (animate.js normalises WAAPI's cancel-time AbortError), so
-			// the awaiting playIn() resumes; its viewDidShow is suppressed by the #leaving
-			// check there.
-			this.#currentAnimation?.cancel();
-			this.#currentAnimation = null;
-			// Never shown: no hide bracket and no out animation (see the doc comment
-			// above). The view is already inert and unsubscribed; the caller's
-			// destroy() follows immediately.
+			if (!spent) {
+				// Unwind a held visible-trigger enter (D73), then cancel a still-running
+				// mount-trigger enter: it fills this same element, and the SPEC §12
+				// one-animator rule forbids running the out spec concurrently with it.
+				this.#abortEnter();
+				this.#currentAnimation?.cancel();
+				this.#currentAnimation = null;
+			}
+			// Never shown: no hide bracket and no out animation (see the doc comment).
 			if (!shown) return;
-			// A `trigger`/`triggerOffset`/`triggerAnchor` on the OUT spec is meaningless
-			// (leave is never scroll-gated) — warn once and ignore it; the leave path is
-			// unchanged (D73).
-			const out = this.animations?.out;
+			// Leave is never scroll-gated: an out-spec trigger is warned and ignored (D73).
+			const out = spent ? undefined : this.animations?.out;
 			if (
 				(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
 				out &&
@@ -2320,17 +2279,11 @@ export class PuzzleView {
 			}
 			this.viewWillHide();
 			await this.#runAnimation(out, { retainOut: true });
-			// Interrupted by destroy() — order preserved by it — or by
-			// _restoreFromLeaving(), which cancels the out animation and so RESOLVES the
-			// await above. A cleared #leaving means this view is back on screen, live and
-			// re-subscribed: firing its closing hook there would announce a departure
-			// that did not happen. The restore fires the SHOW bracket instead, and the
-			// eventual real leave re-arms #leaving and fires the full hide bracket
-			// through the spent-#outTask branch above.
+			// Interrupted by destroy(), or by _restoreFromLeaving(): a cleared #leaving
+			// means this view is back on screen, so its closing hook must not fire.
 			if (this.#destroyed || !this.#leaving) return;
 			this.viewDidHide();
-		})();
-		leavingTask.then(resolveLeaving, rejectLeaving);
+		})().then(resolveLeaving, rejectLeaving);
 		return this.#leaving;
 	}
 
@@ -2957,5 +2910,3 @@ export class PuzzleView {
 		});
 	}
 }
-
-export default PuzzleView;
