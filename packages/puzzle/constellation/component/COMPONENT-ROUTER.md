@@ -17,6 +17,20 @@ connections:
   - DECISION-D182-NAVIGATION-RESULT
 verified_at: '2026-11-01T19:25:13.521Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      Pop still loading (`#popInFlight && #pendingNavPromise`, the D182 pair push() already reads)
+      is now one rule in #handlePopState and #navigate: (1) a popstate home to the committed entry
+      (the D41 fragment branch, e.g. Back then Forward before the Back lands) supersedes the stale
+      pop with `#recoverFailedNavigation(++#token)` before #applyFragmentPop, so URL and tree stay
+      together (review C2#1); (2) no scroll save while a pop loads: #scrollKey already names the
+      popped entry, which was never on screen, so neither a second popstate nor a push over it files
+      the live position under that key (departScroll is null; #commitLocation skips the save)
+      (F1-B2/C2#2). No new state field. Regression tests: tests/router-fragment-pop.test.js "over a
+      pop still loading". Open and NOT built: F1-B1 (overlap recover restores a dead leaver), and
+      F1-B3 (nav #0 is invisible to the same-path rules; the fragment guard still needs a committed
+      #state).
 ---
 
 # Router
