@@ -322,12 +322,6 @@ describe('injectShell managed head surgery (D84)', () => {
 		expect(out.startsWith('<!doctype html><html><head><title>')).toBe(true);
 	});
 
-	it('title-only fallback (no head passed) is byte-compatible pre-D84: no managed tags', () => {
-		const out = injectShell(SHELL, { targetId: 'app', content: 'x', title: 'Legacy' });
-		expect(out).toContain('<title>Legacy</title>');
-		expect(out).not.toContain('data-puzzle-head');
-	});
-
 	it('a null head.title keeps the shell title (leave-alone, like document.title)', () => {
 		const out = injectShell(SHELL, {
 			targetId: 'app',
@@ -452,16 +446,6 @@ describe('injectShell head surgery — the pinned contract (D84/D151)', () => {
 		expect(out).toContain('<title>Body title</title>');
 		// the managed tags still land in <head>
 		expect(out.indexOf('data-puzzle-head="og:title"')).toBeLessThan(out.indexOf('</head>'));
-	});
-
-	it('the title-only (pre-D84) path is head-scoped too', () => {
-		const out = injectShell(SHELL_NO_TITLE, {
-			targetId: 'app',
-			content: '<svg><title>Icon label</title></svg>',
-			title: 'Legacy',
-		});
-		expect(out).toContain('<svg><title>Icon label</title></svg>');
-		expect(out).not.toContain('Legacy');
 	});
 
 	it('does NOT touch a data-puzzle-head marker in rendered body markup', () => {
@@ -600,7 +584,6 @@ describe('injectStaticShell head surgery (D84)', () => {
 		const out = injectStaticShell(SHELL, {
 			targetId: 'app',
 			content: null,
-			title: null,
 			head: null,
 			slug: 'spa',
 			data: {},
@@ -642,9 +625,7 @@ describe('head extras: hreflang alternates (D177)', () => {
 		expect(out).toContain('<div id="app" data-puzzle-ssg></div><link data-puzzle-head="alternate">');
 	});
 
-	it('the title-only path and a null head ignore headExtra', () => {
-		const titled = injectShell(SHELL, { targetId: 'app', content: '', title: 'T', headExtra: ALT });
-		expect(titled).not.toContain('hreflang');
+	it('a null head ignores headExtra', () => {
 		const spa = injectStaticShell(SHELL, {
 			targetId: 'app',
 			content: null,

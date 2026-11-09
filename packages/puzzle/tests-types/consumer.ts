@@ -675,8 +675,8 @@ app.setMorphHandler(handler);
 app.setMorphHandler(null);
 
 // ---------------------------------------------------------------------------
-// ssg subpath: prerendered pages carry the resolved head beside the
-// compatibility title (v1.50, D84); injectShell accepts it.
+// ssg subpath: prerendered pages carry the resolved head (v1.50, D84);
+// injectShell accepts it.
 // ---------------------------------------------------------------------------
 
 prerender(config).then((result: PrerenderResult) => {
@@ -689,11 +689,10 @@ prerender(config).then((result: PrerenderResult) => {
 		void description;
 		void canonical;
 	}
-	// title kept beside head for compatibility; head is optional on injectShell.
+	// head is optional on injectShell.
 	return injectShell('<html><head></head><body><div id="app"></div></body></html>', {
 		targetId: 'app',
 		content: page.html ?? '',
-		title: page.title,
 		head,
 		// The build's locale island (D175), inserted before `</body>`.
 		island: '',
@@ -732,7 +731,6 @@ prerender(config, { mode: 'static' }).then((result: PrerenderResult) => {
 	return injectStaticShell(shell, {
 		targetId: 'app',
 		content: page.html,
-		title: page.title,
 		head: page.head,
 		slug: 'index',
 		data: islandData ?? {},

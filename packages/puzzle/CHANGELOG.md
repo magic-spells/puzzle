@@ -215,6 +215,9 @@ one is *not* a compile error; it silently builds a different product.
   `Store` and `Router` also lose their `[key: string]: any` index signature,
   so a misspelt member such as `router.pushh()` is now a type error in
   `lang="ts"` views and `puzzle check`.
+- **BREAKING: `injectShell` / `injectStaticShell` (`/ssg`) take no `title`.**
+  Pass the resolved `head` (`prerender()` returns it on every page); without
+  one the shell's head is left as it is.
 
 ### Changed
 
