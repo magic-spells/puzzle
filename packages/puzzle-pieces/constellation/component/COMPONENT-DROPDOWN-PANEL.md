@@ -93,6 +93,15 @@ notes:
       list six effects (fade, slide, scale, blur, bloom, swing). The dead root `effect` is now gone
       from all six roots — Popover, DropdownMenu, DropdownMenu.Sub, ContextMenu, HoverCard,
       Menubar.Menu — plus their root doc rows and DropdownPanelDoc's root `effect="slide"`.
+  - kind: state
+    text: >-
+      2026-11-08 (feat/0.10-pieces-dialog-chat, review P13-B8, same shape as #245's
+      DropdownMenu.Sub): Menubar.Menu no longer forces arrow="none". It leaves arrow unset, so
+      upstream defaults to flip. Menubar.Trigger gained a D141 fallback body: `{ label }`, plus the
+      [data-dropdown-arrow] hook for variant="item" only. So submenu rows draw a right-pointing
+      chevron that flips on open, and bar labels still carry no glyph. Submenu examples use
+      `<Menubar.Trigger variant="item" label="Export as"/>`, because a filled body replaces the
+      hook. Verified in Chromium and WebKit on the MenubarDoc page.
 ---
 
 The registry's shared base for every trigger-and-panel overlay. A D167 family —

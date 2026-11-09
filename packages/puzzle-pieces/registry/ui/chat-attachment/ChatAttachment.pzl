@@ -1,34 +1,18 @@
 <puzzle-view>
   <div class={ rootClass }>
-    {#if href}
-      <a href={ href } download title={ name } class={ contentClass }>
-        <svg class="size-5 shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          {#for d in iconPaths}
-            <path d={ d } key={ d } />
-          {/for}
-        </svg>
-        <span class="min-w-0 flex flex-col">
-          <span class="truncate text-sm text-ink">{ name }</span>
-          {#if size}
-            <span class="text-xs text-muted">{ size }</span>
-          {/if}
-        </span>
-      </a>
-    {:else}
-      <span class={ contentClass } title={ name }>
-        <svg class="size-5 shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          {#for d in iconPaths}
-            <path d={ d } key={ d } />
-          {/for}
-        </svg>
-        <span class="min-w-0 flex flex-col">
-          <span class="truncate text-sm text-ink">{ name }</span>
-          {#if size}
-            <span class="text-xs text-muted">{ size }</span>
-          {/if}
-        </span>
+    <a href={ href } download={ download } title={ name } class={ contentClass }>
+      <svg class="size-5 shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        {#for d in iconPaths}
+          <path d={ d } key={ d } />
+        {/for}
+      </svg>
+      <span class="min-w-0 flex flex-col">
+        <span class="truncate text-sm text-ink">{ name }</span>
+        {#if size}
+          <span class="text-xs text-muted">{ size }</span>
+        {/if}
       </span>
-    {/if}
+    </a>
 
     {#if removable}
       <button
@@ -72,9 +56,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   @remove(name, event)  fired from the × button with the filename first
 //
 // The leading glyphs are inline stroke-current SVG PATHS only (no <text>)
-// tinted text-muted. The href/no-href branches repeat
-// the icon+label block because a single root can't swap only its tag name; the
-// shared class strings keep the two arms identical.
+// tinted text-muted. Without `href` the body is an <a> with no href: a
+// role-less, unfocusable placeholder, so one element serves both modes.
 
 // Extension → type map. Kept small and explicit; extend per app. Unlisted
 // extensions (and files with none) resolve to the generic 'file' document icon.
@@ -119,7 +102,7 @@ const ICONS = {
 };
 
 const ROOT_BASE =
-  'inline-flex max-w-[16rem] items-center gap-2 rounded-lg border border-border ' +
+  'inline-flex max-w-64 items-center gap-2 rounded-lg border border-border ' +
   'bg-surface px-3 py-2';
 
 function resolveType(props) {
@@ -138,7 +121,8 @@ export default class ChatAttachment extends PuzzleView {
     return {
       name,
       size: props.size || '',
-      href: props.href || '',
+      href: props.href || false,
+      download: !!props.href,
       removable: !!props.removable,
       disabled,
       removeLabel: `Remove ${name}`,

@@ -1,5 +1,5 @@
 <puzzle-view>
-  <div class={ rootClass }>
+  <div class={ rootClass } @focusout={ onFocusOut(event) }>
     {#if label}
       <label for={ triggerId } class="mb-1.5 block text-sm font-medium text-ink">{ label }</label>
     {/if}
@@ -172,7 +172,7 @@ import { parseISODate, toDate } from '../../lib/date-math.js';
 // instead.) Escape closes and returns focus to the trigger — Calendar lets days-view
 // Escape bubble up to this handler, while its months/years views consume Escape to back
 // out hierarchically. Outside-click dismisses via a document pointerdown listener that
-// lives only while open.
+// lives only while open; tabbing out of the panel closes it too.
 //
 // MORPH. When `morph` is on (and motion isn't reduced) a MorphEngine animates the
 // trigger↔panel transform. The panel opens CENTERED on the trigger — horizontally and
@@ -544,6 +544,12 @@ export default class DatePicker extends PuzzleView {
         event.preventDefault();
         this._requestOpen();
       }
+    },
+
+    // Tab out closes. A null relatedTarget (non-focusable click, re-rendered cell) is not leaving.
+    onFocusOut: (event) => {
+      const to = event.relatedTarget;
+      if (to && !this.element.contains(to)) this._requestClose({ restoreFocus: false });
     },
 
     // Escape from the panel. Calendar's days view lets Escape bubble here (its months/years
