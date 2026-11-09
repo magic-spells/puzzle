@@ -172,6 +172,12 @@
   --shadow-kbd: inset 0 -1px 0 var(--color-border);
 }
 
+/* Type — scheme-agnostic, so outside the palette block the theme files restate. */
+@theme {
+  --text-code: 0.8125rem; /* 13px — code blocks, inline code */
+  --text-code--line-height: 1.25rem;
+}
+
 /*
  * DIM — `color-scheme: dark` resolves every pair above to its dark half; only
  * the tokens whose dim value differs are restated.

@@ -5,8 +5,6 @@ framework: puzzle
 props:
   - name: disabled
     type: boolean
-  - name: effect
-    type: string
   - name: class
     type: string
 connections:
@@ -16,7 +14,6 @@ connections:
   - DECISION-CONFIG-FIRST-API
   - DOC-REGISTRY
 ---
-
 
 A D167 family in `registry/ui/context-menu/ContextMenu/`: root, `.Content` and the barrel —
 three files. The root composes [[COMPONENT-DROPDOWN-PANEL]] with `menu` and

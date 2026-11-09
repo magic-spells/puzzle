@@ -32,6 +32,16 @@ notes:
       such runs on one line. Also: getComputedStyle().getPropertyValue('--color-x') returns the
       UNRESOLVED light-dark() text; the demo resolves colours by applying the var to a probe
       element's background-color and reading that.
+  - kind: state
+    text: >-
+      pieces.css now has a second, type-only `@theme` block after the palette block, holding
+      `--text-code` (0.8125rem / 1.25rem line-height). It sits outside the palette block on purpose:
+      themes.test's token contract reads only the first `@theme` block, so cool/warm/void do not
+      restate a scheme-agnostic size. The demo's duplicate definition in styles.css is gone.
+      Code.pzl, markdown-doc.js and rich-text-doc.js use `text-code` instead of `text-[13px]`. An
+      app with an older pieces.css lacks the token until it runs `puzzle add theme default`, and
+      add-piece's stale-theme hint already prints that.
+    sha: 0c470749
 ---
 
 # Puzzle themes — four palettes × three modes, appearance runtime, design-system demo

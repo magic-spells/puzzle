@@ -384,6 +384,73 @@ describe('Router fragment pop — what still navigates', () => {
 	});
 });
 
+// ---- a pop still loading (C2#1, F1-B2) -------------------------------------
+
+describe('Router fragment pop — over a pop still loading', () => {
+	// /slow's data() waits on `gate` while one is set: the Back below loads slowly.
+	let gate;
+	class SlowView extends PuzzleView {
+		async data() {
+			await gate?.promise;
+			return {};
+		}
+		render() {
+			return h('puzzle-view', { class: 'slow' }, [text('SLOW')]);
+		}
+	}
+	const SLOW_ROUTES = [...ROUTES, { path: '/slow', name: 'slow', view: SlowView }];
+	const deferred = () => {
+		let resolve;
+		const promise = new Promise((r) => (resolve = r));
+		return { promise, resolve };
+	};
+	const savedY = (state) => JSON.parse(sessionStorage.getItem('__puzzleScroll'))[state.__puzzleScrollKey]?.y;
+
+	beforeEach(() => {
+		gate = null;
+	});
+
+	it('Back then Forward before the Back lands keeps the URL, tree and scroll on the committed page', async () => {
+		const { router, el } = await boot(SLOW_ROUTES, undefined, '/slow');
+		const slowState = history.state;
+		setScroll(0, 100);
+		await router.push('/about');
+		const aboutState = history.state;
+		setScroll(0, 200);
+
+		gate = deferred();
+		traverseTo(slowState, '/slow'); // Back — /slow's data() is held
+		await tick();
+		traverseTo(aboutState, '/about'); // Forward, home to the committed entry
+		gate.resolve();
+		await tick();
+
+		expect(location.pathname).toBe('/about');
+		expect(router.current.path).toBe('/about');
+		expect(el.textContent).toBe('ABOUT');
+		expect(window.scrollY).toBe(200);
+		expect(savedY(slowState)).toBe(100); // not /about's 200 under /slow's key
+	});
+
+	it("a push over a loading pop files no position under the popped entry's key", async () => {
+		const { router } = await boot(SLOW_ROUTES, undefined, '/slow');
+		const slowState = history.state;
+		setScroll(0, 100);
+		await router.push('/about');
+		setScroll(0, 200);
+
+		gate = deferred();
+		traverseTo(slowState, '/slow');
+		await tick();
+		await router.push('/docs');
+		gate.resolve();
+		await tick();
+
+		expect(router.current.path).toBe('/docs');
+		expect(savedY(slowState)).toBe(100);
+	});
+});
+
 // ---- hash routing keeps its own D34/D41 behavior ---------------------------
 
 describe('Router fragment pop — hash routing (D34/D41)', () => {

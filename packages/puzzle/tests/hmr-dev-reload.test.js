@@ -33,8 +33,7 @@ class Todo extends PuzzleModel {
 }
 
 // A routed view that reads its own local state back through getData() (the
-// documented read-back idiom) and derives a store query. data() does NOT re-run
-// on setData, so the restored setData state shows through directly.
+// documented read-back idiom), derives a key from it, and derives a store query.
 let lastEditor = null;
 class EditorView extends PuzzleView {
 	data() {
@@ -42,6 +41,7 @@ class EditorView extends PuzzleView {
 		return {
 			draft: s.draft ?? '',
 			pinned: s.pinned ?? false,
+			hasDraft: Boolean(s.draft),
 			todos: this.ctx.store.findMany('todo'),
 		};
 	}
@@ -387,6 +387,7 @@ describe('HMR dev reload — two-phase restore (§27, D57; Change D)', () => {
 		await fresh.mount();
 		expect(fresh.store.findOne('todo', 't1').text).toBe('in-store'); // phase 1
 		expect(lastEditor.getData().draft).toBe('mid-edit draft'); // phase 2
+		expect(lastEditor.getData().hasDraft).toBe(true); // data() re-ran on the restored draft
 	});
 });
 

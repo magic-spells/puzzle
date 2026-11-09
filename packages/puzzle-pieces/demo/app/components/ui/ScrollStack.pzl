@@ -123,12 +123,9 @@ import { PuzzleView } from '@magic-spells/puzzle';
 
 // A prop that was not passed renders no attribute — `false` is the compiler's
 // omit sentinel, the same one ScrollArea uses for its optional role/label.
+// Values pass through as-is: the element validates and defaults its own enums.
 function attr(value) {
   return value === undefined || value === null || value === '' ? false : String(value);
-}
-
-function oneOf(value, allowed) {
-  return allowed.includes(value) ? value : false;
 }
 
 export default class ScrollStack extends PuzzleView {
@@ -140,31 +137,19 @@ export default class ScrollStack extends PuzzleView {
     return {
       rootClass: props.class || false,
       rootStyle: declarations.length ? declarations.join(';') : false,
-      directionAttr: oneOf(props.direction, ['vertical', 'horizontal']),
-      effectAttr: oneOf(props.effect, [
-        'stack-fade',
-        'fade-scale',
-        'fade',
-        'scale',
-        'none',
-      ]),
-      pinAttr: oneOf(props.pin, ['start', 'end', 'both', 'none']),
+      directionAttr: attr(props.direction),
+      effectAttr: attr(props.effect),
+      pinAttr: attr(props.pin),
       zoneAttr: attr(props.zone),
-      edgesAttr: oneOf(props.edges, ['both', 'start', 'end']),
-      // presence alone means "snap to starts"; normalize `true` to the explicit
-      // value so the attribute never renders empty
-      snapAttr:
-        props.snap === true ? 'start' : oneOf(props.snap, ['start', 'center', 'proximity']),
+      edgesAttr: attr(props.edges),
+      // presence alone means "snap to starts", so `false` must omit the attribute
+      // (attr() would render "false", which the element reads as snapping ON)
+      snapAttr: props.snap === true ? 'start' : props.snap || false,
       perViewAttr: attr(props.perView),
       itemMinAttr: attr(props.itemMin),
       itemMaxAttr: attr(props.itemMax),
-      easingAttr: oneOf(props.easing, [
-        'linear',
-        'ease-in',
-        'ease-out',
-        'ease-in-out',
-      ]),
-      reducedMotionAttr: oneOf(props.reducedMotion, ['auto', 'ignore']),
+      easingAttr: attr(props.easing),
+      reducedMotionAttr: attr(props.reducedMotion),
       // an explicit value rather than a bare boolean: `disabled` is a real
       // boolean attribute on native elements but only an attribute on a custom
       // one, and the component reads it with hasAttribute()

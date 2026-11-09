@@ -13,7 +13,6 @@ import (
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/locales"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
-	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
 
 // WatchBuilder is the incremental esbuild driver for `puzzle dev` (D27). It
@@ -35,8 +34,8 @@ type WatchBuilder struct {
 	// or app/app.js). The esbuild context is frozen over it, so every rebuild
 	// re-resolves and refuses to go on once the answer changes.
 	appEntry string
-	// refused holds the changed paths of rebuilds the entry check turned away,
-	// replayed into the next rebuild.
+	// refused holds the changed paths of rebuilds that failed, replayed into
+	// the next rebuild: a batch is consumed only once its effects land in dist.
 	refused []string
 	pl      *plugin.Plugin
 	ctx     api.BuildContext
@@ -269,15 +268,14 @@ func (b *WatchBuilder) RebuildProfile(changed []string, prof *PhaseProfile) (Reb
 
 func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildResult, error) {
 	var out RebuildResult
-	// A batch the entry check refuses is carried into the next rebuild rather
-	// than dropped: the usage scan, locale reload and public sync below all key
-	// off `changed`, and the rebuild after the fix must still see those paths.
+	// A failed batch is carried into the next rebuild rather than dropped: the
+	// usage scan, locale reload and public sync below all key off `changed`, and
+	// the rebuild after the fix must still see those paths.
 	changed = append(b.refused, changed...)
+	b.refused = changed
 	if err := entryUnchanged(b.root, b.appEntry); err != nil {
-		b.refused = changed
 		return out, err
 	}
-	b.refused = nil
 	currentPublic := publicDir(b.root)
 	syncPublic := !b.landed || currentPublic != b.publicSource ||
 		pathsTouchDir(changed, currentPublic) || pathsTouchDir(changed, b.publicSource)
@@ -334,12 +332,7 @@ func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildRes
 		// onLoad callbacks for otherwise-valid files may already have changed the
 		// plugin's candidate CSS. Do not prune or promote it: CSS() continues to
 		// return the last fully successful snapshot.
-		lines := api.FormatMessages(result.Errors, api.FormatMessagesOptions{
-			Kind:          api.ErrorMessage,
-			Color:         ui.New(os.Stderr).Enabled(),
-			TerminalWidth: 0,
-		})
-		return out, fmt.Errorf("puzzle build failed:\n%s", strings.Join(lines, "\n"))
+		return out, formatBuildErrors("puzzle build failed", result.Errors)
 	}
 	if !publicOnly && b.splitting {
 		// Write:false is on, so nothing has reached dist yet. Materialize this
@@ -402,6 +395,7 @@ func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildRes
 		b.pendingBundleCommit = false
 		b.commitLocales()
 	}
+	b.refused = nil
 	b.landed = true
 	return out, nil
 }

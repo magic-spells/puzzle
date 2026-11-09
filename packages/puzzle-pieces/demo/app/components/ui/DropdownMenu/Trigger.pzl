@@ -12,7 +12,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 // its single root with no wrapper — the direct-children contract holds.
 //
 //   <DropdownMenu.Trigger>Options</DropdownMenu.Trigger>
-//   <DropdownMenu.Trigger variant="item">Export as</DropdownMenu.Trigger>
+//   <DropdownMenu.Trigger variant="item" label="Export as"/>
 //   <DropdownMenu.Trigger variant="bare" class="p-1.5" label="Actions">
 //     <svg …/>
 //   </DropdownMenu.Trigger>

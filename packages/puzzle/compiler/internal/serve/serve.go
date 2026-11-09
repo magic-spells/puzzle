@@ -76,10 +76,10 @@ func Resolve(dist, mode, urlPath string) Result {
 	}
 
 	candidate := filepath.Join(dist, filepath.FromSlash(strings.TrimPrefix(clean, "/")))
-	// withinDir is lexical; withinDirResolved backstops it for a symlink under
+	// WithinDir is lexical; withinDirResolved backstops it for a symlink under
 	// dist pointing outside. A path that escapes is treated as a miss, never
 	// served.
-	if withinDir(dist, candidate) {
+	if WithinDir(dist, candidate) {
 		if isFile(candidate) && withinDirResolved(dist, candidate) {
 			if candidate == index && mode != ModeStatic {
 				// "/index.html" is the root document, same as "/".
@@ -120,7 +120,7 @@ func missing(dist, clean string) Result {
 	seg, _, _ := strings.Cut(strings.TrimPrefix(clean, "/"), "/")
 	if seg != "" && seg != "." && seg != ".." {
 		page := filepath.Join(dist, seg, "404.html")
-		if withinDir(dist, page) && isFile(page) && hasEntryNamed(dist, seg) && withinDirResolved(dist, page) {
+		if WithinDir(dist, page) && isFile(page) && hasEntryNamed(dist, seg) && withinDirResolved(dist, page) {
 			return Result{File: page, HTML: true, Status: 404}
 		}
 	}
@@ -156,9 +156,9 @@ func isHTMLName(path string) bool {
 	return ext == ".html" || ext == ".htm"
 }
 
-// withinDir reports whether target resolves inside dir (path-traversal guard).
+// WithinDir reports whether target resolves inside dir (path-traversal guard).
 // It is purely lexical — see withinDirResolved for the symlink-aware backstop.
-func withinDir(dir, target string) bool {
+func WithinDir(dir, target string) bool {
 	rel, err := filepath.Rel(dir, target)
 	if err != nil {
 		return false
@@ -178,7 +178,7 @@ func withinDirResolved(dir, target string) bool {
 	if err != nil {
 		return false
 	}
-	return withinDir(realDir, realTarget)
+	return WithinDir(realDir, realTarget)
 }
 
 // PortScanLimit is how many consecutive ports Listen tries before giving up.

@@ -383,10 +383,8 @@ export type BeforeRequestHook = (
 
 /** Store construction options (wired by `PuzzleApp` from its config). */
 export interface StoreOptions {
-	/** Storage-like object for opt-in persistence. */
+	/** Storage-like object for opt-in persistence (key `'puzzle-store'`). */
 	storage?: any;
-	/** Persistence key (default `'puzzle-store'`). */
-	storageKey?: string;
 	/** Base URL for the server read/write path. */
 	apiURL?: string;
 	/** Adapter request hook (D91). */
@@ -1134,7 +1132,6 @@ export declare class ViewNode {
 	readonly isComponent: boolean;
 	readonly isSlot: boolean;
 	readonly isSnippet: boolean;
-	readonly isPortal: boolean;
 	readonly props: Record<string, any>;
 }
 

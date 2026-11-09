@@ -31,7 +31,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //   align   'start' (default) | 'end'
 //   wide    full-width panel spanning the nearest positioned ancestor
 //   opens   'down' (default) | 'right' for a nested submenu
-//   effect  'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
+//   effect  'fade' | 'slide' | 'scale' | 'blur' | 'bloom' | 'swing' (effects sheet only)
 //   class   merged onto <dropdown-panel>.
 //           Merging is not precedence: a utility of yours on a property the
 //           stock chrome already sets wins only if Tailwind emits it LATER in

@@ -63,14 +63,8 @@ Existing files are never overwritten unless --force (-f) is given.`,
 			}
 		}
 
+		// FindProjectRoot walks up from the working directory when --dir is empty.
 		start, _ := cmd.Flags().GetString("dir")
-		if start == "" {
-			cwd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
-			start = cwd
-		}
 		root, err := generate.FindProjectRoot(start)
 		if err != nil {
 			return err

@@ -17,6 +17,16 @@ connections:
   - DECISION-D188-TICK
 verified_at: '2026-11-01T19:26:46.557Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      2026-11-08 runtime trims (feat/0.10-runtime-trims; review F2-Q1/Q3/Q4). playOut() is now one
+      path keyed on `const spent = this.#outTask !== null`. The spent case (a restored view leaving
+      for real) skips only the #outTask arm, _cancelOutAnimation, the enter cancel and the out spec.
+      It still re-arms #leaving, unsubscribes and fires the zero-duration hide bracket in the same
+      async task. The #plantFailurePlaceholder wrapper is inlined, and pending.reconcile is called
+      without `?.` (the getter always returns a function). The default export is removed; index.js
+      re-exports named bindings only.
 ---
 
 # PuzzleView

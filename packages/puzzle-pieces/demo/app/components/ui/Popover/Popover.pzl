@@ -4,7 +4,6 @@
     trigger="click"
     arrow="none"
     open={ openState }
-    effect={ effect }
     @show={ onShow() }
     @hide={ onHide() }><Children/></DropdownPanel>
 </puzzle-view>
@@ -64,7 +63,6 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //
 // Props
 //   open    optional-controlled, edge-triggered
-//   effect  'fade' | 'slide' | 'scale' | 'blur' | 'swing' (effects sheet only)
 //   class   merged onto <dropdown-component>
 //   @show / @hide  fired when THIS popover opens or closes. A nested dropdown's
 //           events are filtered out by the base — see DropdownPanel.pzl.
@@ -74,7 +72,6 @@ export default class Popover extends PuzzleView {
     return {
       rootClass: props.class || false,
       openState: props.open,
-      effect: props.effect,
     };
   }
 

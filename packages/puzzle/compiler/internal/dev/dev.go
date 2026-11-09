@@ -281,7 +281,7 @@ func Serve(root string, opts Options) error {
 	// needs a second watcher). Using build.PublicDir keeps the watched dir in
 	// lockstep with the dir the copier actually reads.
 	watchDirs := []string{appDir}
-	if pub := build.PublicDir(absRoot); pub != "" && !withinDir(appDir, pub) {
+	if pub := build.PublicDir(absRoot); pub != "" && !serve.WithinDir(appDir, pub) {
 		watchDirs = append(watchDirs, pub)
 	}
 	// puzzle.config.js is watched too, but NOT to rebuild: the config is loaded
@@ -503,20 +503,11 @@ func Serve(root string, opts Options) error {
 		// with a reserved output (app.js/app.js.map/styles.css) while the server
 		// runs must surface as a visible build error, not a silent clobber.
 		endPublicValidation := prof.Phase("public validation")
-		if err := build.ValidatePublic(absRoot, splitting, cfg.I18n); err != nil {
-			endPublicValidation()
-			logBuildFailure(stderr, err)
-			message := err.Error()
-			srv.rememberBuildError(message)
-			srv.hub.broadcast(hubMessage{event: buildErrorEvent, payload: message})
-			if opts.onRebuild != nil {
-				opts.onRebuild(err)
-			}
-			return err
-		}
+		err := build.ValidatePublic(absRoot, splitting, cfg.I18n)
 		endPublicValidation()
-		var err error
 		switch {
+		case err != nil:
+			// Reported below, like any build failure.
 		case staticBuilder != nil:
 			// The real static pipeline, incrementally: persistent esbuild contexts
 			// for the app, prerender, and per-page passes, composed into a fresh
@@ -596,10 +587,6 @@ func Serve(root string, opts Options) error {
 			}
 			timer.Reset(debounceInterval)
 		}
-	} else if staticMode {
-		// The one-shot static fallback composes styles inside its own build, and
-		// runs Tailwind itself — no warm child exists to call this.
-		stylesChanged = func() { _ = rebuild(nil, false, nil) }
 	} else {
 		stylesChanged = func() {
 			if err := pl.recompose(); err != nil {
@@ -1233,20 +1220,10 @@ func injectReload(html []byte) []byte {
 	return append(html, []byte("\n"+reloadScript+"\n")...)
 }
 
-// withinDir reports whether target resolves inside dir (path-traversal guard).
-// It is purely lexical — see withinDirResolved for the symlink-aware backstop.
-func withinDir(dir, target string) bool {
-	rel, err := filepath.Rel(dir, target)
-	if err != nil {
-		return false
-	}
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
 // withinAnyDir reports whether target lies inside any of dirs.
 func withinAnyDir(dirs []string, target string) bool {
 	for _, d := range dirs {
-		if withinDir(d, target) {
+		if serve.WithinDir(d, target) {
 			return true
 		}
 	}
@@ -1322,24 +1299,6 @@ func isJunkChange(path string) bool {
 		}
 	}
 	return false
-}
-
-// withinDirResolved reports whether target, after symlink resolution, is inside
-// dir (also symlink-resolved). It backstops the lexical withinDir: a symlink
-// under dist pointing outside passes that check, but http.ServeFile would follow
-// it. Resolving dir too normalizes a symlinked prefix (e.g. macOS /tmp →
-// /private/tmp) so a legitimate in-root file is not wrongly rejected. A
-// resolution error (e.g. the path vanished) is treated as outside — fail closed.
-func withinDirResolved(dir, target string) bool {
-	realDir, err := filepath.EvalSymlinks(dir)
-	if err != nil {
-		return false
-	}
-	realTarget, err := filepath.EvalSymlinks(target)
-	if err != nil {
-		return false
-	}
-	return withinDir(realDir, realTarget)
 }
 
 // reloadCoalesceDelay collapses the double reload (esbuild rebuild + Tailwind

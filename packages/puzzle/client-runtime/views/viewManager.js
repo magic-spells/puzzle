@@ -186,13 +186,26 @@ export function moveManager(vm, container, ref) {
 	vm.container = container;
 }
 
+/**
+ * What a clone must carry to stay patchable: the live links of the vnode it
+ * replaces (fresh, unmounted vnodes just copy nulls).
+ * @param {ViewNode} from
+ * @param {ViewNode} to
+ */
+function carryLinks(from, to) {
+	to.el = from.el;
+	to.component = from.component;
+	to.instance = from.instance;
+	if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
+		to.takeoverPreloaded = from.takeoverPreloaded;
+		to.takeoverFailed = from.takeoverFailed;
+	}
+}
+
 /** @param {ViewNode} vnode */
 function keepOutgoing(vnode) {
 	const copy = new ViewNode(vnode.tag, vnode.attrs, vnode.children);
-	copy.key = vnode.key;
-	copy.el = vnode.el;
-	copy.component = vnode.component;
-	copy.instance = vnode.instance;
+	carryLinks(vnode, copy);
 	if (vnode.tag === HTML_TAG) copy.nodes = vnode.nodes;
 	else if (vnode.tag === PORTAL_TAG) copy.portal = vnode.portal;
 	else if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
@@ -644,14 +657,7 @@ function stripSlotAttr(vnode) {
 		clone.slotEnd = vnode.slotEnd;
 	}
 	slotClones.set(vnode, clone);
-	clone.key = vnode.key;
-	clone.el = vnode.el;
-	clone.component = vnode.component;
-	clone.instance = vnode.instance;
-	if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
-		clone.takeoverPreloaded = vnode.takeoverPreloaded;
-		clone.takeoverFailed = vnode.takeoverFailed;
-	}
+	carryLinks(vnode, clone);
 	return clone;
 }
 
@@ -712,24 +718,9 @@ function expandNode(vnode, parts) {
 	if (!out) return vnode;
 
 	const clone = new ViewNode(vnode.tag, vnode.attrs, out);
-	clone.key = vnode.key;
+	carryLinks(vnode, clone);
 	if ((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) &&
-		vnode.tag === COMPONENT_SLOT_TAG) {
-		clone.el = vnode.el;
-		clone.slotEnd = vnode.slotEnd;
-	}
-	if (vnode.isComponent) {
-		// Mirror stripSlotAttr's clone: preserve the live links so patch/teardown
-		// keep working if this vnode has already been mounted (fresh render-tree
-		// clones just copy nulls).
-		clone.el = vnode.el;
-		clone.component = vnode.component;
-		clone.instance = vnode.instance;
-		if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
-			clone.takeoverPreloaded = vnode.takeoverPreloaded;
-			clone.takeoverFailed = vnode.takeoverFailed;
-		}
-	}
+		vnode.tag === COMPONENT_SLOT_TAG) clone.slotEnd = vnode.slotEnd;
 	return clone;
 }
 
@@ -1530,18 +1521,6 @@ function syncControlChecked(el, value, owner) {
 }
 
 /**
- * Re-assert every controlled value in ONE element's attrs — the element-level
- * composition of the three live-DOM comparisons the ordinary patch path runs
- * across patchAttrs and the post-children select re-assert.
- *
- * patchAttrs deliberately keeps its own per-attr dispatch instead of calling
- * this: hoisting the whole element to one call would move the `value`/`checked`
- * writes out of the attrs iteration order, and <select> must keep asserting its
- * controlled value AFTER its <option> children patch (see reassertSelectValue),
- * not during the attr pass. A cached subtree has no attr pass and no children
- * pass at all, so for it the order is this function's order.
- */
-/**
  * The three form tags whose `value`/`checked` the patcher re-asserts against the
  * LIVE DOM. The same predicate listBlock's `collectControls` walks with — a
  * `<li value="3">` or a `<progress value=…>` is not a control and keeps the
@@ -1555,6 +1534,17 @@ function isControlTag(tag) {
 }
 
 /**
+ * Re-assert every controlled value in ONE element's attrs — the element-level
+ * composition of the three live-DOM comparisons the ordinary patch path runs
+ * across patchAttrs and the post-children select re-assert.
+ *
+ * patchAttrs deliberately keeps its own per-attr dispatch instead of calling
+ * this: hoisting the whole element to one call would move the `value`/`checked`
+ * writes out of the attrs iteration order, and <select> must keep asserting its
+ * controlled value AFTER its <option> children patch (see reassertSelectValue),
+ * not during the attr pass. A cached subtree has no attr pass and no children
+ * pass at all, so for it the order is this function's order.
+ *
  * @param {Node} el a control's live element (dispatched on nodeName)
  * @param {Record<string, any>} attrs
  * @param {PuzzleView | null} owner
@@ -1825,7 +1815,7 @@ function unmount(vnode, immediate = false) {
 		// timing every non-animating removal already has. playOut() carries the same
 		// rule for the router's leave paths, which never come through here.
 		if (!((typeof __PUZZLE_HAS_COMPONENT_SLOT__ === 'undefined' || __PUZZLE_HAS_COMPONENT_SLOT__) && immediateUnmount) &&
-			child.__isMounted && (child?.animations?.out || child?.__hasHideHooks)) {
+			child.__isMounted && (child.animations?.out || child.__hasHideHooks)) {
 			const leavingEl = child.element;
 			if (leavingEl && leavingEl.nodeType === 1 /* ELEMENT_NODE */) {
 				leavingEls.add(leavingEl);
@@ -1834,7 +1824,7 @@ function unmount(vnode, immediate = false) {
 				child.destroyAnimated();
 			}
 		} else {
-			child?.destroy();
+			child.destroy();
 		}
 		// Drop the links to the instance this vnode just gave up (D170, identity
 		// short-circuit). A vnode is no longer single-use: the same object can come
@@ -2627,5 +2617,3 @@ function inSvgNamespace(tag, parent) {
 	if (tag === 'svg') return true;
 	return /** @type {Element} */ (parent).namespaceURI === SVG_NS && parent.nodeName.toLowerCase() !== 'foreignobject';
 }
-
-export default ViewManager;

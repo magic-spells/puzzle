@@ -6,7 +6,6 @@
     trigger={ triggerMode }
     arrow={ arrowMode }
     open={ openState }
-    effect={ effect }
     @show={ onShow }
     @hide={ onHide }
     @select={ onSelect }><Children/></DropdownPanel>
@@ -32,7 +31,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //       <DropdownMenu.Link href="/docs">Docs</DropdownMenu.Link>
 //       <DropdownMenu.Separator/>
 //       <DropdownMenu.Sub>
-//         <DropdownMenu.Trigger variant="item">Export as</DropdownMenu.Trigger>
+//         <DropdownMenu.Trigger variant="item" label="Export as"/>
 //         <DropdownMenu.Content opens="right">
 //           <DropdownMenu.Item value="pdf" @press={ run }>PDF</DropdownMenu.Item>
 //         </DropdownMenu.Content>
@@ -76,7 +75,6 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //            the [data-dropdown-arrow] hook. Effects stylesheet only.
 //   open     optional-controlled and edge-triggered, forwarded to the base:
 //            leave it off and the component owns its own state.
-//   effect   'fade' | 'slide' | 'scale' | 'blur' | 'swing'. Effects sheet only.
 //   sub      internal — set by DropdownMenu.Sub so a nested root does not
 //            report @select twice. Do not pass it yourself.
 //   class    merged onto <dropdown-component>, after `inline-block relative`
@@ -109,7 +107,6 @@ export default class DropdownMenu extends PuzzleView {
       triggerMode: props.trigger || 'click',
       arrowMode: props.arrow || 'none',
       openState: props.open,
-      effect: props.effect,
     };
   }
 

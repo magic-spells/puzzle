@@ -15,6 +15,16 @@ connections:
   - DECISION-D182-NAVIGATION-RESULT
   - DECISION-D157-ADAPTER-SUBPATH
   - DECISION-D175-TRANSLATIONS
+notes:
+  - kind: decision
+    text: >-
+      The navigation read is `static navigating(router)` on Router, not a class static block and not
+      an instance getter. A static block is a side effect that pinned the whole Router into every
+      output:'static' shared chunk (static-docs 25,606 → 18,452 gzip; i18n --static 29,182 → 21,586
+      gzip, measured with the CLI built from source). A static method tree-shakes and is within 1 B
+      gzip of the getter (todos production: 27,554 vs 27,553), so it keeps the no-instance-member
+      intent at no cost. Never reintroduce a `static {}` block in router.js;
+      tests/static-docs-example.test.js fails if `popstate` reappears in a static build.
 ---
 
 # D185 — app.idle
@@ -25,6 +35,7 @@ Code driving a running app from outside (an agent bridge, an end-to-end script, 
 
 ## Decision
 
+
 ```js
 const quiet = await app.idle({ timeout: 10000 }); // true when idle; false on timeout
 ```
@@ -32,7 +43,7 @@ const quiet = await app.idle({ timeout: 10000 }); // true when idle; false on ti
 `app.idle({ timeout = 10000 })` returns a promise of a boolean. It resolves `true` once two consecutive checks, one frame apart, find all of these clear:
 
 - no `mount()` in flight (the app's own `#mountPromise`);
-- no navigation in flight: the router's `#pendingNavPromise`, read through `navigating(router)`, a module-level function bound in Router's static block, so no public member is added;
+- no navigation in flight: the router's `#pendingNavPromise`, read through the static method `Router.navigating(router)`, so no instance member is added and a bundle that never references `Router` still drops the class;
 - no scheduled store flush (`_flushScheduled`, which every pending notification and batched persist arms);
 - no store flush or view render job waiting for its frame: `scheduled()`, the scheduler's pending count (the one `renderTick()` waits on, D188). idle's own checks use `frame()`, not `schedule()`, so they never count themselves. This catches a render chain, such as an `afterUpdate()` that schedules another render every frame;
 - no async `data()` evaluation running (`_asyncTrackingChain`, which serializes them);
@@ -52,7 +63,8 @@ It never rejects. A timeout that is not a finite number ≥ 0 falls back to 1000
 - **Reuse `settled()`**: it patches prototypes and forces flushes; production must observe, not drive.
 - **Per-operation counters (pending fetches, pending writes)**: new bookkeeping on hot paths for a diagnostic API. Pending renders need none: the scheduler already counts them for `renderTick()`.
 - **Read each view's private `#updateScheduled`**: there is no registry of live view instances to walk without adding one; the scheduler's pending count covers the same renders.
-- **A public `router.navigating` getter**: public surface for an internal question; the static-block accessor costs a few bytes and no API.
+- **A public `router.navigating` getter**: public instance surface for an internal question. It tree-shakes as well as the static method and measures the same (todos production bundle: 5 B raw / 1 B gzip smaller), so the choice is about surface, not size.
+- **A module-level `navigating` function bound in Router's class static block**: a static block is a side effect, so the bundler keeps the whole `Router` class (and the modules only it uses) in every graph that imports any name from `router/router.js`. The `output: 'static'` kernel, the SSG assembler and `i18n.js` import path helpers from there, so every static site shipped the router in its shared chunk, breaking D81's "no router" promise. Measured with the CLI built from source, `--mode production`: examples/static-docs shared chunk 76,924 B / 25,606 gzip with the block, 54,752 B / 18,452 gzip without (−7,154 gzip, −28%); examples/i18n `--static` −7,596 gzip. Static methods are not side effects, so `Router.navigating` costs a router-free bundle nothing. `tests/static-docs-example.test.js` asserts no built module mentions `popstate`.
 - **Reject on timeout**: callers branch on the result; a rejection forces a try/catch for an expected outcome.
 
 ## Consequences
