@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// One flush, one data() run (D170, flush-sequence dedupe).
+// One flush, one data() run (D161, D170).
 //
 // A child that both RECEIVES a record prop and QUERIES that record is woken
 // twice by a single store flush: once by its parent's applyParentUpdate (the
@@ -9,10 +9,10 @@
 // data, so the second is pure waste — and before the revision-aware prop compare
 // the first one did not even exist.
 //
-// The mechanism is D161's, extended by one case: `Store._flushSeq` publishes the
-// sequence being delivered, a refresh started during delivery stamps it onto
-// `_settleMark` when it commits, and the child's own `onStoreChange(seq)` takes
-// the existing `seq <= _settleMark` early return.
+// The mechanism is D161's: a refresh reads `Store._notifySeq` before data()
+// runs and stamps it onto `_settleMark` when it commits, and a later
+// `onStoreChange(seq)` for an already-seen batch takes the `seq <= _settleMark`
+// early return.
 import { afterEach, describe, expect, it } from 'vitest';
 import { Store } from '../client-runtime/datastore/store.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
@@ -20,6 +20,13 @@ import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
 import { listRows } from '../client-runtime/views/listBlock.js';
 import { mountView, settled } from '../client-runtime/testing/index.js';
+
+class User extends PuzzleModel {
+	static schema = {
+		id: Puzzle.string().primary(),
+		name: Puzzle.string(),
+	};
+}
 
 class Todo extends PuzzleModel {
 	static schema = {
@@ -54,7 +61,17 @@ class Row extends PuzzleView {
 	}
 }
 
+/** A row that takes the todo as a prop and queries a RELATED record. */
+class OwnerRow extends Row {
+	data() {
+		dataRuns.owner = (dataRuns.owner ?? 0) + 1;
+		return { text: this.ctx.store.findOne('user', 'u').name };
+	}
+}
+
 class List extends PuzzleView {
+	static Row = Row;
+
 	data() {
 		return { todos: this.ctx.store.findMany('todo') };
 	}
@@ -68,14 +85,14 @@ class List extends PuzzleView {
 				this,
 				0,
 				this.getData().todos,
-				(s) => new ViewNode(Row, { key: s.k, todo: s.item }, []),
+				(s) => new ViewNode(this.constructor.Row, { key: s.k, todo: s.item }, []),
 				KEY
 			)
 		);
 	}
 }
 
-describe('flush-sequence dedupe', () => {
+describe('notification dedupe', () => {
 	it('runs a prop-and-query child\'s data() exactly once per flush', async () => {
 		const store = new Store({ todo: Todo });
 		for (const id of ['a', 'b']) store.createRecord('todo', { id, text: id });
@@ -92,7 +109,7 @@ describe('flush-sequence dedupe', () => {
 		expect(view.find('[data-id="a"]').textContent).toBe('changed');
 	});
 
-	it('stamps the delivering sequence onto the child that refreshed', async () => {
+	it('stamps the notification sequence onto the child that refreshed', async () => {
 		const store = new Store({ todo: Todo });
 		store.createRecord('todo', { id: 'a', text: 'a' });
 		const view = await mountView(List, { store });
@@ -104,9 +121,23 @@ describe('flush-sequence dedupe', () => {
 		const row = view.instance._vnodeTree().children[0].component;
 		expect(row._settleMark).toBeGreaterThan(0);
 		expect(row._settleMark).toBeLessThanOrEqual(store._notifySeq);
-		// Outside a delivery loop the store advertises nothing, so an ordinary
-		// refresh stamps nothing and can never suppress a later batch.
-		expect(store._flushSeq).toBe(0);
+	});
+
+	it('runs data() once for a mutation followed by refresh() before the flush', async () => {
+		const store = new Store({ todo: Todo });
+		store.createRecord('todo', { id: 'a', text: 'a' });
+		const view = await mountView(List, { store });
+		handles.push(view);
+		dataRuns = {};
+
+		// The handler idiom: mutate, then refresh(). The refresh already saw the
+		// change, so the flush that delivers it must not re-run the row.
+		store.findOne('todo', 'a').update({ text: 'changed' });
+		view.instance.refresh();
+		await settled();
+
+		expect(dataRuns).toEqual({ a: 1 });
+		expect(view.find('[data-id="a"]').textContent).toBe('changed');
 	});
 
 	it('still delivers to a child the parent did NOT refresh', async () => {
@@ -126,5 +157,23 @@ describe('flush-sequence dedupe', () => {
 		expect(dataRuns).toEqual({ a: 1, b: 1 });
 		expect(view.find('[data-id="a"]').textContent).toBe('A!');
 		expect(view.find('[data-id="b"]').textContent).toBe('B!');
+	});
+
+	it('runs a related-record row once when its own notification is delivered first', async () => {
+		const store = new Store({ user: User, todo: Todo });
+		const user = store.createRecord('user', { id: 'u', name: 'Ann' });
+		const todo = store.createRecord('todo', { id: 'a', text: 'a' });
+		const view = await mountView(class extends List { static Row = OwnerRow; }, { store });
+		handles.push(view);
+		dataRuns = {};
+
+		// The user key is gathered before the list's todo key, so the row refreshes
+		// itself first; the list's re-render must not push the todo prop again.
+		user.update({ name: 'Bob' });
+		todo.update({ text: 'changed' });
+		await settled();
+
+		expect(dataRuns).toEqual({ owner: 1 });
+		expect(view.find('[data-id="a"]').textContent).toBe('Bob');
 	});
 });

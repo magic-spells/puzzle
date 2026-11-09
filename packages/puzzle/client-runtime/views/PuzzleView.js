@@ -561,16 +561,17 @@ export class PuzzleView {
 	}
 
 	/**
-	 * Snapshot the render revisions of the record props just applied
+	 * Snapshot the render revisions of the record props a data() run is about to read
 	 * (D170, record render revision).
 	 *
 	 * `propsEqual` compares a record prop against THIS snapshot rather than
 	 * against the old prop object, because a record mutates in place: after an
 	 * update both sides hold the same object with the same (already advanced)
 	 * revision, and only a value stored at the time props were last applied can
-	 * say whether this view has seen it. Written at mount and at every
-	 * applyParentUpdate that carries props — the two moments a view's props become
-	 * current — and replaced wholesale, never merged.
+	 * say whether this view has seen it. Written as every refresh begins, before
+	 * data() runs (#refreshInner) — whichever wake-up came first, a parent's push
+	 * or the view's own notification — so it holds what the next committed
+	 * data() sees, never more; replaced wholesale, never merged.
 	 *
 	 * Null when no prop carries a revision, which is the overwhelmingly common
 	 * case and allocates nothing; `propsEqual` reads it with `?.`.
@@ -1114,12 +1115,6 @@ export class PuzzleView {
 			this.#params = params;
 			this.#props = props;
 		}
-		// Record-prop revisions as of this mount (D170, record render revision).
-		// Read from the COMMITTED props rather than the argument so a preloaded
-		// view — whose props were set in preload(), not here — is snapshotted too;
-		// without an entry a record prop would compare unequal on every later
-		// patch and re-run the child's data() for nothing.
-		this.#snapshotPropRevs(this.#props);
 		this.#children = children;
 		this.#vm.anchorAt(ref);
 
@@ -1254,13 +1249,6 @@ export class PuzzleView {
 			if (this.#vm) this.#vm.slotChildren = children;
 		}
 		if (props !== undefined) {
-			// The props the patcher just handed down are now this view's current
-			// props, so re-stamp their record revisions (D170, record render
-			// revision) BEFORE the refresh that will render them. Doing it here
-			// rather than inside #refreshInner keeps it to the one path where props
-			// are APPLIED — a router refresh carrying params only must not rewrite
-			// a snapshot it knows nothing about.
-			this.#snapshotPropRevs(props);
 			// Fire-and-forget: a data() failure is logged rather than escaping into
 			// the parent's patch path (mount's skeleton-path style). #refreshContained
 			// takes both arms — a rejecting async data() and a sync throw.
@@ -1346,17 +1334,14 @@ export class PuzzleView {
 				return;
 		}
 		const token = ++this.#runToken;
-		// Flush-sequence dedupe (D170). A child that both receives a
-		// record prop and queries that record gets TWO wake-ups from one store
-		// flush: the parent's applyParentUpdate during delivery, and its own
-		// onStoreChange later in the same delivery loop. Capture the sequence the
-		// store is delivering — non-zero only INSIDE that loop — before data() runs;
-		// #commit stamps it onto `_settleMark`, and the second wake-up then takes
-		// onStoreChange's existing `seq <= _settleMark` early return. The mutations
-		// in that batch already landed in the store before delivery started, so the
-		// model this pass commits reflects every one of them. The D161 settle loop
-		// keeps its own (higher, _notifySeq-based) stamping; #commit takes the max.
-		const mark = this.ctx.store?._flushSeq || 0;
+		// Notification dedupe (D161, D170). Every store mutation lands before its
+		// _notify, so each sequence already queued as data() starts is baked into
+		// the model this pass commits; #commit stamps it onto `_settleMark` and that
+		// batch's later delivery takes onStoreChange's `seq <= _settleMark` early
+		// return. Read before data() runs, so it can only under-stamp: a change
+		// queued later is delivered, never dropped.
+		const mark = this.ctx.store?._notifySeq || 0;
+		this.#snapshotPropRevs(this.#props);
 		const run = () => {
 			const out =
 				typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
@@ -1545,6 +1530,7 @@ export class PuzzleView {
 		};
 
 		const store = this.ctx.store;
+		const mark = store?._notifySeq || 0; // see #refreshInner
 		const expectsAsync = this._dataAsyncShape || this.data.constructor.name === 'AsyncFunction';
 		// D161: a prepared run settles through the same loop. Intermediate passes are
 		// discarded as they are anywhere else; the FINAL pass's reconcile is parked on
@@ -1628,7 +1614,7 @@ export class PuzzleView {
 					// containment broken together). Every other refresh() caller funnels;
 					// so does this one.
 					try {
-						this.#commit(++this.#runToken, model);
+						this.#commit(++this.#runToken, model, mark);
 					} catch (err) {
 						this.#handleViewFailure(
 							'[puzzle] render failed during a prepared commit:',
@@ -2418,18 +2404,15 @@ export class PuzzleView {
 	/**
 	 * @param {number} token the run token the result belongs to
 	 * @param {any} model the data() result
-	 * @param {number} [mark] the store flush sequence this run evaluated under
+	 * @param {number} [mark] the store's `_notifySeq` as this run's data() began
 	 */
 	#commit(token, model, mark = 0) {
 		// superseded, torn down, or LEAVING — see #completeMount for why removal is
 		// now asynchronous for any view declaring a hide hook (D136 §3).
 		if (token !== this.#runToken || this.#destroyed || this.#leaving) return;
-		// Flush-sequence stamp (D170). This run evaluated data() while the
-		// store was delivering the batch ending at `mark`, and it is committing, so
-		// every notification in that batch is already on screen. MAX, never plain
-		// assignment: the D161 settle loop has already stamped its own (higher)
-		// _notifySeq-based mark for an adapter app's settled pass, and a prepared
-		// D146 commit passes no mark at all — neither may be walked backwards.
+		// Notification stamp (see #refreshInner). MAX, never plain assignment: the
+		// D161 settle loop may already have stamped its committing pass's (higher)
+		// mark, and that must not be walked backwards.
 		if (mark > this._settleMark) this._settleMark = mark;
 		// Two-layer state (Change C, SPEC §4). A successful data() result REPLACES the
 		// model layer wholesale — keys an earlier run returned but this one omits

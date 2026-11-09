@@ -70,9 +70,10 @@ handle, by this view, during its own evaluation, may fault
   held back by its own store (`tests/adapter-realm-isolation.test.js`). The loop
   itself (round cap, fault-in, supersession) is [[COMPONENT-ADAPTER]].
 - **`onStoreChange(seq)` returns early when `seq <= _settleMark`.** A refresh
-  started inside the store's delivery loop captures `Store._flushSeq`, and
-  `#commit` stamps it as a max with the settle loop's `_notifySeq` mark. So a child
-  that is both parent-updated and subscribed runs `data()` once per flush.
+  or prepare captures `Store._notifySeq` before `data()` runs, and `#commit`
+  stamps it as a max with the settle loop's own mark. So a view that already
+  read a change (mutate then `refresh()`, or a child that is both
+  parent-updated and subscribed) runs `data()` once for it.
   No-argument calls never skip.
 - `afterUpdate(prev)` ([[DECISION-D178-AFTERUPDATE-PREV]]): `#renderNowInner`
   freezes `{ props, params, route, data }` as each render lands (`data` is a
@@ -129,8 +130,8 @@ All are reserved by [[DOC-SPEC-ANATOMY]] §4 and never spelled in templates.
   `#renderNowInner` (prerender, takeover) leave it 0.
 - `__walk`: one-shot "walk, don't short-circuit" flag set after a child mount
   failure or by a retry; the next render consumes it.
-- `__propRevs`: record-prop render revisions, written at mount and at each
-  props-carrying `applyParentUpdate`; null when no prop has one.
+- `__propRevs`: record-prop render revisions, written as each refresh begins
+  (`#refreshInner`, before `data()`); null when no prop has one.
 - `__lists`: list-block registry, allocated by the block itself.
 - **No list method on the class, deliberately**: loops call `listRows` (imported
   as `__l`), and `PuzzleView` must never import `views/listBlock.js`, or loop-free
