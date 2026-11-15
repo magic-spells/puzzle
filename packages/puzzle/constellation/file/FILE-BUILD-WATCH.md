@@ -45,3 +45,6 @@ public-asset mirroring. Intent: [[COMPONENT-DEV-SERVER]], [[FLOW-DEV-REBUILD]].
   builder wrote are prune candidates, so the public mirror stays `prevPublic`'s
   job and `app.js` (rewritten every pass) is safe. With the flag off, `Write:
   true` and none of this runs.
+- **Unlinked entry CSS** uses the shared shell reference scan and warning formatter.
+  A successful SPA/hybrid rebuild warns at most once per session, including when
+  CSS is first imported during the session. Static pages link their own CSS.

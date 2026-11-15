@@ -63,6 +63,8 @@ type WatchBuilder struct {
 	// landed becomes true only after a whole Rebuild succeeds. Until then every
 	// attempt retains initial-build behavior, including a full public sync.
 	landed bool
+	// Shell advisories print at most once per dev session.
+	shellNotices ShellNotices
 	// bundleInputs is the last successful esbuild graph. A public asset normally
 	// needs only mirroring, but public/ is still ordinary source on disk and an
 	// app may import from it. Only skip esbuild when none of the changed public
@@ -394,6 +396,9 @@ func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildRes
 		endCSS()
 		b.pendingBundleCommit = false
 		b.commitLocales()
+	}
+	if !publicOnly {
+		b.shellNotices.warnUnlinkedCSS(result.Metafile, b.outdir, b.entry, func() shellHashPlan { return shellHashSupport(b.root) })
 	}
 	b.refused = nil
 	b.landed = true

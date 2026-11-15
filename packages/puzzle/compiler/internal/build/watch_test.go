@@ -1131,3 +1131,47 @@ func readDistBundle(t *testing.T, root string) string {
 	}
 	return string(b)
 }
+
+func TestWatchBuilderUnlinkedEntryCSSWarning(t *testing.T) {
+	for _, splitting := range []bool{false, true} {
+		for _, linked := range []bool{false, true} {
+			root := writeSplitFixture(t, "")
+			if linked {
+				page := filepath.Join(root, "app", "public", "index.html")
+				write(t, page, `<link href="/app.css" rel="stylesheet">`+readFile(t, page))
+			}
+			b, err := NewWatchBuilder(root, WatchOptions{Splitting: splitting})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// A bundle with no CSS must not warn or consume the once-per-session notice.
+			initial := captureStderr(t, func() { _, err = b.Rebuild(nil) })
+			if err != nil || initial != "" {
+				t.Fatalf("initial rebuild: %v, stderr = %q", err, initial)
+			}
+			write(t, filepath.Join(root, "app", "entry.css"), "body { color: red; }")
+			write(t, filepath.Join(root, "app", "app.js"), "import './entry.css';")
+			stderr := captureStderr(t, func() {
+				for range 3 {
+					if _, err = b.Rebuild(nil); err != nil {
+						break
+					}
+				}
+			})
+			b.Dispose()
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := 1
+			if linked {
+				want = 0
+			}
+			if got := strings.Count(stderr, "no shell page references app.css"); got != want {
+				t.Errorf("split=%v linked=%v: warning count=%d, want %d: %s", splitting, linked, got, want, stderr)
+			}
+			if !linked && !strings.Contains(stderr, "emitted app.css") {
+				t.Errorf("dev warning missing emitted filename: %s", stderr)
+			}
+		}
+	}
+}

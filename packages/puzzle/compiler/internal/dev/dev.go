@@ -493,6 +493,7 @@ func Serve(root string, opts Options) error {
 	// It returns the failure it printed (nil on success) so the watcher loop can
 	// tell the change filter that the bytes it accepted were NOT successfully
 	// built from — a re-save of the same bytes has to be able to retry.
+	var shellNotices build.ShellNotices
 	rebuild := func(changed []string, logSuccess bool, prof *build.PhaseProfile) error {
 		if prof == nil {
 			prof = build.NewPhaseProfile(profileEnabled, "puzzle dev · rebuild")
@@ -528,7 +529,7 @@ func Serve(root string, opts Options) error {
 				endStyles()
 			}
 		default:
-			err = build.Build(absRoot, build.Options{Development: true, Fixtures: opts.Fixtures, Config: buildCfg, Profiler: prof})
+			err = build.Build(absRoot, build.Options{Development: true, Fixtures: opts.Fixtures, Config: buildCfg, Profiler: prof, ShellNotices: &shellNotices})
 		}
 		if err != nil {
 			logBuildFailure(stderr, err)
