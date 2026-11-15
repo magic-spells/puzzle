@@ -1,6 +1,8 @@
 package build
 
 import (
+	"encoding/json"
+
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/locales"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
@@ -19,6 +21,8 @@ import (
 // use it — its plugin is reused across rebuilds and must re-derive source facts
 // when files change.
 type passContext struct {
+	env map[string]json.RawMessage
+
 	// usage is the project-wide tree-shaking scan (formatter manifest seeds + the
 	// D85 flip bit). Immutable once built; every pass gets the same value, so the
 	// esbuild Define map and the virtual formatter manifest are identical across

@@ -270,6 +270,7 @@ func Build(root string, opts Options) error {
 	if scanErr != nil {
 		return scanErr
 	}
+	pc.env = cfg.Env
 	pc.i18n = cfg.I18n
 	pc.locales = localeRes
 	pc.stripStamps = !opts.Development && mode == ""
@@ -289,6 +290,7 @@ func Build(root string, opts Options) error {
 	// static page — the per-page mountStatic bundles are) can never reach those
 	// branches, so the define folds them — and ssg/preload.js — away.
 	buildOpts := newBundleOptions(absRoot, entry, staging, pl, bundleFlags{
+		Env:       cfg.Env,
 		Dev:       opts.Development,
 		Takeover:  mode == "hybrid",
 		Splitting: splitting,

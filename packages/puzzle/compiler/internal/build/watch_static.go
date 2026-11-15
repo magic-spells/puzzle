@@ -296,7 +296,7 @@ func (b *StaticWatchBuilder) buildContexts() error {
 	// app.js (the one-shot build deletes staging/app.js before the swap), so this
 	// pass exists purely to compile every view once — surfacing errors and
 	// filling the CSS collector — and its bytes are dropped.
-	appOpts := newBundleOptions(b.root, b.entry, filepath.Join(b.warm, "app"), b.appPl, bundleFlags{Dev: true, Takeover: false})
+	appOpts := newBundleOptions(b.root, b.entry, filepath.Join(b.warm, "app"), b.appPl, bundleFlags{Env: b.cfg.Env, Dev: true, Takeover: false})
 	appOpts.Write = false
 	appOpts.Metafile = true
 	appCtx, ctxErr := api.Context(appOpts)
@@ -311,7 +311,7 @@ func (b *StaticWatchBuilder) buildContexts() error {
 		return err
 	}
 	preOpts := prerenderBundleOptions(
-		b.root, preStdin, filepath.Join(b.warm, prerenderDir, "prerender.mjs"), b.prePl,
+		b.root, preStdin, filepath.Join(b.warm, prerenderDir, "prerender.mjs"), b.prePl, b.cfg.Env,
 	)
 	// The prerender bundle's module graph is what tells a change apart from a
 	// render-wide one (route_deps.go): app.js, routes.js, the models registry and

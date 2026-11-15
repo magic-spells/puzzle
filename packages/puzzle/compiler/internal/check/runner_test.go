@@ -623,3 +623,25 @@ func TestJSHandlerArgumentsAndNameAreChecked(t *testing.T) {
 		t.Fatalf("handler name diagnostic mismatch: %s", got)
 	}
 }
+
+func TestImportMetaEnvCheck(t *testing.T) {
+	root := liveTSCApp(t)
+	writeLiveView(t, root, `<puzzle-view><p>{ url }</p></puzzle-view>
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {
+ url: string = import.meta.env.API_URL;
+ beta: boolean = import.meta.env.BETA;
+ unknown: string | number | boolean | undefined = import.meta.env.UNDECLARED;
+}
+</script>`)
+	if err := os.WriteFile(filepath.Join(root, "app", "env.d.ts"), []byte(`interface ImportMetaEnv { readonly API_URL: string; readonly BETA: boolean; }`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "app", "app.ts"), []byte(`const api: string = import.meta.env.API_URL;`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(root); err != nil {
+		t.Fatalf("puzzle check must load env globals and app augmentation: %v", err)
+	}
+}

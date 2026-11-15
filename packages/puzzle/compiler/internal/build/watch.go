@@ -78,6 +78,7 @@ type WatchBuilder struct {
 	// esbuild context is configured and whether rebuild writes and prunes the
 	// outputs itself.
 	splitting bool
+	env       map[string]json.RawMessage
 	// prevOutputs is the set of dist-relative paths THIS builder wrote on the
 	// previous rebuild (splitting only). A one-shot build prunes for free — it
 	// stages a fresh tree and swaps it in — but dev keeps dist warm, so every
@@ -137,6 +138,8 @@ type RebuildResult struct {
 
 // WatchOptions configure the incremental dev builder.
 type WatchOptions struct {
+	Env map[string]json.RawMessage
+
 	// Splitting mirrors build.splitting (puzzle.config.js) into the dev loop, so
 	// a developer sees the same lazy chunks the production build will emit. It
 	// also switches this builder off esbuild's own writer — see the prevOutputs
@@ -205,7 +208,7 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 	// the HMR snapshot/restore hooks are live for `puzzle dev`. __PUZZLE_TAKEOVER__
 	// is true too — `puzzle dev` has no resolved output mode, and a dev bundle must
 	// never be the thing that silently drops a code path.
-	ctx, ctxErr := api.Context(watchBundleOptions(absRoot, entry, outdir, pl, opts.Splitting, opts.Fixtures, fixtures))
+	ctx, ctxErr := api.Context(watchBundleOptions(absRoot, entry, outdir, pl, opts.Splitting, opts.Fixtures, fixtures, opts.Env))
 	if ctxErr != nil {
 		return nil, fmt.Errorf("puzzle dev: creating esbuild context: %s", ctxErr.Error())
 	}
@@ -224,14 +227,15 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 		fixtures:    fixtures,
 		useFixtures: opts.Fixtures,
 		splitting:   opts.Splitting,
+		env:         opts.Env,
 	}, nil
 }
 
 // watchBundleOptions assembles the dev context's BuildOptions. Shared by
 // construction and refreshUsage's context replacement so a rebuilt context can
 // never drift from the original one.
-func watchBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, splitting, useFixtures bool, fixtures fixturesWrapper) api.BuildOptions {
-	buildOpts := newBundleOptions(absRoot, entry, outdir, pl, bundleFlags{Dev: true, Takeover: true, Splitting: splitting})
+func watchBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, splitting, useFixtures bool, fixtures fixturesWrapper, env map[string]json.RawMessage) api.BuildOptions {
+	buildOpts := newBundleOptions(absRoot, entry, outdir, pl, bundleFlags{Env: env, Dev: true, Takeover: true, Splitting: splitting})
 	// Metafile carries the module graph's Inputs, used after each rebuild to prune
 	// CSS from files no longer imported (see Rebuild → plugin.PruneCSS). It is
 	// produced regardless of Write.
@@ -643,7 +647,7 @@ func (b *WatchBuilder) refreshUsage() error {
 		return nil
 	}
 
-	next, ctxErr := api.Context(watchBundleOptions(b.root, b.entry, b.outdir, b.pl, b.splitting, b.useFixtures, b.fixtures))
+	next, ctxErr := api.Context(watchBundleOptions(b.root, b.entry, b.outdir, b.pl, b.splitting, b.useFixtures, b.fixtures, b.env))
 	if ctxErr != nil {
 		return fmt.Errorf("puzzle dev: refreshing esbuild context: %s", ctxErr.Error())
 	}

@@ -1,6 +1,7 @@
 package build
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,12 +13,14 @@ import (
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 )
 
-// bundleFlags carries the per-call BUILD facts that select the literal defines.
+// bundleFlags carries the per-call build and config facts that select the literal defines.
 // Every field is decided by the caller — the one-shot app build has already
 // resolved its output mode, the watch builder is always development — so no call
 // site has to re-derive a mode from an empty-string sentinel, and adding a
 // define does not silently default an existing caller to the wrong value.
 type bundleFlags struct {
+	Env map[string]json.RawMessage
+
 	// Dev selects __PUZZLE_DEV__ (§27, D57): the HMR snapshot/restore machinery,
 	// the window publish, the DevTools bridge, and the profiler seam.
 	Dev bool
@@ -130,7 +133,7 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 // a separate, always-in concern handled by head.js syncTitle.
 func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 	f := pl.Features()
-	return map[string]string{
+	defines := map[string]string{
 		"__PUZZLE_DEV__":                  strconv.FormatBool(flags.Dev),
 		"__PUZZLE_HAS_FLIP__":             strconv.FormatBool(f.Flip),
 		"__PUZZLE_HAS_PORTAL__":           strconv.FormatBool(f.Portal),
@@ -155,6 +158,17 @@ func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 		// same bytes it did before prefixes existed.
 		"__PUZZLE_HAS_LOCALE_ROUTING__": strconv.FormatBool(pl.LocaleRoutingEnabled()),
 	}
+	// A bare read supports destructuring and computed keys. Direct reads use only
+	// their literal, so unused config values never add bytes to those bundles.
+	defines["import.meta.env"] = "{}"
+	if len(flags.Env) > 0 {
+		object, _ := json.Marshal(flags.Env) // validated JSON literals from config
+		defines["import.meta.env"] = string(object)
+		for key, value := range flags.Env {
+			defines["import.meta.env."+key] = string(value)
+		}
+	}
+	return defines
 }
 
 // scanUsage refreshes pl's usage bits from a walk of absRoot. scanner may be nil

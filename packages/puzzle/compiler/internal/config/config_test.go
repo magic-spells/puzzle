@@ -632,3 +632,48 @@ func TestLoadConfigOutputNonStringRejected(t *testing.T) {
 		t.Errorf("error should name output, got: %v", err)
 	}
 }
+
+func TestLoadConfigEnv(t *testing.T) {
+	requireNode(t)
+	t.Setenv("PUZZLE_TEST_API_URL", "https://api.example")
+	root := writeConfig(t, `export default { env: { API_URL: process.env.PUZZLE_TEST_API_URL, BETA: false, LIMIT: 3.5, $key: '', café: true, ['__proto__']: 'literal' } };`)
+	cfg, err := LoadConfig(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]string{"API_URL": `"https://api.example"`, "BETA": "false", "LIMIT": "3.5", "$key": `""`, "café": "true", "__proto__": `"literal"`} {
+		if got := string(cfg.Env[key]); got != want {
+			t.Errorf("env.%s = %s, want %s", key, got, want)
+		}
+	}
+}
+
+func TestLoadConfigEnvInvalid(t *testing.T) {
+	requireNode(t)
+	for _, tc := range []struct{ name, env, want string }{
+		{"bad-key", `{'API-URL': 'x'}`, `env key "API-URL" must be a JavaScript identifier`},
+		{"empty-key", `{'': 'x'}`, `env key "" must be a JavaScript identifier`},
+		{"digit-key", `{'1KEY': 'x'}`, `env key "1KEY" must be a JavaScript identifier`},
+		{"array", `[]`, "env must be a flat object"},
+		{"null", `null`, "env must be a flat object"},
+		{"undefined-object", `undefined`, "env must be a flat object"},
+		{"string", `'x'`, "env must be a flat object"},
+		{"nested", `{KEY: { nested: true }}`, "env.KEY must be a string, finite number or boolean"},
+		{"array-value", `{KEY: []}`, "env.KEY must be a string, finite number or boolean"},
+		{"null-value", `{KEY: null}`, "env.KEY must be a string, finite number or boolean"},
+		{"undefined-value", `{KEY: undefined}`, "env.KEY must be a string, finite number or boolean"},
+		{"function", `{KEY: () => 'x'}`, "env.KEY must be a string, finite number or boolean"},
+		{"symbol", `{KEY: Symbol('x')}`, "env.KEY must be a string, finite number or boolean"},
+		{"bigint", `{KEY: 1n}`, "env.KEY must be a string, finite number or boolean"},
+		{"nan", `{KEY: NaN}`, "env.KEY must be a string, finite number or boolean"},
+		{"infinity", `{KEY: Infinity}`, "env.KEY must be a string, finite number or boolean"},
+		{"date", `{KEY: new Date()}`, "env.KEY must be a string, finite number or boolean"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := LoadConfig(writeConfig(t, "export default {env: "+tc.env+"};"))
+			if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), ConfigFileName) {
+				t.Fatalf("error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}

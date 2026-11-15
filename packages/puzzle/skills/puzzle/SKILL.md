@@ -63,6 +63,38 @@ has a `tsconfig.json`),
   current and asks before replacing an older one (a non-interactive run needs
   `--force` for that).
 
+## Build configuration
+
+Public values that vary by environment belong in the top-level `env` object:
+
+```js
+// puzzle.config.js
+export default {
+  env: {
+    API_URL: process.env.API_URL ?? 'http://localhost:3000',
+    BETA: false,
+  },
+};
+
+// app code (including .pzl scripts)
+fetch(import.meta.env.API_URL + '/users');
+```
+
+Keys must be JavaScript identifiers; values must be strings, finite numbers or
+booleans. The compiler substitutes JSON literals in build, dev and prerender
+bundles; these values are written into the public bundle, so secrets do not
+belong in them. `import.meta.env` is always an object (empty without config),
+and undeclared keys read `undefined`; destructuring and computed reads work,
+but direct `import.meta.env.KEY` reads keep bundles smallest. Read `process.env`
+in the config itself: Puzzle adds no `.env` loading, modes or built-in keys.
+Restart `puzzle dev` after editing config, as its existing advisory requests.
+
+For TypeScript, reference `@magic-spells/puzzle/puzzle-env` and augment the global
+`ImportMetaEnv` interface with exact keys, for example
+`interface ImportMetaEnv { readonly API_URL: string; readonly BETA: boolean; }`.
+A view test under Vitest sees Vitest's own `import.meta.env`, not the values in
+`puzzle.config.js`; supply test values through Vitest's configuration.
+
 Production builds default to ES2022, minification, and **console stripping** —
 set `build: { dropConsole: false }` in puzzle.config.js to keep console calls.
 Linked source maps are **opt-in** in production (`build: { sourceMap: true }`);

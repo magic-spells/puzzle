@@ -700,7 +700,7 @@ func staticPagesBundleOptions(absRoot string, entryFiles []string, outdir string
 		// boot. Unconditional rather than tier-dependent: the other tiers never pull
 		// PuzzleApp into the graph, so the define is inert there, and this keeps the
 		// dev builder's frozen page context from going stale on an adapter change.
-		Define:   bundleDefines(pl, bundleFlags{Dev: dev, Takeover: true, Capture: true}),
+		Define:   bundleDefines(pl, bundleFlags{Env: cfg.Env, Dev: dev, Takeover: true, Capture: true}),
 		Plugins:  []api.Plugin{pl.ESBuild()},
 		LogLevel: api.LogLevelSilent,
 		// Anchor esbuild's input-path bookkeeping to the OUTPUT TREE rather than
