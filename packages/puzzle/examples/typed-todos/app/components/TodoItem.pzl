@@ -25,17 +25,17 @@ interface TodoItemProps {
   remove: (event: Event) => void;
 }
 
-export default class TodoItem extends PuzzleView {
+export default class TodoItem extends PuzzleView<TodoItemProps> {
   data(_params: unknown, props: TodoItemProps): { todo: TodoRecord } {
     return { todo: props.todo };
   }
 
   events = {
     toggle: (event: Event): void => {
-      (this.props as TodoItemProps).toggle(event);
+      this.props.toggle(event);
     },
     remove: (event: Event): void => {
-      (this.props as TodoItemProps).remove(event);
+      this.props.remove(event);
     },
   };
 }

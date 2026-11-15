@@ -55,6 +55,7 @@ import type {
 	NavigationResult,
 	RouteView,
 	RouteAgent,
+	PrevViewState,
 } from '@magic-spells/puzzle';
 import { adapter, PuzzleAdapterError } from '@magic-spells/puzzle/adapter';
 import type {
@@ -815,6 +816,68 @@ async function profileRenders(): Promise<void> {
 	void renders;
 }
 void profileRenders;
+
+// ---------------------------------------------------------------------------
+// Typed props: PuzzleView<Props> types this.props, data()'s props, afterUpdate's
+// prev.props and the testing helpers' props; the default stays `any`.
+// ---------------------------------------------------------------------------
+
+interface CardProps {
+	title: string;
+	open: (event: Event) => void;
+}
+
+class Card extends PuzzleView<CardProps> {
+	events = { open: (event: Event) => this.props.open(event) };
+
+	data(_params: Record<string, string>, props: CardProps) {
+		return { heading: props.title };
+	}
+
+	afterUpdate(prev: PrevViewState<CardProps>): void {
+		const before: string = prev.props.title;
+		void before;
+	}
+
+	mounted(): void {
+		const title: string = this.props.title;
+		// @ts-expect-error this.props is CardProps, not any
+		void this.props.titel;
+		void title;
+	}
+}
+
+class MismatchedCard extends PuzzleView<CardProps> {
+	// @ts-expect-error data()'s props parameter is the view's Props
+	data(_params: Record<string, string>, props: { count: number }) {
+		return props;
+	}
+}
+void MismatchedCard;
+
+// An untyped view keeps `any` props, and a typed one fills every view position.
+class PlainView extends PuzzleView {
+	mounted(): void {
+		const anything: number = this.props.whatever;
+		void anything;
+	}
+}
+const typedConstructor: PuzzleViewConstructor = Card;
+const plainPzl: typeof PuzzleView = PlainView;
+void [typedConstructor, plainPzl];
+routes.push({ path: '/card', view: Card, layout: PlainView });
+
+async function typedPropsTests(open: (event: Event) => void): Promise<void> {
+	const card = await mountView(Card, { props: { title: 'Hi', open } });
+	await card.setProps({ title: 'Bye', open });
+	// @ts-expect-error setProps takes the view's Props
+	await card.setProps({ title: 1, open });
+	// @ts-expect-error mountView's props are the view's Props
+	await mountView(Card, { props: { title: 'Hi' } });
+	const plain = await mountView(PlainView, { props: { anything: true } });
+	await plain.setProps({ whatever: 1 });
+}
+void typedPropsTests;
 
 // ---------------------------------------------------------------------------
 // Translations (D175)

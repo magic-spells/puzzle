@@ -31,12 +31,12 @@ notes:
 
 ```
 $ puzzle check
-app/views/Profile.pzl:14:22: Property 'nmae' does not exist on type 'User'.
+app/components/TodoItem.pzl:11:16: Property 'remov' does not exist on type '{ toggle: (event: Event) => void; remove: (event: Event) => void; }'. Did you mean 'remove'?
 ```
 
 ## Context
 
-`lang="ts"` is transpile-only (D54) and the build never type-checks, yet a template expression is a closed JavaScript-shaped expression against class fields (D176), so `{ user.nmae }` is mechanically checkable. **Hard constraint (Cory's rule): nothing is built on TypeScript compiler APIs** — no language service, no Volar, no `typescript` import. TS 7 is a Go rewrite with no stable tooling API; what stays stable is the CLI: `tsc --noEmit`, the `Version x.y.z` banner, and the `file(line,col): error TSxxxx:` line. **TypeScript 7 is the floor** (Cory: "we're on TS7 and up, we don't need to support old TS at all").
+`lang="ts"` is transpile-only (D54) and the build never type-checks, yet a template expression is a closed JavaScript-shaped expression (D176), so it can be re-emitted as TypeScript and checked. **Hard constraint (Cory's rule): nothing is built on TypeScript compiler APIs** — no language service, no Volar, no `typescript` import. TS 7 is a Go rewrite with no stable tooling API; what stays stable is the CLI: `tsc --noEmit`, the `Version x.y.z` banner, and the `file(line,col): error TSxxxx:` line. **TypeScript 7 is the floor** (Cory: "we're on TS7 and up, we don't need to support old TS at all").
 
 ## Decision
 
@@ -67,7 +67,7 @@ app/views/Profile.pzl:14:22: Property 'nmae' does not exist on type 'User'.
 **tsc is resolved, never installed, always run under `node`:** `node <app>/node_modules/typescript/bin/tsc …` (works under npm, pnpm, yarn). `tsc --version` is read once per run, before anything is generated; a major below 7 stops the run with `puzzle check needs TypeScript 7 or later, found 5.9.3: npm install -D typescript@latest`. Other errors: `puzzle check needs TypeScript: npm install -D typescript`, `puzzle check needs Node.js on PATH: …`; "not in a Puzzle project" is checked first. The `.bin` shims are avoided on purpose: Windows `tsc.cmd` must run via `cmd.exe /s`, which strips the quotes around a path with a space.
 
 **Scope of typing.**
-- Expressions check against the class's declared fields; `data()`-derived keys fall through the inline `{ [key: string]: any }` and are unchecked (known gap: under `noPropertyAccessFromIndexSignature` a dotted `data()`-only read is itself a diagnostic). The fallback is an inline index signature, not `Record`, so an authored class named `Record` cannot capture it.
+- Expressions check against the class's declared fields; `data()`-derived keys fall through the inline `{ [key: string]: any }` and are unchecked, so a misspelled data field (`{ user.nmae }`) is not reported (known gap: under `noPropertyAccessFromIndexSignature` a dotted `data()`-only read is itself a diagnostic). The fallback is an inline index signature, not `Record`, so an authored class named `Record` cannot capture it.
 - A JS component's `this` is `__PuzzleCheckJSView<InstanceType<typeof Class>> & { [key: string]: any }`, which types each declared `events` handler `(...args: any[]) => any`: arity is not checked (`@click={ play(event) }` against `play: () => {}` passes), but names are — `plya(event)`, or a handler attached at runtime instead of declared in `events`, is reported. `lang="ts"` components check against their declared handlers.
 - `PuzzleView.events` is optional in `types/index.d.ts` (the base class has none), so a template handler on a view that declares no `events` reports "possibly 'undefined'" — a real runtime TypeError.
 

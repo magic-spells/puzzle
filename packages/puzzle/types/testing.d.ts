@@ -20,8 +20,8 @@ export type PuzzleViewClass<T extends PuzzleView = PuzzleView> = new (
 	ctx: PuzzleContext
 ) => T;
 
-export interface MountViewOptions {
-	props?: any;
+export interface MountViewOptions<Props = any> {
+	props?: Props;
 	params?: Record<string, string>;
 	children?: any[];
 	ref?: Node | null;
@@ -62,7 +62,7 @@ export interface MountedView<T extends PuzzleView = PuzzleView> {
 	click(target: string | Element): Promise<this>;
 	/** Text-valued controls only; use click() for a checkbox or radio. */
 	type(target: string | Element, text: string): Promise<this>;
-	setProps(props: any): Promise<this>;
+	setProps(props: T['props']): Promise<this>;
 	destroy(): void;
 }
 
@@ -99,7 +99,7 @@ export interface TestApp {
  */
 export declare function mountView<T extends PuzzleView>(
 	ViewClass: PuzzleViewClass<T>,
-	options?: MountViewOptions
+	options?: MountViewOptions<T['props']>
 ): Promise<MountedView<T>>;
 
 /**

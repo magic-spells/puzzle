@@ -70,7 +70,7 @@ npm install -D @magic-spells/puzzle
 - **Route transitions**: sequential by default; overlapping cross-fades and shared-element morphs *(experimental — see below)*
 - **App-level error handling** — one compiled `errorView` replaces a failed view in place with `{ error, info, retry }`; the `onError` hook funnels every framework-contained error
 - **Go-based compiler** for fast builds and state-preserving live reload (store and JSON-safe local view state survive edits)
-- **Type-checked templates** — `puzzle check` runs the app's own TypeScript over every `.pzl`, so a typo in `{ user.nmae }` is a type error reported at its real line and column
+- **`puzzle check`** — runs the app's own TypeScript over every `.pzl` and reports at the real line and column: `lang="ts"` scripts as written, and in templates the event handlers (an undeclared handler name, and in a `lang="ts"` component arguments that do not fit it) and calls to the standard functions. Values a template reads from `data()` are untyped, so `{ user.nmae }` is not an error
 - **SPA-first output with two optional prerender modes** — `output: 'hybrid'` (prerendered pages the SPA takes over) and `output: 'static'` (true static pages, no router or `app.js`); no request-time SSR server or hydration layer
 - **[Puzzle Pieces](../puzzle-pieces) component library** — ready-made `.pzl` components installed with `puzzle add piece <name>` ([browse the catalog](https://magicspells.io/puzzle-pieces))
 
@@ -132,8 +132,11 @@ npm run dev
 ```
 
 Every component is `<script lang="ts">` with typed `data()`, props, events and
-lifecycle hooks, the modules are `.ts` — the build entry `app/app.ts`,
-`routes.ts`, the todos template's models — and `package.json` adds
+lifecycle hooks. A component names its props interface on the base class —
+`class TodoItem extends PuzzleView<TodoItemProps>` — so `this.props` is typed
+with no cast and a `data()` override's `props` parameter must fit it; plain
+`extends PuzzleView` leaves props `any`. The modules are `.ts` — the build
+entry `app/app.ts`, `routes.ts`, the todos template's models — and `package.json` adds
 `typescript` plus a `check` script. The build starts from `app/app.ts` when it
 exists, otherwise `app/app.js`, and refuses an app that has both. It strips
 types without checking them; `npm run check` is the type check, under the
@@ -816,11 +819,14 @@ is how you refresh it:
 version.
 
 `puzzle check` type-checks every `.pzl` file with the TypeScript the app itself
-has installed (7 or later) — Puzzle never installs one for you. A `lang="ts"` script is
-checked as written; every template expression is re-emitted as typed statements,
-so a typo in `{ user.nmae }` is a type error reported at its real `.pzl` line and
-column. A plain-JavaScript component gets its template expressions checked and
-its script body left alone.
+has installed (7 or later) — Puzzle never installs one for you — and reports each
+error at its real `.pzl` line and column. A `lang="ts"` script is checked as
+written. Every template expression is re-emitted as typed statements, but a value
+the template reads from `data()` is typed `any`: the template check catches an
+event handler missing from `events`, a `lang="ts"` handler called with arguments
+that do not fit it, and a standard function called with the wrong arguments —
+not a misspelled data field such as `{ user.nmae }`. A plain-JavaScript component
+gets its template expressions checked and its script body left alone.
 
 The full CLI surface (see [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §13): `init`, `generate`, `add`, `check`, `doctor`, and `info` join `dev` and `build`.
 
