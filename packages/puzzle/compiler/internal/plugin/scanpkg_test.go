@@ -241,7 +241,7 @@ func TestUndeclaredPackageFailsTheBuild(t *testing.T) {
 		t.Fatalf("want exactly one error, got %d: %+v", len(res.Errors), res.Errors)
 	}
 	msg := res.Errors[0]
-	if msg.Location == nil || msg.Location.File != "node_modules/kit/Message.pzl" {
+	if msg.Location == nil || msg.Location.File != "node_modules/kit/Message.pzl" || msg.Location.LineText != strings.Split(kitMessage, "\n")[0] {
 		t.Errorf("error does not name the file: %+v", msg.Location)
 	}
 	for _, want := range []string{"raw()", "currency()", "compiled out"} {

@@ -71,7 +71,7 @@ func (p *Plugin) setupSVGAssets(build api.PluginBuild) {
 		out, cerr := codegen.SVGAssetModuleFrom(scanned, name, viewNodeImport)
 		if cerr != nil {
 			return api.OnLoadResult{
-				Errors:     toMessages(cerr, name),
+				Errors:     toMessages(cerr, name, func(string) []byte { return scanned.Data }),
 				WatchFiles: []string{args.Path},
 			}, nil
 		}

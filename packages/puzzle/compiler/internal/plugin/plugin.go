@@ -10,6 +10,7 @@
 package plugin
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,7 +40,7 @@ type Plugin struct {
 	// scan read, and the usage of each compiled .pzl it did not.
 	usageSet   bool
 	scanned    map[string]bool
-	unscanned  map[string]fileUsage
+	unscanned  map[string]unscannedFile
 	runtimeDir string
 	// i18nEnabled/i18nManifest back the D175 locale manifest module and the
 	// __PUZZLE_HAS_I18N__ define (see SetI18n).
@@ -77,7 +78,7 @@ func New(appRoot string) *Plugin {
 		assetsDir:  filepath.Join(appRoot, "app", "assets"),
 		css:        map[string]string{},
 		formatters: map[string]bool{"escape": true},
-		unscanned:  map[string]fileUsage{},
+		unscanned:  map[string]unscannedFile{},
 	}
 }
 
@@ -206,6 +207,9 @@ func (p *Plugin) setup(build api.PluginBuild) {
 func (p *Plugin) transformPZL(path string, src []byte) pzlResult {
 	p.mu.Lock()
 	svgCache := p.cache.svgCache()
+	if svgCache == nil {
+		svgCache = codegen.NewSVGCache()
+	}
 	strip := p.stripStamps
 	p.mu.Unlock()
 
@@ -214,10 +218,18 @@ func (p *Plugin) transformPZL(path string, src []byte) pzlResult {
 	// absolute path if it is somehow outside the root.
 	name := p.relName(path)
 	out := pzlResult{name: name, loader: api.LoaderJS}
+	// Codegen can report an error inside a {#svg} asset. Keep its read/scan
+	// available even without a build cache, so diagnostics reuse those bytes.
+	source := func(file string) []byte {
+		if file == name {
+			return src
+		}
+		return svgCache.Load(filepath.Join(p.appRoot, filepath.FromSlash(file)), file).Data
+	}
 
 	sec, serr := parser.SplitSections(string(src), name)
 	if serr != nil {
-		out.errs = toMessages(serr, name)
+		out.errs = toMessages(serr, name, source)
 		return out
 	}
 
@@ -267,7 +279,7 @@ func (p *Plugin) transformPZL(path string, src []byte) pzlResult {
 	out.watchFiles = res.InlinedFiles
 	out.warnings = res.Warnings
 	if cerr != nil {
-		out.errs = toMessages(cerr, name)
+		out.errs = toMessages(cerr, name, source)
 		return out
 	}
 	out.js = res.JS
@@ -409,45 +421,49 @@ func (p *Plugin) relName(path string) string {
 
 // toMessages converts a parser/codegen error into esbuild messages — one
 // message per ParseError, batching an ErrorList (§e).
-func toMessages(err error, fallbackFile string) []api.Message {
+func toMessages(err error, fallbackFile string, source func(string) []byte) []api.Message {
 	switch e := err.(type) {
 	case parser.ErrorList:
 		msgs := make([]api.Message, 0, len(e))
 		for _, pe := range e {
-			msgs = append(msgs, peMessage(pe, fallbackFile))
+			msgs = append(msgs, peMessage(pe, fallbackFile, source))
 		}
 		if len(msgs) == 0 {
 			return []api.Message{{Text: err.Error()}}
 		}
 		return msgs
 	case *parser.ParseError:
-		return []api.Message{peMessage(e, fallbackFile)}
+		return []api.Message{peMessage(e, fallbackFile, source)}
 	default:
 		return []api.Message{{Text: err.Error()}}
 	}
 }
 
 // peMessage maps a *parser.ParseError to an api.Message. ParseError columns are
-// 1-based; esbuild Location.Column is 0-based in bytes.
-func peMessage(pe *parser.ParseError, fallbackFile string) api.Message {
+// 1-based bytes; esbuild columns are 0-based bytes. Length stays zero: the
+// parser reports a point, not a token span. Keep tabs and UTF-8 verbatim.
+func peMessage(pe *parser.ParseError, fallbackFile string, source func(string) []byte) api.Message {
 	file := pe.File
 	if file == "" {
 		file = fallbackFile
 	}
-	col := pe.Col - 1
-	if col < 0 {
-		col = 0
-	}
 	msg := api.Message{
-		Text: pe.Message,
-		Location: &api.Location{
-			File:   file,
-			Line:   pe.Line,
-			Column: col,
-		},
+		Text:     pe.Message,
+		Location: sourceLocation(file, pe.Line, pe.Col, source(file)),
 	}
 	if pe.Note != "" {
 		msg.Notes = []api.Note{{Text: pe.Note}}
 	}
 	return msg
+}
+
+// sourceLocation is shared by all positioned plugin diagnostics. Columns are
+// 1-based bytes on input; a zero length marks a point without inventing a span.
+func sourceLocation(file string, line, col int, src []byte) *api.Location {
+	lineText := ""
+	lines := bytes.Split(src, []byte{'\n'})
+	if line > 0 && line <= len(lines) {
+		lineText = string(bytes.TrimSuffix(lines[line-1], []byte{'\r'}))
+	}
+	return &api.Location{File: file, Line: line, Column: max(0, col-1), LineText: lineText}
 }
