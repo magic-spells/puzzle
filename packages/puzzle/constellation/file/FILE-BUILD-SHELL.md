@@ -26,18 +26,22 @@ notes:
 Production HTML rewriting for the shell (`public/index.html`), every other copied
 public `.html`, and generated static pages: maps compiler names (`app.js`,
 `app.css`, `styles.css`) to the emitted hashed names and inserts static-import
-`modulepreload` links. Development skips all of it. Intent:
+`modulepreload` links. Development skips rewriting. Intent:
 [[DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD]].
 
-- **The pre-check runs before bundling** (`shellHashSupport` → `shellHashPlan`),
-  only when `build.hashNames` is unset (default-on): esbuild's `EntryNames` is fixed
-  per pass, so whether the entry can be hashed must be known up front. It walks the
-  public dir itself (staging is not filled yet) and reports whether `index.html`
-  loads `app.js` from a `<script src>` / references `styles.css`, and which other
-  public pages name `app.js`/`app.css`/`styles.css` by their fixed names. Build
-  keeps the fixed name for anything a page cannot follow and prints
-  `hashFallbackWarning` once per file. It reuses the rewrite's tag scan
+- **The pre-check runs before bundling** (`shellHashSupport` → `shellHashPlan`):
+  esbuild's `EntryNames` is fixed per pass, so whether the entry can be hashed
+  must be known up front. It walks the public dir itself (staging is not filled
+  yet), reading the shell's entry/styles references and other pages' fixed-name
+  references. Build keeps the fixed name for anything a page cannot follow and
+  prints `hashFallbackWarning` once per file. It reuses the rewrite's tag scan
   (`rewriteShellHTMLRefs` with nil renames) so the two can never disagree.
+- **Unlinked entry CSS is advisory.** When the entry emits a CSS bundle but no
+  public HTML page references `app.css`, build and SPA/hybrid dev warn with the
+  emitted filename and the exact link to add to `app/public/index.html`. An app
+  may load it another way, so this never fails the build. The notice shares the
+  shell warning formatter, is silent under `build -q`, and dev prints it at most
+  once per session. Static pages wire their own per-page CSS and are excluded.
 - **`strict` = an explicit `hashNames: true`.** Only then does a compiler-name
   reference with no emitted output, or a missing shell/entry reference, fail the
   build. Unset hashing leaves such references as written.

@@ -296,6 +296,9 @@ export default class Home extends PuzzleView {}
 	for _, e := range res.Errors {
 		if e.Location != nil && strings.HasSuffix(filepath.ToSlash(e.Location.File), "app/assets/icons/bad.svg") {
 			located = true
+			if e.Location.LineText != "<div><span/></div>" || e.Location.Column != 0 {
+				t.Errorf("SVG frame = %+v, want the SVG source", e.Location)
+			}
 			if !strings.Contains(e.Text, "root element is <div>") {
 				t.Errorf("malformed-svg error should name the actual root; got: %q", e.Text)
 			}
@@ -1540,6 +1543,50 @@ func TestPluginScriptErrorPositions(t *testing.T) {
 			col := off - strings.LastIndex(src[:off], "\n") - 1
 			if loc == nil || loc.Line != line || loc.Column != col || !strings.HasSuffix(filepath.ToSlash(loc.File), "app/views/Home.pzl") {
 				t.Fatalf("location = %+v, want Home.pzl:%d:%d", loc, line, col)
+			}
+		})
+	}
+}
+
+// The plugin must supply source text itself: esbuild does not read .pzl files
+// for plugin diagnostics. Imported files must use their own bytes.
+func TestPluginDiagnosticFrames(t *testing.T) {
+	for _, tc := range []struct {
+		name, line, tail string
+	}{
+		{"expression", "  {#if todos.length > }", "\n  {/if}"},
+		{"tab and UTF-8", "\té🙂 {#if todos.length > }", "\n  {/if}"},
+		{"missing for close", "  {#for todo in todos}", "\n  <p>{ todo }</p>"},
+		{"style attribute", "<style invalid>", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "<puzzle-view>\n" + tc.line + tc.tail + "\n</puzzle-view>"
+			if tc.name == "style attribute" {
+				src = "<puzzle-view><p>Hi</p></puzzle-view>\n" + tc.line + "body {}\n</style>"
+			}
+			root := writeApp(t, map[string]string{
+				"app/app.js":                "import './views/Home.pzl';",
+				"app/views/Home.pzl":        strings.Replace(homePzl, "../components/Button.pzl", "../components/Broken.pzl", 1),
+				"app/components/Broken.pzl": src,
+			})
+			res, _ := buildApp(t, root)
+			if len(res.Errors) != 1 {
+				t.Fatalf("errors = %v, want one", res.Errors)
+			}
+			loc := res.Errors[0].Location
+			if loc == nil || !strings.HasSuffix(filepath.ToSlash(loc.File), "app/components/Broken.pzl") {
+				t.Fatalf("location = %+v, want imported Broken.pzl", loc)
+			}
+			lines := strings.Split(src, "\n")
+			if loc.LineText != lines[loc.Line-1] || loc.LineText == "" {
+				t.Errorf("line text = %q, want %q", loc.LineText, lines[loc.Line-1])
+			}
+			if strings.Contains(tc.name, "expression") || tc.name == "tab and UTF-8" {
+				// The missing expression is immediately after > and before its space.
+				want := strings.Index(tc.line, ">") + 1
+				if loc.Line != 2 || loc.Column != want || loc.Length != 0 {
+					t.Errorf("location = %+v, want line 2 byte column %d, point span", loc, want)
+				}
 			}
 		})
 	}
