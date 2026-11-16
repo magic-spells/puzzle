@@ -525,7 +525,8 @@ func parseAttrString(attrsRaw string, base Position, file, section string) ([]At
 	if strings.TrimSpace(attrsRaw) == "" {
 		return nil, nil
 	}
-	p := &parser{lex: newAttrLexer(attrsRaw, base, file), file: file}
+	dom := section == "puzzle-view"
+	p := &parser{lex: newAttrLexer(attrsRaw, base, file), file: file, opts: Options{SkipForeignSyntaxCheck: !dom}}
 	if err := p.advance(); err != nil {
 		return nil, toPE(err)
 	}
@@ -537,7 +538,7 @@ func parseAttrString(attrsRaw string, base Position, file, section string) ([]At
 		}
 		name := t.Value
 		npos := tokPos(t)
-		if e := checkAttrNamespace(name, npos, file, false, Token{}); e != nil {
+		if e := checkAttrName(name, npos, file, dom, p.opts); e != nil {
 			return nil, e
 		}
 		if err := p.advance(); err != nil {
@@ -547,7 +548,7 @@ func parseAttrString(attrsRaw string, base Position, file, section string) ([]At
 			if err := p.advance(); err != nil {
 				return nil, toPE(err)
 			}
-			a, e := buildAttr(name, npos, p.cur, file, exprScope{})
+			a, e := p.buildAttr(name, npos, p.cur, section)
 			if e != nil {
 				return nil, e
 			}

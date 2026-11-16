@@ -1904,7 +1904,7 @@ func TestParseReservedAttributeNamespaces(t *testing.T) {
 		// A directive-shaped prefix gets the binding steer, not the SVG one: the
 		// author who types this arrived from Svelte/Vue and needs the keyword-free
 		// form, and telling them about Inkscape exports would be noise.
-		wantMessage := "attribute namespace \"bind:\" is reserved — two-way binding needs no prefix. Write `value={ expr }` (or `checked={ expr }`) on a plain <input>/<textarea>/<select> and the compiler synthesizes the write-back; see template SPEC §6"
+		wantMessage := "attribute namespace \"bind:\" is reserved — two-way binding needs no prefix. Write `value={ expr }` (or `checked={ expr }`) on a plain <input>/<textarea>/<select> and the compiler synthesizes the write-back"
 		if pe.Message != wantMessage {
 			t.Errorf("message: got %q, want %q", pe.Message, wantMessage)
 		}

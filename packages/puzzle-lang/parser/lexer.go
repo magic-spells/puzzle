@@ -85,16 +85,15 @@ const (
 )
 
 type lexer struct {
-	input        string
-	file         string
-	pos          int
-	line         int
-	col          int
-	baseOffset   int
-	mode         lexMode
-	expectValue  bool // true immediately after '=', so a bareword lexes as a value
-	rawBraces    bool // nested lexer for a captured raw body: HTML on, brace grammar off
-	foreignAttrs bool // parser enables attribute steers on DOM tags, per host
+	input       string
+	file        string
+	pos         int
+	line        int
+	col         int
+	baseOffset  int
+	mode        lexMode
+	expectValue bool // true immediately after '=', so a bareword lexes as a value
+	rawBraces   bool // nested lexer for a captured raw body: HTML on, brace grammar off
 }
 
 // newLexer creates a lexer over content whose first byte sits at base in the
@@ -162,9 +161,9 @@ func (l *lexer) errf(line, col int, format string, args ...any) error {
 }
 
 // Next returns the next token.
-func (l *lexer) Next() (Token, error) {
+func (l *lexer) Next(opts ...Options) (Token, error) {
 	if l.mode == modeTag {
-		return l.nextTag()
+		return l.nextTag(pickOptions(opts))
 	}
 	return l.nextText()
 }
@@ -365,7 +364,7 @@ func (l *lexer) lexBrace() (Token, error) {
 
 // nextTag tokenizes inside an open tag: attribute names, '=', values, and the
 // tag terminators.
-func (l *lexer) nextTag() (Token, error) {
+func (l *lexer) nextTag(opts Options) (Token, error) {
 	for l.pos < len(l.input) && isSpaceByte(l.cur()) {
 		l.step()
 	}
@@ -439,10 +438,10 @@ func (l *lexer) nextTag() (Token, error) {
 			}
 			name := l.input[l.pos:j]
 			// A leading colon stays a lexical error, with the same name-based
-			// steer as other foreign attributes when the parser enables it.
+			// steer as other foreign attributes, on elements and components.
 			if c == ':' {
-				if l.foreignAttrs {
-					if e := checkAttrNamespace(name, Position{Line: line, Col: col, Offset: off}, l.file, true, Token{}); e != nil {
+				if !raw {
+					if e := checkAttrName(name, Position{Line: line, Col: col, Offset: off}, l.file, false, opts); e != nil {
 						return Token{}, e
 					}
 				}
