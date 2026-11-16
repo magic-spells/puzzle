@@ -77,6 +77,7 @@ app.mount();
 | `output` | `'static'` or `'hybrid'`; absent is the SPA build (§36). |
 | `i18n` | `{ locales, defaultLocale, routing?: 'prefix', detect?: boolean }`: translations (§11, §66, [[DOC-SPEC-BUILD]] §13). |
 | `site` | The app's public origin, for `hreflang` and the sitemap ([[DOC-SPEC-BUILD]] §13). |
+| `env` | `{ API_URL: 'https://api.example.com' }`: public strings, numbers or booleans compiled into the bundle, read as `import.meta.env.KEY` ([[DECISION-D190-CONFIG-ENV]]). |
 
 ### `app.idle()` — wait for the app to go quiet
 
@@ -211,6 +212,7 @@ export default class Home extends PuzzleView {
 - **`.pzl` is the only extension**; a separate TypeScript extension was rejected (D54).
 - **Typings:** the package ships `types/index.d.ts` (via `exports.types`) and a `puzzle-env.d.ts` shim (`declare module '*.pzl'` → `typeof PuzzleView`). `examples/typed-todos` is the worked example.
 - **Typed props:** `PuzzleView<Props = any>` — `class TodoItem extends PuzzleView<TodoItemProps>` types `this.props`, `data()`'s `props` parameter and `afterUpdate`'s `prev.props`, and `mountView`/`setProps` in `/testing` take the same `Props`. A plain `extends PuzzleView` keeps `any`.
+- **`import.meta.env`:** `puzzle-env.d.ts` also declares `ImportMeta.env` as `ImportMetaEnv` (any key, `string | number | boolean | undefined`), so config `env` reads (§2) type-check; augment `ImportMetaEnv` for exact keys ([[DECISION-D190-CONFIG-ENV]]).
 - **Scaffold:** `puzzle init --typescript` (or the TypeScript prompt, §42) writes every component as `<script lang="ts">` with typed `data()`, props, events and hooks; `app/app.ts`, `app/routes.ts` and (todos) `.ts` models; a strict/noEmit `tsconfig.json`; and a `package.json` with `typescript` `^7` and `"check": "puzzle check"`. The default stays JavaScript.
 - **Generate:** with a `tsconfig.json` at the project root, `puzzle generate` writes TypeScript stubs ([[DOC-SPEC-BUILD]] §13).
 - **Authoring note:** under `strict`/`noImplicitAny`, annotate `data(params, props)` and handler params; TypeScript does not contextually type a subclass override from the base declaration.

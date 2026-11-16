@@ -10,6 +10,12 @@ connections:
   - DECISION-D120-TARBALL-PUBLISH
 verified_at: '2026-11-01T19:19:18.479Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      `./puzzle-env` (the root `puzzle-env.d.ts`, the only file it loads) also declares
+      `ImportMetaEnv` and `ImportMeta.env` for config `env` values ([[DECISION-D190-CONFIG-ENV]]).
+      There is no `types/puzzle-env.d.ts`.
 ---
 
 # package.json

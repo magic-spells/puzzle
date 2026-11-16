@@ -41,6 +41,15 @@ connections:
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
 verified_at: '2026-11-01T19:24:02.433Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      Config `env` ([[DECISION-D190-CONFIG-ENV]]): `build/env_test.go` covers `bundleDefines`
+      (TestEnvDefines), a built SPA bundle (TestBuildEnv) and both prerender passes
+      (TestPrerenderEnv); `config_test.go` covers valid, unset and invalid `env` with exact messages
+      (TestLoadConfigEnv / EnvUnset / EnvInvalid) and an unset `dev.proxy` target in
+      TestLoadConfigNullBehavesAsUnset; `check/runner_test.go` TestImportMetaEnvCheck proves `puzzle
+      check` types `import.meta.env`; `dev_test.go` checks the fallback warning names env values.
 ---
 
 # Build pipeline, watch, and dev server

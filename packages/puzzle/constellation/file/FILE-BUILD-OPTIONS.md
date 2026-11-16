@@ -9,6 +9,14 @@ connections:
   - DECISION-D160-SPA-CODE-SPLITTING
 verified_at: '2026-11-01T19:19:18.479Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: gotcha
+    text: >-
+      `bundleDefines` always defines the bare `import.meta.env` (`{}` without `env`), plus
+      `import.meta.env.KEY` per key ([[DECISION-D190-CONFIG-ENV]]). esbuild turns any object-valued
+      define into an injected `<define:...>` module imported by every parsed file: unused it emits
+      nothing, but it shifts the minifier's names in every bundle. A primitive define (the
+      `__PUZZLE_HAS_*__` flags) changes no bytes. Count that before adding another object define.
 ---
 
 # options.go
