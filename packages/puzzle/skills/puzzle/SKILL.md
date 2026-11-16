@@ -84,10 +84,9 @@ Keys must be JavaScript identifiers; values must be strings, finite numbers or
 booleans. The compiler substitutes JSON literals in build, dev and prerender
 bundles; these values are written into the public bundle, so secrets do not
 belong in them. `import.meta.env` is always an object (empty without config),
-and undeclared keys read `undefined`; destructuring and computed reads work,
-but direct `import.meta.env.KEY` reads keep bundles smallest. Read `process.env`
-in the config itself: Puzzle adds no `.env` loading, modes or built-in keys.
-Restart `puzzle dev` after editing config, as its existing advisory requests.
+and undeclared keys read `undefined`; destructuring and computed reads work.
+Read `process.env` in the config itself: Puzzle adds no `.env` loading, modes
+or built-in keys. `puzzle dev` reads the config once; restart it after an edit.
 
 For TypeScript, reference `@magic-spells/puzzle/puzzle-env` and augment the global
 `ImportMetaEnv` interface with exact keys, for example

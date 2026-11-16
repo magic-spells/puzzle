@@ -40,8 +40,9 @@ exit 1) → `build.SweepWorkDirs` (the SPA path never calls `build.Build`, so it
 itself) → watchers → listener. The config loaded here is handed to every `build.Build` of
 the session (`build.Options.Config`), so rebuilds never re-spawn node to read it. A config
 that FAILS to load is non-fatal: dev serves from the zero `Config`, and
-`configFallbackWarning` names every lost key — notably `dev.proxy`, whose loss makes the
-SPA fallback answer `/api/*` with `index.html`. Config edits advise a restart.
+`configFallbackWarning` names the losses nothing else reports — the Tailwind pipeline,
+`env` values ([[DECISION-D190-CONFIG-ENV]]) and `dev.proxy`, whose loss makes the SPA
+fallback answer `/api/*` with `index.html`. Config edits advise a restart.
 
 ## Watching and change filtering
 

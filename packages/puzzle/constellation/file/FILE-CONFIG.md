@@ -11,6 +11,15 @@ connections:
   - DECISION-D160-SPA-CODE-SPLITTING
 verified_at: '2026-11-01T19:19:18.479Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: gotcha
+    text: >-
+      `env` ([[DECISION-D190-CONFIG-ENV]]) is held as `json.RawMessage` and checked in `validate`:
+      unset when absent/null/undefined, otherwise a flat object whose keys pass `expr.IsIdentifier`
+      and whose raw values do not start with `{`, `[` or `n` (object, array, null). `Config.Env`
+      keeps each value as its raw JSON literal, ready for an esbuild define. The node script keeps
+      an unset value as `null` only inside `env`; every other key still drops undefined (see the
+      D190 gotcha).
 ---
 
 # config.go

@@ -50,7 +50,7 @@ What `@magic-spells/puzzle` ships on the current release branch, as a map. [[DOC
   - `/static` — `mountStatic`, the per-page kernel for `output: 'static'`.
   - `/testing` — `mountView`, `createTestApp` (both accept `i18n: { locale, strings }`), `settled`, `type`, `measureRenders`, `installFakeAnimate`, `installFakeObserver`, and a re-export of `installFixtures`.
   - `/fixtures` — `installFixtures`, `uninstall`, `DEFAULT_FIXTURE_SEED`.
-  - `/puzzle-env` — types only: the ambient `*.pzl` module shim.
+  - `/puzzle-env` — types only: the ambient `*.pzl` module shim and `ImportMeta.env` (`ImportMetaEnv`, D190).
   - Build-replaced: `/formatters/manifest`, `/i18n/manifest`.
 - **Binary:** the `puzzle` shim (`bin/puzzle.js`) picks one of five optional platform packages (darwin/linux × arm64/x64, `win32-x64`; Windows on ARM uses x64). `pzlc` is an internal single-file compiler for tests and tooling.
 - **`packages/puzzle-lang`** (Go module, no npm package): `parser`, `expr`, `conformance`, `jsident`, `textutil`; tagged `packages/puzzle-lang/vX.Y.Z` beside each framework tag. `expr` also serves the Sites dialect's `|` pipes behind `Options.Pipes`. A `js/wasm` build of parser + codegen feeds the docs playground only ([[COMPONENT-PLAYGROUND-COMPILER]]).
@@ -59,7 +59,7 @@ What `@magic-spells/puzzle` ships on the current release branch, as a map. [[DOC
 
 - **`new PuzzleApp({...})`** (§2): `target`, `routes`, `models`, `formatters` (app functions), `apiURL`, `storage`, `adapter` (the `/adapter` capability), `beforeRequest`, `scrollBehavior`, `focusBehavior`, `routerMode` (a mode object; a string throws), `routerBase`, `transitionMode`, `beforeMount`, `mounted`, `beforeUnmount`, `onError`, `errorView`.
 - **Route fields** (§9): `path`, `view`, `layout` (class or `lazy()` marker), `children`, `guard`, `meta` (`title`/`description`/`canonical`/`socialImage` plus free keys; `title`/`description` may be `{ t: 'key' }`), `transitionMode`, `prerender: false`, `staticPaths` (build-only, leaf `:param` routes), `agent` (`false` or `{ name, about? }`), `name` (informational; there is no named-route navigation).
-- **`puzzle.config.js`** (§2, read by `compiler/internal/config`): `styles.use: ['tailwindcss']`; `build.dropConsole` (default true), `build.sourceMap` (default off; dev always has maps), `build.splitting` (default off), `build.hashNames` (default on in production); `dev.proxy` (path prefix → backend origin); `output` (`'hybrid'` | `'static'`; absent = SPA); `i18n: { locales, defaultLocale, routing?: 'prefix', detect?: boolean }`; `site` (public origin only; makes `hreflang` absolute and turns on the sitemap).
+- **`puzzle.config.js`** (§2, read by `compiler/internal/config`): `styles.use: ['tailwindcss']`; `build.dropConsole` (default true), `build.sourceMap` (default off; dev always has maps), `build.splitting` (default off), `build.hashNames` (default on in production); `dev.proxy` (path prefix → backend origin); `output` (`'hybrid'` | `'static'`; absent = SPA); `i18n: { locales, defaultLocale, routing?: 'prefix', detect?: boolean }`; `site` (public origin only; makes `hreflang` absolute and turns on the sitemap); `env` (flat public strings, numbers or booleans, compiled in as `import.meta.env.KEY`; D190).
 
 ## Templates (`.pzl`)
 

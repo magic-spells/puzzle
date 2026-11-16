@@ -21,6 +21,11 @@ notes:
       `NewPhaseProfile`, `ProfileEnabled`, `.Phase`, `.Report`, no lowercase shims); every esbuild
       error block calls `formatBuildErrors(prefix, errs)`; `prerenderOnlyArgs` returns `[]string`
       only (marshalling a `[]string` cannot fail).
+  - kind: state
+    text: >-
+      `cfg.Env` ([[DECISION-D190-CONFIG-ENV]]) rides `passContext.env` into both prerender passes
+      and static pages, and `bundleFlags.Env` into the SPA pass, the same way `i18n` is threaded;
+      every pass reaches `bundleDefines`.
 ---
 
 # build.go
