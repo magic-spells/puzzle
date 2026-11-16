@@ -279,8 +279,8 @@ export type PuzzleViewConstructor = new (ctx?: PuzzleContext) => PuzzleView;
  * so `prev.data.post` is the same live record: to catch an edit, return the
  * field from `data()` (`title: post.title`) and compare that.
  */
-export interface PrevViewState {
-	readonly props: any;
+export interface PrevViewState<Props = any> {
+	readonly props: Props;
 	readonly params: Record<string, string>;
 	readonly route: RouteSnapshot | null;
 	readonly data: Readonly<Record<string, any>>;
@@ -681,16 +681,17 @@ export interface PuzzleLocale {
  * the model is more than the props;
  * the compiler attaches `render()` from the template. State lives in
  * `getData()`/`setData()`; reactive sources (store, props, route params) flow
- * through `data()`.
+ * through `data()`. `Props` types `this.props`:
+ * `class TodoItem extends PuzzleView<TodoItemProps>`.
  */
-export declare class PuzzleView {
+export declare class PuzzleView<Props = any> {
 	constructor(ctx?: PuzzleContext);
 
 	/** Framework services (store/router/formatters). */
 	ctx: PuzzleContext;
 
 	/** Props passed from the parent component (reactive). */
-	readonly props: any;
+	readonly props: Props;
 
 	/** Route params for the navigation that mounted this view. */
 	readonly params: Record<string, string>;
@@ -727,7 +728,7 @@ export declare class PuzzleView {
 	 * prop, or route param changes. May be async. The base returns `props`;
 	 * override it when the model is more than the props.
 	 */
-	data(params?: Record<string, string>, props?: any): any | Promise<any>;
+	data(params?: Record<string, string>, props?: Props): any | Promise<any>;
 
 	/** Read the current component model. */
 	getData<T = any>(): T;
@@ -772,7 +773,7 @@ export declare class PuzzleView {
 	mounted(): void;
 	beforeUpdate(): void;
 	/** After every update render; `prev` is what the previous render drew (D178). */
-	afterUpdate(prev: PrevViewState): void;
+	afterUpdate(prev: PrevViewState<Props>): void;
 	destroyed(): void;
 
 	// ---- enter/leave hooks (D28) ----

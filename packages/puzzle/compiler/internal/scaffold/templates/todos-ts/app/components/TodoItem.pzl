@@ -44,7 +44,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import type { TodoRecord } from '../models/todo';
 
 // `todo` is a prop from the parent; `remove` is a callback prop (SPEC §6)
-// that routes this row's delete click up to the owning view (Home).
+// that routes this row's delete click up to the owning view (Home). Passing
+// this interface to PuzzleView types `this.props`.
 interface TodoItemProps {
   todo: TodoRecord;
   remove: (event: Event) => void;
@@ -54,7 +55,7 @@ interface TodoItemModel {
   todo: TodoRecord;
 }
 
-export default class TodoItem extends PuzzleView {
+export default class TodoItem extends PuzzleView<TodoItemProps> {
   // Returning the record itself is what makes the checkbox writable: the
   // template's `checked={ todo.completed }` resolves to this record, so the
   // synthesized handler has something to call update() on.
@@ -69,7 +70,7 @@ export default class TodoItem extends PuzzleView {
   // that handler with the row's todo already closed over.
   events = {
     remove: (event: Event): void => {
-      (this.props as TodoItemProps).remove(event);
+      this.props.remove(event);
     },
   };
 
