@@ -54,7 +54,7 @@ func newParser(lex *lexer, file string, opts Options) (*parser, error) {
 }
 
 func (p *parser) advance() error {
-	t, err := p.lex.Next()
+	t, err := p.lex.Next(p.opts)
 	if err != nil {
 		return toPE(err)
 	}
@@ -478,11 +478,10 @@ func (p *parser) parseElement() (Node, *ParseError) {
 	open := p.cur
 	name := open.Value
 	pos := tokPos(open)
-	p.lex.foreignAttrs = !p.raw && !isComponentName(name) && !p.opts.SkipForeignSyntaxCheck
 	if err := p.advance(); err != nil {
 		return nil, toPE(err)
 	}
-	attrs, selfClose, perr := p.parseAttrs()
+	attrs, selfClose, perr := p.parseAttrs(name)
 	if perr != nil {
 		return nil, perr
 	}
@@ -619,8 +618,8 @@ func (p *parser) parseElement() (Node, *ParseError) {
 
 // parseAttrs reads attributes until the tag terminator, which it consumes.
 // selfClose reports whether the tag ended with "/>".
-func (p *parser) parseAttrs() (attrs []Attr, selfClose bool, perr *ParseError) {
-	foreign := p.lex.foreignAttrs
+func (p *parser) parseAttrs(tag string) (attrs []Attr, selfClose bool, perr *ParseError) {
+	dom := !isComponentName(tag)
 	for {
 		t := p.cur
 		switch t.Type {
@@ -664,24 +663,19 @@ func (p *parser) parseAttrs() (attrs []Attr, selfClose bool, perr *ParseError) {
 			// `inkscape:label` in sample markup is literal rather than an error.
 			literalName := t.Raw
 			npos := tokPos(t)
-			if err := p.advance(); err != nil {
-				return nil, false, toPE(err)
-			}
-			valued := p.cur.Type == TokEquals
-			var value Token
-			if valued {
-				if err := p.advance(); err != nil {
-					return nil, false, toPE(err)
-				}
-				value = p.cur
-			}
 			if !literalName {
-				if e := checkAttrNamespace(name, npos, p.file, foreign, value); e != nil {
+				if e := checkAttrName(name, npos, p.file, dom, p.opts); e != nil {
 					return nil, false, e
 				}
 			}
-			if valued {
-				a, e := buildAttr(name, npos, p.cur, p.file, p.scope())
+			if err := p.advance(); err != nil {
+				return nil, false, toPE(err)
+			}
+			if p.cur.Type == TokEquals {
+				if err := p.advance(); err != nil {
+					return nil, false, toPE(err)
+				}
+				a, e := p.buildAttr(name, npos, p.cur, tag)
 				if e != nil {
 					return nil, false, e
 				}
@@ -703,35 +697,36 @@ func (p *parser) parseAttrs() (attrs []Attr, selfClose bool, perr *ParseError) {
 	}
 }
 
-// checkAttrNamespace owns name-based attribute diagnostics: foreign spellings
-// on DOM tags (unless the host skips them), then the namespace reservation on
-// every tag. It runs for valued AND valueless names, before buildAttr; only the
-// inline-handler steer needs the value token. Events own their modifier colons.
-func checkAttrNamespace(name string, npos Position, file string, foreign bool, value Token) *ParseError {
+// checkAttrName rejects foreign spellings and reserved namespaces at the name,
+// before lexing a value. Plain-name steers are DOM-only; colon steers apply to
+// components too. Events own their modifier colons.
+func checkAttrName(name string, npos Position, file string, dom bool, opts Options) *ParseError {
 	if strings.HasPrefix(name, "@") {
 		return nil
 	}
-	if foreign {
+	if !opts.SkipForeignSyntaxCheck {
 		var steer string
-		switch name {
-		case "className":
-			steer = "write class"
-		case "htmlFor":
-			steer = "write for"
-		case "v-if":
-			steer = "wrap the element in {#if condition}…{/if}"
-		case "v-else-if":
-			steer = "use {:else if condition} inside {#if}…{/if}"
-		case "v-else":
-			steer = "use {:else} inside {#if}…{/if}"
-		case "v-show":
-			steer = "use {#if condition}…{/if} to conditionally render the element"
-		case "v-for":
-			steer = "wrap the element in {#for item in items}…{/for}"
-		case "v-model":
-			steer = "write value={ expr } on <input>, <textarea>, or <select> for two-way binding"
-		case "v-html":
-			steer = "put { raw(expr) } inside the element"
+		if dom {
+			switch name {
+			case "className":
+				steer = "write class"
+			case "htmlFor":
+				steer = "write for"
+			case "v-if":
+				steer = "wrap the element in {#if condition}…{/if}"
+			case "v-else-if":
+				steer = "use {:else if condition} inside {#if}…{/if}"
+			case "v-else":
+				steer = "use {:else} inside {#if}…{/if}"
+			case "v-show":
+				steer = "use {#if condition}…{/if} to conditionally render the element"
+			case "v-for":
+				steer = "wrap the element in {#for item in items}…{/for}"
+			case "v-model":
+				steer = "write value={ expr } (or checked={ expr }) on <input>, <textarea>, or <select> for two-way binding"
+			case "v-html":
+				steer = "put { raw(expr) } inside the element"
+			}
 		}
 		prefix, local, _ := strings.Cut(name, ":")
 		if local != "" {
@@ -744,15 +739,12 @@ func checkAttrNamespace(name string, npos Position, file string, foreign bool, v
 				steer = `write class="{#if cond}` + local + `{/if}"`
 			}
 		}
-		if lower := strings.ToLower(name); steer == "" && strings.HasPrefix(lower, "on") && value.Type == TokAttrBrace {
-			steer = "write @" + lower[2:] + "={ " + strings.TrimSpace(value.Value) + " }"
-		}
 		if steer != "" {
 			return errAt(file, npos, "%s is not supported — %s", name, steer)
 		}
 	}
 	i := strings.IndexByte(name, ':')
-	if i < 0 {
+	if i <= 0 {
 		return nil
 	}
 	switch name[:i] {
@@ -767,7 +759,7 @@ func checkAttrNamespace(name string, npos Position, file string, foreign bool, v
 	prefix, local := name[:i], name[i+1:]
 	if isDirectiveWord(prefix) || isDirectiveWord(local) {
 		return errAt(file, npos,
-			"attribute namespace %q is reserved — two-way binding needs no prefix. Write `value={ expr }` (or `checked={ expr }`) on a plain <input>/<textarea>/<select> and the compiler synthesizes the write-back; see template SPEC §6",
+			"attribute namespace %q is reserved — two-way binding needs no prefix. Write `value={ expr }` (or `checked={ expr }`) on a plain <input>/<textarea>/<select> and the compiler synthesizes the write-back",
 			prefix+":")
 	}
 	return errAt(file, npos,
@@ -786,9 +778,11 @@ func isDirectiveWord(s string) bool {
 	return false
 }
 
-// buildAttr classifies an attribute given its name and value token, parsing
-// every expression it carries in scope sc.
-func buildAttr(name string, npos Position, v Token, file string, sc exprScope) (Attr, *ParseError) {
+// buildAttr classifies an attribute's value and parses its expressions in the
+// current scope. tag distinguishes component props and custom-element attrs
+// from inline handlers on standard DOM elements.
+func (p *parser) buildAttr(name string, npos Position, v Token, tag string) (Attr, *ParseError) {
+	file, sc := p.file, p.scope()
 	vpos := tokPos(v)
 	if v.Raw {
 		// Inside {#raw} the value bytes are literal AND so is the name (D150) — see
@@ -826,6 +820,13 @@ func buildAttr(name string, npos Position, v Token, file string, sc exprScope) (
 	}
 	switch v.Type {
 	case TokAttrBrace:
+		if event := strings.ToLower(name); len(event) > 2 && strings.HasPrefix(event, "on") && !isComponentName(tag) && !strings.ContainsRune(tag, '-') && !p.opts.SkipForeignSyntaxCheck {
+			event = event[2:]
+			if event == "doubleclick" {
+				event = "dblclick"
+			}
+			return nil, errAt(file, npos, "%s is not supported — write @%s={ %s }", name, event, strings.TrimSpace(v.Value))
+		}
 		if strings.TrimSpace(v.Value) == "" {
 			return nil, errAt(file, vpos, "empty attribute expression for %q", name)
 		}

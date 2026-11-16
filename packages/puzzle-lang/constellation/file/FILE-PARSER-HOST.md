@@ -7,7 +7,7 @@ summary: >-
   Public surface for a host with its own file layout: ParseMarkup (wrapper-less fragment at a file
   position, with a depth guard) plus the exported section/lexer scanners a host splitter needs.
   options.go holds parser.Options (Let, Pipes, SkipIslandCheck, SkipSlotCheck, SkipRefCheck,
-  MaxDepth) whose zero value is PuzzleKit's grammar.
+  SkipForeignSyntaxCheck, MaxDepth) whose zero value is PuzzleKit's grammar.
 connections:
   - FILE-PARSER
   - FILE-PARSER-SECTIONS
@@ -27,10 +27,15 @@ vendoring it (D172: one parser, per-host switches).
   `Pipes` turns on the Sites `|` pipe in every expression position (it rides
   `exprScope` into `expr.Options.Pipes`; `x | f(a)` parses to the call
   `f(x, a)`); `SkipIslandCheck`/`SkipSlotCheck`/`SkipRefCheck` turn off the
-  post-parse `validateIslands`/`validateSlots`/`validateRefs` passes; `MaxDepth`
-  bounds `ParseMarkup` nesting. Every entry point (`Parse`, `ParseTemplate`,
-  `ParseSkeleton`, `ParseFile`, `ParseMarkup`) takes it as an optional trailing
-  variadic, and the zero value is PuzzleKit's grammar.
+  post-parse `validateIslands`/`validateSlots`/`validateRefs` passes;
+  `SkipForeignSyntaxCheck` turns off the React/Vue/Svelte attribute steers as
+  one family (they suggest `@event` and implicit binding, which a host without
+  them must not; the `:` namespace reservation and the `{@html}` steer stay);
+  `MaxDepth` bounds `ParseMarkup` nesting. Every entry point (`Parse`,
+  `ParseTemplate`, `ParseSkeleton`, `ParseFile`, `ParseMarkup`) takes it as an
+  optional trailing variadic, and the zero value is PuzzleKit's grammar. The
+  lexer's `Next` takes the same optional `Options` (`pickOptions`), read only by
+  the leading-`:` steer; a bare `Next()` keeps every steer on.
 - **Rule:** a new host feature lands OFF by default, and a check a host may not
   want gets a `Skip…` switch. Nothing may change what a no-options parse returns:
   `TestOptionsDefaultIsPuzzleKit` parses the whole corpus with no options and with
@@ -51,8 +56,10 @@ vendoring it (D172: one parser, per-host switches).
   the lexer use: `TagNameAt`, `ScanOpenTag`, `FindScriptClose`, `FindStyleClose`,
   `FindTemplateClose`, `ScanBraceGroup`, `SkipBraceGroup` (`{##…}`,
   `{#comment}…{/comment}` and `{#raw}…{/raw}` whole, else a balanced group),
-  `AttrNames` (names only — values never get expression semantics),
-  `ParseAttrString`, `ParseScriptLang`, `ParseStyleScoped`. Conventions: every
+  `AttrNames` (names only — values never get expression semantics; lexes with
+  `SkipForeignSyntaxCheck`, so a `:x` name is the lexer's plain error),
+  `ParseAttrString` (`parseAttrString`: other-framework steers only when the tag
+  is `puzzle-view`), `ParseScriptLang`, `ParseStyleScoped`. Conventions: every
   index in or out is absolute; an out-of-range index returns -1 or an error, never
   a panic; errors are positioned `*ParseError`s returned as `error`, nil on
   success (no typed-nil leak). A host must return `SkipBraceGroup`'s error or

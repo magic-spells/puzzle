@@ -6,7 +6,8 @@ language: go
 summary: >-
   Recursive-descent template parser and grammar validation: every expression position handed to
   expr.Parse through exprs.go, the {#for}/{#case}/{:when} header shapes, {#unless} as a negated
-  condition, HTML void elements closed at their start tag, binding-name checks, and D167 component
+  condition, HTML void elements closed at their start tag, attribute-name checks (other frameworks'
+  spellings and reserved namespaces, checkAttrName), binding-name checks, and D167 component
   classification and name validation (with lexer.go's Unicode tag-name lexing).
 verified_at: '2026-11-01T19:25:05.616Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
@@ -43,6 +44,20 @@ intent: COMPONENT-TEMPLATE-PARSER in the framework plan (`repo=puzzle`).
   `SpreadAttr` (expression parsed at its original file position) and rejects
   spreads on elements and composition markers. `Component` cannot be a dotted
   family root.
+- **Attribute-name checks.** `parseAttrs(tag)` calls `checkAttrName` at the
+  name, before the value is lexed, for every name outside `{#raw}` (`@` names
+  return at once): the plain-name steers (`className`, `htmlFor`, `v-*`) when
+  `dom` (the tag is not a component), the colon steers (`v-bind:`/`:`,
+  `v-on:`/`on:`, `class:`) on every tag, then the `:` namespace reservation
+  (binding-shaped halves via `isDirectiveWord`). `buildAttr(name, npos, v, tag)`
+  holds the one value-dependent rule: a `TokAttrBrace` named `on…` (any case, at
+  least one character after `on`) on a non-component tag with no hyphen steers
+  to `@<rest>` (`doubleclick` → `dblclick`). `SkipForeignSyntaxCheck` skips both
+  steer sets; the reservation always runs. `advance` passes `p.opts` to
+  `lex.Next`, whose leading-`:` branch in `nextTag` calls `checkAttrName` with
+  `dom=false` before its "unexpected character" error.
+  `parseInterpolationExpr` steers `{@html expr}` to `{ raw(expr) }` before
+  `expr` sees the `@`, under every host.
 - **`{#unless c}`** stores `!` over the parsed condition — one tree shape.
 - **A second `{:else}`** in `{#if}`/`{#unless}`/`{#case}` is reported at the stray
   clause ("a second {:else} in {#if} opened at L:C — {:else} must be the last

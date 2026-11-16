@@ -189,7 +189,7 @@ interface __NAME__Model {
   label: string;
 }
 
-export default class __NAME__ extends PuzzleView {
+export default class __NAME__ extends PuzzleView<__NAME__Props> {
   data(_params: Record<string, string>, props: __NAME__Props): __NAME__Model {
     return {
       label: props.label || '__NAME__',
@@ -232,7 +232,7 @@ interface __NAME__Model {
   classes: string;
 }
 
-export default class __NAME__ extends PuzzleView {
+export default class __NAME__ extends PuzzleView<__NAME__Props> {
   // Family members compose: <Children/> above renders whatever the caller
   // nests inside <__NAME__>.
   data(_params: Record<string, string>, props: __NAME__Props): __NAME__Model {
@@ -303,7 +303,7 @@ interface __NAME__Model {
   title: string;
 }
 
-export default class __NAME__ extends PuzzleView {
+export default class __NAME__ extends PuzzleView<__NAME__Props> {
   data(_params: Record<string, string>, props: __NAME__Props): __NAME__Model {
     return {
       title: props.title || '__NAME__',

@@ -20,7 +20,7 @@ interface AdminModel {
   title: string;
 }
 
-export default class Admin extends PuzzleView {
+export default class Admin extends PuzzleView<AdminProps> {
   data(_params: Record<string, string>, props: AdminProps): AdminModel {
     return {
       title: props.title || 'Admin',

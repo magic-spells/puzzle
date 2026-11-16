@@ -19,10 +19,10 @@ one for you).
 Each .pzl becomes a virtual file under .puzzle/check/: a lang="ts" script is
 checked as written, and every template expression is re-emitted as typed
 statements. A value read from data() is untyped, so the template check catches
-event handlers missing from events (and, in a lang="ts" component, arguments
-that do not fit the handler) and standard functions called with the wrong
-arguments, not a misspelled data field. Diagnostics are reported at their real
-.pzl line and column.
+an event handler missing from events, and a handler (in a lang="ts" component)
+or standard function called with the wrong number of arguments or an argument
+of a known type that does not fit — not a misspelled data field. Diagnostics
+are reported at their real .pzl line and column.
 
 A plain-JavaScript component gets its template expressions checked but its
 script body left alone — inference noise on untyped JavaScript is opt-in.`,
