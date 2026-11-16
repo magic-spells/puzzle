@@ -17,7 +17,7 @@ interface ContentModel {
   classes: string;
 }
 
-export default class Content extends PuzzleView {
+export default class Content extends PuzzleView<ContentProps> {
   // Family members compose: <Children/> above renders whatever the caller
   // nests inside <Content>.
   data(_params: Record<string, string>, props: ContentProps): ContentModel {

@@ -13,6 +13,6 @@
 
 declare module '*.pzl' {
 	import { PuzzleView } from '@magic-spells/puzzle';
-	const component: typeof PuzzleView;
+	const component: typeof PuzzleView<any>;
 	export default component;
 }

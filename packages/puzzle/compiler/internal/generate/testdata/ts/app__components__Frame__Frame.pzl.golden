@@ -17,7 +17,7 @@ interface FrameModel {
   classes: string;
 }
 
-export default class Frame extends PuzzleView {
+export default class Frame extends PuzzleView<FrameProps> {
   // Family members compose: <Children/> above renders whatever the caller
   // nests inside <Frame>.
   data(_params: Record<string, string>, props: FrameProps): FrameModel {

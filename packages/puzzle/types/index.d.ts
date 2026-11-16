@@ -268,7 +268,7 @@ export interface PuzzleErrorViewProps {
 	readonly retry: () => void | Promise<void>;
 }
 
-/** Constructor accepted by PuzzleAppConfig.errorView. */
+/** Any view class, typed props or not; annotate with this, not `typeof PuzzleView`. */
 export type PuzzleViewConstructor = new (ctx?: PuzzleContext) => PuzzleView;
 
 /**
