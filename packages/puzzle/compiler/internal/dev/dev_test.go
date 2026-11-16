@@ -386,7 +386,7 @@ func TestConfigFallbackWarningNamesProxy(t *testing.T) {
 	if !strings.Contains(msg, "puzzle.config.js: unexpected token") {
 		t.Errorf("warning drops the underlying load error: %q", msg)
 	}
-	for _, want := range []string{"dev.proxy", "Tailwind", "SPA shell"} {
+	for _, want := range []string{"dev.proxy", "Tailwind", "env values", "SPA shell"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("warning should mention %q, got: %q", want, msg)
 		}

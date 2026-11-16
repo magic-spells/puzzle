@@ -648,31 +648,44 @@ func TestLoadConfigEnv(t *testing.T) {
 	}
 }
 
+func TestLoadConfigEnvUnset(t *testing.T) {
+	requireNode(t)
+	for _, env := range []string{"null", "undefined", "{}"} {
+		t.Run(env, func(t *testing.T) {
+			cfg, err := LoadConfig(writeConfig(t, "export default {env: "+env+"};"))
+			if err != nil || len(cfg.Env) != 0 {
+				t.Fatalf("env = %v, error %v; want no env values", cfg.Env, err)
+			}
+		})
+	}
+}
+
 func TestLoadConfigEnvInvalid(t *testing.T) {
 	requireNode(t)
+	t.Setenv("PUZZLE_TEST_MISSING_ENV", "")
+	if err := os.Unsetenv("PUZZLE_TEST_MISSING_ENV"); err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range []struct{ name, env, want string }{
 		{"bad-key", `{'API-URL': 'x'}`, `env key "API-URL" must be a JavaScript identifier`},
 		{"empty-key", `{'': 'x'}`, `env key "" must be a JavaScript identifier`},
 		{"digit-key", `{'1KEY': 'x'}`, `env key "1KEY" must be a JavaScript identifier`},
-		{"array", `[]`, "env must be a flat object"},
-		{"null", `null`, "env must be a flat object"},
-		{"undefined-object", `undefined`, "env must be a flat object"},
-		{"string", `'x'`, "env must be a flat object"},
-		{"nested", `{KEY: { nested: true }}`, "env.KEY must be a string, finite number or boolean"},
-		{"array-value", `{KEY: []}`, "env.KEY must be a string, finite number or boolean"},
-		{"null-value", `{KEY: null}`, "env.KEY must be a string, finite number or boolean"},
-		{"undefined-value", `{KEY: undefined}`, "env.KEY must be a string, finite number or boolean"},
-		{"function", `{KEY: () => 'x'}`, "env.KEY must be a string, finite number or boolean"},
-		{"symbol", `{KEY: Symbol('x')}`, "env.KEY must be a string, finite number or boolean"},
-		{"bigint", `{KEY: 1n}`, "env.KEY must be a string, finite number or boolean"},
-		{"nan", `{KEY: NaN}`, "env.KEY must be a string, finite number or boolean"},
-		{"infinity", `{KEY: Infinity}`, "env.KEY must be a string, finite number or boolean"},
-		{"date", `{KEY: new Date()}`, "env.KEY must be a string, finite number or boolean"},
+		{"array", `[]`, "env must be a flat object of strings, numbers or booleans; got []"},
+		{"string", `'x'`, `env must be a flat object of strings, numbers or booleans; got "x"`},
+		{"number", `3`, "env must be a flat object of strings, numbers or booleans; got 3"},
+		{"boolean", `false`, "env must be a flat object of strings, numbers or booleans; got false"},
+		{"nested", `{KEY: { nested: true }}`, `env.KEY must be a string, number or boolean; got {"nested":true}`},
+		{"array-value", `{KEY: []}`, "env.KEY must be a string, number or boolean; got []"},
+		{"null-value", `{KEY: null}`, "env.KEY must be a string, number or boolean; got null"},
+		{"undefined-value", `{KEY: undefined}`, "env.KEY must be a string, number or boolean; got null"},
+		{"unset-env", `{API_URL: process.env.PUZZLE_TEST_MISSING_ENV}`, "env.API_URL must be a string, number or boolean; got null"},
+		{"nan", `{KEY: NaN}`, "env.KEY must be a string, number or boolean; got null"},
+		{"infinity", `{KEY: Infinity}`, "env.KEY must be a string, number or boolean; got null"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := LoadConfig(writeConfig(t, "export default {env: "+tc.env+"};"))
-			if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), ConfigFileName) {
-				t.Fatalf("error = %v, want %q", err, tc.want)
+			if want := ConfigFileName + ": " + tc.want; err == nil || err.Error() != want {
+				t.Fatalf("error = %v, want %q", err, want)
 			}
 		})
 	}

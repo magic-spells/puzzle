@@ -1592,13 +1592,13 @@ func logBuildFailure(p *ui.Printer, err error) {
 // carried, not just styles. dev.proxy is the one that misleads: with no proxy
 // registered the SPA history fallback answers /api/* with index.html, so the app
 // reports a JSON parse error on "<!doctype html>" with nothing tying it back to
-// the config. Both losses are named so cause and effect connect.
+// the config. The losses are named so cause and effect connect.
 //
 // LoadConfig returns no error when there is no config file at all, so a
 // zero-config app never sees this warning.
 func configFallbackWarning(err error) string {
 	return fmt.Sprintf(
-		"%v — continuing with defaults: no Tailwind pipeline and no dev.proxy (proxied paths will fall through to the SPA shell); fix the config and restart",
+		"%v — continuing with defaults: no Tailwind pipeline, no env values and no dev.proxy (proxied paths will fall through to the SPA shell); fix the config and restart",
 		err,
 	)
 }

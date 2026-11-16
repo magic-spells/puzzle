@@ -1,5 +1,3 @@
-/// <reference path="./types/puzzle-env.d.ts" />
-
 /**
  * Ambient module shim so `import Home from './views/Home.pzl'` type-checks in a
  * Puzzle app authored with `<script lang="ts">`. Each `.pzl` file compiles to a
@@ -15,4 +13,13 @@ declare module '*.pzl' {
 	import { PuzzleView } from '@magic-spells/puzzle';
 	const component: typeof PuzzleView;
 	export default component;
+}
+
+/** Public compile-time values from puzzle.config.js; apps can augment this interface. */
+interface ImportMetaEnv {
+	readonly [key: string]: string | number | boolean | undefined;
+}
+
+interface ImportMeta {
+	readonly env: ImportMetaEnv;
 }

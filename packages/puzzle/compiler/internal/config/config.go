@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/magic-spells/puzzle/packages/puzzle-lang/jsident"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
 )
 
 // ConfigFileName is the app-root config file. Its absence is not an error.
@@ -176,7 +176,7 @@ func (c Config) HashNames() bool {
 // be distinguished from strings and reported precisely; build booleans are raw
 // so invalid values can be named precisely in rejection messages.
 type rawConfig struct {
-	Env    map[string]json.RawMessage `json:"env"`
+	Env    json.RawMessage `json:"env"`
 	Styles struct {
 		Use []json.RawMessage `json:"use"`
 	} `json:"styles"`
@@ -248,26 +248,13 @@ const configSentinel = "__PUZZLE_CONFIG_JSON__"
 // a Windows drive letter resolve correctly. The JSON rides a unique sentinel so
 // stray console output from the config cannot corrupt the payload.
 func readConfigViaNode(configPath string) ([]byte, error) {
-	// Validate env before JSON can omit undefined/functions or turn NaN into null.
-	script := fmt.Sprintf(`
-const { pathToFileURL } = await import('node:url');
-const m = await import(pathToFileURL(process.argv[1]).href);
-const config = m.default ?? {};
-if (Object.hasOwn(config, 'env')) {
-  const env = config.env;
-  if (env === null || typeof env !== 'object' ||
-      (Object.getPrototypeOf(env) !== Object.prototype && Object.getPrototypeOf(env) !== null)) {
-    throw new Error('puzzle.config.js: env must be a flat object of strings, numbers or booleans');
-  }
-  for (const [key, value] of Object.entries(env)) {
-    if (!['string', 'number', 'boolean'].includes(typeof value) ||
-        (typeof value === 'number' && !Number.isFinite(value))) {
-      throw new Error('puzzle.config.js: env.' + key + ' must be a string, finite number or boolean');
-    }
-  }
-}
-process.stdout.write('\n%s' + JSON.stringify(config));
-`, configSentinel)
+	// Keep unset process.env values as null so validate can report their keys.
+	script := fmt.Sprintf(
+		"const { pathToFileURL } = await import('node:url');"+
+			"const m = await import(pathToFileURL(process.argv[1]).href);"+
+			"process.stdout.write('\\n%s' + JSON.stringify(m.default ?? {}, (k, v) => v === undefined ? null : v));",
+		configSentinel,
+	)
 	ctx, cancel := context.WithTimeout(context.Background(), configLoadTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "node", "--input-type=module", "-e", script, configPath)
@@ -325,17 +312,18 @@ func unset(raw json.RawMessage) bool {
 // validate turns the permissive raw config into a validated Config, rejecting
 // every v1-deferred style entry with a message that names it.
 func validate(raw rawConfig) (Config, error) {
-	cfg := Config{Env: raw.Env}
-	for key := range raw.Env {
-		valid := key != ""
-		for i, r := range key {
-			if i == 0 && !jsident.IsIDStart(r) || i > 0 && !jsident.IsIDContinue(r) {
-				valid = false
-				break
-			}
+	var cfg Config
+	if !unset(raw.Env) {
+		if err := json.Unmarshal(raw.Env, &cfg.Env); err != nil {
+			return Config{}, fmt.Errorf("%s: env must be a flat object of strings, numbers or booleans; got %s", ConfigFileName, raw.Env)
 		}
-		if !valid {
-			return Config{}, fmt.Errorf("%s: env key %q must be a JavaScript identifier", ConfigFileName, key)
+		for key, value := range cfg.Env {
+			if !expr.IsIdentifier(key) {
+				return Config{}, fmt.Errorf("%s: env key %q must be a JavaScript identifier", ConfigFileName, key)
+			}
+			if c := value[0]; c == '{' || c == '[' || c == 'n' {
+				return Config{}, fmt.Errorf("%s: env.%s must be a string, number or boolean; got %s", ConfigFileName, key, value)
+			}
 		}
 	}
 	for _, entry := range raw.Styles.Use {
