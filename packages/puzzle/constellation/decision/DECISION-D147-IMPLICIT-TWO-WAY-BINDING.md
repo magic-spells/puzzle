@@ -21,6 +21,8 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - FLOW-REACTIVITY
   - DOC-SPEC-TEMPLATE
+  - COMPONENT-TEMPLATE-PARSER
+  - DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS
 verified_at: '2026-11-01T19:19:25.478Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 code_refs:
@@ -170,3 +172,34 @@ row block re-asserts its collected control vnodes through the same
 - The `:bind` suffix is greppable and visible in DevTools listener listings.
 - SSG output strips `@` attrs, so prerendered markup carries only the initial
   value; hydration and `mountStatic` attach listeners on mount.
+
+## Other frameworks' spellings
+
+The `bind:value` answer above covers every attribute another framework uses for
+events, binding or conditionals: a positioned parse error at the name that
+gives the Puzzle spelling, never an alias. Where each check runs, and the full
+list, is in [[COMPONENT-TEMPLATE-PARSER]] "Attributes and markup".
+
+- **Plain names** (`className`, `htmlFor`, `v-if` … `v-html`) are checked on
+  lowercase tags only. On a component they are ordinary prop names a library
+  may declare.
+- **Colon names** (`:x`, `v-bind:x`, `on:x`, `v-on:x`, `class:x`) are checked on
+  every tag, components included: the namespace reservation already rejects
+  them as props, so a component loses no valid spelling.
+- **Brace-valued `on…` is checked on standard elements only** (lowercase, no
+  hyphen). The runtime sets a non-prop attribute with `setAttribute`, so
+  `onClick={ save }` compiled to a plain attribute and never a listener; it is a
+  compile error from 0.10.0 (breaking). Custom elements are exempt: their
+  `on…` attributes can be the element's own API, and separating those from
+  mistakes needs a DOM event-name table, rejected as weight for a guess.
+  Components are exempt because `onSelect={ x }` is an ordinary prop.
+- **The event is the rest of the name, lowercased.** React's camelCase lowers
+  to the DOM name for every event but one, so `onDoubleClick` → `@dblclick` is
+  the single rename; a React-to-DOM event table was rejected for the same
+  reason. A static `onclick="…"` is plain HTML on every tag.
+- **Accepted false positive:** `<p once={ x }>` is rejected. A standard element
+  has no non-event attribute starting with `on`, so only a made-up one hits it.
+- **One host switch for the family** (`SkipForeignSyntaxCheck`,
+  [[DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS]]): the steers name PuzzleKit-only
+  spellings, so a host without them turns them all off. A host that wants some
+  must split the switch first.

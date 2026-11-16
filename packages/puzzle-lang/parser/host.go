@@ -210,7 +210,7 @@ func AttrNames(attrsRaw string, base Position, filename string) ([]AttrName, err
 	lex := newAttrLexer(attrsRaw, base, filename)
 	var names []AttrName
 	for {
-		tok, err := lex.Next()
+		tok, err := lex.Next(Options{SkipForeignSyntaxCheck: true})
 		if err != nil {
 			return nil, err
 		}

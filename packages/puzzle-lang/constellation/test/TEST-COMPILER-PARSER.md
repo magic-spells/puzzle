@@ -57,6 +57,25 @@ loosening one fails a test on purpose.
 - **Void elements** (`TestParseVoidElements`): `<br>`, `<br/>`, `<br />` build one
   tree, children after `<br>` belong to the parent, holds inside `{#raw}`,
   `<Input>` stays a component; a void closer is an error at the closer.
+- **Other frameworks' spellings** (`foreign_syntax_test.go`):
+  `TestForeignAttributes` pins every steer's message and position on a
+  `<button>`, through `Parse` and through `ParseMarkup` at an offset base (its
+  depth pre-scan must not replace the positioned error);
+  `TestForeignAttributeNamesWithoutValues` requires valueless and valued names to
+  fail alike; `TestForeignAttributeExemptions` pins what still compiles — the
+  plain names and brace `on…` as component props, static and valueless
+  `onclick`, `on={ x }`, a custom element's `on…` (`once`, `onboarding`,
+  `onDoubleClick`), and all of it inside `{#raw}`;
+  `TestForeignColonAttributesOnComponents` the colon steers on `<Button>`;
+  `TestForeignAttributeReviewRegressions` the `v-model` steer naming `checked`,
+  the `<puzzle-view>` root (`className` rejects, brace `onclick` compiles),
+  `on:submit|preventDefault` steering at the name, `<my-el className>` and
+  `<rect onclick={ f }>`; `TestSkipForeignSyntaxCheck` that the switch compiles
+  the plain names and brace `on…`, leaves colon names their namespace or lexer
+  error, and that `ParseAttrString` on another tag and `AttrNames` give the
+  lexer's plain `:` error; `TestForeignHTMLInterpolation` the `{@html}` steer
+  with and without the switch. `TestParseReservedAttributeNamespaces`
+  (`parser_test.go`) pins both namespace messages.
 - **The shared expression table.** `expr/conformance_test.go` runs
   `conformance/expressions-parse.json`: each row is a source (optionally with
   `handler`, `bindings` or `pipes` set) and either its S-expression tree with
@@ -93,7 +112,8 @@ loosening one fails a test on purpose.
 - **Time budgets** (`perf_test.go`, best of three, skipped under `-short`, 3× when
   `CI` is set): a 20,000-line template under 100 ms; a 40 KB `{#raw}` of `{`
   under 20 ms; a 430 KB `{#let}` block and a 400 KB attribute value with 50k
-  braces each under 100 ms.
+  braces each under 100 ms. On a loaded machine the 20,000-line budget can miss
+  locally; rerun idle before reading it as a regression.
 - Composition markers are unique per render path (`slot_paths_test.go`); the
   nesting scan counts exactly for well-formed input and treats `{#let}` as void
   (`depth_test.go`, `TestLetIsVoidForDepth`); an inline SVG may start with a BOM
@@ -114,8 +134,9 @@ and the codegen halves of these rules in
 `TestCompileUnicodeComponentTags`, `TestCompileUnicodeClassName`.
 
 Contracts pinned (framework plan, `repo=puzzle`; plans cannot connect across
-repos): COMPONENT-TEMPLATE-PARSER, DECISION-D150-RAW-TEMPLATE-BLOCK,
-DECISION-D164-PLAYGROUND-WASM-BOUNDARY, DECISION-D166-SNIPPETS,
-DECISION-D167-COMPONENT-FAMILIES, DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS,
-DECISION-D173-CORE-SEMANTICS, DECISION-D176-EXPRESSION-LANGUAGE,
-DECISION-D180-COMPONENT-SLOT, DOC-LANGUAGE-CORE, DOC-SPEC-TEMPLATE.
+repos): COMPONENT-TEMPLATE-PARSER, DECISION-D147-IMPLICIT-TWO-WAY-BINDING,
+DECISION-D150-RAW-TEMPLATE-BLOCK, DECISION-D164-PLAYGROUND-WASM-BOUNDARY,
+DECISION-D166-SNIPPETS, DECISION-D167-COMPONENT-FAMILIES,
+DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS, DECISION-D173-CORE-SEMANTICS,
+DECISION-D176-EXPRESSION-LANGUAGE, DECISION-D180-COMPONENT-SLOT,
+DOC-LANGUAGE-CORE, DOC-SPEC-TEMPLATE.

@@ -76,6 +76,12 @@ check on), so the compiler passes nothing:
 - `SkipIslandCheck`, `SkipSlotCheck`, `SkipRefCheck` turn off PuzzleKit's
   post-parse rules for a host that applies its own (Sites' slot rules depend
   on the file kind).
+- `SkipForeignSyntaxCheck` turns off every other-framework attribute steer
+  (`className`, `v-*`, `:x`, `on:x`, brace `onClick`, …;
+  [[COMPONENT-TEMPLATE-PARSER]] "Attributes and markup") as one family: the
+  steers name PuzzleKit spellings (`@click`, implicit binding) that Sites
+  rejects. The `:` namespace reservation and the `{@html}` → `raw()` steer stay
+  on. A host that wants some of these steers must narrow the switch first.
 - `MaxDepth` bounds nesting for `ParseMarkup`, so an untrusted file cannot
   exhaust the recursive parser's stack.
 - `ParseMarkup` parses wrapper-less markup at a file position, and the
