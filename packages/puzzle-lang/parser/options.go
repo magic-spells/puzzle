@@ -38,6 +38,11 @@ type Options struct {
 	// SkipRefCheck skips the post-parse `ref` rules (refs.go). A host with no
 	// element refs diagnoses `ref` itself.
 	SkipRefCheck bool
+	// SkipForeignSyntaxCheck skips the DOM-attribute steers for React, Vue and
+	// Svelte spellings, including brace-valued on* handlers. A host without
+	// PuzzleKit events or implicit form binding must not suggest that syntax.
+	// The existing namespace reservation still applies.
+	SkipForeignSyntaxCheck bool
 
 	// MaxDepth is the deepest template nesting ParseMarkup accepts (elements,
 	// components, markers and block bodies each count one level, as
