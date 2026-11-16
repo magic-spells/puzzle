@@ -427,12 +427,16 @@ func TestLoadConfigNullBehavesAsUnset(t *testing.T) {
 			name: "all three null",
 			body: "export default { build: { dropConsole: null, sourceMap: null }, output: null };\n",
 		},
+		{
+			name: "proxy target undefined",
+			body: "export default { dev: { proxy: { '/api': undefined } } };\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg, err := LoadConfig(writeConfig(t, tt.body))
 			if err != nil {
-				t.Fatalf("a null value should be treated as unset, got error: %v", err)
+				t.Fatalf("an unset value should load without error: %v", err)
 			}
 			if !cfg.DropConsole() {
 				t.Error("DropConsole() = false, want the unset default true")

@@ -248,11 +248,11 @@ const configSentinel = "__PUZZLE_CONFIG_JSON__"
 // a Windows drive letter resolve correctly. The JSON rides a unique sentinel so
 // stray console output from the config cannot corrupt the payload.
 func readConfigViaNode(configPath string) ([]byte, error) {
-	// Keep unset process.env values as null so validate can report their keys.
+	// Keep an unset env value as null so validate can report its key.
 	script := fmt.Sprintf(
 		"const { pathToFileURL } = await import('node:url');"+
-			"const m = await import(pathToFileURL(process.argv[1]).href);"+
-			"process.stdout.write('\\n%s' + JSON.stringify(m.default ?? {}, (k, v) => v === undefined ? null : v));",
+			"const c = (await import(pathToFileURL(process.argv[1]).href)).default ?? {};"+
+			"process.stdout.write('\\n%s' + JSON.stringify(c, function (k, v) { return v === undefined && this === c.env ? null : v; }));",
 		configSentinel,
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), configLoadTimeout)
