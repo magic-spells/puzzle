@@ -1,3 +1,5 @@
+/// <reference path="./types/puzzle-env.d.ts" />
+
 /**
  * Ambient module shim so `import Home from './views/Home.pzl'` type-checks in a
  * Puzzle app authored with `<script lang="ts">`. Each `.pzl` file compiles to a

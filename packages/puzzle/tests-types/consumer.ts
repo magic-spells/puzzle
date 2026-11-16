@@ -1,3 +1,5 @@
+/// <reference path="../puzzle-env.d.ts" />
+
 /**
  * Type-only consumer fixture (`npm run test:types`).
  *
@@ -978,3 +980,22 @@ void okFlag;
 void errShape;
 void partialResult;
 void upcase;
+
+// Config env remains usable without generated types; exact keys are augmentable.
+declare global {
+	interface ImportMetaEnv {
+		readonly API_URL: string;
+		readonly BETA: boolean;
+		readonly LIMIT: number;
+	}
+}
+const publicAPI: string = import.meta.env.API_URL;
+const publicBeta: boolean = import.meta.env.BETA;
+const publicLimit: number = import.meta.env.LIMIT;
+const undeclaredEnv: string | number | boolean | undefined = import.meta.env.UNDECLARED;
+// @ts-expect-error config values are readonly
+import.meta.env.API_URL = 'changed';
+// @ts-expect-error the env object is readonly
+import.meta.env = {};
+// @ts-expect-error augmented keys keep their exact types
+const wrongEnv: number = import.meta.env.API_URL;

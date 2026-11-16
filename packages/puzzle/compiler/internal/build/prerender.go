@@ -234,7 +234,7 @@ func checkPrerenderCollision(absRoot, staging string, publicOwners map[string]st
 // plugin collects is discarded — styles.css was already composed by the main
 // pass; this pass exists only to run the app under node.
 func bundlePrerenderEntry(absRoot, stdin, outfile, label string, pc *passContext) error {
-	buildOpts := prerenderBundleOptions(absRoot, stdin, outfile, pc.plugin(absRoot))
+	buildOpts := prerenderBundleOptions(absRoot, stdin, outfile, pc.plugin(absRoot), pc.env)
 
 	result := api.Build(buildOpts)
 	if len(result.Errors) > 0 {
@@ -247,7 +247,7 @@ func bundlePrerenderEntry(absRoot, stdin, outfile, label string, pc *passContext
 // split out from bundlePrerenderEntry so the static dev builder can hold the
 // same pass open as a persistent api.Context and never risk drifting from what
 // a one-shot build compiles.
-func prerenderBundleOptions(absRoot, stdin, outfile string, pl *plugin.Plugin) api.BuildOptions {
+func prerenderBundleOptions(absRoot, stdin, outfile string, pl *plugin.Plugin, env map[string]json.RawMessage) api.BuildOptions {
 	buildOpts := api.BuildOptions{
 		Stdin: &api.StdinOptions{
 			Contents:   stdin,
@@ -270,7 +270,7 @@ func prerenderBundleOptions(absRoot, stdin, outfile string, pl *plugin.Plugin) a
 		// router.js only for route-shape validation and segment-regex compilation
 		// (ssg/index.js constructs an unstarted memory Router); nothing here
 		// navigates into a container.
-		Define:   bundleDefines(pl, bundleFlags{Dev: false, Takeover: false}),
+		Define:   bundleDefines(pl, bundleFlags{Env: env, Dev: false, Takeover: false}),
 		Plugins:  []api.Plugin{pl.ESBuild()},
 		LogLevel: api.LogLevelSilent,
 	}
