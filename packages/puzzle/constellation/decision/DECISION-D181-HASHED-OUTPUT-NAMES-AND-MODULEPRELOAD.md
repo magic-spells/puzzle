@@ -52,8 +52,6 @@ Each fallback prints one `warning: build.hashNames: …` line naming the file (n
 
 An **explicit** `hashNames: true` is strict: a missing shell or entry reference is a hard error naming `build.hashNames: false` (before the atomic swap); a shell reference to an output that was not emitted (a stale `/app.css`) fails; the other public pages are rewritten to the hashed names (no preloads; only the shell boots the app); and the stylesheet is hashed even when unlinked.
 
-When a SPA/hybrid entry emits CSS and no public HTML page references `app.css`, build and dev warn with the emitted filename and `<link href="/app.css" rel="stylesheet">` for `app/public/index.html`. This uses the shell scan and notice formatter, independently of hashing. `build -q` suppresses this advisory; dev prints it at most once per session, including cold fallback builds. It stays a warning because apps may load the CSS another way. Static pages wire their own CSS.
-
 ### Rewriting HTML
 
 The build rewrites local `src`/`href` references in script/link start tags, preserving bare, `./`, `/` and deployment-base prefixes, queries and fragments; remote URLs are unchanged, and copied public files win over compiler names, under a deployment base too. Tags inside an HTML comment (or an unterminated one to the end of the shell) are left alone: not rewritten, not checked, not read as the entry script. The scan steps over whole `<script>…</script>` bodies and quoted attribute values first, so a `<!--` inside either opens no comment. Static output strips the fixed app script under the normalized `routerBase` as well as the unprefixed spellings, with query and fragment suffixes.

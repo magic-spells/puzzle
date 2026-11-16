@@ -20,11 +20,8 @@ notes:
 
 The esbuild `onLoad` plugin for `*.pzl` ([[COMPONENT-ESBUILD-PLUGIN]]), all in
 memory per file: split sections → `codegen.Compile` → JS. Parse/codegen errors
-become positioned esbuild messages, and a failed file emits nothing. The shared
-message converter supplies the original source line, with zero-based byte columns
-and point locations (no invented token span). It uses the caller's source bytes;
-errors naming an SVG asset use that asset's cached bytes, never the importing
-`.pzl` line. Build and dev share this path; `check` reports its own diagnostics.
+become positioned esbuild messages, and a failed file emits nothing.
+Every positioned `.pzl` plugin message uses `sourceLocation` for its code frame.
 
 - `<style>` blocks go into a mutex-guarded map (esbuild runs `onLoad`
   concurrently) and are joined sorted by path, so `CSS()` output is deterministic.

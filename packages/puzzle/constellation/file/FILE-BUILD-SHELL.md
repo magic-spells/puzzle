@@ -36,12 +36,8 @@ public `.html`, and generated static pages: maps compiler names (`app.js`,
   references. Build keeps the fixed name for anything a page cannot follow and
   prints `hashFallbackWarning` once per file. It reuses the rewrite's tag scan
   (`rewriteShellHTMLRefs` with nil renames) so the two can never disagree.
-- **Unlinked entry CSS is advisory.** When the entry emits a CSS bundle but no
-  public HTML page references `app.css`, build and SPA/hybrid dev warn with the
-  emitted filename and the exact link to add to `app/public/index.html`. An app
-  may load it another way, so this never fails the build. The notice shares the
-  shell warning formatter, is silent under `build -q`, and dev prints it at most
-  once per session. Static pages wire their own per-page CSS and are excluded.
+- **Unlinked CSS**: `warnUnlinkedCSS` reuses the shell reference scan. It warns
+  rather than errors because an app may load the emitted CSS outside its HTML.
 - **`strict` = an explicit `hashNames: true`.** Only then does a compiler-name
   reference with no emitted output, or a missing shell/entry reference, fail the
   build. Unset hashing leaves such references as written.

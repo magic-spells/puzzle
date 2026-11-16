@@ -200,3 +200,12 @@ func TestRewriteShellReadErrors(t *testing.T) {
 		t.Fatalf("shell read error = %v", err)
 	}
 }
+
+func TestEntryCSSLinkCheckIsLazy(t *testing.T) {
+	if warnUnlinkedCSS(`{"outputs":{"dist/app.js":{"entryPoint":"app/app.js"}}}`, "dist", "app/app.js", func() bool {
+		t.Fatal("a bundle without CSS must not scan public HTML")
+		return false
+	}) {
+		t.Fatal("a bundle without CSS must not warn")
+	}
+}
