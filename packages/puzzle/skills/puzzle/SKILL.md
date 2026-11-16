@@ -184,7 +184,9 @@ counter after the range: `{#for 1...n, i}`. HTML void elements (`<br>`,
 `<img …>`, `<input …>`) need no `/>`, and a closer such as `</br>` is a
 compile error.
 `<script lang="ts">` for TypeScript (build remains transpile-only; run
-`puzzle check` separately for static checks).
+`puzzle check` separately for static checks). Name the props interface on the
+base class — `class Card extends PuzzleView<CardProps>` — and the script reads
+its props typed, with no cast.
 
 The function library is the standard set shared with Sites plus the
 PuzzleKit-only `link` and `timeago`; a template calls one by name, and calls
@@ -390,10 +392,12 @@ Rules that bite:
   `event` reads as data (`<EventCard event={ item } />` works), but a template
   that both reads one and uses `event` inside a handler is a compile error:
   rename the field or prop.
-- **`puzzle check` types the language.** Methods are checked as the same
-  JavaScript methods, so a wrong method or argument is a real TypeScript error
-  at its line and column, and library calls check against the function
-  signatures (an app function is `any`). The check adds the ES2019–ES2023
+- **`puzzle check` types the language where a type is known.** Methods are
+  checked as the same JavaScript methods and library calls against the function
+  signatures (an app function is `any`), and template handlers against the
+  component's `events`, each error at its line and column. A value read from
+  `data()` is `any`, so a misspelled data field (`{ user.nmae }`) or a method
+  its real type lacks passes unreported. The check adds the ES2019–ES2023
   string and array libs whatever the app's `target`, so `.at()`,
   `.replaceAll()` and `.toSorted()` type in templates — and in that file's
   `<script>` too, which can hide a method your `target` lacks from the check

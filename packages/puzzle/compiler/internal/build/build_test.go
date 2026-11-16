@@ -2798,3 +2798,56 @@ func TestSplitShellWithoutRecognizedEntrySkipsPreloads(t *testing.T) {
 		t.Fatalf("shell without a recognized entry changed: %s", got)
 	}
 }
+
+func TestBuildUnlinkedEntryCSSWarning(t *testing.T) {
+	for _, tc := range []struct {
+		name, page, output string
+		dev, noCSS         bool
+	}{
+		{name: "production"},
+		{name: "development", dev: true},
+		{name: "static", output: "static"},
+		{name: "static linked", output: "static", page: "index.html"},
+		{name: "linked", page: "index.html"},
+		{name: "other page links", page: "embed.html"},
+		{name: "no CSS", noCSS: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := writeSplitFixture(t, "")
+			if tc.output == "static" {
+				requireStaticRuntime(t)
+				root = writeSSGFixture(t, baseSSGFixture())
+			}
+			if !tc.noCSS {
+				write(t, filepath.Join(root, "app", "entry.css"), "body { color: red; }")
+				write(t, filepath.Join(root, "app", "app.js"), "import './entry.css';\n"+readFile(t, filepath.Join(root, "app", "app.js")))
+			}
+			if tc.page != "" {
+				page := filepath.Join(root, "app", "public", tc.page)
+				body := `<link href="/app.css" rel="stylesheet">`
+				if tc.page == "index.html" {
+					body += readFile(t, page)
+				}
+				write(t, page, body)
+			}
+			var err error
+			stderr := captureStderr(t, func() { err = Build(root, Options{Development: tc.dev, Output: tc.output}) })
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := tc.page == "" && !tc.noCSS
+			if got := strings.Count(stderr, "no shell page references app.css"); (got == 1) != want || got > 1 {
+				t.Fatalf("warning count = %d, want warning %v: %s", got, want, stderr)
+			}
+			if want {
+				files, _ := filepath.Glob(filepath.Join(root, "dist", "app*.css"))
+				if len(files) != 1 || !strings.Contains(stderr, "emitted "+filepath.Base(files[0])) {
+					t.Errorf("warning does not name emitted file %v: %s", files, stderr)
+				}
+				if !strings.Contains(stderr, `add <link href="/app.css" rel="stylesheet"> to app/public/index.html`) {
+					t.Errorf("warning missing exact fix: %s", stderr)
+				}
+			}
+		})
+	}
+}

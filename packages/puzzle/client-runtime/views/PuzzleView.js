@@ -141,6 +141,7 @@ export class PuzzleView {
 	/** @type {Record<string, any>} */
 	#model = {};
 	#params = {};
+	/** @type {any} */
 	#props = {};
 	// Route snapshot of the navigation that delivered this view's params (v1.15,
 	// D47) — set only when the router threads it through preload()/refresh(), so
@@ -1794,7 +1795,7 @@ export class PuzzleView {
 	 * Component model; defaults to the props, so a template reads `{ tone }`.
 	 *
 	 * @param {Record<string, any>} params
-	 * @param {Record<string, any>} props
+	 * @param {any} props
 	 * @returns {any} the model object (or a promise of it)
 	 */
 	data(params, props) {

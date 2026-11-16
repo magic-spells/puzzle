@@ -85,15 +85,16 @@ const (
 )
 
 type lexer struct {
-	input       string
-	file        string
-	pos         int
-	line        int
-	col         int
-	baseOffset  int
-	mode        lexMode
-	expectValue bool // true immediately after '=', so a bareword lexes as a value
-	rawBraces   bool // nested lexer for a captured raw body: HTML on, brace grammar off
+	input        string
+	file         string
+	pos          int
+	line         int
+	col          int
+	baseOffset   int
+	mode         lexMode
+	expectValue  bool // true immediately after '=', so a bareword lexes as a value
+	rawBraces    bool // nested lexer for a captured raw body: HTML on, brace grammar off
+	foreignAttrs bool // parser enables attribute steers on DOM tags, per host
 }
 
 // newLexer creates a lexer over content whose first byte sits at base in the
@@ -422,7 +423,7 @@ func (l *lexer) nextTag() (Token, error) {
 			l.expectValue = false
 			return Token{Type: TokAttrBare, Value: val, Raw: raw, Line: line, Col: col, Offset: off}, nil
 		}
-		if c == '@' || isNameStart(c) || attrStartRuneLen(l.input[l.pos:]) > 0 {
+		if c == ':' || c == '@' || isNameStart(c) || attrStartRuneLen(l.input[l.pos:]) > 0 {
 			j := l.pos
 			if c == '@' {
 				j++
@@ -437,6 +438,16 @@ func (l *lexer) nextTag() (Token, error) {
 				}
 			}
 			name := l.input[l.pos:j]
+			// A leading colon stays a lexical error, with the same name-based
+			// steer as other foreign attributes when the parser enables it.
+			if c == ':' {
+				if l.foreignAttrs {
+					if e := checkAttrNamespace(name, Position{Line: line, Col: col, Offset: off}, l.file, true, Token{}); e != nil {
+						return Token{}, e
+					}
+				}
+				return Token{}, l.errf(line, col, "unexpected character %q in tag", ":")
+			}
 			l.jumpTo(j)
 			return Token{Type: TokAttrName, Value: name, Raw: raw, Line: line, Col: col, Offset: off}, nil
 		}

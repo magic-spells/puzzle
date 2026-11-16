@@ -28,6 +28,12 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 )
 
+// Keep the source already read by OnLoad for the OnEnd diagnostic.
+type unscannedFile struct {
+	usage    fileUsage
+	location *api.Location
+}
+
 // noteCompiled records (or forgets) one successfully compiled .pzl for the
 // check. p.mu must NOT be held.
 func (p *Plugin) noteCompiled(path string, src []byte) {
@@ -47,7 +53,7 @@ func (p *Plugin) noteCompiled(path string, src []byte) {
 	}
 	fu := fileUsageFromSource(p.appRoot, path, string(src), allow)
 	p.mu.Lock()
-	p.unscanned[path] = fu
+	p.unscanned[path] = unscannedFile{usage: fu, location: sourceLocation(p.relName(path), 1, 1, src)}
 	p.mu.Unlock()
 }
 
@@ -91,11 +97,11 @@ func (p *Plugin) featureMismatches(graph map[string]bool) []api.Message {
 
 	var msgs []api.Message
 	for _, path := range paths {
-		missing := p.missingLocked(p.unscanned[path])
+		missing := p.missingLocked(p.unscanned[path].usage)
 		if len(missing) == 0 {
 			continue
 		}
-		msgs = append(msgs, usageMismatchMessage(p.relName(path), missing, p.mismatchHint(path)))
+		msgs = append(msgs, usageMismatchMessage(p.relName(path), missing, p.mismatchHint(path), p.unscanned[path].location))
 	}
 	return msgs
 }
@@ -145,13 +151,10 @@ func (p *Plugin) missingLocked(fu fileUsage) []string {
 	return append(out, fns...)
 }
 
-func usageMismatchMessage(name string, missing []string, hint string) api.Message {
+func usageMismatchMessage(name string, missing []string, hint string, location *api.Location) api.Message {
 	return api.Message{
-		Text: fmt.Sprintf("this .pzl uses %s, which this build compiled out: the usage scan never read the file", strings.Join(missing, ", ")),
-		Location: &api.Location{
-			File: name,
-			Line: 1,
-		},
+		Text:     fmt.Sprintf("this .pzl uses %s, which this build compiled out: the usage scan never read the file", strings.Join(missing, ", ")),
+		Location: location,
 		Notes: []api.Note{
 			{Text: hint},
 			{Text: "A running `puzzle dev` reads installed packages at startup: restart it after installing or changing a package."},

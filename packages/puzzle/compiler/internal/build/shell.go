@@ -232,7 +232,7 @@ func rewriteShellHTMLRefs(source string, renames map[string]string, chunks []str
 // (build.hashNames unset): the shell must follow a hashed name, and no other
 // public page may depend on the fixed one, or that file keeps its fixed name.
 type shellHashPlan struct {
-	entry, styles           bool
+	entry, styles, appCSS   bool
 	entryPages, stylesPages []string
 }
 
@@ -264,6 +264,7 @@ func shellHashSupport(root string) shellHashPlan {
 		var refs map[string]bool
 		_, plan.entry, refs, _ = rewriteShellHTMLRefs(string(source), nil, nil, publicFiles, false)
 		plan.styles = refs["styles.css"]
+		plan.appCSS = refs["app.css"]
 	}
 	for _, page := range pages {
 		source, err := os.ReadFile(filepath.Join(src, filepath.FromSlash(page)))
@@ -271,6 +272,7 @@ func shellHashSupport(root string) shellHashPlan {
 			continue
 		}
 		_, _, refs, _ := rewriteShellHTMLRefs(string(source), nil, nil, publicFiles, false)
+		plan.appCSS = plan.appCSS || refs["app.css"]
 		if refs["app.js"] || refs["app.css"] {
 			plan.entryPages = append(plan.entryPages, "public/"+page)
 		}
@@ -285,6 +287,19 @@ func shellHashSupport(root string) shellHashPlan {
 // keeps a fixed name because the shell cannot reference the hashed one.
 func hashFallbackWarning(file, reason string) string {
 	return fmt.Sprintf("warning: build.hashNames: %s, so %s keeps its fixed name; set build.hashNames to true or false to choose explicitly\n", reason, file)
+}
+
+func warnUnlinkedCSS(metafile, outdir, entry string, linked func() bool) bool {
+	outputs, err := bundleOutputs(metafile, "", outdir)
+	if err != nil {
+		return false
+	}
+	renames, _ := shellRenames(outputs, "", entry)
+	if css := renames["app.css"]; css != "" && !linked() {
+		fmt.Fprintf(os.Stderr, "warning: emitted %s but no shell page references app.css; add <link href=\"/app.css\" rel=\"stylesheet\"> to app/public/index.html\n", css)
+		return true
+	}
+	return false
 }
 
 func insertModulepreloads(source, prefix string, chunks []string, crossorigin string) (string, error) {

@@ -24,6 +24,7 @@
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
 
+// What the parent passes; PuzzleView<CounterProps> below types `this.props`.
 interface CounterProps {
   label?: string;
 }
@@ -39,7 +40,7 @@ interface CounterModel {
   label: string;
 }
 
-export default class Counter extends PuzzleView {
+export default class Counter extends PuzzleView<CounterProps> {
   // Local UI state — seeded once before the first data() run.
   created(): void {
     this.setData({ count: 0 });

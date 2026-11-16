@@ -172,8 +172,10 @@ func Build(root string, opts Options) error {
 	// errors on a missing entry reference and rewrites the other pages.
 	strictHash := hash && cfg.Build.HashNames != nil
 	var stylesFallback string
+	linkedCSS := func() bool { return shellHashSupport(absRoot).appCSS }
 	if hash && !strictHash {
 		plan := shellHashSupport(absRoot)
+		linkedCSS = func() bool { return plan.appCSS }
 		if hashEntry {
 			reason := ""
 			switch {
@@ -296,7 +298,7 @@ func Build(root string, opts Options) error {
 		Splitting: splitting,
 		HashEntry: hashEntry,
 	})
-	buildOpts.Metafile = opts.Metafile != nil || !opts.Development
+	buildOpts.Metafile = true
 	if opts.Fixtures {
 		buildOpts.Plugins = append(buildOpts.Plugins, fixtures.Plugin())
 	}
@@ -352,6 +354,8 @@ func Build(root string, opts Options) error {
 	if tailwindErr != nil {
 		return tailwindErr
 	}
+
+	warnUnlinkedCSS(result.Metafile, staging, entry, linkedCSS)
 
 	// Styles → one global stylesheet (the shell follows its emitted name): the
 	// Tailwind layer (when puzzle.config.js declares it) followed by the

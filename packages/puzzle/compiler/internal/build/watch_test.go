@@ -1131,3 +1131,95 @@ func readDistBundle(t *testing.T, root string) string {
 	}
 	return string(b)
 }
+
+func TestWatchBuilderUnlinkedEntryCSSWarning(t *testing.T) {
+	for _, splitting := range []bool{false, true} {
+		for _, linked := range []bool{false, true} {
+			root := writeSplitFixture(t, "")
+			if linked {
+				page := filepath.Join(root, "app", "public", "index.html")
+				write(t, page, `<link href="/app.css" rel="stylesheet">`+readFile(t, page))
+			}
+			b, err := NewWatchBuilder(root, WatchOptions{Splitting: splitting})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// A bundle with no CSS must not warn or consume the once-per-session notice.
+			initial := captureStderr(t, func() { _, err = b.Rebuild(nil) })
+			if err != nil || initial != "" {
+				t.Fatalf("initial rebuild: %v, stderr = %q", err, initial)
+			}
+			write(t, filepath.Join(root, "app", "entry.css"), "body { color: red; }")
+			write(t, filepath.Join(root, "app", "app.js"), "import './entry.css';")
+			stderr := captureStderr(t, func() {
+				for range 3 {
+					if _, err = b.Rebuild(nil); err != nil {
+						break
+					}
+				}
+			})
+			b.Dispose()
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := 1
+			if linked {
+				want = 0
+			}
+			if got := strings.Count(stderr, "no shell page references app.css"); got != want {
+				t.Errorf("split=%v linked=%v: warning count=%d, want %d: %s", splitting, linked, got, want, stderr)
+			}
+			if !linked && !strings.Contains(stderr, "emitted app.css") {
+				t.Errorf("dev warning missing emitted filename: %s", stderr)
+			}
+		}
+	}
+}
+
+func TestWatchBuilderTemplateErrorFrame(t *testing.T) {
+	root := writeSplitFixture(t, "")
+	write(t, filepath.Join(root, "app", "app.js"), "import './Home.pzl';")
+	write(t, filepath.Join(root, "app", "Home.pzl"), "<puzzle-view>\n\té🙂 {#if todos.length > }\n{/if}\n</puzzle-view>")
+	b, err := NewWatchBuilder(root, WatchOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Dispose()
+	_, err = b.Rebuild(nil)
+	if err == nil || !strings.Contains(err.Error(), "é🙂 {#if todos.length > }") || !strings.Contains(err.Error(), "╵") {
+		t.Fatalf("dev template error lost its code frame: %v", err)
+	}
+}
+
+func TestWatchBuilderCachesCSSLinkUntilPublicChanges(t *testing.T) {
+	root := writeSplitFixture(t, "")
+	css := filepath.Join(root, "app", "entry.css")
+	page := filepath.Join(root, "app", "public", "index.html")
+	write(t, css, "body { color: red; }")
+	write(t, filepath.Join(root, "app", "app.js"), "import './entry.css';")
+	original := readFile(t, page)
+	write(t, page, `<link href="/app.css" rel="stylesheet">`+original)
+	b, err := NewWatchBuilder(root, WatchOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Dispose()
+	stderr := captureStderr(t, func() { _, err = b.Rebuild(nil) })
+	if err != nil || stderr != "" {
+		t.Fatalf("linked rebuild: %v, stderr = %q", err, stderr)
+	}
+	// A bundle-only rebuild must use the public tree it last synced. Removing
+	// the source link without reporting that edit exposes any extra HTML scan.
+	write(t, page, original)
+	stderr = captureStderr(t, func() { _, err = b.Rebuild([]string{css}) })
+	if err != nil || stderr != "" {
+		t.Fatalf("bundle-only rebuild rescanned public HTML: %v, stderr = %q", err, stderr)
+	}
+	if _, err = b.Rebuild([]string{page}); err != nil {
+		t.Fatal(err)
+	}
+	stderr = captureStderr(t, func() { _, err = b.Rebuild([]string{css}) })
+	if err != nil || strings.Count(stderr, "no shell page references app.css") != 1 {
+		t.Fatalf("public edit did not invalidate the CSS link: %v, stderr = %q", err, stderr)
+	}
+}

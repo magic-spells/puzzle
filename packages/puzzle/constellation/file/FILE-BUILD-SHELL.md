@@ -26,18 +26,18 @@ notes:
 Production HTML rewriting for the shell (`public/index.html`), every other copied
 public `.html`, and generated static pages: maps compiler names (`app.js`,
 `app.css`, `styles.css`) to the emitted hashed names and inserts static-import
-`modulepreload` links. Development skips all of it. Intent:
+`modulepreload` links. Development skips rewriting. Intent:
 [[DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD]].
 
-- **The pre-check runs before bundling** (`shellHashSupport` → `shellHashPlan`),
-  only when `build.hashNames` is unset (default-on): esbuild's `EntryNames` is fixed
-  per pass, so whether the entry can be hashed must be known up front. It walks the
-  public dir itself (staging is not filled yet) and reports whether `index.html`
-  loads `app.js` from a `<script src>` / references `styles.css`, and which other
-  public pages name `app.js`/`app.css`/`styles.css` by their fixed names. Build
-  keeps the fixed name for anything a page cannot follow and prints
-  `hashFallbackWarning` once per file. It reuses the rewrite's tag scan
+- **The pre-check runs before bundling** (`shellHashSupport` → `shellHashPlan`):
+  esbuild's `EntryNames` is fixed per pass, so whether the entry can be hashed
+  must be known up front. It walks the public dir itself (staging is not filled
+  yet), reading the shell's entry/styles references and other pages' fixed-name
+  references. Build keeps the fixed name for anything a page cannot follow and
+  prints `hashFallbackWarning` once per file. It reuses the rewrite's tag scan
   (`rewriteShellHTMLRefs` with nil renames) so the two can never disagree.
+- **Unlinked CSS**: `warnUnlinkedCSS` reuses the shell reference scan. It warns
+  rather than errors because an app may load the emitted CSS outside its HTML.
 - **`strict` = an explicit `hashNames: true`.** Only then does a compiler-name
   reference with no emitted output, or a missing shell/entry reference, fail the
   build. Unset hashing leaves such references as written.
