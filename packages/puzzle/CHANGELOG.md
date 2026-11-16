@@ -218,6 +218,48 @@ one is *not* a compile error; it silently builds a different product.
 - **BREAKING: `injectShell` / `injectStaticShell` (`/ssg`) take no `title`.**
   Pass the resolved `head` (`prerender()` returns it on every page); without
   one the shell's head is left as it is.
+- **BREAKING: other frameworks' spellings are compile errors (D147).** A
+  template that carries React, Vue or Svelte syntax used to build and then do
+  nothing, or fail with a message about SVG namespaces. Each spelling now stops
+  the build with a positioned error that names the Puzzle form: `className` →
+  `class`, `htmlFor` → `for`, `v-if` / `v-else-if` / `v-else` / `v-show` →
+  `{#if}`, `v-for` → `{#for}`, `v-model` → `value={ expr }` (or
+  `checked={ expr }`), `v-html` and `{@html expr}` → `{ raw(expr) }`,
+  `v-bind:x` and `:x` → `x={ expr }`, `v-on:click` and `on:click` →
+  `@click={ handler }`, `class:name` → an `{#if}` inside `class="…"`. The
+  plain names are checked on DOM elements, the `<puzzle-view>` root included;
+  on a component they stay ordinary props. The colon forms are errors on
+  every tag. A brace-valued `on…` attribute on a standard element
+  (`<button onclick={ save }>`, `onClick={ save }`) is an error too and
+  steers to `@click={ save }`; it used to write the expression's text into an
+  inline handler attribute. A static `onclick="…"` string still compiles, and
+  a custom element (a tag with a hyphen) keeps its own `on…` attributes. A
+  host of `packages/puzzle-lang` that has no `@event` syntax turns the checks
+  off with `parser.Options.SkipForeignSyntaxCheck`.
+
+### Added
+
+- **`env` in `puzzle.config.js`, read as `import.meta.env.KEY` (D190).** A flat
+  object of strings, numbers and booleans:
+  `env: { API_URL: process.env.API_URL ?? 'http://localhost:3000' }`. Each
+  entry is written into every bundle at build time (`build`, `dev`, and the
+  hybrid and static prerender), so `fetch(import.meta.env.API_URL + '/users')`
+  works in every output mode. `import.meta.env` is always an object, so a key
+  the config does not declare reads `undefined` instead of throwing. The
+  values ship in the public bundle; secrets do not belong in them.
+  `puzzle-env.d.ts` declares `ImportMetaEnv` for an app to augment with its
+  own keys. A key that is not a JavaScript identifier, or a value of another
+  type (an unset `process.env` variable included), is a one-line config error.
+  `puzzle dev` reads the config once; restart it after an edit.
+- **`PuzzleView<Props>` types a component's props.**
+  `class TodoItem extends PuzzleView<TodoItemProps>` types `this.props`,
+  `data()`'s `props` and `afterUpdate`'s `prev.props`, and `mountView` /
+  `setProps` in `/testing` take the same `Props`. Plain `extends PuzzleView`
+  stays `any`. The TypeScript scaffolds, the `puzzle generate` stubs that take
+  props and `examples/typed-todos` name the interface and no longer cast
+  `this.props`. `PuzzleViewConstructor` is the type for any view class; a
+  `typeof PuzzleView` annotation rejects a typed one. The `.pzl` module shim
+  types an import as `typeof PuzzleView<any>`.
 
 ### Changed
 
@@ -242,6 +284,24 @@ one is *not* a compile error; it silently builds a different product.
   synchronously left the in-flight slot pointing at the wrong navigation, so
   `idle()` never resolved. The slot now latches a pending sentinel until the
   navigation pairs with its own promise (D182).
+- **`.pzl` errors show the source line.** A template, codegen, `<style>`
+  section, `{#svg}` asset or usage-check error used to print an empty code
+  frame with the caret in column 0. The frame now shows the line, with the
+  caret under the reported column, in `build`, `dev` and the browser overlay.
+- **A warning when imported CSS is built but no page links it.** CSS imported
+  from JavaScript is bundled to `app.css` (`app-<hash>.css` in production).
+  When no page under `public/` references `app.css`, those rules never load;
+  `puzzle build` (every output mode) and `puzzle dev` now say so, name the
+  emitted file, and print the `<link href="/app.css" rel="stylesheet">` line to
+  add to `app/public/index.html`. `dev` prints it once per session; the
+  static-output dev server does not print it. It is a warning, so it also
+  prints under `-q`.
+- **`puzzle check`'s documentation matches what it checks.** The README and
+  `puzzle check --help` claimed a misspelled data field such as
+  `{ user.nmae }` is a type error. It is not: values from `data()` are
+  untyped. `puzzle check` type-checks `lang="ts"` scripts, template event
+  handlers (a handler that does not exist, the wrong number of arguments, or
+  an argument of a known type that does not fit) and standard-function calls.
 - **Buttons are quiet: no brand fill (puzzle-pieces).** A screen with many
   buttons no longer reads as a wall of indigo. `button` `primary` is solid ink
   with the page colour as its text (`bg-ink text-page hover:bg-ink/85`):
