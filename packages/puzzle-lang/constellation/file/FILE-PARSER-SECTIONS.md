@@ -45,6 +45,13 @@ COMPONENT-TEMPLATE-PARSER (`repo=puzzle`).
 - Accepted: a brace group that fails to scan advances one byte and rescans,
   quadratic on thousands of unbalanced `{` outside a raw block — such a file is
   already a compile error.
+- **Section-tag attributes** (`parseAttrString`, shared by every section tag and
+  the host's `ParseAttrString`) run `checkAttrName` at each name and
+  `buildAttr(name, npos, v, section)` for each value, the same rules as an
+  element's. Only `section == "puzzle-view"` gets the other-framework steers
+  (`dom` true, so `className` and `v-*` reject; the tag has a hyphen, so a
+  brace-valued `on…` does not); every other tag name parses with
+  `SkipForeignSyntaxCheck` on. The `:` namespace reservation applies to all.
 - Also reads `<script lang>` (`""` | `"ts"`) and the `<puzzle-skeleton>`
   `min-duration` attribute, each attribute error positioned.
 

@@ -32,10 +32,13 @@ The grammar is [[DOC-SPEC-TEMPLATE]]; the expression grammar is [[DOC-LANGUAGE-C
   a file exactly as the parser will.
 - **`Options`** (`options.go`): `Let` (`{#let}`, `let.go`), `Pipes` (threaded into every
   expression as `expr.Options.Pipes`), `SkipIslandCheck` / `SkipSlotCheck` /
-  `SkipRefCheck` (a host that runs its own), and `MaxDepth` (ParseMarkup only, default
-  `DefaultMaxDepth` 200; a token-count scan rejects deeper nesting before the recursive
-  parser could exhaust the stack). **The zero `Options` is PuzzleKit's grammar exactly**;
-  every PuzzleKit caller passes none.
+  `SkipRefCheck` (a host that runs its own), `SkipForeignSyntaxCheck` (every
+  other-framework attribute steer under "Attributes and markup", as one family), and
+  `MaxDepth` (ParseMarkup only, default `DefaultMaxDepth` 200; a token-count scan rejects
+  deeper nesting before the recursive parser could exhaust the stack). **The zero
+  `Options` is PuzzleKit's grammar exactly**; every PuzzleKit caller passes none. The
+  parser also hands its `Options` to the lexer (`Next(opts)`), whose only use is the
+  leading-colon steer.
 - `OverNestingDepth` (depth.go) is the same guard for the wrapped PuzzleKit path; only the
   playground WASM compiler ([[DECISION-D164-PLAYGROUND-WASM-BOUNDARY]]) calls it.
 
@@ -110,9 +113,44 @@ mirror all three rules.**
 
 - Attributes are static, dynamic, mixed, event, valueless or a standalone `SpreadAttr`
   (`{...expr}`, one `ExprAST`; the expression grammar itself still rejects spread).
-  Non-event names with `:` are reserved unless the prefix is `xml`/`xlink`/`xmlns`;
-  `checkAttrNamespace` runs at the NAME, before the `=` branch, so valued and valueless
-  forms reject alike. Attribute names may carry non-ASCII letters.
+  Attribute names may carry non-ASCII letters.
+- **Name checks run at the NAME** (`checkAttrName`), before the value is lexed, so valued
+  and valueless forms reject alike and a lexer error in the value
+  (`on:submit|preventDefault`) cannot hide the name's steer. `@` names are exempt: events
+  own their modifier colons.
+- **Reserved namespaces:** a non-event name with `:` is an error unless the prefix is
+  `xml`/`xlink`/`xmlns`. A binding-shaped half (`bind`, `model`, `v-model`, `sync`, `value`,
+  `checked`) steers to implicit binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]); any
+  other prefix (`inkscape:`) to stripping the attribute or loading the file with `{#svg}`.
+  No host switch turns this off.
+- **Other frameworks' spellings** are positioned errors at the name, "`<name>` is not
+  supported — <the Puzzle spelling>" (rationale and boundaries in D147):
+  - *Any lowercase tag* (standard or custom element, the `<puzzle-view>` root included),
+    exact case: `className`, `htmlFor`, `v-if`, `v-else-if`, `v-else`, `v-show`, `v-for`,
+    `v-model` (names `value={ expr }` and `checked={ expr }`), `v-html`. On a component
+    these are ordinary prop names and compile.
+  - *Every tag, components included:* `v-bind:x` and `:x` → `x={ expr }`; `v-on:x` and
+    `on:x` → `@x={ handler }`; `class:x` → `class="{#if cond}x{/if}"`. A leading `:` is a
+    lexer error before the parser sees a name, so its steer comes from `nextTag` — the
+    reason the lexer takes `Options`.
+  - *Standard elements only* (lowercase tag, no hyphen): a brace-valued `on…={ expr }`, any
+    case, with at least one character after `on`, → `@<rest, lowercased>={ expr }`;
+    `onDoubleClick` → `@dblclick` is the one renamed event. It is checked in `buildAttr`,
+    the one place that sees the value, which is why `buildAttr` takes the tag. Custom
+    elements (any hyphenated tag, `<puzzle-view>` included) and components keep their
+    `on…` attributes, and a static or quoted `onclick="…"` is ordinary HTML on any tag.
+  - `{@html expr}` in a text interpolation → `{ raw(expr) }` (`parseInterpolationExpr`,
+    before `expr` sees the `@`). Not behind the host switch: `raw` is a shared function.
+  - None of these apply inside `{#raw}`. `SkipForeignSyntaxCheck` turns every attribute
+    steer off; the colon names then get the namespace message and `:x` the lexer's
+    "unexpected character".
+  - **Gotcha:** `<p once={ x }>` is rejected (steering to `@ce`). A standard element has no
+    non-event `on*` attribute, so the rule accepts that risk there and nowhere else.
+- **The `<puzzle-view>` root's attributes** (`parseAttrString`, section `puzzle-view`) run
+  the same name checks and `buildAttr` as an element tag named `puzzle-view`, steers on
+  whatever the host (only PuzzleKit has the wrapper). Any other tag name (every other
+  section tag, and whatever a host passes to `ParseAttrString`) parses with
+  `SkipForeignSyntaxCheck` on, as does `AttrNames`.
 - **Event modifiers** (`parseEventModifiers`, written order kept): `prevent`, `stop`,
   `once`, `outside`, `passive`, `capture` on any event; `passive` with `prevent` is an error
   in either order ([[DECISION-D187-PASSIVE-CAPTURE]]); key filters are keyboard-only.
