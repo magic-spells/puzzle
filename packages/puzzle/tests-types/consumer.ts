@@ -91,6 +91,7 @@ import { mountStatic } from '@magic-spells/puzzle/static';
 import type { MountStaticOptions, StaticRoute } from '@magic-spells/puzzle/static';
 import { createTestApp, measureRenders, mountView, type } from '@magic-spells/puzzle/testing';
 import type { RenderProfile } from '@magic-spells/puzzle/testing';
+import ImportedView from './views/Imported.pzl';
 
 const renderedNull: string = displayValue(null);
 const renderedNamedValue: string = displayValue(0, 'count');
@@ -837,8 +838,8 @@ class Card extends PuzzleView<CardProps> {
 	}
 
 	afterUpdate(prev: PrevViewState<CardProps>): void {
-		const before: string = prev.props.title;
-		void before;
+		// @ts-expect-error prev.props is CardProps, not any
+		void prev.props.titel;
 	}
 
 	mounted(): void {
@@ -854,6 +855,9 @@ class MismatchedCard extends PuzzleView<CardProps> {
 	data(_params: Record<string, string>, props: { count: number }) {
 		return props;
 	}
+
+	// @ts-expect-error afterUpdate's prev.props is the view's Props
+	afterUpdate(_prev: PrevViewState<{ count: number }>): void {}
 }
 void MismatchedCard;
 
@@ -868,6 +872,12 @@ const typedConstructor: PuzzleViewConstructor = Card;
 const plainPzl: typeof PuzzleView = PlainView;
 void [typedConstructor, plainPzl];
 routes.push({ path: '/card', view: Card, layout: PlainView });
+
+// puzzle-env.d.ts types a `.pzl` import as an untyped view: its props are `any`.
+declare const imported: InstanceType<typeof ImportedView>;
+const importedProp: number = imported.props.anything;
+void importedProp;
+routes.push({ path: '/imported', view: ImportedView });
 
 async function typedPropsTests(open: (event: Event) => void): Promise<void> {
 	const card = await mountView(Card, { props: { title: 'Hi', open } });

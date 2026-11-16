@@ -17,7 +17,7 @@ interface WrapperModel {
   classes: string;
 }
 
-export default class Wrapper extends PuzzleView {
+export default class Wrapper extends PuzzleView<WrapperProps> {
   // Family members compose: <Children/> above renders whatever the caller
   // nests inside <Wrapper>.
   data(_params: Record<string, string>, props: WrapperProps): WrapperModel {

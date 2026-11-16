@@ -19,5 +19,5 @@
       "@magic-spells/puzzle/testing": ["../types/testing.d.ts"]
     }
   },
-  "include": ["consumer.ts"]
+  "include": ["consumer.ts", "../puzzle-env.d.ts"]
 }

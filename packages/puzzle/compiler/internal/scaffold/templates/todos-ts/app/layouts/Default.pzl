@@ -45,7 +45,7 @@ interface LayoutModel {
   showVersion: boolean;
 }
 
-export default class DefaultLayout extends PuzzleView {
+export default class DefaultLayout extends PuzzleView<LayoutProps> {
   created(): void {
     this.setData({
       version: '1.0.0'
