@@ -35,5 +35,3 @@ Change classification lives in `changes.go`.
 - Server errors come back through a channel and shutdown is graceful
   (SIGINT/SIGTERM → `Shutdown`, SSE handlers released via context) — no
   `log.Fatal` in goroutines.
-- Cold SPA fallback builds share `build.ShellNotices` for the session, so an
-  unlinked entry CSS advisory prints once just as on the warm builder path.

@@ -286,33 +286,20 @@ func shellHashSupport(root string) shellHashPlan {
 // hashFallbackWarning is the one-line notice printed when default-on hashing
 // keeps a fixed name because the shell cannot reference the hashed one.
 func hashFallbackWarning(file, reason string) string {
-	return shellWarning("build.hashNames: %s, so %s keeps its fixed name; set build.hashNames to true or false to choose explicitly", reason, file)
+	return fmt.Sprintf("warning: build.hashNames: %s, so %s keeps its fixed name; set build.hashNames to true or false to choose explicitly\n", reason, file)
 }
 
-// shellWarning is the common plain-stderr format for shell advisories.
-func shellWarning(format string, args ...any) string {
-	return fmt.Sprintf("warning: "+format+"\n", args...)
-}
-
-// ShellNotices retains shell advisories across the builds of one dev session.
-// A one-shot Build uses a fresh value.
-type ShellNotices struct {
-	warnedUnlinkedCSS bool
-}
-
-func (n *ShellNotices) warnUnlinkedCSS(metafile, outdir, entry string, shell func() shellHashPlan) {
-	if n.warnedUnlinkedCSS {
-		return
-	}
+func warnUnlinkedCSS(metafile, outdir, entry string, linked func() bool) bool {
 	outputs, err := bundleOutputs(metafile, "", outdir)
 	if err != nil {
-		return
+		return false
 	}
 	renames, _ := shellRenames(outputs, "", entry)
-	if css := renames["app.css"]; css != "" && !shell().appCSS {
-		fmt.Fprint(os.Stderr, shellWarning(`emitted %s but no shell page references app.css; add <link href="/app.css" rel="stylesheet"> to app/public/index.html`, css))
-		n.warnedUnlinkedCSS = true
+	if css := renames["app.css"]; css != "" && !linked() {
+		fmt.Fprintf(os.Stderr, "warning: emitted %s but no shell page references app.css; add <link href=\"/app.css\" rel=\"stylesheet\"> to app/public/index.html\n", css)
+		return true
 	}
+	return false
 }
 
 func insertModulepreloads(source, prefix string, chunks []string, crossorigin string) (string, error) {

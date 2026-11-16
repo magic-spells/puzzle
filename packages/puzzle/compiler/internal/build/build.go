@@ -74,9 +74,6 @@ type Options struct {
 	// passes (`puzzle build -q`); warnings and errors still print.
 	Quiet bool
 
-	// ShellNotices shares once-per-session advisories with dev's cold fallback.
-	ShellNotices *ShellNotices
-
 	// Profiler folds phases into a caller-owned table instead of printing a
 	// separate `puzzle build` report. The dev server uses this only for its
 	// non-incremental fallback so startup/rebuild still emits exactly one table.
@@ -175,8 +172,10 @@ func Build(root string, opts Options) error {
 	// errors on a missing entry reference and rewrites the other pages.
 	strictHash := hash && cfg.Build.HashNames != nil
 	var stylesFallback string
-	plan := shellHashSupport(absRoot)
+	linkedCSS := func() bool { return shellHashSupport(absRoot).appCSS }
 	if hash && !strictHash {
+		plan := shellHashSupport(absRoot)
+		linkedCSS = func() bool { return plan.appCSS }
 		if hashEntry {
 			reason := ""
 			switch {
@@ -356,13 +355,7 @@ func Build(root string, opts Options) error {
 		return tailwindErr
 	}
 
-	if mode != "static" && !opts.Quiet {
-		notices := opts.ShellNotices
-		if notices == nil {
-			notices = &ShellNotices{}
-		}
-		notices.warnUnlinkedCSS(result.Metafile, staging, entry, func() shellHashPlan { return plan })
-	}
+	warnUnlinkedCSS(result.Metafile, staging, entry, linkedCSS)
 
 	// Styles → one global stylesheet (the shell follows its emitted name): the
 	// Tailwind layer (when puzzle.config.js declares it) followed by the

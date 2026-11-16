@@ -51,8 +51,7 @@ this card holds the implementation rules behind it.
   the network, would guess the manager, and could install a mismatched runtime).
   `check`/`generate`/`preview` never bundle and are not gated.
 - **`build -q`** sets `build.Options.Quiet`, which gates the internal/build page report as
-  well as the CLI summary and update notice. It also suppresses the advisory for an
-  emitted entry CSS bundle that no public HTML page links.
+  well as the CLI summary and update notice.
 - **`--profile-build`** reads `PUZZLE_PROFILE_BUILD=1` too (that is how dev static
   rebuilds get profiled); tables go to stderr; disabled, the profiler is a nil pointer.
 
