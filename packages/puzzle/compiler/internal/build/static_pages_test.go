@@ -772,6 +772,85 @@ func TestBuildStaticProductionPreloads(t *testing.T) {
 	}
 }
 
+// A script's CSS imports reach only its own page: each page links the sheet
+// esbuild wrote for its graph after the global stylesheet, under the same
+// naming as its module. CSS behind a dynamic import rides in the importing
+// page's sheet, so the lazy chunk's own copy and the unused app.css are gone.
+// Component <style> blocks are minified in production only.
+func TestBuildStaticLinksPageCSS(t *testing.T) {
+	requireStaticRuntime(t)
+	for _, tc := range []struct {
+		name string
+		dev  bool
+	}{{name: "production"}, {name: "development", dev: true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			files := baseSSGFixture()
+			files["app/views/about.css"] = ".about-page { -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }\n"
+			files["app/views/lazy.css"] = ".lazy-part { color: green; }\n"
+			files["app/views/lazy.js"] = "import './lazy.css';\nexport const lazy = 1;\n"
+			files["app/views/About.pzl"] = `<puzzle-view>
+  <h1 class="about-page">About</h1>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import './about.css';
+export default class About extends PuzzleView {
+  mounted() { import('./lazy.js'); }
+}
+</script>
+<style>
+/* component comment */
+.about-page { color: red; }
+</style>
+`
+			root := writeSSGFixture(t, files)
+			var err error
+			stderr := captureStderr(t, func() { err = Build(root, Options{Development: tc.dev, Output: "static"}) })
+			if err != nil {
+				t.Fatalf("static Build failed: %v", err)
+			}
+			if strings.Contains(stderr, "imported outside") {
+				t.Errorf("CSS every page loads drew a warning: %s", stderr)
+			}
+			dist := filepath.Join(root, "dist")
+			aboutPath := filepath.Join(dist, "about", "index.html")
+			about := readFile(t, aboutPath)
+			sheet := emittedAsset(t, dist, aboutPath, "_puzzle/about.css")
+			if (sheet == filepath.Join(dist, staticPagesDir, "about.css")) == !tc.dev {
+				t.Errorf("page stylesheet %s does not follow the module's naming", sheet)
+			}
+			css := readFile(t, sheet)
+			for _, want := range []string{"-webkit-backdrop-filter", ".lazy-part"} {
+				if !strings.Contains(css, want) {
+					t.Errorf("page stylesheet lacks %s:\n%s", want, css)
+				}
+			}
+			global := strings.Index(about, `rel="stylesheet">`)
+			own := strings.Index(about, `<link rel="stylesheet" href="/_puzzle/about`)
+			if global < 0 || own < global {
+				t.Errorf("page stylesheet must follow the global one:\n%s", about)
+			}
+			if home := readFile(t, filepath.Join(dist, "index.html")); strings.Contains(home, "/_puzzle/about") {
+				t.Errorf("another page links the about stylesheet:\n%s", home)
+			}
+			var sheets []string
+			_ = filepath.WalkDir(dist, func(p string, d fs.DirEntry, err error) error {
+				if err == nil && strings.HasSuffix(p, ".css") {
+					sheets = append(sheets, p)
+				}
+				return err
+			})
+			if len(sheets) != 2 {
+				t.Errorf("want only the global and the about stylesheet, got %v", sheets)
+			}
+			styles := readFile(t, emittedAsset(t, dist, aboutPath, "styles.css"))
+			if strings.Contains(styles, "component comment") != tc.dev {
+				t.Errorf("component <style> blocks minified = %v, want %v:\n%s", !tc.dev, !tc.dev, styles)
+			}
+		})
+	}
+}
+
 // Locale pages share a module slug, but each HTML file needs the emitted name
 // and its preloads. routerBase prefixes those URLs without becoming part of the
 // output directory; the same module serves every language under either base.

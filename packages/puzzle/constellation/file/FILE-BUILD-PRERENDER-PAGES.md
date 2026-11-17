@@ -11,6 +11,19 @@ connections:
   - DECISION-D179-STATIC-PATHS
 verified_at: '2026-11-01T19:19:18.479Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: state
+    text: >-
+      linkStaticPages (was rewriteStaticPages) now runs in every mode and from both drivers
+      (one-shot Build and StaticWatchBuilder.rebuildInto, base = the pass's AbsWorkingDir). Per page
+      it swaps in the emitted module, links the entry's metafile cssBundle as `<link
+      rel="stylesheet">` before </head> (after the shell's global sheet), and adds preloads only in
+      production. Reused (D155) pages are skipped but still count their sheet as linked. Any .css
+      output no entry links (esbuild's own sheet for a dynamic-import chunk, whose CSS is already in
+      the importing entry's cssBundle) is deleted with its map. Step 5 drops app.css unless a public
+      page links it, and unloadedCSS warns for CSS the app entry imports that no page graph reaches.
+      Per-page pass Metafile is always on. Pinned by TestBuildStaticLinksPageCSS and the "page CSS
+      import" step of TestStaticWatchBuilderMatchesOneShot.
 ---
 
 # prerender_pages.go

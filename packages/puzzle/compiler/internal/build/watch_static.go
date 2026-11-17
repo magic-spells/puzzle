@@ -689,6 +689,9 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *PhaseProfile, pla
 		if pagesErr != nil {
 			return pagesErr
 		}
+		if err := linkStaticPages(staging, b.warm, pagesMetafile, summary.Written, false); err != nil {
+			return err
+		}
 	}
 
 	// 7. Refresh the reverse dependency graph from the two metafiles this rebuild
@@ -953,9 +956,6 @@ func (b *StaticWatchBuilder) newPagesContext(entryFiles []string) (api.BuildCont
 	b.pagesPl = b.newPlugin(b.usage)
 	opts := staticPagesBundleOptions(b.root, entryFiles, filepath.Join(b.warm, staticPagesDir), b.cfg, true, b.pagesPl)
 	opts.Write = false
-	// One graph per route, rooted at that route's generated entry: the half of
-	// the reverse dependency graph that makes an edit attributable (route_deps.go).
-	opts.Metafile = true
 	ctx, err := api.Context(opts)
 	if err != nil {
 		return nil, fmt.Errorf("puzzle dev: creating per-page esbuild context: %s", err.Error())

@@ -52,7 +52,7 @@ my-app/
 └── package.json
 ```
 
-`@/` resolves to `app/` in every module import, from any depth (`import PostCard from '@/components/PostCard.pzl'`); `puzzle init` writes the matching `paths` entry for editors. `{#svg '…'}` paths resolve against `app/assets/`. Styling is per-file `<style>` (optionally `scoped`) or Tailwind: `puzzle add tailwind` wires `styles: { use: ['tailwindcss'] }`. [[DOC-APP-STRUCTURE]] has the layout rules.
+`@/` resolves to `app/` in every module import, from any depth (`import PostCard from '@/components/PostCard.pzl'`); `puzzle init` writes the matching `paths` entry for editors. `{#svg '…'}` paths resolve against `app/assets/`. Styling is per-file `<style>` (optionally `scoped`) or Tailwind: `puzzle add tailwind` wires `styles: { use: ['tailwindcss'] }`. Every `<style>` block lands in the one global stylesheet, minified in production. CSS only one page needs goes in a file its view (or layout, or a component it uses) imports from `<script>`: `import './agency.css';`. With `output: 'static'` each page links its own sheet holding just the CSS its views import, in `puzzle build` and `puzzle dev` alike, so that CSS loads only on that page. A CSS file imported from `app.js` reaches no static page (the build warns); import it from a layout instead. [[DOC-APP-STRUCTURE]] has the layout rules.
 
 ## App entry
 

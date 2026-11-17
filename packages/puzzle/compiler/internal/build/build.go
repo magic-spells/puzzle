@@ -355,7 +355,10 @@ func Build(root string, opts Options) error {
 		return tailwindErr
 	}
 
-	warnUnlinkedCSS(result.Metafile, staging, entry, linkedCSS)
+	// Static pages link their own CSS, so only the other modes need the shell to.
+	if mode != "static" {
+		warnUnlinkedCSS(result.Metafile, staging, entry, linkedCSS)
+	}
 
 	// Styles → one global stylesheet (the shell follows its emitted name): the
 	// Tailwind layer (when puzzle.config.js declares it) followed by the
@@ -363,7 +366,14 @@ func Build(root string, opts Options) error {
 	// build — the pipeline is never silently skipped. Written into staging, not
 	// dist/, so a Tailwind failure above never touches the last good build.
 	endStyles := prof.Phase("styles compose")
-	final := styles.Compose(tailwindCSS, pl.CSS())
+	collected := pl.CSS()
+	if !opts.Development {
+		if collected, err = styles.Minify(collected); err != nil {
+			endStyles()
+			return err
+		}
+	}
+	final := styles.Compose(tailwindCSS, collected)
 	stylesheet := "styles.css"
 	if hashStyles {
 		stylesheet = "styles-" + fsutil.ContentHash([]byte(final)) + ".css"
@@ -410,7 +420,7 @@ func Build(root string, opts Options) error {
 	case "static":
 		// The per-page pass decides its own source-map mode from cfg + dev
 		// (staticPagesSourcemap), so there is no generate-then-delete pass here.
-		if err := prerenderStaticPages(absRoot, entry, staging, publicFiles, cfg, opts.Development, opts.Quiet, prof, pc); err != nil {
+		if err := prerenderStaticPages(absRoot, entry, staging, result.Metafile, publicFiles, cfg, opts.Development, opts.Quiet, prof, pc); err != nil {
 			return err
 		}
 	}

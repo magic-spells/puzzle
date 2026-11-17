@@ -257,6 +257,22 @@ export default class About extends PuzzleView {}
 `)
 	})
 
+	step("page CSS import", []string{abs("app/views/About.pzl")}, &wantPlan{routes: []string{"/about"}}, func() {
+		write("app/views/about.css", ".about { color: teal; }\n")
+		write("app/views/About.pzl", `<puzzle-view>
+  <h1 class="about">About, revised</h1>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import './about.css';
+export default class About extends PuzzleView {}
+</script>
+`)
+	})
+	if about := readFile(t, filepath.Join(dist, "about", "index.html")); !strings.Contains(about, `<link rel="stylesheet" href="/_puzzle/about.css">`) {
+		t.Errorf("the dev page does not link its own stylesheet:\n%s", about)
+	}
+
 	step("component edit", []string{abs("app/components/Card.pzl")}, &wantPlan{routes: []string{"/"}}, func() {
 		write("app/components/Card.pzl", `<puzzle-view>
   <section class="card"><span>{#svg 'icons/logo.svg'}</span><em>edited</em><Children/></section>

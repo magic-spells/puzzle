@@ -8,6 +8,16 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
 verified_at: '2026-11-01T19:25:05.957Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: decision
+    text: >-
+      Minify (esbuild api.Transform, CSS loader, whitespace + syntax, no engine targets) minifies
+      the collected <style> blocks in production before Compose; build.go calls it, dev skips it.
+      Rejected: running the composed sheet through the Tailwind CLI (would feed user <style> blocks
+      to Tailwind, enabling @apply there, and serialize the concurrent Tailwind and bundle lanes)
+      and a plain lightningcss minify (with no targets it drops -webkit-backdrop-filter, breaking
+      blur on Safari 17 and earlier). Measured on magicspells.io's 639 KB dev sheet: 448 KB out, all
+      103 -webkit- declarations kept. Pinned by TestMinifyKeepsVendorPrefixes.
 ---
 
 # styles.go

@@ -28,6 +28,16 @@ func TestComposeTailwindThenCollected(t *testing.T) {
 	}
 }
 
+func TestMinifyKeepsVendorPrefixes(t *testing.T) {
+	got, err := Minify("/* card */\n.card {\n  -webkit-backdrop-filter: blur(4px);\n  backdrop-filter: blur(4px);\n}\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := ".card{-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}\n"; got != want {
+		t.Fatalf("Minify = %q, want %q", got, want)
+	}
+}
+
 func TestComposeOnlyCollected(t *testing.T) {
 	// No Tailwind layer (pipeline disabled): output is just the collected CSS.
 	got := Compose("", ".x{color:green}")

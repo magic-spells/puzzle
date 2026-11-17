@@ -44,6 +44,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/evanw/esbuild/pkg/api"
 )
 
 // Runner produces the Tailwind CSS layer for an app. The real implementation
@@ -90,6 +92,21 @@ func Compose(tailwindCSS, collected string) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// Minify minifies the collected <style> blocks for a production build. esbuild
+// is given no browser targets, so it keeps vendor-prefixed duplicates such as
+// -webkit-backdrop-filter that a targetless lightningcss pass would drop.
+func Minify(css string) (string, error) {
+	result := api.Transform(css, api.TransformOptions{
+		Loader:           api.LoaderCSS,
+		MinifyWhitespace: true,
+		MinifySyntax:     true,
+	})
+	if len(result.Errors) > 0 {
+		return "", fmt.Errorf("minifying component <style> blocks: %s", result.Errors[0].Text)
+	}
+	return string(result.Code), nil
 }
 
 // NpxRunner runs the Tailwind CLI once per build. It resolves the CLI directly

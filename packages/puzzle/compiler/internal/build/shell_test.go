@@ -88,9 +88,14 @@ func TestShellPreloads(t *testing.T) {
 			}
 		}
 	}
-	got, err := insertModulepreloads("<head></head>", "/", []string{"chunks/a.js"}, "")
+	got, err := insertHeadLinks("<head></head>", "/", "", []string{"chunks/a.js"}, "")
 	if err != nil || got != "<head>\n<link rel=\"modulepreload\" href=\"/chunks/a.js\">\n</head>" {
 		t.Fatalf("inline head = %q, %v", got, err)
+	}
+	got, err = insertHeadLinks("<head>\n  <link href=\"/styles.css\" rel=\"stylesheet\">\n</head>", "/", "page.css", []string{"chunks/a.js"}, "")
+	want := "<head>\n  <link href=\"/styles.css\" rel=\"stylesheet\">\n<link rel=\"stylesheet\" href=\"/page.css\">\n<link rel=\"modulepreload\" href=\"/chunks/a.js\">\n</head>"
+	if err != nil || got != want {
+		t.Fatalf("page stylesheet = %q, %v; want it after the global sheet and before the preloads", got, err)
 	}
 }
 
@@ -152,19 +157,20 @@ func TestBundleOutputsAndStaticClosure(t *testing.T) {
 func TestRewriteStaticPage(t *testing.T) {
 	for _, base := range []string{"", "/app"} {
 		source := `<head></head><script type="module" src="` + base + `/_puzzle/about.js"></script>`
-		got, err := rewriteStaticPage(source, "_puzzle/about.js", "_puzzle/about-HASH.js", []string{"_puzzle/chunks/shared.js"})
+		got, err := rewriteStaticPage(source, "_puzzle/about.js", "_puzzle/about-HASH.js", "_puzzle/about-CSS.css", []string{"_puzzle/chunks/shared.js"})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(got, `src="`+base+`/_puzzle/about-HASH.js"`) || !strings.Contains(got, `href="`+base+`/_puzzle/chunks/shared.js"`) {
+		if !strings.Contains(got, `src="`+base+`/_puzzle/about-HASH.js"`) || !strings.Contains(got, `href="`+base+`/_puzzle/chunks/shared.js"`) ||
+			!strings.Contains(got, `<link rel="stylesheet" href="`+base+`/_puzzle/about-CSS.css">`) {
 			t.Fatalf("static page lost its base: %s", got)
 		}
-		fixed, err := rewriteStaticPage(source, "_puzzle/about.js", "_puzzle/about.js", nil)
+		fixed, err := rewriteStaticPage(source, "_puzzle/about.js", "_puzzle/about.js", "", nil)
 		if err != nil || fixed != source {
 			t.Fatalf("fixed page changed: %q, %v", fixed, err)
 		}
 		for _, bad := range []string{`<head></head>`, source + source} {
-			if _, err := rewriteStaticPage(bad, "_puzzle/about.js", "_puzzle/about-HASH.js", nil); err == nil {
+			if _, err := rewriteStaticPage(bad, "_puzzle/about.js", "_puzzle/about-HASH.js", "", nil); err == nil {
 				t.Fatal("expected exactly one generated module tag")
 			}
 		}
