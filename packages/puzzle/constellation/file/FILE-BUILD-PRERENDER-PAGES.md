@@ -52,11 +52,13 @@ entries stay byte-identical. `routeKey()` (Pattern, else Path) is the unit the d
 route graph and the D155 `only` filter use (`watch_static.go`) — the prerender
 matches `only` against route paths, never generated page paths.
 
-Production: `rewriteStaticPages` maps each generated entry to its emitted output
-and rewrites every page's HTML through [[FILE-BUILD-SHELL]] — locale and generated
-pages sharing an entry included — and every production page preloads its
-transitive static-import chunks, hashed or not. Development and the warm static
-builder keep fixed names.
+`linkStaticPages` runs in every mode, from the one-shot build and from the warm
+static builder. It maps each generated entry to its emitted output, rewrites every
+page's HTML through [[FILE-BUILD-SHELL]] (locale and generated pages sharing an
+entry included) and links the entry's page sheet before `</head>`. Production pages
+also preload their transitive static-import chunks, hashed or not; development keeps
+fixed names and adds no preloads. `app.css` ships only when the shell links it,
+which `Build` decides once and passes in.
 
 Easy to undo:
 

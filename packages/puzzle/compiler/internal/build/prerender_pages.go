@@ -151,7 +151,7 @@ type staticModules struct {
 // same minify/define/dropConsole policy as the main app.js pass. prof may be nil
 // (profiling off); it splits this pass into its three expensive steps — the node
 // prerender bundle, the render run, and the per-page browser bundles.
-func prerenderStaticPages(absRoot, appEntry, staging, appMetafile string, publicFiles map[string]bool, cfg config.Config, dev, quiet bool, prof *PhaseProfile, pc *passContext) error {
+func prerenderStaticPages(absRoot, appEntry, staging, appMetafile string, publicFiles map[string]bool, cfg config.Config, dev, quiet, linkedCSS bool, prof *PhaseProfile, pc *passContext) error {
 	// A public/ asset that already produced a staging/_puzzle would be clobbered
 	// by the per-page bundles — reject it up front (extends the reserved-output
 	// collision guard to the static tree). copyPublic has already run, so the
@@ -269,7 +269,7 @@ func prerenderStaticPages(absRoot, appEntry, staging, appMetafile string, public
 	//    plus the prerender scaffolding before the swap so neither ships in dist/.
 	//    Pages link their own CSS, so app.css ships only for a shell that names it.
 	dead := []string{"app.js", "app.js.map"}
-	if !shellHashSupport(absRoot).appCSS {
+	if !linkedCSS {
 		dead = append(dead, "app.css", "app.css.map")
 		for _, css := range unloadedCSS(appMetafile, pagesMetafile, staging) {
 			if rel, err := filepath.Rel(absRoot, css); err == nil {

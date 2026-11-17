@@ -180,7 +180,6 @@ export default class TodoHome extends PuzzleView {
 
 ## 11. Project layout & build
 
-
 - Source directory: **`app/`**. The entry is **`app/app.ts`** when it exists, otherwise **`app/app.js`**; both is a build error naming both files (D54, one resolver for every consumer; [[DOC-SPEC-BUILD]] §13). `puzzle.config.js` stays JavaScript. Output goes to **`dist/`**: `dist/app.js`, or `dist/app-[hash].js` with production name hashing (§59).
 - **`app/public/`** is copied verbatim into `dist/`. **`app/assets/`** is compile-time-only input for `{#svg}` (§18), never copied.
 - Translations (§66): **`app/locales/<tag>.json`**, one per locale, read only when `puzzle.config.js` declares `i18n: { locales: [...], defaultLocale: '…' }`. `locales` is a non-empty list of distinct BCP 47 tags (`-`, never `_`; compared case-insensitively) that must include `defaultLocale`. Every listed locale needs a file; an unlisted file is skipped with a warning, and `app/locales/` without `i18n` is a warning. Build details: [[DOC-SPEC-BUILD]] §13.

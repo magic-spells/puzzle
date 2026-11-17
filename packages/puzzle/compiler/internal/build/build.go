@@ -420,7 +420,7 @@ func Build(root string, opts Options) error {
 	case "static":
 		// The per-page pass decides its own source-map mode from cfg + dev
 		// (staticPagesSourcemap), so there is no generate-then-delete pass here.
-		if err := prerenderStaticPages(absRoot, entry, staging, result.Metafile, publicFiles, cfg, opts.Development, opts.Quiet, prof, pc); err != nil {
+		if err := prerenderStaticPages(absRoot, entry, staging, result.Metafile, publicFiles, cfg, opts.Development, opts.Quiet, linkedCSS(), prof, pc); err != nil {
 			return err
 		}
 	}
