@@ -173,7 +173,7 @@ export class PuzzleApp {
 	 *   feel (v1.24, D56): omit/`'sequential'` for the default sequential swap
 	 *   (old `out` finishes before the new view mounts), `'overlap'` to play the
 	 *   old `out` and new `in` concurrently via fixed-pin positioning (SPEC §26)
-	 * @param {boolean} [config.prefetch] link prefetch default (D193): omit or
+	 * @param {boolean} [config.prefetch] link prefetch default (D195): omit or
 	 *   `true` to load a lazy route's code when a link to it is hovered, touched
 	 *   or focused (guarded routes skipped); `false` to prefetch only links that
 	 *   ask by name (`data-prefetch`) and `router.prefetch(path)` calls
@@ -518,7 +518,7 @@ export class PuzzleApp {
 		// the Router's own default ('sequential' — byte-identical to v1.23) stands
 		// otherwise (v1.24, D56) — mirroring the conditional passthroughs above.
 		if (transitionMode !== undefined) routerOptions.transitionMode = transitionMode;
-		// prefetch → Router `prefetch` (D193). Undefined lets the Router's own
+		// prefetch → Router `prefetch` (D195). Undefined lets the Router's own
 		// default (true) stand. Behind the lazy gate: an app with no lazy() route
 		// has nothing to prefetch, so it carries neither the key nor the check.
 		if (typeof __PUZZLE_HAS_LAZY__ === 'undefined' || __PUZZLE_HAS_LAZY__) {

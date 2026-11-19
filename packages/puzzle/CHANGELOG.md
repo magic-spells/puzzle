@@ -319,7 +319,7 @@ one is *not* a compile error; it silently builds a different product.
   own keys. A key that is not a JavaScript identifier, or a value of another
   type (an unset `process.env` variable included), is a one-line config error.
   `puzzle dev` reads the config once; restart it after an edit.
-- **Lazy routes prefetch before the click (D193).** When a link points at a
+- **Lazy routes prefetch before the click (D195).** When a link points at a
   route whose view or layout is `lazy()`, its code starts loading as soon as
   the pointer rests on the link for 60 ms, a finger touches it, or keyboard
   focus reaches it, so the click usually finds it loaded. Only code loads: no

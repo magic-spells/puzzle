@@ -1,5 +1,5 @@
 /**
- * Link prefetch (D193) — load a lazy route's code before the click.
+ * Link prefetch (D195) — load a lazy route's code before the click.
  *
  * A link to an in-app route whose view or layout is a `lazy()` marker (D163)
  * starts that route's chunk download when the user shows intent: the pointer
@@ -42,7 +42,7 @@ const VISIBLE_SELECTOR = 'a[data-prefetch="visible"]';
 const routers = new WeakMap();
 
 /**
- * Record a router's `prefetch` option (config `prefetch`, D193).
+ * Record a router's `prefetch` option (config `prefetch`, D195).
  *
  * @param {object} router
  * @param {unknown} value `true` (also when omitted) or `false`

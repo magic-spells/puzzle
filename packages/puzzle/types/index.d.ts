@@ -484,7 +484,7 @@ export interface Router {
 	url(path: string, options?: LinkOptions | null): string;
 	/**
 	 * Load the code a path's route needs — every `lazy()` view and layout in its
-	 * matched chain — without navigating (D193). No guard runs and no view is
+	 * matched chain — without navigating (D195). No guard runs and no view is
 	 * built; a later navigation to the path runs warm. Resolves `true` once the
 	 * code is in memory (also for a route with none to load), `false` when
 	 * nothing matched or a load failed. Never rejects.
@@ -1035,7 +1035,7 @@ export interface PuzzleAppConfig {
 	 */
 	transitionMode?: 'sequential' | 'overlap';
 	/**
-	 * Link prefetch default (D193). `true` (the default): a link to a route with
+	 * Link prefetch default (D195). `true` (the default): a link to a route with
 	 * `lazy()` code loads that code when it is hovered, touched or focused, so
 	 * the click runs warm; routes behind a guard are skipped. `false`: only
 	 * links that ask by name (`data-prefetch`, `data-prefetch="visible"`) and

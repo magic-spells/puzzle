@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// link prefetch (D193): a link to a lazy() route loads that route's code on
+// link prefetch (D195): a link to a lazy() route loads that route's code on
 // hover, touch or focus — and, with data-prefetch="visible", when it scrolls
 // into view — so the click runs as a warm lazy route. router.prefetch(path)
 // does the same by name. only code loads: no guard runs, no view is built.

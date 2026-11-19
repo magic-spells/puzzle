@@ -11,7 +11,7 @@ connections:
   - DECISION-D177-LOCALE-URL-PREFIXES
   - DECISION-D182-NAVIGATION-RESULT
   - DECISION-D183-ROUTE-VIEWS-AGENT-FIELD
-  - DECISION-D193-LINK-PREFETCH
+  - DECISION-D195-LINK-PREFETCH
 verified_at: '2026-11-01T19:25:13.521Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 code_refs:
@@ -305,7 +305,7 @@ export default [
 
 ## 68. Link prefetch: `prefetch` and `data-prefetch`
 
-A link to a route whose `view` or `layout` is a `lazy()` marker (§62) starts loading that code **before the click** ([[DECISION-D193-LINK-PREFETCH]]). By the time the click lands the chunk is usually in memory, so the navigation runs as a warm lazy route.
+A link to a route whose `view` or `layout` is a `lazy()` marker (§62) starts loading that code **before the click** ([[DECISION-D195-LINK-PREFETCH]]). By the time the click lands the chunk is usually in memory, so the navigation runs as a warm lazy route.
 
 ```html
 <a href="/settings">Settings</a>                          <!-- app default: on intent -->

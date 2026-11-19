@@ -1,5 +1,5 @@
 ---
-name: 'D193 — Link prefetch: lazy route code loads on intent, guarded routes only on request'
+name: 'D195 — Link prefetch: lazy route code loads on intent, guarded routes only on request'
 status: built
 connections:
   - DECISION-D163-LAZY-ROUTE-VIEWS

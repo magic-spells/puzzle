@@ -297,7 +297,7 @@ class TodoListView extends PuzzleView {
 		this.ctx.router.push('/todos');
 		this.ctx.router.replace('/todos?tab=2'); // v1.49, D83
 		this.ctx.router.go(-1);
-		// prefetch loads a lazy route's code and resolves a boolean (D193).
+		// prefetch loads a lazy route's code and resolves a boolean (D195).
 		void this.ctx.router.prefetch('/settings').then((loaded: boolean) => loaded);
 		// @ts-expect-error prefetch takes a path string
 		void this.ctx.router.prefetch(42);
@@ -520,7 +520,7 @@ const config: PuzzleAppConfig = {
 	// are imported factories (D159), and the handle they produce is opaque.
 	routerBase: '/app',
 	transitionMode: 'sequential',
-	// link prefetch of lazy route code is on by default (D193).
+	// link prefetch of lazy route code is on by default (D195).
 	prefetch: false,
 	scrollBehavior,
 	focusBehavior,

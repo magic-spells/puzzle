@@ -31,7 +31,7 @@
  *   base/locale rules never run.
  *
  * Both link seams are pure answers, never actions: the click interceptor and
- * link prefetch (D193) ask the same question of a link, and only the click
+ * link prefetch (D195) ask the same question of a link, and only the click
  * acts on the answer (preventDefault + push).
  * - `urlless` — the mode carries NO URL and takes NO document-level side effects
  *   (D42): no popstate listener, no scroll, no focus, no title/head. A urlless

@@ -15,7 +15,7 @@ connections:
   - DECISION-D163-LAZY-ROUTE-VIEWS
   - DECISION-D177-LOCALE-URL-PREFIXES
   - DECISION-D182-NAVIGATION-RESULT
-  - DECISION-D193-LINK-PREFETCH
+  - DECISION-D195-LINK-PREFETCH
 verified_at: '2026-11-01T19:25:13.521Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 notes:
@@ -63,7 +63,7 @@ Route compiler and navigation state machine. The public contract is [[DOC-SPEC-R
 - `router/routePath.js` — path canonicalization and dynamic-segment shape (D126), shared with prerender.
 - `router/viewClass.js` — view/layout value checks, kept out of `lazy.js` so validation survives the `__PUZZLE_HAS_LAZY__` fold.
 - `router/lazy.js` — the `lazy()` marker and resolver ([[DECISION-D163-LAZY-ROUTE-VIEWS]]).
-- `router/prefetch.js` — link prefetch ([[DECISION-D193-LINK-PREFETCH]]): document intent listeners, the `data-prefetch="visible"` scan, the per-router `prefetch` default in a WeakMap. Reached only behind the `__PUZZLE_HAS_LAZY__` probe.
+- `router/prefetch.js` — link prefetch ([[DECISION-D195-LINK-PREFETCH]]): document intent listeners, the `data-prefetch="visible"` scan, the per-router `prefetch` default in a WeakMap. Reached only behind the `__PUZZLE_HAS_LAZY__` probe.
 - `router/routeViews.js` — `router.views` and the dev-only `agent` checks (D183).
 - `router/modes.js` — the hash and memory factories behind `@magic-spells/puzzle/router-modes` ([[DECISION-D159-ROUTER-MODE-FACTORIES]]). Path routing is inline, so a path-mode bundle carries neither.
 
@@ -98,7 +98,7 @@ Each leaf precomputes its guard chain (`entry.guards`, root → leaf) and, when 
 3. **Load:** compute the shared prefix, preload fresh views, prepare reused ancestors (D146 — their gated `data()` runs against the destination but commits only in `#commitState`; any new non-committing exit must discard the prepared runs, or their subscriptions strand on a live ancestor). One frozen snapshot per navigation (`parseLocation`, D83). The D39 skeleton gate must start every gated load before any skeleton-exempt preload opens its tracking scope.
 4. **Commit** (`#commitLocation` then `#commitState`, one synchronous window): location/history and title, mount, `current`, scroll, focus, and the dev-only D100 route emit ([[FILE-DEVTOOLS]]).
 
-## Link test and prefetch (D193)
+## Link test and prefetch (D195)
 
 - `#linkPath(a)` is the single answer to "which in-app path would a click on this link navigate to" (null when a click would not be intercepted): `target`, `download`, the hash mode's `fragmentPath` for `#…`, `mailto:`/`tel:`, origin, the mode's `linkPath`, the locale-prefix check, `stripBase`. `#handleClick` and prefetch both call it, so a link never prefetches where a click would not navigate. The mode seams are pure (they return a path or null; the caller pushes).
 - `#prefetch(path, explicit)` matches and calls `resolveRouteViews(entry)` — D163's memoized resolver, so prefetch and navigation share one in-flight load. Without `explicit`, an entry with guards returns `false` before loading (gated code never downloads on its own). It never runs guards and never rejects; `router.prefetch(path)` is the explicit public form.

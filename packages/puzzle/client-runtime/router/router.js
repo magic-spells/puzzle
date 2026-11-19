@@ -48,7 +48,7 @@ import { checkAgentRoutes, routeViews } from './routeViews.js';
 // site — a named const is not constant-propagated by esbuild and would keep the
 // import alive.
 import { hasLazyRouteViews, isLazyView, resolveRouteViews } from './lazy.js';
-// link prefetch (D193) loads lazy route code, so it rides the same gate: an app
+// link prefetch (D195) loads lazy route code, so it rides the same gate: an app
 // with no lazy() has nothing to prefetch and the module folds out with lazy.js.
 import { setPrefetchDefault, unwatchLinks, watchLinks } from './prefetch.js';
 import { describeValue, isViewClass } from './viewClass.js';
@@ -397,7 +397,7 @@ export class Router {
 	 * @param {readonly string[]} [options.locales] every configured locale, in
 	 *   config order (D177); a route whose first segment is a non-default tag is a
 	 *   constructor throw
-	 * @param {boolean} [options.prefetch] link prefetch default (D193): `true`
+	 * @param {boolean} [options.prefetch] link prefetch default (D195): `true`
 	 *   (the default) loads a lazy route's code when a link to it is hovered,
 	 *   touched or focused; `false` leaves only links that ask by name
 	 *   (`data-prefetch`) and `prefetch(path)` calls
@@ -450,7 +450,7 @@ export class Router {
 			);
 		}
 		this.#defaultTransitionMode = transitionMode;
-		// link prefetch default (D193). read off `arguments` like the locale options
+		// link prefetch default (D195). read off `arguments` like the locale options
 		// below — esbuild keeps an unused destructured key — so an app without
 		// lazy() carries neither the option nor its check.
 		if (typeof __PUZZLE_HAS_LAZY__ === 'undefined' || __PUZZLE_HAS_LAZY__) {
@@ -546,7 +546,7 @@ export class Router {
 		this.#container = container;
 		this.#ctx = ctx;
 		document.addEventListener('click', this.#onClick);
-		// link prefetch (D193): only when some route has lazy code to fetch — an
+		// link prefetch (D195): only when some route has lazy code to fetch — an
 		// eager-only route table adds no listener at all. The probe leads so an
 		// app without lazy() folds this branch and prefetch.js out of its bundle.
 		if (
@@ -755,7 +755,7 @@ export class Router {
 
 	/**
 	 * Load the code a path's route needs — every `lazy()` view and layout in its
-	 * matched chain (D163) — without navigating (D193). No guard runs and no view
+	 * matched chain (D163) — without navigating (D195). No guard runs and no view
 	 * is constructed; a later navigation to the path finds the classes already
 	 * resolved and runs synchronously. Called by name, so a guarded route loads
 	 * too (only automatic link prefetch skips those). Never rejects.
@@ -3356,7 +3356,7 @@ export class Router {
 	/**
 	 * The router path a link navigates to in-app, or null when a click on it
 	 * belongs to the browser. One answer for the click interceptor and link
-	 * prefetch (D193), so a prefetched link is always one a click would route.
+	 * prefetch (D195), so a prefetched link is always one a click would route.
 	 *
 	 * @param {Element} a the link
 	 * @returns {string | null}
@@ -3445,7 +3445,7 @@ export class Router {
  * browser navigations. closest() stays as the fallback for synthetic events
  * carrying no composedPath.
  *
- * Also link prefetch's lookup (D193): pointer and focus events retarget the
+ * Also link prefetch's lookup (D195): pointer and focus events retarget the
  * same way, so a hovered or focused link in an open shadow root is found too.
  *
  * @param {Event} e
