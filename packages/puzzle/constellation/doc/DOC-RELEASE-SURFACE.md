@@ -50,6 +50,7 @@ What `@magic-spells/puzzle` ships on the current release branch, as a map. [[DOC
   - `/static` — `mountStatic`, the per-page kernel for `output: 'static'`.
   - `/testing` — `mountView`, `createTestApp` (both accept `i18n: { locale, strings }`), `settled`, `type`, `measureRenders`, `installFakeAnimate`, `installFakeObserver`, and a re-export of `installFixtures`.
   - `/fixtures` — `installFixtures`, `uninstall`, `DEFAULT_FIXTURE_SEED`.
+  - `/forms` — `createForm(view, Model, options)`, the opt-in form controller (draft values, touched, changed, errors, submitting, server-error mapping; [[FEATURE-FORMS]]).
   - `/puzzle-env` — types only: the ambient `*.pzl` module shim and `ImportMeta.env` (`ImportMetaEnv`, D190).
   - Build-replaced: `/formatters/manifest`, `/i18n/manifest`.
 - **Binary:** the `puzzle` shim (`bin/puzzle.js`) picks one of five optional platform packages (darwin/linux × arm64/x64, `win32-x64`; Windows on ARM uses x64). `pzlc` is an internal single-file compiler for tests and tooling.

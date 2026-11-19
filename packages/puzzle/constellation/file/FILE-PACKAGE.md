@@ -24,9 +24,9 @@ The root manifest of the published `@magic-spells/puzzle` package. This card
 owns the shape; the release mechanics live on [[FLOW-RELEASE]] and
 [[DECISION-D120-TARBALL-PUBLISH]].
 
-- **Exports map** — eight normal subpaths point into `client-runtime/` with a
+- **Exports map** — nine normal subpaths point into `client-runtime/` with a
   `types` condition into `types/`: `.`, `./adapter`, `./morph`, `./router-modes`,
-  `./ssg`, `./static`, `./testing`, `./fixtures`. Three are shaped differently:
+  `./ssg`, `./static`, `./testing`, `./fixtures`, `./forms`. Three are shaped differently:
   `./puzzle-env` is types-only (the `.pzl` ambient-module shim), and
   `./formatters/manifest` and `./i18n/manifest` are bare strings into
   `client-runtime/` with no `types` condition. A new normal subpath needs all

@@ -126,6 +126,10 @@ Binding.prototype.render = function () {
       multiple: true,
     }, []),
     new ViewNode(Foo, { value: __d.x }, []),
-    new ViewNode('input', { value: __d.x?.a?.b }, []),
+    new ViewNode('input', {
+      value: __d.x?.a?.b,
+      '@input:bind': this.__bind(__d.x?.a ?? 0, 'b', 'v'),
+    }, []),
+    new ViewNode('input', { value: __d.x?.a?.[__d.k] }, []),
   ]);
 };

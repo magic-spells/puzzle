@@ -248,6 +248,20 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Added
 
+- **Forms: `@magic-spells/puzzle/forms` (D192).** An opt-in subpath with one
+  export, `createForm(view, Model, { from, fields, key, serverErrors })`. It
+  keeps a draft in view state that binds directly
+  (`value={ form.values.title }`), shows the model's validation errors once a
+  field is touched or a submit was tried, tracks `changed`/`dirty`/`valid`,
+  and its `submit(event, fn)` focuses the first invalid control, ignores a
+  second submit while one runs, and maps a thrown `PuzzleValidationError` or a
+  4xx body's `errors` back onto fields. An error that maps to no field becomes
+  `form.error` and reaches `onError` with the new phase `submit`. Apps that
+  don't import it ship none of it. The blog example's comment form uses it.
+- **The Field piece takes `form` and `name` (puzzle-pieces).**
+  `<Field form={ form } name="title" label="Title"/>` reads the value and
+  error from the form, writes through it and marks the field touched on blur.
+  An explicit `error` prop still wins; without `form`, Field is unchanged.
 - **Static pages link their own CSS.** In `output: 'static'`, a view, layout
   or component script that does `import './page.css'` now gets that CSS on its
   own page only: each page links `_puzzle/<slug>.css` (`<slug>-<hash>.css`
@@ -285,6 +299,11 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Changed
 
+- **Two-way binding reaches deeper paths (D147).** `value={ a.b.c }` (any
+  number of plain `.name` steps) now binds both ways, as `a.b` already did; it
+  writes `c` on the object `a.b` names. Paths with `[k]` or `?.` still don't
+  bind. A handler-less `value=` on a deeper path that was meant for display
+  only now writes back: write it as `value={ a.b.c ?? '' }` to keep it one-way.
 - **Router focus keeps a view's own choice (D93).** After a client-side
   navigation the router used to focus the new view's root after `mounted()`
   ran, taking focus away from an input the view had just focused. Now focus

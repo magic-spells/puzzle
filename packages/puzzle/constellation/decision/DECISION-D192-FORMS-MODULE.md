@@ -1,16 +1,23 @@
 ---
 name: D192 — an optional /forms module holds a form's draft, touched, changed, errors and submitting state
-status: planned
+status: built
 connections:
   - FEATURE-FORMS
   - DECISION-D147-IMPLICIT-TWO-WAY-BINDING
   - DECISION-D48-SCHEMA-VALIDATION
   - DECISION-D191-SET-STATE-GET-STATE
+  - DECISION-D23-REFRESH-PATTERN
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
   - DECISION-D145-ERROR-BOUNDARIES
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-PUZZLE-MODEL
   - DOC-RELEASE-SURFACE
+code_refs:
+  - client-runtime/forms.js
+  - types/forms.d.ts
+  - compiler/internal/codegen/binding.go
+  - ../puzzle-pieces/registry/ui/field/Field.pzl
+  - tests/forms.test.js
 ---
 
 ## Context
@@ -32,18 +39,19 @@ Ship it as an opt-in subpath, `@magic-spells/puzzle/forms`, exporting one
 function. An app that never imports it pays nothing.
 
 ```js
-import { form } from '@magic-spells/puzzle/forms';
+import { createForm } from '@magic-spells/puzzle/forms';
 
 created() {
-  this.form = form(this, Post, { from: this.props.post, fields: ['title', 'body'] });
+  this.form = createForm(this, Post, { from: this.props.post, fields: ['title', 'body'] });
 }
 ```
 
-- **One controller, kept in view state.** `form()` builds the controller and
+- **One controller, kept in view state.** `createForm()` builds the controller and
   writes it to the view with `setState(key, controller)` (`key` defaults to
   `'form'`), so the template reads `form.values.title` with nothing else to
-  wire. Every change writes the same key again, which schedules one re-render
-  and never re-runs `data()`. A second form in one view passes its own `key`.
+  wire. Every change writes the same key again, which schedules one re-render;
+  `data()` re-runs only when it read that key ([[DECISION-D23-REFRESH-PATTERN]]),
+  so a `data()` that derives from the draft stays current with no `refresh()`. A second form in one view passes its own `key`.
 - **Draft values.** `values` holds one property per form field, seeded from
   `from` (a record or plain object) or, without one, from
   `Model.applyDefaults({})`. It is a stable object whose properties are
@@ -91,6 +99,10 @@ created() {
 - **A Proxy for `values`.** Catches unknown keys too, but `structuredClone`
   (the HMR snapshot path) throws on a Proxy. Accessors over a known field list
   clone and serialize as plain data.
+- **Naming the export `form`.** It reads well (`this.form = form(...)`), but a
+  name the script imports is undefined in the template, and the compiler warns
+  when a template reads one, so every template's `form.values` would trip the
+  warning against the default state key. `createForm` leaves `form` free.
 - **A `<Form>` component or form directives in the grammar.** New syntax for
   something a function and the existing bind already cover.
 - **Validating every keystroke from the first one.** Flags an email field as
@@ -107,6 +119,10 @@ created() {
 - D147's trigger rule (`ident` or `ident.ident`) is rewritten in place to allow
   deeper plain paths; its "display-only paths write back" gotcha covers more
   shapes.
+- The controller is a class instance, so the HMR state snapshot (plain data
+  only) drops it: after a dev hot reload `created()` builds a fresh form and an
+  unsaved draft is lost. Production is unaffected.
+- The `onError` phase set gains `submit` ([[DECISION-D145-ERROR-BOUNDARIES]]).
 - The Field piece accepts `form` + `name` (duck-typed, no import), so it works
   with or without the module.
 - Removes "a schema-derived forms helper" from plan.md's unscheduled ideas.

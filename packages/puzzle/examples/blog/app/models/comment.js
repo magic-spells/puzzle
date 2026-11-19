@@ -10,7 +10,12 @@ export default class Comment extends PuzzleModel {
     id:        Puzzle.string().primary(),
     postId:    Puzzle.string(),
     author:    Puzzle.string().default('Anonymous'),
-    text:      Puzzle.string().required(),
+    // the comment form (PostDetail.pzl) shows these messages through the
+    // forms module, so they are written for the reader
+    text:      Puzzle.string()
+                 .required('Write a comment first')
+                 .validate((text) => text.trim() !== '', 'Write a comment first')
+                 .validate((text) => text.length <= 500, 'Keep it under 500 characters'),
     createdAt: Puzzle.date().default(() => new Date())
   };
 }

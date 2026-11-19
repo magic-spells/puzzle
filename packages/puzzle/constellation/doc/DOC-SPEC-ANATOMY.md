@@ -34,7 +34,7 @@ import { PuzzleApp, PuzzleView, PuzzleModel, Puzzle, lazy } from '@magic-spells/
 | `Puzzle` | Schema field builders (`Puzzle.string()`, …). |
 | `lazy` | Lazy route views (§62). |
 
-The root also exports `PuzzleValidationError` (§20) and, for compiled modules only (not user surface), `FormatterRegistry`, `ViewNode`, the marker tags (`SLOT_TAG`, `SNIPPET_TAG`, `PORTAL_TAG`), `displayValue`, `urlValue`, `listRows`, `loopItems`, `loopRange` and `dynamicComponent`. Subpaths: `./adapter` (§58), `./router-modes` (§15), `./morph` (§37), `./ssg`, `./static`, `./testing` (§53), `./fixtures` (§52), `./puzzle-env`, plus `./formatters/manifest` and `./i18n/manifest`, which a Puzzle build replaces at bundle time.
+The root also exports `PuzzleValidationError` (§20) and, for compiled modules only (not user surface), `FormatterRegistry`, `ViewNode`, the marker tags (`SLOT_TAG`, `SNIPPET_TAG`, `PORTAL_TAG`), `displayValue`, `urlValue`, `listRows`, `loopItems`, `loopRange` and `dynamicComponent`. Subpaths: `./adapter` (§58), `./router-modes` (§15), `./morph` (§37), `./ssg`, `./static`, `./testing` (§53), `./fixtures` (§52), `./forms` (opt-in form controller, D192), `./puzzle-env`, plus `./formatters/manifest` and `./i18n/manifest`, which a Puzzle build replaces at bundle time.
 
 - Apps start with **`app.mount()`**.
 - Components are **class-based** (`extends PuzzleView`). `PuzzleView` is a **plain JavaScript class**, not a custom element and no shadow DOM; the ViewManager owns all DOM work ([[DOC-VIEW-LIFECYCLE]]). `<puzzle-view>` is only the template root element name.

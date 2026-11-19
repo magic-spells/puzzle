@@ -20,6 +20,7 @@ function pzlModuleGraph() {
 		fileURLToPath(new URL('./tests/fixtures/todos-compiled/', import.meta.url)),
 		fileURLToPath(new URL('./tests/fixtures/slot-forwarding/', import.meta.url)),
 		fileURLToPath(new URL('./tests/fixtures/component-slot/', import.meta.url)),
+		fileURLToPath(new URL('./tests/fixtures/forms/', import.meta.url)),
 	];
 	return {
 		name: 'puzzle-pzl-module-graph',
@@ -42,6 +43,7 @@ export default defineConfig({
 		alias: {
 			'@magic-spells/puzzle/formatters/manifest': fileURLToPath(new URL('./client-runtime/formatters/builtins-all.js', import.meta.url)),
 			'@magic-spells/puzzle/i18n/manifest': fileURLToPath(new URL('./client-runtime/i18n-manifest.js', import.meta.url)),
+			'@magic-spells/puzzle/forms': fileURLToPath(new URL('./client-runtime/forms.js', import.meta.url)),
 			'@magic-spells/puzzle': fileURLToPath(new URL('./client-runtime/index.js', import.meta.url)),
 		},
 	},

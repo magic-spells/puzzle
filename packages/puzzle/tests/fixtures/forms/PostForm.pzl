@@ -1,0 +1,34 @@
+<puzzle-view>
+  <form class="post-form" @submit={ save(event) } @focusout={ touch(event) } novalidate>
+    <input class="title" name="title" value={ form.values.title } />
+    {#if form.errors.title}<p class="title-error">{ form.errors.title }</p>{/if}
+    <Field form={ form } name="body" label="Body" />
+    {#if form.error}<p class="form-error">{ form.error }</p>{/if}
+    <p class="flags">{ form.dirty ? 'dirty' : 'clean' } { form.submitting ? 'busy' : 'idle' }</p>
+    <button class="save" type="submit" disabled={ form.submitting }>Save</button>
+    <button class="cancel" type="button" @click={ cancel }>Cancel</button>
+  </form>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { createForm } from '@magic-spells/puzzle/forms';
+import Field from './Field.pzl';
+
+// the forms module (d192) end to end: a raw input bound through the deep
+// d147 path, the field piece wired by form + name, one focusout handler that
+// touches whichever field was left, and a submit whose callback the test owns.
+export default class PostForm extends PuzzleView {
+  created() {
+    this.form = createForm(this, this.props.Model, { from: this.props.post, fields: ['title', 'body'] });
+  }
+
+  events = {
+    save: (event) => {
+      this.pending = this.form.submit(event, (values) => this.props.onSave(values));
+    },
+    touch: (event) => this.form.touch(event),
+    cancel: () => this.form.reset(),
+  };
+}
+</script>

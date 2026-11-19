@@ -508,7 +508,7 @@
     },
     {
       "name": "field",
-      "description": "Labeled text input with hint/error helper text, danger invalid state, and full ARIA wiring",
+      "description": "Labeled text input with hint/error helper text, danger invalid state, full ARIA wiring, and optional form + name wiring for @magic-spells/puzzle/forms",
       "files": [
         "Field.pzl"
       ],

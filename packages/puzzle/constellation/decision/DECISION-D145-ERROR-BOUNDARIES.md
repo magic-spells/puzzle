@@ -5,6 +5,7 @@ connections:
   - DECISION-D115-MOUNT-FAILURE-RECOVERY-CONTRACT
   - DECISION-D136-VIEW-LIFECYCLE-CONVERGENCE
   - DECISION-D143-MOUNT-THROW-OWNERSHIP
+  - DECISION-D192-FORMS-MODULE
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ROUTER
@@ -36,7 +37,8 @@ frozen `info = { phase, view, route }`; `view`/`route` are coerced to `null`
 when absent (the app phases always have `view: null`). The phase set is closed
 and pinned in tests-types (`PuzzleErrorInfo` in `types/index.d.ts`):
 - view positions — `mount`, `refresh`, `render`, `bind`, `enter`, `leave`,
-  `unmount`;
+  `unmount`, and `submit` (a `/forms` submit callback's error that maps to no
+  field, [[DECISION-D192-FORMS-MODULE]]);
 - navigation — `navigation`, `transition`;
 - app — `app-mount`, `app-unmount`;
 - terminal — `error-view` (never produces a replacement).

@@ -203,14 +203,47 @@ What this shows:
 
 ## Form binding
 
-`value={ … }` and `checked={ … }` on a plain `<input>`, `<textarea>` or `<select>` bind both ways when the expression is a bare key or a one-member path ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]). **Bind the path you want written:**
+`value={ … }` and `checked={ … }` on a plain `<input>`, `<textarea>` or `<select>` bind both ways when the expression is a bare key or a plain member path of any depth, such as `profile.hue` or `form.values.title` ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]). **Bind the path you want written:**
 
 - **Local draft, bare key** (`value={ authorName }`): the write is `setState` + `refresh`, so everything `data()` derives from the key recomputes within the same keystroke. Seed the key in `created()` and read it back in `data()` with `this.getData()`.
-- **Record field, one-member path** (`checked={ profile.subscribed }`): each edit goes through `record.update()`, so validation runs and subscribed views re-render. Bind the record path rather than copying the field into a local key `data()` also derives from the record — that key is overwritten on the next commit (dev warns once per key).
-- **Constrained field, draft + submit:** a bound record path validates every keystroke, so a `required()` field could never be emptied. Bind a local draft, check it with `Model.validate({ text: draft }, { fields: ['text'] })` on submit, then `record.update(...)`. A rejected bind reaches `onError` with `phase: 'bind'`.
+- **Record field, member path** (`checked={ profile.subscribed }`): each edit goes through `record.update()`, so validation runs and subscribed views re-render. Bind the record path rather than copying the field into a local key `data()` also derives from the record — that key is overwritten on the next commit (dev warns once per key).
+- **Constrained field, draft + submit:** a bound record path validates every keystroke, so a `required()` field could never be emptied. Bind a draft instead and validate on submit; the forms module below does this for you. A rejected bind reaches `onError` with `phase: 'bind'`.
 - **Opting out:** an author `@input`/`@change` suppresses the synthesized write; a non-path expression (`value={ name ?? '' }`) or a static `readonly` does not bind. Use the non-path form when Escape must revert.
 
 `@magic-spells/puzzle/testing`'s `type()` drives a bound control the way a real edit does ([[DOC-TESTING]]).
+
+### Forms
+
+For a form with rules, `@magic-spells/puzzle/forms` holds the draft and its bookkeeping ([[FEATURE-FORMS]]). It is opt-in; an app that never imports it ships none of it.
+
+```html
+<form @submit={ save(event) } @focusout={ touch(event) } novalidate>
+  <input name="text" value={ form.values.text } />
+  {#if form.errors.text}<p class="error">{ form.errors.text }</p>{/if}
+  <button disabled={ form.submitting }>Post</button>
+</form>
+```
+
+```js
+import { createForm } from '@magic-spells/puzzle/forms';
+
+created() {
+  this.form = createForm(this, Comment, { from: { author: '', text: '' }, fields: ['author', 'text'] });
+}
+events = {
+  touch: (event) => this.form.touch(event),
+  save: async (event) => {
+    const saved = await this.form.submit(event, (values) => this.ctx.store.createRecord('comment', values));
+    if (saved) this.form.reset({ author: '', text: '' });
+  },
+};
+```
+
+- **Errors come from the model** (`Model.validate`), and show once the user leaves a field (the `@focusout` handler, which needs a `name` on each control) or tries to submit. After that they clear the moment the value is fixed.
+- **`submit()`** focuses the first invalid control, ignores a second submit while one is running, and maps a server's field errors (a thrown `PuzzleValidationError`, or a 4xx body with `errors`) onto `form.errors`. Anything else lands in `form.error` and reaches `onError` with `phase: 'submit'`.
+- **`form.dirty`**, **`form.changed.title`** and **`form.valid`** are ready for a Save button or a leave-page prompt; `form.reset()` goes back to the saved values.
+- **The Field piece** takes `form={ form } name="text"` and wires the value, the error and the blur itself.
+- Import it as `createForm`. A template reading `form` means the state key, and an imported `form` would shadow it.
 
 ## Components
 

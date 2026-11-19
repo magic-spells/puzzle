@@ -35,9 +35,16 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // flips aria-invalid, and paints the border/ring danger.
 // A stable id is generated when `id` is absent so the label can target the input.
 //
+// Given a `form` from @magic-spells/puzzle/forms (D192) plus a `name`, the field
+// wires itself: it reads form.values[name], shows form.errors[name] (an explicit
+// `error` prop still wins), writes through form.set(name, value) and touches the
+// field on blur. Duck-typed — nothing is imported, so apps without the forms
+// module are unchanged.
+//
 //   <Field label="Email" type="email" value={ email } @change={ setEmail } />
 //   <Field label="Name" required hint="As it appears on your card" />
 //   <Field label="Email" value={ email } error="That address is taken" />
+//   <Field form={ form } name="title" label="Title" />
 let uid = 0;
 
 const INPUT_BASE =
@@ -53,14 +60,16 @@ export default class Field extends PuzzleView {
     // Fallback id is generated once per instance so it survives re-renders; an
     // explicit `id` prop always wins.
     const id = props.id || (this._fallbackId ??= `pp-field-${++uid}`);
-    const error = props.error || '';
+    // a forms controller plus a name: the form owns the value and the error
+    const form = props.form && props.name ? props.form : null;
+    const error = props.error || form?.errors?.[props.name] || '';
     const hint = props.hint || '';
     const described = !!(error || hint);
     return {
       id,
       descId: `${id}-desc`,
       type: props.type || 'text',
-      value: props.value ?? '',
+      value: (form ? form.values[props.name] : props.value) ?? '',
       placeholder: props.placeholder ?? null,
       name: props.name ?? null,
       autocomplete: props.autocomplete ?? null,
@@ -78,11 +87,15 @@ export default class Field extends PuzzleView {
 
   events = {
     handleInput: (event) => {
-      const { change } = this.props;
+      const { change, form, name } = this.props;
+      // write the draft first so a change callback reads the new value back
+      if (form && name) form.set(name, event.target.value);
       if (typeof change === 'function') change(event.target.value, event);
     },
     handleBlur: (event) => {
-      const { blur } = this.props;
+      const { blur, form, name } = this.props;
+      // leaving the field is what makes its error show
+      if (form && name) form.touch(name);
       if (typeof blur === 'function') blur(event);
     },
     handleFocus: (event) => {

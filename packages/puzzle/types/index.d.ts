@@ -244,6 +244,7 @@ export interface PuzzleErrorInfo {
 		| 'navigation'
 		| 'render'
 		| 'bind'
+		| 'submit'
 		| 'error-view'
 		| 'enter'
 		| 'leave'

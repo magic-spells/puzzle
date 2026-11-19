@@ -14,13 +14,16 @@ type autoBind struct {
 	spec   string // "v" | "vn" | "c"
 }
 
-// classifyBindExpr reports whether an expression is exactly `ident` or
-// `ident.ident` — a data field the edit can be written back to.
+// classifyBindExpr reports whether an expression is a plain path a control's
+// edit can be written back to: `ident`, or `ident.ident` with any number of
+// further `.ident` steps (D147, widened by D192 so `form.values.title` binds).
 // bare==true  => field is the local key ("draft"), target is "".
-// bare==false => target is the ROOT name (unresolved), field the member.
-// A literal, a global, a call, an operator, a computed or optional step, or a
-// deeper path never classifies. A bare root that is a template binding (a
-// {#for} variable) never classifies; a binding's member does.
+// bare==false => target is the dotted path to the OBJECT that owns the field,
+// starting at the RAW root name (unresolved; `form.values` for
+// `form.values.title`), and field is the last step.
+// A literal, a global, a call, an operator, or a computed or optional step
+// anywhere in the chain never classifies. A bare root that is a template
+// binding (a {#for} variable) never classifies; a binding's member does.
 func classifyBindExpr(n expr.Node, scope scopeMap) (target, field string, bare, ok bool) {
 	switch n := n.(type) {
 	case *expr.Identifier:
@@ -29,14 +32,37 @@ func classifyBindExpr(n expr.Node, scope scopeMap) (target, field string, bare, 
 		}
 		return "", n.Name, true, true
 	case *expr.Member:
-		root, isIdent := n.Object.(*expr.Identifier)
-		if !isIdent || n.Computed || n.Optional || root.Name == "this" {
+		if n.Computed || n.Optional {
 			return "", "", false, false
+		}
+		// walk the object side down to its root identifier, collecting the plain
+		// steps in between. every step must be a static `.name` read.
+		steps := []string{}
+		obj := n.Object
+		for {
+			m, isMember := obj.(*expr.Member)
+			if !isMember {
+				break
+			}
+			if m.Computed || m.Optional {
+				return "", "", false, false
+			}
+			steps = append(steps, m.Property)
+			obj = m.Object
+		}
+		root, isIdent := obj.(*expr.Identifier)
+		if !isIdent || root.Name == "this" {
+			return "", "", false, false
+		}
+		// steps were collected innermost-last; rebuild root-first.
+		path := root.Name
+		for i := len(steps) - 1; i >= 0; i-- {
+			path += "." + steps[i]
 		}
 		// `x.size` classifies like any field: on an object it IS the field
 		// (`product.size`). A `.length` count is a field read too; binding one
 		// is meaningless and is not special-cased.
-		return root.Name, n.Property, false, true
+		return path, n.Property, false, true
 	}
 	return "", "", false, false
 }
@@ -150,11 +176,21 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope scopeMap) *autoBind {
 func autoBindKV(bind *autoBind, scope scopeMap) string {
 	target := "null"
 	if bind.target != "" {
-		target = "__d." + bind.target
-		if local, ok := scopeRef(scope, bind.target); ok {
+		// the target is a dotted path; only its first step is a name that
+		// resolves (data root or loop local). the rest are plain member reads.
+		root, rest, _ := strings.Cut(bind.target, ".")
+		target = "__d." + root
+		if local, ok := scopeRef(scope, root); ok {
 			// A {#for} local resolves through its scope map entry, so a row
 			// inside a lowered list block binds `s.item` (D170 emission contract).
 			target = local
+		}
+		// a deeper path (D192) reads each further step optionally, so a missing
+		// middle object stays inert exactly like a missing root.
+		if rest != "" {
+			for _, step := range strings.Split(rest, ".") {
+				target += "?." + step
+			}
 		}
 		// A member-path bind whose root is missing must stay inert, not fall into
 		// __bind's `target == null` branch, which belongs to the bare-local form

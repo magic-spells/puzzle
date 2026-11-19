@@ -1,6 +1,6 @@
 ---
 name: Forms module (@magic-spells/puzzle/forms)
-status: planned
+status: built
 connections:
   - DECISION-D192-FORMS-MODULE
   - DECISION-D147-IMPLICIT-TWO-WAY-BINDING
@@ -8,6 +8,12 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-PUZZLE-MODEL
 change: feature
+code_refs:
+  - client-runtime/forms.js
+  - types/forms.d.ts
+  - tests/forms.test.js
+  - tests/fixtures/forms/PostForm.pzl
+  - examples/blog/app/views/PostDetail.pzl
 ---
 
 # Forms module
@@ -37,12 +43,12 @@ server-error mapping and reset. Rationale: [[DECISION-D192-FORMS-MODULE]].
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import { form } from '@magic-spells/puzzle/forms';
+import { createForm } from '@magic-spells/puzzle/forms';
 import Post from '../models/post.js';
 
 export default class EditPost extends PuzzleView {
   created() {
-    this.form = form(this, Post, { from: this.props.post, fields: ['title', 'body'] });
+    this.form = createForm(this, Post, { from: this.props.post, fields: ['title', 'body'] });
   }
 
   events = {
@@ -56,7 +62,7 @@ export default class EditPost extends PuzzleView {
 
 ## API
 
-`form(view, Model, options?)` → controller, also written to the view's state.
+`createForm(view, Model, options?)` → controller, also written to the view's state.
 
 | Option | Meaning |
 |---|---|
@@ -80,9 +86,10 @@ export default class EditPost extends PuzzleView {
 
 ## Behavior notes
 
-- **Re-render, not refresh.** Changes call `view.setState(key, controller)`;
-  `data()` does not re-run. A `data()` that derives from the draft calls
-  `this.refresh()` itself.
+- **Re-render, and `data()` only when it reads the form.** Changes call
+  `view.setState(key, controller)`, which schedules a render. `data()` re-runs
+  only if its last run read that key (D23), so a value derived from the draft
+  stays current without a `refresh()`.
 - **Records loaded later.** When the record arrives after `created()`, reseed
   once it exists: `afterUpdate() { const { post } = this.getData(); if (post && this.form.source !== post) this.form.reset(post); }`.
 - **After success** the baseline becomes the submitted values, so `dirty` goes
@@ -91,6 +98,11 @@ export default class EditPost extends PuzzleView {
   submitted form's `elements`.
 - **Destroyed view.** Writes after the view is destroyed are dropped (the
   `setState` guard).
+- **Dev hot reload** builds a fresh form; an unsaved draft does not survive it.
+- **Name the import `createForm`.** Importing it as `form` shadows the state
+  key: the template would read the (undefined-in-templates) import.
+- **Example app:** the blog's comment form (`examples/blog`,
+  `PostDetail.pzl`) uses it with the comment model's rules.
 
 ## Field piece
 

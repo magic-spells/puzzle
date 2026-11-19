@@ -165,7 +165,7 @@ retries. Full atomicity belongs to the staged pipelines.
   — `json.Unmarshal` of `null` into a scalar is a silent no-op, so `dropConsole: null`
   would otherwise read as `false`.
 - `aliasRuntime` maps the root package and every subpath (`/adapter`, `/morph`,
-  `/router-modes`, `/ssg`, `/static`, `/testing`, `/fixtures`) explicitly — the bare alias
+  `/router-modes`, `/ssg`, `/static`, `/testing`, `/fixtures`, `/forms`) explicitly — the bare alias
   resolves to a file and can't take suffixes; longest key wins. `@/…` resolves from `app/`
   without capturing scoped packages. `PUZZLE_RUNTIME` overrides the in-repo walk and
   `node_modules`; a wrong value is a hard stop.
