@@ -337,7 +337,7 @@ func aliasRuntime(buildOpts *api.BuildOptions, pl *plugin.Plugin, runtime string
 	// wrapper lives under <appRoot>/.puzzle/, so node_modules resolution walks up
 	// to the project root on its own.
 	buildOpts.Alias["@magic-spells/puzzle/fixtures"] = filepath.Join(dir, "fixtures", "index.js")
-	// The Vitest plugin (D193) is Node-only and no app bundle imports it; the
+	// The Vitest plugin (D194) is Node-only and no app bundle imports it; the
 	// alias only keeps every export pointing into the named checkout.
 	buildOpts.Alias["@magic-spells/puzzle/vitest"] = filepath.Join(dir, "vitest", "index.js")
 	pl.SetRuntimeDir(dir)

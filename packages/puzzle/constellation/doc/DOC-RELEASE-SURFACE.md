@@ -25,7 +25,7 @@ connections:
   - DECISION-D179-STATIC-PATHS
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
   - DECISION-D184-STORE-OBSERVE
-  - DECISION-D193-VITEST-PLUGIN
+  - DECISION-D194-VITEST-PLUGIN
 verified_at: '2026-11-01T19:28:56.040Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 notes:
@@ -52,7 +52,7 @@ What `@magic-spells/puzzle` ships on the current release branch, as a map. [[DOC
   - `/testing` — `mountView`, `createTestApp` (both accept `i18n: { locale, strings }`), `settled`, `type`, `measureRenders`, `installFakeAnimate`, `installFakeObserver`, and a re-export of `installFixtures`.
   - `/fixtures` — `installFixtures`, `uninstall`, `DEFAULT_FIXTURE_SEED`.
   - `/forms` — `createForm(view, Model, options)`, the opt-in form controller (draft values, touched, changed, errors, submitting, server-error mapping; [[FEATURE-FORMS]]).
-  - `/vitest` — `puzzle(options?)`, the Vite plugin that compiles `.pzl` imports in an app's Vitest suite (Node-only, D193).
+  - `/vitest` — `puzzle(options?)`, the Vite plugin that compiles `.pzl` imports in an app's Vitest suite (Node-only, D194).
   - `/puzzle-env` — types only: the ambient `*.pzl` module shim and `ImportMeta.env` (`ImportMetaEnv`, D190).
   - Build-replaced: `/formatters/manifest`, `/i18n/manifest`.
 - **Binary:** the `puzzle` shim (`bin/puzzle.js`) picks one of five optional platform packages (darwin/linux × arm64/x64, `win32-x64`; Windows on ARM uses x64). `pzlc` is an internal single-file compiler for tests and tooling.

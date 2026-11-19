@@ -11,7 +11,7 @@ import (
 )
 
 // compileCmd prints one .pzl file's compiled module to stdout. It is the seam
-// between the Go compiler and the @magic-spells/puzzle/vitest plugin (D193):
+// between the Go compiler and the @magic-spells/puzzle/vitest plugin (D194):
 // Vitest runs on Vite, which cannot read .pzl, so the plugin hands each .pzl
 // import to this command and serves what it prints. It is hidden because the
 // plugin is its only intended caller; its output is not a stable format to

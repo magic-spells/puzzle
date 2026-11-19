@@ -262,7 +262,7 @@ one is *not* a compile error; it silently builds a different product.
   `<Field form={ form } name="title" label="Title"/>` reads the value and
   error from the form, writes through it and marks the field touched on blur.
   An explicit `error` prop still wins; without `form`, Field is unchanged.
-- **New apps come with a test suite, and app tests can import `.pzl` (D193).**
+- **New apps come with a test suite, and app tests can import `.pzl` (D194).**
   `puzzle init` now writes `tests/` with a starter test (`default`: a
   component test that clicks the counter; `todos`: a view test that adds a
   todo and a store test on the model; `.test.ts` under `--typescript`), a

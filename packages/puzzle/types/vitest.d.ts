@@ -1,5 +1,5 @@
 /**
- * Public declarations for @magic-spells/puzzle/vitest (D193): the Vite plugin
+ * Public declarations for @magic-spells/puzzle/vitest (D194): the Vite plugin
  * that lets an app's Vitest suite import `.pzl` files.
  *
  * Declared structurally, without importing Vite's types, so the package takes

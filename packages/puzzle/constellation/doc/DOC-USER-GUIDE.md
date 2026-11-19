@@ -11,7 +11,7 @@ connections:
   - DOC-ROUTER
   - DOC-TESTING
   - DOC-APP-STRUCTURE
-  - DECISION-D193-VITEST-PLUGIN
+  - DECISION-D194-VITEST-PLUGIN
 ---
 
 # Puzzle app-building guide
@@ -35,7 +35,7 @@ puzzle build                  # production build
 
 `--typescript` scaffolds `<script lang="ts">` components, `app/app.ts`, a strict `tsconfig.json` and a `check` script. The build strips types without checking them; `puzzle check` is the type check. With a `tsconfig.json`, `puzzle generate` writes TypeScript stubs.
 
-Every template also ships a working test suite ([[DECISION-D193-VITEST-PLUGIN]]): `tests/` holds a component test (`default`: `Counter.test.js`) or a view test and a store test (`todos`), `vitest.config.js` registers the `puzzle()` plugin from `@magic-spells/puzzle/vitest` so tests can import `.pzl` files, and `npm test` runs them. Testing, below, covers writing more.
+Every template also ships a working test suite ([[DECISION-D194-VITEST-PLUGIN]]): `tests/` holds a component test (`default`: `Counter.test.js`) or a view test and a store test (`todos`), `vitest.config.js` registers the `puzzle()` plugin from `@magic-spells/puzzle/vitest` so tests can import `.pzl` files, and `npm test` runs them. Testing, below, covers writing more.
 
 ## Project structure
 

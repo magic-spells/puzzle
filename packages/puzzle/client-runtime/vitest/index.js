@@ -1,6 +1,6 @@
 /**
  * `@magic-spells/puzzle/vitest` — the Vite plugin that lets an app's own Vitest
- * suite import `.pzl` files (D193).
+ * suite import `.pzl` files (D194).
  *
  * Vitest runs on Vite, and Vite cannot read a `.pzl` file: the real compiler is
  * the Go binary, which `puzzle build` drives through esbuild. So this plugin

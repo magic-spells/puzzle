@@ -12,7 +12,7 @@ connections:
   - COMPONENT-FIXTURES
   - DECISION-D94-TESTING-EXPORT
   - DECISION-D185-APP-IDLE
-  - DECISION-D193-VITEST-PLUGIN
+  - DECISION-D194-VITEST-PLUGIN
 ---
 
 # Testing strategy
@@ -66,7 +66,7 @@ const app = await createTestApp({ routes, models, routerInitialPath: '/todos/42'
 await app.visit('/todos/7');
 ```
 
-**Running them.** An app's own Vitest suite cannot import a `.pzl` file by itself, so `@magic-spells/puzzle/vitest` exports `puzzle()`, a Vite plugin for `vitest.config.js` ([[DECISION-D193-VITEST-PLUGIN]]). It compiles each `.pzl` import through the installed CLI's hidden `puzzle compile` (same D20 directory rule as the build, `{#svg}` inlined, `lang="ts"` types stripped), surfaces positioned compile errors as the failing import, and adds the build's `@/` alias. `options.bin` or `PUZZLE_BIN` points it at a compiler built from source. `puzzle init` scaffolds the whole setup: `vitest.config.js` (`plugins: [puzzle()]`, `environment: 'jsdom'`), `"test": "vitest run"`, `vitest` and `jsdom` dev dependencies, and a starter `tests/` (`default`: `Counter.test.js`; `todos`: `Home.test.js` and the store test `todo.test.js`; `.test.ts` under `--typescript`, type-checked by the app's `tsconfig.json`).
+**Running them.** An app's own Vitest suite cannot import a `.pzl` file by itself, so `@magic-spells/puzzle/vitest` exports `puzzle()`, a Vite plugin for `vitest.config.js` ([[DECISION-D194-VITEST-PLUGIN]]). It compiles each `.pzl` import through the installed CLI's hidden `puzzle compile` (same D20 directory rule as the build, `{#svg}` inlined, `lang="ts"` types stripped), surfaces positioned compile errors as the failing import, and adds the build's `@/` alias. `options.bin` or `PUZZLE_BIN` points it at a compiler built from source. `puzzle init` scaffolds the whole setup: `vitest.config.js` (`plugins: [puzzle()]`, `environment: 'jsdom'`), `"test": "vitest run"`, `vitest` and `jsdom` dev dependencies, and a starter `tests/` (`default`: `Counter.test.js`; `todos`: `Home.test.js` and the store test `todo.test.js`; `.test.ts` under `--typescript`, type-checked by the app's `tsconfig.json`).
 
 ```js
 // vitest.config.js

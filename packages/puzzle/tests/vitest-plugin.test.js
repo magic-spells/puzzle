@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { puzzle } from '../client-runtime/vitest/index.js';
 
-// the @magic-spells/puzzle/vitest plugin (d193). the go side, `puzzle compile`,
+// the @magic-spells/puzzle/vitest plugin (d194). the go side, `puzzle compile`,
 // has its own go tests; these cover the plugin's plumbing with a stand-in
 // executable, so the suite needs no built binary.
 

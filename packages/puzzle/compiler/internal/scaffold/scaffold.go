@@ -185,7 +185,7 @@ func readTree(root string) (map[string][]byte, error) {
 // tsconfigJSON is the strict, noEmit tsconfig written by --typescript (D54).
 // The Puzzle build never runs tsc; this config serves two readers. An editor's
 // TypeScript reads it directly for the app's .ts/.js files and its tests/
-// (D193), where `include` picks up the package's shipped `puzzle-env.d.ts`
+// (D194), where `include` picks up the package's shipped `puzzle-env.d.ts`
 // shim so `import X from './views/X.pzl'` resolves to a PuzzleView subclass. `puzzle check` (the
 // scaffold's `npm run check`, D165) extends it, so its strictness is what the
 // .pzl scripts, template expressions and .ts modules are checked against.

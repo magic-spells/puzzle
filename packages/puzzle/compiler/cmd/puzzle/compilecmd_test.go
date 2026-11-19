@@ -24,7 +24,7 @@ func writeApp(t *testing.T, files map[string]string) string {
 	return root
 }
 
-// the vitest plugin (d193) leans on `puzzle compile` choosing the same emission
+// the vitest plugin (d194) leans on `puzzle compile` choosing the same emission
 // mode the build does: views and layouts get a <puzzle-view> root, everything
 // else renders its own single root.
 func TestCompileOneFollowsTheDirectoryRule(t *testing.T) {

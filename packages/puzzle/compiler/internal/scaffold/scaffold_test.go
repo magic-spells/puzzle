@@ -357,7 +357,7 @@ func TestTypeScriptPackageJSONTracksTheBase(t *testing.T) {
 	}
 }
 
-// TestEveryTemplateShipsATestSuite pins the test scaffold (D193): every app,
+// TestEveryTemplateShipsATestSuite pins the test scaffold (D194): every app,
 // in both languages, gets an `npm test` script running Vitest once, the vitest
 // and jsdom dev dependencies, a vitest.config.js wiring the .pzl plugin, and at
 // least one test under tests/ that imports the testing module.

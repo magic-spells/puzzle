@@ -1106,7 +1106,7 @@ class EditFormPost extends PuzzleView {
 	}
 }
 void EditFormPost;
-// vitest subpath (D193): the plugin factory takes an optional executable path
+// vitest subpath (D194): the plugin factory takes an optional executable path
 const vitestPlugin: PuzzleVitePlugin = puzzle();
 const vitestPluginFromSource: PuzzleVitePlugin = puzzle({ bin: '/usr/local/bin/puzzle' });
 const vitestPluginName: string = vitestPlugin.name;

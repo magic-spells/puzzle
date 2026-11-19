@@ -8,7 +8,7 @@
 // Two callers share it: the repo's pzlc tool, which writes compiled fixtures
 // for the framework's own Vitest suite, and `puzzle compile`, which the
 // @magic-spells/puzzle/vitest plugin runs so an app's own tests can import
-// .pzl files (D193).
+// .pzl files (D194).
 package standalone
 
 import (

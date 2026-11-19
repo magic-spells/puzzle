@@ -1,5 +1,5 @@
 ---
-name: D193 — the Vitest plugin and the scaffolded test suite
+name: D194 — the Vitest plugin and the scaffolded test suite
 status: built
 connections:
   - DOC-TESTING
