@@ -1,5 +1,5 @@
 // Package deploy holds the host config templates that `puzzle add deploy`
-// copies into an app (D193). The files in this folder are the templates
+// copies into an app (D198). The files in this folder are the templates
 // themselves, so they double as plain examples: copy one by hand and it works
 // the same.
 //

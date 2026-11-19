@@ -26,7 +26,7 @@ type deployWrite struct {
 	current bool
 }
 
-// addDeploy is `puzzle add deploy [host]` (D193). with no host it lists the
+// addDeploy is `puzzle add deploy [host]` (D198). with no host it lists the
 // hosts; with one it copies that host's config template into the app, picking
 // the spa or static template from --static / --hybrid, else from the
 // config's output key. like `add piece` it refuses to overwrite an existing

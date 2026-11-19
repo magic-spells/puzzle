@@ -23,4 +23,4 @@ notes:
       when no project root is found.
 ---
 
-Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `compiler/cmd/puzzle/add.go` plus the D78 skill installer (`compiler/cmd/puzzle/add_skills.go`, embedded payload in `skills/embed.go` + `skills/puzzle/SKILL.md`). `puzzle add deploy <host>` (D193) lives in `compiler/cmd/puzzle/add_deploy.go` and copies a template from the embedded `deploy/` folder (`deploy/embed.go`).
+Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `compiler/cmd/puzzle/add.go` plus the D78 skill installer (`compiler/cmd/puzzle/add_skills.go`, embedded payload in `skills/embed.go` + `skills/puzzle/SKILL.md`). `puzzle add deploy <host>` (D198) lives in `compiler/cmd/puzzle/add_deploy.go` and copies a template from the embedded `deploy/` folder (`deploy/embed.go`).

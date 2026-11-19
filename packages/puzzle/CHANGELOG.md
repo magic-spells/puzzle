@@ -331,7 +331,7 @@ one is *not* a compile error; it silently builds a different product.
   Save-Data or on a 2g connection. `router.prefetch(path)` warms a route from
   code and resolves `true` once it is loaded. Apps without `lazy()` grow by
   about 60 B gzip; apps with it by about 0.75 KB.
-- **`puzzle add deploy <host>` writes a tested host config (D193).** One
+- **`puzzle add deploy <host>` writes a tested host config (D198).** One
   template per host in `deploy/`: `vercel` (`vercel.json`), `netlify`
   (`netlify.toml`), `cloudflare` (`app/public/_headers`), `nginx` (a
   `nginx.conf` server block) and `apache` (`app/public/.htaccess`). Each one

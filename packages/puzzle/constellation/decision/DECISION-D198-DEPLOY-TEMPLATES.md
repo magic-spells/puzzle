@@ -1,5 +1,5 @@
 ---
-name: D193 — deploy templates and `puzzle add deploy <host>`
+name: D198 — deploy templates and `puzzle add deploy <host>`
 status: built
 connections:
   - DECISION-D32-CLI-TOOLING
@@ -15,7 +15,7 @@ code_refs:
   - compiler/cmd/puzzle/add_deploy_test.go
 ---
 
-# D193 — deploy templates and `puzzle add deploy <host>`
+# D198 — deploy templates and `puzzle add deploy <host>`
 
 `dist/` is plain static files, but every host needs two rules Puzzle can't
 write into `dist/` by itself: the routing fallback (SPA/hybrid → the shell;

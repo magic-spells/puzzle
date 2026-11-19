@@ -188,7 +188,7 @@ func init() {
 // runAdd dispatches on the requested integration/selector. args[0] selects:
 // "tailwind"/"tailwindcss" wire the Tailwind pipeline (unchanged); "piece"
 // copies the remaining args as piece names from the registry; "deploy" copies
-// a host's config template (D193); "skills"/"skill"
+// a host's config template (D198); "skills"/"skill"
 // installs the embedded Puzzle agent skill into detected tool config dirs.
 // runAdd is runAddWithEnvironment under the default environment: real home
 // directory, real stdin, no pinned skill roots, and no --pieces-version pin.
