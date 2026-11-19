@@ -70,7 +70,7 @@ const codeHero = `<Textarea label="Bio" rows={ 4 } value={ bio } @change={ setBi
 
 // parent
 events = {
-  setBio: (v) => this.setData('bio', v),
+  setBio: (v) => this.setState('bio', v),
 };`;
 
 const codeHint = `<Textarea label="Notes" rows={ 4 } hint="A sentence or two about yourself." />`;
@@ -79,7 +79,7 @@ const codeError = `<Textarea label="Message" value="Hi" error="Message is requir
 
 export default class TextareaDoc extends PuzzleView {
   created() {
-    this.setData({ bio: '' });
+    this.setState({ bio: '' });
   }
 
   data(params, props) {
@@ -101,7 +101,7 @@ export default class TextareaDoc extends PuzzleView {
   }
 
   events = {
-    setBio: (v) => this.setData('bio', v),
+    setBio: (v) => this.setState('bio', v),
   };
 }
 </script>

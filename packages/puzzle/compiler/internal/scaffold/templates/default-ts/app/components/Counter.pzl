@@ -29,7 +29,7 @@ interface CounterProps {
   label?: string;
 }
 
-// Local UI state, owned by this component through setData().
+// Local UI state, owned by this component through setState().
 interface CounterState {
   count: number;
 }
@@ -43,7 +43,7 @@ interface CounterModel {
 export default class Counter extends PuzzleView<CounterProps> {
   // Local UI state — seeded once before the first data() run.
   created(): void {
-    this.setData({ count: 0 });
+    this.setState({ count: 0 });
   }
 
   data(_params: Record<string, string>, props: CounterProps): CounterModel {
@@ -60,10 +60,10 @@ export default class Counter extends PuzzleView<CounterProps> {
   // warns in the console when a handler is written that way.
   events = {
     increment: (): void => {
-      this.setData('count', this.getData<CounterState>().count + 1);
+      this.setState('count', this.getData<CounterState>().count + 1);
     },
     decrement: (): void => {
-      this.setData('count', this.getData<CounterState>().count - 1);
+      this.setState('count', this.getData<CounterState>().count - 1);
     },
   };
 }

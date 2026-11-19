@@ -375,12 +375,12 @@ describe('<Component> runtime (D180)', () => {
 			mounted() { mountedHook(); }
 		}
 		const view = await mounted(Host, { props: { current: null, title: 'ready', content: '' } });
-		view.instance.setData('current', Pending);
+		view.instance.setState('current', Pending);
 		await created;
 		let announceReplacement;
 		const replaced = new Promise((resolve) => { announceReplacement = resolve; });
 		class Replacement extends Card { created() { announceReplacement(); } }
-		view.instance.setData('current', Replacement);
+		view.instance.setState('current', Replacement);
 		await replaced;
 		expect(pending.isDestroyed).toBe(true);
 		resolveData({ title: 'late' });

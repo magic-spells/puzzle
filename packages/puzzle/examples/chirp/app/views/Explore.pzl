@@ -1,6 +1,6 @@
 <puzzle-view>
   <!-- Explore: search + trends. The query is local UI state; typing filters live
-       via @input (setData+refresh). The @keydown:enter modifier (v1.7, D38) is
+       via @input (setState). The @keydown:enter modifier (v1.7, D38) is
        the showcase here — pressing Enter blurs the field to dismiss the mobile
        keyboard (the results are already applied on every keystroke). With no
        query we show computed hashtag trends + a WhoToFollow card; with a query we
@@ -90,7 +90,7 @@ const byNewest = (a, b) => String(b.createdAt || '').localeCompare(String(a.crea
 
 export default class ExploreView extends PuzzleView {
   created() {
-    this.setData({ query: '' });
+    this.setState({ query: '' });
   }
 
   data(params, props) {
@@ -140,10 +140,7 @@ export default class ExploreView extends PuzzleView {
   }
 
   events = {
-    onSearch: (event) => {
-      this.setData('query', event.target.value);
-      this.refresh();
-    },
+    onSearch: (event) => this.setState('query', event.target.value),
 
     // @keydown:enter — the results are already live, so Enter just dismisses the
     // keyboard by blurring the input (modifier showcase).
@@ -152,10 +149,7 @@ export default class ExploreView extends PuzzleView {
     },
 
     // Tapping a trend loads it into the search box.
-    setQuery: (tag) => {
-      this.setData('query', tag);
-      this.refresh();
-    },
+    setQuery: (tag) => this.setState('query', tag),
   };
 
   animations = {

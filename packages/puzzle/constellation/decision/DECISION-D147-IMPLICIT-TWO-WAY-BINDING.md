@@ -110,7 +110,7 @@ member targets — so listener identity is stable across renders
 returns a shared inert handler. The handler returns early on
 `event.isComposing`, coerces, then writes:
 
-- **Local** (`null`): `setData` + `refresh()` — so a bound filter feeding
+- **Local** (`null`): `setState` + `refresh()` — so a bound filter feeding
   `data()` narrows as you type ([[DECISION-D23-REFRESH-PATTERN]]).
 - **Record** (duck-typed `update` + string `_type`): strict
   `record.update({ [key]: v })`. Validation is never bypassed

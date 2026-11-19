@@ -64,5 +64,5 @@ needed, as the plan predicted.
    (data-driven) drop-target hit-test is never occluded by the thing being
    dragged.
 7. **Never `record.update()` during pointermove.** Ephemeral gesture state
-   goes through `setData()` + one rAF per frame; the drop commits. Same
+   goes through `setState()` + one rAF per frame; the drop commits. Same
    rule the orrery example documents for its animation loop.

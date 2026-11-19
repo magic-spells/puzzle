@@ -137,7 +137,7 @@ const codeSorting = `// Sort is optional-controlled: the parent owns the descrip
            sort={ sort } @sortChange={ setSort } />
 
 events = {
-  setSort: (next) => this.setData({ sort: next }),   // { key, dir } | null
+  setSort: (next) => this.setState({ sort: next }),   // { key, dir } | null
 };`;
 
 const codeSnippets = `// Snippets are stamped at every matching marker. Branch on the column
@@ -167,7 +167,7 @@ const codeSelection = `// selected is an array of rowKey values; @select fires t
 <p>{ selected.size } selected</p>
 
 events = {
-  setSelected: (keys) => this.setData({ selected: keys }),
+  setSelected: (keys) => this.setState({ selected: keys }),
 };`;
 
 const codePagination = `// pageSize enables pagination (rows are sorted, THEN paged); the footer
@@ -177,7 +177,7 @@ const codePagination = `// pageSize enables pagination (rows are sorted, THEN pa
            pageSize={ 4 } page={ page } @pageChange={ setPage } />
 
 events = {
-  setPage: (n) => this.setData({ page: n }),
+  setPage: (n) => this.setState({ page: n }),
 };`;
 
 const INVOICE_COLUMNS = [
@@ -204,7 +204,7 @@ const INVOICE_ROWS = [
 
 export default class DataTableDoc extends PuzzleView {
   created() {
-    this.setData({ sortState: { key: 'amount', dir: 'desc' }, selectedKeys: [], pageNum: 1 });
+    this.setState({ sortState: { key: 'amount', dir: 'desc' }, selectedKeys: [], pageNum: 1 });
   }
 
   data(params, props) {
@@ -239,16 +239,13 @@ export default class DataTableDoc extends PuzzleView {
 
   events = {
     setSort: (next) => {
-      this.setData('sortState', next);
-      this.refresh();
+      this.setState('sortState', next);
     },
     setSelected: (keys) => {
-      this.setData('selectedKeys', keys);
-      this.refresh();
+      this.setState('selectedKeys', keys);
     },
     setPageNum: (n) => {
-      this.setData('pageNum', n);
-      this.refresh();
+      this.setState('pageNum', n);
     },
   };
 }

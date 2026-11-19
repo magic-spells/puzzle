@@ -138,7 +138,7 @@ const TURN_COMMANDS = SLASH_COMMANDS.filter((c) => c.type !== 'divider').concat(
 export default class Doc extends PuzzleView {
   created() {
     // Drag state machine (adapted from the kanban Board): a mutable `_drag`
-    // scratch object plus published setData mirror for data() to splice the
+    // scratch object plus published setState mirror for data() to splice the
     // placeholder. FLIP rects are only snapshotted while a drag is live so the
     // per-keystroke re-render stays cheap.
     this._drag = null;
@@ -153,7 +153,7 @@ export default class Doc extends PuzzleView {
     this._onDocPointerDown = (e) => this._handleDocPointerDown(e);
     this._menuListening = false;
 
-    this.setData({
+    this.setState({
       dragging: false,
       draggingId: '',
       targetIndex: 0,
@@ -250,7 +250,7 @@ export default class Doc extends PuzzleView {
 
   destroyed() {
     this._teardownMenuListeners();
-    this._cleanupDrag(false);
+    this._cleanupDrag();
   }
 
   // ---- store / order helpers (Doc owns them; Block owns caret math) ---------
@@ -513,11 +513,11 @@ export default class Doc extends PuzzleView {
 
   // ---- menu internals -------------------------------------------------------
 
-  // setData + synchronous refresh so a menu-state change (especially the
+  // setState + synchronous refresh so a menu-state change (especially the
   // slashActive prop) propagates to the child blocks THIS turn — before the next
   // keystroke the island might dispatch.
   _setMenu(patch) {
-    this.setData(patch);
+    this.setState(patch);
     this.refresh();
   }
 
@@ -796,7 +796,7 @@ export default class Doc extends PuzzleView {
       e.preventDefault();
       this._commitDrop();
     }
-    this._cleanupDrag(true);
+    this._cleanupDrag();
 
     // A press that never moved is a click on the handle → open Turn-into.
     if (wasPending) this._openMenu('turn', dragId);
@@ -806,13 +806,13 @@ export default class Doc extends PuzzleView {
     if (!this._drag || e.key !== 'Escape') return;
     e.preventDefault();
     // Cancel: drop the drag with no reorder.
-    this._cleanupDrag(true);
+    this._cleanupDrag();
   }
 
   _promote(e) {
     const row = this._blockElement(this._drag.id);
     if (!row) {
-      this._cleanupDrag(true);
+      this._cleanupDrag();
       return;
     }
 
@@ -849,13 +849,12 @@ export default class Doc extends PuzzleView {
 
   _publishDragState() {
     if (!this._drag) return;
-    this.setData({
+    this.setState({
       dragging: this._drag.phase === 'DRAGGING',
       draggingId: this._drag.id,
       targetIndex: this._drag.targetIndex,
       dragHeight: this._drag.height,
     });
-    this.refresh();
   }
 
   _moveGhost(e) {
@@ -893,7 +892,7 @@ export default class Doc extends PuzzleView {
     this._reindex(ordered);
   }
 
-  _cleanupDrag(shouldRefresh) {
+  _cleanupDrag() {
     const ghost = this._drag && this._drag.ghost;
 
     document.removeEventListener('pointermove', this._onPointerMove);
@@ -906,8 +905,7 @@ export default class Doc extends PuzzleView {
     document.body.style.cursor = this._storedCursor;
     this._drag = null;
 
-    this.setData({ dragging: false, draggingId: '', targetIndex: 0, dragHeight: 0 });
-    if (shouldRefresh) this.refresh();
+    this.setState({ dragging: false, draggingId: '', targetIndex: 0, dragHeight: 0 });
   }
 
   // ---- FLIP (only while a drag is active) ----------------------------------

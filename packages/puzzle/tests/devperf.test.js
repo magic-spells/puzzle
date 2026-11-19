@@ -44,10 +44,10 @@ describe('dev performance render instrumentation', () => {
 			})
 		);
 
-		view.instance.setData('count', 0);
-		view.instance.setData('count', 0);
+		view.instance.setState('count', 0);
+		view.instance.setState('count', 0);
 		await settled();
-		view.instance.setData('count', 1);
+		view.instance.setState('count', 1);
 		await settled();
 
 		expect(renders).toHaveLength(2);
@@ -139,7 +139,7 @@ describe('dev performance render instrumentation', () => {
 		);
 		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-		exploding.instance.setData('explode', true);
+		exploding.instance.setState('explode', true);
 		exploding.instance.flushUpdates(); // flushUpdates catches and logs the throw
 		await settled();
 		expect(error).toHaveBeenCalledWith('[puzzle] render update failed:', expect.any(Error));
@@ -147,9 +147,9 @@ describe('dev performance render instrumentation', () => {
 		expect(renders.filter((event) => event.viewName === 'Exploding')).toHaveLength(0);
 
 		// Two later, independent interactions each open their OWN chain at depth 1.
-		neighbor.instance.setData('tick', 1);
+		neighbor.instance.setState('tick', 1);
 		await settled();
-		neighbor.instance.setData('tick', 2);
+		neighbor.instance.setState('tick', 2);
 		await settled();
 
 		const neighborRenders = renders.filter((event) => event.viewName === 'Neighbor');
@@ -210,7 +210,7 @@ describe('dev performance render instrumentation', () => {
 		);
 
 		armed = true;
-		reentrant.instance.setData('tick', 1);
+		reentrant.instance.setState('tick', 1);
 		await settled();
 
 		const reentrantRenders = renders.filter((event) => event.viewName === 'Reentrant');
@@ -219,9 +219,9 @@ describe('dev performance render instrumentation', () => {
 
 		// Two later, independent interactions each open their OWN chain at depth 1 —
 		// the proof that the outer render's scope was popped.
-		neighbor.instance.setData('tick', 1);
+		neighbor.instance.setState('tick', 1);
 		await settled();
-		neighbor.instance.setData('tick', 2);
+		neighbor.instance.setState('tick', 2);
 		await settled();
 
 		const neighborRenders = renders.filter((event) => event.viewName === 'Neighbor');
@@ -251,7 +251,7 @@ describe('dev performance render instrumentation', () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
 		for (let i = 0; i < 61; i++) {
-			view.instance.setData('tick', i);
+			view.instance.setState('tick', i);
 			view.instance.flushUpdates();
 		}
 
@@ -275,7 +275,7 @@ describe('dev performance render instrumentation', () => {
 
 		// The whole point: work still gets done after the warning. A render that
 		// DOES change the DOM lands.
-		view.instance.setData('label', 'after the warning');
+		view.instance.setState('label', 'after the warning');
 		view.instance.flushUpdates();
 		expect(view.element.textContent).toBe('after the warning');
 		const afterWarning = events.filter((event) => event.type === 'render').at(-1);

@@ -27,7 +27,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 export default class Counter extends PuzzleView {
   // Local UI state — seeded once before the first data() run.
   created() {
-    this.setData({ count: 0 });
+    this.setState({ count: 0 });
   }
 
   data(params, props) {
@@ -44,10 +44,10 @@ export default class Counter extends PuzzleView {
   // warns in the console when a handler is written that way.
   events = {
     increment: () => {
-      this.setData('count', this.getData().count + 1);
+      this.setState('count', this.getData().count + 1);
     },
     decrement: () => {
-      this.setData('count', this.getData().count - 1);
+      this.setState('count', this.getData().count - 1);
     },
   };
 }

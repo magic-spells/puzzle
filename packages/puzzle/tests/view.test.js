@@ -66,9 +66,9 @@ describe('PuzzleView — lifecycle', () => {
 		expect(seen).toEqual({ params: { id: '42' }, props: { userId: 7 } });
 	});
 
-	it('setData in created() seeds state that data() reads back — the TodoHome pattern', async () => {
+	it('setState in created() seeds state that data() reads back — the TodoHome pattern', async () => {
 		class V extends PuzzleView {
-			created() { this.setData({ currentFilter: 'all' }); }
+			created() { this.setState({ currentFilter: 'all' }); }
 			data() {
 				const local = this.getData();
 				return { filterLabel: `filter: ${local.currentFilter}` };
@@ -216,7 +216,7 @@ describe('PuzzleView — lifecycle', () => {
 		}
 		class Host extends PuzzleView {
 			created() {
-				this.setData('which', 'one');
+				this.setState('which', 'one');
 			}
 			render() {
 				return h('section', {}, [comp(Child, { which: this.getData().which })]);
@@ -226,7 +226,7 @@ describe('PuzzleView — lifecycle', () => {
 		try {
 			const el = container();
 			const host = await new Host().mount(el);
-			host.setData('which', 'two');
+			host.setState('which', 'two');
 			host.flushUpdates();
 
 			gates.one.resolve('stale');
@@ -292,10 +292,10 @@ describe('PuzzleView — lifecycle', () => {
 
 describe('PuzzleView — afterUpdate(prev) (D178)', () => {
 	// `prev` is what the PREVIOUS render drew — frozen, shallow — not whatever the
-	// instance held when the update started: setData writes #data at call time and
+	// instance held when the update started: setState writes #data at call time and
 	// refresh swaps props/params/route before data() runs.
 
-	it('setData: prev.data is the drawn state, frozen and separate from the live data', async () => {
+	it('setState: prev.data is the drawn state, frozen and separate from the live data', async () => {
 		const seen = [];
 		class V extends PuzzleView {
 			data() { return { label: 'model' }; }
@@ -305,9 +305,9 @@ describe('PuzzleView — afterUpdate(prev) (D178)', () => {
 		const props = { tone: 'calm' };
 		const v = await new V().mount(container(), { props });
 
-		v.setData('count', 1);
+		v.setState('count', 1);
 		v.flushUpdates();
-		v.setData('count', 2);
+		v.setState('count', 2);
 		v.flushUpdates();
 
 		expect(seen).toHaveLength(2);
@@ -369,12 +369,12 @@ describe('PuzzleView — afterUpdate(prev) (D178)', () => {
 			render() { return h('span', {}, [text(String(this.getData().doubled))]); }
 		}
 		class Parent extends PuzzleView {
-			created() { this.setData('n', 1); }
+			created() { this.setState('n', 1); }
 			render() { return h('div', {}, [comp(Child, { n: this.getData().n })]); }
 		}
 		const el = container();
 		const parent = await new Parent().mount(el);
-		parent.setData('n', 5);
+		parent.setState('n', 5);
 		parent.flushUpdates();
 
 		expect(el.textContent).toBe('10');
@@ -428,11 +428,11 @@ describe('PuzzleView — afterUpdate(prev) (D178)', () => {
 			freeze.mock.calls.filter(([o]) => o && typeof o === 'object' && 'props' in o && 'data' in o && 'route' in o)
 				.length;
 		try {
-			plain.setData('n', 1);
+			plain.setState('n', 1);
 			plain.flushUpdates();
 			expect(snapshots()).toBe(0);
 
-			hooked.setData('n', 1);
+			hooked.setState('n', 1);
 			hooked.flushUpdates();
 			expect(snapshots()).toBe(1); // the hooked control does snapshot
 		} finally {
@@ -448,32 +448,50 @@ describe('PuzzleView — afterUpdate(prev) (D178)', () => {
 		}
 		const v = await new V().mount(container());
 		expect(calls).toEqual([]); // not on the first render
-		v.setData('n', 1);
+		v.setState('n', 1);
 		v.flushUpdates();
 		expect(calls).toEqual([1]);
 	});
 });
 
-describe('PuzzleView — setData semantics (SPEC §4)', () => {
+describe('PuzzleView — setState semantics (SPEC §4)', () => {
 	class Counter extends PuzzleView {
 		data() { return { count: this.getData().count ?? 0 }; }
 		render() { return h('span', {}, [text(`count: ${this.getData().count}`)]); }
 	}
 
-	it('re-renders WITHOUT re-running data()', async () => {
+	it('re-renders WITHOUT re-running data() for a key data() never read', async () => {
+		class V extends PuzzleView {
+			data() { return { label: 'fixed' }; }
+			render() { return h('span', {}, [text(`${this.getData().label} ${this.getData().count ?? 0}`)]); }
+		}
+		const v = new V();
+		const dataSpy = vi.spyOn(v, 'data');
+		const el = container();
+		await v.mount(el);
+		expect(dataSpy).toHaveBeenCalledTimes(1);
+
+		v.setState('count', 5);
+		v.flushUpdates();
+		expect(el.textContent).toBe('fixed 5');
+		expect(dataSpy).toHaveBeenCalledTimes(1); // still once
+	});
+
+	it('re-runs data() once with the render for a key data() read (D23)', async () => {
 		const v = new Counter();
 		const dataSpy = vi.spyOn(v, 'data');
 		const el = container();
 		await v.mount(el);
 		expect(dataSpy).toHaveBeenCalledTimes(1);
 
-		v.setData('count', 5);
+		v.setState('count', 5);
+		expect(dataSpy).toHaveBeenCalledTimes(1); // nothing runs until the flush
 		v.flushUpdates();
 		expect(el.textContent).toBe('count: 5');
-		expect(dataSpy).toHaveBeenCalledTimes(1); // still once
+		expect(dataSpy).toHaveBeenCalledTimes(2);
 	});
 
-	it('batches multiple setData calls into one render with beforeUpdate/afterUpdate around it', async () => {
+	it('batches multiple setState calls into one render with beforeUpdate/afterUpdate around it', async () => {
 		const hooks = [];
 		class V extends Counter {
 			beforeUpdate() { hooks.push('before'); }
@@ -484,9 +502,9 @@ describe('PuzzleView — setData semantics (SPEC §4)', () => {
 		await v.mount(el);
 		expect(hooks).toEqual([]); // hooks do not fire on initial render
 
-		v.setData('count', 1);
-		v.setData('count', 2);
-		v.setData('count', 3);
+		v.setState('count', 1);
+		v.setState('count', 2);
+		v.setState('count', 3);
 		v.flushUpdates();
 		expect(el.textContent).toBe('count: 3');
 		expect(hooks).toEqual(['before', 'after']); // one update cycle
@@ -496,7 +514,7 @@ describe('PuzzleView — setData semantics (SPEC §4)', () => {
 	// it. A synchronous refresh() in the same tick renders immediately, so the still
 	// pending rAF fired a THIRD render with byte-identical state. Clearing the flag
 	// wherever a render actually lands makes any render satisfy the pending one.
-	it('a synchronous refresh() satisfies the render setData scheduled (no stale third pass)', async () => {
+	it('a synchronous refresh() satisfies the render setState scheduled (no stale third pass)', async () => {
 		const renders = [];
 		class V extends PuzzleView {
 			data() { return { n: this.getData().n ?? 0 }; }
@@ -510,7 +528,7 @@ describe('PuzzleView — setData semantics (SPEC §4)', () => {
 		await v.mount(el);
 		expect(renders).toEqual([0]);
 
-		v.setData('n', 1);
+		v.setState('n', 1);
 		expect(renders).toEqual([0]); // scheduled for the frame, not rendered yet
 		v.refresh(); // sync data() → commits and renders right now
 		expect(renders).toEqual([0, 1]);
@@ -520,7 +538,7 @@ describe('PuzzleView — setData semantics (SPEC §4)', () => {
 		expect(el.textContent).toBe('n: 1');
 	});
 
-	it('a setData issued after that synchronous refresh still re-arms the frame', async () => {
+	it('a setState issued after that synchronous refresh still re-arms the frame', async () => {
 		const renders = [];
 		class V extends PuzzleView {
 			data() { return { n: this.getData().n ?? 0 }; }
@@ -533,9 +551,9 @@ describe('PuzzleView — setData semantics (SPEC §4)', () => {
 		const el = container();
 		await v.mount(el);
 
-		v.setData('n', 1);
+		v.setState('n', 1);
 		v.refresh();
-		v.setData('n', 2); // same tick, after the sync render
+		v.setState('n', 2); // same tick, after the sync render
 		await afterFrame();
 		expect(renders).toEqual([0, 1, 2]);
 		expect(el.textContent).toBe('n: 2');
@@ -551,7 +569,7 @@ describe('PuzzleView — setData semantics (SPEC §4)', () => {
 		const el = container();
 		await v.mount(el);
 
-		v.setData('count', 1);
+		v.setState('count', 1);
 		v.flushUpdates(); // throws internally, reported, not rethrown
 		expect(v.isDestroyed).toBe(true);
 		expect(el.textContent).toBe('');
@@ -560,10 +578,162 @@ describe('PuzzleView — setData semantics (SPEC §4)', () => {
 	});
 });
 
-describe('PuzzleView — two-layer data()/setData semantics (Change C, SPEC §4)', () => {
-	// #local (setData) and #model (last successful data(), replaced wholesale) compose
+describe('PuzzleView — setState() re-runs data() when data() read the key (D23)', () => {
+	// a filter tab narrowing a list: the classic derived-from-local-state shape
+	class Filtered extends PuzzleView {
+		created() { this.setState({ filter: 'all', draft: '' }); }
+		data() {
+			const { filter } = this.getData();
+			const items = ['a1', 'b1', 'a2'];
+			return { shown: filter === 'all' ? items : items.filter((i) => i.startsWith(filter)) };
+		}
+		render() { return h('p', {}, [text(`${this.getData().shown.join(',')}|${this.getData().draft}`)]); }
+	}
+
+	it('a derived value follows setState() with no refresh()', async () => {
+		const v = new Filtered();
+		const el = container();
+		await v.mount(el);
+		expect(el.textContent).toBe('a1,b1,a2|');
+		v.setState('filter', 'a');
+		await v.renderTick();
+		expect(el.textContent).toBe('a1,a2|');
+	});
+
+	it('a burst of writes runs data() once and renders once', async () => {
+		let renders = 0;
+		class V extends Filtered {
+			afterUpdate() { renders++; }
+		}
+		const v = new V();
+		const el = container();
+		await v.mount(el);
+		const dataSpy = vi.spyOn(v, 'data');
+		v.setState('filter', 'b');
+		v.setState('filter', 'a');
+		v.setState({ filter: 'a', draft: 'x' });
+		await v.renderTick();
+		expect(dataSpy).toHaveBeenCalledTimes(1);
+		expect(renders).toBe(1);
+		expect(el.textContent).toBe('a1,a2|x');
+	});
+
+	it('a key data() never read only re-renders', async () => {
+		const v = new Filtered();
+		const el = container();
+		await v.mount(el);
+		const dataSpy = vi.spyOn(v, 'data');
+		v.setState('draft', 'typed');
+		await v.renderTick();
+		expect(dataSpy).not.toHaveBeenCalled();
+		expect(el.textContent).toBe('a1,b1,a2|typed');
+	});
+
+	it('an explicit refresh() right after setState() still runs data() just once', async () => {
+		const v = new Filtered();
+		await v.mount(container());
+		const dataSpy = vi.spyOn(v, 'data');
+		v.setState('filter', 'a');
+		v.refresh();
+		await v.renderTick();
+		expect(dataSpy).toHaveBeenCalledTimes(1);
+	});
+
+	it('reads through getState() count too', async () => {
+		class V extends PuzzleView {
+			data() { return { doubled: (this.getState().n ?? 0) * 2 }; }
+			render() { return h('p', {}, [text(String(this.getData().doubled))]); }
+		}
+		const v = new V();
+		const el = container();
+		await v.mount(el);
+		v.setState('n', 4);
+		await v.renderTick();
+		expect(el.textContent).toBe('8');
+	});
+
+	it('spreading getData() inside data() counts as reading every key, new ones included', async () => {
+		class V extends PuzzleView {
+			data() {
+				const all = { ...this.getData() };
+				return { count: Object.keys(all).filter((k) => k !== 'count').length };
+			}
+			render() { return h('p', {}, [text(String(this.getData().count))]); }
+		}
+		const v = new V();
+		const el = container();
+		await v.mount(el);
+		expect(el.textContent).toBe('0');
+		v.setState('fresh', true); // a key that did not exist when data() last ran
+		await v.renderTick();
+		expect(el.textContent).toBe('1');
+	});
+
+	it('a setState() inside data() does not schedule a re-run of itself', async () => {
+		class V extends PuzzleView {
+			data() {
+				const n = this.getData().n ?? 0;
+				this.setState('seen', n);
+				return { label: `n=${n}` };
+			}
+			render() { return h('p', {}, [text(this.getData().label)]); }
+		}
+		const v = new V();
+		await v.mount(container());
+		const dataSpy = vi.spyOn(v, 'data');
+		v.setState('n', 1);
+		await v.renderTick();
+		await v.renderTick();
+		expect(dataSpy).toHaveBeenCalledTimes(1);
+	});
+
+	it('an async data() shows the written value at once, then the derived one when it resolves', async () => {
+		/** @type {(v?: any) => void} */
+		let release = () => {};
+		class V extends PuzzleView {
+			async data() {
+				const q = this.getData().q ?? '';
+				await new Promise((r) => (release = r));
+				return { result: `results for ${q}` };
+			}
+			render() { return h('p', {}, [text(`${this.getData().q ?? ''}|${this.getData().result ?? ''}`)]); }
+		}
+		const v = new V();
+		const el = container();
+		const mounting = v.mount(el);
+		release();
+		await mounting;
+		expect(el.textContent).toBe('|results for ');
+		v.setState('q', 'cats');
+		await v.renderTick();
+		expect(el.textContent).toBe('cats|results for '); // the write is on screen right away
+		release();
+		await new Promise((r) => setTimeout(r, 0));
+		expect(el.textContent).toBe('cats|results for cats');
+	});
+
+	it('a sync data() throw on the re-run is contained, not rethrown from the flush', async () => {
+		class V extends PuzzleView {
+			data() {
+				if (this.getData().boom) throw new Error('boom');
+				return { ok: true };
+			}
+			render() { return h('p', {}, [text('ok')]); }
+		}
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const v = new V();
+		await v.mount(container());
+		v.setState('boom', true);
+		expect(() => v.flushUpdates()).not.toThrow();
+		expect(errSpy).toHaveBeenCalled();
+		errSpy.mockRestore();
+	});
+});
+
+describe('PuzzleView — two-layer data()/setState semantics (Change C, SPEC §4)', () => {
+	// #state (setState) and #derived (last successful data(), replaced wholesale) compose
 	// into the visible getData(): the model overlays local (a data() commit beats an
-	// EARLIER setData); a LATER setData beats the model value until the next commit.
+	// EARLIER setState); a LATER setState beats the model value until the next commit.
 	const mkGate = () => {
 		let resolve, reject;
 		const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
@@ -589,45 +759,45 @@ describe('PuzzleView — two-layer data()/setData semantics (Change C, SPEC §4)
 
 		// A LOCAL b, however, survives the model omission.
 		phase = 1; v.refresh();
-		v.setData('b', 99);
+		v.setState('b', 99);
 		phase = 2; v.refresh();
 		expect(v.getData().b).toBe(99);
 	});
 
-	it('2. local setData state survives data() re-runs when the model omits the key', async () => {
+	it('2. local setState state survives data() re-runs when the model omits the key', async () => {
 		const v = makeView(() => ({ n: 1 }));
 		await v.mount(container());
-		v.setData('draft', 'hello');
+		v.setState('draft', 'hello');
 		expect(v.getData()).toEqual({ n: 1, draft: 'hello' });
 		v.refresh(); // model still { n: 1 } — no draft
 		expect(v.getData().draft).toBe('hello');
 	});
 
-	it('3. a data() commit overwrites an earlier setData value for the same key', async () => {
+	it('3. a data() commit overwrites an earlier setState value for the same key', async () => {
 		let val = 'model-A';
 		const v = makeView(() => ({ x: val }));
 		await v.mount(container());
-		v.setData('x', 'local-override');
-		expect(v.getData().x).toBe('local-override'); // later setData wins for now
+		v.setState('x', 'local-override');
+		expect(v.getData().x).toBe('local-override'); // later setState wins for now
 		val = 'model-B';
 		v.refresh();
-		expect(v.getData().x).toBe('model-B'); // the commit beats the earlier setData
+		expect(v.getData().x).toBe('model-B'); // the commit beats the earlier setState
 	});
 
-	it('4. a later setData overwrites the model value until the next commit', async () => {
+	it('4. a later setState overwrites the model value until the next commit', async () => {
 		const v = makeView(() => ({ x: 'from-model' }));
 		await v.mount(container());
 		expect(v.getData().x).toBe('from-model');
-		v.setData('x', 'from-local');
+		v.setState('x', 'from-local');
 		expect(v.getData().x).toBe('from-local'); // wins until the next commit
 		v.refresh();
 		expect(v.getData().x).toBe('from-model'); // the next commit re-asserts the model
 	});
 
-	it('5. created()-seeded setData is readable in the first data() (getData inside data)', async () => {
+	it('5. created()-seeded setState is readable in the first data() (getData inside data)', async () => {
 		let seen;
 		class V extends PuzzleView {
-			created() { this.setData({ seed: 'seeded' }); }
+			created() { this.setState({ seed: 'seeded' }); }
 			data() { seen = this.getData().seed; return { echoed: this.getData().seed }; }
 			render() { return h('span', {}, [text(this.getData().echoed ?? '')]); }
 		}
@@ -635,6 +805,24 @@ describe('PuzzleView — two-layer data()/setData semantics (Change C, SPEC §4)
 		await v.mount(container());
 		expect(seen).toBe('seeded');
 		expect(v.getData()).toEqual({ seed: 'seeded', echoed: 'seeded' });
+	});
+
+	it('5b. getState() returns the state layer alone, as a copy (D191)', async () => {
+		const v = makeView(() => ({ x: 'from-model', total: 3 }));
+		await v.mount(container());
+		v.setState({ x: 'from-local', draft: 'hi' });
+		// the state layer holds only what setState wrote; data()'s keys stay out
+		expect(v.getState()).toEqual({ x: 'from-local', draft: 'hi' });
+		v.refresh();
+		// after the commit the merged view shows the model's x, the state layer keeps its own
+		expect(v.getData().x).toBe('from-model');
+		expect(v.getState().x).toBe('from-local');
+		// a copy: mutating it never reaches the view
+		const copy = v.getState();
+		copy.draft = 'changed';
+		expect(v.getState().draft).toBe('hi');
+		// the old name is gone outright, with no alias
+		expect(/** @type {any} */ (v).setData).toBeUndefined();
 	});
 
 	it('6. a superseded stale-token data() run touches neither layer', async () => {
@@ -820,10 +1008,10 @@ describe('PuzzleView — skeleton loading (v1.8, D39)', () => {
 		expect(el.querySelector('.is-loading')).toBeNull();
 	});
 
-	it('setData during the skeleton phase re-renders the skeleton with created()-seeded state', async () => {
+	it('setState during the skeleton phase re-renders the skeleton with created()-seeded state', async () => {
 		const gate = deferred();
 		class V extends PuzzleView {
-			created() { this.setData({ rows: 2 }); }
+			created() { this.setState({ rows: 2 }); }
 			async data() { return { post: await gate.promise }; }
 		}
 		V.prototype.render = function () { return h('article', {}, [text(this.getData().post)]); };
@@ -836,7 +1024,7 @@ describe('PuzzleView — skeleton loading (v1.8, D39)', () => {
 		const v = await new V().mount(el);
 		expect(el.querySelectorAll('.bg-skeleton')).toHaveLength(2);
 
-		v.setData('rows', 4); // still loading — skeleton re-renders
+		v.setState('rows', 4); // still loading — skeleton re-renders
 		v.flushUpdates();
 		expect(el.querySelectorAll('.bg-skeleton')).toHaveLength(4);
 		gate.resolve('done');
@@ -1057,7 +1245,7 @@ describe('PuzzleView — events integration (mini hand-compiled component)', () 
 	// the same pattern the Phase 1 Home.pzl fixture uses.
 	class MiniCounter extends PuzzleView {
 		created() {
-			this.setData({ count: 0 });
+			this.setState({ count: 0 });
 		}
 
 		data() {
@@ -1066,7 +1254,7 @@ describe('PuzzleView — events integration (mini hand-compiled component)', () 
 
 		events = {
 			increment: (event) => {
-				this.setData('count', this.getData().count + 1);
+				this.setState('count', this.getData().count + 1);
 			},
 		};
 	}
@@ -1079,7 +1267,7 @@ describe('PuzzleView — events integration (mini hand-compiled component)', () 
 		]);
 	};
 
-	it('clicking wires @attr → events field arrow → setData → DOM update', async () => {
+	it('clicking wires @attr → events field arrow → setState → DOM update', async () => {
 		const el = container();
 		const v = await new MiniCounter().mount(el);
 		expect(el.querySelector('#n').textContent).toBe('0');
@@ -1130,7 +1318,7 @@ describe('controlled `checked` keeps its content attribute coherent', () => {
 
 		// The browser moves the property on click; the app mirrors it into state.
 		box.checked = false;
-		v.setData('on', false);
+		v.setState('on', false);
 		v.flushUpdates();
 
 		expect(box.checked).toBe(false);
@@ -1143,13 +1331,13 @@ describe('controlled `checked` keeps its content attribute coherent', () => {
 	it('adds the attribute after a user click flips state to true', async () => {
 		const el = container();
 		const v = await new Box().mount(el);
-		v.setData('on', false);
+		v.setState('on', false);
 		v.flushUpdates();
 		const box = el.querySelector('input');
 		expect(box.hasAttribute('checked')).toBe(false);
 
 		box.checked = true;
-		v.setData('on', true);
+		v.setState('on', true);
 		v.flushUpdates();
 
 		expect(box.checked).toBe(true);
@@ -1199,8 +1387,8 @@ describe('ViewManager — an unknown tree is never patched over', () => {
 		poisoned = true;
 		n = 2;
 		const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
-		// refresh(), not setData: setData never re-runs data(), so the poisoned
-		// tree would never be built and the patch would never throw.
+		// refresh(), not setState: data() reads module variables the runtime
+		// cannot see, so only an on-purpose re-run builds the poisoned tree.
 		let aborted = false;
 		try {
 			await v.refresh();
@@ -1256,21 +1444,21 @@ describe('PuzzleView — a restored view goes inert again when it really leaves'
 
 			v.playOut();
 			expect(unsubscribe).toHaveBeenCalledTimes(1);
-			expect(v.setData('x', 1)).toBe(undefined);
-			// Inert while leaving: setData is a no-op.
+			expect(v.setState('x', 1)).toBe(undefined);
+			// Inert while leaving: setState is a no-op.
 			expect(v.getData().x).toBe(undefined);
 
 			// The router's failed-navigation recovery puts it back.
 			v._restoreFromLeaving();
 			await afterFrame();
-			v.setData('x', 2);
+			v.setState('x', 2);
 			expect(v.getData().x).toBe(2); // reactive again
 
 			// Now it leaves for real.
 			unsubscribe.mockClear();
 			v.playOut();
 			expect(unsubscribe).toHaveBeenCalledTimes(1); // inert again
-			v.setData('x', 3);
+			v.setState('x', 3);
 			expect(v.getData().x).toBe(2); // still 2 — the write was refused
 		}
 	});

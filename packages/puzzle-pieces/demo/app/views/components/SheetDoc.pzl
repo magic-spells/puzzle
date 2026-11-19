@@ -812,7 +812,7 @@ const codeDismiss = `<Button variant="outline" @press={ openConfirm }>Delete pro
 
 // events = {
 //   finishConfirm: ({ result }) => {
-//     this.setData({ confirmOpen: false, lastResult: result ?? 'dismissed' });
+//     this.setState({ confirmOpen: false, lastResult: result ?? 'dismissed' });
 //     if (result === 'delete') this.deleteProject();
 //   },
 // };
@@ -858,7 +858,7 @@ const codeHeader = `<Sheet
 
 export default class SheetDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       heroOpen: false,
       snapsOpen: false,
       morphCenterOpen: false,
@@ -968,44 +968,44 @@ export default class SheetDoc extends PuzzleView {
   }
 
   events = {
-    openHero: () => this.setData('heroOpen', true),
-    closeHero: () => this.setData('heroOpen', false),
-    openSnaps: () => this.setData('snapsOpen', true),
-    closeSnaps: () => this.setData('snapsOpen', false),
-    setSnapIndex: (index) => this.setData('snapIndex', index),
-    openMorphCenter: () => this.setData('morphCenterOpen', true),
-    closeMorphCenter: () => this.setData('morphCenterOpen', false),
-    openMorphDrawer: () => this.setData('morphDrawerOpen', true),
-    closeMorphDrawer: () => this.setData('morphDrawerOpen', false),
-    openMorphPop: () => this.setData('morphPopOpen', true),
-    closeMorphPop: () => this.setData('morphPopOpen', false),
-    openLeft: () => this.setData('leftOpen', true),
-    closeLeft: () => this.setData('leftOpen', false),
-    openRight: () => this.setData('rightOpen', true),
-    closeRight: () => this.setData('rightOpen', false),
-    openCenter: () => this.setData('centerOpen', true),
-    closeCenter: () => this.setData('centerOpen', false),
-    openCard: () => this.setData('cardOpen', true),
-    closeCard: () => this.setData('cardOpen', false),
-    openEdge: () => this.setData('edgeOpen', true),
-    closeEdge: () => this.setData('edgeOpen', false),
-    openTriggerMorph: () => this.setData('triggerMorphOpen', true),
-    closeTriggerMorph: () => this.setData('triggerMorphOpen', false),
-    openPop: () => this.setData('popOpen', true),
-    closePop: () => this.setData('popOpen', false),
-    openAsym: () => this.setData('asymOpen', true),
-    closeAsym: () => this.setData('asymOpen', false),
-    openConfirm: () => this.setData('confirmOpen', true),
+    openHero: () => this.setState('heroOpen', true),
+    closeHero: () => this.setState('heroOpen', false),
+    openSnaps: () => this.setState('snapsOpen', true),
+    closeSnaps: () => this.setState('snapsOpen', false),
+    setSnapIndex: (index) => this.setState('snapIndex', index),
+    openMorphCenter: () => this.setState('morphCenterOpen', true),
+    closeMorphCenter: () => this.setState('morphCenterOpen', false),
+    openMorphDrawer: () => this.setState('morphDrawerOpen', true),
+    closeMorphDrawer: () => this.setState('morphDrawerOpen', false),
+    openMorphPop: () => this.setState('morphPopOpen', true),
+    closeMorphPop: () => this.setState('morphPopOpen', false),
+    openLeft: () => this.setState('leftOpen', true),
+    closeLeft: () => this.setState('leftOpen', false),
+    openRight: () => this.setState('rightOpen', true),
+    closeRight: () => this.setState('rightOpen', false),
+    openCenter: () => this.setState('centerOpen', true),
+    closeCenter: () => this.setState('centerOpen', false),
+    openCard: () => this.setState('cardOpen', true),
+    closeCard: () => this.setState('cardOpen', false),
+    openEdge: () => this.setState('edgeOpen', true),
+    closeEdge: () => this.setState('edgeOpen', false),
+    openTriggerMorph: () => this.setState('triggerMorphOpen', true),
+    closeTriggerMorph: () => this.setState('triggerMorphOpen', false),
+    openPop: () => this.setState('popOpen', true),
+    closePop: () => this.setState('popOpen', false),
+    openAsym: () => this.setState('asymOpen', true),
+    closeAsym: () => this.setState('asymOpen', false),
+    openConfirm: () => this.setState('confirmOpen', true),
     // The one handler that reads the @hide detail: data-result tells a deliberate
     // answer apart from a dismissal, which reports null.
     closeConfirm: (detail) =>
-      this.setData({ confirmOpen: false, lastResult: detail?.result ?? 'dismissed' }),
-    openSpring: () => this.setData('springOpen', true),
-    closeSpring: () => this.setData('springOpen', false),
-    openHeader: () => this.setData('headerOpen', true),
-    closeHeader: () => this.setData('headerOpen', false),
+      this.setState({ confirmOpen: false, lastResult: detail?.result ?? 'dismissed' }),
+    openSpring: () => this.setState('springOpen', true),
+    closeSpring: () => this.setState('springOpen', false),
+    openHeader: () => this.setState('headerOpen', true),
+    closeHeader: () => this.setState('headerOpen', false),
     toggleHeaderGrabber: (event) =>
-      this.setData('headerGrabber', !!event.target.checked),
+      this.setState('headerGrabber', !!event.target.checked),
   };
 }
 </script>

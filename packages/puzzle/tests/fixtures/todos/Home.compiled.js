@@ -11,7 +11,7 @@ export default class TodoHome extends PuzzleView {
 
   // runs one time when object is created, before data() runs
   created() {
-    this.setData({
+    this.setState({
       newTodoText: '',
       currentFilter: 'all'
     });
@@ -63,7 +63,7 @@ export default class TodoHome extends PuzzleView {
       if (text) {
         const store = this.ctx.store;
         store.createRecord('todo', { text });
-        this.setData('newTodoText', '');
+        this.setState('newTodoText', '');
       }
     },
 
@@ -71,13 +71,9 @@ export default class TodoHome extends PuzzleView {
       todo.destroy();
     },
 
-    setFilter: (filter) => {
-      this.setData('currentFilter', filter);
-      // filteredTodos is derived in data(); setData() alone does not re-run
-      // data() (SPEC §4), so refresh() re-runs it to recompute the filtered
-      // list from the just-updated currentFilter.
-      this.refresh();
-    },
+    // filteredTodos is derived in data() from currentFilter, so this write
+    // re-runs data() before the next render (SPEC §4).
+    setFilter: (filter) => this.setState('currentFilter', filter),
 
     clearCompleted: () => {
       if (confirm('Clear all completed todos?')) {

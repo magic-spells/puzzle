@@ -44,7 +44,7 @@ async function refreshFixture({ errorView = true, binding = false, autoFetch = t
 	class Child extends PuzzleView {
 		created() {
 			child = this;
-			if (binding) this.setData({ id: 'initial' });
+			if (binding) this.setState({ id: 'initial' });
 		}
 		data() {
 			const id = binding ? this.getData().id : this.props.id;
@@ -77,7 +77,7 @@ async function refreshFixture({ errorView = true, binding = false, autoFetch = t
 	class Host extends PuzzleView {
 		created() {
 			host = this;
-			this.setData({ id: 'initial', show: true });
+			this.setState({ id: 'initial', show: true });
 		}
 		render() {
 			return h('main', {}, this.getData().show ? [h(Child, { id: this.getData().id })] : []);
@@ -100,7 +100,7 @@ async function refreshFixture({ errorView = true, binding = false, autoFetch = t
 			input.value = id;
 			input.dispatchEvent(new InputEvent('input', { bubbles: true }));
 		} else {
-			host.setData({ id });
+			host.setState({ id });
 			host.flushUpdates();
 		}
 		return refresh.mock.results.at(-1).value;
@@ -156,7 +156,7 @@ describe('AF-01 — stale refresh ownership', () => {
 	it.each([true, false])('ignores rejection after destruction (autoFetch=%s)', async (autoFetch) => {
 		const f = await refreshFixture({ autoFetch });
 		const old = f.change('old');
-		f.host.setData({ show: false });
+		f.host.setState({ show: false });
 		f.host.flushUpdates();
 		expect(f.child.isDestroyed).toBe(true);
 

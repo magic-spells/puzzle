@@ -24,7 +24,7 @@ const text = (value) => new ViewNode('text', { value });
 const comp = (Class, props = {}, children = []) => new ViewNode(Class, props, children);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 // jsdom's requestAnimationFrame does NOT fire inside a setTimeout(0), so the
-// setData re-render path needs a real frame to land.
+// setState re-render path needs a real frame to land.
 const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
 const OUT = { from: { opacity: 1 }, to: { opacity: 0 }, duration: 150 };
@@ -190,7 +190,7 @@ describe('leave inertness covers the mount/commit path (D136 §3)', () => {
 
 		const el = container();
 		await new Host().mount(el);
-		host.setData('show', true);
+		host.setState('show', true);
 		await frame();
 		expect(el.textContent).toContain('FIRST');
 		order.length = 0;
@@ -200,7 +200,7 @@ describe('leave inertness covers the mount/commit path (D136 §3)', () => {
 		const refreshing = child.refresh();
 
 		// Now the owner removes it. The out animation holds the leave window open.
-		host.setData('show', false);
+		host.setState('show', false);
 		await frame();
 		expect(order).toEqual(['willHide']);
 
@@ -381,7 +381,7 @@ describe('the hide bracket fires only for a view that completed its mount (D28)'
 
 		class Parent extends PuzzleView {
 			created() {
-				this.setData({ show: true });
+				this.setState({ show: true });
 			}
 			data() {
 				return {};
@@ -396,7 +396,7 @@ describe('the hide bracket fires only for a view that completed its mount (D28)'
 		await tick();
 		expect(order).toEqual([]);
 
-		parent.setData({ show: false });
+		parent.setState({ show: false });
 		await frame();
 		await tick();
 
@@ -430,7 +430,7 @@ describe('the hide bracket fires only for a view that completed its mount (D28)'
 
 		class Parent extends PuzzleView {
 			created() {
-				this.setData({ show: true });
+				this.setState({ show: true });
 			}
 			data() {
 				return {};
@@ -444,7 +444,7 @@ describe('the hide bracket fires only for a view that completed its mount (D28)'
 		const parent = await new Parent().mount(el);
 		await tick();
 
-		parent.setData({ show: false });
+		parent.setState({ show: false });
 		await frame();
 		await tick();
 
@@ -478,7 +478,7 @@ describe('the hide bracket fires only for a view that completed its mount (D28)'
 
 		class Parent extends PuzzleView {
 			created() {
-				this.setData({ show: true });
+				this.setState({ show: true });
 			}
 			data() {
 				return {};
@@ -493,7 +493,7 @@ describe('the hide bracket fires only for a view that completed its mount (D28)'
 		await tick();
 		expect(order).toEqual(['mounted']);
 
-		parent.setData({ show: false });
+		parent.setState({ show: false });
 		await frame();
 		await tick();
 

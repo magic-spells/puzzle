@@ -82,7 +82,7 @@ describe('named slots — unfilled markers (D141)', () => {
 	it('inserts and removes a later fill without fallback content', async () => {
 		class Host extends PuzzleView {
 			created() {
-				this.setData({ withHeader: false });
+				this.setState({ withHeader: false });
 			}
 			data() {
 				return { withHeader: this.getData().withHeader };
@@ -102,13 +102,13 @@ describe('named slots — unfilled markers (D141)', () => {
 		expect(el.querySelector('.card header').textContent).toBe('');
 
 		// fill it
-		host.setData('withHeader', true);
+		host.setState('withHeader', true);
 		host.flushUpdates();
 		expect(el.querySelector('.card header h2').textContent).toBe('Filled');
 		expect(el.querySelector('.card header').textContent).toBe('Filled');
 
 		// unfill again → nothing
-		host.setData('withHeader', false);
+		host.setState('withHeader', false);
 		host.flushUpdates();
 		expect(el.querySelector('.card header h2')).toBeNull();
 		expect(el.querySelector('.card header').textContent).toBe('');
@@ -161,7 +161,7 @@ describe('named slots — slotted components + control flow (D53)', () => {
 		}
 		class Host extends PuzzleView {
 			created() {
-				this.setData({ label: 'a', show: true });
+				this.setState({ label: 'a', show: true });
 			}
 			data() {
 				const d = this.getData();
@@ -180,12 +180,12 @@ describe('named slots — slotted components + control flow (D53)', () => {
 		expect(el.querySelector('.card footer .chip').textContent).toBe('a');
 
 		// prop patch flows through the slot
-		host.setData('label', 'b');
+		host.setState('label', 'b');
 		host.flushUpdates();
 		expect(el.querySelector('.card footer .chip').textContent).toBe('b');
 
 		// removal destroys the slotted child
-		host.setData('show', false);
+		host.setState('show', false);
 		host.flushUpdates();
 		expect(el.querySelector('.card footer .chip')).toBeNull();
 		expect(destroyed).toHaveBeenCalledTimes(1);
@@ -195,7 +195,7 @@ describe('named slots — slotted components + control flow (D53)', () => {
 		let clicks = 0;
 		class Host extends PuzzleView {
 			created() {
-				this.setData({ open: true });
+				this.setState({ open: true });
 			}
 			data() {
 				return { open: this.getData().open };
@@ -224,7 +224,7 @@ describe('named slots — slotted components + control flow (D53)', () => {
 		const host = await new Host().mount(el);
 
 		expect(el.querySelector('.card header h2').textContent).toBe('Open');
-		host.setData('open', false);
+		host.setState('open', false);
 		host.flushUpdates();
 		expect(el.querySelector('.card header h2').textContent).toBe('Closed');
 
@@ -274,7 +274,7 @@ describe('named slots — keyed reconciliation inside a region (D53)', () => {
 	it('multiple keyed children in one named slot reorder without rebuilding DOM', async () => {
 		class Host extends PuzzleView {
 			created() {
-				this.setData({ order: ['a', 'b', 'c'] });
+				this.setState({ order: ['a', 'b', 'c'] });
 			}
 			data() {
 				return { order: this.getData().order };
@@ -293,7 +293,7 @@ describe('named slots — keyed reconciliation inside a region (D53)', () => {
 		expect(before.map((n) => n.textContent)).toEqual(['a', 'b', 'c']);
 		const [elA, elB, elC] = before;
 
-		host.setData('order', ['c', 'a', 'b']);
+		host.setState('order', ['c', 'a', 'b']);
 		host.flushUpdates();
 
 		const after = [...el.querySelectorAll('.listcard li')];

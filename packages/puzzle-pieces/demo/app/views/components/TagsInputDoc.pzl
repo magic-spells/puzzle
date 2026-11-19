@@ -139,8 +139,7 @@ const usageMarkup = `<TagsInput value={ tags } @change={ setTags } />`;
 
 const codeHero = `// value is a string ARRAY; @change fires with the NEXT array on add or remove.
 setTags(next) {
-  this.setData('tags', next);
-  this.refresh();
+  this.setState('tags', next);
 }
 
 <TagsInput value={ tags } @change={ setTags } />`;
@@ -177,7 +176,7 @@ const codeKeyboard = `<TagsInput value={ tags } @change={ setTags } />`;
 
 export default class TagsInputDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       tags: ['design', 'puzzle'],
       basicTags: ['typescript', 'go'],
       maxTags: ['red', 'green'],
@@ -215,28 +214,22 @@ export default class TagsInputDoc extends PuzzleView {
 
   events = {
     setTags: (v) => {
-      this.setData('tags', v);
-      this.refresh();
+      this.setState('tags', v);
     },
     setBasicTags: (v) => {
-      this.setData('basicTags', v);
-      this.refresh();
+      this.setState('basicTags', v);
     },
     setMaxTags: (v) => {
-      this.setData('maxTags', v);
-      this.refresh();
+      this.setState('maxTags', v);
     },
     setDupeTags: (v) => {
-      this.setData('dupeTags', v);
-      this.refresh();
+      this.setState('dupeTags', v);
     },
     setCommaTags: (v) => {
-      this.setData('commaTags', v);
-      this.refresh();
+      this.setState('commaTags', v);
     },
     setErrTags: (v) => {
-      this.setData('errTags', v);
-      this.refresh();
+      this.setState('errTags', v);
     },
   };
 }

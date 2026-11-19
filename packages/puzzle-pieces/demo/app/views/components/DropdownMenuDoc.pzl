@@ -328,7 +328,7 @@ const reference = [
 
 export default class DropdownMenuDoc extends PuzzleView {
   created() {
-    this.setData({ selected: 'nothing yet' });
+    this.setState({ selected: 'nothing yet' });
   }
 
   data() {
@@ -355,12 +355,10 @@ export default class DropdownMenuDoc extends PuzzleView {
 
   events = {
     run: (value) => {
-      this.setData('selected', String(value));
-      this.refresh();
+      this.setState('selected', String(value));
     },
     onSelect: (value) => {
-      this.setData('selected', String(value));
-      this.refresh();
+      this.setState('selected', String(value));
     },
   };
 }

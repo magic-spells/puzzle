@@ -1036,7 +1036,7 @@ describe('Router transitions — incomplete navigations do not strand an in-flig
 			animations = { out: OUT };
 			created() {
 				one = this;
-				this.setData('draft', 'before');
+				this.setState('draft', 'before');
 			}
 			data() {
 				return { count: store.read() };
@@ -1084,7 +1084,7 @@ describe('Router transitions — incomplete navigations do not strand an in-flig
 
 		// Both inertness guards were undone: local writes repaint, and a later store
 		// delivery re-runs data() on the restored, still-committed instance.
-		one.setData('draft', 'after');
+		one.setState('draft', 'after');
 		one.flushUpdates();
 		expect(el.querySelector('.one').textContent).toBe('after:0');
 		store.value = 1;

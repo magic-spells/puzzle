@@ -481,7 +481,7 @@ describe('list block — controlled values in a cached row', () => {
 		// the cached vnode, so the ONLY thing that can correct this is the control
 		// list patch() re-asserts on the identity short-circuit.
 		input.value = 'drifted';
-		view.instance.setData('tick', 1);
+		view.instance.setState('tick', 1);
 		await settled();
 
 		expect(input.value).toBe('typed');

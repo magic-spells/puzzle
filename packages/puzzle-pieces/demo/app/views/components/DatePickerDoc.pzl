@@ -145,7 +145,7 @@ const codeHero = `<DatePicker
 
 // parent
 events = {
-  setShipDate: (iso) => this.setData('shipDate', iso),
+  setShipDate: (iso) => this.setState('shipDate', iso),
 };`;
 
 const codeError = `<DatePicker
@@ -195,7 +195,7 @@ const codeFormats = `<!-- format: short | medium (default) | long | full -->
 
 export default class DatePickerDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       shipDate: '',
       errorDate: '',
       morphDate: '2026-08-01',
@@ -232,12 +232,12 @@ export default class DatePickerDoc extends PuzzleView {
   }
 
   events = {
-    setShipDate: (iso) => this.setData('shipDate', iso),
-    setErrorDate: (iso) => this.setData('errorDate', iso),
-    setMorphDate: (iso) => this.setData('morphDate', iso),
-    setBoundedDate: (iso) => this.setData('boundedDate', iso),
-    setEventDate: (iso) => this.setData('eventDate', iso),
-    setFmtDate: (iso) => this.setData('fmtDate', iso),
+    setShipDate: (iso) => this.setState('shipDate', iso),
+    setErrorDate: (iso) => this.setState('errorDate', iso),
+    setMorphDate: (iso) => this.setState('morphDate', iso),
+    setBoundedDate: (iso) => this.setState('boundedDate', iso),
+    setEventDate: (iso) => this.setState('eventDate', iso),
+    setFmtDate: (iso) => this.setState('fmtDate', iso),
   };
 }
 </script>

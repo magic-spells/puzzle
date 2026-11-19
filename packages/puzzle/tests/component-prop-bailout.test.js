@@ -213,7 +213,7 @@ async function mountList({ stableHandlers }) {
 	const rows = makeRows(ROW_COUNT);
 	const view = await mountView(makeList(rowClasses, { stableHandlers }));
 	handles.push(view);
-	view.instance.setData('rows', rows);
+	view.instance.setState('rows', rows);
 	await settled();
 	dataRuns = {};
 	return { view, rows };
@@ -225,7 +225,7 @@ async function mountList({ stableHandlers }) {
  */
 function changeOneRow(view, rows) {
 	return measureRenders(view, () => {
-		view.instance.setData(
+		view.instance.setState(
 			'rows',
 			rows.map((row) =>
 				row.id === TARGET_ROW ? { ...row, label: 'changed' } : row
@@ -367,7 +367,7 @@ async function childRerenders(before, after) {
 	handles.push(view);
 	const profile = await measureRenders(view, () => {
 		view.instance.childProps = after;
-		view.instance.setData('tick', 1);
+		view.instance.setState('tick', 1);
 	});
 	expect(profile.rendersByView.Host).toBe(1);
 	return (profile.rendersByView.Probe ?? 0) > 0;

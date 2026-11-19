@@ -121,7 +121,7 @@ export default class TagsInput extends PuzzleView {
   created() {
     this._uid = ++uid;
     this._base = `pp-tagsinput-${this._uid}`;
-    this.setData({ draft: '' });
+    this.setState({ draft: '' });
   }
 
   // ---- value helpers -------------------------------------------------------
@@ -214,13 +214,12 @@ export default class TagsInput extends PuzzleView {
     const draft = this.getData().draft;
     const next = this._commitOne(current, draft);
     if (next !== current) {
-      this.setData({ draft: '' });
+      this.setState({ draft: '' });
       const { change } = this.props;
       if (typeof change === 'function') change(next, event);
     } else if (!String(draft ?? '').trim()) {
-      this.setData({ draft: '' });
+      this.setState({ draft: '' });
     }
-    this.refresh();
     this._focusInput();
   }
 
@@ -232,7 +231,6 @@ export default class TagsInput extends PuzzleView {
     const next = current.slice(0, idx).concat(current.slice(idx + 1));
     const { change } = this.props;
     if (typeof change === 'function') change(next, event);
-    this.refresh();
     this._focusInput();
   }
 
@@ -251,7 +249,7 @@ export default class TagsInput extends PuzzleView {
     },
 
     onInput: (event) => {
-      this.setData({ draft: event.target.value });
+      this.setState({ draft: event.target.value });
       // No refresh: the native input already shows the text; refreshing here would
       // re-render mid-keystroke. The draft is read back on commit / keydown.
     },
@@ -293,12 +291,11 @@ export default class TagsInput extends PuzzleView {
         if (next === current && String(part).trim()) rejected.push(String(part).trim());
         current = next;
       }
-      this.setData({ draft: rejected.join(' ') });
+      this.setState({ draft: rejected.join(' ') });
       if (current !== before) {
         const { change } = this.props;
         if (typeof change === 'function') change(current, event);
       }
-      this.refresh();
       this._focusInput();
     },
 

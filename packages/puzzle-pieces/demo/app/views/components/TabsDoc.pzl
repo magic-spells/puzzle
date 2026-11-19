@@ -465,7 +465,7 @@ const codeControlled = `// Controlled and EDGE-triggered: only a change to \`val
 // group from a button elsewhere leaves the caret where the user put it.
 <Tabs value={ tab } @change={ setTab }>…</Tabs>
 
-// setTab: (value) => this.setData('tab', value)`;
+// setTab: (value) => this.setState('tab', value)`;
 
 const codeDynamic = `// Drive BOTH loops from the same array. Puzzle applies both patches
 // in one commit, so the counts can never diverge mid-patch — and the
@@ -527,7 +527,7 @@ let added = 0;
 
 export default class TabsDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       hero: 'account',
       controlled: 'one',
       docValue: 'brief',
@@ -576,34 +576,28 @@ export default class TabsDoc extends PuzzleView {
 
   events = {
     setHero: (value) => {
-      this.setData('hero', value);
-      this.refresh();
+      this.setState('hero', value);
     },
     setControlled: (value) => {
-      this.setData('controlled', value);
-      this.refresh();
+      this.setState('controlled', value);
     },
     cycle: () => {
       const order = ['one', 'two', 'three'];
       const next = order[(order.indexOf(this.getData().controlled) + 1) % order.length];
-      this.setData('controlled', next);
-      this.refresh();
+      this.setState('controlled', next);
     },
     setDocValue: (value) => {
-      this.setData('docValue', value);
-      this.refresh();
+      this.setState('docValue', value);
     },
     addDoc: () => {
       added += 1;
       const id = `note-${added}`;
       const docs = [...this.getData().docs];
       docs.splice(1, 0, { id, title: `Note ${added}`, body: `Inserted mid-list as ${id}.` });
-      this.setData('docs', docs);
-      this.refresh();
+      this.setState('docs', docs);
     },
     resetDocs: () => {
-      this.setData({ docs: SEED.map((doc) => ({ ...doc })), docValue: 'brief' });
-      this.refresh();
+      this.setState({ docs: SEED.map((doc) => ({ ...doc })), docValue: 'brief' });
     },
   };
 }

@@ -139,7 +139,7 @@ describe('fixture page ↔ page hook', () => {
 		expect(result.roots[0].children[0].children.map((n) => n.id)).toEqual([3, 4, 5]);
 	});
 
-	it('answers inspect:view with the model and local layers reported separately', () => {
+	it('answers inspect:view with the derived and state layers reported separately', () => {
 		const { result } = request(REQUESTS.INSPECT_VIEW, { id: 2 });
 		expect(Object.keys(result).sort()).toEqual(['local', 'model', 'module', 'name', 'params', 'props']);
 		expect(result.model).toEqual({ todos: 3, activeTodos: 2 });
@@ -148,7 +148,7 @@ describe('fixture page ↔ page hook', () => {
 
 	it('reports a key that exists in BOTH layers with different values', () => {
 		// The whole reason the panel splits the two layers: `completed` is false in
-		// the last data() commit and true in the local layer that overrides it.
+		// the last data() commit and true in the state layer that overrides it.
 		const { result } = request(REQUESTS.INSPECT_VIEW, { id: 3 });
 		expect(result.model.completed).toBe(false);
 		expect(result.local.completed).toBe(true);

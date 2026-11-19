@@ -42,7 +42,7 @@ describe('@magic-spells/puzzle/testing — mountView', () => {
 		const view = await mountView(Probe);
 		handles.push(view);
 		const { idle } = view.instance.ctx;
-		view.instance.setData({ n: 3 });
+		view.instance.setState({ n: 3 });
 		expect(await idle()).toBe(true);
 		expect(view.element.textContent).toBe('3');
 	});
@@ -406,7 +406,7 @@ describe('@magic-spells/puzzle/testing — settled convergence guard', () => {
 
 		const view = await mountView(LocalUpdate);
 		handles.push(view);
-		view.instance.setData('count', 1);
+		view.instance.setState('count', 1);
 
 		await expect(settled({ maxPasses: 2 })).resolves.toBeUndefined();
 		expect(view.find('.count').textContent).toBe('1');
@@ -423,7 +423,7 @@ describe('@magic-spells/puzzle/testing — settled convergence guard', () => {
 			afterUpdate() {
 				if (this.remaining === 0) return;
 				this.remaining--;
-				this.setData('count', this.getData().count + 1);
+				this.setState('count', this.getData().count + 1);
 			}
 
 			render() {
@@ -436,7 +436,7 @@ describe('@magic-spells/puzzle/testing — settled convergence guard', () => {
 		const view = await mountView(SlowConvergence);
 		handles.push(view);
 		view.instance.remaining = 5;
-		view.instance.setData('count', 1);
+		view.instance.setState('count', 1);
 
 		await expect(settled({ maxPasses: 1 })).rejects.toThrow(
 			'did not converge after 1 pass'

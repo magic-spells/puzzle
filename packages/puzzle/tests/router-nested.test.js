@@ -624,7 +624,7 @@ describe('Router nested — failure & cancellation', () => {
 // After a mid-chain swap the router hands the FULL rebuilt vnode chain to the
 // topmost host, so every host's slot content describes the new chain (D30). If
 // only the survivor were updated, a later re-render of any host ABOVE it (store
-// change, setData) would push its stale slot vnodes back down through
+// change, setState) would push its stale slot vnodes back down through
 // patchComponent and revert the swap, resurrecting destroyed instances.
 
 describe('Router nested — ancestor re-renders after a swap', () => {
@@ -659,7 +659,7 @@ describe('Router nested — ancestor re-renders after a swap', () => {
 		expect(el.querySelector('.two')).not.toBeNull();
 
 		// The layout (ABOVE the survivor) re-renders from local UI state.
-		StatefulLayout.last.setData('z', 1);
+		StatefulLayout.last.setState('z', 1);
 		StatefulLayout.last.flushUpdates();
 		await tick();
 
@@ -701,7 +701,7 @@ describe('Router nested — ancestor re-renders after a swap', () => {
 		await router.push('/a/b/c2'); // keep=2, survivor = B; TopShell + layout sit above
 		expect(el.querySelector('.c2')).not.toBeNull();
 
-		TopShell.last.setData('z', 1);
+		TopShell.last.setState('z', 1);
 		TopShell.last.flushUpdates();
 		await tick();
 

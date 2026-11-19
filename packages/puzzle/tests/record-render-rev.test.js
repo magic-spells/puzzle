@@ -171,7 +171,7 @@ describe('snapshot prop comparison through the real patch path', () => {
 
 		// A parent re-render that changes nothing: the record prop is the same
 		// reference AND the same revision, so the bailout holds.
-		view.instance.setData('tick', 1);
+		view.instance.setState('tick', 1);
 		await settled();
 		expect(runs).toBe(0);
 
@@ -179,14 +179,14 @@ describe('snapshot prop comparison through the real patch path', () => {
 		// this was invisible to the child forever (FLOW-REACTIVITY's durable
 		// caveat). The advanced revision is what the child now sees.
 		todo.update({ text: 'second' });
-		view.instance.setData('tick', 2);
+		view.instance.setState('tick', 2);
 		await settled();
 		expect(runs).toBe(1);
 		expect(view.find('.row').textContent).toBe('second');
 
 		// The snapshot was rewritten when those props were applied, so the NEXT
 		// parent render bails out again rather than refreshing forever.
-		view.instance.setData('tick', 3);
+		view.instance.setState('tick', 3);
 		await settled();
 		expect(runs).toBe(1);
 	});
@@ -200,7 +200,7 @@ describe('snapshot prop comparison through the real patch path', () => {
 		runs = 0;
 
 		other.update({ text: 'moved' });
-		view.instance.setData('tick', 1);
+		view.instance.setState('tick', 1);
 		await settled();
 
 		// A record's revision is its OWN. A sibling's mutation moves the store's

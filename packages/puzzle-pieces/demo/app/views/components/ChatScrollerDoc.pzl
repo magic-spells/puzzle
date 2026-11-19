@@ -114,9 +114,9 @@ events = {
   addMessage: () => {
     const log = this.getData().log.slice();
     log.push({ author: 'You', time: 'now', body: 'Sounds good!' });
-    this.setData({ log });
+    this.setState({ log });
   },
-  setPinned: (atBottom) => this.setData({ pinned: atBottom }),
+  setPinned: (atBottom) => this.setState({ pinned: atBottom }),
 };
 
 <ChatScroller height={ 360 } @pin={ setPinned }>
@@ -130,7 +130,7 @@ events = {
 const codePinning = `// "Pinned" = within 40px of the bottom. Mirror it in the parent to drive
 // UI like an unread badge.
 events = {
-  setPinned: (isPinned) => this.setData({ pinned: isPinned }),
+  setPinned: (isPinned) => this.setState({ pinned: isPinned }),
 };
 
 <ChatScroller @pin={ setPinned }> … </ChatScroller>`;
@@ -204,9 +204,9 @@ export default class ChatScrollerDoc extends PuzzleView {
       const log = this.getData().log.slice();
       const n = log.filter((m) => m.author === 'You').length + 1;
       log.push({ author: 'You', time: 'now', body: `Reply #${n} — auto-scrolled into view.` });
-      this.setData({ log });
+      this.setState({ log });
     },
-    setPinned: (isPinned) => this.setData({ pinned: isPinned }),
+    setPinned: (isPinned) => this.setState({ pinned: isPinned }),
   };
 }
 </script>

@@ -29,7 +29,7 @@
     "authorId": "u1",
     "tags": ["reactivity", "components"],
     "publishedAt": "2026-07-01T08:45:00.000Z",
-    "body": "The heart of a Puzzle component is its data() method. It returns the model the template renders, and any store query made inside it automatically subscribes the component to changes. Update a record anywhere in the app and every component that read it re-runs data() and repaints — no dependency arrays, no manual subscriptions, no selectors. Local UI state that should not trigger a full reload uses setData() instead, which updates state and re-renders without re-running data(). That single split — data() for reactive sources, setData() for local flags — is most of what you need to know to build a real application."
+    "body": "The heart of a Puzzle component is its data() method. It returns the model the template renders, and any store query made inside it automatically subscribes the component to changes. Update a record anywhere in the app and every component that read it re-runs data() and repaints — no dependency arrays, no manual subscriptions, no selectors. Local UI state that should not trigger a full reload uses setState() instead, which updates state and re-renders without re-running data(). That single split — data() for reactive sources, setState() for local flags — is most of what you need to know to build a real application."
   },
   {
     "id": "p5",

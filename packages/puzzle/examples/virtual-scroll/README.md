@@ -20,7 +20,7 @@ Everything lives in [`app/views/Home.pzl`](./app/views/Home.pzl):
    (`allRows.slice(start, start + WINDOW)`), where `start` is the only reactive
    piece of state.
 4. **The scroll handler recomputes the window's start bucket** and calls
-   `setData('start', …)` + `refresh()` **only when the bucket actually changed** —
+   `setState('start', …)` + `refresh()` **only when the bucket actually changed** —
    so a fast flick doesn't trigger a render on every scroll pixel.
 5. **Two spacer divs** with interpolated inline heights
    (`style="height:{ topPx }px"`) reserve the off-window geometry, so the native

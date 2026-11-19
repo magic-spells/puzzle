@@ -85,7 +85,7 @@ app.mount();
 const quiet = await app.idle({ timeout: 10000 }); // true when idle; false on timeout
 ```
 
-`idle()` resolves `true` once two consecutive frames find no `mount()` or navigation in flight, no store flush or view render pending, no async `data()` running, no `setLocale()` switch loading, and, with the adapter, no tracked find's fetch in flight ([[DECISION-D185-APP-IDLE]]). Each check runs after its frame's callbacks, so a `setData()` render scheduled before it has landed. It resolves `false` when `timeout` ms (default 10000) run out first, and never rejects; a timeout that is not a finite number ≥ 0 logs a development error and uses 10000. A hidden tab steps on timers. An app neither mounted nor mounting resolves `true` at once. It cannot see user timers, animations, IntersectionObserver triggers, writes or fetches nothing awaits (an unawaited `save()` or `loadMany()`), or a path- or hash-mode `back()`/`forward()`/`go()` before its `popstate` fires. Views reach the same method as `this.ctx.idle()` (§10). The testing module's `settled()` drives work to a fixed point instead ([[DOC-TESTING]]).
+`idle()` resolves `true` once two consecutive frames find no `mount()` or navigation in flight, no store flush or view render pending, no async `data()` running, no `setLocale()` switch loading, and, with the adapter, no tracked find's fetch in flight ([[DECISION-D185-APP-IDLE]]). Each check runs after its frame's callbacks, so a `setState()` render scheduled before it has landed. It resolves `false` when `timeout` ms (default 10000) run out first, and never rejects; a timeout that is not a finite number ≥ 0 logs a development error and uses 10000. A hidden tab steps on timers. An app neither mounted nor mounting resolves `true` at once. It cannot see user timers, animations, IntersectionObserver triggers, writes or fetches nothing awaits (an unawaited `save()` or `loadMany()`), or a path- or hash-mode `back()`/`forward()`/`go()` before its `popstate` fires. Views reach the same method as `this.ctx.idle()` (§10). The testing module's `settled()` drives work to a fixed point instead ([[DOC-TESTING]]).
 
 ## 3. `.pzl` file anatomy
 
@@ -114,14 +114,14 @@ export default class MyComponent extends PuzzleView { ... }
 The contents of `<script>` are standard JavaScript (or TypeScript, §25), no dialect. The compiler hands the block to esbuild **untouched**; the Go compiler never parses the script body. Editors, ESLint, Prettier and TypeScript work with no special tooling.
 
 - `events` and `animations` are **class fields** (`events = { ... };`), with **no commas between class members**.
-- Handlers in `events` **must be arrow functions.** The field initializer runs during construction with `this` bound to the instance, so each arrow captures the component. Method shorthand (`addTodo(event) { ... }`) parses, but the runtime calls it as `this.events.addTodo(event)`, so `this` is the events object and `this.setData(...)` throws at event time.
+- Handlers in `events` **must be arrow functions.** The field initializer runs during construction with `this` bound to the instance, so each arrow captures the component. Method shorthand (`addTodo(event) { ... }`) parses, but the runtime calls it as `this.events.addTodo(event)`, so `this` is the events object and `this.setState(...)` throws at event time.
 
 ```js
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class TodoHome extends PuzzleView {
   created() {
-    this.setData({ newTodoText: '', currentFilter: 'all' });
+    this.setState({ newTodoText: '', currentFilter: 'all' });
   }
 
   data(params, props) {
@@ -141,10 +141,10 @@ export default class TodoHome extends PuzzleView {
       const text = this.getData().newTodoText.trim();
       if (text) {
         this.ctx.store.createRecord('todo', { text });
-        this.setData('newTodoText', '');
+        this.setState('newTodoText', '');
       }
     },
-    setFilter: (filter) => this.setData('currentFilter', filter),
+    setFilter: (filter) => this.setState('currentFilter', filter),
   };
 }
 ```
@@ -153,17 +153,20 @@ export default class TodoHome extends PuzzleView {
 
 | Member | Kind | Notes |
 | --- | --- | --- |
-| `data(params, props)` | method (may be `async`) | Returns the component model; the base class returns `props`. Re-runs on mount, prop change, route-param change and subscribed store changes; `setData()` does **not** re-run it. **Two-layer state:** each successful result **replaces** the model layer, so a key the new run omits disappears from `getData()` unless `setData` wrote it. A successful **non-object** result (`undefined`, `null`, a primitive) keeps the previous model layer but still counts as a load. `setData` writes a persistent local layer: a `data()` commit wins over an *earlier* `setData` for the same key, a *later* `setData` wins until the next commit, and local keys the model never returns survive every re-run. |
+| `data(params, props)` | method (may be `async`) | Returns the component model; the base class returns `props`. Re-runs on mount, prop change, route-param change, subscribed store changes, and a `setState()` of a key the last committed run read through `getData()`/`getState()` (once per burst of writes, before the render; [[DECISION-D23-REFRESH-PATTERN]]). A key it never read does not re-run it. **Two-layer state:** each successful result **replaces** the derived layer, so a key the new run omits disappears from `getData()` unless `setState` wrote it. A successful **non-object** result (`undefined`, `null`, a primitive) keeps the previous derived layer but still counts as a load. `setState` writes a persistent state layer: a `data()` commit wins over an *earlier* `setState` for the same key, a *later* `setState` wins until the next commit, and local keys the model never returns survive every re-run. |
+| `setState(key, value)` / `setState(partial)` | method | Writes the state layer and schedules a re-render ([[DECISION-D191-SET-STATE-GET-STATE]]); the render re-runs `data()` first when `data()` read a written key (D23). Safe in `created()`, where it seeds what the first `data()` run reads back. |
+| `getState()` | method | A fresh shallow copy of the state layer alone: what `setState()` wrote, without `data()`'s values over it. |
+| `getData()` | method | A fresh shallow copy of the merged model the template reads: the state layer with the derived layer over it. |
 | `events` | class field (object of arrows) | Template-facing handlers (§5). |
 | `created` / `mounted` / `beforeUpdate` / `afterUpdate(prev)` / `destroyed` | methods | Lifecycle hooks, in that order. `prev` is a frozen, shallow `{ props, params, route, data }` of what the previous render drew; a record in `prev.data` is the same live object, so compare a field returned from `data()` ([[DECISION-D178-AFTERUPDATE-PREV]]). |
 | `animations` | class field | Declarative enter/leave animations (§12). |
-| `renderTick()` | method | `await this.renderTick()` resolves once no store flush or view render is scheduled anywhere in the runtime, including the renders those schedule: the point to read `this.refs` or measure after `setData()` or a store write ([[DECISION-D188-TICK]]). It forces nothing, has no timeout, and does not wait for async `data()`, fetches, navigation, locale loading, animations or timers; that is `app.idle()` (§2). |
+| `renderTick()` | method | `await this.renderTick()` resolves once no store flush or view render is scheduled anywhere in the runtime, including the renders those schedule: the point to read `this.refs` or measure after `setState()` or a store write ([[DECISION-D188-TICK]]). It forces nothing, has no timeout, and does not wait for async `data()`, fetches, navigation, locale loading, animations or timers; that is `app.idle()` (§2). |
 | anything else | methods/fields | Plain JS helpers. A template cannot call them; it has no `this` (§6). |
 
 **Reserved names.** `PuzzleView` owns these member names; a subclass member with the same name silently overrides framework behavior:
 
 - **Override points:** `data`, `render` (compiler-attached), `events`, `animations`, `transitionMode` (§33), `renderSkeleton`/`skeletonMinDuration` (§16, compiler-attached), and the hooks `created`, `mounted`, `beforeUpdate`, `afterUpdate`, `destroyed`, `viewWillShow`/`viewDidShow`/`viewWillHide`/`viewDidHide` (§12).
-- **Read-only API:** `getData`, `setData`, `memo` (§32), `renderTick`, `ctx`, and the getters `element`, `loaded`, `isDestroyed`, `params`, `props`, `route` (§19). `refs` is the framework-owned element-ref map (§38): read it, never assign it.
+- **Read-only API:** `getData`, `getState`, `setState`, `memo` (§32), `renderTick`, `ctx`, and the getters `element`, `loaded`, `isDestroyed`, `params`, `props`, `route` (§19). `refs` is the framework-owned element-ref map (§38): read it, never assign it.
 - **Framework internals:** `mount`, `preload`, `refresh`, `prepareRefresh`, `applyParentUpdate`, `onStoreChange`, `flushUpdates`, `destroy`, `destroyAnimated`, `playIn`, `playOut`, `skipEnter`, `elementEnd`, and **every member whose name starts with `_` or `__`** (the compiler's `__h` §31, `__ref` §38, `__bind` §6, `__lists` §28, `__c`, `__dirty`, `__rgen`, `__walk`, `__propRevs`, and the dev/adapter `_`-members).
 - **On the class:** `__roots`, the top-level `data()` keys some loop body reads (§28).
 - **At module scope:** `__L0`, `__L1`, … (one list-block meta const per item-form `{#for}` site) and `__l` (the local bound to `listRows`), reserved only in a file that emits them. These are the only names a `<script>` can actually collide with, so binding one at module scope is a **positioned compile error**, as binding `ViewNode` or `SLOT_TAG` is. The instance and class names above are reserved by convention only.

@@ -22,7 +22,7 @@ const WORDS = ['alpha', 'beta', 'gamma', 'delta'];
 // refresh() must keep live.
 export default class LocalForm extends PuzzleView {
 	created() {
-		this.setData({
+		this.setState({
 			draft: '',
 			age: null,
 			volume: 0,

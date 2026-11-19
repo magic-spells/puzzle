@@ -70,7 +70,7 @@ export default class BoardView extends PuzzleView {
     this._onPointerUp = (event) => this._handlePointerUp(event);
     this._onKeyDown = (event) => this._handleKeyDown(event);
 
-    this.setData({
+    this.setState({
       dragging: false,
       draggingId: '',
       targetCol: null,
@@ -170,7 +170,7 @@ export default class BoardView extends PuzzleView {
   // instead of being fought over by two systems.
 
   destroyed() {
-    this._cleanup(false);
+    this._cleanup();
   }
 
   _handlePointerMove(event) {
@@ -208,7 +208,7 @@ export default class BoardView extends PuzzleView {
       this._drag.phase = 'CANCEL';
     }
 
-    this._cleanup(true);
+    this._cleanup();
   }
 
   _handleKeyDown(event) {
@@ -216,14 +216,14 @@ export default class BoardView extends PuzzleView {
 
     event.preventDefault();
     this._drag.phase = 'CANCEL';
-    this._cleanup(true);
+    this._cleanup();
   }
 
   _promote(event) {
     const card = this._findTaskElement(this._drag.id);
     if (!card) {
       this._drag.phase = 'CANCEL';
-      this._cleanup(true);
+      this._cleanup();
       return;
     }
 
@@ -255,14 +255,13 @@ export default class BoardView extends PuzzleView {
   _publishDragState() {
     if (!this._drag) return;
 
-    this.setData({
+    this.setState({
       dragging: this._drag.phase === 'DRAGGING',
       draggingId: this._drag.id,
       targetCol: this._drag.targetCol,
       targetIndex: this._drag.targetIndex,
       dragHeight: this._drag.height,
     });
-    this.refresh();
   }
 
   _moveGhost(event) {
@@ -323,7 +322,7 @@ export default class BoardView extends PuzzleView {
     }
   }
 
-  _cleanup(shouldRefresh) {
+  _cleanup() {
     const ghost = this._drag && this._drag.ghost;
 
     document.removeEventListener('pointermove', this._onPointerMove);
@@ -338,15 +337,13 @@ export default class BoardView extends PuzzleView {
     document.body.style.cursor = this._storedCursor;
     this._drag = null;
 
-    this.setData({
+    this.setState({
       dragging: false,
       draggingId: '',
       targetCol: null,
       targetIndex: 0,
       dragHeight: 0,
     });
-
-    if (shouldRefresh) this.refresh();
   }
 
   _findTaskElement(taskId) {

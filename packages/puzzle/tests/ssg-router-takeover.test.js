@@ -24,7 +24,7 @@ const slot = () => new ViewNode(SLOT_TAG);
 const scopedMarker = (name, args) => new ViewNode(SLOT_TAG, { name, args });
 const snippet = (fits, params, fn) => new ViewNode(SNIPPET_TAG, { fits, params, fn });
 const tick = () => new Promise((r) => setTimeout(r, 0));
-// A bind write is setData + refresh(): the re-render lands on an animation frame
+// A bind write is setState + refresh(): the re-render lands on an animation frame
 // after data() re-runs, so drain both queues a few times.
 const frame = () =>
 	new Promise((r) =>

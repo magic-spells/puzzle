@@ -163,6 +163,15 @@ CLI — it is unrelated and must not be bumped along with the release.
   `registry/theme/pieces.css` (`bg-surface`, `text-ink`, `border-border`, `bg-brand`,
   `text-danger`, …). **No hex colors** inside components. `pieces.css` is a registry file —
   editing token VALUES there changes every consumer.
+- **Local UI state: seed, derive, set.** Seed render-feeding state with `setState()` in
+  `created()`, read it back in `data()` through `this.getState()` / `this.getData()` and derive
+  the render model there, and have handlers call `setState()` only. A write to a key the last
+  `data()` run read re-runs `data()` with the next render (framework D23), so no `refresh()`
+  follows a `setState()`. Keep instance fields for bookkeeping that never feeds `data()` (timers,
+  listener flags, a pending-focus marker). Call `refresh()` only on purpose: `data()` reads
+  something the runtime cannot see (a module store), or the next line needs the new model in
+  the DOM now (focusing a just-opened row, a FLIP measurement, a placement correction measured in
+  `afterUpdate()`/rAF that must paint this frame). Say why in a comment beside it.
 
 ## Themes — four schemes × four styles
 

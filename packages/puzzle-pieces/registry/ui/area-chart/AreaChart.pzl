@@ -203,7 +203,7 @@ export default class AreaChart extends PuzzleView {
     this._cxs = [];
     this._width = DEFAULT_WIDTH;
     this._ro = null;
-    this.setData({ measuredWidth: 0, hover: null });
+    this.setState({ measuredWidth: 0, hover: null });
   }
 
   mounted() {
@@ -211,8 +211,7 @@ export default class AreaChart extends PuzzleView {
     this._ro = new ResizeObserver((entries) => {
       const w = Math.round(entries[0]?.contentRect?.width || this.element.clientWidth || 0);
       if (w > 0 && w !== this.getData().measuredWidth) {
-        this.setData({ measuredWidth: w });
-        this.refresh();
+        this.setState({ measuredWidth: w });
       }
     });
     this._ro.observe(this.element);
@@ -420,15 +419,13 @@ export default class AreaChart extends PuzzleView {
       }
       const h = this.getData().hover;
       if (!h || h.index !== best || h.x !== lx || h.y !== ly) {
-        this.setData({ hover: { index: best, x: lx, y: ly } });
-        this.refresh();
+        this.setState({ hover: { index: best, x: lx, y: ly } });
       }
     },
 
     onLeave: () => {
       if (this.getData().hover != null) {
-        this.setData({ hover: null });
-        this.refresh();
+        this.setState({ hover: null });
       }
     },
   };

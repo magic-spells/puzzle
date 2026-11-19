@@ -142,7 +142,7 @@ export default class OrreryCanvas extends PuzzleView {
         speed,
         phase,
       });
-      // No setData / no manual redraw needed: createRecord re-runs data() (we're
+      // No setState / no manual redraw needed: createRecord re-runs data() (we're
       // subscribed), and the loop paints the new body on the next frame.
     },
   };

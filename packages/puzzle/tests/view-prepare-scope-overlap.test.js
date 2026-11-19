@@ -158,7 +158,7 @@ describe('prepareRefresh eval-scope unwinding', () => {
 		expect(instance.params.id).toBe(2); // the destination scope is live
 
 		// A DOM handler landing during the gate, with a nested fence inside it.
-		instance.setData('n', 1); // arms the flushUpdates → #renderNow fence
+		instance.setState('n', 1); // arms the flushUpdates → #renderNow fence
 		const seen = [];
 		instance.__withCommittedScope(() => {
 			seen.push(instance.params.id);

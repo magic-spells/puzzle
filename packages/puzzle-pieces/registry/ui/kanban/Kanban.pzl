@@ -94,7 +94,7 @@ import KanbanCard from './KanbanCard.pzl';
 //       }
 //       const dest = cols.find((c) => c.id === toColumnId);
 //       dest.cards.splice(toIndex, 0, card);
-//       this.setData({ columns: cols });
+//       this.setState({ columns: cols });
 //     },
 //   };
 //
@@ -215,7 +215,7 @@ export default class Kanban extends PuzzleView {
       if (this._arm && this._arm.started && e.cancelable) e.preventDefault();
     };
 
-    this.setData({
+    this.setState({
       dragging: false,
       dragCardId: null,
       dragFromCol: null,
@@ -440,7 +440,7 @@ export default class Kanban extends PuzzleView {
     }
   }
 
-  // --- ghost (imperative — never setData per move) ---------------------------
+  // --- ghost (imperative — never setState per move) ---------------------------
 
   _applyGhost() {
     if (!this.element || !this._ghostPos) return;
@@ -461,8 +461,7 @@ export default class Kanban extends PuzzleView {
       if (!t) return;
       const d = this.getData();
       if (d.hoveredColId !== t.colId || d.targetIndex !== t.index) {
-        this.setData({ hoveredColId: t.colId, targetIndex: t.index });
-        this.refresh();
+        this.setState({ hoveredColId: t.colId, targetIndex: t.index });
       }
     });
   }
@@ -491,7 +490,7 @@ export default class Kanban extends PuzzleView {
     const orig = this._origIndex(a.colId, a.cardId);
     // clear any keyboard grab — one gesture at a time
     this._ghostPos = { x: event.clientX, y: event.clientY };
-    this.setData({
+    this.setState({
       dragging: true,
       dragCardId: a.cardId,
       dragFromCol: a.colId,
@@ -503,7 +502,6 @@ export default class Kanban extends PuzzleView {
       grabbedId: null,
       announce: '',
     });
-    this.refresh();
     // Capture on the ROOT (persists across the source-card removal), mouse/pen only.
     if (event.pointerType !== 'touch' && this.element) {
       try {
@@ -539,7 +537,7 @@ export default class Kanban extends PuzzleView {
     const dest = (Array.isArray(this.props.columns) ? this.props.columns : []).find(
       (c) => c.id === toColId
     );
-    this.setData({
+    this.setState({
       dragging: false,
       dragCardId: null,
       dragFromCol: null,
@@ -551,7 +549,6 @@ export default class Kanban extends PuzzleView {
           ? `Moved ${card.title} to ${dest.title}.`
           : '',
     });
-    this.refresh();
 
     if (!noop && toColId) this._emitMove(cardId, toColId, toIndex, event);
   }
@@ -566,7 +563,7 @@ export default class Kanban extends PuzzleView {
       this._rafT = null;
     }
     if (this.getData().dragging) {
-      this.setData({
+      this.setState({
         dragging: false,
         dragCardId: null,
         dragFromCol: null,
@@ -575,7 +572,6 @@ export default class Kanban extends PuzzleView {
         targetIndex: -1,
         announce: 'Move cancelled.',
       });
-      this.refresh();
     }
   }
 
@@ -597,22 +593,20 @@ export default class Kanban extends PuzzleView {
 
   _grab(colId, cardId) {
     const card = this._findCard(colId, cardId);
-    this.setData({
+    this.setState({
       grabbedId: cardId,
       announce: card
         ? `Picked up ${card.title}. Use the arrow keys to move, space or escape to drop.`
         : '',
     });
-    this.refresh();
   }
 
   _drop() {
     const card = this._findCard(this._grabColOf(), this.getData().grabbedId);
-    this.setData({
+    this.setState({
       grabbedId: null,
       announce: card ? `Dropped ${card.title}.` : '',
     });
-    this.refresh();
   }
 
   // Locate the column currently holding the grabbed card (its position moves as
@@ -657,12 +651,13 @@ export default class Kanban extends PuzzleView {
     const card = cards[i];
     const destCol = cols.find((c) => c.id === destColId);
     const destLen = (destCol.cards || []).length + (destColId === colId ? 0 : 1);
-    this.setData({
+    this.setState({
       announce: `Moved ${card.title} to ${destCol.title}, position ${index + 1} of ${destLen}.`,
     });
+    // refresh() on purpose, and the marker set after it: refresh runs afterUpdate
+    // synchronously, which consumes the marker. A setState() render alone would run
+    // that afterUpdate later, ahead of the parent's re-render, and eat the marker there.
     this.refresh();
-    // set after the announcement refresh: refresh runs afterUpdate synchronously, which
-    // consumes the marker — it has to survive until the parent's re-render
     this._refocusGrabbed = cardId;
     this._emitMove(cardId, destColId, index, event);
   }
@@ -678,7 +673,7 @@ export default class Kanban extends PuzzleView {
       }
       // starting a pointer gesture clears any keyboard grab
       if (this.getData().grabbedId) {
-        this.setData({ grabbedId: null });
+        this.setState({ grabbedId: null });
       }
       const rect = event.currentTarget.getBoundingClientRect();
       this._arm = {

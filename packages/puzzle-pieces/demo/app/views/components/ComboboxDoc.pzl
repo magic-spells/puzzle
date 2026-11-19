@@ -210,7 +210,7 @@ const codeFilterFn = (opt, q) => {
 
 export default class ComboboxDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       framework: 'svelte',
       food: 'banana',
       country: '',
@@ -274,32 +274,25 @@ export default class ComboboxDoc extends PuzzleView {
 
   events = {
     setFramework: (v) => {
-      this.setData('framework', v);
-      this.refresh();
+      this.setState('framework', v);
     },
     setFood: (v) => {
-      this.setData('food', v);
-      this.refresh();
+      this.setState('food', v);
     },
     setCountry: (v) => {
-      this.setData('country', v);
-      this.refresh();
+      this.setState('country', v);
     },
     setErrValue: (v) => {
-      this.setData('errValue', v);
-      this.refresh();
+      this.setState('errValue', v);
     },
     setControlledValue: (v) => {
-      this.setData('controlledValue', v);
-      this.refresh();
+      this.setState('controlledValue', v);
     },
     onShow: () => {
-      this.setData('cbOpen', true);
-      this.refresh();
+      this.setState('cbOpen', true);
     },
     onHide: () => {
-      this.setData('cbOpen', false);
-      this.refresh();
+      this.setState('cbOpen', false);
     },
   };
 }

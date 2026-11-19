@@ -176,6 +176,15 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Breaking
 
+- **BREAKING: `setData()` is now `setState()`, and `getState()` is new (D191).**
+  `this.setData(...)` is gone with no alias; rename every call to
+  `this.setState(...)`, which takes the same `(key, value)` or object map and
+  behaves the same way. `getState()` returns a copy of the state layer alone
+  (what `setState()` wrote), while `getData()` still returns the merged model
+  the template reads. An old call throws `this.setData is not a function` the
+  first time it runs, and `puzzle check` flags it. Search for `setData(` to
+  find them all, but leave DOM calls such as `event.dataTransfer.setData()`
+  alone.
 - **BREAKING: production builds hash their output names by default (D181).**
   `build.hashNames` no longer follows `build.splitting`: with the key unset,
   every production build emits `app-<hash>.js` and `styles-<hash>.css`

@@ -85,7 +85,7 @@ const codeHero = `const aligns = [
 <ToggleGroup items={ aligns } value={ align } @change={ setAlign } label="Text alignment"/>
 
 // parent
-events = { setAlign: (v) => this.setData('align', v) };`;
+events = { setAlign: (v) => this.setState('align', v) };`;
 
 const codeMultiple = `const marks = [
   { value: 'bold', label: 'B' },
@@ -97,7 +97,7 @@ const codeMultiple = `const marks = [
 <ToggleGroup type="multiple" items={ marks } value={ marks$ } @change={ setMarks } label="Text formatting"/>
 
 // parent
-events = { setMarks: (v) => this.setData('marks', v) };`;
+events = { setMarks: (v) => this.setState('marks', v) };`;
 
 const codeIcon = `// icon field is ignored — use a short/emoji label as the accessible name
 const aligns = [
@@ -110,7 +110,7 @@ const aligns = [
 
 export default class ToggleGroupDoc extends PuzzleView {
   created() {
-    this.setData({ align: 'left', marks: ['bold'] });
+    this.setState({ align: 'left', marks: ['bold'] });
   }
 
   data(params, props) {
@@ -144,8 +144,8 @@ export default class ToggleGroupDoc extends PuzzleView {
   }
 
   events = {
-    setAlign: (v) => this.setData('align', v),
-    setMarks: (v) => this.setData('marks', v),
+    setAlign: (v) => this.setState('align', v),
+    setMarks: (v) => this.setState('marks', v),
   };
 }
 </script>

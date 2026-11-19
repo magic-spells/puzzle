@@ -126,7 +126,7 @@ export default class SplitPanel extends PuzzleView {
     this._lastMeasure = null;
     this._onWinMove = (event) => this._pointerMove(event);
     this._onWinEnd = (event) => this._pointerEnd(event);
-    this.setData({
+    this.setState({
       uncontrolledSizes: null,
       draftSizes: null,
       dragging: false,
@@ -134,6 +134,8 @@ export default class SplitPanel extends PuzzleView {
   }
 
   mounted() {
+    // refresh() on purpose: data() reads the measured constraints off an instance
+    // field the runtime cannot see.
     const measure = this._measurePair(this._currentSizes(this.props));
     if (measure) this.refresh();
   }
@@ -152,7 +154,7 @@ export default class SplitPanel extends PuzzleView {
     // the same guarded path works during Node prerender and in the browser.
     if (!Array.isArray(uncontrolledSizes)) {
       uncontrolledSizes = this._restore(props) || authored;
-      this.setData('uncontrolledSizes', uncontrolledSizes);
+      this.setState('uncontrolledSizes', uncontrolledSizes);
     }
 
     const committed = props.sizes !== undefined
@@ -244,8 +246,7 @@ export default class SplitPanel extends PuzzleView {
         !now.dragging &&
         samePair(this._committed(this.props), now.draftSizes)
       ) {
-        this.setData('draftSizes', null);
-        this.refresh();
+        this.setState('draftSizes', null);
       }
     });
   }
@@ -275,8 +276,7 @@ export default class SplitPanel extends PuzzleView {
     const normalized = normalizePair(next, [50, 50]);
     const current = this._currentSizes(this.props);
     if (samePair(current, normalized)) return false;
-    this.setData('draftSizes', normalized);
-    this.refresh();
+    this.setState('draftSizes', normalized);
     if (emitResize) this._emit('resize', normalized);
     return true;
   }
@@ -285,8 +285,7 @@ export default class SplitPanel extends PuzzleView {
     const normalized = normalizePair(next, [50, 50]);
     const update = { dragging: false, draftSizes: normalized };
     if (!this._controlled()) update.uncontrolledSizes = normalized;
-    this.setData(update);
-    this.refresh();
+    this.setState(update);
     this._persist(normalized);
     this._emit('resizeEnd', normalized);
     this._scheduleOverlayClear();
@@ -303,8 +302,7 @@ export default class SplitPanel extends PuzzleView {
       this._overlayTimer = null;
       const local = this.getData();
       if (Array.isArray(local.draftSizes) && !local.dragging) {
-        this.setData('draftSizes', null);
-        this.refresh();
+        this.setState('draftSizes', null);
       }
     }, 100);
   }
@@ -577,8 +575,7 @@ export default class SplitPanel extends PuzzleView {
     const moved = !samePair(current, drag.startSizes);
 
     if (!moved) {
-      this.setData('dragging', false);
-      this.refresh();
+      this.setState('dragging', false);
       this._scheduleOverlayClear();
       return;
     }
@@ -587,7 +584,7 @@ export default class SplitPanel extends PuzzleView {
     const snappedFirst = this._snapShare(current[0], drag.measure);
     if (snappedFirst !== null) {
       finalSizes = this._sizesForFirst(snappedFirst, drag.measure);
-      this.setData('dragging', false);
+      this.setState('dragging', false);
       this._applyDraft(finalSizes, true);
     }
     this._commit(finalSizes);
@@ -654,8 +651,7 @@ export default class SplitPanel extends PuzzleView {
         startSizes: [...sizes],
         measure,
       };
-      this.setData({ dragging: true, draftSizes: [...sizes] });
-      this.refresh();
+      this.setState({ dragging: true, draftSizes: [...sizes] });
       if (divider.focus) divider.focus({ preventScroll: true });
       this._capturePointer(divider, event);
       this._addWindowListeners();

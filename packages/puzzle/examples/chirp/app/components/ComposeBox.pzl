@@ -1,10 +1,9 @@
 <puzzle-view>
   <!-- The composer, reused for both top-level chirps (Home) and replies
        (PostDetail). Props: `replyToId` ('' = a top-level chirp) and `placeholder`
-       (default "What's happening?"). `draft` is LOCAL UI state (setData, not the
-       store) so keystrokes stay cheap; the live counter is derived in data(), so
-       onInput does setData THEN refresh() to recompute it (setData alone never
-       re-runs data() — SPEC §4). Two event-modifier showcases live here (v1.7,
+       (default "What's happening?"). `draft` is LOCAL UI state (setState, not the
+       store) so keystrokes stay cheap; the live counter is derived in data(), which
+       reads the draft, so each setState re-runs it (SPEC §4). Two event-modifier showcases live here (v1.7,
        D38): the form commits with @submit:prevent (no page reload) and Escape in
        the textarea clears the draft via @keydown:escape. -->
   <form class="flex gap-3 px-4 py-3 border-b border-line" @submit:prevent={ submitChirp }>
@@ -44,7 +43,7 @@ export default class ComposeBox extends PuzzleView {
   // Seed the draft before the first data() run so the counter has something to
   // read on mount (created()-seeded state is also what a skeleton could read).
   created() {
-    this.setData({ draft: '' });
+    this.setState({ draft: '' });
   }
 
   data(params, props) {
@@ -65,17 +64,15 @@ export default class ComposeBox extends PuzzleView {
   }
 
   events = {
-    // Mirror the textarea into local state, then refresh() so `remaining` and
-    // `canSubmit` recompute in data().
+    // Mirror the textarea into local state; data() reads it, so `remaining` and
+    // `canSubmit` recompute on their own.
     onInput: (event) => {
-      this.setData('draft', event.target.value);
-      this.refresh();
+      this.setState('draft', event.target.value);
     },
 
     // @keydown:escape → wipe the draft (modifier showcase).
     clearDraft: () => {
-      this.setData('draft', '');
-      this.refresh();
+      this.setState('draft', '');
     },
 
     // @submit:prevent handler. Create the chirp with a 'c-local-' id (app.js
@@ -106,8 +103,7 @@ export default class ComposeBox extends PuzzleView {
         if (parent) parent.update({ replyCount: (parent.replyCount || 0) + 1 });
       }
 
-      this.setData('draft', '');
-      this.refresh();
+      this.setState('draft', '');
     },
   };
 }

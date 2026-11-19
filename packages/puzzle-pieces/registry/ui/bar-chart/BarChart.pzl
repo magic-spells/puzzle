@@ -163,7 +163,7 @@ function barPath(x, w, yTop, yBottom, r) {
 export default class BarChart extends PuzzleView {
   created() {
     this._uid = ++uid;
-    this.setData({
+    this.setState({
       width: 0,
       hoveredId: null,
       tip: { visible: false, x: 0, y: 0, flipX: false, label: '', value: '' },
@@ -176,8 +176,7 @@ export default class BarChart extends PuzzleView {
     this._ro = new ResizeObserver((entries) => {
       const w = Math.round(entries[0].contentRect.width);
       if (w && w !== this.getData().width) {
-        this.setData({ width: w });
-        this.refresh();
+        this.setState({ width: w });
       }
     });
     this._ro.observe(this.element);
@@ -389,14 +388,12 @@ export default class BarChart extends PuzzleView {
     onHover: (mark, event) => {
       const tip = this._tipFromEvent(event, mark.tipLabel, mark.tipValue);
       if (!tip) return;
-      this.setData({ hoveredId: mark.id, tip });
-      this.refresh();
+      this.setState({ hoveredId: mark.id, tip });
     },
 
     onLeave: () => {
       const tip = this.getData().tip;
-      this.setData({ hoveredId: null, tip: { ...tip, visible: false } });
-      this.refresh();
+      this.setState({ hoveredId: null, tip: { ...tip, visible: false } });
     },
   };
 }

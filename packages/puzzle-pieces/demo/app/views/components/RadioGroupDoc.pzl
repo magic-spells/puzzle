@@ -70,7 +70,7 @@ data() {
     ],
   };
 }
-events = { setPlan: (v) => this.setData('plan', v) };`;
+events = { setPlan: (v) => this.setState('plan', v) };`;
 
 const codeHorizontal = `<RadioGroup
   label="Size"
@@ -89,7 +89,7 @@ const codeHints = `const planOptions = [
 
 export default class RadioGroupDoc extends PuzzleView {
   created() {
-    this.setData({ plan: 'pro', size: 'm', planDetail: 'pro' });
+    this.setState({ plan: 'pro', size: 'm', planDetail: 'pro' });
   }
 
   data(params, props) {
@@ -127,16 +127,13 @@ export default class RadioGroupDoc extends PuzzleView {
 
   events = {
     setPlan: (v) => {
-      this.setData('plan', v);
-      this.refresh();
+      this.setState('plan', v);
     },
     setSize: (v) => {
-      this.setData('size', v);
-      this.refresh();
+      this.setState('size', v);
     },
     setPlanDetail: (v) => {
-      this.setData('planDetail', v);
-      this.refresh();
+      this.setState('planDetail', v);
     },
   };
 }

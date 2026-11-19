@@ -15,18 +15,18 @@
          driver's own `el.value = …` is structurally uncountable rather than
          merely uncounted. They bind DIFFERENT state layers on purpose:
 
-           .fs-draft  setData('draftText', …) — the local layer, no data() run
-           .fs-bound  record.update({ text }) — the model layer, via the store
+           .fs-draft  setState('draftText', …) — the state layer, no data() run
+           .fs-bound  record.update({ text }) — the derived layer, via the store
 
          `draftText` is a key data() NEVER returns. If data() also returned it,
-         #recompose()'s { ...#local, ...#model } would overlay the model value
+         #recompose()'s { ...#state, ...#derived } would overlay the model value
          on top of the local one and the FIRST store flush would silently erase
          the draft mid-typing (PuzzleView.js — the two-layer precedence rule).
          That clobber is documented here rather than counted: its interesting
          form depends on flush timing and is not deterministic. -->
     <div class="fs-typing flex flex-wrap items-end gap-6 px-4 py-3 border-b border-hairline">
       <label class="flex flex-col gap-1">
-        <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-faint">local draft · setData</span>
+        <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-faint">local draft · setState</span>
         <input
           class="fs-draft w-72 h-8 px-2 rounded-md bg-ink border border-hairline font-mono text-xs text-fg focus:outline-none focus:border-accent/60"
           type="text"
@@ -220,7 +220,7 @@ const GATE_STORE = 'gate-store-keystroke';
  *
  * `renders` is incremented by a NESTED getter — `probe.tick`, one level below
  * what data() returns — because PuzzleView.#recompose() rebuilds visible state
- * as { ...#local, ...#model }, and that spread INVOKES any getter sitting at the
+ * as { ...#state, ...#derived }, and that spread INVOKES any getter sitting at the
  * top level. A top-level getter would therefore count data() runs, which is a
  * different number entirely: `type-local` drives 200 renders and ZERO data()
  * runs. See rc-metrics.js for the same trick at length.
@@ -289,7 +289,7 @@ export default class FormState extends PuzzleView {
         'patchAttrs compares an input\'s value against the LIVE DOM property and writes only on a difference; the ' +
         'select\'s post-options re-assert makes the same live compare, so a settled select also writes nothing. ' +
         'rerender proves both zeros, rerender-dirty proves both write paths still fire — one write per changed ' +
-        'select, not two — and the two typing arms price a keystroke through the local layer against the same ' +
+        'select, not two — and the two typing arms price a keystroke through the state layer against the same ' +
         'keystroke through record.update().',
       note: this.note,
       resultText: result
@@ -312,7 +312,7 @@ export default class FormState extends PuzzleView {
   events = {
     // Bare-shaped arguments, so codegen caches one arrow per site per instance
     // and the two typing targets never churn a listener.
-    onDraft: (event) => this.setData('draftText', event?.target?.value ?? ''),
+    onDraft: (event) => this.setState('draftText', event?.target?.value ?? ''),
     onBound: (event) => this.record?.update({ text: event?.target?.value ?? '' }),
   };
 
@@ -354,9 +354,9 @@ export default class FormState extends PuzzleView {
     clearType(store, TYPE);
     this.record = store.createRecord(TYPE, { id: DRAFT_ID, ...FORM_DRAFT_SEED });
 
-    // The local layer's seed. setData before mount just seeds state — the
+    // The state layer's seed. setState before mount just seeds state — the
     // scheduled render is a no-op until #mounted flips.
-    this.setData('draftText', 'draft');
+    this.setState('draftText', 'draft');
 
     this.lastResult = null;
     this.note = '';
@@ -556,7 +556,7 @@ export default class FormState extends PuzzleView {
    * K real keystrokes into ONE field, with the framework's own flush forced
    * synchronously after each so the op is bounded by a count and not a clock.
    *
-   *   local  setData -> flushUpdates()  — re-render only, data() never re-runs
+   *   local  setState -> flushUpdates()  — re-render only (data() never reads draftText)
    *   store  record.update -> store.flush() — validate, notify, data(), render
    *
    * Identical probe load, identical keystroke count, identical grid. The only
@@ -598,7 +598,7 @@ export default class FormState extends PuzzleView {
       probes,
       perfBefore,
       summary:
-        `${op}: ${KEYSTROKES} keystrokes through ${arm === 'local' ? 'setData' : 'record.update()'} ` +
+        `${op}: ${KEYSTROKES} keystrokes through ${arm === 'local' ? 'setState' : 'record.update()'} ` +
         `over ${this.fieldCount} controlled fields in ${ms1(scriptMs)}ms script`,
     });
   }
@@ -641,7 +641,7 @@ export default class FormState extends PuzzleView {
 
       const localState = this.getData().draftText;
       if (localState !== GATE_LOCAL) {
-        throw new Error(`[stress] form-state ${op}: the local keystroke never reached setData (state holds "${localState}")`);
+        throw new Error(`[stress] form-state ${op}: the local keystroke never reached setState (state holds "${localState}")`);
       }
       if (draftEl.value !== GATE_LOCAL) {
         throw new Error(`[stress] form-state ${op}: the local keystroke never reached the DOM (input shows "${draftEl.value}")`);
@@ -679,7 +679,7 @@ export default class FormState extends PuzzleView {
       perfBefore,
       summary:
         `${op}: BEHAVIOUR GATE — one real input event per binding reached state AND the DOM ` +
-        `(local via setData, store via record.update). ${caret}. Ignore the timing.`,
+        `(local via setState, store via record.update). ${caret}. Ignore the timing.`,
     });
   }
 
@@ -808,7 +808,7 @@ export default class FormState extends PuzzleView {
     const draftHeld = this.getData().draftText;
     const draftShown = root.querySelector('.fs-draft')?.value;
     if (draftShown !== draftHeld) {
-      return { ok: false, detail: `the draft input reads "${draftShown}", the local layer holds "${draftHeld}"` };
+      return { ok: false, detail: `the draft input reads "${draftShown}", the state layer holds "${draftHeld}"` };
     }
 
     // fsSchemaNormalizations === 3 per keystroke depends on the store having NO

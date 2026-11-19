@@ -165,7 +165,7 @@ export default class MarkdownEditor extends PuzzleView {
 		this._appliedRaw = null;
 		// Ordered markdown emissions still awaiting their controlled-value echoes.
 		this._pending = [];
-		this.setData({
+		this.setState({
 			active: {},
 			empty: true,
 			linkOpen: false,
@@ -236,7 +236,7 @@ export default class MarkdownEditor extends PuzzleView {
 		this._pending = [];
 		// Seed the emptiness flag data() switches to post-mount, or a non-empty
 		// starting value would render under the placeholder until the first edit.
-		this.setData('empty', isEmpty(value));
+		this.setState('empty', isEmpty(value));
 		this._editor = new Editor({
 			element: this.refs.mount,
 			editable: !this.props.disabled,
@@ -298,12 +298,11 @@ export default class MarkdownEditor extends PuzzleView {
 				this._applied = md;
 				this._pending.push(md);
 				if (this._pending.length > EMITTED_LIMIT) this._pending.shift();
-				// Deliberately do NOT touch _appliedRaw here: refresh() synchronously
-				// runs afterUpdate() while the prop still holds its pre-keystroke value;
-				// the pending queue separately catches older scheduled parent echoes.
-				// _appliedRaw tracks only the last prop spelling seen.
-				this.setData('empty', isEmpty(md));
-				this.refresh();
+				// Deliberately do NOT touch _appliedRaw here: the `empty` write's render
+				// can reach afterUpdate() while the prop still holds its pre-keystroke
+				// value; the pending queue separately catches older scheduled parent
+				// echoes. _appliedRaw tracks only the last prop spelling seen.
+				this.setState('empty', isEmpty(md));
 				this.props.change?.(md);
 			},
 			// Fires on every state change including selection moves — keeps the
@@ -312,7 +311,7 @@ export default class MarkdownEditor extends PuzzleView {
 		});
 		this._applied = this._editor.getMarkdown();
 		this._appliedRaw = value;
-		this.setData('empty', isEmpty(this._applied));
+		this.setState('empty', isEmpty(this._applied));
 		this._syncActive();
 	}
 
@@ -327,17 +326,17 @@ export default class MarkdownEditor extends PuzzleView {
 		// setEditable defaults to emitUpdate=true, which synchronously fires the
 		// 'update' event → onUpdate → props.change — so a disabled toggle would
 		// look like an edit. Pass false. The isEditable guard additionally breaks
-		// the afterUpdate → update → refresh → afterUpdate loop.
+		// the afterUpdate → update → render → afterUpdate loop.
 		const editable = !this.props.disabled;
 		if (ed.isEditable !== editable) ed.setEditable(editable, false);
 		if (this.props.disabled && this.getData().linkOpen) {
-			this.setData({ linkOpen: false, linkDraft: '' });
+			this.setState({ linkOpen: false, linkDraft: '' });
 		}
 
-		// Controlled markdown has two timing traps. First, onUpdate's refresh() is
-		// synchronous and reaches afterUpdate() before @change can update the parent,
+		// Controlled markdown has two timing traps. First, onUpdate's own render can
+		// reach afterUpdate() before @change has updated the parent,
 		// so the prop still contains its pre-keystroke spelling; _appliedRaw's exact
-		// fast path recognizes that unchanged prop. Second, the parent's setData()
+		// fast path recognizes that unchanged prop. Second, the parent's setState()
 		// render is frame-scheduled: an older emission e_i can arrive after typing has
 		// already advanced the editor to e_j. Comparing e_i only with the latest
 		// _applied would misclassify our own stale echo as an external reset. That is
@@ -374,8 +373,7 @@ export default class MarkdownEditor extends PuzzleView {
 		this._pending.length = 0;
 		// emitUpdate defaults TRUE in Tiptap 3.30 — explicit false prevents an
 		// external set from echoing a spurious @change back to the parent.
-		this.setData('empty', isEmpty(this._applied));
-		this.refresh();
+		this.setState('empty', isEmpty(this._applied));
 	}
 
 	_syncActive() {
@@ -405,8 +403,7 @@ export default class MarkdownEditor extends PuzzleView {
 		const prev = this.getData().active || {};
 		const keys = Object.keys(next);
 		if (keys.every((k) => !!prev[k] === !!next[k])) return;
-		this.setData('active', next);
-		this.refresh();
+		this.setState('active', next);
 	}
 
 	_chain() {
@@ -447,9 +444,9 @@ export default class MarkdownEditor extends PuzzleView {
 			if (value === 'link') {
 				if (!this._editor) return;
 				const href = this._editor.getAttributes('link').href || '';
-				this.setData({ linkOpen: true, linkDraft: href });
+				this.setState({ linkOpen: true, linkDraft: href });
 				this.refresh();
-				// An explicit refresh() renders synchronously, so the row's input is
+				// refresh() on purpose: it renders synchronously, so the row's input is
 				// already mounted by the time it returns — focus it right here, or the
 				// row is keyboard-unreachable. Deliberately NOT deferred: Chrome pauses
 				// requestAnimationFrame in unfocused/occluded windows, so an rAF focus
@@ -494,20 +491,17 @@ export default class MarkdownEditor extends PuzzleView {
 				? isSafeUrl(url) && this._chain().insertContent({ type: 'text', text: raw, marks: [{ type: 'link', attrs: { href: url } }] }).run()
 				: this._chain()?.extendMarkRange('link').setLink({ href: url }).run();
 			if (!applied) return;
-			this.setData({ linkOpen: false, linkDraft: '' });
-			this.refresh();
+			this.setState({ linkOpen: false, linkDraft: '' });
 		},
 
 		removeLink: () => {
 			if (this.props.disabled) return;
 			this._chain()?.extendMarkRange('link').unsetLink().run();
-			this.setData({ linkOpen: false, linkDraft: '' });
-			this.refresh();
+			this.setState({ linkOpen: false, linkDraft: '' });
 		},
 
 		closeLink: () => {
-			this.setData({ linkOpen: false, linkDraft: '' });
-			this.refresh();
+			this.setState({ linkOpen: false, linkDraft: '' });
 			// The focused input unmounts with the row; hand focus back to the
 			// editor instead of letting it fall to <body>. (applyLink/removeLink
 			// already refocus through _chain().)

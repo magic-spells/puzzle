@@ -277,7 +277,7 @@ export class PuzzleApp {
 	 * loading, and — with the adapter — no tracked find's fetch in flight; false
 	 * when `timeout` (ms, default 10000; a bad value falls back to it) runs out
 	 * first. A check runs after its frame's callbacks, so
-	 * a setData() render scheduled before it has landed. Frames follow the store's
+	 * a setState() render scheduled before it has landed. Frames follow the store's
 	 * scheduler (D63): timers in a hidden tab. An app neither mounted nor mounting
 	 * resolves true at once. Never rejects. It reads state the runtime already
 	 * keeps, so it cannot see user timers, animations, IntersectionObserver
@@ -318,7 +318,7 @@ export class PuzzleApp {
 				else if (++clear > 1) return resolve(true);
 				if (Date.now() >= end) return resolve(false);
 				// Check again after the next frame's callbacks (rAF, then a timer), so a
-				// setData() render scheduled before then has landed. The store's D63
+				// setState() render scheduled before then has landed. The store's D63
 				// scheduler: a timer in a hidden tab, a fallback timer if rAF freezes.
 				frame(() => setTimeout(check, 0));
 			};
@@ -642,7 +642,7 @@ export class PuzzleApp {
 		if (this.#mountEpoch !== epoch || !this._mounted) return this;
 
 		// Dev HMR restore, phase 2 (§27, D57; Change D): the view chain is now
-		// mounted, so each saved view's LOCAL setData state (drafts, toggles) can be
+		// mounted, so each saved view's LOCAL setState state (drafts, toggles) can be
 		// restored onto its keyed counterpart. The store was already transplanted in
 		// phase 1 (before nav #0); this consumes the same blob phase 1 handed back.
 		// Fail-soft end to end — a null/corrupt/expired blob just cold-starts.

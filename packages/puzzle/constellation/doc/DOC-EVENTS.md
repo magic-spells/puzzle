@@ -28,19 +28,18 @@ export default class TodoHome extends PuzzleView {
       const text = this.getData().newTodoText.trim();
       if (text) {
         this.ctx.store.createRecord('todo', { text });
-        this.setData('newTodoText', '');
+        this.setState('newTodoText', '');
       }
     },
-    setFilter: (filter) => {
-      this.setData('currentFilter', filter);
-      this.refresh(); // filteredTodos is derived in data()
-    },
+    // filteredTodos is derived in data() from currentFilter, so this write
+    // re-runs data() before the next render
+    setFilter: (filter) => this.setState('currentFilter', filter),
   };
 }
 ```
 
 - `events` is a class field (`events = { … };`), with no commas between class members.
-- **Every handler must be an arrow function.** The runtime calls `this.events.addTodo(event)`, so method shorthand (`addTodo(event) { … }`) gets the `events` object as `this`, and `this.setData(...)` throws when the event fires. The compiler can't catch it; a development build warns at the view's first mount, once per view class, for each non-arrow handler that uses `this`. A shorthand handler that never touches `this` works.
+- **Every handler must be an arrow function.** The runtime calls `this.events.addTodo(event)`, so method shorthand (`addTodo(event) { … }`) gets the `events` object as `this`, and `this.setState(...)` throws when the event fires. The compiler can't catch it; a development build warns at the view's first mount, once per view class, for each non-arrow handler that uses `this`. A shorthand handler that never touches `this` works.
 
 ## Binding handlers in templates
 
@@ -70,11 +69,12 @@ Three forms (§5):
 
 | Change | Use | Re-runs `data()`? |
 | --- | --- | --- |
-| Local UI state (a filter, a toggle, draft text) | `this.setData(key, value)` or `this.setData({ … })` | No — re-renders directly |
-| Values `data()` derives from local state | `this.setData(…)` then `this.refresh()` | Yes, for this view |
+| Local UI state `data()` never reads (a toggle, draft text) | `this.setState(key, value)` or `this.setState({ … })` | No — re-renders directly |
+| Local state `data()` derives values from (a filter) | `this.setState(…)` | Yes, once before the next render, for this view |
+| Inputs the runtime cannot see (an instance field, the clock) | `this.refresh()` | Yes, for this view |
 | Shared records | `store.createRecord`, `record.update()`, `record.destroy()` | Yes, on every subscribed view |
 
-- `setData()` is cheap on purpose; it does not re-run store queries. When `data()` computes something from local state (like `filteredTodos` from `currentFilter`), call `this.refresh()` after it.
+- `setState()` re-runs `data()` only when `data()` read a written key through `getData()` or `getState()` ([[DECISION-D23-REFRESH-PATTERN]]), so a field `data()` never looks at stays cheap. Several writes before the next render share one run. Do not add `this.refresh()` after it.
 - A `data()` commit replaces the model, so a view mixing local state and store data reads its local values back in `data()` with `this.getData()`.
 - Mutate records through `update()` or the store, not by assigning fields or editing copies: a store mutation re-runs `data()` on every view that queried those records.
 
@@ -108,7 +108,7 @@ events = {
     const text = this.getData().draft.trim();
     if (!text) return;
     this.ctx.store.createRecord('todo', { text });
-    this.setData('draft', ''); // clearing the source clears the field
+    this.setState('draft', ''); // clearing the source clears the field
   },
   ```
 
@@ -182,7 +182,7 @@ When a parent needs a child's imperative handle (a carousel's `.next()`, a libra
 
 ```js
 events = {
-  carouselReady: (carousel) => { this._carousel = carousel; }, // an instance field, not setData
+  carouselReady: (carousel) => { this._carousel = carousel; }, // an instance field, not setState
   nextSlide: () => this._carousel?.next(),                      // guard: it arrives after mount
 };
 ```
@@ -193,5 +193,5 @@ Expect a new handle after the child remounts. For an element in your **own** tem
 
 1. **Method shorthand in `events`** — `this` is wrong at event time. Use arrows; development builds warn.
 2. **Curried handlers** — `(todo) => () => { … }` returns an unused inner function. Write `(todo) => { … }`; the template call passes the arguments.
-3. **Assigning to a variable, a record field, or the object `getData()` returned** — invisible to the renderer. Call `setData` or `record.update()`.
+3. **Assigning to a variable, a record field, or the object `getData()` returned** — invisible to the renderer. Call `setState` or `record.update()`.
 4. **Commas between class members** — `events` is a class field; commas go only between handlers inside it.

@@ -154,7 +154,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 export default class Counter extends PuzzleView {
   data() { return { count: this.getData()?.count ?? 0 }; }  // runs at render — and under NODE during prerender
   events = {
-    increment: () => this.setData('count', this.getData().count + 1),
+    increment: () => this.setState('count', this.getData().count + 1),
   };  // handlers should be arrow functions in the `events` class field so
       // `this` is the component — method shorthand gets the events object as `this`
       // (development builds warn when a non-arrow handler uses `this`)
@@ -363,8 +363,8 @@ Rules that bite:
   value, a block header, a function argument, or an `@event` handler's
   arguments or ternary condition is a compile error. Every value a template
   shows comes through `data()` — move a getter's body into a `data()` field,
-  and call `this.refresh()` after a `setData()` that field depends on
-  (`setData()` alone does not re-run `data()`).
+  and read the local state it depends on with `getData()` there; a later
+  `setState()` of that key re-runs `data()` on its own.
   Member access is guarded, so `{ user.address.city }` prints nothing when
   `address` is missing instead of throwing (`?.` is legal but unnecessary),
   and a method call on a missing value prints nothing too (dev warning). A
@@ -567,7 +567,7 @@ Rules that bite:
   (live node, populated before `mounted()`). `ref` is NOT allowed on component
   tags — when a parent needs a child's imperative handle (a carousel's
   `.next()`), the child delivers it up once via an `@ready` callback prop; store
-  it on an instance field (not `setData`) and guard every use with `?.`.
+  it on an instance field (not `setState`) and guard every use with `?.`.
 - If a callback prop is wired into a long-lived external system, read it at fire
   time (`(e) => this.props.name?.(e)`), never capture it at wiring time.
 
@@ -727,7 +727,7 @@ many other`) is a plural entry and must have `other`.
   `.defaultLocale`, and `this.ctx.i18n.setLocale('es')` — it fetches the file
   first, then switches, stores the choice, sets `<html lang>` (except in
   memory mode, which never touches the document), and rebuilds the page at the
-  same location (store records survive; `setData` state does not — keep state
+  same location (store records survive; `setState` state does not — keep state
   that must survive a switch in the store). It resolves once the new strings
   are active; if a navigation (push, replace or pop) is in flight, that
   navigation lands first and the page is rebuilt after it. So a root layout's
@@ -862,8 +862,9 @@ What follows from the rule:
   handle, and a read through it, by this view, during this view's own `data()`
   run is the one thing that can fault: event handlers, model methods, timers,
   and a store captured in a module variable all get a local snapshot and never
-  issue a request. A handler that needs fresh server data changes state and
-  calls `this.refresh()`, which re-enters the loop. Calling
+  issue a request. A handler that needs fresh server data writes a key
+  `data()` reads with `setState()` (or calls `this.refresh()`), which re-enters
+  the loop. Calling
   `store.loadOne`/`store.loadMany` from inside
   `data()` warns in dev and points you at `findOne`/`findMany` — the imperative
   loaders are a force-refresh escape hatch, not the read path.
@@ -956,13 +957,20 @@ refresh outside the request path and let the hook read the current token. Mutate
 
 The reactivity contract — the three methods are not interchangeable:
 
-- **`data()`** owns the model layer. Store queries made inside `data()`
+- **`data()`** owns the derived layer. Store queries made inside `data()`
   **auto-subscribe** the view; when matching records change, `data()` re-runs
   and the result replaces the view's data wholesale (replace-on-commit).
-- **`setData(patch)`** owns persistent local UI state (open panels, drafts).
-  It rerenders WITHOUT re-running `data()` and survives it.
-- **`refresh()`** re-runs `data()` — use it when local state feeds
-  `data()`-derived values.
+- **`setState(patch)`** owns persistent local UI state (open panels, drafts).
+  It survives `data()` re-runs. When `data()` read the written key through
+  `getData()` or `getState()`, the next render re-runs `data()` first (one run
+  per burst of writes); any other key just re-renders. `getState()` reads the
+  state layer alone; `getData()` reads the merged model the template sees.
+  There is no `setData()` (removed in 0.10.0).
+- **`refresh()`** re-runs `data()` on purpose. Do not put it after a
+  `setState()`: the write already re-runs `data()` when `data()` reads that
+  key. Use it when `data()` derives from something the runtime cannot see (an
+  instance field, a module variable, the clock), or when the next line needs
+  the new model already rendered.
 - **A record prop tracks that record, and only that record.** Records mutate in
   place, so a record prop is always reference-equal — but it also carries a
   render revision, so a child receiving `todo={ todo }` DOES re-run `data()`
@@ -982,7 +990,7 @@ tab). Two awaits observe that work; neither forces it:
 
 - `await this.renderTick()` in a view resolves once every scheduled store flush and
   view render has landed, including the renders those schedule. Use it after
-  `setData()` before measuring `this.refs`. It does not wait for async
+  `setState()` before measuring `this.refs`. It does not wait for async
   `data()`, fetches or navigation.
 - `await app.idle()` (or `this.ctx.idle()` from any view or component)
   resolves `true` once two consecutive frames find no mount, navigation,

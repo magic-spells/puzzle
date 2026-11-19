@@ -25,10 +25,15 @@ connections:
   - DOC-REGISTRY
   - DECISION-CONFIG-FIRST-API
 notes:
+  - kind: state
+    text: >-
+      0.10.0 (framework D23): every setState() + refresh() pair lost its refresh() except the
+      keyboard cross-column move, which keeps its refresh() on purpose so the announcement's
+      afterUpdate() runs before the `_refocusGrabbed` marker is armed (see the gotcha below).
   - kind: gotcha
     text: >-
       The `_refocusGrabbed` marker for a keyboard cross-column move must be set AFTER the
-      announcement setData/refresh(), not before: refresh() runs afterUpdate() synchronously, and
+      announcement setState/refresh(), not before: refresh() runs afterUpdate() synchronously, and
       afterUpdate() consumes and clears the marker — so a marker set first was eaten by the
       announcement render and focus fell to <body> on the parent's real re-render. Fixed 2026-09-04
       (Astra review F6) by moving the assignment to just before `_emitMove()`.

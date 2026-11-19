@@ -168,7 +168,7 @@ export default class Thread extends PuzzleView {
     this._cancel = streamReply(promptText, {
       model,
       onToken: (token) => {
-        // Update THROUGH THE STORE (not setData): re-renders the thread AND —
+        // Update THROUGH THE STORE (not setState): re-renders the thread AND —
         // via the updatedAt bump — reorders/refreshes the sidebar (item 10).
         assistant.update({ content: assistant.content + token });
         if (conversation) conversation.update({ updatedAt: new Date() });

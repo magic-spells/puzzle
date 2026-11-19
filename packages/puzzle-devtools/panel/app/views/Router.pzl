@@ -108,7 +108,7 @@ const HISTORY_LIMIT = 40;
 
 export default class RouterView extends PuzzleView {
   created() {
-    this.setData({ route: null, loading: false, error: '' });
+    this.setState({ route: null, loading: false, error: '' });
     this._seenGeneration = null;
     this._commitTimer = null;
   }
@@ -220,17 +220,15 @@ export default class RouterView extends PuzzleView {
 
   async load() {
     if (this.isDestroyed || !this.connected()) return;
-    this.setData({ loading: true, error: '' });
-    this.refresh();
+    this.setState({ loading: true, error: '' });
     try {
       const result = await api.snapshotRoute();
-      if (!this.isDestroyed) this.setData('route', result ?? null);
+      if (!this.isDestroyed) this.setState('route', result ?? null);
     } catch (err) {
-      if (!this.isDestroyed) this.setData('error', err?.message ?? String(err));
+      if (!this.isDestroyed) this.setState('error', err?.message ?? String(err));
     } finally {
       if (!this.isDestroyed) {
-        this.setData('loading', false);
-        this.refresh();
+        this.setState('loading', false);
       }
     }
   }

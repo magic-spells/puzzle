@@ -739,8 +739,8 @@ describe.skipIf(!built)('Views panel', () => {
 
 		expect(bridge.payloadsFor('inspect:view')).toEqual([{ id: 3 }]);
 
-		const model = groupFor('data() model layer');
-		const local = groupFor('setData() local layer');
+		const model = groupFor('data() derived layer');
+		const local = groupFor('setState() state layer');
 		expect(model).toBeTruthy();
 		expect(local).toBeTruthy();
 
@@ -758,7 +758,7 @@ describe.skipIf(!built)('Views panel', () => {
 
 		// And the explainer that says which one wins.
 		expect(document.body.textContent).toContain(
-			'a later setData() wins until the next data() commit'
+			'a later setState() wins until the next data() commit'
 		);
 	});
 
@@ -785,7 +785,7 @@ describe.skipIf(!built)('Views panel', () => {
 		treeRow('2').click();
 		await settle(app, 60);
 
-		const key = [...groupFor('data() model layer').querySelectorAll('dt')].find(
+		const key = [...groupFor('data() derived layer').querySelectorAll('dt')].find(
 			(dt) => dt.textContent.trim() === 'note'
 		);
 		const value = key.nextElementSibling;
@@ -812,7 +812,7 @@ describe.skipIf(!built)('Views panel', () => {
 		treeRow('3').click();
 		await settle(app, 60);
 
-		const local = groupFor('setData() local layer');
+		const local = groupFor('setState() state layer');
 		const row = [...local.querySelectorAll('dt')].find(
 			(dt) => dt.textContent.trim() === 'draft'
 		).parentElement;
@@ -1212,6 +1212,26 @@ describe.skipIf(!built)('Store panel', () => {
 		expect(document.querySelector('[data-field="text"] input').value).toBe('   ');
 		// The store was not touched, so the table still shows the old value.
 		expect(document.querySelector('[data-row="t1"]').textContent).toContain('Ship the bridge');
+	});
+
+	it('keeps the caret where it was while typing re-runs data()', async () => {
+		document.querySelector('[data-row="t1"]').click();
+		await settle(app);
+
+		// editField's setState re-runs data() (it reads `edits`), which re-renders the
+		// focused input. The controlled value matches what is already in the DOM, so
+		// the patch must leave the input, and the caret in it, alone.
+		const input = document.querySelector('[data-field="text"] input');
+		input.focus();
+		type(input, 'Ship the bridge now');
+		input.setSelectionRange(4, 4);
+		await settle(app);
+
+		const after = document.querySelector('[data-field="text"] input');
+		expect(after).toBe(input);
+		expect(after.value).toBe('Ship the bridge now');
+		expect(after.selectionStart).toBe(4);
+		expect(after.selectionEnd).toBe(4);
 	});
 
 	it('reports a malformed number before it ever reaches the wire', async () => {

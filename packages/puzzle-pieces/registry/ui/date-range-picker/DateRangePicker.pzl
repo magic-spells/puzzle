@@ -237,7 +237,7 @@ export default class DateRangePicker extends PuzzleView {
     this._pendingRestoreFocus = true; // whether the next close returns focus to the trigger
     // Local UI state (open placement + hover preview). Never returned from data() as `open`
     // when controlled — `props.open` wins there.
-    this.setData({ uncontrolledOpen: false, placement: 'bottom', preview: '' });
+    this.setState({ uncontrolledOpen: false, placement: 'bottom', preview: '' });
   }
 
   mounted() {
@@ -400,13 +400,12 @@ export default class DateRangePicker extends PuzzleView {
     if (this._effectiveOpen()) return;
     const placement = this._decidePlacement();
     if (this._controlled()) {
-      this.setData({ placement });
+      this.setState({ placement });
     } else {
-      this.setData({ uncontrolledOpen: true, placement });
+      this.setState({ uncontrolledOpen: true, placement });
     }
     const { show } = this.props;
     if (typeof show === 'function') show();
-    if (!this._controlled()) this.refresh();
   }
 
   _requestClose({ restoreFocus = true } = {}) {
@@ -415,8 +414,7 @@ export default class DateRangePicker extends PuzzleView {
     const { hide } = this.props;
     if (typeof hide === 'function') hide();
     if (this._controlled()) return; // parent unmounts the panel; focus return in _onClosed
-    this.setData({ uncontrolledOpen: false });
-    this.refresh();
+    this.setState({ uncontrolledOpen: false });
   }
 
   // ---- open / close side-effects -------------------------------------------
@@ -442,7 +440,9 @@ export default class DateRangePicker extends PuzzleView {
       if (!this._effectiveOpen() || !this.element) return;
       const corrected = this._measurePlacement();
       if (corrected !== this.getData().placement) {
-        this.setData({ placement: corrected });
+        this.setState({ placement: corrected });
+        // refresh() on purpose: a correction measured off the rendered panel has to
+        // paint this frame, and a setState() render would land a frame late.
         this.refresh();
       }
     });
@@ -450,7 +450,7 @@ export default class DateRangePicker extends PuzzleView {
 
   _onClosed() {
     document.removeEventListener('pointerdown', this._onDocPointer);
-    this.setData({ placement: 'bottom', preview: '' });
+    this.setState({ placement: 'bottom', preview: '' });
     if (this._pendingRestoreFocus) {
       this.element?.querySelector('[data-drp-trigger]')?.focus();
     }
@@ -527,15 +527,13 @@ export default class DateRangePicker extends PuzzleView {
       const { start, end } = this._value(this.props);
       const iso = event.target.closest('[data-iso]')?.getAttribute('data-iso');
       if (start && !end && iso && iso !== this.getData().preview) {
-        this.setData('preview', iso);
-        this.refresh();
+        this.setState('preview', iso);
       }
     },
 
     onDayLeave: () => {
       if (this.getData().preview) {
-        this.setData('preview', '');
-        this.refresh();
+        this.setState('preview', '');
       }
     },
   };

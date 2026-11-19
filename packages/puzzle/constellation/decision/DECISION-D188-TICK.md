@@ -16,7 +16,7 @@ connections:
 
 ## Context
 
-`setData()` and store mutations schedule a render without returning a promise. View code that reads a ref or measures the DOM after the change needs to wait for that render to land.
+`setState()` and store mutations schedule a render without returning a promise. View code that reads a ref or measures the DOM after the change needs to wait for that render to land.
 
 ## Decision
 

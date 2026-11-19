@@ -77,8 +77,8 @@ const codeHero = `<Toggle variant="outline" pressed={ bold } @change={ setBold }
 
 // parent — owns each pressed boolean, flips it from @change
 events = {
-  setBold: (v) => this.setData('bold', v),
-  setItalic: (v) => this.setData('italic', v),
+  setBold: (v) => this.setState('bold', v),
+  setItalic: (v) => this.setState('italic', v),
 };`;
 
 const codeVariants = `<Toggle pressed={ a } @change={ setA }>Default</Toggle>
@@ -90,7 +90,7 @@ const codeSizes = `<Toggle size="sm" pressed={ a } @change={ setA }>Small</Toggl
 
 export default class ToggleDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       bold: true,
       italic: false,
       vDefault: true,
@@ -120,13 +120,13 @@ export default class ToggleDoc extends PuzzleView {
   }
 
   events = {
-    setBold: (v) => this.setData('bold', v),
-    setItalic: (v) => this.setData('italic', v),
-    setVDefault: (v) => this.setData('vDefault', v),
-    setVOutline: (v) => this.setData('vOutline', v),
-    setSSm: (v) => this.setData('sSm', v),
-    setSMd: (v) => this.setData('sMd', v),
-    setSLg: (v) => this.setData('sLg', v),
+    setBold: (v) => this.setState('bold', v),
+    setItalic: (v) => this.setState('italic', v),
+    setVDefault: (v) => this.setState('vDefault', v),
+    setVOutline: (v) => this.setState('vOutline', v),
+    setSSm: (v) => this.setState('sSm', v),
+    setSMd: (v) => this.setState('sMd', v),
+    setSLg: (v) => this.setState('sLg', v),
   };
 }
 </script>

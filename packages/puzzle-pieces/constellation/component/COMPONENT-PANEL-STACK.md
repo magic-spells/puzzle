@@ -61,7 +61,7 @@ a stack that starts deep can still pop back.
 FOUND IN BROWSER SMOKE. Upstream dispatches `panel-stack:push` and `:pop` BEFORE
 mutating the stack (push must be cancelable; pop restores focus around the frame
 it drops). A synchronous `props.change?.()` therefore re-enters the component
-mid-navigation: the parent's setData/refresh runs `afterUpdate`, which sees a
+mid-navigation: the parent's setState/refresh runs `afterUpdate`, which sees a
 stack that has not moved, decides the handles differ, and pushes a SECOND time —
 depth 4 for two clicks. Reading `detail.toHandle` instead fixes the reported value
 but not the re-entrancy. One `queueMicrotask` fixes both, which is also why the

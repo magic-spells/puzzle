@@ -115,22 +115,22 @@
               <h2 class="m-0 px-2 py-1 text-[11px] font-semibold text-ink">
                 State layers
                 <span class="ml-1 font-normal text-[10px] text-muted">
-                  a later setData() wins until the next data() commit replaces the model layer
+                  a later setState() wins until the next data() commit replaces the derived layer
                 </span>
               </h2>
               <div class="p-2 pt-0 grid gap-2 grid-cols-1 lg:grid-cols-2">
                 <StateGroup
-                  title="data() model layer"
+                  title="data() derived layer"
                   tone="model"
                   hint="Replaced wholesale on every data() commit."
                   entries={ modelEntries }
                   emptyLabel="data() returned nothing" />
                 <StateGroup
-                  title="setData() local layer"
+                  title="setState() state layer"
                   tone="local"
                   hint="Persistent UI state; survives data() re-runs."
                   entries={ localEntries }
-                  emptyLabel="no setData() state" />
+                  emptyLabel="no setState() state" />
               </div>
             </section>
 
@@ -209,7 +209,7 @@ const KIND_DOT = {
 
 export default class ViewsView extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       // id -> true. Collapsed is the exception, so a view that appears while the
       // panel is open shows up expanded rather than hidden inside a closed node.
       closed: {},
@@ -276,7 +276,7 @@ export default class ViewsView extends PuzzleView {
     const selectedId = local.selectedId;
     const selectedRecord = selectedId == null ? null : store.findOne('pview', selectedId);
 
-    // The selected view was re-rendered by a flush — its model layer changed, so
+    // The selected view was re-rendered by a flush — its derived layer changed, so
     // the detail pane is showing stale values until we ask again.
     if (selectedRecord) {
       const pulseAt = selectedRecord.pulseAt ?? 0;
@@ -346,7 +346,7 @@ export default class ViewsView extends PuzzleView {
     takeViewSelection();
     clearTimeout(this._inspectTimer);
     this._seenPulseAt = 0;
-    this.setData({ selectedId: id, inspect: null, inspectError: '' });
+    this.setState({ selectedId: id, inspect: null, inspectError: '' });
     this.loadInspect(id);
   }
 
@@ -432,19 +432,17 @@ export default class ViewsView extends PuzzleView {
 
   async loadTree() {
     if (this.isDestroyed || !this.connected()) return;
-    this.setData({ loadingTree: true, treeError: '' });
-    this.refresh();
+    this.setState({ loadingTree: true, treeError: '' });
     try {
       const result = await api.snapshotViews();
       if (this.isDestroyed) return;
       applyViewSnapshot(result?.roots);
     } catch (err) {
       if (this.isDestroyed) return;
-      this.setData('treeError', err?.message ?? String(err));
+      this.setState('treeError', err?.message ?? String(err));
     } finally {
       if (!this.isDestroyed) {
-        this.setData('loadingTree', false);
-        this.refresh();
+        this.setState('loadingTree', false);
       }
     }
   }
@@ -474,26 +472,22 @@ export default class ViewsView extends PuzzleView {
       // A slow answer for a view the user already navigated away from must not
       // overwrite the pane.
       if (this.getData().selectedId !== id) return;
-      this.setData({ inspect: result ?? null, inspectError: '' });
+      this.setState({ inspect: result ?? null, inspectError: '' });
       const record = this.ctx.store.findOne('pview', id);
       if (record) record.update({ inspected: result ?? null, inspectedAt: Date.now() });
     } catch (err) {
       if (this.isDestroyed || this.getData().selectedId !== id) return;
-      this.setData({ inspect: null, inspectError: err?.message ?? String(err) });
-    } finally {
-      if (!this.isDestroyed) this.refresh();
+      this.setState({ inspect: null, inspectError: err?.message ?? String(err) });
     }
   }
 
   flash(message) {
     clearTimeout(this._toastTimer);
-    this.setData('toast', message);
-    this.refresh();
+    this.setState('toast', message);
     this._toastTimer = setTimeout(() => {
       this._toastTimer = null;
       if (this.isDestroyed) return;
-      this.setData('toast', '');
-      this.refresh();
+      this.setState('toast', '');
     }, TOAST_MS);
   }
 
@@ -506,8 +500,7 @@ export default class ViewsView extends PuzzleView {
       if (previous != null) api.highlightView(previous, false).catch(noop);
       clearTimeout(this._inspectTimer);
       this._seenPulseAt = 0;
-      this.setData({ selectedId: id, inspect: null, inspectError: '' });
-      this.refresh();
+      this.setState({ selectedId: id, inspect: null, inspectError: '' });
       this.loadInspect(id);
     },
 
@@ -515,8 +508,7 @@ export default class ViewsView extends PuzzleView {
       const closed = { ...this.getData().closed };
       if (closed[id]) delete closed[id];
       else closed[id] = true;
-      this.setData('closed', closed);
-      this.refresh();
+      this.setState('closed', closed);
     },
 
     hoverOn: (id) => {

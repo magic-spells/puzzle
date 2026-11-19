@@ -61,7 +61,7 @@ const KNOWLEDGE = [
   {
     keywords: ['store', 'reactive', 'reactivity', 'data', 'record', 'model', 'subscribe'],
     answer:
-      "The store is a reactive datastore. Any query you run inside data() — findOne, findMany — auto-subscribes the component, so when a matching record changes the component's data() re-runs and the view patches. That's how a streamed token lands: the assistant message record is update()'d through the store on every word, which re-renders this thread AND bumps the conversation to the top of the sidebar. Local UI state that shouldn't trigger a re-query uses setData() instead.",
+      "The store is a reactive datastore. Any query you run inside data() — findOne, findMany — auto-subscribes the component, so when a matching record changes the component's data() re-runs and the view patches. That's how a streamed token lands: the assistant message record is update()'d through the store on every word, which re-renders this thread AND bumps the conversation to the top of the sidebar. Local UI state that shouldn't trigger a re-query uses setState() instead.",
   },
   {
     keywords: ['event', 'modifier', 'prevent', 'stop', 'keydown', 'submit', 'handler'],

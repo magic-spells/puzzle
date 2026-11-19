@@ -68,7 +68,7 @@ describe('renderTick() (D188)', () => {
 
 	it('waits for a scheduled local render, with concurrent callers', async () => {
 		const { app, view, el } = await mount(Local);
-		view.setData('n', 1);
+		view.setState('n', 1);
 		const a = view.renderTick();
 		const b = view.renderTick();
 		const state = watch(a);
@@ -85,11 +85,11 @@ describe('renderTick() (D188)', () => {
 		class Cascade extends Local {
 			afterUpdate() {
 				const n = this.getData().n;
-				if (n < 3) this.setData('n', n + 1);
+				if (n < 3) this.setState('n', n + 1);
 			}
 		}
 		const { app, view, el } = await mount(Cascade);
-		view.setData('n', 1);
+		view.setState('n', 1);
 		const pending = view.renderTick();
 		const state = watch(pending);
 		await frame();
@@ -106,11 +106,11 @@ describe('renderTick() (D188)', () => {
 	it('includes a render queued by an update hook microtask', async () => {
 		class Cascade extends Local {
 			afterUpdate() {
-				if (this.getData().n === 1) Promise.resolve().then(() => this.setData('n', 2));
+				if (this.getData().n === 1) Promise.resolve().then(() => this.setState('n', 2));
 			}
 		}
 		const { app, view, el } = await mount(Cascade);
-		view.setData('n', 1);
+		view.setState('n', 1);
 		const pending = view.renderTick();
 		const state = watch(pending);
 		await frame();
@@ -118,7 +118,7 @@ describe('renderTick() (D188)', () => {
 		await frame();
 		await pending;
 		expect(el.textContent).toBe('2');
-		view.setData('n', 3);
+		view.setState('n', 3);
 		const next = view.renderTick();
 		await frame();
 		await next;
@@ -129,7 +129,7 @@ describe('renderTick() (D188)', () => {
 		class Notes extends PuzzleView {
 			data() { return { notes: this.ctx.store.findMany('note') }; }
 			afterUpdate() {
-				if (this.getData().notes.length && !this.getData().ready) this.setData('ready', true);
+				if (this.getData().notes.length && !this.getData().ready) this.setState('ready', true);
 			}
 			render() { return text(`${this.getData().notes.length}:${this.getData().ready ?? false}`); }
 		}
@@ -169,10 +169,10 @@ describe('renderTick() (D188)', () => {
 		}
 		class Parent extends PuzzleView {
 			render() { return new ViewNode('puzzle-view', {}, [new ViewNode(Child)]); }
-			afterUpdate() { child.setData('n', 2); }
+			afterUpdate() { child.setState('n', 2); }
 		}
 		const { app, view, el } = await mount(Parent);
-		view.setData('changed', true);
+		view.setState('changed', true);
 		const pending = view.renderTick();
 		await frame();
 		await frame();
@@ -186,7 +186,7 @@ describe('renderTick() (D188)', () => {
 		const raf = vi.fn();
 		vi.stubGlobal('requestAnimationFrame', raf);
 		app.store.createRecord('note', { id: 'a', text: 'first' });
-		view.setData('n', 4);
+		view.setState('n', 4);
 		const pending = view.renderTick();
 		await vi.runAllTimersAsync();
 		await pending;
@@ -198,7 +198,7 @@ describe('renderTick() (D188)', () => {
 	it('finishes when a tab hides after scheduling and ignores a late frame', async () => {
 		const { app, view, el } = await mount(Local);
 		const render = vi.spyOn(view, 'render');
-		view.setData('n', 5);
+		view.setState('n', 5);
 		const pending = view.renderTick();
 		const state = watch(pending);
 		await vi.advanceTimersByTimeAsync(219);
@@ -213,7 +213,7 @@ describe('renderTick() (D188)', () => {
 	it('ends at the frame for jobs a manual flush or destruction already satisfied', async () => {
 		const { app, view } = await mount(Local);
 		const render = vi.spyOn(view, 'render');
-		view.setData('n', 1);
+		view.setState('n', 1);
 		app.store.createRecord('note', { id: 'a', text: 'first' });
 		const pending = view.renderTick();
 		app.store.flush();
@@ -227,7 +227,7 @@ describe('renderTick() (D188)', () => {
 	it('ends at the frame for a view job an immediate render satisfied', async () => {
 		const { view, el } = await mount(Local);
 		const render = vi.spyOn(view, 'render');
-		view.setData('n', 1);
+		view.setState('n', 1);
 		const pending = view.renderTick();
 		view.flushUpdates();
 		expect(el.textContent).toBe('1');
@@ -243,13 +243,13 @@ describe('renderTick() (D188)', () => {
 			beforeUpdate() { throw new Error('broken update'); }
 		}
 		const { app, view } = await mount(Broken);
-		view.setData('n', 1);
+		view.setState('n', 1);
 		const pending = view.renderTick();
 		await frame();
 		await pending;
 		expect(view.isDestroyed).toBe(true);
 		const { view: next, el } = await mount(Local);
-		next.setData('n', 2);
+		next.setState('n', 2);
 		const nextTick = next.renderTick();
 		await frame();
 		await nextTick;

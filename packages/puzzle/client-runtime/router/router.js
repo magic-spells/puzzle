@@ -1848,7 +1848,7 @@ export class Router {
 			// reused ancestors alike) receives slot content whose descendants describe
 			// the NEW chain. Swapping only at the divergence level and leaving ancestors
 			// holding their old vnodes would let any later ancestor re-render (store
-			// change, setData) push the stale sub-chain back down and revert the swap.
+			// change, setState) push the stale sub-chain back down and revert the swap.
 			//
 			// Keys: a REUSED level keeps its committed key, so the keyed patch reuses
 			// the instance (children pushed through, no data() re-run — props are just

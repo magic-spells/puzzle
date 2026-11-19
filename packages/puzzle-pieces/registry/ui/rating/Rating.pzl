@@ -105,7 +105,7 @@ function clamp(v, lo, hi) {
 
 export default class Rating extends PuzzleView {
   created() {
-    this.setData({ hover: 0 });
+    this.setState({ hover: 0 });
   }
 
   data(params, props) {
@@ -196,14 +196,12 @@ export default class Rating extends PuzzleView {
 
     onHover: (value) => {
       if (this.props.disabled) return;
-      this.setData('hover', value);
-      this.refresh();
+      this.setState('hover', value);
     },
 
     onLeave: () => {
       if (this.getData().hover === 0) return;
-      this.setData('hover', 0);
-      this.refresh();
+      this.setState('hover', 0);
     },
 
     onKeyDown: (event) => {

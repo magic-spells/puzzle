@@ -59,7 +59,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 //   // events = {
 //   //   finish: ({ result }) => {
-//   //     this.setData('open', false);
+//   //     this.setState('open', false);
 //   //     if (result === 'confirm') this.deleteProject();
 //   //   },
 //   // };

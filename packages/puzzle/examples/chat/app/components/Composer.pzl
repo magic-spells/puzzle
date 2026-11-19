@@ -18,7 +18,7 @@
 
     <!-- Row 2: controls — model selector (left) + send button (right). -->
     <div class="flex items-center justify-between gap-2 pt-1">
-      <!-- Model selector: local UI state via setData (NOT data()), same as draft.
+      <!-- Model selector: local UI state via setState (NOT data()), same as draft.
            A real <select> for a11y, styled quiet, with a ▾ affordance. -->
       <div class="relative inline-flex items-center">
         <select
@@ -59,12 +59,12 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // The message input, restyled as a modern AI-chat input card: one bordered
 // bg-surface-2 card holding the (chrome-free) text row and a controls row with a
 // model selector and a send button. Both `draft` and `model` are LOCAL UI state
-// (setData, not data()); `send` is a callback prop the parent supplies, and
+// (setState, not data()); `send` is a callback prop the parent supplies, and
 // `disabled` (streaming) comes in as a prop. value={ draft } is the two-way input
 // binding; @keydown:escape clears it.
 export default class Composer extends PuzzleView {
   created() {
-    this.setData({ draft: '', model: 'puzzle-core' });
+    this.setState({ draft: '', model: 'puzzle-core' });
   }
 
   data(params, props) {
@@ -76,17 +76,16 @@ export default class Composer extends PuzzleView {
       // template's disabled=.
       hasDraft: draft.trim() !== '',
       // Surfaced for the controlled <select value={ model }> — still pure local
-      // UI state managed by setData (never sourced from props/store), like draft.
+      // UI state managed by setState (never sourced from props/store), like draft.
       model: this.getData().model ?? 'puzzle-core',
       busy: props.disabled || false,
     };
   }
 
-  // hasDraft is derived in data(); setData() alone does not re-run data(), so
-  // every draft write refreshes to recompute it.
+  // hasDraft is derived in data() from draft, so every draft write re-runs
+  // data() before the next render.
   setDraft(text) {
-    this.setData('draft', text);
-    this.refresh();
+    this.setState('draft', text);
   }
 
   events = {
@@ -97,7 +96,7 @@ export default class Composer extends PuzzleView {
       this.setDraft('');
     },
     pickModel: (event) => {
-      this.setData('model', event.target.value);
+      this.setState('model', event.target.value);
     },
     submit: () => {
       const text = (this.getData().draft || '').trim();

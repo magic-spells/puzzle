@@ -976,13 +976,13 @@ record. Ops: `rerender`, `rerender-dirty`, `type-local`, `type-store`,
 
 The two typing targets are the A/B:
 
-- `.fs-draft` — `setData('draftText', …)`. The **local** layer: re-render only,
-  `data()` never re-runs.
+- `.fs-draft` — `setState('draftText', …)`. The **local** layer: `data()` never
+  reads `draftText`, so the write re-renders only and `data()` never re-runs.
 - `.fs-bound` — `record.update({ text })`. The **model** layer: validate,
   notify, `data()`, render.
 
 `draftText` is a key `data()` deliberately never returns. If it did,
-`#recompose()`'s `{ ...#local, ...#model }` would overlay the model value on the
+`#recompose()`'s `{ ...#state, ...#derived }` would overlay the model value on the
 local one and the first store flush would erase the draft mid-typing. That
 clobber is documented in the scenario rather than counted — its interesting form
 depends on flush timing and is not deterministic.
@@ -1011,7 +1011,7 @@ be an input, and which the runner's clamp guard would rightly reject).
 | --- | ---: | ---: | ---: | ---: | ---: |
 | `rerender` (clean) | 20 | 20 | **0** | **0** | 0 |
 | `rerender-dirty` (control) | 20 | 20 | 4,000 | **4,000** | 0 |
-| `type-local` (setData) | 200 | **0** | 0 | **0** | 0 |
+| `type-local` (setState) | 200 | **0** | 0 | **0** | 0 |
 | `type-store` (record.update) | 200 | 200 | 0 | 0 | **600** |
 | `type-event` (gate) | 2 | 1 | 0 | 0 | 3 |
 
@@ -1036,7 +1036,7 @@ no-syntax escape — is not usable here: it is not a valid `<select>` attribute,
 and on the inputs it would remove the interactivity that `type-event` and
 `opValidate()` rely on. The two typing targets need no escape at all; their
 author-written `@input` handlers suppress synthesis by themselves, which is also
-what keeps `.fs-draft` on the local layer and `.fs-bound` on the model layer.
+what keeps `.fs-draft` on the state layer and `.fs-bound` on the derived layer.
 
 ### Both controlled form properties write only on a real change
 
@@ -1496,7 +1496,7 @@ covers that directly, on the same records and the same rows. A second scenario
 would measure the same code twice.
 
 `form-state` **is now built** (scenario 11 above), and it grew past the original
-one-line plan: "`setData` throughput under a typing burst" turned out to be the
+one-line plan: "`setState` throughput under a typing burst" turned out to be the
 *cheap* half of the question. The expensive half is what the rest of the form
 pays for that keystroke.
 

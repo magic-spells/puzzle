@@ -52,7 +52,7 @@ transitions:
       focus
   - from: mounted
     to: updating
-    action: a store change matching a tracked query, refresh(), setData(), or a parent prop or slot update
+    action: a store change matching a tracked query, refresh(), setState(), or a parent prop or slot update
   - from: updating
     to: mounted
     action: >-
@@ -152,7 +152,7 @@ stateDiagram-v2
   skeleton --> mounted: first data() commits (after any min-duration hold)
   loading --> mounted: data() resolved, first tree rendered
   loading --> destroyed: destroyed while data() was awaited
-  mounted --> updating: store change / refresh / setData / parent update
+  mounted --> updating: store change / refresh / setState / parent update
   updating --> mounted: beforeUpdate, patch, afterUpdate(prev)
   mounted --> preparing: prepareRefresh() for a gated navigation
   preparing --> mounted: commit — swap params, route, model, subscriptions
@@ -173,8 +173,8 @@ stateDiagram-v2
   that misses queues a fetch and re-runs the pass instead of committing (D161), so one
   `loading` phase can span several fetch rounds.
 - **updating** is reached two ways that look the same in the DOM: a `data()` re-run
-  (model layer replaced, subscriptions re-derived to exactly what the run queried) or
-  `setData()` (local layer only, no re-run). `afterUpdate(prev)` gets a frozen shallow
+  (derived layer replaced, subscriptions re-derived to exactly what the run queried) or
+  `setState()` (state layer only, no re-run). `afterUpdate(prev)` gets a frozen shallow
   copy of the props, params, route and merged data the previous render drew; it never
   fires for the first render, which is `mounted()`. Trigger table: [[FLOW-REACTIVITY]].
 - **preloaded** makes the navigation commit atomic: `created()` + `data()` run with no

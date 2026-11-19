@@ -69,7 +69,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   Omitting the snippet keeps the `{ item }` text fallback.
 //
 // PERFORMANCE. The native scroll handler derives the first visible row and
-// refreshes only when the overscanned start bucket changes — scrolling within
+// writes state only when the overscanned start bucket changes — scrolling within
 // one row is a no-op. Rendered rows are keyed, and overflow anchoring is disabled
 // so changing spacer heights cannot make the browser fight the scroll position.
 //
@@ -110,7 +110,9 @@ function itemKey(item, index, field) {
 
 export default class VirtualList extends PuzzleView {
   created() {
-    this._windowStart = 0;
+    // the first rendered row. data() reads it through getState(), so a scroll
+    // that moves the bucket re-runs data() with the next render.
+    this.setState({ windowStart: 0 });
     this._warnedRowHeight = false;
   }
 
@@ -140,8 +142,7 @@ export default class VirtualList extends PuzzleView {
     const visibleCount = Math.max(1, Math.ceil(viewportHeight / rowHeight) + 1);
     const windowCount = visibleCount + overscan * 2;
     const maxStart = Math.max(0, items.length - windowCount);
-    const start = clamp(this._windowStart, 0, maxStart);
-    this._windowStart = start;
+    const start = clamp(this.getState().windowStart || 0, 0, maxStart);
 
     const end = Math.min(items.length, start + windowCount);
     const visibleRows = items.slice(start, end).map((item, offset) => {
@@ -180,10 +181,7 @@ export default class VirtualList extends PuzzleView {
       const { rowHeight, overscan, maxStart } = this.getData();
       const firstVisible = Math.floor(Math.max(0, event.target.scrollTop) / rowHeight);
       const nextStart = clamp(firstVisible - overscan, 0, maxStart);
-      if (nextStart !== this._windowStart) {
-        this._windowStart = nextStart;
-        this.refresh();
-      }
+      if (nextStart !== this.getState().windowStart) this.setState({ windowStart: nextStart });
     },
   };
 }

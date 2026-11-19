@@ -157,10 +157,10 @@ const codeHero = `<DateRangePicker
 
 // parent — value is { start, end } ISO strings
 created() {
-  this.setData({ range: { start: '', end: '' } });
+  this.setState({ range: { start: '', end: '' } });
 }
 events = {
-  setRange: (range) => this.setData('range', range),
+  setRange: (range) => this.setState('range', range),
 };`;
 
 const codeTwo = `<!-- two side-by-side month grids sharing the range band -->
@@ -200,8 +200,8 @@ const codeControlled = `<!-- pass open + @show/@hide to own the open state -->
   @hide={ onHide } />
 
 events = {
-  onShow: () => this.setData('open', true),
-  onHide: () => this.setData('open', false),
+  onShow: () => this.setState('open', true),
+  onHide: () => this.setState('open', false),
 };`;
 
 // Mirror of the live day-snippet example above — keep the two in sync.
@@ -241,7 +241,7 @@ const presets = [
 
 export default class DateRangePickerDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       heroRange: { start: '', end: '' },
       twoRange: { start: '2026-07-14', end: '2026-07-22' },
       presetRange: { start: '', end: '' },
@@ -284,24 +284,21 @@ export default class DateRangePickerDoc extends PuzzleView {
   }
 
   events = {
-    setHeroRange: (range) => this.setData('heroRange', range),
-    setTwoRange: (range) => this.setData('twoRange', range),
-    setPresetRange: (range) => this.setData('presetRange', range),
-    setBoundedRange: (range) => this.setData('boundedRange', range),
-    setEventRange: (range) => this.setData('eventRange', range),
-    setErrorRange: (range) => this.setData('errorRange', range),
-    setControlledRange: (range) => this.setData('controlledRange', range),
+    setHeroRange: (range) => this.setState('heroRange', range),
+    setTwoRange: (range) => this.setState('twoRange', range),
+    setPresetRange: (range) => this.setState('presetRange', range),
+    setBoundedRange: (range) => this.setState('boundedRange', range),
+    setEventRange: (range) => this.setState('eventRange', range),
+    setErrorRange: (range) => this.setState('errorRange', range),
+    setControlledRange: (range) => this.setState('controlledRange', range),
     toggleOpen: () => {
-      this.setData('controlledOpen', !this.getData().controlledOpen);
-      this.refresh();
+      this.setState('controlledOpen', !this.getData().controlledOpen);
     },
     onShow: () => {
-      this.setData('controlledOpen', true);
-      this.refresh();
+      this.setState('controlledOpen', true);
     },
     onHide: () => {
-      this.setData('controlledOpen', false);
-      this.refresh();
+      this.setState('controlledOpen', false);
     },
   };
 }

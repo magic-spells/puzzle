@@ -188,12 +188,11 @@ export default class ListingView extends PuzzleView {
 
   events = {
     // Calendar reports its selection here; either date may be '' mid-selection.
-    // setData updates local state (it does NOT re-run data()), then refresh()
-    // re-renders so the new dates re-prop the Calendar + BookingWidget.
+    // data() reads checkIn/checkOut, so the setState re-runs it and the new dates
+    // re-prop the Calendar + BookingWidget.
     onDatesSelect: (event) => {
       const sel = event || {};
-      this.setData({ checkIn: sel.checkIn || '', checkOut: sel.checkOut || '' });
-      this.refresh();
+      this.setState({ checkIn: sel.checkIn || '', checkOut: sel.checkOut || '' });
     },
 
     // Reserve: create a local trip and jump to the trips list. Locally-created

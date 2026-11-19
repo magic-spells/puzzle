@@ -11,7 +11,7 @@ export default class SnippetList extends PuzzleView {
       const users = this.getData().users.map((user, index) => (
         index === 0 ? { ...user, name: `${user.name}!` } : user
       ));
-      this.setData('users', users);
+      this.setState('users', users);
     },
   };
 }

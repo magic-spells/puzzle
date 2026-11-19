@@ -128,8 +128,8 @@ const codeHero = `<Meter
 
 // parent
 events = {
-  bump: () => this.setData({ disk: Math.min(100, this.getData().disk + 10) }),
-  reset: () => this.setData({ disk: 30 }),
+  bump: () => this.setState({ disk: Math.min(100, this.getData().disk + 10) }),
+  reset: () => this.setState({ disk: 30 }),
 };`;
 
 const codeBands = `// low/high split the range into three bands; optimum={ 0 } means
@@ -165,7 +165,7 @@ const codeSizes = `<Meter value={ 40 } low={ 60 } high={ 85 } optimum={ 0 } size
 
 export default class MeterDoc extends PuzzleView {
   created() {
-    this.setData({ disk: 72 });
+    this.setState({ disk: 72 });
   }
 
   data(params, props) {
@@ -194,12 +194,10 @@ export default class MeterDoc extends PuzzleView {
 
   events = {
     bump: () => {
-      this.setData({ disk: Math.min(100, this.getData().disk + 10) });
-      this.refresh();
+      this.setState({ disk: Math.min(100, this.getData().disk + 10) });
     },
     reset: () => {
-      this.setData({ disk: 30 });
-      this.refresh();
+      this.setState({ disk: 30 });
     },
   };
 }

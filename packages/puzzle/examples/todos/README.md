@@ -51,7 +51,7 @@ events = {
     const text = this.getData().newTodoText.trim();
     if (text) {
       this.ctx.store.createRecord('todo', { text });
-      this.setData('newTodoText', '');
+      this.setState('newTodoText', '');
     }
   }
 };

@@ -143,11 +143,11 @@ let seq = 0;
 
 export default class Home extends PuzzleView {
   // The modal's imperative handle, delivered up by @ready. An instance field,
-  // never setData — it is not render state.
+  // never setState — it is not render state.
   modal = null;
 
   created() {
-    this.setData({ panelOpen: false });
+    this.setState({ panelOpen: false });
   }
 
   data() {
@@ -203,8 +203,8 @@ export default class Home extends PuzzleView {
       this.ctx.store.findMany('toast').forEach((t) => t.destroy());
     },
 
-    openPanel: () => this.setData('panelOpen', true),
-    closePanel: () => this.setData('panelOpen', false),
+    openPanel: () => this.setState('panelOpen', true),
+    closePanel: () => this.setState('panelOpen', false),
 
     modalReady: (handle) => {
       this.modal = handle;

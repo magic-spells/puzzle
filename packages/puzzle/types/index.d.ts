@@ -679,8 +679,9 @@ export interface PuzzleLocale {
  * Base class for every `.pzl` component, view, and layout
  * (constellation/doc/DOC-SPEC.md §4). Subclass it and override `data()` when
  * the model is more than the props;
- * the compiler attaches `render()` from the template. State lives in
- * `getData()`/`setData()`; reactive sources (store, props, route params) flow
+ * the compiler attaches `render()` from the template. Local state is written
+ * with `setState()` and read back with `getState()`; `getData()` is the merged
+ * model the template reads. Reactive sources (store, props, route params) flow
  * through `data()`. `Props` types `this.props`:
  * `class TodoItem extends PuzzleView<TodoItemProps>`.
  */
@@ -730,12 +731,19 @@ export declare class PuzzleView<Props = any> {
 	 */
 	data(params?: Record<string, string>, props?: Props): any | Promise<any>;
 
-	/** Read the current component model. */
+	/** Read the current component model: local state with data()'s values over it. */
 	getData<T = any>(): T;
 
-	/** Merge local UI state and schedule a re-render (does NOT re-run data()). */
-	setData(key: string, value: any): void;
-	setData(partial: Record<string, any>): void;
+	/** Read local state only (what setState() wrote), without data()'s values. */
+	getState<T = any>(): T;
+
+	/**
+	 * Merge local UI state and schedule a re-render. When the last data() run read
+	 * a written key through getData()/getState(), the render re-runs data() first
+	 * (once per burst of writes, D23).
+	 */
+	setState(key: string, value: any): void;
+	setState(partial: Record<string, any>): void;
 	/**
 	 * Wait for every pending store flush and scheduled view render to land,
 	 * including the ones they schedule (D188). Forces nothing, and does not await

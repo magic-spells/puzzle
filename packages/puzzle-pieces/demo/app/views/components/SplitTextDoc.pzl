@@ -288,11 +288,10 @@ const codeHero = `// trigger="load" fires on the next microtask instead of waiti
 <Button variant="outline" size="sm" @press={ replayHero }>Replay</Button>
 
 // in the view:
-created() { this.setData('heroPlay', 0); }
+created() { this.setState('heroPlay', 0); }
 events = {
   replayHero: () => {
-    this.setData('heroPlay', this.getData().heroPlay + 1);
-    this.refresh();
+    this.setState('heroPlay', this.getData().heroPlay + 1);
   },
 };`;
 
@@ -311,8 +310,7 @@ const codeChars = `// split="chars" masks every grapheme. Slow the stagger down 
 
 // @complete is value-first — it hands you { split, count }
 noteChars: ({ split, count }) => {
-  this.setData('charsNote', \`\${count} \${split}\`);
-  this.refresh();
+  this.setState('charsNote', \`\${count} \${split}\`);
 },`;
 
 const codeLines = `// Lines are measured, not guessed: the element splits on words, waits for
@@ -399,7 +397,7 @@ const cssRows = [
 
 export default class SplitTextDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       heroPlay: 0,
       charsPlay: 0,
       linesPlay: 0,
@@ -444,8 +442,7 @@ export default class SplitTextDoc extends PuzzleView {
   }
 
   #bump(key) {
-    this.setData(key, (this.getData()[key] || 0) + 1);
-    this.refresh();
+    this.setState(key, (this.getData()[key] || 0) + 1);
   }
 
   events = {
@@ -454,8 +451,7 @@ export default class SplitTextDoc extends PuzzleView {
     replayLines: () => this.#bump('linesPlay'),
     replayEffects: () => this.#bump('effectsPlay'),
     noteChars: ({ split, count }) => {
-      this.setData('charsNote', `${count} ${split}`);
-      this.refresh();
+      this.setState('charsNote', `${count} ${split}`);
     },
   };
 }

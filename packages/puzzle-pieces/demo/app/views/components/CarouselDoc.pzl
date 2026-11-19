@@ -131,8 +131,8 @@ const codeLoop = `// Controlled index: the parent owns \`value\`, props in / @ch
 </Carousel>
 
 // parent
-created() { this.setData('i', 0); }
-events = { setI: (index) => this.setData('i', index) };`;
+created() { this.setState('i', 0); }
+events = { setI: (index) => this.setState('i', index) };`;
 
 const codeDots = `// controls={ false } hides the arrows and leaves the dot row.
 // (dots={ false } would do the opposite.)
@@ -144,7 +144,7 @@ const codeDots = `// controls={ false } hides the arrows and leaves the dot row.
 
 export default class CarouselDoc extends PuzzleView {
   created() {
-    this.setData({ loopIdx: 0 });
+    this.setState({ loopIdx: 0 });
   }
 
   data(params, props) {
@@ -169,7 +169,7 @@ export default class CarouselDoc extends PuzzleView {
   }
 
   events = {
-    setLoopIdx: (index) => this.setData('loopIdx', index),
+    setLoopIdx: (index) => this.setState('loopIdx', index),
   };
 }
 </script>

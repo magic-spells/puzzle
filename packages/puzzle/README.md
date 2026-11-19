@@ -549,7 +549,7 @@ active prefix for you, and `this.ctx.i18n.locales` is a list of
 `await this.renderTick()` resolves once every pending store flush and scheduled render has landed, including renders those schedule (D188):
 
 ```js
-this.setData({ editing: true });
+this.setState({ editing: true });
 await this.renderTick();
 this.refs.editor.focus();
 ```

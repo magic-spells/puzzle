@@ -1,7 +1,7 @@
 import { PuzzleView } from "@magic-spells/puzzle";
 class HandlerFormsTs extends PuzzleView {
   created() {
-    this.setData("count", 0);
+    this.setState("count", 0);
   }
   events = {
     play(event) {
@@ -15,7 +15,7 @@ class HandlerFormsTs extends PuzzleView {
       return "this is fine";
     },
     bump: () => {
-      this.setData("count", this.getData().count + 1);
+      this.setState("count", this.getData().count + 1);
     }
   };
 }

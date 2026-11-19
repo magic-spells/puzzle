@@ -38,7 +38,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class DefaultLayout extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       version: '1.0.0'
     });
   }

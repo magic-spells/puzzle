@@ -245,7 +245,7 @@ Omit `routerMode` for path routing; a string like `'hash'` throws. App code is t
 
 ## Switching locale
 
-With `i18n` configured, `this.ctx.i18n.setLocale('es')` loads the new strings and rebuilds the current page in place: same URL, no history entry, no scroll or focus change, no animations. Store records survive; `setData` state starts fresh. The promise rejects if the page could not be rebuilt (§9, `examples/i18n`).
+With `i18n` configured, `this.ctx.i18n.setLocale('es')` loads the new strings and rebuilds the current page in place: same URL, no history entry, no scroll or focus change, no animations. Store records survive; `setState` state starts fresh. The promise rejects if the page could not be rebuilt (§9, `examples/i18n`).
 
 With `i18n.routing: 'prefix'` each non-default locale lives under its own URL prefix (`/es/about`) and `setLocale` loads that URL instead. Routes, `push()` and `this.route` stay prefix-free; `link()` adds the prefix (`link('/about', { locale: 'es' })` for another locale), and `ctx.i18n.locales` gives a switcher its `{ locale, label, href, active }` entries. Prefix routing needs path mode (§9, [[DECISION-D177-LOCALE-URL-PREFIXES]]).
 

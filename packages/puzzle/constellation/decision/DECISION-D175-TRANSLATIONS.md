@@ -242,7 +242,7 @@ the shared case table keeps the two in step.
   `data()` re-run, one-swap commit; no history entry, no enter/exit
   animations (nested components mount fresh and may animate), scroll and
   focus untouched. Same path as the errorView retry
-  ([[DECISION-D145-ERROR-BOUNDARIES]]). Store records survive; `setData`
+  ([[DECISION-D145-ERROR-BOUNDARIES]]). Store records survive; `setState`
   state does not (state that must survive belongs in the store).
 - **A navigation in flight wins.** If a push, `replace()`, pop, `go()` or an
   earlier rebuild is loading (`#pendingNavPromise`, filled via `#trackNav`),

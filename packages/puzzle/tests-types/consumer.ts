@@ -230,9 +230,13 @@ class TodoListView extends PuzzleView {
 			const title = this.getData<{ draft: string }>().draft;
 			// store is reachable via ctx; createRecord returns a record (any).
 			this.ctx.store.createRecord('todo', { title });
-			this.setData('draft', '');
+			this.setState('draft', '');
 		},
-		selectAll: () => this.setData({ filter: 'all', selectedId: null }),
+		selectAll: () => this.setState({ filter: 'all', selectedId: null }),
+		// getState() reads the state layer alone, typed by the caller like getData().
+		clearIfAll: () => {
+			if (this.getState<{ filter: string }>().filter === 'all') this.setState('draft', '');
+		},
 		// `@click={ rename(todo.id, draft) }`: a handler takes the call's arguments.
 		rename: (id: string, title: string) => this.ctx.store.findOne('todo', id)?.update({ title }),
 	};

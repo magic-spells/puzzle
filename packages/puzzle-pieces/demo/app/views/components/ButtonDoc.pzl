@@ -105,17 +105,15 @@ const codeStates = `<Button disabled>Disabled</Button>
 // parent
 events = {
   save: async () => {
-    this.setData({ saving: true });
-    this.refresh();
+    this.setState({ saving: true });
     await api.save();
-    this.setData({ saving: false });
-    this.refresh();
+    this.setState({ saving: false });
   },
 };`;
 
 export default class ButtonDoc extends PuzzleView {
   created() {
-    this.setData({ loading: false });
+    this.setState({ loading: false });
   }
 
   data(params, props) {
@@ -141,8 +139,7 @@ export default class ButtonDoc extends PuzzleView {
   events = {
     cheer: () => toast({ message: 'Buttons wire up @press callbacks.', variant: 'success' }),
     toggleLoading: () => {
-      this.setData({ loading: !this.getData().loading });
-      this.refresh();
+      this.setState({ loading: !this.getData().loading });
     },
   };
 }

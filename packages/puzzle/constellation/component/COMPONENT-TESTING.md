@@ -40,7 +40,7 @@ The published `@magic-spells/puzzle/testing` subpath (`client-runtime/testing/`)
 
 ## Settling
 
-`settled()` drains framework work to a fixed point: flush registered stores, apply scheduled renders, await current last-wins `data()` and navigation promises, and repeat until two unchanged passes — without waiting for a real frame or the hidden-tab timer. It reaches private promises by patching `PuzzleView.prototype` `refresh`/`setData`/`destroy` (once per realm, never removed) and wrapping each registered router's navigation methods (per instance, ref-counted, restored when the last handle goes). Wrappers preserve identity, return values and rejections; a newer refresh releases the older promise and a destroyed view releases its pending one. `app.idle()` ([[DECISION-D185-APP-IDLE]]) is the observing, production counterpart — it lives on `PuzzleApp`, not here.
+`settled()` drains framework work to a fixed point: flush registered stores, apply scheduled renders, await current last-wins `data()` and navigation promises, and repeat until two unchanged passes — without waiting for a real frame or the hidden-tab timer. It reaches private promises by patching `PuzzleView.prototype` `refresh`/`setState`/`destroy` (once per realm, never removed) and wrapping each registered router's navigation methods (per instance, ref-counted, restored when the last handle goes). Wrappers preserve identity, return values and rejections; a newer refresh releases the older promise and a destroyed view releases its pending one. `app.idle()` ([[DECISION-D185-APP-IDLE]]) is the observing, production counterpart — it lives on `PuzzleApp`, not here.
 
 ## Invariants
 

@@ -84,7 +84,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // showModal() traps focus and inerts the page, the top layer comes free, and
 // Escape arrives as the `cancel` event. Filtering, grouping, ranking, and
 // roving keyboard navigation are Puzzle-native: local UI state (query,
-// activeIndex) via setData + refresh(), imperative DOM only for focus and
+// activeIndex) via setState, imperative DOM only for focus and
 // scrollIntoView.
 //
 // THE OVERLAY IS A WRAPPER, NOT A PORT. Like Dialog, AlertDialog, Sheet and
@@ -170,7 +170,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   onHotkey: (e) => {
 //     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
 //       e.preventDefault();
-//       this.setData('cmdOpen', true);
+//       this.setState('cmdOpen', true);
 //     }
 //   }
 let uid = 0;
@@ -210,7 +210,7 @@ export default class Command extends PuzzleView {
     this._selfHiding = false;
     this._userHide = false;
     // Seed local UI state so the first data() run can read it back.
-    this.setData({ query: '', activeIndex: -1 });
+    this.setState({ query: '', activeIndex: -1 });
   }
 
   // Normalize `items` into a flat render list (`rows` — a mix of group headings
@@ -457,9 +457,11 @@ export default class Command extends PuzzleView {
     return active && active !== document.body && active.focus ? active : undefined;
   }
 
+  // refresh() on purpose: this runs on the open edge, and the palette must not
+  // paint one frame with the previous query and rows.
   _resetForOpen() {
     this._scrollActive = false;
-    this.setData({ query: '', activeIndex: -1 });
+    this.setState({ query: '', activeIndex: -1 });
     this.refresh();
   }
 
@@ -485,8 +487,7 @@ export default class Command extends PuzzleView {
   _setActive(i, scroll) {
     if (i < 0) return;
     this._scrollActive = !!scroll;
-    this.setData({ activeIndex: i });
-    this.refresh();
+    this.setState({ activeIndex: i });
   }
 
   _scrollActiveIntoView() {
@@ -499,12 +500,11 @@ export default class Command extends PuzzleView {
 
   events = {
     // Every keystroke re-filters, and activeIndex -1 tells data() to reseat the
-    // active row on the first enabled result (per spec). refresh() re-runs data()
-    // so the ranked/grouped rows recompute.
+    // active row on the first enabled result (per spec). data() reads both keys,
+    // so the write re-runs it and the ranked/grouped rows recompute.
     onInput: (event) => {
       this._scrollActive = false;
-      this.setData({ query: event.target.value, activeIndex: -1 });
-      this.refresh();
+      this.setState({ query: event.target.value, activeIndex: -1 });
     },
 
     moveDown: () => this._move(1),

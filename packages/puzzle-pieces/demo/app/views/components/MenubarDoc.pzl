@@ -305,7 +305,7 @@ const reference = [
 
 export default class MenubarDoc extends PuzzleView {
   created() {
-    this.setData({ pressed: 'nothing yet' });
+    this.setState({ pressed: 'nothing yet' });
   }
 
   data() {
@@ -330,8 +330,7 @@ export default class MenubarDoc extends PuzzleView {
 
   events = {
     run: (value) => {
-      this.setData('pressed', String(value));
-      this.refresh();
+      this.setState('pressed', String(value));
     },
   };
 }

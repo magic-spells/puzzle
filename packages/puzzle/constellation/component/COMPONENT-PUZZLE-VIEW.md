@@ -15,6 +15,7 @@ connections:
   - DECISION-D161-AUTO-FETCHING-FINDS
   - DECISION-D178-AFTERUPDATE-PREV
   - DECISION-D188-TICK
+  - DECISION-D191-SET-STATE-GET-STATE
 verified_at: '2026-11-01T19:26:46.557Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 notes:
@@ -51,12 +52,14 @@ handle, by this view, during its own evaluation, may fault
 
 ## State and refresh
 
-- Two layers: a successful `data(params, props)` REPLACES the model layer;
-  `setData()` writes a persistent local layer that wins until the next model
-  commit and rerenders without rerunning `data()`. Keep raw local values and
+- Two layers: a successful `data(params, props)` REPLACES the derived layer;
+  `setState()` writes a persistent state layer that wins until the next derived
+  commit. It rerenders, and when the last `data()` run read a written key
+  (through `getData()`/`getState()`) the render re-runs `data()` first, once
+  per burst ([[DECISION-D23-REFRESH-PATTERN]]). Keep raw local values and
   `data()`-derived display values under different keys, or the commit erases the
   raw one.
-- A `setData()` render goes through `schedule()` in `scheduler.js` (the shared
+- A `setState()` render goes through `schedule()` in `scheduler.js` (the shared
   [[DECISION-D63-HIDDEN-TAB-FLUSH]] frame rule). A render that lands first clears
   the flag, so the later frame is a no-op. `renderTick()` returns that module's
   `tick()`: it resolves once no store flush or view render is pending anywhere in
@@ -108,7 +111,7 @@ manager.
 ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]) is memoized the same way, so each
 (target, key, spec) has one handler identity. The handler skips mid-IME events,
 coerces (`v` string, `vn` number with `''` → `null` and NaN skipped, `c` boolean),
-then writes: local → `setData` + `refresh`; record (duck-typed `update` + string
+then writes: local → `setState` + `refresh`; record (duck-typed `update` + string
 `_type`; this file never imports model.js) → validated `update()`; plain object →
 mutate + repaint. Failures report as `phase: 'bind'`. Two dev-only diagnostics:
 a `data()` commit reverting a bound local key, and a bound plain object replaced
@@ -136,7 +139,7 @@ All are reserved by [[DOC-SPEC-ANATOMY]] §4 and never spelled in templates.
 - **No list method on the class, deliberately**: loops call `listRows` (imported
   as `__l`), and `PuzzleView` must never import `views/listBlock.js`, or loop-free
   apps pay for it ([[FILE-LIST-BLOCK]]).
-- Dev readers `_localState()`, `_modelState()`, `_vnodeTree()` serve the DevTools
+- Dev readers `_derived()`, `_vnodeTree()` (with the public `getState()`) serve the DevTools
   bridge ([[FILE-DEVTOOLS]]); profiler state lives in [[FILE-DEVPERF]] WeakMaps
   behind inline `__PUZZLE_DEV__` probes. Dev builds register mounted views with
   [[COMPONENT-DEVSTATE]].

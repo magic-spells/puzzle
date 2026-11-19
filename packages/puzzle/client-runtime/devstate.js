@@ -168,7 +168,7 @@ function getSessionStorage() {
  * positional shape can't survive omissions). Depth-capped and cycle-guarded so
  * a self-referential or deeply-nested model can never wedge the snapshot. The
  * store records that data() derived from queries are intentionally dropped —
- * the restored store re-provides them; only local setData state (drafts,
+ * the restored store re-provides them; only local setState state (drafts,
  * toggles, form fields) needs to cross the reload. Exported for direct testing.
  *
  * @param {unknown} data
@@ -272,17 +272,16 @@ function snapshotImpl(app) {
 			blob.read = null;
 		}
 
-		// View state: each live view's LOCAL layer (setData + created()-seeded
+		// View state: each live view's STATE layer (setState + created()-seeded
 		// state) through the JSON-safe filter (Change D). Only genuinely-local state
-		// crosses the reload — derived values in the model layer are recomputed by
+		// crosses the reload — derived values in the derived layer are recomputed by
 		// data(): against the transplanted store during navigation #0, then again
 		// after phase 2 restores the local state it may read. Serializing the merged
 		// getData() would wrongly pin stale derived values as local overrides.
-		// _localState() is PuzzleView's internal reader for exactly this
-		// (same-package convention, like store._serializeAll).
+		// getState() is PuzzleView's reader for exactly this layer.
 		for (const { key, view } of keyedViews()) {
 			try {
-				blob.views.push({ key, data: safeState(view._localState()) });
+				blob.views.push({ key, data: safeState(view.getState()) });
 			} catch {
 				// one unreadable view must not lose the rest
 			}
@@ -368,7 +367,7 @@ function restoreStoreImpl(app) {
 /**
  * Phase 2 of the two-phase HMR restore (D57 + Change D) — called by
  * PuzzleApp.mount() after the initial navigation has mounted the view chain,
- * with the blob returned by phase 1. Restores each saved view's LOCAL setData
+ * with the blob returned by phase 1. Restores each saved view's LOCAL setState
  * state onto its live keyed counterpart (store already transplanted in phase 1),
  * then refreshes it so data()-derived keys see the restored state.
  * Fail-soft: a null blob (cold start / expired / corrupt) or a missing view is a
@@ -392,7 +391,7 @@ function restoreViewsImpl(blob) {
 			try {
 				const view = byKey.get(entry?.key);
 				if (!view || !entry.data || typeof entry.data !== 'object') continue;
-				view.setData(entry.data);
+				view.setState(entry.data);
 				view.refresh();
 			} catch {
 				// a mis-shaped or missing view just cold-starts

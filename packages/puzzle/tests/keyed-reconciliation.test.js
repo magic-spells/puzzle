@@ -15,7 +15,7 @@ import { ViewNode } from '../client-runtime/views/ViewNode.js';
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
 const comp = (Class, attrs = {}, children = []) => new ViewNode(Class, attrs, children);
-// setData re-renders schedule through requestAnimationFrame (jsdom fires that on a
+// setState re-renders schedule through requestAnimationFrame (jsdom fires that on a
 // ~16ms timer), and a fresh child mount then resolves data() across microtasks —
 // so flush past several rAF ticks + microtask drains.
 const flush = async () => {
@@ -160,7 +160,7 @@ describe('first-mount failure recovery', () => {
 
 		// data() will now succeed; force the host to re-render this position.
 		shouldThrow = false;
-		host.setData({ n: 1 });
+		host.setState({ n: 1 });
 		await flush();
 
 		const child = el.querySelector('.child');
@@ -169,7 +169,7 @@ describe('first-mount failure recovery', () => {
 		expect(mountedInstances).toHaveLength(1); // a FRESH instance mounted and fired mounted()
 
 		// And the fresh instance is live — a local re-render works.
-		mountedInstances[0].setData({});
+		mountedInstances[0].setState({});
 		await flush();
 		expect(el.querySelector('.child').textContent).toBe('ok');
 	});
@@ -214,7 +214,7 @@ describe('first-mount failure recovery', () => {
 		expect(instances[0].isDestroyed).toBe(true);
 
 		shouldThrow = false;
-		host.setData({ n: 1 });
+		host.setState({ n: 1 });
 		await flush();
 
 		expect(instances).toHaveLength(2);
@@ -246,7 +246,7 @@ describe('first-mount failure recovery', () => {
 		await flush();
 		expect(err).toHaveBeenCalled();
 
-		host.setData({ show: false }); // unmount the failed child
+		host.setState({ show: false }); // unmount the failed child
 		await flush();
 		// No leftover comment placeholder or element under #host.
 		expect(el.querySelector('#host').childNodes).toHaveLength(0);

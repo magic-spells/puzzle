@@ -44,7 +44,7 @@ unmount, and [[COMPONENT-PUZZLE-VIEW]] from mount through destroy (the machine i
   navigation pipeline, terminal failure defaults, cleanup of the replaced position.
 - **View** (`view`, `memo`, `element-refs`, `skeleton-antiflash`,
   `render-null-clears-dom`, `view-prepare-scope-overlap`, `refresh-ownership`): the
-  two-layer `data()` / `setData()` split, tracked store reactivity across the full
+  two-layer `data()` / `setState()` split, tracked store reactivity across the full
   subscription loop, `refresh()` and stale-refresh ownership, `afterUpdate(prev)`,
   `memo()`, skeletons with the `min-duration` hold, element refs, `render()` returning
   null clearing the DOM without disturbing the skeleton path, `prepareRefresh` scope

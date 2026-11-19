@@ -21,10 +21,10 @@ import installFakeAnimate from './fake-waapi.js';
 let waapi = null;
 
 // ---- scheduling shims -------------------------------------------------------
-// Store notifications are rAF-batched and setData re-renders are rAF-batched.
+// Store notifications are rAF-batched and setState re-renders are rAF-batched.
 // settle() flushes both deterministically: store.flush() delivers pending record
 // notifications synchronously (subscribed views re-run data()); the rAF ticks let
-// any setData-scheduled renders run. Two rounds cover notifications queued during
+// any setState-scheduled renders run. Two rounds cover notifications queued during
 // a render.
 //
 // ANIMATION-FINISHING STRATEGY (constellation/doc/DOC-SPEC.md §12, point 10):

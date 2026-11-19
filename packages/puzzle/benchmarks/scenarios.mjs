@@ -821,20 +821,20 @@ export const OPS = [
 			{
 				...common,
 				id: 'form-state/type-local/200',
-				label: 'type-local (setData)',
+				label: 'type-local (setState)',
 				op: 'type-local',
 				expect: {
 					...shape,
 					fsKeystrokes: keystrokes,
 					fsRenders: keystrokes,
-					// ZERO. setData re-renders without ever re-running data(), which
-					// is the cheap path and half of the A/B.
+					// ZERO. data() never reads the typed key, so setState only
+					// re-renders (D23): the cheap path and half of the A/B.
 					fsDataRuns: 0,
 					fsInputValueWrites: 0,
 					fsSelectValueWrites: 0,
 					fsSchemaNormalizations: 0,
 				},
-				note: 'type-local drives 200 REAL input events into a field bound to the local layer, forcing flushUpdates() after each so the op is bounded by a count rather than by 200 frames of scheduler. data() never re-runs, and no select is written: typing into an unrelated field now touches zero HTMLSelectElement values across 200 renders, where it wrote 40,000 before reassertSelectValue compared first.',
+				note: 'type-local drives 200 REAL input events into a field bound to the state layer, forcing flushUpdates() after each so the op is bounded by a count rather than by 200 frames of scheduler. data() never re-runs, and no select is written: typing into an unrelated field now touches zero HTMLSelectElement values across 200 renders, where it wrote 40,000 before reassertSelectValue compared first.',
 			},
 			{
 				...common,
@@ -854,7 +854,7 @@ export const OPS = [
 					// its 24-entry map from scratch every time; nothing memoizes it.
 					fsSchemaNormalizations: keystrokes * 3,
 				},
-				note: 'type-store is type-local\'s A/B partner: the same 200 real keystrokes, the same grid, the same probes, routed through record.update() + store.flush() instead of setData(). Its delta against type-local is the only ms comparison here that is fair, because the instrument load is identical by construction. 600 normalizedSchema() calls for 200 single-field updates is 3 per keystroke, and none of them are memoized.',
+				note: 'type-store is type-local\'s A/B partner: the same 200 real keystrokes, the same grid, the same probes, routed through record.update() + store.flush() instead of setState(). Its delta against type-local is the only ms comparison here that is fair, because the instrument load is identical by construction. 600 normalizedSchema() calls for 200 single-field updates is 3 per keystroke, and none of them are memoized.',
 			},
 			{
 				...common,

@@ -23,7 +23,7 @@ const unsafe = [
 
 function tree(url, candidates = '/safe.png 1x') {
 	view = new Links();
-	view.setData({ url, candidates });
+	view.setState({ url, candidates });
 	return view.render();
 }
 
@@ -103,10 +103,10 @@ describe('dynamic URL bindings (D186)', () => {
 		tree('/safe');
 		const container = document.createElement('div');
 		await view.mount(container);
-		view.setData({ url: 'javascript:run()' });
+		view.setState({ url: 'javascript:run()' });
 		view.flushUpdates();
 		expect(container.querySelector('.dynamic').hasAttribute('href')).toBe(false);
-		view.setData({ url: '/again' });
+		view.setState({ url: '/again' });
 		view.flushUpdates();
 		expect(container.querySelector('.dynamic').getAttribute('href')).toBe('/again');
 	});
@@ -124,11 +124,11 @@ describe('dynamic URL bindings (D186)', () => {
 	it('guards SVG animation values per `;` entry and to/from/by whatever attributeName says', async () => {
 		vi.spyOn(console, 'warn').mockImplementation(() => {});
 		view = new Links();
-		view.setData({ url: 'javascript:run()', candidates: '', frames: '/a; JaVa\tScRiPt:run()' });
+		view.setState({ url: 'javascript:run()', candidates: '', frames: '/a; JaVa\tScRiPt:run()' });
 		let html = await serialize(view.render());
 		expect(html).not.toMatch(/<set[^>]* to=/);
 		expect(html).not.toMatch(/<animate[^>]* values=/);
-		view.setData({ url: '/next', frames: '/a; /b' });
+		view.setState({ url: '/next', frames: '/a; /b' });
 		html = await serialize(view.render());
 		expect(html).toMatch(/<set[^>]* to="\/next"/);
 		expect(html).toMatch(/<animate[^>]* values="\/a; \/b"/);

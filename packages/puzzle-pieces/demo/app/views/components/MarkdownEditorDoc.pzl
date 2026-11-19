@@ -155,7 +155,7 @@ const codeHero = `<MarkdownEditor label="Post body" placeholder="Write something
 
 // parent
 events = {
-  setMd: (md) => this.setData('md', md),
+  setMd: (md) => this.setState('md', md),
 };`;
 
 const codeLive = `<MarkdownEditor label="Editor" value={ md } @change={ setMd } />
@@ -187,7 +187,7 @@ row, column, and header actions.
 
 export default class MarkdownEditorDoc extends PuzzleView {
 	created() {
-		this.setData({ md: SAMPLE_MD, tableMd: TABLE_MD });
+		this.setState({ md: SAMPLE_MD, tableMd: TABLE_MD });
 	}
 
 	data(params, props) {
@@ -213,8 +213,8 @@ export default class MarkdownEditorDoc extends PuzzleView {
 	}
 
 	events = {
-		setMd: (md) => this.setData('md', md),
-		setTableMd: (md) => this.setData('tableMd', md),
+		setMd: (md) => this.setState('md', md),
+		setTableMd: (md) => this.setState('tableMd', md),
 	};
 }
 </script>

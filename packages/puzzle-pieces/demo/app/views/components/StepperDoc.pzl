@@ -134,9 +134,9 @@ const codeClickable = `// Completed/current steps become buttons; @stepChange fi
 
 // parent
 events = {
-  setStep: (i) => this.setData('step', i),
-  next: () => this.setData('step', Math.min(this.getData().step + 1, 3)),
-  back: () => this.setData('step', Math.max(this.getData().step - 1, 0)),
+  setStep: (i) => this.setState('step', i),
+  next: () => this.setState('step', Math.min(this.getData().step + 1, 3)),
+  back: () => this.setState('step', Math.max(this.getData().step - 1, 0)),
 };`;
 
 const codeStates = `// Steps before value are complete, value is current, the rest are upcoming.
@@ -144,7 +144,7 @@ const codeStates = `// Steps before value are complete, value is current, the re
 
 export default class StepperDoc extends PuzzleView {
   created() {
-    this.setData({ stepHero: 1, stepVert: 1, stepClick: 1 });
+    this.setState({ stepHero: 1, stepVert: 1, stepClick: 1 });
   }
 
   data(params, props) {
@@ -186,9 +186,9 @@ export default class StepperDoc extends PuzzleView {
   }
 
   events = {
-    setStepClick: (i) => this.setData('stepClick', i),
-    nextClick: () => this.setData('stepClick', Math.min(this.getData().stepClick + 1, 3)),
-    backClick: () => this.setData('stepClick', Math.max(this.getData().stepClick - 1, 0)),
+    setStepClick: (i) => this.setState('stepClick', i),
+    nextClick: () => this.setState('stepClick', Math.min(this.getData().stepClick + 1, 3)),
+    backClick: () => this.setState('stepClick', Math.max(this.getData().stepClick - 1, 0)),
   };
 }
 </script>

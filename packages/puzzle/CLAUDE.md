@@ -273,7 +273,7 @@ enforced, not merely advised.
   files) and every item-form `{#for}` row keyed. Production sizes: hello-world
   **23.0 KB gzip**, todos **27.0 KB gzip** (about +1 KB each over 0.8.0,
   mostly the D182–D189 built-in APIs). The next free decision number is
-  **D191**.
+  **D192**.
 - Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
   amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74, D160 = v1.75,
@@ -497,9 +497,12 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   rewrites the script body. TypeScript is transpile-only.
 - A compiled class stays untouched; codegen attaches `prototype.render` after
   it. `PuzzleView` is a plain class, not an HTMLElement.
-- `data()` owns the replace-on-commit model layer. `setData()` owns persistent
-  local UI state and rerenders without rerunning `data()`. Use `refresh()` when
-  local state feeds `data()`-derived values.
+- `data()` owns the replace-on-commit derived layer. `setState()` owns persistent
+  local UI state; a write to a key `data()` read (through `getData()` or
+  `getState()`) re-runs `data()` with the next render, once per burst, and any
+  other key just rerenders (D23). `refresh()` is only for on-purpose re-runs:
+  `data()` reading an instance field, a module variable or the clock, or a
+  caller that needs the new model rendered synchronously.
 - Store queries inside `data()` auto-subscribe, and on an adapter-backed model a
   tracked `findOne`/`findMany` that misses queues a fetch and re-runs the pass
   rather than committing (D161). Reads outside `data()` never fetch. A record
