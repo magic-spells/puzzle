@@ -827,8 +827,8 @@ export const OPS = [
 					...shape,
 					fsKeystrokes: keystrokes,
 					fsRenders: keystrokes,
-					// ZERO. setState re-renders without ever re-running data(), which
-					// is the cheap path and half of the A/B.
+					// ZERO. data() never reads the typed key, so setState only
+					// re-renders (D23): the cheap path and half of the A/B.
 					fsDataRuns: 0,
 					fsInputValueWrites: 0,
 					fsSelectValueWrites: 0,

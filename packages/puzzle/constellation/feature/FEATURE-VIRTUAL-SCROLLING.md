@@ -30,8 +30,9 @@ which hands each row back to the caller through a snippet
   geometry, so `top + rows·ROW_H + bottom === total` and the scrollbar stays
   honest. A keyed `{#for}` reuses row DOM across windows.
 
-Gotcha: `setState` does not re-run `data()`, so the derived window only
-recomputes through the explicit `refresh()`.
+The scroll handler only writes `scrollTop` with `setState`: `data()` reads it
+through `getData()`, so the write re-runs `data()` and recomputes the window
+([[DECISION-D23-REFRESH-PATTERN]]).
 
 Not covered: variable-height auto-measurement, and router scroll restoration
 into an inner scroller (the router restores window scroll only,

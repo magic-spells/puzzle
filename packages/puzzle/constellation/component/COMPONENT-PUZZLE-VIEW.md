@@ -54,7 +54,9 @@ handle, by this view, during its own evaluation, may fault
 
 - Two layers: a successful `data(params, props)` REPLACES the derived layer;
   `setState()` writes a persistent state layer that wins until the next derived
-  commit and rerenders without rerunning `data()`. Keep raw local values and
+  commit. It rerenders, and when the last `data()` run read a written key
+  (through `getData()`/`getState()`) the render re-runs `data()` first, once
+  per burst ([[DECISION-D23-REFRESH-PATTERN]]). Keep raw local values and
   `data()`-derived display values under different keys, or the commit erases the
   raw one.
 - A `setState()` render goes through `schedule()` in `scheduler.js` (the shared

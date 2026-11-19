@@ -71,13 +71,9 @@ export default class TodoHome extends PuzzleView {
       todo.destroy();
     },
 
-    setFilter: (filter) => {
-      this.setState('currentFilter', filter);
-      // filteredTodos is derived in data(); setState() alone does not re-run
-      // data() (SPEC §4), so refresh() re-runs it to recompute the filtered
-      // list from the just-updated currentFilter.
-      this.refresh();
-    },
+    // filteredTodos is derived in data() from currentFilter, so this write
+    // re-runs data() before the next render (SPEC §4).
+    setFilter: (filter) => this.setState('currentFilter', filter),
 
     clearCompleted: () => {
       if (confirm('Clear all completed todos?')) {

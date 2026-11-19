@@ -98,8 +98,8 @@ const RESIZE_CURSORS = {
 
 // The canvas editor. `selectedIds` is LOCAL ephemeral state (setState), read back
 // inside data() the kanban way. `drag` is the OTHER ephemeral channel: a pointer
-// gesture (move / resize / marquee) publishes its live state through setState +
-// this.refresh(), and data() derives the render tree from it — NO store writes
+// gesture (move / resize / marquee) publishes its live state through setState,
+// and data() derives the render tree from it (reading `drag` re-runs it) — NO store writes
 // happen until the gesture drops (see _commitMove / _commitResize).
 //
 // Gesture machine (kanban-derived): press seeds `this._drag` (PENDING for a
@@ -128,7 +128,7 @@ export default class Editor extends PuzzleView {
 
   destroyed() {
     document.removeEventListener('keydown', this._onKeyDown);
-    this._cleanup(false);
+    this._cleanup();
   }
 
   animations = {
@@ -334,7 +334,6 @@ export default class Editor extends PuzzleView {
       };
       event.preventDefault();
       this._beginGesture('crosshair');
-      this.refresh();
     },
 
     startResize: (payload) => {
@@ -392,7 +391,6 @@ export default class Editor extends PuzzleView {
 
       store.createRecord('element', data);
       this.setState({ selectedIds: [data.id] });
-      this.refresh();
     },
   };
 
@@ -415,7 +413,6 @@ export default class Editor extends PuzzleView {
     }
 
     this.setState({ selectedIds });
-    this.refresh();
   }
 
   _isStackChild(el, elements) {
@@ -596,7 +593,6 @@ export default class Editor extends PuzzleView {
 
     if (d.mode === 'resize') {
       this.setState({ drag: { mode: 'resize', id: d.id, box: d.box, stackChild: d.stackChild } });
-      this.refresh();
       return;
     }
 
@@ -612,7 +608,6 @@ export default class Editor extends PuzzleView {
         })
         .map((e) => e.id);
       this.setState({ selectedIds: ids, drag: { mode: 'marquee', box } });
-      this.refresh();
       return;
     }
 
@@ -654,7 +649,6 @@ export default class Editor extends PuzzleView {
         draggingFrame: d.draggingFrame,
       },
     });
-    this.refresh();
   }
 
   _handlePointerUp(event) {
@@ -671,14 +665,14 @@ export default class Editor extends PuzzleView {
       this.setState({ selectedIds: [d.clickCandidate] });
     }
 
-    this._cleanup(true);
+    this._cleanup();
   }
 
   _handleDragKey(event) {
     if (!this._drag || event.key !== 'Escape') return;
     event.preventDefault();
     // Cancel: tear down with NO store writes; selection is left untouched.
-    this._cleanup(true);
+    this._cleanup();
   }
 
   _commitMove() {
@@ -780,7 +774,7 @@ export default class Editor extends PuzzleView {
     el.update(patch);
   }
 
-  _cleanup(refresh) {
+  _cleanup() {
     if (this._raf) {
       cancelAnimationFrame(this._raf);
       this._raf = null;
@@ -795,7 +789,6 @@ export default class Editor extends PuzzleView {
     this._drag = null;
     this._stageEl = null;
     this.setState({ drag: null });
-    if (refresh) this.refresh();
   }
 
   _handleKeyDown(event) {
@@ -812,7 +805,6 @@ export default class Editor extends PuzzleView {
 
     if (event.key === 'Escape') {
       this.setState({ selectedIds: [] });
-      this.refresh();
       return;
     }
 
@@ -821,7 +813,6 @@ export default class Editor extends PuzzleView {
       event.preventDefault();
       deleteElements(store, selectedIds);
       this.setState({ selectedIds: [] });
-      this.refresh();
       return;
     }
 
@@ -830,7 +821,6 @@ export default class Editor extends PuzzleView {
       event.preventDefault();
       const newIds = duplicateElements(store, selectedIds);
       this.setState({ selectedIds: newIds });
-      this.refresh();
       return;
     }
 
@@ -854,8 +844,6 @@ export default class Editor extends PuzzleView {
         }
         rec.update({ x: rec.x + delta[0] * step, y: rec.y + delta[1] * step });
       });
-
-      this.refresh();
     }
   }
 }

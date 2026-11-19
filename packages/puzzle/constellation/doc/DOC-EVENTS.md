@@ -31,10 +31,9 @@ export default class TodoHome extends PuzzleView {
         this.setState('newTodoText', '');
       }
     },
-    setFilter: (filter) => {
-      this.setState('currentFilter', filter);
-      this.refresh(); // filteredTodos is derived in data()
-    },
+    // filteredTodos is derived in data() from currentFilter, so this write
+    // re-runs data() before the next render
+    setFilter: (filter) => this.setState('currentFilter', filter),
   };
 }
 ```
@@ -70,11 +69,12 @@ Three forms (§5):
 
 | Change | Use | Re-runs `data()`? |
 | --- | --- | --- |
-| Local UI state (a filter, a toggle, draft text) | `this.setState(key, value)` or `this.setState({ … })` | No — re-renders directly |
-| Values `data()` derives from local state | `this.setState(…)` then `this.refresh()` | Yes, for this view |
+| Local UI state `data()` never reads (a toggle, draft text) | `this.setState(key, value)` or `this.setState({ … })` | No — re-renders directly |
+| Local state `data()` derives values from (a filter) | `this.setState(…)` | Yes, once before the next render, for this view |
+| Inputs the runtime cannot see (an instance field, the clock) | `this.refresh()` | Yes, for this view |
 | Shared records | `store.createRecord`, `record.update()`, `record.destroy()` | Yes, on every subscribed view |
 
-- `setState()` is cheap on purpose; it does not re-run store queries. When `data()` computes something from local state (like `filteredTodos` from `currentFilter`), call `this.refresh()` after it.
+- `setState()` re-runs `data()` only when `data()` read a written key through `getData()` or `getState()` ([[DECISION-D23-REFRESH-PATTERN]]), so a field `data()` never looks at stays cheap. Several writes before the next render share one run. Do not add `this.refresh()` after it.
 - A `data()` commit replaces the model, so a view mixing local state and store data reads its local values back in `data()` with `this.getData()`.
 - Mutate records through `update()` or the store, not by assigning fields or editing copies: a store mutation re-runs `data()` on every view that queried those records.
 

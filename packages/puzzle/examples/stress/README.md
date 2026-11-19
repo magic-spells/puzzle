@@ -976,8 +976,8 @@ record. Ops: `rerender`, `rerender-dirty`, `type-local`, `type-store`,
 
 The two typing targets are the A/B:
 
-- `.fs-draft` — `setState('draftText', …)`. The **local** layer: re-render only,
-  `data()` never re-runs.
+- `.fs-draft` — `setState('draftText', …)`. The **local** layer: `data()` never
+  reads `draftText`, so the write re-renders only and `data()` never re-runs.
 - `.fs-bound` — `record.update({ text })`. The **model** layer: validate,
   notify, `data()`, render.
 

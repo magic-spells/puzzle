@@ -221,7 +221,6 @@ export default class RouterView extends PuzzleView {
   async load() {
     if (this.isDestroyed || !this.connected()) return;
     this.setState({ loading: true, error: '' });
-    this.refresh();
     try {
       const result = await api.snapshotRoute();
       if (!this.isDestroyed) this.setState('route', result ?? null);
@@ -230,7 +229,6 @@ export default class RouterView extends PuzzleView {
     } finally {
       if (!this.isDestroyed) {
         this.setState('loading', false);
-        this.refresh();
       }
     }
   }

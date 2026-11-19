@@ -363,8 +363,8 @@ Rules that bite:
   value, a block header, a function argument, or an `@event` handler's
   arguments or ternary condition is a compile error. Every value a template
   shows comes through `data()` — move a getter's body into a `data()` field,
-  and call `this.refresh()` after a `setState()` that field depends on
-  (`setState()` alone does not re-run `data()`).
+  and read the local state it depends on with `getData()` there; a later
+  `setState()` of that key re-runs `data()` on its own.
   Member access is guarded, so `{ user.address.city }` prints nothing when
   `address` is missing instead of throwing (`?.` is legal but unnecessary),
   and a method call on a missing value prints nothing too (dev warning). A
@@ -862,8 +862,9 @@ What follows from the rule:
   handle, and a read through it, by this view, during this view's own `data()`
   run is the one thing that can fault: event handlers, model methods, timers,
   and a store captured in a module variable all get a local snapshot and never
-  issue a request. A handler that needs fresh server data changes state and
-  calls `this.refresh()`, which re-enters the loop. Calling
+  issue a request. A handler that needs fresh server data writes a key
+  `data()` reads with `setState()` (or calls `this.refresh()`), which re-enters
+  the loop. Calling
   `store.loadOne`/`store.loadMany` from inside
   `data()` warns in dev and points you at `findOne`/`findMany` — the imperative
   loaders are a force-refresh escape hatch, not the read path.
@@ -960,12 +961,16 @@ The reactivity contract — the three methods are not interchangeable:
   **auto-subscribe** the view; when matching records change, `data()` re-runs
   and the result replaces the view's data wholesale (replace-on-commit).
 - **`setState(patch)`** owns persistent local UI state (open panels, drafts).
-  It rerenders WITHOUT re-running `data()` and survives it. `getState()` reads
-  that state layer back alone; `getData()` reads the merged model the template
-  sees. There is no `setData()` (removed in 0.10.0).
-- **`refresh()`** re-runs `data()` — use it only when local state feeds
-  `data()`-derived values. A `setState()` key the template reads directly
-  already re-renders; adding `refresh()` after it is dead work.
+  It survives `data()` re-runs. When `data()` read the written key through
+  `getData()` or `getState()`, the next render re-runs `data()` first (one run
+  per burst of writes); any other key just re-renders. `getState()` reads the
+  state layer alone; `getData()` reads the merged model the template sees.
+  There is no `setData()` (removed in 0.10.0).
+- **`refresh()`** re-runs `data()` on purpose. Do not put it after a
+  `setState()`: the write already re-runs `data()` when `data()` reads that
+  key. Use it when `data()` derives from something the runtime cannot see (an
+  instance field, a module variable, the clock), or when the next line needs
+  the new model already rendered.
 - **A record prop tracks that record, and only that record.** Records mutate in
   place, so a record prop is always reference-equal — but it also carries a
   render revision, so a child receiving `todo={ todo }` DOES re-run `data()`

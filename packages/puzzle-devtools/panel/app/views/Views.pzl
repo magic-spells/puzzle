@@ -433,7 +433,6 @@ export default class ViewsView extends PuzzleView {
   async loadTree() {
     if (this.isDestroyed || !this.connected()) return;
     this.setState({ loadingTree: true, treeError: '' });
-    this.refresh();
     try {
       const result = await api.snapshotViews();
       if (this.isDestroyed) return;
@@ -444,7 +443,6 @@ export default class ViewsView extends PuzzleView {
     } finally {
       if (!this.isDestroyed) {
         this.setState('loadingTree', false);
-        this.refresh();
       }
     }
   }
@@ -480,20 +478,16 @@ export default class ViewsView extends PuzzleView {
     } catch (err) {
       if (this.isDestroyed || this.getData().selectedId !== id) return;
       this.setState({ inspect: null, inspectError: err?.message ?? String(err) });
-    } finally {
-      if (!this.isDestroyed) this.refresh();
     }
   }
 
   flash(message) {
     clearTimeout(this._toastTimer);
     this.setState('toast', message);
-    this.refresh();
     this._toastTimer = setTimeout(() => {
       this._toastTimer = null;
       if (this.isDestroyed) return;
       this.setState('toast', '');
-      this.refresh();
     }, TOAST_MS);
   }
 
@@ -507,7 +501,6 @@ export default class ViewsView extends PuzzleView {
       clearTimeout(this._inspectTimer);
       this._seenPulseAt = 0;
       this.setState({ selectedId: id, inspect: null, inspectError: '' });
-      this.refresh();
       this.loadInspect(id);
     },
 
@@ -516,7 +509,6 @@ export default class ViewsView extends PuzzleView {
       if (closed[id]) delete closed[id];
       else closed[id] = true;
       this.setState('closed', closed);
-      this.refresh();
     },
 
     hoverOn: (id) => {

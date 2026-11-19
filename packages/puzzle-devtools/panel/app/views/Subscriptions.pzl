@@ -309,7 +309,6 @@ export default class SubscriptionsView extends PuzzleView {
   async load({ force = false } = {}) {
     if (this.isDestroyed || !this.connected()) return;
     this.setState({ loading: true, error: '' });
-    this.refresh();
     try {
       // Shared with the Views inspector: within the window, whichever panel
       // asks first wins and the other joins that request.
@@ -323,7 +322,6 @@ export default class SubscriptionsView extends PuzzleView {
     } finally {
       if (!this.isDestroyed) {
         this.setState('loading', false);
-        this.refresh();
       }
     }
   }
@@ -331,7 +329,6 @@ export default class SubscriptionsView extends PuzzleView {
   events = {
     selectKey: (id) => {
       this.setState('selectedKey', this.getData().selectedKey === id ? null : id);
-      this.refresh();
     },
 
     // Cross-panel navigation: park the intent in the `ui` singleton, then route.

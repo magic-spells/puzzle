@@ -70,7 +70,7 @@ The exported class extends `PuzzleView`:
 | `this.renderTick()` | Resolves once no render is pending — the point to read `this.refs` or measure after `setState()` (§4). |
 | anything else | Your own helpers, called from hooks and handlers. |
 
-Class fields (`events`, `animations`) have no commas between them and other members. A few member names belong to the framework (`render`, `refresh`, `getData`, `setState`, `memo`, `renderTick`, `refs`, and names starting `__`); the list is in §4.
+Class fields (`events`, `animations`) have no commas between them and other members. A few member names belong to the framework (`render`, `refresh`, `getData`, `getState`, `setState`, `memo`, `renderTick`, `refs`, and names starting `__`); the list is in §4.
 
 ### `this.ctx`
 
@@ -95,7 +95,7 @@ data(params, props) {
 Two layers of state:
 
 - **The model** — each `data()` result **replaces** the last one.
-- **Local state** — `this.setState(key, value)` or `this.setState({ … })` writes a layer underneath that survives `data()` re-runs, and re-renders **without** re-running `data()`. When `data()` derives something from local state, call `this.refresh()` after `setState`.
+- **Local state** — `this.setState(key, value)` or `this.setState({ … })` writes a layer underneath that survives `data()` re-runs, and re-renders. When `data()` read a written key through `this.getData()` or `this.getState()`, the render re-runs `data()` first, so derived values follow without a `refresh()`. `this.getState()` reads that layer alone.
 
 ```js
 created() {
@@ -113,10 +113,7 @@ data() {
 }
 
 events = {
-  setFilter: (filter) => {
-    this.setState('filter', filter);
-    this.refresh();
-  },
+  setFilter: (filter) => this.setState('filter', filter), // data() reads filter, so it re-runs
   addTodo: () => this.ctx.store.createRecord('todo', { text: 'New todo' }), // subscribers re-run
 };
 ```

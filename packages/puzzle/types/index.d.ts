@@ -737,7 +737,11 @@ export declare class PuzzleView<Props = any> {
 	/** Read local state only (what setState() wrote), without data()'s values. */
 	getState<T = any>(): T;
 
-	/** Merge local UI state and schedule a re-render (does NOT re-run data()). */
+	/**
+	 * Merge local UI state and schedule a re-render. When the last data() run read
+	 * a written key through getData()/getState(), the render re-runs data() first
+	 * (once per burst of writes, D23).
+	 */
 	setState(key: string, value: any): void;
 	setState(partial: Record<string, any>): void;
 	/**

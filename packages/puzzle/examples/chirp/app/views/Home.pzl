@@ -4,7 +4,7 @@
        <puzzle-skeleton> below renders instantly in place while the fetch is in
        flight, then the real feed patches over it once data() commits — the
        navigation no longer gates on the load. Everything else is a normal feed:
-       a "For you" / "Following" tab switch (local state via setState+refresh, the
+       a "For you" / "Following" tab switch (local state via setState, the
        stays Home chip pattern), the composer, and the chirp list. -->
 
   <!-- Tab bar. Sticky so it stays pinned as the feed scrolls under it. -->
@@ -112,12 +112,9 @@ export default class HomeView extends PuzzleView {
   }
 
   events = {
-    // Flip the tab, then refresh() so data() recomputes `feed` from it
-    // (setState alone won't re-run data() — SPEC §4).
-    setTab: (tab) => {
-      this.setState('activeTab', tab);
-      this.refresh();
-    },
+    // Flip the tab; data() reads activeTab, so the write re-runs it and
+    // `feed` recomputes (SPEC §4).
+    setTab: (tab) => this.setState('activeTab', tab),
   };
 
   animations = {

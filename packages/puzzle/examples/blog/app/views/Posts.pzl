@@ -112,16 +112,10 @@ export default class PostsView extends PuzzleView {
   }
 
   events = {
-    setTag: (tag) => {
-      // D23 derived-list pattern: setState() updates local state but does not
-      // re-run data(), so refresh() recomputes the filtered list from it.
-      this.setState('activeTag', tag);
-      this.refresh();
-    },
-    setSort: (sortBy) => {
-      this.setState('sortBy', sortBy);
-      this.refresh();
-    }
+    // D23: data() reads activeTag and sortBy, so each write re-runs it and the
+    // filtered, sorted list follows.
+    setTag: (tag) => this.setState('activeTag', tag),
+    setSort: (sortBy) => this.setState('sortBy', sortBy)
   };
 
   // Route transition (constellation/doc/DOC-SPEC.md §12) — see Home.pzl for the full rationale.

@@ -187,7 +187,6 @@ export default class PostDetailView extends PuzzleView {
         postId: this.params.id, author: authorName.trim() || 'Anonymous', text: commentText.trim()
       });
       this.setState({ commentText: '', authorName: '' });
-      this.refresh();
     },
     removeComment: (comment) => comment.destroy()   // the parent owns the mutation
   };
@@ -206,7 +205,7 @@ What this shows:
 
 `value={ … }` and `checked={ … }` on a plain `<input>`, `<textarea>` or `<select>` bind both ways when the expression is a bare key or a one-member path ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]). **Bind the path you want written:**
 
-- **Local draft, bare key** (`value={ authorName }`): the write is `setState` + `refresh`, so everything `data()` derives from the key recomputes as the user types. Seed the key in `created()` and read it back in `data()` with `this.getData()`.
+- **Local draft, bare key** (`value={ authorName }`): the write is `setState` + `refresh`, so everything `data()` derives from the key recomputes within the same keystroke. Seed the key in `created()` and read it back in `data()` with `this.getData()`.
 - **Record field, one-member path** (`checked={ profile.subscribed }`): each edit goes through `record.update()`, so validation runs and subscribed views re-render. Bind the record path rather than copying the field into a local key `data()` also derives from the record — that key is overwritten on the next commit (dev warns once per key).
 - **Constrained field, draft + submit:** a bound record path validates every keystroke, so a `required()` field could never be emptied. Bind a local draft, check it with `Model.validate({ text: draft }, { fields: ['text'] })` on submit, then `record.update(...)`. A rejected bind reaches `onError` with `phase: 'bind'`.
 - **Opting out:** an author `@input`/`@change` suppresses the synthesized write; a non-path expression (`value={ name ?? '' }`) or a static `readonly` does not bind. Use the non-path form when Escape must revert.
@@ -249,7 +248,7 @@ The parent writes `<Button variant="primary" @press={ goToPosts }>Browse</Button
 
 - **Never call `store.loadMany`/`loadOne` inside `data()`** — tracked finds already fetch, and dev warns. The explicit loads are for event handlers; `store.loadOne` there is the force-refresh idiom.
 - **Relationships never fetch** (`post.author`), so a 50-row list never fires 50 GETs; write the tracked find on the foreign key when a view needs the record.
-- **`setState()` does not rerun `data()`** ([[DECISION-D23-REFRESH-PATTERN]]). When `data()` derives from local state, follow `setState(...)` with `this.refresh()`; when the template reads the key directly, `setState()` alone re-renders it.
+- **`setState()` is enough** ([[DECISION-D23-REFRESH-PATTERN]]). When `data()` read the key through `this.getData()` or `this.getState()`, the next render re-runs `data()` first, once however many writes came before it; a key `data()` never read just re-renders. Call `this.refresh()` only to re-run `data()` on purpose, when it derives from an instance field or other state the runtime cannot see, or when you need the new model rendered before your next line runs.
 - **`getState()` reads only what `setState()` wrote** ([[DECISION-D191-SET-STATE-GET-STATE]]); `getData()` reads the merged model, with `data()`'s values over local state.
 - **Stable object props:** props compare with `===`, so a fresh object from every `data()` run re-runs the child. Wrap derived objects in `this.memo(key, deps, factory)` ([[DOC-SPEC-VIEW]] §32). Primitive props need no memo, and data-independent callback props are cached by the compiler.
 - **Animations:** an `animations = { in, out }` class field animates the instance root via WAAPI; `to` must equal the resting style and height cannot animate to `auto` ([[DOC-SPEC-VIEW]] §12, §39).

@@ -250,7 +250,7 @@ export default class Doc extends PuzzleView {
 
   destroyed() {
     this._teardownMenuListeners();
-    this._cleanupDrag(false);
+    this._cleanupDrag();
   }
 
   // ---- store / order helpers (Doc owns them; Block owns caret math) ---------
@@ -796,7 +796,7 @@ export default class Doc extends PuzzleView {
       e.preventDefault();
       this._commitDrop();
     }
-    this._cleanupDrag(true);
+    this._cleanupDrag();
 
     // A press that never moved is a click on the handle → open Turn-into.
     if (wasPending) this._openMenu('turn', dragId);
@@ -806,13 +806,13 @@ export default class Doc extends PuzzleView {
     if (!this._drag || e.key !== 'Escape') return;
     e.preventDefault();
     // Cancel: drop the drag with no reorder.
-    this._cleanupDrag(true);
+    this._cleanupDrag();
   }
 
   _promote(e) {
     const row = this._blockElement(this._drag.id);
     if (!row) {
-      this._cleanupDrag(true);
+      this._cleanupDrag();
       return;
     }
 
@@ -855,7 +855,6 @@ export default class Doc extends PuzzleView {
       targetIndex: this._drag.targetIndex,
       dragHeight: this._drag.height,
     });
-    this.refresh();
   }
 
   _moveGhost(e) {
@@ -893,7 +892,7 @@ export default class Doc extends PuzzleView {
     this._reindex(ordered);
   }
 
-  _cleanupDrag(shouldRefresh) {
+  _cleanupDrag() {
     const ghost = this._drag && this._drag.ghost;
 
     document.removeEventListener('pointermove', this._onPointerMove);
@@ -907,7 +906,6 @@ export default class Doc extends PuzzleView {
     this._drag = null;
 
     this.setState({ dragging: false, draggingId: '', targetIndex: 0, dragHeight: 0 });
-    if (shouldRefresh) this.refresh();
   }
 
   // ---- FLIP (only while a drag is active) ----------------------------------

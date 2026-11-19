@@ -417,7 +417,6 @@ export default class StoreView extends PuzzleView {
   async loadTypes(type) {
     if (this.isDestroyed || !this.connected()) return;
     this.setState({ loading: true, error: '' });
-    this.refresh();
     try {
       const result = await api.snapshotRecords(type);
       if (this.isDestroyed) return;
@@ -434,7 +433,6 @@ export default class StoreView extends PuzzleView {
     } finally {
       if (!this.isDestroyed) {
         this.setState('loading', false);
-        this.refresh();
       }
     }
   }
@@ -490,7 +488,6 @@ export default class StoreView extends PuzzleView {
       this._okTimer = null;
       if (this.isDestroyed) return;
       this.setState('editOk', '');
-      this.refresh();
     }, OK_MS);
   }
 
@@ -505,7 +502,6 @@ export default class StoreView extends PuzzleView {
         editOk: '',
       });
       this.resetWatch();
-      this.refresh();
     },
 
     selectRow: (key) => {
@@ -520,17 +516,16 @@ export default class StoreView extends PuzzleView {
       // so the first flush after this diffs against what is on screen NOW.
       this.resetWatch();
       this.syncWatched();
-      this.refresh();
     },
 
     closeDetail: () => {
       this.setState({ selectedRowId: null, edits: {}, editError: '', editOk: '' });
       this.resetWatch();
-      this.refresh();
     },
 
-    // No refresh() on keystroke: the input already holds what was typed, and
-    // re-rendering a focused controlled input is how you lose a caret position.
+    // data() reads `edits`, so this write re-runs it and the field re-renders.
+    // The controlled value then equals what the input already holds, so the
+    // patch writes nothing and the caret stays put.
     editField: (label, event) => {
       const edits = { ...this.getData().edits };
       edits[label] = event.target.value;
@@ -560,7 +555,6 @@ export default class StoreView extends PuzzleView {
         const parsed = coerceInput(raw, kind);
         if (!parsed.ok) {
           this.setState({ editError: `${label}: ${parsed.error}`, editOk: '' });
-          this.refresh();
           return;
         }
         if (parsed.value !== row[label]) patch[label] = parsed.value;
@@ -568,12 +562,10 @@ export default class StoreView extends PuzzleView {
 
       if (Object.keys(patch).length === 0) {
         this.setState({ editError: 'nothing changed', editOk: '' });
-        this.refresh();
         return;
       }
 
       this.setState({ applying: true, editError: '', editOk: '' });
-      this.refresh();
       try {
         await api.editRecord(type, row[shape.pk], patch);
         if (this.isDestroyed) return;
@@ -592,7 +584,6 @@ export default class StoreView extends PuzzleView {
       } finally {
         if (!this.isDestroyed) {
           this.setState('applying', false);
-          this.refresh();
         }
       }
     },

@@ -181,14 +181,10 @@ export default class Calendar extends PuzzleView {
   events = {
     prevMonth: () => {
       const o = this.getData().monthOffset;
-      if (o > 0) {
-        this.setState('monthOffset', o - 1);
-        this.refresh();
-      }
+      if (o > 0) this.setState('monthOffset', o - 1);
     },
     nextMonth: () => {
       this.setState('monthOffset', this.getData().monthOffset + 1);
-      this.refresh();
     },
 
     // Range selection. The clicked day arrives as a plain ISO string because the

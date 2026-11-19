@@ -82,12 +82,10 @@ export default class TypedHome extends PuzzleView {
   }
 
   events = {
+    // canAdd is derived in data() from newTodoText, so this write re-runs it.
     updateNewTodoText: (event: Event): void => {
       const input = event.target as HTMLInputElement;
       this.setState('newTodoText', input.value);
-      // canAdd is derived in data(); setState() alone does not re-run data(),
-      // so refresh() recomputes it from the just-updated draft.
-      this.refresh();
     },
 
     addTodo: (event: Event): void => {

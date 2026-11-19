@@ -28,8 +28,11 @@ Two intentionally asymmetric update paths:
    `data(params, props)`. The settled result REPLACES the derived layer, then the
    view renders and patches.
 2. **Local path**: `setState()` writes the persistent state layer and schedules a
-   render without rerunning `data()`; call `refresh()` when derived model data must
-   recompute.
+   render. When the write touches a key the last committed `data()` read through
+   `getData()` or `getState()`, that render re-runs `data()` first, once for the
+   whole burst of writes ([[DECISION-D23-REFRESH-PATTERN]]); any other key only
+   re-renders. `refresh()` re-runs `data()` on purpose, for inputs the runtime
+   cannot track.
 
 Implicit two-way binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]) uses both: a
 bound local writes through `setState` + `refresh`; a bound record writes through

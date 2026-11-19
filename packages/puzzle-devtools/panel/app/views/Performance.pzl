@@ -456,7 +456,6 @@ export default class PerformanceView extends PuzzleView {
       // for as long as the tab is open helps nobody.
       this.stopPolling();
       this.setState({ error: err?.message ?? String(err), recording: false });
-      this.refresh();
       return null;
     }
   }
@@ -472,7 +471,6 @@ export default class PerformanceView extends PuzzleView {
   adoptRecordingState(recording) {
     if (recording !== this.getData().recording) {
       this.setState('recording', recording);
-      this.refresh();
     }
     if (!recording) {
       this.stopPolling();
@@ -484,7 +482,6 @@ export default class PerformanceView extends PuzzleView {
   async startRecording() {
     if (!this.connected() || this.getData().busy) return;
     this.setState({ busy: true, error: '', recording: true });
-    this.refresh();
     try {
       await api.perfStart();
       if (this.isDestroyed) return;
@@ -497,7 +494,6 @@ export default class PerformanceView extends PuzzleView {
     } finally {
       if (!this.isDestroyed) {
         this.setState('busy', false);
-        this.refresh();
       }
     }
   }
@@ -506,7 +502,6 @@ export default class PerformanceView extends PuzzleView {
     if (this.getData().busy) return;
     this.stopPolling();
     this.setState({ busy: true, recording: false });
-    this.refresh();
     try {
       await api.perfStop();
       if (this.isDestroyed) return;
@@ -518,7 +513,6 @@ export default class PerformanceView extends PuzzleView {
     } finally {
       if (!this.isDestroyed) {
         this.setState('busy', false);
-        this.refresh();
       }
     }
   }
@@ -532,7 +526,6 @@ export default class PerformanceView extends PuzzleView {
     sortBy: (key) => {
       const local = this.getData();
       this.setState(nextSortState(local.sort, local.direction, key));
-      this.refresh();
     },
 
     // Cross-panel navigation, exactly as the Subscriptions panel does it: park

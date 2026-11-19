@@ -82,11 +82,10 @@ export default class Composer extends PuzzleView {
     };
   }
 
-  // hasDraft is derived in data(); setState() alone does not re-run data(), so
-  // every draft write refreshes to recompute it.
+  // hasDraft is derived in data() from draft, so every draft write re-runs
+  // data() before the next render.
   setDraft(text) {
     this.setState('draft', text);
-    this.refresh();
   }
 
   events = {

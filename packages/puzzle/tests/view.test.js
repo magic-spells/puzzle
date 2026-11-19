@@ -460,8 +460,12 @@ describe('PuzzleView — setState semantics (SPEC §4)', () => {
 		render() { return h('span', {}, [text(`count: ${this.getData().count}`)]); }
 	}
 
-	it('re-renders WITHOUT re-running data()', async () => {
-		const v = new Counter();
+	it('re-renders WITHOUT re-running data() for a key data() never read', async () => {
+		class V extends PuzzleView {
+			data() { return { label: 'fixed' }; }
+			render() { return h('span', {}, [text(`${this.getData().label} ${this.getData().count ?? 0}`)]); }
+		}
+		const v = new V();
 		const dataSpy = vi.spyOn(v, 'data');
 		const el = container();
 		await v.mount(el);
@@ -469,8 +473,22 @@ describe('PuzzleView — setState semantics (SPEC §4)', () => {
 
 		v.setState('count', 5);
 		v.flushUpdates();
-		expect(el.textContent).toBe('count: 5');
+		expect(el.textContent).toBe('fixed 5');
 		expect(dataSpy).toHaveBeenCalledTimes(1); // still once
+	});
+
+	it('re-runs data() once with the render for a key data() read (D23)', async () => {
+		const v = new Counter();
+		const dataSpy = vi.spyOn(v, 'data');
+		const el = container();
+		await v.mount(el);
+		expect(dataSpy).toHaveBeenCalledTimes(1);
+
+		v.setState('count', 5);
+		expect(dataSpy).toHaveBeenCalledTimes(1); // nothing runs until the flush
+		v.flushUpdates();
+		expect(el.textContent).toBe('count: 5');
+		expect(dataSpy).toHaveBeenCalledTimes(2);
 	});
 
 	it('batches multiple setState calls into one render with beforeUpdate/afterUpdate around it', async () => {
@@ -556,6 +574,158 @@ describe('PuzzleView — setState semantics (SPEC §4)', () => {
 		expect(v.isDestroyed).toBe(true);
 		expect(el.textContent).toBe('');
 		expect(el.firstChild?.nodeType).toBe(Node.COMMENT_NODE);
+		errSpy.mockRestore();
+	});
+});
+
+describe('PuzzleView — setState() re-runs data() when data() read the key (D23)', () => {
+	// a filter tab narrowing a list: the classic derived-from-local-state shape
+	class Filtered extends PuzzleView {
+		created() { this.setState({ filter: 'all', draft: '' }); }
+		data() {
+			const { filter } = this.getData();
+			const items = ['a1', 'b1', 'a2'];
+			return { shown: filter === 'all' ? items : items.filter((i) => i.startsWith(filter)) };
+		}
+		render() { return h('p', {}, [text(`${this.getData().shown.join(',')}|${this.getData().draft}`)]); }
+	}
+
+	it('a derived value follows setState() with no refresh()', async () => {
+		const v = new Filtered();
+		const el = container();
+		await v.mount(el);
+		expect(el.textContent).toBe('a1,b1,a2|');
+		v.setState('filter', 'a');
+		await v.renderTick();
+		expect(el.textContent).toBe('a1,a2|');
+	});
+
+	it('a burst of writes runs data() once and renders once', async () => {
+		let renders = 0;
+		class V extends Filtered {
+			afterUpdate() { renders++; }
+		}
+		const v = new V();
+		const el = container();
+		await v.mount(el);
+		const dataSpy = vi.spyOn(v, 'data');
+		v.setState('filter', 'b');
+		v.setState('filter', 'a');
+		v.setState({ filter: 'a', draft: 'x' });
+		await v.renderTick();
+		expect(dataSpy).toHaveBeenCalledTimes(1);
+		expect(renders).toBe(1);
+		expect(el.textContent).toBe('a1,a2|x');
+	});
+
+	it('a key data() never read only re-renders', async () => {
+		const v = new Filtered();
+		const el = container();
+		await v.mount(el);
+		const dataSpy = vi.spyOn(v, 'data');
+		v.setState('draft', 'typed');
+		await v.renderTick();
+		expect(dataSpy).not.toHaveBeenCalled();
+		expect(el.textContent).toBe('a1,b1,a2|typed');
+	});
+
+	it('an explicit refresh() right after setState() still runs data() just once', async () => {
+		const v = new Filtered();
+		await v.mount(container());
+		const dataSpy = vi.spyOn(v, 'data');
+		v.setState('filter', 'a');
+		v.refresh();
+		await v.renderTick();
+		expect(dataSpy).toHaveBeenCalledTimes(1);
+	});
+
+	it('reads through getState() count too', async () => {
+		class V extends PuzzleView {
+			data() { return { doubled: (this.getState().n ?? 0) * 2 }; }
+			render() { return h('p', {}, [text(String(this.getData().doubled))]); }
+		}
+		const v = new V();
+		const el = container();
+		await v.mount(el);
+		v.setState('n', 4);
+		await v.renderTick();
+		expect(el.textContent).toBe('8');
+	});
+
+	it('spreading getData() inside data() counts as reading every key, new ones included', async () => {
+		class V extends PuzzleView {
+			data() {
+				const all = { ...this.getData() };
+				return { count: Object.keys(all).filter((k) => k !== 'count').length };
+			}
+			render() { return h('p', {}, [text(String(this.getData().count))]); }
+		}
+		const v = new V();
+		const el = container();
+		await v.mount(el);
+		expect(el.textContent).toBe('0');
+		v.setState('fresh', true); // a key that did not exist when data() last ran
+		await v.renderTick();
+		expect(el.textContent).toBe('1');
+	});
+
+	it('a setState() inside data() does not schedule a re-run of itself', async () => {
+		class V extends PuzzleView {
+			data() {
+				const n = this.getData().n ?? 0;
+				this.setState('seen', n);
+				return { label: `n=${n}` };
+			}
+			render() { return h('p', {}, [text(this.getData().label)]); }
+		}
+		const v = new V();
+		await v.mount(container());
+		const dataSpy = vi.spyOn(v, 'data');
+		v.setState('n', 1);
+		await v.renderTick();
+		await v.renderTick();
+		expect(dataSpy).toHaveBeenCalledTimes(1);
+	});
+
+	it('an async data() shows the written value at once, then the derived one when it resolves', async () => {
+		/** @type {(v?: any) => void} */
+		let release = () => {};
+		class V extends PuzzleView {
+			async data() {
+				const q = this.getData().q ?? '';
+				await new Promise((r) => (release = r));
+				return { result: `results for ${q}` };
+			}
+			render() { return h('p', {}, [text(`${this.getData().q ?? ''}|${this.getData().result ?? ''}`)]); }
+		}
+		const v = new V();
+		const el = container();
+		const mounting = v.mount(el);
+		release();
+		await mounting;
+		expect(el.textContent).toBe('|results for ');
+		v.setState('q', 'cats');
+		await v.renderTick();
+		expect(el.textContent).toBe('cats|results for '); // the write is on screen right away
+		release();
+		await new Promise((r) => setTimeout(r, 0));
+		expect(el.textContent).toBe('cats|results for cats');
+	});
+
+	it('a sync data() throw on the re-run is contained, not rethrown from the flush', async () => {
+		class V extends PuzzleView {
+			data() {
+				if (this.getData().boom) throw new Error('boom');
+				return { ok: true };
+			}
+			render() { return h('p', {}, [text('ok')]); }
+		}
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const v = new V();
+		await v.mount(container());
+		v.setState('boom', true);
+		expect(() => v.flushUpdates()).not.toThrow();
+		expect(errSpy).toHaveBeenCalled();
 		errSpy.mockRestore();
 	});
 });
@@ -1217,8 +1387,8 @@ describe('ViewManager — an unknown tree is never patched over', () => {
 		poisoned = true;
 		n = 2;
 		const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
-		// refresh(), not setState: setState never re-runs data(), so the poisoned
-		// tree would never be built and the patch would never throw.
+		// refresh(), not setState: data() reads module variables the runtime
+		// cannot see, so only an on-purpose re-run builds the poisoned tree.
 		let aborted = false;
 		try {
 			await v.refresh();

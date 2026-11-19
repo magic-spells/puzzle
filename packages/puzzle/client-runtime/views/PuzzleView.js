@@ -16,7 +16,8 @@
  * - refresh({params|props}) from router/parent → data() re-runs
  * - a two-way bind write-back (D147) → setState + refresh, or the record's
  *   update() and the store flush behind it → data() re-runs
- * - setState() → re-render only, data() does NOT re-run
+ * - setState() → re-render; data() re-runs first when the last committed
+ *   data() read a written key through getData()/getState() (D23)
  */
 
 import { ViewManager, releasePins, moveManager } from './viewManager.js';
@@ -123,6 +124,12 @@ function warnThisHandlers(view) {
  * @typedef {{ params?: Record<string, any>, props?: any, route?: any }} RefreshInput
  */
 
+/**
+ * The keys one data() invocation read through getData()/getState() (D23).
+ * `all` means it enumerated a copy, so every key counts as read.
+ * @typedef {{ keys: Set<string>, all: boolean, open: boolean }} ReadRecord
+ */
+
 export class PuzzleView {
 	// Two-layer component state (Change C, SPEC §4). #state holds values written
 	// via setState() (and created()-seeded state, which uses setState); #derived holds
@@ -220,6 +227,21 @@ export class PuzzleView {
 	#enterPending = false;
 	#destroyed = false;
 	#updateScheduled = false;
+	// Read tracking for the automatic data() re-run (D23). While data() runs, the
+	// reads it makes through getData()/getState() land in #recorder (one record
+	// per invocation, the latest in #lastReads). A successful commit keeps that
+	// invocation's record in #dataReads, and a setState() that writes one of those
+	// keys sets #rerunData, so the scheduled flush re-runs data() before it renders.
+	/** @type {ReadRecord | null} */
+	#recorder = null;
+	/** @type {ReadRecord | null} */
+	#lastReads = null;
+	/** @type {ReadRecord | null} */
+	#dataReads = null;
+	#rerunData = false;
+	// Bumped by every render that lands, so a flush can tell whether the data()
+	// re-run it started already painted (a sync data() commits and renders).
+	#renderSeq = 0;
 	#runToken = 0;
 	// D161 settle loop: the run token of the refresh currently re-running data()
 	// behind fetches (0 = none), and whether a store change landed during it. A
@@ -401,14 +423,20 @@ export class PuzzleView {
 	 * @returns {T}
 	 */
 	getData() {
-		return /** @type {T} */ ({ ...this.#data });
+		return /** @type {T} */ (this.#tracked({ ...this.#data }));
 	}
 
 	/**
-	 * Write local UI state and schedule a re-render. Never re-runs data(). Accepts
-	 * (key, value) or an object map. Safe before mount (e.g. in created()) — it just
-	 * seeds state for the first data() run to read back. Replaces the old
-	 * setData() (renamed in 0.10, D191).
+	 * Write local UI state and schedule a re-render. Accepts (key, value) or an
+	 * object map. Safe before mount (e.g. in created()) — it just seeds state for
+	 * the first data() run to read back. Replaces the old setData() (renamed in
+	 * 0.10, D191).
+	 *
+	 * When the last committed data() read a written key through getData() or
+	 * getState(), the scheduled render re-runs data() first (D23), so values
+	 * derived from local state stay current with no refresh(). Any number of
+	 * writes before that render share one data() run. A key data() never read
+	 * only re-renders.
 	 *
 	 * Two-layer state (Change C, SPEC §4): the write targets the STATE layer AND the
 	 * visible #data directly, so the value shows immediately and wins over any derived
@@ -427,6 +455,21 @@ export class PuzzleView {
 			this.#state[/** @type {string} */ (key)] = value;
 			this.#data[/** @type {string} */ (key)] = value;
 		}
+		// A write to a key the last committed data() read re-runs data() with the
+		// render (D23). A write made while data() itself is running never does: the
+		// run in progress already sees it, and re-running would loop.
+		const reads = this.#dataReads;
+		if (reads && !this.#recorder && !this.#rerunData) {
+			if (reads.all) this.#rerunData = true;
+			else if (typeof key === 'object' && key !== null) {
+				for (const k of Object.keys(key)) {
+					if (reads.keys.has(k)) {
+						this.#rerunData = true;
+						break;
+					}
+				}
+			} else if (reads.keys.has(/** @type {string} */ (key))) this.#rerunData = true;
+		}
 		this.#scheduleRender();
 	}
 
@@ -441,7 +484,56 @@ export class PuzzleView {
 	 * @returns {T}
 	 */
 	getState() {
-		return /** @type {T} */ ({ ...this.#state });
+		return /** @type {T} */ (this.#tracked({ ...this.#state }));
+	}
+
+	/**
+	 * Hand out `copy` as is, or — while this view's data() is running — wrapped so
+	 * every key data() reads off it is recorded (D23). Enumerating it (a spread,
+	 * Object.keys, JSON.stringify) counts as reading every key, present or future.
+	 * The record closes when its run commits, so a proxy data() returned inside its
+	 * model stops recording from then on.
+	 * @param {Record<string, any>} copy
+	 * @returns {Record<string, any>}
+	 */
+	#tracked(copy) {
+		const rec = this.#recorder;
+		if (!rec) return copy;
+		return new Proxy(copy, {
+			get(target, key, receiver) {
+				if (rec.open && typeof key === 'string') rec.keys.add(key);
+				return Reflect.get(target, key, receiver);
+			},
+			has(target, key) {
+				if (rec.open && typeof key === 'string') rec.keys.add(key);
+				return Reflect.has(target, key);
+			},
+			ownKeys(target) {
+				if (rec.open) rec.all = true;
+				return Reflect.ownKeys(target);
+			},
+		});
+	}
+
+	/**
+	 * Run one data() invocation with read tracking on. Only the synchronous part
+	 * of the call installs the recorder; an async data() keeps recording through
+	 * any getData()/getState() copy it took before its first await.
+	 * @template R
+	 * @param {() => R} invoke
+	 * @returns {R}
+	 */
+	#recordReads(invoke) {
+		/** @type {ReadRecord} */
+		const rec = { keys: new Set(), all: false, open: true };
+		this.#lastReads = rec;
+		const outer = this.#recorder;
+		this.#recorder = rec;
+		try {
+			return invoke();
+		} finally {
+			this.#recorder = outer;
+		}
 	}
 
 	/**
@@ -705,10 +797,11 @@ export class PuzzleView {
 	/**
 	 * Apply one bind write. Three arms, decided by the target:
 	 *
-	 * 1. null → local component state. refresh(), not a bare setState: a bound
-	 *    filter field feeding a data()-derived list must narrow it as you type, and
-	 *    setState never re-runs data(). #renderNow disarms the frame setState armed,
-	 *    so this still costs exactly one render.
+	 * 1. null → local component state. setState then refresh(): a bound filter
+	 *    field feeding a data()-derived list narrows it within the same input
+	 *    event, rather than on the frame setState's own re-run (D23) would use.
+	 *    The refresh clears that pending re-run and #renderNow disarms the frame
+	 *    setState armed, so this still costs one data() run and one render.
 	 * 2. a PuzzleModel record → its validated update(). Duck-typed on `update` and
 	 *    a string `_type` TOGETHER (this file must not import model.js); a plain
 	 *    object that merely owns an update() method is not a record. update()
@@ -1338,6 +1431,10 @@ export class PuzzleView {
 				return;
 		}
 		const token = ++this.#runToken;
+		// This run reads the current state, so a pending setState()-driven re-run is
+		// satisfied by it (an explicit refresh() right after setState() runs data()
+		// once, not twice).
+		this.#rerunData = false;
 		// Notification dedupe (D161, D170). Every store mutation lands before its
 		// _notify, so each sequence already queued as data() starts is baked into
 		// the model this pass commits; #commit stamps it onto `_settleMark` and that
@@ -1347,10 +1444,11 @@ export class PuzzleView {
 		const mark = this.ctx.store?._notifySeq || 0;
 		this.#snapshotPropRevs(this.#props);
 		const run = () => {
-			const out =
+			const out = this.#recordReads(() =>
 				typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
 					? devperfRunData(this, this.#params, this.#props)
-					: this.data(this.#params, this.#props);
+					: this.data(this.#params, this.#props)
+			);
 			if (out && typeof out.then === 'function') this.#noteAsyncShape();
 			return out;
 		};
@@ -1508,10 +1606,11 @@ export class PuzzleView {
 			const mine = this.#beginEvalRun(scope);
 			let out;
 			try {
-				out =
+				out = this.#recordReads(() =>
 					typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
 						? devperfRunData(this, scope.params, scope.props)
-						: this.data(scope.params, scope.props);
+						: this.data(scope.params, scope.props)
+				);
 			} catch (err) {
 				this.#endEvalRun(mine);
 				throw err;
@@ -2418,6 +2517,14 @@ export class PuzzleView {
 		// D161 settle loop may already have stamped its committing pass's (higher)
 		// mark, and that must not be walked backwards.
 		if (mark > this._settleMark) this._settleMark = mark;
+		// The committing run's reads become the keys setState() watches (D23). The
+		// latest invocation is the committing one: the settle loop's last pass, or
+		// the prepare this commit belongs to. Closing it stops any proxy data()
+		// handed back inside its model from recording later reads.
+		if (this.#lastReads) {
+			this.#lastReads.open = false;
+			this.#dataReads = this.#lastReads;
+		}
 		// Two-layer state (Change C, SPEC §4). A successful data() result REPLACES the
 		// derived layer wholesale — keys an earlier run returned but this one omits
 		// disappear (unless the state layer still holds them) — then #recompose()
@@ -2671,6 +2778,7 @@ export class PuzzleView {
 		// them would silently drop a legitimately pending local-state render. A setState
 		// later in this same tick sees the flag false and re-arms normally.
 		this.#updateScheduled = false;
+		this.#renderSeq++;
 		const isUpdate = this.#mounted;
 
 		if (isUpdate) this.beforeUpdate();
@@ -2889,11 +2997,42 @@ export class PuzzleView {
 		this.#withCommittedScope(() => {
 			if (!this.#updateScheduled) return;
 			this.#updateScheduled = false;
+			if (this.#rerunData && !this.#rerunDataNow()) return;
 			try {
 				this.#renderNow();
 			} catch (err) {
 				this.#handleViewFailure('[puzzle] render update failed:', err, 'render');
 			}
 		});
+	}
+
+	/**
+	 * The automatic data() re-run (D23): a setState() since the last commit wrote
+	 * a key that data() read. Every write since the flush was armed is already in
+	 * the state layer, so one run covers the whole burst. A synchronous data()
+	 * commits and renders here, and the flush has nothing left to do. An async one
+	 * is still in flight, so the flush renders the written values now and the
+	 * commit renders again when data() resolves. A view mid-settle (D161) folds the
+	 * write into that run as one more pass instead of superseding it.
+	 * @returns {boolean} whether the flush still has to render
+	 */
+	#rerunDataNow() {
+		this.#rerunData = false;
+		if (this.#destroyed || this.#leaving) return true;
+		if (this._settlingToken !== 0) {
+			this._settleDirty = true;
+			return true;
+		}
+		const seq = this.#renderSeq;
+		const message = '[puzzle] data() failed during a setState() re-run:';
+		try {
+			this.refresh()?.catch((err) => this.#handleViewFailure(message, err, 'refresh'));
+		} catch (err) {
+			// a sync data() throw is already reported; rendering on top of it would
+			// report the same broken view twice
+			this.#handleViewFailure(message, err, 'refresh');
+			return false;
+		}
+		return seq === this.#renderSeq && !this.#destroyed;
 	}
 }

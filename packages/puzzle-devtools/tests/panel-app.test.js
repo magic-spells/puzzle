@@ -1214,6 +1214,26 @@ describe.skipIf(!built)('Store panel', () => {
 		expect(document.querySelector('[data-row="t1"]').textContent).toContain('Ship the bridge');
 	});
 
+	it('keeps the caret where it was while typing re-runs data()', async () => {
+		document.querySelector('[data-row="t1"]').click();
+		await settle(app);
+
+		// editField's setState re-runs data() (it reads `edits`), which re-renders the
+		// focused input. The controlled value matches what is already in the DOM, so
+		// the patch must leave the input, and the caret in it, alone.
+		const input = document.querySelector('[data-field="text"] input');
+		input.focus();
+		type(input, 'Ship the bridge now');
+		input.setSelectionRange(4, 4);
+		await settle(app);
+
+		const after = document.querySelector('[data-field="text"] input');
+		expect(after).toBe(input);
+		expect(after.value).toBe('Ship the bridge now');
+		expect(after.selectionStart).toBe(4);
+		expect(after.selectionEnd).toBe(4);
+	});
+
 	it('reports a malformed number before it ever reaches the wire', async () => {
 		document.querySelector('[data-row="t1"]').click();
 		await settle(app);

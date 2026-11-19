@@ -11,9 +11,8 @@
        back with router.replace() — no history entry per keystroke, scroll
        untouched, and the query-only change re-runs data() with the new
        snapshot, so /search?q=cabin is a shareable, reload-safe link. Every
-       other control writes to LOCAL state and calls refresh(), so data()
-       re-runs and recomputes `results` (setState alone won't re-run it,
-       SPEC §4). No store writes anywhere — pure client-side browsing. -->
+       other control writes to LOCAL state with setState, and data() reads
+       those keys, so it re-runs and recomputes `results` (SPEC §4). No store writes anywhere — pure client-side browsing. -->
   <div class="rounded-2xl ring-1 ring-line bg-bg p-5 sm:p-6 mb-8 space-y-5">
     <!-- Free-text destination search: matched against title/city/country. -->
     <input
@@ -207,24 +206,16 @@ export default class SearchView extends PuzzleView {
       const value = event.target.value;
       this.ctx.router.replace(value ? '/search?q=' + encodeURIComponent(value) : '/search');
     },
-    // Each remaining control mirrors into local state then refresh()es so data()
-    // recomputes the result set (setState does not re-run data(), SPEC §4).
+    // Each remaining control mirrors into local state; data() reads those keys,
+    // so the result set recomputes (SPEC §4).
     decGuests: () => {
       this.setState('guests', Math.max(1, (this.getData().guests || 1) - 1));
-      this.refresh();
     },
     incGuests: () => {
       this.setState('guests', Math.min(10, (this.getData().guests || 1) + 1));
-      this.refresh();
     },
-    setPrice: (bucket) => {
-      this.setState('price', bucket);
-      this.refresh();
-    },
-    setType: (type) => {
-      this.setState('type', type);
-      this.refresh();
-    },
+    setPrice: (bucket) => this.setState('price', bucket),
+    setType: (type) => this.setState('type', type),
     // Toggle one amenity in/out of the selected set (copy, don't mutate in place).
     toggleAmenity: (name) => {
       const current = this.getData().amenities || [];
@@ -232,11 +223,9 @@ export default class SearchView extends PuzzleView {
         ? current.filter((a) => a !== name)
         : current.concat(name);
       this.setState('amenities', next);
-      this.refresh();
     },
     clearAll: () => {
       this.setState({ guests: 1, price: 'any', type: '', amenities: [] });
-      this.refresh();
       // Clearing ?q is a URL change, not a setState: replace() re-runs data()
       // with the empty query snapshot (and is a same-path no-op when ?q is
       // already absent).
