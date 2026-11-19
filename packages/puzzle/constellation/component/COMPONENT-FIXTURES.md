@@ -52,7 +52,7 @@ The schema already declares the types, so nothing is declared twice. Field-name 
 
 Interception sits at `_network` — after the request hook, instead of the real call. That placement is the design: load, save, delete and custom-request paths run unmodified, so a mocked app exercises the real pipeline in [[FLOW-ADAPTER-SYNC]]. What comes back is a Response-shaped object branded with `Symbol.for('puzzle.response')` (the real `Response` constructor is not uniform across Node and jsdom).
 
-Two config sources merge per key, the fixtures file winning: the model's checked-in `mock` block and the file's `mock[type]`. Either alone mocks a type. Default CRUD dispatches on method plus URL shape; `handler` serves anything deeper. `latency` makes skeletons and their anti-flash hold developable, and `fail`/`failRate` (a 500) are the only supported way to make a `data()` reject on purpose.
+Two config sources merge per key, the fixtures file winning: the model's checked-in `mock` block and the file's `mock[type]`. Either alone mocks a type. Default CRUD dispatches on method plus URL shape; `handler` serves anything deeper. A collection GET carrying `page`, `limit` or `after` is paginated (`mockPage`): it answers `{ records, meta: { page, limit, total, nextPage, nextCursor } }`, `limit` defaulting to 10 and clamped to 1–100, `after` (the last pk of the previous page) winning over `page`. Without those params it answers the plain array, so an app's other queries are unchanged ([[DECISION-D193-SERVER-QUERIES]]). `latency` makes skeletons and their anti-flash hold developable, and `fail`/`failRate` (a 500) are the only supported way to make a `data()` reject on purpose.
 
 ## Invariants
 

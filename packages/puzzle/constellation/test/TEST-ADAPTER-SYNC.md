@@ -17,6 +17,7 @@ connections:
   - DECISION-D157-ADAPTER-SUBPATH
   - DECISION-D158-ADAPTER-FETCH-FUNCTIONS
   - DECISION-D161-AUTO-FETCHING-FINDS
+  - DECISION-D193-SERVER-QUERIES
   - DOC-TESTING
   - FILE-ADAPTER
   - STATE-RECORD
@@ -28,7 +29,7 @@ verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 
 The opt-in `/adapter` capability (read path, write path, request hook, and the D161
 auto-fetch settle loop) against a stubbed `fetch`. Run with
-`npx vitest run tests/adapter- tests/auto-fetching tests/settle- tests/tracked- tests/tracking-overlap tests/collection-completeness`.
+`npx vitest run tests/adapter- tests/auto-fetching tests/settle- tests/tracked- tests/tracking-overlap tests/collection-completeness tests/server-queries tests/paginated-posts-example`.
 
 - **Dispatch** (`adapter-custom`, `adapter-defaults-local-models`): per-verb model
   function → app-wide `adapter.defaults()` → endpoint-generated REST; pagination, the
@@ -51,6 +52,14 @@ auto-fetch settle loop) against a stubbed `fetch`. Run with
   the run that owns the settle window clears its dirty flag; an automatic fault racing an
   explicit `loadOne`; a foreign read during a suspension is attributed correctly; a
   prepared refresh keeps its own tracking scope.
+- **Server queries** (`server-queries`, [[DECISION-D193-SERVER-QUERIES]]): a query read
+  faults once with the serialized URL, keeps pages apart and in server order, carries a
+  frozen non-enumerable `meta`, and dedupes canonical spellings and two views; untracked
+  reads are local; bad queries throw; explicit `loadMany` fills the entry; the LRU
+  evicts at 200. `invalidate` in all three forms refetches only what a view reads, keeps
+  a pre-invalidate response stale, removes a record whose refetch 404s, and retries after
+  a failed refetch. `syncStatus` and the write promise flip through queued writes; the
+  read-state round-trip carries queries; the fixtures mock paginates by page and cursor. `paginated-posts-example` boots the compiled example over its own fixtures: page links, a failed and a successful publish, and the comment cursor.
 - **Isolation** (`adapter-realm-isolation`): installing the adapter in one app does not
   leak into a later adapter-less app.
 

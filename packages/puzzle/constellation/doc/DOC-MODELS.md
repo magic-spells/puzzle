@@ -2,6 +2,7 @@
 name: Puzzle models — declaring models, validation, relationships, adapters
 status: built
 connections:
+  - DECISION-D193-SERVER-QUERIES
   - COMPONENT-PUZZLE-MODEL
   - COMPONENT-STORE
   - COMPONENT-ADAPTER
@@ -72,6 +73,8 @@ Mutate records only through `record.update(patch)` or a store path. `update()` m
 2. `record.update(patch)` — validate the patch, merge, notify.
 3. `record.destroy()` — local removal; notifies so lists drop it.
 
+`record.save()` and `record.delete()` return a promise carrying `pending` and `error`; `store.syncStatus(record)` reads the same state inside `data()`, so a button can show “Saving…” and an error without local flags (D193).
+
 Removal is terminal for the instance. After `destroy()` or a confirmed `delete()`, a later `delete()` resolves with the same record and sends nothing, and `save()` rejects with `cannot save a deleted record`. An instance built with `new` was never in a store: its `delete()` and `save()` reject. `toJSON()` is the record's own enumerable fields.
 
 ## Relationships (D49)
@@ -96,7 +99,7 @@ Opt-in: `import { adapter } from '@magic-spells/puzzle/adapter'` and pass it onc
 
 A model's `static adapter` takes `endpoint`, `mock` (the `/fixtures` mock, [[DOC-TESTING]]) and functions; other keys warn in dev. `endpoint` generates the REST five against `apiURL + endpoint`: `loadMany` GET (options → query string, nullish dropped), `loadOne` GET `/:id`, `create` POST, `update` PUT `/:id` (JSON `toJSON()` body), `delete` DELETE `/:id` (404 = already gone).
 
-Authored verbs override generated ones or work with no endpoint: `loadMany(fetch, options?)`, `loadOne(fetch, id)`, `create(fetch, record)`, `update(fetch, record)`, `delete(fetch, record)`. Use the `fetch` you are handed — it is platform-shaped (no URL prefixing) and routes through `beforeRequest` and the fixtures mock; global fetch bypasses both. Return the `Response` (non-OK rejects with `PuzzleAdapterError`; the body is parsed) or parsed data. Every returned record needs its pk. A custom `loadOne` signals not-found with a 404 Response — returning `null` is a shape error. A server that does not echo the record needs a `create`/`update` that returns nothing.
+Authored verbs override generated ones or work with no endpoint: `loadMany(fetch, options?)`, `loadOne(fetch, id)`, `create(fetch, record)`, `update(fetch, record)`, `delete(fetch, record)`. Use the `fetch` you are handed — it is platform-shaped (no URL prefixing) and routes through `beforeRequest` and the fixtures mock; global fetch bypasses both. Return the `Response` (non-OK rejects with `PuzzleAdapterError`; the body is parsed) or parsed data. Every returned record needs its pk. A custom `loadOne` signals not-found with a 404 Response — returning `null` is a shape error. A server that does not echo the record needs a `create`/`update` that returns nothing. An authored `loadMany` may return `{ records, meta }` for an API that wraps its rows; `meta` reaches the view as `findMany(...).meta` ([[DECISION-D193-SERVER-QUERIES]]).
 
 Dispatch per verb: model function → app default → generated REST. For an app-wide dialect pass `adapter.defaults({ ...verbs })` instead of the bare capability; each default gets a trailing `{ type, endpoint }`. A dialect alone does not make a model without its own `static adapter` auto-fetch.
 

@@ -1,6 +1,6 @@
 ---
-name: D192 — Server queries: query keys on findMany, store.invalidate(), and write status
-status: proposed
+name: D193 — Server queries: query keys on findMany, store.invalidate(), and write status
+status: built
 connections:
   - DECISION-D161-AUTO-FETCHING-FINDS
   - DECISION-D158-ADAPTER-FETCH-FUNCTIONS
@@ -12,6 +12,13 @@ connections:
   - COMPONENT-STORE
   - COMPONENT-ADAPTER
   - DOC-SPEC-DATA
+code_refs:
+  - client-runtime/datastore/adapter.js
+  - client-runtime/datastore/store.js
+  - client-runtime/fixtures/mock.js
+  - client-runtime/capabilities.js
+  - types/index.d.ts
+  - types/adapter.d.ts
 ---
 
 Tracked `findMany` takes server query params that become part of the cache key, `store.invalidate()` marks server data stale so the views reading it refetch, and every `save()`/`delete()` exposes its pending and error state. All of it lives in the `/adapter` subpath.
@@ -40,13 +47,13 @@ data() {
 
 - **`query` is its own option key.** `filter` stays the local predicate it is today and still applies on top of a query's rows. Server params never share a namespace with local options, so a server param literally named `filter` or `sort` cannot be misread.
 - **The query is the adapter's `loadMany` options, unchanged** ([[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]]): a tracked `findMany('post', { query })` dispatches `loadMany(fetch, query)`. The generated REST verb already serializes non-nullish entries with `URLSearchParams` (`GET /api/posts?page=2&status=published`); an authored verb or `adapter.defaults()` receives the object as-is. Adapters need no new parameter.
-- **Cache key.** `type` + a canonical spelling of the query: keys sorted, nullish entries dropped (the same entries `URLSearchParams` drops), values limited to strings, finite numbers, booleans and arrays of those. `{ page: 2, q: null }` and `{ page: 2 }` share an entry; `{ page: 2 }` and `{ page: '2' }` do not (they are different requests to an authored verb). A function, Date, nested object or `NaN` in a query throws in development naming the key. An empty `{ query: {} }` is the same as no query.
+- **Cache key.** `type` + a canonical spelling of the query: keys sorted, nullish entries dropped (the same entries `URLSearchParams` drops), values limited to strings, finite numbers, booleans and arrays of those. `{ page: 2, q: null }` and `{ page: 2 }` share an entry; `{ page: 2 }` and `{ page: '2' }` do not (they are different requests to an authored verb). A function, Date, nested object or `NaN` in a query throws, naming the type and key. An empty `{ query: {} }` is the same as no query.
 - **Each query keeps its own ordered result.** A query entry stores the server's row order as a list of record keys, plus `meta`, its load state and its generation. `findMany` with a query returns those records in that order (records removed since are skipped), not the whole local collection. Rows still merge into the one record table by pk exactly as `loadMany` does today, so `findOne('post', 7)` sees a post loaded by any page, and an edit to it shows in every page that lists it.
 - **Response shape.** A `loadMany` verb returns an array (as today) **or** `{ records: [...], meta: {...} }`. The second shape is how a server or verb reports a cursor, a total or a next page; the shape guards apply to `records`. `meta` must be a plain object or absent and is stored frozen.
 - **Reading `meta`.** The array a query `findMany` returns carries a non-enumerable, frozen `meta` property (`posts.meta.nextCursor`, `posts.meta.total`). It is `undefined` for a no-query `findMany` and for a query with no `meta` in its response. Read it before `filter`/`sort`/`map`, which return plain arrays.
 - **Cursors are just params.** `findMany('post', { query: { after: cursor } })` is one entry per cursor. "Load more" keeps the cursors it has walked in view state and reads each page; the store dedupes and caches every page. There is no accumulating query API.
 - **First load vs. no query.** A no-query tracked `findMany` behaves exactly as D161 (LOADED/EXHAUSTIVE marks, whole local collection). A query-bearing load marks neither: a page proves nothing about the whole collection.
-- **Untracked reads stay local.** Outside a tracked `data()` run, `findMany(type, { query })` returns the cached rows for that key (or `[]` if never loaded) and never fetches, like every other D161 local snapshot.
+- **Untracked reads stay local.** Outside a tracked `data()` run, `findMany(type, { query })` returns the cached rows for that key (or `[]` if never loaded) and never fetches, like every other D161 local snapshot. On a store built without the capability, `query` is ignored with a once-per-type development warning.
 - **Explicit `store.loadMany(type, options)`** with non-nullish options now also writes the query entry for those options, so a handler-driven prefetch fills the same cache a later tracked read will hit.
 - **Bounded.** Query entries live in an LRU of 200 per store. Evicting one only means the next tracked read of that key fetches again.
 
@@ -66,7 +73,8 @@ store.invalidate('post', { query: { page: 2 } }); // one query (exact key match)
 - **How it reaches views.** Invalidation calls `_notify` for the type's collection key (and the record key for the id form), batched like any change. Every view whose `data()` read that type re-runs. During that run, a tracked read of a stale entry queues a refetch through the existing D161 fault path (same in-flight dedupe, same request map). The settle loop holds the commit until the refetch lands, so **the old rows stay on screen while the new ones load**, then the view commits once. Views reading fresh entries of the same type re-run `data()` once and commit unchanged rows.
 - **Staleness test for a record.** The adapter already stamps each record with the generation of the last read that landed on it (`LOAD_GENERATIONS`). A tracked `findOne` hit refetches when the record is synced and its last read generation is older than the type's or the record's stale mark. Locally created, never-saved records are never stale.
 - **Refetch replaces a query's rows.** The new response's row list replaces the entry's old one, so a row the server dropped leaves that page. Records themselves are not deleted from the store by a refetch.
-- **Failures.** A refetch that fails rejects that view's run into the normal `errorView` path, as a first load does, and leaves the entry stale so the next run retries. A 404 on a stale record refetch records absence, as D161.
+- **Failures.** A refetch that fails rejects that view's run into the normal `errorView` path, as a first load does, and leaves the entry stale so the next run retries. A 404 on a stale record's refetch means the server no longer has it: the record is removed locally (which records it absent, D161) and the next pass reads `null`.
+- **Local edits.** A stale record's refetch is an ordinary `loadOne`, so D138's per-field merge applies: fields edited while the refetch was in flight keep their local value; unsaved edits made before it take the server's. Save before invalidating a record you are editing.
 - Concurrency: a response dispatched before an invalidation still lands its rows (it is not dropped), but the entry stays stale, because its generation is older than the mark.
 
 ### 3. Write status on `save()` and `delete()`
@@ -96,13 +104,12 @@ data() {
 
 ### 4. Serialization and tooling
 
-- The HMR snapshot and the `output: 'static'` read-state island (`data-puzzle-static-read`) gain an optional `queries` field: each entry's canonical key, row keys and `meta`, without load state. Version stays `1`; older readers ignore the field, and a page without it hydrates with no query entries. Stale marks never serialize (a reload is a fresh read).
+- The HMR snapshot and the `output: 'static'` read-state island (`data-puzzle-static-read`) gain an optional `queries` field, written only when there are entries: `[key, type, query, rows, meta]` each, without load generations. Version stays `1`; older readers ignore the field. Hydration recomputes each key from its own type and query and drops an entry that does not match. Stale marks never serialize (a reload is a fresh read).
 - `PuzzleApp.idle()` and `testing`'s settled helpers already ask `_reading()`; query and stale refetches register in the same in-flight maps, so both see them.
-- DevTools shows query entries in the Store panel (key, row count, stale flag). Wire keys are additive.
 
 ### 5. Bundle size
 
-Everything here is adapter-side, grafted onto the Store prototype by `installAdapter()` like D161's tracked pair. **An app without the `adapter` capability ships nothing new and its core bundle does not change.** The `/adapter` subpath grows by an estimated 1.2–1.6 KB gzip; the PR measures it with `scripts/measure-size.mjs` and reports the real number.
+Everything here is adapter-side, grafted onto the Store prototype by `installAdapter()` like D161's tracked pair. **An app without the `adapter` capability ships nothing new and its core bundle does not change.** Measured on production builds (all `dist/*.js`, gzip -9) against the base commit: every adapter app (`blog`, `chirp`, `music`, `stays`) grows by about 4.7 KB minified and **1.4–1.5 KB gzip**; `hello-world` and `todos`, which don't use the adapter, are byte-for-byte the same size minified.
 
 ## Alternatives rejected
 

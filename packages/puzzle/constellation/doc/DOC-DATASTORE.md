@@ -2,6 +2,7 @@
 name: Puzzle datastore
 status: built
 connections:
+  - DECISION-D193-SERVER-QUERIES
   - DOC-SPEC
   - DOC-SPEC-DATA
   - DOC-MODELS
@@ -30,10 +31,13 @@ Views reach the store as `this.ctx.store`. `modelFor`, `createRecord`, the finds
 | `createRecord(type, data)` | Defaults, pk, validation, insert, notify. |
 | `findOne(type, id)` | One record or `null`; subscribes that record. May fetch (below). |
 | `findMany(type, { filter }?)` | Records in insertion order; `filter` runs locally; subscribes the collection. May fetch (below). |
+| `findMany(type, { query })` | One server query (a page, a search, a cursor): its rows in server order, with the response's `meta` on the array. May fetch (below). |
+| `invalidate(type, [id \| { query }])` | Marks server data stale; views reading it refetch on their next run. Never fetches itself (D193). |
+| `syncStatus(record)` | `{ pending: 'save' \| 'delete' \| null, error }` for the record's writes; reactive in `data()` (D193). |
 | `observe(type, [id,] fn)` | Calls `fn()` after each flush carrying a change to the collection (or the one record); returns `stop()`. Never fetches (D184, below). |
 | `flush()` | Deliver pending notifications and write pending persistence now. |
 | `loadOne(type, id)` | Always requests and upserts. Bypasses the negative cache (the force-refresh hatch) and accepts whatever record the server returns, so a slug-resolving endpoint works. |
-| `loadMany(type, options?)` | Always requests and upserts every record. No options: a whole-collection load. With options (`{}` included): a partial page that marks nothing. |
+| `loadMany(type, options?)` | Always requests and upserts every record. No options: a whole-collection load. With options (`{}` included): a partial page that marks nothing, and fills that query's cache entry. |
 | `upsert(type, objectOrArray)` | Apply server data: update in place by pk or create as synced. Every object needs its pk; an array is checked in full before any element applies. |
 | `adapter(type)`, `request(...)` | Custom adapter actions ([[DOC-MODELS]]). |
 
@@ -59,7 +63,25 @@ data(params) {
 - **A committed `null` means "does not exist"**, never "still loading". Dependent reads settle across rounds; ten rounds throw naming the view. `data()` may run several times per navigation, so keep it side-effect free.
 - **404s are remembered** per identity (a 1000-entry cache, never persisted), so re-runs don't refire; any other failure fails the run and stays retryable. A `destroy()` or confirmed `delete()` also marks the identity absent; creating, loading or hydrating it again clears that.
 - **Collections load once.** A successful no-options `loadMany` stops `findMany` from fetching that type again. When the request came from `endpoint` (the generated REST verb), a later `findOne` miss answers `null` without a request; an authored `loadMany` may have returned page one, so an off-page id still fetches.
-- Calling `loadMany`/`loadOne` inside `data()` warns in dev — use the finds. There are no server-side query keys on `findMany`; fetch-all-once per type is the policy.
+- Calling `loadMany`/`loadOne` inside `data()` warns in dev — use the finds.
+
+## Server queries and invalidation (D193)
+
+A collection too big to load at once is read a page at a time with `query`. Each query is its own cache entry, fetched once and kept in server order:
+
+```js
+data() {
+  const page = Number(this.route.query.page ?? 1);
+  const posts = this.ctx.store.findMany('post', { query: { page } });
+  return { posts, page, hasNext: !!posts.meta?.nextPage };
+}
+```
+
+- `query` goes to the server (the generated REST verb puts it in the URL); `filter` stays local and can narrow the page. Values are strings, numbers, booleans or arrays of those, and key order does not matter.
+- `posts.meta` is whatever the server sent beside the rows: return `{ records, meta }` from an authored `loadMany` (or a `defaults()` dialect) for an API that wraps its rows. A plain array has no meta. Cursors are just params: put `meta.nextCursor` in the next query.
+- The page you came from stays cached, so going back costs no request. The 200 most recently read queries are kept.
+- After a write that changes what lists show, call `store.invalidate('post')`. Nothing fetches until a view reads the data again, and that view keeps showing the old rows until the new ones land. `invalidate('post', id)` refreshes one record; `invalidate('post', { query })` one page.
+- `store.syncStatus(record)` shows a save or delete while it runs, and its error after it fails; the promise from `save()`/`delete()` carries the same `pending` and `error`.
 
 ## Merges and read ordering
 
@@ -91,4 +113,4 @@ A record prop or `{#for}` row refreshes when that record changes through `update
 
 ## Non-goals
 
-No write-through on `update()`, server-side query or pagination keys on `findMany`, TTL or a public invalidation API, request cancellation, offline queues, conflict resolution, or background sync. Apps build those around the explicit store and adapter methods.
+No write-through on `update()`, freshness timers (TTL, refetch on focus or interval), request cancellation, offline queues, conflict resolution, or background sync. Apps build those around the explicit store and adapter methods.

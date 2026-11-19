@@ -275,6 +275,25 @@ one is *not* a compile error; it silently builds a different product.
   apps can opt in by adding the same `vitest.config.js`:
   `plugins: [puzzle()]`, `test: { environment: 'jsdom' }`. The CLI command
   behind it, `puzzle compile <file.pzl>`, is hidden and not a stable surface.
+- **Paginated server queries, invalidation and write status (D193).** With
+  the `/adapter` capability, `findMany('post', { query: { page: 2 } })` reads
+  one server query: the query goes to `loadMany` (the REST shorthand puts it in
+  the URL), each query is its own cached entry kept in server order, and a
+  tracked read fetches it once through the auto-fetch settle loop. An authored
+  `loadMany` may return `{ records, meta }`; the array `findMany` returns
+  carries `meta` (non-enumerable, frozen), so `posts.meta.nextPage` or a
+  `nextCursor` drives the next page. `filter` stays local and can narrow a
+  page. `store.invalidate('post')`, `invalidate('post', id)` and
+  `invalidate('post', { query })` mark data stale and notify; nothing fetches
+  until a view reads it again, and that view keeps its rows on screen until the
+  refetch commits. `store.syncStatus(record)` returns
+  `{ pending: 'save' | 'delete' | null, error }` reactively, and the promise
+  from `save()`/`delete()` carries `pending` and `error`. The `--fixtures`
+  mock paginates a collection GET carrying `page`, `limit` or `after`.
+  Adapter apps grow about 1.4–1.5 KB gzip; apps without the adapter are
+  unchanged. `examples/paginated-posts` shows all three. Behavior change: a
+  `query` key passed to `findMany` used to be ignored silently; without the
+  adapter it now warns in development, and with it the read is a server query.
 - **Static pages link their own CSS.** In `output: 'static'`, a view, layout
   or component script that does `import './page.css'` now gets that CSS on its
   own page only: each page links `_puzzle/<slug>.css` (`<slug>-<hash>.css`

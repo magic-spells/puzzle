@@ -1,8 +1,8 @@
 ---
 name: Server queries — paginated finds, invalidation, write status
-status: proposed
+status: built
 connections:
-  - DECISION-D192-SERVER-QUERIES
+  - DECISION-D193-SERVER-QUERIES
   - DECISION-D161-AUTO-FETCHING-FINDS
   - DECISION-D158-ADAPTER-FETCH-FUNCTIONS
   - COMPONENT-STORE
@@ -15,7 +15,7 @@ connections:
 
 # Server queries
 
-The author-facing shape of [[DECISION-D192-SERVER-QUERIES]] and the build plan for it. The decision card owns the rules; this card shows them in use and lists what changes where.
+The author-facing shape of [[DECISION-D193-SERVER-QUERIES]] and how it was built. The decision card owns the rules; this card shows them in use and lists what changes where.
 
 ## In a view
 
@@ -59,7 +59,7 @@ events = {
 };
 ```
 
-Each cursor is its own cached entry, so appending one fetches only the new page. (`setState` on a key `data()` read re-runs `data()` per D191 once #271's auto re-run lands; until then the handler adds `this.refresh()`.)
+Each cursor is its own cached entry, so appending one fetches only the new page. (`setState` on a key `data()` read re-runs `data()` on its own, [[DECISION-D23-REFRESH-PATTERN]].)
 
 ### Saving, then invalidating
 
@@ -111,23 +111,23 @@ The mock adapter (`/fixtures`) learns to serve `?page`/`?limit` and an `after` c
 ## Build plan
 
 **Runtime (`client-runtime/datastore/adapter.js`, all adapter-side):**
-- Read state gains `queries` (LRU `Map` of canonical key → `{ type, rows, meta, gen, stale }`), `staleType` (`type → gen`) and `staleRecord` (`identity → gen`).
+- Read state gains `queries` (LRU `Map` of canonical key → `{ type, query, rows, meta, gen, mark }`), `staleType` (`type → gen`) and `staleRecord` (`identity → gen`).
 - `canonicalQuery(type, query)` builds the key and validates values in development.
 - `_findManyTracked` routes a query read to a new `_faultQuery` (dedupe on `state.many` under the query key) and returns the entry's rows with `meta`; `_findOneTracked` checks the stale marks on a hit.
 - `loadMany` accepts `{ records, meta }`, and with options writes the query entry.
 - The adapter overrides `Store.prototype.findMany` only for the `query` branch, so an untracked query read returns cached rows; a no-query call goes straight to core.
-- `invalidate()` and `syncStatus()` install on the Store prototype; `_chain` sets and clears per-record status and notifies; `save()`/`delete()` decorate their promise with `pending`/`error`.
+- `invalidate()` and `syncStatus()` install on the Store prototype; `saveRecord`/`deleteRecord` run through `_write`, which sets and clears per-record status and notifies; `save()`/`delete()` decorate their promise with `pending`/`error`.
 - `serializeReadState`/`hydrateReadState` carry `queries`.
 
 **Core (`client-runtime/datastore/store.js`):** no behavior change. JSDoc for `FindManyOptions.query`, and a development warning when `query` is passed on an adapter-free store (it would be ignored).
 
 **Fixtures (`client-runtime/fixtures/mock.js`):** default pagination for `page`/`limit`/`after`.
 
-**Types:** `types/index.d.ts` (`FindManyOptions.query`, `QueryResult<T>` with `meta`, `invalidate`, `syncStatus`, `SyncStatus`), `types/adapter.d.ts` (`LoadManyResult`, `WritePromise<T>` with `pending`/`error`), plus the installed-method drift guard.
+**Types:** `types/index.d.ts` (`FindManyOptions.query`, `FindManyResult<T>` with `meta`), `types/adapter.d.ts` (`AdapterLoadManyResult`, `WritePromise<T>` with `pending`/`error`, `SyncStatus`, and `invalidate`/`syncStatus` on the Store), plus the installed-method drift guard.
 
-**Tests (vitest):** canonical keys and dev errors; a query read faults once, dedupes across views, keeps server order and `meta`; pages share records with `findOne`; untracked query reads are local; `invalidate` in all three forms marks, notifies and refetches only what a view reads, holding old rows until the settle commit; a stale refetch failure reaches `errorView` and retries; generations keep a pre-invalidate response from clearing staleness; `syncStatus` flips and notifies through queued writes; promise `pending`/`error`; read-state serialization round-trip; mock pagination; LRU eviction. TypeScript fixtures under `tests-types`. A browser smoke for the example.
+**Tests (vitest):** canonical keys and dev errors; a query read faults once, dedupes across views, keeps server order and `meta`; pages share records with `findOne`; untracked query reads are local; `invalidate` in all three forms marks, notifies and refetches only what a view reads, holding old rows until the settle commit; a stale refetch failure reaches `errorView` and retries; generations keep a pre-invalidate response from clearing staleness; `syncStatus` flips and notifies through queued writes; promise `pending`/`error`; read-state serialization round-trip; mock pagination; LRU eviction. TypeScript fixtures under `tests-types`. An end-to-end test of the example (`tests/paginated-posts-example.test.js`) over its compiled views and fixtures.
 
-**Docs:** [[DOC-SPEC-DATA]] §8/§22/§61, [[DOC-SPEC]] deferred list, [[DOC-DATASTORE]], [[DOC-MODELS]], [[COMPONENT-STORE]], [[COMPONENT-ADAPTER]], [[DOC-RELEASE-SURFACE]], the user guide's data chapter, the agent skill, and a CHANGELOG entry under 0.10.0. D192 and this card flip to `built`.
+**Docs:** [[DOC-SPEC-DATA]] §8/§22/§61, [[DOC-SPEC]] deferred list, [[DOC-DATASTORE]], [[DOC-MODELS]], [[COMPONENT-STORE]], [[COMPONENT-ADAPTER]], [[DOC-RELEASE-SURFACE]], the user guide's data chapter, the agent skill, and a CHANGELOG entry under 0.10.0. D193 and this card flip to `built`.
 
 **Example:** `examples/paginated-posts`: a fixtures-backed post list with page links, a detail view with Publish (pending and error state, then `invalidate`), and a cursor "load more" comments list.
 

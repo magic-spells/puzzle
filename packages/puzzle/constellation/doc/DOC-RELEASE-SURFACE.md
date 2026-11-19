@@ -101,13 +101,14 @@ Contract: §3–§6, §17, §18, §24, §28, §31, §43, §47, §57, §64–§67
 
 ## Data layer
 
-§7, §8, §20–§22, §49, §52, §58, §61.
+§7, §8, §20–§22, §49, §52, §58, §61, §68.
 
 - Schema builders: `string`, `number`, `boolean`, `date`, `object`, `array`, `belongsTo`, `hasMany`, with defaults, primary keys and `required`/`min`/`max`/`oneOf`/custom validation.
 - Store queries inside `data()` auto-subscribe. On an adapter-backed model a tracked `findOne`/`findMany` miss fetches and reruns `data()` until reads settle ([[DECISION-D161-AUTO-FETCHING-FINDS]]). Reads outside `data()` never fetch.
+- Server queries with `/adapter`: `findMany(type, { query })` caches each query's rows in server order with the response `meta`; `store.invalidate(type, [id | { query }])` marks data stale so views reading it refetch; `store.syncStatus(record)` and the `pending`/`error` on the `save()`/`delete()` promise show write state ([[DECISION-D193-SERVER-QUERIES]]).
 - `store.observe(type, [id,] fn)` (D184), `store.flush()`, `store.modelFor(type)` (D189), static `Model.primaryKey()`.
 - Server sync is opt-in through `/adapter`: per-verb model fetch functions, `endpoint` REST defaults, `adapter.defaults()`; dispatch is model function → app default → generated REST. The collection verb is `loadMany`. `beforeRequest(init, { type, method, url })` is synchronous.
-- Fixtures: `installFixtures(config)` adds `store.seed(type, n, overrides)` and a mock adapter (`mock: { data, latency, failRate, fail, handler }`). Ships only under `--fixtures` or a test import.
+- Fixtures: `installFixtures(config)` adds `store.seed(type, n, overrides)` and a mock adapter (`mock: { data, latency, failRate, fail, handler }`) that paginates a collection GET carrying `page`, `limit` or `after`. Ships only under `--fixtures` or a test import.
 - `storage` persistence is fail-soft.
 
 ## Routing and motion

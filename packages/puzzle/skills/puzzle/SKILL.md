@@ -857,7 +857,8 @@ Register model classes in the app's `models` config.
 
 Views reach the store as `this.ctx.store`:
 
-- Reads: `findOne(type, id)`, `findMany(type, { filter }?)`.
+- Reads: `findOne(type, id)`, `findMany(type, { filter }?)`, and with the
+  adapter `findMany(type, { query })` for one server page (below).
 - Writes: `createRecord(type, data)` (validates, defaults, notifies), then
   records mutate in place — `record.update(patch)`, `record.destroy()`,
   `record.validate()` → `{ valid, errors }` (non-throwing, for form UX).
@@ -958,11 +959,40 @@ static adapter = {
   },
 };
 
-// Imperative loads (outside data()): a force refresh, or pagination.
-await store.loadMany('post', { page: 1 });
-await store.loadMany('post', { page: 2 }); // pages accumulate; existing ids merge
+// Imperative loads (outside data()): a force refresh.
+await store.loadMany('post');
 const post = store.upsert('post', await store.adapter('post').publish(id));
 ```
+
+**Pages, invalidation and write status (puzzle ≥ 0.10.0).** Don't load a big
+collection with `findMany(type)`. Read one page with `query`; each query is
+its own cached entry, fetched once and kept in server order:
+
+```js
+data() {
+  const page = Number(this.route.query.page ?? 1); // page in the url: links and back work
+  const posts = this.ctx.store.findMany('post', { query: { page } });
+  return { posts, page, hasNext: !!posts.meta?.nextPage };
+}
+```
+
+- `query` goes to the server (the REST shorthand puts it in the URL); `filter`
+  stays a local predicate. Values are strings, numbers, booleans or arrays of
+  those.
+- `posts.meta` is what the server sent beside the rows. An authored `loadMany`
+  returns an object with `records` and `meta` for an API that wraps rows; a plain array has no
+  meta. A cursor is just another param: put `meta.nextCursor` in the next query,
+  and keep the cursors walked so far in `setState` for a "load more" list.
+- After a write that changes what lists show, call
+  `this.ctx.store.invalidate('post')` (or `invalidate('post', id)`,
+  `invalidate('post', { query })`). It never fetches: views reading that data
+  refetch on their next run and keep the old rows on screen until the new ones
+  land. Don't call `loadMany` to refresh a list.
+- Show a save without your own flags: `store.syncStatus(record)` in `data()`
+  returns `pending` (`'save'`, `'delete'` or `null`) and `error`, and re-runs the view
+  as it changes. The promise from `save()`/`delete()` also carries `pending` and
+  `error`.
+- No TTL, no refetch on focus: data stays until you invalidate it.
 
 Using global `fetch` instead of the supplied parameter is legal and literal:
 it bypasses both `beforeRequest` and fixtures interception.
