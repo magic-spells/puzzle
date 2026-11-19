@@ -141,7 +141,7 @@ V3's strict comparison, V5, V15, V17 and the V18 styles.
   root element (SPEC §24, D141, SKILL.md). Padding to fix it was rejected
   (bytes on every marker for an authoring rule).
 - **V15 — props into scope: host-specific.** In PuzzleKit the base
-  `PuzzleView.data(params, props)` returns its props, so `{ tone }` reads the
+  `PuzzleView.data({ props })` returns its props, so `{ tone }` reads the
   prop as in Sites for every component that does not override `data()`, with
   or without a `<script>`; an overriding `data()` decides.
 - **V16 — dotted tags are a Sites restriction for now.** The shared parser

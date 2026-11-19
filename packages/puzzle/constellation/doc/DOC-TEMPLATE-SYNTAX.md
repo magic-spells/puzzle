@@ -154,7 +154,7 @@ A tag that doesn't start with a lowercase letter is a component, imported in `<s
 <Frame><Frame.Wrapper>…</Frame.Wrapper></Frame>
 ```
 
-- When a prop changes, the child's `data(params, props)` re-runs. `@name={ … }` passes a callback prop.
+- When a prop changes, the child's `data({ params, props })` re-runs. `@name={ … }` passes a callback prop.
 - `{...obj}` spreads an object's properties as props; later attributes override earlier ones. Spreads work on component tags only.
 - A component without a `<script>` reads its props directly (`{ tone }`).
 - Dotted tags are **component families**: a directory of `.pzl` files with an `index.js` barrel (`export default Object.assign(Frame, { Wrapper, Content })`), scaffolded by `puzzle generate component Frame --family Wrapper,Content` (§65).

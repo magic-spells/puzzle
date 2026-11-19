@@ -80,7 +80,7 @@ A declarative loading template shown while a component's **first `data()`** is p
 `memo(key, deps, factory)` ([[DECISION-D64-MEMO-HELPER]]): a per-instance cache keyed by string. It returns the cached value while `deps` (an array) matches the previous call positionally by `Object.is` (a length change is a miss); otherwise it calls `factory()`, caches and returns the result. Synchronous, no reactivity of its own. It exists because props compare shallowly, so object props compare **by reference**:
 
 ```js
-data(params, props) {
+data() {
   const { effect = 'carousel' } = this.getData();
   return {
     carouselOptions: this.memo('opts', [effect], () => ({ effect, loop: true, slidesPerView: 2 })),

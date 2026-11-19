@@ -164,6 +164,21 @@ export default class Counter extends PuzzleView {
 </script>
 ```
 
+`data()` takes **one object**: `data({ params, props, shared })` — route
+params, props, and what ancestors share. Destructure only what you use
+(`data({ props })`, `data({ params })`, `data()`); the old positional
+`data(params, props)` is gone (0.10.0, D197) and gets the object as `params`.
+
+`share()` hands values and callbacks to every view a component's template
+mounts, at any depth and through slots, under `shared.<camelCaseClassName>`
+(`Tabs` → `shared.tabs`). It takes the same object, runs after each `data()`
+commit, and must be synchronous. `shared` is always an object, so
+`data({ shared: { tabs = {} } })` is safe; handlers read `this.shared`.
+Children change the parent only by calling a shared callback
+(`select: (id) => this.setState({ active: id })`); there is no `setShared()`.
+The nearest same-named ancestor wins, and a layout's `share()` does not reach
+its routed page. Don't name a component `Params`, `Props` or `Shared`.
+
 Names starting with `__` belong to the compiler: don't define `__`-prefixed
 fields or methods on a component (`__c`, `__lists`, `__dirty`, `__rgen`,
 `__propRevs`, a static `__roots`, …) or bind them in a `<script>` (`__l`,
@@ -894,7 +909,7 @@ the batch until a pass comes back with every read warm, and commits that one. So
 this is the entire data layer of a deep-linkable detail page:
 
 ```js
-data(params) {
+data({ params }) {
   const store = this.ctx.store;
   const post = store.findOne('post', params.id);
   const author = post ? store.findOne('user', post.authorId) : null;

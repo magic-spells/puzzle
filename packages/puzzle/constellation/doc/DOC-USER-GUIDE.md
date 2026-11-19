@@ -88,7 +88,7 @@ All config keys: [[DOC-SPEC-ANATOMY]] §2. There is no seeding step.
 
 ## Routes
 
-`app/routes.js` exports `{ path, name, view, layout?, meta? }` entries. A `:id` segment arrives as `params.id` in `data(params, props)`; `'*'` matches last and renders the 404 view. A layout renders the routed view at `<Slot/>`. Nesting, guards, lazy views, query, head, scroll and focus: [[DOC-ROUTER]].
+`app/routes.js` exports `{ path, name, view, layout?, meta? }` entries. A `:id` segment arrives as `params.id` in `data({ params, props })`; `'*'` matches last and renders the 404 view. A layout renders the routed view at `<Slot/>`. Nesting, guards, lazy views, query, head, scroll and focus: [[DOC-ROUTER]].
 
 ## Models
 
@@ -168,7 +168,7 @@ export default class PostDetailView extends PuzzleView {
     this.setState({ commentText: '', authorName: '' });   // local form state
   }
 
-  data(params, props) {
+  data({ params }) {
     const store = this.ctx.store;
     const local = this.getData();
     const post = store.findOne('post', params.id);
@@ -202,7 +202,7 @@ export default class PostDetailView extends PuzzleView {
 
 What this shows:
 
-- **`data(params, props)`** receives only route params and props. It may be `async`, runs on mount, on param/prop change and when a store read it made changes, and subscribes to every store query it runs.
+- **`data({ params, props, shared })`** takes one object: route params, props, and `shared`, the values ancestor views hand down with `share()` (always an object, so `shared: { filter = {} }` is safe). It may be `async`, runs on mount, on param/prop change and when a store read it made changes, and subscribes to every store query it runs.
 - **Auto-fetch:** with the adapter installed, a tracked `findOne`/`findMany` miss runs the model's read verb, and the view commits only once every read settles (here the post in round 1, the author in round 2). A committed `null` means "does not exist", never "still loading", so `{:else}` needs no loading flag.
 - **Templates never reach the instance:** `this` is a compile error in a template, so logic lives in `data()` and the template reads named fields like `canComment`. Functions are calls (`byline(…)`, `date(…)`); the count is `.length`.
 - **Components** are tags whose first character is not `a`–`z`, resolved against the script's imports.
@@ -267,7 +267,7 @@ A component's `<puzzle-view>` carries no attributes and wraps one root element. 
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class Button extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { variant: props.variant || 'primary', type: props.type || 'button', disabled: props.disabled || false };
   }
   events = {

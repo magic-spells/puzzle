@@ -63,7 +63,7 @@ The exported class extends `PuzzleView`:
 
 | Member | What it is |
 | --- | --- |
-| `data(params, props)` | Returns the model the template reads. May be `async`. |
+| `data({ params, props })` | Returns the model the template reads. May be `async`. |
 | `events` | A class field of arrow functions — the template's handlers ([[DOC-EVENTS]]). |
 | `created`, `mounted`, `beforeUpdate`, `afterUpdate(prev)`, `destroyed` | Lifecycle hooks, in that order. `viewWillShow`/`viewDidShow`/`viewWillHide`/`viewDidHide` bracket enter/leave animations. |
 | `animations` | A class field `{ in?, out? }` of Web Animations specs (§12). |
@@ -78,16 +78,17 @@ Every view and component gets `this.ctx`: `store` (records), `router` (`this.ctx
 
 ## `data()` and state
 
-`data(params, props)` answers "what does this component need?". It runs:
+`data({ params, props, shared })` answers "what does this component need?". It takes one object: route `params`, `props`, and `shared` (see [Sharing with nested views](#sharing-with-nested-views)). Destructure only what you use. It runs:
 
-1. on mount, with route params and props;
+1. on mount;
 2. when a prop changes;
 3. when route params change;
 4. when a store record it queried changes — any `findOne`/`findMany` inside `data()` subscribes automatically. On a model with an adapter, a query that misses fetches and `data()` re-runs until the data settles (§61), so `data()` can stay synchronous.
+5. when a `shared` key it read changes (below).
 
 ```js
 // UserProfile.pzl — re-runs whenever the userId prop changes
-data(params, props) {
+data({ props }) {
   return { user: this.ctx.store.findOne('user', props.userId) };
 }
 ```
@@ -119,6 +120,52 @@ events = {
 ```
 
 A displayed expression reads what `data()` returns (the `<Component>` `is` module-binding exception is §67 / [[DOC-TEMPLATE-SYNTAX]]) — it has no `this`, so a helper method or getter on the class is out of its reach. Put the value in the model (a getter on a `PuzzleModel` works as a field: `{ user.fullName }`).
+
+## Sharing with nested views
+
+A parent can hand values and callbacks to every view it renders, at any depth, without threading props through each level. Define `share()` next to `data()`. It takes the same object and returns what nested views get ([[DECISION-D197-SHARE]]):
+
+```html
+<!-- Tabs.pzl -->
+<script>
+export default class Tabs extends PuzzleView {
+  created() {
+    this.setState({ active: 'one' });
+  }
+
+  share() {
+    const { active } = this.getData();
+    return {
+      active,
+      // the only way a child changes the parent: call its callback
+      select: (id) => this.setState({ active: id }),
+    };
+  }
+}
+</script>
+```
+
+```html
+<!-- Tab.pzl, used inside <Tabs> or slotted into it -->
+<script>
+export default class Tab extends PuzzleView {
+  data({ props, shared: { tabs = {} } }) {
+    return { label: props.label, open: tabs.active === props.id };
+  }
+
+  events = {
+    pick: () => this.shared.tabs?.select(this.props.id),
+  };
+}
+</script>
+```
+
+- **Where it lands:** under `shared.<camelCaseName>` of the sharing class, so `Tabs` → `shared.tabs` and `FilterPanel` → `shared.filterPanel`. `shared` is always an object (`{}` when no ancestor shares), so destructuring with a default never throws.
+- **Who sees it:** every view the sharer's template mounts, including children passed through a slot. The nearest same-named ancestor wins. The chain stops at a routed view, so a layout's `share()` does not reach its page.
+- **Nesting:** a view's own `share()` receives the `shared` it inherited, so a nested `Filter` can extend its parent's: `share({ shared: { filter } }) { return { chain: [...(filter?.chain ?? []), this.getData().value] }; }`.
+- **Reactivity:** `share()` re-runs after every `data()` commit and on a `setState()` of a key it read. Only the nested views whose `data()` read a changed key re-run. A function value reaches children as a stable wrapper that always calls the newest closure, so it never counts as a change.
+- **Handlers** read the same object through `this.shared`. There is no `setShared()`: children change the sharer's state only through the callbacks it shares.
+- `share()` is synchronous. Keep store queries in `data()` and read the result with `this.getData()`.
 
 ## Skeletons
 

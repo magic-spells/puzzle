@@ -40,7 +40,7 @@ export default [
 ```
 
 - Path routing (pathname + HTML5 history) is the default; hash and memory modes are opt-in imports (§15).
-- `:param` segments arrive as string `params` in `data(params, props)`.
+- `:param` segments arrive as string `params` in `data({ params, props })`.
 - `layout` wraps the view, which renders at the layout's `<Slot/>`. `meta.title` sets `document.title` (§45).
 - Navigation: `this.ctx.router.push('/user/123')`. `router.go(n)` / `back()` / `forward()` work in every mode (path/hash call `history.go(n)`; memory moves its stack index); an out-of-range `n` is a silent no-op.
 - **`router.url(path, options?)`** (D79): path in, mode-encoded href out — `base + path` (path), `'#' + base + path` (hash), unchanged (memory). A string not starting with `/` passes through (external URLs, `mailto:`, bare `#anchor`); a non-string throws. Query and `#anchor` suffixes ride along. Templates reach it as the `link` function: `href="{ link('/user/' + id) }"`. Under locale prefix routing (below) the href carries the active locale's prefix; `{ locale: 'es' }` encodes for that configured locale (an unconfigured one throws a `RangeError`) and `{ locale: false }` skips the prefix but keeps `routerBase` (for a file that exists once). Without prefix routing the options are ignored.
@@ -70,7 +70,7 @@ export default [
 - `children` paths are **relative** (`/settings` + `profile`); the parent view renders its matched child at its own `<Slot/>`.
 - `layout` is **top-level only**. Constructor throws: `layout` on a child, a child path with a leading `/`, `path: '*'` inside `children`, a duplicate `:param` name within one chain.
 - An **index child** `path: ''` matches the parent's bare URL. A parent with children but no index child does **not** match its bare URL — it falls through to the catch-all.
-- **Params merge down the chain:** every level's `data(params)` gets the full merged object.
+- **Params merge down the chain:** every level's `data({ params })` gets the full merged object.
 - **Chain reuse:** the shared prefix is kept; reused ancestors' `data()` re-runs with the merged params and is **awaited before the URL commits** (D19); only divergent levels rebuild. The **topmost swapped view** animates; everything below rides along.
 - Inside any routed `data()`, `this.route` describes the navigation being loaded (§19).
 
@@ -154,7 +154,7 @@ A mode string (`'hash'`, `'memory'`, `'history'`) throws, naming the import. A v
 The route source that is correct **inside** a navigation (D47). During a gated `data()` run, `window.location` and `router.current` still describe the old route, so an active-nav highlight derived from them lags one navigation behind.
 
 ```js
-data(params, props) {
+data() {
   const name = this.route.route.name; // the navigation THIS data() run is loading
   return { isProfile: name === 'account-profile', isTrips: name === 'account-trips' };
 }

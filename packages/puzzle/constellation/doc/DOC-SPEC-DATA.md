@@ -208,7 +208,7 @@ class Post extends PuzzleModel { static adapter = { endpoint: '/api/posts' }; }
 Tracked `findOne`/`findMany` fetch what the store is missing; views need no loading code ([[DECISION-D161-AUTO-FETCHING-FINDS]]). **Server data comes from `data()` — a committed `null` means the record does not exist, never "still loading".**
 
 ```js
-data(params) {
+data({ params }) {
   const store = this.ctx.store;
   const post = store.findOne('post', params.id);                // miss → GET queued
   const author = post && store.findOne('user', post.authorId);  // next round

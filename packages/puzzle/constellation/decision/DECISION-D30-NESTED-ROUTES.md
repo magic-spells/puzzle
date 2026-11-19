@@ -26,7 +26,7 @@ A routed view hosts a child routed view at its `<Slot/>` outlet. This is router 
 - **Paths.** Child paths are relative (`'/settings'` + `'profile'` → `/settings/profile`: strip one trailing slash, add `/`, add the child). The constructor throws on a leading `/` on a child, `layout` on a non-root node, `path: '*'` inside `children`, and a duplicate `:param` in one chain.
 - **Layouts are root-only** — gates and shells at depth 0; children inherit. A layout swap happens only when the chain diverges at depth 0.
 - **A parent with children does not match its bare URL.** Opt in with an index child `path: ''`; otherwise the bare URL falls to the catch-all.
-- **Params.** The leaf regex yields one merged params object, and every level's `data(params)` receives all of it.
+- **Params.** The leaf regex yields one merged params object, and every level's `data({ params })` receives all of it.
 - **Reuse and gating.** `keep` = the shared chain prefix (route-node identity). Fresh levels `preload()`; reused ancestor views re-run `data()` with the full params. All are awaited before the URL commits ([[DECISION-D19-NAVIGATION-COMMIT]]), and reused ancestors commit only in the navigation's commit window ([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]). A reused **layout**'s refresh runs post-commit (it is chrome, not routed content).
 - **One animator:** the topmost swapped instance, `views[keep]` (or the layout when `keep === 0`), animates; every fresh instance below it is `skipEnter()`'d ([[DECISION-D28-ANIMATIONS]]).
 - **After the out, the full rebuilt vnode chain goes to the topmost host** (layout, or the root view) and the keyed patch cascades to the divergence level.

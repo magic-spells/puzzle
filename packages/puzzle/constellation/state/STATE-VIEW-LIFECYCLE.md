@@ -22,7 +22,7 @@ transitions:
   - from: created
     to: loading
     action: >-
-      data(params, props) runs inside the store's tracking scope, so its queries become this
+      data({ params, props }) runs inside the store's tracking scope, so its queries become this
       instance's subscriptions
   - from: loading
     to: preloaded
@@ -168,7 +168,7 @@ stateDiagram-v2
 
 ## Phase notes
 
-- **loading**: `data(params, props)` runs inside the store's tracking scope, so its
+- **loading**: `data({ params, props })` runs inside the store's tracking scope, so its
   queries become this instance's subscriptions. On an adapter-backed model a tracked find
   that misses queues a fetch and re-runs the pass instead of committing (D161), so one
   `loading` phase can span several fetch rounds.
