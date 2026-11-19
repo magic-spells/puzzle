@@ -33,12 +33,12 @@ function deferred() {
 	});
 	return { promise, resolve };
 }
-// setData re-renders flush on the next animation frame (PuzzleView #scheduleRender).
+// setState re-renders flush on the next animation frame (PuzzleView #scheduleRender).
 const frame = () =>
 	new Promise((r) =>
 		typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => r()) : setTimeout(r, 0)
 	);
-// A bind write is setData + refresh(): the re-render lands on an animation frame
+// A bind write is setState + refresh(): the re-render lands on an animation frame
 // after data() re-runs, so drain both queues a few times.
 async function flush() {
 	for (let i = 0; i < 5; i++) {
@@ -60,10 +60,10 @@ class Note extends PuzzleModel {
 }
 
 // A view whose data() reads the store (so hydration is observable) and whose render
-// carries a click handler + local setData (so client interactivity is observable).
+// carries a click handler + local setState (so client interactivity is observable).
 class Counter extends PuzzleView {
 	created() {
-		this.setData({ clicks: 0 });
+		this.setState({ clicks: 0 });
 	}
 	data() {
 		const notes = this.ctx.store.findMany('note');
@@ -73,7 +73,7 @@ class Counter extends PuzzleView {
 		const d = this.getData();
 		return h('div', { class: 'counter' }, [
 			h('ul', {}, d.notes.map((n) => h('li', { key: n.id }, [text(n.body)]))),
-			h('button', { '@click': () => this.setData({ clicks: d.clicks + 1 }) }, [
+			h('button', { '@click': () => this.setState({ clicks: d.clicks + 1 }) }, [
 				text(`clicks: ${d.clicks}`),
 			]),
 		]);
@@ -482,7 +482,7 @@ describe('static kernel — mountStatic (D81)', () => {
 		const button = el.querySelector('button');
 		expect(button.textContent).toBe('clicks: 0');
 		button.click();
-		await frame(); // the setData re-render flushes on the next animation frame
+		await frame(); // the setState re-render flushes on the next animation frame
 		expect(el.querySelector('button').textContent).toBe('clicks: 1');
 	});
 

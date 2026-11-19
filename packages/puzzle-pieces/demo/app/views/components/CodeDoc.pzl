@@ -103,7 +103,7 @@ const longSnippet = `import { PuzzleView } from '@magic-spells/puzzle';
 // passes both the number and the handlers down as props.
 export default class Counter extends PuzzleView {
   created() {
-    this.setData({ count: 0 });
+    this.setState({ count: 0 });
   }
 
   data(params, props) {
@@ -112,10 +112,10 @@ export default class Counter extends PuzzleView {
 
   events = {
     increment: () => {
-      this.setData({ count: this.getData().count + 1 });
+      this.setState({ count: this.getData().count + 1 });
     },
     reset: () => {
-      this.setData({ count: 0 });
+      this.setState({ count: 0 });
     },
   };
 }`;

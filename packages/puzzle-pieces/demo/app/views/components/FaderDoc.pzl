@@ -118,7 +118,7 @@ const codeHero = `<Fader label="Rest" value={ rest } min={ 0 } max={ 100 } unit=
 
 // parent — @input fires live during drag, @change on release
 events = {
-  setRest: (v) => this.setData('rest', v),
+  setRest: (v) => this.setState('rest', v),
 };`;
 
 const codeSteps = `// a numeric step quantizes to a detent. Matching tickStep to step puts a mark on
@@ -168,7 +168,7 @@ const codeDisabled = `<Fader label="Locked" value={ 40 } unit="%" disabled />`;
 
 export default class FaderDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       rest: 40,
       arc: 128,
       feather: 6.5,
@@ -217,49 +217,49 @@ export default class FaderDoc extends PuzzleView {
 
   events = {
     setRest: (v) => {
-      this.setData('rest', v);
+      this.setState('rest', v);
     },
     setArc: (v) => {
-      this.setData('arc', v);
+      this.setState('arc', v);
     },
     setFeather: (v) => {
-      this.setData('feather', v);
+      this.setState('feather', v);
     },
     setRadius: (v) => {
-      this.setData('radius', v);
+      this.setState('radius', v);
     },
     setAspect: (v) => {
-      this.setData('aspect', v);
+      this.setState('aspect', v);
     },
     setStepped: (v) => {
-      this.setData('stepped', v);
+      this.setState('stepped', v);
     },
     setFine: (v) => {
-      this.setData('fine', v);
+      this.setState('fine', v);
     },
     setLow: (v) => {
-      this.setData('low', v);
+      this.setState('low', v);
     },
     setMid: (v) => {
-      this.setData('mid', v);
+      this.setState('mid', v);
     },
     setHigh: (v) => {
-      this.setData('high', v);
+      this.setState('high', v);
     },
     setDensity: (v) => {
-      this.setData('density', v);
+      this.setState('density', v);
     },
     setThreshold: (v) => {
-      this.setData('threshold', v);
+      this.setState('threshold', v);
     },
     setCorner: (v) => {
-      this.setData('corner', v);
+      this.setState('corner', v);
     },
     setGain: (v) => {
-      this.setData('gain', v);
+      this.setState('gain', v);
     },
     setMix: (v) => {
-      this.setData('mix', v);
+      this.setState('mix', v);
     },
   };
 }

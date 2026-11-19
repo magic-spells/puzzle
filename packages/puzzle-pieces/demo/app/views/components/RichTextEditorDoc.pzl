@@ -123,7 +123,7 @@ const codeHero = `<RichTextEditor label="Post body" placeholder="Write something
 
 // parent
 events = {
-  setDoc: (doc) => this.setData('doc', doc),
+  setDoc: (doc) => this.setState('doc', doc),
 };`;
 
 const codeLive = `<RichTextEditor label="Editor" value={ doc } @change={ setDoc } />
@@ -289,7 +289,7 @@ const SAMPLE_DOC = {
 
 export default class RichTextEditorDoc extends PuzzleView {
 	created() {
-		this.setData({ doc: SAMPLE_DOC, mediaDoc: MEDIA_DOC, blocksDoc: BLOCKS_DOC });
+		this.setState({ doc: SAMPLE_DOC, mediaDoc: MEDIA_DOC, blocksDoc: BLOCKS_DOC });
 	}
 
 	data(params, props) {
@@ -322,9 +322,9 @@ export default class RichTextEditorDoc extends PuzzleView {
 	}
 
 	events = {
-		setDoc: (doc) => this.setData('doc', doc),
-		setMediaDoc: (doc) => this.setData('mediaDoc', doc),
-		setBlocksDoc: (doc) => this.setData('blocksDoc', doc),
+		setDoc: (doc) => this.setState('doc', doc),
+		setMediaDoc: (doc) => this.setState('mediaDoc', doc),
+		setBlocksDoc: (doc) => this.setState('blocksDoc', doc),
 	};
 }
 </script>

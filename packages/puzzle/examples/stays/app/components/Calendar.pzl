@@ -182,12 +182,12 @@ export default class Calendar extends PuzzleView {
     prevMonth: () => {
       const o = this.getData().monthOffset;
       if (o > 0) {
-        this.setData('monthOffset', o - 1);
+        this.setState('monthOffset', o - 1);
         this.refresh();
       }
     },
     nextMonth: () => {
-      this.setData('monthOffset', this.getData().monthOffset + 1);
+      this.setState('monthOffset', this.getData().monthOffset + 1);
       this.refresh();
     },
 

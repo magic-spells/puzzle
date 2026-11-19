@@ -43,7 +43,7 @@ puzzle dev examples/stays        # from packages/puzzle: go run ./compiler/cmd/p
 
 ### Views
 - **Home.pzl** — hero, category chips filtering the grid via local
-  `setData` + `refresh` (no store round-trip), guest-favorites rail.
+  `setState` + `refresh` (no store round-trip), guest-favorites rail.
 - **Search.pzl** — five stacking filters (query, guests, price bucket, type,
   amenities) computed in `data()`. The free-text destination filter is the
   **URL-backed transient state showcase (v1.49, puzzle ≥ 0.2.0)**: `data()`
@@ -51,7 +51,7 @@ puzzle dev examples/stays        # from packages/puzzle: go run ./compiler/cmd/p
   `this.ctx.router.replace('/search?q=' + encodeURIComponent(v))` — no history
   entry per keystroke, scroll untouched, and the query-only change re-runs
   `data()` with the new snapshot (no `refresh()`), so `/search?q=cabin` is a
-  shareable deep link. The other four controls stay local `setData` +
+  shareable deep link. The other four controls stay local `setState` +
   `refresh()` state for contrast.
 - **Listing.pzl** — route param join (`listing` + `host` + `reviews`), local
   `checkIn`/`checkOut` state that survives `data()` re-runs, and the

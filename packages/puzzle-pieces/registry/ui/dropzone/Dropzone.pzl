@@ -79,7 +79,7 @@ import ChatAttachment from './ChatAttachment.pzl';
 //
 // CONTROLLED, value-first. The PARENT owns the `files` array (File objects or
 // { name, size, type } descriptors); props in, callbacks out. Dropzone never
-// stores the file list itself — the only local setData state is `dragging`
+// stores the file list itself — the only local setState state is `dragging`
 // (the highlight) and `rejections` (transient validation messages). On a pick or
 // drop it validates against `accept` + `maxSize`, then emits @change with the NEW
 // array (merged for `multiple`, replaced otherwise) and @reject with any failures.
@@ -243,7 +243,7 @@ export default class Dropzone extends PuzzleView {
       next = accepted.slice(0, 1);
     }
 
-    this.setData({ rejections: rejected });
+    this.setState({ rejections: rejected });
 
     const { change, reject } = props;
     if (accepted.length && typeof change === 'function') change(next, event);
@@ -276,7 +276,7 @@ export default class Dropzone extends PuzzleView {
       event.stopPropagation();
       if (this.props.disabled) return;
       if (!this.getData().dragging) {
-        this.setData({ dragging: true });
+        this.setState({ dragging: true });
         this.refresh();
       }
     },
@@ -286,7 +286,7 @@ export default class Dropzone extends PuzzleView {
       // Ignore leaves into descendant elements (flicker guard).
       if (zone && event.relatedTarget && zone.contains && zone.contains(event.relatedTarget)) return;
       if (this.getData().dragging) {
-        this.setData({ dragging: false });
+        this.setState({ dragging: false });
         this.refresh();
       }
     },
@@ -295,7 +295,7 @@ export default class Dropzone extends PuzzleView {
       event.preventDefault();
       event.stopPropagation();
       if (this.props.disabled) return;
-      this.setData({ dragging: false });
+      this.setState({ dragging: false });
       this.processFiles(event.dataTransfer && event.dataTransfer.files, event);
       this.refresh();
     },

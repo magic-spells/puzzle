@@ -211,11 +211,11 @@ export default class SchemePanel extends PuzzleView {
 	};
 
 	mounted() {
-		this.setData({ mode: liveMode() });
+		this.setState({ mode: liveMode() });
 		// appearance.js notifies on every set() and, while following the OS, on
 		// every system light/dark flip — so one subscription covers both.
 		this._unsubscribe = subscribe(() => {
-			this.setData({ mode: liveMode() });
+			this.setState({ mode: liveMode() });
 			this.refresh();
 		});
 		// The demo is hash-routed. Navigating /themes/cool → /themes/warm reuses
@@ -321,7 +321,7 @@ export default class SchemePanel extends PuzzleView {
 		}
 
 		this._probedScheme = scheme;
-		this.setData({ values, contrast, summary, ready: true });
+		this.setState({ values, contrast, summary, ready: true });
 		this.refresh();
 	}
 }

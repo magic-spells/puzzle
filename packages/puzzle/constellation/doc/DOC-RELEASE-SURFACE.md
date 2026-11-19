@@ -71,7 +71,7 @@ Contract: §3–§6, §17, §18, §24, §28, §31, §43, §47, §57, §64–§67
 - **Whitespace** ([[DECISION-D168-TEXT-RUN-WHITESPACE]]): runs collapse to one space; newline-bearing whitespace drops at a parent's edges and between non-text siblings. `<pre>`/`<textarea>` keep their bytes. `\{` / `\}` escape a brace.
 - Dynamic, mixed and boolean attributes; controlled `value`, `checked`, `disabled`, `selected`. Void elements take no closer. Attribute namespaces are compile errors except `xml`/`xlink`/`xmlns`.
 - **Dynamic URL safety** (D186): a dynamic URL attribute drops `javascript:`/`vbscript:` values, and `data:` outside image positions, in the browser and prerendered HTML alike. Static values and mixed values whose literal head fixes the scheme compile without the check.
-- **Two-way binding** (D147): a path-shaped `value=`/`checked=` on a plain form control writes back (records via validated `update()`, locals via `setData`) unless an author `@input`/`@change`, static `readonly`/`disabled`, a dynamic `type`, or a component tag suppresses it.
+- **Two-way binding** (D147): a path-shaped `value=`/`checked=` on a plain form control writes back (records via validated `update()`, locals via `setState`) unless an author `@input`/`@change`, static `readonly`/`disabled`, a dynamic `type`, or a component tag suppresses it.
 - **Blocks:** `{#if}`/`{:else if}`/`{:else}`, `{#unless}`, `{#case}`/`{:when}`, `{#for item in items, i}`, range `{#for 1...5, i}`, `{#raw}…{/raw}`, void `{#svg 'path'}`, comments `{## … }` and `{#comment}…{/comment}`.
 - **Events:** `@event` handlers with `prevent`, `stop`, `once`, `outside`, `passive`, `capture` and key filters. On a component, `@event` is a callback prop.
 - **Components:** a tag whose first character is not ASCII `a`–`z` is a component; names validate as `Ident('.'Ident)*`. A dotted tag (`<Frame.Wrapper>`) is a family member, grouped by an `index.js` barrel ([[DECISION-D167-COMPONENT-FAMILIES]]).
@@ -90,8 +90,8 @@ Contract: §3–§6, §17, §18, §24, §28, §31, §43, §47, §57, §64–§67
 
 ## Component runtime
 
-- Two data layers: each `data()` result replaces the derived layer; `setData()` writes a state layer that wins until the next `data()` commit. Async `data()` is last-wins. Skeletons show only on first load.
-- Lifecycle: `created`, `mounted`, `beforeUpdate`, `afterUpdate(prev)` (D178), `destroyed`, `viewWillShow`/`viewDidShow`, `viewWillHide`/`viewDidHide`. Members: `this.route`, `this.element`, `this.refs`, `this.ctx`, `memo()`, `getData()`, `setData()`, `refresh()`, `renderTick()` (D188).
+- Two data layers: each `data()` result replaces the derived layer; `setState()` writes a state layer that wins until the next `data()` commit. Async `data()` is last-wins. Skeletons show only on first load.
+- Lifecycle: `created`, `mounted`, `beforeUpdate`, `afterUpdate(prev)` (D178), `destroyed`, `viewWillShow`/`viewDidShow`, `viewWillHide`/`viewDidHide`. Members: `this.route`, `this.element`, `this.refs`, `this.ctx`, `memo()`, `getData()`, `getState()`, `setState()` (D191; `setData()` is gone), `refresh()`, `renderTick()` (D188).
 - Incremental rendering ([[DECISION-D170-INCREMENTAL-VDOM-LISTS]]): keyed rows and static subtrees are cached; a record prop carries a render revision.
 - Errors (§60): `onError(error, { phase, view, route })` and an app-level `errorView` with `{ error, info, retry }`.
 - `app.idle({ timeout })` (D185) resolves `true` when the app is quiet, `false` on timeout (default 10000 ms), never rejects; `ctx.idle()` (D189) is the same method on every view's context.

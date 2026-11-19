@@ -971,7 +971,7 @@ describe('errorView retry', () => {
 		});
 		apps.push(app);
 		await flush();
-		host.setData('show', false);
+		host.setState('show', false);
 		await flush();
 		expect(app.find('.gone')).not.toBeNull();
 

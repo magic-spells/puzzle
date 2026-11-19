@@ -1,9 +1,9 @@
 <puzzle-view>
   <!-- The composer, reused for both top-level chirps (Home) and replies
        (PostDetail). Props: `replyToId` ('' = a top-level chirp) and `placeholder`
-       (default "What's happening?"). `draft` is LOCAL UI state (setData, not the
+       (default "What's happening?"). `draft` is LOCAL UI state (setState, not the
        store) so keystrokes stay cheap; the live counter is derived in data(), so
-       onInput does setData THEN refresh() to recompute it (setData alone never
+       onInput does setState THEN refresh() to recompute it (setState alone never
        re-runs data() — SPEC §4). Two event-modifier showcases live here (v1.7,
        D38): the form commits with @submit:prevent (no page reload) and Escape in
        the textarea clears the draft via @keydown:escape. -->
@@ -44,7 +44,7 @@ export default class ComposeBox extends PuzzleView {
   // Seed the draft before the first data() run so the counter has something to
   // read on mount (created()-seeded state is also what a skeleton could read).
   created() {
-    this.setData({ draft: '' });
+    this.setState({ draft: '' });
   }
 
   data(params, props) {
@@ -68,13 +68,13 @@ export default class ComposeBox extends PuzzleView {
     // Mirror the textarea into local state, then refresh() so `remaining` and
     // `canSubmit` recompute in data().
     onInput: (event) => {
-      this.setData('draft', event.target.value);
+      this.setState('draft', event.target.value);
       this.refresh();
     },
 
     // @keydown:escape → wipe the draft (modifier showcase).
     clearDraft: () => {
-      this.setData('draft', '');
+      this.setState('draft', '');
       this.refresh();
     },
 
@@ -106,7 +106,7 @@ export default class ComposeBox extends PuzzleView {
         if (parent) parent.update({ replyCount: (parent.replyCount || 0) + 1 });
       }
 
-      this.setData('draft', '');
+      this.setState('draft', '');
       this.refresh();
     },
   };

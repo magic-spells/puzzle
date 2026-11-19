@@ -88,7 +88,7 @@ describe('D173 core semantics — compiled output', () => {
 		const el = await mountHost();
 		expect(text(el, '.tern')).toBe('no');
 		expect(el.querySelector('.tern-attr').className).toBe('tern-attr ');
-		mounted.setData({ mode: 'edit' });
+		mounted.setState({ mode: 'edit' });
 		mounted.flushUpdates();
 		expect(text(el, '.tern')).toBe('yes');
 		expect(el.querySelector('.tern-attr').className).toBe('tern-attr on');

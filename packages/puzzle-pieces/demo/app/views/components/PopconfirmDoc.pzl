@@ -216,7 +216,7 @@ const RECORDS = [
 
 export default class PopconfirmDoc extends PuzzleView {
   created() {
-    this.setData({ status: 'nothing yet' });
+    this.setState({ status: 'nothing yet' });
   }
 
   data() {
@@ -243,10 +243,10 @@ export default class PopconfirmDoc extends PuzzleView {
 
   events = {
     onConfirm: (what) => {
-      this.setData('status', `confirmed ${what}`);
+      this.setState('status', `confirmed ${what}`);
     },
     onCancel: () => {
-      this.setData('status', 'cancelled');
+      this.setState('status', 'cancelled');
     },
   };
 }

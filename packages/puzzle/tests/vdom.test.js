@@ -145,7 +145,7 @@ describe('ViewManager — form bindings (properties, not attributes)', () => {
 	});
 
 	it('does NOT re-write value when the live DOM already matches — caret preservation', () => {
-		// Per-keystroke echo (@input mirror): user types 'a', handler setData's 'a',
+		// Per-keystroke echo (@input mirror): user types 'a', handler setState's 'a',
 		// re-render arrives with bound 'a'. el.value is ALREADY 'a', so the live
 		// compare must write NOTHING — writing would reset the caret.
 		const { container, vm } = setup();

@@ -10,7 +10,7 @@
 // and the runtime dispatch agree.
 //
 // Three write arms, chosen at write time from the target: null → local state
-// (setData + refresh), a duck-typed record (update + string _type) →
+// (setState + refresh), a duck-typed record (update + string _type) →
 // PuzzleModel.update(), anything else → direct property mutation + refresh.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mountView, measureRenders, settled, type } from '../client-runtime/testing/index.js';
@@ -81,7 +81,7 @@ describe('implicit binding — local-state arm', () => {
 		await settled();
 
 		expect(view.instance.getData().draft).toBe('al');
-		// data() re-ran: only 'alpha' contains 'al'. A bare setData would have left
+		// data() re-ran: only 'alpha' contains 'al'. A bare setState would have left
 		// this at 4 — the search-box case the refresh() exists for.
 		expect(view.find('p.matches').textContent).toBe('1');
 	});
@@ -96,7 +96,7 @@ describe('implicit binding — local-state arm', () => {
 			await settled();
 		});
 
-		// setData arms a frame, the synchronous refresh() renders and disarms it.
+		// setState arms a frame, the synchronous refresh() renders and disarms it.
 		expect(report.renders).toBe(1);
 		expect(view.instance.getData().draft).toBe('be');
 	});

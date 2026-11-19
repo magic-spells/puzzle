@@ -58,7 +58,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class ClippedCard extends PuzzleView {
   created() {
-    this.setData({ menuOpen: false, menuExpanded: 'false', menuStyle: '' });
+    this.setState({ menuOpen: false, menuExpanded: 'false', menuStyle: '' });
   }
 
   data(params, props) {
@@ -78,7 +78,7 @@ export default class ClippedCard extends PuzzleView {
       const left = Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12));
       const top = rect.bottom + 8;
 
-      this.setData({
+      this.setState({
         menuOpen: true,
         menuExpanded: 'true',
         menuStyle: `left:${Math.round(left)}px;top:${Math.round(top)}px;width:${width}px`,
@@ -86,7 +86,7 @@ export default class ClippedCard extends PuzzleView {
     },
 
     closeMenu: () => {
-      this.setData({ menuOpen: false, menuExpanded: 'false' });
+      this.setState({ menuOpen: false, menuExpanded: 'false' });
     },
 
     pick: (label) => {

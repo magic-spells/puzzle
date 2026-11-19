@@ -1124,7 +1124,7 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 	// takeover-preloaded one, which is where a non-routed `instance` pin comes
 	// from) can be unmounted by a branch toggle — destroying its instance — and
 	// returned by the cache and mounted again later. Adopting the corpse would
-	// mount a view whose #destroyed latch makes mounted(), setData() and every
+	// mount a view whose #destroyed latch makes mounted(), setState() and every
 	// refresh inert, with no diagnostic.
 	// Construct fresh instead; `preloaded` follows, so the fresh instance runs its
 	// own created()/data() exactly as a first mount does.
@@ -1347,7 +1347,7 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 		// destroyed, with a bare comment left holding the position (mountComponent's
 		// rejection handler). There is no live instance to update — mount a FRESH one
 		// at the placeholder so a render that no longer throws yields a fully working
-		// component (mounted() fires, setData() re-renders), then drop the placeholder.
+		// component (mounted() fires, setState() re-renders), then drop the placeholder.
 		//
 		// TWO shapes reach here, because that handler runs in a microtask. Normally it
 		// nulled the links on the vnode that is still the tree node (`component ==

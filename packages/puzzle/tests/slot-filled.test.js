@@ -47,7 +47,7 @@ class Card extends PuzzleView {
 function hostFor(content, initial) {
 	return class Host extends PuzzleView {
 		created() {
-			this.setData({ state: initial });
+			this.setState({ state: initial });
 		}
 		data() {
 			return { state: this.getData().state };
@@ -68,12 +68,12 @@ describe('slot filled rule (D173 V14)', () => {
 		const host = await new Host().mount(el);
 		expect(el.querySelector('.fallback')?.textContent).toBe('Nothing here yet');
 
-		host.setData('state', true);
+		host.setState('state', true);
 		host.flushUpdates();
 		expect(el.querySelector('.fallback')).toBeNull();
 		expect(el.querySelector('.fill')?.textContent).toBe('Hi');
 
-		host.setData('state', false);
+		host.setState('state', false);
 		host.flushUpdates();
 		expect(el.querySelector('.fill')).toBeNull();
 		expect(el.querySelector('.fallback')?.textContent).toBe('Nothing here yet');
@@ -89,7 +89,7 @@ describe('slot filled rule (D173 V14)', () => {
 		const host = await new Host().mount(el);
 		expect(el.querySelector('.fallback')).not.toBeNull();
 
-		host.setData('state', ['a', 'b']);
+		host.setState('state', ['a', 'b']);
 		host.flushUpdates();
 		expect(el.querySelectorAll('.row')).toHaveLength(2);
 		expect(el.querySelector('.fallback')).toBeNull();
@@ -102,7 +102,7 @@ describe('slot filled rule (D173 V14)', () => {
 		const host = await new Host().mount(el);
 		expect(el.querySelector('.fallback')).not.toBeNull();
 
-		host.setData('state', 'x');
+		host.setState('state', 'x');
 		host.flushUpdates();
 		expect(el.querySelector('.fallback')).toBeNull();
 		expect(el.querySelector('.card').textContent).toContain('x');
@@ -208,7 +208,7 @@ describe('default markers in exclusive branches (D173 V13)', () => {
 		}
 		class Host extends PuzzleView {
 			created() {
-				this.setData({ compact: true });
+				this.setState({ compact: true });
 			}
 			data() {
 				return { compact: this.getData().compact };
@@ -223,14 +223,14 @@ describe('default markers in exclusive branches (D173 V13)', () => {
 		const host = await new Host().mount(el);
 		expect(el.querySelector('.compact .body')?.textContent).toBe('Body');
 
-		host.setData('compact', false);
+		host.setState('compact', false);
 		host.flushUpdates();
 		await Promise.resolve();
 		expect(el.querySelector('.compact')).toBeNull();
 		expect(el.querySelector('.full .body')?.textContent).toBe('Body');
 		expect(el.querySelectorAll('.body')).toHaveLength(1);
 
-		host.setData('compact', true);
+		host.setState('compact', true);
 		host.flushUpdates();
 		await Promise.resolve();
 		expect(el.querySelector('.compact .body')?.textContent).toBe('Body');
@@ -265,7 +265,7 @@ describe('sibling stability after a marker when a call-site {#if} toggles (D173 
 		}
 		return class Host extends PuzzleView {
 			created() {
-				this.setData({ show: false });
+				this.setState({ show: false });
 			}
 			data() {
 				return { show: this.getData().show };
@@ -290,9 +290,9 @@ describe('sibling stability after a marker when a call-site {#if} toggles (D173 
 			const input = el.querySelector('input.after');
 			input.focus();
 
-			host.setData('show', true);
+			host.setState('show', true);
 			host.flushUpdates();
-			host.setData('show', false);
+			host.setState('show', false);
 			host.flushUpdates();
 
 			expect(el.querySelector('input.after')).toBe(input);

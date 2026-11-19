@@ -53,7 +53,7 @@ describe('__c — the per-instance static cache', () => {
 		const cached = view.instance.__c[0];
 
 		for (let n = 1; n <= 5; n++) {
-			view.instance.setData('n', n);
+			view.instance.setState('n', n);
 			await settled();
 		}
 
@@ -81,7 +81,7 @@ describe('__c — the per-instance static cache', () => {
 			const view = await mountView(Counted);
 			handles.push(view);
 			for (let n = 1; n <= 3; n++) {
-				view.instance.setData('n', n);
+				view.instance.setState('n', n);
 				await settled();
 			}
 		} finally {
@@ -135,7 +135,7 @@ describe('__c — the per-instance static cache', () => {
 		// patcher never touches it again.
 		island.appendChild(document.createElement('i'));
 
-		view.instance.setData('n', 1);
+		view.instance.setState('n', 1);
 		await settled();
 
 		expect(view.instance.__c[0]).toBe(seed);

@@ -144,7 +144,7 @@ describe('default-slot forwarding through a component (D71)', () => {
 	it('keeps forwarded DOM stable across an unrelated host re-render', async () => {
 		class Layout extends PuzzleView {
 			created() {
-				this.setData({ mode: 'x' });
+				this.setState({ mode: 'x' });
 			}
 			data() {
 				return { mode: this.getData().mode };
@@ -159,7 +159,7 @@ describe('default-slot forwarding through a component (D71)', () => {
 		});
 		const pageEl = el.querySelector('p.page');
 
-		layout.setData('mode', 'y');
+		layout.setState('mode', 'y');
 		layout.flushUpdates();
 
 		expect(el.querySelector('div.y')).not.toBeNull();

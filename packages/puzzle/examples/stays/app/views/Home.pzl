@@ -91,9 +91,9 @@ const CATEGORIES = [
 
 export default class HomeView extends PuzzleView {
   // Seed the local filter state before the first data() run. activeTag is UI
-  // state, so it lives in setData (not the store) and drives the recompute below.
+  // state, so it lives in setState (not the store) and drives the recompute below.
   created() {
-    this.setData({ activeTag: 'all' });
+    this.setState({ activeTag: 'all' });
   }
 
   data(params, props) {
@@ -101,7 +101,7 @@ export default class HomeView extends PuzzleView {
     const listings = store.findMany('listing');
 
     // Read the current chip out of local state and derive the visible grid here
-    // in data() (SPEC §8: logic lives in data(), not the template). setData does
+    // in data() (SPEC §8: logic lives in data(), not the template). setState does
     // not re-run data(), so setTag() calls refresh() to land back here.
     const activeTag = this.getData().activeTag || 'all';
     const filtered = activeTag === 'all'
@@ -128,9 +128,9 @@ export default class HomeView extends PuzzleView {
 
   events = {
     // Category filter. Mirror the chip into local state, then refresh() so data()
-    // recomputes `filtered` from the new activeTag (setData alone won't, SPEC §4).
+    // recomputes `filtered` from the new activeTag (setState alone won't, SPEC §4).
     setTag: (tag) => {
-      this.setData('activeTag', tag);
+      this.setState('activeTag', tag);
       this.refresh();
     }
   };

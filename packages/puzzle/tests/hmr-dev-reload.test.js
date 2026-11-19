@@ -55,7 +55,7 @@ class EditorView extends PuzzleView {
 
 const routes = [{ path: '/', name: 'home', view: EditorView }];
 
-// A view whose visible content is DERIVED from a store query — no setData state of
+// A view whose visible content is DERIVED from a store query — no setState state of
 // its own. Proves the two-phase restore (Change D): phase 1 transplants the store
 // records BEFORE navigation #0, so this view's first render already shows them
 // (the masked bug the old single-phase restore left empty until the next mutation).
@@ -122,7 +122,7 @@ describe('HMR dev reload — snapshot/restore transplant (§27, D57)', () => {
 		// Runtime store records + local form state.
 		app.store.createRecord('todo', { id: 't1', text: 'ship v1.25' });
 		app.store.createRecord('todo', { id: 't2', text: 'write tests', completed: true });
-		lastEditor.setData({ draft: 'half-typed message', pinned: true });
+		lastEditor.setState({ draft: 'half-typed message', pinned: true });
 
 		// The dev client's pre-reload snapshot, then the reload (modeled as
 		// unmount + a brand-new app with the same config).
@@ -139,7 +139,7 @@ describe('HMR dev reload — snapshot/restore transplant (§27, D57)', () => {
 		expect(fresh.store.findOne('todo', 't1').text).toBe('ship v1.25');
 		expect(fresh.store.findOne('todo', 't2').completed).toBe(true);
 
-		// The view's local setData state was restored onto the fresh instance.
+		// The view's local setState state was restored onto the fresh instance.
 		expect(lastEditor.getData().draft).toBe('half-typed message');
 		expect(lastEditor.getData().pinned).toBe(true);
 	});
@@ -148,7 +148,7 @@ describe('HMR dev reload — snapshot/restore transplant (§27, D57)', () => {
 		container();
 		const app = make();
 		await app.mount();
-		lastEditor.setData({ draft: 'keep me' });
+		lastEditor.setState({ draft: 'keep me' });
 		app.__devSnapshot();
 		expect(sessionStorage.getItem(HMR_KEY)).not.toBeNull(); // written
 		app.unmount();
@@ -224,7 +224,7 @@ describe('HMR dev reload — snapshot/restore transplant (§27, D57)', () => {
 		container();
 		const app = make();
 		await app.mount();
-		lastEditor.setData({ draft: 'x' });
+		lastEditor.setState({ draft: 'x' });
 
 		const desc = Object.getOwnPropertyDescriptor(window, 'sessionStorage');
 		try {
@@ -276,8 +276,8 @@ describe('HMR dev reload — two-phase restore (§27, D57; Change D)', () => {
 		app.store.createRecord('todo', { id: 't2', text: 'b' });
 		app.__devSnapshot();
 
-		// The snapshot serializes ONLY the local setData layer (Change C's
-		// _state reader): data()-derived values — `count`, `todos` — must not
+		// The snapshot serializes ONLY the local setState layer (Change C's
+		// getState() reader): data()-derived values — `count`, `todos` — must not
 		// be pinned into the blob as if they were local drafts.
 		const blob = JSON.parse(sessionStorage.getItem(HMR_KEY));
 		const entry = blob.views.find((v) => v.key === 'StoreListView:0');
@@ -378,7 +378,7 @@ describe('HMR dev reload — two-phase restore (§27, D57; Change D)', () => {
 		const app = make(); // EditorView: local draft + a store query
 		await app.mount();
 		app.store.createRecord('todo', { id: 't1', text: 'in-store' });
-		lastEditor.setData({ draft: 'mid-edit draft' });
+		lastEditor.setState({ draft: 'mid-edit draft' });
 		app.__devSnapshot();
 		app.unmount();
 

@@ -24,13 +24,13 @@ which hands each row back to the caller through a snippet
 - Build the row array once in `created()` as a plain instance field; `data()`
   returns `rows.slice(start, start + window)` with overscan on both sides.
 - The `@scroll` handler computes the start bucket from `scrollTop / ROW_H`,
-  clamps it, and calls `setData` + `refresh()` **only when the bucket changes** —
+  clamps it, and calls `setState` + `refresh()` **only when the bucket changes** —
   sub-row scrolling never re-renders.
 - Two spacer divs with interpolated inline heights carry the off-window
   geometry, so `top + rows·ROW_H + bottom === total` and the scrollbar stays
   honest. A keyed `{#for}` reuses row DOM across windows.
 
-Gotcha: `setData` does not re-run `data()`, so the derived window only
+Gotcha: `setState` does not re-run `data()`, so the derived window only
 recomputes through the explicit `refresh()`.
 
 Not covered: variable-height auto-measurement, and router scroll restoration

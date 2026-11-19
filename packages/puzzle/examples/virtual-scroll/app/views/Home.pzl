@@ -59,7 +59,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 
 // ---- Fixed-height virtual scrolling, done ENTIRELY in userland -------------
 // This view proves the FEATURE-VIRTUAL-SCROLLING card's core hypothesis: the
-// stock runtime (keyed {#for}, setData + refresh(), a plain @scroll listener,
+// stock runtime (keyed {#for}, setState + refresh(), a plain @scroll listener,
 // interpolated style heights) is enough to render a bounded window of a 10k-row
 // list — no <VirtualList> component, no template grammar, no runtime patch.
 //
@@ -88,7 +88,7 @@ export default class VirtualScrollHome extends PuzzleView {
       even: index % 2 === 0,
       text: ROW_WORDS[index % ROW_WORDS.length] + ' — row ' + index,
     }));
-    this.setData({ start: 0 });
+    this.setState({ start: 0 });
   }
 
   data() {
@@ -122,8 +122,8 @@ export default class VirtualScrollHome extends PuzzleView {
       // within a single row's worth of pixels is a no-op — this is what keeps a
       // fast flick from triggering a render on every scroll event.
       if (nextStart !== this.getData().start) {
-        this.setData('start', nextStart);
-        // setData() alone doesn't re-run data() (SPEC §4); refresh() recomputes
+        this.setState('start', nextStart);
+        // setState() alone doesn't re-run data() (SPEC §4); refresh() recomputes
         // the visible slice from the just-updated start.
         this.refresh();
       }

@@ -232,7 +232,7 @@ export default class Combobox extends PuzzleView {
     // Local UI state. `open` is only used in uncontrolled mode (props.open wins
     // when controlled). `pristine` = freshly opened, query still equals the
     // selected label → show the full list until the first edit.
-    this.setData({
+    this.setState({
       uncontrolledOpen: false,
       query: '',
       pristine: true,
@@ -548,9 +548,9 @@ export default class Combobox extends PuzzleView {
     if (this._effectiveOpen()) return;
     const base = this._seedOpen(selectAll);
     if (this._controlled()) {
-      this.setData(base);
+      this.setState(base);
     } else {
-      this.setData({ ...base, uncontrolledOpen: true });
+      this.setState({ ...base, uncontrolledOpen: true });
     }
 
     const { show } = this.props;
@@ -572,14 +572,14 @@ export default class Combobox extends PuzzleView {
     // Controlled: parent owns `open` and will unmount the panel; focus return
     // happens in _onClosed. Uncontrolled: tear down here.
     if (this._controlled()) return;
-    this.setData({ uncontrolledOpen: false });
+    this.setState({ uncontrolledOpen: false });
     this.refresh();
   }
 
   // ---- open / close side-effects (driven by the effective-open transition) --
 
   // Fires whenever effective-open actually changes, covering both the uncontrolled
-  // setData flip and a controlled parent flipping the prop (DatePicker's shape).
+  // setState flip and a controlled parent flipping the prop (DatePicker's shape).
   _syncOpenEffects() {
     const open = this._effectiveOpen();
     if (open && !this._wasOpen) {
@@ -604,7 +604,7 @@ export default class Combobox extends PuzzleView {
     // Fallback seed: a controlled parent may flip `open` true with no combobox
     // interaction (so _requestOpen/onInput never ran). Seed here, then re-render.
     if (!this._openSeeded) {
-      this.setData(this._seedOpen(true));
+      this.setState(this._seedOpen(true));
       this.refresh();
     }
     this._openSeeded = false;
@@ -622,7 +622,7 @@ export default class Combobox extends PuzzleView {
 
   _onClosed() {
     document.removeEventListener('pointerdown', this._onDocPointer);
-    this.setData({ placement: 'bottom', maxHeight: 0 });
+    this.setState({ placement: 'bottom', maxHeight: 0 });
     if (this._pendingRestoreFocus) {
       this.element?.querySelector('[data-combobox-input]')?.focus();
     }
@@ -659,7 +659,7 @@ export default class Combobox extends PuzzleView {
   _setActive(i, scroll) {
     if (i < 0) return;
     this._scrollActive = !!scroll;
-    this.setData({ activeIndex: i });
+    this.setState({ activeIndex: i });
     this.refresh();
   }
 
@@ -717,15 +717,15 @@ export default class Combobox extends PuzzleView {
         this._openSeeded = true;
         const base = { query, pristine: false, activeIndex: ai, placement, maxHeight };
         if (this._controlled()) {
-          this.setData(base);
+          this.setState(base);
         } else {
-          this.setData({ ...base, uncontrolledOpen: true });
+          this.setState({ ...base, uncontrolledOpen: true });
         }
         const { show } = this.props;
         if (typeof show === 'function') show();
         if (!this._controlled()) this.refresh();
       } else {
-        this.setData({ query, pristine: false, activeIndex: ai });
+        this.setState({ query, pristine: false, activeIndex: ai });
         this.refresh();
       }
     },

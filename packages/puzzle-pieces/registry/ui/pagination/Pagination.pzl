@@ -62,7 +62,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   <Pagination page={ page } count={ 20 } @change={ setPage }/>
 //   <Pagination page={ page } count={ 5 } @change={ setPage } class="justify-center"/>
 //
-// The parent applies the new page:  setPage(p) { this.setData({ page: p }); }
+// The parent applies the new page:  setPage(p) { this.setState({ page: p }); }
 //
 // Props:
 //   page    1-based current page (controlled by the parent)

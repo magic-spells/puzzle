@@ -974,7 +974,7 @@ export default class RichTextEditor extends PuzzleView {
 		this._slashFrom = null;
 		this._internalDrag = false;
 		this._onViewport = () => this._onViewportChange();
-		this.setData({
+		this.setState({
 			handleVisible: false,
 			// 'hover' (shown) or 'caret' (transparent until keyboard focus).
 			handleMode: 'hover',
@@ -1289,7 +1289,7 @@ export default class RichTextEditor extends PuzzleView {
 				this._applied = serialized;
 				this._pending.push(serialized);
 				if (this._pending.length > EMITTED_LIMIT) this._pending.shift();
-				this.setData('empty', blankDoc(editor.state.doc));
+				this.setState('empty', blankDoc(editor.state.doc));
 				this.refresh();
 				const { change } = this.props;
 				if (typeof change === 'function') change(doc);
@@ -1306,14 +1306,14 @@ export default class RichTextEditor extends PuzzleView {
 			// keep it focusable through the blur, or the browser skips it.
 			onBlur: ({ event }) => {
 				if (event?.relatedTarget && event.relatedTarget === this.refs.handle) {
-					this.setData('handleFocus', true);
+					this.setState('handleFocus', true);
 				}
 				this._syncBlocks(null);
 			},
 		});
 		// Seed the emptiness flag data() switches to post-mount, or a non-empty
 		// starting value would render under the placeholder until the first edit.
-		this.setData('empty', blankDoc(this._editor.state.doc));
+		this.setState('empty', blankDoc(this._editor.state.doc));
 		this._syncActive();
 		window.addEventListener('scroll', this._onViewport, true);
 		window.addEventListener('resize', this._onViewport);
@@ -1338,10 +1338,10 @@ export default class RichTextEditor extends PuzzleView {
 		const editable = !this.props.disabled;
 		if (ed.isEditable !== editable) ed.setEditable(editable, false);
 		if (this.props.disabled && this.getData().linkOpen) {
-			this.setData({ linkOpen: false, linkDraft: '' });
+			this.setState({ linkOpen: false, linkDraft: '' });
 		}
 		if (this.props.disabled && this.getData().styleOpen) {
-			this.setData({ styleOpen: false });
+			this.setState({ styleOpen: false });
 		}
 		// Image sources and caption editability come from props / editor state
 		// the node views can't observe; re-sync them (DOM only, no transaction).
@@ -1350,7 +1350,7 @@ export default class RichTextEditor extends PuzzleView {
 		this._showPopovers();
 		const v = this.props.value;
 		// afterUpdate also runs for renders WE caused (onUpdate/_syncActive call
-		// setData + refresh synchronously), and those run BEFORE the parent's
+		// setState + refresh synchronously), and those run BEFORE the parent's
 		// @change commit — which is rAF-scheduled — delivers the new prop. So on
 		// a self-refresh `props.value` is still the doc from before the keystroke,
 		// and a JSON-only comparison misreads our own stale prop as an external
@@ -1361,7 +1361,7 @@ export default class RichTextEditor extends PuzzleView {
 		this._lastSeenValue = v;
 		if (v == null) return;
 		const s = JSON.stringify(v);
-		// Second echo shape, and the destructive one: the parent's setData render
+		// Second echo shape, and the destructive one: the parent's setState render
 		// is frame-scheduled while _applied advances synchronously per keystroke,
 		// so an emission burst spanning frames can deliver an OLDER emission e_i
 		// after typing has already advanced the editor to e_j. It passes the
@@ -1383,7 +1383,7 @@ export default class RichTextEditor extends PuzzleView {
 		if (s !== this._applied) {
 			this._applied = s;
 			ed.chain().setMeta('addToHistory', false).setContent(toTiptap(v), { emitUpdate: false }).run(); // off the undo stack; emitUpdate defaults to TRUE in Tiptap 3.30 — suppress the echo
-			this.setData('empty', blankDoc(ed.state.doc));
+			this.setState('empty', blankDoc(ed.state.doc));
 			this.refresh();
 		}
 	}
@@ -1417,7 +1417,7 @@ export default class RichTextEditor extends PuzzleView {
 		const prev = this.getData().active || {};
 		const keys = Object.keys(next);
 		if (keys.every((k) => !!prev[k] === !!next[k])) return;
-		this.setData('active', next);
+		this.setState('active', next);
 		this.refresh();
 	}
 
@@ -1467,7 +1467,7 @@ export default class RichTextEditor extends PuzzleView {
 	}
 
 	_setUploading(delta) {
-		this.setData('uploading', Math.max(0, (this.getData().uploading || 0) + delta));
+		this.setState('uploading', Math.max(0, (this.getData().uploading || 0) + delta));
 		this.refresh();
 	}
 
@@ -1659,7 +1659,7 @@ export default class RichTextEditor extends PuzzleView {
 		}
 		if (!this._sameLine(line, this._handleLine)) this._handleLine = line;
 		if (!!line !== !!g.handleVisible || (line && mode !== g.handleMode)) {
-			this.setData({ handleVisible: !!line, handleMode: mode });
+			this.setState({ handleVisible: !!line, handleMode: mode });
 			this.refresh();
 		}
 		this._placeHandle();
@@ -1715,7 +1715,7 @@ export default class RichTextEditor extends PuzzleView {
 				sel.from === hit.from + 1;
 			if (typed) {
 				this._slashFrom = hit.from;
-				this.setData({ slashOpen: true, slashQuery: '', slashActive: 0 });
+				this.setState({ slashOpen: true, slashQuery: '', slashActive: 0 });
 				this.refresh();
 			}
 			return;
@@ -1726,7 +1726,7 @@ export default class RichTextEditor extends PuzzleView {
 			return;
 		}
 		if (hit.query !== g.slashQuery) {
-			this.setData({ slashQuery: hit.query, slashActive: 0 });
+			this.setState({ slashQuery: hit.query, slashActive: 0 });
 			this.refresh();
 		} else {
 			this._placePopovers();
@@ -1736,12 +1736,12 @@ export default class RichTextEditor extends PuzzleView {
 	_closeSlash() {
 		this._slashFrom = null;
 		if (!this.getData().slashOpen) return;
-		this.setData({ slashOpen: false, slashQuery: '', slashActive: 0 });
+		this.setState({ slashOpen: false, slashQuery: '', slashActive: 0 });
 		this.refresh();
 	}
 
 	_setSlashActive(i) {
-		this.setData('slashActive', i);
+		this.setState('slashActive', i);
 		this.refresh();
 		// Keep the highlighted row in view inside a scrolled list.
 		const row = this.refs.slashMenu?.querySelectorAll('[role="option"]')[i];
@@ -1803,7 +1803,7 @@ export default class RichTextEditor extends PuzzleView {
 			return true;
 		}
 		if (event.altKey && event.key === 'F10' && g.bubbleOpen) {
-			this.setData('bubbleFocus', true);
+			this.setState('bubbleFocus', true);
 			this.refs.bubble?.querySelector('button:not([disabled])')?.focus();
 			return true;
 		}
@@ -1884,7 +1884,7 @@ export default class RichTextEditor extends PuzzleView {
 		this._menuLine = line;
 		this._handleLine = line;
 		const current = this._menuCommands().findIndex((c) => c.current);
-		this.setData({
+		this.setState({
 			blockMenuOpen: true,
 			blockMenuIndex: Math.max(0, current),
 			handleVisible: true,
@@ -1901,7 +1901,7 @@ export default class RichTextEditor extends PuzzleView {
 		this._menuVariant = 'style';
 		this._menuLine = null;
 		const current = this._menuCommands().findIndex((c) => c.current);
-		this.setData({ blockMenuOpen: true, blockMenuIndex: Math.max(0, current) });
+		this.setState({ blockMenuOpen: true, blockMenuIndex: Math.max(0, current) });
 		this.refresh();
 		this._focusBlockRow();
 	}
@@ -1919,7 +1919,7 @@ export default class RichTextEditor extends PuzzleView {
 		const variant = this._menuVariant;
 		this._menuLine = null;
 		this._menuVariant = 'block';
-		this.setData({ blockMenuOpen: false, blockMenuIndex: 0 });
+		this.setState({ blockMenuOpen: false, blockMenuIndex: 0 });
 		this.refresh();
 		if (refocus) {
 			if (variant === 'style') this.refs.bubble?.querySelector('[data-tb-value="style"]')?.focus();
@@ -1948,7 +1948,7 @@ export default class RichTextEditor extends PuzzleView {
 				(!!g.blockMenuOpen && this._menuVariant === 'style') ||
 				(!sel.empty && !sel.node && !inCode && (ed.isFocused || !!g.bubbleFocus)));
 		if (want !== !!g.bubbleOpen) {
-			this.setData('bubbleOpen', want);
+			this.setState('bubbleOpen', want);
 			this.refresh();
 		} else if (want) {
 			this._placePopovers();
@@ -2108,7 +2108,7 @@ export default class RichTextEditor extends PuzzleView {
 	}
 
 	_setStyleActive(index) {
-		this.setData('styleActive', index);
+		this.setState('styleActive', index);
 		this.refresh();
 	}
 
@@ -2150,7 +2150,7 @@ export default class RichTextEditor extends PuzzleView {
 		toggleStyle: () => {
 			if (this.props.disabled) return;
 			const open = !this.getData().styleOpen;
-			this.setData({
+			this.setState({
 				styleOpen: open,
 				styleActive: open ? this._styleIndex() : -1,
 			});
@@ -2170,7 +2170,7 @@ export default class RichTextEditor extends PuzzleView {
 
 		closeStyle: () => {
 			if (!this.getData().styleOpen) return;
-			this.setData({ styleOpen: false, styleActive: -1 });
+			this.setState({ styleOpen: false, styleActive: -1 });
 			this.refresh();
 		},
 
@@ -2249,7 +2249,7 @@ export default class RichTextEditor extends PuzzleView {
 				if (opt.level === 0) c.setParagraph().run();
 				else c.setHeading({ level: opt.level }).run();
 			}
-			this.setData({ styleOpen: false, styleActive: -1 });
+			this.setState({ styleOpen: false, styleActive: -1 });
 			this.refresh();
 		},
 
@@ -2270,7 +2270,7 @@ export default class RichTextEditor extends PuzzleView {
 			if (value !== 'link' || !this._editor) return;
 			const href = this._editor.getAttributes('link').href || '';
 			// Blocks mode hosts the URL row in the bubble, so open it with the row.
-			this.setData({ linkOpen: true, linkDraft: href, ...(this._blocks() ? { bubbleOpen: true } : {}) });
+			this.setState({ linkOpen: true, linkDraft: href, ...(this._blocks() ? { bubbleOpen: true } : {}) });
 			this.refresh();
 			// An explicit refresh() renders synchronously, so the row's input is
 			// already mounted by the time it returns — focus it right here, or the
@@ -2299,7 +2299,7 @@ export default class RichTextEditor extends PuzzleView {
 				this._chain()
 					?.insertContent({ type: 'text', text: raw, marks: [{ type: 'link', attrs: { href: url } }] })
 					.run();
-				this.setData({ linkOpen: false, linkDraft: '' });
+				this.setState({ linkOpen: false, linkDraft: '' });
 				this.refresh();
 				this._syncBlocks(null);
 				return;
@@ -2311,7 +2311,7 @@ export default class RichTextEditor extends PuzzleView {
 			// the whole error affordance.
 			const applied = this._chain()?.extendMarkRange('link').setLink({ href: url }).run();
 			if (!applied) return;
-			this.setData({ linkOpen: false, linkDraft: '' });
+			this.setState({ linkOpen: false, linkDraft: '' });
 			this.refresh();
 			this._syncBlocks(null);
 		},
@@ -2319,7 +2319,7 @@ export default class RichTextEditor extends PuzzleView {
 		removeLink: () => {
 			if (this.props.disabled) return;
 			this._chain()?.extendMarkRange('link').unsetLink().run();
-			this.setData({ linkOpen: false, linkDraft: '' });
+			this.setState({ linkOpen: false, linkDraft: '' });
 			this.refresh();
 			this._syncBlocks(null);
 		},
@@ -2368,12 +2368,12 @@ export default class RichTextEditor extends PuzzleView {
 		},
 
 		onHandleFocus: () => {
-			this.setData('handleFocus', true);
+			this.setState('handleFocus', true);
 			this._refreshHandle();
 		},
 
 		onHandleBlur: () => {
-			this.setData('handleFocus', false);
+			this.setState('handleFocus', false);
 			this._refreshHandle();
 		},
 
@@ -2442,7 +2442,7 @@ export default class RichTextEditor extends PuzzleView {
 					return;
 			}
 			event.preventDefault();
-			this.setData('blockMenuIndex', next);
+			this.setState('blockMenuIndex', next);
 			this.refresh();
 			this._focusBlockRow();
 		},
@@ -2455,7 +2455,7 @@ export default class RichTextEditor extends PuzzleView {
 
 		hoverBlockRow: (i) => {
 			if (this.getData().blockMenuIndex === i) return;
-			this.setData('blockMenuIndex', i);
+			this.setState('blockMenuIndex', i);
 			this.refresh();
 			this._focusBlockRow();
 		},
@@ -2485,12 +2485,12 @@ export default class RichTextEditor extends PuzzleView {
 
 		onBubbleFocus: () => {
 			if (this.getData().bubbleFocus) return;
-			this.setData('bubbleFocus', true);
+			this.setState('bubbleFocus', true);
 		},
 
 		onBubbleBlur: (event) => {
 			if (this.refs.bubble?.contains(event.relatedTarget)) return;
-			this.setData('bubbleFocus', false);
+			this.setState('bubbleFocus', false);
 			this._syncBlocks(null);
 		},
 
@@ -2499,12 +2499,12 @@ export default class RichTextEditor extends PuzzleView {
 				this.events.closeLink();
 				return;
 			}
-			this.setData('bubbleFocus', false);
+			this.setState('bubbleFocus', false);
 			this._editor?.commands.focus();
 		},
 
 		closeLink: () => {
-			this.setData({ linkOpen: false, linkDraft: '' });
+			this.setState({ linkOpen: false, linkDraft: '' });
 			this.refresh();
 			// The focused input unmounts with the row; hand focus back to the
 			// editor instead of letting it fall to <body>. (applyLink/removeLink

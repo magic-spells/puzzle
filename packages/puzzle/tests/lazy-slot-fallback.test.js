@@ -112,12 +112,12 @@ describe('lazy marker fallbacks (D141)', () => {
 		expect(probeName).toHaveBeenCalledTimes(2);
 		const firstName = el.querySelector('.lazy-name');
 
-		// setData re-renders without re-running data(). The `rows` loop wraps each
+		// setState re-renders without re-running data(). The `rows` loop wraps each
 		// item in a plain object, so the list block rebuilds those rows and their
 		// fallbacks. The primitive `names` rows are clean: the block hands back the
 		// same cached row vnodes, and each marker's fallback — built once, on first
 		// use — keeps its vnode identity, so there is no rebuild and no DOM churn.
-		rows.setData('unrelated', 1);
+		rows.setState('unrelated', 1);
 		rows.flushUpdates();
 		expect(probe).toHaveBeenCalledTimes(4);
 		expect(probeName).toHaveBeenCalledTimes(2);
@@ -151,7 +151,7 @@ describe('lazy marker fallbacks (D141)', () => {
 
 		class Host extends PuzzleView {
 			created() {
-				this.setData({ filled: true });
+				this.setState({ filled: true });
 			}
 			data() {
 				return { filled: this.getData().filled };
@@ -181,7 +181,7 @@ describe('lazy marker fallbacks (D141)', () => {
 		// Unfilling re-renders LazyRows without re-running its data(). The `names`
 		// rows are clean, so their cached markers are the ones built on the first
 		// render, and each calls the fallback thunk it deferred then.
-		host.setData('filled', false);
+		host.setState('filled', false);
 		host.flushUpdates();
 		expect(el.querySelector('.stamped')).toBeNull();
 		expect(notes(el)).toEqual(['note:Ada', 'note:Grace']);
@@ -189,7 +189,7 @@ describe('lazy marker fallbacks (D141)', () => {
 		expect(names(el)).toEqual(['name:x', 'name:y']);
 		expect(probeName).toHaveBeenCalledTimes(2);
 
-		host.setData('filled', true);
+		host.setState('filled', true);
 		host.flushUpdates();
 		expect(el.querySelectorAll('.stamped')).toHaveLength(2);
 		expect(el.querySelectorAll('.stamped-name')).toHaveLength(2);
@@ -235,7 +235,7 @@ describe('lazy marker fallbacks (D141)', () => {
 
 		class Host extends PuzzleView {
 			created() {
-				this.setData({ custom: false });
+				this.setState({ custom: false });
 			}
 			render() {
 				const children = this.getData().custom
@@ -251,13 +251,13 @@ describe('lazy marker fallbacks (D141)', () => {
 		await host.mount(el);
 		expect(el.querySelector('.lazy-card-fallback').textContent).toBe('note:L');
 
-		host.setData('custom', true);
+		host.setState('custom', true);
 		host.flushUpdates();
 		expect(el.querySelector('.lazy-card-fallback')).toBeNull();
 		expect(el.querySelector('.lazy-card-custom').textContent).toBe('Custom');
 		const calls = probe.mock.calls.length;
 
-		host.setData('custom', false);
+		host.setState('custom', false);
 		host.flushUpdates();
 		expect(el.querySelector('.lazy-card-custom')).toBeNull();
 		expect(el.querySelector('.lazy-card-fallback').textContent).toBe('note:L');
@@ -277,12 +277,12 @@ describe('lazy marker fallbacks (D141)', () => {
 		// `tips` is empty, so the default marker's fallback builds nothing. The
 		// false call-site {#if}'s placeholder must stay in the position, or the
 		// true branch adds a node, shifts the input and remounts it.
-		host.setData('show', true);
+		host.setState('show', true);
 		host.flushUpdates();
 		expect(el.querySelector('.lazy-card-shown')).not.toBeNull();
 		expect(el.querySelector('.lazy-card-input')).toBe(input);
 
-		host.setData('show', false);
+		host.setState('show', false);
 		host.flushUpdates();
 		expect(el.querySelector('.lazy-card-shown')).toBeNull();
 		expect(el.querySelector('.lazy-card-input')).toBe(input);

@@ -36,7 +36,7 @@ model values.
 **Restore** is two-phase. After `beforeMount`, before navigation zero, records
 hydrate in identity-preserving replace mode, then `hydrateReadState` applies
 (records first, so a stale absence is dropped). After the route chain mounts,
-local view state is applied with `setData()`. Blobs are deleted before parsing,
+local view state is applied with `setState()`. Blobs are deleted before parsing,
 expire after 10 s (`MAX_AGE_MS`), and every step fails soft to a cold start. App
 persistence (localStorage) stays records-only.
 

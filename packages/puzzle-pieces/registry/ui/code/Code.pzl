@@ -97,7 +97,7 @@ export default class Code extends PuzzleView {
   created() {
     this._copyTimer = null;
     this._hlKey = null;
-    this.setData({ copied: false, expanded: false });
+    this.setState({ copied: false, expanded: false });
   }
 
   destroyed() {
@@ -217,13 +217,13 @@ export default class Code extends PuzzleView {
   events = {
     expand: () => {
       this._animateHeight(() => {
-        this.setData({ expanded: true });
+        this.setState({ expanded: true });
         this.refresh();
       });
     },
     collapse: () => {
       this._animateHeight(() => {
-        this.setData({ expanded: false });
+        this.setState({ expanded: false });
         this.refresh();
       });
     },
@@ -235,12 +235,12 @@ export default class Code extends PuzzleView {
       if (!navigator.clipboard?.writeText) return;
       navigator.clipboard.writeText(code).then(
         () => {
-          this.setData({ copied: true });
+          this.setState({ copied: true });
           this.refresh();
           if (this._copyTimer) clearTimeout(this._copyTimer);
           this._copyTimer = setTimeout(() => {
             this._copyTimer = null;
-            this.setData({ copied: false });
+            this.setState({ copied: false });
             this.refresh();
           }, COPIED_MS);
         },

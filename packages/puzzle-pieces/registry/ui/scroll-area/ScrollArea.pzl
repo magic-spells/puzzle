@@ -63,7 +63,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   class        merged onto the root (width, height, rounding, …)
 //
 // PERFORMANCE MODEL (mirrors Slider/Sheet). The native `scroll` event is
-// high-frequency, so the handler never calls setData/refresh — it coalesces to
+// high-frequency, so the handler never calls setState/refresh — it coalesces to
 // one requestAnimationFrame and writes the thumb geometry straight to the DOM
 // (`style.height` / `style.transform`), the same imperative escape hatch Sheet
 // uses for its drag transform. Writing `element.style.transform = 'translateY()'`
@@ -188,7 +188,7 @@ export default class ScrollArea extends PuzzleView {
     return this.element && this.element.querySelector(`[data-scroll-thumb="${axis}"]`);
   }
 
-  // --- measurement (imperative — never setData) -------------------------------
+  // --- measurement (imperative — never setState) -------------------------------
 
   _scheduleMeasure() {
     if (this._raf) return;

@@ -79,9 +79,9 @@ describe('events handler that is not an arrow and uses `this` (D03)', () => {
 		let getterRan = false;
 		class Quiet extends PuzzleView {
 			events = {
-				bare: (event) => this.setData('last', event),
-				single: event => this.setData('last', event),
-				asyncArrow: async () => this.setData('last', 1),
+				bare: (event) => this.setState('last', event),
+				single: event => this.setState('last', event),
+				asyncArrow: async () => this.setState('last', 1),
 				noThis(event) {
 					// this comment says this, and so does "this" string
 					return event;

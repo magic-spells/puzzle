@@ -270,7 +270,7 @@ const codeControlled = `// Controlled and EDGE-triggered: only a change to \`cur
 // element.current under a syncing guard.
 <PanelStack current={ panel } @change={ setPanel }>…</PanelStack>
 
-// setPanel: (handle) => this.setData('panel', handle)`;
+// setPanel: (handle) => this.setState('panel', handle)`;
 
 const codeEffect = `<PanelStack effect="stack">…</PanelStack>`;
 
@@ -321,7 +321,7 @@ const BACK =
 
 export default class PanelStackDoc extends PuzzleView {
   created() {
-    this.setData({ current: 'root', changeCount: 0 });
+    this.setState({ current: 'root', changeCount: 0 });
   }
 
   data() {
@@ -359,10 +359,10 @@ export default class PanelStackDoc extends PuzzleView {
 
   events = {
     goTo: (handle) => {
-      this.setData('current', handle);
+      this.setState('current', handle);
     },
     onChange: (handle) => {
-      this.setData({ current: handle, changeCount: this.getData().changeCount + 1 });
+      this.setState({ current: handle, changeCount: this.getData().changeCount + 1 });
     },
   };
 }

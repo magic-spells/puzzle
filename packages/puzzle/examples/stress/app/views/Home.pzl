@@ -191,8 +191,8 @@ import { intParam, ms1 } from '../scenario-utils.js';
 // props update and the already-built dataset would silently disagree with the
 // URL.
 //
-// State here lives in plain instance fields rather than setData(): the template
-// reads only from data()'s return value, so a setData() write would need a
+// State here lives in plain instance fields rather than setState(): the template
+// reads only from data()'s return value, so a setState() write would need a
 // refresh() to become visible anyway.
 // ---------------------------------------------------------------------------
 

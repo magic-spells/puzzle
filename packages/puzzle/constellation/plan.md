@@ -20,7 +20,7 @@ Puzzle is a SPA-first JavaScript framework: `.pzl` single-file components, a rea
 - npm `latest` is **0.9.0**. **`release/0.10.0` is the working trunk** (unpublished). Check `npm view @magic-spells/puzzle version` and `git tag` before trusting this line. Never recommend 0.3.0 (published broken).
 - The repo is a monorepo ([[DECISION-D162-MONOREPO-PACKAGES]]); every package in the release train carries the framework version. `packages/puzzle-lang` is tagged `packages/puzzle-lang/vX.Y.Z` and may ship Go-module-only patch releases (0.9.1 added the Sites `|` pipes, `Options.Pipes`).
 - The three editor grammars are separate, dev-install-only repos with their own versions; sweep them whenever the template grammar changes.
-- **The next free decision number is D190.**
+- **The next free decision number is D192.**
 
 ## Open and deferred
 
@@ -28,7 +28,7 @@ The "Deferred features" section of [[DOC-SPEC]] lists deferred and rejected feat
 
 - `output: 'static'` pages carry neither `beforeRequest` nor router focus/announcement: they ship no router, and `mountStatic` options are serialized into a generated module, so functions cannot cross.
 - Height animations need explicit px; WAAPI cannot animate to `auto`.
-- `setData()` re-renders without rerunning `data()` ([[DECISION-D23-REFRESH-PATTERN]]); pair it with `refresh()` only when `data()` derives another value from the written key. A key the template reads directly needs no `refresh()`.
+- `setState()` re-renders without rerunning `data()` ([[DECISION-D23-REFRESH-PATTERN]]); pair it with `refresh()` only when `data()` derives another value from the written key. A key the template reads directly needs no `refresh()`.
 
 Unscheduled ideas (no design yet): `<KeepAlive>`-style view retention, a schema-derived forms helper, global event bindings, per-subtree provide/inject, `build --analyze`, deploy presets, content collections, Tailwind standalone-binary support, the playground's worker/UI phases (the WASM core is [[COMPONENT-PLAYGROUND-COMPILER]]).
 

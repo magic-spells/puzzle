@@ -84,7 +84,7 @@ export default class Hamburger extends PuzzleView {
   created() {
     // Uncontrolled open state — an instance field, not view data: the render
     // model is derived from it in data(), so a toggle must refresh() to re-run
-    // data() (setData alone would not).
+    // data() (setState alone would not).
     this._uncontrolledOpen = false;
   }
 

@@ -67,7 +67,7 @@ import TrackRow from '../components/TrackRow.pzl';
 
 export default class SearchView extends PuzzleView {
   created() {
-    this.setData({ query: '' });
+    this.setState({ query: '' });
   }
 
   data(params, props) {
@@ -113,17 +113,17 @@ export default class SearchView extends PuzzleView {
   }
 
   events = {
-    // Manual bind: setData reflects the keystroke, refresh() re-runs data() so the
-    // derived result lists recompute (setData alone does not re-run data(), SPEC §4).
+    // Manual bind: setState reflects the keystroke, refresh() re-runs data() so the
+    // derived result lists recompute (setState alone does not re-run data(), SPEC §4).
     updateQuery: (event) => {
-      this.setData('query', event.target.value);
+      this.setState('query', event.target.value);
       this.refresh();
     },
     // Escape clears the field and blurs it. `@keydown:escape` is a D38 key-filtered
     // binding (SPEC §5) — the handler only fires on the Escape key, no manual
-    // event.key check. setData + refresh re-runs data() so the results reset.
+    // event.key check. setState + refresh re-runs data() so the results reset.
     clearQuery: (event) => {
-      this.setData('query', '');
+      this.setState('query', '');
       this.refresh();
       if (event.target) event.target.blur();
     },

@@ -65,7 +65,7 @@ Current terms. [[DOC-SPEC]] is authoritative.
 
 **snippet** — `<Snippet fits="name" params…>` at a call site: a parameterized body the component stamps per item through its own markers.
 
-**state layer** — Persistent component state set by `setData()`; overrides same-named derived-layer values and renders without rerunning `data()`.
+**state layer** — Persistent component state set by `setState()`; overrides same-named derived-layer values and renders without rerunning `data()`.
 
 **store** — Per-app record registry, query and subscription engine, and persistence owner; with the adapter capability it also fetches and syncs.
 

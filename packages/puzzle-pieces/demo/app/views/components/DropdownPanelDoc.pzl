@@ -344,8 +344,8 @@ const codeControlled = `// open is optional-controlled and EDGE-triggered: only 
 
 // in the parent view
 events = {
-  toggle: () => this.setData('open', !this.getData().open),
-  onHide: () => this.setData('open', false),
+  toggle: () => this.setState('open', !this.getData().open),
+  onHide: () => this.setState('open', false),
 };`;
 
 const rootRows = [
@@ -410,7 +410,7 @@ const ACCOUNT = [
 
 export default class DropdownPanelDoc extends PuzzleView {
   created() {
-    this.setData({ controlled: false, shows: 0, hides: 0 });
+    this.setState({ controlled: false, shows: 0, hides: 0 });
   }
 
   data() {
@@ -450,15 +450,15 @@ export default class DropdownPanelDoc extends PuzzleView {
 
   events = {
     toggleControlled: () => {
-      this.setData('controlled', !this.getData().controlled);
+      this.setState('controlled', !this.getData().controlled);
     },
     onShow: () => {
-      this.setData('shows', this.getData().shows + 1);
+      this.setState('shows', this.getData().shows + 1);
     },
     // The dropdown closes itself too, so the parent flips its flag back here —
     // that is what keeps the next `open` a fresh edge.
     onHide: () => {
-      this.setData({ hides: this.getData().hides + 1, controlled: false });
+      this.setState({ hides: this.getData().hides + 1, controlled: false });
     },
   };
 }

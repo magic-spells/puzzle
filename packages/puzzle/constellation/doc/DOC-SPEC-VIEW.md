@@ -36,7 +36,7 @@ animations = {
 
 - A throwing `destroyed()` is caught and logged; the surrounding teardown (parent destroy, `Router.stop()`, `PuzzleApp.unmount()`) always completes.
 - An enter requested while the first render is still pending replays after `mounted()` on the real root.
-- A **leaving** view is inert from `playOut()` start: its store subscription drops immediately and `refresh`/`setData`/store-change/parent-update deliveries are ignored.
+- A **leaving** view is inert from `playOut()` start: its store subscription drops immediately and `refresh`/`setState`/store-change/parent-update deliveries are ignored.
 - A view restored after a failed navigation mid-leave fires the show bracket again (`viewWillShow()` → `viewDidShow()`, zero-duration, each hook contained) before its eventual real leave fires the full hide bracket.
 
 **The hide bracket pairs with the mount.** Hide hooks and `out` fire only for a view that reached `mounted()`. A component removed while its first `data()` was pending is destroyed instantly: pending run cancelled, subscription dropped, `destroyed()` fires, no hide hooks. A view with a `<puzzle-skeleton>` (§16) **is** mounted once the skeleton renders, so it leaves with the full bracket.
@@ -124,7 +124,7 @@ Elements sharing a `data-puzzle-morph` value morph between views with only `enab
 
 A static `ref="name"` on a **plain element** binds its live DOM node to `this.refs.name` ([[DECISION-D72-ELEMENT-REFS]]). The attribute is framework-owned (stripped from the DOM and from SSG output like `key`/`island`), and the name must be an identifier.
 
-- `this.refs.name` is the mounted element, or `null`. It is populated **before `mounted()`**; a keyed or tag replacement re-points it; removal (`{#if}` off, row leaving, teardown) nulls it. Outside `mounted()`, guard with `?.`. `refs` is an instance field, never in `getData`/`setData` or dev state snapshots.
+- `this.refs.name` is the mounted element, or `null`. It is populated **before `mounted()`**; a keyed or tag replacement re-points it; removal (`{#if}` off, row leaving, teardown) nulls it. Outside `mounted()`, guard with `?.`. `refs` is an instance field, never in `getData`/`setState` or dev state snapshots.
 - Codegen emits `ref: this.__ref("name")`; `__ref` returns a per-instance **cached** setter whose guarded removal makes patch ordering irrelevant. `refs` and `__ref` are reserved names.
 - **Positioned compile errors:** a dynamic `ref={ expr }` or interpolated value; empty or valueless `ref`; a non-identifier name; `ref` on a component (use an `@ready` callback prop), on a `<Slot>`, `<Children>` or `<Portal>` marker, or on the `<puzzle-view>` root (that is `this.element`); inside `{#for}` (no per-iteration refs); inside `<puzzle-skeleton>`; inside a `<Snippet>` body; duplicate names in one template.
 - **`ref` + `island` (§17)** is the zero-diff animation path: `<svg island ref="scene">` plus a rAF loop in `mounted()`.
@@ -162,7 +162,7 @@ A keyed `{#for}` row root may declare `flip` (bare) or `flip={ flipOptions }` (a
 
 Two optional PuzzleApp config keys over the framework's failure recovery ([[DECISION-D145-ERROR-BOUNDARIES]]).
 
-**The funnel** (`client-runtime/errors.js`). Every framework-contained error reports through one funnel. `onError(error, info)` receives a frozen `info = { phase, view, route }`. The twelve phases are `mount`, `refresh`, `render` (a scheduled `setData` re-render), `bind`, `enter`, `leave`, `unmount`, `navigation`, `transition`, `app-mount`, `app-unmount` and `error-view`; they are pinned in the type tests (`PuzzleErrorInfo`), so a new emission site cannot ship without its member. A loaded swap deferred by a skeleton hold reports `mount`, for a routed view too. `view`/`route` are `null` where the site has none; the app phases always carry `view: null`. With no hook, the funnel logs with `console.error`. A throwing or rejecting `onError` is caught and logged and never re-enters. **Not funneled:** rethrow-to-caller paths (`beforeMount`, `router.start()`), explicit verdicts (a guard returning `false`), input-capability fallbacks, event handlers.
+**The funnel** (`client-runtime/errors.js`). Every framework-contained error reports through one funnel. `onError(error, info)` receives a frozen `info = { phase, view, route }`. The twelve phases are `mount`, `refresh`, `render` (a scheduled `setState` re-render), `bind`, `enter`, `leave`, `unmount`, `navigation`, `transition`, `app-mount`, `app-unmount` and `error-view`; they are pinned in the type tests (`PuzzleErrorInfo`), so a new emission site cannot ship without its member. A loaded swap deferred by a skeleton hold reports `mount`, for a routed view too. `view`/`route` are `null` where the site has none; the app phases always carry `view: null`. With no hook, the funnel logs with `console.error`. A throwing or rejecting `onError` is caught and logged and never re-enters. **Not funneled:** rethrow-to-caller paths (`beforeMount`, `router.start()`), explicit verdicts (a guard returning `false`), input-capability fallbacks, event handlers.
 
 **Only current-run failures report.** A refresh whose token moved, or whose view is destroyed or leaving, is discarded whether it fulfilled or rejected, and §61's settle loop drops a stale pass's rejection like its success. Discarded work never reaches `onError` or the error view.
 

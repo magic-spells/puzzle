@@ -151,7 +151,7 @@ const codeHero = `<TimePicker
 
 // parent
 events = {
-  setMeeting: (value) => this.setData('meeting', value),
+  setMeeting: (value) => this.setState('meeting', value),
 };`;
 
 const codeTwelve = `<!-- hourCycle 12 adds an am/pm column; value stays 24h canonical -->
@@ -190,7 +190,7 @@ const codeError = `<TimePicker
 
 export default class TimePickerDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       meeting: '09:30',
       reminder: '14:15',
       lap: '00:01:30',
@@ -234,14 +234,14 @@ export default class TimePickerDoc extends PuzzleView {
   }
 
   events = {
-    setMeeting: (value) => this.setData('meeting', value),
-    setReminder: (value) => this.setData('reminder', value),
-    setLap: (value) => this.setData('lap', value),
-    setSlot: (value) => this.setData('slot', value),
-    setDeparture: (value) => this.setData('departure', value),
-    openDeparture: () => this.setData('depOpen', true),
-    closeDeparture: () => this.setData('depOpen', false),
-    setStartTime: (value) => this.setData('startTime', value),
+    setMeeting: (value) => this.setState('meeting', value),
+    setReminder: (value) => this.setState('reminder', value),
+    setLap: (value) => this.setState('lap', value),
+    setSlot: (value) => this.setState('slot', value),
+    setDeparture: (value) => this.setState('departure', value),
+    openDeparture: () => this.setState('depOpen', true),
+    closeDeparture: () => this.setState('depOpen', false),
+    setStartTime: (value) => this.setState('startTime', value),
   };
 }
 </script>

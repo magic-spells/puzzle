@@ -67,10 +67,10 @@ The exported class extends `PuzzleView`:
 | `events` | A class field of arrow functions — the template's handlers ([[DOC-EVENTS]]). |
 | `created`, `mounted`, `beforeUpdate`, `afterUpdate(prev)`, `destroyed` | Lifecycle hooks, in that order. `viewWillShow`/`viewDidShow`/`viewWillHide`/`viewDidHide` bracket enter/leave animations. |
 | `animations` | A class field `{ in?, out? }` of Web Animations specs (§12). |
-| `this.renderTick()` | Resolves once no render is pending — the point to read `this.refs` or measure after `setData()` (§4). |
+| `this.renderTick()` | Resolves once no render is pending — the point to read `this.refs` or measure after `setState()` (§4). |
 | anything else | Your own helpers, called from hooks and handlers. |
 
-Class fields (`events`, `animations`) have no commas between them and other members. A few member names belong to the framework (`render`, `refresh`, `getData`, `setData`, `memo`, `renderTick`, `refs`, and names starting `__`); the list is in §4.
+Class fields (`events`, `animations`) have no commas between them and other members. A few member names belong to the framework (`render`, `refresh`, `getData`, `setState`, `memo`, `renderTick`, `refs`, and names starting `__`); the list is in §4.
 
 ### `this.ctx`
 
@@ -95,11 +95,11 @@ data(params, props) {
 Two layers of state:
 
 - **The model** — each `data()` result **replaces** the last one.
-- **Local state** — `this.setData(key, value)` or `this.setData({ … })` writes a layer underneath that survives `data()` re-runs, and re-renders **without** re-running `data()`. When `data()` derives something from local state, call `this.refresh()` after `setData`.
+- **Local state** — `this.setState(key, value)` or `this.setState({ … })` writes a layer underneath that survives `data()` re-runs, and re-renders **without** re-running `data()`. When `data()` derives something from local state, call `this.refresh()` after `setState`.
 
 ```js
 created() {
-  this.setData({ filter: 'all' });
+  this.setState({ filter: 'all' });
 }
 
 data() {
@@ -114,7 +114,7 @@ data() {
 
 events = {
   setFilter: (filter) => {
-    this.setData('filter', filter);
+    this.setState('filter', filter);
     this.refresh();
   },
   addTodo: () => this.ctx.store.createRecord('todo', { text: 'New todo' }), // subscribers re-run

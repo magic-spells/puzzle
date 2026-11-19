@@ -103,7 +103,7 @@ export default class TrackRow extends PuzzleView {
       // everywhere else (Album/Artist/Search), so the button never renders there.
       removable: !!props.removable,
       playlists,
-      // Local UI flag (setData does not re-run data(), so read it back through
+      // Local UI flag (setState does not re-run data(), so read it back through
       // getData — same pattern the layout uses for queueOpen).
       menuOpen: this.getData().menuOpen || false
     };
@@ -122,7 +122,7 @@ export default class TrackRow extends PuzzleView {
 
     // Toggle the context menu open/closed.
     toggleMenu: () => {
-      this.setData('menuOpen', !this.getData().menuOpen);
+      this.setState('menuOpen', !this.getData().menuOpen);
     },
 
     // Queue actions — each flashes a toast and closes the menu.
@@ -182,7 +182,7 @@ export default class TrackRow extends PuzzleView {
 
   _closeMenu() {
     if (!this.getData().menuOpen) return;
-    this.setData('menuOpen', false);
+    this.setState('menuOpen', false);
   }
 
   _player() {

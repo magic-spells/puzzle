@@ -144,9 +144,9 @@ contract is [[DOC-SPEC-ROUTER]] §30. The rules that shape the diagram:
 | Store change matching a query this view made in `data()` | yes | batched flush → tracked re-run → diff/patch |
 | Navigation reusing the view (new params/query) | yes | per §4; delivers the new `this.route` |
 | Parent re-renders with changed props | yes | shallow compare; a store record prop also compares by render revision |
-| Two-way bind write-back | yes | `setData` + `refresh`, or `record.update()` and its flush |
+| Two-way bind write-back | yes | `setState` + `refresh`, or `record.update()` and its flush |
 | Parent re-render with new slot content only | no | re-render with the existing model (once mounted) |
-| `this.setData(...)` | no | state merged, one render scheduled per frame |
+| `this.setState(...)` | no | state merged, one render scheduled per frame |
 | Anything else (locals, direct DOM pokes) | no | not reactive by design |
 
 Both paths batch on the shared frame scheduler (`scheduler.js`,

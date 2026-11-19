@@ -154,7 +154,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 export default class Counter extends PuzzleView {
   data() { return { count: this.getData()?.count ?? 0 }; }  // runs at render — and under NODE during prerender
   events = {
-    increment: () => this.setData('count', this.getData().count + 1),
+    increment: () => this.setState('count', this.getData().count + 1),
   };  // handlers should be arrow functions in the `events` class field so
       // `this` is the component — method shorthand gets the events object as `this`
       // (development builds warn when a non-arrow handler uses `this`)
@@ -363,8 +363,8 @@ Rules that bite:
   value, a block header, a function argument, or an `@event` handler's
   arguments or ternary condition is a compile error. Every value a template
   shows comes through `data()` — move a getter's body into a `data()` field,
-  and call `this.refresh()` after a `setData()` that field depends on
-  (`setData()` alone does not re-run `data()`).
+  and call `this.refresh()` after a `setState()` that field depends on
+  (`setState()` alone does not re-run `data()`).
   Member access is guarded, so `{ user.address.city }` prints nothing when
   `address` is missing instead of throwing (`?.` is legal but unnecessary),
   and a method call on a missing value prints nothing too (dev warning). A
@@ -567,7 +567,7 @@ Rules that bite:
   (live node, populated before `mounted()`). `ref` is NOT allowed on component
   tags — when a parent needs a child's imperative handle (a carousel's
   `.next()`), the child delivers it up once via an `@ready` callback prop; store
-  it on an instance field (not `setData`) and guard every use with `?.`.
+  it on an instance field (not `setState`) and guard every use with `?.`.
 - If a callback prop is wired into a long-lived external system, read it at fire
   time (`(e) => this.props.name?.(e)`), never capture it at wiring time.
 
@@ -727,7 +727,7 @@ many other`) is a plural entry and must have `other`.
   `.defaultLocale`, and `this.ctx.i18n.setLocale('es')` — it fetches the file
   first, then switches, stores the choice, sets `<html lang>` (except in
   memory mode, which never touches the document), and rebuilds the page at the
-  same location (store records survive; `setData` state does not — keep state
+  same location (store records survive; `setState` state does not — keep state
   that must survive a switch in the store). It resolves once the new strings
   are active; if a navigation (push, replace or pop) is in flight, that
   navigation lands first and the page is rebuilt after it. So a root layout's
@@ -959,10 +959,12 @@ The reactivity contract — the three methods are not interchangeable:
 - **`data()`** owns the derived layer. Store queries made inside `data()`
   **auto-subscribe** the view; when matching records change, `data()` re-runs
   and the result replaces the view's data wholesale (replace-on-commit).
-- **`setData(patch)`** owns persistent local UI state (open panels, drafts).
-  It rerenders WITHOUT re-running `data()` and survives it.
+- **`setState(patch)`** owns persistent local UI state (open panels, drafts).
+  It rerenders WITHOUT re-running `data()` and survives it. `getState()` reads
+  that state layer back alone; `getData()` reads the merged model the template
+  sees. There is no `setData()` (removed in 0.10.0).
 - **`refresh()`** re-runs `data()` — use it only when local state feeds
-  `data()`-derived values. A `setData()` key the template reads directly
+  `data()`-derived values. A `setState()` key the template reads directly
   already re-renders; adding `refresh()` after it is dead work.
 - **A record prop tracks that record, and only that record.** Records mutate in
   place, so a record prop is always reference-equal — but it also carries a
@@ -983,7 +985,7 @@ tab). Two awaits observe that work; neither forces it:
 
 - `await this.renderTick()` in a view resolves once every scheduled store flush and
   view render has landed, including the renders those schedule. Use it after
-  `setData()` before measuring `this.refs`. It does not wait for async
+  `setState()` before measuring `this.refs`. It does not wait for async
   `data()`, fetches or navigation.
 - `await app.idle()` (or `this.ctx.idle()` from any view or component)
   resolves `true` once two consecutive frames find no mount, navigation,

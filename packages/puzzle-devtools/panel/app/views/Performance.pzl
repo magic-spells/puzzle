@@ -255,7 +255,7 @@ const RECORD_LIVE = 'border-danger text-danger hover:bg-danger-soft';
 
 export default class PerformanceView extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       recording: false,
       // Guards the Record button against a double click while perf:start is in
       // flight; also drives the reload glyph's spinner.
@@ -446,7 +446,7 @@ export default class PerformanceView extends PuzzleView {
       ]);
       if (this.isDestroyed) return null;
       applyProfileSnapshot(report);
-      if (this.getData().error) this.setData('error', '');
+      if (this.getData().error) this.setState('error', '');
       this.adoptRecordingState(report?.recording === true);
       return report;
     } catch (err) {
@@ -455,7 +455,7 @@ export default class PerformanceView extends PuzzleView {
       // turns into a rejection. Stop rather than retry: one failure per second
       // for as long as the tab is open helps nobody.
       this.stopPolling();
-      this.setData({ error: err?.message ?? String(err), recording: false });
+      this.setState({ error: err?.message ?? String(err), recording: false });
       this.refresh();
       return null;
     }
@@ -471,7 +471,7 @@ export default class PerformanceView extends PuzzleView {
    */
   adoptRecordingState(recording) {
     if (recording !== this.getData().recording) {
-      this.setData('recording', recording);
+      this.setState('recording', recording);
       this.refresh();
     }
     if (!recording) {
@@ -483,7 +483,7 @@ export default class PerformanceView extends PuzzleView {
 
   async startRecording() {
     if (!this.connected() || this.getData().busy) return;
-    this.setData({ busy: true, error: '', recording: true });
+    this.setState({ busy: true, error: '', recording: true });
     this.refresh();
     try {
       await api.perfStart();
@@ -492,11 +492,11 @@ export default class PerformanceView extends PuzzleView {
       await this.loadSample();
     } catch (err) {
       if (!this.isDestroyed) {
-        this.setData({ recording: false, error: err?.message ?? String(err) });
+        this.setState({ recording: false, error: err?.message ?? String(err) });
       }
     } finally {
       if (!this.isDestroyed) {
-        this.setData('busy', false);
+        this.setState('busy', false);
         this.refresh();
       }
     }
@@ -505,7 +505,7 @@ export default class PerformanceView extends PuzzleView {
   async stopRecording() {
     if (this.getData().busy) return;
     this.stopPolling();
-    this.setData({ busy: true, recording: false });
+    this.setState({ busy: true, recording: false });
     this.refresh();
     try {
       await api.perfStop();
@@ -514,10 +514,10 @@ export default class PerformanceView extends PuzzleView {
       // whatever the poll happened to catch a fraction of a second earlier.
       await this.loadSample();
     } catch (err) {
-      if (!this.isDestroyed) this.setData('error', err?.message ?? String(err));
+      if (!this.isDestroyed) this.setState('error', err?.message ?? String(err));
     } finally {
       if (!this.isDestroyed) {
-        this.setData('busy', false);
+        this.setState('busy', false);
         this.refresh();
       }
     }
@@ -531,7 +531,7 @@ export default class PerformanceView extends PuzzleView {
 
     sortBy: (key) => {
       const local = this.getData();
-      this.setData(nextSortState(local.sort, local.direction, key));
+      this.setState(nextSortState(local.sort, local.direction, key));
       this.refresh();
     },
 

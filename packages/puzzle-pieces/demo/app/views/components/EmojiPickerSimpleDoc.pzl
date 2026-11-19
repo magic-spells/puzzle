@@ -96,7 +96,7 @@ const usageMarkup = `<EmojiPickerSimple @change={ addEmoji }/>
 const codeHero = `<input value={ message } @input={ onMessageInput(event) } />
 <EmojiPickerSimple align="end" @change={ addEmoji }/>
 
-// addEmoji: (char) => this.setData({ message: this.getData().message + char })`;
+// addEmoji: (char) => this.setState({ message: this.getData().message + char })`;
 
 const codeTrigger = `<EmojiPickerSimple label="Add reaction" @change={ addEmoji }>
   <span slot="trigger" class="…">React</span>
@@ -137,19 +137,19 @@ export default class EmojiPickerSimpleDoc extends PuzzleView {
   events = {
     addEmoji: (char) => {
       const { message } = this.getData();
-      this.setData({ message: message + char, lastEmoji: char });
+      this.setState({ message: message + char, lastEmoji: char });
     },
 
     onMessageInput: (event) => {
-      this.setData({ message: event.target.value });
+      this.setState({ message: event.target.value });
     },
 
     openPicker: () => {
-      this.setData({ pickerOpen: true });
+      this.setState({ pickerOpen: true });
     },
 
     closePicker: () => {
-      this.setData({ pickerOpen: false });
+      this.setState({ pickerOpen: false });
     },
   };
 }

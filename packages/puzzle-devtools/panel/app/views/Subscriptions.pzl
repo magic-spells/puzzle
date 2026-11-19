@@ -161,7 +161,7 @@ function heldNote(selected) {
 
 export default class SubscriptionsView extends PuzzleView {
   created() {
-    this.setData({ selectedKey: null, loading: false, error: '' });
+    this.setState({ selectedKey: null, loading: false, error: '' });
     this._seenGeneration = null;
     this._flushTimer = null;
   }
@@ -308,7 +308,7 @@ export default class SubscriptionsView extends PuzzleView {
 
   async load({ force = false } = {}) {
     if (this.isDestroyed || !this.connected()) return;
-    this.setData({ loading: true, error: '' });
+    this.setState({ loading: true, error: '' });
     this.refresh();
     try {
       // Shared with the Views inspector: within the window, whichever panel
@@ -319,10 +319,10 @@ export default class SubscriptionsView extends PuzzleView {
       // opened straight to this tab could only print bare `#2` ids.
       await Promise.all([ensureSubscriptions({ force }), ensureViews({ force })]);
     } catch (err) {
-      if (!this.isDestroyed) this.setData('error', err?.message ?? String(err));
+      if (!this.isDestroyed) this.setState('error', err?.message ?? String(err));
     } finally {
       if (!this.isDestroyed) {
-        this.setData('loading', false);
+        this.setState('loading', false);
         this.refresh();
       }
     }
@@ -330,7 +330,7 @@ export default class SubscriptionsView extends PuzzleView {
 
   events = {
     selectKey: (id) => {
-      this.setData('selectedKey', this.getData().selectedKey === id ? null : id);
+      this.setState('selectedKey', this.getData().selectedKey === id ? null : id);
       this.refresh();
     },
 

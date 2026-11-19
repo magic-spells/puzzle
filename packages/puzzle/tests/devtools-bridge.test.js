@@ -58,7 +58,7 @@ Badge.__pzlModule = 'components/Badge.pzl';
 
 class Home extends PuzzleView {
 	created() {
-		this.setData('draft', 'local-value');
+		this.setState('draft', 'local-value');
 	}
 
 	data() {
@@ -273,7 +273,7 @@ describe('devtools bridge — requests', () => {
 			props: {},
 			// data()'s committed result …
 			model: { count: 0, tag: 'model-value' },
-			// … and the setData layer, never merged into one another.
+			// … and the setState layer, never merged into one another.
 			local: { draft: 'local-value' },
 		});
 		expect(inspected.model.draft).toBeUndefined();
@@ -597,7 +597,7 @@ describe('devtools bridge — profiler (D121)', () => {
 		// 61 renders inside devperf's one-second window, none of them mutating
 		// anything — the runaway detector's exact trigger.
 		for (let i = 0; i < 61; i++) {
-			runaway.setData('tick', i);
+			runaway.setState('tick', i);
 			runaway.flushUpdates();
 		}
 
@@ -634,7 +634,7 @@ describe('devtools bridge — profiler (D121)', () => {
 		await app.visit('/runaway');
 		hook.request('perf:start');
 		for (let i = 0; i < 61; i++) {
-			runaway.setData('tick', i);
+			runaway.setState('tick', i);
 			runaway.flushUpdates();
 		}
 		hook.request('perf:stop');
@@ -647,7 +647,7 @@ describe('devtools bridge — profiler (D121)', () => {
 		await app.visit('/');
 		await app.visit('/runaway');
 		for (let i = 0; i < 61; i++) {
-			runaway.setData('tick', i);
+			runaway.setState('tick', i);
 			runaway.flushUpdates();
 		}
 

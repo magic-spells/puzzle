@@ -30,8 +30,8 @@ notes:
   - kind: state
     text: >-
       2026-11-08 (feat/0.10-pieces-select-toast, review P10-B1/Q1): #setLabel now calls refresh()
-      instead of setData — a preselected (controlled) value and every pick on an UNCONTROLLED Select
-      used to stay in placeholder grey (text-muted), because setData never re-runs data() where
+      instead of setState — a preselected (controlled) value and every pick on an UNCONTROLLED Select
+      used to stay in placeholder grey (text-muted), because setState never re-runs data() where
       labelClass is derived. Dead guards removed: #memberKey (never called), #syncing (upstream's
       value setter dispatches nothing, so there is no echo) and #mine (only the host dispatches
       select-dropdown:*), plus the unused `label` data key. test/select-wrapper.test.js no longer
@@ -83,7 +83,7 @@ mutation, so a `{#for}` re-render keeps the selection with no help from the root
 selected option leaves the DOM, upstream clears silently — value `''`, label back to
 whatever `.select-label-text` held when the panel first existed — with no event. The root
 therefore mirrors `element.selectedText` into its `#label` field on every `afterUpdate()`
-and calls `refresh()` when it changes (not `setData`, which never re-runs `data()` — the
+and calls `refresh()` when it changes (not `setState`, which never re-runs `data()` — the
 label colour and text are derived there). The stock trigger must render the placeholder
 text (not an empty span) at mount, since that captured text is also the form-reset label.
 A controlled parent cannot CLEAR the selection by passing `''`/`null`.

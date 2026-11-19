@@ -106,7 +106,7 @@ const codeHero = `<InputOtp value={ code } @change={ setCode } />
 
 // parent
 events = {
-  setCode: (v) => this.setData('code', v),
+  setCode: (v) => this.setState('code', v),
 };`;
 
 const codeGroups = `// groups={[3, 3]} inserts an aria-hidden separator between segments
@@ -122,7 +122,7 @@ const codeComplete = `<InputOtp value={ otp } @change={ setOtp } @complete={ onC
 
 // parent — @complete(value) fires once when value.length === length
 events = {
-  setOtp: (v) => this.setData('otp', v),
+  setOtp: (v) => this.setState('otp', v),
   onComplete: (v) => this.verify(v),
 };`;
 
@@ -130,7 +130,7 @@ const codeKeyboard = `<InputOtp value={ code } @change={ setCode } />`;
 
 export default class InputOtpDoc extends PuzzleView {
   created() {
-    this.setData({ code: '', grouped: '', alnum: '', badCode: '123', otp: '', confirmed: false });
+    this.setState({ code: '', grouped: '', alnum: '', badCode: '123', otp: '', confirmed: false });
   }
 
   data(params, props) {
@@ -159,23 +159,23 @@ export default class InputOtpDoc extends PuzzleView {
 
   events = {
     setCode: (v) => {
-      this.setData('code', v);
+      this.setState('code', v);
     },
     setGrouped: (v) => {
-      this.setData('grouped', v);
+      this.setState('grouped', v);
     },
     setAlnum: (v) => {
-      this.setData('alnum', v);
+      this.setState('alnum', v);
     },
     setBadCode: (v) => {
-      this.setData('badCode', v);
+      this.setState('badCode', v);
     },
     setOtp: (v) => {
       // A new edit that isn't yet complete clears the confirmation.
-      this.setData({ otp: v, confirmed: v.length === 6 ? this.getData().confirmed : false });
+      this.setState({ otp: v, confirmed: v.length === 6 ? this.getData().confirmed : false });
     },
     onComplete: () => {
-      this.setData('confirmed', true);
+      this.setState('confirmed', true);
     },
   };
 }

@@ -264,7 +264,7 @@ const reference = [
 
 export default class ContextMenuDoc extends PuzzleView {
   created() {
-    this.setData({ selected: 'nothing yet' });
+    this.setState({ selected: 'nothing yet' });
   }
 
   data() {
@@ -291,10 +291,10 @@ export default class ContextMenuDoc extends PuzzleView {
 
   events = {
     run: (value) => {
-      this.setData('selected', String(value));
+      this.setState('selected', String(value));
     },
     onSelect: (value) => {
-      this.setData('selected', String(value));
+      this.setState('selected', String(value));
     },
   };
 }

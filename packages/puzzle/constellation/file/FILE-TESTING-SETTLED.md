@@ -13,6 +13,6 @@ verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 
 # testing/settled.js
 
-The async-work tracking behind every `./testing` helper and the fixed-point `settled()` drain ([[DECISION-D94-TESTING-EXPORT]]). `PuzzleView` keeps its last-wins `data()` token private and store notifications do not return promises, so on first use `ensureTracking()` wraps `PuzzleView.prototype` `refresh`/`setData`/`destroy` and `registerStore`/`registerRouter` instrument those services; `settled()` then loops until no tracked work remains (bounded by `maxPasses`).
+The async-work tracking behind every `./testing` helper and the fixed-point `settled()` drain ([[DECISION-D94-TESTING-EXPORT]]). `PuzzleView` keeps its last-wins `data()` token private and store notifications do not return promises, so on first use `ensureTracking()` wraps `PuzzleView.prototype` `refresh`/`setState`/`destroy` and `registerStore`/`registerRouter` instrument those services; `settled()` then loops until no tracked work remains (bounded by `maxPasses`).
 
 Production runtime code never imports this module, so app behavior and bundle size are untouched. `destroy` clears a view's pending work so an abandoned, never-resolving `data()` cannot hold `settled()` open.

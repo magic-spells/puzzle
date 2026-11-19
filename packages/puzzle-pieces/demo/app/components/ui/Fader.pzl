@@ -53,7 +53,7 @@ import {
 // faint interior ticks, and a thin bar handle. Functionally the same control as
 // Slider, but it reads as a flat dial you turn UP rather than a scale you pick a
 // point on. A CONTROLLED component: the parent owns the value and passes it as a
-// prop; the fader keeps only its live drag position internally (setData draft)
+// prop; the fader keeps only its live drag position internally (setState draft)
 // and reports changes through value-first callbacks.
 //
 //   <Fader label="Feather" value={ feather } max={ 20 } unit="px"
@@ -216,7 +216,7 @@ export default class Fader extends PuzzleView {
     };
     // Local draft (drives rendering while dragging / settling). draftValue null
     // means "render the committed value straight from props".
-    this.setData({ dragging: false, draftValue: null });
+    this.setState({ dragging: false, draftValue: null });
   }
 
   destroyed() {
@@ -290,7 +290,7 @@ export default class Fader extends PuzzleView {
       this._pendingClearCheck = false;
       const now = this.getData();
       if (now.draftValue !== null && !now.dragging) {
-        this.setData({ draftValue: null });
+        this.setState({ draftValue: null });
         this.refresh();
       }
     });
@@ -367,7 +367,7 @@ export default class Fader extends PuzzleView {
     return Math.max(0, Math.min(100, pct));
   }
 
-  // --- gesture bookkeeping (transient — never setData, must not re-render) ----
+  // --- gesture bookkeeping (transient — never setState, must not re-render) ----
 
   _resetDrag() {
     this._drag = {
@@ -439,7 +439,7 @@ export default class Fader extends PuzzleView {
       this._overlayTimer = null;
       const d = this.getData();
       if (d.draftValue !== null && !d.dragging) {
-        this.setData({ draftValue: null });
+        this.setState({ draftValue: null });
         this.refresh();
       }
     }, 90);
@@ -480,7 +480,7 @@ export default class Fader extends PuzzleView {
     const nv = normalize(raw, 'single', cfg);
     const d = this.getData();
     if (d.draftValue !== nv || !d.dragging) {
-      this.setData({ dragging: true, draftValue: nv });
+      this.setState({ dragging: true, draftValue: nv });
       this.refresh();
       this._emit('input', nv);
     }
@@ -504,7 +504,7 @@ export default class Fader extends PuzzleView {
       const finalValue = this.getData().draftValue;
       // dragging → false re-enables transitions; the overlay stays until props
       // catch up (afterUpdate) or the fallback timer reverts it.
-      this.setData({ dragging: false });
+      this.setState({ dragging: false });
       this.refresh();
       if (finalValue !== startValue) this._emit('change', finalValue);
       this._scheduleOverlayClear();
@@ -514,7 +514,7 @@ export default class Fader extends PuzzleView {
       const nv = normalize(percentToValue(this._percentFromEvent(event, axis), cfg), 'single', cfg);
       this._suppressClick = true;
       if (nv !== committed) {
-        this.setData({ dragging: false, draftValue: nv });
+        this.setState({ dragging: false, draftValue: nv });
         this.refresh();
         this._emit('input', nv);
         this._emit('change', nv);
@@ -594,7 +594,7 @@ export default class Fader extends PuzzleView {
       // Keys are commits (native <input type=range> parity): fire @input AND
       // @change. Overlay optimistically so the fill animates even before props
       // land (transitions on because dragging is false).
-      this.setData({ dragging: false, draftValue: nv });
+      this.setState({ dragging: false, draftValue: nv });
       this.refresh();
       this._emit('input', nv);
       this._emit('change', nv);

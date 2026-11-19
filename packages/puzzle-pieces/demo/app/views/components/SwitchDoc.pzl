@@ -92,7 +92,7 @@ const codeDisabled = `<Switch label="Roaming" hint="Unavailable on this plan" ch
 
 export default class SwitchDoc extends PuzzleView {
   created() {
-    this.setData({ wifi: true, notify: false });
+    this.setState({ wifi: true, notify: false });
   }
 
   data(params, props) {
@@ -115,10 +115,10 @@ export default class SwitchDoc extends PuzzleView {
 
   events = {
     setWifi: (v) => {
-      this.setData('wifi', v);
+      this.setState('wifi', v);
     },
     setNotify: (v) => {
-      this.setData('notify', v);
+      this.setState('notify', v);
     },
   };
 }

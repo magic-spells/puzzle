@@ -92,7 +92,7 @@ import { api } from '../bridge.js';
 
 export default class ConnectionView extends PuzzleView {
   created() {
-    this.setData({ probing: false, probeResult: '', probeError: '' });
+    this.setState({ probing: false, probeResult: '', probeError: '' });
   }
 
   data() {
@@ -124,15 +124,15 @@ export default class ConnectionView extends PuzzleView {
     // Exercises the full request round-trip (panel → worker → content script →
     // page hook → bridge handler and back) without needing the Views panel.
     probe: async () => {
-      this.setData({ probing: true, probeResult: '', probeError: '' });
+      this.setState({ probing: true, probeResult: '', probeError: '' });
       try {
         const result = await api.snapshotViews();
         const roots = Array.isArray(result?.roots) ? result.roots : [];
-        this.setData({ probeResult: `${roots.length} root(s), ${countTree(roots)} view(s)` });
+        this.setState({ probeResult: `${roots.length} root(s), ${countTree(roots)} view(s)` });
       } catch (err) {
-        this.setData({ probeError: err?.message ?? String(err) });
+        this.setState({ probeError: err?.message ?? String(err) });
       } finally {
-        this.setData('probing', false);
+        this.setState('probing', false);
       }
     },
   };

@@ -15,7 +15,7 @@
          driver's own `el.value = …` is structurally uncountable rather than
          merely uncounted. They bind DIFFERENT state layers on purpose:
 
-           .fs-draft  setData('draftText', …) — the state layer, no data() run
+           .fs-draft  setState('draftText', …) — the state layer, no data() run
            .fs-bound  record.update({ text }) — the derived layer, via the store
 
          `draftText` is a key data() NEVER returns. If data() also returned it,
@@ -26,7 +26,7 @@
          form depends on flush timing and is not deterministic. -->
     <div class="fs-typing flex flex-wrap items-end gap-6 px-4 py-3 border-b border-hairline">
       <label class="flex flex-col gap-1">
-        <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-faint">local draft · setData</span>
+        <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-faint">local draft · setState</span>
         <input
           class="fs-draft w-72 h-8 px-2 rounded-md bg-ink border border-hairline font-mono text-xs text-fg focus:outline-none focus:border-accent/60"
           type="text"
@@ -312,7 +312,7 @@ export default class FormState extends PuzzleView {
   events = {
     // Bare-shaped arguments, so codegen caches one arrow per site per instance
     // and the two typing targets never churn a listener.
-    onDraft: (event) => this.setData('draftText', event?.target?.value ?? ''),
+    onDraft: (event) => this.setState('draftText', event?.target?.value ?? ''),
     onBound: (event) => this.record?.update({ text: event?.target?.value ?? '' }),
   };
 
@@ -354,9 +354,9 @@ export default class FormState extends PuzzleView {
     clearType(store, TYPE);
     this.record = store.createRecord(TYPE, { id: DRAFT_ID, ...FORM_DRAFT_SEED });
 
-    // The state layer's seed. setData before mount just seeds state — the
+    // The state layer's seed. setState before mount just seeds state — the
     // scheduled render is a no-op until #mounted flips.
-    this.setData('draftText', 'draft');
+    this.setState('draftText', 'draft');
 
     this.lastResult = null;
     this.note = '';
@@ -556,7 +556,7 @@ export default class FormState extends PuzzleView {
    * K real keystrokes into ONE field, with the framework's own flush forced
    * synchronously after each so the op is bounded by a count and not a clock.
    *
-   *   local  setData -> flushUpdates()  — re-render only, data() never re-runs
+   *   local  setState -> flushUpdates()  — re-render only, data() never re-runs
    *   store  record.update -> store.flush() — validate, notify, data(), render
    *
    * Identical probe load, identical keystroke count, identical grid. The only
@@ -598,7 +598,7 @@ export default class FormState extends PuzzleView {
       probes,
       perfBefore,
       summary:
-        `${op}: ${KEYSTROKES} keystrokes through ${arm === 'local' ? 'setData' : 'record.update()'} ` +
+        `${op}: ${KEYSTROKES} keystrokes through ${arm === 'local' ? 'setState' : 'record.update()'} ` +
         `over ${this.fieldCount} controlled fields in ${ms1(scriptMs)}ms script`,
     });
   }
@@ -641,7 +641,7 @@ export default class FormState extends PuzzleView {
 
       const localState = this.getData().draftText;
       if (localState !== GATE_LOCAL) {
-        throw new Error(`[stress] form-state ${op}: the local keystroke never reached setData (state holds "${localState}")`);
+        throw new Error(`[stress] form-state ${op}: the local keystroke never reached setState (state holds "${localState}")`);
       }
       if (draftEl.value !== GATE_LOCAL) {
         throw new Error(`[stress] form-state ${op}: the local keystroke never reached the DOM (input shows "${draftEl.value}")`);
@@ -679,7 +679,7 @@ export default class FormState extends PuzzleView {
       perfBefore,
       summary:
         `${op}: BEHAVIOUR GATE — one real input event per binding reached state AND the DOM ` +
-        `(local via setData, store via record.update). ${caret}. Ignore the timing.`,
+        `(local via setState, store via record.update). ${caret}. Ignore the timing.`,
     });
   }
 

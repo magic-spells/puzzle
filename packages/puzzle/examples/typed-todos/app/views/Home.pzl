@@ -62,7 +62,7 @@ export default class TypedHome extends PuzzleView {
   };
 
   created(): void {
-    this.setData({ newTodoText: '' });
+    this.setState({ newTodoText: '' });
   }
 
   data(): HomeModel {
@@ -84,8 +84,8 @@ export default class TypedHome extends PuzzleView {
   events = {
     updateNewTodoText: (event: Event): void => {
       const input = event.target as HTMLInputElement;
-      this.setData('newTodoText', input.value);
-      // canAdd is derived in data(); setData() alone does not re-run data(),
+      this.setState('newTodoText', input.value);
+      // canAdd is derived in data(); setState() alone does not re-run data(),
       // so refresh() recomputes it from the just-updated draft.
       this.refresh();
     },
@@ -95,7 +95,7 @@ export default class TypedHome extends PuzzleView {
       const text: string = this.getData<{ newTodoText: string }>().newTodoText.trim();
       if (text) {
         this.ctx.store.createRecord('todo', { text });
-        this.setData('newTodoText', '');
+        this.setState('newTodoText', '');
       }
     },
 

@@ -976,7 +976,7 @@ record. Ops: `rerender`, `rerender-dirty`, `type-local`, `type-store`,
 
 The two typing targets are the A/B:
 
-- `.fs-draft` — `setData('draftText', …)`. The **local** layer: re-render only,
+- `.fs-draft` — `setState('draftText', …)`. The **local** layer: re-render only,
   `data()` never re-runs.
 - `.fs-bound` — `record.update({ text })`. The **model** layer: validate,
   notify, `data()`, render.
@@ -1011,7 +1011,7 @@ be an input, and which the runner's clamp guard would rightly reject).
 | --- | ---: | ---: | ---: | ---: | ---: |
 | `rerender` (clean) | 20 | 20 | **0** | **0** | 0 |
 | `rerender-dirty` (control) | 20 | 20 | 4,000 | **4,000** | 0 |
-| `type-local` (setData) | 200 | **0** | 0 | **0** | 0 |
+| `type-local` (setState) | 200 | **0** | 0 | **0** | 0 |
 | `type-store` (record.update) | 200 | 200 | 0 | 0 | **600** |
 | `type-event` (gate) | 2 | 1 | 0 | 0 | 3 |
 
@@ -1496,7 +1496,7 @@ covers that directly, on the same records and the same rows. A second scenario
 would measure the same code twice.
 
 `form-state` **is now built** (scenario 11 above), and it grew past the original
-one-line plan: "`setData` throughput under a typing burst" turned out to be the
+one-line plan: "`setState` throughput under a typing burst" turned out to be the
 *cheap* half of the question. The expensive half is what the rest of the form
 pays for that keystroke.
 

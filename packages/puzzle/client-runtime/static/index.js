@@ -17,7 +17,7 @@
  *
  * `beforeMount` is NOT called here: it is build-time only in static mode (the
  * Astro-frontmatter policy — its store seed already ran at build time and rode into
- * the data island). Only component interactivity (event handlers, local setData
+ * the data island). Only component interactivity (event handlers, local setState
  * state, store mutations) runs client-side.
  *
  * This module runs in the browser only (it touches `document`). It is bundled per

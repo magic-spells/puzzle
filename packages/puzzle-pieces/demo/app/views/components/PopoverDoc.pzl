@@ -242,7 +242,7 @@ const FILTERS = [
 
 export default class PopoverDoc extends PuzzleView {
   created() {
-    this.setData({ open: false });
+    this.setState({ open: false });
   }
 
   data() {
@@ -274,15 +274,15 @@ export default class PopoverDoc extends PuzzleView {
 
   events = {
     toggle: () => {
-      this.setData('open', !this.getData().open);
+      this.setState('open', !this.getData().open);
       this.refresh();
     },
     onShow: () => {
-      this.setData('open', true);
+      this.setState('open', true);
       this.refresh();
     },
     onHide: () => {
-      this.setData('open', false);
+      this.setState('open', false);
       this.refresh();
     },
   };

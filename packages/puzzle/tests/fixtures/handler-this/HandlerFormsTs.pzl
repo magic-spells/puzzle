@@ -16,7 +16,7 @@ interface FormsState {
 // method shorthand and arrows as they were written.
 export default class HandlerFormsTs extends PuzzleView {
   created(): void {
-    this.setData('count', 0);
+    this.setState('count', 0);
   }
 
   events = {
@@ -31,7 +31,7 @@ export default class HandlerFormsTs extends PuzzleView {
       return 'this is fine';
     },
     bump: (): void => {
-      this.setData('count', this.getData<FormsState>().count + 1);
+      this.setState('count', this.getData<FormsState>().count + 1);
     },
   };
 }

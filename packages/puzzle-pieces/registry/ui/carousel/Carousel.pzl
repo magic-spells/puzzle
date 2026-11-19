@@ -145,7 +145,7 @@ export default class Carousel extends PuzzleView {
     this._programmatic = false;
     this._committed = 0;
     this._autoplayMs = -1;
-    this.setData({ slideCount: 0, viewIndex: 0, paused: false });
+    this.setState({ slideCount: 0, viewIndex: 0, paused: false });
   }
 
   data(params, props) {
@@ -196,7 +196,7 @@ export default class Carousel extends PuzzleView {
     let init = this._controlled() ? this._propIndex() : 0;
     init = clamp(init, 0, Math.max(0, n - 1));
     this._committed = init;
-    this.setData('viewIndex', init);
+    this.setState('viewIndex', init);
     this.refresh();
     this.scrollToIndex(init, 'auto');
     this._syncAutoplay();
@@ -215,7 +215,7 @@ export default class Carousel extends PuzzleView {
         if (v !== this._committed) {
           this._committed = v;
           if (this.getData().viewIndex !== v) {
-            this.setData('viewIndex', v);
+            this.setState('viewIndex', v);
             this.refresh();
           }
           this.scrollToIndex(v, this._behavior());
@@ -261,7 +261,7 @@ export default class Carousel extends PuzzleView {
 
     if (n !== this.getData().slideCount) {
       this._committed = clamp(this._committed, 0, Math.max(0, n - 1));
-      this.setData({
+      this.setState({
         slideCount: n,
         viewIndex: clamp(this.getData().viewIndex, 0, Math.max(0, n - 1)),
       });
@@ -334,7 +334,7 @@ export default class Carousel extends PuzzleView {
     const prev = this._committed;
     this._committed = i;
     if (this.getData().viewIndex !== i) {
-      this.setData('viewIndex', i);
+      this.setState('viewIndex', i);
       this.refresh();
     }
     if (scroll) this.scrollToIndex(i, this._behavior());
@@ -357,7 +357,7 @@ export default class Carousel extends PuzzleView {
 
   _pause(p) {
     if (this.getData().paused !== p) {
-      this.setData('paused', p);
+      this.setState('paused', p);
       this.refresh();
     }
   }
@@ -406,7 +406,7 @@ export default class Carousel extends PuzzleView {
           this._raf = null;
           const near = this._nearestIndex();
           if (near !== this.getData().viewIndex) {
-            this.setData('viewIndex', near);
+            this.setState('viewIndex', near);
             this.refresh();
           }
         });

@@ -52,7 +52,7 @@ the error view holds the position until retry or owner replacement. Routed retry
 is recognized from Router state.
 
 **3. Leave inertness.** A leaving view is inert from `playOut()` start:
-- It unsubscribes from the store immediately, and `refresh()`, `setData()`,
+- It unsubscribes from the store immediately, and `refresh()`, `setState()`,
   `onStoreChange()`, `applyParentUpdate()`, `#commit()`, `#swapLoaded()` and
   `#completeMount()` early-return on `#leaving` beside `#destroyed`. The render
   and mount guards matter because a component with hide hooks but no

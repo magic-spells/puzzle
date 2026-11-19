@@ -128,10 +128,10 @@ const codeHero = `<Dropzone label="Attachment" files={ files } accept=".pdf,.doc
 
 // parent
 created() {
-  this.setData({ files: [] });
+  this.setState({ files: [] });
 }
 events = {
-  setFiles: (next) => this.setData('files', next),
+  setFiles: (next) => this.setState('files', next),
 };`;
 
 const codeMultiple = `<Dropzone
@@ -167,7 +167,7 @@ const codeDisabled = `<Dropzone label="Attachment" disabled files={ files } />`;
 
 export default class DropzoneDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       files: [{ name: 'brand-guidelines.pdf', size: 2_411_724, type: '' }],
       images: [
         { name: 'hero-banner.png', size: 845_231 },
@@ -204,13 +204,13 @@ export default class DropzoneDoc extends PuzzleView {
 
   events = {
     setFiles: (next) => {
-      this.setData('files', next);
+      this.setState('files', next);
     },
     setImages: (next) => {
-      this.setData('images', next);
+      this.setState('images', next);
     },
     setAvatar: (next) => {
-      this.setData('avatar', next);
+      this.setState('avatar', next);
     },
     onReject: (rejections) =>
       toast({ message: rejections[0].message, variant: 'danger' }),

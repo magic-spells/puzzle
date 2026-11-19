@@ -27,12 +27,12 @@ Two intentionally asymmetric update paths:
 1. **Model path**: a store notification, prop change or route-param change reruns
    `data(params, props)`. The settled result REPLACES the derived layer, then the
    view renders and patches.
-2. **Local path**: `setData()` writes the persistent state layer and schedules a
+2. **Local path**: `setState()` writes the persistent state layer and schedules a
    render without rerunning `data()`; call `refresh()` when derived model data must
    recompute.
 
 Implicit two-way binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]) uses both: a
-bound local writes through `setData` + `refresh`; a bound record writes through
+bound local writes through `setState` + `refresh`; a bound record writes through
 validated `update()`, which comes back as a store notification. The
 controlled-property echo compares against the live DOM, so a keystroke patches
 nothing back.

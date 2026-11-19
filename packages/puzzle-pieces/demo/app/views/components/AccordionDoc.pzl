@@ -266,15 +266,15 @@ const codeMultiple = `// type="multiple": rows are independent and value is an a
   …
 </Accordion>
 
-// setOpen: (value) => this.setData('open', value)  // string[] here`;
+// setOpen: (value) => this.setState('open', value)  // string[] here`;
 
 const codeControlled = `// The root reaches its rows through the DOM — Puzzle has no
 // cross-component context — and calls show()/hide() on them. It is
 // EDGE-triggered: a re-render carrying the same value does nothing,
 // and a row already in the requested state is skipped, so echoing
 // back the value you were just handed animates nothing.
-this.setData('open', 'returns');   // opens that row
-this.setData('open', '');          // closes them all`;
+this.setState('open', 'returns');   // opens that row
+this.setState('open', '');          // closes them all`;
 
 const codeRich = `// Bodies take arbitrary markup, nesting included. A nested Accordion
 // joins the nearest group, and a standalone Collapsible carries its
@@ -334,7 +334,7 @@ const SPECS = [
 
 export default class AccordionDoc extends PuzzleView {
   created() {
-    this.setData({ faqOpen: 'shipping', specsOpen: ['audio'] });
+    this.setState({ faqOpen: 'shipping', specsOpen: ['audio'] });
   }
 
   data() {
@@ -373,19 +373,19 @@ export default class AccordionDoc extends PuzzleView {
 
   events = {
     setFaqOpen: (value) => {
-      this.setData('faqOpen', value);
+      this.setState('faqOpen', value);
       this.refresh();
     },
     setSpecsOpen: (value) => {
-      this.setData('specsOpen', value);
+      this.setState('specsOpen', value);
       this.refresh();
     },
     openRow: (id) => {
-      this.setData('faqOpen', id);
+      this.setState('faqOpen', id);
       this.refresh();
     },
     closeAll: () => {
-      this.setData('faqOpen', '');
+      this.setState('faqOpen', '');
       this.refresh();
     },
   };

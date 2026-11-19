@@ -113,7 +113,7 @@ data() {
 }
 events = {
   removeFile: (name) =>
-    this.setData({ files: this.getData().files.filter((f) => f.name !== name) }),
+    this.setState({ files: this.getData().files.filter((f) => f.name !== name) }),
 };
 
 {#for file in files}
@@ -167,8 +167,8 @@ export default class ChatAttachmentDoc extends PuzzleView {
 
   events = {
     removeFile: (name) =>
-      this.setData({ files: this.getData().files.filter((f) => f.name !== name) }),
-    resetFiles: () => this.setData({ files: INITIAL_FILES.slice() }),
+      this.setState({ files: this.getData().files.filter((f) => f.name !== name) }),
+    resetFiles: () => this.setState({ files: INITIAL_FILES.slice() }),
   };
 }
 </script>

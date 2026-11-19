@@ -124,7 +124,7 @@ On a plain `<input>`, `<textarea>` or `<select>`, `value={ path }` and `checked=
 <input type="checkbox" checked={ todo.completed } />
 ```
 
-- A bare name writes local state (`setData` + `refresh`, so `data()`-derived values like `canAdd` stay current as you type).
+- A bare name writes local state (`setState` + `refresh`, so `data()`-derived values like `canAdd` stay current as you type).
 - A path writes its root: a store record through validated `update()`; a plain object is mutated. **Bind the path you want written.**
 - Numbers, checkboxes, dates and selects commit on `change`; text fields on `input`.
 - Opt out with your own `@input`/`@change`, a non-path expression (`value={ draft ?? '' }`), or static `readonly`. Other events (`@keydown:enter`, `@blur`) coexist with the bind — [[DOC-EVENTS]] shows the patterns.

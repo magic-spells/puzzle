@@ -239,8 +239,8 @@ const nodes = [
       label="Project files" @select={ onSelect } @toggle={ onToggle } />
 
 events = {
-  onSelect: (id) => this.setData({ selected: id }),
-  onToggle: ({ expanded }) => this.setData({ expanded }),
+  onSelect: (id) => this.setState({ selected: id }),
+  onToggle: ({ expanded }) => this.setState({ expanded }),
 };`;
 
 const codeControlled = `// Omit \`expanded\` and the Tree owns expansion internally. Pass it and the
@@ -248,9 +248,9 @@ const codeControlled = `// Omit \`expanded\` and the Tree owns expansion interna
 <Tree nodes={ nodes } expanded={ expanded } @toggle={ onToggle } />
 
 events = {
-  onToggle: ({ expanded }) => this.setData({ expanded }),
-  expandAll: () => this.setData({ expanded: allParentIds(nodes) }),
-  collapseAll: () => this.setData({ expanded: [] }),
+  onToggle: ({ expanded }) => this.setState({ expanded }),
+  expandAll: () => this.setState({ expanded: allParentIds(nodes) }),
+  collapseAll: () => this.setState({ expanded: [] }),
 };`;
 
 const codeDisabled = `// A node with disabled: true is aria-disabled — no select/toggle from
@@ -288,7 +288,7 @@ function allParentIds(nodes, out) {
 
 export default class TreeDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       selected: 'src/Tree.pzl',
       expanded: ['src', 'components'],
       selected2: '',
@@ -323,15 +323,15 @@ export default class TreeDoc extends PuzzleView {
   }
 
   events = {
-    onSelect: (id) => { this.setData({ selected: id }); this.refresh(); },
-    onToggle: ({ expanded }) => { this.setData({ expanded }); this.refresh(); },
+    onSelect: (id) => { this.setState({ selected: id }); this.refresh(); },
+    onToggle: ({ expanded }) => { this.setState({ expanded }); this.refresh(); },
 
-    onSelect2: (id) => { this.setData({ selected2: id }); this.refresh(); },
-    onToggle2: ({ expanded }) => { this.setData({ expanded2: expanded }); this.refresh(); },
-    expandAll: () => { this.setData({ expanded2: allParentIds(fileTree) }); this.refresh(); },
-    collapseAll: () => { this.setData({ expanded2: [] }); this.refresh(); },
+    onSelect2: (id) => { this.setState({ selected2: id }); this.refresh(); },
+    onToggle2: ({ expanded }) => { this.setState({ expanded2: expanded }); this.refresh(); },
+    expandAll: () => { this.setState({ expanded2: allParentIds(fileTree) }); this.refresh(); },
+    collapseAll: () => { this.setState({ expanded2: [] }); this.refresh(); },
 
-    onSelect3: (id) => { this.setData({ selected3: id }); this.refresh(); },
+    onSelect3: (id) => { this.setState({ selected3: id }); this.refresh(); },
   };
 }
 </script>

@@ -88,7 +88,7 @@ resurrected. `#withCommittedScope(fn)` nulls `#evalScope` for the dynamic
 extent of the outermost fence (`#fenceDepth`) and then restores the newest
 in-flight run. Fenced: renders, DOM event dispatch (the view manager wraps
 each patch-managed listener via `__withCommittedScope`), `flushUpdates`/
-`setData`, `refresh()`/`onStoreChange()`, and `mounted`/`destroyed`.
+`setState`, `refresh()`/`onStoreChange()`, and `mounted`/`destroyed`.
 
 **Ordering.** Skeleton leaves ([[DECISION-D39-SKELETON]]) commit through
 `#commitState` too. D47's `reuseLayout` refresh still runs last and sees

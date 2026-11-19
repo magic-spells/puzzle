@@ -199,8 +199,8 @@ export default class Select extends PuzzleView {
     if (typeof text === 'string') this.#setLabel(text);
   }
 
-  // refresh(), not setData: labelClass and triggerText derive from #label in
-  // data(), which setData never re-runs. The equality check ends the loop.
+  // refresh(), not setState: labelClass and triggerText derive from #label in
+  // data(), which setState never re-runs. The equality check ends the loop.
   #setLabel(text) {
     if (text === this.#label) return;
     this.#label = text;

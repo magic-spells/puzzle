@@ -305,7 +305,7 @@ const THUMB_BASE =
   'h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 bg-surface-sunken transition-colors ' +
   'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2';
 
-// setData() merges into the view's data and does NOT re-run data(), so every
+// setState() merges into the view's data and does NOT re-run data(), so every
 // value the template reads has to be a key that is actually set — a derived
 // one recomputed here at the same time, never in data() alone.
 const thumbsFor = (activeSrc) =>
@@ -353,12 +353,12 @@ const codeMax = `// max caps the double-tap target and the top of the pinch rang
   @ready={ onZoomReady }/>
 
 // in the view's events = { … } field, which is where a bare handler
-// name in a template resolves. setData() merges into the view's data
+// name in a template resolves. setState() merges into the view's data
 // without re-running data(), so set the key the template reads:
 events = {
   onZoomChange: (scale) => {
     const label = (Math.round(scale * 100) / 100).toFixed(2);
-    if (label !== this.getData().scaleLabel) this.setData({ scaleLabel: label });
+    if (label !== this.getData().scaleLabel) this.setState({ scaleLabel: label });
   },
   onZoomReady: (element) => { this.zoomEl = element; },
   resetZoom: () => this.zoomEl?.reset(),
@@ -473,7 +473,7 @@ export default class ImageZoomDoc extends PuzzleView {
     // costs a handful of renders instead of one per frame.
     onZoomChange: (scale) => {
       const label = (Math.round((scale ?? 1) * 100) / 100).toFixed(2);
-      if (label !== this.getData().scaleLabel) this.setData({ scaleLabel: label });
+      if (label !== this.getData().scaleLabel) this.setState({ scaleLabel: label });
     },
     onZoomReady: (element) => {
       this.zoomEl = element;
@@ -482,7 +482,7 @@ export default class ImageZoomDoc extends PuzzleView {
     selectShot: (src) => {
       const shot = SHOTS.find((item) => item.src === src);
       if (!shot) return;
-      this.setData({
+      this.setState({
         activeShot: shot.src,
         activeAlt: shot.alt,
         shots: thumbsFor(shot.src),

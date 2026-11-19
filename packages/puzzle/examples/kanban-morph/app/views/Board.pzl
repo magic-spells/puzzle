@@ -63,7 +63,7 @@ export default class BoardView extends PuzzleView {
     this._onPointerUp = (event) => this._handlePointerUp(event);
     this._onKeyDown = (event) => this._handleKeyDown(event);
 
-    this.setData({
+    this.setState({
       dragging: false,
       draggingId: '',
       targetCol: null,
@@ -301,7 +301,7 @@ export default class BoardView extends PuzzleView {
   _publishDragState() {
     if (!this._drag) return;
 
-    this.setData({
+    this.setState({
       dragging: this._drag.phase === 'DRAGGING',
       draggingId: this._drag.id,
       targetCol: this._drag.targetCol,
@@ -388,7 +388,7 @@ export default class BoardView extends PuzzleView {
     document.body.style.cursor = this._storedCursor;
     this._drag = null;
 
-    this.setData({
+    this.setState({
       dragging: false,
       draggingId: '',
       targetCol: null,

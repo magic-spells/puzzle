@@ -517,7 +517,7 @@ function inspectView(id) {
 		// the wire keys stay `model` / `local` (the panel protocol); they carry the
 		// derived and state layers.
 		model: safeState(view._derived?.() ?? {}),
-		local: safeState(view._state?.() ?? {}),
+		local: safeState(view.getState?.() ?? {}),
 	};
 }
 
@@ -698,7 +698,7 @@ const CAUSE_BUCKET = {
 	store: 'store',
 	props: 'parent', // a parent re-render passed new props down
 	route: 'route',
-	'local-state': 'manual', // setData()
+	'local-state': 'manual', // setState()
 	render: 'manual', // a direct rerender() with nothing else pending
 	slots: 'slot',
 };

@@ -242,7 +242,7 @@ const ROW_IDLE = 'hover:bg-raised';
 
 export default class StoreView extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       activeType: null,
       selectedRowId: null,
       /** label -> raw input value, for the fields the user has touched. */
@@ -263,7 +263,7 @@ export default class StoreView extends PuzzleView {
     this._okTimer = null;
     // The last snapshot of the watched record: { type, id, row }. Kept OFF the
     // local state layer on purpose — it is diff bookkeeping, never rendered, and
-    // putting it in setData would re-render the card on every flush.
+    // putting it in setState would re-render the card on every flush.
     this._watched = null;
   }
 
@@ -416,7 +416,7 @@ export default class StoreView extends PuzzleView {
 
   async loadTypes(type) {
     if (this.isDestroyed || !this.connected()) return;
-    this.setData({ loading: true, error: '' });
+    this.setState({ loading: true, error: '' });
     this.refresh();
     try {
       const result = await api.snapshotRecords(type);
@@ -424,16 +424,16 @@ export default class StoreView extends PuzzleView {
       const names = applyRecordSnapshot(result, type ?? null);
       // First snapshot with nothing selected: land on something.
       if (!this.getData().activeType && names.length) {
-        this.setData('activeType', names[0]);
+        this.setState('activeType', names[0]);
       }
       // Every re-snapshot is a chance to see what changed under the open card.
       this.syncWatched();
     } catch (err) {
       if (this.isDestroyed) return;
-      this.setData('error', err?.message ?? String(err));
+      this.setState('error', err?.message ?? String(err));
     } finally {
       if (!this.isDestroyed) {
-        this.setData('loading', false);
+        this.setState('loading', false);
         this.refresh();
       }
     }
@@ -470,7 +470,7 @@ export default class StoreView extends PuzzleView {
     if (sameTarget && previous.row && next) {
       const changes = diffRecord(previous.row, next);
       if (changes.length) {
-        this.setData('history', appendHistory(local.history ?? [], changes, Date.now()));
+        this.setState('history', appendHistory(local.history ?? [], changes, Date.now()));
       }
     }
 
@@ -480,16 +480,16 @@ export default class StoreView extends PuzzleView {
   /** Drop the changelog and its baseline — the card is now showing something else. */
   resetWatch() {
     this._watched = null;
-    this.setData('history', []);
+    this.setState('history', []);
   }
 
   flashOk(message) {
     clearTimeout(this._okTimer);
-    this.setData('editOk', message);
+    this.setState('editOk', message);
     this._okTimer = setTimeout(() => {
       this._okTimer = null;
       if (this.isDestroyed) return;
-      this.setData('editOk', '');
+      this.setState('editOk', '');
       this.refresh();
     }, OK_MS);
   }
@@ -497,7 +497,7 @@ export default class StoreView extends PuzzleView {
   events = {
     selectType: (id) => {
       if (this.getData().activeType === id) return;
-      this.setData({
+      this.setState({
         activeType: id,
         selectedRowId: null,
         edits: {},
@@ -510,7 +510,7 @@ export default class StoreView extends PuzzleView {
 
     selectRow: (key) => {
       const same = String(this.getData().selectedRowId ?? '\u0000') === String(key);
-      this.setData({
+      this.setState({
         selectedRowId: same ? null : key,
         edits: {},
         editError: '',
@@ -524,7 +524,7 @@ export default class StoreView extends PuzzleView {
     },
 
     closeDetail: () => {
-      this.setData({ selectedRowId: null, edits: {}, editError: '', editOk: '' });
+      this.setState({ selectedRowId: null, edits: {}, editError: '', editOk: '' });
       this.resetWatch();
       this.refresh();
     },
@@ -534,13 +534,13 @@ export default class StoreView extends PuzzleView {
     editField: (label, event) => {
       const edits = { ...this.getData().edits };
       edits[label] = event.target.value;
-      this.setData('edits', edits);
+      this.setState('edits', edits);
     },
 
     editBool: (label, event) => {
       const edits = { ...this.getData().edits };
       edits[label] = event.target.checked;
-      this.setData('edits', edits);
+      this.setState('edits', edits);
     },
 
     apply: async () => {
@@ -559,7 +559,7 @@ export default class StoreView extends PuzzleView {
         const kind = valueKind(row[label]);
         const parsed = coerceInput(raw, kind);
         if (!parsed.ok) {
-          this.setData({ editError: `${label}: ${parsed.error}`, editOk: '' });
+          this.setState({ editError: `${label}: ${parsed.error}`, editOk: '' });
           this.refresh();
           return;
         }
@@ -567,12 +567,12 @@ export default class StoreView extends PuzzleView {
       }
 
       if (Object.keys(patch).length === 0) {
-        this.setData({ editError: 'nothing changed', editOk: '' });
+        this.setState({ editError: 'nothing changed', editOk: '' });
         this.refresh();
         return;
       }
 
-      this.setData({ applying: true, editError: '', editOk: '' });
+      this.setState({ applying: true, editError: '', editOk: '' });
       this.refresh();
       try {
         await api.editRecord(type, row[shape.pk], patch);
@@ -580,7 +580,7 @@ export default class StoreView extends PuzzleView {
         // The write succeeded in the app's store; re-read so the table shows what
         // the app actually holds (defaults, coercions, adapter round-trips)
         // rather than what we sent.
-        this.setData({ edits: {} });
+        this.setState({ edits: {} });
         this.flashOk('applied');
         await this.loadTypes(type);
       } catch (err) {
@@ -588,10 +588,10 @@ export default class StoreView extends PuzzleView {
         // result into a rejection. The typed values stay in `edits` so the field
         // can be corrected instead of retyped.
         if (this.isDestroyed) return;
-        this.setData('editError', err?.message ?? String(err));
+        this.setState('editError', err?.message ?? String(err));
       } finally {
         if (!this.isDestroyed) {
-          this.setData('applying', false);
+          this.setState('applying', false);
           this.refresh();
         }
       }

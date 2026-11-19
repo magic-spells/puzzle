@@ -74,7 +74,7 @@ const codeHero = `<Field label="Full name" placeholder="Ada Lovelace" value={ na
 
 // parent
 events = {
-  setName: (v) => this.setData('name', v),
+  setName: (v) => this.setState('name', v),
 };`;
 
 const codeHint = `<Field label="Company" hint="As it appears on your invoice" placeholder="Acme Inc." />`;
@@ -85,7 +85,7 @@ const codeDisabled = `<Field label="Read-only" value="Locked field" disabled />`
 
 export default class FieldDoc extends PuzzleView {
   created() {
-    this.setData({ name: '' });
+    this.setState({ name: '' });
   }
 
   data(params, props) {
@@ -109,7 +109,7 @@ export default class FieldDoc extends PuzzleView {
   }
 
   events = {
-    setName: (v) => this.setData('name', v),
+    setName: (v) => this.setState('name', v),
   };
 }
 </script>

@@ -47,7 +47,7 @@ interface LayoutModel {
 
 export default class DefaultLayout extends PuzzleView<LayoutProps> {
   created(): void {
-    this.setData({
+    this.setState({
       version: '1.0.0'
     });
   }

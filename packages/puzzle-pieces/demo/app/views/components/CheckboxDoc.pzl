@@ -63,7 +63,7 @@ const codeHero = `<Checkbox label="Subscribe to the newsletter" checked={ subscr
 
 // parent
 events = {
-  setSubscribe: (v) => this.setData('subscribe', v),
+  setSubscribe: (v) => this.setState('subscribe', v),
 };`;
 
 const codeHint = `<Checkbox
@@ -76,7 +76,7 @@ const codeDisabled = `<Checkbox label="Gift wrapping" hint="Not available for th
 
 export default class CheckboxDoc extends PuzzleView {
   created() {
-    this.setData({ subscribe: true, shipIt: false });
+    this.setState({ subscribe: true, shipIt: false });
   }
 
   data(params, props) {
@@ -99,10 +99,10 @@ export default class CheckboxDoc extends PuzzleView {
 
   events = {
     setSubscribe: (v) => {
-      this.setData('subscribe', v);
+      this.setState('subscribe', v);
     },
     setShipIt: (v) => {
-      this.setData('shipIt', v);
+      this.setState('shipIt', v);
     },
   };
 }

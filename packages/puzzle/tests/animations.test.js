@@ -301,7 +301,7 @@ describe('PuzzleView — enter/leave hooks (order, with & without animations)', 
 		const leave = v.playOut();
 		expect(hooks).toEqual(['willHide']);
 		v.refresh();
-		v.setData('ignored', true);
+		v.setState('ignored', true);
 		v.onStoreChange();
 		v.applyParentUpdate({ props: { ignored: true } });
 		v.flushUpdates();
@@ -491,14 +491,14 @@ describe('ViewManager — leave animation on component removal', () => {
 
 	it('warns once for unkeyed out-animated removal and does not warn for keyed removal', async () => {
 		class KeyedHost extends PuzzleView {
-			created() { this.setData({ order: ['a', 'b'] }); }
+			created() { this.setState({ order: ['a', 'b'] }); }
 			data() { return { order: this.getData().order }; }
 			render() {
 				return h('ul', {}, this.getData().order.map((id) => comp(Row, { key: id, id })));
 			}
 		}
 		class UnkeyedHost extends PuzzleView {
-			created() { this.setData({ order: ['a', 'b', 'c'] }); }
+			created() { this.setState({ order: ['a', 'b', 'c'] }); }
 			data() { return { order: this.getData().order }; }
 			render() {
 				return h('ul', {}, this.getData().order.map((id) => comp(Row, { id })));
@@ -509,15 +509,15 @@ describe('ViewManager — leave animation on component removal', () => {
 
 		const keyed = await new KeyedHost().mount(container());
 		await tick();
-		keyed.setData('order', ['a']);
+		keyed.setState('order', ['a']);
 		keyed.flushUpdates();
 		expect(warn).not.toHaveBeenCalled();
 
 		const unkeyed = await new UnkeyedHost().mount(container());
 		await tick();
-		unkeyed.setData('order', ['a', 'b']);
+		unkeyed.setState('order', ['a', 'b']);
 		unkeyed.flushUpdates();
-		unkeyed.setData('order', ['a']);
+		unkeyed.setState('order', ['a']);
 		unkeyed.flushUpdates();
 
 		expect(warn).toHaveBeenCalledTimes(1);
@@ -533,7 +533,7 @@ describe('ViewManager — leave animation on component removal', () => {
 		const destroyed = vi.fn();
 		class Item extends Row { destroyed() { destroyed(); } }
 		class Host extends PuzzleView {
-			created() { this.setData({ show: true }); }
+			created() { this.setState({ show: true }); }
 			data() { return { show: this.getData().show }; }
 			render() { return h('ul', {}, this.getData().show ? [comp(Item, { id: 'x' })] : []); }
 		}
@@ -542,7 +542,7 @@ describe('ViewManager — leave animation on component removal', () => {
 		const host = await new Host().mount(el);
 		await tick();
 
-		host.setData('show', false);
+		host.setState('show', false);
 		host.flushUpdates(); // triggers unmount → destroyAnimated()
 		await tick();
 
@@ -561,13 +561,13 @@ describe('ViewManager — leave animation on component removal', () => {
 			render() { return h('li', { class: 'plain' }, [text('p')]); }
 		}
 		class Host extends PuzzleView {
-			created() { this.setData({ show: true }); }
+			created() { this.setState({ show: true }); }
 			data() { return { show: this.getData().show }; }
 			render() { return h('ul', {}, this.getData().show ? [comp(Plain)] : []); }
 		}
 		const el = container();
 		const host = await new Host().mount(el);
-		host.setData('show', false);
+		host.setState('show', false);
 		host.flushUpdates();
 		expect(el.querySelector('.plain')).toBeNull(); // instant, no await needed
 	});
@@ -581,7 +581,7 @@ describe('ViewManager — leave animation on component removal', () => {
 			render() { return h('li', { class: 'hooked' }, [text('h')]); }
 		}
 		class Host extends PuzzleView {
-			created() { this.setData({ show: true }); }
+			created() { this.setState({ show: true }); }
 			data() { return { show: this.getData().show }; }
 			render() { return h('ul', {}, this.getData().show ? [comp(Hooked)] : []); }
 		}
@@ -589,7 +589,7 @@ describe('ViewManager — leave animation on component removal', () => {
 		const host = await new Host().mount(el);
 		await tick();
 
-		host.setData('show', false);
+		host.setState('show', false);
 		host.flushUpdates();
 		await tick();
 
@@ -606,7 +606,7 @@ describe('ViewManager — leave animation on component removal', () => {
 			created() { instances[this.props.id] = this; }
 		}
 		class Host extends PuzzleView {
-			created() { this.setData({ order: ['a', 'b', 'c'] }); }
+			created() { this.setState({ order: ['a', 'b', 'c'] }); }
 			data() { return { order: this.getData().order }; }
 			render() {
 				return h('ul', {}, this.getData().order.map((id) => comp(Item, { key: id, id })));
@@ -620,7 +620,7 @@ describe('ViewManager — leave animation on component removal', () => {
 		const [instA, instC] = [instances.a, instances.c];
 
 		// remove 'b' AND swap the survivors to [c, a]
-		host.setData('order', ['c', 'a']);
+		host.setState('order', ['c', 'a']);
 		host.flushUpdates();
 		await tick();
 
@@ -642,7 +642,7 @@ describe('ViewManager — leave animation on component removal', () => {
 	// ZERO moves, so the fading item stays exactly in its slot.
 	it('deleting a middle keyed item leaves it in place while it animates out', async () => {
 		class Host extends PuzzleView {
-			created() { this.setData({ order: ['a', 'b', 'c', 'd', 'e'] }); }
+			created() { this.setState({ order: ['a', 'b', 'c', 'd', 'e'] }); }
 			data() { return { order: this.getData().order }; }
 			render() {
 				return h('ul', {}, this.getData().order.map((id) => comp(Row, { key: id, id })));
@@ -653,7 +653,7 @@ describe('ViewManager — leave animation on component removal', () => {
 		const host = await new Host().mount(el);
 		await tick();
 
-		host.setData('order', ['a', 'b', 'd', 'e']);
+		host.setState('order', ['a', 'b', 'd', 'e']);
 		host.flushUpdates();
 		await tick();
 
@@ -668,7 +668,7 @@ describe('ViewManager — leave animation on component removal', () => {
 
 	it('deleting two non-adjacent items keeps both in place while they animate out', async () => {
 		class Host extends PuzzleView {
-			created() { this.setData({ order: ['a', 'b', 'c', 'd', 'e'] }); }
+			created() { this.setState({ order: ['a', 'b', 'c', 'd', 'e'] }); }
 			data() { return { order: this.getData().order }; }
 			render() {
 				return h('ul', {}, this.getData().order.map((id) => comp(Row, { key: id, id })));
@@ -679,7 +679,7 @@ describe('ViewManager — leave animation on component removal', () => {
 		const host = await new Host().mount(el);
 		await tick();
 
-		host.setData('order', ['a', 'c', 'e']);
+		host.setState('order', ['a', 'c', 'e']);
 		host.flushUpdates();
 		await tick();
 
@@ -694,7 +694,7 @@ describe('ViewManager — leave animation on component removal', () => {
 
 	it('deleting the head item keeps it at the head while it animates out', async () => {
 		class Host extends PuzzleView {
-			created() { this.setData({ order: ['a', 'b', 'c'] }); }
+			created() { this.setState({ order: ['a', 'b', 'c'] }); }
 			data() { return { order: this.getData().order }; }
 			render() {
 				return h('ul', {}, this.getData().order.map((id) => comp(Row, { key: id, id })));
@@ -705,7 +705,7 @@ describe('ViewManager — leave animation on component removal', () => {
 		const host = await new Host().mount(el);
 		await tick();
 
-		host.setData('order', ['b', 'c']);
+		host.setState('order', ['b', 'c']);
 		host.flushUpdates();
 		await tick();
 

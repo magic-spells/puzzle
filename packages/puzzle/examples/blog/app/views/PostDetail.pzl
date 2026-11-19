@@ -69,7 +69,7 @@ import CommentItem from '../components/CommentItem.pzl';
 export default class PostDetailView extends PuzzleView {
   created() {
     // Local form state — seeded here so data() can read it back on first run.
-    this.setData({
+    this.setState({
       commentText: '',
       authorName: ''
     });
@@ -114,12 +114,12 @@ export default class PostDetailView extends PuzzleView {
 
   events = {
     updateAuthorName: (event) => {
-      this.setData('authorName', event.target.value);
+      this.setState('authorName', event.target.value);
     },
 
     updateCommentText: (event) => {
-      this.setData('commentText', event.target.value);
-      // canComment is derived in data(); setData() alone does not re-run
+      this.setState('commentText', event.target.value);
+      // canComment is derived in data(); setState() alone does not re-run
       // data(), so refresh() recomputes it from the just-updated text.
       this.refresh();
     },
@@ -136,7 +136,7 @@ export default class PostDetailView extends PuzzleView {
         text
       });
 
-      this.setData({ commentText: '', authorName: '' });
+      this.setState({ commentText: '', authorName: '' });
     },
 
     removeComment: (comment) => {

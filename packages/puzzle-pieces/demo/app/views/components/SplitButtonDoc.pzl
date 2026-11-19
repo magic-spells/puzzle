@@ -250,7 +250,7 @@ const reference = [
 
 export default class SplitButtonDoc extends PuzzleView {
   created() {
-    this.setData({ last: 'nothing yet' });
+    this.setState({ last: 'nothing yet' });
   }
 
   data() {
@@ -278,10 +278,10 @@ export default class SplitButtonDoc extends PuzzleView {
 
   events = {
     onPrimary: () => {
-      this.setData('last', 'primary @press');
+      this.setState('last', 'primary @press');
     },
     onSelect: (value) => {
-      this.setData('last', `@select ${String(value)}`);
+      this.setState('last', `@select ${String(value)}`);
     },
   };
 }

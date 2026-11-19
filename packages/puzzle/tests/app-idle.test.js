@@ -100,7 +100,7 @@ describe('app.idle() (D185)', () => {
 		await app.mount();
 		expect(child.ctx.idle).toBe(app.ctx.idle);
 		const { idle } = child.ctx;
-		child.setData({ n: 5 });
+		child.setState({ n: 5 });
 		expect(await idle()).toBe(true);
 		expect(el.querySelector('.child').textContent).toBe('5');
 		expect(await idle({ timeout: 0 })).toBe(false);
@@ -198,7 +198,7 @@ describe('app.idle() (D185)', () => {
 		expect(el.querySelector('.notes').textContent).toBe('held');
 	});
 
-	it('waits for a setData() render', async () => {
+	it('waits for a setState() render', async () => {
 		let view;
 		class LocalView extends PuzzleView {
 			mounted() {
@@ -210,7 +210,7 @@ describe('app.idle() (D185)', () => {
 		}
 		const { app, el } = make({ routes: [{ path: '/', view: LocalView }] });
 		await app.mount();
-		view.setData({ n: 5 });
+		view.setState({ n: 5 });
 		expect(el.querySelector('.local').textContent).toBe('0');
 		expect(await app.idle()).toBe(true);
 		expect(el.querySelector('.local').textContent).toBe('5');
@@ -348,7 +348,7 @@ describe('app.idle() (D185)', () => {
 			}
 			afterUpdate() {
 				const n = this.getData().n;
-				if (n > 0 && n < 8) this.setData({ n: n + 1 });
+				if (n > 0 && n < 8) this.setState({ n: n + 1 });
 			}
 			render() {
 				return h('puzzle-view', { class: 'chain' }, [text(String(this.getData().n ?? 0))]);
@@ -356,7 +356,7 @@ describe('app.idle() (D185)', () => {
 		}
 		const { app, el } = make({ routes: [{ path: '/', view: ChainView }] });
 		await app.mount();
-		view.setData({ n: 1 });
+		view.setState({ n: 1 });
 		expect(await app.idle()).toBe(true);
 		expect(el.querySelector('.chain').textContent).toBe('8');
 	});
@@ -374,7 +374,7 @@ describe('app.idle() (D185)', () => {
 		expect(el.querySelector('.notes').textContent).toBe('bg');
 	});
 
-	it('renders a setData() in a hidden tab, and waits for it', async () => {
+	it('renders a setState() in a hidden tab, and waits for it', async () => {
 		let view;
 		class LocalView extends PuzzleView {
 			mounted() {
@@ -390,7 +390,7 @@ describe('app.idle() (D185)', () => {
 		vi.stubGlobal('requestAnimationFrame', raf);
 		vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
 
-		view.setData({ n: 7 });
+		view.setState({ n: 7 });
 		expect(el.querySelector('.local').textContent).toBe('0');
 		const idle = watch(app.idle());
 		// Never true while the old value is still on screen.

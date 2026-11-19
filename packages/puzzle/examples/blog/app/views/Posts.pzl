@@ -78,7 +78,7 @@ const SORTS = {
 
 export default class PostsView extends PuzzleView {
   created() {
-    this.setData({ activeTag: 'all', sortBy: 'newest' });
+    this.setState({ activeTag: 'all', sortBy: 'newest' });
   }
 
   // data() derives the tag list and the filtered, sorted posts from the store.
@@ -113,13 +113,13 @@ export default class PostsView extends PuzzleView {
 
   events = {
     setTag: (tag) => {
-      // D23 derived-list pattern: setData() updates local state but does not
+      // D23 derived-list pattern: setState() updates local state but does not
       // re-run data(), so refresh() recomputes the filtered list from it.
-      this.setData('activeTag', tag);
+      this.setState('activeTag', tag);
       this.refresh();
     },
     setSort: (sortBy) => {
-      this.setData('sortBy', sortBy);
+      this.setState('sortBy', sortBy);
       this.refresh();
     }
   };

@@ -235,7 +235,7 @@ export default class Toolbar extends PuzzleView {
   // Make `value` the roving item and focus it. Sets state BEFORE focusing so the
   // resulting @focus sees an already-matching rovingValue and short-circuits.
   moveTo(value) {
-    this.setData('rovingValue', value);
+    this.setState('rovingValue', value);
     this.refresh();
     this.focusValue(value);
   }
@@ -259,7 +259,7 @@ export default class Toolbar extends PuzzleView {
     // Remember the last-focused control so a Tab-out/Tab-in returns to it.
     focusItem: (value) => {
       if (this.getData().rovingValue === value) return;
-      this.setData('rovingValue', value);
+      this.setState('rovingValue', value);
       this.refresh();
     },
 

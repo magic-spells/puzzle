@@ -94,7 +94,7 @@ import KanbanCard from './KanbanCard.pzl';
 //       }
 //       const dest = cols.find((c) => c.id === toColumnId);
 //       dest.cards.splice(toIndex, 0, card);
-//       this.setData({ columns: cols });
+//       this.setState({ columns: cols });
 //     },
 //   };
 //
@@ -215,7 +215,7 @@ export default class Kanban extends PuzzleView {
       if (this._arm && this._arm.started && e.cancelable) e.preventDefault();
     };
 
-    this.setData({
+    this.setState({
       dragging: false,
       dragCardId: null,
       dragFromCol: null,
@@ -440,7 +440,7 @@ export default class Kanban extends PuzzleView {
     }
   }
 
-  // --- ghost (imperative — never setData per move) ---------------------------
+  // --- ghost (imperative — never setState per move) ---------------------------
 
   _applyGhost() {
     if (!this.element || !this._ghostPos) return;
@@ -461,7 +461,7 @@ export default class Kanban extends PuzzleView {
       if (!t) return;
       const d = this.getData();
       if (d.hoveredColId !== t.colId || d.targetIndex !== t.index) {
-        this.setData({ hoveredColId: t.colId, targetIndex: t.index });
+        this.setState({ hoveredColId: t.colId, targetIndex: t.index });
         this.refresh();
       }
     });
@@ -491,7 +491,7 @@ export default class Kanban extends PuzzleView {
     const orig = this._origIndex(a.colId, a.cardId);
     // clear any keyboard grab — one gesture at a time
     this._ghostPos = { x: event.clientX, y: event.clientY };
-    this.setData({
+    this.setState({
       dragging: true,
       dragCardId: a.cardId,
       dragFromCol: a.colId,
@@ -539,7 +539,7 @@ export default class Kanban extends PuzzleView {
     const dest = (Array.isArray(this.props.columns) ? this.props.columns : []).find(
       (c) => c.id === toColId
     );
-    this.setData({
+    this.setState({
       dragging: false,
       dragCardId: null,
       dragFromCol: null,
@@ -566,7 +566,7 @@ export default class Kanban extends PuzzleView {
       this._rafT = null;
     }
     if (this.getData().dragging) {
-      this.setData({
+      this.setState({
         dragging: false,
         dragCardId: null,
         dragFromCol: null,
@@ -597,7 +597,7 @@ export default class Kanban extends PuzzleView {
 
   _grab(colId, cardId) {
     const card = this._findCard(colId, cardId);
-    this.setData({
+    this.setState({
       grabbedId: cardId,
       announce: card
         ? `Picked up ${card.title}. Use the arrow keys to move, space or escape to drop.`
@@ -608,7 +608,7 @@ export default class Kanban extends PuzzleView {
 
   _drop() {
     const card = this._findCard(this._grabColOf(), this.getData().grabbedId);
-    this.setData({
+    this.setState({
       grabbedId: null,
       announce: card ? `Dropped ${card.title}.` : '',
     });
@@ -657,7 +657,7 @@ export default class Kanban extends PuzzleView {
     const card = cards[i];
     const destCol = cols.find((c) => c.id === destColId);
     const destLen = (destCol.cards || []).length + (destColId === colId ? 0 : 1);
-    this.setData({
+    this.setState({
       announce: `Moved ${card.title} to ${destCol.title}, position ${index + 1} of ${destLen}.`,
     });
     this.refresh();
@@ -678,7 +678,7 @@ export default class Kanban extends PuzzleView {
       }
       // starting a pointer gesture clears any keyboard grab
       if (this.getData().grabbedId) {
-        this.setData({ grabbedId: null });
+        this.setState({ grabbedId: null });
       }
       const rect = event.currentTarget.getBoundingClientRect();
       this._arm = {

@@ -14,7 +14,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // here; comparing against the value data() actually committed keeps it silent.
 export default class ClobberForm extends PuzzleView {
 	created() {
-		this.setData({ note: '' });
+		this.setState({ note: '' });
 	}
 
 	data() {

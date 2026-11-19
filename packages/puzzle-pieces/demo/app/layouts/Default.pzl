@@ -260,7 +260,7 @@ export default class DefaultLayout extends PuzzleView {
   }
 
   setMobileNav(open) {
-    this.setData({ mobileNavOpen: open });
+    this.setState({ mobileNavOpen: open });
     this.refresh();
   }
 
@@ -282,7 +282,7 @@ export default class DefaultLayout extends PuzzleView {
     // next pill press is a fresh open edge.
     closeMobileNav: () => {
       if (!this.getData().mobileNavOpen) return;
-      this.setData({ mobileNavOpen: false });
+      this.setState({ mobileNavOpen: false });
       this.refresh();
     },
     // Any link in the sheet closes it; the router still follows the href. A
@@ -291,7 +291,7 @@ export default class DefaultLayout extends PuzzleView {
     onDrawerClick: (event) => {
       if (!event.target.closest('a[href]')) return;
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      this.setData({ mobileNavOpen: false });
+      this.setState({ mobileNavOpen: false });
       this.refresh();
     },
     // The sheet lists ~110 links; open it on the page being read rather than

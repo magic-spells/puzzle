@@ -15,7 +15,7 @@ verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 A component whose first `mount()` rejects is destroyed and replaced by a
 placeholder comment (or the app's `errorView`) so the next patch can mount
 fresh. The rejection handler runs a microtask later and closes over the
-mount-time vnode, but a same-turn parent render (a store flush, `setData()` in
+mount-time vnode, but a same-turn parent render (a store flush, `setState()` in
 the parent's `mounted()`) may already have copied the instance onto a new
 vnode. So recovery keys off state **every vnode generation shares** — the
 instance and its owned position — never the mount-time vnode's links.

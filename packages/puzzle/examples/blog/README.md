@@ -34,7 +34,7 @@ own `@theme` palette in `app/styles/styles.css`.
 - **Home.pzl** — hero, a `<Button @press>` that navigates, and the three newest
   posts via `<PostCard>` with an `{#if}/{:else}` empty state.
 - **Posts.pzl** — tag-filter tabs using `findMany({ filter })` plus the
-  `setData` + `this.refresh()` derived-list pattern; the `pluralize` function.
+  `setState` + `this.refresh()` derived-list pattern; the `pluralize` function.
   Also the **`flip` showcase (v1.51, puzzle ≥ 0.2.0)**: the sort control
   (Newest / Oldest / A–Z) reorders the keyed post list, and the bare `flip`
   attribute on the `<PostCard>` row root makes every retained card slide to its

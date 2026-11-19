@@ -60,7 +60,7 @@ export default class Home extends PuzzleView {
       typeof matchMedia === 'function' &&
       matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    this.setData({
+    this.setState({
       selectedId: '',
       running: !reduced, // respect reduced-motion: start paused
       trails: false,
@@ -85,15 +85,15 @@ export default class Home extends PuzzleView {
     //   canvas    → @select={ selectBody(event) }     (hit-test id forwarded up)
     selectBody: (id) => {
       const { selectedId } = this.getData();
-      this.setData({ selectedId: selectedId === id ? '' : id });
+      this.setState({ selectedId: selectedId === id ? '' : id });
     },
 
     togglePause: () => {
-      this.setData({ running: !this.getData().running });
+      this.setState({ running: !this.getData().running });
     },
 
     toggleTrails: () => {
-      this.setData({ trails: !this.getData().trails });
+      this.setState({ trails: !this.getData().trails });
     },
 
     addPlanet: () => {
@@ -111,7 +111,7 @@ export default class Home extends PuzzleView {
       // findMany returns a fresh array, so destroying while iterating is safe.
       this.ctx.store.findMany('body').forEach((body) => body.destroy());
       seedBodies.forEach((body) => this.ctx.store.createRecord('body', body));
-      this.setData({ selectedId: '' });
+      this.setState({ selectedId: '' });
     },
   };
 }

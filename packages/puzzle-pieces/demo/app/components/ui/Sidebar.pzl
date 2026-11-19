@@ -434,8 +434,8 @@ export default class Sidebar extends PuzzleView {
     this._regionState = {};
     // Uncontrolled collapsed state — instance field, NOT view data: the visible
     // layout (rail width, icon-only rows) is derived from it inside data(), so
-    // the toggle must refresh() to re-run data(). A setData key would update
-    // silently without re-deriving the render model (setData never re-runs
+    // the toggle must refresh() to re-run data(). A setState key would update
+    // silently without re-deriving the render model (setState never re-runs
     // data()), leaving the click with no visible effect.
     this._uncontrolledCollapsed = false;
     // Flyout state stays in instance fields because data() derives the panel model.

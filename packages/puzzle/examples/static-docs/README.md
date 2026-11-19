@@ -28,7 +28,7 @@ JavaScript runs. What makes this *static* (as of D81) is what the output does
 
 The page still becomes interactive: `mountStatic` mounts the view tree over the
 prerendered markup (flash-free, since it re-renders identically), so event
-handlers, local `setData` state, and store mutations all work. It's an
+handlers, local `setState` state, and store mutations all work. It's an
 interactive *document*, not an SPA.
 
 ### `static` vs `hybrid`

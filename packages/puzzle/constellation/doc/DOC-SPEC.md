@@ -102,7 +102,7 @@ The contract is split across six chapter cards; this card is the entry point. Se
 
 Rules that span several sections. Each is stated in full where it belongs; this list is the cross-reference.
 
-- **Two-layer component state** (§4): a `data()` result replaces the derived layer wholesale (omitted keys drop); `setData` writes a persistent state layer underneath. A `data()` commit beats an earlier `setData`; a later `setData` beats the model until the next commit.
+- **Two-layer component state** (§4): a `data()` result replaces the derived layer wholesale (omitted keys drop); `setState` writes a persistent state layer underneath. A `data()` commit beats an earlier `setState`; a later `setState` beats the model until the next commit.
 - **Type-aware validation bounds** (§20): `number()`/`date()` fields reject wrong-type values in `min`/`max` instead of measuring string length.
 - **Persisted sync provenance** (§22, §8): `_synced` rides out of band (`__synced`) in the persistence blob; hydration restores it.
 - **Save-boundary guards** (§22): destroy wins over an in-flight save; a server pk that collides with another record is refused. Schema object/array defaults deep-clone per record.

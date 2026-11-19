@@ -91,7 +91,7 @@ import Icon from '../components/Icon.pzl';
 
 export default class AppLayout extends PuzzleView {
   created() {
-    this.setData({ queueOpen: false });
+    this.setState({ queueOpen: false });
   }
 
   // data() re-runs on every navigation that reuses this layout (SPEC §9), so the
@@ -134,10 +134,10 @@ export default class AppLayout extends PuzzleView {
 
   events = {
     toggleQueue: () => {
-      this.setData('queueOpen', !this.getData().queueOpen);
+      this.setState('queueOpen', !this.getData().queueOpen);
     },
     closeQueue: () => {
-      this.setData('queueOpen', false);
+      this.setState('queueOpen', false);
     },
     // Create a fresh empty playlist and navigate to it — the user lands on the
     // new page and renames it inline. createRecord notifies subscribers, so the

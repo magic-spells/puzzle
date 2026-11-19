@@ -13,7 +13,7 @@ const fixtures = readdirSync(fixturesDir).filter((f) => f.endsWith('.pzl'));
 describe('script formatting', () => {
 	it('formats a JS <script> body with babel', async () => {
 		const out = await format(read('js-scripts.pzl'));
-		expect(out).toContain('created() {\n    this.setData({ count: 0 });\n  }');
+		expect(out).toContain('created() {\n    this.setState({ count: 0 });\n  }');
 		expect(out).toContain('import { PuzzleView } from "@magic-spells/puzzle";');
 	});
 

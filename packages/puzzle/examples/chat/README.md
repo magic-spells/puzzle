@@ -80,7 +80,7 @@ Every checklist feature maps to a specific file:
   staggered `get animations()`.
 - **MessageBubble.pzl** — role-styled bubble with a blinking streaming caret.
 - **Composer.pzl** — the input, styled as an AI-chat input card (text row +
-  controls row). Local `draft` **and** `model` state (both via `setData`, not
+  controls row). Local `draft` **and** `model` state (both via `setState`, not
   `data()`); a quiet `<select>` model picker (puzzle-nano / puzzle-core /
   puzzle-max); callback `send` prop that passes a single `{ text, model }`
   object (the parent's `@send={ sendMessage(event) }` binding only forwards the

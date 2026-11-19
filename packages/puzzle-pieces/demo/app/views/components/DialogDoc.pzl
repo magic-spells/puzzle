@@ -341,9 +341,9 @@ const codeHero = `<Button variant="outline" @press={ openHero }>Delete project</
 </Dialog>
 
 // events = {
-//   openHero: () => this.setData('heroOpen', true),
+//   openHero: () => this.setState('heroOpen', true),
 //   closeHero: ({ result }) => {
-//     this.setData({ heroOpen: false, lastResult: result ?? 'dismissed' });
+//     this.setState({ heroOpen: false, lastResult: result ?? 'dismissed' });
 //     if (result === 'delete') this.deleteProject();
 //   },
 // };
@@ -435,7 +435,7 @@ const codeMorph = `<button id="new-project-card" @click={ open }>…a card, a bu
 
 export default class DialogDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       heroOpen: false,
       lockedOpen: false,
       sizeOpen: false,
@@ -507,22 +507,22 @@ export default class DialogDoc extends PuzzleView {
   }
 
   events = {
-    openHero: () => this.setData('heroOpen', true),
+    openHero: () => this.setState('heroOpen', true),
     // The one handler that reads the @hide detail: data-result tells a deliberate
     // answer apart from a dismissal, which reports null.
     closeHero: (detail) => {
       const result = detail?.result ?? null;
-      this.setData({ heroOpen: false, lastResult: result ?? 'dismissed' });
+      this.setState({ heroOpen: false, lastResult: result ?? 'dismissed' });
       if (result === 'delete') toast({ message: 'Project deleted.', variant: 'danger' });
     },
-    openLocked: () => this.setData('lockedOpen', true),
-    closeLocked: () => this.setData('lockedOpen', false),
-    openSize: (value) => this.setData({ size: value, sizeOpen: true }),
-    closeSize: () => this.setData('sizeOpen', false),
-    openScroll: () => this.setData('scrollOpen', true),
-    closeScroll: () => this.setData('scrollOpen', false),
-    openHeader: () => this.setData('headerOpen', true),
-    closeHeader: () => this.setData('headerOpen', false),
+    openLocked: () => this.setState('lockedOpen', true),
+    closeLocked: () => this.setState('lockedOpen', false),
+    openSize: (value) => this.setState({ size: value, sizeOpen: true }),
+    closeSize: () => this.setState('sizeOpen', false),
+    openScroll: () => this.setState('scrollOpen', true),
+    closeScroll: () => this.setState('scrollOpen', false),
+    openHeader: () => this.setState('headerOpen', true),
+    closeHeader: () => this.setState('headerOpen', false),
   };
 }
 </script>

@@ -740,7 +740,7 @@ describe.skipIf(!built)('Views panel', () => {
 		expect(bridge.payloadsFor('inspect:view')).toEqual([{ id: 3 }]);
 
 		const model = groupFor('data() derived layer');
-		const local = groupFor('setData() state layer');
+		const local = groupFor('setState() state layer');
 		expect(model).toBeTruthy();
 		expect(local).toBeTruthy();
 
@@ -758,7 +758,7 @@ describe.skipIf(!built)('Views panel', () => {
 
 		// And the explainer that says which one wins.
 		expect(document.body.textContent).toContain(
-			'a later setData() wins until the next data() commit'
+			'a later setState() wins until the next data() commit'
 		);
 	});
 
@@ -812,7 +812,7 @@ describe.skipIf(!built)('Views panel', () => {
 		treeRow('3').click();
 		await settle(app, 60);
 
-		const local = groupFor('setData() state layer');
+		const local = groupFor('setState() state layer');
 		const row = [...local.querySelectorAll('dt')].find(
 			(dt) => dt.textContent.trim() === 'draft'
 		).parentElement;

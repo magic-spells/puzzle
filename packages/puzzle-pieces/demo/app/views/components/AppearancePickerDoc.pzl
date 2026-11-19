@@ -159,7 +159,7 @@ export default class AppearancePickerDoc extends PuzzleView {
   events = {
     applyLive: (choice) => set(choice),
     applyLocal: (choice) => {
-      this.setData({ localScheme: choice.scheme, localMode: choice.mode });
+      this.setState({ localScheme: choice.scheme, localMode: choice.mode });
       this.refresh();
     },
   };

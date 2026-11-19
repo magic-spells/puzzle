@@ -427,7 +427,7 @@ const codeResult = `<Button variant="outline" @press={ openConfirm }>Delete proj
 
 // events = {
 //   finishConfirm: ({ result }) => {
-//     this.setData({ confirmOpen: false, lastResult: result ?? 'dismissed' });
+//     this.setState({ confirmOpen: false, lastResult: result ?? 'dismissed' });
 //     if (result === 'delete') this.deleteProject();
 //   },
 // };
@@ -469,7 +469,7 @@ const codeHeader = `<BottomSheet
 
 export default class BottomSheetDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       heroOpen: false,
       binaryOpen: false,
       insetOpen: false,
@@ -546,22 +546,22 @@ export default class BottomSheetDoc extends PuzzleView {
   }
 
   events = {
-    openHero: () => this.setData('heroOpen', true),
-    closeHero: () => this.setData('heroOpen', false),
-    setSnap: (value) => this.setData('snap', value),
-    openBinary: () => this.setData('binaryOpen', true),
-    closeBinary: () => this.setData('binaryOpen', false),
-    openInset: () => this.setData('insetOpen', true),
-    closeInset: () => this.setData('insetOpen', false),
-    openConfirm: () => this.setData('confirmOpen', true),
+    openHero: () => this.setState('heroOpen', true),
+    closeHero: () => this.setState('heroOpen', false),
+    setSnap: (value) => this.setState('snap', value),
+    openBinary: () => this.setState('binaryOpen', true),
+    closeBinary: () => this.setState('binaryOpen', false),
+    openInset: () => this.setState('insetOpen', true),
+    closeInset: () => this.setState('insetOpen', false),
+    openConfirm: () => this.setState('confirmOpen', true),
     // The one handler that reads the @hide detail: data-result tells a deliberate
     // answer apart from a dismissal, which reports null.
     closeConfirm: (detail) =>
-      this.setData({ confirmOpen: false, lastResult: detail?.result ?? 'dismissed' }),
-    openHeader: () => this.setData('headerOpen', true),
-    closeHeader: () => this.setData('headerOpen', false),
+      this.setState({ confirmOpen: false, lastResult: detail?.result ?? 'dismissed' }),
+    openHeader: () => this.setState('headerOpen', true),
+    closeHeader: () => this.setState('headerOpen', false),
     toggleHeaderGrabber: (event) =>
-      this.setData('headerGrabber', !!event.target.checked),
+      this.setState('headerGrabber', !!event.target.checked),
   };
 }
 </script>

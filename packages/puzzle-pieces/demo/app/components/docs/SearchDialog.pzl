@@ -168,7 +168,7 @@ const ROW_ACTIVE = 'border-border-strong bg-surface-sunken';
 
 export default class SearchDialog extends PuzzleView {
   created() {
-    this.setData({ query: '', results: [], activeIndex: 0 });
+    this.setState({ query: '', results: [], activeIndex: 0 });
   }
 
   data() {
@@ -298,7 +298,7 @@ export default class SearchDialog extends PuzzleView {
   }
 
   runSearch(value) {
-    this.setData({ query: value, results: searchDocs(value), activeIndex: 0 });
+    this.setState({ query: value, results: searchDocs(value), activeIndex: 0 });
     this.refresh();
   }
 
@@ -309,7 +309,7 @@ export default class SearchDialog extends PuzzleView {
       event.preventDefault();
       const step = event.key === 'ArrowDown' ? 1 : -1;
       const next = (this.getData().activeIndex + step + results.length) % results.length;
-      this.setData({ activeIndex: next });
+      this.setState({ activeIndex: next });
       this.refresh();
       this.scrollActiveIntoView(next);
       return;

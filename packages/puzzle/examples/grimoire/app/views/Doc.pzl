@@ -138,7 +138,7 @@ const TURN_COMMANDS = SLASH_COMMANDS.filter((c) => c.type !== 'divider').concat(
 export default class Doc extends PuzzleView {
   created() {
     // Drag state machine (adapted from the kanban Board): a mutable `_drag`
-    // scratch object plus published setData mirror for data() to splice the
+    // scratch object plus published setState mirror for data() to splice the
     // placeholder. FLIP rects are only snapshotted while a drag is live so the
     // per-keystroke re-render stays cheap.
     this._drag = null;
@@ -153,7 +153,7 @@ export default class Doc extends PuzzleView {
     this._onDocPointerDown = (e) => this._handleDocPointerDown(e);
     this._menuListening = false;
 
-    this.setData({
+    this.setState({
       dragging: false,
       draggingId: '',
       targetIndex: 0,
@@ -513,11 +513,11 @@ export default class Doc extends PuzzleView {
 
   // ---- menu internals -------------------------------------------------------
 
-  // setData + synchronous refresh so a menu-state change (especially the
+  // setState + synchronous refresh so a menu-state change (especially the
   // slashActive prop) propagates to the child blocks THIS turn — before the next
   // keystroke the island might dispatch.
   _setMenu(patch) {
-    this.setData(patch);
+    this.setState(patch);
     this.refresh();
   }
 
@@ -849,7 +849,7 @@ export default class Doc extends PuzzleView {
 
   _publishDragState() {
     if (!this._drag) return;
-    this.setData({
+    this.setState({
       dragging: this._drag.phase === 'DRAGGING',
       draggingId: this._drag.id,
       targetIndex: this._drag.targetIndex,
@@ -906,7 +906,7 @@ export default class Doc extends PuzzleView {
     document.body.style.cursor = this._storedCursor;
     this._drag = null;
 
-    this.setData({ dragging: false, draggingId: '', targetIndex: 0, dragHeight: 0 });
+    this.setState({ dragging: false, draggingId: '', targetIndex: 0, dragHeight: 0 });
     if (shouldRefresh) this.refresh();
   }
 

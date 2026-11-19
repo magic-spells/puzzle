@@ -186,7 +186,7 @@ const codeHero = `<Slider label="Volume" value={ volume } min={ 0 } max={ 100 } 
 
 // parent — @input fires live during drag, @change on release
 events = {
-  setVolume: (v) => this.setData('volume', v),
+  setVolume: (v) => this.setState('volume', v),
 };`;
 
 const codeRange = `// the presence of valueMin / valueMax switches to dual-thumb range mode
@@ -196,7 +196,7 @@ const codeRange = `// the presence of valueMin / valueMax switches to dual-thumb
 
 // parent — range callbacks receive { valueMin, valueMax }
 events = {
-  setPrice: ({ valueMin, valueMax }) => this.setData({ priceMin: valueMin, priceMax: valueMax }),
+  setPrice: ({ valueMin, valueMax }) => this.setState({ priceMin: valueMin, priceMax: valueMax }),
 };`;
 
 const codeSteps = `// a numeric step quantizes to a detent
@@ -270,7 +270,7 @@ const codeDisabled = `<Slider label="Disabled" value={ 40 } disabled />`;
 
 export default class SliderDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       volume: 60,
       priceMin: 200,
       priceMax: 800,
@@ -323,46 +323,46 @@ export default class SliderDoc extends PuzzleView {
 
   events = {
     setVolume: (v) => {
-      this.setData('volume', v);
+      this.setState('volume', v);
     },
     setPrice: ({ valueMin, valueMax }) => {
-      this.setData({ priceMin: valueMin, priceMax: valueMax });
+      this.setState({ priceMin: valueMin, priceMax: valueMax });
     },
     setStepped: (v) => {
-      this.setData('stepped', v);
+      this.setState('stepped', v);
     },
     setFine: (v) => {
-      this.setData('fine', v);
+      this.setState('fine', v);
     },
     setAutoTicked: (v) => {
-      this.setData('autoTicked', v);
+      this.setState('autoTicked', v);
     },
     setQuarter: (v) => {
-      this.setData('quarter', v);
+      this.setState('quarter', v);
     },
     setStepTen: (v) => {
-      this.setData('stepTen', v);
+      this.setState('stepTen', v);
     },
     setLabeled: (v) => {
-      this.setData('labeled', v);
+      this.setState('labeled', v);
     },
     setZoom: (v) => {
-      this.setData('zoom', v);
+      this.setState('zoom', v);
     },
     setPosBelow: (v) => {
-      this.setData('posBelow', v);
+      this.setState('posBelow', v);
     },
     setPosAbove: (v) => {
-      this.setData('posAbove', v);
+      this.setState('posAbove', v);
     },
     setPosInside: (v) => {
-      this.setData('posInside', v);
+      this.setState('posInside', v);
     },
     setRedline: (v) => {
-      this.setData('redline', v);
+      this.setState('redline', v);
     },
     setMode: (v) => {
-      this.setData('mode', v);
+      this.setState('mode', v);
     },
   };
 }

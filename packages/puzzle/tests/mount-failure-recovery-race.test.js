@@ -5,13 +5,13 @@
 //
 //   A. THE RACE. mount() is async, so the rejection handler runs in a MICROTASK,
 //      but it closes over the vnode as of mount time. A parent re-render in the
-//      SAME turn (a store flush, a setData() from the parent's mounted()) patches
+//      SAME turn (a store flush, a setState() from the parent's mounted()) patches
 //      the position first, and patchComponent copies the instance onto a NEW vnode
 //      that becomes the live tree node. The handler then destroyed the instance the
 //      LIVE vnode still points at while nulling only the ORPHAN's links — so
 //      patch()'s recovery test (`component == null`) never fired again and every
 //      later render called applyParentUpdate on a destroyed view: mounted() never
-//      fires, setData() re-renders are inert, the component is permanently dead,
+//      fires, setState() re-renders are inert, the component is permanently dead,
 //      and an orphan <!--puzzle--> comment sits in the DOM. Recovery now keys off
 //      the destroyed INSTANCE (`isDestroyed` + the placeholder stashed on it),
 //      which is the one thing both vnodes share.
@@ -36,7 +36,7 @@ import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
 const comp = (Class, attrs = {}, children = []) => new ViewNode(Class, attrs, children);
-// setData re-renders schedule through requestAnimationFrame (jsdom fires that on a
+// setState re-renders schedule through requestAnimationFrame (jsdom fires that on a
 // ~16ms timer), and a child mount then resolves data() across microtasks — so flush
 // past several rAF ticks + microtask drains.
 const flush = async () => {
@@ -122,7 +122,7 @@ function setup() {
 
 // Shared tail: the position must now hold a FRESH, fully working component.
 async function expectRecovered({ host, el, instances }) {
-	host.setData({ tick: 1 }); // any parent re-render reaches the failed position
+	host.setState({ tick: 1 }); // any parent re-render reaches the failed position
 	await flush();
 
 	expect(instances).toHaveLength(2);
@@ -135,7 +135,7 @@ async function expectRecovered({ host, el, instances }) {
 	expect(childEl.textContent).toBe('ok');
 
 	// Live instance: its own local state re-renders its own DOM.
-	fresh.setData({ label: 'live' });
+	fresh.setState({ label: 'live' });
 	await flush();
 	expect(el.querySelector('.child').textContent).toBe('live');
 
@@ -239,7 +239,7 @@ describe('a superseding first-mount refresh failure recovers from the anchor rac
 		}
 		class Host extends PuzzleView {
 			created() {
-				this.setData('which', 'one');
+				this.setState('which', 'one');
 			}
 			render() {
 				return h('div', { id: 'pending-host' }, [
@@ -251,7 +251,7 @@ describe('a superseding first-mount refresh failure recovers from the anchor rac
 		const el = document.createElement('div');
 		document.body.appendChild(el);
 		const host = await new Host().mount(el);
-		host.setData('which', 'two');
+		host.setState('which', 'two');
 		host.flushUpdates();
 
 		// The original run resolves stale, so mount() takes Change A's early
@@ -278,7 +278,7 @@ describe('a superseding first-mount refresh failure recovers from the anchor rac
 		expect(failed.isDestroyed).toBe(true);
 		expect(failed.__failedPlaceholder).toBe(placeholder);
 
-		host.setData('which', 'three');
+		host.setState('which', 'three');
 		host.flushUpdates();
 		await Promise.resolve();
 		await Promise.resolve();

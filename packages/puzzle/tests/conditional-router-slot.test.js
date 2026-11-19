@@ -53,14 +53,14 @@ describe('conditional router outlets', () => {
 			render() { renders++; return h('puzzle-view', {}, [h(SLOT_TAG)]); }
 		}
 		class Layout extends PuzzleView {
-			created() { layout = this; this.setData({ n: 0 }); }
+			created() { layout = this; this.setState({ n: 0 }); }
 			render() { return h('puzzle-view', {}, [h('b', {}, [text(String(this.getData().n))]), h(SLOT_TAG)]); }
 		}
 		const app = await createTestApp({ routes: [{ path: '/', layout: Layout, view: Parent, children: [{ path: '', view: Leaf }] }] });
 		handles.push(app);
 		const before = renders;
 		for (let n = 1; n < 4; n++) {
-			layout.setData({ n });
+			layout.setState({ n });
 			await settled();
 		}
 		expect(app.find('b').textContent).toBe('3');
@@ -97,7 +97,7 @@ describe('conditional router outlets', () => {
 			render() { return h('puzzle-view', { class: 'parent' }, [h(SLOT_TAG)]); }
 		}
 		class Layout extends PuzzleView {
-			created() { layout = this; this.setData({ open: true }); }
+			created() { layout = this; this.setState({ open: true }); }
 			render() { return h('puzzle-view', {}, [this.getData().open ? h(SLOT_TAG) : h('p', {}, [text('closed')])]); }
 		}
 		const app = await createTestApp({ routes: [{ path: '/', layout: Layout, view: Parent, children: [
@@ -105,7 +105,7 @@ describe('conditional router outlets', () => {
 		] }] });
 		handles.push(app);
 		const root = parent.element;
-		layout.setData({ open: false });
+		layout.setState({ open: false });
 		await settled();
 		await app.visit('/two');
 		expect(leaves[0].isDestroyed).toBe(true);
@@ -114,7 +114,7 @@ describe('conditional router outlets', () => {
 		expect(leaves).toHaveLength(3);
 		expect(parent.isDestroyed).toBe(false);
 		expect(app.find('.parent')).toBeNull();
-		layout.setData({ open: true });
+		layout.setState({ open: true });
 		await settled();
 		expect(app.find('.parent')).toBe(root);
 		expect(app.findAll('.leaf')).toHaveLength(1);
@@ -143,7 +143,7 @@ describe('conditional router outlets', () => {
 		await app.visit('/two');
 		expect(pages[0].isDestroyed).toBe(true);
 		expect(pages[1].element).toBeNull();
-		layout.setData({ open: true });
+		layout.setState({ open: true });
 		await settled();
 		expect(app.findAll('.page')).toHaveLength(1);
 		expect(app.find('.page')).toBe(pages[1].element);
@@ -172,7 +172,7 @@ describe('conditional router outlets', () => {
 		const app = await createTestApp({ routes: [{ path: '/', view: Page, layout: Layout }] });
 		handles.push(app);
 		const root = app.find('.page');
-		layout.setData({ right: true });
+		layout.setState({ right: true });
 		await settled();
 		expect(app.findAll('.page')).toHaveLength(1);
 		expect(app.find('.page')).toBe(root);
@@ -200,7 +200,7 @@ describe('conditional router outlets', () => {
 			render() { return h('section', { class: 'frame' }, [h(SLOT_TAG)]); }
 		}
 		class Layout extends PuzzleView {
-			created() { layout = this; this.setData({ open: true }); }
+			created() { layout = this; this.setState({ open: true }); }
 			render() {
 				const outlet = h(SLOT_TAG);
 				const content = wrapper === 'direct' ? outlet : h(wrapper === 'component' ? Frame : 'section', { class: 'frame' }, [outlet]);
@@ -218,11 +218,11 @@ describe('conditional router outlets', () => {
 		const element = app.find('.page');
 		const before = app.find('.before');
 		const after = app.find('.after');
-		const toggle = async (open) => { layout.setData({ open }); await settled(); };
+		const toggle = async (open) => { layout.setState({ open }); await settled(); };
 		await toggle(false);
 		expect(app.find('.page')).toBeNull();
 		expect(first.isDestroyed).toBe(false);
-		first.setData({ label: 'retained' });
+		first.setState({ label: 'retained' });
 		await settled();
 		await toggle(true);
 		expect(app.findAll('.page')).toHaveLength(1);

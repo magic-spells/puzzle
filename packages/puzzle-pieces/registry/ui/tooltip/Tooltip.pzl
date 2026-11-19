@@ -78,7 +78,7 @@ export default class Tooltip extends PuzzleView {
     this._timer = null; // pending show timer (pointerenter → delay → show)
     // Seed local UI state so the first data() run can read it back. `placement`
     // is the effective (possibly flipped) side; null while hidden = "use `side`".
-    this.setData({ visible: false, placement: null });
+    this.setState({ visible: false, placement: null });
   }
 
   // Wire aria-describedby onto the slotted target (see the file comment). The
@@ -139,7 +139,7 @@ export default class Tooltip extends PuzzleView {
     }
     if (this.getData().visible) return;
     const side = this._side();
-    this.setData({ visible: true, placement: side });
+    this.setState({ visible: true, placement: side });
     this.refresh();
 
     // Cheap top<->bottom flip: after the chip renders, if it overflows the
@@ -150,7 +150,7 @@ export default class Tooltip extends PuzzleView {
       if (!this.getData().visible || !this.element) return;
       const next = this._measureFlip(side);
       if (next !== this.getData().placement) {
-        this.setData({ placement: next });
+        this.setState({ placement: next });
         this.refresh();
       }
     });
@@ -162,7 +162,7 @@ export default class Tooltip extends PuzzleView {
       this._timer = null;
     }
     if (!this.getData().visible) return;
-    this.setData({ visible: false, placement: null });
+    this.setState({ visible: false, placement: null });
     this.refresh();
   }
 

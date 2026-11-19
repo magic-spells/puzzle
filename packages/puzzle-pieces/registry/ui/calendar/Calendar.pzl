@@ -244,7 +244,7 @@ import {
 // (`new Date(y, m-1, d)`, never Date.parse / new Date('YYYY-MM-DD'), which UTC-parse
 // shift a day across zones); addMonths clamps day overflow (Jan 31 + 1mo = Feb 28/29).
 // `value` stays parent-owned; the displayed month + drill-down view + roving focus are
-// INTERNAL state written with setData()+refresh(). The grid is a fixed 6×7 = 42 cells so
+// INTERNAL state written with setState()+refresh(). The grid is a fixed 6×7 = 42 cells so
 // the panel height never jumps between months. Crossing a month edge re-renders the grid
 // and re-focuses the moved-to cell via a pendingFocus flag applied in afterUpdate() —
 // the vdom re-render breaks the source's persistent-button focus trick.
@@ -347,7 +347,7 @@ export default class Calendar extends PuzzleView {
     this._lastAnchor = undefined; // tracks month || value to detect external changes
     // Seed the drill-down view; the month/year anchor is derived from `month`/`value` on the
     // first data() run (props aren't available in created()).
-    this.setData({ view: 'days', viewYear: null, viewMonth: null, focusedIso: null, monthCursor: null });
+    this.setState({ view: 'days', viewYear: null, viewMonth: null, focusedIso: null, monthCursor: null });
   }
 
   mounted() {
@@ -444,7 +444,7 @@ export default class Calendar extends PuzzleView {
     const firstDayOfWeek = this._firstDayOfWeek(props);
 
     // Resolve the displayed month + drill-down view + roving focus. These live in the
-    // STATE layer (setData) so they survive data() re-runs; they're seeded from `value`
+    // STATE layer (setState) so they survive data() re-runs; they're seeded from `value`
     // (or today, clamped into range) on first run and re-anchored when `month || value`
     // changes externally. Never RETURNED from data() — a returned key would let the model
     // layer clobber the local one on the next unrelated re-render.
@@ -461,7 +461,7 @@ export default class Calendar extends PuzzleView {
       seed.focusedIso = formatISODate(anchor);
       seed.monthCursor = anchor.month;
     }
-    if (Object.keys(seed).length) this.setData(seed);
+    if (Object.keys(seed).length) this.setState(seed);
 
     const view = seed.view ?? local.view ?? 'days';
     const viewYear = seed.viewYear ?? local.viewYear;
@@ -671,7 +671,7 @@ export default class Calendar extends PuzzleView {
   // ---- internal navigation -------------------------------------------------
 
   _moveFocusTo(target) {
-    this.setData({ viewYear: target.year, viewMonth: target.month, focusedIso: formatISODate(target) });
+    this.setState({ viewYear: target.year, viewMonth: target.month, focusedIso: formatISODate(target) });
     this._pendingFocus = { type: 'day', iso: formatISODate(target) };
     this.refresh();
   }
@@ -679,7 +679,7 @@ export default class Calendar extends PuzzleView {
   _selectDay(parts) {
     if (!parts || this._isDayDisabled(parts, this.props)) return;
     const iso = formatISODate(parts);
-    this.setData({ view: 'days', viewYear: parts.year, viewMonth: parts.month, focusedIso: iso, monthCursor: parts.month });
+    this.setState({ view: 'days', viewYear: parts.year, viewMonth: parts.month, focusedIso: iso, monthCursor: parts.month });
     this._pendingFocus = { type: 'day', iso };
     this.refresh();
     const { change } = this.props;
@@ -694,7 +694,7 @@ export default class Calendar extends PuzzleView {
     const focused = parseISODate(focusedIso);
     const day = Math.min(focused ? focused.day : 1, daysInMonth(viewYear, month));
     const iso = formatISODate({ year: viewYear, month, day });
-    this.setData({ view: 'days', viewMonth: month, focusedIso: iso });
+    this.setState({ view: 'days', viewMonth: month, focusedIso: iso });
     this._pendingFocus = { type: 'day', iso };
     this.refresh();
   }
@@ -703,7 +703,7 @@ export default class Calendar extends PuzzleView {
   _selectYear(year) {
     if (this._yearOutOfRange(year, this.props)) return;
     const cursor = this._initialMonthCursor(year, this.props);
-    this.setData({ view: 'months', viewYear: year, monthCursor: cursor });
+    this.setState({ view: 'months', viewYear: year, monthCursor: cursor });
     this._pendingFocus = { type: 'month', month: cursor };
     this.refresh();
   }
@@ -713,7 +713,7 @@ export default class Calendar extends PuzzleView {
     if (view === 'days') {
       const focused = parseISODate(focusedIso) || { year: viewYear, month: viewMonth, day: 1 };
       const target = addMonths(focused, delta);
-      this.setData({ viewYear: target.year, viewMonth: target.month, focusedIso: formatISODate(target) });
+      this.setState({ viewYear: target.year, viewMonth: target.month, focusedIso: formatISODate(target) });
       const { min, max } = this._bounds(this.props);
       const nav = navAvailability('days', target.year, target.month, min, max);
       const nowDisabled = delta < 0 ? nav.prevDisabled : nav.nextDisabled;
@@ -723,7 +723,7 @@ export default class Calendar extends PuzzleView {
       this.refresh();
     } else if (view === 'months') {
       const ny = viewYear + delta;
-      this.setData({ viewYear: ny });
+      this.setState({ viewYear: ny });
       const { min, max } = this._bounds(this.props);
       const nav = navAvailability('months', ny, viewMonth, min, max);
       const nowDisabled = delta < 0 ? nav.prevDisabled : nav.nextDisabled;
@@ -731,7 +731,7 @@ export default class Calendar extends PuzzleView {
       this.refresh();
     } else {
       const ny = viewYear + delta * 12;
-      this.setData({ viewYear: ny });
+      this.setState({ viewYear: ny });
       const { min, max } = this._bounds(this.props);
       const nav = navAvailability('years', ny, viewMonth, min, max);
       const nowDisabled = delta < 0 ? nav.prevDisabled : nav.nextDisabled;
@@ -743,11 +743,11 @@ export default class Calendar extends PuzzleView {
   _zoomOut() {
     const { view, viewYear, viewMonth, monthCursor } = this.getData();
     if (view === 'days') {
-      this.setData({ view: 'months', monthCursor: viewMonth });
+      this.setState({ view: 'months', monthCursor: viewMonth });
       this._pendingFocus = { type: 'month', month: viewMonth };
       this.refresh();
     } else if (view === 'months') {
-      this.setData({ view: 'years' });
+      this.setState({ view: 'years' });
       this._pendingFocus = { type: 'year', year: viewYear };
       this.refresh();
     }
@@ -831,7 +831,7 @@ export default class Calendar extends PuzzleView {
         // to the focused date's month, or it renders a month with no tab stop at all.
         const backIso = this.getData().focusedIso;
         const backTo = parseISODate(backIso);
-        this.setData(
+        this.setState(
           backTo ? { view: 'days', viewYear: backTo.year, viewMonth: backTo.month } : { view: 'days' }
         );
         this._pendingFocus = { type: 'day', iso: backIso };
@@ -871,7 +871,7 @@ export default class Calendar extends PuzzleView {
       event.preventDefault();
       const ny = Math.floor(target / 12);
       const nc = (target % 12) + 1;
-      this.setData({ viewYear: ny, monthCursor: nc });
+      this.setState({ viewYear: ny, monthCursor: nc });
       this._pendingFocus = { type: 'month', month: nc };
       this.refresh();
     },
@@ -883,7 +883,7 @@ export default class Calendar extends PuzzleView {
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
-        this.setData({ view: 'months' });
+        this.setState({ view: 'months' });
         this._pendingFocus = { type: 'month', month: monthCursor };
         this.refresh();
         return;
@@ -919,7 +919,7 @@ export default class Calendar extends PuzzleView {
           return;
       }
       event.preventDefault();
-      this.setData({ viewYear: target });
+      this.setState({ viewYear: target });
       this._pendingFocus = { type: 'year', year: target };
       this.refresh();
     },

@@ -73,9 +73,9 @@ DnD possible with **zero framework changes**:
    accumulates keys in a Set; N `record.update()` calls in one tick → each subscriber
    notified at most once. The drop commit below issues up to ~10 updates and produces
    exactly one board re-render.
-6. **`setData()` does NOT re-run `data()`.** It merges local state and schedules a
+6. **`setState()` does NOT re-run `data()`.** It merges local state and schedules a
    re-render of the *old* model. If `data()` derives anything from local state (it does
-   here — the placeholder position), you must call `this.refresh()` after `setData()`.
+   here — the placeholder position), you must call `this.refresh()` after `setState()`.
    `refresh()` re-runs `data()` **synchronously** when `data()` is sync, then patches.
 7. **The runtime owns FLIP** (v1.51, D85). A `flip` attribute on a keyed row root
    animates retained rows from their old visual position to their new one — measured
@@ -104,11 +104,11 @@ DnD possible with **zero framework changes**:
   `ghost.style.transform = translate3d(...)`. The ghost is a `cloneNode(true)` appended
   to `document.body` — *outside* Puzzle's render tree, so patches never touch it and it
   never appears in FLIP measurements.
-- **Slow lane (only when the target slot actually changes):** `setData({ targetCol,
+- **Slow lane (only when the target slot actually changes):** `setState({ targetCol,
   targetIndex }) + refresh()` → `data()` recomposes column arrays → keyed patch moves
   the placeholder → the rows' `flip` attribute animates every card that shifted.
 
-Running ghost movement through `setData` would re-patch the board 60×/sec. Don't.
+Running ghost movement through `setState` would re-patch the board 60×/sec. Don't.
 
 ## Drag state machine
 
@@ -282,7 +282,7 @@ targetTasks.forEach((t, i) => t.update({ status: targetCol, order: i }));
       document listeners.
 - [ ] Guard `startDrag` re-entry (`if (this._drag) return`) — a second pointerdown
       mid-drag (multi-touch) would overwrite state and leak the ghost.
-- [ ] `setData()` alone won't recompute `data()` — pair with `refresh()` when `data()` derives from the key (here, the column arrays).
+- [ ] `setState()` alone won't recompute `data()` — pair with `refresh()` when `data()` derives from the key (here, the column arrays).
 - [ ] Exclude the placeholder from hit-test measurement (feedback loop).
 - [ ] `{#if}` can't be a `{#for}` body root — branch inside the item component.
 - [ ] `.kanban-card { touch-action:none; user-select:none }` in CSS **and**

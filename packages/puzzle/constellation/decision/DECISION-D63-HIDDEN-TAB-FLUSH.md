@@ -22,7 +22,7 @@ Store flushes, view renders and `app.idle()` checks batch onto `requestAnimation
   - hidden tab (`document.hidden`) or no rAF (Node, tests) → `setTimeout(0)`;
   - otherwise rAF **plus** a 220ms fallback timer, covering a tab that hides before the frame.
   - Whichever fires first runs `run`; the other does nothing.
-- `schedule(job)` wraps `frame` for store flushes (`Store._scheduleFlush`, which arms both subscriber delivery and batched persistence) and `setData()` renders, and counts them for `renderTick()` ([[DECISION-D188-TICK]]) and `app.idle()` (D185).
+- `schedule(job)` wraps `frame` for store flushes (`Store._scheduleFlush`, which arms both subscriber delivery and batched persistence) and `setState()` renders, and counts them for `renderTick()` ([[DECISION-D188-TICK]]) and `app.idle()` (D185).
 - A frame that fires after an explicit `flush()` finds nothing pending; `flush()` is idempotent.
 
 ## Alternatives rejected

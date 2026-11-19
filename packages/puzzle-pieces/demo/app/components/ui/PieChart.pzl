@@ -130,7 +130,7 @@ function slicePaths(cx, cy, rO, rI, a0, a1) {
 export default class PieChart extends PuzzleView {
   created() {
     this._uid = ++uid;
-    this.setData({
+    this.setState({
       hoveredId: null,
       tip: { visible: false, x: 0, y: 0, flipX: false, label: '', value: '', percent: '' },
     });
@@ -255,13 +255,13 @@ export default class PieChart extends PuzzleView {
     onHover: (mark, event) => {
       const tip = this._tipFromEvent(event, mark.tipLabel, mark.tipValue, mark.tipPercent);
       if (!tip) return;
-      this.setData({ hoveredId: mark.id, tip });
+      this.setState({ hoveredId: mark.id, tip });
       this.refresh();
     },
 
     onLeave: () => {
       const tip = this.getData().tip;
-      this.setData({ hoveredId: null, tip: { ...tip, visible: false } });
+      this.setState({ hoveredId: null, tip: { ...tip, visible: false } });
       this.refresh();
     },
   };

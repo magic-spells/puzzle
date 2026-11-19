@@ -323,7 +323,7 @@ const codeEvents = `// @resize is ADVISORY — it fires on every applied change 
 // hook: release, keyboard step, or a double-click reset.
 <SplitPanel @resize={ onResize } @resizeEnd={ onResizeEnd }>…</SplitPanel>
 
-// onResize:    (sizes) => this.setData('live', sizes)
+// onResize:    (sizes) => this.setState('live', sizes)
 // onResizeEnd: (sizes) => save(sizes)`;
 
 const codeDisabled = `// 'disabled' on one divider locks that pair; on the group it locks
@@ -361,7 +361,7 @@ const keyRows = [
 
 export default class SplitPanelDoc extends PuzzleView {
   created() {
-    this.setData({ live: null, commit: null, commitCount: 0 });
+    this.setState({ live: null, commit: null, commitCount: 0 });
   }
 
   data() {
@@ -405,11 +405,11 @@ export default class SplitPanelDoc extends PuzzleView {
 
   events = {
     onResize: (sizes) => {
-      this.setData('live', sizes);
+      this.setState('live', sizes);
       this.refresh();
     },
     onResizeEnd: (sizes) => {
-      this.setData({ commit: sizes, commitCount: this.getData().commitCount + 1 });
+      this.setState({ commit: sizes, commitCount: this.getData().commitCount + 1 });
       this.refresh();
     },
   };

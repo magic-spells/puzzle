@@ -67,7 +67,7 @@ const codeHero = `<Pagination page={ page } count={ 12 } @change={ setPage } />
 
 // parent
 events = {
-  setPage: (p) => this.setData({ page: p }),
+  setPage: (p) => this.setState({ page: p }),
 };`;
 
 const codeWindowing = `// Always shows the first and last page; a run of siblings hugs the
@@ -80,7 +80,7 @@ const codeSmall = `// Counts of seven or fewer never gap — every page renders,
 
 export default class PaginationDoc extends PuzzleView {
   created() {
-    this.setData({ page: 1, pageWide: 10, pageSmall: 1 });
+    this.setState({ page: 1, pageWide: 10, pageSmall: 1 });
   }
 
   data(params, props) {
@@ -103,13 +103,13 @@ export default class PaginationDoc extends PuzzleView {
 
   events = {
     setPage: (p) => {
-      this.setData('page', p);
+      this.setState('page', p);
     },
     setPageWide: (p) => {
-      this.setData('pageWide', p);
+      this.setState('pageWide', p);
     },
     setPageSmall: (p) => {
-      this.setData('pageSmall', p);
+      this.setState('pageSmall', p);
     },
   };
 }

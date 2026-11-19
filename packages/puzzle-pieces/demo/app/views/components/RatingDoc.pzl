@@ -115,7 +115,7 @@ const codeHero = `<Rating value={ score } size="lg" @change={ setScore } />
 
 // parent — input mode commits whole-star values
 events = {
-  setScore: (v) => this.setData('score', v),
+  setScore: (v) => this.setState('score', v),
 };`;
 
 const codeDisplay = `// readOnly renders a static row; the value rounds to the nearest half.
@@ -141,7 +141,7 @@ const codeKeyboard = `<Rating value={ kbdScore } @change={ setKbd } />
 
 export default class RatingDoc extends PuzzleView {
   created() {
-    this.setData({ score: 3, formScore: 4, kbdScore: 2 });
+    this.setState({ score: 3, formScore: 4, kbdScore: 2 });
   }
 
   data(params, props) {
@@ -173,14 +173,14 @@ export default class RatingDoc extends PuzzleView {
 
   events = {
     setScore: (v) => {
-      this.setData('score', v);
+      this.setState('score', v);
       this.refresh();
     },
     setFormScore: (v) => {
-      this.setData('formScore', v);
+      this.setState('formScore', v);
     },
     setKbd: (v) => {
-      this.setData('kbdScore', v);
+      this.setState('kbdScore', v);
       this.refresh();
     },
   };

@@ -84,7 +84,7 @@ import { parseISODate, toDate } from '../../lib/date-math.js';
 // they port later). The behavior design carries over — the WAI-ARIA date-picker
 // dialog pattern, locale-aware trigger label, auto-flip positioning, hidden form
 // input, and the opt-in trigger↔panel morph — but the code shape is Puzzle-native:
-// no custom elements, declarative @event listeners, setData/getData local state,
+// no custom elements, declarative @event listeners, setState/getData local state,
 // callback props out, and the actual month grid delegated to <Calendar/>.
 //
 //   <DatePicker value={ iso } @change={ setDate } />
@@ -221,7 +221,7 @@ export default class DatePicker extends PuzzleView {
     this._pendingRestoreFocus = true; // whether the next close returns focus to the trigger
     // Local UI state (used only in uncontrolled mode + for placement). Never returned
     // from data() as `open` when controlled — `props.open` wins there.
-    this.setData({ uncontrolledOpen: false, placement: 'bottom', morphTop: 0 });
+    this.setState({ uncontrolledOpen: false, placement: 'bottom', morphTop: 0 });
   }
 
   // Outside-click close: attached only while open (see _onOpened / _onClosed). Guarded
@@ -375,9 +375,9 @@ export default class DatePicker extends PuzzleView {
     // Stash the pre-decided side FIRST so it's in place before the parent's @show
     // handler (controlled mode) synchronously flips `open` and re-renders.
     if (this._controlled()) {
-      this.setData({ placement });
+      this.setState({ placement });
     } else {
-      this.setData({ uncontrolledOpen: true, placement });
+      this.setState({ uncontrolledOpen: true, placement });
     }
 
     const { show } = this.props;
@@ -412,7 +412,7 @@ export default class DatePicker extends PuzzleView {
       // `open` (→ _onClosed) once it has animated away.
       this._morph.hide();
     } else {
-      this.setData({ uncontrolledOpen: false });
+      this.setState({ uncontrolledOpen: false });
       this.refresh();
     }
   }
@@ -420,7 +420,7 @@ export default class DatePicker extends PuzzleView {
   // ---- open / close side-effects (driven by the effective-open transition) --
 
   // Fires whenever effective-open actually changes, so it covers both the uncontrolled
-  // setData flip and a controlled parent flipping the prop. Mirrors Dialog's syncOpen().
+  // setState flip and a controlled parent flipping the prop. Mirrors Dialog's syncOpen().
   _syncOpenEffects() {
     const open = this._effectiveOpen();
     if (open && !this._wasOpen) {
@@ -464,7 +464,7 @@ export default class DatePicker extends PuzzleView {
       // `autofocus` already put focus on the active day cell at the pre-decided side.
       const corrected = this._measurePlacement();
       if (corrected !== this.getData().placement) {
-        this.setData({ placement: corrected });
+        this.setState({ placement: corrected });
         this.refresh();
       }
     });
@@ -489,7 +489,7 @@ export default class DatePicker extends PuzzleView {
     );
     top += clamped - screenTop;
 
-    this.setData({ morphTop: Math.round(top) });
+    this.setState({ morphTop: Math.round(top) });
     this.refresh();
   }
 
@@ -498,7 +498,7 @@ export default class DatePicker extends PuzzleView {
     // trigger `visibility:hidden` forever; stop() is a no-op on an idle engine.
     this._morph?.stop();
     document.removeEventListener('pointerdown', this._onDocPointer);
-    this.setData({ placement: 'bottom', morphTop: 0 });
+    this.setState({ placement: 'bottom', morphTop: 0 });
     if (this._pendingRestoreFocus) {
       this.element?.querySelector('[data-datepicker-trigger]')?.focus();
     }
@@ -515,7 +515,7 @@ export default class DatePicker extends PuzzleView {
       this._focusActiveCell();
     });
     engine.on('hidden', () => {
-      this.setData({ uncontrolledOpen: false });
+      this.setState({ uncontrolledOpen: false });
       this.refresh();
     });
     return engine;

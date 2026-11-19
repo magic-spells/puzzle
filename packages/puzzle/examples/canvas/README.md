@@ -12,7 +12,7 @@ ties the store to a `<canvas>` loop, this app is the **direct-manipulation
 stress test**: a full pointer-gesture state machine (move / resize /
 marquee / reorder) layered over pure store-driven rendering. The core
 pattern throughout: **the store is the document, gestures are ephemeral** —
-pointer moves publish through `setData()` + rAF batching and only the drop
+pointer moves publish through `setState()` + rAF batching and only the drop
 commits `record.update()` writes.
 
 ## Run it
@@ -47,7 +47,7 @@ go run ./compiler/cmd/puzzle build examples/canvas
 
 | Feature | Where |
 | ------- | ----- |
-| Ephemeral gesture state vs store commits (the kanban pattern, generalized) | `app/views/Editor.pzl` — `_drag` machine (PENDING → DRAGGING → drop/cancel), rAF-batched `setData` publish, store writes only in `_commitMove`/`_commitResize` |
+| Ephemeral gesture state vs store commits (the kanban pattern, generalized) | `app/views/Editor.pzl` — `_drag` machine (PENDING → DRAGGING → drop/cancel), rAF-batched `setState` publish, store writes only in `_commitMove`/`_commitResize` |
 | Reactive fan-out from `record.update()` | `app/components/Inspector.pzl` — every slider/swatch writes the record; canvas, layers panel, and overlay all re-render from the store subscription |
 | Pure derivation in `data()` | `Editor.pzl` `data()` — render tree, ghost layer, drop-target flag, overlay bounds, and marquee box all derived from records + ephemeral state, no side effects |
 | Component callback props (single-payload convention) | `CanvasShape`/`CanvasFrame` → `this.props.press({ event, id })`; `SelectionOverlay` → `resize({ event, dir })` |

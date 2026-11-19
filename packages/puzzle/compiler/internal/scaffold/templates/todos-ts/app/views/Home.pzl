@@ -3,7 +3,7 @@
     <div class="p-5 border-b border-line">
       <form class="flex items-center gap-2.5" @submit={ addTodo(event) }>
         <!-- `value={ newTodoText }` is the whole binding. `newTodoText` is a
-             bare local key, so every keystroke lands in setData() and data()
+             bare local key, so every keystroke lands in setState() and data()
              re-runs — which is what keeps the disabled= below honest. -->
         <input
           type="text"
@@ -94,7 +94,7 @@ import type { TodoRecord } from '../models/todo';
 
 type Filter = 'all' | 'active' | 'completed';
 
-// Local UI state, owned by this view through setData().
+// Local UI state, owned by this view through setState().
 interface HomeState {
   newTodoText: string;
   currentFilter: Filter;
@@ -119,7 +119,7 @@ export default class TodoHome extends PuzzleView {
 
   // runs one time when object is created, before data() runs
   created(): void {
-    this.setData({
+    this.setState({
       newTodoText: '',
       currentFilter: 'all'
     });
@@ -172,7 +172,7 @@ export default class TodoHome extends PuzzleView {
       if (text) {
         const store = this.ctx.store;
         store.createRecord('todo', { text });
-        this.setData('newTodoText', '');
+        this.setState('newTodoText', '');
       }
     },
 
@@ -181,8 +181,8 @@ export default class TodoHome extends PuzzleView {
     },
 
     setFilter: (filter: Filter): void => {
-      this.setData('currentFilter', filter);
-      // filteredTodos is derived in data(); setData() alone does not re-run
+      this.setState('currentFilter', filter);
+      // filteredTodos is derived in data(); setState() alone does not re-run
       // data() (SPEC §4), so refresh() re-runs it to recompute the filtered
       // list from the just-updated currentFilter.
       this.refresh();

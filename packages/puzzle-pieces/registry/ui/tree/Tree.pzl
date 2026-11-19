@@ -201,7 +201,7 @@ export default class Tree extends PuzzleView {
     // ROVING TABINDEX FOLLOWS FOCUS, NOT SELECTION (APG). Whoever the reader last
     // moved focus to — by arrow key or by click — owns the tree's single Tab stop,
     // so tabbing out and shift-tabbing back returns to where they were rather than
-    // teleporting to the selection. focusedId is local state (setData in
+    // teleporting to the selection. focusedId is local state (setState in
     // _setFocused), carried across data() re-runs through `prev` so a parent
     // re-render cannot lose the reader's place. Two fallbacks in order: the row is
     // gone or now disabled (a collapsed branch, a filtered list) → the selected
@@ -288,13 +288,13 @@ export default class Tree extends PuzzleView {
     this._setFocused(row ? row.id : null);
   }
 
-  // Hand the roving tabindex to `id`. refresh() is what makes it stick: setData
+  // Hand the roving tabindex to `id`. refresh() is what makes it stick: setState
   // alone re-renders without re-running data(), and every row's tabindex is derived
   // there — the attribute would stay on the old row until some unrelated re-render.
   // Rows are keyed by id, so the patch reuses the same <li> and DOM focus survives.
   _setFocused(id) {
     if (!id || this.getData().focusedId === id) return;
-    this.setData({ focusedId: id });
+    this.setState({ focusedId: id });
     this.refresh();
   }
 

@@ -278,7 +278,7 @@ export default class MultiSelect extends PuzzleView {
     this._scrollActive = false; // scroll the active option into view after next render
     this._openSeeded = false; // did this open pass already seed query/active/placement?
     this._pendingRestoreFocus = true; // whether the next close refocuses the input
-    this.setData({
+    this.setState({
       uncontrolledOpen: false,
       query: '',
       activeIndex: -1,
@@ -596,9 +596,9 @@ export default class MultiSelect extends PuzzleView {
     if (this._effectiveOpen()) return;
     const base = this._seedOpen();
     if (this._controlled()) {
-      this.setData(base);
+      this.setState(base);
     } else {
-      this.setData({ ...base, uncontrolledOpen: true });
+      this.setState({ ...base, uncontrolledOpen: true });
     }
 
     const { show } = this.props;
@@ -616,10 +616,10 @@ export default class MultiSelect extends PuzzleView {
 
     if (this._controlled()) {
       // Parent owns `open`; clear the local query so the reopened control is blank.
-      this.setData({ query: '' });
+      this.setState({ query: '' });
       return;
     }
-    this.setData({ uncontrolledOpen: false, query: '' });
+    this.setState({ uncontrolledOpen: false, query: '' });
     this.refresh();
   }
 
@@ -648,7 +648,7 @@ export default class MultiSelect extends PuzzleView {
     document.addEventListener('pointerdown', this._onDocPointer);
     // Fallback seed: a controlled parent may flip `open` true with no interaction.
     if (!this._openSeeded) {
-      this.setData(this._seedOpen());
+      this.setState(this._seedOpen());
       this.refresh();
     }
     this._openSeeded = false;
@@ -659,7 +659,7 @@ export default class MultiSelect extends PuzzleView {
 
   _onClosed() {
     document.removeEventListener('pointerdown', this._onDocPointer);
-    this.setData({ placement: 'bottom', maxHeight: 0 });
+    this.setState({ placement: 'bottom', maxHeight: 0 });
     if (this._pendingRestoreFocus) {
       this.element?.querySelector('[data-multiselect-input]')?.focus();
     }
@@ -695,7 +695,7 @@ export default class MultiSelect extends PuzzleView {
   _setActive(i, scroll) {
     if (i < 0) return;
     this._scrollActive = !!scroll;
-    this.setData({ activeIndex: i });
+    this.setState({ activeIndex: i });
     this.refresh();
   }
 
@@ -720,7 +720,7 @@ export default class MultiSelect extends PuzzleView {
 
     const { options } = this._build(this.props, '', new Set(next));
     this._scrollActive = false;
-    this.setData({ query: '', activeIndex: this._firstEnabled(options) });
+    this.setState({ query: '', activeIndex: this._firstEnabled(options) });
     this.refresh();
     this.element?.querySelector('[data-multiselect-input]')?.focus({ preventScroll: true });
   }
@@ -741,7 +741,7 @@ export default class MultiSelect extends PuzzleView {
       const { activeIndex } = this.getData();
       const ai = activeIndex >= 0 && activeIndex < options.length ? activeIndex : this._firstEnabled(options);
       this._scrollActive = false;
-      this.setData({ activeIndex: ai });
+      this.setState({ activeIndex: ai });
       this.refresh();
     }
     this.element?.querySelector('[data-multiselect-input]')?.focus({ preventScroll: true });
@@ -785,15 +785,15 @@ export default class MultiSelect extends PuzzleView {
         this._openSeeded = true;
         const base = { query, activeIndex: ai, placement, maxHeight };
         if (this._controlled()) {
-          this.setData(base);
+          this.setState(base);
         } else {
-          this.setData({ ...base, uncontrolledOpen: true });
+          this.setState({ ...base, uncontrolledOpen: true });
         }
         const { show } = this.props;
         if (typeof show === 'function') show();
         if (!this._controlled()) this.refresh();
       } else {
-        this.setData({ query, activeIndex: ai });
+        this.setState({ query, activeIndex: ai });
         this.refresh();
       }
     },

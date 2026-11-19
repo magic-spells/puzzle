@@ -231,7 +231,7 @@ export default class EmojiPicker extends PuzzleView {
     this._wasOpen = false; // last effective-open seen by the transition detector
     this._scrollActive = false; // scroll the active cell into view after next render
     this._pendingRestoreFocus = true; // whether the next close refocuses the trigger
-    this.setData({
+    this.setState({
       uncontrolledOpen: false,
       query: '',
       activeIndex: 0,
@@ -443,9 +443,9 @@ export default class EmojiPicker extends PuzzleView {
     const seed = { query: '', activeIndex: 0, placement };
 
     if (this._controlled()) {
-      this.setData(seed);
+      this.setState(seed);
     } else {
-      this.setData({ ...seed, uncontrolledOpen: true });
+      this.setState({ ...seed, uncontrolledOpen: true });
     }
 
     const { show } = this.props;
@@ -473,7 +473,7 @@ export default class EmojiPicker extends PuzzleView {
       // tears down `open` (→ _onClosed) once it has animated away.
       this._morph.hide();
     } else {
-      this.setData({ uncontrolledOpen: false });
+      this.setState({ uncontrolledOpen: false });
       this.refresh();
     }
   }
@@ -520,7 +520,7 @@ export default class EmojiPicker extends PuzzleView {
 
       const corrected = this._measurePlacement();
       if (corrected !== this.getData().placement) {
-        this.setData({ placement: corrected });
+        this.setState({ placement: corrected });
         this.refresh();
       }
       this._focusSearch();
@@ -545,7 +545,7 @@ export default class EmojiPicker extends PuzzleView {
     );
     top += clamped - screenTop;
 
-    this.setData({ morphTop: Math.round(top) });
+    this.setState({ morphTop: Math.round(top) });
     this.refresh();
   }
 
@@ -554,7 +554,7 @@ export default class EmojiPicker extends PuzzleView {
     // trigger `visibility:hidden` forever; stop() is a no-op on an idle engine.
     this._morph?.stop();
     document.removeEventListener('pointerdown', this._onDocPointer);
-    this.setData({ placement: 'bottom', morphTop: 0, query: '', activeIndex: 0 });
+    this.setState({ placement: 'bottom', morphTop: 0, query: '', activeIndex: 0 });
     if (this._pendingRestoreFocus) {
       this.element?.querySelector('[data-emoji-trigger]')?.focus();
     }
@@ -568,7 +568,7 @@ export default class EmojiPicker extends PuzzleView {
       this._focusSearch();
     });
     engine.on('hidden', () => {
-      this.setData({ uncontrolledOpen: false });
+      this.setState({ uncontrolledOpen: false });
       this.refresh();
     });
     return engine;
@@ -584,7 +584,7 @@ export default class EmojiPicker extends PuzzleView {
     const { options } = this.getData();
     if (i < 0 || i >= options.length) return;
     this._scrollActive = !!scroll;
-    this.setData({ activeIndex: i });
+    this.setState({ activeIndex: i });
     this.refresh();
   }
 
@@ -641,7 +641,7 @@ export default class EmojiPicker extends PuzzleView {
     // Every keystroke re-filters and reseats the active cell on the first result.
     onInput: (event) => {
       this._scrollActive = false;
-      this.setData({ query: event.target.value, activeIndex: 0 });
+      this.setState({ query: event.target.value, activeIndex: 0 });
       this.refresh();
     },
 

@@ -164,7 +164,7 @@ const codeHero = `const frameworks = [
 const codeBasic = `// Selected options are hidden from the list — the chips carry them.
 // Remove a chip (× or Backspace on an empty input) to re-add it.
 setPicks(next) {
-  this.setData('picks', next);
+  this.setState('picks', next);
 }
 
 <MultiSelect
@@ -212,7 +212,7 @@ const codeKeyboard = `<MultiSelect options={ frameworks } value={ picks } @chang
 
 export default class MultiSelectDoc extends PuzzleView {
   created() {
-    this.setData({
+    this.setState({
       picks: ['svelte'],
       basicPicks: ['next', 'astro'],
       tech: ['ts'],
@@ -267,25 +267,25 @@ export default class MultiSelectDoc extends PuzzleView {
 
   events = {
     setPicks: (v) => {
-      this.setData('picks', v);
+      this.setState('picks', v);
     },
     setBasicPicks: (v) => {
-      this.setData('basicPicks', v);
+      this.setState('basicPicks', v);
     },
     setTech: (v) => {
-      this.setData('tech', v);
+      this.setState('tech', v);
     },
     setErrPicks: (v) => {
-      this.setData('errPicks', v);
+      this.setState('errPicks', v);
     },
     setControlledPicks: (v) => {
-      this.setData('controlledPicks', v);
+      this.setState('controlledPicks', v);
     },
     onShow: () => {
-      this.setData('msOpen', true);
+      this.setState('msOpen', true);
     },
     onHide: () => {
-      this.setData('msOpen', false);
+      this.setState('msOpen', false);
     },
   };
 }

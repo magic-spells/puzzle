@@ -96,7 +96,7 @@ import {
 // Slider — a touch-friendly single-value or dual-thumb range slider, ported
 // from the @magic-spells/range-slider web component. A CONTROLLED component:
 // the parent owns the committed value(s) and passes them as props; the slider
-// keeps only its live drag position internally (setData draft) and reports
+// keeps only its live drag position internally (setState draft) and reports
 // changes through value-first callbacks.
 //
 //   single:  <Slider value={ vol } min={ 0 } max={ 100 } @change={ setVol } />
@@ -300,7 +300,7 @@ export default class Slider extends PuzzleView {
     };
     // Local draft (drives rendering while dragging / settling). draftThumb null
     // means "render the committed value straight from props".
-    this.setData({ dragging: false, draftThumb: null, draftValue: null });
+    this.setState({ dragging: false, draftThumb: null, draftValue: null });
   }
 
   destroyed() {
@@ -411,7 +411,7 @@ export default class Slider extends PuzzleView {
       this._pendingClearCheck = false;
       const now = this.getData();
       if (now.draftThumb != null && !now.dragging) {
-        this.setData({ draftThumb: null, draftValue: null });
+        this.setState({ draftThumb: null, draftValue: null });
         this.refresh();
       }
     });
@@ -528,7 +528,7 @@ export default class Slider extends PuzzleView {
     return dMin < dMax ? 'min' : 'max';
   }
 
-  // --- gesture bookkeeping (transient — never setData, must not re-render) ----
+  // --- gesture bookkeeping (transient — never setState, must not re-render) ----
 
   _resetDrag() {
     this._drag = {
@@ -613,7 +613,7 @@ export default class Slider extends PuzzleView {
       this._overlayTimer = null;
       const d = this.getData();
       if (d.draftThumb != null && !d.dragging) {
-        this.setData({ draftThumb: null, draftValue: null });
+        this.setState({ draftThumb: null, draftValue: null });
         this.refresh();
       }
     }, 90);
@@ -662,7 +662,7 @@ export default class Slider extends PuzzleView {
     const nv = normalize(raw, drag.thumb, cfg, committed);
     const d = this.getData();
     if (d.draftThumb !== drag.thumb || d.draftValue !== nv || !d.dragging) {
-      this.setData({ dragging: true, draftThumb: drag.thumb, draftValue: nv });
+      this.setState({ dragging: true, draftThumb: drag.thumb, draftValue: nv });
       this.refresh();
       this._emit('input', cfg, drag.thumb, nv, committed);
     }
@@ -682,7 +682,7 @@ export default class Slider extends PuzzleView {
       const finalValue = this.getData().draftValue;
       // dragging → false re-enables transitions; the overlay stays until props
       // catch up (afterUpdate) or the fallback timer reverts it.
-      this.setData({ dragging: false });
+      this.setState({ dragging: false });
       this.refresh();
       if (finalValue !== startValue) {
         this._emit('change', cfg, thumb, finalValue, committed);
@@ -696,7 +696,7 @@ export default class Slider extends PuzzleView {
       this._suppressClick = true;
       const nv = normalize(percentToValue(percent, cfg), tapThumb, cfg, committed);
       if (nv !== this._channel(committed, tapThumb)) {
-        this.setData({ dragging: false, draftThumb: tapThumb, draftValue: nv });
+        this.setState({ dragging: false, draftThumb: tapThumb, draftValue: nv });
         this.refresh();
         this._emit('input', cfg, tapThumb, nv, committed);
         this._emit('change', cfg, tapThumb, nv, committed);
@@ -745,7 +745,7 @@ export default class Slider extends PuzzleView {
           startY: event.clientY,
           startValue,
         };
-        this.setData({ dragging: true, draftThumb: thumb, draftValue: startValue });
+        this.setState({ dragging: true, draftThumb: thumb, draftValue: startValue });
         this.refresh();
         if (thumbEl.focus) thumbEl.focus({ preventScroll: true });
         this._capturePointer(event);
@@ -812,7 +812,7 @@ export default class Slider extends PuzzleView {
       // Keys are commits (native <input type=range> parity): fire @input AND
       // @change. Overlay optimistically so the thumb animates even before props
       // land (transitions on because dragging is false).
-      this.setData({ dragging: false, draftThumb: thumb, draftValue: nv });
+      this.setState({ dragging: false, draftThumb: thumb, draftValue: nv });
       this.refresh();
       this._emit('input', cfg, thumb, nv, committed);
       this._emit('change', cfg, thumb, nv, committed);

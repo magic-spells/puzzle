@@ -39,7 +39,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class PlaygroundView extends PuzzleView {
   created() {
-    this.setData({ text: '' });
+    this.setState({ text: '' });
   }
 
   data() {
@@ -50,7 +50,7 @@ export default class PlaygroundView extends PuzzleView {
 
   events = {
     update: (event) => {
-      this.setData('text', event.target.value);
+      this.setState('text', event.target.value);
       // wordCount is derived in data(), so re-run it (SPEC §4).
       this.refresh();
     },

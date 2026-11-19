@@ -63,7 +63,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // samples directly — NOT through rAF: scroll fires once per frame, before rAF
 // callbacks, so the sample lands before the next streamed render appends (a
 // rAF sample measured that growth as the reader leaving, and unpinned). It
-// calls setData only when pinned flips. The observer is torn down in
+// calls setState only when pinned flips. The observer is torn down in
 // destroyed(). On mount the viewport starts scrolled to the bottom.
 //
 // Props:
@@ -187,7 +187,7 @@ export default class ChatScroller extends PuzzleView {
       return;
     }
     if (pinned !== this.getData().pinned) {
-      this.setData({ pinned });
+      this.setState({ pinned });
       const { pin } = this.props;
       if (typeof pin === 'function') pin(pinned);
     }
@@ -206,7 +206,7 @@ export default class ChatScroller extends PuzzleView {
       }, JUMP_RELEASE_MS);
       this.scrollToBottom(true);
       if (!this.getData().pinned) {
-        this.setData({ pinned: true });
+        this.setState({ pinned: true });
         const { pin } = this.props;
         if (typeof pin === 'function') pin(true);
       }

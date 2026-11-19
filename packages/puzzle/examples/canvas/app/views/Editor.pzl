@@ -96,9 +96,9 @@ const RESIZE_CURSORS = {
   e: 'ew-resize', w: 'ew-resize',
 };
 
-// The canvas editor. `selectedIds` is LOCAL ephemeral state (setData), read back
+// The canvas editor. `selectedIds` is LOCAL ephemeral state (setState), read back
 // inside data() the kanban way. `drag` is the OTHER ephemeral channel: a pointer
-// gesture (move / resize / marquee) publishes its live state through setData +
+// gesture (move / resize / marquee) publishes its live state through setState +
 // this.refresh(), and data() derives the render tree from it — NO store writes
 // happen until the gesture drops (see _commitMove / _commitResize).
 //
@@ -110,7 +110,7 @@ const RESIZE_CURSORS = {
 // drop-time only.
 export default class Editor extends PuzzleView {
   created() {
-    this.setData({ selectedIds: [], drag: null });
+    this.setState({ selectedIds: [], drag: null });
     this._drag = null;
     this._raf = null;
     this._stageEl = null;
@@ -317,7 +317,7 @@ export default class Editor extends PuzzleView {
       if (event.target.closest('[data-el-id]')) return;
       if (event.button !== undefined && event.button !== 0) return;
 
-      this.setData({ selectedIds: [] });
+      this.setState({ selectedIds: [] });
 
       this._stageEl = this.element.querySelector('[data-stage]');
       const rect = this._stageEl.getBoundingClientRect();
@@ -391,7 +391,7 @@ export default class Editor extends PuzzleView {
       );
 
       store.createRecord('element', data);
-      this.setData({ selectedIds: [data.id] });
+      this.setState({ selectedIds: [data.id] });
       this.refresh();
     },
   };
@@ -414,7 +414,7 @@ export default class Editor extends PuzzleView {
       selectedIds = [id];
     }
 
-    this.setData({ selectedIds });
+    this.setState({ selectedIds });
     this.refresh();
   }
 
@@ -595,7 +595,7 @@ export default class Editor extends PuzzleView {
     if (!d) return;
 
     if (d.mode === 'resize') {
-      this.setData({ drag: { mode: 'resize', id: d.id, box: d.box, stackChild: d.stackChild } });
+      this.setState({ drag: { mode: 'resize', id: d.id, box: d.box, stackChild: d.stackChild } });
       this.refresh();
       return;
     }
@@ -611,7 +611,7 @@ export default class Editor extends PuzzleView {
           return boxesIntersect(box, { x: abs.x, y: abs.y, w: e.w, h: e.h });
         })
         .map((e) => e.id);
-      this.setData({ selectedIds: ids, drag: { mode: 'marquee', box } });
+      this.setState({ selectedIds: ids, drag: { mode: 'marquee', box } });
       this.refresh();
       return;
     }
@@ -641,7 +641,7 @@ export default class Editor extends PuzzleView {
       if (f) targetFrameId = f.id;
     }
 
-    this.setData({
+    this.setState({
       drag: {
         mode: 'move',
         ids: d.ids,
@@ -668,7 +668,7 @@ export default class Editor extends PuzzleView {
       // marquee: selection already committed to selectedIds during the drag.
     } else if (d.clickCandidate) {
       // Release without a drag: collapse the multi-selection to the pressed one.
-      this.setData({ selectedIds: [d.clickCandidate] });
+      this.setState({ selectedIds: [d.clickCandidate] });
     }
 
     this._cleanup(true);
@@ -794,7 +794,7 @@ export default class Editor extends PuzzleView {
 
     this._drag = null;
     this._stageEl = null;
-    this.setData({ drag: null });
+    this.setState({ drag: null });
     if (refresh) this.refresh();
   }
 
@@ -811,7 +811,7 @@ export default class Editor extends PuzzleView {
     const selectedIds = (this.getData().selectedIds || []).slice();
 
     if (event.key === 'Escape') {
-      this.setData({ selectedIds: [] });
+      this.setState({ selectedIds: [] });
       this.refresh();
       return;
     }
@@ -820,7 +820,7 @@ export default class Editor extends PuzzleView {
       if (!selectedIds.length) return;
       event.preventDefault();
       deleteElements(store, selectedIds);
-      this.setData({ selectedIds: [] });
+      this.setState({ selectedIds: [] });
       this.refresh();
       return;
     }
@@ -829,7 +829,7 @@ export default class Editor extends PuzzleView {
       if (!selectedIds.length) return;
       event.preventDefault();
       const newIds = duplicateElements(store, selectedIds);
-      this.setData({ selectedIds: newIds });
+      this.setState({ selectedIds: newIds });
       this.refresh();
       return;
     }

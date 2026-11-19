@@ -243,7 +243,7 @@ export default class DataTable extends PuzzleView {
   created() {
     // Internal state, used only in the uncontrolled arm of each optional-controlled
     // prop. When a prop is passed (props.x !== undefined) the prop wins and these are ignored.
-    this.setData({ uncontrolledSort: null, uncontrolledSelected: [], uncontrolledPage: 1 });
+    this.setState({ uncontrolledSort: null, uncontrolledSelected: [], uncontrolledPage: 1 });
     this._warnedRowKey = false;
   }
 
@@ -276,7 +276,7 @@ export default class DataTable extends PuzzleView {
 
   _commitSort(next) {
     if (!this._sortControlled()) {
-      this.setData('uncontrolledSort', next);
+      this.setState('uncontrolledSort', next);
       this.refresh();
     }
     const { sortChange } = this.props;
@@ -284,7 +284,7 @@ export default class DataTable extends PuzzleView {
   }
   _commitSelected(keys, event) {
     if (!this._selectedControlled()) {
-      this.setData('uncontrolledSelected', keys);
+      this.setState('uncontrolledSelected', keys);
       this.refresh();
     }
     const { select } = this.props;
@@ -292,7 +292,7 @@ export default class DataTable extends PuzzleView {
   }
   _commitPage(n) {
     if (!this._pageControlled()) {
-      this.setData('uncontrolledPage', n);
+      this.setState('uncontrolledPage', n);
       this.refresh();
     }
     const { pageChange } = this.props;
