@@ -72,6 +72,8 @@ import { installFixtures, DEFAULT_FIXTURE_SEED } from '@magic-spells/puzzle/fixt
 import type { FixturesConfig } from '@magic-spells/puzzle/fixtures';
 import { hashRouter, memoryRouter } from '@magic-spells/puzzle/router-modes';
 import type { RouterMode } from '@magic-spells/puzzle/router-modes';
+import { createForm } from '@magic-spells/puzzle/forms';
+import type { PuzzleForm, FormOptions } from '@magic-spells/puzzle/forms';
 import { enableMorph } from '@magic-spells/puzzle/morph';
 import type { MorphEngine } from '@magic-spells/puzzle/morph';
 import {
@@ -541,6 +543,7 @@ const config: PuzzleAppConfig = {
 			'refresh',
 			'render',
 			'bind',
+			'submit',
 			'enter',
 			'leave',
 			'unmount',
@@ -1076,3 +1079,28 @@ import.meta.env.API_URL = 'changed';
 import.meta.env = {};
 // @ts-expect-error augmented keys keep their exact types
 const wrongEnv: number = import.meta.env.API_URL;
+
+// ---- `@magic-spells/puzzle/forms` (D192) -----------------------------------
+class FormPost extends PuzzleModel {
+	static schema = { id: Puzzle.string().primary(), title: Puzzle.string().required() };
+}
+class EditFormPost extends PuzzleView {
+	form!: PuzzleForm<{ title: string }>;
+	created() {
+		const options: FormOptions<{ title: string }> = { fields: ['title'], key: 'post' };
+		this.form = createForm<{ title: string }>(this, FormPost, options);
+		const title: string = this.form.values.title;
+		const message: string | null = this.form.errors.title;
+		const flags: boolean[] = [this.form.touched.title, this.form.changed.title, this.form.dirty, this.form.valid, this.form.submitting];
+		this.form.set('title', 'next');
+		this.form.touch('title');
+		// @ts-expect-error a field the form does not declare
+		this.form.set('nope', 1);
+		const done: Promise<boolean> = this.form.submit(null, (values) => values.title.length);
+		const done2: Promise<boolean> = this.form.submit((values) => values.title);
+		this.form.reset();
+		this.form.reset({ title: 'seed' });
+		void [title, message, flags, done, done2];
+	}
+}
+void EditFormPost;

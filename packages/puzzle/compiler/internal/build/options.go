@@ -318,6 +318,8 @@ func aliasRuntime(buildOpts *api.BuildOptions, pl *plugin.Plugin, runtime string
 	buildOpts.Alias["@magic-spells/puzzle"] = runtime
 	buildOpts.Alias["@magic-spells/puzzle/adapter"] = filepath.Join(dir, "datastore", "adapter.js")
 	buildOpts.Alias["@magic-spells/puzzle/morph"] = filepath.Join(dir, "morph.js")
+	// The opt-in forms controller (D192): only an app that imports it ships it.
+	buildOpts.Alias["@magic-spells/puzzle/forms"] = filepath.Join(dir, "forms.js")
 	// The opt-in router modes (D159): hashRouter()/memoryRouter() live in their
 	// own module so a path-mode app never pulls them into the graph.
 	buildOpts.Alias["@magic-spells/puzzle/router-modes"] = filepath.Join(dir, "router", "modes.js")

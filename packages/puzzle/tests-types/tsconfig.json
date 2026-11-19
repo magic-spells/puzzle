@@ -11,6 +11,7 @@
     "paths": {
       "@magic-spells/puzzle": ["../types/index.d.ts"],
       "@magic-spells/puzzle/adapter": ["../types/adapter.d.ts"],
+      "@magic-spells/puzzle/forms": ["../types/forms.d.ts"],
       "@magic-spells/puzzle/morph": ["../types/morph.d.ts"],
       "@magic-spells/puzzle/router-modes": ["../types/router-modes.d.ts"],
       "@magic-spells/puzzle/ssg": ["../types/ssg.d.ts"],

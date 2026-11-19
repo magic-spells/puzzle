@@ -581,7 +581,8 @@ Form controls bind themselves — write NO input handler:
 <input type="number" value={ profile.hue } />         <!-- commits on change -->
 ```
 
-- Binds when the expression is exactly `ident` or `ident.ident` on a plain
+- Binds when the expression is a plain path (`draft`, `profile.hue`,
+  `form.values.title`: any depth of `.name` steps, no `[k]` or `?.`) on a plain
   `<input>`/`<textarea>`/`<select>` with no author `@input`/`@change`, no
   static `readonly`/`disabled`, and an absent or static classifiable `type`.
   Never on components (their `value` is a plain prop). Excluded: radio, file,
@@ -598,7 +599,9 @@ Form controls bind themselves — write NO input handler:
   (dev warns once per key).
 - Constrained fields (`required()`, `min(3)`): bind a local draft, commit
   with `record.update()` on submit, pre-check with the non-throwing
-  `validate()` — a bind can never clear a `required()` field.
+  `validate()` — a bind can never clear a `required()` field. The optional
+  `@magic-spells/puzzle/forms` module (puzzle ≥ 0.10.0, below) does this
+  bookkeeping for you.
 - Opting out needs no syntax: write your own `@input`/`@change` (the author
   handler owns the write — nothing is synthesized), use a non-path expression
   (`value={ x ?? '' }`), or add static `readonly`. Migration gotcha: a
@@ -607,6 +610,50 @@ Form controls bind themselves — write NO input handler:
   semantics (Enter-commit / Escape-cancel).
 - In tests, `await handle.type('input.search', 'hello')` (from
   `@magic-spells/puzzle/testing`) drives a bound control and settles.
+
+## Forms (puzzle ≥ 0.10.0)
+
+For a form with rules, use the optional `/forms` module instead of hand-rolling
+the draft, errors and submitting flag:
+
+```html
+<form @submit={ save(event) } @focusout={ touch(event) } novalidate>
+  <input name="title" value={ form.values.title } />
+  {#if form.errors.title}<p class="error">{ form.errors.title }</p>{/if}
+  <Field form={ form } name="body" label="Body" />
+  {#if form.error}<p class="error">{ form.error }</p>{/if}
+  <button disabled={ form.submitting }>Save</button>
+</form>
+```
+
+```js
+import { createForm } from '@magic-spells/puzzle/forms';
+
+export default class EditPost extends PuzzleView {
+  created() {
+    this.form = createForm(this, Post, { from: this.props.post, fields: ['title', 'body'] });
+  }
+  events = {
+    save: (event) => this.form.submit(event, (values) => this.props.post.update(values)),
+    touch: (event) => this.form.touch(event),
+  };
+}
+```
+
+- `createForm(view, Model, { from, fields, key, serverErrors })` writes the
+  controller to view state under `key` (default `'form'`). Name the import
+  `createForm`; never import it as `form`, or the template's `form` reads the
+  import (undefined in templates) instead of the state key.
+- `form.values.x` binds directly. Rules come from `Model.validate()`; an error
+  shows once the field is touched (blurred, given a `name`) or after a submit
+  attempt, then clears as soon as the value is fixed.
+- `submit(event, fn)` validates, focuses the first invalid control, guards a
+  double submit, and awaits `fn(values)`. A thrown `PuzzleValidationError` or a
+  4xx body with `errors` maps onto fields; anything else becomes `form.error`
+  and reaches `onError` with `phase: 'submit'`. It resolves `true` on success.
+- `form.dirty`, `form.changed.x`, `form.valid`, `form.reset(from?)`. Reseed
+  after the record reloads with `form.reset(newRecord)`.
+- The Field piece takes `form` + `name` and wires value, error and blur itself.
 
 ## Routing
 

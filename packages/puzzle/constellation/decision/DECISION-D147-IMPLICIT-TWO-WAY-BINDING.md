@@ -23,6 +23,7 @@ connections:
   - DOC-SPEC-TEMPLATE
   - COMPONENT-TEMPLATE-PARSER
   - DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS
+  - DECISION-D192-FORMS-MODULE
 verified_at: '2026-11-01T19:19:25.478Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 code_refs:
@@ -54,11 +55,13 @@ controlled props, caret-safe live-DOM compare (`syncControl`) and
 1. Tag is a plain `<input>`, `<textarea>` or `<select>` — never a component
    (component `value` is a plain prop, [[DECISION-D16-COMPOSITION-SLOTS-CALLBACKS]]).
 2. The `value`/`checked` attr name is spelled exactly (lowercase: the runtime's
-   controlled-prop lookup is case-sensitive) and its expression is exactly
-   `ident` or `ident.ident`. Literals, calls, operators, computed or optional
-   steps and deeper paths (`a.b.c`) never classify. A bare `{#for}` variable
-   doesn't classify; a loop variable as the root of a member path
-   (`todo.completed`) does.
+   controlled-prop lookup is case-sensitive) and its expression is a plain
+   path: `ident`, or an identifier followed by any number of plain `.name`
+   steps (`draft`, `profile.hue`, `form.values.title`). Literals, calls,
+   operators, `this`, and computed (`a[k]`) or optional (`a?.b`) steps
+   anywhere in the chain never classify. A bare `{#for}` variable doesn't
+   classify; a loop variable as the root of a member path (`todo.completed`,
+   `row.meta.done`) does.
 3. No author `@input` or `@change` (any modifiers) — the author owns the write.
    Other events (`@keydown:enter`, `@blur`) do not suppress.
 4. No static `readonly` or `disabled`; no `<select multiple>`.
@@ -95,9 +98,13 @@ A render-time call under a distinct listener key, riding the modifier channel:
 '@input:bind': this.__bind(null, 'draft', 'v')              // local state
 '@change:bind': this.__bind(s.item ?? 0, 'completed', 'c')  // {#for} member (D170 row item)
 '@change:bind': this.__bind(__d.profile ?? 0, 'hue', 'vn')  // data-root member
+'@input:bind': this.__bind(__d.form?.values ?? 0, 'title', 'v')  // deeper path
 ```
 
-It consumes no `__h` handler-site index ([[DECISION-D62-HANDLER-CACHING]]).
+The target is the path minus its last step and the key is that last step, so
+`a.b.c` writes `c` on whatever `a.b` is at render time. Steps after the root
+read with `?.`, so a missing link anywhere in the chain is as inert as a
+missing root. It consumes no `__h` handler-site index ([[DECISION-D62-HANDLER-CACHING]]).
 Inside a lowered `{#for}` the target is `s.item`, the row's current record at
 write time, so a bind after a reorder writes the live record. The `?? 0`
 coalesce keeps a missing root inert instead of falling into the local arm.
@@ -139,13 +146,16 @@ row block re-asserts its collected control vnodes through the same
   object (`this.memo(...)`), a record, or a bare local.
 - **Constrained fields** — a `required()` field can't be cleared via bind; bind
   a local draft and commit on submit, using `record.validate()` for form UX.
+  The optional `/forms` module ([[DECISION-D192-FORMS-MODULE]]) holds that draft
+  and binds as `value={ form.values.title }`.
 - **IME** — only the write side is guarded. A re-render from elsewhere
   mid-composition still re-asserts the stale value into the composing element;
   a patch-side guard is not implemented.
 - **Islands** — a bind inside a [[DECISION-D44-DOM-ISLANDS]] subtree attaches at
   mount and survives the freeze.
 - **Display-only paths write back** — a handler-less path-shaped `value=` binds
-  even when meant for display or paired only with key/blur handlers. An edit
+  at any depth (`settings.theme.name` included) even when meant for display or
+  paired only with key/blur handlers. An edit
   buffer needs a non-path expression (`value={ playlist.name ?? '' }` in
   `examples/music` Playlist). Grep compiled output for `__bind(` to audit.
 
@@ -164,6 +174,10 @@ row block re-asserts its collected control vnodes through the same
 - Running the author handler and the auto-write — double writes stomp clamping
   handlers.
 - Warning on non-classifying expressions — spam on legitimate display bindings.
+- Capping paths at two steps (`ident.ident`). It kept the classifier trivial,
+  but a nested plain object (`user.address.city`) or a form controller's
+  `form.values.title` then needed a hand-written `@input`, and the runtime's
+  plain-object arm already writes any object, so the cap bought nothing.
 
 ## Consequences
 

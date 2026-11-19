@@ -54,6 +54,7 @@ npm install -D @magic-spells/puzzle
 - **Component families** — related components import as one unit and invoke with dot notation (`<Frame.Wrapper>`), scaffolded by `puzzle generate component Frame --family Wrapper,Content`
 - **Reactive data** with automatic view updates
 - **Two-way form binding with no directive** — `value={ draft }` and `checked={ todo.completed }` read *and* write; the compiler synthesizes the handler, so there is no `bind:` prefix and no mirror handler to maintain
+- **Forms without the bookkeeping** — `createForm(this, Post, { from: post })` from the opt-in `@magic-spells/puzzle/forms` subpath gives a bindable draft (`value={ form.values.title }`), errors from the model's rules shown once a field is touched, `dirty`/`changed`, a double-submit guard, server field errors mapped back onto fields, and `reset()`
 - **Model/store architecture** with adapters, relationships, schema validation, persistence, and read/write server sync — opt-in via the `@magic-spells/puzzle/adapter` subpath (local-only apps ship none of it)
 - **Server data with no loading code** — `findOne`/`findMany` inside a view's `data()` fetch whatever the store is missing and settle before the view commits, so a committed `null` always means "does not exist", never "still loading"
 - **Template expressions that are JavaScript** — `{ truncate(title.toLowerCase(), 40) }`, `{#for t in todos.filter(t => !t.done)}`: one closed grammar and method table, parsed once and shared with Magic Spells Sites, with display functions called like any function
