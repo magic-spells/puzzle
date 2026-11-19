@@ -46,6 +46,10 @@
 			"types": "./types/fixtures.d.ts",
 			"default": "./client-runtime/fixtures/index.js"
 		},
+		"./vitest": {
+			"types": "./types/vitest.d.ts",
+			"default": "./client-runtime/vitest/index.js"
+		},
 		"./puzzle-env": {
 			"types": "./puzzle-env.d.ts"
 		},

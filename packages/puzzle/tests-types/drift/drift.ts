@@ -48,6 +48,8 @@ import type * as TestingRuntime from '../../client-runtime/testing/index.js';
 import type * as TestingTypes from '../../types/testing.js';
 import type * as FixturesRuntime from '../../client-runtime/fixtures/index.js';
 import type * as FixturesTypes from '../../types/fixtures.js';
+import type * as VitestRuntime from '../../client-runtime/vitest/index.js';
+import type * as VitestTypes from '../../types/vitest.js';
 
 declare function undeclared<Runtime, Types, Internal = never>(): Exclude<
 	keyof Runtime,
@@ -136,3 +138,8 @@ export const fixturesUnimplemented: never = unimplemented<
 	typeof FixturesTypes
 >();
 export const fixturesMismatched: never = mismatched<typeof FixturesRuntime, typeof FixturesTypes>();
+
+// ---- `@magic-spells/puzzle/vitest` -----------------------------------------
+export const vitestUndeclared: never = undeclared<typeof VitestRuntime, typeof VitestTypes>();
+export const vitestUnimplemented: never = unimplemented<typeof VitestRuntime, typeof VitestTypes>();
+export const vitestMismatched: never = mismatched<typeof VitestRuntime, typeof VitestTypes>();

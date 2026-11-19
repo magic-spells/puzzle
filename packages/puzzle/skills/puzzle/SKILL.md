@@ -1052,6 +1052,14 @@ tab). Two awaits observe that work; neither forces it:
 Puzzle ships its own test utilities — do NOT hand-roll a harness, and do not
 reach into private fields to await renders.
 
+Tests run in Vitest. Apps from `puzzle init` already have the setup: `tests/`
+with a starter test, `npm test` (`vitest run`), and a `vitest.config.js` whose
+`plugins: [puzzle()]` (from `@magic-spells/puzzle/vitest`) compiles every
+`.pzl` a test imports and resolves `@/`, with `environment: 'jsdom'`. An older
+app adds that file plus `vitest` and `jsdom` dev dependencies; without the
+plugin, importing a `.pzl` file in a test fails. Put new tests in `tests/`
+(or next to the code; Vitest finds `*.test.js` anywhere).
+
 ```js
 import { mountView, createTestApp, settled } from '@magic-spells/puzzle/testing';
 

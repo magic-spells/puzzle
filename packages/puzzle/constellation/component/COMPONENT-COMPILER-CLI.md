@@ -11,6 +11,8 @@ connections:
   - FILE-GENERATE
   - FILE-PIECES
   - FILE-PZLC
+  - FILE-STANDALONE-COMPILE
+  - DECISION-D193-VITEST-PLUGIN
 verified_at: '2026-11-01T19:26:04.240Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
@@ -107,4 +109,7 @@ this card holds the implementation rules behind it.
   `/dev/null` is a character device, not a terminal, so prompts never block under CI.
 - `pzlc` (`cmd/pzlc`) is the test/tooling single-file compiler with explicit mode; not the
   app workflow.
+- The hidden `puzzle compile <file.pzl>` (`cmd/puzzle/compilecmd.go`) shares pzlc's
+  pipeline (`internal/standalone`) but picks the mode by the D20 directory rule; its one
+  caller is the `/vitest` plugin, so app tests can import `.pzl` (D193).
 - Flag-convention tests live in `cmd/puzzle/cli_conventions_test.go`.

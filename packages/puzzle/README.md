@@ -24,6 +24,7 @@ cd my-app
 npm install
 
 puzzle dev     # develop with live reload
+npm test       # run the starter test in tests/
 puzzle build   # build for production
 ```
 

@@ -262,6 +262,19 @@ one is *not* a compile error; it silently builds a different product.
   `<Field form={ form } name="title" label="Title"/>` reads the value and
   error from the form, writes through it and marks the field touched on blur.
   An explicit `error` prop still wins; without `form`, Field is unchanged.
+- **New apps come with a test suite, and app tests can import `.pzl` (D193).**
+  `puzzle init` now writes `tests/` with a starter test (`default`: a
+  component test that clicks the counter; `todos`: a view test that adds a
+  todo and a store test on the model; `.test.ts` under `--typescript`), a
+  `vitest.config.js`, a `"test": "vitest run"` script and `vitest` + `jsdom`
+  dev dependencies, so `npm test` passes on a fresh app. The config uses the
+  new `@magic-spells/puzzle/vitest` subpath: `puzzle()` is a Vite plugin that
+  compiles each `.pzl` a test imports with the installed CLI and resolves
+  `@/` like the build. Before, an app's own Vitest could not import a `.pzl`
+  file at all, so `/testing`'s `mountView` had nothing to mount. Existing
+  apps can opt in by adding the same `vitest.config.js`:
+  `plugins: [puzzle()]`, `test: { environment: 'jsdom' }`. The CLI command
+  behind it, `puzzle compile <file.pzl>`, is hidden and not a stable surface.
 - **Static pages link their own CSS.** In `output: 'static'`, a view, layout
   or component script that does `import './page.css'` now gets that CSS on its
   own page only: each page links `_puzzle/<slug>.css` (`<slug>-<hash>.css`

@@ -60,6 +60,8 @@ func TestCreateDefault(t *testing.T) {
 		"app/views/NotFound.pzl",
 		"package.json",
 		"puzzle.config.js",
+		"tests/Counter.test.js",
+		"vitest.config.js",
 	}
 	got := collect(t, res.Dir)
 	if strings.Join(got, ",") != strings.Join(want, ",") {
@@ -113,6 +115,9 @@ func TestCreateTodos(t *testing.T) {
 		"app/views/NotFound.pzl",
 		"package.json",
 		"puzzle.config.js",
+		"tests/Home.test.js",
+		"tests/todo.test.js",
+		"vitest.config.js",
 	}
 	got := collect(t, res.Dir)
 	if strings.Join(got, ",") != strings.Join(want, ",") {
@@ -263,6 +268,8 @@ func TestCreateTypeScriptVariants(t *testing.T) {
 			"app/views/NotFound.pzl",
 			"package.json",
 			"puzzle.config.js",
+			"tests/Counter.test.ts",
+			"vitest.config.js",
 		},
 		"todos": {
 			".gitignore",
@@ -279,6 +286,9 @@ func TestCreateTypeScriptVariants(t *testing.T) {
 			"app/views/NotFound.pzl",
 			"package.json",
 			"puzzle.config.js",
+			"tests/Home.test.ts",
+			"tests/todo.test.ts",
+			"vitest.config.js",
 		},
 	}
 	for tpl, want := range cases {
@@ -343,6 +353,66 @@ func TestTypeScriptPackageJSONTracksTheBase(t *testing.T) {
 		delete(dev, "typescript")
 		if !reflect.DeepEqual(js, ts) {
 			t.Errorf("%s: TypeScript package.json differs from the JavaScript one beyond check + typescript:\n js: %v\n ts: %v", tpl, js, ts)
+		}
+	}
+}
+
+// TestEveryTemplateShipsATestSuite pins the test scaffold (D193): every app,
+// in both languages, gets an `npm test` script running Vitest once, the vitest
+// and jsdom dev dependencies, a vitest.config.js wiring the .pzl plugin, and at
+// least one test under tests/ that imports the testing module.
+func TestEveryTemplateShipsATestSuite(t *testing.T) {
+	for _, tpl := range Templates {
+		for _, ts := range []bool{false, true} {
+			res, err := Create(t.TempDir(), "my-app", tpl, ts)
+			if err != nil {
+				t.Fatalf("Create(%q, %v): %v", tpl, ts, err)
+			}
+			tree := diskTree(t, res.Dir)
+			label := tpl
+			if ts {
+				label += " (typescript)"
+			}
+
+			var pkg struct {
+				Scripts map[string]string `json:"scripts"`
+				Dev     map[string]string `json:"devDependencies"`
+			}
+			if err := json.Unmarshal([]byte(tree["package.json"]), &pkg); err != nil {
+				t.Fatal(err)
+			}
+			if pkg.Scripts["test"] != "vitest run" {
+				t.Errorf("%s: scripts.test = %q, want \"vitest run\"", label, pkg.Scripts["test"])
+			}
+			for _, dep := range []string{"vitest", "jsdom"} {
+				if pkg.Dev[dep] == "" {
+					t.Errorf("%s: devDependencies has no %s", label, dep)
+				}
+			}
+
+			config := tree["vitest.config.js"]
+			if !strings.Contains(config, "from '@magic-spells/puzzle/vitest'") ||
+				!strings.Contains(config, "plugins: [puzzle()]") ||
+				!strings.Contains(config, "environment: 'jsdom'") {
+				t.Errorf("%s: vitest.config.js does not wire the puzzle plugin and jsdom:\n%s", label, config)
+			}
+
+			tests := 0
+			for p, body := range tree {
+				if !strings.HasPrefix(p, "tests/") {
+					continue
+				}
+				tests++
+				if ts != strings.HasSuffix(p, ".test.ts") {
+					t.Errorf("%s: %s has the wrong extension for this variant", label, p)
+				}
+				if !strings.Contains(body, "from '@magic-spells/puzzle/testing'") {
+					t.Errorf("%s: %s does not use @magic-spells/puzzle/testing", label, p)
+				}
+			}
+			if tests == 0 {
+				t.Errorf("%s: no tests under tests/", label)
+			}
 		}
 	}
 }

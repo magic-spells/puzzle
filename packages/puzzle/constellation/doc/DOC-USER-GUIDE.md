@@ -11,6 +11,7 @@ connections:
   - DOC-ROUTER
   - DOC-TESTING
   - DOC-APP-STRUCTURE
+  - DECISION-D193-VITEST-PLUGIN
 ---
 
 # Puzzle app-building guide
@@ -26,12 +27,15 @@ npm install -g @magic-spells/puzzle
 puzzle init my-app            # --template default|todos, --typescript
 cd my-app && npm install
 puzzle dev                    # watch + live reload
+npm test                      # the starter tests in tests/ (Vitest)
 puzzle build                  # production build
 ```
 
 `puzzle init` is the only onboarding path; there is no `npx create-*` wrapper ([[DECISION-D77-INIT-PROMPTS]]). The app depends on `@magic-spells/puzzle` locally, so collaborators only need `npm install`; `npm install -D @magic-spells/puzzle` adds runtime + CLI to an existing project.
 
 `--typescript` scaffolds `<script lang="ts">` components, `app/app.ts`, a strict `tsconfig.json` and a `check` script. The build strips types without checking them; `puzzle check` is the type check. With a `tsconfig.json`, `puzzle generate` writes TypeScript stubs.
+
+Every template also ships a working test suite ([[DECISION-D193-VITEST-PLUGIN]]): `tests/` holds a component test (`default`: `Counter.test.js`) or a view test and a store test (`todos`), `vitest.config.js` registers the `puzzle()` plugin from `@magic-spells/puzzle/vitest` so tests can import `.pzl` files, and `npm test` runs them. Testing, below, covers writing more.
 
 ## Project structure
 
@@ -48,7 +52,9 @@ my-app/
 │   ├── locales/          # <tag>.json translations (optional)
 │   ├── styles/           # Tailwind entry + global CSS
 │   └── public/           # index.html + static files (copied to dist/)
+├── tests/                # Vitest tests (*.test.js | *.test.ts)
 ├── puzzle.config.js      # styles, i18n, dev proxy, output, build options
+├── vitest.config.js      # puzzle() plugin + jsdom, for npm test
 └── package.json
 ```
 
@@ -285,6 +291,25 @@ The parent writes `<Button variant="primary" @press={ goToPosts }>Browse</Button
 - **`getState()` reads only what `setState()` wrote** ([[DECISION-D191-SET-STATE-GET-STATE]]); `getData()` reads the merged model, with `data()`'s values over local state.
 - **Stable object props:** props compare with `===`, so a fresh object from every `data()` run re-runs the child. Wrap derived objects in `this.memo(key, deps, factory)` ([[DOC-SPEC-VIEW]] §32). Primitive props need no memo, and data-independent callback props are cached by the compiler.
 - **Animations:** an `animations = { in, out }` class field animates the instance root via WAAPI; `to` must equal the resting style and height cannot animate to `auto` ([[DOC-SPEC-VIEW]] §12, §39).
+
+## Testing
+
+`npm test` runs Vitest over `tests/`. A test imports the `.pzl` file it covers, mounts it with `@magic-spells/puzzle/testing`, and drives it through its handle; every handle action waits for the re-render, so assertions read the page right after it.
+
+```javascript
+import { expect, test } from 'vitest';
+import { mountView } from '@magic-spells/puzzle/testing';
+import Counter from '../app/components/Counter.pzl';
+
+test('the counter goes up', async () => {
+  const view = await mountView(Counter, { props: { label: 'Clicks' } });
+  await view.click('[aria-label="Increase"]');
+  expect(view.find('.count').textContent).toBe('1');
+  view.destroy();
+});
+```
+
+Pass `models` to `mountView` for a view that reads the store, or boot the whole app with `createTestApp({ routes, models })` to test models and navigation. The `puzzle()` plugin in `vitest.config.js` compiles each `.pzl` import with the installed CLI and resolves `@/` like the build. [[DOC-TESTING]] lists the full helper surface.
 
 ## Backends in dev
 

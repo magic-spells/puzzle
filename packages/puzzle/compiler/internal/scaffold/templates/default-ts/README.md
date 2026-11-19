@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Then open http://localhost:3000.
+Then open http://localhost:3000. Run the tests with `npm test`.
 
 ## Project layout
 
@@ -23,7 +23,9 @@ __APP_NAME__/
 │   ├── views/            # Page components (Home.pzl)
 │   ├── public/           # Static assets + index.html
 │   └── styles/           # Tailwind entry stylesheet
+├── tests/                # Vitest tests (Counter.test.ts)
 ├── puzzle.config.js      # Compiler config (Tailwind pipeline)
+├── vitest.config.js      # Test config: compiles .pzl imports, jsdom for the DOM
 ├── tsconfig.json         # Strict TypeScript settings for editors and `npm run check`
 └── package.json
 ```
@@ -35,6 +37,9 @@ checking them, so it stays fast; type-checking is its own step.
 
 - `npm run dev` — watch + rebuild + live-reload dev server.
 - `npm run build` — production build into `dist/`.
+- `npm test` — run the tests in `tests/` once with Vitest. They mount
+  components and views with `@magic-spells/puzzle/testing` and click and type
+  the way a user would; `tests/` starts with a component test for Counter.pzl.
 - `npm run check` — type-check the app: `.ts` modules, `.pzl` scripts, and
   template expressions (`puzzle check`, using the app's own TypeScript).
 

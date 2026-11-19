@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "puzzle dev",
     "build": "puzzle build",
+    "test": "vitest run",
     "check": "puzzle check"
   },
   "dependencies": {
@@ -13,7 +14,9 @@
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.14",
+    "jsdom": "^31.0.1",
     "tailwindcss": "^4.1.14",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1"
   }
 }
