@@ -15,11 +15,36 @@ export type AdapterFetch = typeof globalThis.fetch;
 /** Values serialized by the endpoint-generated loadMany transport. */
 export type AdapterLoadManyOptions = Record<
 	string,
-	string | number | boolean | null | undefined
+	string | number | boolean | Array<string | number | boolean> | null | undefined
 >;
 
 /** A server-returned record shape. The framework validates primary keys at runtime. */
 export type AdapterRecord = Record<string, any>;
+
+/**
+ * What a `loadMany` verb may answer (D193): the records alone, or the records
+ * with response `meta` (a cursor, a total, a next page) that a query read
+ * exposes as `findMany(...).meta`.
+ */
+export type AdapterLoadManyResult =
+	| AdapterRecord[]
+	| { records: AdapterRecord[]; meta?: Record<string, any> | null };
+
+/** A record's write status (D193), from `store.syncStatus(record)`. */
+export interface SyncStatus {
+	/** The write running at the front of the record's chain, or null when none is queued. */
+	readonly pending: 'save' | 'delete' | null;
+	/** The last failed write's error, cleared when the next write starts. */
+	readonly error: unknown;
+}
+
+/** A `save()`/`delete()` promise, carrying its own status while it runs (D193). */
+export type WritePromise<T> = Promise<T> & {
+	/** true until the write settles. Not reactive — read `store.syncStatus()` in data(). */
+	pending: boolean;
+	/** null, or the rejection reason once the write has failed. */
+	error: unknown;
+};
 
 /** Per-model identity supplied last to every app-wide adapter default. */
 export interface AdapterDefaultContext {
@@ -33,7 +58,7 @@ export interface AdapterDefaults<TRecord extends PuzzleModel = PuzzleModel> {
 		fetch: AdapterFetch,
 		options: AdapterLoadManyOptions | undefined,
 		context: AdapterDefaultContext
-	): AdapterMaybePromise<Response | AdapterRecord[]>;
+	): AdapterMaybePromise<Response | AdapterLoadManyResult>;
 	loadOne?(
 		fetch: AdapterFetch,
 		id: any,
@@ -68,7 +93,7 @@ export interface AdapterConfig<TRecord extends PuzzleModel = PuzzleModel> {
 	loadMany?(
 		fetch: AdapterFetch,
 		options?: AdapterLoadManyOptions
-	): AdapterMaybePromise<Response | AdapterRecord[]>;
+	): AdapterMaybePromise<Response | AdapterLoadManyResult>;
 	loadOne?(fetch: AdapterFetch, id: any): AdapterMaybePromise<Response | AdapterRecord>;
 	create?(
 		fetch: AdapterFetch,
@@ -84,7 +109,7 @@ export interface AdapterConfig<TRecord extends PuzzleModel = PuzzleModel> {
 type BoundAdapterVerbs<TRecord extends PuzzleModel> = {
 	loadMany(
 		options?: AdapterLoadManyOptions
-	): AdapterMaybePromise<Response | AdapterRecord[]>;
+	): AdapterMaybePromise<Response | AdapterLoadManyResult>;
 	loadOne(id: any): AdapterMaybePromise<Response | AdapterRecord>;
 	create(
 		record: TRecord
@@ -159,17 +184,26 @@ declare module './index.js' {
 		/** Apply server-authoritative object(s), preserving record identity. */
 		upsert(type: string, objectOrArray: Record<string, any> | Record<string, any>[]): any;
 		/** Queue a record save through the per-record adapter write chain. */
-		saveRecord(record: PuzzleModel): Promise<PuzzleModel>;
+		saveRecord(record: PuzzleModel): WritePromise<PuzzleModel>;
 		/** Queue a confirmed record delete through the shared write chain. */
-		deleteRecord(record: PuzzleModel): Promise<PuzzleModel>;
+		deleteRecord(record: PuzzleModel): WritePromise<PuzzleModel>;
+		/**
+		 * Mark server data stale so the views reading it refetch (D193). Never
+		 * fetches by itself. `invalidate(type)` covers every query, the collection
+		 * and every synced record of the type; `invalidate(type, id)` one record;
+		 * `invalidate(type, { query })` one query by its exact key.
+		 */
+		invalidate(type: string, target?: string | number | { query: AdapterLoadManyOptions }): void;
+		/** A record's write status (D193); reactive when read inside data(). */
+		syncStatus(record: PuzzleModel): SyncStatus;
 		/** Custom-endpoint escape hatch. */
 		request(type: string, path?: string, options?: RequestOptions): Promise<any>;
 	}
 
 	interface PuzzleModel {
-		/** POST when new, PUT after synchronization. */
-		save(): Promise<this>;
-		/** Confirmed server delete, then local removal. */
-		delete(): Promise<this>;
+		/** POST when new, PUT after synchronization. The promise carries `pending`/`error` (D193). */
+		save(): WritePromise<this>;
+		/** Confirmed server delete, then local removal. The promise carries `pending`/`error` (D193). */
+		delete(): WritePromise<this>;
 	}
 }

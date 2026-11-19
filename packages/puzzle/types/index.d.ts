@@ -344,8 +344,24 @@ export interface ValidationResult {
 
 /** Options for `store.findMany(type, options)`. */
 export interface FindManyOptions {
+	/** Local predicate, applied after any query. */
 	filter?: (record: any) => boolean;
+	/**
+	 * Server params for this read (D193). Needs the adapter capability: the
+	 * query is passed to the model's `loadMany` as its options, and its canonical
+	 * spelling is the cache key, so each page or cursor is cached separately.
+	 * Values are strings, finite numbers, booleans or arrays of those; nullish
+	 * entries are dropped.
+	 */
+	query?: Record<string, string | number | boolean | Array<string | number | boolean> | null | undefined>;
 }
+
+/**
+ * What `findMany` returns: the records, plus (for a `query` read) the `meta`
+ * the server sent with them — a cursor, a total, a next page. `meta` is
+ * non-enumerable and survives only on this array, not on `filter`/`map` copies.
+ */
+export type FindManyResult<T = any> = T[] & { readonly meta?: Readonly<Record<string, any>> };
 
 /** Options for `store.request(type, path, options)` (D50). */
 export interface RequestOptions {
@@ -407,7 +423,7 @@ export interface Store {
 	 * `this.ctx.store` inside `data()`, the collection loads once if it has not
 	 * already; the filter always runs locally (D161).
 	 */
-	findMany(type: string, options?: FindManyOptions): any[];
+	findMany(type: string, options?: FindManyOptions): FindManyResult;
 	/**
 	 * Observe every record of a type, or one record by primary key, from outside
 	 * a view (D184). `fn` runs with no arguments after the batched flush that
