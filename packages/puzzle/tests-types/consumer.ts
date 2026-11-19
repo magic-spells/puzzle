@@ -4,7 +4,7 @@
  * Type-only consumer fixture (`npm run test:types`).
  *
  * Imports from the PUBLIC package root ('@magic-spells/puzzle') and the
- * '@magic-spells/puzzle/morph', '/ssg', '/static' and '/fixtures' subpaths
+ * '@magic-spells/puzzle/morph', '/ssg', '/static', '/fixtures', '/testing' and '/vitest' subpaths
  * exactly as an app authored with `<script lang="ts">` would. The package is
  * NOT installed in this repo, so the fixture tsconfig maps the specifiers at
  * ../types via `paths` — this still type-checks the real exported declaration
@@ -93,6 +93,8 @@ import { mountStatic } from '@magic-spells/puzzle/static';
 import type { MountStaticOptions, StaticRoute } from '@magic-spells/puzzle/static';
 import { createTestApp, measureRenders, mountView, type } from '@magic-spells/puzzle/testing';
 import type { RenderProfile } from '@magic-spells/puzzle/testing';
+import { puzzle } from '@magic-spells/puzzle/vitest';
+import type { PuzzleVitePlugin } from '@magic-spells/puzzle/vitest';
 import ImportedView from './views/Imported.pzl';
 
 const renderedNull: string = displayValue(null);
@@ -1104,3 +1106,9 @@ class EditFormPost extends PuzzleView {
 	}
 }
 void EditFormPost;
+// vitest subpath (D194): the plugin factory takes an optional executable path
+const vitestPlugin: PuzzleVitePlugin = puzzle();
+const vitestPluginFromSource: PuzzleVitePlugin = puzzle({ bin: '/usr/local/bin/puzzle' });
+const vitestPluginName: string = vitestPlugin.name;
+// @ts-expect-error bin is a path string
+puzzle({ bin: 1 });

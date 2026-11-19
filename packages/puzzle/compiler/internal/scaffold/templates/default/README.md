@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Then open http://localhost:3000.
+Then open http://localhost:3000. Run the tests with `npm test`.
 
 ## Project layout
 
@@ -23,7 +23,9 @@ __APP_NAME__/
 │   ├── views/            # Page components (Home.pzl)
 │   ├── public/           # Static assets + index.html
 │   └── styles/           # Tailwind entry stylesheet
+├── tests/                # Vitest tests (Counter.test.js)
 ├── puzzle.config.js      # Compiler config (Tailwind pipeline)
+├── vitest.config.js      # Test config: compiles .pzl imports, jsdom for the DOM
 └── package.json
 ```
 
@@ -31,6 +33,9 @@ __APP_NAME__/
 
 - `npm run dev` — watch + rebuild + live-reload dev server.
 - `npm run build` — production build into `dist/`.
+- `npm test` — run the tests in `tests/` once with Vitest. They mount
+  components and views with `@magic-spells/puzzle/testing` and click and type
+  the way a user would; `tests/` starts with a component test for Counter.pzl.
 
 ## Next steps
 

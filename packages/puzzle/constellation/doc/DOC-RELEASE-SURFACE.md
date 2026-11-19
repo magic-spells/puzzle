@@ -25,6 +25,7 @@ connections:
   - DECISION-D179-STATIC-PATHS
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
   - DECISION-D184-STORE-OBSERVE
+  - DECISION-D194-VITEST-PLUGIN
 verified_at: '2026-11-01T19:28:56.040Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 notes:
@@ -51,6 +52,7 @@ What `@magic-spells/puzzle` ships on the current release branch, as a map. [[DOC
   - `/testing` — `mountView`, `createTestApp` (both accept `i18n: { locale, strings }`), `settled`, `type`, `measureRenders`, `installFakeAnimate`, `installFakeObserver`, and a re-export of `installFixtures`.
   - `/fixtures` — `installFixtures`, `uninstall`, `DEFAULT_FIXTURE_SEED`.
   - `/forms` — `createForm(view, Model, options)`, the opt-in form controller (draft values, touched, changed, errors, submitting, server-error mapping; [[FEATURE-FORMS]]).
+  - `/vitest` — `puzzle(options?)`, the Vite plugin that compiles `.pzl` imports in an app's Vitest suite (Node-only, D194).
   - `/puzzle-env` — types only: the ambient `*.pzl` module shim and `ImportMeta.env` (`ImportMetaEnv`, D190).
   - Build-replaced: `/formatters/manifest`, `/i18n/manifest`.
 - **Binary:** the `puzzle` shim (`bin/puzzle.js`) picks one of five optional platform packages (darwin/linux × arm64/x64, `win32-x64`; Windows on ARM uses x64). `pzlc` is an internal single-file compiler for tests and tooling.
@@ -136,7 +138,7 @@ Contract: §3–§6, §17, §18, §24, §28, §31, §43, §47, §57, §64–§67
 
 Commands live in `compiler/cmd/puzzle`. Global: `--no-color`; `puzzle version` = `--version` = `-v`.
 
-- `puzzle init [app-name|path]` — `-t/--template default|todos`, `-y/--yes`, `--typescript`.
+- `puzzle init [app-name|path]` — `-t/--template default|todos`, `-y/--yes`, `--typescript`. Every template includes `tests/`, `vitest.config.js` and an `npm test` script.
 - `puzzle dev [dir]` — `-p/--port` (3000), `--strict-port`, `--host`, `-o/--open`, `--fixtures`, `--profile-build`.
 - `puzzle build [dir]` — `-m/--mode production|development`, `--static`, `--hybrid`, `--fixtures` (not with prerender), `-q/--quiet` (skips the summary, page report and update notice), `--profile-build` (or `PUZZLE_PROFILE_BUILD=1`). Entry is `app/app.ts` else `app/app.js`; both is an error.
 - `puzzle preview [dir]` — `-p/--port` (4000), `--strict-port`, `--host`.
@@ -146,6 +148,7 @@ Commands live in `compiler/cmd/puzzle`. Global: `--no-color`; `puzzle version` =
 - `puzzle upgrade [--check] [-y]`, `puzzle upgrade skills`; `dev`/`build` show a TTY-only update notice (`PUZZLE_NO_UPDATE_CHECK=1` opts out; skipped in CI).
 - `puzzle doctor [dir]`, `puzzle info [dir]` (both `--json`).
 - Hidden compatibility aliases: `init --dir`, `add --overwrite`.
+- Hidden `puzzle compile <file.pzl>`: prints one compiled module for the `/vitest` plugin; not a stable surface.
 
 ## Not shipped
 

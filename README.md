@@ -26,6 +26,7 @@ cd my-app
 npm install
 
 puzzle dev     # dev server with live reload
+npm test       # run the starter tests in tests/ with Vitest
 puzzle build   # production build to dist/
 ```
 
@@ -55,7 +56,9 @@ my-app/
 │   │   └── styles.css      # Tailwind entry and global CSS
 │   └── public/             # static files copied into dist/
 │       └── index.html      # the page shell with <div id="app">
+├── tests/                  # Vitest tests: Counter.test.js mounts and clicks the counter
 ├── puzzle.config.js        # build config: style pipeline, output mode, i18n
+├── vitest.config.js        # puzzle() compiles .pzl imports in tests; jsdom for the DOM
 ├── jsconfig.json           # maps the @/ import alias to app/
 └── package.json
 ```
