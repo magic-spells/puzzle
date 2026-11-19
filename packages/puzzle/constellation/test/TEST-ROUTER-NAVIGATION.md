@@ -18,6 +18,7 @@ connections:
   - DECISION-D42-MEMORY-MODE
   - DECISION-D47-ROUTE-SNAPSHOT
   - DECISION-D51-ROUTER-BASE-PATH
+  - DECISION-D193-LINK-PREFETCH
   - DECISION-D61-ATOMIC-LOCATION-COMMIT
   - DECISION-D79-LINK-FUNCTION
   - DECISION-D83-QUERY-REPLACE
@@ -71,6 +72,11 @@ Run with `npx vitest run tests/router tests/route-tree-shared`.
   convergence, exception safety, the mid-gate scope fence.
 - **`router.views` and `agent`** (`router-views`, D183): the frozen leaf list and the
   `agent` route field's resolution and dev checks.
+- **Link prefetch** (`router-prefetch`, D193): hover delay and cancel, touch and focus
+  at once, lazy layouts, links a click would not take, Save-Data and 2g, hash mode,
+  `data-prefetch` values and the `prefetch: false` default, the guard rule,
+  `router.prefetch()` results and retry after a failed load, `"visible"` links joining
+  and leaving, no listeners for an eager table, teardown at `stop()`.
 - **Route tree** (`route-tree-shared`): SSG enumeration and the router table agree.
 
 Transitions and morphs are [[TEST-TRANSITIONS-MORPH]]; locale prefixes are

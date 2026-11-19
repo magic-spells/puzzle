@@ -16,6 +16,7 @@ connections:
   - FILE-ROUTER
   - DOC-SPEC-ROUTER
   - DOC-RELEASE-SURFACE
+  - DECISION-D193-LINK-PREFETCH
 verified_at: '2026-11-01T19:19:25.478Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
@@ -70,3 +71,5 @@ export default [
 ## Consequences
 
 Route validation is stricter: a non-view value fails at `Router` construction, not first navigation.
+
+[[DECISION-D193-LINK-PREFETCH]] calls the same resolver before the click (intent or scroll into view). It keeps this card's guard rule by default: an automatic prefetch skips a guarded route, and only a link that asks by name, or `router.prefetch()`, loads one.

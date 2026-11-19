@@ -319,6 +319,18 @@ one is *not* a compile error; it silently builds a different product.
   own keys. A key that is not a JavaScript identifier, or a value of another
   type (an unset `process.env` variable included), is a one-line config error.
   `puzzle dev` reads the config once; restart it after an edit.
+- **Lazy routes prefetch before the click (D193).** When a link points at a
+  route whose view or layout is `lazy()`, its code starts loading as soon as
+  the pointer rests on the link for 60 ms, a finger touches it, or keyboard
+  focus reaches it, so the click usually finds it loaded. Only code loads: no
+  guard, constructor or `data()` runs. It is on by default; set
+  `prefetch: false` in the `PuzzleApp` config to turn it off app-wide, or use
+  `data-prefetch` on one link: `"off"` never, `"visible"` also when the link
+  scrolls into view, and a bare `data-prefetch` (or `"intent"`) to prefetch a
+  route that has a `guard`, which the default skips. Nothing prefetches under
+  Save-Data or on a 2g connection. `router.prefetch(path)` warms a route from
+  code and resolves `true` once it is loaded. Apps without `lazy()` grow by
+  about 60 B gzip; apps with it by about 0.75 KB.
 - **`PuzzleView<Props>` types a component's props.**
   `class TodoItem extends PuzzleView<TodoItemProps>` types `this.props`,
   `data()`'s `props` and `afterUpdate`'s `prev.props`, and `mountView` /

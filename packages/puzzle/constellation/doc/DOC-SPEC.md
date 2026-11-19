@@ -96,6 +96,7 @@ The contract is split across six chapter cards; this card is the entry point. Se
 | 66 | Translations: the `t` function and `ctx.i18n` | [[DOC-SPEC-TEMPLATE]] |
 | 67 | Runtime component selection: `<Component>` | [[DOC-SPEC-TEMPLATE]] |
 | 68 | Server queries, invalidation and write status | [[DOC-SPEC-DATA]] |
+| 69 | Link prefetch: `prefetch` and `data-prefetch` | [[DOC-SPEC-ROUTER]] |
 | — | Deferred features | this card |
 | — | Open questions | this card |
 
@@ -125,7 +126,7 @@ Out of scope today. Docs may describe them only when marked **"Planned — not s
 - **A `puzzle dev` mock API server** — rejected: the §52 mock adapter intercepts at the store's fetch seam and behaves the same in `puzzle dev` and Vitest; a server would only add mocking of plain `fetch` calls. `dev.proxy`'s handler chain is the seam if it comes back.
 - **Async `beforeRequest` and an `options.fetch` override** (§49). Awaiting the hook puts an `await` before every adapter call and needs a coalescing story against the §22 per-record save chain; a whole-fetch override lets a bad implementation silently break the §22 guards. Widening sync → async later stays compatible.
 - **Freshness timers (TTL, refetch on focus or interval) and relationship fault-in** on top of §61/§68.
-- **Link preloading** (prefetching a route's chunk on hover or viewport entry) on top of §59/§62.
+- **Route data prefetch** — loading a route's `data()` before the click. §69 prefetches code only.
 - **Editor-level `.pzl` type checking** (language service / LSP). Waits for the TypeScript 7 tooling API; nothing builds on TypeScript 6-era compiler APIs. `puzzle check` (§63) is the shipped checker.
 - **Open-ended dynamic module resolution** (`<component is="module-name">`, registries, lazy manifests) — rejected. `<Component>` (§67, [[DECISION-D180-COMPONENT-SLOT]]) selects only constructors its file already imports.
 
