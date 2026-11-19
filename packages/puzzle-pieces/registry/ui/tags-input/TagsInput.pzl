@@ -220,7 +220,6 @@ export default class TagsInput extends PuzzleView {
     } else if (!String(draft ?? '').trim()) {
       this.setState({ draft: '' });
     }
-    this.refresh();
     this._focusInput();
   }
 
@@ -232,7 +231,6 @@ export default class TagsInput extends PuzzleView {
     const next = current.slice(0, idx).concat(current.slice(idx + 1));
     const { change } = this.props;
     if (typeof change === 'function') change(next, event);
-    this.refresh();
     this._focusInput();
   }
 
@@ -298,7 +296,6 @@ export default class TagsInput extends PuzzleView {
         const { change } = this.props;
         if (typeof change === 'function') change(current, event);
       }
-      this.refresh();
       this._focusInput();
     },
 

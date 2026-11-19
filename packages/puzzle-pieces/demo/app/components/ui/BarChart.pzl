@@ -177,7 +177,6 @@ export default class BarChart extends PuzzleView {
       const w = Math.round(entries[0].contentRect.width);
       if (w && w !== this.getData().width) {
         this.setState({ width: w });
-        this.refresh();
       }
     });
     this._ro.observe(this.element);
@@ -390,13 +389,11 @@ export default class BarChart extends PuzzleView {
       const tip = this._tipFromEvent(event, mark.tipLabel, mark.tipValue);
       if (!tip) return;
       this.setState({ hoveredId: mark.id, tip });
-      this.refresh();
     },
 
     onLeave: () => {
       const tip = this.getData().tip;
       this.setState({ hoveredId: null, tip: { ...tip, visible: false } });
-      this.refresh();
     },
   };
 }

@@ -412,7 +412,6 @@ export default class Slider extends PuzzleView {
       const now = this.getData();
       if (now.draftThumb != null && !now.dragging) {
         this.setState({ draftThumb: null, draftValue: null });
-        this.refresh();
       }
     });
   }
@@ -614,7 +613,6 @@ export default class Slider extends PuzzleView {
       const d = this.getData();
       if (d.draftThumb != null && !d.dragging) {
         this.setState({ draftThumb: null, draftValue: null });
-        this.refresh();
       }
     }, 90);
   }
@@ -663,7 +661,6 @@ export default class Slider extends PuzzleView {
     const d = this.getData();
     if (d.draftThumb !== drag.thumb || d.draftValue !== nv || !d.dragging) {
       this.setState({ dragging: true, draftThumb: drag.thumb, draftValue: nv });
-      this.refresh();
       this._emit('input', cfg, drag.thumb, nv, committed);
     }
   }
@@ -683,7 +680,6 @@ export default class Slider extends PuzzleView {
       // dragging → false re-enables transitions; the overlay stays until props
       // catch up (afterUpdate) or the fallback timer reverts it.
       this.setState({ dragging: false });
-      this.refresh();
       if (finalValue !== startValue) {
         this._emit('change', cfg, thumb, finalValue, committed);
       }
@@ -697,7 +693,6 @@ export default class Slider extends PuzzleView {
       const nv = normalize(percentToValue(percent, cfg), tapThumb, cfg, committed);
       if (nv !== this._channel(committed, tapThumb)) {
         this.setState({ dragging: false, draftThumb: tapThumb, draftValue: nv });
-        this.refresh();
         this._emit('input', cfg, tapThumb, nv, committed);
         this._emit('change', cfg, tapThumb, nv, committed);
         this._scheduleOverlayClear();
@@ -746,7 +741,6 @@ export default class Slider extends PuzzleView {
           startValue,
         };
         this.setState({ dragging: true, draftThumb: thumb, draftValue: startValue });
-        this.refresh();
         if (thumbEl.focus) thumbEl.focus({ preventScroll: true });
         this._capturePointer(event);
         this._addWindowListeners();
@@ -813,7 +807,6 @@ export default class Slider extends PuzzleView {
       // @change. Overlay optimistically so the thumb animates even before props
       // land (transitions on because dragging is false).
       this.setState({ dragging: false, draftThumb: thumb, draftValue: nv });
-      this.refresh();
       this._emit('input', cfg, thumb, nv, committed);
       this._emit('change', cfg, thumb, nv, committed);
       this._scheduleOverlayClear();

@@ -244,8 +244,8 @@ import {
 // (`new Date(y, m-1, d)`, never Date.parse / new Date('YYYY-MM-DD'), which UTC-parse
 // shift a day across zones); addMonths clamps day overflow (Jan 31 + 1mo = Feb 28/29).
 // `value` stays parent-owned; the displayed month + drill-down view + roving focus are
-// INTERNAL state written with setState()+refresh(). The grid is a fixed 6×7 = 42 cells so
-// the panel height never jumps between months. Crossing a month edge re-renders the grid
+// INTERNAL state written with setState(), which re-runs data() because data() reads it.
+// The grid is a fixed 6×7 = 42 cells so the panel height never jumps between months. Crossing a month edge re-renders the grid
 // and re-focuses the moved-to cell via a pendingFocus flag applied in afterUpdate() —
 // the vdom re-render breaks the source's persistent-button focus trick.
 
@@ -673,7 +673,6 @@ export default class Calendar extends PuzzleView {
   _moveFocusTo(target) {
     this.setState({ viewYear: target.year, viewMonth: target.month, focusedIso: formatISODate(target) });
     this._pendingFocus = { type: 'day', iso: formatISODate(target) };
-    this.refresh();
   }
 
   _selectDay(parts) {
@@ -681,7 +680,6 @@ export default class Calendar extends PuzzleView {
     const iso = formatISODate(parts);
     this.setState({ view: 'days', viewYear: parts.year, viewMonth: parts.month, focusedIso: iso, monthCursor: parts.month });
     this._pendingFocus = { type: 'day', iso };
-    this.refresh();
     const { change } = this.props;
     if (typeof change === 'function') change(iso, toDate(parts));
   }
@@ -696,7 +694,6 @@ export default class Calendar extends PuzzleView {
     const iso = formatISODate({ year: viewYear, month, day });
     this.setState({ view: 'days', viewMonth: month, focusedIso: iso });
     this._pendingFocus = { type: 'day', iso };
-    this.refresh();
   }
 
   // Years-view selection = pure navigation: drill down to months view of the chosen year.
@@ -705,7 +702,6 @@ export default class Calendar extends PuzzleView {
     const cursor = this._initialMonthCursor(year, this.props);
     this.setState({ view: 'months', viewYear: year, monthCursor: cursor });
     this._pendingFocus = { type: 'month', month: cursor };
-    this.refresh();
   }
 
   _navigate(delta) {
@@ -720,7 +716,6 @@ export default class Calendar extends PuzzleView {
       // Keep DOM focus on the pressed arrow (it persists in the vdom); only fall back to
       // the day cell when min/max just disabled the arrow.
       this._pendingFocus = nowDisabled ? { type: 'day', iso: formatISODate(target) } : null;
-      this.refresh();
     } else if (view === 'months') {
       const ny = viewYear + delta;
       this.setState({ viewYear: ny });
@@ -728,7 +723,6 @@ export default class Calendar extends PuzzleView {
       const nav = navAvailability('months', ny, viewMonth, min, max);
       const nowDisabled = delta < 0 ? nav.prevDisabled : nav.nextDisabled;
       this._pendingFocus = nowDisabled ? { type: 'month', month: monthCursor } : null;
-      this.refresh();
     } else {
       const ny = viewYear + delta * 12;
       this.setState({ viewYear: ny });
@@ -736,7 +730,6 @@ export default class Calendar extends PuzzleView {
       const nav = navAvailability('years', ny, viewMonth, min, max);
       const nowDisabled = delta < 0 ? nav.prevDisabled : nav.nextDisabled;
       this._pendingFocus = nowDisabled ? { type: 'year', year: ny } : null;
-      this.refresh();
     }
   }
 
@@ -745,11 +738,9 @@ export default class Calendar extends PuzzleView {
     if (view === 'days') {
       this.setState({ view: 'months', monthCursor: viewMonth });
       this._pendingFocus = { type: 'month', month: viewMonth };
-      this.refresh();
     } else if (view === 'months') {
       this.setState({ view: 'years' });
       this._pendingFocus = { type: 'year', year: viewYear };
-      this.refresh();
     }
     // years view: zoom-out disabled (no-op)
   }
@@ -835,7 +826,6 @@ export default class Calendar extends PuzzleView {
           backTo ? { view: 'days', viewYear: backTo.year, viewMonth: backTo.month } : { view: 'days' }
         );
         this._pendingFocus = { type: 'day', iso: backIso };
-        this.refresh();
         return;
       }
       const index = monthCursor - 1;
@@ -873,7 +863,6 @@ export default class Calendar extends PuzzleView {
       const nc = (target % 12) + 1;
       this.setState({ viewYear: ny, monthCursor: nc });
       this._pendingFocus = { type: 'month', month: nc };
-      this.refresh();
     },
 
     // Years-view roving keyboard: ±1 / ±3 crossing pages at an edge, Home/End, Enter/Space
@@ -885,7 +874,6 @@ export default class Calendar extends PuzzleView {
         event.stopPropagation();
         this.setState({ view: 'months' });
         this._pendingFocus = { type: 'month', month: monthCursor };
-        this.refresh();
         return;
       }
       const page = startOfYearPage(viewYear);
@@ -921,7 +909,6 @@ export default class Calendar extends PuzzleView {
       event.preventDefault();
       this.setState({ viewYear: target });
       this._pendingFocus = { type: 'year', year: target };
-      this.refresh();
     },
   };
 }

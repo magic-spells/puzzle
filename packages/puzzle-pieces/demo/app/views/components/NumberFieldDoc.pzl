@@ -190,23 +190,18 @@ export default class NumberFieldDoc extends PuzzleView {
   events = {
     setQty: (v) => {
       this.setState('qty', v);
-      this.refresh();
     },
     setWeight: (v) => {
       this.setState('weight', v);
-      this.refresh();
     },
     setRating: (v) => {
       this.setState('rating', v);
-      this.refresh();
     },
     setDiscount: (v) => {
       this.setState('discount', v);
-      this.refresh();
     },
     setLevel: (v) => {
       this.setState('level', v);
-      this.refresh();
     },
   };
 }

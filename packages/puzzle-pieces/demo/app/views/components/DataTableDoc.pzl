@@ -240,11 +240,9 @@ export default class DataTableDoc extends PuzzleView {
   events = {
     setSort: (next) => {
       this.setState('sortState', next);
-      this.refresh();
     },
     setSelected: (keys) => {
       this.setState('selectedKeys', keys);
-      this.refresh();
     },
     setPageNum: (n) => {
       this.setState('pageNum', n);

@@ -104,7 +104,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   @toggle({ id, expanded })    a parent's expand/collapse INTENT; `expanded` is
 //                                the full next array of expanded ids. A controlled
 //                                parent writes it back to `expanded`. (Uncontrolled,
-//                                the Tree also flips its internal set + refresh().)
+//                                the Tree also flips its own expanded state.)
 //
 // KEYBOARD (roving tabindex — the whole tree is a single Tab stop; exactly one
 // visible treeitem is tabbable, and per APG it is the LAST-FOCUSED row, not the
@@ -168,9 +168,10 @@ function flatten(nodes, expandedSet, value, level, out) {
 export default class Tree extends PuzzleView {
   created() {
     this._uid = ++uid;
-    // Uncontrolled expansion state keyed by node id (instance field, flipped with
-    // refresh() — mirrors Sidebar's _openMap). Ignored when `expanded` is controlled.
-    this._expandedMap = {};
+    // uncontrolled expansion state keyed by node id, in the state layer. data()
+    // reads it through getState(), so a setState() flip re-runs data() on its
+    // own. ignored when `expanded` is controlled.
+    this.setState({ expandedMap: {} });
   }
 
   // ---- expanded: optional-controlled resolution ----------------------------
@@ -184,9 +185,8 @@ export default class Tree extends PuzzleView {
       const arr = Array.isArray(this.props.expanded) ? this.props.expanded : [];
       return new Set(arr.map(String));
     }
-    return new Set(
-      Object.keys(this._expandedMap).filter((id) => this._expandedMap[id])
-    );
+    const map = this.getState().expandedMap || {};
+    return new Set(Object.keys(map).filter((id) => map[id]));
   }
 
   // ---- render model --------------------------------------------------------
@@ -270,8 +270,8 @@ export default class Tree extends PuzzleView {
     if (typeof toggle === 'function') toggle({ id: row.id, expanded: nextArr });
 
     if (!this._expandedControlled()) {
-      this._expandedMap[row.id] = willExpand;
-      this.refresh();
+      const map = this.getState().expandedMap || {};
+      this.setState({ expandedMap: { ...map, [row.id]: willExpand } });
     }
   }
 
@@ -288,14 +288,12 @@ export default class Tree extends PuzzleView {
     this._setFocused(row ? row.id : null);
   }
 
-  // Hand the roving tabindex to `id`. refresh() is what makes it stick: setState
-  // alone re-renders without re-running data(), and every row's tabindex is derived
-  // there — the attribute would stay on the old row until some unrelated re-render.
-  // Rows are keyed by id, so the patch reuses the same <li> and DOM focus survives.
+  // Hand the roving tabindex to `id`. data() reads focusedId, so the write re-runs
+  // it with the next render and every row's tabindex follows. Rows are keyed by
+  // id, so the patch reuses the same <li> and DOM focus survives.
   _setFocused(id) {
     if (!id || this.getData().focusedId === id) return;
     this.setState({ focusedId: id });
-    this.refresh();
   }
 
   events = {

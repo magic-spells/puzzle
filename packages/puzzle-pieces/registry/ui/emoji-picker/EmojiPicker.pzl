@@ -450,8 +450,6 @@ export default class EmojiPicker extends PuzzleView {
 
     const { show } = this.props;
     if (typeof show === 'function') show();
-
-    if (!this._controlled()) this.refresh();
   }
 
   _requestClose({ restoreFocus = true } = {}) {
@@ -474,7 +472,6 @@ export default class EmojiPicker extends PuzzleView {
       this._morph.hide();
     } else {
       this.setState({ uncontrolledOpen: false });
-      this.refresh();
     }
   }
 
@@ -521,6 +518,8 @@ export default class EmojiPicker extends PuzzleView {
       const corrected = this._measurePlacement();
       if (corrected !== this.getData().placement) {
         this.setState({ placement: corrected });
+        // refresh() on purpose: a correction measured off the rendered panel has to
+        // paint this frame, and a setState() render would land a frame late.
         this.refresh();
       }
       this._focusSearch();
@@ -546,6 +545,8 @@ export default class EmojiPicker extends PuzzleView {
     top += clamped - screenTop;
 
     this.setState({ morphTop: Math.round(top) });
+    // refresh() on purpose: the morph engine measures the panel next, so the
+    // new top must already be in the DOM.
     this.refresh();
   }
 
@@ -569,7 +570,6 @@ export default class EmojiPicker extends PuzzleView {
     });
     engine.on('hidden', () => {
       this.setState({ uncontrolledOpen: false });
-      this.refresh();
     });
     return engine;
   }
@@ -585,7 +585,6 @@ export default class EmojiPicker extends PuzzleView {
     if (i < 0 || i >= options.length) return;
     this._scrollActive = !!scroll;
     this.setState({ activeIndex: i });
-    this.refresh();
   }
 
   // Move the active cell by `delta` over the flat option list, clamping at the
@@ -642,7 +641,6 @@ export default class EmojiPicker extends PuzzleView {
     onInput: (event) => {
       this._scrollActive = false;
       this.setState({ query: event.target.value, activeIndex: 0 });
-      this.refresh();
     },
 
     onKey: (event) => {

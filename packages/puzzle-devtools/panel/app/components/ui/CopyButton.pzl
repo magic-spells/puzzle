@@ -54,7 +54,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // are swallowed — the button just never enters the copied state. The revert
 // timer is cleared on teardown so it never fires setState on a dead view, and
 // an in-flight clipboard write that resolves after teardown fires nothing
-// (the runtime guards setState/refresh, but not the parent's @copy callback).
+// (the runtime guards setState, but not the parent's @copy callback).
 const BASE =
   'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
   'font-medium cursor-pointer transition-colors ' +
@@ -134,18 +134,16 @@ export default class CopyButton extends PuzzleView {
       const value = this.props.value || '';
       navigator.clipboard.writeText(value).then(
         () => {
-          // The write can resolve after teardown: setState/refresh are guarded by
-          // the runtime, but the parent's @copy callback is not — bail entirely.
+          // The write can resolve after teardown: setState is guarded by the
+          // runtime, but the parent's @copy callback is not — bail entirely.
           if (this._destroyed) return;
           this.setState({ copied: true });
-          this.refresh();
           const { copy } = this.props;
           if (typeof copy === 'function') copy(value);
           if (this._timer) clearTimeout(this._timer);
           this._timer = setTimeout(() => {
             this._timer = null;
             this.setState({ copied: false });
-            this.refresh();
           }, COPIED_MS);
         },
         () => {

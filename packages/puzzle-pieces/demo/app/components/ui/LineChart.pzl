@@ -191,14 +191,13 @@ export default class LineChart extends PuzzleView {
   }
 
   // Responsive width: observe the rendered figure and store its content width.
-  // Guarded so an unchanged measure never loops the ResizeObserver → refresh.
+  // Guarded so an unchanged measure never loops the ResizeObserver → re-render.
   mounted() {
     if (typeof ResizeObserver === 'undefined' || !this.element) return;
     this._ro = new ResizeObserver((entries) => {
       const w = Math.round(entries[0]?.contentRect?.width || this.element.clientWidth || 0);
       if (w > 0 && w !== this.getData().measuredWidth) {
         this.setState({ measuredWidth: w });
-        this.refresh();
       }
     });
     this._ro.observe(this.element);
@@ -381,14 +380,12 @@ export default class LineChart extends PuzzleView {
       const h = this.getData().hover;
       if (!h || h.index !== best || h.x !== lx || h.y !== ly) {
         this.setState({ hover: { index: best, x: lx, y: ly } });
-        this.refresh();
       }
     },
 
     onLeave: () => {
       if (this.getData().hover != null) {
         this.setState({ hover: null });
-        this.refresh();
       }
     },
   };

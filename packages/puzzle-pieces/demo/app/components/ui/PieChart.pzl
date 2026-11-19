@@ -256,13 +256,11 @@ export default class PieChart extends PuzzleView {
       const tip = this._tipFromEvent(event, mark.tipLabel, mark.tipValue, mark.tipPercent);
       if (!tip) return;
       this.setState({ hoveredId: mark.id, tip });
-      this.refresh();
     },
 
     onLeave: () => {
       const tip = this.getData().tip;
       this.setState({ hoveredId: null, tip: { ...tip, visible: false } });
-      this.refresh();
     },
   };
 }

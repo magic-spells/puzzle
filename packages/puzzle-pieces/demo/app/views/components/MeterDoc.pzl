@@ -195,11 +195,9 @@ export default class MeterDoc extends PuzzleView {
   events = {
     bump: () => {
       this.setState({ disk: Math.min(100, this.getData().disk + 10) });
-      this.refresh();
     },
     reset: () => {
       this.setState({ disk: 30 });
-      this.refresh();
     },
   };
 }

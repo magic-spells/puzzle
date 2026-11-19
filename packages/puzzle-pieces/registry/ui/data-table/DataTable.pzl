@@ -277,7 +277,6 @@ export default class DataTable extends PuzzleView {
   _commitSort(next) {
     if (!this._sortControlled()) {
       this.setState('uncontrolledSort', next);
-      this.refresh();
     }
     const { sortChange } = this.props;
     if (typeof sortChange === 'function') sortChange(next);
@@ -285,7 +284,6 @@ export default class DataTable extends PuzzleView {
   _commitSelected(keys, event) {
     if (!this._selectedControlled()) {
       this.setState('uncontrolledSelected', keys);
-      this.refresh();
     }
     const { select } = this.props;
     if (typeof select === 'function') select(keys, event);
@@ -293,7 +291,6 @@ export default class DataTable extends PuzzleView {
   _commitPage(n) {
     if (!this._pageControlled()) {
       this.setState('uncontrolledPage', n);
-      this.refresh();
     }
     const { pageChange } = this.props;
     if (typeof pageChange === 'function') pageChange(n);

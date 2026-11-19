@@ -317,11 +317,9 @@ export default class CollapsibleDoc extends PuzzleView {
   events = {
     toggle: () => {
       this.setState('open', !this.getData().open);
-      this.refresh();
     },
     onChange: (open) => {
       this.setState('open', open);
-      this.refresh();
     },
   };
 }

@@ -174,14 +174,12 @@ export default class RatingDoc extends PuzzleView {
   events = {
     setScore: (v) => {
       this.setState('score', v);
-      this.refresh();
     },
     setFormScore: (v) => {
       this.setState('formScore', v);
     },
     setKbd: (v) => {
       this.setState('kbdScore', v);
-      this.refresh();
     },
   };
 }

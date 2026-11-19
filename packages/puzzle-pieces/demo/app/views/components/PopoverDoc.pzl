@@ -275,15 +275,12 @@ export default class PopoverDoc extends PuzzleView {
   events = {
     toggle: () => {
       this.setState('open', !this.getData().open);
-      this.refresh();
     },
     onShow: () => {
       this.setState('open', true);
-      this.refresh();
     },
     onHide: () => {
       this.setState('open', false);
-      this.refresh();
     },
   };
 }

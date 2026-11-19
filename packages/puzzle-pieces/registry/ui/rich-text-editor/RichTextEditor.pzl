@@ -1290,7 +1290,6 @@ export default class RichTextEditor extends PuzzleView {
 				this._pending.push(serialized);
 				if (this._pending.length > EMITTED_LIMIT) this._pending.shift();
 				this.setState('empty', blankDoc(editor.state.doc));
-				this.refresh();
 				const { change } = this.props;
 				if (typeof change === 'function') change(doc);
 			},
@@ -1334,7 +1333,7 @@ export default class RichTextEditor extends PuzzleView {
 		// setEditable defaults to emitUpdate=true, which synchronously fires the
 		// 'update' event → onUpdate → props.change — so a disabled toggle would
 		// look like an edit. Pass false. The isEditable guard additionally breaks
-		// the afterUpdate → update → refresh → afterUpdate loop.
+		// the afterUpdate → update → render → afterUpdate loop.
 		const editable = !this.props.disabled;
 		if (ed.isEditable !== editable) ed.setEditable(editable, false);
 		if (this.props.disabled && this.getData().linkOpen) {
@@ -1350,9 +1349,9 @@ export default class RichTextEditor extends PuzzleView {
 		this._showPopovers();
 		const v = this.props.value;
 		// afterUpdate also runs for renders WE caused (onUpdate/_syncActive call
-		// setState + refresh synchronously), and those run BEFORE the parent's
-		// @change commit — which is rAF-scheduled — delivers the new prop. So on
-		// a self-refresh `props.value` is still the doc from before the keystroke,
+		// setState, whose render is scheduled ahead of the parent's @change commit),
+		// and those run BEFORE that commit delivers the new prop. So on a
+		// self-caused render `props.value` is still the doc from before the keystroke,
 		// and a JSON-only comparison misreads our own stale prop as an external
 		// reset: setContent would revert the keystroke and collapse the selection
 		// to doc start. Identity-gate first — if the prop reference did not
@@ -1384,7 +1383,6 @@ export default class RichTextEditor extends PuzzleView {
 			this._applied = s;
 			ed.chain().setMeta('addToHistory', false).setContent(toTiptap(v), { emitUpdate: false }).run(); // off the undo stack; emitUpdate defaults to TRUE in Tiptap 3.30 — suppress the echo
 			this.setState('empty', blankDoc(ed.state.doc));
-			this.refresh();
 		}
 	}
 
@@ -1418,7 +1416,6 @@ export default class RichTextEditor extends PuzzleView {
 		const keys = Object.keys(next);
 		if (keys.every((k) => !!prev[k] === !!next[k])) return;
 		this.setState('active', next);
-		this.refresh();
 	}
 
 	_chain() {
@@ -1468,7 +1465,6 @@ export default class RichTextEditor extends PuzzleView {
 
 	_setUploading(delta) {
 		this.setState('uploading', Math.max(0, (this.getData().uploading || 0) + delta));
-		this.refresh();
 	}
 
 	_uploadFiles(files, pos) {
@@ -1660,7 +1656,6 @@ export default class RichTextEditor extends PuzzleView {
 		if (!this._sameLine(line, this._handleLine)) this._handleLine = line;
 		if (!!line !== !!g.handleVisible || (line && mode !== g.handleMode)) {
 			this.setState({ handleVisible: !!line, handleMode: mode });
-			this.refresh();
 		}
 		this._placeHandle();
 	}
@@ -1716,7 +1711,6 @@ export default class RichTextEditor extends PuzzleView {
 			if (typed) {
 				this._slashFrom = hit.from;
 				this.setState({ slashOpen: true, slashQuery: '', slashActive: 0 });
-				this.refresh();
 			}
 			return;
 		}
@@ -1727,7 +1721,6 @@ export default class RichTextEditor extends PuzzleView {
 		}
 		if (hit.query !== g.slashQuery) {
 			this.setState({ slashQuery: hit.query, slashActive: 0 });
-			this.refresh();
 		} else {
 			this._placePopovers();
 		}
@@ -1737,12 +1730,10 @@ export default class RichTextEditor extends PuzzleView {
 		this._slashFrom = null;
 		if (!this.getData().slashOpen) return;
 		this.setState({ slashOpen: false, slashQuery: '', slashActive: 0 });
-		this.refresh();
 	}
 
 	_setSlashActive(i) {
 		this.setState('slashActive', i);
-		this.refresh();
 		// Keep the highlighted row in view inside a scrolled list.
 		const row = this.refs.slashMenu?.querySelectorAll('[role="option"]')[i];
 		row?.scrollIntoView?.({ block: 'nearest' });
@@ -1890,6 +1881,8 @@ export default class RichTextEditor extends PuzzleView {
 			handleVisible: true,
 			handleMode: 'hover',
 		});
+		// refresh() on purpose: the menu rows have to be in the DOM to take focus
+		// now (an rAF-deferred focus never fires in an unfocused window).
 		this.refresh();
 		this._focusBlockRow();
 	}
@@ -1902,6 +1895,7 @@ export default class RichTextEditor extends PuzzleView {
 		this._menuLine = null;
 		const current = this._menuCommands().findIndex((c) => c.current);
 		this.setState({ blockMenuOpen: true, blockMenuIndex: Math.max(0, current) });
+		// refresh() on purpose, as in _openBlockMenu: focus needs the rows rendered.
 		this.refresh();
 		this._focusBlockRow();
 	}
@@ -1920,7 +1914,6 @@ export default class RichTextEditor extends PuzzleView {
 		this._menuLine = null;
 		this._menuVariant = 'block';
 		this.setState({ blockMenuOpen: false, blockMenuIndex: 0 });
-		this.refresh();
 		if (refocus) {
 			if (variant === 'style') this.refs.bubble?.querySelector('[data-tb-value="style"]')?.focus();
 			else this.refs.handle?.focus();
@@ -1949,7 +1942,6 @@ export default class RichTextEditor extends PuzzleView {
 				(!sel.empty && !sel.node && !inCode && (ed.isFocused || !!g.bubbleFocus)));
 		if (want !== !!g.bubbleOpen) {
 			this.setState('bubbleOpen', want);
-			this.refresh();
 		} else if (want) {
 			this._placePopovers();
 		}
@@ -2109,7 +2101,6 @@ export default class RichTextEditor extends PuzzleView {
 
 	_setStyleActive(index) {
 		this.setState('styleActive', index);
-		this.refresh();
 	}
 
 	events = {
@@ -2154,7 +2145,6 @@ export default class RichTextEditor extends PuzzleView {
 				styleOpen: open,
 				styleActive: open ? this._styleIndex() : -1,
 			});
-			this.refresh();
 			// A mouse open never focuses the trigger — the wrapper prevents
 			// pointerdown to protect the editor's selection — so without this the
 			// listbox would sit open with focus still in ProseMirror: arrows would
@@ -2171,7 +2161,6 @@ export default class RichTextEditor extends PuzzleView {
 		closeStyle: () => {
 			if (!this.getData().styleOpen) return;
 			this.setState({ styleOpen: false, styleActive: -1 });
-			this.refresh();
 		},
 
 		// The trigger sits OUTSIDE the panel, so a click on it would dismiss here
@@ -2250,7 +2239,6 @@ export default class RichTextEditor extends PuzzleView {
 				else c.setHeading({ level: opt.level }).run();
 			}
 			this.setState({ styleOpen: false, styleActive: -1 });
-			this.refresh();
 		},
 
 		onPress: (value) => {
@@ -2271,12 +2259,12 @@ export default class RichTextEditor extends PuzzleView {
 			const href = this._editor.getAttributes('link').href || '';
 			// Blocks mode hosts the URL row in the bubble, so open it with the row.
 			this.setState({ linkOpen: true, linkDraft: href, ...(this._blocks() ? { bubbleOpen: true } : {}) });
-			this.refresh();
-			// An explicit refresh() renders synchronously, so the row's input is
+			// refresh() on purpose: it renders synchronously, so the row's input is
 			// already mounted by the time it returns — focus it right here, or the
 			// row is keyboard-unreachable. Deliberately NOT deferred: Chrome pauses
 			// requestAnimationFrame in unfocused/occluded windows, so an rAF focus
 			// never fires there at all.
+			this.refresh();
 			const input = this.refs.linkInput || this.refs.bubbleLinkInput;
 			input?.focus();
 			if (href) input?.select();
@@ -2300,7 +2288,6 @@ export default class RichTextEditor extends PuzzleView {
 					?.insertContent({ type: 'text', text: raw, marks: [{ type: 'link', attrs: { href: url } }] })
 					.run();
 				this.setState({ linkOpen: false, linkDraft: '' });
-				this.refresh();
 				this._syncBlocks(null);
 				return;
 			}
@@ -2312,7 +2299,6 @@ export default class RichTextEditor extends PuzzleView {
 			const applied = this._chain()?.extendMarkRange('link').setLink({ href: url }).run();
 			if (!applied) return;
 			this.setState({ linkOpen: false, linkDraft: '' });
-			this.refresh();
 			this._syncBlocks(null);
 		},
 
@@ -2320,7 +2306,6 @@ export default class RichTextEditor extends PuzzleView {
 			if (this.props.disabled) return;
 			this._chain()?.extendMarkRange('link').unsetLink().run();
 			this.setState({ linkOpen: false, linkDraft: '' });
-			this.refresh();
 			this._syncBlocks(null);
 		},
 
@@ -2443,7 +2428,6 @@ export default class RichTextEditor extends PuzzleView {
 			}
 			event.preventDefault();
 			this.setState('blockMenuIndex', next);
-			this.refresh();
 			this._focusBlockRow();
 		},
 
@@ -2456,7 +2440,6 @@ export default class RichTextEditor extends PuzzleView {
 		hoverBlockRow: (i) => {
 			if (this.getData().blockMenuIndex === i) return;
 			this.setState('blockMenuIndex', i);
-			this.refresh();
 			this._focusBlockRow();
 		},
 
@@ -2505,7 +2488,6 @@ export default class RichTextEditor extends PuzzleView {
 
 		closeLink: () => {
 			this.setState({ linkOpen: false, linkDraft: '' });
-			this.refresh();
 			// The focused input unmounts with the row; hand focus back to the
 			// editor instead of letting it fall to <body>. (applyLink/removeLink
 			// already refocus through _chain().)

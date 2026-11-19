@@ -368,9 +368,8 @@ export default class SelectDoc extends PuzzleView {
     toggleSize: () => this.#set('sizeOpen', !this.getData().sizeOpen),
     setFruit: (v) => this.#set('fruit', v),
     swapFruits: () => {
+      // fruits is derived from swapped in data(); writing swapped re-runs it
       this.#set('swapped', !this.getData().swapped);
-      // fruits is derived from swapped in data(), so re-run it
-      this.refresh();
     },
   };
 }

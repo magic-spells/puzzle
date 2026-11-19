@@ -212,7 +212,6 @@ export default class AreaChart extends PuzzleView {
       const w = Math.round(entries[0]?.contentRect?.width || this.element.clientWidth || 0);
       if (w > 0 && w !== this.getData().measuredWidth) {
         this.setState({ measuredWidth: w });
-        this.refresh();
       }
     });
     this._ro.observe(this.element);
@@ -421,14 +420,12 @@ export default class AreaChart extends PuzzleView {
       const h = this.getData().hover;
       if (!h || h.index !== best || h.x !== lx || h.y !== ly) {
         this.setState({ hover: { index: best, x: lx, y: ly } });
-        this.refresh();
       }
     },
 
     onLeave: () => {
       if (this.getData().hover != null) {
         this.setState({ hover: null });
-        this.refresh();
       }
     },
   };

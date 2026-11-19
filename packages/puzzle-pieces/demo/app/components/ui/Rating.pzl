@@ -197,13 +197,11 @@ export default class Rating extends PuzzleView {
     onHover: (value) => {
       if (this.props.disabled) return;
       this.setState('hover', value);
-      this.refresh();
     },
 
     onLeave: () => {
       if (this.getData().hover === 0) return;
       this.setState('hover', 0);
-      this.refresh();
     },
 
     onKeyDown: (event) => {

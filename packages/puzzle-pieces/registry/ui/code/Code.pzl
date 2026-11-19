@@ -138,6 +138,8 @@ export default class Code extends PuzzleView {
   // max-height is the animated property (not height — the state's own
   // max-height style would clamp height keyframes and snap the collapse), and
   // overflow is pinned to hidden for the flight so no scrollbar flashes by.
+  // flip() must render synchronously (setState + refresh) so the second
+  // measurement sees the new height.
   _animateHeight(flip) {
     const el = this.element?.querySelector('[data-code-scroll]');
     if (!el || this._reducedMotion()) {
@@ -236,12 +238,10 @@ export default class Code extends PuzzleView {
       navigator.clipboard.writeText(code).then(
         () => {
           this.setState({ copied: true });
-          this.refresh();
           if (this._copyTimer) clearTimeout(this._copyTimer);
           this._copyTimer = setTimeout(() => {
             this._copyTimer = null;
             this.setState({ copied: false });
-            this.refresh();
           }, COPIED_MS);
         },
         () => {}

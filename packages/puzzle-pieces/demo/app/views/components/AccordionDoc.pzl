@@ -374,19 +374,15 @@ export default class AccordionDoc extends PuzzleView {
   events = {
     setFaqOpen: (value) => {
       this.setState('faqOpen', value);
-      this.refresh();
     },
     setSpecsOpen: (value) => {
       this.setState('specsOpen', value);
-      this.refresh();
     },
     openRow: (id) => {
       this.setState('faqOpen', id);
-      this.refresh();
     },
     closeAll: () => {
       this.setState('faqOpen', '');
-      this.refresh();
     },
   };
 }

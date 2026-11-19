@@ -293,15 +293,12 @@ export default class DateRangePickerDoc extends PuzzleView {
     setControlledRange: (range) => this.setState('controlledRange', range),
     toggleOpen: () => {
       this.setState('controlledOpen', !this.getData().controlledOpen);
-      this.refresh();
     },
     onShow: () => {
       this.setState('controlledOpen', true);
-      this.refresh();
     },
     onHide: () => {
       this.setState('controlledOpen', false);
-      this.refresh();
     },
   };
 }

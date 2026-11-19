@@ -210,7 +210,8 @@ export default class Dropzone extends PuzzleView {
 
   // Validate an incoming FileList, emit @change with the merged/replaced array
   // and @reject with any failures, and stash rejection messages for the live
-  // region. Does NOT refresh — callers do, once.
+  // region. The rejections write re-runs data() with the next render, since
+  // data() reads that key.
   processFiles(fileList, event) {
     const list = Array.from(fileList || []);
     if (!list.length) return;
@@ -266,7 +267,6 @@ export default class Dropzone extends PuzzleView {
       this.processFiles(input.files, event);
       // Reset so re-selecting the same file fires `change` again.
       input.value = '';
-      this.refresh();
     },
 
     onDragOver: (event) => {
@@ -277,7 +277,6 @@ export default class Dropzone extends PuzzleView {
       if (this.props.disabled) return;
       if (!this.getData().dragging) {
         this.setState({ dragging: true });
-        this.refresh();
       }
     },
 
@@ -287,7 +286,6 @@ export default class Dropzone extends PuzzleView {
       if (zone && event.relatedTarget && zone.contains && zone.contains(event.relatedTarget)) return;
       if (this.getData().dragging) {
         this.setState({ dragging: false });
-        this.refresh();
       }
     },
 
@@ -297,7 +295,6 @@ export default class Dropzone extends PuzzleView {
       if (this.props.disabled) return;
       this.setState({ dragging: false });
       this.processFiles(event.dataTransfer && event.dataTransfer.files, event);
-      this.refresh();
     },
 
     // removal is by ROW INDEX: two files can share a name (and a size), so filtering

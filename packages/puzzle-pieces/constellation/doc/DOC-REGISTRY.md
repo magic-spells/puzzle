@@ -12,6 +12,18 @@ connections:
 notes:
   - kind: state
     text: >-
+      0.10.0 (claude/remove-unneeded-refresh): every piece moved to the seed/derive/set state
+      pattern (CLAUDE.md "Piece conventions") now that setState() re-runs data() when data() read
+      the written key (framework D23). Render-feeding instance fields became state keys:
+      Hamburger `uncontrolledOpen`, Tree `expandedMap`, Sidebar `openMap` /
+      `uncontrolledCollapsed` / `flyoutIndex` / `flyoutPos`, VirtualList `windowStart`, Select
+      `label`. The refresh() calls left are deliberate and commented: Toaster's module-store
+      subscription, Code's FLIP height measure, opening a row that takes focus at once
+      (MarkdownEditor/RichTextEditor link row and block menu), the open-edge seeds in Command /
+      Combobox / MultiSelect / TimePicker, placement and morph-top corrections in the pickers,
+      Sidebar's flyout clamp, and Kanban's keyboard move announcement.
+  - kind: state
+    text: >-
       0.8.0, feat/piece-image-zoom: new `image-zoom` piece — a WRAPPER over @magic-spells/image-zoom
       (floor ^0.1.0, the only published release), see COMPONENT-IMAGE-ZOOM. Registry manifest +
       registry.json row, demo copy, ImageZoomDoc page, nav/routes entries, `@import

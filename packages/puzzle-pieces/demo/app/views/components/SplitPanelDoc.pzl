@@ -406,11 +406,9 @@ export default class SplitPanelDoc extends PuzzleView {
   events = {
     onResize: (sizes) => {
       this.setState('live', sizes);
-      this.refresh();
     },
     onResizeEnd: (sizes) => {
       this.setState({ commit: sizes, commitCount: this.getData().commitCount + 1 });
-      this.refresh();
     },
   };
 }

@@ -291,7 +291,6 @@ export default class Fader extends PuzzleView {
       const now = this.getData();
       if (now.draftValue !== null && !now.dragging) {
         this.setState({ draftValue: null });
-        this.refresh();
       }
     });
   }
@@ -440,7 +439,6 @@ export default class Fader extends PuzzleView {
       const d = this.getData();
       if (d.draftValue !== null && !d.dragging) {
         this.setState({ draftValue: null });
-        this.refresh();
       }
     }, 90);
   }
@@ -481,7 +479,6 @@ export default class Fader extends PuzzleView {
     const d = this.getData();
     if (d.draftValue !== nv || !d.dragging) {
       this.setState({ dragging: true, draftValue: nv });
-      this.refresh();
       this._emit('input', nv);
     }
   }
@@ -505,7 +502,6 @@ export default class Fader extends PuzzleView {
       // dragging → false re-enables transitions; the overlay stays until props
       // catch up (afterUpdate) or the fallback timer reverts it.
       this.setState({ dragging: false });
-      this.refresh();
       if (finalValue !== startValue) this._emit('change', finalValue);
       this._scheduleOverlayClear();
     } else if (armed && event.type === 'pointerup') {
@@ -515,7 +511,6 @@ export default class Fader extends PuzzleView {
       this._suppressClick = true;
       if (nv !== committed) {
         this.setState({ dragging: false, draftValue: nv });
-        this.refresh();
         this._emit('input', nv);
         this._emit('change', nv);
         this._scheduleOverlayClear();
@@ -595,7 +590,6 @@ export default class Fader extends PuzzleView {
       // @change. Overlay optimistically so the fill animates even before props
       // land (transitions on because dragging is false).
       this.setState({ dragging: false, draftValue: nv });
-      this.refresh();
       this._emit('input', nv);
       this._emit('change', nv);
       this._scheduleOverlayClear();

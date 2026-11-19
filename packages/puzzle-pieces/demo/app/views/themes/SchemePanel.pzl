@@ -216,7 +216,6 @@ export default class SchemePanel extends PuzzleView {
 		// every system light/dark flip — so one subscription covers both.
 		this._unsubscribe = subscribe(() => {
 			this.setState({ mode: liveMode() });
-			this.refresh();
 		});
 		// The demo is hash-routed. Navigating /themes/cool → /themes/warm reuses
 		// this view with new params; the router re-renders on hashchange, and the
@@ -322,7 +321,6 @@ export default class SchemePanel extends PuzzleView {
 
 		this._probedScheme = scheme;
 		this.setState({ values, contrast, summary, ready: true });
-		this.refresh();
 	}
 }
 

@@ -299,7 +299,6 @@ export default class SearchDialog extends PuzzleView {
 
   runSearch(value) {
     this.setState({ query: value, results: searchDocs(value), activeIndex: 0 });
-    this.refresh();
   }
 
   onInputKey(event) {
@@ -310,7 +309,6 @@ export default class SearchDialog extends PuzzleView {
       const step = event.key === 'ArrowDown' ? 1 : -1;
       const next = (this.getData().activeIndex + step + results.length) % results.length;
       this.setState({ activeIndex: next });
-      this.refresh();
       this.scrollActiveIntoView(next);
       return;
     }
@@ -323,8 +321,8 @@ export default class SearchDialog extends PuzzleView {
     }
   }
 
-  // Safe to read straight away: refresh() patches synchronously, so the rows
-  // already carry the new active class by the time this runs.
+  // the rows are already in the dom, so this can scroll before the render
+  // that moves the active class lands.
   scrollActiveIntoView(index) {
     const rows = this._scroll?.querySelectorAll('[data-search-result]');
     rows?.[index]?.scrollIntoView({ block: 'nearest' });

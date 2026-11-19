@@ -197,7 +197,6 @@ export default class Carousel extends PuzzleView {
     init = clamp(init, 0, Math.max(0, n - 1));
     this._committed = init;
     this.setState('viewIndex', init);
-    this.refresh();
     this.scrollToIndex(init, 'auto');
     this._syncAutoplay();
   }
@@ -216,7 +215,6 @@ export default class Carousel extends PuzzleView {
           this._committed = v;
           if (this.getData().viewIndex !== v) {
             this.setState('viewIndex', v);
-            this.refresh();
           }
           this.scrollToIndex(v, this._behavior());
         }
@@ -265,7 +263,6 @@ export default class Carousel extends PuzzleView {
         slideCount: n,
         viewIndex: clamp(this.getData().viewIndex, 0, Math.max(0, n - 1)),
       });
-      this.refresh();
     }
 
     slides.forEach((el, i) => {
@@ -335,7 +332,6 @@ export default class Carousel extends PuzzleView {
     this._committed = i;
     if (this.getData().viewIndex !== i) {
       this.setState('viewIndex', i);
-      this.refresh();
     }
     if (scroll) this.scrollToIndex(i, this._behavior());
     if (i !== prev) {
@@ -358,7 +354,6 @@ export default class Carousel extends PuzzleView {
   _pause(p) {
     if (this.getData().paused !== p) {
       this.setState('paused', p);
-      this.refresh();
     }
   }
 
@@ -407,7 +402,6 @@ export default class Carousel extends PuzzleView {
           const near = this._nearestIndex();
           if (near !== this.getData().viewIndex) {
             this.setState('viewIndex', near);
-            this.refresh();
           }
         });
       }

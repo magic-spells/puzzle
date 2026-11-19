@@ -130,13 +130,11 @@ export default class AppearanceSwitcher extends PuzzleView {
     toggle: () => {
       const open = !this.getData().open;
       this.setState({ open });
-      this.refresh();
       if (open) requestAnimationFrame(() => this.refs.panel && this.refs.panel.focus());
     },
     close: () => {
       if (!this.getData().open) return;
       this.setState({ open: false });
-      this.refresh();
       if (this.refs.trigger) this.refs.trigger.focus();
     },
     applyChoice: (choice) => set(choice),

@@ -406,7 +406,6 @@ export default class DateRangePicker extends PuzzleView {
     }
     const { show } = this.props;
     if (typeof show === 'function') show();
-    if (!this._controlled()) this.refresh();
   }
 
   _requestClose({ restoreFocus = true } = {}) {
@@ -416,7 +415,6 @@ export default class DateRangePicker extends PuzzleView {
     if (typeof hide === 'function') hide();
     if (this._controlled()) return; // parent unmounts the panel; focus return in _onClosed
     this.setState({ uncontrolledOpen: false });
-    this.refresh();
   }
 
   // ---- open / close side-effects -------------------------------------------
@@ -443,6 +441,8 @@ export default class DateRangePicker extends PuzzleView {
       const corrected = this._measurePlacement();
       if (corrected !== this.getData().placement) {
         this.setState({ placement: corrected });
+        // refresh() on purpose: a correction measured off the rendered panel has to
+        // paint this frame, and a setState() render would land a frame late.
         this.refresh();
       }
     });
@@ -528,14 +528,12 @@ export default class DateRangePicker extends PuzzleView {
       const iso = event.target.closest('[data-iso]')?.getAttribute('data-iso');
       if (start && !end && iso && iso !== this.getData().preview) {
         this.setState('preview', iso);
-        this.refresh();
       }
     },
 
     onDayLeave: () => {
       if (this.getData().preview) {
         this.setState('preview', '');
-        this.refresh();
       }
     },
   };

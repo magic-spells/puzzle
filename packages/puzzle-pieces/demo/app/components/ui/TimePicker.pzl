@@ -474,8 +474,6 @@ export default class TimePicker extends PuzzleView {
 
     const { show } = this.props;
     if (typeof show === 'function') show();
-
-    if (!this._controlled()) this.refresh();
   }
 
   _requestClose({ restoreFocus = true } = {}) {
@@ -488,7 +486,6 @@ export default class TimePicker extends PuzzleView {
     if (this._controlled()) return; // parent unmounts the panel; focus return in _onClosed
 
     this.setState({ uncontrolledOpen: false });
-    this.refresh();
   }
 
   // ---- open / close side-effects -------------------------------------------
@@ -511,9 +508,10 @@ export default class TimePicker extends PuzzleView {
   _onOpened() {
     // Seed on the effective closed→open edge: a parent-initiated open never runs
     // _requestOpen(), so without this the columns would derive from a stale 00:00 draft.
-    // refresh() re-runs data() so the columns / aria-activedescendant / scroll target
-    // re-derive. _syncOpenEffects() flips _wasOpen *before* calling here, so the
-    // afterUpdate() this refresh triggers finds no edge and cannot re-enter.
+    // refresh() on purpose (not just the setState) so the columns /
+    // aria-activedescendant / scroll target re-derive before the panel's first paint.
+    // _syncOpenEffects() flips _wasOpen *before* calling here, so the afterUpdate()
+    // this refresh triggers finds no edge and cannot re-enter.
     this._seedActive();
     this.refresh();
 
@@ -524,6 +522,8 @@ export default class TimePicker extends PuzzleView {
       const corrected = this._measurePlacement();
       if (corrected !== this.getData().placement) {
         this.setState({ placement: corrected });
+        // refresh() on purpose: a correction measured off the rendered panel has to
+        // paint this frame, and a setState() render would land a frame late.
         this.refresh();
       }
       // Land focus in the hours column and scroll each column's active row in.
@@ -561,7 +561,6 @@ export default class TimePicker extends PuzzleView {
     else if (key === 'ap') h = to24(to12(h).dh, val);
 
     this.setState({ active: { h, m, s } });
-    this.refresh();
 
     const { change } = this.props;
     if (typeof change === 'function') change(compose(h, m, s, !!this.props.seconds), event);

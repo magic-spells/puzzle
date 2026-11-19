@@ -134,6 +134,8 @@ export default class SplitPanel extends PuzzleView {
   }
 
   mounted() {
+    // refresh() on purpose: data() reads the measured constraints off an instance
+    // field the runtime cannot see.
     const measure = this._measurePair(this._currentSizes(this.props));
     if (measure) this.refresh();
   }
@@ -245,7 +247,6 @@ export default class SplitPanel extends PuzzleView {
         samePair(this._committed(this.props), now.draftSizes)
       ) {
         this.setState('draftSizes', null);
-        this.refresh();
       }
     });
   }
@@ -276,7 +277,6 @@ export default class SplitPanel extends PuzzleView {
     const current = this._currentSizes(this.props);
     if (samePair(current, normalized)) return false;
     this.setState('draftSizes', normalized);
-    this.refresh();
     if (emitResize) this._emit('resize', normalized);
     return true;
   }
@@ -286,7 +286,6 @@ export default class SplitPanel extends PuzzleView {
     const update = { dragging: false, draftSizes: normalized };
     if (!this._controlled()) update.uncontrolledSizes = normalized;
     this.setState(update);
-    this.refresh();
     this._persist(normalized);
     this._emit('resizeEnd', normalized);
     this._scheduleOverlayClear();
@@ -304,7 +303,6 @@ export default class SplitPanel extends PuzzleView {
       const local = this.getData();
       if (Array.isArray(local.draftSizes) && !local.dragging) {
         this.setState('draftSizes', null);
-        this.refresh();
       }
     }, 100);
   }
@@ -578,7 +576,6 @@ export default class SplitPanel extends PuzzleView {
 
     if (!moved) {
       this.setState('dragging', false);
-      this.refresh();
       this._scheduleOverlayClear();
       return;
     }
@@ -655,7 +652,6 @@ export default class SplitPanel extends PuzzleView {
         measure,
       };
       this.setState({ dragging: true, draftSizes: [...sizes] });
-      this.refresh();
       if (divider.focus) divider.focus({ preventScroll: true });
       this._capturePointer(divider, event);
       this._addWindowListeners();

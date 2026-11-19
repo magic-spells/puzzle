@@ -556,10 +556,9 @@ export default class Combobox extends PuzzleView {
     const { show } = this.props;
     if (typeof show === 'function') show();
 
-    // Uncontrolled: we own `open`, so render the newly-open state. Controlled:
-    // the parent's prop flip drives the render. Either way _syncOpenEffects
-    // (afterUpdate) runs the open side-effects.
-    if (!this._controlled()) this.refresh();
+    // Uncontrolled: the uncontrolledOpen write re-runs data() with the next
+    // render. Controlled: the parent's prop flip drives the render. Either way
+    // _syncOpenEffects (afterUpdate) runs the open side-effects.
   }
 
   _requestClose({ restoreFocus = true } = {}) {
@@ -573,7 +572,6 @@ export default class Combobox extends PuzzleView {
     // happens in _onClosed. Uncontrolled: tear down here.
     if (this._controlled()) return;
     this.setState({ uncontrolledOpen: false });
-    this.refresh();
   }
 
   // ---- open / close side-effects (driven by the effective-open transition) --
@@ -602,7 +600,8 @@ export default class Combobox extends PuzzleView {
   _onOpened() {
     document.addEventListener('pointerdown', this._onDocPointer);
     // Fallback seed: a controlled parent may flip `open` true with no combobox
-    // interaction (so _requestOpen/onInput never ran). Seed here, then re-render.
+    // interaction (so _requestOpen/onInput never ran). Seed here, then refresh()
+    // on purpose: the select-all below needs the seeded query rendered now.
     if (!this._openSeeded) {
       this.setState(this._seedOpen(true));
       this.refresh();
@@ -660,7 +659,6 @@ export default class Combobox extends PuzzleView {
     if (i < 0) return;
     this._scrollActive = !!scroll;
     this.setState({ activeIndex: i });
-    this.refresh();
   }
 
   _scrollActiveIntoView() {
@@ -723,10 +721,8 @@ export default class Combobox extends PuzzleView {
         }
         const { show } = this.props;
         if (typeof show === 'function') show();
-        if (!this._controlled()) this.refresh();
       } else {
         this.setState({ query, pristine: false, activeIndex: ai });
-        this.refresh();
       }
     },
 

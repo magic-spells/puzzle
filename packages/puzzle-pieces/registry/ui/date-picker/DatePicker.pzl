@@ -383,10 +383,9 @@ export default class DatePicker extends PuzzleView {
     const { show } = this.props;
     if (typeof show === 'function') show();
 
-    // Uncontrolled: we own `open`, so render the newly-open state ourselves.
-    // Controlled: the parent's prop flip drives the render. Either way
+    // Uncontrolled: the uncontrolledOpen write re-runs data() with the next
+    // render. Controlled: the parent's prop flip drives the render. Either way
     // _syncOpenEffects (afterUpdate) runs the open side-effects.
-    if (!this._controlled()) this.refresh();
   }
 
   _requestClose({ restoreFocus = true } = {}) {
@@ -413,7 +412,6 @@ export default class DatePicker extends PuzzleView {
       this._morph.hide();
     } else {
       this.setState({ uncontrolledOpen: false });
-      this.refresh();
     }
   }
 
@@ -465,6 +463,8 @@ export default class DatePicker extends PuzzleView {
       const corrected = this._measurePlacement();
       if (corrected !== this.getData().placement) {
         this.setState({ placement: corrected });
+        // refresh() on purpose: a correction measured off the rendered panel has to
+        // paint this frame, and a setState() render would land a frame late.
         this.refresh();
       }
     });
@@ -490,6 +490,8 @@ export default class DatePicker extends PuzzleView {
     top += clamped - screenTop;
 
     this.setState({ morphTop: Math.round(top) });
+    // refresh() on purpose: the morph engine measures the panel next, so the
+    // new top must already be in the DOM.
     this.refresh();
   }
 
@@ -516,7 +518,6 @@ export default class DatePicker extends PuzzleView {
     });
     engine.on('hidden', () => {
       this.setState({ uncontrolledOpen: false });
-      this.refresh();
     });
     return engine;
   }

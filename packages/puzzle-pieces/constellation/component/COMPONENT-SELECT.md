@@ -36,6 +36,11 @@ notes:
       value setter dispatches nothing, so there is no echo) and #mine (only the host dispatches
       select-dropdown:*), plus the unused `label` data key. test/select-wrapper.test.js no longer
       asserts #syncing or the target guard. 341→310 lines, 1581→1465 B min+gz.
+  - kind: state
+    text: >-
+      0.10.0 (claude/remove-unneeded-refresh, framework D23): the `#label` field is now a `label`
+      state key seeded in created(); #setLabel writes it with setState() and no refresh(), since
+      setState() now re-runs data() when data() read the written key.
   - kind: gotcha
     text: >-
       2026-11-08 (#259 review, pre-existing, not fixed): when `options` arrive AFTER mount with a
@@ -82,9 +87,9 @@ Upstream re-asserts the last applied value (user pick or programmatic) on every 
 mutation, so a `{#for}` re-render keeps the selection with no help from the root. If the
 selected option leaves the DOM, upstream clears silently — value `''`, label back to
 whatever `.select-label-text` held when the panel first existed — with no event. The root
-therefore mirrors `element.selectedText` into its `#label` field on every `afterUpdate()`
-and calls `refresh()` when it changes (not `setState`, which never re-runs `data()` — the
-label colour and text are derived there). The stock trigger must render the placeholder
+therefore mirrors `element.selectedText` into its `label` state key on every `afterUpdate()`
+with `setState()` when it changes. `data()` reads `label` through `getState()`, so the write
+re-runs `data()`, where the label colour and text are derived. The stock trigger must render the placeholder
 text (not an empty span) at mount, since that captured text is also the form-reset label.
 A controlled parent cannot CLEAR the selection by passing `''`/`null`.
 

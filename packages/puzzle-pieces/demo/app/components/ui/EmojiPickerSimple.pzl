@@ -338,8 +338,6 @@ export default class EmojiPickerSimple extends PuzzleView {
 
     const { show } = this.props;
     if (typeof show === 'function') show();
-
-    if (!this._controlled()) this.refresh();
   }
 
   _requestClose({ restoreFocus = true } = {}) {
@@ -360,7 +358,6 @@ export default class EmojiPickerSimple extends PuzzleView {
       this._morph.hide();
     } else {
       this.setState({ uncontrolledOpen: false });
-      this.refresh();
     }
   }
 
@@ -406,6 +403,8 @@ export default class EmojiPickerSimple extends PuzzleView {
       const corrected = this._measurePlacement();
       if (corrected !== this.getData().placement) {
         this.setState({ placement: corrected });
+        // refresh() on purpose: a correction measured off the rendered panel has to
+        // paint this frame, and a setState() render would land a frame late.
         this.refresh();
       }
       this._focusList();
@@ -428,6 +427,8 @@ export default class EmojiPickerSimple extends PuzzleView {
     top += clamped - screenTop;
 
     this.setState({ morphTop: Math.round(top) });
+    // refresh() on purpose: the morph engine measures the panel next, so the
+    // new top must already be in the DOM.
     this.refresh();
   }
 
@@ -451,7 +452,6 @@ export default class EmojiPickerSimple extends PuzzleView {
     });
     engine.on('hidden', () => {
       this.setState({ uncontrolledOpen: false });
-      this.refresh();
     });
     return engine;
   }
@@ -467,7 +467,6 @@ export default class EmojiPickerSimple extends PuzzleView {
     if (i < 0 || i >= cells.length) return;
     this._scrollActive = !!scroll;
     this.setState({ activeIndex: i });
-    this.refresh();
   }
 
   _move(delta) {
@@ -492,7 +491,6 @@ export default class EmojiPickerSimple extends PuzzleView {
     if (next === this.getData().groupIndex) return;
     this._scrollActive = false;
     this.setState({ groupIndex: next, activeIndex: 0 });
-    this.refresh();
     const list = this.element?.querySelector('[data-emoji-list]');
     if (list) list.scrollTop = 0;
     if (focusTab) {

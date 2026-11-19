@@ -118,6 +118,8 @@ export default class Toaster extends PuzzleView {
   }
 
   mounted() {
+    // refresh() on purpose: the toasts live in a module store data() reads, which
+    // setState() cannot see.
     this._unsub = subscribe(() => this.refresh());
   }
 

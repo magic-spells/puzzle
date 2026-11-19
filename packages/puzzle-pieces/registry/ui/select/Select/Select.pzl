@@ -165,10 +165,12 @@ export default class Select extends PuzzleView {
   #openControlled = false;
   #last;
   #lastOpen = false;
-  // The selected option's text, mirrored from the component. Kept in a field
-  // rather than read back out of data() so the first data() call — which runs
-  // before there IS any data — has something to read.
-  #label = '';
+
+  // the selected option's text, mirrored from the component, lives in the state
+  // layer. seeding it here gives the first data() run something to read.
+  created() {
+    this.setState({ label: '' });
+  }
 
   #onChange = (event) => {
     const detail = event.detail || {};
@@ -199,16 +201,16 @@ export default class Select extends PuzzleView {
     if (typeof text === 'string') this.#setLabel(text);
   }
 
-  // refresh(), not setState: labelClass and triggerText derive from #label in
-  // data(), which setState never re-runs. The equality check ends the loop.
+  // labelClass and triggerText derive from `label` in data(), which reads it
+  // through getState(), so the write re-runs data(). The equality check ends the
+  // afterUpdate → setState → afterUpdate loop.
   #setLabel(text) {
-    if (text === this.#label) return;
-    this.#label = text;
-    this.refresh();
+    if (text === this.getState().label) return;
+    this.setState({ label: text });
   }
 
   data(params, props) {
-    const label = this.#label;
+    const label = this.getState().label || '';
     const placeholder = props.placeholder ?? 'Select…';
     return {
       triggerText: label || placeholder,

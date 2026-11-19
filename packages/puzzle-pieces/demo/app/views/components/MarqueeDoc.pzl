@@ -262,7 +262,6 @@ export default class MarqueeDoc extends PuzzleView {
   events = {
     nextPromo: () => {
       this.setState('promoIndex', this.getData().promoIndex + 1);
-      this.refresh();
     },
   };
 }

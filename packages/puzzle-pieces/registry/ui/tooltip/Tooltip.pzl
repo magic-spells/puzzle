@@ -140,7 +140,6 @@ export default class Tooltip extends PuzzleView {
     if (this.getData().visible) return;
     const side = this._side();
     this.setState({ visible: true, placement: side });
-    this.refresh();
 
     // Cheap top<->bottom flip: after the chip renders, if it overflows the
     // viewport on the requested edge and the opposite edge has room, flip. Left
@@ -151,7 +150,6 @@ export default class Tooltip extends PuzzleView {
       const next = this._measureFlip(side);
       if (next !== this.getData().placement) {
         this.setState({ placement: next });
-        this.refresh();
       }
     });
   }
@@ -163,7 +161,6 @@ export default class Tooltip extends PuzzleView {
     }
     if (!this.getData().visible) return;
     this.setState({ visible: false, placement: null });
-    this.refresh();
   }
 
   _measureFlip(side) {

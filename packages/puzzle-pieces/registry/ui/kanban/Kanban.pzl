@@ -462,7 +462,6 @@ export default class Kanban extends PuzzleView {
       const d = this.getData();
       if (d.hoveredColId !== t.colId || d.targetIndex !== t.index) {
         this.setState({ hoveredColId: t.colId, targetIndex: t.index });
-        this.refresh();
       }
     });
   }
@@ -503,7 +502,6 @@ export default class Kanban extends PuzzleView {
       grabbedId: null,
       announce: '',
     });
-    this.refresh();
     // Capture on the ROOT (persists across the source-card removal), mouse/pen only.
     if (event.pointerType !== 'touch' && this.element) {
       try {
@@ -551,7 +549,6 @@ export default class Kanban extends PuzzleView {
           ? `Moved ${card.title} to ${dest.title}.`
           : '',
     });
-    this.refresh();
 
     if (!noop && toColId) this._emitMove(cardId, toColId, toIndex, event);
   }
@@ -575,7 +572,6 @@ export default class Kanban extends PuzzleView {
         targetIndex: -1,
         announce: 'Move cancelled.',
       });
-      this.refresh();
     }
   }
 
@@ -603,7 +599,6 @@ export default class Kanban extends PuzzleView {
         ? `Picked up ${card.title}. Use the arrow keys to move, space or escape to drop.`
         : '',
     });
-    this.refresh();
   }
 
   _drop() {
@@ -612,7 +607,6 @@ export default class Kanban extends PuzzleView {
       grabbedId: null,
       announce: card ? `Dropped ${card.title}.` : '',
     });
-    this.refresh();
   }
 
   // Locate the column currently holding the grabbed card (its position moves as
@@ -660,9 +654,10 @@ export default class Kanban extends PuzzleView {
     this.setState({
       announce: `Moved ${card.title} to ${destCol.title}, position ${index + 1} of ${destLen}.`,
     });
+    // refresh() on purpose, and the marker set after it: refresh runs afterUpdate
+    // synchronously, which consumes the marker. A setState() render alone would run
+    // that afterUpdate later, ahead of the parent's re-render, and eat the marker there.
     this.refresh();
-    // set after the announcement refresh: refresh runs afterUpdate synchronously, which
-    // consumes the marker — it has to survive until the parent's re-render
     this._refocusGrabbed = cardId;
     this._emitMove(cardId, destColId, index, event);
   }
