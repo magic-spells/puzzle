@@ -235,7 +235,16 @@ function defaultCrud({ method, path, body, collection, pk, state, url }) {
 	const id = segment !== null && !segment.includes('/') ? safeDecode(segment) : null;
 
 	if (method === 'GET') {
-		if (isCollection) return mockResponse(200, [...collection.values()]);
+		if (isCollection) {
+			const all = [...collection.values()];
+			// D193: a collection GET carrying page, limit or after answers one page
+			// as { records, meta }; any other query param is ignored.
+			const params = new URLSearchParams(path.split('?')[1] ?? '');
+			if (params.has('page') || params.has('limit') || params.has('after')) {
+				return mockResponse(200, mockPage(all, params, pk));
+			}
+			return mockResponse(200, all);
+		}
 		if (id === null) return notFound(method, url);
 		const key = resolveKey(collection, id);
 		return key === undefined ? notFound(method, url) : mockResponse(200, collection.get(key));
@@ -272,6 +281,42 @@ function defaultCrud({ method, path, body, collection, pk, state, url }) {
 	}
 
 	return notFound(method, url);
+}
+
+/**
+ * One page of a mock collection (D193), in insertion order. `limit` (default 10,
+ * 1 to 100) sizes it; `after` is a cursor — the primary key of the last row of
+ * the previous page — and wins over `page` (1-based) when both are present.
+ * `meta.nextPage`/`meta.nextCursor` are null on the last page.
+ * @param {Record<string, any>[]} all
+ * @param {URLSearchParams} params
+ * @param {string} pk
+ * @returns {{ records: Record<string, any>[], meta: Record<string, any> }}
+ */
+function mockPage(all, params, pk) {
+	const limit = Math.min(100, Math.max(1, Number.parseInt(params.get('limit') ?? '', 10) || 10));
+	const after = params.get('after');
+	let page = null;
+	let start;
+	if (after !== null) {
+		// an unknown cursor starts from the top rather than answering nothing
+		start = all.findIndex((row) => String(row[pk]) === after) + 1;
+	} else {
+		page = Math.max(1, Number.parseInt(params.get('page') ?? '', 10) || 1);
+		start = (page - 1) * limit;
+	}
+	const records = all.slice(start, start + limit);
+	const more = start + limit < all.length;
+	return {
+		records,
+		meta: {
+			page,
+			limit,
+			total: all.length,
+			nextPage: more && page !== null ? page + 1 : null,
+			nextCursor: more && records.length ? String(records[records.length - 1][pk]) : null,
+		},
+	};
 }
 
 /**

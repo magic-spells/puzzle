@@ -15,7 +15,10 @@
 /**
  * The adapter's read state as it crosses a serialization boundary (D161): the
  * prerendered page's island, the HMR snapshot. `v` versions the envelope.
- * @typedef {{ v: number, complete: string[], loaded: string[], absent: string[] }} ReadStateEnvelope
+ * `queries` (D193) is optional and additive: [key, type, query, rows, meta] per
+ * cached server query.
+ * @typedef {{ v: number, complete: string[], loaded: string[], absent: string[],
+ *   queries?: [string, string, Record<string, unknown>, string[], Record<string, unknown> | null][] }} ReadStateEnvelope
  */
 
 /**

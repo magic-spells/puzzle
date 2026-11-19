@@ -9,6 +9,7 @@
 import { createAdapterCapability, registerReadState } from '../capabilities.js';
 import { HANDLE_CTX, Store } from './store.js';
 import { PuzzleView } from '../views/PuzzleView.js';
+import { RENDER_REV } from '../renderRev.js';
 import {
 	PuzzleModel,
 	PuzzleValidationError,
@@ -38,7 +39,33 @@ import {
  *   loaded: Set<string>,
  *   complete: Set<string>,
  *   seq: number,
+ *   queries: Map<string, QueryEntry>,
+ *   staleType: Map<string, number>,
+ *   staleRecord: Map<string, number>,
  * }} ReadState
+ */
+
+/**
+ * One cached server query (D193): the rows a `loadMany(type, query)` answered,
+ * in the server's order, as record keys into the one record table, plus the
+ * response's `meta`. `gen` is the read generation of the load that wrote it
+ * (0 for a hydrated entry); `mark` is the generation of the last
+ * `invalidate(type, { query })` that named it. The entry is stale while
+ * `gen` is older than the newer of `mark` and its type's stale mark.
+ * @typedef {{
+ *   type: string,
+ *   query: Record<string, unknown>,
+ *   rows: string[],
+ *   meta: Readonly<Record<string, unknown>> | undefined,
+ *   gen: number,
+ *   mark: number,
+ * }} QueryEntry
+ */
+
+/**
+ * A record's write status (D193): which write is running at the front of its
+ * D132 chain, how many are queued behind it, and the last failure.
+ * @typedef {{ pending: 'save' | 'delete' | null, error: unknown, queued: number }} WriteStatus
  */
 
 /**
@@ -63,6 +90,26 @@ const MAX_SETTLE_ROUNDS = 10;
 const noop = () => {};
 /** @type {WeakMap<object, WeakMap<object, Promise<any>>>} */
 const writeChainsByStore = new WeakMap();
+// record → its D193 write status, created on its first save()/delete(). Keyed by
+// the record so the entry dies with it.
+/** @type {WeakMap<object, WriteStatus>} */
+const WRITE_STATUS = new WeakMap();
+const IDLE_STATUS = Object.freeze({ pending: null, error: null });
+
+/**
+ * A write that is decided before it reaches the chain — a deleted or store-less
+ * record — still answers `pending`/`error` like any other (D193).
+ * @template T
+ * @param {T} [value] the resolution, when `error` is undefined
+ * @param {unknown} [error] the rejection reason
+ * @returns {import('../../types/adapter.js').WritePromise<T>}
+ */
+function decidedWrite(value, error) {
+	const out = /** @type {any} */ (error === undefined ? Promise.resolve(value) : Promise.reject(error));
+	out.pending = false;
+	out.error = error ?? null;
+	return out;
+}
 // D161: subscriber → its store handle. One entry per subscriber, matching the
 // one HANDLE_CTX slot a subscriber carries: a subscriber belongs to exactly one
 // store, which is what a PuzzleView is — `this.ctx.store` is minted once, in its
@@ -89,6 +136,7 @@ const baseCreateRecord = Store.prototype.createRecord;
 const baseRemoveRecord = Store.prototype.removeRecord;
 const baseHydrateAll = Store.prototype._hydrateAll;
 const baseInstallRelationships = Store.prototype._installRelationships;
+const baseFindMany = Store.prototype.findMany;
 
 /**
  * @param {string} type
@@ -329,6 +377,10 @@ const LOAD_GENERATIONS = new WeakMap();
 // without limit. No TTL: an identity the server 404s is absent until something
 // makes it present (see clearAbsent's call sites).
 const MAX_ABSENT = 1000;
+// Bounded like the negative cache: a page that walks every page number or cursor
+// must not grow the query cache without limit. Evicting an entry costs nothing
+// but a refetch the next time a tracked read asks for that key (D193).
+const MAX_QUERIES = 200;
 const REC_SEP = ' '; // matches Store's record-key convention: a type name has no space
 
 /**
@@ -351,6 +403,13 @@ function readStateFor(store) {
 			loaded: new Set(),
 			complete: new Set(),
 			seq: 0, // monotonic read-dispatch/removal counter (see LOAD_GENERATIONS)
+			// D193 server queries and staleness. `queries` is an LRU of canonical
+			// query key → QueryEntry. The two stale maps hold the read generation an
+			// invalidate() stamped: a whole type, or one "type id" identity. Anything
+			// whose last read landed BEFORE its mark is stale.
+			queries: new Map(),
+			staleType: new Map(),
+			staleRecord: new Map(),
 		};
 		readStateByStore.set(store, state);
 	}
@@ -423,6 +482,156 @@ function sweepAbsent(store) {
 	}
 }
 
+// ---- server queries (D193) ---------------------------------------------------
+
+/**
+ * Is `value` allowed inside a query? Strings, finite numbers and booleans, which
+ * spell the same way in a URL and in the cache key. Anything else (a function, a
+ * Date, a nested object, NaN) has no stable spelling, so two reads that mean the
+ * same request could miss each other's cache entry.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function isQueryScalar(value) {
+	return (
+		typeof value === 'string' ||
+		typeof value === 'boolean' ||
+		(typeof value === 'number' && Number.isFinite(value))
+	);
+}
+
+/**
+ * The cache key for one server query (D193), or null when the query is empty.
+ * Keys are sorted and nullish entries dropped — the same entries the generated
+ * transport's URLSearchParams drops — so `{ page: 2, q: null }` and `{ page: 2 }`
+ * share an entry. Values keep their JSON type: `{ page: 2 }` and `{ page: '2' }`
+ * are different requests to an authored verb, so they are different entries.
+ * Throws on a value that has no stable spelling, naming the type and key.
+ * @param {string} type
+ * @param {unknown} query
+ * @returns {string | null}
+ */
+function canonicalQuery(type, query) {
+	if (query == null) return null;
+	if (typeof query !== 'object' || Array.isArray(query)) {
+		throw new Error(`[puzzle] findMany('${type}', { query }) expects query to be a plain object`);
+	}
+	/** @type {[string, unknown][]} */
+	const entries = [];
+	for (const key of Object.keys(query).sort()) {
+		const value = /** @type {Record<string, unknown>} */ (query)[key];
+		if (value == null) continue;
+		const ok = Array.isArray(value) ? value.every(isQueryScalar) : isQueryScalar(value);
+		if (!ok) {
+			throw new Error(
+				`[puzzle] findMany('${type}') query key "${key}" must be a string, finite number, boolean, or an array of those`
+			);
+		}
+		entries.push([key, value]);
+	}
+	// '?' cannot start a model type name, so a query key never equals a collection key.
+	return entries.length ? type + '?' + JSON.stringify(entries) : null;
+}
+
+/**
+ * Read one query entry and mark it most recently used.
+ * @param {ReadState} state
+ * @param {string} key
+ * @returns {QueryEntry | undefined}
+ */
+function touchQuery(state, key) {
+	const entry = state.queries.get(key);
+	if (entry) {
+		state.queries.delete(key);
+		state.queries.set(key, entry);
+	}
+	return entry;
+}
+
+/**
+ * Store (or replace) one query entry, evicting the least recently used past the cap.
+ * @param {ReadState} state
+ * @param {string} key
+ * @param {QueryEntry} entry
+ */
+function setQuery(state, key, entry) {
+	state.queries.delete(key);
+	state.queries.set(key, entry);
+	if (state.queries.size > MAX_QUERIES) {
+		state.queries.delete(/** @type {string} */ (state.queries.keys().next().value));
+	}
+}
+
+/**
+ * A query entry is stale when its last load was dispatched before an
+ * invalidate() that covers it — its own mark, or its whole type's (D193).
+ * @param {ReadState} state
+ * @param {QueryEntry} entry
+ * @returns {boolean}
+ */
+function isQueryStale(state, entry) {
+	return entry.gen < Math.max(entry.mark, state.staleType.get(entry.type) ?? 0);
+}
+
+/**
+ * A present record is stale when it is synced (it came from or went to the
+ * server) and the last read that landed on it was dispatched before an
+ * invalidate() that covers it (D193). A record that only ever lived locally is
+ * never stale: the server has nothing newer to say about it.
+ * @param {ReadState} state
+ * @param {string} type
+ * @param {StoreRecord} record
+ * @param {string} key its identity key
+ * @returns {boolean}
+ */
+function isRecordStale(state, type, record, key) {
+	if (!record._synced) return false;
+	const mark = Math.max(state.staleType.get(type) ?? 0, state.staleRecord.get(key) ?? 0);
+	return mark > 0 && (LOAD_GENERATIONS.get(record) ?? 0) < mark;
+}
+
+/**
+ * Turn a query entry into what findMany returns: the live records for its rows,
+ * in the server's order, skipping any removed since, with the local `filter`
+ * applied on top. The array carries the response's `meta` as a non-enumerable
+ * property, so a spread or a loop never sees it (D193).
+ * @param {Store} store
+ * @param {string} type
+ * @param {QueryEntry | undefined} entry
+ * @param {FindManyOptions | undefined} options
+ * @returns {StoreRecord[] & { meta?: Readonly<Record<string, unknown>> }}
+ */
+function queryRows(store, type, entry, options) {
+	/** @type {StoreRecord[] & { meta?: Readonly<Record<string, unknown>> }} */
+	let records = [];
+	if (entry) {
+		const map = store._typeMap(type);
+		for (const key of entry.rows) {
+			const record = map.get(key);
+			if (record) records.push(record);
+		}
+	}
+	if (typeof options?.filter === 'function') records = records.filter(options.filter);
+	Object.defineProperty(records, 'meta', { value: entry?.meta, configurable: true });
+	return records;
+}
+
+/**
+ * Deliver a change to exactly one subscription key — no collection key, no
+ * mutation — and advance the record's render revision when there is one, so a
+ * looped row refreshes too (D170). The write status and invalidation use this:
+ * neither changes a field, but both change what a view may show.
+ * @param {Store} store
+ * @param {string} key a collection key ("type") or a record key ("type id")
+ * @param {StoreRecord | null} [record]
+ */
+function notifyKey(store, key, record) {
+	const seq = ++store._notifySeq;
+	store._pendingKeys.set(key, seq);
+	if (record) /** @type {any} */ (record)[RENDER_REV] = seq;
+	store._scheduleFlush();
+}
+
 /**
  * The read state a prerendered page hands its browser kernel (D161). Records
  * travel in the existing data island; this is what the island cannot infer from
@@ -437,7 +646,8 @@ export function serializeReadState(store) {
 	// must not silently get an empty envelope (D161).
 	const state = readStateByStore.get(store?.[STORE_RAW] ?? store);
 	if (!state) return { v: 1, complete: [], loaded: [], absent: [] };
-	return {
+	/** @type {ReadStateEnvelope} */
+	const envelope = {
 		v: 1,
 		// `complete` keeps its original meaning — exhaustive — so an older kernel
 		// reading a newer envelope is still right about every id. `loaded` is
@@ -446,6 +656,13 @@ export function serializeReadState(store) {
 		loaded: [...state.loaded],
 		absent: [...state.absent.keys()],
 	};
+	// D193 query entries, additive the same way and present only when there are
+	// any: their rows and meta, never their load generations or stale marks — the
+	// next page starts fresh.
+	if (state.queries.size) {
+		envelope.queries = Array.from(state.queries, ([key, e]) => [key, e.type, e.query, e.rows, e.meta ?? null]);
+	}
+	return envelope;
 }
 
 /**
@@ -474,6 +691,31 @@ export function hydrateReadState(handleOrStore, envelope) {
 	if (Array.isArray(envelope.absent)) {
 		for (const key of envelope.absent) {
 			if (typeof key === 'string' && key.includes(REC_SEP)) markAbsent(state, key, 0);
+		}
+	}
+	// D193 query entries. Untrusted, so each one is checked for shape and its key
+	// recomputed from its own type and query: an entry whose key does not match
+	// is dropped rather than cached under a key no read would ever spell.
+	if (Array.isArray(envelope.queries)) {
+		for (const item of envelope.queries) {
+			if (!Array.isArray(item)) continue;
+			const [key, type, query, rows, meta] = item;
+			if (typeof type !== 'string' || !Array.isArray(rows)) continue;
+			let expected;
+			try {
+				expected = canonicalQuery(type, query);
+			} catch {
+				continue;
+			}
+			if (expected === null || expected !== key) continue;
+			setQuery(state, key, {
+				type,
+				query: { ...query },
+				rows: rows.filter((row) => typeof row === 'string'),
+				meta: meta && typeof meta === 'object' && !Array.isArray(meta) ? Object.freeze({ ...meta }) : undefined,
+				gen: 0,
+				mark: 0,
+			});
 		}
 	}
 	sweepAbsent(store);
@@ -724,8 +966,25 @@ class AdapterStoreMethods {
 				recordMutationRevision(record),
 			])
 		);
-		const list = await this._adapterResult(this._adapterVerb(type, 'loadMany')(options));
+		const result = await this._adapterResult(this._adapterVerb(type, 'loadMany')(options));
+		// D193: a verb (or the server, through the generated one) may answer
+		// `{ records, meta }` instead of a bare array — the shape that carries a
+		// cursor, a total or a next page. The guards below apply to `records`.
+		let list = result;
+		/** @type {Record<string, unknown> | undefined} */
+		let meta;
+		if (result && typeof result === 'object' && !Array.isArray(result) && Array.isArray(result.records)) {
+			list = result.records;
+			if (result.meta != null) {
+				if (typeof result.meta !== 'object' || Array.isArray(result.meta)) {
+					throw new Error(`[puzzle] loadMany('${type}') expected meta to be a JSON object`);
+				}
+				meta = result.meta;
+			}
+		}
 		if (!Array.isArray(list)) {
+			// the message predates D193's { records, meta } shape and is matched by
+			// apps and tests, so it keeps its wording
 			throw new Error(`[puzzle] loadMany('${type}') expected a JSON array from the server`);
 		}
 		// Per-element shape guard (mirrors loadOne): validate EVERY entry up front,
@@ -757,9 +1016,50 @@ class AdapterStoreMethods {
 			const state = readStateFor(this);
 			state.loaded.add(type);
 			if (isGeneratedVerb(this, type, 'loadMany')) state.complete.add(type);
+		} else {
+			this._storeQuery(type, options, records, meta, gen);
 		}
 		this._persist();
 		return records;
+	}
+
+	/**
+	 * Write the query entry an options-bearing loadMany answered (D193), so the
+	 * explicit verb and the tracked read fill one cache. Options with no stable
+	 * spelling (an authored verb may take anything) simply cache nothing — only a
+	 * tracked read is strict about them. An empty query caches nothing either: it
+	 * is no query. A response older than the one already cached never replaces it.
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @param {AdapterLoadManyOptions} options
+	 * @param {StoreRecord[]} records the upserted rows, in the server's order
+	 * @param {Record<string, unknown> | undefined} meta
+	 * @param {number} gen this load's dispatch generation
+	 */
+	_storeQuery(type, options, records, meta, gen) {
+		let key;
+		try {
+			key = canonicalQuery(type, options);
+		} catch {
+			return;
+		}
+		if (key === null) return;
+		const state = readStateFor(this);
+		const current = state.queries.get(key);
+		if (current && current.gen > gen) return;
+		const pk = this.modelFor(type).primaryKey();
+		setQuery(state, key, {
+			type,
+			query: { ...options },
+			rows: records.map((record) => /** @type {string} */ (recordKey(record[pk]))),
+			meta: meta ? Object.freeze({ ...meta }) : undefined,
+			gen,
+			mark: current?.mark ?? 0,
+		});
+		// The rows of a cached query can change without any record changing (a
+		// refetch after invalidate() may drop or reorder rows), so tell the views
+		// reading this type that the answer moved.
+		notifyKey(this, type);
 	}
 
 	/**
@@ -894,7 +1194,11 @@ class AdapterStoreMethods {
 	 */
 	_findOneTracked(type, id, requests) {
 		const record = this._findOneLocal(type, id);
-		if (!record && requests) this._faultOne(type, id, requests);
+		if (!requests) return record;
+		if (!record) this._faultOne(type, id, requests);
+		// D193: a present record an invalidate() covered refetches. The settle loop
+		// holds the commit until it lands, so the old fields stay on screen.
+		else this._faultStale(type, id, record, requests);
 		return record;
 	}
 
@@ -905,10 +1209,103 @@ class AdapterStoreMethods {
 	 * @param {RequestMap | null} requests
 	 */
 	_findManyTracked(type, options, requests) {
+		// D193: a query read answers from its own cached rows and faults that one
+		// key. An empty query is no query, and falls through to the collection.
+		const key = canonicalQuery(type, options?.query);
+		if (key !== null) {
+			const state = readStateFor(this);
+			const entry = touchQuery(state, key);
+			if (requests && (!entry || isQueryStale(state, entry))) {
+				this._faultQuery(type, key, /** @type {Record<string, any>} */ (options?.query), requests);
+			}
+			this._subscribe(type);
+			return queryRows(this, type, entry, options);
+		}
 		// The collection, not the filter, is what can be missing: a filter is always
 		// applied locally and is never serialized into a request.
 		if (requests) this._faultMany(type, requests);
 		return this._findManyLocal(type, options);
+	}
+
+	/**
+	 * The raw store's findMany, widened for D193: a `query` read returns that
+	 * query's cached rows (or `[]`) as a local snapshot — it never fetches, like
+	 * every read outside a tracked data() run. Without a query, or on a store
+	 * built without the capability, this is core's local read, unchanged.
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @param {FindManyOptions} [options]
+	 */
+	findMany(type, options) {
+		// the prototype is shared realm-wide, so a store built WITHOUT the
+		// capability keeps core's read (and its dev warning) unchanged (D157)
+		return this._a ? this._findManyTracked(type, options, null) : baseFindMany.call(this, type, options);
+	}
+
+	/**
+	 * Mark server data stale so the views reading it refetch (D193). Never
+	 * fetches: it stamps a stale mark at the current read generation and
+	 * notifies, and each tracked read of a covered entry then refetches through
+	 * the D161 fault path, behind the settle loop, with the old rows still on
+	 * screen until the fresh pass commits. Nothing on screen reading it ⇒ nothing
+	 * fetches.
+	 *
+	 * - `invalidate(type)`: every query of the type, its whole-collection load
+	 *   (LOADED and EXHAUSTIVE are cleared), its negative cache, and every synced
+	 *   record of the type for findOne.
+	 * - `invalidate(type, id)`: one record, and its negative-cache entry.
+	 * - `invalidate(type, { query })`: one query entry, matched by its exact key.
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @param {unknown} [target] an id, or `{ query }`
+	 */
+	invalidate(type, target) {
+		const state = readStateFor(this);
+		const mark = ++state.seq;
+		if (target === undefined) {
+			state.staleType.set(type, mark);
+			state.loaded.delete(type);
+			state.complete.delete(type);
+			for (const key of [...state.absent.keys()]) {
+				if (key.startsWith(type + REC_SEP)) state.absent.delete(key);
+			}
+			// Every view reading the collection or one of its records hears it.
+			for (const key of this.subscribersByKey.keys()) {
+				if (key === type || key.startsWith(type + REC_SEP)) notifyKey(this, key);
+			}
+			return;
+		}
+		if (target !== null && typeof target === 'object' && 'query' in target) {
+			const key = canonicalQuery(type, /** @type {{ query: unknown }} */ (target).query);
+			const entry = key === null ? undefined : state.queries.get(key);
+			if (entry) {
+				entry.mark = mark;
+				notifyKey(this, type);
+			}
+			return;
+		}
+		const key = identityKey(type, target);
+		if (key === null) return;
+		state.staleRecord.set(key, mark);
+		state.absent.delete(key);
+		notifyKey(this, type + REC_SEP + target, this._typeMap(type).get(recordKey(target)));
+	}
+
+	/**
+	 * The write status of one record (D193): `pending` names the write running
+	 * at the front of its D132 chain ('save' or 'delete'), or null when none is
+	 * queued; `error` is the last failed write's error, cleared when the next
+	 * write starts. Read inside data() it subscribes to the record, and every
+	 * change of status notifies that record, so the view re-runs on its own.
+	 * @this {AdapterStore}
+	 * @param {StoreRecord} record
+	 * @returns {Readonly<{ pending: 'save' | 'delete' | null, error: unknown }>}
+	 */
+	syncStatus(record) {
+		const type = record?._type;
+		if (type) this._subscribe(type + REC_SEP + record[this.modelFor(type).primaryKey()]);
+		const status = record ? WRITE_STATUS.get(record) : undefined;
+		return status ? Object.freeze({ pending: status.pending, error: status.error }) : IDLE_STATUS;
 	}
 
 	/**
@@ -1114,6 +1511,74 @@ class AdapterStoreMethods {
 	}
 
 	/**
+	 * The query half (D193): fetch one query key that is missing or stale,
+	 * deduped with any request already in flight for the same key (concurrent
+	 * views share it). Shares `state.many` with collection loads — a query key
+	 * always holds a '?', which no model type name does.
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @param {string} key the canonical query key
+	 * @param {Record<string, any>} query
+	 * @param {RequestMap} requests
+	 */
+	_faultQuery(type, key, query, requests) {
+		const state = readStateFor(this);
+		const inflight = state.many.get(key);
+		if (inflight) {
+			requests.set(key, inflight);
+			return;
+		}
+		if (!faultVerb(this, type, 'loadMany')) return;
+		const request = (async () => {
+			try {
+				await this.loadMany(type, query);
+			} finally {
+				if (state.many.get(key) === request) state.many.delete(key);
+			}
+		})();
+		state.many.set(key, request);
+		request.catch(noop);
+		requests.set(key, request);
+	}
+
+	/**
+	 * Refetch a present record an invalidate() covered (D193). A 404 means the
+	 * server no longer has it, so the record is removed locally (which records
+	 * it absent) and the next pass reads null. Any other failure fails the run
+	 * and leaves the record stale, so the next run retries.
+	 * @this {AdapterStore}
+	 * @param {string} type
+	 * @param {unknown} id
+	 * @param {StoreRecord} record
+	 * @param {RequestMap} requests
+	 */
+	_faultStale(type, id, record, requests) {
+		const state = readStateByStore.get(this);
+		if (!state || (state.staleType.size === 0 && state.staleRecord.size === 0)) return;
+		const key = identityKey(type, id);
+		if (key === null || !isRecordStale(state, type, record, key)) return;
+		const inflight = state.one.get(key);
+		if (inflight) {
+			requests.set(key, inflight);
+			return;
+		}
+		if (!faultVerb(this, type, 'loadOne')) return;
+		const request = (async () => {
+			try {
+				await this._loadOne(type, id, true);
+			} catch (err) {
+				if (!(err instanceof PuzzleAdapterError) || err.status !== 404) throw err;
+				if (this._typeMap(type).get(recordKey(id)) === record) this.removeRecord(record);
+			} finally {
+				if (state.one.get(key) === request) state.one.delete(key);
+			}
+		})();
+		state.one.set(key, request);
+		request.catch(noop);
+		requests.set(key, request);
+	}
+
+	/**
 	 * Whether a tracked find's fetch is in flight. PuzzleApp.idle() asks through
 	 * an optional call, so core reads this state without importing it (D185).
 	 * @this {AdapterStore}
@@ -1286,10 +1751,71 @@ class AdapterStoreMethods {
 	 * no write may create or revive a row for a record the app has discarded.
 	 * @this {AdapterStore}
 	 * @param {StoreRecord} record
-	 * @returns {Promise<StoreRecord>}
+	 * @returns {import('../../types/adapter.js').WritePromise<StoreRecord>}
 	 */
 	saveRecord(record) {
-		return this._chain(record, () => this._saveRecordNow(record));
+		return this._write(record, 'save', () => this._saveRecordNow(record));
+	}
+
+	/**
+	 * Run one write through the record's D132 chain and keep its D193 status:
+	 * `pending` names the write at the front of the chain, `error` holds the
+	 * last failure, and every change notifies the record. The promise returned
+	 * carries the same two facts as plain properties for code that holds it.
+	 * @template T
+	 * @this {AdapterStore}
+	 * @param {StoreRecord} record
+	 * @param {'save' | 'delete'} kind
+	 * @param {() => Promise<T>} fn
+	 * @returns {import('../../types/adapter.js').WritePromise<T>}
+	 */
+	_write(record, kind, fn) {
+		let status = WRITE_STATUS.get(record);
+		if (!status) {
+			status = { pending: null, error: null, queued: 0 };
+			WRITE_STATUS.set(record, status);
+		}
+		const s = status;
+		s.queued++;
+		// the status notification goes to the record's key as it is NOW — a first
+		// save may re-key it, so this is read again at each flip
+		const changed = () => {
+			const type = record._type;
+			if (!type) return;
+			const id = record[this.modelFor(type).primaryKey()];
+			notifyKey(this, type + REC_SEP + id, record);
+		};
+		const run = this._chain(record, () => {
+			s.pending = kind;
+			s.error = null;
+			changed();
+			return fn();
+		});
+		/** @type {any} */
+		let out;
+		/** @param {unknown} [err] */
+		const settle = (err) => {
+			s.queued--;
+			if (s.queued === 0) s.pending = null;
+			if (err !== undefined) s.error = err;
+			out.pending = false;
+			out.error = err ?? null;
+			changed();
+		};
+		out = run.then(
+			(value) => {
+				settle();
+				return value;
+			},
+			(err) => {
+				// a rejection with no reason still counts as a failure
+				settle(err ?? new Error('[puzzle] write failed'));
+				throw err;
+			}
+		);
+		out.pending = true;
+		out.error = null;
+		return out;
 	}
 
 	/**
@@ -1460,10 +1986,10 @@ class AdapterStoreMethods {
 	 * record is a local removal, not a doomed DELETE that can reject.
 	 * @this {AdapterStore}
 	 * @param {StoreRecord} record
-	 * @returns {Promise<StoreRecord>}
+	 * @returns {import('../../types/adapter.js').WritePromise<StoreRecord>}
 	 */
 	deleteRecord(record) {
-		return this._chain(record, () => this._deleteRecordNow(record));
+		return this._write(record, 'delete', () => this._deleteRecordNow(record));
 	}
 
 	/**
@@ -1551,15 +2077,16 @@ class AdapterModelMethods {
 	 * (retry by calling again). A deleted record cannot be resurrected through this
 	 * verb; any other store-less record has nowhere to sync. Both reject asynchronously
 	 * (never a sync throw) so callers only ever `await`.
-	 * @returns {Promise<PuzzleModel>}
+	 * @returns {import('../../types/adapter.js').WritePromise<PuzzleModel>}
 	 * @this {PuzzleModel & { _store: AdapterStore | null }}
 	 */
 	save() {
 		if (this._deleted) {
-			return Promise.reject(new Error(DELETED_SAVE_MESSAGE));
+			return decidedWrite(undefined, new Error(DELETED_SAVE_MESSAGE));
 		}
 		if (!this._store) {
-			return Promise.reject(
+			return decidedWrite(
+				undefined,
 				new Error('[puzzle] cannot save() a store-less record — create it via store.createRecord() first')
 			);
 		}
@@ -1570,13 +2097,14 @@ class AdapterModelMethods {
 	 * Confirmed server delete (constellation/doc/DOC-SPEC.md §22, D50): DELETE first,
 	 * local remove on ack. Distinct from destroy() (local-only). A removed instance
 	 * resolves idempotently; a never-added instance still rejects asynchronously.
-	 * @returns {Promise<PuzzleModel>}
+	 * @returns {import('../../types/adapter.js').WritePromise<PuzzleModel>}
 	 * @this {PuzzleModel & { _store: AdapterStore | null }}
 	 */
 	delete() {
-		if (this._deleted) return Promise.resolve(this);
+		if (this._deleted) return decidedWrite(/** @type {PuzzleModel} */ (this));
 		if (!this._store) {
-			return Promise.reject(
+			return decidedWrite(
+				undefined,
 				new Error('[puzzle] cannot delete() a record that was never added to a store')
 			);
 		}

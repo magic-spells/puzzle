@@ -12,6 +12,7 @@ connections:
   - DECISION-D161-AUTO-FETCHING-FINDS
   - DECISION-D184-STORE-OBSERVE
   - DECISION-D189-AGENT-HOOKS
+  - DECISION-D193-SERVER-QUERIES
 verified_at: '2026-11-01T19:23:56.488Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
@@ -68,7 +69,11 @@ record.update({ completed: true });               // re-runs subscribed data()
 record.destroy();
 const stop = store.observe('todo', fn);           // outside a view; stop() ends it
 store.flush();                                    // deliver pending notifications now
-// with the /adapter capability — escape hatches; tracked finds fetch on their own (§61)
+// with the /adapter capability — tracked finds fetch on their own (§61)
+store.findMany('post', { query: { page: 2 } });   // one server page, its own cache entry (§68)
+store.invalidate('post');                         // mark stale; views reading it refetch (§68)
+store.syncStatus(post);                           // { pending: 'save' | 'delete' | null, error } (§68)
+// escape hatches
 await store.loadMany('todo', { page: 2 });
 await store.loadOne('todo', id);                  // bypasses the negative cache
 ```
@@ -133,11 +138,12 @@ await store.request('todo', `/${todo.id}/archive`, { method: 'POST' });
 - **Write serialization (D132):** a record's `save()` and `delete()` calls run through one per-record chain. Each reads the record's state when it **reaches the front**: a delete queued behind a first save uses the adopted server pk; a queued save whose record was removed rejects with `save()`'s own message. Every caller sees its own outcome; a prior link's rejection does not propagate.
 - **`store.request(type, path, { method, body, headers })`** prefixes `apiURL + adapter.endpoint` (it requires `endpoint`), JSON in/out, non-OK → `PuzzleAdapterError`, empty → `null`. It never changes the store. Idiom: wrap it in model methods.
 - **Errors:** every adapter failure rejects with `PuzzleAdapterError` (`.status`, `.statusText`, `.body` when parseable), exported from `/adapter`. Only post-2xx local guards (response shape, pk collision) are plain `Error`s.
+- **Write status (§68):** the promise `save()`/`delete()` return carries `pending` and `error`, and `store.syncStatus(record)` reads the same state reactively inside `data()`.
 - Reads fetch transparently (§61); **writes stay explicit** — there is no network in `update()`, no offline queue, conflict resolution or write-through.
 
-**Transport contract (D158).** Verbs: `loadMany(fetch, options?)`, `loadOne(fetch, id)`, `create(fetch, record)`, `update(fetch, record)`, `delete(fetch, record)`. The supplied `fetch` has platform fetch's signature and `Response` result — no URL prefixing, no automatic JSON — and runs §49's hook and §52's network seam. A verb may return parsed data or a `Response`; for a Response, Puzzle converts non-OK to `PuzzleAdapterError` and parses the body, then applies the same shape guards and reconciliation as generated verbs. Reads must return pk-bearing object(s); create/update return a pk-bearing object or nullish (no echo); delete's return is ignored after the Response check. A custom `loadOne` signals not-found with a 404 Response. A missing verb with no `endpoint` rejects with a per-verb error naming the signature.
+**Transport contract (D158).** Verbs: `loadMany(fetch, options?)`, `loadOne(fetch, id)`, `create(fetch, record)`, `update(fetch, record)`, `delete(fetch, record)`. The supplied `fetch` has platform fetch's signature and `Response` result — no URL prefixing, no automatic JSON — and runs §49's hook and §52's network seam. A verb may return parsed data or a `Response`; for a Response, Puzzle converts non-OK to `PuzzleAdapterError` and parses the body, then applies the same shape guards and reconciliation as generated verbs. Reads must return pk-bearing object(s); `loadMany` may instead return `{ records, meta }` (§68); create/update return a pk-bearing object or nullish (no echo); delete's return is ignored after the Response check. A custom `loadOne` signals not-found with a 404 Response. A missing verb with no `endpoint` rejects with a per-verb error naming the signature.
 - **Dispatch:** model function → app `adapter.defaults()` function → endpoint-generated REST. App defaults receive `{ type, endpoint }` after the normal arguments. Capabilities are per Store, so two apps on one page can differ.
-- `store.loadMany(type, options?)` passes options unchanged to an authored verb; the generated verb serializes non-nullish entries with `URLSearchParams` (no options → the bare collection URL). Results merge by pk. A no-options success marks the type LOADED for §61; EXHAUSTIVE only when the generated transport made the request.
+- `store.loadMany(type, options?)` passes options unchanged to an authored verb; the generated verb serializes non-nullish entries with `URLSearchParams` (no options → the bare collection URL). Results merge by pk. Options are the §68 query: an options-bearing success also fills that query's cache entry. A no-options success marks the type LOADED for §61; EXHAUSTIVE only when the generated transport made the request.
 - `store.adapter(type)` returns a stable per-store, per-type object with the enhanced fetch pre-bound to every function, generated verbs included. It is the only way to call a custom function; results are usually passed to `store.upsert()`. Code using global fetch bypasses the hook and the mock seam. Model adapter keys other than `endpoint`, `mock` and functions warn once per model in development.
 
 ## 49. Adapter request hook: `beforeRequest`
@@ -218,7 +224,41 @@ data(params) {
 - **Failures:** only a 404 becomes `null` + a negative entry. Network errors, 5xx, 401/403 and shape errors reject the run into the normal navigation-failure / `errorView` path and poison no caches.
 - **Skeletons:** all rounds count as one §16 load; without a skeleton the previous route holds until settlement.
 - **Notifications mid-settle** coalesce into one more pass rather than a competing refresh. A run that ends without committing (superseded, stale or failed) hands a folded notification back to the view on screen. The flush carrying a settle's own upserts does not re-run the view that committed behind it (a fetching settle renders once). A destroyed, leaving or superseded view stops its loop without aborting shared requests; a stale pass is dropped whether it fulfilled or rejected.
-- **Output modes:** a prerender read must be answerable from the build machine. An absolute `apiURL` is fetched for real; a model with no `endpoint` and no read verb never fetches (seed it in `beforeMount({ store })`); an app-relative URL fails the build naming the route and both remedies. Static pages carry read state in a second island (`data-puzzle-static-read`, `{ v: 1, complete, loaded, absent }`, `complete` = exhaustive) hydrated after records, so `mountStatic` repeats none of the build's loads or 404s. Hybrid transfers nothing (takeover re-runs `data()`). The dev HMR snapshot carries read state; in-flight requests never transfer.
+- **Output modes:** a prerender read must be answerable from the build machine. An absolute `apiURL` is fetched for real; a model with no `endpoint` and no read verb never fetches (seed it in `beforeMount({ store })`); an app-relative URL fails the build naming the route and both remedies. Static pages carry read state in a second island (`data-puzzle-static-read`, `{ v: 1, complete, loaded, absent }`, `complete` = exhaustive, plus §68 `queries` when any were read) hydrated after records, so `mountStatic` repeats none of the build's loads or 404s. Hybrid transfers nothing (takeover re-runs `data()`). The dev HMR snapshot carries read state; in-flight requests never transfer.
 - **`data()` must tolerate multiple runs per navigation.**
 
-Not supported: server-side query/pagination keys on `findMany`, TTL/`reload(type)` invalidation, request cancellation, relationship fetching (§21 traversals stay local by design).
+Not supported: freshness timers (TTL, refetch on focus or interval), request cancellation, relationship fetching (§21 traversals stay local by design). Server queries, invalidation and write status are §68.
+
+## 68. Server queries, invalidation and write status
+
+Paginated and filtered server reads, a way to mark server data stale, and readable write state, all on top of §61 and all inside the `/adapter` subpath ([[DECISION-D193-SERVER-QUERIES]]). An app without the capability ships none of it.
+
+```js
+data() {
+  const page = Number(this.route.query.page ?? 1);
+  const posts = this.ctx.store.findMany('post', { query: { page } });
+  return { posts, hasNext: !!posts.meta?.nextPage };
+}
+
+// after a write that changes what lists show
+this.ctx.store.invalidate('post');
+```
+
+**Query keys.**
+- `findMany(type, { query })` names a server query. `query` is a plain object passed to `loadMany` as its options, unchanged; the generated transport serializes it to the URL (§22). `filter` stays a local predicate and may be combined with `query`: it filters the query's rows.
+- The cache key is the type plus the query's entries sorted by key with nullish entries dropped, so `{ page: 2, q: null }` and `{ page: 2 }` share an entry. Values keep their JSON type (`2` and `'2'` are different entries). A value must be a string, finite number, boolean or an array of those; anything else, or a non-object `query`, throws naming the type and key. An empty query is no query: it reads the collection as before.
+- Each query keeps its own rows **in server order**, separate from the collection and from other queries; the records themselves are the store's, merged by pk, so a page and `findOne` see the same objects and local edits. A query read never returns a record that has since been removed.
+- A tracked query read that misses (or is stale) fetches through the §61 fault path: same-key reads in one pass and across views share one request, the settle loop holds the commit until it lands, and failures take §61's failure path. An options-bearing load never marks the type LOADED or EXHAUSTIVE.
+- **Response shape:** `loadMany` may answer a plain array or `{ records, meta }` (`meta` a JSON object or nullish; anything else rejects). The array `findMany` returns carries `meta` as a **non-enumerable, frozen** property (`undefined` when the server sent none), so spreading or iterating the result sees only records. Cursors are ordinary query params: the next cursor comes from `meta`, and each cursor is its own entry.
+- Untracked query reads (handlers, `app.store`) are local snapshots: the cached rows, or `[]`. On a store without the capability a `query` is ignored and warns once per type in development.
+- An explicit `store.loadMany(type, query)` fills the same entry. The cache holds the **200** most recently read queries; an evicted query refetches on its next tracked read.
+
+**Invalidation.** `store.invalidate(type)`, `store.invalidate(type, id)` and `store.invalidate(type, { query })` mark data stale and notify the views reading it. They never fetch: a stale entry refetches on its next tracked read, so data no view is reading costs nothing, and the view keeps its current rows on screen until the refetch commits.
+- `invalidate(type)` covers every query of the type, the whole-collection load (LOADED and EXHAUSTIVE are cleared), the type's negative-cache entries, and every synced record of the type for `findOne`.
+- `invalidate(type, id)` covers one record and its negative-cache entry; a refetch that 404s removes the record.
+- `invalidate(type, { query })` covers one query, matched by its exact key.
+- A record changed locally since its last sync keeps those fields when the refetch merges (D138 rules). A response for a request dispatched **before** the invalidation does not clear it.
+
+**Write status.** `save()` and `delete()` (and `store.saveRecord`/`deleteRecord`) return a promise with `pending` (true until it settles) and `error` (the rejection, or null). `store.syncStatus(record)` returns a frozen `{ pending: 'save' | 'delete' | null, error }` for the record: `pending` names the write running at the front of its §22 chain, `error` is the last failed write's error and clears when the next write starts. Read in `data()` it subscribes to the record, and every change re-runs the view. A record that never wrote reads `{ pending: null, error: null }`.
+
+**Serialization.** Query entries ride the §61 read-state envelope as an optional `queries` field, written only when non-empty; hydration skips any entry whose key does not match its recomputed query. Stale marks never transfer.

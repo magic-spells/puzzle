@@ -80,6 +80,24 @@ export const HANDLE_CTX = Symbol('puzzleStoreHandleCtx');
 
 /** @typedef {import('../model.js').RelationshipDef} RelationshipDef */
 
+// D193 dev nudge: a findMany `query` is a server param, so without the adapter
+// capability it can only be ignored. Once per type, so a list that renders on
+// every frame does not flood the console.
+/** @type {Set<string> | undefined} */
+let warnedQueryTypes;
+
+/**
+ * @param {string} type
+ */
+function warnQueryWithoutAdapter(type) {
+	warnedQueryTypes ??= new Set();
+	if (warnedQueryTypes.has(type)) return;
+	warnedQueryTypes.add(type);
+	console.warn(
+		`[puzzle] findMany('${type}', { query }) needs the adapter capability — pass \`adapter\` from '@magic-spells/puzzle/adapter' to PuzzleApp. Without it the query is ignored and every local '${type}' record is returned.`
+	);
+}
+
 /**
  * Dev-only registration guards, run once from the constructor.
  *
@@ -423,10 +441,17 @@ export class Store {
 	}
 
 	/**
+	 * Query a collection. `filter` is a local predicate. `query` holds server
+	 * params (D193) and only means something once the adapter capability is
+	 * installed — the adapter replaces this method with one that reads a query's
+	 * cached rows. On an adapter-free store it is ignored, with a dev warning.
 	 * @param {string} type
-	 * @param {import('../../types/index.js').FindManyOptions} [options] { filter: (record) => boolean }
+	 * @param {import('../../types/index.js').FindManyOptions} [options] { filter, query }
 	 */
 	findMany(type, options = {}) {
+		if ((typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) && options.query != null) {
+			warnQueryWithoutAdapter(type);
+		}
 		return this._findManyLocal(type, options);
 	}
 

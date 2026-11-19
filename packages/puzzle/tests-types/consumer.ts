@@ -58,6 +58,7 @@ import type {
 	RouteView,
 	RouteAgent,
 	PrevViewState,
+	FindManyResult,
 } from '@magic-spells/puzzle';
 import { adapter, PuzzleAdapterError } from '@magic-spells/puzzle/adapter';
 import type {
@@ -66,7 +67,10 @@ import type {
 	AdapterDefaultContext,
 	AdapterDefaults,
 	AdapterFetch,
+	AdapterLoadManyResult,
 	AdapterRecord,
+	SyncStatus,
+	WritePromise,
 } from '@magic-spells/puzzle/adapter';
 import { installFixtures, DEFAULT_FIXTURE_SEED } from '@magic-spells/puzzle/fixtures';
 import type { FixturesConfig } from '@magic-spells/puzzle/fixtures';
@@ -579,6 +583,25 @@ const noEndpointAdapter = app.store.adapter<typeof FullyCustomPost.adapter>('pos
 void noEndpointAdapter.loadMany?.();
 void app.store.loadMany('todo', { page: 2, limit: 20 });
 void [restLoad, publishResult];
+
+// D193: server queries, invalidation and write status
+const page: FindManyResult = app.store.findMany('todo', { query: { page: 2, tags: ['a', 'b'], q: null } });
+const nextPage: unknown = page.meta?.nextPage;
+// @ts-expect-error a query value is a string, number, boolean or an array of those
+app.store.findMany('todo', { query: { since: new Date() } });
+app.store.invalidate('todo');
+app.store.invalidate('todo', 7);
+app.store.invalidate('todo', { query: { page: 2 } });
+// @ts-expect-error invalidate takes an id or { query }
+app.store.invalidate('todo', true);
+const firstTodo = app.store.findOne('todo', 1) as Todo;
+const status: SyncStatus = app.store.syncStatus(firstTodo);
+const pendingVerb: 'save' | 'delete' | null = status.pending;
+const saving: WritePromise<Todo> = firstTodo.save();
+const savingPending: boolean = saving.pending;
+const deleting: WritePromise<PuzzleModel> = app.store.deleteRecord(firstTodo);
+const loadManyResult: AdapterLoadManyResult = { records: [{ id: 1 }], meta: { nextCursor: 'x' } };
+void [nextPage, pendingVerb, savingPending, deleting, loadManyResult];
 
 // ---------------------------------------------------------------------------
 // router-modes subpath: the two opt-in mode factories (D159)
