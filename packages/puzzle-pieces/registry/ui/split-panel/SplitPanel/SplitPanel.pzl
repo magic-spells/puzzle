@@ -148,7 +148,7 @@ export default class SplitPanel extends PuzzleView {
     this.props.resizeEnd?.(event.detail?.sizes);
   };
 
-  data(params, props) {
+  data({ props }) {
     return {
       rootClass: [ROOT, props.class].filter(Boolean).join(' '),
       rootStyle: ROOT_STYLE,

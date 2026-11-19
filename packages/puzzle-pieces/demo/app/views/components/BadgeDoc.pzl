@@ -88,7 +88,7 @@ const codeContext = `<div class="flex items-center gap-2">
 </div>`;
 
 export default class BadgeDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       installCmd,
       usageImport,

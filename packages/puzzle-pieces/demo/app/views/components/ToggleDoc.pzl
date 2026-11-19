@@ -101,7 +101,7 @@ export default class ToggleDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

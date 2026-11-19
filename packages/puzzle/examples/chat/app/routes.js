@@ -8,7 +8,7 @@ import DefaultLayout from './layouts/Default.pzl';
 // persistent sidebar-plus-pane frame, and it renders its matched child at
 // <Slot />. `path: ''` is the index child (Welcome, the empty state); `c/:id`
 // is a thread. `layout` is a top-level-only field — the children inherit it.
-// Params merge down the chain, so Shell's data(params) sees `id` when a thread
+// Params merge down the chain, so Shell's data({ params }) sees `id` when a thread
 // is open. The '*' catch-all handles unknown URLs.
 export default [
   {

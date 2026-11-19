@@ -202,12 +202,11 @@ export function devperfPrepareData(view, cause) {
 
 /**
  * @param {PuzzleView} view
- * @param {Record<string, any>} params
- * @param {Record<string, any>} props
+ * @param {import('./views/PuzzleView.js').DataInput} input the one object data() takes (D197)
  * @returns {any} whatever the view's data() returned
  */
-export function devperfRunData(view, params, props) {
-	return runDataImpl(view, params, props);
+export function devperfRunData(view, input) {
+	return runDataImpl(view, input);
 }
 
 /**
@@ -575,15 +574,14 @@ function prepareDataImpl(view, cause) {
 
 /**
  * @param {PuzzleView} view
- * @param {Record<string, any>} params
- * @param {Record<string, any>} props
+ * @param {import('./views/PuzzleView.js').DataInput} input
  * @returns {any}
  */
-function runDataImpl(view, params, props) {
+function runDataImpl(view, input) {
 	const queue = preparedData.get(view);
 	const prepared = queue?.shift();
 	if (queue?.length === 0) preparedData.delete(view);
-	if (!prepared) return view.data(params, props);
+	if (!prepared) return view.data(input);
 	const { state, chain, cause } = prepared;
 	if (!prepared.started) {
 		prepared.started = true;
@@ -596,7 +594,7 @@ function runDataImpl(view, params, props) {
 	/** @type {any} the author's data() result: a plain object or a promise of one */
 	let result;
 	try {
-		result = view.data(params, props);
+		result = view.data(input);
 	} catch (error) {
 		popScope(scope);
 		recordData(prepared, startedAt, false, true);

@@ -84,7 +84,7 @@ export default class MainLayout extends PuzzleView {
   // active-nav highlight recomputes from this.route (v1.15, D47) — the per-nav
   // route snapshot, correct inside the pre-commit gate. The section is the ROOT
   // route name (chain[0]): 'home' | 'search' | 'listing' | 'account'.
-  data(params, props) {
+  data() {
     const section = this.route.chain[0].name;
 
     // Finer-grained flags for the account links: `section === 'account'` alone

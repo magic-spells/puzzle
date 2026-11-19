@@ -214,7 +214,7 @@ export default class Pieces extends PuzzleView {
 		});
 	}
 
-	data(params, props) {
+	data() {
 		const live = current();
 		// A null mode follows the OS; resolve it so the line can name a mode.
 		// Guarded, because data() also runs under Node during prerender.

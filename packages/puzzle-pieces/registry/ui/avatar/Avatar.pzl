@@ -47,7 +47,7 @@ const SIZE = {
 };
 
 export default class Avatar extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const src = props.src || '';
     const name = props.name || '';
     const hasName = name.trim().length > 0;

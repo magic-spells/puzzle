@@ -73,7 +73,7 @@ function makeFixture() {
 		created() {
 			shell = this;
 		}
-		data(params) {
+		data({ params }) {
 			// A tracked query keyed by the CURRENT params — the subscription set moves
 			// with the org id, which is what makes discard/commit observable.
 			const org = this.ctx.store.findOne('org', params.id);
@@ -145,7 +145,7 @@ describe('Router — transactional reused-ancestor refresh (D146)', () => {
 		const seen = [];
 		const store = makeStore();
 		class Shell extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				seen.push({ arg: params.id, route: this.route?.params?.id ?? null });
 				return {};
 			}
@@ -227,7 +227,7 @@ describe('Router — transactional reused-ancestor refresh (D146)', () => {
 			created() {
 				shell = this;
 			}
-			data(params) {
+			data({ params }) {
 				return { org: this.ctx.store.findOne('org', params.id) };
 			}
 			render() {
@@ -311,7 +311,7 @@ describe('Router — D146 overlapping prepares (F1)', () => {
 			created() {
 				shell = this;
 			}
-			data(params) {
+			data({ params }) {
 				return { org: this.ctx.store.findOne('org', params.id) };
 			}
 			render() {
@@ -374,7 +374,7 @@ describe('Router — D146 conflicting commit convergence (F5)', () => {
 
 		let runs = 0;
 		class Shell extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				runs++;
 				// A DERIVED value — the shape that cannot self-heal through the record.
 				return { label: (this.ctx.store.findOne('org', params.id)?.name ?? '?') + '!' };
@@ -436,7 +436,7 @@ describe('Router — D146 conflicting commit convergence (F5)', () => {
 		let runs = 0;
 		let renders = 0;
 		class Shell extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				runs++;
 				return { org: this.ctx.store.findOne('org', params.id) };
 			}
@@ -501,7 +501,7 @@ describe('Router — D146 exception-safe prepared handles (F6)', () => {
 			created() {
 				shell = this;
 			}
-			data(params) {
+			data({ params }) {
 				return { org: this.ctx.store.findOne('org', params.id) };
 			}
 			render() {
@@ -569,7 +569,7 @@ describe('Router — D146 mid-gate scope fence (F4)', () => {
 			created() {
 				shell = this;
 			}
-			async data(params) {
+			async data({ params }) {
 				// D47: the prepared run must see the DESTINATION.
 				dataSaw.push({ arg: params.id, params: this.params.id, route: this.route?.params?.id ?? null });
 				if (gate) await gate;

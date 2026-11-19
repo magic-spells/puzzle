@@ -205,7 +205,7 @@ export default class DatePickerDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

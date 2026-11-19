@@ -46,7 +46,7 @@ export default class ComposeBox extends PuzzleView {
     this.setState({ draft: '' });
   }
 
-  data(params, props) {
+  data({ props }) {
     const me = this.ctx.store.findOne('user', 'me');
     const draft = this.getData().draft || '';
     const remaining = LIMIT - draft.length;

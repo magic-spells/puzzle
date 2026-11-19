@@ -220,7 +220,7 @@ export default class SpinnerDoc extends PuzzleView {
     this.setState({ loading: false });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

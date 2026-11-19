@@ -79,7 +79,7 @@ const trail = [
 <Breadcrumb items={ trail } />`;
 
 export default class BreadcrumbDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

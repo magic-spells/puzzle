@@ -881,7 +881,7 @@ export default class SheetDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     const state = this.getData();
     return {
       ...state,

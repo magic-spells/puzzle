@@ -128,7 +128,7 @@ const TILE_DIRS = [
 ];
 
 export default class Spinner extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const variant = VARIANTS.includes(props.variant) ? props.variant : 'ring';
     const size = SIZE[props.size] ? props.size : 'md';
     const extra = props.class || '';

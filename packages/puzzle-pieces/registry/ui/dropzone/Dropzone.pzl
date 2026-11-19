@@ -145,7 +145,7 @@ function acceptsFile(file, accept) {
 }
 
 export default class Dropzone extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const inputId = props.id || (this._fallbackId ??= `pp-dropzone-${++uid}`);
     const error = props.error || '';
     const hint = props.hint || '';

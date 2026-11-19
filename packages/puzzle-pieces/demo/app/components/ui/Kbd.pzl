@@ -16,7 +16,7 @@ const BASE =
   'font-sans text-xs text-muted shadow-kbd';
 
 export default class Kbd extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       classes: [BASE, props.class || ''].join(' '),
     };

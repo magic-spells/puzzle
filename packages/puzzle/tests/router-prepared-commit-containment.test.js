@@ -46,7 +46,7 @@ describe('prepared-commit render failures reach the D145 funnel', () => {
 	it('a reused LEAF whose render throws on commit does not reject push()', async () => {
 		const errors = [];
 		class User extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				return { user: USERS[params.id] ?? null };
 			}
 			render() {
@@ -85,7 +85,7 @@ describe('prepared-commit render failures reach the D145 funnel', () => {
 			created() {
 				shell = this;
 			}
-			data(params) {
+			data({ params }) {
 				return { id: params.id };
 			}
 			render() {
@@ -96,7 +96,7 @@ describe('prepared-commit render failures reach the D145 funnel', () => {
 			}
 		}
 		class Inner extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				return { user: USERS[params.id] ?? null };
 			}
 			render() {
@@ -147,7 +147,7 @@ describe('prepared-commit render failures reach the D145 funnel', () => {
 		// __showErrorView is async, so anything failing inside it becomes a rejected
 		// promise rather than an exception in the router's commit window.
 		class User extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				return { user: USERS[params.id] ?? null };
 			}
 			render() {
@@ -177,7 +177,7 @@ describe('prepared-commit render failures reach the D145 funnel', () => {
 		let leaf = null;
 
 		class Shell extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				return { user: USERS[params.id] ?? null };
 			}
 			render() {
@@ -191,7 +191,7 @@ describe('prepared-commit render failures reach the D145 funnel', () => {
 			created() {
 				leaf = this;
 			}
-			data(params) {
+			data({ params }) {
 				return { id: params.id };
 			}
 			render() {

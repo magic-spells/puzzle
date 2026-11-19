@@ -92,7 +92,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 const BAR = 'relative rounded-xl border border-border bg-surface-sunken/60 p-1.5';
 
 export default class NavigationMenu extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       navLabel: props.label != null ? String(props.label) : 'Main',
       rootClass: [BAR, props.class].filter(Boolean).join(' '),

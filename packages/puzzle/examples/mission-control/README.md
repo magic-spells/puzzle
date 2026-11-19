@@ -30,7 +30,7 @@ npm run dev        # serves on http://localhost:3000
   (`path: ''`) that renders nothing, and a `path: ':id'` child that renders the
   shared [`Detail.pzl`](app/views/Detail.pzl) view at the section's `<Slot/>`.
   Clicking a row calls `router.push('/fleet/<id>')`; the section view is a
-  *reused ancestor* on that swap, so its `data(params)` re-runs with the merged
+  *reused ancestor* on that swap, so its `data({ params })` re-runs with the merged
   params and the row highlight tracks the URL — no local selection state, and
   deep links / back / forward work for free.
 - **Only the swapped level animates.** The one-animator rule (D28, generalized

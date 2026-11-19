@@ -148,7 +148,7 @@ const codeNoValue = `// Hide the centered percentage with showValue={ false } an
 <ProgressRing value={ 88 } size="sm" showValue={ false } label="Battery" />`;
 
 export default class ProgressRingDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

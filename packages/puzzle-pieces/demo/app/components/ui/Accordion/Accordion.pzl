@@ -172,7 +172,7 @@ export default class Accordion extends PuzzleView {
     });
   };
 
-  data(params, props) {
+  data({ props }) {
     return {
       rootClass: [ROOT, props.class].filter(Boolean).join(' '),
       // `false` is the compiler's omit sentinel — multiple mode renders no

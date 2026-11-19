@@ -211,7 +211,7 @@ export default class AppearancePicker extends PuzzleView {
   // distinct names or they would steal each other's checked state.
   _radioName = `appearance-picker-${++uid}`;
 
-  data(params, props) {
+  data({ props }) {
     const schemes = Array.isArray(props.schemes) && props.schemes.length ? props.schemes : DEFAULT_SCHEMES;
     const modes = Array.isArray(props.modes) && props.modes.length ? props.modes : DEFAULT_MODES;
     const system = props.system !== false;

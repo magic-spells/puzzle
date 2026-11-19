@@ -46,7 +46,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class AccountShell extends PuzzleView {
-  data(params, props) {
+  data() {
     // The signed-in user is a single record with id 'me'. May be undefined for
     // a beat during the initial seed, so every field has a fallback.
     const me = this.ctx.store.findOne('traveler', 'me');

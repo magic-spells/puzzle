@@ -211,7 +211,7 @@ export default class CalendarDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

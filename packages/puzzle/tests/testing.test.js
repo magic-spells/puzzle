@@ -78,7 +78,7 @@ describe('@magic-spells/puzzle/testing — mountView', () => {
 
 	it('mounts detached with the complete ctx, query helpers, click(), and setProps()', async () => {
 		class Counter extends PuzzleView {
-			data(params, props) {
+			data({ props }) {
 				return {
 					label: props.label,
 					items: this.ctx.store.findMany('item'),
@@ -134,7 +134,7 @@ describe('@magic-spells/puzzle/testing — mountView', () => {
 		const seen = [];
 
 		class Routed extends PuzzleView {
-			data(params, props) {
+			data({ params, props }) {
 				seen.push({ params, props, route: this.route });
 				return { id: params.id, filter: props.filter, path: this.route.path };
 			}
@@ -212,7 +212,7 @@ describe('@magic-spells/puzzle/testing — mountView', () => {
 		};
 
 		class LastWins extends PuzzleView {
-			data(_params, props) {
+			data({ props }) {
 				if (props.value === 'old') return oldGate.promise;
 				if (props.value === 'new') return newGate.promise;
 				return { value: props.value };
@@ -269,7 +269,7 @@ describe('@magic-spells/puzzle/testing — createTestApp', () => {
 			}
 		}
 		class Todo extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				return { id: params.id };
 			}
 			render() {

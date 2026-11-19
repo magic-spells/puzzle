@@ -106,7 +106,7 @@ const OPEN = 'bg-rail-active';
 export default class AppearanceSwitcher extends PuzzleView {
   _id = `appearance-${++uid}`;
 
-  data(params, props) {
+  data({ props }) {
     const live = current();
     const scheme = SCHEMES.find((s) => s.value === live.scheme) || SCHEMES[0];
     const mode = live.mode === null ? null : MODES.find((m) => m.value === live.mode) || null;

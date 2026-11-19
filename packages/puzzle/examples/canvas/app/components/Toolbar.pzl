@@ -34,7 +34,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // the Editor via the `create` callback prop ({ type }); the toolbar holds no
 // state of its own.
 export default class Toolbar extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { selCount: props.selCount || 0 };
   }
 

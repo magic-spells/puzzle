@@ -271,7 +271,7 @@ export default class Sheet extends PuzzleView {
     this.props.snapChange?.(to);
   };
 
-  data(params, props) {
+  data({ props }) {
     const title = props.title || '';
     const snapPoints = Array.isArray(props.snapPoints)
       ? props.snapPoints.join(' ')

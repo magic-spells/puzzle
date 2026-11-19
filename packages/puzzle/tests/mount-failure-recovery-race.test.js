@@ -219,7 +219,7 @@ describe('a superseding first-mount refresh failure recovers from the anchor rac
 				super(...args);
 				instances.push(this);
 			}
-			async data(params, props) {
+			async data({ props }) {
 				if (props.which === 'one') {
 					await gates.one.promise;
 					return { label: 'stale' };

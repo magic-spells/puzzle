@@ -24,7 +24,7 @@ export default class LocaleSwitcher extends PuzzleView {
   // (/es/about), and whether it is the active one. A prop, not this component's
   // own read of ctx.i18n: the list changes with every navigation, and only the
   // layout's data() re-runs for each one.
-  data(params, props) {
+  data({ props }) {
     return { options: props.options ?? [] };
   }
 

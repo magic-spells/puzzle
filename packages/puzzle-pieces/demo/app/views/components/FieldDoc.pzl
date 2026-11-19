@@ -127,7 +127,7 @@ export default class FieldDoc extends PuzzleView {
     this.form = createForm(this, Signup, { fields: ['name', 'email'] });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

@@ -16,7 +16,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 const BASE = 'block text-sm font-medium text-ink';
 
 export default class Label extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       forId: props.for,
       classes: [BASE, props.class || ''].join(' '),

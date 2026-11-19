@@ -114,7 +114,7 @@ function resolveType(props) {
 }
 
 export default class ChatAttachment extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const name = props.name || '';
     const type = resolveType(props);
     const disabled = !!props.disabled;

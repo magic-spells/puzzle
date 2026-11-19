@@ -108,7 +108,7 @@ export default class Rating extends PuzzleView {
     this.setState({ hover: 0 });
   }
 
-  data(params, props) {
+  data({ props }) {
     const max = Number(props.max) > 0 ? Math.floor(Number(props.max)) : 5;
     const readOnly = !!props.readOnly;
     const disabled = !!props.disabled;

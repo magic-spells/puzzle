@@ -231,7 +231,7 @@ const CURRENT = new Map([
 const NO_PAGE = { group: '', title: 'Menu' };
 
 export default class DefaultLayout extends PuzzleView {
-  data(params, props) {
+  data() {
     // this.route is the per-navigation snapshot (D47), readable here in data();
     // fall back to the live router when it isn't set yet.
     const path =

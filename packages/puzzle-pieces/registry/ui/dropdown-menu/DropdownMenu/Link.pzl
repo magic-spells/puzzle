@@ -52,7 +52,7 @@ const ROW_NORMAL = 'text-body hover:bg-surface-sunken hover:text-ink';
 const ROW_DANGER = 'text-danger hover:bg-danger-tint';
 
 export default class Link extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const disabled = !!props.disabled;
 
     return {

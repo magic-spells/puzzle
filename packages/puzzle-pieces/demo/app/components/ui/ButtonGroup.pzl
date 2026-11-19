@@ -95,7 +95,7 @@ const SIZE = {
 const ICON_SIZE = { sm: 'size-4', md: 'size-4', lg: 'size-5' };
 
 export default class ButtonGroup extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const variant = VARIANT[props.variant] ? props.variant : 'outline';
     const size = SIZE[props.size] ? props.size : 'md';
     const groupDisabled = !!props.disabled;

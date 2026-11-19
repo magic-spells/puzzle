@@ -48,7 +48,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 const BASE = 'flex flex-col items-center justify-center px-6 py-12 text-center';
 
 export default class Empty extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       classes: [BASE, props.class || ''].join(' '),
       title: props.title || '',

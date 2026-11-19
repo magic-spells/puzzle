@@ -174,7 +174,7 @@ function decorate(list) {
 }
 
 export default class ChatScrollerDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     const prev = this.getData();
     const log = prev && prev.log ? prev.log : SEED.slice();
     const pinned = prev && typeof prev.pinned === 'boolean' ? prev.pinned : true;

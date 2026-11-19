@@ -30,7 +30,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import PhotoCard from '../components/PhotoCard.pzl';
 
 export default class GalleryView extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       photos: this.ctx.store.findMany('photo'),
     };

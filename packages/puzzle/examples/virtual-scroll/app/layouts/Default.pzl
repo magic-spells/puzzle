@@ -34,7 +34,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class DefaultLayout extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       title: props.title || 'Puzzle — Virtual Scroll',
     };

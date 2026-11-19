@@ -54,7 +54,7 @@ function avatarStyle(name) {
 }
 
 export default class KanbanCard extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const card = props.card || {};
     const assignee = card.assignee || '';
     return {

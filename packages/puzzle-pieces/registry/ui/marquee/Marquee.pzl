@@ -84,7 +84,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   style         merged after the piece's own custom-property declarations
 
 export default class Marquee extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const declarations = [];
     // Tailwind spacing step → rem, so `gap={ 8 }` reads like `gap-8` elsewhere
     // in the registry. The component's own default is 1rem, i.e. step 4.

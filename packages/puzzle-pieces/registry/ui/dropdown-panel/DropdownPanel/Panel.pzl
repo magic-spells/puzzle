@@ -103,7 +103,7 @@ const GAP_RIGHT = 'ml-3 -mt-2.25';
 const ALIGN_END = 'left-auto right-0';
 
 export default class Panel extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const right = props.opens === 'right';
     const alignEnd = props.align === 'end' && !props.wide && !right;
 

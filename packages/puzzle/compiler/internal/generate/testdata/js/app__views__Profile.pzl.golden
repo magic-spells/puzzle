@@ -7,7 +7,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class Profile extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       title: 'Profile',
       message: 'This view was scaffolded by puzzle generate.'

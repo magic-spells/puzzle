@@ -61,7 +61,7 @@ const SENTIMENT_FILL = {
 const TRACK_SIZE = { sm: 'h-1.5', md: 'h-2.5' };
 
 export default class Meter extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const min = typeof props.min === 'number' && !Number.isNaN(props.min) ? props.min : 0;
     const maxRaw = typeof props.max === 'number' && !Number.isNaN(props.max) ? props.max : 100;
     const max = maxRaw > min ? maxRaw : min + 100;

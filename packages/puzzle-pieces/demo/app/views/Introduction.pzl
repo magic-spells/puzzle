@@ -88,7 +88,7 @@ const useImport = `import Button from '@/components/ui/Button.pzl';`;
 const useMarkup = `<Button variant="primary" @press={ save }>Save changes</Button>`;
 
 export default class Introduction extends PuzzleView {
-  data(params, props) {
+  data() {
     return { tokensSnippet, addSnippet, useImport, useMarkup, pieceCount: COMPONENTS.length };
   }
 

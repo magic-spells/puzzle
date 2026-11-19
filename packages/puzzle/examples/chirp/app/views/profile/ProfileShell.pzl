@@ -95,7 +95,7 @@ import Avatar from '@/components/Avatar.pzl';
 import FollowButton from '@/components/FollowButton.pzl';
 
 export default class ProfileShell extends PuzzleView {
-  data(params, props) {
+  data({ params }) {
     const store = this.ctx.store;
 
     // Resolve the profile owner by handle (params merge down the nested chain, so

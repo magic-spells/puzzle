@@ -105,7 +105,7 @@ async function mount(View, props) {
 	const view = new View();
 	view.props = { ...props };
 	view.refs = { panel, sheet };
-	view.data({}, view.props);
+	view.data({ props: view.props });
 	view.mounted();
 	await tick(); // the dynamic import resolves → #ready
 	return { view, panel, sheet };
@@ -113,7 +113,7 @@ async function mount(View, props) {
 
 function render(view, props) {
 	view.props = { ...view.props, ...props };
-	view.data({}, view.props);
+	view.data({ props: view.props });
 	view.afterUpdate();
 }
 

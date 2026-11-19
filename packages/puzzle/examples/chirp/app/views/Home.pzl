@@ -86,7 +86,7 @@ export default class HomeView extends PuzzleView {
     this.setState({ activeTab: 'for-you' });
   }
 
-  async data(params, props) {
+  async data() {
     // Skeleton view: kick (or join) the memoized seed, then read synchronously.
     // Because seedStore() is memoized this is safe to await on every data() run —
     // it never re-initiates a load (the D21 gotcha the seed contract guards).

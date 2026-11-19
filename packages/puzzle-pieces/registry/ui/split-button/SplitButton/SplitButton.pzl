@@ -51,7 +51,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 const ROOT = 'relative inline-flex';
 
 export default class SplitButton extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { rootClass: [ROOT, props.class].filter(Boolean).join(' ') };
   }
 }

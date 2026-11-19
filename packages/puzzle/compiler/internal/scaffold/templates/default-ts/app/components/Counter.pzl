@@ -22,7 +22,7 @@
 </puzzle-view>
 
 <script lang="ts">
-import { PuzzleView } from '@magic-spells/puzzle';
+import { PuzzleView, type DataInput } from '@magic-spells/puzzle';
 
 // What the parent passes; PuzzleView<CounterProps> below types `this.props`.
 interface CounterProps {
@@ -46,7 +46,7 @@ export default class Counter extends PuzzleView<CounterProps> {
     this.setState({ count: 0 });
   }
 
-  data(_params: Record<string, string>, props: CounterProps): CounterModel {
+  data({ props }: DataInput<CounterProps>): CounterModel {
     const { count = 0 } = this.getData<Partial<CounterState>>();
     return {
       count,

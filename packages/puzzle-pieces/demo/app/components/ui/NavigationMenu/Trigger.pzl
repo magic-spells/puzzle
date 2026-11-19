@@ -59,7 +59,7 @@ const CARD =
   FOCUS;
 
 export default class Trigger extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       arrow: props.arrow !== false,
       triggerClass: [props.variant === 'card' ? CARD : BAR, props.class]

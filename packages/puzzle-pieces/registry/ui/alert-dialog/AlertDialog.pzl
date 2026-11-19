@@ -235,7 +235,7 @@ export default class AlertDialog extends PuzzleView {
     }, 0);
   };
 
-  data(params, props) {
+  data({ props }) {
     const title = props.title || '';
     const description = props.description || '';
 

@@ -111,7 +111,7 @@ export default class ScrollArea extends PuzzleView {
     this._onWinUp = (e) => this._dragEnd(e);
   }
 
-  data(params, props) {
+  data({ props }) {
     const orientation =
       props.orientation === 'horizontal' || props.orientation === 'both'
         ? props.orientation

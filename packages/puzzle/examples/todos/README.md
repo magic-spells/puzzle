@@ -32,7 +32,7 @@ A complete todo application built with the Puzzle framework, demonstrating all c
 
 ### 1. Reactive Data Loading
 ```javascript
-data(params, props) {
+data() {
   const todos = this.ctx.store.findMany('todo'); // auto-subscribes
   return {
     todos,

@@ -147,7 +147,7 @@ export default class StepperDoc extends PuzzleView {
     this.setState({ stepHero: 1, stepVert: 1, stepClick: 1 });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

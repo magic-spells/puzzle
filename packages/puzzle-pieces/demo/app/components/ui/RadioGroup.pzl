@@ -53,7 +53,7 @@ const ORIENTATION = {
 let uid = 0;
 
 export default class RadioGroup extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const name = props.name || (this._name ??= `pieces-radio-${++uid}`);
     return {
       fieldsetClass: [

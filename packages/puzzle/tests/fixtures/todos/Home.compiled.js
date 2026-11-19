@@ -18,7 +18,7 @@ export default class TodoHome extends PuzzleView {
   }
 
   // data() defines component model - runs on mount and when subscribed store data changes
-  data(params, props) {
+  data() {
     const store = this.ctx.store;
     const localData = this.getData();
 

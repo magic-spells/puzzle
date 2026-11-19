@@ -509,7 +509,7 @@ active prefix for you, and `this.ctx.i18n.locales` is a list of
   import Icon from './Icon.pzl';
 
   export default class Button extends PuzzleView {
-    data(params, props) {
+    data({ props }) {
       const variant = props.variant || 'default'
       const size = props.size || 'medium'
       const icon = props.icon || null

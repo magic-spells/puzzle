@@ -220,7 +220,7 @@ export default class ComboboxDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

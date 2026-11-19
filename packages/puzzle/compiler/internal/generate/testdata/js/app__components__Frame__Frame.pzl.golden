@@ -10,7 +10,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 export default class Frame extends PuzzleView {
   // Family members compose: <Children/> above renders whatever the caller
   // nests inside <Frame>. `class` is the usual caller override prop.
-  data(params, props) {
+  data({ props }) {
     return {
       classes: ['Frame', props.class].filter(Boolean).join(' ')
     };

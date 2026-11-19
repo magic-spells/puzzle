@@ -481,7 +481,7 @@ export default class BottomSheetDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

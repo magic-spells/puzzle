@@ -24,7 +24,7 @@ const VARIANT = {
 };
 
 export default class Badge extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       classes: [
         BASE,

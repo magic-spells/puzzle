@@ -88,7 +88,7 @@ export default class Toaster extends PuzzleView {
     this._unsub = null;
   }
 
-  data(params, props) {
+  data({ props }) {
     const n = Number(props.maxVisible);
     const maxVisible = Number.isFinite(n) && n >= 1 ? Math.floor(n) : 4;
 

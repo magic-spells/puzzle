@@ -79,7 +79,7 @@ const CHIP_FAIL = 'mt-1 inline-block rounded px-1.5 py-0.5 text-2xs font-medium 
 const groundLabel = (prop) => String(prop || '').replace('--color-', '');
 
 export default class TokenCard extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const token = props.token || {};
     const name = token.name || '';
     const shadow = !!token.shadow;

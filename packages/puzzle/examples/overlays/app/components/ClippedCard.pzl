@@ -61,7 +61,7 @@ export default class ClippedCard extends PuzzleView {
     this.setState({ menuOpen: false, menuExpanded: 'false', menuStyle: '' });
   }
 
-  data(params, props) {
+  data({ props }) {
     return { title: props.title || 'Untitled card' };
   }
 

@@ -178,7 +178,7 @@ export default class DropzoneDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       oneMB: 1024 * 1024,

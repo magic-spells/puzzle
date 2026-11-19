@@ -187,7 +187,7 @@ export default class BarChart extends PuzzleView {
     this._ro = null;
   }
 
-  data(params, props) {
+  data({ props }) {
     const local = this.getData();
     const width = local.width || 640; // default before the first measure
     const height = Number(props.height) || 288;

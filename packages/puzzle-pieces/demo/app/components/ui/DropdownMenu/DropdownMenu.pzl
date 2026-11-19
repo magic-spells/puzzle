@@ -98,7 +98,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 const ROOT = 'inline-block relative';
 
 export default class DropdownMenu extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       rootClass: [ROOT, props.class].filter(Boolean).join(' '),
       // `false` is the compiler's omit sentinel — an unset prop renders no

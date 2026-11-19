@@ -33,7 +33,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // {:else} branch catches the 'error' role. A blinking caret trails an assistant
 // message while it is still streaming (message.pending).
 export default class MessageBubble extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     // The prop alone would keep this bubble current: a record carries a render
     // revision (D170), so a streamed token or the pending flip counts as a
     // changed prop the next time Thread re-renders. The findOne additionally

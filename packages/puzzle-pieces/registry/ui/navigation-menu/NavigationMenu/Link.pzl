@@ -60,7 +60,7 @@ const CARD_LABEL = 'block text-sm font-medium text-ink';
 const CARD_LABEL_ACTIVE = 'underline decoration-2 underline-offset-4 decoration-brand';
 
 export default class Link extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const bar = props.variant === 'bar';
     const current = !!props.current;
 

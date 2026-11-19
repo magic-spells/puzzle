@@ -75,7 +75,7 @@ const OFF = 'bg-surface text-body not-disabled:hover:bg-surface-sunken not-disab
 const ON = 'bg-faint text-ink not-disabled:hover:bg-faint';
 
 export default class ToggleGroup extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const type = props.type === 'multiple' ? 'multiple' : 'single';
     const groupDisabled = !!props.disabled;
     const value = props.value;

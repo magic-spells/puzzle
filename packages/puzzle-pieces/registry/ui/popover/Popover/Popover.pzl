@@ -68,7 +68,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //           events are filtered out by the base — see DropdownPanel.pzl.
 
 export default class Popover extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       rootClass: props.class || false,
       openState: props.open,

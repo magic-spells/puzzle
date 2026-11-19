@@ -43,7 +43,7 @@ export default class AboutView extends PuzzleView {
   // One tracked read is the whole data layer: `findMany('user')` fetches
   // /api/users.json the first time this route is visited and returns the warm
   // collection on every later visit (D161).
-  data(params, props) {
+  data() {
     const members = this.ctx.store.findMany('user');
 
     return {

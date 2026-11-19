@@ -3,7 +3,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import Wrapper from './Wrapper.compiled.js';
 
 export default class WrapperChain extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { users: props.users, group: props.group };
   }
 }

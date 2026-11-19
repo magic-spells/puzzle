@@ -46,7 +46,7 @@ const LIST =
   '[tab-group[data-variant=buttons]_&]:border-b-0';
 
 export default class TabsList extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { listClass: [LIST, props.class].filter(Boolean).join(' ') };
   }
 }

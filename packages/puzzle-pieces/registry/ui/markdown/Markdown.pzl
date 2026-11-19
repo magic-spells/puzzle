@@ -246,7 +246,7 @@ function blockDom(tok, newTab = false) {
 }
 
 export default class Markdown extends PuzzleView {
-	data(params, props) {
+	data({ props }) {
 		return {
 			rootClass: props.class || '',
 		};

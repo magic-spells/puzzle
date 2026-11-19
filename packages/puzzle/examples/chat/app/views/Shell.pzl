@@ -39,12 +39,12 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import ConversationItem from '../components/ConversationItem.pzl';
 
 // The persistent sidebar-plus-pane frame and the nested-route parent (D30): it
-// renders its matched child at <Slot />. data(params) receives the FULL merged
+// renders its matched child at <Slot />. data({ params }) receives the FULL merged
 // params, so `params.id` is set whenever a thread is open — that drives the
 // active-row highlight. The conversation query auto-subscribes, so creating a
 // thread or bumping one's updatedAt (a streamed reply) reorders the list live.
 export default class Shell extends PuzzleView {
-  data(params) {
+  data({ params }) {
     const conversations = this.ctx.store
       .findMany('conversation')
       .sort((a, b) => b.updatedAt - a.updatedAt);

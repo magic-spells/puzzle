@@ -60,7 +60,7 @@ class TodosView extends PuzzleView {
 
 let seenUserId;
 class UserView extends PuzzleView {
-	data(params) {
+	data({ params }) {
 		seenUserId = params.id;
 		return { id: params.id };
 	}
@@ -333,7 +333,7 @@ describe('Router memory mode — push pipeline (D42 / D19)', () => {
 	it('a push byte-identical to the committed path is a no-op (no stack entry, no data() re-run)', async () => {
 		let dataRuns = 0;
 		class CountView extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				dataRuns++;
 				return { id: params.id };
 			}

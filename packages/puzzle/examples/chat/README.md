@@ -98,7 +98,7 @@ invisible to it. `MessageBubble` and `ConversationItem` use the idiom that
 covers every case, re-querying by id inside `data()`:
 
 ```javascript
-data(params, props) {
+data({ props }) {
   // findOne subscribes THIS component to its own record key — every update()
   // to the record re-renders exactly this bubble, nothing else.
   return {

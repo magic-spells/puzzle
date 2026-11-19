@@ -40,7 +40,7 @@ export default class TaskDialog extends PuzzleView {
     };
   }
 
-  data(params) {
+  data({ params }) {
     // findMany (not findOne) so a deep link rendered BEFORE the seeds land
     // subscribes to the collection and fills in when they do.
     const tasks = this.ctx.store.findMany('task');

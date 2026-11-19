@@ -83,7 +83,7 @@ export default class PostsView extends PuzzleView {
 
   // data() derives the tag list and the filtered, sorted posts from the store.
   // The active tag and sort order are local UI state read back from getData().
-  data(params, props) {
+  data() {
     const store = this.ctx.store;
     const activeTag = this.getData().activeTag;
     const sortBy = this.getData().sortBy || 'newest';

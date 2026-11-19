@@ -96,7 +96,7 @@ export default class ChatScroller extends PuzzleView {
     this.updatePinned();
   };
 
-  data(params, props) {
+  data({ props }) {
     const prev = this.getData();
     const pinned = prev && typeof prev.pinned === 'boolean' ? prev.pinned : true;
     const height = Number(props.height) > 0 ? Number(props.height) : 384;

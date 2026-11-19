@@ -76,7 +76,7 @@ const ICON = { sm: 'size-3.5', md: 'size-4', lg: 'size-4' };
 const DISABLED = 'opacity-50 pointer-events-none';
 
 export default class Menu extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const variant = VARIANT[props.variant] ? props.variant : 'primary';
     const size = HEIGHT[props.size] ? props.size : 'md';
 

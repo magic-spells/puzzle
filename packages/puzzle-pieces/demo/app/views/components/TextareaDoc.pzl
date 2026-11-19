@@ -82,7 +82,7 @@ export default class TextareaDoc extends PuzzleView {
     this.setState({ bio: '' });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

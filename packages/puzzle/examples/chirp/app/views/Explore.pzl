@@ -93,7 +93,7 @@ export default class ExploreView extends PuzzleView {
     this.setState({ query: '' });
   }
 
-  data(params, props) {
+  data() {
     const store = this.ctx.store;
     const query = (this.getData().query || '').trim();
     const q = query.toLowerCase();

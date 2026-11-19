@@ -264,7 +264,7 @@ export default class Dialog extends PuzzleView {
     event.preventDefault();
   };
 
-  data(params, props) {
+  data({ props }) {
     const title = props.title || '';
     const description = props.description || '';
     const showClose = props.showClose === true;

@@ -234,7 +234,7 @@ export default class Kanban extends PuzzleView {
     if (this._rafT) cancelAnimationFrame(this._rafT);
   }
 
-  data(params, props) {
+  data({ props }) {
     const d = this.getData();
     const cols = Array.isArray(props.columns) ? props.columns : [];
     const disabled = !!props.disabled;

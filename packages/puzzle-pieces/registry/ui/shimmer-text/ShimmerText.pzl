@@ -43,7 +43,7 @@ const BASE =
 const SPEED = { slow: 3200, normal: 2200, fast: 1400 };
 
 export default class ShimmerText extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const ms = Number.isFinite(props.speed) && props.speed > 0 ? props.speed : SPEED[props.speed] || SPEED.normal;
     return {
       rootClass: `${BASE} ${props.class || ''}`,

@@ -80,7 +80,7 @@ const codeNoTitle = `<Alert>Your changes were saved.</Alert>
 <Alert variant="danger">We couldn't reach the server. Retrying…</Alert>`;
 
 export default class AlertDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       installCmd,
       usageImport,

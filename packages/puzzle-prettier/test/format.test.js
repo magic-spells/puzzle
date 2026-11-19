@@ -20,7 +20,7 @@ describe('script formatting', () => {
 	it('formats a TS <script lang="ts"> body with typescript', async () => {
 		const out = await format(read('ts-scripts.pzl'));
 		expect(out).toContain('interface HomeModel {\n  title: string;\n  count: number;\n}');
-		expect(out).toContain('data(params: Record<string, string>): HomeModel {');
+		expect(out).toContain('data({ params }: DataInput): HomeModel {');
 		// the open tag with its lang attribute survives verbatim
 		expect(out).toContain('<script lang="ts">');
 	});
@@ -231,7 +231,7 @@ import Avatar from './Avatar.pzl';
 import PageCard from './PageCard.pzl';
 
 export default class Docs extends PuzzleView {
-  data(params, props) {
+  data() {
     // Pages I'm linking to (and not this one), newest first, capped at
     // three. Filtering/sorting live here, not in the template.
     const pages = this.ctx.store

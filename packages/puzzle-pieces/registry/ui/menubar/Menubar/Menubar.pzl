@@ -60,7 +60,7 @@ const BAR =
   'relative inline-flex items-center gap-0.5 rounded-lg border border-border bg-surface p-1';
 
 export default class Menubar extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       barLabel: props.label != null ? String(props.label) : 'Menu bar',
       rootClass: [BAR, props.class].filter(Boolean).join(' '),

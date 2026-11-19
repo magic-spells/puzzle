@@ -13,7 +13,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class SettingsProfileView extends PuzzleView {
-  data(params, props) {
+  data() {
     const [author] = this.ctx.store.findMany('user');
     return { author: author ?? null };
   }

@@ -82,7 +82,7 @@ That is the whole rule. `PostDetail.pzl` is the clearest case — this is the
 complete data layer for a deep-linkable `/posts/:id` page:
 
 ```js
-data(params) {
+data({ params }) {
   const store = this.ctx.store;
   const post = store.findOne('post', params.id);
   const author = post ? store.findOne('user', post.authorId) : null;

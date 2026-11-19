@@ -112,7 +112,7 @@ const codeControlled = `<EmojiPickerSimple open={ pickerOpen } @change={ addEmoj
 // Omit \`open\` and the picker manages itself; pass it and the parent owns it.`;
 
 export default class EmojiPickerSimpleDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       message: '',
       lastEmoji: '',

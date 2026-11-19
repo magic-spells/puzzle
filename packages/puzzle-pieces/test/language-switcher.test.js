@@ -104,7 +104,7 @@ for (const { name, file, deps, source, template, script, View } of PIECES) {
 	});
 
 	test(`${name}: links under prefix routing, buttons when every href is the same page`, () => {
-		const routed = mount(View, {}).data({}, { locales: prefixed });
+		const routed = mount(View, {}).data({ props: { locales: prefixed } });
 		assert.equal(routed.routed, true);
 		assert.deepEqual(
 			routed.options.map((o) => [o.locale, o.label, o.href, o.current]),
@@ -113,12 +113,12 @@ for (const { name, file, deps, source, template, script, View } of PIECES) {
 				['es', 'Español', '/es/about', 'true'],
 			]
 		);
-		assert.equal(mount(View, {}).data({}, { locales: unprefixed }).routed, false);
+		assert.equal(mount(View, {}).data({ props: { locales: unprefixed } }).routed, false);
 		// a host with no page to name gives every entry ''
 		const blank = prefixed.map((entry) => ({ ...entry, href: '' }));
-		assert.equal(mount(View, {}).data({}, { locales: blank }).routed, false);
-		assert.equal(mount(View, {}).data({}, {}).routed, false);
-		assert.deepEqual(mount(View, {}).data({}, {}).options, []);
+		assert.equal(mount(View, {}).data({ props: { locales: blank } }).routed, false);
+		assert.equal(mount(View, {}).data({ props: {} }).routed, false);
+		assert.deepEqual(mount(View, {}).data({ props: {} }).options, []);
 	});
 
 	test(`${name}: a plain link click fires the hook, prevents default and calls setLocale`, () => {
@@ -176,18 +176,18 @@ for (const { name, file, deps, source, template, script, View } of PIECES) {
 
 test('language-switcher: label defaults to "Language"', () => {
 	const { View } = PIECES[0];
-	assert.equal(mount(View, {}).data({}, { locales: prefixed }).label, 'Language');
-	assert.equal(mount(View, {}).data({}, { locales: prefixed, label: 'Idioma' }).label, 'Idioma');
+	assert.equal(mount(View, {}).data({ props: { locales: prefixed } }).label, 'Language');
+	assert.equal(mount(View, {}).data({ props: { locales: prefixed, label: 'Idioma' } }).label, 'Idioma');
 });
 
 test('language-menu: trigger shows the active language, align defaults to start', () => {
 	const { View } = PIECES[1];
-	const data = mount(View, {}).data({}, { locales: prefixed });
+	const data = mount(View, {}).data({ props: { locales: prefixed } });
 	assert.equal(data.activeLabel, 'Español');
 	assert.equal(data.activeLocale, 'es');
 	assert.equal(data.labelPrefix, 'Language: ');
 	assert.equal(data.align, 'start');
-	const end = mount(View, {}).data({}, { locales: prefixed, align: 'end', label: 'Idioma' });
+	const end = mount(View, {}).data({ props: { locales: prefixed, align: 'end', label: 'Idioma' } });
 	assert.equal(end.align, 'end');
 	assert.equal(end.labelPrefix, 'Idioma: ');
 });

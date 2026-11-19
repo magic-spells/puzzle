@@ -57,7 +57,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import TravelStamp from '@/components/TravelStamp.pzl';
 
 export default class Profile extends PuzzleView {
-  data(params, props) {
+  data() {
     // Traveler may not be seeded yet on first paint; default stamps to [] so the
     // grid and the distinct-counts below never touch undefined.
     const me = this.ctx.store.findOne('traveler', 'me');

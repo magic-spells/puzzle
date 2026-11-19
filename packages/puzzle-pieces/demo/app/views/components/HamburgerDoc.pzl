@@ -193,7 +193,7 @@ export default class HamburgerDoc extends PuzzleView {
     this.setState({ navOpen: false });
   }
 
-  data(params, props) {
+  data() {
     const state = this.getData();
     return {
       ...state,

@@ -26,7 +26,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // binds @select / @delete with the conversation already closed over, so this
 // row just invokes them.
 export default class ConversationItem extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     // findOne (not the prop itself) so this row subscribes to its own record —
     // in-place record mutation is invisible to prop-diffing, and the title and
     // updatedAt change over the conversation's life (auto-title, new messages).

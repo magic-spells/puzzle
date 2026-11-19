@@ -113,7 +113,7 @@ const SAMPLE_DOC = {
 const codeDoc = JSON.stringify(SAMPLE_DOC, null, 2);
 
 export default class RichTextDoc extends PuzzleView {
-	data(params, props) {
+	data() {
 		return {
 			sampleDoc: SAMPLE_DOC,
 			installCmd,

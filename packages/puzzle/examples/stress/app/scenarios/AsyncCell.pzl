@@ -21,7 +21,7 @@ import { sleep } from '../scenario-utils.js';
 // ---------------------------------------------------------------------------
 
 export default class AsyncCell extends PuzzleView {
-  async data(params, props) {
+  async data({ props }) {
     const probe = props.probe;
     const started = performance.now();
 

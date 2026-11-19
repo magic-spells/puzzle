@@ -39,7 +39,7 @@ const LINK =
 const PLAIN = 'inline-flex items-center gap-1 select-none cursor-pointer ' + FOCUS;
 
 export default class Trigger extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       triggerClass: [props.variant === 'plain' ? PLAIN : LINK, props.class]
         .filter(Boolean)

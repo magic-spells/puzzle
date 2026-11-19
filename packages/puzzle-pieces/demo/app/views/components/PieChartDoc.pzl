@@ -102,7 +102,7 @@ const codeFolding = `const countryData = [
 <PieChart data={ countryData } label="Users by country" totalLabel="Users" />`;
 
 export default class PieChartDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

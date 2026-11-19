@@ -107,7 +107,7 @@ export default class MainLayout extends PuzzleView {
   // filter auto-subscribes this layout to the notification collection (SPEC §9),
   // so when the Notifications view marks a record read the count here re-runs and
   // the badge drains LIVE — no event plumbing between the two views.
-  data(params, props) {
+  data() {
     // The ROOT route name (chain[0]) is the section for the active-nav flags.
     const section = this.route.chain[0].name;
     const unread = this.ctx.store.findMany('notification', { filter: (n) => !n.read });

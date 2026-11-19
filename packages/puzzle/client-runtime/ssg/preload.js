@@ -32,9 +32,11 @@ export async function preloadTakeoverComponents(vnode, ctx) {
  * @param {ViewNode|string|null} vnode
  * @param {Record<string, any>} ctx
  * @param {PuzzleView[]} instances collects each freshly preloaded nested instance
+ * @param {PuzzleView | null} [parent] the view whose render tree holds vnode, so
+ *   a nested component's data() sees what its ancestors share (D197)
  * @returns {Promise<void>}
  */
-async function preloadNode(vnode, ctx, instances) {
+async function preloadNode(vnode, ctx, instances, parent = null) {
 	if (
 		vnode == null ||
 		typeof vnode === 'string' ||
@@ -45,7 +47,7 @@ async function preloadNode(vnode, ctx, instances) {
 
 	if (!vnode.isComponent) {
 		if (typeof vnode.children === 'string') return;
-		for (const child of vnode.children) await preloadNode(child, ctx, instances);
+		for (const child of vnode.children) await preloadNode(child, ctx, instances, parent);
 		return;
 	}
 
@@ -61,6 +63,7 @@ async function preloadNode(vnode, ctx, instances) {
 	if (nested) {
 		try {
 			instance = new (/** @type {typeof PuzzleView} */ (vnode.tag))(ctx);
+			instance.__parent = parent;
 			await instance.preload({ params: {}, props: vnode.attrs, route: null });
 		} catch (err) {
 			// Match mountComponent's existing fail-soft posture: log the failed child,
@@ -97,7 +100,7 @@ async function preloadNode(vnode, ctx, instances) {
 	}
 
 	instance.__takeoverTree = expanded;
-	await preloadNode(expanded, ctx, instances);
+	await preloadNode(expanded, ctx, instances, instance);
 }
 
 export default preloadTakeoverComponents;

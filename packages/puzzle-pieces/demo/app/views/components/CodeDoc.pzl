@@ -106,7 +106,7 @@ export default class Counter extends PuzzleView {
     this.setState({ count: 0 });
   }
 
-  data(params, props) {
+  data() {
     return { count: this.getData().count ?? 0 };
   }
 
@@ -142,7 +142,7 @@ const codeLang = `<Code code={ bashSnippet } numbers={ false }/>   // guessed: b
 <Code code={ snippet } lang="javascript"/>        // explicit override`;
 
 export default class CodeDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       installCmd,
       usageImport,

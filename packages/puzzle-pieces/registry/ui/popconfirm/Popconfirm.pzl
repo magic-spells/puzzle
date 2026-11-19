@@ -128,7 +128,7 @@ export default class Popconfirm extends PuzzleView {
     event?.currentTarget?.closest?.('dropdown-component')?.hide?.();
   }
 
-  data(params, props) {
+  data({ props }) {
     return {
       rootClass: 'inline-block',
       openState: props.open,

@@ -104,7 +104,7 @@ import { toast } from '@/components/ui/toast.js';
 toast('Saved!');`;
 
 export default class ToastDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       installCmd,
       usageImport,

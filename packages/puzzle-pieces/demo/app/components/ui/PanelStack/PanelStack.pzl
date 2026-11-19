@@ -150,7 +150,7 @@ export default class PanelStack extends PuzzleView {
     this.props.change?.(event.detail?.handle);
   };
 
-  data(params, props) {
+  data({ props }) {
     // Frozen on the FIRST call and never recomputed: the component reflects
     // `current` as its own state, so re-rendering the attribute every commit
     // would fight it. Every later change goes through #sync().

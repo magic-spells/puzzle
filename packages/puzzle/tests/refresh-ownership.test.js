@@ -267,7 +267,7 @@ function shellFixture() {
 	const gate = deferred();
 	const started = deferred();
 	class OrgShell extends PuzzleView {
-		async data(params) {
+		async data({ params }) {
 			const org = this.ctx.store.findOne('org', params.id);
 			if (params.id === '2') {
 				started.resolve();

@@ -77,7 +77,7 @@ class Home extends PuzzleView {
 Home.__pzlModule = 'views/Home.pzl';
 
 class Detail extends PuzzleView {
-	data(params) {
+	data({ params }) {
 		return { id: params.id };
 	}
 
@@ -88,7 +88,7 @@ class Detail extends PuzzleView {
 Detail.__pzlModule = 'views/Detail.pzl';
 
 class Item extends PuzzleView {
-	data(params) {
+	data({ params }) {
 		// findOne subscribes to a PER-RECORD key, so a run prepared against another
 		// id adds a key this view is not already subscribed to — the only shape in
 		// which D146 holds anything.

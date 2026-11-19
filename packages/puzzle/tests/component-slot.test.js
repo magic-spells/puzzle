@@ -25,7 +25,7 @@ async function mounted(Class, options) {
 }
 
 class Card extends PuzzleView {
-	data(_params, props) { return props; }
+	data({ props }) { return props; }
 	render() {
 		const { title, close } = this.getData();
 		return h('section', { class: 'card' }, [text(title), h('button', { '@click': () => close?.(title) }), h(SLOT_TAG)]);
@@ -35,14 +35,14 @@ class Panel extends Card {
 	render() { return h('article', { class: 'panel' }, [text(this.getData().title), h(SLOT_TAG)]); }
 }
 class Host extends PuzzleView {
-	data(_params, props) { return props; }
+	data({ props }) { return props; }
 	render() {
 		const { current, title, close, content } = this.getData();
 		return h('main', {}, [dynamicComponent(current, { title, close }, [h('b', {}, [text(content)])]), h('input', { class: 'sibling' })]);
 	}
 }
 class ComponentRoot extends PuzzleView {
-	data(_params, props) { return props; }
+	data({ props }) { return props; }
 	render() { return dynamicComponent(Card, this.getData()); }
 }
 class NestedComponentRoot extends ComponentRoot {
@@ -58,7 +58,7 @@ describe('<Component> runtime (D180)', () => {
 			render() { return h('main', {}, [h('header', {}, [h(SLOT_TAG, { name: 'heading' })]), h('article', {}, [h(SLOT_TAG)])]); }
 		}
 		class NamedHost extends PuzzleView {
-			data(_params, props) { return props; }
+			data({ props }) { return props; }
 			render() { return h(Regions, {}, [dynamicComponent(this.getData().current, { slot: 'heading', title: 'title' }), h('p', {}, [text('body')])]); }
 		}
 		const view = await mounted(NamedHost, { props: { current: Card } });
@@ -72,7 +72,7 @@ describe('<Component> runtime (D180)', () => {
 
 	it('forwards an ordinary slot prop when no enclosing component consumes it', async () => {
 		class Slotted extends PuzzleView {
-			data(_params, props) { return props; }
+			data({ props }) { return props; }
 			render() { return h('div', { slot: this.getData().slot }); }
 		}
 		class PlainHost extends PuzzleView {
@@ -149,7 +149,7 @@ describe('<Component> runtime (D180)', () => {
 	it.each([ComponentRoot, NestedComponentRoot, ForwardedComponentRoot].map((Row) => [Row.name, Row]))(
 		'keyed rows with %s roots move their entire ranges', async (_name, Row) => {
 			class List extends PuzzleView {
-				data(_params, props) { return props; }
+				data({ props }) { return props; }
 				render() { return h('main', {}, this.getData().items.map((id) => h(Row, { key: id, title: id }))); }
 			}
 			const view = await mounted(List, { props: { items: ['a', 'b', 'c'] } });
@@ -167,7 +167,7 @@ describe('<Component> runtime (D180)', () => {
 	it.each([ComponentRoot, NestedComponentRoot, ForwardedComponentRoot].map((Row) => [Row.name, Row]))(
 		'conditional replacement of %s stays between its siblings', async (_name, Row) => {
 			class Conditional extends PuzzleView {
-				data(_params, props) { return props; }
+				data({ props }) { return props; }
 				render() {
 					return h('main', {}, [h('input', { class: 'before' }),
 						this.getData().open ? h(Row, { title: 'selected' }) : h('p', {}, [text('replacement')]),
@@ -214,7 +214,7 @@ describe('<Component> runtime (D180)', () => {
 				viewDidHide() { didHide(); }
 			}
 			class Conditional extends PuzzleView {
-				data(_params, props) { return props; }
+				data({ props }) { return props; }
 				render() {
 					const child = selected ? dynamicComponent(Modal, { key: 'modal' }) : h(Modal, { key: 'modal' });
 					return h('main', {}, mode === 'keyed row'
@@ -240,7 +240,7 @@ describe('<Component> runtime (D180)', () => {
 			viewDidHide() { didHide(); }
 		}
 		class Conditional extends PuzzleView {
-			data(_params, props) { return props; }
+			data({ props }) { return props; }
 			render() { return h('main', {}, [this.getData().open ? dynamicComponent(Modal) : h('#'), h('input')]); }
 		}
 		try {
@@ -299,7 +299,7 @@ describe('<Component> runtime (D180)', () => {
 				render() { return dynamicComponent(Dispatcher); }
 			}
 			class Conditional extends PuzzleView {
-				data(_params, props) { return props; }
+				data({ props }) { return props; }
 				render() {
 					const Row = shape.includes('nested') ? NestedDispatcher : Dispatcher;
 					const child = shape.startsWith('selected') ? dynamicComponent(Row) : h(Row);
@@ -412,7 +412,7 @@ describe('<Component> runtime (D180)', () => {
 			render() { return h('div', { class: 'nested' }, [dynamicComponent(Card, { title: this.props.title })]); }
 		}
 		class List extends PuzzleView {
-			data(_params, props) { return props; }
+			data({ props }) { return props; }
 			render() { return h('main', {}, this.getData().items.map((id) => dynamicComponent(Nested, { key: id, title: id }))); }
 		}
 		const view = await mounted(List, { props: { items: ['a', 'b'] } });
@@ -437,7 +437,7 @@ describe('<Component> runtime (D180)', () => {
 
 	it('a root range can swap and be destroyed without leaving comments or content', async () => {
 		class Root extends PuzzleView {
-			data(_params, props) { return props; }
+			data({ props }) { return props; }
 			render() { return dynamicComponent(this.getData().current, { title: 'root' }); }
 		}
 		const view = await mounted(Root, { props: { current: Card } });

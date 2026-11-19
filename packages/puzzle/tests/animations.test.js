@@ -485,7 +485,7 @@ describe('ViewManager — leave animation on component removal', () => {
 
 	class Row extends PuzzleView {
 		animations = { out: OUT };
-		data(params, props) { return { id: props.id }; }
+		data({ props }) { return { id: props.id }; }
 		render() { return h('li', { 'data-id': this.getData().id }, [text(this.getData().id)]); }
 	}
 

@@ -21,7 +21,7 @@ const LABEL =
   'uppercase tracking-wide text-muted';
 
 export default class SelectLabel extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { labelClass: [LABEL, props.class].filter(Boolean).join(' ') };
   }
 }

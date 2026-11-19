@@ -19,7 +19,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 const LABEL = 'px-2.5 pt-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted';
 
 export default class Label extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { labelClass: [LABEL, props.class].filter(Boolean).join(' ') };
   }
 }

@@ -39,7 +39,7 @@ describe('prepareRefresh eval-scope unwinding', () => {
 	it('overlapping prepares leave no dead scope behind', async () => {
 		const gates = { a: deferred(), b: deferred() };
 		class Detail extends PuzzleView {
-			async data(params) {
+			async data({ params }) {
 				await gates[params.id]?.promise;
 				return { id: params.id };
 			}
@@ -199,7 +199,7 @@ describe('prepareRefresh eval-scope unwinding', () => {
 		class Detail extends PuzzleView {
 			// Deliberately NOT declared async: the sync-shaped probe is what reaches
 			// the abandon-and-retry branch inside Store.withTracking.
-			data(params) {
+			data({ params }) {
 				runs++;
 				return gate.then(() => ({ id: params.id }));
 			}

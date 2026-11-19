@@ -136,7 +136,7 @@ export default class PieChart extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data({ props }) {
     const local = this.getData();
     const size = Number(props.size) || 240;
     const donut = props.donut !== false;

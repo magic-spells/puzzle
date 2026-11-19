@@ -207,7 +207,7 @@ export default class DataTableDoc extends PuzzleView {
     this.setState({ sortState: { key: 'amount', dir: 'desc' }, selectedKeys: [], pageNum: 1 });
   }
 
-  data(params, props) {
+  data() {
     const d = this.getData();
     const sortState = d.sortState || null;
     return {

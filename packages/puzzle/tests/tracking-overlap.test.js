@@ -126,7 +126,7 @@ describe('D161 overlap — the sticky async-shape flag', () => {
 
 		let thenRuns = 0;
 		class ThenView extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				thenRuns++;
 				return Promise.resolve().then(() => ({
 					title: store.findOne('post', params.id)?.title,
@@ -190,7 +190,7 @@ describe('D161 overlap — the sticky async-shape flag', () => {
 		}
 
 		class ThenView extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				const store = this.ctx.store;
 				// The store read happens in the CONTINUATION — after withTracking has had
 				// its chance to abandon this invocation.
@@ -246,7 +246,7 @@ describe('D161 overlap — the prepared-refresh scope identity guard', () => {
 		const seen = [];
 		let calls = 0;
 		class PreparedView extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				calls++;
 				// Synchronous on the mount, so the view is still UNFLAGGED when the
 				// prepare below runs and withTracking abandons its first invocation.

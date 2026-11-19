@@ -135,7 +135,7 @@ export default class CommandDoc extends PuzzleView {
     this.setState({ commandOpen: false });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

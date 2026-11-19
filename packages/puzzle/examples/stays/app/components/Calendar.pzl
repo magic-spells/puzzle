@@ -75,7 +75,7 @@ function isoOf(y, m, d) {
 }
 
 export default class Calendar extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const listing = props.listing || null;
     const checkIn = props.checkIn || '';
     const checkOut = props.checkOut || '';

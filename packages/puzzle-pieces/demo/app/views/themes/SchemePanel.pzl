@@ -140,7 +140,7 @@ export default class SchemePanel extends PuzzleView {
 		this._scheduled = false;
 	}
 
-	data(params, props) {
+	data({ params, props }) {
 		const requested = (params && params.scheme) || props.scheme || DEFAULT_SCHEME;
 		const known = SCHEME_VALUES.includes(requested);
 		const scheme = requested;

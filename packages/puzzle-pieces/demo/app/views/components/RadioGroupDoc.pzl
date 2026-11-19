@@ -92,7 +92,7 @@ export default class RadioGroupDoc extends PuzzleView {
     this.setState({ plan: 'pro', size: 'm', planDetail: 'pro' });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

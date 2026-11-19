@@ -14,7 +14,7 @@ import Code from '../ui/Code.pzl';
 //   <CodeBlock code={ installCmd }/>
 //   <CodeBlock code={ importLine } class="mt-2"/>
 export default class CodeBlock extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       code: props.code || '',
       lang: props.lang || false,

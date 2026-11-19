@@ -96,7 +96,7 @@ export default class HomeView extends PuzzleView {
     this.setState({ activeTag: 'all' });
   }
 
-  data(params, props) {
+  data() {
     const store = this.ctx.store;
     const listings = store.findMany('listing');
 

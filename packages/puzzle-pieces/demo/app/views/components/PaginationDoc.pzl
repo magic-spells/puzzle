@@ -83,7 +83,7 @@ export default class PaginationDoc extends PuzzleView {
     this.setState({ page: 1, pageWide: 10, pageSmall: 1 });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

@@ -57,7 +57,7 @@ describe('render() returning null clears the mounted DOM', () => {
 			render() { return h('span', { class: 'child' }, [text('selected')]); }
 		}
 		class Host extends PuzzleView {
-			data(_params, props) { return props; }
+			data({ props }) { return props; }
 			render() { return this.getData().hide ? null : dynamicComponent(selected ? Child : null); }
 		}
 		const before = document.createElement('input');

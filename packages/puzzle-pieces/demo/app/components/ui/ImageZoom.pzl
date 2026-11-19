@@ -152,7 +152,7 @@ export default class ImageZoom extends PuzzleView {
     this.props.zoomEnd?.(event.detail?.scale);
   };
 
-  data(params, props) {
+  data({ props }) {
     const declarations = [];
     if (props.aspect) declarations.push(`--image-zoom-aspect:${props.aspect}`);
     if (props.style) declarations.push(String(props.style));

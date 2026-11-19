@@ -147,7 +147,7 @@ export default class CarouselDoc extends PuzzleView {
     this.setState({ loopIdx: 0 });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

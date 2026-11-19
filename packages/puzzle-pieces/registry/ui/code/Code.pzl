@@ -160,7 +160,7 @@ export default class Code extends PuzzleView {
     };
   }
 
-  data(params, props) {
+  data({ props }) {
     const code = props.code || '';
     const numbers = props.numbers !== false;
     const copy = props.copy !== false;

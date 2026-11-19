@@ -5,7 +5,7 @@
 </puzzle-view>
 
 <script lang="ts">
-import { PuzzleView } from '@magic-spells/puzzle';
+import { PuzzleView, type DataInput } from '@magic-spells/puzzle';
 
 // `class` is the usual caller override prop.
 interface WrapperProps {
@@ -20,7 +20,7 @@ interface WrapperModel {
 export default class Wrapper extends PuzzleView<WrapperProps> {
   // Family members compose: <Children/> above renders whatever the caller
   // nests inside <Wrapper>.
-  data(_params: Record<string, string>, props: WrapperProps): WrapperModel {
+  data({ props }: DataInput<WrapperProps>): WrapperModel {
     return {
       classes: ['Wrapper', props.class].filter(Boolean).join(' '),
     };

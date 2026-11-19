@@ -209,7 +209,7 @@ export default class Tabs extends PuzzleView {
     this.props.change?.(value);
   };
 
-  data(params, props) {
+  data({ props }) {
     return {
       variant: VARIANTS.includes(props.variant) ? props.variant : 'underline',
       rootClass: [ROOT, props.class].filter(Boolean).join(' '),

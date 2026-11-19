@@ -113,7 +113,7 @@ const DISC_INTERACTIVE =
 const LABEL_BASE = 'text-sm leading-tight';
 
 export default class Stepper extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const horizontal = props.orientation !== 'vertical';
     const clickable = !!props.clickable;
     const src = Array.isArray(props.steps) ? props.steps : [];

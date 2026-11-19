@@ -26,7 +26,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // grip press is stopped from bubbling (it must not reach the stage/marquee) and
 // forwarded up as a { event, dir } resize request.
 export default class SelectionOverlay extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { overlay: props.overlay, handles: !!props.handles };
   }
 

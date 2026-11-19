@@ -90,7 +90,7 @@ const codeDelay = `<Tooltip text="Shows instantly" delay={ 0 }><Button variant="
 // immediately; hide is always immediate.`;
 
 export default class TooltipDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

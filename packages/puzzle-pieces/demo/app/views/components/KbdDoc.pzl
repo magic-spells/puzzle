@@ -80,7 +80,7 @@ const codeProse = `<p>
 </p>`;
 
 export default class KbdDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

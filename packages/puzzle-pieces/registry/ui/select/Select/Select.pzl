@@ -209,7 +209,7 @@ export default class Select extends PuzzleView {
     this.setState({ label: text });
   }
 
-  data(params, props) {
+  data({ props }) {
     const label = this.getState().label || '';
     const placeholder = props.placeholder ?? 'Select…';
     return {

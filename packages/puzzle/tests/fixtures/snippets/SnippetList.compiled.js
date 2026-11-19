@@ -2,7 +2,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class SnippetList extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { users: props.users, group: props.group };
   }
 

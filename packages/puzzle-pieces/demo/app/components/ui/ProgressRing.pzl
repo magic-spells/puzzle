@@ -71,7 +71,7 @@ const SIZE = { sm: 48, md: 96, lg: 128 };
 const CAPTION_MIN = 88; // below this the label is aria-only, not a visible caption
 
 export default class ProgressRing extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const max = typeof props.max === 'number' && props.max > 0 ? props.max : 100;
 
     const hasValue = typeof props.value === 'number' && !Number.isNaN(props.value);

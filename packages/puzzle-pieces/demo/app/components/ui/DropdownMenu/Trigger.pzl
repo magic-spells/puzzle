@@ -69,7 +69,7 @@ const BARE = 'inline-flex items-center select-none cursor-pointer ' + FOCUS;
 const VARIANT = { button: BUTTON, item: ITEM, bare: BARE };
 
 export default class Trigger extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       label: props.label != null ? String(props.label) : '',
       triggerClass: [VARIANT[props.variant] || BUTTON, props.class]

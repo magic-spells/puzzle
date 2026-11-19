@@ -30,7 +30,7 @@ export default class Counter extends PuzzleView {
     this.setState({ count: 0 });
   }
 
-  data(params, props) {
+  data({ props }) {
     const { count = 0 } = this.getData();
     return {
       count,

@@ -47,7 +47,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 const CONTENT = 'w-max max-w-xs p-4 text-sm';
 
 export default class Content extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       contentClass: [CONTENT, props.class].filter(Boolean).join(' '),
       align: props.align,

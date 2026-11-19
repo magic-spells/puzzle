@@ -11,7 +11,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // just the template delimiter — it carries no attributes and wraps a single
 // root element (D20). Label content is projected through <Children/>.
 export default class Button extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       variant: props.variant || 'primary',
       type: props.type || 'button',

@@ -43,7 +43,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // items: [{ label, href, id? }]  — href is ignored on the final item; id, when
 // given, is the row key (the position otherwise)
 export default class Breadcrumb extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const src = props.items || [];
     const last = src.length - 1;
     const items = src.map((item, i) => ({

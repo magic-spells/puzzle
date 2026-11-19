@@ -42,7 +42,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   class   merged onto <dropdown-trigger>
 
 export default class Trigger extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { triggerClass: props.class || false };
   }
 }

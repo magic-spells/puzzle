@@ -74,7 +74,7 @@ const TAB =
   '[tab-group[data-variant=buttons]_&]:aria-selected:hover:bg-brand-dark';
 
 export default class TabsTab extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       value: props.value == null ? undefined : String(props.value),
       disabled: props.disabled ? true : false,

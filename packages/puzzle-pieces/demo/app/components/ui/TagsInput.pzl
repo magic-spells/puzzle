@@ -148,7 +148,7 @@ export default class TagsInput extends PuzzleView {
 
   // ---- render model --------------------------------------------------------
 
-  data(params, props) {
+  data({ props }) {
     const draft = this.getData().draft ?? '';
     const values = this._values(props);
     const chips = values.map((v, i) => ({

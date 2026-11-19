@@ -284,7 +284,7 @@ export default class SidebarDoc extends PuzzleView {
     this.setState({ collapsed: false });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

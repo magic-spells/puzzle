@@ -120,7 +120,7 @@ const hasOwnUrls = (list) => {
 };
 
 export default class LanguageMenu extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const list = (Array.isArray(props.locales) ? props.locales : []).filter(
       (entry) => entry && entry.locale != null
     );

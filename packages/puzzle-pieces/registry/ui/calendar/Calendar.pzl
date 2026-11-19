@@ -436,7 +436,7 @@ export default class Calendar extends PuzzleView {
 
   // ---- render model --------------------------------------------------------
 
-  data(params, props) {
+  data({ props }) {
     const local = this.getData();
     const committed = parseISODate(props.value);
     const { min, max } = this._bounds(props);

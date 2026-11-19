@@ -92,7 +92,7 @@ function sanitize(str, type) {
 }
 
 export default class InputOtp extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const id = props.id || (this._fallbackId ??= `pp-otp-${++uid}`);
     const length = Number.isInteger(props.length) && props.length > 0 ? props.length : 6;
     const type = props.type === 'alphanumeric' ? 'alphanumeric' : 'numeric';

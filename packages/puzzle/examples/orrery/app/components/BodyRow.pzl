@@ -67,7 +67,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // the parent's findMany('body') is the subscription, and prop reactivity
 // re-runs this data() with the fresh record whenever anything changes.
 export default class BodyRow extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const body = props.body;
     const speed = Math.round(body.speed);
     return {

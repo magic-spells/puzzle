@@ -87,7 +87,7 @@ export default class DetailView extends PuzzleView {
   // params-only navigation: the router REUSES this instance and re-runs
   // data() with the new id — content swaps in place, no re-slide (the calm
   // default).
-  data(params) {
+  data({ params }) {
     const item = ALL.find((entry) => entry.id === params.id) || null;
     const t = tone(item ? item.statusTone : 'idle');
     return {

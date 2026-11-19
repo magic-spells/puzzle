@@ -84,7 +84,7 @@ export default class SearchFieldDoc extends PuzzleView {
     this.setState({ query: '', term: '' });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

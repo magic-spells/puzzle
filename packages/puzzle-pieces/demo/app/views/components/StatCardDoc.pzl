@@ -102,7 +102,7 @@ const codeNoDelta = `// Omit delta for a plain metric. A sparkline without a del
 <StatCard label="Uptime" value="99.98%" sparkline={ trendFlat } />`;
 
 export default class StatCardDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

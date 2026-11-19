@@ -10,7 +10,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 export default class Wrapper extends PuzzleView {
   // Family members compose: <Children/> above renders whatever the caller
   // nests inside <Wrapper>. `class` is the usual caller override prop.
-  data(params, props) {
+  data({ props }) {
     return {
       classes: ['Wrapper', props.class].filter(Boolean).join(' ')
     };

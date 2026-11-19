@@ -81,7 +81,7 @@ export default class LabelDoc extends PuzzleView {
     this.setState({ query: '' });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

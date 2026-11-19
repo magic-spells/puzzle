@@ -137,7 +137,7 @@ const codeMorph = `<EmojiPicker morph @change={ addEmoji }/>
 // prefers-reduced-motion by falling back to the plain panel.`;
 
 export default class EmojiPickerDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       message: '',
       lastEmoji: '',

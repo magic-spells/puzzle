@@ -129,7 +129,7 @@ const codeAttachments = `<!-- Chips slotted into "attachments" render below the 
 </ChatMessage>`;
 
 export default class ChatMessageDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

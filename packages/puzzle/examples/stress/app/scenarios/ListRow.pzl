@@ -64,7 +64,7 @@ import { rowMetrics } from '../row-metrics.js';
 // ---------------------------------------------------------------------------
 
 export default class ListRow extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     // Counts child data() runs in PRODUCTION, where the framework's own devperf
     // counters are compiled out. See ../row-metrics.js.
     rowMetrics.dataRuns += 1;

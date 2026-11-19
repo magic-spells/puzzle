@@ -17,7 +17,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class SnippetRoster extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { members: props.members || [] };
   }
 }

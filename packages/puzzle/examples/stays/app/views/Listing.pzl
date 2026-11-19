@@ -146,7 +146,7 @@ const AMENITY_ICONS = {
 };
 
 export default class ListingView extends PuzzleView {
-  data(params, props) {
+  data({ params }) {
     const store = this.ctx.store;
     const listing = store.findOne('listing', params.id);
 

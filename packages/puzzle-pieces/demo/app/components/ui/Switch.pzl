@@ -48,7 +48,7 @@ const ROW = 'flex w-full items-center gap-3 select-none cursor-pointer';
 const BARE = 'inline-flex select-none cursor-pointer';
 
 export default class Switch extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const disabled = !!props.disabled;
     return {
       wrapperClass: [
