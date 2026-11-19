@@ -1,0 +1,134 @@
+---
+name: Server queries — paginated finds, invalidation, write status
+status: proposed
+connections:
+  - DECISION-D192-SERVER-QUERIES
+  - DECISION-D161-AUTO-FETCHING-FINDS
+  - DECISION-D158-ADAPTER-FETCH-FUNCTIONS
+  - COMPONENT-STORE
+  - COMPONENT-ADAPTER
+  - COMPONENT-FIXTURES
+  - DOC-SPEC-DATA
+  - DOC-DATASTORE
+  - TEST-ADAPTER-SYNC
+---
+
+# Server queries
+
+The author-facing shape of [[DECISION-D192-SERVER-QUERIES]] and the build plan for it. The decision card owns the rules; this card shows them in use and lists what changes where.
+
+## In a view
+
+### A paginated list
+
+```js
+// app/views/posts/PostList.pzl (script)
+data() {
+  // the page lives in the url, so back/forward and links work for free
+  const page = Number(this.route.query.page ?? 1);
+  const posts = this.ctx.store.findMany('post', { query: { page } });
+  return {
+    posts,
+    page,
+    // meta comes from the response; the server decides whether there is more
+    hasNext: !!posts.meta?.nextPage,
+  };
+}
+```
+
+A query-only navigation (`?page=3`) re-runs `data()` with the new route query ([[DOC-SPEC-ROUTER]] §44). Page 3's key misses, the settle loop fetches it, and the view commits once it lands, with page 2 still on screen until then. Going back to page 2 reads its cached entry with no request.
+
+### Cursor "load more"
+
+```js
+data() {
+  // cursors walked so far live in view state; '' means the first page
+  const cursors = this.getState().cursors ?? [''];
+  const pages = cursors.map((after) =>
+    this.ctx.store.findMany('post', { query: after ? { after } : {} })
+  );
+  const last = pages[pages.length - 1];
+  return { posts: pages.flat(), nextCursor: last.meta?.nextCursor ?? null };
+}
+
+events = {
+  loadMore() {
+    const { cursors = [''] } = this.getState();
+    this.setState('cursors', [...cursors, this.getData().nextCursor]);
+  },
+};
+```
+
+Each cursor is its own cached entry, so appending one fetches only the new page. (`setState` on a key `data()` read re-runs `data()` per D191 once #271's auto re-run lands; until then the handler adds `this.refresh()`.)
+
+### Saving, then invalidating
+
+```js
+data() {
+  const post = this.ctx.store.findOne('post', this.route.params.id);
+  const sync = post && this.ctx.store.syncStatus(post);
+  return { post, saving: sync?.pending === 'save', saveError: sync?.error?.message ?? null };
+}
+
+events = {
+  async publish() {
+    try {
+      await this.getData().post.update({ published: true }).save();
+    } catch {
+      return; // syncStatus(post).error is already showing it
+    }
+    // every list that shows posts refetches when next read; nothing fetches now
+    this.ctx.store.invalidate('post');
+  },
+};
+```
+
+```html
+<button @click={ publish } disabled={ saving }>
+  {#if saving}Publishing…{/if}{#if !saving}Publish{/if}
+</button>
+{#if saveError}<p role="alert">{ saveError }</p>{/if}
+```
+
+## In an adapter
+
+Nothing changes for an array-returning endpoint. A server that wraps rows, or a cursor API, returns (or is adapted to) `{ records, meta }`:
+
+```js
+// app/app.js — one app-wide dialect for an API that answers { data, meta }
+const api = adapter.defaults({
+  async loadMany(fetch, query, { endpoint }) {
+    const qs = new URLSearchParams(query ?? {}).toString();
+    const res = await fetch(endpoint + (qs ? '?' + qs : ''));
+    const body = await res.json();
+    return { records: body.data, meta: body.meta };
+  },
+});
+```
+
+The mock adapter (`/fixtures`) learns to serve `?page`/`?limit` and an `after` cursor by default, answering `{ records, meta: { page, nextPage, nextCursor, total } }` when a request carries any of those params and the plain array otherwise, so `--fixtures` apps paginate without a handler.
+
+## Build plan
+
+**Runtime (`client-runtime/datastore/adapter.js`, all adapter-side):**
+- Read state gains `queries` (LRU `Map` of canonical key → `{ type, rows, meta, gen, stale }`), `staleType` (`type → gen`) and `staleRecord` (`identity → gen`).
+- `canonicalQuery(type, query)` builds the key and validates values in development.
+- `_findManyTracked` routes a query read to a new `_faultQuery` (dedupe on `state.many` under the query key) and returns the entry's rows with `meta`; `_findOneTracked` checks the stale marks on a hit.
+- `loadMany` accepts `{ records, meta }`, and with options writes the query entry.
+- The adapter overrides `Store.prototype.findMany` only for the `query` branch, so an untracked query read returns cached rows; a no-query call goes straight to core.
+- `invalidate()` and `syncStatus()` install on the Store prototype; `_chain` sets and clears per-record status and notifies; `save()`/`delete()` decorate their promise with `pending`/`error`.
+- `serializeReadState`/`hydrateReadState` carry `queries`.
+
+**Core (`client-runtime/datastore/store.js`):** no behavior change. JSDoc for `FindManyOptions.query`, and a development warning when `query` is passed on an adapter-free store (it would be ignored).
+
+**Fixtures (`client-runtime/fixtures/mock.js`):** default pagination for `page`/`limit`/`after`.
+
+**Types:** `types/index.d.ts` (`FindManyOptions.query`, `QueryResult<T>` with `meta`, `invalidate`, `syncStatus`, `SyncStatus`), `types/adapter.d.ts` (`LoadManyResult`, `WritePromise<T>` with `pending`/`error`), plus the installed-method drift guard.
+
+**Tests (vitest):** canonical keys and dev errors; a query read faults once, dedupes across views, keeps server order and `meta`; pages share records with `findOne`; untracked query reads are local; `invalidate` in all three forms marks, notifies and refetches only what a view reads, holding old rows until the settle commit; a stale refetch failure reaches `errorView` and retries; generations keep a pre-invalidate response from clearing staleness; `syncStatus` flips and notifies through queued writes; promise `pending`/`error`; read-state serialization round-trip; mock pagination; LRU eviction. TypeScript fixtures under `tests-types`. A browser smoke for the example.
+
+**Docs:** [[DOC-SPEC-DATA]] §8/§22/§61, [[DOC-SPEC]] deferred list, [[DOC-DATASTORE]], [[DOC-MODELS]], [[COMPONENT-STORE]], [[COMPONENT-ADAPTER]], [[DOC-RELEASE-SURFACE]], the user guide's data chapter, the agent skill, and a CHANGELOG entry under 0.10.0. D192 and this card flip to `built`.
+
+**Example:** `examples/paginated-posts`: a fixtures-backed post list with page links, a detail view with Publish (pending and error state, then `invalidate`), and a cursor "load more" comments list.
+
+**Verification:** `npx vitest run`, `npm run test:runtime-types`, `npm run test:types`, both Go suites, `puzzle check` and `puzzle build` on the new example and on `blog`/`chirp` (existing adapter users), `measure-size.mjs` before and after, and the puzzle-pieces and puzzle-devtools suites.
