@@ -185,7 +185,7 @@ export default class TodoHome extends PuzzleView {
 - Translations (§66): **`app/locales/<tag>.json`**, one per locale, read only when `puzzle.config.js` declares `i18n: { locales: [...], defaultLocale: '…' }`. `locales` is a non-empty list of distinct BCP 47 tags (`-`, never `_`; compared case-insensitively) that must include `defaultLocale`. Every listed locale needs a file; an unlisted file is skipped with a warning, and `app/locales/` without `i18n` is a warning. Build details: [[DOC-SPEC-BUILD]] §13.
 - `.pzl` compilation is an **esbuild plugin**: Go parses templates and generates render functions; esbuild owns module resolution, bundling, sourcemaps and minification.
 - CLI: `puzzle build` (production by default) and `puzzle dev` (watch + static server with history fallback + reload); the rest of the CLI is §13.
-- Styling: Tailwind-first via `styles: { use: ['tailwindcss'] }`. Sass is **not supported and will not be** ([[DECISION-D12-TAILWIND-FIRST]]); native CSS nesting plus Tailwind cover it.
+- Styling: Tailwind-first via `styles: { use: ['tailwindcss'] }`. Sass is **not supported and will not be** ([[DECISION-D12-TAILWIND-FIRST]]); native CSS nesting plus Tailwind cover it. `<style>` blocks compose into the global stylesheet after the Tailwind layer, minified in production builds. A script may also `import './x.css'`: SPA and hybrid builds emit it as `app.css` for the shell to link, and `output: 'static'` links each page to a sheet holding only the CSS its own graph imports ([[DOC-SPEC-BUILD]] §59).
 
 ## 25. TypeScript scripts: `<script lang="ts">`
 

@@ -239,6 +239,19 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Added
 
+- **Static pages link their own CSS.** In `output: 'static'`, a view, layout
+  or component script that does `import './page.css'` now gets that CSS on its
+  own page only: each page links `_puzzle/<slug>.css` (`<slug>-<hash>.css`
+  when its module is hashed) after the global stylesheet, in `puzzle build`
+  and `puzzle dev`. Before, esbuild wrote the file and no page linked it. CSS
+  behind a dynamic `import()` loads with the importing page's sheet. The
+  unused `dist/app.css` is no longer shipped unless a `public/` page links it,
+  and a CSS import no page graph reaches (one in `app.js`) is named in a
+  warning.
+- **Production builds minify `<style>` blocks.** The collected component
+  styles were appended to the stylesheet verbatim, comments included; they now
+  go through esbuild's CSS minifier, which keeps vendor-prefixed duplicates
+  such as `-webkit-backdrop-filter`. Development output stays readable.
 - **`env` in `puzzle.config.js`, read as `import.meta.env.KEY` (D190).** A flat
   object of strings, numbers and booleans:
   `env: { API_URL: process.env.API_URL ?? 'http://localhost:3000' }`. Each

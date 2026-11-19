@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -150,7 +151,7 @@ type staticModules struct {
 // same minify/define/dropConsole policy as the main app.js pass. prof may be nil
 // (profiling off); it splits this pass into its three expensive steps — the node
 // prerender bundle, the render run, and the per-page browser bundles.
-func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[string]bool, cfg config.Config, dev, quiet bool, prof *PhaseProfile, pc *passContext) error {
+func prerenderStaticPages(absRoot, appEntry, staging, appMetafile string, publicFiles map[string]bool, cfg config.Config, dev, quiet, linkedCSS bool, prof *PhaseProfile, pc *passContext) error {
 	// A public/ asset that already produced a staging/_puzzle would be clobbered
 	// by the per-page bundles — reject it up front (extends the reserved-output
 	// collision guard to the static tree). copyPublic has already run, so the
@@ -249,24 +250,35 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 	// 4. Splitting esbuild pass over all entries → staging/_puzzle. Shared chunks
 	//    land in _puzzle/chunks/ automatically. Skipped when there is nothing to
 	//    render (no static routes).
+	pagesMetafile := ""
 	if len(entryFiles) > 0 {
 		endPages := prof.Phase("per-page bundles")
-		metafile, pagesErr := bundleStaticPages(absRoot, entryFiles, filepath.Join(staging, staticPagesDir), cfg, dev, pc)
+		var pagesErr error
+		pagesMetafile, pagesErr = bundleStaticPages(absRoot, entryFiles, filepath.Join(staging, staticPagesDir), cfg, dev, pc)
 		endPages()
 		if pagesErr != nil {
 			return pagesErr
 		}
 
-		if !dev {
-			if err := rewriteStaticPages(staging, metafile, summary.Written); err != nil {
-				return err
-			}
+		if err := linkStaticPages(staging, staging, pagesMetafile, summary.Written, !dev); err != nil {
+			return err
 		}
 	}
 
 	// 5. Nothing references staging/app.js in static mode — drop it (and its map)
 	//    plus the prerender scaffolding before the swap so neither ships in dist/.
-	for _, name := range []string{"app.js", "app.js.map"} {
+	//    Pages link their own CSS, so app.css ships only for a shell that names it.
+	dead := []string{"app.js", "app.js.map"}
+	if !linkedCSS {
+		dead = append(dead, "app.css", "app.css.map")
+		for _, css := range unloadedCSS(appMetafile, pagesMetafile, staging) {
+			if rel, err := filepath.Rel(absRoot, css); err == nil {
+				css = filepath.ToSlash(rel)
+			}
+			fmt.Fprintf(os.Stderr, "warning: %s is imported outside every page's views and layouts, so no static page loads it; import it from a layout or view\n", css)
+		}
+	}
+	for _, name := range dead {
 		if err := os.Remove(filepath.Join(staging, name)); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("puzzle build --static: removing staging/%s: %w", name, err)
 		}
@@ -279,8 +291,12 @@ func prerenderStaticPages(absRoot, appEntry, staging string, publicFiles map[str
 	return nil
 }
 
-func rewriteStaticPages(staging, metafile string, written []staticPage) error {
-	outputs, err := bundleOutputs(metafile, staging, staging)
+// linkStaticPages points each freshly rendered page at its emitted module, at
+// the stylesheet esbuild wrote for its graph's CSS imports, and (preload) at its
+// shared chunks. Output paths are relative to base, the pass's working tree;
+// the files themselves are under staging.
+func linkStaticPages(staging, base, metafile string, written []staticPage, preload bool) error {
+	outputs, err := bundleOutputs(metafile, base, base)
 	if err != nil {
 		return err
 	}
@@ -290,17 +306,27 @@ func rewriteStaticPages(staging, metafile string, written []staticPage) error {
 			entries[output.EntryPoint] = name
 		}
 	}
+	linked := make(map[string]bool)
 	for _, page := range written {
 		entry := filepath.ToSlash(filepath.Join(prerenderDir, "entries", filepath.Base(page.Entry)))
 		output, ok := entries[entry]
 		if !ok {
 			return fmt.Errorf("puzzle build --static: per-page bundle has no output for %s", page.Entry)
 		}
+		css := outputs[output].CSSBundle
+		linked[css] = true
+		var chunks []string
+		if preload {
+			chunks = staticImportClosure(outputs, output)
+		}
+		if page.Reused || (output == page.Entry && css == "" && len(chunks) == 0) {
+			continue
+		}
 		html, err := os.ReadFile(page.File)
 		if err != nil {
 			return fmt.Errorf("puzzle build --static: reading page %s: %w", page.File, err)
 		}
-		rewritten, err := rewriteStaticPage(string(html), page.Entry, output, staticImportClosure(outputs, output))
+		rewritten, err := rewriteStaticPage(string(html), page.Entry, output, css, chunks)
 		if err != nil {
 			return fmt.Errorf("puzzle build --static: rewriting page %s: %w", page.File, err)
 		}
@@ -308,7 +334,47 @@ func rewriteStaticPages(staging, metafile string, written []staticPage) error {
 			return fmt.Errorf("puzzle build --static: writing page %s: %w", page.File, err)
 		}
 	}
+	// A lazily imported module gets a stylesheet of its own that nothing loads;
+	// its CSS is already in the stylesheet of every page that imports it.
+	for name := range outputs {
+		if filepath.Ext(name) != ".css" || linked[name] {
+			continue
+		}
+		for _, file := range []string{name, name + ".map"} {
+			if err := os.Remove(filepath.Join(staging, filepath.FromSlash(file))); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("puzzle build --static: removing unlinked %s: %w", file, err)
+			}
+		}
+	}
 	return nil
+}
+
+// unloadedCSS lists the CSS files the app entry's graph imports (paths relative
+// to the working directory) that no page graph does (relative to pagesBase).
+func unloadedCSS(appMetafile, pagesMetafile, pagesBase string) []string {
+	app, err := metafileAllInputs(appMetafile)
+	if err != nil {
+		return nil
+	}
+	var pages struct {
+		Inputs map[string]json.RawMessage `json:"inputs"`
+	}
+	_ = json.Unmarshal([]byte(pagesMetafile), &pages)
+	loaded := make(map[string]bool, len(pages.Inputs))
+	for key := range pages.Inputs {
+		if !filepath.IsAbs(key) {
+			key = filepath.Join(pagesBase, filepath.FromSlash(key))
+		}
+		loaded[resolvePath(key)] = true
+	}
+	var out []string
+	for path := range app {
+		if filepath.Ext(path) == ".css" && !loaded[path] {
+			out = append(out, path)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // staticPrerenderStdin builds the generated node entry for the static prerender
@@ -664,10 +730,11 @@ func staticPagesSourcemap(cfg config.Config, dev bool) api.SourceMap {
 // bundleStaticPages runs the browser-platform, Splitting esbuild pass over the
 // generated per-page entries into outdir (staging/_puzzle). Target/minify/define
 // and the dropConsole policy match the main app.js pass exactly. EntryNames is
-// the slug, hashed in production when build.hashNames is on; the production
-// page rewrite resolves the injected URLs through the returned metafile. Shared
-// code splits into _puzzle/chunks/. The CSS this fresh plugin collects is
-// discarded — the main pass already composed the stylesheet.
+// the slug, hashed in production when build.hashNames is on; linkStaticPages
+// resolves the injected URLs through the returned metafile. Shared code splits
+// into _puzzle/chunks/. The <style> CSS this fresh plugin collects is discarded
+// (the main pass already composed the stylesheet); CSS a script imports is
+// written beside each entry as _puzzle/<slug>.css.
 func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg config.Config, dev bool, pc *passContext) (string, error) {
 	result := api.Build(staticPagesBundleOptions(absRoot, entryFiles, outdir, cfg, dev, pc.plugin(absRoot)))
 	if len(result.Errors) > 0 {
@@ -717,11 +784,12 @@ func staticPagesBundleOptions(absRoot string, entryFiles []string, outdir string
 		// at the same depth by construction). Production output is unaffected:
 		// minification strips the comments entirely.
 		AbsWorkingDir: filepath.Dir(outdir),
+		// linkStaticPages and the dev route graph (route_deps.go) read it.
+		Metafile: true,
 	}
 	// Production (dev=false) matches the main bundle: minify everything and strip
 	// console.* unless build.dropConsole: false opts out.
 	if !dev {
-		buildOpts.Metafile = true
 		if cfg.HashNames() {
 			buildOpts.EntryNames = "[name]-[hash]"
 		}

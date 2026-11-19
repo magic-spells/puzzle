@@ -1198,8 +1198,14 @@ production-host semantics for any mode (SPA deep-link fallback, static real
 
 Tailwind v4 is the supported pipeline (`styles: { use: ['tailwindcss'] }` — the
 CLI folds Tailwind output + collected `<style>` blocks into `dist/styles.css`
-or `dist/styles-<hash>.css` when production hashing is on;
-wire it with `puzzle add tailwind`). For puzzle-pieces apps, import the theme after
+or `dist/styles-<hash>.css` when production hashing is on, `<style>` blocks
+minified in production; wire it with `puzzle add tailwind`). A view, layout or
+component `<script>` may also `import './page.css'`: in `output: 'static'`
+every page links its own `_puzzle/<slug>.css` (hashed with the page module)
+holding only the CSS its graph imports, in `build` and `dev` alike, so
+page-only CSS loads only on that page. CSS imported from `app.js` reaches no
+static page (the build warns); import it from a layout. SPA/hybrid builds emit
+script-imported CSS as `app.css` for `public/index.html` to link. For puzzle-pieces apps, import the theme after
 `@import "tailwindcss"` — `@import "@magic-spells/puzzle-pieces/themes/default.css"`
 (or the copied `app/styles/pieces.css`) plus any palette you offer
 (`/themes/cool.css`, `/themes/warm.css`, `/themes/void.css`) — and style ONLY via

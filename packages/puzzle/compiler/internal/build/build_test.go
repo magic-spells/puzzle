@@ -777,7 +777,7 @@ func TestBuildUsageThroughSymlinkedRoot(t *testing.T) {
 			}
 		}
 		css := readFile(t, filepath.Join(root, "dist", "styles.css"))
-		if !strings.Contains(css, "@scope (["+scopeAttr+"])") {
+		if !strings.Contains(css, "@scope(["+scopeAttr+"])") {
 			t.Errorf("root %q: scoped CSS lost app-relative scope id: %s", root, css)
 		}
 	}
@@ -2836,6 +2836,16 @@ func TestBuildUnlinkedEntryCSSWarning(t *testing.T) {
 				t.Fatal(err)
 			}
 			want := tc.page == "" && !tc.noCSS
+			if tc.output == "static" {
+				// Static pages link their own CSS; what only app.css could carry is named instead.
+				if got := strings.Count(stderr, "app/entry.css is imported outside every page's views and layouts"); (got == 1) != want || got > 1 || strings.Contains(stderr, "no shell page references app.css") {
+					t.Fatalf("static warning count = %d, want warning %v: %s", got, want, stderr)
+				}
+				if _, err := os.Stat(filepath.Join(root, "dist", "app.css")); os.IsNotExist(err) != want {
+					t.Errorf("dist/app.css shipped = %v, want %v", !os.IsNotExist(err), !want)
+				}
+				return
+			}
 			if got := strings.Count(stderr, "no shell page references app.css"); (got == 1) != want || got > 1 {
 				t.Fatalf("warning count = %d, want warning %v: %s", got, want, stderr)
 			}
