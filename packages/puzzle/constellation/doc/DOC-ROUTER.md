@@ -155,7 +155,7 @@ if (result.ok) {
 
 ## Prefetching lazy routes
 
-When a route's view or layout is `lazy()` (§62), its code downloads on the first visit. Puzzle starts that download a little earlier, when the user shows they're about to click: the pointer rests on the link, a finger touches it, or keyboard focus reaches it. The click then usually finds the code already loaded (§68).
+When a route's view or layout is `lazy()` (§62), its code downloads on the first visit. Puzzle starts that download a little earlier, when the user shows they're about to click: the pointer rests on the link, a finger touches it, or keyboard focus reaches it. The click then usually finds the code already loaded (§69).
 
 It's on by default and needs nothing in your templates. To change it for one link:
 

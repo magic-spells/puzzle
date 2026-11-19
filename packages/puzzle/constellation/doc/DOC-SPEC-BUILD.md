@@ -107,7 +107,7 @@ Two build modes that prerender every static route to its own HTML file. No SSR s
 
 **404.** The top-level catch-all (`path: '*'`) renders to `dist/404.html` with the same treatment (`prerender: false` on its chain writes the plain shell); under prefix routing each other locale's to `dist/<locale>/404.html`. No catch-all → an advisory warning. In hybrid the live router also serves it for unmatched paths; in static the file is all there is. The `init` templates ship a `NotFound.pzl` catch-all.
 
-**Boundaries.** A `:param` route without `staticPaths`, or with an empty list, is skipped with a warning naming the field, in both modes. `prerender: false` anywhere in a chain writes the plain shell at that path — an SPA island in hybrid, a client-rendered island (data island + entry module, no marker) in static. Not supported: DOM-adoption hydration, a zero-JS static opt-out, link prefetch in static pages (§68 rides the SPA router, so hybrid has it after takeover), and flat `name.html` output.
+**Boundaries.** A `:param` route without `staticPaths`, or with an empty list, is skipped with a warning naming the field, in both modes. `prerender: false` anywhere in a chain writes the plain shell at that path — an SPA island in hybrid, a client-rendered island (data island + entry module, no marker) in static. Not supported: DOM-adoption hydration, a zero-JS static opt-out, link prefetch in static pages (§69 rides the SPA router, so hybrid has it after takeover), and flat `name.html` output.
 
 ## 41. CLI update notification + `puzzle upgrade`
 

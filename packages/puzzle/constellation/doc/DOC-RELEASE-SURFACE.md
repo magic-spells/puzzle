@@ -113,7 +113,7 @@ Contract: §3–§6, §17, §18, §24, §28, §31, §43, §47, §57, §64–§67
 
 ## Routing and motion
 
-§9, §14, §15, §19, §23, §26, §30, §33, §44, §45, §48, §51, §62, §68.
+§9, §14, §15, §19, §23, §26, §30, §33, §44, §45, §48, §51, §62, §69.
 
 - Path (default), hash and memory modes; nested routes, index and catch-all routes, layouts, `routerBase`. The snapshot carries `path`, `pathname`, frozen `query`, `hash`, `params`, `route`, `chain`.
 - `push`, `replace`, `go`, `back`, `forward`; same-origin link interception; `router.url(path, options?)` and the `link` function. `push`/`replace` resolve a never-rejecting `NavigationResult` (D182; `catchAll: true` per D189).

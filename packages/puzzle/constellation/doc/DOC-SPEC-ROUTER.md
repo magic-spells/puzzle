@@ -303,7 +303,7 @@ export default [
 - **Prerender awaits the same markers** in both modes; static pages bundle the resolved class (§36) and have no runtime laziness.
 - A route table with no markers costs nothing extra; `__PUZZLE_HAS_LAZY__ = false` drops the resolver from the bundle (§54).
 
-## 68. Link prefetch: `prefetch` and `data-prefetch`
+## 69. Link prefetch: `prefetch` and `data-prefetch`
 
 A link to a route whose `view` or `layout` is a `lazy()` marker (§62) starts loading that code **before the click** ([[DECISION-D195-LINK-PREFETCH]]). By the time the click lands the chunk is usually in memory, so the navigation runs as a warm lazy route.
 
