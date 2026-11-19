@@ -116,11 +116,9 @@ export default class SwitchDoc extends PuzzleView {
   events = {
     setWifi: (v) => {
       this.setData('wifi', v);
-      this.refresh();
     },
     setNotify: (v) => {
       this.setData('notify', v);
-      this.refresh();
     },
   };
 }

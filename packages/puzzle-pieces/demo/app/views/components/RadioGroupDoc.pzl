@@ -128,15 +128,12 @@ export default class RadioGroupDoc extends PuzzleView {
   events = {
     setPlan: (v) => {
       this.setData('plan', v);
-      this.refresh();
     },
     setSize: (v) => {
       this.setData('size', v);
-      this.refresh();
     },
     setPlanDetail: (v) => {
       this.setData('planDetail', v);
-      this.refresh();
     },
   };
 }

@@ -244,11 +244,9 @@ export default class PopconfirmDoc extends PuzzleView {
   events = {
     onConfirm: (what) => {
       this.setData('status', `confirmed ${what}`);
-      this.refresh();
     },
     onCancel: () => {
       this.setData('status', 'cancelled');
-      this.refresh();
     },
   };
 }

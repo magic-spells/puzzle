@@ -167,7 +167,6 @@ export default class EmojiPickerDoc extends PuzzleView {
     addEmoji: (char) => {
       const { message } = this.getData();
       this.setData({ message: message + char, lastEmoji: char });
-      this.refresh();
     },
 
     onMessageInput: (event) => {
@@ -176,12 +175,10 @@ export default class EmojiPickerDoc extends PuzzleView {
 
     openPicker: () => {
       this.setData({ pickerOpen: true });
-      this.refresh();
     },
 
     closePicker: () => {
       this.setData({ pickerOpen: false });
-      this.refresh();
     },
   };
 }

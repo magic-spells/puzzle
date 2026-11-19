@@ -577,21 +577,17 @@ export default class TabsDoc extends PuzzleView {
   events = {
     setHero: (value) => {
       this.setData('hero', value);
-      this.refresh();
     },
     setControlled: (value) => {
       this.setData('controlled', value);
-      this.refresh();
     },
     cycle: () => {
       const order = ['one', 'two', 'three'];
       const next = order[(order.indexOf(this.getData().controlled) + 1) % order.length];
       this.setData('controlled', next);
-      this.refresh();
     },
     setDocValue: (value) => {
       this.setData('docValue', value);
-      this.refresh();
     },
     addDoc: () => {
       added += 1;
@@ -599,11 +595,9 @@ export default class TabsDoc extends PuzzleView {
       const docs = [...this.getData().docs];
       docs.splice(1, 0, { id, title: `Note ${added}`, body: `Inserted mid-list as ${id}.` });
       this.setData('docs', docs);
-      this.refresh();
     },
     resetDocs: () => {
       this.setData({ docs: SEED.map((doc) => ({ ...doc })), docValue: 'brief' });
-      this.refresh();
     },
   };
 }

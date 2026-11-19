@@ -181,7 +181,6 @@ events = {
     }
     cols.find((c) => c.id === toColumnId).cards.splice(toIndex, 0, card);
     this.setData({ board: cols });
-    this.refresh();
   },
 };`;
 
@@ -291,7 +290,6 @@ export default class KanbanDoc extends PuzzleView {
       const at = Math.max(0, Math.min(toIndex, dest.cards.length));
       dest.cards.splice(at, 0, card);
       this.setData({ board: cols, lastMove: `${card.title} → ${dest.title}` });
-      this.refresh();
     },
   };
 }

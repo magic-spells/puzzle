@@ -355,7 +355,6 @@ export default class SelectDoc extends PuzzleView {
 
   #set(key, value) {
     this.setData(key, value);
-    this.refresh();
   }
 
   events = {
@@ -368,7 +367,11 @@ export default class SelectDoc extends PuzzleView {
     onSizeHide: () => this.#set('sizeOpen', false),
     toggleSize: () => this.#set('sizeOpen', !this.getData().sizeOpen),
     setFruit: (v) => this.#set('fruit', v),
-    swapFruits: () => this.#set('swapped', !this.getData().swapped),
+    swapFruits: () => {
+      this.#set('swapped', !this.getData().swapped);
+      // fruits is derived from swapped in data(), so re-run it
+      this.refresh();
+    },
   };
 }
 </script>

@@ -292,11 +292,9 @@ export default class ContextMenuDoc extends PuzzleView {
   events = {
     run: (value) => {
       this.setData('selected', String(value));
-      this.refresh();
     },
     onSelect: (value) => {
       this.setData('selected', String(value));
-      this.refresh();
     },
   };
 }

@@ -275,31 +275,24 @@ export default class ComboboxDoc extends PuzzleView {
   events = {
     setFramework: (v) => {
       this.setData('framework', v);
-      this.refresh();
     },
     setFood: (v) => {
       this.setData('food', v);
-      this.refresh();
     },
     setCountry: (v) => {
       this.setData('country', v);
-      this.refresh();
     },
     setErrValue: (v) => {
       this.setData('errValue', v);
-      this.refresh();
     },
     setControlledValue: (v) => {
       this.setData('controlledValue', v);
-      this.refresh();
     },
     onShow: () => {
       this.setData('cbOpen', true);
-      this.refresh();
     },
     onHide: () => {
       this.setData('cbOpen', false);
-      this.refresh();
     },
   };
 }

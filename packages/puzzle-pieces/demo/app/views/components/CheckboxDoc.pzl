@@ -100,11 +100,9 @@ export default class CheckboxDoc extends PuzzleView {
   events = {
     setSubscribe: (v) => {
       this.setData('subscribe', v);
-      this.refresh();
     },
     setShipIt: (v) => {
       this.setData('shipIt', v);
-      this.refresh();
     },
   };
 }

@@ -106,10 +106,8 @@ const codeStates = `<Button disabled>Disabled</Button>
 events = {
   save: async () => {
     this.setData({ saving: true });
-    this.refresh();
     await api.save();
     this.setData({ saving: false });
-    this.refresh();
   },
 };`;
 
@@ -142,7 +140,6 @@ export default class ButtonDoc extends PuzzleView {
     cheer: () => toast({ message: 'Buttons wire up @press callbacks.', variant: 'success' }),
     toggleLoading: () => {
       this.setData({ loading: !this.getData().loading });
-      this.refresh();
     },
   };
 }

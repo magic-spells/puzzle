@@ -218,63 +218,48 @@ export default class FaderDoc extends PuzzleView {
   events = {
     setRest: (v) => {
       this.setData('rest', v);
-      this.refresh();
     },
     setArc: (v) => {
       this.setData('arc', v);
-      this.refresh();
     },
     setFeather: (v) => {
       this.setData('feather', v);
-      this.refresh();
     },
     setRadius: (v) => {
       this.setData('radius', v);
-      this.refresh();
     },
     setAspect: (v) => {
       this.setData('aspect', v);
-      this.refresh();
     },
     setStepped: (v) => {
       this.setData('stepped', v);
-      this.refresh();
     },
     setFine: (v) => {
       this.setData('fine', v);
-      this.refresh();
     },
     setLow: (v) => {
       this.setData('low', v);
-      this.refresh();
     },
     setMid: (v) => {
       this.setData('mid', v);
-      this.refresh();
     },
     setHigh: (v) => {
       this.setData('high', v);
-      this.refresh();
     },
     setDensity: (v) => {
       this.setData('density', v);
-      this.refresh();
     },
     setThreshold: (v) => {
       this.setData('threshold', v);
-      this.refresh();
     },
     setCorner: (v) => {
       this.setData('corner', v);
-      this.refresh();
     },
     setGain: (v) => {
       this.setData('gain', v);
-      this.refresh();
     },
     setMix: (v) => {
       this.setData('mix', v);
-      this.refresh();
     },
   };
 }

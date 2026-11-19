@@ -961,8 +961,9 @@ The reactivity contract — the three methods are not interchangeable:
   and the result replaces the view's data wholesale (replace-on-commit).
 - **`setData(patch)`** owns persistent local UI state (open panels, drafts).
   It rerenders WITHOUT re-running `data()` and survives it.
-- **`refresh()`** re-runs `data()` — use it when local state feeds
-  `data()`-derived values.
+- **`refresh()`** re-runs `data()` — use it only when local state feeds
+  `data()`-derived values. A `setData()` key the template reads directly
+  already re-renders; adding `refresh()` after it is dead work.
 - **A record prop tracks that record, and only that record.** Records mutate in
   place, so a record prop is always reference-equal — but it also carries a
   render revision, so a child receiving `todo={ todo }` DOES re-run `data()`

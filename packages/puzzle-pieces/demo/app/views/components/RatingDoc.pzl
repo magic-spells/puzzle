@@ -178,7 +178,6 @@ export default class RatingDoc extends PuzzleView {
     },
     setFormScore: (v) => {
       this.setData('formScore', v);
-      this.refresh();
     },
     setKbd: (v) => {
       this.setData('kbdScore', v);

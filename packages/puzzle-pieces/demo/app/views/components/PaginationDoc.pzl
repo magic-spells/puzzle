@@ -104,15 +104,12 @@ export default class PaginationDoc extends PuzzleView {
   events = {
     setPage: (p) => {
       this.setData('page', p);
-      this.refresh();
     },
     setPageWide: (p) => {
       this.setData('pageWide', p);
-      this.refresh();
     },
     setPageSmall: (p) => {
       this.setData('pageSmall', p);
-      this.refresh();
     },
   };
 }

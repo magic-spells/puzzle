@@ -140,7 +140,6 @@ const usageMarkup = `<TagsInput value={ tags } @change={ setTags } />`;
 const codeHero = `// value is a string ARRAY; @change fires with the NEXT array on add or remove.
 setTags(next) {
   this.setData('tags', next);
-  this.refresh();
 }
 
 <TagsInput value={ tags } @change={ setTags } />`;
@@ -216,27 +215,21 @@ export default class TagsInputDoc extends PuzzleView {
   events = {
     setTags: (v) => {
       this.setData('tags', v);
-      this.refresh();
     },
     setBasicTags: (v) => {
       this.setData('basicTags', v);
-      this.refresh();
     },
     setMaxTags: (v) => {
       this.setData('maxTags', v);
-      this.refresh();
     },
     setDupeTags: (v) => {
       this.setData('dupeTags', v);
-      this.refresh();
     },
     setCommaTags: (v) => {
       this.setData('commaTags', v);
-      this.refresh();
     },
     setErrTags: (v) => {
       this.setData('errTags', v);
-      this.refresh();
     },
   };
 }

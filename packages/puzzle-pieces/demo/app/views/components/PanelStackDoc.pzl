@@ -360,11 +360,9 @@ export default class PanelStackDoc extends PuzzleView {
   events = {
     goTo: (handle) => {
       this.setData('current', handle);
-      this.refresh();
     },
     onChange: (handle) => {
       this.setData({ current: handle, changeCount: this.getData().changeCount + 1 });
-      this.refresh();
     },
   };
 }

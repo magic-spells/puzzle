@@ -165,7 +165,6 @@ const codeBasic = `// Selected options are hidden from the list — the chips ca
 // Remove a chip (× or Backspace on an empty input) to re-add it.
 setPicks(next) {
   this.setData('picks', next);
-  this.refresh();
 }
 
 <MultiSelect
@@ -269,31 +268,24 @@ export default class MultiSelectDoc extends PuzzleView {
   events = {
     setPicks: (v) => {
       this.setData('picks', v);
-      this.refresh();
     },
     setBasicPicks: (v) => {
       this.setData('basicPicks', v);
-      this.refresh();
     },
     setTech: (v) => {
       this.setData('tech', v);
-      this.refresh();
     },
     setErrPicks: (v) => {
       this.setData('errPicks', v);
-      this.refresh();
     },
     setControlledPicks: (v) => {
       this.setData('controlledPicks', v);
-      this.refresh();
     },
     onShow: () => {
       this.setData('msOpen', true);
-      this.refresh();
     },
     onHide: () => {
       this.setData('msOpen', false);
-      this.refresh();
     },
   };
 }

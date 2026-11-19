@@ -279,11 +279,9 @@ export default class SplitButtonDoc extends PuzzleView {
   events = {
     onPrimary: () => {
       this.setData('last', 'primary @press');
-      this.refresh();
     },
     onSelect: (value) => {
       this.setData('last', `@select ${String(value)}`);
-      this.refresh();
     },
   };
 }

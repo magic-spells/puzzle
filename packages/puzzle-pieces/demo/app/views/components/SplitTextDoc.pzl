@@ -292,7 +292,6 @@ created() { this.setData('heroPlay', 0); }
 events = {
   replayHero: () => {
     this.setData('heroPlay', this.getData().heroPlay + 1);
-    this.refresh();
   },
 };`;
 
@@ -312,7 +311,6 @@ const codeChars = `// split="chars" masks every grapheme. Slow the stagger down 
 // @complete is value-first — it hands you { split, count }
 noteChars: ({ split, count }) => {
   this.setData('charsNote', \`\${count} \${split}\`);
-  this.refresh();
 },`;
 
 const codeLines = `// Lines are measured, not guessed: the element splits on words, waits for
@@ -445,7 +443,6 @@ export default class SplitTextDoc extends PuzzleView {
 
   #bump(key) {
     this.setData(key, (this.getData()[key] || 0) + 1);
-    this.refresh();
   }
 
   events = {
@@ -455,7 +452,6 @@ export default class SplitTextDoc extends PuzzleView {
     replayEffects: () => this.#bump('effectsPlay'),
     noteChars: ({ split, count }) => {
       this.setData('charsNote', `${count} ${split}`);
-      this.refresh();
     },
   };
 }

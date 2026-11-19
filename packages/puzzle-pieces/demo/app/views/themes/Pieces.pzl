@@ -240,32 +240,25 @@ export default class Pieces extends PuzzleView {
 	events = {
 		setName: (value) => {
 			this.setData({ name: value });
-			this.refresh();
 		},
 		setEmail: (value) => {
 			this.setData({ email: value });
-			this.refresh();
 		},
 		setNotes: (value) => {
 			this.setData({ notes: value });
-			this.refresh();
 		},
 		setDigest: (value) => {
 			this.setData({ digest: value });
-			this.refresh();
 		},
 		setCalm: (value) => {
 			this.setData({ calm: value });
-			this.refresh();
 		},
 		fireToast: () => toast({ title: 'Published', message: 'The post is now live.', variant: 'success' }),
 		openDialog: () => {
 			this.setData({ dialogOpen: true });
-			this.refresh();
 		},
 		closeDialog: () => {
 			this.setData({ dialogOpen: false });
-			this.refresh();
 		},
 	};
 }

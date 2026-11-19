@@ -324,59 +324,45 @@ export default class SliderDoc extends PuzzleView {
   events = {
     setVolume: (v) => {
       this.setData('volume', v);
-      this.refresh();
     },
     setPrice: ({ valueMin, valueMax }) => {
       this.setData({ priceMin: valueMin, priceMax: valueMax });
-      this.refresh();
     },
     setStepped: (v) => {
       this.setData('stepped', v);
-      this.refresh();
     },
     setFine: (v) => {
       this.setData('fine', v);
-      this.refresh();
     },
     setAutoTicked: (v) => {
       this.setData('autoTicked', v);
-      this.refresh();
     },
     setQuarter: (v) => {
       this.setData('quarter', v);
-      this.refresh();
     },
     setStepTen: (v) => {
       this.setData('stepTen', v);
-      this.refresh();
     },
     setLabeled: (v) => {
       this.setData('labeled', v);
-      this.refresh();
     },
     setZoom: (v) => {
       this.setData('zoom', v);
-      this.refresh();
     },
     setPosBelow: (v) => {
       this.setData('posBelow', v);
-      this.refresh();
     },
     setPosAbove: (v) => {
       this.setData('posAbove', v);
-      this.refresh();
     },
     setPosInside: (v) => {
       this.setData('posInside', v);
-      this.refresh();
     },
     setRedline: (v) => {
       this.setData('redline', v);
-      this.refresh();
     },
     setMode: (v) => {
       this.setData('mode', v);
-      this.refresh();
     },
   };
 }

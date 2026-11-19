@@ -113,11 +113,9 @@ export default class Counter extends PuzzleView {
   events = {
     increment: () => {
       this.setData({ count: this.getData().count + 1 });
-      this.refresh();
     },
     reset: () => {
       this.setData({ count: 0 });
-      this.refresh();
     },
   };
 }`;

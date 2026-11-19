@@ -451,17 +451,14 @@ export default class DropdownPanelDoc extends PuzzleView {
   events = {
     toggleControlled: () => {
       this.setData('controlled', !this.getData().controlled);
-      this.refresh();
     },
     onShow: () => {
       this.setData('shows', this.getData().shows + 1);
-      this.refresh();
     },
     // The dropdown closes itself too, so the parent flips its flag back here —
     // that is what keeps the next `open` a fresh edge.
     onHide: () => {
       this.setData({ hides: this.getData().hides + 1, controlled: false });
-      this.refresh();
     },
   };
 }

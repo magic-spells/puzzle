@@ -28,7 +28,7 @@ The "Deferred features" section of [[DOC-SPEC]] lists deferred and rejected feat
 
 - `output: 'static'` pages carry neither `beforeRequest` nor router focus/announcement: they ship no router, and `mountStatic` options are serialized into a generated module, so functions cannot cross.
 - Height animations need explicit px; WAAPI cannot animate to `auto`.
-- `setData()` does not rerun `data()` when it touches keys `data()` read ([[DECISION-D23-REFRESH-PATTERN]]); pair it with `refresh()`.
+- `setData()` re-renders without rerunning `data()` ([[DECISION-D23-REFRESH-PATTERN]]); pair it with `refresh()` only when `data()` derives another value from the written key. A key the template reads directly needs no `refresh()`.
 
 Unscheduled ideas (no design yet): `<KeepAlive>`-style view retention, a schema-derived forms helper, global event bindings, per-subtree provide/inject, `build --analyze`, deploy presets, content collections, Tailwind standalone-binary support, the playground's worker/UI phases (the WASM core is [[COMPONENT-PLAYGROUND-COMPILER]]).
 

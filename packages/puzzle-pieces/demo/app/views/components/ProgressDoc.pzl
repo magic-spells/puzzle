@@ -113,11 +113,9 @@ export default class ProgressDoc extends PuzzleView {
   events = {
     bump: () => {
       this.setData({ pct: Math.min(100, this.getData().pct + 10) });
-      this.refresh();
     },
     reset: () => {
       this.setData({ pct: 0 });
-      this.refresh();
     },
   };
 }

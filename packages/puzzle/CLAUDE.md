@@ -498,8 +498,9 @@ puzzle-devtools repos are archived on GitHub, never deleted.
 - A compiled class stays untouched; codegen attaches `prototype.render` after
   it. `PuzzleView` is a plain class, not an HTMLElement.
 - `data()` owns the replace-on-commit model layer. `setData()` owns persistent
-  local UI state and rerenders without rerunning `data()`. Use `refresh()` when
-  local state feeds `data()`-derived values.
+  local UI state and rerenders without rerunning `data()`. Use `refresh()` only
+  when local state feeds `data()`-derived values; a key the template reads
+  directly needs no `refresh()` after `setData()`.
 - Store queries inside `data()` auto-subscribe, and on an adapter-backed model a
   tracked `findOne`/`findMany` that misses queues a fetch and re-runs the pass
   rather than committing (D161). Reads outside `data()` never fetch. A record

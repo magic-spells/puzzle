@@ -331,7 +331,6 @@ export default class MenubarDoc extends PuzzleView {
   events = {
     run: (value) => {
       this.setData('pressed', String(value));
-      this.refresh();
     },
   };
 }

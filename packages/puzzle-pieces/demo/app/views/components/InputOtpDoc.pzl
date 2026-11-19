@@ -160,28 +160,22 @@ export default class InputOtpDoc extends PuzzleView {
   events = {
     setCode: (v) => {
       this.setData('code', v);
-      this.refresh();
     },
     setGrouped: (v) => {
       this.setData('grouped', v);
-      this.refresh();
     },
     setAlnum: (v) => {
       this.setData('alnum', v);
-      this.refresh();
     },
     setBadCode: (v) => {
       this.setData('badCode', v);
-      this.refresh();
     },
     setOtp: (v) => {
       // A new edit that isn't yet complete clears the confirmation.
       this.setData({ otp: v, confirmed: v.length === 6 ? this.getData().confirmed : false });
-      this.refresh();
     },
     onComplete: () => {
       this.setData('confirmed', true);
-      this.refresh();
     },
   };
 }

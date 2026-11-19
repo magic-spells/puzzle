@@ -205,15 +205,12 @@ export default class DropzoneDoc extends PuzzleView {
   events = {
     setFiles: (next) => {
       this.setData('files', next);
-      this.refresh();
     },
     setImages: (next) => {
       this.setData('images', next);
-      this.refresh();
     },
     setAvatar: (next) => {
       this.setData('avatar', next);
-      this.refresh();
     },
     onReject: (rejections) =>
       toast({ message: rejections[0].message, variant: 'danger' }),

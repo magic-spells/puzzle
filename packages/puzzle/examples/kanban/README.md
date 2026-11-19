@@ -282,7 +282,7 @@ targetTasks.forEach((t, i) => t.update({ status: targetCol, order: i }));
       document listeners.
 - [ ] Guard `startDrag` re-entry (`if (this._drag) return`) — a second pointerdown
       mid-drag (multi-touch) would overwrite state and leak the ghost.
-- [ ] `setData()` alone won't recompute `data()` — pair with `refresh()`.
+- [ ] `setData()` alone won't recompute `data()` — pair with `refresh()` when `data()` derives from the key (here, the column arrays).
 - [ ] Exclude the placeholder from hit-test measurement (feedback loop).
 - [ ] `{#if}` can't be a `{#for}` body root — branch inside the item component.
 - [ ] `.kanban-card { touch-action:none; user-select:none }` in CSS **and**

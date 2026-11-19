@@ -249,7 +249,7 @@ The parent writes `<Button variant="primary" @press={ goToPosts }>Browse</Button
 
 - **Never call `store.loadMany`/`loadOne` inside `data()`** — tracked finds already fetch, and dev warns. The explicit loads are for event handlers; `store.loadOne` there is the force-refresh idiom.
 - **Relationships never fetch** (`post.author`), so a 50-row list never fires 50 GETs; write the tracked find on the foreign key when a view needs the record.
-- **`setData()` does not rerun `data()`** ([[DECISION-D23-REFRESH-PATTERN]]). When `data()` derives from local state, follow `setData(...)` with `this.refresh()`.
+- **`setData()` does not rerun `data()`** ([[DECISION-D23-REFRESH-PATTERN]]). When `data()` derives from local state, follow `setData(...)` with `this.refresh()`; when the template reads the key directly, `setData()` alone re-renders it.
 - **Stable object props:** props compare with `===`, so a fresh object from every `data()` run re-runs the child. Wrap derived objects in `this.memo(key, deps, factory)` ([[DOC-SPEC-VIEW]] §32). Primitive props need no memo, and data-independent callback props are cached by the compiler.
 - **Animations:** an `animations = { in, out }` class field animates the instance root via WAAPI; `to` must equal the resting style and height cannot animate to `auto` ([[DOC-SPEC-VIEW]] §12, §39).
 

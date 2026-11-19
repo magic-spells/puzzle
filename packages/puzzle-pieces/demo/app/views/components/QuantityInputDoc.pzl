@@ -155,19 +155,15 @@ export default class QuantityInputDoc extends PuzzleView {
   events = {
     setQty: (v) => {
       this.setData('qty', v);
-      this.refresh();
     },
     setBoxes: (v) => {
       this.setData('boxes', v);
-      this.refresh();
     },
     setCart: (v) => {
       this.setData('cart', v);
-      this.refresh();
     },
     setPack: (v) => {
       this.setData('pack', v);
-      this.refresh();
     },
   };
 }
