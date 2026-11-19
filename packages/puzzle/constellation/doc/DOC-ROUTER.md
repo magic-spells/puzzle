@@ -153,7 +153,7 @@ this.ctx.router.replace({ name: 'items', query: { q: 'cabin' } }); // → /items
 ```
 
 - Nested and index children resolve by their full path: `{ name: 'settings-profile' }` is `/settings/profile`.
-- Each param is URI-encoded, and `data(params)` gets the value back as a string. `query` repeats a key for an array and drops `null`/`undefined`; `hash` takes `'faq'` or `'#faq'`.
+- Each param is URI-encoded, and `data({ params })` gets the value back as a string. `query` repeats a key for an array and drops `null`/`undefined`; `hash` takes `'faq'` or `'#faq'`.
 - Mistakes throw a `[puzzle]` error naming the route: an unknown name, a missing param, a param the pattern lacks, an unknown key, or a link to the `'*'` route. A bad target makes `push()`/`replace()` throw before navigating, unlike their usual resolved `NavigationResult`. Two routes with one name throw at startup in development.
 - A guard may return a named target to redirect.
 - Static pages resolve names too: a page whose prerender rendered a named link ships the name table in a small data island.

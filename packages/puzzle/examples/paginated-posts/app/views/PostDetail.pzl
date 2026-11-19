@@ -26,7 +26,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class PostDetailView extends PuzzleView {
-  data(params) {
+  data({ params }) {
     const store = this.ctx.store;
 
     // a deep link fetches the post through the settle loop (D161)

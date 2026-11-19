@@ -28,7 +28,7 @@ const INPUT_OK = 'border-border outline-ring focus-visible:outline-ring';
 const INPUT_ERROR = 'border-danger outline-danger focus-visible:outline-danger';
 
 export default class Field extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     // Fallback id is generated once per instance so it survives re-renders; an
     // explicit `id` prop always wins.
     const id = props.id || (this._fallbackId ??= `pp-field-${++uid}`);

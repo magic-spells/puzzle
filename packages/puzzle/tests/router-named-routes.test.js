@@ -39,7 +39,7 @@ const view = (cls) =>
 // the album view records the params data() saw, so decoding is observable
 let seenParams;
 class AlbumView extends PuzzleView {
-	data(params) {
+	data({ params }) {
 		seenParams = params;
 		return { id: params.id };
 	}
