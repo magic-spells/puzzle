@@ -11,7 +11,7 @@
  *   query, replace), D28/D56/D65 (transitions, overlap, per-route mode),
  *   D33/D41 (scroll, anchors, persistence), D93/D139 (focus, announcement),
  *   D34/D42/D159 (modes), D51 (base path), D87 (guards), D182 (results),
- *   D177 (locale prefixes), D183 (router.views).
+ *   D177 (locale prefixes), D183 (router.views), D196 (named targets).
  *
  * File map, in order:
  * - Module state and typedefs; `fail`/`SUPERSEDED`/`PENDING`/`succeed`.
@@ -40,6 +40,9 @@ import {
 } from './routePath.js';
 import { walkRouteTree } from './routeTree.js';
 import { checkAgentRoutes, routeViews } from './routeViews.js';
+// named targets (D196): { name, params, query, hash } → the path string the
+// rest of this file already understands.
+import { routeNames, targetPath } from './routeNames.js';
 // D163's resolver, reached ONLY through `typeof __PUZZLE_HAS_LAZY__ …` probes
 // (the D89 gate). The build's usage scan sets the define false for a project
 // whose source never calls lazy(); MinifySyntax then folds all three call sites
@@ -58,7 +61,7 @@ import { reportError } from '../errors.js';
 
 /** @import { PuzzleView } from '../views/PuzzleView.js' */
 /** @import { RouterModeDescriptor, RouterModeInstance } from './modes.js' */
-/** @import { Route, RouteSnapshot, GuardFn, ScrollPosition, PuzzleContext, NavigationResult } from '../../types/index.js' */
+/** @import { Route, RouteSnapshot, GuardFn, ScrollPosition, PuzzleContext, NavigationResult, NamedRouteTarget } from '../../types/index.js' */
 
 /**
  * A compiled route leaf (makeEntry), or the synthetic catch-all entry.
@@ -173,6 +176,9 @@ export class Router {
 	#catchAll = null; // synthetic single-node Entry for path:'*' (matched last)
 	/** @type {readonly import('../../types/index.js').RouteView[] | null} */
 	#views = null; // router.views, built on first read (D183)
+	// route name → full path pattern, for named targets in url/push/replace (D196)
+	/** @type {import('./routeNames.js').RouteNameTable} */
+	#names;
 	/** @type {Element | null} */
 	#container = null;
 	/** @type {Record<string, any> | null} */
@@ -488,6 +494,10 @@ export class Router {
 			}
 			walkRouteTree(route, this.#routes, makeEntry);
 		}
+		// the name table for named targets (D196), built after the structural
+		// checks above so a malformed route still reports its own error first. in
+		// development a name two routes share throws here, at startup.
+		this.#names = routeNames(routes);
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			warnShadowedPaths(findShadowedPaths(this.#routes));
 			checkAgentRoutes(this.#routes, this.#catchAll);
@@ -804,11 +814,15 @@ export class Router {
 	 * right after the in-flight commit — see #committing and #defer — and its
 	 * promise settles when that deferred navigation does.
 	 *
-	 * @param {string} path
+	 * A named target (`{ name, params, query, hash }`, D196) resolves to its path
+	 * first; a bad one (an unknown name, a missing param) throws right here,
+	 * before any navigation starts — it is a coding error, not an outcome.
+	 *
+	 * @param {string | NamedRouteTarget} target
 	 * @returns {Promise<NavigationResult>}
 	 */
-	push(path) {
-		path = normalizeRoutePath(path);
+	push(target) {
+		const path = normalizeRoutePath(targetPath(target, this.#names));
 		if (this.#committing) return this.#defer({ kind: 'push', path });
 		// v-next same-path no-op: a push whose target matches the COMMITTED state's
 		// path is a no-op — no history entry, no data() re-run, no scroll change (Vue
@@ -887,13 +901,14 @@ export class Router {
 	 * pathname) and the commit-window deferral (a replace from a mounted() hook
 	 * — the auth-redirect case that must not leave the aborted page in history).
 	 *
-	 * Resolves a NavigationResult exactly as push() does (D182).
+	 * Resolves a NavigationResult exactly as push() does (D182), and takes a
+	 * named target the same way (D196).
 	 *
-	 * @param {string} path
+	 * @param {string | NamedRouteTarget} target
 	 * @returns {Promise<NavigationResult>}
 	 */
-	replace(path) {
-		path = normalizeRoutePath(path);
+	replace(target) {
+		const path = normalizeRoutePath(targetPath(target, this.#names));
 		if (this.#committing) return this.#defer({ kind: 'replace', path });
 		// Same-path no-op, exactly push()'s guard: replacing the committed entry
 		// with itself would re-run data() and rewrite an identical URL for nothing.
@@ -1090,21 +1105,25 @@ export class Router {
 	 * routing ships the one-parameter method (esbuild keeps unused parameters);
 	 * the overload is how JSDoc spells the second parameter callers may pass.
 	 *
+	 * A named target (`{ name, params, query, hash }`, D196) resolves to its path
+	 * through the route table first, then encodes like any path; an unknown name,
+	 * a missing param or (in development) a stray key throws.
+	 *
 	 * @overload
-	 * @param {string} path
+	 * @param {string | NamedRouteTarget} target
 	 * @param {{ locale?: string | false } | null} [options]
 	 * @returns {string}
 	 */
 	/**
-	 * @param {string} path
+	 * @param {string | NamedRouteTarget} target
 	 * @returns {string}
 	 */
-	url(path) {
+	url(target) {
 		const routing =
 			(typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) &&
 			localeRouting.get(this);
 		return encodeURL(
-			path,
+			targetPath(target, this.#names),
 			this.#mode,
 			routing
 				? localeBase(
@@ -1175,6 +1194,9 @@ export class Router {
 			let verdict;
 			try {
 				verdict = await guard({ to, from, ctx: /** @type {PuzzleContext} */ (this.#ctx) });
+				// a guard may redirect to a named target (D196); resolving it here, inside
+				// the try, reports a bad one like any other guard failure.
+				if (verdict && typeof verdict === 'object') verdict = targetPath(verdict, this.#names);
 			} catch (err) {
 				// Rejection is still the completion of an await: a newer
 				// navigation makes it stale and therefore silent.

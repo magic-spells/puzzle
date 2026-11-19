@@ -55,6 +55,8 @@ import type {
 	StaticPathsEntry,
 	StaticPathsFn,
 	NavigationResult,
+	NamedRouteTarget,
+	RouteTarget,
 	RouteView,
 	RouteAgent,
 	PrevViewState,
@@ -301,6 +303,19 @@ class TodoListView extends PuzzleView {
 		void this.ctx.router.prefetch('/settings').then((loaded: boolean) => loaded);
 		// @ts-expect-error prefetch takes a path string
 		void this.ctx.router.prefetch(42);
+		// named targets (D196): { name, params, query?, hash? } wherever a path goes.
+		const albumTarget: NamedRouteTarget = { name: 'album', params: { id: 7 }, query: { tab: 'tracks', tag: ['a', 'b'] }, hash: 'credits' };
+		const anyTarget: RouteTarget = albumTarget;
+		this.ctx.router.push(albumTarget);
+		this.ctx.router.replace({ name: 'settings' });
+		const albumHref: string = this.ctx.router.url(anyTarget, { locale: 'es' });
+		void albumHref;
+		// @ts-expect-error a named target needs its name.
+		this.ctx.router.push({ params: { id: 7 } });
+		// @ts-expect-error params are strings or numbers.
+		this.ctx.router.push({ name: 'album', params: { id: { nested: true } } });
+		// @ts-expect-error the key is params, not param.
+		this.ctx.router.push({ name: 'album', param: { id: 7 } });
 		// push/replace resolve a NavigationResult (D182), narrowed on `ok`.
 		void this.ctx.router.push('/about').then((result: NavigationResult) => {
 			if (result.ok) {
@@ -339,6 +354,10 @@ const requireAuth: GuardFn = ({ to, from, ctx }) => {
 	if (from?.pathname === '/login' || sessions.length > 0) return true;
 	return '/login?redirect=' + encodeURIComponent(to.path);
 };
+
+// a guard may redirect to a named target (D196).
+const requireAccount: GuardFn = ({ to }) => ({ name: 'login', query: { redirect: to.path } });
+void requireAccount;
 
 const requireAdmin: GuardFn = async ({ ctx }) => {
 	await Promise.resolve();
@@ -985,6 +1004,9 @@ function libraryCalls(lib: LibraryFunctions, price: number, when: Date, tags: st
 		// Locale prefix routing (D177): force a locale, or skip the prefix.
 		lib.link('/about', { locale: 'es' }),
 		lib.link('/files/cv.pdf', { locale: false }),
+		// a named route target (D196), alone or with options.
+		lib.link({ name: 'album', params: { id: 7 } }),
+		lib.link({ name: 'album', params: { id: 7 } }, { locale: 'es' }),
 		lib.t('cart.title'),
 		lib.t('cart.items', { count: tags.length }),
 		lib.t(404, null),

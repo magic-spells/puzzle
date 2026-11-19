@@ -16,7 +16,7 @@
 import manifestFormatters from '@magic-spells/puzzle/formatters/manifest';
 import { escape } from './formatters/builtins.js';
 
-/** @import { Formatter, LinkOptions } from '../types/index.js' */
+/** @import { Formatter, LinkOptions, NamedRouteTarget } from '../types/index.js' */
 
 // `raw` is no longer seeded here (D174): templates reach it only through the
 // live-HTML node, never through the registry, and seeding it would pull the
@@ -233,8 +233,9 @@ export class FormatterRegistry {
  * formatter only when the app did not provide its own implementation.
  *
  * @param {object} [customFormatters] name → formatter function
- * @param {(path: string, options?: LinkOptions) => string} [url] mode-aware route URL
- *   encoder; `options` reaches it only under locale prefix routing (D177)
+ * @param {(target: string | NamedRouteTarget, options?: LinkOptions) => string} [url]
+ *   mode-aware route URL encoder; a named target (D196) is resolved by it, and
+ *   `options` reaches it only under locale prefix routing (D177)
  * @returns {FormatterRegistry}
  */
 export function makeFormatterRegistry(customFormatters = {}, url) {
@@ -263,11 +264,16 @@ export function makeFormatterRegistry(customFormatters = {}, url) {
 			// Locale prefix routing (D177) passes `options` ({ locale: 'es' } or
 			// { locale: false }) through to the encoder; without it the second
 			// argument is not even read, so those apps ship the one-argument form.
+			//
+			// A plain object is a named target (`link({ name: 'album', params })`,
+			// D196) and reaches url() as it is, which resolves it through the route
+			// table; every other value (a number, a URL object, an array) is a path
+			// and is stringified exactly as before.
 			typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__
-				? (value, options) => (value == null ? '' : url(String(value), options))
+				? (value, options) => (value == null ? '' : url(value.constructor === Object ? value : String(value), options))
 				: (value) => {
 						if (value == null) return '';
-						return url(String(value));
+						return url(value.constructor === Object ? value : String(value));
 					}
 		);
 	}

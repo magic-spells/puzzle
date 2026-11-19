@@ -17,17 +17,39 @@
 import { ViewNode } from '../views/ViewNode.js';
 import { encodeURL, linkLocale, localeBase, normalizeBase } from '../router/router.js';
 import { normalizeRoutePath } from '../router/routePath.js';
+import { targetPath } from '../router/routeNames.js';
 
 /** @import { PuzzleView } from '../views/PuzzleView.js' */
-/** @import { LinkOptions } from '../../types/index.js' */
+/** @import { LinkOptions, NamedRouteTarget } from '../../types/index.js' */
+/** @import { RouteNameTable } from '../router/routeNames.js' */
 
 /**
  * The static router facade makeRouterStub returns: `url()` and a read-only
  * `current`, plus every Router navigation method (each throws). `url` takes
  * `options` only once localizeRouterStub has made it locale-aware (D177).
- * @typedef {{ url: (path: string, options?: LinkOptions) => string, readonly current: object,
- *   [method: string]: any }} RouterStub
+ * `names` is the route name table a named target resolves through (D196) —
+ * the build's table at prerender, the page's names island in the browser —
+ * and `named` is set once the stub has resolved one.
+ * @typedef {{ url: (target: string | NamedRouteTarget, options?: LinkOptions) => string,
+ *   readonly current: object, names?: RouteNameTable | null,
+ *   named?: boolean, [method: string]: any }} RouterStub
  */
+
+/**
+ * A static stub's target as a path (D196): a path string as written, a named
+ * target through the stub's `names` table. Resolving one marks the stub, so the
+ * prerender knows the page needs the table in its names island.
+ *
+ * @param {RouterStub} stub
+ * @param {string | NamedRouteTarget} target
+ * @returns {string}
+ */
+function stubPath(stub, target) {
+	if (typeof target === 'string') return target;
+	stub.named = true;
+	// a stub given no table knows no names, so every name reads as unknown.
+	return targetPath(target, stub.names ?? new Map());
+}
 
 /**
  * Instantiate + preload the layout+view chain for one route and assemble it into
@@ -157,7 +179,7 @@ export function makeRouterStub(route, { base = '' } = {}) {
 		throw new Error('[puzzle] static output has no router — use plain links');
 	};
 	for (const method of ROUTER_METHODS) stub[method] = throwNoRouter;
-	stub.url = (path) => encodeURL(path, null, normalizedBase);
+	stub.url = (target) => encodeURL(stubPath(stub, target), null, normalizedBase);
 	Object.defineProperty(stub, 'current', {
 		enumerable: true,
 		get: () => route,
@@ -183,8 +205,12 @@ export function makeRouterStub(route, { base = '' } = {}) {
  */
 export function localizeRouterStub(stub, { base = '', locale, defaultLocale, locales }) {
 	const normalizedBase = normalizeBase(base);
-	stub.url = (path, options) =>
-		encodeURL(path, null, localeBase(normalizedBase, linkLocale(options, locale, locales), defaultLocale));
+	stub.url = (target, options) =>
+		encodeURL(
+			stubPath(stub, target),
+			null,
+			localeBase(normalizedBase, linkLocale(options, locale, locales), defaultLocale)
+		);
 	return stub;
 }
 

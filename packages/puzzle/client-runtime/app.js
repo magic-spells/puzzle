@@ -484,9 +484,11 @@ export class PuzzleApp {
 			formatters,
 			// Locale prefix routing (D177) hands link()'s options ({ locale: 'es' },
 			// { locale: false }) to router.url; without it the one-argument form ships.
+			// With no router yet a path passes through as before, and a named target
+			// (D196), which only the route table can resolve, renders no href.
 			typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__
-				? (path, options) => (this.router ? this.router.url(path, options) : path)
-				: (path) => (this.router ? this.router.url(path) : path)
+				? (path, options) => (this.router ? this.router.url(path, options) : typeof path === 'string' ? path : '')
+				: (path) => (this.router ? this.router.url(path) : typeof path === 'string' ? path : '')
 		);
 		// The service-bound `t` formatter (D175); an app `t` still wins.
 		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n)

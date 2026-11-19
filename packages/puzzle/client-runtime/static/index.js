@@ -346,6 +346,12 @@ function buildStaticContext({
 	// all (D159), and the build warns when one is configured. `routerBase` still
 	// applies — a subpath deploy wants the prefix.
 	const router = makeRouterStub(route, { base: routerBase });
+	// Named links (D196): a static page ships no route table, so the page's names
+	// island stands in for it. Read on the first named link, so a page without
+	// one never looks for it.
+	/** @type {Map<string, string> | undefined} */
+	let names;
+	Object.defineProperty(router, 'names', { get: () => (names ??= readNamesIsland()) });
 	const registry = makeFormatterRegistry(
 		formatters,
 		// Read router.url per call: locale prefix routing (D177) swaps in its
@@ -357,6 +363,24 @@ function buildStaticContext({
 
 	// ctx.idle (D189): no navigation or app to wait on, so a static page is always idle.
 	return { store, router, formatters: registry, idle: async () => true };
+}
+
+/**
+ * The route name table a static page's prerender wrote into its names island
+ * (D196). A page carries one only when its prerender rendered a named link (or
+ * it is a `prerender: false` page), so a named link the browser renders on any
+ * other page is a clear error rather than a dead href.
+ *
+ * @returns {Map<string, string>} the same Map shape the live router builds
+ */
+function readNamesIsland() {
+	const el = document.querySelector('script[data-puzzle-static-names]');
+	if (!el) {
+		throw new Error(
+			'[puzzle] this static page has no route names to resolve a named link — a static page carries them only when its prerender rendered one; link to this route by its path'
+		);
+	}
+	return new Map(Object.entries(JSON.parse(el.textContent)));
 }
 
 /**
