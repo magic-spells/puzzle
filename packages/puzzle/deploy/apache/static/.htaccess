@@ -1,0 +1,45 @@
+# apache config for a puzzle app built with output: 'static' (true static
+# pages, no router). written by `puzzle add deploy apache --static` into
+# app/public/, so puzzle build copies it to dist/.htaccess. needs mod_rewrite,
+# and the server must allow overrides for this folder (AllowOverride All or
+# FileInfo).
+
+Options -Indexes
+DirectoryIndex index.html
+
+# serve /about from about/index.html without first redirecting to /about/
+DirectorySlash Off
+
+# a path with no page gets dist/404.html, with a 404 status
+ErrorDocument 404 /404.html
+
+# with i18n.routing: 'prefix', each other locale has its own 404 page. add one
+# block per locale so its missing paths get it (es shown here, apache 2.4+):
+#
+# <If "%{REQUEST_URI} =~ m#^/es/#">
+# 	ErrorDocument 404 /es/404.html
+# </If>
+
+<IfModule mod_rewrite.c>
+	RewriteEngine On
+
+	# clean urls: /about is about/index.html. no shell fallback, so a missing
+	# page is a real 404.
+	RewriteCond %{REQUEST_FILENAME} -d
+	RewriteCond %{REQUEST_FILENAME}/index.html -f
+	RewriteRule ^(.+?)/?$ $1/index.html [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+	# hashed production names (styles-<hash>.css, <slug>-<hash>.js,
+	# chunk-<hash>.js, <tag>.<hash>.json) change on every build that changes
+	# their content, so browsers may keep them for a year.
+	<FilesMatch "[-.][A-Z2-7]{8}\.(js|css|json)$">
+		Header set Cache-Control "public, max-age=31536000, immutable"
+	</FilesMatch>
+
+	# html pages: always ask the server first.
+	<FilesMatch "\.html$">
+		Header set Cache-Control "no-cache"
+	</FilesMatch>
+</IfModule>

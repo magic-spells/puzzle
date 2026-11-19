@@ -331,6 +331,17 @@ one is *not* a compile error; it silently builds a different product.
   Save-Data or on a 2g connection. `router.prefetch(path)` warms a route from
   code and resolves `true` once it is loaded. Apps without `lazy()` grow by
   about 60 B gzip; apps with it by about 0.75 KB.
+- **`puzzle add deploy <host>` writes a tested host config (D193).** One
+  template per host in `deploy/`: `vercel` (`vercel.json`), `netlify`
+  (`netlify.toml`), `cloudflare` (`app/public/_headers`), `nginx` (a
+  `nginx.conf` server block) and `apache` (`app/public/.htaccess`). Each one
+  sends client routes to the shell after real files (SPA and `hybrid`) or
+  serves `404.html` with a 404 status and never the shell (`static`), and
+  caches the hashed `app-`, `styles-`, `chunks/` and `locales/` files for a
+  year while HTML revalidates. The template follows the config's `output`, or
+  `--static` / `--hybrid`. An existing file is refused unless `--force`, and
+  running it again changes nothing. `puzzle add deploy` with no host lists them;
+  [`deploy/README.md`](deploy/README.md) explains each file.
 - **`PuzzleView<Props>` types a component's props.**
   `class TodoItem extends PuzzleView<TodoItemProps>` types `this.props`,
   `data()`'s `props` and `afterUpdate`'s `prev.props`, and `mountView` /

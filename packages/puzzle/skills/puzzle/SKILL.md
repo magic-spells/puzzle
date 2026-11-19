@@ -1237,6 +1237,10 @@ URLs, full page loads, real 404s, prerender on every rebuild); hybrid projects
 dev as the SPA. `puzzle preview` serves an existing `dist/` with
 production-host semantics for any mode (SPA deep-link fallback, static real
 404s) — use `puzzle build && puzzle preview` to check the shipped artifact.
+`puzzle add deploy <host>` (`vercel`, `netlify`, `cloudflare`, `nginx`,
+`apache`; no host lists them) writes that host's fallback and cache config
+for the app's output mode; don't hand-write a `/* /index.html 200` rule
+(on Cloudflare Pages it serves the shell in place of JavaScript).
 
 1. **`data()` and `beforeMount` run under Node at build time** (both modes).
    Guard every browser global: `typeof document !== 'undefined'` before touching
