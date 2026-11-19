@@ -289,7 +289,7 @@ enforced, not merely advised.
   its numbered card only, never in two spots.)
 - Public package: `@magic-spells/puzzle`, with root, `./adapter`, `./morph`,
   `./router-modes`, `./ssg`, `./static`, `./testing`, `./fixtures`,
-  `./vitest` (Node-only, D193), and `./puzzle-env` exports (plus the build-served `./formatters/manifest` and
+  `./vitest` (Node-only, D194), and `./puzzle-env` exports (plus the build-served `./formatters/manifest` and
   `./i18n/manifest`, which a Puzzle build replaces at bundle time)
   plus a `puzzle` binary shim and five
   optional platform binary packages (macOS/Linux arm64/x64, Windows x64 —
