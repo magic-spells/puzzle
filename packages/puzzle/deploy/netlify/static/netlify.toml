@@ -1,0 +1,39 @@
+# netlify config for a puzzle app built with output: 'static' (true static
+# pages, no router). written by `puzzle add deploy netlify --static`.
+
+# netlify runs the build and publishes dist/, where puzzle build writes.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# no fallback rule: every page is a real file (/about is
+# dist/about/index.html), and a path with no page gets dist/404.html with a
+# 404 status, which netlify does by itself.
+#
+# with i18n.routing: 'prefix', each other locale has its own 404 page. add one
+# rule per locale so its missing paths get it (es shown here):
+#
+# [[redirects]]
+#   from = "/es/*"
+#   to = "/es/404.html"
+#   status = 404
+
+# page modules and shared chunks. _puzzle/chunks/ is always content-hashed;
+# the page modules themselves (_puzzle/<slug>-<hash>.js) keep netlify's
+# default revalidation, because build.hashNames: false gives them fixed names.
+[[headers]]
+  for = "/_puzzle/chunks/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# styles-<hash>.css: the composed stylesheet.
+[[headers]]
+  for = "/styles-*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# locales/<tag>.<hash>.json: translation tables (i18n).
+[[headers]]
+  for = "/locales/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

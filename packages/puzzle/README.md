@@ -670,6 +670,7 @@ Install instructions are in each repository's README.
 - **[Component Reference](constellation/doc/DOC-PUZZLE-FILE.md)** - Complete .pzl component documentation
 - **[Data Layer](constellation/doc/DOC-DATASTORE.md)** - Models, adapters, and store management
 - **[Build Process](constellation/doc/DOC-COMPILATION-FLOW.md)** - Compiler and build system details
+- **[Deploying](deploy/README.md)** - Host configs for Vercel, Netlify, Cloudflare Pages, nginx and Apache (`puzzle add deploy <host>`)
 
 ### AI project memory
 
@@ -880,6 +881,9 @@ puzzle add tailwind
 puzzle add piece <name>
 puzzle add theme <name>
 puzzle add skills
+
+# Write a host config (vercel, netlify, cloudflare, nginx or apache) — see deploy/README.md
+puzzle add deploy netlify
 puzzle doctor
 
 # Machine-readable environment and health reports
@@ -904,7 +908,7 @@ and `init --dir` still work as hidden compatibility aliases (no notice in
 | `preview [dir]` | `-p, --port <n>` (4000), `--strict-port`, `--host [ip]` / `--host=<addr>` |
 | `check [dir]` | (none) |
 | `generate <type> <Name>` (alias `g`) | `--path <dir>`, `--family <A,B>`, `-f, --force`, `--dir <app-root>` |
-| `add <integration\|piece\|theme\|skills> [name…]` | `-f, --force`, `-y, --yes`, `--dir <app-root>`, `--registry <source>`, `--pieces-version <v>`, `--skill-root <dir>` |
+| `add <integration\|piece\|theme\|deploy\|skills> [name…]` | `-f, --force`, `-y, --yes`, `--dir <app-root>`, `--registry <source>`, `--pieces-version <v>`, `--skill-root <dir>`, `--static`, `--hybrid` (deploy) |
 | `upgrade` | `--check`, `-y, --yes` |
 | `upgrade skills` | `-y, --yes` |
 | `doctor [dir]` | `--json` |

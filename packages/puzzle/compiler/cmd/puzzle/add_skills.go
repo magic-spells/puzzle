@@ -40,6 +40,9 @@ type addEnvironment struct {
 	// explicit intent. `puzzle upgrade` uses this to hand the freshly installed
 	// binary the exact set the user already confirmed (D78).
 	skillRoots []string
+	// deployOutput is the --static / --hybrid choice for `add deploy`: "static",
+	// "hybrid", or "" to follow the config's output key.
+	deployOutput string
 }
 
 type skillTarget struct {

@@ -1,0 +1,39 @@
+# apache config for a puzzle app built as an spa (the default) or with
+# output: 'hybrid'. written by `puzzle add deploy apache` into app/public/, so
+# puzzle build copies it to dist/.htaccess. needs mod_rewrite, and the server
+# must allow overrides for this folder (AllowOverride All or FileInfo).
+
+Options -Indexes
+DirectoryIndex index.html
+
+# serve /about from about/index.html without first redirecting to /about/
+DirectorySlash Off
+
+<IfModule mod_rewrite.c>
+	RewriteEngine On
+
+	# a folder holding a prerendered page (hybrid's dist/<path>/index.html):
+	# serve that page.
+	RewriteCond %{REQUEST_FILENAME} -d
+	RewriteCond %{REQUEST_FILENAME}/index.html -f
+	RewriteRule ^(.+?)/?$ $1/index.html [L]
+
+	# client-side routes: any path that is not a real file gets the shell, and
+	# the router draws the route.
+	RewriteCond %{REQUEST_FILENAME} !-f
+	RewriteRule ^ index.html [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+	# hashed production names (app-<hash>.js, styles-<hash>.css,
+	# chunk-<hash>.js, <tag>.<hash>.json) change on every build that changes
+	# their content, so browsers may keep them for a year.
+	<FilesMatch "[-.][A-Z2-7]{8}\.(js|css|json)$">
+		Header set Cache-Control "public, max-age=31536000, immutable"
+	</FilesMatch>
+
+	# html is the shell and the pages: always ask the server first.
+	<FilesMatch "\.html$">
+		Header set Cache-Control "no-cache"
+	</FilesMatch>
+</IfModule>

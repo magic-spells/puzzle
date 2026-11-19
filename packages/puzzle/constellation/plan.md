@@ -30,7 +30,7 @@ The "Deferred features" section of [[DOC-SPEC]] lists deferred and rejected feat
 - Height animations need explicit px; WAAPI cannot animate to `auto`.
 - `setState()` re-renders, and re-runs `data()` with that render when `data()` read the written key ([[DECISION-D23-REFRESH-PATTERN]]). `refresh()` is only for on-purpose re-runs.
 
-Unscheduled ideas (no design yet): `<KeepAlive>`-style view retention, global event bindings, per-subtree provide/inject, `build --analyze`, deploy presets, content collections, Tailwind standalone-binary support, the playground's worker/UI phases (the WASM core is [[COMPONENT-PLAYGROUND-COMPILER]]).
+Unscheduled ideas (no design yet): `<KeepAlive>`-style view retention, global event bindings, per-subtree provide/inject, `build --analyze`, content collections, Tailwind standalone-binary support, the playground's worker/UI phases (the WASM core is [[COMPONENT-PLAYGROUND-COMPILER]]).
 
 ## Releasing
 
