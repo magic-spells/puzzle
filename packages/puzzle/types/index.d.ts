@@ -482,6 +482,14 @@ export interface Router {
 	 * Under `i18n.routing: 'prefix'` the href carries the page's locale prefix; `{ locale: 'es' }` forces one locale, `{ locale: false }` skips the prefix for a file that exists once (D177).
 	 */
 	url(path: string, options?: LinkOptions | null): string;
+	/**
+	 * Load the code a path's route needs — every `lazy()` view and layout in its
+	 * matched chain — without navigating (D195). No guard runs and no view is
+	 * built; a later navigation to the path runs warm. Resolves `true` once the
+	 * code is in memory (also for a route with none to load), `false` when
+	 * nothing matched or a load failed. Never rejects.
+	 */
+	prefetch(path: string): Promise<boolean>;
 	/** The current route snapshot, or null before the first navigation. */
 	readonly current: RouteSnapshot | null;
 	/** Every leaf route as frozen data (D183), built once on first read; the catch-all is left out. */
@@ -1026,6 +1034,16 @@ export interface PuzzleAppConfig {
 	 * (routes.js) and per-view/layout (a class field) (D65).
 	 */
 	transitionMode?: 'sequential' | 'overlap';
+	/**
+	 * Link prefetch default (D195). `true` (the default): a link to a route with
+	 * `lazy()` code loads that code when it is hovered, touched or focused, so
+	 * the click runs warm; routes behind a guard are skipped. `false`: only
+	 * links that ask by name (`data-prefetch`, `data-prefetch="visible"`) and
+	 * `router.prefetch(path)` calls load early. A link's `data-prefetch="off"`
+	 * opts that link out. Nothing is prefetched under Save-Data or on a 2g-class
+	 * connection.
+	 */
+	prefetch?: boolean;
 	/**
 	 * App lifecycle hook (SPEC §34, D66): runs inside `mount()` after the
 	 * ctx services (store/router/formatters) are wired but BEFORE navigation #0,

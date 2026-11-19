@@ -60,7 +60,7 @@ What `@magic-spells/puzzle` ships on the current release branch, as a map. [[DOC
 
 ## Configuration
 
-- **`new PuzzleApp({...})`** (§2): `target`, `routes`, `models`, `formatters` (app functions), `apiURL`, `storage`, `adapter` (the `/adapter` capability), `beforeRequest`, `scrollBehavior`, `focusBehavior`, `routerMode` (a mode object; a string throws), `routerBase`, `transitionMode`, `beforeMount`, `mounted`, `beforeUnmount`, `onError`, `errorView`.
+- **`new PuzzleApp({...})`** (§2): `target`, `routes`, `models`, `formatters` (app functions), `apiURL`, `storage`, `adapter` (the `/adapter` capability), `beforeRequest`, `scrollBehavior`, `focusBehavior`, `routerMode` (a mode object; a string throws), `routerBase`, `transitionMode`, `prefetch` (boolean, default true; D195), `beforeMount`, `mounted`, `beforeUnmount`, `onError`, `errorView`.
 - **Route fields** (§9): `path`, `view`, `layout` (class or `lazy()` marker), `children`, `guard`, `meta` (`title`/`description`/`canonical`/`socialImage` plus free keys; `title`/`description` may be `{ t: 'key' }`), `transitionMode`, `prerender: false`, `staticPaths` (build-only, leaf `:param` routes), `agent` (`false` or `{ name, about? }`), `name` (informational; there is no named-route navigation).
 - **`puzzle.config.js`** (§2, read by `compiler/internal/config`): `styles.use: ['tailwindcss']`; `build.dropConsole` (default true), `build.sourceMap` (default off; dev always has maps), `build.splitting` (default off), `build.hashNames` (default on in production); `dev.proxy` (path prefix → backend origin); `output` (`'hybrid'` | `'static'`; absent = SPA); `i18n: { locales, defaultLocale, routing?: 'prefix', detect?: boolean }`; `site` (public origin only; makes `hreflang` absolute and turns on the sitemap); `env` (flat public strings, numbers or booleans, compiled in as `import.meta.env.KEY`; D190).
 
@@ -113,13 +113,14 @@ Contract: §3–§6, §17, §18, §24, §28, §31, §43, §47, §57, §64–§67
 
 ## Routing and motion
 
-§9, §14, §15, §19, §23, §26, §30, §33, §44, §45, §48, §51, §62.
+§9, §14, §15, §19, §23, §26, §30, §33, §44, §45, §48, §51, §62, §69.
 
 - Path (default), hash and memory modes; nested routes, index and catch-all routes, layouts, `routerBase`. The snapshot carries `path`, `pathname`, frozen `query`, `hash`, `params`, `route`, `chain`.
 - `push`, `replace`, `go`, `back`, `forward`; same-origin link interception; `router.url(path, options?)` and the `link` function. `push`/`replace` resolve a never-rejecting `NavigationResult` (D182; `catchAll: true` per D189).
 - `router.views` and the `agent` route field (D183).
 - Locale URL prefixes: `i18n.routing: 'prefix'` (path routing only) (D177).
 - Load-then-commit navigation; inherited `guard` (SPA only); `lazy()` views and layouts.
+- Link prefetch of lazy route code (D195): on intent by default, `data-prefetch` (`intent` / `visible` / `off`) per link, `router.prefetch(path)`; unguarded routes only unless the link asks.
 - Head: `document.title` syncs on every navigation; description/canonical/social tags and `hreflang` are prerender-only.
 - `scrollBehavior`, `focusBehavior`; sequential or `overlap` transitions; WAAPI enter/leave animations including `trigger: 'visible'`; `/morph`.
 
@@ -153,4 +154,4 @@ Commands live in `compiler/cmd/puzzle`. Global: `--no-color`; `puzzle version` =
 
 ## Not shipped
 
-SSR server, hydration, named-route navigation, route link preloading, array refs, a built-in virtual list, per-module hot swap, Sass, an event bus, a global keyboard API, app-level computed/settings/methods, a config-level devtools hook, editor-level `.pzl` type checking. Rationale for each is in DOC-SPEC's deferred list.
+SSR server, hydration, named-route navigation, route data prefetch, array refs, a built-in virtual list, per-module hot swap, Sass, an event bus, a global keyboard API, app-level computed/settings/methods, a config-level devtools hook, editor-level `.pzl` type checking. Rationale for each is in DOC-SPEC's deferred list.

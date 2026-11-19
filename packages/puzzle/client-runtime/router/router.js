@@ -48,6 +48,9 @@ import { checkAgentRoutes, routeViews } from './routeViews.js';
 // site — a named const is not constant-propagated by esbuild and would keep the
 // import alive.
 import { hasLazyRouteViews, isLazyView, resolveRouteViews } from './lazy.js';
+// link prefetch (D195) loads lazy route code, so it rides the same gate: an app
+// with no lazy() has nothing to prefetch and the module folds out with lazy.js.
+import { setPrefetchDefault, unwatchLinks, watchLinks } from './prefetch.js';
 import { describeValue, isViewClass } from './viewClass.js';
 import { devtoolsRouteCommit } from '../devtools.js';
 import { preloadTakeoverComponents } from '../ssg/preload.js';
@@ -394,6 +397,10 @@ export class Router {
 	 * @param {readonly string[]} [options.locales] every configured locale, in
 	 *   config order (D177); a route whose first segment is a non-default tag is a
 	 *   constructor throw
+	 * @param {boolean} [options.prefetch] link prefetch default (D195): `true`
+	 *   (the default) loads a lazy route's code when a link to it is hovered,
+	 *   touched or focused; `false` leaves only links that ask by name
+	 *   (`data-prefetch`) and `prefetch(path)` calls
 	 */
 	constructor(
 		routes = [],
@@ -443,6 +450,12 @@ export class Router {
 			);
 		}
 		this.#defaultTransitionMode = transitionMode;
+		// link prefetch default (D195). read off `arguments` like the locale options
+		// below — esbuild keeps an unused destructured key — so an app without
+		// lazy() carries neither the option nor its check.
+		if (typeof __PUZZLE_HAS_LAZY__ === 'undefined' || __PUZZLE_HAS_LAZY__) {
+			setPrefetchDefault(this, arguments[1]?.prefetch);
+		}
 		// Normalize + validate the base at construction (D51, config-error posture
 		// like the mode throw above): '#'/'?' in a base is a hard error, and
 		// '', '/', and a trailing '/' all collapse to the canonical form.
@@ -533,6 +546,19 @@ export class Router {
 		this.#container = container;
 		this.#ctx = ctx;
 		document.addEventListener('click', this.#onClick);
+		// link prefetch (D195): only when some route has lazy code to fetch — an
+		// eager-only route table adds no listener at all. The probe leads so an
+		// app without lazy() folds this branch and prefetch.js out of its bundle.
+		if (
+			(typeof __PUZZLE_HAS_LAZY__ === 'undefined' || __PUZZLE_HAS_LAZY__) &&
+			(this.#routes.some((entry) => entry.hasLazy) || this.#catchAll?.hasLazy)
+		) {
+			watchLinks(this, {
+				anchor: findAnchor,
+				path: (a) => this.#linkPath(a),
+				load: (path, explicit) => this.#prefetch(path, explicit),
+			});
+		}
 		// A urlless mode registers NO popstate listener — location/history are never
 		// touched, so there is nothing to hear (D42). The click interceptor stays.
 		if (!this.#mode?.urlless) {
@@ -695,6 +721,7 @@ export class Router {
 		//    nulled after the restore).
 		document.removeEventListener('click', this.#onClick);
 		window.removeEventListener('popstate', this.#onPopState);
+		if (typeof __PUZZLE_HAS_LAZY__ === 'undefined' || __PUZZLE_HAS_LAZY__) unwatchLinks(this);
 		// Drop the announcement live region (v1.56, D93) — it is the router's only
 		// node outside the mount container, so leaving it would leak a stray element
 		// into <body> on every mount/unmount cycle. Idempotent on a second stop().
@@ -724,6 +751,50 @@ export class Router {
 	 */
 	setMorphHandler(handler) {
 		this.#morphHandler = handler ?? null;
+	}
+
+	/**
+	 * Load the code a path's route needs — every `lazy()` view and layout in its
+	 * matched chain (D163) — without navigating (D195). No guard runs and no view
+	 * is constructed; a later navigation to the path finds the classes already
+	 * resolved and runs synchronously. Called by name, so a guarded route loads
+	 * too (only automatic link prefetch skips those). Never rejects.
+	 *
+	 * @param {string} path a router path, as push() takes it
+	 * @returns {Promise<boolean>} true once the route's code is in memory (also
+	 *   for a route with none to load); false when nothing matched or a load failed
+	 */
+	prefetch(path) {
+		return this.#prefetch(path, true);
+	}
+
+	/**
+	 * The shared body of prefetch() and link prefetch. Matching is the same pure
+	 * #match navigation uses; loading is the same memoized resolver, so a chunk is
+	 * fetched once and a click mid-download joins the in-flight promise. A load
+	 * failure is swallowed here — the marker clears its slot, so the navigation
+	 * that follows retries and reports it the usual way (onError, `navigation`).
+	 *
+	 * @param {string} path
+	 * @param {boolean} explicit asked for by name: a guarded route loads too
+	 * @returns {Promise<boolean>}
+	 */
+	#prefetch(path, explicit) {
+		const matched = this.#match(parseLocation(normalizeRoutePath(path)).pathname);
+		if (!matched) return Promise.resolve(false);
+		const entry = matched.entry;
+		if ((typeof __PUZZLE_HAS_LAZY__ === 'undefined' || __PUZZLE_HAS_LAZY__) && entry.hasLazy) {
+			// automatic prefetch never downloads gated code: a guard could refuse the
+			// navigation, and D163 keeps a refused route's chunk off the wire.
+			if (!explicit && entry.guards.length) return Promise.resolve(false);
+			// resolveRouteViews never throws synchronously: each loader runs in a
+			// microtask and every failure arrives as a rejection.
+			return Promise.resolve(resolveRouteViews(entry)).then(
+				() => true,
+				() => false
+			);
+		}
+		return Promise.resolve(true);
 	}
 
 	/**
@@ -3276,24 +3347,38 @@ export class Router {
 
 		const a = findAnchor(e);
 		if (!a) return;
+		const path = this.#linkPath(a);
+		if (path == null) return;
+		e.preventDefault();
+		this.push(path);
+	}
+
+	/**
+	 * The router path a link navigates to in-app, or null when a click on it
+	 * belongs to the browser. One answer for the click interceptor and link
+	 * prefetch (D195), so a prefetched link is always one a click would route.
+	 *
+	 * @param {Element} a the link
+	 * @returns {string | null}
+	 */
+	#linkPath(a) {
 		// Only '_self' navigates THIS frame, so only it can be ours. '_blank',
 		// '_parent', '_top' and named frames all move a different browsing
 		// context — the browser has to do those. An explicit '_self' is the
 		// default spelled out (component libraries emit it), not an opt-out.
 		const target = a.getAttribute('target')?.trim().toLowerCase();
-		if (target && target !== '_self') return;
-		if (a.hasAttribute('download')) return;
+		if (target && target !== '_self') return null;
+		if (a.hasAttribute('download')) return null;
 
 		const href = a.getAttribute('href');
-		if (!href) return;
+		if (!href) return null;
 		if (href.startsWith('#')) {
 			// path mode: any '#'-href is an in-page anchor, left to the browser.
-			// A mode may claim it instead — hash routing intercepts '#/...' (D34,
+			// A mode may claim it instead — hash routing routes '#/...' (D34,
 			// modes.js) while still leaving a bare '#anchor' to the browser.
-			this.#mode?.clickFragment?.(href, e, this.#base, this);
-			return;
+			return this.#mode?.fragmentPath?.(href, this.#base) ?? null;
 		}
-		if (href.startsWith('mailto:') || href.startsWith('tel:')) return;
+		if (href.startsWith('mailto:') || href.startsWith('tel:')) return null;
 
 		let url;
 		try {
@@ -3301,15 +3386,16 @@ export class Router {
 			// not a string, so reading it would resolve "[object SVGAnimatedString]"
 			// as a path — an intercepted, dead click. Fall back to the attribute and
 			// resolve it the way the element itself would, against baseURI (<base>).
-			url = new URL(typeof a.href === 'string' ? a.href : href, a.baseURI || location.href);
+			const own = /** @type {HTMLAnchorElement} */ (a).href;
+			url = new URL(typeof own === 'string' ? own : href, a.baseURI || location.href);
 		} catch {
-			return;
+			return null;
 		}
-		if (url.origin !== location.origin) return; // external
+		if (url.origin !== location.origin) return null; // external
 
-		// A mode that owns absolute-URL clicks decides alone and stops the cascade
-		// (hash routing: only a same-page URL carrying a route fragment is in-app).
-		if (this.#mode?.clickLink?.(url, e, this.#base, this)) return;
+		// A mode that owns absolute URLs decides alone (hash routing: only a
+		// same-page URL carrying a route fragment is in-app).
+		if (this.#mode?.linkPath) return this.#mode.linkPath(url, this.#base);
 
 		// Locale prefix routing (D177): a link into another locale's pages — another
 		// prefix, or the default locale's unprefixed URL from a prefixed page — is a
@@ -3326,23 +3412,22 @@ export class Router {
 					routing.defaultLocale
 				) !== this.#base
 			) {
-				return;
+				return null;
 			}
 		}
 
-		// path mode: with a base (D51) intercept ONLY same-origin URLs under the
-		// base and push the base-STRIPPED path; a same-origin link outside the base
+		// path mode: with a base (D51) take ONLY same-origin URLs under the base
+		// and return the base-STRIPPED path; a same-origin link outside the base
 		// (stripBase → null) is a real navigation away from the app and falls
 		// through to the browser. A urlless mode keeps the base inert — the
 		// interceptor stays active but never strips (there is no URL to prefix).
 		// url.hash rides along (D41): a `/docs#faq` link carries its anchor into
 		// the pushed path so the default landing can target the element. A bare
 		// `#anchor` href never reaches here — it took the href.startsWith('#')
-		// branch above and fell through to the browser.
+		// branch above.
 		const pathname = this.#mode ? url.pathname : stripBase(url.pathname, this.#base);
-		if (pathname == null) return;
-		e.preventDefault();
-		this.push(pathname + url.search + url.hash);
+		if (pathname == null) return null;
+		return pathname + url.search + url.hash;
 	}
 }
 
@@ -3360,7 +3445,10 @@ export class Router {
  * browser navigations. closest() stays as the fallback for synthetic events
  * carrying no composedPath.
  *
- * @param {MouseEvent} e
+ * Also link prefetch's lookup (D195): pointer and focus events retarget the
+ * same way, so a hovered or focused link in an open shadow root is found too.
+ *
+ * @param {Event} e
  * @returns {HTMLAnchorElement | null}
  */
 function findAnchor(e) {

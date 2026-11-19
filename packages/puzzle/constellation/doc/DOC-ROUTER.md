@@ -11,6 +11,7 @@ connections:
   - DECISION-D177-LOCALE-URL-PREFIXES
   - DECISION-D182-NAVIGATION-RESULT
   - DECISION-D183-ROUTE-VIEWS-AGENT-FIELD
+  - DECISION-D195-LINK-PREFETCH
 verified_at: '2026-11-01T19:25:13.521Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
@@ -152,6 +153,27 @@ if (result.ok) {
 
 `push()` and `replace()` never reject. A push to the page you're on is a no-op that resolves `ok`, unless another navigation is loading.
 
+## Prefetching lazy routes
+
+When a route's view or layout is `lazy()` (§62), its code downloads on the first visit. Puzzle starts that download a little earlier, when the user shows they're about to click: the pointer rests on the link, a finger touches it, or keyboard focus reaches it. The click then usually finds the code already loaded (§69).
+
+It's on by default and needs nothing in your templates. To change it for one link:
+
+```html
+<a href="{ link('/reports') }" data-prefetch="visible">Reports</a>  <!-- also when it scrolls into view -->
+<a href="{ link('/admin') }" data-prefetch>Admin</a>                 <!-- even though /admin has a guard -->
+<a href="{ link('/export') }" data-prefetch="off">Export</a>         <!-- never -->
+```
+
+To turn the default off for the whole app, set `prefetch: false` in the `PuzzleApp` config. Links that name a mode still prefetch.
+
+A few things to know:
+
+- Only code loads. Guards don't run and `data()` doesn't run until the real navigation.
+- A route behind a `guard` isn't prefetched unless the link asks for it with `data-prefetch`, so gated code doesn't download for users who can't open it.
+- Nothing prefetches when the browser reports Save-Data or a 2g connection.
+- To warm a route yourself, after sign-in say, call `router.prefetch(path)`. It resolves `true` once the code is loaded and never navigates.
+
 ## URL-backed state: `query` and `replace()`
 
 Filters, tabs, search and pagination belong in the URL. Read them from `this.route.query` (frozen; repeated keys become arrays, `?debug` is `''`) and write them with `replace()`, which adds no history entry, leaves scroll alone, and on the same route leaves focus where it is, so typing is never interrupted (§44, §51):
@@ -285,6 +307,7 @@ Each entry is `{ path, params, name, meta, title, agent, chain }`. `agent` resol
 | `push(path)` | Navigate with a new history entry. Resolves a `NavigationResult`; never rejects. |
 | `replace(path)` | Same, but replaces the current entry and leaves scroll alone. |
 | `go(n)` / `back()` / `forward()` | History movement in every mode. |
+| `prefetch(path)` | Load a path's lazy route code now, without navigating or running guards. Resolves `true` when loaded (or nothing to load), `false` on no match or a failed load. |
 | `url(path, options?)` | Mode-, base- and locale-correct href (what `link()` calls). |
 | `current` | The committed snapshot `{ path, pathname, query, hash, route, params, chain }`. |
 | `views` | Every leaf route as frozen `{ path, params, name, meta, title, agent, chain }` entries. |

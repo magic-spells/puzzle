@@ -11,6 +11,7 @@ connections:
   - DECISION-D177-LOCALE-URL-PREFIXES
   - DECISION-D182-NAVIGATION-RESULT
   - DECISION-D183-ROUTE-VIEWS-AGENT-FIELD
+  - DECISION-D195-LINK-PREFETCH
 verified_at: '2026-11-01T19:25:13.521Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 code_refs:
@@ -18,6 +19,7 @@ code_refs:
   - client-runtime/router/modes.js
   - client-runtime/router/routePath.js
   - client-runtime/router/routeViews.js
+  - client-runtime/router/prefetch.js
   - client-runtime/router/lazy.js
   - client-runtime/head.js
   - client-runtime/headTags.js
@@ -300,3 +302,26 @@ export default [
 - **No loading UI:** the previous view stays until the new one commits; skeletons (§16) cannot render before their module arrives.
 - **Prerender awaits the same markers** in both modes; static pages bundle the resolved class (§36) and have no runtime laziness.
 - A route table with no markers costs nothing extra; `__PUZZLE_HAS_LAZY__ = false` drops the resolver from the bundle (§54).
+
+## 69. Link prefetch: `prefetch` and `data-prefetch`
+
+A link to a route whose `view` or `layout` is a `lazy()` marker (§62) starts loading that code **before the click** ([[DECISION-D195-LINK-PREFETCH]]). By the time the click lands the chunk is usually in memory, so the navigation runs as a warm lazy route.
+
+```html
+<a href="/settings">Settings</a>                          <!-- app default: on intent -->
+<a href="/reports" data-prefetch="visible">Reports</a>    <!-- also when scrolled into view -->
+<a href="/admin" data-prefetch>Admin</a>                  <!-- on intent, even behind a guard -->
+<a href="/export" data-prefetch="off">Export</a>          <!-- never -->
+```
+
+- **Intent** means the pointer rests on the link for 60 ms (mouse or pen), a touch lands on it (no delay — the click follows), or keyboard focus reaches it. Leaving the link before the delay cancels; moving between the link's own children does not.
+- **Code only.** Prefetch calls the same memoized resolver navigation uses (§62): no guard runs, no view is constructed, no `data()` runs, and nothing changes in the URL, history or tree. A chunk loads once; a click while it downloads joins the same load. A failed prefetch is not reported and not cached, so the click retries and reports through `onError` as before.
+- **Which links:** only links a click would turn into an in-app navigation — the same test as click interception (§9): same origin, inside the base (§23) and the current locale prefix, no `target` other than `_self`, no `download`, not `mailto:`/`tel:`, and in hash mode (§15) only `#/…` fragments. A route with no markers has nothing to load.
+- **`data-prefetch` per link:** absent → the app default; `""` or `"intent"` → on intent; `"visible"` → on intent and when the link scrolls into view (once); `"off"` → never. Any other value warns in development and acts as `"intent"`.
+- **Guards:** the app default skips a matched route with a `guard` (§48) anywhere in its chain, so gated code still never downloads on its own (§62). A link that names a mode (`""`, `"intent"`, `"visible"`) loads it anyway — the author has said the code is not secret.
+- **App config `prefetch`** (boolean, default `true`). `false` turns off the default for links without `data-prefetch`; links that name a mode still prefetch. A non-boolean value throws at startup.
+- **Connection:** nothing prefetches automatically when `navigator.connection.saveData` is set or `effectiveType` is a 2g class. The chunk still loads on click.
+- **`router.prefetch(path)`** loads a path's route code now and resolves `true` when it is in memory (or there was nothing to load), `false` when no route matches or the load failed. It never rejects, never navigates, never runs a guard, and ignores the config and connection checks — calling it is the explicit request.
+- **Cost:** with no `lazy()` call in the project, `__PUZZLE_HAS_LAZY__ = false` drops the whole feature (§54). With markers, the router adds one set of passive document listeners at `start()`, removed by `stop()`; `"visible"` uses the shared visibility observer (§39) and a document `MutationObserver` that watches for marked links.
+- **Static output** (§36) has no router and no prefetch. Hybrid pages prefetch once the SPA router starts.
+- Data is not prefetched: a route's `data()` runs at navigation as before.
