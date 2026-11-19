@@ -40,7 +40,7 @@ framework internals. The protocol contract is SPEC §55.
   dev-gated code — app mount/unmount (`__PUZZLE_APP__` publish/clear), store
   notification delivery (flush keys + notified set), router `#commitState`, and
   devstate's `registerView`/`unregisterView`. `PuzzleView` carries inert readers
-  `_modelState()`, `_localState()`, `_vnodeTree()`.
+  `_derived()`, `_state()`, `_vnodeTree()`.
 - **Protocol:** envelope `{ puzzle: 1, v: 1, type, payload }`. Events `hello`,
   `app-mounted`, `app-unmounted`, `view-mounted`, `view-destroyed`, `flush`,
   `route-commit`; requests `snapshot:views|records|subscriptions|route|profile`,

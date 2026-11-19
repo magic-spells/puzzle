@@ -982,7 +982,7 @@ The two typing targets are the A/B:
   notify, `data()`, render.
 
 `draftText` is a key `data()` deliberately never returns. If it did,
-`#recompose()`'s `{ ...#local, ...#model }` would overlay the model value on the
+`#recompose()`'s `{ ...#state, ...#derived }` would overlay the model value on the
 local one and the first store flush would erase the draft mid-typing. That
 clobber is documented in the scenario rather than counted — its interesting form
 depends on flush timing and is not deterministic.
@@ -1036,7 +1036,7 @@ no-syntax escape — is not usable here: it is not a valid `<select>` attribute,
 and on the inputs it would remove the interactivity that `type-event` and
 `opValidate()` rely on. The two typing targets need no escape at all; their
 author-written `@input` handlers suppress synthesis by themselves, which is also
-what keeps `.fs-draft` on the local layer and `.fs-bound` on the model layer.
+what keeps `.fs-draft` on the state layer and `.fs-bound` on the derived layer.
 
 ### Both controlled form properties write only on a real change
 

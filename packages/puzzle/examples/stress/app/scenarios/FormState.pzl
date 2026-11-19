@@ -15,11 +15,11 @@
          driver's own `el.value = …` is structurally uncountable rather than
          merely uncounted. They bind DIFFERENT state layers on purpose:
 
-           .fs-draft  setData('draftText', …) — the local layer, no data() run
-           .fs-bound  record.update({ text }) — the model layer, via the store
+           .fs-draft  setData('draftText', …) — the state layer, no data() run
+           .fs-bound  record.update({ text }) — the derived layer, via the store
 
          `draftText` is a key data() NEVER returns. If data() also returned it,
-         #recompose()'s { ...#local, ...#model } would overlay the model value
+         #recompose()'s { ...#state, ...#derived } would overlay the model value
          on top of the local one and the FIRST store flush would silently erase
          the draft mid-typing (PuzzleView.js — the two-layer precedence rule).
          That clobber is documented here rather than counted: its interesting
@@ -220,7 +220,7 @@ const GATE_STORE = 'gate-store-keystroke';
  *
  * `renders` is incremented by a NESTED getter — `probe.tick`, one level below
  * what data() returns — because PuzzleView.#recompose() rebuilds visible state
- * as { ...#local, ...#model }, and that spread INVOKES any getter sitting at the
+ * as { ...#state, ...#derived }, and that spread INVOKES any getter sitting at the
  * top level. A top-level getter would therefore count data() runs, which is a
  * different number entirely: `type-local` drives 200 renders and ZERO data()
  * runs. See rc-metrics.js for the same trick at length.
@@ -289,7 +289,7 @@ export default class FormState extends PuzzleView {
         'patchAttrs compares an input\'s value against the LIVE DOM property and writes only on a difference; the ' +
         'select\'s post-options re-assert makes the same live compare, so a settled select also writes nothing. ' +
         'rerender proves both zeros, rerender-dirty proves both write paths still fire — one write per changed ' +
-        'select, not two — and the two typing arms price a keystroke through the local layer against the same ' +
+        'select, not two — and the two typing arms price a keystroke through the state layer against the same ' +
         'keystroke through record.update().',
       note: this.note,
       resultText: result
@@ -354,7 +354,7 @@ export default class FormState extends PuzzleView {
     clearType(store, TYPE);
     this.record = store.createRecord(TYPE, { id: DRAFT_ID, ...FORM_DRAFT_SEED });
 
-    // The local layer's seed. setData before mount just seeds state — the
+    // The state layer's seed. setData before mount just seeds state — the
     // scheduled render is a no-op until #mounted flips.
     this.setData('draftText', 'draft');
 
@@ -808,7 +808,7 @@ export default class FormState extends PuzzleView {
     const draftHeld = this.getData().draftText;
     const draftShown = root.querySelector('.fs-draft')?.value;
     if (draftShown !== draftHeld) {
-      return { ok: false, detail: `the draft input reads "${draftShown}", the local layer holds "${draftHeld}"` };
+      return { ok: false, detail: `the draft input reads "${draftShown}", the state layer holds "${draftHeld}"` };
     }
 
     // fsSchemaNormalizations === 3 per keystroke depends on the store having NO

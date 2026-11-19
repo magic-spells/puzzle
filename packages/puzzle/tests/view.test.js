@@ -561,7 +561,7 @@ describe('PuzzleView — setData semantics (SPEC §4)', () => {
 });
 
 describe('PuzzleView — two-layer data()/setData semantics (Change C, SPEC §4)', () => {
-	// #local (setData) and #model (last successful data(), replaced wholesale) compose
+	// #state (setData) and #derived (last successful data(), replaced wholesale) compose
 	// into the visible getData(): the model overlays local (a data() commit beats an
 	// EARLIER setData); a LATER setData beats the model value until the next commit.
 	const mkGate = () => {

@@ -277,7 +277,7 @@ describe('HMR dev reload — two-phase restore (§27, D57; Change D)', () => {
 		app.__devSnapshot();
 
 		// The snapshot serializes ONLY the local setData layer (Change C's
-		// _localState reader): data()-derived values — `count`, `todos` — must not
+		// _state reader): data()-derived values — `count`, `todos` — must not
 		// be pinned into the blob as if they were local drafts.
 		const blob = JSON.parse(sessionStorage.getItem(HMR_KEY));
 		const entry = blob.views.find((v) => v.key === 'StoreListView:0');

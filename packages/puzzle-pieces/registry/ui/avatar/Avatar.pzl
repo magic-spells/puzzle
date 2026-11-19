@@ -77,7 +77,7 @@ export default class Avatar extends PuzzleView {
 
   events = {
     markFailed: () => {
-      // setData persists over the model layer, so the fallback sticks until the
+      // setData persists over the derived layer, so the fallback sticks until the
       // src prop changes (which resets `failed` back in data()).
       this.setData({ failed: true, showImg: false });
     },

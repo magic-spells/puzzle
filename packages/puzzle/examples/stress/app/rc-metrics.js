@@ -18,7 +18,7 @@
  *
  * ── Why renders are counted with a nested getter ───────────────────────────
  * `PuzzleView.#recompose()` rebuilds the visible data as
- * `{ ...#local, ...#model }` — a SPREAD, which invokes any getter sitting on
+ * `{ ...#state, ...#derived }` — a SPREAD, which invokes any getter sitting on
  * the top level of what data() returned. A top-level getter would therefore
  * fire once per data() RUN and count exactly the thing dataRuns already counts.
  *

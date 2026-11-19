@@ -497,7 +497,7 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   rewrites the script body. TypeScript is transpile-only.
 - A compiled class stays untouched; codegen attaches `prototype.render` after
   it. `PuzzleView` is a plain class, not an HTMLElement.
-- `data()` owns the replace-on-commit model layer. `setData()` owns persistent
+- `data()` owns the replace-on-commit derived layer. `setData()` owns persistent
   local UI state and rerenders without rerunning `data()`. Use `refresh()` only
   when local state feeds `data()`-derived values; a key the template reads
   directly needs no `refresh()` after `setData()`.

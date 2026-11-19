@@ -90,7 +90,7 @@ Contract: §3–§6, §17, §18, §24, §28, §31, §43, §47, §57, §64–§67
 
 ## Component runtime
 
-- Two state layers: each `data()` result replaces the model layer; `setData()` writes a local layer that wins until the next model commit. Async `data()` is last-wins. Skeletons show only on first load.
+- Two data layers: each `data()` result replaces the derived layer; `setData()` writes a state layer that wins until the next `data()` commit. Async `data()` is last-wins. Skeletons show only on first load.
 - Lifecycle: `created`, `mounted`, `beforeUpdate`, `afterUpdate(prev)` (D178), `destroyed`, `viewWillShow`/`viewDidShow`, `viewWillHide`/`viewDidHide`. Members: `this.route`, `this.element`, `this.refs`, `this.ctx`, `memo()`, `getData()`, `setData()`, `refresh()`, `renderTick()` (D188).
 - Incremental rendering ([[DECISION-D170-INCREMENTAL-VDOM-LISTS]]): keyed rows and static subtrees are cached; a record prop carries a render revision.
 - Errors (§60): `onError(error, { phase, view, route })` and an app-level `errorView` with `{ error, info, retry }`.

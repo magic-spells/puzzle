@@ -834,7 +834,7 @@ export const OPS = [
 					fsSelectValueWrites: 0,
 					fsSchemaNormalizations: 0,
 				},
-				note: 'type-local drives 200 REAL input events into a field bound to the local layer, forcing flushUpdates() after each so the op is bounded by a count rather than by 200 frames of scheduler. data() never re-runs, and no select is written: typing into an unrelated field now touches zero HTMLSelectElement values across 200 renders, where it wrote 40,000 before reassertSelectValue compared first.',
+				note: 'type-local drives 200 REAL input events into a field bound to the state layer, forcing flushUpdates() after each so the op is bounded by a count rather than by 200 frames of scheduler. data() never re-runs, and no select is written: typing into an unrelated field now touches zero HTMLSelectElement values across 200 renders, where it wrote 40,000 before reassertSelectValue compared first.',
 			},
 			{
 				...common,

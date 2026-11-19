@@ -51,8 +51,8 @@ handle, by this view, during its own evaluation, may fault
 
 ## State and refresh
 
-- Two layers: a successful `data(params, props)` REPLACES the model layer;
-  `setData()` writes a persistent local layer that wins until the next model
+- Two layers: a successful `data(params, props)` REPLACES the derived layer;
+  `setData()` writes a persistent state layer that wins until the next derived
   commit and rerenders without rerunning `data()`. Keep raw local values and
   `data()`-derived display values under different keys, or the commit erases the
   raw one.
@@ -136,7 +136,7 @@ All are reserved by [[DOC-SPEC-ANATOMY]] §4 and never spelled in templates.
 - **No list method on the class, deliberately**: loops call `listRows` (imported
   as `__l`), and `PuzzleView` must never import `views/listBlock.js`, or loop-free
   apps pay for it ([[FILE-LIST-BLOCK]]).
-- Dev readers `_localState()`, `_modelState()`, `_vnodeTree()` serve the DevTools
+- Dev readers `_state()`, `_derived()`, `_vnodeTree()` serve the DevTools
   bridge ([[FILE-DEVTOOLS]]); profiler state lives in [[FILE-DEVPERF]] WeakMaps
   behind inline `__PUZZLE_DEV__` probes. Dev builds register mounted views with
   [[COMPONENT-DEVSTATE]].

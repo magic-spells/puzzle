@@ -272,17 +272,17 @@ function snapshotImpl(app) {
 			blob.read = null;
 		}
 
-		// View state: each live view's LOCAL layer (setData + created()-seeded
+		// View state: each live view's STATE layer (setData + created()-seeded
 		// state) through the JSON-safe filter (Change D). Only genuinely-local state
-		// crosses the reload — derived values in the model layer are recomputed by
+		// crosses the reload — derived values in the derived layer are recomputed by
 		// data(): against the transplanted store during navigation #0, then again
 		// after phase 2 restores the local state it may read. Serializing the merged
 		// getData() would wrongly pin stale derived values as local overrides.
-		// _localState() is PuzzleView's internal reader for exactly this
+		// _state() is PuzzleView's internal reader for exactly this
 		// (same-package convention, like store._serializeAll).
 		for (const { key, view } of keyedViews()) {
 			try {
-				blob.views.push({ key, data: safeState(view._localState()) });
+				blob.views.push({ key, data: safeState(view._state()) });
 			} catch {
 				// one unreadable view must not lose the rest
 			}

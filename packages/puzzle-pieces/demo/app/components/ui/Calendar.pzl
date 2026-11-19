@@ -444,7 +444,7 @@ export default class Calendar extends PuzzleView {
     const firstDayOfWeek = this._firstDayOfWeek(props);
 
     // Resolve the displayed month + drill-down view + roving focus. These live in the
-    // LOCAL layer (setData) so they survive data() re-runs; they're seeded from `value`
+    // STATE layer (setData) so they survive data() re-runs; they're seeded from `value`
     // (or today, clamped into range) on first run and re-anchored when `month || value`
     // changes externally. Never RETURNED from data() — a returned key would let the model
     // layer clobber the local one on the next unrelated re-render.

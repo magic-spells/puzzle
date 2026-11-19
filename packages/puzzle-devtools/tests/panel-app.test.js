@@ -739,8 +739,8 @@ describe.skipIf(!built)('Views panel', () => {
 
 		expect(bridge.payloadsFor('inspect:view')).toEqual([{ id: 3 }]);
 
-		const model = groupFor('data() model layer');
-		const local = groupFor('setData() local layer');
+		const model = groupFor('data() derived layer');
+		const local = groupFor('setData() state layer');
 		expect(model).toBeTruthy();
 		expect(local).toBeTruthy();
 
@@ -785,7 +785,7 @@ describe.skipIf(!built)('Views panel', () => {
 		treeRow('2').click();
 		await settle(app, 60);
 
-		const key = [...groupFor('data() model layer').querySelectorAll('dt')].find(
+		const key = [...groupFor('data() derived layer').querySelectorAll('dt')].find(
 			(dt) => dt.textContent.trim() === 'note'
 		);
 		const value = key.nextElementSibling;
@@ -812,7 +812,7 @@ describe.skipIf(!built)('Views panel', () => {
 		treeRow('3').click();
 		await settle(app, 60);
 
-		const local = groupFor('setData() local layer');
+		const local = groupFor('setData() state layer');
 		const row = [...local.querySelectorAll('dt')].find(
 			(dt) => dt.textContent.trim() === 'draft'
 		).parentElement;

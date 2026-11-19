@@ -115,18 +115,18 @@
               <h2 class="m-0 px-2 py-1 text-[11px] font-semibold text-ink">
                 State layers
                 <span class="ml-1 font-normal text-[10px] text-muted">
-                  a later setData() wins until the next data() commit replaces the model layer
+                  a later setData() wins until the next data() commit replaces the derived layer
                 </span>
               </h2>
               <div class="p-2 pt-0 grid gap-2 grid-cols-1 lg:grid-cols-2">
                 <StateGroup
-                  title="data() model layer"
+                  title="data() derived layer"
                   tone="model"
                   hint="Replaced wholesale on every data() commit."
                   entries={ modelEntries }
                   emptyLabel="data() returned nothing" />
                 <StateGroup
-                  title="setData() local layer"
+                  title="setData() state layer"
                   tone="local"
                   hint="Persistent UI state; survives data() re-runs."
                   entries={ localEntries }
@@ -276,7 +276,7 @@ export default class ViewsView extends PuzzleView {
     const selectedId = local.selectedId;
     const selectedRecord = selectedId == null ? null : store.findOne('pview', selectedId);
 
-    // The selected view was re-rendered by a flush — its model layer changed, so
+    // The selected view was re-rendered by a flush — its derived layer changed, so
     // the detail pane is showing stale values until we ask again.
     if (selectedRecord) {
       const pulseAt = selectedRecord.pulseAt ?? 0;

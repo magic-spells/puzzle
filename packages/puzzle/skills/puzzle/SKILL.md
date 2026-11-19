@@ -956,7 +956,7 @@ refresh outside the request path and let the hook read the current token. Mutate
 
 The reactivity contract — the three methods are not interchangeable:
 
-- **`data()`** owns the model layer. Store queries made inside `data()`
+- **`data()`** owns the derived layer. Store queries made inside `data()`
   **auto-subscribe** the view; when matching records change, `data()` re-runs
   and the result replaces the view's data wholesale (replace-on-commit).
 - **`setData(patch)`** owns persistent local UI state (open panels, drafts).

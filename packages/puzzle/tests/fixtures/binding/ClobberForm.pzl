@@ -9,14 +9,14 @@ import { PuzzleView } from '@magic-spells/puzzle';
 
 // Hazard #4 of implicit binding (D147), both arms of it in one view.
 //
-// `title` is the CLOBBER: a bare identifier binds to the LOCAL layer, but data()
+// `title` is the CLOBBER: a bare identifier binds to the STATE layer, but data()
 // derives the same key from a record, and #recompose composes { ...local,
 // ...model } with the model last — so every commit reverts what the user typed.
 // The dev-only diagnostic must name that key.
 //
 // `note` is the legitimate ECHO idiom (examples/static-docs Playground): data()
 // re-reads its own bound local through getData() and returns it unchanged. The
-// key IS in the model layer, so a naive `key in model` check would false-positive
+// key IS in the derived layer, so a naive `key in model` check would false-positive
 // here; comparing against the value data() actually committed keeps it silent.
 export default class ClobberForm extends PuzzleView {
 	created() {

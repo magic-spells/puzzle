@@ -27,6 +27,8 @@ Current terms. [[DOC-SPEC]] is authoritative.
 
 **default children** — Content inside a component invocation, placed by the child with `<Children/>`.
 
+**derived layer** — The values returned by the latest successful `data()`; replaced wholesale on each commit, below the state layer.
+
 **development-state transfer** — The one-shot snapshot/restore `puzzle dev` uses across full reloads for store records and JSON-safe local view data. Not per-module hot replacement.
 
 **function** — A display transform a template calls by name, value first: `{ currency(price) }`, `{ truncate(title, 40) }`. The library is 19 standard functions plus PuzzleKit's `link` and `timeago`, tree-shaken to what templates call; apps register their own under the `formatters` config key. Never call one a filter or a pipe.
@@ -36,10 +38,6 @@ Current terms. [[DOC-SPEC]] is authoritative.
 **layout** — A routed view wrapping a route chain; `<Slot/>` marks the outlet.
 
 **list block** — The persistent per-key row state behind an item-form `{#for}`; an unchanged row returns its cached vnode subtree.
-
-**local layer** — Persistent component state set by `setData()`; overrides same-named model-layer values and renders without rerunning `data()`.
-
-**model layer** — The values returned by the latest successful `data()`; replaced wholesale on each commit, below the local layer.
 
 **model / record** — A `PuzzleModel` subclass defines schema and behavior; a record is its stable instance, stored by type and primary key.
 
@@ -66,6 +64,8 @@ Current terms. [[DOC-SPEC]] is authoritative.
 **skeleton** — Optional first-load placeholder in `<puzzle-skeleton>`, with an optional minimum duration.
 
 **snippet** — `<Snippet fits="name" params…>` at a call site: a parameterized body the component stamps per item through its own markers.
+
+**state layer** — Persistent component state set by `setData()`; overrides same-named derived-layer values and renders without rerunning `data()`.
 
 **store** — Per-app record registry, query and subscription engine, and persistence owner; with the adapter capability it also fetches and syncs.
 

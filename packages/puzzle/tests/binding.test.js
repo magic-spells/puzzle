@@ -557,7 +557,7 @@ describe('implicit binding — rebuilt member-target diagnostic', () => {
 });
 
 describe('implicit binding — the layer-clobber diagnostic', () => {
-	// Hazard #4: a bare bind writes the LOCAL layer, but #recompose composes
+	// Hazard #4: a bare bind writes the STATE layer, but #recompose composes
 	// { ...local, ...model } with the model LAST — so a key data() also derives
 	// from a record is silently reverted on the next commit. Dev-only.
 	const clobberWarnings = (spy) =>
@@ -597,7 +597,7 @@ describe('implicit binding — the layer-clobber diagnostic', () => {
 	});
 
 	it('never warns for the echo idiom, where data() returns its own bound local back', async () => {
-		// `note` IS present in the model layer — a naive `key in model` check would
+		// `note` IS present in the derived layer — a naive `key in model` check would
 		// false-positive here. The composed value equals what the bind wrote, so
 		// nothing was reverted and nothing is reported.
 		const store = todoStore();

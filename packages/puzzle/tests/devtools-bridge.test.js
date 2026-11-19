@@ -260,7 +260,7 @@ describe('devtools bridge — requests', () => {
 		});
 	});
 
-	it('inspect:view separates the model layer from the local layer', async () => {
+	it('inspect:view separates the derived layer from the state layer', async () => {
 		const hook = installHook();
 		await bootApp();
 		const homeId = hook.of('view-mounted').find((e) => e.payload.name === 'Home').payload.id;

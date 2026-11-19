@@ -124,22 +124,22 @@ function warnThisHandlers(view) {
  */
 
 export class PuzzleView {
-	// Two-layer component state (Change C, SPEC §4). #local holds values written
-	// via setData() (and created()-seeded state, which uses setData); #model holds
+	// Two-layer component state (Change C, SPEC §4). #state holds values written
+	// via setData() (and created()-seeded state, which uses setData); #derived holds
 	// the latest SUCCESSFUL data() result, REPLACED wholesale on each commit (not
-	// merged). #data is the composed, visible state — { ...#local, ...#model } —
+	// merged). #data is the composed, visible state — { ...#state, ...#derived } —
 	// rebuilt by #recompose() on every commit and written straight by setData().
-	// Precedence: a data() commit wins over an EARLIER setData for a key (the model
-	// overlays local); a LATER setData wins over the model value for that key until
+	// Precedence: a data() commit wins over an EARLIER setData for a key (derived
+	// overlays state); a LATER setData wins over the derived value for that key until
 	// the next commit (setData writes #data directly). getData() hands out copies of
 	// #data, so its identity is internal — but it is mutated in place regardless, so
 	// setData's direct writes and the recompose target stay the one object.
 	/** @type {Record<string, any>} */
 	#data = {};
 	/** @type {Record<string, any>} */
-	#local = {};
+	#state = {};
 	/** @type {Record<string, any>} */
-	#model = {};
+	#derived = {};
 	#params = {};
 	/** @type {any} */
 	#props = {};
@@ -313,7 +313,7 @@ export class PuzzleView {
 	 * this.refs[name] with the mounted DOM element and nulls it on unmount. A
 	 * PUBLIC instance field, NOT render data — never composed into #data, never
 	 * returned by getData(), never snapshotted by the dev HMR path (devstate reads
-	 * the local layer via _localState(), which is #local — refs stays out for
+	 * the state layer via _state(), which is #state — refs stays out for
 	 * free). The compiler emits `ref: this.__ref("name")` in a vnode's attrs; the
 	 * ViewManager calls that setter on mount/unmount (see __ref below).
 	 *
@@ -396,7 +396,7 @@ export class PuzzleView {
 	// ---- state ---------------------------------------------------------------
 
 	/**
-	 * The composed component model — the local layer overlaid by data()'s result.
+	 * The composed component model — the state layer overlaid by data()'s result.
 	 * @template [T=any] the caller's view of the model (unchecked, as published)
 	 * @returns {T}
 	 */
@@ -409,10 +409,10 @@ export class PuzzleView {
 	 * (key, value) or an object map. Safe before mount (e.g. in created()) — it just
 	 * seeds state for the first data() run to read back.
 	 *
-	 * Two-layer state (Change C, SPEC §4): the write targets the LOCAL layer AND the
-	 * visible #data directly, so the value shows immediately and wins over any model
+	 * Two-layer state (Change C, SPEC §4): the write targets the STATE layer AND the
+	 * visible #data directly, so the value shows immediately and wins over any derived
 	 * value for that key until the next data() commit recomposes (a later setData
-	 * beats the model; a data() commit beats an earlier setData).
+	 * beats the derived value; a data() commit beats an earlier setData).
 	 *
 	 * @param {string | Record<string, any>} key a key, or a map of keys to values
 	 * @param {any} [value] the value for a single key
@@ -420,10 +420,10 @@ export class PuzzleView {
 	setData(key, value) {
 		if (this.#destroyed || this.#leaving) return;
 		if (typeof key === 'object' && key !== null) {
-			Object.assign(this.#local, key);
+			Object.assign(this.#state, key);
 			Object.assign(this.#data, key);
 		} else {
-			this.#local[/** @type {string} */ (key)] = value;
+			this.#state[/** @type {string} */ (key)] = value;
 			this.#data[/** @type {string} */ (key)] = value;
 		}
 		this.#scheduleRender();
@@ -440,26 +440,26 @@ export class PuzzleView {
 	}
 
 	/**
-	 * The LOCAL layer only (setData + created()-seeded state), as a fresh shallow
+	 * The STATE layer only (setData + created()-seeded state), as a fresh shallow
 	 * copy. INTERNAL — not public API: the dev HMR snapshot (constellation/doc/DOC-SPEC.md
 	 * §27, D57; Change D) restores only genuinely-local state (drafts, toggles) and
 	 * lets data() recompute store-derived values against the transplanted store, so
 	 * it must read this layer, not the merged getData(). Underscore-prefixed by the
 	 * codebase's internal convention (like _store/_type), never spelled in a template.
 	 */
-	_localState() {
-		return { ...this.#local };
+	_state() {
+		return { ...this.#state };
 	}
 
 	/**
-	 * The MODEL layer only (the last data() commit), as a fresh shallow copy.
+	 * The DERIVED layer only (the last data() commit), as a fresh shallow copy.
 	 * INTERNAL — not public API: the DevTools bridge (constellation/doc/DOC-SPEC.md
-	 * §27, D100) shows the two state layers SEPARATELY, so it needs this alongside
-	 * _localState() rather than the merged getData(). Same underscore-prefixed
+	 * §27, D100) shows the two layers SEPARATELY, so it needs this alongside
+	 * _state() rather than the merged getData(). Same underscore-prefixed
 	 * internal convention, never spelled in a template.
 	 */
-	_modelState() {
-		return { ...this.#model };
+	_derived() {
+		return { ...this.#derived };
 	}
 
 	/**
@@ -2416,14 +2416,14 @@ export class PuzzleView {
 		// mark, and that must not be walked backwards.
 		if (mark > this._settleMark) this._settleMark = mark;
 		// Two-layer state (Change C, SPEC §4). A successful data() result REPLACES the
-		// model layer wholesale — keys an earlier run returned but this one omits
-		// disappear (unless the local layer still holds them) — then #recompose()
-		// rebuilds the visible #data as { ...#local, ...#model }. A non-object result
+		// derived layer wholesale — keys an earlier run returned but this one omits
+		// disappear (unless the state layer still holds them) — then #recompose()
+		// rebuilds the visible #data as { ...#state, ...#derived }. A non-object result
 		// contributes no model (matching the pre-Change-C guard), yet still swaps
 		// loaded + renders. Superseded/rejected runs returned above, touching neither
 		// layer.
 		if (model && typeof model === 'object') {
-			this.#model = model;
+			this.#derived = model;
 			this.#recompose();
 		}
 		// Anti-flash hold (v1.20, D52). The FIRST data() result normally flips
@@ -2493,25 +2493,25 @@ export class PuzzleView {
 	}
 
 	/**
-	 * Rebuild the visible #data from the two layers (Change C): { ...#local,
-	 * ...#model }. Mutates #data IN PLACE to keep it the one object setData writes to
+	 * Rebuild the visible #data from the two layers (Change C): { ...#state,
+	 * ...#derived }. Mutates #data IN PLACE to keep it the one object setData writes to
 	 * — drop keys no longer contributed by either layer, then assign the composition.
 	 */
 	#recompose() {
-		const composed = { ...this.#local, ...this.#model };
+		const composed = { ...this.#state, ...this.#derived };
 		for (const key of Object.keys(this.#data)) {
 			if (!(key in composed)) delete this.#data[key];
 		}
 		Object.assign(this.#data, composed);
 		// Layer-clobber diagnostic (D147 hazard 4, dev only). A bare bind writes the
-		// LOCAL layer, but the composition above puts the MODEL last — so a key data()
+		// STATE layer, but the composition above puts the DERIVED layer last — so a key data()
 		// also derives from a record or prop is reverted the moment data() commits, and
 		// the user's typing snaps back with nothing to explain it. The compiler cannot
 		// see this (data() is opaque bytes, D03), so catch it here, against what the
 		// commit ACTUALLY composed: a bind write's own commit compares equal in the
 		// legitimate echo idiom (data() reads its own local back out through getData()
 		// and returns it unchanged) and only differs when something really overwrote it.
-		// Testing `key in #model` instead would flag every echo view in the corpus.
+		// Testing `key in #derived` instead would flag every echo view in the corpus.
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			if (this.#bindPending) {
 				for (const [key, written] of this.#bindPending) {
