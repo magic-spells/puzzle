@@ -1,0 +1,11 @@
+<puzzle-view>
+  <h1>Not found</h1>
+  <p><a href="/">Back to posts</a></p>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// the catch-all route
+export default class NotFoundView extends PuzzleView {}
+</script>

@@ -1,0 +1,13 @@
+{
+  "name": "paginated-posts",
+  "version": "1.0.0",
+  "description": "Paginated server queries, invalidation and save status (D193), served by the fixtures mock",
+  "type": "module",
+  "scripts": {
+    "dev": "puzzle dev --fixtures",
+    "build": "puzzle build --fixtures"
+  },
+  "dependencies": {
+    "@magic-spells/puzzle": "^0.9.0"
+  }
+}

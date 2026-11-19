@@ -1,0 +1,45 @@
+<puzzle-view>
+  <h1>Posts</h1>
+  <ul class="rows">
+    {#for post in posts}
+      <li>
+        <a href="/posts/{ post.id }">{ post.title }</a>
+        {#if post.published}<span class="badge">Published</span>{/if}
+      </li>
+    {/for}
+  </ul>
+  <nav class="pager">
+    {#if page > 1}<a href="/?page={ page - 1 }">Previous</a>{:else}<span></span>{/if}
+    <span>Page { page } of { pageCount }</span>
+    {#if hasNext}<a href="/?page={ page + 1 }">Next</a>{:else}<span></span>{/if}
+  </nav>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class PostListView extends PuzzleView {
+  // the page lives in the url (?page=3), so links, back and forward work with
+  // no state of our own. a query-only navigation re-runs data() with the new
+  // route query: page 3's query misses, the settle loop fetches it, and page 2
+  // stays on screen until page 3 lands. going back to page 2 reads its cached
+  // entry with no request (D193).
+  data() {
+    const page = Math.max(1, Number(this.route.query.page) || 1);
+
+    // one server query: GET /api/posts?page=3. the rows come back in server
+    // order and are cached under this query alone, apart from other pages.
+    const posts = this.ctx.store.findMany('post', { query: { page } });
+
+    // meta is whatever the server sent beside the rows. here the fixtures mock
+    // sends { page, limit, total, nextPage, nextCursor }.
+    const meta = posts.meta ?? {};
+    return {
+      posts,
+      page,
+      hasNext: meta.nextPage != null,
+      pageCount: meta.total ? Math.ceil(meta.total / meta.limit) : page,
+    };
+  }
+}
+</script>

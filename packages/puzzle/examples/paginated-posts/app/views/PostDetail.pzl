@@ -1,0 +1,76 @@
+<puzzle-view>
+  {#if post}
+    <p><a href="/">Back to posts</a></p>
+    <h1>{ post.title }</h1>
+    <p class="muted">By { post.author }</p>
+    <p>{ post.body }</p>
+
+    <!-- publish sets the field locally before it saves, so the badge waits
+         for the save to finish; until then the button shows it is pending -->
+    {#if post.published && !saving}
+      <p class="badge">Published</p>
+    {:else}
+      <button @click={ publish } disabled={ saving }>
+        {#if saving}Publishing…{:else}Publish{/if}
+      </button>
+      {#if saveError}<p class="error" role="alert">{ saveError }</p>{/if}
+    {/if}
+  {:else}
+    <!-- a committed null means the post does not exist, never "still loading" -->
+    <h1>Post not found</h1>
+    <p><a href="/">Back to posts</a></p>
+  {/if}
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class PostDetailView extends PuzzleView {
+  data(params) {
+    const store = this.ctx.store;
+
+    // a deep link fetches the post through the settle loop (D161)
+    const post = store.findOne('post', params.id);
+
+    // the write status of this record (D193): pending names the write that is
+    // running ('save' or 'delete'), and error is the last failed write's error.
+    // reading it here subscribes the view, so each flip re-runs data() — no
+    // saving flag of our own to set and clear.
+    const sync = post ? store.syncStatus(post) : null;
+
+    return {
+      post,
+      saving: sync?.pending === 'save',
+      saveError: sync?.error ? errorText(sync.error) : null,
+    };
+  }
+
+  events = {
+    // publish the post, then tell the store every post list is out of date
+    publish: async () => {
+      const post = this.getData().post;
+      try {
+        await post.update({ published: true }).save();
+      } catch {
+        // syncStatus(post).error is already on screen. the failed save keeps
+        // the local change, so put the field back to match the server.
+        post.update({ published: false });
+        return;
+      }
+      // invalidate never fetches. it marks every post query stale, so the list
+      // refetches the next time it is shown, with the badge coming from the
+      // server instead of a guess.
+      this.ctx.store.invalidate('post');
+    },
+  };
+}
+
+/**
+ * a short message for a failed save: the server's own error when it sent one.
+ * @param {any} error a PuzzleAdapterError (status, body) or any other error
+ * @returns {string}
+ */
+function errorText(error) {
+  return error?.body?.error ?? error?.message ?? 'Publishing failed.';
+}
+</script>

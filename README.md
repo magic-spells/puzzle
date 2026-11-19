@@ -312,6 +312,7 @@ Every example is a complete app under
 | [i18n](packages/puzzle/examples/i18n) | Translations in three languages, plural forms, a live locale switch |
 | [stays](packages/puzzle/examples/stays) | An Airbnb-style marketplace: nested routes, callback props, store updates across pages |
 | [blog](packages/puzzle/examples/blog) | Several models, route params, auto-fetching server data, `lazy()` routes, plain `<style>` blocks |
+| [paginated-posts](packages/puzzle/examples/paginated-posts) | Paginated server queries, a cursor "load more", save status and invalidation, over the fixtures mock |
 | [chirp](packages/puzzle/examples/chirp) | A Twitter-style feed: skeleton loaders, `{#case}` and `{#unless}`, event modifiers |
 | [kanban-morph](packages/puzzle/examples/kanban-morph) | A drag-and-drop board whose cards morph open into a detail dialog |
 | [grimoire](packages/puzzle/examples/grimoire) | A Notion-style block editor built on DOM islands |
