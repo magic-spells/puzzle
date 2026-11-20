@@ -72,8 +72,18 @@ transitions:
     to: leaving
     guard: every gated load resolved and this navigation still owns the token
   - from: loading
+    to: leaving
+    guard: >-
+      a gated load rejected with nothing on screen (nothing committed, not a hybrid takeover) and
+      the token still owned
+    action: >-
+      report phase 'navigation', destroy every fresh instance but the top unit (layout, else root
+      view), which carries the failure into the commit and shows the errorView in its place
+  - from: loading
     to: failed
-    guard: a lazy() loader, a view/layout constructor, or a gated load rejected
+    guard: >-
+      a lazy() loader or a view/layout constructor rejected, or a gated load rejected with a page on
+      screen (something committed, or a hybrid takeover)
     action: >-
       report phase 'navigation', drop or destroy the fresh views and layout, discard every prepared
       ancestor handle, restore a stalled leaver, repair a popped URL, stay put
@@ -150,7 +160,8 @@ stateDiagram-v2
   guarding --> superseded: newer token
   loading --> committing: params-only (keep == chain length)
   loading --> leaving: gate resolved
-  loading --> failed: lazy / constructor / gated load rejected
+  loading --> leaving: gated load rejected, nothing on screen
+  loading --> failed: lazy / constructor rejected, or gated load rejected with a page on screen
   loading --> superseded: newer token
   leaving --> committing: out settled, token re-checks pass
   leaving --> superseded: newer token mid-out or mid-flyback
@@ -192,10 +203,11 @@ mounted), and rollback (racier than never committing).
   blocks navigation zero leaves the container empty and warns that it should redirect.
 - **redirected** → the redirect's own result, plus `redirectedFrom`. The redirect inherits
   the denied verb (push mints its own entry; pop and navigation zero replace).
-- **failed** → `error`. A guard throw, the redirect cap, or a pre-commit load failure:
-  fresh instances dropped, prepared ancestors discarded, stalled leaver restored, error
-  reported, a popped URL repaired with `replaceState`. This navigation owns the token, so
-  it owns cleanup.
+- **failed** → `error`. A guard throw, the redirect cap, or a pre-commit load failure (a
+  `data()` failure only with a page on screen; with nothing committed yet it commits
+  instead and shows the `errorView`): fresh instances dropped, prepared ancestors
+  discarded, stalled leaver restored, error reported, a popped URL repaired with
+  `replaceState`. This navigation owns the token, so it owns cleanup.
 - **superseded** → `superseded`. A newer navigation owns the token. The loser must not
   touch shared state: it abandons its fresh instances and leaves the outgoing unit for the
   winner (tearing it down would rip it out from under a mid-flight morph).

@@ -1142,7 +1142,8 @@ export interface PuzzleAppConfig {
 	onError?: PuzzleErrorHandler;
 	/**
 	 * Ordinary compiled PuzzleView constructor used for framework-contained error
-	 * UI. A fresh instance replaces only the failed view and receives
+	 * UI. A fresh instance replaces only the failed view (on a first load, the
+	 * whole routed page, since nothing else is on screen yet) and receives
 	 * `{ error, info, retry }` props.
 	 */
 	errorView?: PuzzleViewConstructor;

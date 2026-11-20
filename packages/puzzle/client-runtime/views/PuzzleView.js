@@ -1412,6 +1412,10 @@ export class PuzzleView {
 		// §5) — just render the resolved model into the reserved position. This keeps
 		// the mount synchronous so the Router's COMMIT stays atomic (D19).
 		if (preloaded) {
+			// A preload that already failed paints nothing: its position goes straight
+			// to the error view (or its placeholder), and the render and mounted()
+			// below skip the destroyed view.
+			this.#flushPendingFailure();
 			// Only a prerender takeover ever stamps __takeoverTree, so a bundle built
 			// without the takeover path folds this to the bare `#renderNow()` it was
 			// before the feature existed — no hasOwnProperty probe and, more to the
@@ -1463,7 +1467,6 @@ export class PuzzleView {
 		}
 
 		this.#completeMount();
-		this.#flushPendingFailure();
 		return this;
 	}
 

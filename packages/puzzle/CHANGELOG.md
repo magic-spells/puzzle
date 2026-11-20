@@ -578,6 +578,17 @@ changes.
   reported nothing (since 0.9.0). Both now reach the console as an unhandled
   rejection. A failed `record.save()` or `.delete()` that nothing awaits is
   now reported the same way.
+- **A first page load whose `data()` fails shows the app's `errorView`.** On a
+  cold load, refresh or deep link whose routed `data()` threw or rejected, the
+  router stayed put on a page that was not there yet, so `#app` stayed empty
+  and only `onError` heard about it (since 0.6.0). The failed route now
+  commits with the `errorView` in its place, and `retry` loads it again. An
+  app needs an `errorView` for this; without one the page stays blank. The
+  route counts as committed: `router.current` names it and its title is
+  applied. A navigation started before anything has committed, such as a
+  `push()` during a slow first load, lands on the error view the same way and
+  resolves `ok`. A hybrid prerendered page whose `data()` fails at takeover
+  keeps its prerendered content.
 - **Back after a bare `#anchor` link returns to the reading position in
   Safari and every iOS browser.** WebKit jumps to the anchor before it fires
   `popstate`, so the router saved the anchor's position for the entry the

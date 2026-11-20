@@ -197,7 +197,6 @@ Opt-in concurrent transitions — old `out` and new `in` play together ([[DECISI
 
 ## 30. Atomic location commit
 
-
 The location side effects — `pushState`/`replaceState`, `document.title`, the memory stack/index, and the outgoing scroll save — commit **in the swap's synchronous commit window, immediately before the incoming mount** ([[DECISION-D61-ATOMIC-LOCATION-COMMIT]]). URL, title, DOM and router state move together.
 
 - **Sequential:** the commit runs after the outgoing `out` (and any morph-leave) settles and the navigation is still current. A push superseded or failed during the out phase commits nothing — no phantom history entry.
@@ -223,7 +222,7 @@ The location side effects — `pushState`/`replaceState`, `document.title`, the 
 
   A guard redirect to the committed path stays a no-op (§48). `replace()` to the committed path is a no-op on the first row, joins an in-flight rebuild of that path, and is otherwise an ordinary replace.
 - A guard redirect resolves the final navigation's result; when it is `ok`, `redirectedFrom` is the path originally requested (the first one across a chain).
-- `'blocked'` — a guard returned `false`. `'superseded'` — a later navigation won. `'not-found'` — no match and no catch-all (still warns). `'error'` plus `error` — anything reported to `onError` (phase `navigation`): a throwing guard, the redirect cycle cap, a lazy load, construction or `data()` failure, or a synchronous throw in the commit window.
+- `'blocked'` — a guard returned `false`. `'superseded'` — a later navigation won. `'not-found'` — no match and no catch-all (still warns). `'error'` plus `error` — anything reported to `onError` (phase `navigation`): a throwing guard, the redirect cycle cap, a lazy load, construction or `data()` failure, or a synchronous throw in the commit window. With nothing committed yet and no hybrid takeover, a `data()` failure commits instead, with the `errorView` in the page's place (§60), and resolves `ok`.
 - `ok: false` means the navigation did not complete. Every reason except a commit-window throw leaves URL, DOM and `router.current` untouched. A commit-window throw can leave the URL and DOM on the target while `router.current` still names the old route; the next navigation, the same path included, rebuilds every level.
 - Only `start()`'s navigation zero (and a guard redirect continuing it) rethrows a commit-window throw, so `mount()` rejects and tears down; a push that supersedes or follows it resolves.
 - A push or replace from inside the commit window (a `mounted()` redirect) resolves when the deferred navigation runs; the last-wins slot resolves the entry it displaces, or one `stop()` drops, as `'superseded'`.
@@ -300,7 +299,7 @@ export default [
 - **A bare function in a view position is an error** steering to `lazy()`; any other non-class value is an error naming it.
 - **Accepted anywhere a view class is:** top-level routes, children, index routes, the catch-all, and the top-level `layout`.
 - **Resolution happens after guards, before construction** — a blocked or redirected route never downloads, and layout reuse compares resolved classes. The whole matched chain loads in parallel.
-- **A loader rejection is a failed navigation:** no instance exists yet, so nothing changes (§30). It reports through `onError` as phase `navigation`; §60's `errorView` and retry apply.
+- **A loader rejection is a failed navigation:** no instance exists yet, so nothing changes (§30). It reports through `onError` as phase `navigation` and stays put; an error view already up from an earlier failure is redrawn with this error (§60). With nothing committed yet no instance exists to hold an error view, so the container stays empty.
 - **Memoization:** a fulfilled load is cached for the marker's lifetime; a **rejection never is**, so retry reaches the loader again. Concurrent navigations share one in-flight load.
 - **No loading UI:** the previous view stays until the new one commits; skeletons (§16) cannot render before their module arrives.
 - **Prerender awaits the same markers** in both modes; static pages bundle the resolved class (§36) and have no runtime laziness.

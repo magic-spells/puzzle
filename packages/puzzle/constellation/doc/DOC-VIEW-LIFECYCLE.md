@@ -126,7 +126,10 @@ contract is [[DOC-SPEC-ROUTER]] §30. The rules that shape the diagram:
    unmatched push can't strand a transition mid-`out`.
 3. A `data()` rejection stays put: report through `onError`, destroy fresh views,
    discard prepared ancestors, restore a view stranded mid-`out`. A skeleton
-   view's own failure (it is already on screen) shows the `errorView`.
+   view's own failure (it is already on screen) shows the `errorView`. With
+   nothing committed yet (a first load) there is nothing to stay on: the top
+   unit commits and shows the `errorView`, and a hybrid takeover keeps its
+   prerendered page.
 4. Reused ancestors are prepared, not committed, until the navigation commits
    ([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]). A reused layout is patched,
    and its `data()` re-runs after the state commit, so it reads a fresh
