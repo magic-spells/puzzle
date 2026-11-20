@@ -38,7 +38,7 @@ my-app/
     └── models/*.js
 ```
 
-CLI (bin `puzzle`, installed with `@magic-spells/puzzle`):
+CLI (bin `puzzle`, installed with `@magic-spells/puzzle`; needs Node 24 or later):
 `dev` (SSE live reload, state-preserving full-page refresh), `build` (`--static`,
 `--hybrid`, `--mode production|development`), `check` (run the app-installed
 TypeScript compiler over `.pzl` scripts and template expressions), `preview`

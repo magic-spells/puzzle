@@ -30,6 +30,9 @@
 		"directory": "packages/puzzle-eslint"
 	},
 	"sideEffects": false,
+	"engines": {
+		"node": ">=24"
+	},
 	"peerDependencies": {
 		"eslint": ">=9"
 	},

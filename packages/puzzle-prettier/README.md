@@ -28,7 +28,7 @@ The only guaranteed changes are: the `<script>` and `<style>` bodies are reforma
 
 ## Usage
 
-Install alongside Prettier 3:
+Install alongside Prettier 3 (Node 24 or later):
 
 ```bash
 npm install --save-dev prettier @magic-spells/prettier-plugin-puzzle

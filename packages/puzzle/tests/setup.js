@@ -9,3 +9,14 @@ if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
 		configurable: true,
 	});
 }
+
+// Node 25+ defines its own global localStorage, undefined unless Node starts
+// with --localstorage-file, and Vitest's jsdom environment keeps a global that
+// already exists, so jsdom's working Storage stays hidden. Put jsdom's back.
+if (typeof jsdom !== 'undefined') {
+	Object.defineProperty(globalThis, 'localStorage', {
+		value: jsdom.window.localStorage,
+		configurable: true,
+		writable: true,
+	});
+}
