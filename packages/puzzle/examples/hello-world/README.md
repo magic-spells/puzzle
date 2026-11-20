@@ -7,7 +7,7 @@ extra routes to muddy the bundle.
 
 ## What ships in the bundle
 
-`dist/app.js` is the Puzzle runtime (app + router + view engine) plus this app's
+`dist/app-<hash>.js` is the Puzzle runtime (app + router + view engine) plus this app's
 one view. That is the honest floor: `mount()` always constructs the router, so a
 single static route is as small as a real Puzzle app gets.
 
@@ -21,15 +21,15 @@ npm run build           # production: minified, console-stripped
 The build prints raw and gzip sizes per file, e.g.:
 
 ```
-dist/app.js      69.8 KB │ 23.1 KB gzip
+dist/app-YHPHZ3MT.js  72.7 KB │ 24.1 KB gzip
 ```
 
-The `app.js` line is the framework size. `styles.css` is empty by design — this
+The `app-<hash>.js` line is the framework size. `styles.css` is empty by design — this
 app has no CSS, so nothing but the runtime is being weighed. The exact number
 tracks whichever `@magic-spells/puzzle` version is installed. The CLI's gzip
-figure runs slightly high: both gzip at level 9, but the framework's
-`npm run measure:size` uses Node's zlib, which packs a little tighter, and
-reports 23.0 KB for this 0.9.0 bundle, the figure the CHANGELOG cites.
+figure can differ by a tenth: both gzip at level 9, but the framework's
+`npm run measure:size` uses Node's zlib, and reports 24.2 KB for this 0.10.0
+bundle, the figure the CHANGELOG cites.
 
 ## Files
 
