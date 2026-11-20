@@ -440,6 +440,7 @@ describe.skipIf(!built)('panel app (compiled bundle)', () => {
 	it('renders the "no Puzzle app detected" state before any hello', async () => {
 		await boot(bridge);
 		expect(document.body.textContent).toContain('No Puzzle app detected');
+		expect(document.body.textContent).toContain("built with output: 'static' (static pages never load the bridge)");
 		// Nav shell is present too.
 		expect(document.body.textContent).toContain('Connection');
 		expect(document.body.textContent).toContain('Views');
@@ -1022,7 +1023,7 @@ describe.skipIf(!built)('Views panel', () => {
 		const empty = emptyBlocks();
 		expect(empty).toHaveLength(1);
 		expect(empty[0].querySelector('p.font-medium').textContent).toBe('No Puzzle app detected');
-		expect(empty[0].textContent).toContain('dev-only runtime bridge');
+		expect(empty[0].textContent).toContain("dev-only runtime bridge, which pages built with `output: 'static'` never load");
 		// The page-hook injects at document_start, so a tab opened before the
 		// extension existed can never connect without a reload. Say so.
 		expect(empty[0].textContent).toContain(
@@ -1257,18 +1258,24 @@ describe.skipIf(!built)('Store panel', () => {
 		bridge.emit('flush', { keys: ['todo'], notified: [2] });
 		await settle(app, 260);
 
-		const entries = [...document.querySelectorAll('[data-history-entry]')];
-		expect(entries).toHaveLength(2);
-		const text = entries.map((e) => e.textContent.replace(/\s+/g, ' ')).join(' | ');
-		expect(text).toContain('text');
-		expect(text).toContain('Ship the panel');
-		expect(text).toContain('Ship the panel v2');
-		expect(text).toContain('priority');
+		// Newest first; the clock is the only part not pinned.
+		const entries = () =>
+			[...document.querySelectorAll('[data-history-entry]')].map((e) =>
+				[...e.children].map((span) => span.textContent).join(' ').replace(/^\d\d:\d\d:\d\d /, ''),
+			);
+		const first = ['text "Ship the panel" → "Ship the panel v2"', 'priority 2 → 9'];
+		expect(entries()).toEqual(first);
 
-		// A flush that changes nothing appends nothing.
+		// A flush that changes nothing appends nothing and re-renders the same text.
 		bridge.emit('flush', { keys: ['todo'], notified: [2] });
 		await settle(app, 260);
-		expect(document.querySelectorAll('[data-history-entry]')).toHaveLength(2);
+		expect(entries()).toEqual(first);
+
+		// A second change lands on top.
+		bridge.world.records.todo[1].priority = 10;
+		bridge.emit('flush', { keys: ['todo'], notified: [2] });
+		await settle(app, 260);
+		expect(entries()).toEqual(['priority 9 → 10', ...first]);
 	});
 
 	it('clears the changelog when the watched record changes', async () => {

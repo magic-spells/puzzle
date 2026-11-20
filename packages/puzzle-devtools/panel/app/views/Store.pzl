@@ -170,14 +170,14 @@
               <section data-history class="border-t border-line">
                 <h3 class="m-0 flex items-baseline gap-2 px-3 py-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-faint">
                   History
-                  <span class="tabular-nums">{ history.length }</span>
+                  <span class="tabular-nums">{ historyRows.length }</span>
                   <span class="ml-auto font-normal normal-case tracking-normal text-[9px] text-faint">changes seen while this card was open</span>
                 </h3>
-                {#if history.length === 0}
+                {#if historyRows.length === 0}
                   <p class="m-0 px-3 pb-1.5 text-[10px] italic text-faint">No changes yet.</p>
                 {:else}
                   <ul class="m-0 p-0 pb-1 list-none">
-                    {#for entry in history}
+                    {#for entry in historyRows}
                       <li
                         key={ entry.key }
                         data-history-entry
@@ -330,7 +330,7 @@ export default class StoreView extends PuzzleView {
       fields: this.toFields(selectedRow, shape.pk, local.edits),
       // Pretty-printed so a pasted record is readable, not one long line.
       recordJson: selectedRow ? JSON.stringify(selectedRow, null, 2) : '',
-      history: (local.history ?? []).map((entry, index) => ({
+      historyRows: (local.history ?? []).map((entry, index) => ({
         key: `${entry.at}-${entry.field}-${index}`,
         time: stamp(entry.at),
         field: entry.field,

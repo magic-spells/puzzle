@@ -7,7 +7,9 @@ running dev build.
 Puzzle ships a **dev-only runtime bridge**; this extension ships the page hook that
 bridge registers into. There are no production bytes on either side: a production build
 compiles the bridge away entirely, and a page with no bridge simply reports
-"No Puzzle app detected".
+"No Puzzle app detected". Pages built with `output: 'static'` never load the
+bridge, so they report no app even under `puzzle dev`; SPA and
+`output: 'hybrid'` apps are inspectable.
 
 **Requires Puzzle 0.7.0+** running a **development** build (`puzzle dev`) — devtools
 releases in lockstep with the framework from the `magic-spells/puzzle` monorepo
