@@ -3,12 +3,13 @@ package check
 import (
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 )
 
 const missingTypeScriptMessage = "puzzle check needs TypeScript: npm install -D typescript"
@@ -120,14 +121,14 @@ func emitDiagnosticsError(result *Result) error {
 	return errors.New(strings.Join(result.Diagnostics, "\n"))
 }
 
-// resolveTSC finds the app's own TypeScript compiler. It targets the package's
-// own `bin/tsc` entry — what every `.bin` shim points at, under npm, pnpm, and
-// yarn layouts alike — rather than the shim, so the command never depends on a
-// platform shell.
+// resolveTSC finds the app's own TypeScript compiler, walking up lexically
+// from the app directory, so a workspace root's hoisted install is found. It
+// targets the package's own `bin/tsc` entry — what every `.bin` shim points
+// at, under npm, pnpm, and yarn layouts alike — rather than the shim, so the
+// command never depends on a platform shell.
 func resolveTSC(appRoot string) (tscTool, error) {
-	entry := filepath.Join(appRoot, "node_modules", "typescript", "bin", "tsc")
-	info, err := os.Stat(entry)
-	if err != nil || info.IsDir() {
+	entry := fsutil.FindUp(appRoot, filepath.Join("node_modules", "typescript", "bin", "tsc"))
+	if entry == "" {
 		return tscTool{}, errors.New(missingTypeScriptMessage)
 	}
 	node, err := exec.LookPath("node")
@@ -177,4 +178,16 @@ func remapTSCOutput(appRoot, output string, tables map[string]*SegmentTable) str
 		formatted += "\n"
 	}
 	return formatted
+}
+
+// HasTypeScript reports whether the app under appRoot has its own TypeScript
+// compiler installed, without running it. `puzzle check --fix` asks first so
+// an app with nothing to type-check with still gets its upgrade (D199).
+func HasTypeScript(appRoot string) bool {
+	root, err := filepath.Abs(appRoot)
+	if err != nil {
+		return false
+	}
+	_, err = resolveTSC(root)
+	return err == nil
 }

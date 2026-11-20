@@ -1,0 +1,13 @@
+<puzzle-view>
+  <h1>{ title }</h1>
+</puzzle-view>
+
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Typed extends PuzzleView {
+  data(params: { id: string }, props?: { title: string }) {
+    return { title: props?.title ?? params.id };
+  }
+}
+</script>

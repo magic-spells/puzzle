@@ -14,10 +14,10 @@ import MainLayout from './layouts/MainLayout.pzl';
 // Explore, Notifications, PostDetail, the profile chain and 404 all share
 // MainLayout, so navigating between them is a "view swap inside a reused layout"
 // — the left sidebar, right rail and mobile tab bar stay mounted, only the
-// center <Slot/> animates.
+// center <Outlet/> animates.
 //
 // /u/:handle is a NESTED route (v1.3, D30): ProfileShell renders its matched
-// child pane (Chirps / Replies / Likes) at its own <Slot/>. Child paths are
+// child pane (Chirps / Replies / Likes) at its own <Outlet/>. Child paths are
 // RELATIVE; `path: ''` is the index child that fills the slot at the bare
 // /u/:handle URL, so a profile opens on the Chirps tab. `layout` is a
 // top-level-route-only field — the children inherit MainLayout from the chain.

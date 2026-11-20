@@ -69,7 +69,7 @@ import manifestData from '@magic-spells/puzzle/i18n/manifest';
  *   generated (D179), with `path` and `params` taken from the page's
  *   `data-puzzle-static-route` island
  * @param {object} [options.models] the app models map
- * @param {object} [options.formatters] the app custom formatters map
+ * @param {object} [options.functions] the app's custom template functions map
  * @param {string} [options.apiURL] the store's base API URL
  * @param {Pick<Storage, 'getItem' | 'setItem'>} [options.storage] Storage-like persistence object
  * @param {import('../capabilities.js').AdapterCapability} [options.adapter] opaque adapter capability
@@ -86,7 +86,7 @@ export async function mountStatic({
 	layout = null,
 	route,
 	models,
-	formatters,
+	functions,
 	apiURL,
 	storage,
 	adapter,
@@ -119,7 +119,7 @@ export async function mountStatic({
 	const routeSnapshot = makeRouteSnapshot(entry);
 	const ctx = buildStaticContext({
 		models,
-		formatters,
+		functions,
 		apiURL,
 		storage,
 		adapter,
@@ -254,9 +254,11 @@ export async function mountStatic({
 		}
 	};
 
-	// An unmarked prerender:false page has no fallback DOM to preserve and keeps the
-	// original mount path byte-for-byte.
+	// An unmarked prerender:false page has no fallback DOM to preserve. Its HTML is
+	// the verbatim shell, so its route title is set here, as the SPA router's
+	// navigation zero does (a `{ t }` title was synced above; syncTitle skips it).
 	if (!isTakeover) {
+		syncTitle(resolveHeadField(chain, 'title'));
 		targetEl.replaceChildren();
 		mount(topVnode, targetEl, null, ctx);
 		armRemount(topVnode.instance);
@@ -314,17 +316,17 @@ function syncLocaleTitle(chain, i18n) {
 /**
  * Wire the build-time ctx exactly as ssg/index.js buildContext does — a Store over
  * the models + apiURL and a FormatterRegistry seeded with the built-ins then the
- * config formatters — EXCEPT `ctx.router` is a throwing stub (no Router import in
+ * config functions — EXCEPT `ctx.router` is a throwing stub (no Router import in
  * this module graph). `beforeMount` is NOT run (build-time only in static mode).
  *
- * @param {{ models?: object, formatters?: object, apiURL?: string,
+ * @param {{ models?: object, functions?: object, apiURL?: string,
  *   storage?: Pick<Storage, 'getItem' | 'setItem'>, adapter?: AdapterCapability,
  *   routerBase?: string, route: object }} options
  * @returns {StaticContext}
  */
 function buildStaticContext({
 	models = {},
-	formatters = {},
+	functions = {},
 	apiURL,
 	storage,
 	adapter,
@@ -353,7 +355,7 @@ function buildStaticContext({
 	let names;
 	Object.defineProperty(router, 'names', { get: () => (names ??= readNamesIsland()) });
 	const registry = makeFormatterRegistry(
-		formatters,
+		functions,
 		// Read router.url per call: locale prefix routing (D177) swaps in its
 		// locale-aware url(path, options) after this registry is built.
 		typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__

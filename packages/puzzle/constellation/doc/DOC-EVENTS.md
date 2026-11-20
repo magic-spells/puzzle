@@ -94,8 +94,10 @@ events = {
 - **Your `@input` or `@change` wins.** Either one, with any modifiers, means you own the write, and nothing is synthesized:
 
   ```html
-  <input type="number" value={ quantity } @input={ clampQuantity(event) } />
+  <input type="number" value={ quantity } @change={ clampQuantity(event) } />
   ```
+
+  Clamp or validate a number field on `@change`. On `@input` the handler runs on every keystroke, so an emptied field clamps to the minimum while the user is still typing.
 
 - **Other events coexist with the bind** — the shape for a field that binds continuously but acts on a key:
 

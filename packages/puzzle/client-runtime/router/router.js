@@ -342,6 +342,15 @@ export class Router {
 	#positions = new Map(); // entry key → { x, y }
 	/** @type {string | null} */
 	#scrollKey = null; // key of the entry the window currently shows
+	// The window position as of the last scroll event (seeded in start()): what a
+	// popstate saves for the entry it leaves. Never a live read there: WebKit and
+	// Firefox scroll to a fragment BEFORE they fire popstate (a bare `#anchor`
+	// click, Back/Forward onto a fragment entry), so window.scrollY by then names
+	// the anchor, not what the user was reading.
+	#shown = { x: 0, y: 0 };
+	#onScroll = () => {
+		this.#shown = { x: window.scrollX || 0, y: window.scrollY || 0 };
+	};
 	#keySeq = 0;
 	/** @type {ScrollRestoration | null} */
 	#prevScrollRestoration = null;
@@ -592,6 +601,8 @@ export class Router {
 		if (this.#scrollEnabled()) {
 			this.#hydratePositions();
 			this.#scrollKey = this.#adoptEntryKey();
+			this.#onScroll();
+			window.addEventListener('scroll', this.#onScroll);
 		}
 
 		// Route announcement (v1.56, D93): ONE live region owned by the router for
@@ -669,7 +680,7 @@ export class Router {
 	 * Full router teardown — idempotent, safe to call twice or before start().
 	 * Invalidates any in-flight navigation, cancels a pending out-animation,
 	 * destroys the mounted view chain (which cascades through the ViewManager to
-	 * nested routed views hosted at <Slot/> and every component, firing their
+	 * nested routed views hosted at <Outlet/> and every component, firing their
 	 * destroyed() hooks and dropping store subscriptions — PuzzleView.destroy),
 	 * clears router state + the references the router holds, removes listeners,
 	 * and restores the browser's scrollRestoration. Leaves no live view or
@@ -692,8 +703,8 @@ export class Router {
 
 		// 3. Destroy the top-level mounted owner. PuzzleView.destroy() cascades
 		//    through the ViewManager: the root layout hosts the routed view chain
-		//    at its <Slot/> (and each view hosts its nested child at its own
-		//    <Slot/>), so destroying the layout — or the root view when there is
+		//    at its <Outlet/> (and each view hosts its nested child at its own
+		//    <Outlet/>), so destroying the layout — or the root view when there is
 		//    no layout — tears the WHOLE chain + components down and fires every
 		//    destroyed() hook. Idempotent per instance (destroy() no-ops if run).
 		if (this.#state) {
@@ -731,6 +742,7 @@ export class Router {
 		//    nulled after the restore).
 		document.removeEventListener('click', this.#onClick);
 		window.removeEventListener('popstate', this.#onPopState);
+		window.removeEventListener('scroll', this.#onScroll);
 		if (typeof __PUZZLE_HAS_LAZY__ === 'undefined' || __PUZZLE_HAS_LAZY__) unwatchLinks(this);
 		// Drop the announcement live region (v1.56, D93) — it is the router's only
 		// node outside the mount container, so leaving it would leak a stray element
@@ -2701,7 +2713,7 @@ export class Router {
 		// here, in the immediate (un-awaited-leaf) commit, exactly like the old inline
 		// ancestor refresh did.
 		if (next.prepared) for (const p of next.prepared) p.commit();
-		// Dev-only missing-<Slot/> diagnostic — the module helper (and this whole
+		// Dev-only missing-<Outlet/> diagnostic — the module helper (and this whole
 		// per-commit walk) DCEs away in production (§27 define pattern).
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			warnMissingSlots(next.views);
@@ -2819,17 +2831,16 @@ export class Router {
 	}
 
 	/**
-	 * Record the outgoing entry's scroll position. `captured` (when given) is the
-	 * position measured at navigation start, BEFORE the outgoing view's teardown
-	 * collapsed the page — reading window live at commit time yields a clamped
-	 * {0,0} in real browsers. The argless form (popstate save) still reads live:
-	 * there the page is intact when it runs.
+	 * Record the outgoing entry's scroll position, measured before anything moved
+	 * the window: a push's departScroll, read at navigation start (a live read at
+	 * commit time yields a clamped {0,0} in real browsers, once the outgoing
+	 * view's teardown has collapsed the page), or a pop's #shown, the last scroll
+	 * event before the browser's own fragment jump.
 	 *
-	 * @param {ScrollPosition | null} [captured]
+	 * @param {ScrollPosition} pos
 	 */
-	#savePosition(captured = null) {
+	#savePosition(pos) {
 		if (this.#scrollKey == null) return;
-		const pos = captured ?? { x: window.scrollX || 0, y: window.scrollY || 0 };
 		this.#positions.delete(this.#scrollKey);
 		this.#positions.set(this.#scrollKey, pos);
 		while (this.#positions.size > SCROLL_MAX_ENTRIES) {
@@ -2967,7 +2978,7 @@ export class Router {
 	 * first load only). Either way, null when focus is now inside the view; asking
 	 * the DOM where focus landed covers a hidden, disabled, inert or closed-<dialog>
 	 * autofocus target with no visibility logic. `.element` is legitimately null for a
-	 * view that never mounted — a parent whose template has no <Slot/> preloads its
+	 * view that never mounted — a parent whose template has no <Outlet/> preloads its
 	 * routed child and then has nowhere to put it, the exact case warnMissingSlots
 	 * reports — so walk back UP the chain to the nearest live root, and return null
 	 * (never throw) when no level has one.
@@ -3288,7 +3299,7 @@ export class Router {
 		const popping = this.#popInFlight && this.#pendingNavPromise;
 		let savedPosition = null;
 		if (this.#scrollEnabled()) {
-			if (!popping) this.#savePosition();
+			if (!popping) this.#savePosition(this.#shown);
 			this.#scrollKey = this.#adoptEntryKey();
 			savedPosition = this.#positions.get(this.#scrollKey) || null;
 		}
@@ -3698,10 +3709,10 @@ function warnOutsideBaseOnce(pathname, base) {
 
 /**
  * Dev aid (D30 edge): a non-leaf view whose routed child never landed has no
- * <Slot/> in its template. Its child was preloaded but never mounted, so the
+ * <Outlet/> in its template. Its child was preloaded but never mounted, so the
  * child instance has no ViewManager and reports a null element. A parent
  * still showing its skeleton (v1.8, D39 — not `loaded` yet) is skipped: its
- * child legitimately mounts later, when the real template (and its <Slot/>)
+ * child legitimately mounts later, when the real template (and its <Outlet/>)
  * lands.
  *
  * @param {PuzzleView[]} views
@@ -3711,7 +3722,7 @@ function warnMissingSlots(views) {
 		if (views[i] && !views[i].loaded) continue;
 		if (views[i + 1] && views[i + 1].element == null) {
 			console.warn(
-				'[puzzle] a routed child did not mount — does the parent view template include a <Slot/>?'
+				'[puzzle] a routed child did not mount — does the parent view template include an <Outlet/>?'
 			);
 		}
 	}

@@ -79,7 +79,7 @@ const SHELL =
 const staticConfig = () => ({
 	target: '#app',
 	models: { note: Note },
-	formatters: {},
+	functions: {},
 	routes: [
 		{ path: '/', name: 'home', view: Home, layout: Layout, meta: { title: 'Home' } },
 		{
@@ -523,7 +523,7 @@ describe('static prerender (D81)', () => {
 			expect(summary.mode).toBe('static');
 			expect(summary.target).toBe('app');
 			expect(summary.apiURL).toBeNull();
-			expect(summary.hasFormatters).toBe(false);
+			expect(summary.hasFunctions).toBe(false);
 			expect(summary.hasAdapter).toBe(false);
 		});
 
@@ -537,19 +537,19 @@ describe('static prerender (D81)', () => {
 			expect(appJsWarnings).toHaveLength(1);
 		});
 
-		it('reports apiURL + hasFormatters + hasAdapter from config', async () => {
+		it('reports apiURL + hasFunctions + hasAdapter from config', async () => {
 			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-cfg-'));
 			const shellPath = writeShell(outDir);
 			const cfg = {
 				target: '#app',
 				apiURL: 'https://api.example.com',
 				adapter,
-				formatters: { shout: (s) => String(s).toUpperCase() },
+				functions: { shout: (s) => String(s).toUpperCase() },
 				routes: [{ path: '/', name: 'home', view: Home }],
 			};
 			const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
 			expect(summary.apiURL).toBe('https://api.example.com');
-			expect(summary.hasFormatters).toBe(true);
+			expect(summary.hasFunctions).toBe(true);
 			expect(summary.hasAdapter).toBe(true);
 		});
 
@@ -826,6 +826,20 @@ describe('static output ignores storage with a warning (D81, item B3)', () => {
 		expect(summary.warnings.some((w) => w.includes('static output ignores `storage`'))).toBe(true);
 		// No `storage` field rides the summary → the Go build can never emit a dead `{}`.
 		expect('storage' in summary).toBe(false);
+	});
+
+	it('warns for a window-guarded storage, which reads undefined at build time', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-guarded-storage-'));
+		const shellPath = writeShell(outDir);
+		const cfg = {
+			target: '#app',
+			// What `typeof window !== 'undefined' ? window.localStorage : undefined`
+			// reads in the Node build (this file runs under jsdom, so spelled out).
+			storage: undefined,
+			routes: [{ path: '/', name: 'home', view: Home, layout: Layout, meta: { title: 'Home' } }],
+		};
+		const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+		expect(summary.warnings.some((w) => w.includes('static output ignores `storage`'))).toBe(true);
 	});
 
 	it('no storage configured → no warning', async () => {

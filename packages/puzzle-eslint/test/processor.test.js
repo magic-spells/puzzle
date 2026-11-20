@@ -45,10 +45,10 @@ describe('processor.preprocess', () => {
 		expect(blocks).toHaveLength(1);
 		expect(blocks[0].filename).toBe('0_scripts.js');
 		const virtual = blocks[0].text;
-		// Same length → offsets identical.
-		expect(virtual.length).toBe(src.length);
+		// Cut at the end of the body; offsets before it identical.
+		expect(virtual.length).toBe(src.lastIndexOf('</script>'));
 		// Every newline preserved at the same index.
-		for (let i = 0; i < src.length; i++) {
+		for (let i = 0; i < virtual.length; i++) {
 			if (src[i] === '\n' || src[i] === '\r') expect(virtual[i]).toBe(src[i]);
 		}
 		// The <script> body is byte-identical; outside it is blanked to spaces.
@@ -162,18 +162,53 @@ describe('ESLint end to end (JS)', () => {
 		expect(res2.messages.filter((m) => m.ruleId === 'quotes')).toHaveLength(0);
 	});
 
+	// The blanked template and styles read as blank lines and trailing spaces,
+	// so whitespace rules (core, @stylistic, neostandard, prettier) "fix" them
+	// away unless the processor drops fixes that reach outside the body.
+	it('autofix never edits the template or styles, even for whitespace rules', async () => {
+		const src = [
+			'<puzzle-view>',
+			'  <p>',
+			'',
+			'',
+			'    { x }',
+			'  </p>',
+			'</puzzle-view>',
+			'',
+			'<script>',
+			'const a = 1;',
+			'',
+			'',
+			'',
+			'export default a;   ',
+			'</script>',
+			'',
+			'<style>',
+			'  p { color: red; }',
+			'</style>',
+			'',
+		].join('\n');
+		const rules = { 'no-multiple-empty-lines': 'error', 'no-trailing-spaces': 'error' };
+		const { output, messages } = await lint(src, rules, { fix: true });
+		const open = src.indexOf('<script>') + '<script>'.length;
+		expect(output.slice(0, open)).toBe(src.slice(0, open));
+		expect(output.slice(output.indexOf('</script>'))).toBe(src.slice(src.indexOf('</script>')));
+		expect(output.slice(open, output.indexOf('</script>'))).toBe('\nconst a = 1;\n\n\nexport default a;\n');
+		expect(messages).toEqual([]);
+	});
+
 	// D141: paired composition markers — <Slot name="x">…</Slot>,
-	// <Children>…</Children>, <Slot>…</Slot> with fallback bodies. The splitter
+	// <Children>…</Children>, <Outlet>…</Outlet> with fallback bodies. The splitter
 	// only finds section boundaries; it never parses template tags, so these are
 	// inert template bytes. Pinned so a future template-grammar change cannot
 	// silently start producing structural errors here.
-	it('lints paired <Slot>/<Children> markers with no structural errors or fatals', async () => {
+	it('lints paired <Outlet>/<Children> markers with no structural errors or fatals', async () => {
 		const src = fixture('paired-markers.pzl');
 		const blocks = processor.preprocess(src, 'paired-markers.pzl');
 		expect(blocks).toHaveLength(1);
 		expect(blocks[0].filename).toBe('0_scripts.js');
-		// Positions preserved: the virtual file is the same length as the source.
-		expect(blocks[0].text.length).toBe(src.length);
+		// Positions preserved: the virtual file is the source up to </script>.
+		expect(blocks[0].text.length).toBe(src.lastIndexOf('</script>'));
 		// The template (markers included) is blanked out of the JS block.
 		expect(blocks[0].text).not.toContain('<Children>');
 		expect(blocks[0].text).not.toContain('<Slot');
@@ -192,8 +227,8 @@ describe('ESLint end to end (JS)', () => {
 		const blocks = processor.preprocess(src, 'raw-block.pzl');
 		expect(blocks).toHaveLength(1);
 		expect(blocks[0].filename).toBe('0_scripts.js');
-		// Positions preserved: the virtual file is the same length as the source.
-		expect(blocks[0].text.length).toBe(src.length);
+		// Positions preserved: the virtual file is the source up to </script>.
+		expect(blocks[0].text.length).toBe(src.lastIndexOf('</script>'));
 		// The template — raw bodies included — is blanked out of the JS block.
 		expect(blocks[0].text).not.toContain('{#raw}');
 		expect(blocks[0].text).not.toContain('"slides"');
@@ -214,7 +249,7 @@ describe('ESLint end to end (JS)', () => {
 		const src = fixture('grammar-0-8.pzl');
 		const blocks = processor.preprocess(src, 'grammar-0-8.pzl');
 		expect(blocks).toHaveLength(1);
-		expect(blocks[0].text.length).toBe(src.length);
+		expect(blocks[0].text.length).toBe(src.lastIndexOf('</script>'));
 		expect(blocks[0].text).not.toContain('compact_number');
 		expect(blocks[0].text).not.toContain('toSorted');
 		expect(blocks[0].text).not.toContain('${items');
@@ -250,6 +285,7 @@ describe('byte-order mark', () => {
 	const cases = {
 		bom: ['\uFEFF<puzzle-view>é</puzzle-view>\n<script>\n', "let a = 'x'\n", 'export default a\n</script>\n'],
 		crlf: ['<puzzle-view>é</puzzle-view>\r\n<script>\r\n', "let a = 'x'\r\n", 'export default a\r\n</script>\r\n'],
+		'bom, body on the <script> line': ['\uFEFF<puzzle-view>é</puzzle-view>\n<script>', "let a = 'x'\n", 'export default a\n</script>\n'],
 		emoji: ['<puzzle-view>🎉🎉 é</puzzle-view>\n<script>\n', "let a = '😀x'\n", 'export default a\n</script>\n'],
 		'bom + crlf + emoji': [
 			'\uFEFF<puzzle-view>🎉</puzzle-view>\r\n<script>\r\n',
@@ -307,11 +343,11 @@ describe('TypeScript blocks', () => {
 		expect(res.messages).toEqual([]);
 	});
 
-	it('tseslint.configs.recommended + configs.typescript: tag imports used, whitespace rules off', async () => {
+	it('tseslint.configs.recommended + configs.typescript: tag imports used, blanked regions quiet', async () => {
 		const res = await lintWith(
 			[
-				// Enabled broadly, as a user might; configs.typescript turns them
-				// off for the virtual TS blocks.
+				// Enabled broadly, as a user might; their reports on the blanked
+				// regions carry fixes outside the body, so the processor drops them.
 				{ rules: { 'eol-last': 'error', 'no-trailing-spaces': 'error', 'unicode-bom': 'error' } },
 				js.configs.recommended,
 				...tseslint.configs.recommended,

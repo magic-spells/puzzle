@@ -285,6 +285,35 @@ describe('PuzzleApp + i18n', () => {
 		expect(constructed).toEqual([]);
 	});
 
+	// A language button calls setLocale() without awaiting it: a failed switch must
+	// still reach the console, while an awaited one is the caller's to handle.
+	it('a failed switch nobody awaits is an unhandled rejection; an awaited one is not', async () => {
+		stubFetch({ 'locales/en.AAAA.json': EN }, {});
+		const { app } = make();
+		await app.mount();
+		// Vitest fails the run on an unhandled rejection; take its listeners off for
+		// the two switches and count the reports here instead.
+		const vitestListeners = process.listeners('unhandledRejection');
+		const unhandled = [];
+		process.removeAllListeners('unhandledRejection');
+		process.on('unhandledRejection', (reason) => unhandled.push(reason));
+		try {
+			app.i18n.setLocale('es');
+			await tick();
+			await tick();
+			expect(unhandled.map((err) => err.message)).toEqual([expect.stringMatching(/failed to load/)]);
+
+			unhandled.length = 0;
+			await expect(app.i18n.setLocale('es')).rejects.toThrow(/failed to load/);
+			await tick();
+			await tick();
+			expect(unhandled).toEqual([]);
+		} finally {
+			process.removeAllListeners('unhandledRejection');
+			for (const listener of vitestListeners) process.on('unhandledRejection', listener);
+		}
+	});
+
 	it('overlapping switches are last-wins; landing back on the active locale rebuilds nothing', async () => {
 		let releaseEs;
 		const esGate = new Promise((r) => (releaseEs = r));

@@ -200,6 +200,11 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	// BEFORE resolveInlineSVG splices never-parsed raw markup in. Out-of-band
 	// like every Warning — the generated JS is byte-identical.
 	collectA11yWarnings(root.Children, opts.Filename, warnings)
+	// D199: the router fills <Outlet/> in a layout or a parent view; a component
+	// is never routed, so an outlet in one is almost certainly a <Children/>.
+	if opts.Mode == ModeComponent {
+		warnOutletInComponent(root.Children, opts.Filename, warnings)
+	}
 	// <script> is optional (DOC-SPEC.md §4). With no user class to bind the
 	// render tail to, synthesize a minimal module — the runtime import plus an
 	// empty PuzzleView subclass named from the filename — and drive the rest of
@@ -212,6 +217,11 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	moduleBindings, mutableModuleBindings := scriptSelectorBindingInfo(scriptToks)
 	if filepath.Base(strings.ReplaceAll(opts.Filename, "\\", "/")) == "Component.pzl" {
 		return "", &parser.ParseError{File: opts.Filename, Line: 1, Col: 1, Message: "Component is a reserved built-in tag — rename Component.pzl (for example, Card.pzl) and its imports"}
+	}
+	// Outlet is a reserved marker since 0.10 (D199), so a component named
+	// Outlet could never be written as a tag.
+	if filepath.Base(strings.ReplaceAll(opts.Filename, "\\", "/")) == "Outlet.pzl" {
+		return "", &parser.ParseError{File: opts.Filename, Line: 1, Col: 1, Message: "Outlet is a reserved built-in tag (the router outlet, D199) — rename Outlet.pzl (for example, PageOutlet.pzl) and its imports"}
 	}
 	var className string
 	if strings.TrimSpace(scripts) == "" {

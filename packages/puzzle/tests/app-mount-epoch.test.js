@@ -453,4 +453,45 @@ describe('PuzzleApp — concurrent mount()', () => {
 		await expect(first).resolves.toBe(app);
 		expect(el.querySelector('.layout main .home')).not.toBeNull();
 	});
+
+	// The latch must not mark the rejection handled: an app.js that calls a bare
+	// `app.mount()` (every scaffold does) would get a blank page and a silent console.
+	it('a failed mount() nobody awaits is an unhandled rejection; an awaited one is not', async () => {
+		const failure = new Error('seed failed');
+		const config = () => ({
+			target: '#app',
+			routes: routesWith(),
+			beforeMount() {
+				throw failure;
+			},
+		});
+		container();
+		// Vitest fails the run on an unhandled rejection; take its listeners off for
+		// the two mounts and count the reports here instead.
+		const vitestListeners = process.listeners('unhandledRejection');
+		const unhandled = [];
+		process.removeAllListeners('unhandledRejection');
+		process.on('unhandledRejection', (reason) => unhandled.push(reason));
+		try {
+			make(config()).mount();
+			await tick();
+			await tick();
+			expect(unhandled).toEqual([failure]);
+
+			unhandled.length = 0;
+			let caught = null;
+			try {
+				await make(config()).mount();
+			} catch (err) {
+				caught = err;
+			}
+			await tick();
+			await tick();
+			expect(caught).toBe(failure);
+			expect(unhandled).toEqual([]);
+		} finally {
+			process.removeAllListeners('unhandledRejection');
+			for (const listener of vitestListeners) process.on('unhandledRejection', listener);
+		}
+	});
 });

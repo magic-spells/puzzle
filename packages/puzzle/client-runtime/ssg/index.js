@@ -363,7 +363,7 @@ function unresolvableEndpointError(url) {
  *
  * @param {Record<string, any>} config the PuzzleApp config (the default-exported app's
  *   `app.config`, or a bare config object) — { target, routes, models,
- *   formatters, apiURL, beforeMount, … }
+ *   functions, apiURL, beforeMount, … }
  * @param {object} [opts]
  * @param {'hybrid'|'static'} [opts.mode] `'hybrid'` (default) is the router-takeover
  *   mode; `'static'` additionally captures each page's store snapshot (`data`), the
@@ -405,6 +405,12 @@ function unresolvableEndpointError(url) {
  *   skips and warnings are reported once, not once per locale.
  */
 export async function prerender(config, opts = {}) {
+	// the pre-0.10 `formatters` key throws here as it does in the PuzzleApp
+	// constructor (D199): a build handed a raw config would otherwise drop the
+	// app's functions without a word and fail later on the first call site.
+	if (config?.formatters !== undefined) {
+		throw new Error('[puzzle] config.formatters is config.functions since 0.10 — rename the key (puzzle check --fix does it)');
+	}
 	// Every build-time read in the pass below goes through the build-fetch
 	// wrapper, so an app-relative endpoint fails with a diagnostic naming the URL
 	// and the two ways to make the read answerable from the build machine — never
@@ -1358,7 +1364,7 @@ function pageRenderer(config, { isStatic, routed, tags, defaultLocale, routeRout
  *   absence is what means "no such module".
  * @returns {Promise<{ outDir: string, written: WrittenPage[], skipped: SkippedRoute[],
  *   warnings: string[], count: number, mode?: 'static', target?: string,
- *   apiURL?: string|null, hasFormatters?: boolean, hasAdapter?: boolean,
+ *   apiURL?: string|null, hasFunctions?: boolean, hasAdapter?: boolean,
  *   adapterConfigured?: boolean, adapterModuleMatches?: boolean|null }>}
  */
 export async function prerenderToDir(config, options = {}) {
@@ -1519,7 +1525,7 @@ async function writeFiles(files) {
  * a collision-free slug, inject the static shell (content + `data-puzzle-static`
  * marker, inline JSON data island, per-page module script), and collect the extended
  * summary the Go static build consumes (per page: `entry`, `modules`, `route`; per
- * skipped route: `modules`; top level: `mode`, `target`, `apiURL`, `hasFormatters`,
+ * skipped route: `modules`; top level: `mode`, `target`, `apiURL`, `hasFunctions`,
  * `hasAdapter`, `adapterConfigured`, `adapterModuleMatches`).
  *
  * A page whose output file an earlier page already claimed is skipped here with
@@ -1562,10 +1568,11 @@ async function writeStaticDir({
 
 	// Static output has no persistence layer: a live Storage object can't cross the
 	// build→client boundary (it JSON-serializes to a dead `{}`), so a static build
-	// never threads `config.storage`. Warn when it's set so the missing persistence
-	// isn't a silent surprise (records won't survive a page load). A direct
-	// mountStatic({storage}) caller can still wire real persistence by hand.
-	if (config.storage != null) {
+	// never threads `config.storage`. Warn when the config names it (by key: a
+	// window-guarded value reads undefined in this Node build) so the missing
+	// persistence isn't a silent surprise (records won't survive a page load). A
+	// direct mountStatic({storage}) caller can still wire persistence by hand.
+	if ('storage' in config) {
 		warnings.push(
 			'[puzzle] static output ignores `storage` — a static page has no persistence layer, ' +
 				"so records won't persist across page loads. Remove `storage` from the config, or use " +
@@ -1675,7 +1682,7 @@ async function writeStaticDir({
 		apiURL: config.apiURL ?? null,
 		routerBase: config.routerBase,
 		hasModels: Object.keys(config.models ?? {}).length > 0,
-		hasFormatters: Object.keys(config.formatters ?? {}).length > 0,
+		hasFunctions: Object.keys(config.functions ?? {}).length > 0,
 		hasAdapter: Boolean(config.adapter),
 		// The two facts that tell the Go build WHICH adapter value a page must
 		// install. A configured capability holds functions, so it cannot cross this
@@ -1852,7 +1859,7 @@ async function writeSitemap(outDir, written, dress, warnings) {
 /**
  * Wire the build-time ctx the way PuzzleApp.mount() does (app.js §mount): a Store
  * over the models + apiURL, a FormatterRegistry seeded with the built-ins then the
- * config formatters registered over them, and the page's `router` facade.
+ * config functions registered over them, and the page's `router` facade.
  *
  * Router facade parity (D81) is decided by the caller (prerender's
  * createPageContext), which owns the per-build/per-page split. In HYBRID that
@@ -1881,7 +1888,7 @@ async function writeSitemap(outDir, written, dress, warnings) {
  * @returns {Promise<PrerenderContext>}
  */
 async function buildContext(config, { router, i18n = null }) {
-	const { models = {}, formatters = {}, apiURL, storage, adapter, beforeRequest } = config;
+	const { models = {}, functions = {}, apiURL, storage, adapter, beforeRequest } = config;
 
 	installAdapterCapability(adapter, 'config.adapter');
 	/**
@@ -1896,7 +1903,7 @@ async function buildContext(config, { router, i18n = null }) {
 	// per-page entry module by the Go build, and a function does not survive that.)
 	if (beforeRequest !== undefined) storeOptions.beforeRequest = beforeRequest;
 	const store = new Store(models, storeOptions);
-	const registry = makeFormatterRegistry(formatters, (path, options) => router.url(path, options));
+	const registry = makeFormatterRegistry(functions, (path, options) => router.url(path, options));
 
 	/** @type {PrerenderContext} */
 	// ctx.idle (D189): a build-time page has no app to wait on.

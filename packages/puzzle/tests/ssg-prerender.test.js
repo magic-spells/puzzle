@@ -86,7 +86,7 @@ const routes = () => [
 	{ path: '/app', name: 'spa', view: SpaOnly, layout: Layout, prerender: false },
 ];
 
-const config = () => ({ target: '#app', routes: routes(), models: {}, formatters: {} });
+const config = () => ({ target: '#app', routes: routes(), models: {}, functions: {} });
 
 const SHELL =
 	'<!doctype html><html><head><title>Shell</title></head><body><div id="app"></div></body></html>';

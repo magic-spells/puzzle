@@ -6,11 +6,14 @@
 // (or TS) file and let the user's existing ESLint rules — and any parser they
 // layer on, e.g. @typescript-eslint — lint it.
 //
-// The virtual file is the ORIGINAL source with every code unit OUTSIDE the
-// <script> body replaced by a single space, preserving '\n' and '\r' exactly.
-// That keeps offsets, lines, and columns identical to the real file, so message
-// positions AND autofix ranges map 1:1 with no remapping. Fixes therefore only
-// ever touch bytes inside the <script> body; the rest of the .pzl is untouched.
+// The virtual file is the ORIGINAL source up to the end of the <script> body,
+// with every code unit before the body replaced by a single space, preserving
+// '\n' and '\r' exactly. That keeps offsets, lines, and columns identical to
+// the real file, so message positions AND autofix ranges map 1:1 with no
+// remapping. The blanked lead-in looks like stray whitespace to formatting
+// rules, so postprocess drops every message whose autofix starts before the
+// body: fixes only ever touch bytes inside it, and the rest of the .pzl is
+// untouched.
 //
 // Section-structure errors (missing <puzzle-view>, duplicate sections, illegal
 // section attributes, a body truncated by a stray close tag, …) are collected
@@ -28,8 +31,9 @@ import {
 } from './split.js';
 import { Linter } from 'eslint';
 
-// Carries splitter errors from preprocess to postprocess, keyed by filename.
-const errorStore = new Map();
+// Carries each file's splitter errors and <script> body start from preprocess
+// to postprocess, keyed by filename.
+const fileStore = new Map();
 
 // SECTION_RULE_ID is the synthetic rule id attached to injected section errors.
 const SECTION_RULE_ID = 'puzzle/no-invalid-sections';
@@ -241,7 +245,7 @@ function collectComponentTags(s, names) {
 
 // componentTags returns the root names of every component tag in the
 // template sections and the free names in <Component is={...}>. Markers
-// (Slot, Children, Snippet, Portal) come along too;
+// (Slot, Children, Outlet, Snippet, Portal) come along too;
 // they are never script bindings, so marking them used is a no-op.
 function componentTags(sections) {
 	const names = new Set();
@@ -251,16 +255,18 @@ function componentTags(sections) {
 	return names;
 }
 
-// blankOutside returns a copy of src with every char outside [start, end)
-// replaced by a space, except '\n' and '\r' which are preserved so line
-// structure is byte-identical, and a leading BOM (U+FEFF at index 0), which
-// is kept so ESLint strips it from the virtual text exactly as it strips it
-// from the physical file — otherwise every autofix range lands one code unit
-// early.
+// blankOutside returns src cut at end, with every char before start replaced
+// by a space, except '\n' and '\r' which are preserved so line structure is
+// byte-identical, and a leading BOM (U+FEFF at index 0), which is kept so
+// ESLint strips it from the virtual text exactly as it strips it from the
+// physical file — otherwise every autofix range lands one code unit early.
+// Nothing after the body is kept: a diff-based formatter (Prettier) would
+// align its output with that whitespace and split one edit across the body's
+// end, and postprocess could then apply only half of it.
 function blankOutside(src, start, end) {
-	const out = new Array(src.length);
-	for (let i = 0; i < src.length; i++) {
-		if (i >= start && i < end) {
+	const out = new Array(end);
+	for (let i = 0; i < end; i++) {
+		if (i >= start) {
 			out[i] = src[i];
 		} else {
 			const c = src[i];
@@ -279,16 +285,19 @@ export const processor = {
 
 	preprocess(text, filename) {
 		const { sections, errors } = splitSections(text, filename);
-		errorStore.set(filename, errors);
+		const script = sections.scripts;
+		// The body start in fix-range offsets, which count from after a leading BOM.
+		const bom = text[0] === '\uFEFF' ? 1 : 0;
+		fileStore.set(filename, { errors, start: script?.contentStart - bom });
 		tagStore.set(filename, componentTags(sections));
 
 		// No <script> section → nothing to lint as JS. Splitter errors are still
 		// surfaced in postprocess (which ESLint calls with an empty message set).
-		if (!sections.scripts) {
+		if (!script) {
 			return [];
 		}
 
-		const { contentStart, contentEnd, lang } = sections.scripts;
+		const { contentStart, contentEnd, lang } = script;
 		const virtual = blankOutside(text, contentStart, contentEnd);
 		const ext = lang === 'ts' ? 'ts' : 'js';
 
@@ -296,18 +305,15 @@ export const processor = {
 	},
 
 	postprocess(messages, filename) {
-		const injected = errorStore.get(filename) || [];
-		errorStore.delete(filename);
+		const { errors, start } = fileStore.get(filename);
+		fileStore.delete(filename);
 		tagStore.delete(filename);
 
-		// messages is an array of per-block message arrays. Only block 0 exists
-		// (the extracted <script> body), but flatten defensively.
-		const flat = [];
-		for (const block of messages || []) {
-			for (const m of block) flat.push(m);
-		}
+		// One block at most (the <script> body). A message whose fix reaches into
+		// the blanked lead-in goes, so --fix cannot delete it.
+		const flat = messages.flat().filter((m) => !m.fix || m.fix.range[0] >= start);
 
-		for (const e of injected) {
+		for (const e of errors) {
 			flat.push({
 				ruleId: SECTION_RULE_ID,
 				severity: 2,

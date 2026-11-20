@@ -55,9 +55,12 @@ const ROUTES = [
 ];
 
 // Make window scroll state writable and wire a browser-faithful scrollTo stub.
+// A browser follows every move with a `scroll` event, which is what the router
+// reads the departing position from on popstate.
 function setScroll(x, y) {
 	Object.defineProperty(window, 'scrollX', { configurable: true, writable: true, value: x });
 	Object.defineProperty(window, 'scrollY', { configurable: true, writable: true, value: y });
+	window.dispatchEvent(new Event('scroll'));
 }
 let scrollToSpy;
 
@@ -264,6 +267,28 @@ describe('Router scroll — configuration (D33)', () => {
 		expect(window.scrollY).toBe(340);
 		expect(errSpy).toHaveBeenCalled();
 		errSpy.mockRestore();
+	});
+
+	it('listens for scroll once per start(), removes it on stop(), and not at all when off', async () => {
+		const add = vi.spyOn(window, 'addEventListener');
+		const remove = vi.spyOn(window, 'removeEventListener');
+		const scrolls = (spy) => spy.mock.calls.filter(([type]) => type === 'scroll').map(([, fn]) => fn);
+		try {
+			const { router } = await boot(ROUTES);
+			router.stop();
+			await router.start(container(), ctx());
+			router.stop();
+			const [listener] = scrolls(add);
+			expect(scrolls(add)).toEqual([listener, listener]);
+			expect(scrolls(remove)).toEqual([listener, listener]);
+
+			add.mockClear();
+			await boot(ROUTES, { scrollBehavior: false });
+			expect(scrolls(add)).toEqual([]);
+		} finally {
+			add.mockRestore();
+			remove.mockRestore();
+		}
 	});
 });
 

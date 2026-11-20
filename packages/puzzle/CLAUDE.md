@@ -227,8 +227,8 @@ enforced, not merely advised.
   loop domain, slot-filled rule, value printing, script-less components); D174
   the function library (19 standard functions plus PuzzleKit's `link` and
   `timeago`; formatters that duplicated JS methods, the list formatters and
-  `noescape` removed; sanitized `raw`; apps still register under the
-  `formatters` config key); D175 translations (`t`, `ctx.i18n`); D176 the
+  `noescape` removed; sanitized `raw`; apps register under the `functions`
+  config key since 0.10); D175 translations (`t`, `ctx.i18n`); D176 the
   expression language — a closed JavaScript-shaped grammar parsed once in
   `packages/puzzle-lang/expr`, functions instead of `|` pipes (the `|` steer
   names each removed formatter's replacement), `.length` not `.size`, no
@@ -273,9 +273,10 @@ enforced, not merely advised.
   files) and every item-form `{#for}` row keyed. Production sizes: hello-world
   **23.0 KB gzip**, todos **27.0 KB gzip** (about +1 KB each over 0.8.0,
   mostly the D182–D189 built-in APIs). The next free decision number is
-  **D199** (the 0.10 work holds D191 setState/getState, D192 forms, D193
+  **D200** (the 0.10 work holds D191 setState/getState, D192 forms, D193
   server queries, D194 the Vitest plugin, D195 link prefetch, D196 named
-  routes, D197 share() and D198 deploy templates).
+  routes, D197 share(), D198 deploy templates and D199 the upgrade pass,
+  `puzzle check --fix`, with the `<Outlet/>` and `functions` renames).
 - Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
   amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74, D160 = v1.75,
@@ -517,11 +518,12 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   data, subscriptions — D146) commit together. Failed or superseded pushes do
   not partially commit.
 - `<Children>` is the component default marker, `<Slot name="x">` is named
-  composition, and `<Slot>` is the router outlet. A marker is self-closing or
+  composition, and `<Outlet>` is the router outlet (a `<Slot>` with no name is
+  a compile error since 0.10, D199; `<Outlet>` in a component warns). A marker is self-closing or
   paired — a paired body is fallback content, rendered only when nothing fills
   the position (D141) — and any lowercase `<slot>`/`<children>` is a
   positioned compile error steering to the capitalized form (D134). A
-  `<Snippet>` body is a composition **leaf** — no `<Children>`, `<Slot>`, nested
+  `<Snippet>` body is a composition **leaf** — no `<Children>`, `<Outlet>`, `<Slot>`, nested
   `<Snippet>`, or `ref=` inside one (D166). A tag is a component when its
   first character is anything but an ASCII lowercase letter — the only
   characters that can begin an HTML element name — so `<Card>`, `<Übersicht>`
@@ -570,9 +572,9 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   grammar and public docs.
 - Generated `.pzl` templates must remain compiler-tested.
 - Function is the project term for the template library (`round`, `date`,
-  `t`, …); never call one a filter or a pipe. `formatter` survives only as the
-  `formatters` config key apps register under and in the registry's code
-  names.
+  `t`, …); never call one a filter or a pipe. Apps register theirs under the
+  `functions` config key; `formatter` survives only in the runtime's internal
+  names (`ctx.formatters`, the registry), which no app writes.
 - Future or rejected features must be clearly labeled. Do not describe them as
   shipped.
 - Update current-state prose in card bodies. Keep only durable, surprising

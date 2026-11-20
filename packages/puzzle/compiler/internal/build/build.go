@@ -817,21 +817,7 @@ func FindRuntime(start string) string {
 // FindInstalledRuntime walks up from start for an installed Puzzle runtime and
 // returns the absolute path to its client-runtime/index.js, or "" if absent.
 func FindInstalledRuntime(start string) string {
-	dir, err := filepath.Abs(start)
-	if err != nil {
-		dir = start
-	}
-	for {
-		idx := filepath.Join(dir, "node_modules", "@magic-spells", "puzzle", "client-runtime", "index.js")
-		if fsutil.FileExists(idx) {
-			return idx
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
-	}
+	return fsutil.FindUp(start, filepath.Join("node_modules", "@magic-spells", "puzzle", "client-runtime", "index.js"))
 }
 
 // PkgIsPuzzle reports whether pkgPath is a package.json for

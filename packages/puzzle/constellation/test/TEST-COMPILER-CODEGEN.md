@@ -65,8 +65,6 @@ reach them).
 - **JS lane over compiled fixtures**: `tests/core-semantics.test.js` (D173 runtime
   semantics of compiled output) and `tests/handler-this.test.js` (a non-arrow handler
   using `this`, JS and TS) mount fixtures that `npm run pretest` compiles with `pzlc`.
-- `puzzle check`'s emitter has its own `internal/check/component_test.go` for selector
-  scope, including a live-`tsc` declared-`Record` case ([[TEST-CLI-COMMANDS]]).
 
 **The Go and JS suites are coupled.** The golden tests also compile the real
 `examples/todos/app` sources and compare them with the committed fixtures under

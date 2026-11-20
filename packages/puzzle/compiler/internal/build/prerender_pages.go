@@ -61,14 +61,14 @@ type staticSummary struct {
 	// not carried for the same serialization reason — the JS side warns instead; a
 	// direct mountStatic({storage}) caller still passes a real Storage object.)
 	RouterBase json.RawMessage `json:"routerBase"`
-	// HasModels/HasFormatters report config registrations. The build uses them
+	// HasModels/HasFunctions report config registrations. The build uses them
 	// only for warnings when no conventional module can reproduce that wiring in
 	// the per-page browser graph.
 	HasModels bool `json:"hasModels"`
-	// HasFormatters is true when the app config registered custom formatters; the
-	// build warns when they exist but app/formatters.js does not (they would be
-	// missing client-side in static mode).
-	HasFormatters bool `json:"hasFormatters"`
+	// HasFunctions is true when the app config registered custom template
+	// functions; the build warns when they exist but app/functions.js does not
+	// (they would be missing client-side in static mode).
+	HasFunctions bool `json:"hasFunctions"`
 	// HasAdapter carries the non-serializable app capability across the node→Go
 	// summary boundary so each browser entry can import and pass the same value.
 	HasAdapter bool `json:"hasAdapter"`
@@ -168,12 +168,12 @@ func prerenderStaticPages(absRoot, appEntry, staging, appMetafile string, public
 		return err
 	}
 
-	// Whether the app ships a models registry, a formatters module, or a
+	// Whether the app ships a models registry, a functions module, or a
 	// conventional adapter module is a build-wide fact; resolve it once. The
 	// adapter module is needed BEFORE the render — the prerender entry imports it
 	// so the summary can report whether it is the value the config passed.
 	modelsModule := findStaticModule(absRoot, "app/models/index.js", "app/models/index.ts")
-	formattersModule := findStaticModule(absRoot, "app/formatters.js", "app/formatters.ts")
+	functionsModule := findStaticModule(absRoot, "app/functions.js", "app/functions.ts")
 	adapterModule := findStaticModule(absRoot, "app/adapter.js", "app/adapter.ts")
 
 	// 1. Node prerender pass in mode 'static': the JS side renders each static
@@ -221,7 +221,7 @@ func prerenderStaticPages(absRoot, appEntry, staging, appMetafile string, public
 	}
 	var entryFiles []string
 	for _, page := range pages {
-		src, err := staticEntrySource(absRoot, appEntry, page.staticPage, summary, modelsModule, formattersModule, adapterModule)
+		src, err := staticEntrySource(absRoot, appEntry, page.staticPage, summary, modelsModule, functionsModule, adapterModule)
 		if err != nil {
 			return err
 		}
@@ -239,9 +239,8 @@ func prerenderStaticPages(absRoot, appEntry, staging, appMetafile string, public
 		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"),
 			"models registered in the app entry will not exist client-side in static mode — export them from app/models/index.js or app/models/index.ts")
 	}
-	if summary.HasFormatters && formattersModule == "" {
-		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"),
-			"custom formatters registered in the app entry will not exist client-side in static mode — export them from app/formatters.js or app/formatters.ts")
+	if summary.HasFunctions && functionsModule == "" {
+		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"), missingFunctionsModuleNote(absRoot))
 	}
 	if staticCaptured(summary, adapterModule) {
 		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"), staticCaptureNote)
@@ -513,11 +512,11 @@ func sameModules(a, b staticModules) bool {
 
 // staticEntrySource builds the mountStatic entry module for one page. Import
 // specifiers and embedded values are JSON-encoded (space/quote safe, forward
-// slashes). The models/formatters imports (and their shorthand call properties)
+// slashes). The models/functions imports (and their shorthand call properties)
 // are emitted only when the source files exist — an absent binding must never be
 // referenced. Route + service options are embedded verbatim from the summary;
 // the adapter is resolved by staticAdapterImport.
-func staticEntrySource(absRoot, appEntry string, page staticPage, summary staticSummary, modelsModule, formattersModule, adapterModule string) (string, error) {
+func staticEntrySource(absRoot, appEntry string, page staticPage, summary staticSummary, modelsModule, functionsModule, adapterModule string) (string, error) {
 	var b strings.Builder
 	b.WriteString("import { mountStatic } from '@magic-spells/puzzle/static';\n")
 	// adapterBinding is emitted after every import, so the generated module reads
@@ -560,12 +559,12 @@ func staticEntrySource(absRoot, appEntry string, page staticPage, summary static
 		}
 		fmt.Fprintf(&b, "import models from %s;\n", spec)
 	}
-	if formattersModule != "" {
-		spec, err := json.Marshal(absModuleImport(absRoot, formattersModule))
+	if functionsModule != "" {
+		spec, err := json.Marshal(absModuleImport(absRoot, functionsModule))
 		if err != nil {
 			return "", err
 		}
-		fmt.Fprintf(&b, "import formatters from %s;\n", spec)
+		fmt.Fprintf(&b, "import functions from %s;\n", spec)
 	}
 
 	targetJSON, err := json.Marshal("#" + summary.Target)
@@ -598,8 +597,8 @@ func staticEntrySource(absRoot, appEntry string, page staticPage, summary static
 	if modelsModule != "" {
 		b.WriteString("  models,\n")
 	}
-	if formattersModule != "" {
-		b.WriteString("  formatters,\n")
+	if functionsModule != "" {
+		b.WriteString("  functions,\n")
 	}
 	if summary.HasAdapter {
 		b.WriteString("  adapter,\n")
@@ -840,4 +839,16 @@ func printStaticSummary(s staticSummary, bundleCount int, quiet bool) {
 			fmt.Sprintf("%s (%s)", sk.Path, sk.Reason),
 		)
 	}
+}
+
+// missingFunctionsModuleNote is the static-mode warning for template functions
+// registered only in the app entry. before 0.10 the conventional module was
+// app/formatters.js (D199), so an app that still has that file is told to
+// rename it rather than to create a second one.
+func missingFunctionsModuleNote(absRoot string) string {
+	if old := findStaticModule(absRoot, "app/formatters.js", "app/formatters.ts"); old != "" {
+		return "custom functions registered in the app entry will not exist client-side in static mode — " +
+			old + " is app/functions.js (or .ts) since 0.10: rename it (puzzle check --fix does it)"
+	}
+	return "custom functions registered in the app entry will not exist client-side in static mode — export them from app/functions.js or app/functions.ts"
 }

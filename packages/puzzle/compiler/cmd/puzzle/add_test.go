@@ -979,7 +979,7 @@ func writeCmdFixtureRegistry(t *testing.T) string {
 	root := t.TempDir()
 	writeFixtureFile(t, root, "registry.json", `{"version":1,"theme":"theme/pieces.css","pieces":[`+
 		`{"name":"button","description":"","files":["Button.pzl"],"registryDependencies":[],"dependencies":[],"targetDir":"app/components/ui"}]}`)
-	writeFixtureFile(t, root, "ui/button/Button.pzl", "<puzzle-view><button><Slot/></button></puzzle-view>\n")
+	writeFixtureFile(t, root, "ui/button/Button.pzl", "<puzzle-view><button><Children/></button></puzzle-view>\n")
 	writeFixtureFile(t, root, "theme/pieces.css", "/* puzzle-pieces design tokens */\n")
 	return root
 }

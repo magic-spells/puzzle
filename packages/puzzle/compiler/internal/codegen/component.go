@@ -9,20 +9,9 @@ import (
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
-// ScriptValueBindings shares the opaque-script binding scan with puzzle check.
-// Only Component's is expression may resolve these names (D180).
-func ScriptValueBindings(scripts string) map[string]int {
-	return scriptSelectorBindings(tokenizeJS(scripts))
-}
-
 // The reserved-name scan intentionally ignores later variable declarators;
 // selectors also need the simple names after a top-level comma. Their
 // initializers are never interpreted, and nested declaration names are skipped.
-func scriptSelectorBindings(tokens []jsTok) map[string]int {
-	bindings, _ := scriptSelectorBindingInfo(tokens)
-	return bindings
-}
-
 func scriptSelectorBindingInfo(tokens []jsTok) (map[string]int, map[string]bool) {
 	bindings := scriptTopLevelBindings(tokens)
 	mutable := map[string]bool{}
@@ -106,31 +95,6 @@ func selectorDeclaratorTail(tokens []jsTok, name int) (recognized, ended bool) {
 		return true, true
 	}
 	return tokens[following].lineBreak, tokens[following].lineBreak
-}
-
-// ComponentSelectorBindings returns module names that selectors read, so a JS
-// check mirror can expose them to its separate TypeScript template wrapper.
-func ComponentSelectorBindings(scripts string, roots ...*parser.Element) []string {
-	bindings := ScriptValueBindings(scripts)
-	used := map[string]bool{}
-	for _, root := range roots {
-		if root == nil {
-			continue
-		}
-		walkComponentSlots(root.Children, func(component *parser.Component) {
-			for _, prop := range component.Props {
-				if attr, ok := prop.(*parser.DynamicAttr); ok && attr.Name == "is" {
-					collectSelectorBindings(attr.ExprAST, bindings, used)
-				}
-			}
-		})
-	}
-	names := make([]string, 0, len(used))
-	for name := range used {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
 }
 
 func collectSelectorBindings(tree expr.Node, bindings map[string]int, used map[string]bool) {
@@ -246,34 +210,4 @@ func (c *compiler) emitComponentSlot(node *parser.Component, ind int, scope scop
 	}
 	c.usesDynamicComponent = true
 	return "__dc(" + selector + ", " + attrs + ", " + array + ")", nil
-}
-
-func walkComponentSlots(nodes []parser.Node, visit func(*parser.Component)) {
-	for _, node := range nodes {
-		switch node := node.(type) {
-		case *parser.Component:
-			if node.Name == "Component" {
-				visit(node)
-			}
-			walkComponentSlots(node.Children, visit)
-		case *parser.Element:
-			walkComponentSlots(node.Children, visit)
-		case *parser.Slot:
-			walkComponentSlots(node.Children, visit)
-		case *parser.Snippet:
-			walkComponentSlots(node.Body, visit)
-		case *parser.Portal:
-			walkComponentSlots(node.Children, visit)
-		case *parser.If:
-			walkComponentSlots(node.Then, visit)
-			walkComponentSlots(node.Else, visit)
-		case *parser.Case:
-			for _, clause := range node.Clauses {
-				walkComponentSlots(clause.Body, visit)
-			}
-			walkComponentSlots(node.Else, visit)
-		case *parser.For:
-			walkComponentSlots(node.Body, visit)
-		}
-	}
 }

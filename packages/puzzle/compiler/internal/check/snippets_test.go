@@ -143,7 +143,7 @@ export default class Home extends PuzzleView { count = 1; }
 	}
 
 	// …and the added parentheses must not disturb the remap of a real error.
-	bad := `<puzzle-view><p>{ count.upper + 1 }</p></puzzle-view>
+	bad := `<puzzle-view><p>{ round(count).upper + 1 }</p></puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView { count = 1; }
@@ -165,7 +165,7 @@ export default class Home extends PuzzleView { count = 1; }
 // positioned on the .pzl expression, not on the generated wrapper.
 func TestLiveTSCPositionsAMarkerArgumentError(t *testing.T) {
 	root := liveTSCApp(t)
-	source := `<puzzle-view><Slot name="heading" total={ value.upper }>Team</Slot></puzzle-view>
+	source := `<puzzle-view><Slot name="heading" total={ round(value).upper }>Team</Slot></puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView { value = 123; }
@@ -191,7 +191,7 @@ func TestLiveTSCPositionsASnippetBodyError(t *testing.T) {
   <Roster>
     <Snippet member>
       <span>{ member.name }</span>
-      <span>{ value.upper }</span>
+      <span>{ round(value).upper }</span>
     </Snippet>
   </Roster>
 </puzzle-view>

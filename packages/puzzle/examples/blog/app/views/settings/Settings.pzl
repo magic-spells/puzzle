@@ -10,7 +10,7 @@
       <a href="/settings/profile" class="px-3 py-1.5 rounded-lg text-[0.9rem] text-brand hover:bg-surface">Profile</a>
       <a href="/settings/notifications" class="px-3 py-1.5 rounded-lg text-[0.9rem] text-brand hover:bg-surface">Notifications</a>
     </nav>
-    <Slot />
+    <Outlet />
   </section>
 </puzzle-view>
 

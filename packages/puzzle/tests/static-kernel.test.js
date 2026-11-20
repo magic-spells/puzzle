@@ -608,6 +608,18 @@ describe('static kernel — mountStatic (D81)', () => {
 		expect(el.textContent).toContain('zulu');
 	});
 
+	it('a prerender:false page takes its route title over the shell’s', async () => {
+		const route = { path: '/app', name: 'spa', view: Counter, prerender: false, meta: { title: 'Workbench' } };
+		const { pages } = await prerender({ target: '#app', models: { note: Note }, routes: [route] }, { mode: 'static' });
+		expect(pages[0].title).toBeNull(); // the build writes the verbatim shell
+		seedDocument({ content: '', data: pages[0].data });
+		document.title = 'Shell';
+
+		await mountStatic({ target: '#app', views: [Counter], route: pages[0].route, models: { note: Note } });
+
+		expect(document.title).toBe('Workbench');
+	});
+
 	it('ctx.router is a stub whose methods throw', async () => {
 		let captured = null;
 		class RouterProbe extends PuzzleView {

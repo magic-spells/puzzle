@@ -33,8 +33,9 @@ vitest suites; it does not replace them. Specs in `tests-browser/`. Run with
   forward push lands at the top.
 - `anchor-fragment`: a bare `<a href="#faq">` click fires popstate then hashchange with
   null entry state; the router does not commit, scroll, focus or announce, still stamps a
-  scroll key on the browser-created entry, restores scroll across the `/#fragment` pair,
-  and a real route change from a fragment URL still commits.
+  scroll key on the browser-created entry, restores the exact pre-click position across the
+  `/#fragment` pair in Chromium and WebKit, and a real route change from a fragment URL
+  still commits.
 - `dev-reload`: `puzzle dev` live reload across eight tabs on one origin. One tab (Web
   Locks) holds the only SSE stream and relays over a BroadcastChannel; without that, about
   six tabs exhaust the browser's per-host connection limit and later requests hang.

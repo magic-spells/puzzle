@@ -2,7 +2,7 @@
  * PuzzleApp — the application class (constellation/doc/DOC-SPEC.md §1–§2, constellation/doc/DOC-APP-ANATOMY.md §3).
  *
  * Instantiate once with the v1 config surface and call `mount()`. The config
- * surface is frozen (SPEC §2): { target, routes, models, formatters, apiURL,
+ * surface is frozen (SPEC §2): { target, routes, models, functions, apiURL,
  * storage, adapter }, amended by v1.5 with { scrollBehavior } (D33), v1.6 with
  * { routerMode } (D34/D42, an imported mode object since D159), v1.19 with
  * { routerBase } (sub-path deploys, D51), v1.24 with
@@ -131,7 +131,8 @@ export class PuzzleApp {
 	 * @param {any[]} [config.routes] route definitions (the published `Route`
 	 *   shape; author data handed to the Router as-is)
 	 * @param {object} [config.models] type name → model class registry
-	 * @param {object} [config.formatters] app-level template formatters (override built-ins)
+	 * @param {object} [config.functions] app-level template functions (override built-ins); the
+	 *   pre-0.10 `formatters` key throws (D199)
 	 * @param {string} [config.apiURL] base URL for the D21 server read path
 	 * @param {Pick<Storage, 'getItem' | 'setItem'>} [config.storage] Storage-like object for persistence (opt-in)
 	 * @param {import('./capabilities.js').AdapterCapability} [config.adapter] capability imported from
@@ -201,6 +202,12 @@ export class PuzzleApp {
 	 *   kernel pass so nothing is fetched
 	 */
 	constructor(config = {}) {
+		// the template-function map was `formatters` before 0.10 (D199). an app
+		// that still passes it would boot with none of its functions, so the old
+		// key stops here, naming the new one and the codemod that renames it.
+		if (/** @type {any} */ (config).formatters !== undefined) {
+			throw new Error('[puzzle] config.formatters is config.functions since 0.10 — rename the key (puzzle check --fix does it)');
+		}
 		if (config.adapter && !isAdapterCapability(config.adapter)) {
 			throw new TypeError(
 				"[puzzle] config.adapter must be the adapter capability imported from '@magic-spells/puzzle/adapter'"
@@ -264,14 +271,12 @@ export class PuzzleApp {
 	 */
 	mount() {
 		if (this.#mountPromise) return this.#mountPromise;
-		const p = this.#mount();
-		this.#mountPromise = p;
-		// Not .finally(): that mints a second promise whose rejection nobody handles.
-		const clear = () => {
+		// Hand out the finally() promise itself, so a rejection nobody handles is
+		// still reported by the browser.
+		const p = this.#mount().finally(() => {
 			if (this.#mountPromise === p) this.#mountPromise = null;
-		};
-		p.then(clear, clear);
-		return p;
+		});
+		return (this.#mountPromise = p);
 	}
 
 	/**
@@ -372,7 +377,7 @@ export class PuzzleApp {
 			target,
 			routes = [],
 			models = {},
-			formatters = {},
+			functions = {},
 			apiURL,
 			storage,
 			adapter,
@@ -481,7 +486,7 @@ export class PuzzleApp {
 		//    `link` encoder. The closure reads this.router lazily so a re-mount never
 		//    keeps a stale Router, and a custom `link` formatter still wins.
 		this.formatters = makeFormatterRegistry(
-			formatters,
+			functions,
 			// Locale prefix routing (D177) hands link()'s options ({ locale: 'es' },
 			// { locale: false }) to router.url; without it the one-argument form ships.
 			// With no router yet a path passes through as before, and a named target

@@ -41,7 +41,7 @@ const KNOWLEDGE = [
   {
     keywords: ['nested', 'child route', 'slot', 'children'],
     answer:
-      "Nested routes let a route carry children: [...] with paths relative to the parent, and the parent view renders its matched child at <Slot />. A path: '' entry is the index child that matches the bare URL. Params merge down the whole chain, so every level's data({ params }) sees the full merged params. This sidebar-plus-thread layout is exactly that: a Shell parent hosts a Welcome index child and a Thread child at c/:id.",
+      "Nested routes let a route carry children: [...] with paths relative to the parent, and the parent view renders its matched child at <Outlet />. A path: '' entry is the index child that matches the bare URL. Params merge down the whole chain, so every level's data({ params }) sees the full merged params. This sidebar-plus-thread layout is exactly that: a Shell parent hosts a Welcome index child and a Thread child at c/:id.",
   },
   {
     keywords: ['route', 'router', 'navigation', 'push', 'url', 'link'],

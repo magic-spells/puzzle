@@ -24,7 +24,7 @@ The source for the Language section on puzzlejs.dev, written for a reader who kn
 
 ## What Puzzle is
 
-Puzzle is **one template language with two dialects**. A `.pzl` file is HTML plus a few brace constructs (`{ … }`, `{#if}`, `{#for}`, …) and tags HTML lacks (`<Children/>`, `<Slot>`, components). That shared part is the **core**. Each host is a **dialect**:
+Puzzle is **one template language with two dialects**. A `.pzl` file is HTML plus a few brace constructs (`{ … }`, `{#if}`, `{#for}`, …) and tags HTML lacks (`<Children/>`, `<Outlet/>`, `<Slot>`, components). That shared part is the **core**. Each host is a **dialect**:
 
 - **PuzzleKit**, the app framework in this package, compiles `.pzl` to JavaScript that renders in the browser.
 - **Magic Spells Sites** renders themes on the server: it parses with the same module and evaluates the tree in Go.
@@ -132,7 +132,7 @@ A slot is a placeholder filled from outside the file (§24, [[DECISION-D141-MARK
 - `<Children/>` receives the untagged children; `<Slot name="x"/>` receives children marked `slot="x"` (`default` and `children` are reserved names).
 - A marker is self-closing or paired; a paired body is the fallback, shown only when nothing fills the position. **Filled means it rendered a non-whitespace node** (V14), so an empty `{#for}` or a false `{#if}` shows the fallback.
 - **One marker per render path** (V13): exclusive `{#if}`/`{#case}` branches are separate paths, so each may hold its own `<Children/>`; a marker in a `{#for}` body is one declaration.
-- In a layout, the plain `<Slot/>` is the page (PuzzleKit: the routed view; Sites: the page template and sections). A host may reserve named layout slots (Sites: `head-content`, `header-group`, `footer-group`, `panel-group`).
+- In a layout, the outlet is the page (PuzzleKit: `<Outlet/>`, the routed view; Sites: the page template and sections). PuzzleKit rejects the pre-0.10 bare `<Slot/>` (D199); Sites runs its own composition rules, so its spelling is Sites' call. A host may reserve named layout slots (Sites: `head-content`, `header-group`, `footer-group`, `panel-group`).
 - `<Children/>` inside another component's call site forwards this file's default content ([[DECISION-D71-SLOT-FORWARDING]]). Lowercase `<slot>`/`<children>` are errors.
 
 ## Snippets

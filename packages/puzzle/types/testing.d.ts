@@ -34,7 +34,8 @@ export interface MountViewOptions<Props = any> {
 	store?: Store;
 	router?: Router;
 	models?: Record<string, any>;
-	formatters?: Record<string, Formatter>;
+	/** The app's own template functions (the `functions` config map). */
+	functions?: Record<string, Formatter>;
 	/** Install and retain the adapter capability before constructing the default Store. */
 	adapter?: PuzzleAppConfig['adapter'];
 	/**

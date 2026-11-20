@@ -52,6 +52,11 @@ notes:
       Rejected: returning the `[autofocus]` element as the target (a closed dialog's button takes no
       focus, so focus fell to body); autofocus-only (a view focusing in mounted() would still lose
       focus); a reused-view flag to keep D135's old push behaviour.
+  - kind: state
+    text: >-
+      Popstate saves the outgoing position from `#shown`, the window position as of the last
+      `scroll` event (listener added in `start()` when scroll is enabled, removed in `stop()`); a
+      push saves `departScroll`. Neither path reads the window at commit.
 ---
 
 # Router
@@ -131,7 +136,7 @@ With a navigation in flight (`#pendingNavPromise` set — every verb pairs it, a
 
 ## Mounting and transitions
 
-- The chain becomes nested keyed component vnodes through each `<Slot/>`. The **whole** chain is rebuilt each navigation — a survivor-only swap would be reverted by a later ancestor re-render. The shared prefix keeps its instances; the topmost divergent view or a changed layout is the sole animator. A missing outlet warns in development.
+- The chain becomes nested keyed component vnodes through each `<Outlet/>`. The **whole** chain is rebuilt each navigation — a survivor-only swap would be reverted by a later ancestor re-render. The shared prefix keeps its instances; the topmost divergent view or a changed layout is the sole animator. A missing outlet warns in development.
 - Sequential mode awaits the old unit's out phase before commit; a failing leave hook is logged and the swap continues. Overlap pins the leaver at its measured fixed rect and commits the entrant at once. Interruptions synchronously destroy doomed pending-out subtrees. Enter hooks go through `#playInLogged`.
 - Morph seam: `leave(oldRoot)` at out start (awaited before destroy), `enter(newRoot, { initial })` post-commit, pre-paint; errors logged, never wedge; params-only updates fire no morph hooks.
 - **Hybrid takeover** ([[DECISION-D67-HYBRID-PRERENDER]]): matching `data-puzzle-ssg` markup at navigation zero is replaced in the commit window, the marker removed, the initial enter skipped. A failed takeover mount first offers the position to the error view; otherwise the snapshotted prerendered nodes and marker are restored ([[DECISION-D140-TAKEOVER-MOUNT-RESTORATION]]), and every container-mount branch re-runs the takeover clear. Static output has no router.

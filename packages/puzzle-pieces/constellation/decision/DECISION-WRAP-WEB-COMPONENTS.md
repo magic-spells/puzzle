@@ -172,7 +172,7 @@ The `@magic-spells` ecosystem has 15+ mature web components (dialog-panel, sheet
 
 ## Decision (2026-08-22)
 
-**Wrap the web component directly whenever possible.** A wrapper piece renders the custom element's markup around `<Slot/>`/`<Children/>`, binds props to attributes, declares the npm package in `piece.json.dependencies`, dynamic-imports the package in `mounted()` (module-scope `class extends HTMLElement` crashes Node prerender), and documents the stylesheet import (`@import "@magic-spells/<pkg>/css" layer(components)`) so Tailwind utilities on the host still win. Upstream fixes then reach every consumer through a version bump; nothing is re-ported. ScrollStack is the exemplar.
+**Wrap the web component directly whenever possible.** A wrapper piece renders the custom element's markup around `<Children/>`, binds props to attributes, declares the npm package in `piece.json.dependencies`, dynamic-imports the package in `mounted()` (module-scope `class extends HTMLElement` crashes Node prerender), and documents the stylesheet import (`@import "@magic-spells/<pkg>/css" layer(components)`) so Tailwind utilities on the host still win. Upstream fixes then reach every consumer through a version bump; nothing is re-ported. ScrollStack is the exemplar.
 
 **Port (a native `.pzl` rebuild) only when wrapping genuinely can't work** — the behavior doesn't exist as a web component, or the piece's value is token-styled form-control markup where a wrapper would cost more than it saves (Calendar-style controls). Ported pieces keep the rules that make ports workable: no `<style>` blocks, no `customElements.define`, Tailwind semantic tokens only, config-first props.
 

@@ -5,13 +5,14 @@
       <p class="mt-1.5 mb-0 text-[12px] text-muted leading-relaxed">
         This page has not opened a DevTools bridge. That is expected when the page is
         not a Puzzle app, when it is a <strong class="font-medium text-ink">production build</strong>
-        (the bridge is compiled out entirely), or when the framework predates the
-        bridge.
+        (the bridge is compiled out entirely), when it was built with
+        <code class="font-mono text-accent">output: 'static'</code> (static pages never load
+        the bridge), or when the framework predates the bridge.
       </p>
       <ul class="mt-2.5 mb-0 pl-4 text-[11px] text-muted leading-relaxed">
         <li>Run the app with <code class="font-mono text-accent">puzzle dev</code>, or build with <code class="font-mono text-accent">--mode development</code>.</li>
         <li>Reload the page with DevTools already open.</li>
-        <li>Requires puzzle <code class="font-mono text-accent">0.2.0</code> or newer.</li>
+        <li>Requires puzzle <code class="font-mono text-accent">0.7.0</code> or newer.</li>
       </ul>
       <p class="mt-2.5 mb-0 text-[11px] text-faint leading-relaxed">{ refreshHint }</p>
     </section>

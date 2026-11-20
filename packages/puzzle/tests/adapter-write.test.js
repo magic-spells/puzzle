@@ -252,6 +252,43 @@ describe('save() — non-OK response', () => {
 	});
 });
 
+describe('save()/delete() — a failure nobody awaits', () => {
+	// Pins the write path's reporting: `_write` hands the caller its own derived
+	// promise, never the chain's internally handled `run`, so a fire-and-forget
+	// save or delete that fails rejects unhandled, while an awaited one is the
+	// caller's to handle.
+	it('is an unhandled rejection; an awaited one is not', async () => {
+		mockFetch({ ok: false, status: 500, statusText: 'Server Error', body: '' });
+		const store = apiStore();
+		const fresh = store.createRecord('todo', { id: 't1', text: 'x' });
+		const synced = store.upsert('todo', { id: 't2', text: 'y' });
+		const tick = () => new Promise((r) => setTimeout(r, 0));
+		// Vitest fails the run on an unhandled rejection; take its listeners off for
+		// these writes and count the reports here instead.
+		const vitestListeners = process.listeners('unhandledRejection');
+		const unhandled = [];
+		process.removeAllListeners('unhandledRejection');
+		process.on('unhandledRejection', (reason) => unhandled.push(reason));
+		try {
+			fresh.save();
+			synced.delete();
+			await tick();
+			await tick();
+			expect(unhandled.map((err) => err.status)).toEqual([500, 500]);
+
+			unhandled.length = 0;
+			await expect(fresh.save()).rejects.toMatchObject({ status: 500 });
+			await expect(synced.delete()).rejects.toMatchObject({ status: 500 });
+			await tick();
+			await tick();
+			expect(unhandled).toEqual([]);
+		} finally {
+			process.removeAllListeners('unhandledRejection');
+			for (const listener of vitestListeners) process.on('unhandledRejection', listener);
+		}
+	});
+});
+
 describe('save() — 2xx response merge', () => {
 	it('merges a JSON-object response (server-computed field lands) and notifies subscribers', async () => {
 		mockFetch({ body: { id: 't1', text: 'x', completed: false, serverStamp: 'abc' } });

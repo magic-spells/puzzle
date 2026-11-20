@@ -189,7 +189,7 @@ describe('prerender pages carry `head` (D84)', () => {
 		},
 		{ path: '/spa', name: 'spa', view: Page, layout: Layout, prerender: false },
 	];
-	const config = () => ({ target: '#app', routes: routes(), models: {}, formatters: {} });
+	const config = () => ({ target: '#app', routes: routes(), models: {}, functions: {} });
 
 	it('resolves head per page; title rides beside it (=== head.title)', async () => {
 		const { pages } = await prerender(config());
@@ -507,7 +507,7 @@ describe('prerenderToDir output carries the head tags before any JS (D84)', () =
 		const outDir = path.join(dir, 'dist');
 		const shellPath = writeShell(dir, SHELL);
 		await prerenderToDir(
-			{ target: '#app', routes: routes(), models: {}, formatters: {} },
+			{ target: '#app', routes: routes(), models: {}, functions: {} },
 			{ outDir, shellPath }
 		);
 
@@ -532,7 +532,7 @@ describe('prerenderToDir output carries the head tags before any JS (D84)', () =
 			'<body><div id="app"></div><script type="module" src="/app.js"></script></body></html>';
 		const shellPath = writeShell(dir, staticShell);
 		await prerenderToDir(
-			{ target: '#app', routes: [routes()[0]], models: {}, formatters: {} },
+			{ target: '#app', routes: [routes()[0]], models: {}, functions: {} },
 			{ outDir, shellPath, mode: 'static' }
 		);
 
@@ -552,7 +552,7 @@ describe('prerenderToDir output carries the head tags before any JS (D84)', () =
 			'<body><div id="app"></div><script type="module" src="/app.js"></script></body></html>';
 		const shellPath = writeShell(dir, staticShell);
 		await prerenderToDir(
-			{ target: '#app', routes: routes(), models: {}, formatters: {} },
+			{ target: '#app', routes: routes(), models: {}, functions: {} },
 			{ outDir, shellPath, mode: 'static' }
 		);
 

@@ -20,7 +20,7 @@
  *   (constellation/doc/DOC-APP-ANATOMY.md §4). Reusable components render inline — no wrapper
  *   element around the child's root (D20).
  * - Slot marker — `tag === SLOT_TAG`. A child's render tree emits one where
- *   `<Children/>`/`<Slot/>` appeared; the ViewManager substitutes the slot content
+ *   `<Children/>`/`<Outlet/>` appeared; the ViewManager substitutes the slot content
  *   captured at the call site (those vnodes carry parent-scope handlers).
  *
  * Conventions:
@@ -39,7 +39,7 @@
 
 import { PuzzleModel } from '../model.js';
 
-/** Reserved tag marking a composition-marker (`<Children/>`/`<Slot/>`/`<Slot name="…"/>`) substitution point. */
+/** Reserved tag marking a composition-marker (`<Children/>`/`<Outlet/>`/`<Slot name="…"/>`) substitution point. */
 export const SLOT_TAG = 'slot';
 
 /** Reserved tag marking caller-provided <Snippet> content (D166). */

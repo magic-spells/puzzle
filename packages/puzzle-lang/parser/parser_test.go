@@ -392,8 +392,8 @@ func TestParseForReservedIdentifiers(t *testing.T) {
 		{name: "reserved ViewNode counter", content: "{#for item in items, ViewNode}<div>x</div>{/for}", ident: "ViewNode"},
 		// SLOT_TAG is imported whenever the template holds a slot; a loop binding of
 		// that name shadows the outlet marker inside the body.
-		{name: "reserved SLOT_TAG item", content: "{#for SLOT_TAG in items}<Slot/>{/for}", ident: "SLOT_TAG"},
-		{name: "reserved SLOT_TAG counter", content: "{#for item in items, SLOT_TAG}<Slot/>{/for}", ident: "SLOT_TAG"},
+		{name: "reserved SLOT_TAG item", content: "{#for SLOT_TAG in items}<Outlet/>{/for}", ident: "SLOT_TAG"},
+		{name: "reserved SLOT_TAG counter", content: "{#for item in items, SLOT_TAG}<Outlet/>{/for}", ident: "SLOT_TAG"},
 		// Reserved regardless of whether this template actually emits the import.
 		{name: "reserved SLOT_TAG without a slot", content: "{#for SLOT_TAG in items}<div>x</div>{/for}", ident: "SLOT_TAG"},
 	}
@@ -1382,10 +1382,14 @@ func TestParseComponentAndSlot(t *testing.T) {
 		}
 	})
 
-	t.Run("self-closing slot", func(t *testing.T) {
-		root := parseContent(t, "<Slot/>")
-		if _, ok := elementChildren(root.Children)[0].(*Slot); !ok {
+	t.Run("self-closing outlet", func(t *testing.T) {
+		root := parseContent(t, "<Outlet/>")
+		s, ok := elementChildren(root.Children)[0].(*Slot)
+		if !ok {
 			t.Fatalf("expected *Slot")
+		}
+		if s.Marker != "Outlet" || s.Name != "" {
+			t.Errorf("Marker = %q, Name = %q; want Outlet, empty", s.Marker, s.Name)
 		}
 	})
 }
@@ -1404,8 +1408,9 @@ func TestParseCompositionMarkersD141(t *testing.T) {
 			{"Children default marker", "<Children/>", "", 0},
 			{"Children fallback", "<Children><p>Default</p></Children>", "", 1},
 			{"Children empty paired body", "<Children></Children>", "", 0},
-			{"Slot bare outlet", "<Slot/>", "", 0},
-			{"Slot outlet fallback", "<Slot>{#if show}<p>Empty</p>{/if}</Slot>", "", 1},
+			{"Outlet", "<Outlet/>", "", 0},
+			{"Outlet fallback", "<Outlet>{#if show}<p>Empty</p>{/if}</Outlet>", "", 1},
+			{"Outlet empty paired body", "<Outlet></Outlet>", "", 0},
 			{"Slot named marker", `<Slot name="header"/>`, "header", 0},
 			{"Slot named fallback", `<Slot name="header"><h2>Untitled</h2></Slot>`, "header", 1},
 			{"Slot named empty paired body", `<Slot name="header"></Slot>`, "header", 0},
@@ -1451,12 +1456,12 @@ func TestParseCompositionMarkersD141(t *testing.T) {
 		{
 			name:        "bare lowercase slot is retired",
 			src:         `<puzzle-view><slot/></puzzle-view>` + "\n<script></script>",
-			wantMessage: "bare <slot> is not a marker — use <Children/> for call-site content or <Slot/> for the router outlet (D134)",
+			wantMessage: "bare <slot> is not a marker — use <Children/> for call-site content or <Outlet/> for the router outlet (D134/D199)",
 		},
 		{
 			name:        "bare lowercase slot with body is retired",
 			src:         `<puzzle-view><slot>fallback</slot></puzzle-view>` + "\n<script></script>",
-			wantMessage: "bare <slot> is not a marker — use <Children/> for call-site content or <Slot/> for the router outlet (D134)",
+			wantMessage: "bare <slot> is not a marker — use <Children/> for call-site content or <Outlet/> for the router outlet (D134/D199)",
 		},
 		{
 			name:        "lowercase named slot is retired",
@@ -1510,13 +1515,13 @@ func TestParseCompositionMarkersD141(t *testing.T) {
 		},
 		{
 			name:        "duplicate default markers across spellings",
-			src:         `<puzzle-view><Children/><Slot/></puzzle-view>` + "\n<script></script>",
-			wantMessage: "duplicate default marker (<Children/>/<Slot/>) — already declared at 1:14",
+			src:         `<puzzle-view><Children/><Outlet/></puzzle-view>` + "\n<script></script>",
+			wantMessage: "duplicate default marker (<Children/>/<Outlet/>) — already declared at 1:14",
 		},
 		{
 			name:        "named marker inside component invocation",
 			src:         `<puzzle-view><Card><Slot name="header"/></Card></puzzle-view>` + "\n<script></script>",
-			wantMessage: `<Slot name="header"> inside a component invocation is not supported — only the bare default <Children/> or <Slot/> forwards through a component`,
+			wantMessage: `<Slot name="header"> inside a component invocation is not supported — only the default <Children/> or <Outlet/> forwards through a component`,
 		},
 	}
 	for _, tc := range errs {
@@ -1593,7 +1598,7 @@ func TestParseNamedSlotErrors(t *testing.T) {
 		},
 		{
 			name:       "duplicate default marker in one template",
-			src:        `<puzzle-view><Children/><Slot/></puzzle-view>` + "\n<script></script>",
+			src:        `<puzzle-view><Children/><Outlet/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "duplicate default marker",
 		},
 	}
@@ -1620,7 +1625,7 @@ func TestParseDefaultAndNamedSlotOK(t *testing.T) {
 }
 
 // TestParseSlotForwarding covers the D71 call-site forwarding rules (v1.38,
-// respelled by v1.64/D134): the default marker <Children/> (or <Slot/>) may sit
+// respelled by v1.64/D134 and D199): the default marker <Children/> (or <Outlet/>) may sit
 // inside a component invocation (it forwards through the component at runtime),
 // but a NAMED marker there is a positioned compile error — named forwarding
 // semantics are deliberately unspecified.
@@ -1642,8 +1647,8 @@ func TestParseSlotForwarding(t *testing.T) {
 			src:  `<puzzle-view><Slot name="header"/><Card><Children/></Card></puzzle-view>` + "\n<script></script>",
 		},
 		{
-			name: "capitalized Slot outlet forwarding inside an invocation",
-			src:  `<puzzle-view><Card><Slot/></Card></puzzle-view>` + "\n<script></script>",
+			name: "Outlet forwarding inside an invocation",
+			src:  `<puzzle-view><Card><Outlet/></Card></puzzle-view>` + "\n<script></script>",
 		},
 	}
 	for _, tc := range ok {
@@ -2403,12 +2408,12 @@ func TestParseIslandErrors(t *testing.T) {
 		{
 			name:       "Children marker inside island subtree",
 			src:        `<puzzle-view><div island><Children/></div></puzzle-view>` + "\n<script></script>",
-			wantSubstr: `a composition marker (<Children/>/<Slot/>/<Slot name="…"/>) cannot appear inside an island element`,
+			wantSubstr: `a composition marker (<Children/>/<Outlet/>/<Slot name="…"/>) cannot appear inside an island element`,
 		},
 		{
 			name:       "named slot inside island subtree",
 			src:        `<puzzle-view><div island><Slot name="x"/></div></puzzle-view>` + "\n<script></script>",
-			wantSubstr: `a composition marker (<Children/>/<Slot/>/<Slot name="…"/>) cannot appear inside an island element`,
+			wantSubstr: `a composition marker (<Children/>/<Outlet/>/<Slot name="…"/>) cannot appear inside an island element`,
 		},
 		{
 			name:       "dynamic island inside marker fallback",

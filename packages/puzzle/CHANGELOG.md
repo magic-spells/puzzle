@@ -11,7 +11,7 @@ numbered `Dnn` cards, referenced below.
 
 ## Upgrading across versions
 
-Thirteen breaking changes are easy to miss on a multi-version jump. Most fail
+Fifteen breaking changes are easy to miss on a multi-version jump. Most fail
 loudly — a compile error, a constructor throw, an unresolvable import. Seven are
 quiet: hashed production filenames (0.10.0) break only what names the old
 files outside the build; the 0.8.0 template semantics change output without an error;
@@ -34,6 +34,19 @@ prop read and `data(params)` reads `params.id` as `undefined`. Write
 uses. One more change needs no edit:
 `setState()` now re-runs `data()` when `data()` read the key (D23), so the
 `refresh()` that followed it can go.
+
+**The router outlet is `<Outlet/>`, and the config key is `functions` (0.10.0,
+D134, D7).** Both are loud. A bare `<Slot/>` is a compile error: write
+`<Outlet/>` where a layout or view receives its child route and `<Children/>`
+where a component receives call-site content. Named `<Slot name="…"/>` is
+unchanged. `new PuzzleApp({ formatters })` throws: the key is `functions`, and
+a static build's `app/formatters.js` is `app/functions.js`.
+
+**`puzzle check --fix` does all four 0.10 renames (D199).** Run `puzzle check`
+first: it lists every `setData(`, positional `data(params, props)`, bare
+`<Slot/>` and `formatters` key with its position and fails, then `--fix`
+rewrites them in place and type-checks. Sites it cannot judge (a config passed
+by name, a `setData` on another receiver) are listed for you to edit by hand.
 
 **Production builds hash their output names (0.10.0, D181).** With no
 `build.hashNames` key, a production build now writes `app-<hash>.js`,
@@ -157,7 +170,7 @@ and `<slot>` are no longer valid in any position:
 |---|---|
 | `<children/>` | `<Children/>` |
 | `<slot/>` in a component | `<Children/>` |
-| `<slot/>` in a routed view or layout | `<Slot/>` |
+| `<slot/>` in a routed view or layout | `<Slot/>` (`<Outlet/>` since 0.10) |
 | `<slot name="x"/>` | `<Slot name="x"/>` |
 
 The call-site `slot="x"` **attribute** is unchanged — only the tags moved. Two
@@ -178,7 +191,8 @@ or <Slot/> for the router outlet (D134)
 ```
 
 Pick `<Children/>` if that position received content from the call site, or
-`<Slot/>` if it received a child route.
+`<Slot/>` if it received a child route. Since 0.10 that second spelling is
+`<Outlet/>`, and `puzzle check --fix` picks between the two by directory.
 
 **`output: 'static'` changed meaning (0.2.0, D81).** If you set it before
 0.2.0, rename it to `output: 'hybrid'` to keep the behavior you had. The name
@@ -195,7 +209,7 @@ one is *not* a compile error; it silently builds a different product.
   `getState()` returns a copy of the state layer alone (what `setState()`
   wrote), while `getData()` still returns the merged model the template reads.
   An old call throws `this.setData is not a function` the first time it runs,
-  and `puzzle check` flags it. Search for `setData(` to find them all, but
+  and `puzzle check` flags it (`puzzle check --fix` renames it, D199). Search for `setData(` to find them all, but
   leave DOM calls such as `event.dataTransfer.setData()` alone. Pieces you
   copied with `puzzle add piece` before 0.10 call `setData()` too: re-add them
   with `puzzle add piece <name> --force`, or rename the calls by hand.
@@ -222,10 +236,33 @@ one is *not* a compile error; it silently builds a different product.
   callbacks to every view its template mounts, at any depth and through slots,
   under `shared.<camelCaseClassName>` (`Tabs` → `shared.tabs`). `shared` is
   always an object, handlers read it as `this.shared`, and only nested views
-  whose `data()` read a changed shared key re-run. A layout's `share()` does
+  whose `data()` read a changed shared key re-run (`puzzle check --fix`
+  rewrites old declarations, D199). A layout's `share()` does
   not reach its routed page. Components named `Params`, `Props` or `Shared`
   draw a compiler warning. In TypeScript, type the argument with the new
   `DataInput<Props>` export.
+- **BREAKING: the router outlet is `<Outlet/>`; a bare `<Slot/>` is an error
+  (D134).** Each marker now has one role: `<Outlet/>` is where a layout or
+  view receives its child route, `<Children/>` is where a component receives
+  call-site content, and `<Slot name="…"/>` is a named slot. A `<Slot>` with no
+  name stops the build with a positioned error that names both replacements
+  and `puzzle check --fix`. `<Outlet/>` emits the same code as `<Children/>`,
+  so the rename changes no runtime bytes, takes no attributes, and may carry a
+  fallback body (`<Outlet><p>Loading</p></Outlet>`). In a component it
+  compiles with a warning steering to `<Children/>`, since the router never
+  fills one. `Outlet` joins the reserved tag names (a component file named
+  `Outlet.pzl` is an error) and lowercase `<outlet>` steers to it. Hosts with
+  their own composition rules (Sites) skip the check through
+  `parser.Options.SkipSlotCheck`, as before.
+- **BREAKING: the `formatters` config key is `functions` (D7, D174).** Register
+  template functions with `new PuzzleApp({ functions: { … } })`, and the same
+  key on `createTestApp()` and `mountView()`. A config that still sets
+  `formatters` throws at construction, in `prerender()` and in the testing
+  helpers, naming the new key and `puzzle check --fix`. A static build reads
+  `app/functions.js|ts`; a leftover `app/formatters.js|ts` draws a warning
+  naming the rename. The prerender summary's `hasFormatters` field is
+  `hasFunctions`. Internal names (`ctx.formatters`, the
+  `@magic-spells/puzzle/formatters/manifest` alias) are unchanged.
 - **BREAKING: production builds hash their output names by default (D181).**
   `build.hashNames` no longer follows `build.splitting`: with the key unset,
   every production build emits `app-<hash>.js` and `styles-<hash>.css`
@@ -402,6 +439,18 @@ one is *not* a compile error; it silently builds a different product.
   `this.props`. `PuzzleViewConstructor` is the type for any view class; a
   `typeof PuzzleView` annotation rejects a typed one. The `.pzl` module shim
   types an import as `typeof PuzzleView<any>`.
+- **`examples/auth`, a reference app for sign-in, token refresh, a guarded
+  route and logout.** A pattern to copy, not an auth library: one plain
+  `app/auth.js` module holds the tokens, `beforeRequest` (D91) adds the bearer,
+  a route `guard` (D87) refreshes an expiring token before a protected page
+  loads, a timer refreshes ahead of expiry, the `errorView` (D145) renews and
+  retries after a 401, and signing out revokes the refresh token and clears the
+  user's records. The sign-in form uses `/forms` (D192) and every route is
+  named (D196). It runs with `puzzle dev --fixtures` against a mock backend
+  that checks the token. `tests/auth-example.test.js` runs the same flow.
+- **A fixtures mock `handler` receives the request's `headers`.** The header
+  set after `beforeRequest` ran, as a plain object with lower-case names, so a
+  mock can answer 401 for a missing or expired token the way a real API does.
 
 ### Changed
 
@@ -449,6 +498,23 @@ one is *not* a compile error; it silently builds a different product.
   untyped. `puzzle check` type-checks `lang="ts"` scripts, template event
   handlers (a handler that does not exist, the wrong number of arguments, or
   an argument of a known type that does not fit) and standard-function calls.
+- **`puzzle check` no longer reports correct templates that read `data()`
+  (D165).** It typed template reads against the view class's declared
+  members, but a template reads what `data()` returns, so it reported a
+  `private` field mirrored in `data()`, a nullable field `data()` normalises,
+  a data key named like a view member (`events`, `props`, `route`), a dotted
+  read of a `data()`-only key under `noPropertyAccessFromIndexSignature`, and
+  a loop over `Object.values()` or `Object.entries()` of untyped data.
+  Template data is now untyped, so a mistake made through a typed class field
+  (a misspelt member of a declared field, or a declared field passed as the
+  wrong argument) is no longer reported either. Handler names, `lang="ts"`
+  handler calls, standard-function calls, and members of literals, function
+  results and `Object.keys()` results are still checked.
+- **The documented `<Component is={ cards[embed.type] }>` passes
+  `puzzle check` under `strict`.** The check typed the script's `cards` map
+  and indexed it with untyped data, which `noImplicitAny` rejects ("Element
+  implicitly has an 'any' type"). A selector is now checked like other
+  template data; a typed sub-expression inside it still is.
 - **Buttons are quiet: no brand fill (puzzle-pieces).** A screen with many
   buttons no longer reads as a wall of indigo. `button` `primary` is solid ink
   with the page colour as its text (`bg-ink text-page hover:bg-ink/85`):
@@ -502,6 +568,62 @@ one is *not* a compile error; it silently builds a different product.
 Re-add a piece with `puzzle add piece <name> --force` to pick up these
 changes.
 
+### Fixed
+
+- **A failed `app.mount()` or `i18n.setLocale()` that nothing awaits is
+  reported again.** A bare `app.mount()`, as every scaffolded `app.js` has,
+  failed with a blank page and an empty console (since 0.7.0), and a failed
+  in-place locale switch that nothing awaited, such as a language button's,
+  reported nothing (since 0.9.0). Both now reach the console as an unhandled
+  rejection. A failed `record.save()` or `.delete()` that nothing awaits is
+  now reported the same way.
+- **Back after a bare `#anchor` link returns to the reading position in
+  Safari and every iOS browser.** WebKit jumps to the anchor before it fires
+  `popstate`, so the router saved the anchor's position for the entry the
+  reader left, and Back landed on the anchor again. The router now saves the
+  position from the last `scroll` event.
+- **A range input keeps its `value` when `value` comes before `min`, `max` or
+  `step`.** Attributes are written in authored order, and the browser clamps a
+  range to the bounds it has at that moment, so the value was clamped at mount
+  (to 0–100 by default) and when an update raised `value` and `max` together.
+  The value is now applied again once every attribute is in.
+- **A number input whose `@input` stores a number keeps what you type.** With
+  a handler that stores `Number(event.target.value)`, typing `10.05` stored
+  `105`: at `10.0` the field was rewritten to `10` under the caret. A field
+  whose number already equals the bound value is now left alone.
+- **A static `prerender: false` page shows its route's title.** In
+  `output: 'static'` it kept the shell's `<title>` in the browser tab; it now
+  takes the route's `meta.title`, as the SPA router does.
+- **`output: 'static'` warns about an ignored `storage` even when the config
+  guards `window`.** The build reads the config in Node, where
+  `typeof window !== 'undefined' ? window.localStorage : undefined` is
+  `undefined`, so that spelling never drew the warning. It now prints whenever
+  the config has a `storage` key.
+- **`puzzle check` finds a TypeScript hoisted to a workspace root, and
+  `puzzle doctor` a Tailwind CLI in a parent folder.** Both looked only in the
+  app's own `node_modules`, so in an npm or Yarn 1 workspace, which hoists
+  packages to its root, `check` said TypeScript was missing and `doctor`
+  reported no local Tailwind install. Both now look in each parent folder's
+  `node_modules` too.
+- **The Store panel's History stays readable (puzzle-devtools).** After the
+  first update, every later update quoted the earlier rows' values again and
+  lost their times.
+- **DevTools says why a static page shows no app (puzzle-devtools).** Pages
+  built with `output: 'static'` never load the DevTools bridge, so the panels
+  find no app even under `puzzle dev`. The "No Puzzle app detected" state now
+  says so, where it only told you to run `puzzle dev`.
+- **`eslint --fix` no longer deletes a `.pzl` file's template
+  (eslint-plugin-puzzle).** Whitespace and formatting rules (core
+  `no-multiple-empty-lines`, `@stylistic`, `neostandard`,
+  `@antfu/eslint-config`, `eslint-plugin-prettier`) saw the template, the
+  `<script>` tags and the `<style>` section as blank lines and trailing
+  spaces, and `--fix` removed them. A fix now never reaches outside the
+  `<script>` body, and `recommended` and `typescript` no longer turn off
+  `eol-last`, `no-trailing-spaces` and `unicode-bom`. Under
+  `eslint-plugin-prettier`, a change Prettier wants on the first line of the
+  body is neither fixed nor reported; format `.pzl` files with
+  `@magic-spells/prettier-plugin-puzzle`.
+
 ### CLI
 
 The CLI now answers to the flags people type from npm, gh, vite and cargo
@@ -535,6 +657,16 @@ habit. Nothing existing breaks: renamed spellings stay accepted.
 - **`generate --dir`** names the app root the way `add --dir` does.
 - `check --js`, a hidden flag that only ever errored as not implemented, is
   gone.
+- **`puzzle check --fix` (D199)** rewrites the four 0.10 renames in `app/`
+  and `tests/`: `this.setData(` → `this.setState(`, positional
+  `data(params, props)` / `share(…)` → `data({ params, props })`, a bare
+  `<Slot/>` → `<Outlet/>` in layouts and views or `<Children/>` elsewhere, and
+  the `formatters` config key (plus `app/formatters.js`) → `functions`. Bare
+  `puzzle check` is the dry run: it prints each site as `file:line:col  old →
+  new` and exits non-zero before type-checking, so CI fails on an
+  un-upgraded app with the command that fixes it. The pass uses the parser and
+  script tokenizer, not text search, so comments, strings and `{#raw}` are
+  left alone, and a second run finds nothing.
 
 ## 0.9.1 — 2026-10-22 (Go module only)
 

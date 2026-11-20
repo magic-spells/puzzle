@@ -85,10 +85,12 @@ syntax: write your own handler, use a non-path expression
 | `<select>` (single) | `change` | string | `v` |
 
 Other input types (file, radio, submit, button, reset, image, hidden) never
-bind. Number commits on `change` because coercion breaks the caret round-trip
-(`"1.20"` → `1.2` would rewrite the field mid-typing); date kinds yield `''`
-mid-entry. `''` writes `null` so a cleared field isn't rewritten to `"0"`;
-`Number('-')` is NaN and would render `"NaN"`, so it is skipped.
+bind. Number commits on `change`, so state only ever holds a finished number,
+never a half-typed one (`-` and `1e` read as `''`). A re-render never respells a
+field that already holds the bound number (`"1.20"` while state is `1.2`), as
+React does. Date kinds yield `''` mid-entry. `''` writes `null` so a cleared
+field isn't rewritten to `"0"`; `Number('-')` is NaN and would render `"NaN"`,
+so it is skipped.
 
 ### Emission
 

@@ -1,0 +1,61 @@
+<puzzle-view class="min-h-screen">
+  <header class="bg-white border-b border-slate-200">
+    <div class="max-w-3xl mx-auto px-6 h-16 flex items-center justify-between gap-6">
+      <a class="font-semibold text-slate-900" href={ link({ name: 'home' }) }>Puzzle auth</a>
+
+      <nav class="flex items-center gap-5 text-sm">
+        <a class="text-slate-600 hover:text-slate-900" href={ link({ name: 'dashboard' }) }>Notes</a>
+        <a class="text-slate-600 hover:text-slate-900" href={ link({ name: 'account' }) }>Account</a>
+
+        <!-- the session record decides this half of the header. it is in the
+             store, so signing in or out re-renders the layout on its own -->
+        {#if session}
+          <span class="text-slate-400">{ session.name }</span>
+          <button
+            type="button"
+            class="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700 hover:bg-slate-100"
+            @click={ signOut }>
+            Sign out
+          </button>
+        {:else}
+          <a
+            class="rounded-lg bg-indigo-600 px-3 py-1.5 font-medium text-white hover:bg-indigo-500"
+            href={ link({ name: 'login' }) }>
+            Sign in
+          </a>
+        {/if}
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-6 py-10">
+    <Outlet/>
+  </main>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { signOut } from '../auth.js';
+
+// the one layout: a header that knows who is signed in, around the page.
+//
+// why the store and not share(): a layout's share() does not reach its routed
+// page (D197), so state the header and the pages both need lives in a record
+// they each read.
+export default class DefaultLayout extends PuzzleView {
+  data() {
+    // a local model, so this never fetches; null means signed out
+    return { session: this.ctx.store.findOne('session', 'current') };
+  }
+
+  events = {
+    // leave the protected page first, then drop the session. the other order
+    // would clear the notes while the dashboard is still showing, and its
+    // re-run would send a request with no token.
+    signOut: async () => {
+      await this.ctx.router.push({ name: 'home' });
+      await signOut(this.ctx.store);
+    },
+  };
+}
+</script>

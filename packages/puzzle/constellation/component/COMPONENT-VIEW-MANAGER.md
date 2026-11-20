@@ -68,7 +68,9 @@ the views can read it without importing each other.
   `patchComponent`. `tests/keyed-move-el.test.js` pins this.
 - Controlled `value`/`checked` re-sync from the new value on every patch,
   including browser-drifted values (`syncControl`, shared with `patchAttrs` and
-  `reassertSelectValue`).
+  `reassertSelectValue`), and are re-asserted once more after an element's attrs
+  and children are in, at mount and on patch, because a `<select>`'s options and
+  a range's `min`/`max`/`step` can land after its `value`.
 
 ## Identity short-circuit ([[DECISION-D170-INCREMENTAL-VDOM-LISTS]])
 
@@ -130,7 +132,7 @@ child without it. Gated by `__PUZZLE_HAS_COMPONENT_SLOT__`.
 ## Composition markers
 
 `SLOT_TAG` + the shared `expandSlots` (also used by SSG/static): `<Children/>` →
-default bucket, `<Slot name>` → named, `<Slot/>` → router outlet; `SNIPPET_TAG`
+default bucket, `<Slot name>` → named, `<Outlet/>` → router outlet; `SNIPPET_TAG`
 children form a bucket keyed by `fits`. Semantics: [[DOC-SPEC-TEMPLATE]] §24/§64.
 
 - **One helper, `fill(out, nodes, marker, parts)`.** The "filled" test (any node

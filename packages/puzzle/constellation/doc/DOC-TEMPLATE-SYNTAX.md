@@ -55,7 +55,7 @@ The built-ins: `round`, `currency`, `percentage`, `number_with_delimiter`, `comp
 
 - What JavaScript already spells is not a function: count with `.length`, do math with the operators and `Math.*`, fall back with `??`, transform text with methods (`.toUpperCase()`, `.trim()`, `.replaceAll(a, b)`, `.split(',')`).
 - `|` pipes are Sites theme syntax: `{ price | currency }` is a compile error here that says to write `currency(price)`.
-- Register your own in the app config — `formatters: { byline: (name) => … }` — and call them the same way: `{ byline(post.author) }`. A function must be pure: rows in a cached `{#for}` do not re-run it.
+- Register your own in the app config — `functions: { byline: (name) => … }` — and call them the same way: `{ byline(post.author) }`. A function must be pure: rows in a cached `{#for}` do not re-run it.
 - A misspelled function doesn't crash: the value renders unchanged and the console names it, with a did-you-mean.
 
 **Rendering HTML.** Every interpolation is text, so a value never becomes markup by accident. `{ raw(post.bodyHtml) }` renders HTML through an allowlist sanitizer (scripts, event handlers, `style` and unsafe URLs are removed); `{ newline_to_br(comment.text) }` turns line breaks into `<br>`. Either must be the outermost call of a text interpolation — not an attribute or a prop.
@@ -198,7 +198,7 @@ const cards = { task: TaskCard, backtest: BacktestCard };
 </Card>
 ```
 
-- `<Children/>` renders the call site's children; `<Slot name="x"/>` renders the children marked `slot="x"`; in a layout, a bare `<Slot/>` is where the routed page goes.
+- `<Children/>` renders the call site's children; `<Slot name="x"/>` renders the children marked `slot="x"`; in a layout or view, `<Outlet/>` is where the routed page goes.
 - A paired marker's body is a **fallback**, shown when nothing is supplied — including a `{#for}` over an empty list or a false `{#if}`. Keep a fallback to one root element when siblings follow the marker.
 - One default marker per render path; mutually exclusive `{#if}` branches may each have one.
 - `<Children/>` inside another component forwards your children (and snippets) through it.
@@ -274,7 +274,7 @@ Comments and HTML comments are removed at compile time. `{#raw}` makes braces li
 | Component | `<TodoItem todo={ todo } @remove={ deleteTodo(todo) } />` |
 | Spread props | `<Card {...cardProps} />` |
 | Runtime component | `<Component is={ cards[type] } />` |
-| Router outlet | `<Slot/>` |
+| Router outlet | `<Outlet/>` |
 | Children / named slot | `<Children/>`, `<Slot name="header"/>` + `slot="header"` |
 | Fallback | `<Children>Nothing here yet</Children>` |
 | Snippet | `<Snippet user>{ user.name }</Snippet>` + `<Children user={ user }>` |
