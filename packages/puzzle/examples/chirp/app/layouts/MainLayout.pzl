@@ -2,7 +2,7 @@
   <!-- X-style three-column app frame. The window scrolls (no h-screen /
        overflow-hidden shell), so long threads behave like a normal document.
        This layout stays mounted across every route (they all share it), so only
-       the center <Slot/> swaps on navigation — the sidebar, right rail and
+       the center <Outlet/> swaps on navigation — the sidebar, right rail and
        mobile tab bar persist, and the unread badge below re-renders live. -->
   <div class="mx-auto flex w-full max-w-[1290px] justify-center">
 
@@ -55,7 +55,7 @@
     <!-- CENTER COLUMN. Fixed 600px reading width with side rules, matching X.
          Bottom padding on mobile clears the fixed tab bar. -->
     <main class="w-full max-w-[600px] min-h-screen border-x border-line pb-16 lg:pb-0">
-      <Slot/>
+      <Outlet/>
     </main>
 
     <!-- RIGHT RAIL (xl+). Deliberately holds NO component imports — the layout
@@ -122,7 +122,7 @@ export default class MainLayout extends PuzzleView {
   }
 
   // Subtle enter/leave for the whole shell. Since the app shares MainLayout,
-  // view-only swaps animate their own <Slot/> content, not this frame
+  // view-only swaps animate their own <Outlet/> content, not this frame
   // (constellation/doc/DOC-SPEC.md §12).
   animations = {
     in:  { from: { opacity: 0 }, to: { opacity: 1 }, duration: 220, easing: 'ease-out' },

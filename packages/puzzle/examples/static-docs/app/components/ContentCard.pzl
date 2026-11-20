@@ -15,7 +15,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // A global wrapper component the layout forwards the routed page into
-// (v1.36, D69): the layout writes <ContentCard><Slot/></ContentCard> and the
+// (v1.36, D69): the layout writes <ContentCard><Outlet/></ContentCard> and the
 // router-filled content lands in THIS component's default slot — at build time
 // (prerender) and in the browser alike.
 export default class ContentCard extends PuzzleView {}

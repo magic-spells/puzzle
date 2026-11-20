@@ -1,0 +1,13 @@
+<puzzle-view>
+  <li>{#for item in items}<Slot item={ item }/>{/for}</li>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Row extends PuzzleView {
+  data(_params, props = {}) {
+    return { items: props.items ?? [] };
+  }
+}
+</script>

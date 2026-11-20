@@ -45,7 +45,7 @@ function makeView(name, log, { animations = { in: IN, out: OUT } } = {}) {
 	};
 }
 
-// Same, but a layout: its render() carries a <Slot/> the routed view lands in.
+// Same, but a layout: its render() carries an <Outlet/> the routed view lands in.
 function makeLayout(name, log, { animations = { in: IN, out: OUT } } = {}) {
 	return class extends PuzzleView {
 		animations = animations;
@@ -377,7 +377,7 @@ describe('Router transitions — nested initial nav (topmost view only)', () => 
 		waapi = installFakeAnimate();
 		const log = [];
 		const Layout = makeLayout('layout', log);
-		const Parent = makeLayout('parent', log); // a shell view: <Slot/> + hooks
+		const Parent = makeLayout('parent', log); // a shell view: <Outlet/> + hooks
 		const Leaf = makeView('leaf', log);
 		const routes = [
 			{

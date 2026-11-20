@@ -172,7 +172,7 @@ The call form is the core and both hosts accept it.
   a function's name is not ambiguous and draws no warning, by design). An
   unregistered name is the D43 guard: value passes through with a dev error
   (did-you-mean or the removed name's replacement).
-- **Apps register functions** through the `formatters` config map and call
+- **Apps register functions** through the `functions` config map (D7) and call
   them bare: `{ specialFormat(product.title) }`.
 - **Inside an `@event` value** the handler's own call (the whole value, or a
   branch of its top-level conditional) names the view's handler; calls in
@@ -336,4 +336,5 @@ grammar (D180). Headers take any expression
   presets the compiler cannot see; a warning still catches typos.
 - **A shipped `puzzle migrate` codemod** — no outside users; the CHANGELOG
   carries the upgrade checklist.
-- **`functions` config key / `app.function()`** — `formatters` keeps its name.
+- **`app.function()`** — the `functions` config map is the one registration
+  path (D7).

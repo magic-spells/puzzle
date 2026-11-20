@@ -54,7 +54,7 @@ body); opener content after `raw` is ignored, like `{#comment}`.
   `island`, `key`, `flip` are omitted from the emitted vnode (the `@@` escape
   can't encode them); namespace checks don't apply.
 - **Component grammar is inert**: `<slot>`, `<children>` and capitalized tags
-  (`<Card/>`, `<Slot/>`, `<Portal>`) parse as plain elements, so samples show
+  (`<Card/>`, `<Outlet/>`, `<Portal>`) parse as plain elements, so samples show
   composition syntax without instantiating it or tripping
   [[DECISION-D167-COMPONENT-FAMILIES]] steering errors.
 - **`@` shim is usage-gated (D89).** Any raw block in template or skeleton sets

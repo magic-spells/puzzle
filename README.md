@@ -40,12 +40,12 @@ the [CHANGELOG](packages/puzzle/CHANGELOG.md) before you upgrade.
 ```
 my-app/
 ├── app/
-│   ├── app.js              # creates the PuzzleApp: mount target, routes, models, formatters
+│   ├── app.js              # creates the PuzzleApp: mount target, routes, models, functions
 │   ├── routes.js           # the route table: path → view, layout, child routes
 │   ├── views/              # routed pages
 │   │   ├── Home.pzl
 │   │   └── NotFound.pzl    # the '*' catch-all
-│   ├── layouts/            # page shells; the routed view renders at <Slot/>
+│   ├── layouts/            # page shells; the routed view renders at <Outlet/>
 │   │   └── Default.pzl
 │   ├── components/         # reusable .pzl components
 │   │   └── Counter.pzl

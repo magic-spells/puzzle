@@ -529,7 +529,7 @@ export interface Router {
 /**
  * A library function — a display-only value transform a template calls as
  * `name(value, …args)` (D176 §4). An app registers its own through the
- * `formatters` config map.
+ * `functions` config map.
  */
 export type Formatter = (...args: any[]) => any;
 
@@ -576,7 +576,7 @@ export type LinkOptions = { locale?: string | false };
  * the runtime (client-runtime/formatters/builtins.js, plus the registry-built
  * `link` and the i18n service's `t`). A value parameter is `unknown` because
  * every function coerces what it is given and prints a missing value as
- * nothing. Functions an app registers through the `formatters` config map are
+ * nothing. Functions an app registers through the `functions` config map are
  * not listed here.
  */
 export interface LibraryFunctions {
@@ -1057,8 +1057,9 @@ export interface PuzzleAppConfig {
 	/**
 	 * The app's own library functions (D176 §4), called bare from templates —
 	 * `{ specialFormat(product.title) }`. One named like a built-in overrides it.
+	 * The key was `formatters` before 0.10; that spelling throws (D199).
 	 */
-	formatters?: Record<string, Formatter>;
+	functions?: Record<string, Formatter>;
 	/** Base URL for the server read/write path. */
 	apiURL?: string;
 	/** Storage-like object for opt-in persistence. */
@@ -1230,7 +1231,7 @@ export declare class ViewNode {
 	readonly props: Record<string, any>;
 }
 
-/** Reserved tag marking a composition-marker (`<Children/>`/`<Slot/>`/`<Slot name>`) substitution point. */
+/** Reserved tag marking a composition-marker (`<Children/>`/`<Outlet/>`/`<Slot name>`) substitution point. */
 export declare const SLOT_TAG: string;
 
 /** Reserved tag carrying a caller-owned `<Snippet>…</Snippet>` declaration (D166). */

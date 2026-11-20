@@ -122,7 +122,7 @@ work at any depth.
   `dist/guide/templates/index.html` ships no description tags at all. Values
   are static strings only; the same fields stay synced across SPA navigation in
   hybrid/SPA builds.
-- **Nested routes + the title walk.** `/guide` is a shell view with a `<Slot/>`,
+- **Nested routes + the title walk.** `/guide` is a shell view with an `<Outlet/>`,
   an **index child** (`path: ''`, no `meta.title` → inherits the shell's *"Guide ·
   …"*) and a **sibling child** (`path: 'templates'`, its own title wins at
   `/guide/templates/`). Open the two pages and watch the browser tab.
@@ -133,11 +133,11 @@ work at any depth.
   rehydrates it before re-rendering — the browser sees the same records with no
   fetch and no re-run of `beforeMount`.
 - **App functions that work at build time *and* client-side.** `titlecase` and
-  `plural` live in [`app/formatters.js`](./app/formatters.js). The static build
-  reads the `formatters` map from that file so they exist in each page's module and
+  `plural` live in [`app/functions.js`](./app/functions.js). The static build
+  reads the `functions` map from that file so they exist in each page's module and
   re-render identically after mount. Functions registered **only** in the
   `app.js` config would render at build time but be missing client-side — the
-  build warns about that; keeping them in `app/formatters.js` is the fix. Models
+  build warns about that; keeping them in `app/functions.js` is the fix. Models
   come from [`app/models/index.js`](./app/models/index.js) the same way.
 - **Static, then interactive.** The Home page's counter is prerendered showing
   *"Clicked 0 times"*. Load `dist/index.html`, then **click the button** — the
@@ -207,21 +207,21 @@ static-docs/
 ├── app/
 │   ├── app.js                     # export default app + build-time beforeMount seed
 │   ├── routes.js                  # static + nested + prerender:false + catch-all
-│   ├── formatters.js              # titlecase + plural (available build-time AND client-side)
+│   ├── functions.js               # titlecase + plural (available build-time AND client-side)
 │   ├── models/
 │   │   ├── index.js
 │   │   └── principle.js           # trivial build-time model
 │   ├── styles/styles.css          # Tailwind v4, "warm paper" theme
 │   ├── public/index.html          # the shell (empty #app; /app.js tag stripped in static mode)
-│   ├── components/ContentCard.pzl # card chrome the layout forwards <Slot/> through (D69)
-│   ├── layouts/Default.pzl        # nav + footer chrome around <Slot/>
+│   ├── components/ContentCard.pzl # card chrome the layout forwards <Outlet/> through (D69)
+│   ├── layouts/Default.pzl        # nav + footer chrome around <Outlet/>
 │   └── views/
 │       ├── Home.pzl               # interactive counter (client-mount demo)
 │       ├── About.pzl              # reads seeded records in data()
 │       ├── Playground.pzl         # prerender:false client-rendered island
 │       ├── NotFound.pzl           # catch-all '*' → dist/404.html
 │       └── guide/
-│           ├── GuideShell.pzl     # nested shell with <Slot/>
+│           ├── GuideShell.pzl     # nested shell with <Outlet/>
 │           ├── GuideIndex.pzl     # index child (path: '')
 │           └── GuideTemplates.pzl # sibling child (path: 'templates')
 ```

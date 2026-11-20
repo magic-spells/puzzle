@@ -54,7 +54,7 @@ A component that owns its loop — data table, virtual list, combobox, tree, mul
 - Lowercase `<snippet>` carrying `fits` or a bare attribute steers to `<Snippet>`; an unmarked `<snippet>` and `<template>` stay ordinary HTML.
 
 **Guardrails**
-- A snippet body is a composition leaf: no `<Children>`, `<Slot>` or `<Snippet>` at any depth, including a `<Snippet>` on a component invocation inside the body — positioned errors steering to extraction (move the inner invocation and its snippet into their own component). Component invocations and `<Portal>` are fine (a marker inside the portal is still rejected).
+- A snippet body is a composition leaf: no `<Children>`, `<Outlet>`, `<Slot>` or `<Snippet>` at any depth, including a `<Snippet>` on a component invocation inside the body — positioned errors steering to extraction (move the inner invocation and its snippet into their own component). Component invocations and `<Portal>` are fine (a marker inside the portal is still rejected).
 - `ref=` in a snippet body is an error (stamped N times).
 - Marker-name uniqueness skips args-bearing markers (one `<Slot name="row" …>` in `{#for}` is the N-stamp case); args-bearing markers stay rejected inside `island` subtrees.
 - One snippet per `fits` name per invocation (default included); a snippet and a `slot="x"` element can't share a name; a default snippet can't coexist with plain default content.

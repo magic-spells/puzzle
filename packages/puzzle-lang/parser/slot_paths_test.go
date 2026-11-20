@@ -15,8 +15,8 @@ func TestParseMarkersPerRenderPath(t *testing.T) {
 		src  string
 	}{
 		{"default marker in if/else", `{#if compact}<div><Children/></div>{:else}<section><Children/></section>{/if}`},
-		{"both spellings in if/else", `{#if a}<Children/>{:else}<Slot/>{/if}`},
-		{"else-if chain", `{#if a}<Children/>{:else if b}<p><Children/></p>{:else}<Slot/>{/if}`},
+		{"both spellings in if/else", `{#if a}<Children/>{:else}<Outlet/>{/if}`},
+		{"else-if chain", `{#if a}<Children/>{:else if b}<p><Children/></p>{:else}<Outlet/>{/if}`},
 		{"unless/else", `{#unless a}<Children/>{:else}<b><Children/></b>{/unless}`},
 		{"case clauses and else", `{#case mode}{:when 'a'}<Children/>{:when 'b', 'c'}<i><Children/></i>{:else}<Children/>{/case}`},
 		{"named slot in exclusive branches", `{#if a}<Slot name="x"/>{:else}<Slot name="x">fb</Slot>{/if}`},
@@ -40,7 +40,7 @@ func TestParseMarkersPerRenderPath(t *testing.T) {
 		want string
 	}{
 		{"marker before the block and in a branch", `<Children/>{#if a}<Children/>{/if}`, "duplicate default marker"},
-		{"marker in a branch and after the block", `{#if a}<Children/>{/if}<Slot/>`, "duplicate default marker (<Children/>/<Slot/>) — already declared at 1:21"},
+		{"marker in a branch and after the block", `{#if a}<Children/>{/if}<Outlet/>`, "duplicate default marker (<Children/>/<Outlet/>) — already declared at 1:21"},
 		{"two markers in one branch", `{#if a}<Children/><Children/>{:else}x{/if}`, "duplicate default marker"},
 		{"two separate ifs are not exclusive", `{#if a}<Children/>{/if}{#if b}<Children/>{/if}`, "duplicate default marker"},
 		{"case clause then trailing marker", `{#case m}{:when 1}<i/>{:else}<Children/>{/case}<Children/>`, "duplicate default marker"},

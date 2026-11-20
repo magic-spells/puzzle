@@ -1,6 +1,6 @@
 <puzzle-view>
   <div class={ rootClass }>
-    <Slot/>
+    <Children/>
   </div>
 </puzzle-view>
 

@@ -126,7 +126,7 @@ A static `ref="name"` on a **plain element** binds its live DOM node to `this.re
 
 - `this.refs.name` is the mounted element, or `null`. It is populated **before `mounted()`**; a keyed or tag replacement re-points it; removal (`{#if}` off, row leaving, teardown) nulls it. Outside `mounted()`, guard with `?.`. `refs` is an instance field, never in `getData`/`setState` or dev state snapshots.
 - Codegen emits `ref: this.__ref("name")`; `__ref` returns a per-instance **cached** setter whose guarded removal makes patch ordering irrelevant. `refs` and `__ref` are reserved names.
-- **Positioned compile errors:** a dynamic `ref={ expr }` or interpolated value; empty or valueless `ref`; a non-identifier name; `ref` on a component (use an `@ready` callback prop), on a `<Slot>`, `<Children>` or `<Portal>` marker, or on the `<puzzle-view>` root (that is `this.element`); inside `{#for}` (no per-iteration refs); inside `<puzzle-skeleton>`; inside a `<Snippet>` body; duplicate names in one template.
+- **Positioned compile errors:** a dynamic `ref={ expr }` or interpolated value; empty or valueless `ref`; a non-identifier name; `ref` on a component (use an `@ready` callback prop), on a `<Slot>`, `<Children>`, `<Outlet>` or `<Portal>` marker, or on the `<puzzle-view>` root (that is `this.element`); inside `{#for}` (no per-iteration refs); inside `<puzzle-skeleton>`; inside a `<Snippet>` body; duplicate names in one template.
 - **`ref` + `island` (§17)** is the zero-diff animation path: `<svg island ref="scene">` plus a rAF loop in `mounted()`.
 
 ## 39. Scroll-triggered enter animations — `trigger: 'visible'`

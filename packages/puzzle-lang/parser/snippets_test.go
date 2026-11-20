@@ -149,7 +149,7 @@ func TestParseSnippetCompositionRules(t *testing.T) {
 		}
 	}
 
-	_, err := Parse([]byte(`<puzzle-view><div><Children/><Slot/></div></puzzle-view>`+"\n<script></script>"), "test.pzl")
+	_, err := Parse([]byte(`<puzzle-view><div><Children/><Outlet/></div></puzzle-view>`+"\n<script></script>"), "test.pzl")
 	if err == nil || !strings.Contains(err.Error(), "duplicate default marker") {
 		t.Fatalf("no-args duplicate markers must stay rejected, got %v", err)
 	}
@@ -166,7 +166,7 @@ func TestParseSnippetCompositionRules(t *testing.T) {
 		},
 		{
 			name: "distinct args-bearing default marker declarations",
-			src:  `<div><Children item={ first }/><Slot item={ second }/></div>`,
+			src:  `<div><Children item={ first }/><Children item={ second }/></div>`,
 			want: "duplicate default marker",
 		},
 	}
@@ -194,7 +194,7 @@ func TestParseSnippetBodyRejectsCompositionMarkers(t *testing.T) {
 	}{
 		{"direct Children", `<Children item={ item }/>`, `<Children item={ item }/>`},
 		{"direct named Slot", `<Slot name="row" item={ item }/>`, `<Slot name="row" item={ item }/>`},
-		{"nested below element", `<section><Slot/></section>`, `<Slot/>`},
+		{"nested below element", `<section><Outlet/></section>`, `<Outlet/>`},
 		{"nested below control flow", `{#if item}<Children item={ item }/>{/if}`, `<Children item={ item }/>`},
 		{"nested below component invocation", `<Card><Children item={ item }/></Card>`, `<Children item={ item }/>`},
 		{"nested Snippet declaration", `<Card><Snippet cell>{ cell }</Snippet></Card>`, `<Snippet cell>`},

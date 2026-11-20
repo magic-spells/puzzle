@@ -241,7 +241,7 @@ function collectComponentTags(s, names) {
 
 // componentTags returns the root names of every component tag in the
 // template sections and the free names in <Component is={...}>. Markers
-// (Slot, Children, Snippet, Portal) come along too;
+// (Slot, Children, Outlet, Snippet, Portal) come along too;
 // they are never script bindings, so marking them used is a no-op.
 function componentTags(sections) {
 	const names = new Set();

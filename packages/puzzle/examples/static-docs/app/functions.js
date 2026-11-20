@@ -1,6 +1,6 @@
-// App formatters module (SPEC §2 · display transforms only — logic belongs in
-// data()). In static mode (D81) the build reads formatters from THIS file so they
-// exist in the per-page bundle and re-render identically client-side. Formatters
+// app functions module (SPEC §2 · display transforms only — logic belongs in
+// data()). in static mode (D81) the build reads functions from THIS file so they
+// exist in the per-page bundle and re-render identically client-side. functions
 // registered only in app.js config are available at build time (prerender) but
 // NOT client-side in static mode, so the build warns; keeping them here is the fix.
 export default {

@@ -14,7 +14,7 @@ const app = new PuzzleApp({
   // Display-only formatters (logic belongs in data(), per SPEC §8). `timeago`
   // is built in and dresses the sidebar rows; `clock` is this app's one custom
   // formatter, turning a message's Date into a "3:47 PM" wall-clock stamp.
-  formatters: {
+  functions: {
     clock: (d) => {
       const date = d instanceof Date ? d : new Date(d);
       if (Number.isNaN(date.getTime())) return '';

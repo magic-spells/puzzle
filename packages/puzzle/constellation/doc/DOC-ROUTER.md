@@ -48,7 +48,7 @@ export default [
 | `path` | `/about`, `/user/:id`, or `'*'` (catch-all, top level only, matched last). Top-level paths start with `/`. |
 | `name` | Route identifier — match on it rather than on paths, and link or navigate to it by name (below). Unique across the table. |
 | `view` | The `.pzl` view class, or `lazy(() => import('./views/X.pzl'))` to load it on first visit (§62). |
-| `layout` | Wraps the view, which renders at the layout's `<Slot/>`. Top-level routes only. |
+| `layout` | Wraps the view, which renders at the layout's `<Outlet/>`. Top-level routes only. |
 | `children` | Nested routes with relative paths (below). |
 | `guard` | `({ to, from, ctx }) => verdict`, covering this route and every child (§48). |
 | `meta` | `title`, `description`, `canonical`, `socialImage` — static strings, `{ t: 'key' }` for title/description, or `null` (§45). |
@@ -86,18 +86,18 @@ data() {
 
 Compare route names (or `this.route.chain[0].name` for the section), not paths. Components the router doesn't manage get `this.route === null`; pass what they need as props.
 
-## Layouts and `<Slot/>`
+## Layouts and `<Outlet/>`
 
-A layout is an ordinary view with one `<Slot/>` where the routed view renders. Consecutive routes that share a layout class reuse the instance.
+A layout is an ordinary view with one `<Outlet/>` where the routed view renders. Consecutive routes that share a layout class reuse the instance.
 
 ```html
 <puzzle-view class="min-h-screen flex flex-col">
   <header>…</header>
-  <main><Slot/></main>
+  <main><Outlet/></main>
 </puzzle-view>
 ```
 
-`<Slot/>` is the router outlet. Components use `<Children/>` and `<Slot name="…"/>` for composition ([[DOC-SPEC-TEMPLATE]]).
+`<Outlet/>` is the router outlet. Components use `<Children/>` and `<Slot name="…"/>` for composition ([[DOC-SPEC-TEMPLATE]]).
 
 ## Nested routes
 
@@ -113,7 +113,7 @@ A layout is an ordinary view with one `<Slot/>` where the routed view renders. C
 }
 ```
 
-- The parent view renders its matched child at its own `<Slot/>`; a non-leaf view without one warns in development.
+- The parent view renders its matched child at its own `<Outlet/>`; a non-leaf view without one warns in development.
 - Child paths are relative. Add an index child (`path: ''`) or the parent's bare URL falls through to the catch-all.
 - Every level's `data({ params })` gets the full merged params.
 - Moving between siblings keeps the shell instance and swaps only the pane.

@@ -36,7 +36,7 @@ is guarded by them. The same scan feeds the function manifest (D31).
 |---|---|---|
 | `__PUZZLE_HAS_FLIP__` | `views/flip.js` (D85) | a `flip` attr on an element, component invocation or slot child |
 | `__PUZZLE_HAS_PORTAL__` | `views/portal.js` (D144) | any `<Portal>` (not inside a raw block) |
-| `__PUZZLE_HAS_SNIPPETS__` | snippet partition/stamping (D166) | any `<Snippet>`, or a `<Slot>`/`<Children>` with arguments |
+| `__PUZZLE_HAS_SNIPPETS__` | snippet partition/stamping (D166) | any `<Snippet>`, or a `<Slot name>`/`<Children>` with arguments |
 | `__PUZZLE_HAS_COMPONENT_SLOT__` | `views/componentSlot.js` (D180) | any `<Component>` |
 | `__PUZZLE_HAS_CONDITIONAL_SLOT__` | outlet parking/reattach in ViewManager, PuzzleView, router (D30) | over-inclusive: a plain marker under `{#if}`/`{#case}`/`{#for}`, in a snippet body, marker fallback, skeleton or `<Component>`, or under a node carrying `key` or a `{...spread}` |
 | `__PUZZLE_HAS_LISTENER_OPTIONS__` | the native listener-options branch (D187) | a `passive` or `capture` modifier |

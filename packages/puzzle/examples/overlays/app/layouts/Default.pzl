@@ -11,7 +11,7 @@
   </header>
 
   <main class="shell-main">
-    <Slot/>
+    <Outlet/>
   </main>
 
   <footer class="shell-foot">
