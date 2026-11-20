@@ -22,6 +22,7 @@ connections:
   - DOC-TESTING
   - DECISION-D185-APP-IDLE
   - DECISION-D178-AFTERUPDATE-PREV
+  - DECISION-D197-SHARE
 verified_at: '2026-11-01T19:24:02.433Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
@@ -31,7 +32,7 @@ verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 The two lifecycle owners in jsdom: [[COMPONENT-PUZZLE-APP]] from construction through
 unmount, and [[COMPONENT-PUZZLE-VIEW]] from mount through destroy (the machine is
 [[STATE-VIEW-LIFECYCLE]]). Run with
-`npx vitest run tests/app tests/error-boundaries tests/view tests/memo tests/element-refs tests/skeleton-antiflash tests/render- tests/teardown-hook-guards tests/refresh-ownership tests/soft-launch-runtime-fixes tests/component-slot`.
+`npx vitest run tests/app tests/error-boundaries tests/view tests/memo tests/element-refs tests/skeleton-antiflash tests/render- tests/teardown-hook-guards tests/refresh-ownership tests/soft-launch-runtime-fixes tests/component-slot tests/share`.
 
 - **App** (`app`, `app-lifecycle-hooks`, `app-mount-epoch`): boot order and service
   wiring, pre-mount store access failing loudly, function and model registration, target
@@ -44,11 +45,16 @@ unmount, and [[COMPONENT-PUZZLE-VIEW]] from mount through destroy (the machine i
   navigation pipeline, terminal failure defaults, cleanup of the replaced position.
 - **View** (`view`, `memo`, `element-refs`, `skeleton-antiflash`,
   `render-null-clears-dom`, `view-prepare-scope-overlap`, `refresh-ownership`): the
-  two-layer `data()` / `setState()` split, tracked store reactivity across the full
+  two-layer `data()` / `setState()` split, `setState()` re-running `data()` only for a
+  key the last run read (D23), tracked store reactivity across the full
   subscription loop, `refresh()` and stale-refresh ownership, `afterUpdate(prev)`,
   `memo()`, skeletons with the `min-duration` hold, element refs, `render()` returning
   null clearing the DOM without disturbing the skeleton path, `prepareRefresh` scope
   unwinding.
+- **`share()`** (`share`, D197): the one-object `data()`, values reaching nested views
+  at any depth and through slots under the sharer's camelCase name, `this.shared` in
+  handlers, only descendants whose `data()` read a changed key re-running, and a
+  layout's `share()` not reaching its routed page.
 - **Teardown** (`teardown-hook-guards`): a throwing `destroyed()` must not wedge the
   cascade or half-unmount the app.
 - **`<Component>` swaps** (`component-slot`, D180): the outgoing instance is completely

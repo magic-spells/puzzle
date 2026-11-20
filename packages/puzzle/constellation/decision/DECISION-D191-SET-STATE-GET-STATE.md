@@ -16,7 +16,7 @@ A view has two layers of state ([[DOC-SPEC-ANATOMY]] §4): the state layer its o
 
 ## Decision
 
-- `setState(key, value)` / `setState(partial)` writes the state layer and schedules a re-render. It is the old `setData()` under a new name, with identical behavior.
+- `setState(key, value)` / `setState(partial)` writes the state layer and schedules a re-render. It takes the old `setData()`'s arguments. When to re-run `data()` with that render is a separate question, answered in [[DECISION-D23-REFRESH-PATTERN]]: only when the last `data()` run read a written key.
 - `getState()` returns a fresh shallow copy of the state layer alone, without `data()`'s values over it. It replaces the internal `_state()` reader, so the HMR snapshot and the DevTools bridge use the public method.
 - `getData()` is unchanged: a fresh shallow copy of the merged model the template reads.
 - `setData()` is removed outright in 0.10.0, with no alias and no warning. The framework is pre-1.0 and has no outside users yet, so a deprecation cycle would only keep a second spelling alive.
@@ -29,4 +29,4 @@ A view has two layers of state ([[DOC-SPEC-ANATOMY]] §4): the state layer its o
 
 ## Consequences
 
-Every call site moved to `setState()` in the same change: runtime, tests, Pieces, DevTools, examples, docs and the VS Code snippet (`psetstate`). DOM methods with the same name, such as `DataTransfer.setData()`, are unrelated and unchanged. The DevTools wire keys `model` / `local` keep their names.
+Every call site in this repository moved to `setState()` in the same change: runtime, tests, Pieces, DevTools, examples and docs. A piece an app copied before 0.10 still calls `setData()` and throws until it is re-added. The VS Code snippet (`psetstate`) lives in the separate `puzzle-vscode` repo and moves with that repo's own release. DOM methods with the same name, such as `DataTransfer.setData()`, are unrelated and unchanged. The DevTools wire keys `model` / `local` keep their names.

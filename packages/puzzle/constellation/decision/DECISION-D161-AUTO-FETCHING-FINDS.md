@@ -14,6 +14,7 @@ connections:
   - COMPONENT-SSG
   - DOC-DATASTORE
   - DOC-SPEC-DATA
+  - DECISION-D193-SERVER-QUERIES
 verified_at: '2026-11-01T19:19:25.478Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 code_refs:
@@ -87,8 +88,8 @@ An awaited `loadOne` inside `data()` loops (its own upsert notifies the subscrip
 - Fetching from untracked reads (handlers) — silent work with no guaranteed subscriber.
 - Warn-and-commit at the round cap — breaks `null`-means-missing.
 - An ambient request slot on the Store, or fencing Puzzle's reentry points — post-await segments are indistinguishable from foreign code, so timers and callbacks still leak; identity attribution covers them by construction.
-- Passing the store into the hook (`data(params, props, { store })`) — a signature change everywhere, with `ctx.store` still a trap beside it.
+- Passing the store into the hook (a `store` key on `data()`'s input object) — a second way to reach one store, with `ctx.store` still a trap beside it.
 
 ## Consequences
 
-Deferred deliberately: server-side query/pagination pass-through on `findMany` (fetch-all-once per type until someone hits the wall), TTL/`reload(type)` invalidation, request cancellation.
+Deferred deliberately: TTL and other freshness timers, request cancellation. Server-side queries and pagination on `findMany` and explicit `store.invalidate()` are [[DECISION-D193-SERVER-QUERIES]]; without a `query`, `findMany` still fetches a type's whole collection once.

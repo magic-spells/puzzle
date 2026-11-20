@@ -15,6 +15,7 @@ connections:
   - DECISION-D62-HANDLER-CACHING
   - DECISION-D133-RESERVED-SCRIPT-BINDINGS
   - DECISION-D180-COMPONENT-SLOT
+  - DECISION-D197-SHARE
 verified_at: '2026-11-01T19:25:08.617Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
@@ -28,9 +29,9 @@ verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 emit no wrapper. A script-less file gets an empty synthesized class; the base `data()` returns
 the props ([[DECISION-D173-CORE-SEMANTICS]] V15).
 
-## The script stream (`scriptcollide.go`, `classname.go`)
+## The script stream (`scriptcollide.go`, `classname.go`, `sharekey.go`)
 
-These two files have no FILE card; this section is their contract. The `<script>` body is
+These three files have no FILE card; this section is their contract. The `<script>` body is
 tokenized ONCE (`tokenizeJS`) and feeds class-name extraction, the import-collision warning
 and the reserved-binding check. Tokens carry a `comment` bit and remember line terminators in
 preceding whitespace/comments for selector ASI. A comment is whitespace to the class-keyword
@@ -53,6 +54,14 @@ breaks it. Class extraction requires a real named `export default class … exte
   `jsident.IsIDStart`/`IsIDContinue`). `parser.LexSkip` (script only; template expressions
   never pass through a text scanner) reads only ASCII, so `identRunEnd`/`startsNonASCIIIdent`
   carry a run through non-ASCII runes.
+- **`share()` and the one-object `data()`** ([[DECISION-D197-SHARE]], `sharekey.go`). A
+  script that declares a `share` member (a method or a class field, not a property access)
+  gets `Name.__share = '<camelCaseName>';` after its class, because a production build
+  minifies class names and the runtime keys `shared` by that name; a script without one gets
+  no stamp. `shareKey` must stay the same rule as the runtime's in `PuzzleView.js`. Two
+  out-of-band warnings, never errors: a `data()` or `share()` declaration still written
+  positionally (a top-level comma in its parameter list, or a lone `params` / `_params`),
+  and a component named `Params`, `Props` or `Shared`.
 - A script-less file's class comes from its filename (`classNameFromFilename`: bad runes →
   `_`, `_` prefix when the first rune can't start an identifier or is reserved).
 - **A class name the scan can't read to its end is a positioned error** (`nameCut`): a `\u`

@@ -29,18 +29,12 @@ notes:
       min-h rather than h so a custom slot trigger may grow.
   - kind: state
     text: >-
-      2026-11-08 (feat/0.10-pieces-select-toast, review P10-B1/Q1): #setLabel now calls refresh()
-      instead of setState — a preselected (controlled) value and every pick on an UNCONTROLLED Select
-      used to stay in placeholder grey (text-muted), because setState never re-runs data() where
-      labelClass is derived. Dead guards removed: #memberKey (never called), #syncing (upstream's
-      value setter dispatches nothing, so there is no echo) and #mine (only the host dispatches
-      select-dropdown:*), plus the unused `label` data key. test/select-wrapper.test.js no longer
-      asserts #syncing or the target guard. 341→310 lines, 1581→1465 B min+gz.
-  - kind: state
-    text: >-
-      0.10.0 (claude/remove-unneeded-refresh, framework D23): the `#label` field is now a `label`
-      state key seeded in created(); #setLabel writes it with setState() and no refresh(), since
-      setState() now re-runs data() when data() read the written key.
+      The shown label is a `label` state key seeded in created(); #setLabel writes it with
+      setState() and no refresh(), because data() reads `label` to derive labelClass and setState()
+      re-runs data() when data() read the written key (framework D23). Before that, a preselected
+      (controlled) value and every pick on an UNCONTROLLED Select stayed in placeholder grey
+      (text-muted). The wrapper keeps no echo or ownership guards: upstream's value setter
+      dispatches nothing, and only the host dispatches select-dropdown:* events.
   - kind: gotcha
     text: >-
       2026-11-08 (#259 review, pre-existing, not fixed): when `options` arrive AFTER mount with a

@@ -11,7 +11,7 @@ numbered `Dnn` cards, referenced below.
 
 ## Upgrading across versions
 
-Eleven breaking changes are easy to miss on a multi-version jump. Most fail
+Thirteen breaking changes are easy to miss on a multi-version jump. Most fail
 loudly — a compile error, a constructor throw, an unresolvable import. Seven are
 quiet: hashed production filenames (0.10.0) break only what names the old
 files outside the build; the 0.8.0 template semantics change output without an error;
@@ -21,6 +21,19 @@ guard (0.6.0) is not — it depends on what your server returns, so it surfaces
 at runtime on the first save — and neither is the behavior change under
 auto-fetching finds (0.7.0), which turns some reads that used to be local into
 requests.
+
+**Views write state with `setState()`, and `data()` takes one object (0.10.0,
+D191, D197).** Both are loud. `this.setData()` is gone: rename it to
+`this.setState()`, including in pieces copied before 0.10 (re-add them with
+`--force`); a leftover call throws `this.setData is not a function`.
+`data(params, props)` is `data({ params, props, shared })`, and every old
+declaration draws a compiler warning. Heed it: at runtime the whole object
+arrives as the first argument, so `data(params, props)` throws at its first
+prop read and `data(params)` reads `params.id` as `undefined`. Write
+`data({ props })`, `data({ params })` or plain `data()` for what the method
+uses. One more change needs no edit:
+`setState()` now re-runs `data()` when `data()` read the key (D23), so the
+`refresh()` that followed it can go.
 
 **Production builds hash their output names (0.10.0, D181).** With no
 `build.hashNames` key, a production build now writes `app-<hash>.js`,
@@ -176,6 +189,29 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Breaking
 
+- **BREAKING: `setData()` is now `setState()`, and `getState()` is new (D191).**
+  `this.setData(...)` is gone with no alias; rename every call to
+  `this.setState(...)`, which takes the same `(key, value)` or object map.
+  `getState()` returns a copy of the state layer alone (what `setState()`
+  wrote), while `getData()` still returns the merged model the template reads.
+  An old call throws `this.setData is not a function` the first time it runs,
+  and `puzzle check` flags it. Search for `setData(` to find them all, but
+  leave DOM calls such as `event.dataTransfer.setData()` alone. Pieces you
+  copied with `puzzle add piece` before 0.10 call `setData()` too: re-add them
+  with `puzzle add piece <name> --force`, or rename the calls by hand.
+- **`setState()` re-runs `data()` when `data()` read the written key (D23).**
+  The `this.refresh()` that used to follow `setState()` is no longer needed:
+  when the last `data()` run read a key through `this.getData()` or
+  `this.getState()`, writing that key re-runs `data()` with the next render,
+  once however many writes came before it, so `this.setState('filter', 'done')`
+  alone narrows a list `data()` filters. A key `data()` never read still only
+  re-renders. A leftover `setState()` + `refresh()` pair keeps working and
+  still runs `data()` once; delete the `refresh()` when convenient. Keep
+  `refresh()` where `data()` derives from something the runtime cannot see (an
+  instance field, a module variable, the clock) or where the caller needs the
+  new model rendered before its next line. What changes behavior: a `data()`
+  that fetches or has side effects now re-runs after a `setState()` of a key it
+  read, where before it ran only on `refresh()`.
 - **BREAKING: `data()` takes one object, and `share()` is new (D197).**
   `data(params, props)` is now `data({ params, props, shared })`: destructure
   only what you use (`data({ props })`, `data({ params })`, or `data()`). A
@@ -190,15 +226,6 @@ one is *not* a compile error; it silently builds a different product.
   not reach its routed page. Components named `Params`, `Props` or `Shared`
   draw a compiler warning. In TypeScript, type the argument with the new
   `DataInput<Props>` export.
-- **BREAKING: `setData()` is now `setState()`, and `getState()` is new (D191).**
-  `this.setData(...)` is gone with no alias; rename every call to
-  `this.setState(...)`, which takes the same `(key, value)` or object map and
-  behaves the same way. `getState()` returns a copy of the state layer alone
-  (what `setState()` wrote), while `getData()` still returns the merged model
-  the template reads. An old call throws `this.setData is not a function` the
-  first time it runs, and `puzzle check` flags it. Search for `setData(` to
-  find them all, but leave DOM calls such as `event.dataTransfer.setData()`
-  alone.
 - **BREAKING: production builds hash their output names by default (D181).**
   `build.hashNames` no longer follows `build.splitting`: with the key unset,
   every production build emits `app-<hash>.js` and `styles-<hash>.css`
@@ -464,6 +491,13 @@ one is *not* a compile error; it silently builds a different product.
 - **`sheet` and `bottom-sheet` overlays use `--color-scrim`
   (puzzle-pieces).** In light mode the scrim is the palette's slate at 0.4
   instead of black at 0.5, so it reads lighter and tinted.
+
+- **Every piece writes state with `setState()` (puzzle-pieces).** The pieces
+  moved off `setData()` (D191) and dropped the `refresh()` calls D23 made
+  redundant. State that feeds a render now lives in state keys rather than
+  instance fields (Hamburger, Tree, Sidebar, VirtualList, Select); the
+  `refresh()` calls left are deliberate and commented. A piece copied before
+  0.10 still calls `setData()` and throws on 0.10 until it is re-added.
 
 Re-add a piece with `puzzle add piece <name> --force` to pick up these
 changes.
