@@ -38,6 +38,8 @@ comment, or regex will **not** truncate the body.
 
 ## Install
 
+Needs Node 24 or later.
+
 ```sh
 npm install --save-dev @magic-spells/eslint-plugin-puzzle eslint
 ```

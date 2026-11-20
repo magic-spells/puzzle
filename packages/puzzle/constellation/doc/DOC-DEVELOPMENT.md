@@ -28,8 +28,8 @@ workspaces — editing a dependency means regenerating that package's lockfile).
 
 ## Prerequisites
 
-Go at the version `go.mod` names, a current Node.js with npm (CI uses 22), Tailwind
-dependencies for Tailwind examples, and Playwright browsers only for browser tests.
+Go at the version `go.mod` names, Node 24 or later with npm ([[DECISION-D200-MINIMUM-NODE]]),
+Tailwind dependencies for Tailwind examples, and Playwright browsers only for browser tests.
 `npm test` shells out to the Go compiler, so Go is needed for the JavaScript workflow too.
 
 ## Commands
@@ -65,10 +65,10 @@ validation, never on timing. Read `benchmarks/README.md` before quoting a number
 and `release/**`: **go** (vet, build, test for both modules, plus a `GOOS=js GOARCH=wasm`
 build of `cmd/pzl-wasm`), **windows** (the Go steps plus a scaffold-and-build smoke with a
 fresh `puzzle.exe`), **js** (`npm test`, `verify:pack`, `test:types`,
-`test:runtime-types`), **e2e-pack**, **browser** (Playwright chromium + webkit), and
-**pieces**, **devtools**, **plugins** (the sibling suites against this tree). There is no
-publish job; releasing is by hand ([[FLOW-RELEASE]]). CI is a backstop; run the suites
-yourself.
+`test:runtime-types`, on Node 24 and Node 26), **e2e-pack**, **browser** (Playwright
+chromium + webkit), and **pieces**, **devtools**, **plugins** (the sibling suites against
+this tree). Every job but **js** runs Node 26. There is no publish job; releasing is by
+hand ([[FLOW-RELEASE]]). CI is a backstop; run the suites yourself.
 
 ## CLI behavior worth knowing
 

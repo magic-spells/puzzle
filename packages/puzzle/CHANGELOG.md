@@ -11,7 +11,7 @@ numbered `Dnn` cards, referenced below.
 
 ## Upgrading across versions
 
-Fifteen breaking changes are easy to miss on a multi-version jump. Most fail
+Sixteen breaking changes are easy to miss on a multi-version jump. Most fail
 loudly — a compile error, a constructor throw, an unresolvable import. Seven are
 quiet: hashed production filenames (0.10.0) break only what names the old
 files outside the build; the 0.8.0 template semantics change output without an error;
@@ -21,6 +21,10 @@ guard (0.6.0) is not — it depends on what your server returns, so it surfaces
 at runtime on the first save — and neither is the behavior change under
 auto-fetching finds (0.7.0), which turns some reads that used to be local into
 requests.
+
+**Puzzle needs Node 24 or later (0.10.0, D200).** Move your machine, CI and
+your deploy host's build to Node 24 or later first. On an older Node, npm warns
+`EBADENGINE` when it installs the packages (an error under `engine-strict`).
 
 **Views write state with `setState()`, and `data()` takes one object (0.10.0,
 D191, D197).** Both are loud. `this.setData()` is gone: rename it to
@@ -203,6 +207,13 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Breaking
 
+- **BREAKING: Puzzle needs Node 24 or later (D200).** Everything that runs on
+  Node — the `puzzle` shim, `puzzle.config.js`, prerendering, `puzzle check`
+  and the test helpers — needs 24 or later. `@magic-spells/puzzle`,
+  `@magic-spells/puzzle-pieces` and the ESLint and Prettier plugins declare
+  `"engines": { "node": ">=24" }`, so npm warns `EBADENGINE` when it installs
+  them on an older Node. CI runs the framework's JavaScript suites on Node 24
+  and Node 26.
 - **BREAKING: `setData()` is now `setState()`, and `getState()` is new (D191).**
   `this.setData(...)` is gone with no alias; rename every call to
   `this.setState(...)`, which takes the same `(key, value)` or object map.
@@ -407,6 +418,20 @@ one is *not* a compile error; it silently builds a different product.
   own keys. A key that is not a JavaScript identifier, or a value of another
   type (an unset `process.env` variable included), is a one-line config error.
   `puzzle dev` reads the config once; restart it after an edit.
+- **`dev.proxy` takes Vite's `{ target, changeOrigin }` form (D201).** A
+  hosted API behind a platform router, CDN or virtual host picks the site by
+  the `Host` header, and the proxy sends the browser's (`localhost:<port>`), so
+  it answered with an error page (404, 403 or 421) or the wrong site. Write
+  `'/api': { target: 'https://api.example.com', changeOrigin: true }` and
+  `puzzle dev` sends the target's host instead, for requests and WebSocket
+  upgrades alike. As in Vite, `Origin` is left alone, so a backend that
+  compares `Origin` with `Host` (Django's CSRF check, Rails, Go WebSocket
+  servers) rejects POSTs and WebSocket connects unless it is set to accept
+  the dev origin (Rails has no allowlist, so there only turning its origin
+  check off helps). The string form is unchanged and keeps the browser's `Host` (in Vite
+  it implies `changeOrigin: true`). Only `target` and `changeOrigin` are
+  read: Vite's `rewrite` and other options are ignored, and a path in the
+  target URL is dropped.
 - **Lazy routes prefetch before the click (D195).** When a link points at a
   route whose view or layout is `lazy()`, its code starts loading as soon as
   the pointer rests on the link for 60 ms, a finger touches it, or keyboard

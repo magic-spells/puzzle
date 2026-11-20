@@ -10,7 +10,8 @@ A SPA-first JavaScript framework with single-file components, reactive data bind
 
 ## Quick start
 
-Install the `puzzle` CLI once (a prebuilt Go binary — no toolchain needed):
+With Node 24 or later, install the `puzzle` CLI once (a prebuilt Go binary — no
+toolchain needed):
 
 ```bash
 npm install -g @magic-spells/puzzle
@@ -87,8 +88,9 @@ npm install -D @magic-spells/puzzle
 
 ## Installation
 
-Install Puzzle as a dev dependency. This one package gives you **both** the client
-runtime (`import { PuzzleView } from '@magic-spells/puzzle'`) and the `puzzle` CLI:
+Puzzle needs Node 24 or later. Install it as a dev dependency. This one package
+gives you **both** the client runtime
+(`import { PuzzleView } from '@magic-spells/puzzle'`) and the `puzzle` CLI:
 
 ```bash
 npm install -D @magic-spells/puzzle

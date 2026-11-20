@@ -38,7 +38,7 @@ my-app/
     └── models/*.js
 ```
 
-CLI (bin `puzzle`, installed with `@magic-spells/puzzle`):
+CLI (bin `puzzle`, installed with `@magic-spells/puzzle`; needs Node 24 or later):
 `dev` (SSE live reload, state-preserving full-page refresh), `build` (`--static`,
 `--hybrid`, `--mode production|development`), `check` (run the app-installed
 TypeScript compiler over `.pzl` scripts and template expressions), `preview`
@@ -141,9 +141,19 @@ no chunk-loader runtime, so it adds no runtime bytes. Notes:
 
 **Dev API proxy.** `dev: { proxy: { '/api': 'http://localhost:3091' } }` forwards
 matching prefixes to a backend so the app can use same-origin paths
-(`apiURL: ''`) with no CORS middleware. Paths are forwarded unrewritten. A `/`
-prefix and two prefixes differing only by a trailing slash are both config
-errors — proxy a specific prefix.
+(`apiURL: ''`) with no CORS middleware. Paths are forwarded unrewritten, and the
+backend sees the browser's `Host` (`localhost:<dev port>`), as a local backend
+expects. A hosted API that picks the site by `Host` answers that with an error
+page (404, 403 or 421) or the wrong site; for one, write Vite's object form,
+`'/api': { target: 'https://api.example.com', changeOrigin: true }`, which sends
+the target's host instead. As in Vite, `changeOrigin` changes `Host` only (for
+WebSocket upgrades too) and never `Origin`, so a backend that checks `Origin`
+against `Host` (Django's CSRF check, Rails, Go WebSocket servers) rejects POSTs
+and WebSocket connects through it. Unlike Vite, the string form never sets it,
+and only `target` and `changeOrigin` are read: Vite's `rewrite` and other
+options are ignored, and a path in the target URL is dropped. A `/` prefix and
+two prefixes differing only by a trailing slash are both config errors — proxy a
+specific prefix.
 
 ## .pzl anatomy
 

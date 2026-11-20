@@ -42,6 +42,7 @@ What `@magic-spells/puzzle` ships on the current release branch, as a map. [[DOC
 
 ## Package
 
+- **Node 24 or later** ([[DECISION-D200-MINIMUM-NODE]]): `"engines": { "node": ">=24" }` on this package, `@magic-spells/puzzle-pieces` and the ESLint and Prettier plugins. CI tests Node 24 and Node 26.
 - **Root exports:** `PuzzleApp`, `PuzzleView`, `PuzzleModel`, `Puzzle`, `PuzzleValidationError`, `FormatterRegistry`, `lazy`. Compiler-support exports a compiled module imports only when it emits them: `ViewNode`, `SLOT_TAG`/`SNIPPET_TAG`/`PORTAL_TAG`, `displayValue`, `urlValue`, `listRows`/`loopItems`/`loopRange`, `dynamicComponent`. Root types include `NavigationResult`, `PrevViewState`, `RouteView`, `StaticPathsEntry`/`StaticPathsContext`/`StaticPathsFn`.
 - **Subpaths** (each typed in `types/*.d.ts`):
   - `/adapter` — the frozen `adapter` capability (`adapter.defaults()` is the app-wide dialect tier) and `PuzzleAdapterError`. Also exports untyped read-state helpers the static build uses.
@@ -62,7 +63,7 @@ What `@magic-spells/puzzle` ships on the current release branch, as a map. [[DOC
 
 - **`new PuzzleApp({...})`** (§2): `target`, `routes`, `models`, `functions` (app functions), `apiURL`, `storage`, `adapter` (the `/adapter` capability), `beforeRequest`, `scrollBehavior`, `focusBehavior`, `routerMode` (a mode object; a string throws), `routerBase`, `transitionMode`, `prefetch` (boolean, default true; D195), `beforeMount`, `mounted`, `beforeUnmount`, `onError`, `errorView`.
 - **Route fields** (§9): `path`, `view`, `layout` (class or `lazy()` marker), `children`, `guard`, `meta` (`title`/`description`/`canonical`/`socialImage` plus free keys; `title`/`description` may be `{ t: 'key' }`), `transitionMode`, `prerender: false`, `staticPaths` (build-only, leaf `:param` routes), `agent` (`false` or `{ name, about? }`), `name` (unique; a navigation target, D196).
-- **`puzzle.config.js`** (§2, read by `compiler/internal/config`): `styles.use: ['tailwindcss']`; `build.dropConsole` (default true), `build.sourceMap` (default off; dev always has maps), `build.splitting` (default off), `build.hashNames` (default on in production); `dev.proxy` (path prefix → backend origin); `output` (`'hybrid'` | `'static'`; absent = SPA); `i18n: { locales, defaultLocale, routing?: 'prefix', detect?: boolean }`; `site` (public origin only; makes `hreflang` absolute and turns on the sitemap); `env` (flat public strings, numbers or booleans, compiled in as `import.meta.env.KEY`; D190).
+- **`puzzle.config.js`** (§2, read by `compiler/internal/config`): `styles.use: ['tailwindcss']`; `build.dropConsole` (default true), `build.sourceMap` (default off; dev always has maps), `build.splitting` (default off), `build.hashNames` (default on in production); `dev.proxy` (path prefix → backend URL, or `{ target, changeOrigin }` to send the target's `Host`; D201); `output` (`'hybrid'` | `'static'`; absent = SPA); `i18n: { locales, defaultLocale, routing?: 'prefix', detect?: boolean }`; `site` (public origin only; makes `hreflang` absolute and turns on the sitemap); `env` (flat public strings, numbers or booleans, compiled in as `import.meta.env.KEY`; D190).
 
 ## Templates (`.pzl`)
 
