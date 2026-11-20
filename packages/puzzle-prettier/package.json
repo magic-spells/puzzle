@@ -25,6 +25,9 @@
 		"test:watch": "vitest"
 	},
 	"license": "MIT",
+	"engines": {
+		"node": ">=24"
+	},
 	"peerDependencies": {
 		"prettier": ">=3"
 	},
