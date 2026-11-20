@@ -48,7 +48,10 @@ const STATUS_TEXT = {
 	201: 'Created',
 	204: 'No Content',
 	400: 'Bad Request',
+	401: 'Unauthorized',
+	403: 'Forbidden',
 	404: 'Not Found',
+	422: 'Unprocessable Content',
 	500: 'Internal Server Error',
 };
 
@@ -195,6 +198,35 @@ function parseBody(raw) {
 	} catch {
 		return raw;
 	}
+}
+
+/**
+ * the request's headers as a plain object with lower-case names, so a handler
+ * reads `headers.authorization` whatever spelling or container beforeRequest
+ * used: a plain object, a `Headers` instance, or an array of pairs.
+ *
+ * @param {HeadersInit | undefined} raw the post-hook `init.headers`
+ * @returns {Record<string, string>}
+ */
+function headerObject(raw) {
+	/** @type {Record<string, string>} */
+	const out = {};
+	if (!raw) return out;
+	// an array of [name, value] pairs
+	if (Array.isArray(raw)) {
+		for (const [name, value] of raw) out[String(name).toLowerCase()] = String(value);
+		return out;
+	}
+	// a Headers instance (already lower-cases its names)
+	if (typeof (/** @type {any} */ (raw).forEach) === 'function') {
+		/** @type {Headers} */ (raw).forEach((value, name) => (out[name.toLowerCase()] = value));
+		return out;
+	}
+	// a plain object; a nullish value means "no header", as fetch treats it
+	for (const [name, value] of Object.entries(raw)) {
+		if (value != null) out[name.toLowerCase()] = String(value);
+	}
+	return out;
 }
 
 /** @param {unknown} value @returns {value is Record<string, any>} */
@@ -365,6 +397,9 @@ export function mockFetch(store, type, config, url, init) {
 	const method = String(init.method || 'GET').toUpperCase();
 	const path = requestPath(store, Model.adapter?.endpoint || '', url);
 	const body = parseBody(init.body);
+	// read after beforeRequest ran (_fetch calls it first), so a handler sees the
+	// headers a real server would: an auth mock can check `authorization`.
+	const headers = headerObject(init.headers);
 
 	const respond = () => {
 		if (failed) {
@@ -373,7 +408,7 @@ export function mockFetch(store, type, config, url, init) {
 		if (typeof config.handler === 'function') {
 			// Escape hatch for the arbitrary paths request() can build — without it
 			// a custom endpoint cannot be mocked at all. A falsy return falls through.
-			const handled = config.handler({ method, url, path, body, collection });
+			const handled = config.handler({ method, url, path, body, headers, collection });
 			if (handled) return mockResponse(handled.status ?? 200, handled.body);
 		}
 		return defaultCrud({ method, path, body, collection, pk, state, url });

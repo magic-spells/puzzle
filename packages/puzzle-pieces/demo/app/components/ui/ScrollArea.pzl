@@ -7,7 +7,7 @@
       role={ regionRole }
       aria-label={ ariaLabel }
       @scroll={ onScroll }>
-      <Slot/>
+      <Children/>
     </div>
 
     {#if showV}

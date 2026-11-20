@@ -29,7 +29,7 @@ func TestReservedModuleScopeScriptBindings(t *testing.T) {
 	const raw = `<puzzle-view>
   <div class="static" data-count={ count }>no coercion</div>
 </puzzle-view>`
-	const slotted = "<puzzle-view>\n  <Slot/>\n</puzzle-view>"
+	const slotted = "<puzzle-view>\n  <Children/>\n</puzzle-view>"
 	const portaled = "<puzzle-view>\n  <Portal><p>x</p></Portal>\n</puzzle-view>"
 	const withSnippet = "<puzzle-view>\n  <List><Snippet item>{ item }</Snippet></List>\n</puzzle-view>"
 	// An item-form {#for} emits one module-scope `const __L<n>` per site (D170).

@@ -37,7 +37,7 @@
        it escapes this main's overflow-y-auto because no ancestor here carries a
        transform/filter (the album view's only animation is opacity, and it isn't
        even the animator on the child swap). Same trick kanban-morph uses. -->
-  <Slot/>
+  <Outlet/>
 </puzzle-view>
 
 <script>

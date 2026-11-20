@@ -55,7 +55,7 @@ out, a function `(to, from) => element` to choose the target. Spec: SPEC §51.
 - **Transient `tabindex="-1"`:** a `<puzzle-view>` root isn't focusable, so the
   attribute is stamped before focusing and removed on `blur` (`{ once: true }`);
   D139 suppresses the focus ring for the same span. An author-set `tabindex` is
-  never touched. With no live root on the leaf (a parent without `<Slot/>`) the
+  never touched. With no live root on the leaf (a parent without `<Outlet/>`) the
   target walks up the chain; none → no focus, still announce.
 - **Focus before announce** — a polite update issued just before a focus change
   is routinely dropped. A declined focus, or one the view kept, still announces.

@@ -163,11 +163,11 @@ describe('ESLint end to end (JS)', () => {
 	});
 
 	// D141: paired composition markers — <Slot name="x">…</Slot>,
-	// <Children>…</Children>, <Slot>…</Slot> with fallback bodies. The splitter
+	// <Children>…</Children>, <Outlet>…</Outlet> with fallback bodies. The splitter
 	// only finds section boundaries; it never parses template tags, so these are
 	// inert template bytes. Pinned so a future template-grammar change cannot
 	// silently start producing structural errors here.
-	it('lints paired <Slot>/<Children> markers with no structural errors or fatals', async () => {
+	it('lints paired <Outlet>/<Children> markers with no structural errors or fatals', async () => {
 		const src = fixture('paired-markers.pzl');
 		const blocks = processor.preprocess(src, 'paired-markers.pzl');
 		expect(blocks).toHaveLength(1);

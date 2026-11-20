@@ -1,0 +1,59 @@
+<puzzle-view>
+  <h1 class="text-2xl font-semibold tracking-tight">Account</h1>
+
+  {#if session}
+    <dl class="mt-6 grid grid-cols-[8rem_1fr] gap-y-3 text-sm">
+      <dt class="text-slate-500">Name</dt>
+      <dd class="name">{ session.name }</dd>
+      <dt class="text-slate-500">Email</dt>
+      <dd>{ session.email }</dd>
+      <dt class="text-slate-500">Token good until</dt>
+      <!-- expiresAt changes on every refresh, and this view read the record,
+           so the time updates on its own -->
+      <dd class="expires">{ expiresAt }</dd>
+    </dl>
+
+    <button
+      type="button"
+      class="mt-8 rounded-lg border border-slate-300 px-4 py-2 text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+      disabled={ refreshing }
+      @click={ refreshNow }>
+      {#if refreshing}Refreshing…{:else}Refresh the token now{/if}
+    </button>
+  {/if}
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { refresh } from '../auth.js';
+
+export default class AccountView extends PuzzleView {
+  created() {
+    this.setState('refreshing', false);
+  }
+
+  data() {
+    const session = this.ctx.store.findOne('session', 'current');
+    return {
+      session,
+      expiresAt: session ? new Date(session.expiresAt).toLocaleTimeString() : '',
+      refreshing: this.getState().refreshing,
+    };
+  }
+
+  events = {
+    // trade the refresh token for a new pair by hand, to see it happen.
+    // the timer in auth.js does the same thing on its own before expiry.
+    refreshNow: async () => {
+      this.setState('refreshing', true);
+      try {
+        await refresh(this.ctx.store);
+      } catch {
+        // refused: refresh() signed you out, and the next navigation's guard
+        // sends you to the sign-in page
+      }
+      this.setState('refreshing', false);
+    },
+  };
+}
+</script>

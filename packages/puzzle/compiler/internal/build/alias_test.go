@@ -33,7 +33,7 @@ export default [
 ];
 `,
 		"app/layouts/Default.pzl": `<puzzle-view>
-  <main><Slot/></main>
+  <main><Outlet/></main>
 </puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';

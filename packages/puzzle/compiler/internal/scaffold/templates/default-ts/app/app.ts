@@ -12,7 +12,7 @@ const app = new PuzzleApp({
 
 	// App functions, called by name in any template — Home.pzl calls
 	// { shout('hello') }. Display transformation only; logic belongs in data().
-	formatters: {
+	functions: {
 		shout: (value: unknown): string => `${String(value).toUpperCase()}!`,
 	},
 });

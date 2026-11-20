@@ -598,7 +598,7 @@ contract is broken, and `validate()` fails), or `shellDidMutate` reading 0 —
 which would mean the churn never ran and the zero above measured nothing.
 
 No components live inside an island here, and none may: the compiler rejects a
-component, `<Children/>` or `<Slot/>` anywhere in an island subtree.
+component, `<Children/>` or `<Outlet/>` anywhere in an island subtree.
 
 ## Scenario 8 — `formatters`
 
@@ -886,7 +886,7 @@ which **520 wasted (93%)**, and 520 component prop bailouts.
 
 Read this together with the counters, not instead of them. 27 renders costing
 0.25ms means each render is ~9µs, because these ancestors render one span and a
-`<Slot/>`. The finding is a **multiplier**, and what it multiplies is whatever
+`<Outlet/>`. The finding is a **multiplier**, and what it multiplies is whatever
 the app's real layouts do per render. A nav bar that formats dates or queries the
 store pays that cost `d + 2` times per navigation, ~93% of it for nothing.
 
@@ -924,13 +924,13 @@ signature of a reused route ancestor. Since the deepest ancestor renders
 Both 20/sec and 10/sec were tried and both tripped it.
 
 When this was found, the cross-frame guard **suppressed** the tripped ancestor's
-renders for 1000ms. Its `<Slot/>` stopped updating, the routed child never
+renders for 1000ms. Its `<Outlet/>` stopped updating, the routed child never
 mounted, and the tree stayed broken until the next navigation because nothing
 retries a missed mount:
 
 ```
 [puzzle perf] __PUZZLE_PERF__: stopped RcLevel4 after 60 renders in one second (98% wasted)
-[puzzle] a routed child did not mount — does the parent view template include a <Slot/>?
+[puzzle] a routed child did not mount — does the parent view template include an <Outlet/>?
 ```
 
 **That was a defect, and it is fixed.** The cross-frame guard is a heuristic
@@ -1552,7 +1552,7 @@ app/
 
 `RcLayout`, `RcNode` and `RcLeaf` live in `layouts/` and `views/` rather than
 `scenarios/` because `codegen.ModeForPath` compiles only those two directories
-as views — which is what makes `<Slot/>` legal in them. Everything under
+as views — which is what makes `<Outlet/>` legal in them. Everything under
 `scenarios/` is a component.
 
 Each new scenario owns its own store type (`nest`, `storm`, `fmt`, `loop`,

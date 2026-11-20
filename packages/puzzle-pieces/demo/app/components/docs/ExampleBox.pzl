@@ -8,7 +8,7 @@
          clips itself and keeps the bottom corners rounded. -->
     <div class="rounded-xl border border-border">
       <div class={ previewClass }>
-        <Slot/>
+        <Children/>
       </div>
 
       {#if code}

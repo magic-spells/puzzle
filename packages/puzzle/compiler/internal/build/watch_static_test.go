@@ -346,7 +346,7 @@ export default class Card extends PuzzleView {}
 	// site. The catch-all's route path is '*', which sorts first.
 	step("layout edit", []string{abs("app/layouts/Default.pzl")}, &wantPlan{routes: []string{"*", "/", "/about"}}, func() {
 		write("app/layouts/Default.pzl", `<puzzle-view>
-  <main class="shell"><Slot/></main>
+  <main class="shell"><Outlet/></main>
 </puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
