@@ -50,7 +50,7 @@ back button morphs too (same pipeline).
 
 ## The route shape that makes it work
 
-The dialog is a **child route rendered in the board's `<Slot/>`** — the board (and the
+The dialog is a **child route rendered in the board's `<Outlet/>`** — the board (and the
 clicked card) stays mounted underneath for the morph's whole round trip:
 
 ```js

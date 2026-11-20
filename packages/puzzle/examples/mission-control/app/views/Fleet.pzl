@@ -19,7 +19,7 @@
 
     <!-- Detail child route renders here (nested routes, D30): /fleet fills the
          slot with the empty index child; /fleet/:id slides in Detail.pzl. -->
-    <Slot />
+    <Outlet />
   </div>
 </puzzle-view>
 

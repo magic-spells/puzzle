@@ -88,7 +88,7 @@ app/
 ├── app.js                # PuzzleApp + boot-time seeding
 ├── routes.js             # / , /p/:id , * (catch-all → Home)
 ├── models/               # page, block, registry
-├── layouts/Default.pzl   # sidebar shell + <Slot/>
+├── layouts/Default.pzl   # sidebar shell + <Outlet/>
 ├── views/
 │   ├── Home.pzl          # redirect-to-first / empty state
 │   └── Doc.pzl           # doc + menus + drag machine + store/order math

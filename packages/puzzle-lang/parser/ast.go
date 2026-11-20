@@ -53,13 +53,20 @@ type Component struct {
 	Pos      Position
 }
 
-// Slot is a composition render target (D141). <Children> and bare <Slot> have
-// an empty Name and substitute the default bucket; <Slot name="x"> carries a
+// Slot is a composition render target (D141). <Children> and <Outlet> have an
+// empty Name and substitute the default bucket; <Slot name="x"> carries a
 // static, non-empty Name. Paired forms carry ordinary template Children that
 // render as fallback content when the bucket is unfilled. Self-closing and
 // empty paired forms have no fallback.
+//
+// Marker is the tag the author wrote: "Children", "Outlet" or "Slot" (D199).
+// <Children> and <Outlet> fill the same default bucket and emit the same
+// code; the spelling says who fills it (the call site or the router), so the
+// composition check can reject a <Slot> with no name and a host can tell an
+// outlet from a children marker.
 type Slot struct {
 	Name     string
+	Marker   string
 	Args     []Attr
 	Children []Node
 	Pos      Position

@@ -664,7 +664,7 @@ describe('Router focus — custom focusBehavior (D93)', () => {
 
 describe('Router focus — elementless leaf (D93)', () => {
 	it('walks up the chain when the leaf view has no element', async () => {
-		// A parent whose template has NO <Slot/>: its routed child is preloaded but
+		// A parent whose template has NO <Outlet/>: its routed child is preloaded but
 		// never mounted, so child.element is null (the hole warnMissingSlots reports).
 		// Focus must land on the nearest ancestor with a live root instead of
 		// throwing on the null element.

@@ -71,7 +71,7 @@ enableMorph(app);           // pairs data-puzzle-morph elements across route swa
 
 `/artist/:id` gains an overlay **child route** (`{ path: 'info', view:
 ArtistInfoDialog }`), so pushing it keeps `Artist.pzl` mounted and swaps the
-dialog into its `<Slot/>` — the button survives for the router to morph into the
+dialog into its `<Outlet/>` — the button survives for the router to morph into the
 dialog and, on close, fly back home. Because it's route-driven, the **browser
 back button morphs too**, and `/artist/:id/info` is a real deep link (the initial
 navigation renders the dialog plain — nothing to morph from yet). The dialog is a
@@ -130,8 +130,8 @@ app/
 │   └── PlayerLayout.pzl# full-screen player chrome (a layout SWAP away from AppLayout)
 ├── views/
 │   ├── Library.pzl     # Home: greeting, quick picks, recently played, artist/album grids
-│   ├── Artist.pzl      # header glow, popular tracks, album grid; "Info" morph button + <Slot/>
-│   ├── ArtistIndexChild.pzl # empty index leaf for /artist/:id (fills the Slot when no dialog)
+│   ├── Artist.pzl      # header glow, popular tracks, album grid; "Info" morph button + <Outlet/>
+│   ├── ArtistIndexChild.pzl # empty index leaf for /artist/:id (fills the Outlet when no dialog)
 │   ├── ArtistInfoDialog.pzl # /artist/:id/info overlay: router-morphed dialog (D55)
 │   ├── Album.pzl       # header glow, track list
 │   ├── Playlist.pzl    # header glow, inline rename, remove/delete

@@ -1,6 +1,6 @@
 <puzzle-view class="flex h-screen bg-void text-body font-sans overflow-hidden">
   <!-- Persistent sidebar. It is part of the layout, so it never animates on a
-       route change — only the <Slot/> view swaps (D28 one-animator rule). -->
+       route change — only the <Outlet/> view swaps (D28 one-animator rule). -->
   <aside class="relative w-[248px] shrink-0 flex flex-col bg-panel border-r border-hair">
     <div class="sidebar-glow absolute inset-x-0 top-0 h-44 pointer-events-none"></div>
 
@@ -60,7 +60,7 @@
   <!-- Content region. `relative` is the positioning context the detail panel
        docks into; `overflow-hidden` clips the panel while it is off-screen. -->
   <main class="relative flex-1 min-w-0 bg-abyss overflow-hidden">
-    <Slot/>
+    <Outlet/>
   </main>
 </puzzle-view>
 

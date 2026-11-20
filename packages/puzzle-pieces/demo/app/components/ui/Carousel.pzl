@@ -14,7 +14,7 @@
     <div class="sr-only" aria-live={ liveMode } data-carousel-status>{ statusText }</div>
 
     <div class={ trackClass } data-carousel-track @scroll={ onScroll }>
-      <Slot/>
+      <Children/>
     </div>
 
     {#if showControls}

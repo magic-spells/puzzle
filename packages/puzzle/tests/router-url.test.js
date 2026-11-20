@@ -179,7 +179,7 @@ describe('built-in `link` formatter (D79)', () => {
 		const app = make({
 			target: '#app',
 			routes,
-			formatters: { link: (v) => 'custom:' + v },
+			functions: { link: (v) => 'custom:' + v },
 		});
 		await app.mount();
 		expect(app.formatters.getAll().link('/x')).toBe('custom:/x');

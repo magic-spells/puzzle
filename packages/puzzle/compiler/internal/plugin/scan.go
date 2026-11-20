@@ -53,7 +53,7 @@ type Usage struct {
 	HasRawAt         bool
 	HasSnippets      bool
 	HasComponentSlot bool
-	// HasConditionalSlot: a <Slot>/<Children> marker can leave and re-enter
+	// HasConditionalSlot: an <Outlet>/<Children> marker can leave and re-enter
 	// the tree (see conditionalSlot), which keeps the routed-outlet parking code.
 	HasConditionalSlot bool
 	// HasListenerOptions: some element listener carries the `passive` or
@@ -369,7 +369,7 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 	}
 }
 
-// conditionalSlot reports whether a <Slot>/<Children> marker sits where its
+// conditionalSlot reports whether an <Outlet>/<Children> marker sits where its
 // position can leave the tree and come back: under {#if}/{#case}/{#for}, in a
 // snippet body or a marker fallback, under a <Component> selection, or under an
 // element or component carrying a `key` or a spread. under starts true for a skeleton (the

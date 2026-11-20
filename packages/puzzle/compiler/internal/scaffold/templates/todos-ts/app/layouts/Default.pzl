@@ -20,7 +20,7 @@
 
   <main class="relative flex-1 pb-16">
     <div class="max-w-xl mx-auto px-6">
-      <Slot/>
+      <Outlet/>
     </div>
   </main>
 

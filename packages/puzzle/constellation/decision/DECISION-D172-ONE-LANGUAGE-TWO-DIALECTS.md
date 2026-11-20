@@ -36,11 +36,14 @@ core that Shopify extends.
   a display transform is a function call `{ name(expr, args) }`.
 - `{#if}`/`{:else}`, `{#for}`, `{#case}`, `{#raw}`, `{#svg}`.
 - Components: capitalized tags, dotted family tags, props.
-- **Slots: `<Children/>`, `<Slot>`/`<Slot name="…">`, fallback bodies.** A slot
-  is a placeholder filled from outside the file: in a component the caller
-  fills it; in a layout the host does, and **the plain `<Slot/>` in a layout is
-  the page** in both dialects. A host may reserve named layout slots as a
-  post-parse rule: Sites requires `head-content` (inside `<head>`),
+- **Slots: `<Children/>`, `<Outlet/>`, `<Slot name="…">`, fallback bodies.** A
+  slot is a placeholder filled from outside the file: in a component the caller
+  fills it; in a layout the host does, and **the layout's unnamed outlet is the
+  page** in both dialects. PuzzleKit spells it `<Outlet/>` since 0.10 and
+  rejects a bare `<Slot/>` ([[DECISION-D199-UPGRADE-PASS]]); that check is the
+  shared parser's composition post-pass, which Sites skips for its own rules,
+  so a Sites layout keeps the plain `<Slot/>` below unless Sites adopts the
+  rename. A host may reserve named layout slots as a post-parse rule: Sites requires `head-content` (inside `<head>`),
   `header-group`, `footer-group`, `panel-group` and the plain `<Slot/>`
   exactly once each in a layout, and rejects any other layout slot name. No
   platform marker tags: platform-filled placeholders are slots.

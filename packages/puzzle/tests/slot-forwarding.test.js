@@ -186,7 +186,7 @@ describe('default-slot forwarding through a component (D71)', () => {
 });
 
 describe('default-slot forwarding — router end-to-end (D71)', () => {
-	// The original bug scenario: a routed layout wraps its <Slot/> in a global
+	// The original bug scenario: a routed layout wraps its <Outlet/> in a global
 	// wrapper component. Pre-D71 this mounted a literal <slot> element and the
 	// routed view never appeared.
 	let routers = [];

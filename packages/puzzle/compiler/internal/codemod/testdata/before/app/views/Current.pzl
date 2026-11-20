@@ -1,0 +1,16 @@
+<puzzle-view>
+  <Outlet/>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Current extends PuzzleView {
+  data({ params }) {
+    return { id: params.id };
+  }
+  pick() {
+    this.setState('x', 1);
+  }
+}
+</script>

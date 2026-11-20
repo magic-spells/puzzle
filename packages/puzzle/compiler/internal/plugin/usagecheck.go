@@ -138,7 +138,7 @@ func (p *Plugin) missingLocked(fu fileUsage) []string {
 		out = append(out, "<Component>")
 	}
 	if fu.hasCondSlot && !f.ConditionalSlot {
-		out = append(out, "a conditional <Slot/>")
+		out = append(out, "a conditional <Outlet/> or <Children/>")
 	}
 	var fns []string
 	for _, name := range fu.formatters {

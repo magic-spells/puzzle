@@ -160,7 +160,7 @@ import { parseISODate, formatISODate, toDate, fromDate, addMonths, clampDate, co
 //     The snippet replaces only the button's INNER content — DateRangePicker retains
 //     the field/popover and Calendar retains its button, ARIA, grid roles, keyboard
 //     behavior, and range classes. Normal markup, components, and control flow are
-//     allowed; nested <Children>/<Slot>/<Snippet> markers and `ref=` are compile errors.
+//     allowed; nested <Children>/<Outlet>/<Slot>/<Snippet> markers and `ref=` are compile errors.
 //     The content is stamped INSIDE the day <button>, so it must be NON-INTERACTIVE:
 //     no nested <button>, <a href>, <input>, or any other focusable control. Nesting
 //     one is invalid HTML and it breaks the grid's roving-tabindex/gridcell model

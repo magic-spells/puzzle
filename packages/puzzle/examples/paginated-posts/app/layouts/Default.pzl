@@ -7,7 +7,7 @@
     </nav>
   </header>
   <main>
-    <Slot/>
+    <Outlet/>
   </main>
 </puzzle-view>
 

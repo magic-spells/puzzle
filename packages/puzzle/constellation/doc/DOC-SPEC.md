@@ -51,7 +51,7 @@ The contract is split across six chapter cards; this card is the entry point. Se
 | 21 | Model relationships: `hasMany` / `belongsTo` | [[DOC-SPEC-DATA]] |
 | 22 | Adapter write sync | [[DOC-SPEC-DATA]] |
 | 23 | Router base path | [[DOC-SPEC-ROUTER]] |
-| 24 | Composition markers: `<Children>`, `<Slot>`, `<Slot name>` (and `<Portal>`) | [[DOC-SPEC-TEMPLATE]] |
+| 24 | Composition markers: `<Children>`, `<Outlet>`, `<Slot name>` (and `<Portal>`) | [[DOC-SPEC-TEMPLATE]] |
 | 25 | TypeScript scripts: `<script lang="ts">` | [[DOC-SPEC-ANATOMY]] |
 | 26 | Overlapping route transitions | [[DOC-SPEC-ROUTER]] |
 | 27 | Dev HMR: state-preserving reload | [[DOC-SPEC-BUILD]] |

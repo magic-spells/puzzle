@@ -3,9 +3,9 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
-// The album route's index child (path ''), rendered into AlbumView's <Slot/>
+// The album route's index child (path ''), rendered into AlbumView's <Outlet/>
 // when we're on the bare /album/:slug URL. It renders nothing — AlbumView owns
-// the grid; this child exists only so the parent's <Slot/> has something to hold
+// the grid; this child exists only so the parent's <Outlet/> has something to hold
 // (and so navigating /album/:slug ⇄ /album/:slug/photo/:id is a CHILD swap that
 // keeps the grid, and its live morph <img>, mounted — the D55 live-pair shape,
 // exactly like kanban-morph's EmptyOverlay/TaskDialog pair).
