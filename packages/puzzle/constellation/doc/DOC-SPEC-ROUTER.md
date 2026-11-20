@@ -12,6 +12,7 @@ connections:
   - DECISION-D182-NAVIGATION-RESULT
   - DECISION-D183-ROUTE-VIEWS-AGENT-FIELD
   - DECISION-D195-LINK-PREFETCH
+  - DECISION-D196-NAMED-ROUTES
 verified_at: '2026-11-01T19:25:13.521Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 code_refs:
@@ -20,6 +21,7 @@ code_refs:
   - client-runtime/router/routePath.js
   - client-runtime/router/routeViews.js
   - client-runtime/router/prefetch.js
+  - client-runtime/router/routeNames.js
   - client-runtime/router/lazy.js
   - client-runtime/head.js
   - client-runtime/headTags.js
@@ -42,6 +44,7 @@ export default [
 - `layout` wraps the view, which renders at the layout's `<Slot/>`. `meta.title` sets `document.title` (§45).
 - Navigation: `this.ctx.router.push('/user/123')`. `router.go(n)` / `back()` / `forward()` work in every mode (path/hash call `history.go(n)`; memory moves its stack index); an out-of-range `n` is a silent no-op.
 - **`router.url(path, options?)`** (D79): path in, mode-encoded href out — `base + path` (path), `'#' + base + path` (hash), unchanged (memory). A string not starting with `/` passes through (external URLs, `mailto:`, bare `#anchor`); a non-string throws. Query and `#anchor` suffixes ride along. Templates reach it as the `link` function: `href="{ link('/user/' + id) }"`. Under locale prefix routing (below) the href carries the active locale's prefix; `{ locale: 'es' }` encodes for that configured locale (an unconfigured one throws a `RangeError`) and `{ locale: false }` skips the prefix but keeps `routerBase` (for a file that exists once). Without prefix routing the options are ignored.
+- **Named targets** ([[DECISION-D196-NAMED-ROUTES]]): `url()`, `push()`, `replace()`, the `link` function and a guard's redirect verdict take a path string or `{ name, params?, query?, hash? }`. `router/routeNames.js` resolves the named form to the path string, and the rest of the call is the path form's: same encoding, base, locale prefix, same-path no-op. The name table holds every node with a string `name` under its full path (parents and `path: ''` index children included); the `'*'` route is in it with no URL. Each `:param` segment is filled with `encodeURIComponent(String(value))`, which the matcher's `decodeURIComponent` reverses for `data(params)`. `query` builds with `URLSearchParams` (an array repeats the key; `null`/`undefined` are dropped) and `hash` gets a leading `#` if it lacks one. Each of these throws a `[puzzle]` error: a non-string non-object target, a missing or empty `name`, an unknown name, the catch-all's name, a missing, `null` or `''` param, and in development an unused param or a key other than the four. A bad target throws synchronously from `push()`/`replace()` (a coding error, not a `NavigationResult`); from a guard it is a guard throw (§48). A name used by two nodes throws at router construction in development; production keeps the first. The `link` function passes a plain object (`constructor === Object`) through as a target and stringifies every other value, as before. Static output has no route table: the prerender's router stub resolves against the app's table, and a page that resolved a named target — or any `prerender: false` page of an app that names a route — carries the table as `<script type="application/json" data-puzzle-static-names>` for the static kernel. `puzzle check` does not check names.
 - **Commit order:** the URL changes only after the new chain's `data()` resolves — URL, DOM and title change together (§30). A failed or superseded navigation changes nothing. Rapid navigations cancel; the last wins.
 - **404:** an optional top-level catch-all `path: '*'` is always matched last. Without one the router warns and stays on the current view (the result is `'not-found'`, §30).
 - **Path shape (D126):** a top-level `path` must be `'*'` or start with `/` (empty or relative throws at construction). A dynamic segment is a whole `:name` segment only — `:` or `*` inside a static segment is literal (`/releases/v1:beta`, `/files/*`). `*` is a catch-all only as a bare top-level path. `router/routePath.js` owns this rule and the prerenderer uses the same function.
@@ -262,7 +265,7 @@ Any route node — root, child or catch-all — may declare `guard: ({ to, from,
 
 - **Placement:** once per matched navigation — push, replace, pop, params-only, query-only, navigation #0 — after matching, before `lazy()` resolution (§62), any construction, and the D19 load gate. A denied navigation commits nothing and has nothing to tear down. A same-path no-op (§30) never reaches guards.
 - **Arguments:** `to`/`from` are frozen snapshots (`from` null on navigation #0); `ctx` is the app context (`store`, `router`, `formatters`, the bound `idle`, plus `i18n` when configured).
-- **Verdicts:** `undefined`/`true` allows; `false` blocks; a path string redirects **with the denied verb** — a push redirect is a `push()` (Back still returns to the prior page), a pop or navigation-#0 redirect is a `replace()`. The denied URL never enters history; the destination's own guards run. Guards may be async (each awaited; a superseded one is abandoned silently). A throw is reported to `onError` (phase `navigation`) and the app stays put.
+- **Verdicts:** `undefined`/`true` allows; `false` blocks; a path string or a named target (§9) redirects **with the denied verb** — a push redirect is a `push()` (Back still returns to the prior page), a pop or navigation-#0 redirect is a `replace()`. The denied URL never enters history; the destination's own guards run. Guards may be async (each awaited; a superseded one is abandoned silently). A throw is reported to `onError` (phase `navigation`) and the app stays put.
 - **Loop safety:** a redirect to the committed path is the same-path no-op. At most ten guard redirects may run without a commit; the next is a cycle — reported to `onError`, stay put. A commit resets the counter.
 - **Validation:** a present non-function `guard` throws at construction.
 - **Guards are UX, not security.** Hybrid prerender warns per rendered page whose chain declares a guard (`prerender: false` is the quiet opt-out); a static build warns once when any route declares one.

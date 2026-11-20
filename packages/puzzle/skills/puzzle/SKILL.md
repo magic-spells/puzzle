@@ -751,6 +751,12 @@ export default class EditPost extends PuzzleView {
   hash mode); strings not starting with `/` pass through (external URLs,
   `mailto:`, `#anchor`). Hand-written `#/...` hrefs still work in hash mode,
   but `link()` hrefs are the portable spelling.
+- Link or navigate **by route name** (puzzle ≥ 0.10.0) with an object of
+  `name`, `params` and optional `query` and `hash` anywhere a path goes:
+  `href="{ link({ name: 'todo', params: { id: t.id } }) }"`,
+  `router.push({ name: 'todo', params: { id } })`, `replace()`, or a guard's
+  redirect. Names must be unique; nested and index routes resolve by full
+  path; params are URI-encoded. An unknown name or a missing param throws.
 
 ## Translations (puzzle ≥ 0.8.0)
 

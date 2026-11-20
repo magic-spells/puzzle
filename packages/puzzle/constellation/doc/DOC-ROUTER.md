@@ -12,6 +12,7 @@ connections:
   - DECISION-D182-NAVIGATION-RESULT
   - DECISION-D183-ROUTE-VIEWS-AGENT-FIELD
   - DECISION-D195-LINK-PREFETCH
+  - DECISION-D196-NAMED-ROUTES
 verified_at: '2026-11-01T19:25:13.521Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 ---
@@ -45,7 +46,7 @@ export default [
 | Field | Purpose |
 | ----- | ------- |
 | `path` | `/about`, `/user/:id`, or `'*'` (catch-all, top level only, matched last). Top-level paths start with `/`. |
-| `name` | Route identifier — match on it rather than on paths. |
+| `name` | Route identifier — match on it rather than on paths, and link or navigate to it by name (below). Unique across the table. |
 | `view` | The `.pzl` view class, or `lazy(() => import('./views/X.pzl'))` to load it on first visit (§62). |
 | `layout` | Wraps the view, which renders at the layout's `<Slot/>`. Top-level routes only. |
 | `children` | Nested routes with relative paths (below). |
@@ -137,6 +138,27 @@ Plain `<a>` tags are intercepted — there is no link component. The browser kee
 
 `link` calls `router.url()`: `/about` in path mode (with `routerBase`), `#/about` in hash mode. Because the attribute is a real URL, new-tab and copy-link work. External URLs pass through.
 
+### By name
+
+Anywhere a path goes, a named target works too: `{ name, params, query?, hash? }`. The router builds the path from the route's pattern, so a route can move without its links changing ([[DECISION-D196-NAMED-ROUTES]]):
+
+```html
+<a href="{ link({ name: 'album', params: { id: album.id } }) }">{ album.title }</a>
+<a href="{ link({ name: 'search', query: { q: term }, hash: 'results' }, { locale: 'es' }) }">Buscar</a>
+```
+
+```js
+this.ctx.router.push({ name: 'album', params: { id: 42 } });       // → /albums/42
+this.ctx.router.replace({ name: 'items', query: { q: 'cabin' } }); // → /items?q=cabin
+```
+
+- Nested and index children resolve by their full path: `{ name: 'settings-profile' }` is `/settings/profile`.
+- Each param is URI-encoded, and `data(params)` gets the value back as a string. `query` repeats a key for an array and drops `null`/`undefined`; `hash` takes `'faq'` or `'#faq'`.
+- Mistakes throw a `[puzzle]` error naming the route: an unknown name, a missing param, a param the pattern lacks, an unknown key, or a link to the `'*'` route. A bad target makes `push()`/`replace()` throw before navigating, unlike their usual resolved `NavigationResult`. Two routes with one name throw at startup in development.
+- A guard may return a named target to redirect.
+- Static pages resolve names too: a page whose prerender rendered a named link ships the name table in a small data island.
+- `puzzle check` does not check route names; an unknown name throws when the link renders, and a prerender fails the build.
+
 `await router.push(path)` tells you what happened (§30):
 
 ```js
@@ -225,7 +247,7 @@ export default [
 ];
 ```
 
-Return `undefined`/`true` to allow, `false` to stay put, or a path to redirect. Guards run root → leaf before anything loads, on every navigation including the first, so a denied page never constructs or flashes. They may be async. Restore sessions in `beforeMount` so guards can read the store synchronously, and finish login with:
+Return `undefined`/`true` to allow, `false` to stay put, or a path or named target (`{ name: 'login' }`) to redirect. Guards run root → leaf before anything loads, on every navigation including the first, so a denied page never constructs or flashes. They may be async. Restore sessions in `beforeMount` so guards can read the store synchronously, and finish login with:
 
 ```js
 const redirect = this.route.query.redirect;
@@ -304,12 +326,11 @@ Each entry is `{ path, params, name, meta, title, agent, chain }`. `agent` resol
 
 | Member | Description |
 | ------ | ----------- |
-| `push(path)` | Navigate with a new history entry. Resolves a `NavigationResult`; never rejects. |
-| `replace(path)` | Same, but replaces the current entry and leaves scroll alone. |
+| `push(target)` | Navigate with a new history entry to a path or `{ name, params, query?, hash? }`. Resolves a `NavigationResult`; never rejects. |
+| `replace(target)` | Same, but replaces the current entry and leaves scroll alone. |
 | `go(n)` / `back()` / `forward()` | History movement in every mode. |
 | `prefetch(path)` | Load a path's lazy route code now, without navigating or running guards. Resolves `true` when loaded (or nothing to load), `false` on no match or a failed load. |
-| `url(path, options?)` | Mode-, base- and locale-correct href (what `link()` calls). |
+| `url(target, options?)` | Mode-, base- and locale-correct href for a path or named target (what `link()` calls). |
 | `current` | The committed snapshot `{ path, pathname, query, hash, route, params, chain }`. |
 | `views` | Every leaf route as frozen `{ path, params, name, meta, title, agent, chain }` entries. |
 
-Named-route navigation is not supported.

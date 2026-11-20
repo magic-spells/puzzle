@@ -47,6 +47,7 @@ import { findShadowedPaths, isDynamicSegment } from '../router/routePath.js';
 import { walkRouteTree } from '../router/routeTree.js';
 import { serialize, escapeText, escapeAttr, escapeScriptJson } from './serialize.js';
 import { assembleChain, localizeRouterStub, makeRouteSnapshot, makeRouterStub } from './assemble.js';
+import { routeNames, routeNamesJSON, targetPath } from '../router/routeNames.js';
 import { isLazyView, resolveRouteViews } from '../router/lazy.js';
 import { resolveHead } from '../head.js';
 import { MANAGED_TAGS } from '../headTags.js';
@@ -80,11 +81,15 @@ import { redirectScript } from './redirect.js';
 /**
  * One prerendered page (see prerender's @returns). `locale` is set under prefix
  * routing only (D177): the locale the page was rendered in. `pattern` and
- * `params` are set on a page a `staticPaths` route generated (D179).
+ * `params` are set on a page a `staticPaths` route generated (D179). `names` is
+ * the route name table a static page carries in its names island (D196): set
+ * when the page's prerender resolved a named link, or when it is a
+ * `prerender: false` page that renders in the browser alone.
  * @typedef {{ path: string, html: string | null, title: string | null,
  *   head: ResolvedHead | null, reused?: boolean, prerender?: boolean,
  *   data?: Record<string, any[]>, readState?: ReadStateEnvelope, modules?: ChainModules,
- *   route?: RouteJSON, locale?: string, pattern?: string, params?: Record<string, string> }} Page
+ *   route?: RouteJSON, locale?: string, pattern?: string, params?: Record<string, string>,
+ *   names?: Record<string, string> }} Page
  */
 /** @typedef {{ path: string, reason: string, modules?: ChainModules }} SkippedRoute */
 /**
@@ -909,6 +914,9 @@ function pageRenderer(config, { isStatic, routed, tags, defaultLocale, routeRout
 	/** @type {Set<string>} */
 	const canonicalWarned = new Set();
 	let builtContext = false;
+	// route name → pattern, for named links in both modes (D196): the hybrid url()
+	// shadow resolves through it, and the static stub gets it per page.
+	const routeNameTable = routeNames(config.routes ?? []);
 
 	// staticPaths bookkeeping (D179). A fixed route's page always wins its output
 	// file over a generated one (the existing duplicate rule); among generated
@@ -972,10 +980,16 @@ function pageRenderer(config, { isStatic, routed, tags, defaultLocale, routeRout
 			// link()'s { locale } options resolve as Router.url resolves them.
 			const base = normalizeBase(config.routerBase);
 			/** @type {(path: string, options?: import('../../types/index.js').LinkOptions) => string} */
+			// A named target (D196) resolves through the route table first, as the
+			// live Router.url() resolves it.
 			const url = routed
 				? (path, options) =>
-						encodeURL(path, null, localeBase(base, linkLocale(options, locale, tags), defaultLocale))
-				: (path) => encodeURL(path, null, base);
+						encodeURL(
+							targetPath(path, routeNameTable),
+							null,
+							localeBase(base, linkLocale(options, locale, tags), defaultLocale)
+						)
+				: (path) => encodeURL(targetPath(path, routeNameTable), null, base);
 			routeRouter.url = url;
 		}
 		return routeRouter;
@@ -1023,6 +1037,10 @@ function pageRenderer(config, { isStatic, routed, tags, defaultLocale, routeRout
 		let router;
 		if (isStatic && route) {
 			router = makeRouterStub(route, { base: config.routerBase });
+			// The stub resolves named links through the build's table (D196) and
+			// marks itself when it does, so attachStaticFields knows the page needs
+			// the table in its names island.
+			router.names = routeNameTable;
 			// Locale prefix routing (D177): the static stub encodes under the locale
 			// being rendered and resolves link()'s { locale } options exactly as the
 			// browser kernel's stub does. An unconfigured { locale } tag throws here,
@@ -1637,6 +1655,7 @@ async function writeStaticDir({
 				// A generated page's own path + params (D179): its module is shared by
 				// every page of its route, so the page carries what differs.
 				route: page.pattern ? { path: page.path, params: page.params ?? {} } : null,
+				names: page.names ?? null,
 				island: dress.island(locale),
 				headExtra: dress.head(page),
 			});
@@ -2013,6 +2032,16 @@ async function attachStaticFields(page, entry, ctx) {
 	if (hasReadState(readState)) page.readState = readState;
 	page.modules = await collectModules(entry);
 	page.route = serializeRouteJSON(entry);
+	// Named links (D196): a static page ships no route table, so a page whose
+	// render resolved one carries the name table in its names island for the
+	// browser's re-render. A `prerender: false` page renders only in the browser,
+	// so it carries the table whenever the app names a route.
+	// Static pages always render through the stub (createPageContext).
+	const stub = /** @type {RouterStub} */ (ctx.router);
+	if (stub.named || page.html == null) {
+		const names = routeNamesJSON(stub.names ?? new Map());
+		if (Object.keys(names).length) page.names = names;
+	}
 }
 
 /**
@@ -2198,16 +2227,33 @@ function stripAppBundle(shell, base) {
  * so the kernel hands the view the params the prerender used. A fixed route's
  * page has none.
  *
+ * A page whose prerender rendered a named link (D196) carries the route name
+ * table (`{ album: '/albums/:id' }`) as a `data-puzzle-static-names` island, so
+ * the browser's re-render resolves the same names without a route table.
+ *
  * @param {string} shell
  * @param {{ targetId: string, content: string | null,
  *   head?: ResolvedHead | null, slug: string, data?: object,
  *   readState?: Partial<ReadStateEnvelope> | null, base?: string, island?: string,
- *   headExtra?: string, route?: { path: string, params: Record<string, string> } | null }} page
+ *   headExtra?: string, route?: { path: string, params: Record<string, string> } | null,
+ *   names?: Record<string, string> | null }} page
  * @returns {string}
  */
 export function injectStaticShell(
 	shell,
-	{ targetId, content, head, slug, data, readState = null, base = '', island = '', headExtra = '', route = null }
+	{
+		targetId,
+		content,
+		head,
+		slug,
+		data,
+		readState = null,
+		base = '',
+		island = '',
+		headExtra = '',
+		route = null,
+		names = null,
+	}
 ) {
 	const plan = getShellPlan(shell);
 	const ops = [];
@@ -2247,10 +2293,16 @@ export function injectStaticShell(
 	const routeIsland = route
 		? `<script type="application/json" data-puzzle-static-route>${escapeScriptJson(JSON.stringify(route))}</script>`
 		: '';
+	// the names island is omitted on every page that rendered no named link, so
+	// those pages are byte-identical to a build without named routes (D196).
+	const namesIsland = names
+		? `<script type="application/json" data-puzzle-static-names>${escapeScriptJson(JSON.stringify(names))}</script>`
+		: '';
 	const scripts =
 		`<script type="application/json" data-puzzle-static-data>${json}</script>` +
 		readIsland +
 		routeIsland +
+		namesIsland +
 		island +
 		`<script type="module" src="${base}/_puzzle/${slug}.js"></script>`;
 	// The island rides before the SHELL's `</body>` — a fixed offset from the plan, so

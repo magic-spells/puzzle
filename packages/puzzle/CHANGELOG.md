@@ -294,6 +294,16 @@ one is *not* a compile error; it silently builds a different product.
   unchanged. `examples/paginated-posts` shows all three. Behavior change: a
   `query` key passed to `findMany` used to be ignored silently; without the
   adapter it now warns in development, and with it the read is a server query.
+- **Named routes (D196).** `link()`, `router.url()`, `router.push()`,
+  `router.replace()` and a guard's redirect take `{ name, params, query?, hash? }`
+  wherever they took a path, so `link({ name: 'album', params: { id: album.id } })`
+  keeps working when the route's path moves. Path strings work exactly as before.
+  Nested and index routes resolve by their full path, params are URI-encoded,
+  and `{ locale }` composes as it does with a path. An unknown name or a missing
+  param throws a `[puzzle]` error that names the route, and two routes with one
+  name throw at startup in development. Static pages resolve names too: a page
+  that renders a named link carries the route-name table in a small JSON
+  island.
 - **Static pages link their own CSS.** In `output: 'static'`, a view, layout
   or component script that does `import './page.css'` now gets that CSS on its
   own page only: each page links `_puzzle/<slug>.css` (`<slug>-<hash>.css`

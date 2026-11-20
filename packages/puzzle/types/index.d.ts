@@ -139,12 +139,35 @@ export type StaticPathsFn = (
 	context: StaticPathsContext
 ) => ReadonlyArray<StaticPathsEntry> | Promise<ReadonlyArray<StaticPathsEntry>>;
 
-/** A route guard (D87): allow, block, or redirect before navigation loads. */
+/** A route guard (D87): allow, block, or redirect (to a path or a named target, D196) before navigation loads. */
 export type GuardFn = (nav: {
 	to: RouteSnapshot;
 	from: RouteSnapshot | null;
 	ctx: PuzzleContext;
-}) => void | boolean | string | Promise<void | boolean | string>;
+}) => void | boolean | string | NamedRouteTarget | Promise<void | boolean | string | NamedRouteTarget>;
+
+/** A query value a named target writes (D196): an array repeats the key; null and undefined are left out. */
+export type RouteQueryValue = string | number | boolean | null | undefined;
+
+/**
+ * A route by name instead of by path (D196): `{ name: 'album', params: { id: 7 } }`.
+ * The router fills the route's `:param` segments (URI-encoded) from `params`,
+ * then adds `query` and `hash`. An unknown name or a missing param throws; in
+ * development so does a param the route does not have, or any other key.
+ */
+export interface NamedRouteTarget {
+	/** The route's `name` — any route in the table, parents and index children included. */
+	name: string;
+	/** Every `:param` the route's full path declares. */
+	params?: Record<string, string | number>;
+	/** Written as `?key=value`; an array repeats the key. */
+	query?: Record<string, RouteQueryValue | readonly RouteQueryValue[]>;
+	/** The fragment, with or without its `#`. */
+	hash?: string;
+}
+
+/** Where a navigation or link goes: a path (`'/albums/7'`) or a named target (D196). */
+export type RouteTarget = string | NamedRouteTarget;
 
 /** A route's `agent` field (D183). */
 export type RouteAgent = false | { name: string; about?: string; [key: string]: unknown };
@@ -467,10 +490,10 @@ export interface MorphHandler {
  * `this.ctx.router`. The public API is path-shaped in all router modes.
  */
 export interface Router {
-	/** Navigate to a path (push a history entry); resolves the outcome (D182). */
-	push(path: string): Promise<NavigationResult>;
-	/** Navigate to a path REPLACING the current history entry — no new entry, scroll left alone by default (D83); resolves the outcome (D182). */
-	replace(path: string): Promise<NavigationResult>;
+	/** Navigate to a path or a named target (D196) and push a history entry; resolves the outcome (D182). A bad named target throws. */
+	push(target: RouteTarget): Promise<NavigationResult>;
+	/** Navigate to a path or a named target (D196) REPLACING the current history entry — no new entry, scroll left alone by default (D83); resolves the outcome (D182). */
+	replace(target: RouteTarget): Promise<NavigationResult>;
 	/** Move `n` entries in history (negative = back). All modes (D42). */
 	go(n: number): void | Promise<void>;
 	/** Go back one entry. */
@@ -480,8 +503,9 @@ export interface Router {
 	/**
 	 * Path-shaped route in, mode-encoded href out (`'/x'` path mode, `'#/x'` hash, unchanged memory); strings not starting with `/` pass through (D79).
 	 * Under `i18n.routing: 'prefix'` the href carries the page's locale prefix; `{ locale: 'es' }` forces one locale, `{ locale: false }` skips the prefix for a file that exists once (D177).
+	 * A named target (`{ name, params, query, hash }`, D196) resolves through the route table first.
 	 */
-	url(path: string, options?: LinkOptions | null): string;
+	url(target: RouteTarget, options?: LinkOptions | null): string;
 	/**
 	 * Load the code a path's route needs — every `lazy()` view and layout in its
 	 * matched chain — without navigating (D195). No guard runs and no view is
@@ -557,7 +581,8 @@ export type LinkOptions = { locale?: string | false };
  */
 export interface LibraryFunctions {
 	/**
-	 * The URL for an app path in the active routing mode (D79). Under
+	 * The URL for an app path in the active routing mode (D79), or for a named
+	 * target such as `{ name: 'album', params: { id } }` (D196). Under
 	 * `i18n.routing: 'prefix'` it adds the active locale's prefix; `locale`
 	 * forces one locale, and `locale: false` skips the prefix for a file that
 	 * exists once (D177).
