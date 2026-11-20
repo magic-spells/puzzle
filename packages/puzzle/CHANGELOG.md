@@ -388,9 +388,9 @@ one is *not* a compile error; it silently builds a different product.
   when its module is hashed) after the global stylesheet, in `puzzle build`
   and `puzzle dev`. Before, esbuild wrote the file and no page linked it. CSS
   behind a dynamic `import()` loads with the importing page's sheet. The
-  unused `dist/app.css` is no longer shipped unless a `public/` page links it,
-  and a CSS import no page graph reaches (one in `app.js`) is named in a
-  warning.
+  compiler's unused `dist/app.css` is no longer shipped unless a `public/`
+  page links it, and a CSS import no page graph reaches (one in `app.js`) is
+  named in a warning.
 - **Production builds minify `<style>` blocks.** The collected component
   styles were appended to the stylesheet verbatim, comments included; they now
   go through esbuild's CSS minifier, which keeps vendor-prefixed duplicates
@@ -489,9 +489,10 @@ one is *not* a compile error; it silently builds a different product.
   When no page under `public/` references `app.css`, those rules never load;
   `puzzle build` (every output mode) and `puzzle dev` now say so, name the
   emitted file, and print the `<link href="/app.css" rel="stylesheet">` line to
-  add to `app/public/index.html`. `dev` prints it once per session; the
-  static-output dev server does not print it. It is a warning, so it also
-  prints under `-q`.
+  add to `app/public/index.html`. `dev` prints it once per session. In static
+  output, `build` and `dev` instead name each CSS file that only `app.js`
+  imports, and say to import it from a layout or view. It is a warning, so it
+  also prints under `-q`.
 - **`puzzle check`'s documentation matches what it checks.** The README and
   `puzzle check --help` claimed a misspelled data field such as
   `{ user.nmae }` is a type error. It is not: values from `data()` are
@@ -599,6 +600,14 @@ changes.
   `typeof window !== 'undefined' ? window.localStorage : undefined` is
   `undefined`, so that spelling never drew the warning. It now prints whenever
   the config has a `storage` key.
+- **Static `puzzle dev` serves `/app.css` when a public page links it.**
+  `puzzle build` and `puzzle preview` shipped the compiled `app.css` for such
+  a page, but the dev server answered 404. Dev now writes it too; your own
+  `public/app.css` still takes its place, as in the build.
+- **A text node made only of non-breaking spaces keeps them.** A node holding
+  only U+00A0, or another non-ASCII space such as U+3000, compiled to a plain
+  space, so the line could break there; with a line break beside it, it was
+  dropped. Template whitespace is ASCII space, tab, CR and LF only.
 - **`puzzle check` finds a TypeScript hoisted to a workspace root, and
   `puzzle doctor` a Tailwind CLI in a parent folder.** Both looked only in the
   app's own `node_modules`, so in an npm or Yarn 1 workspace, which hoists
