@@ -95,7 +95,7 @@ export default class Hamburger extends PuzzleView {
     return this._controlled() ? !!this.props.open : !!this.getState().uncontrolledOpen;
   }
 
-  data(params, props) {
+  data({ props }) {
     const size = SIZE[props.size] ? props.size : 'md';
     const open = this._open();
     return {

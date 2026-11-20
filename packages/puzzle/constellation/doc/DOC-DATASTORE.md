@@ -50,7 +50,7 @@ Number primary keys match their string form, so `findOne('todo', 7)` and `findOn
 On an adapter app, write `data()` as if everything were local; missing records are fetched and the view commits once they land.
 
 ```js
-data(params) {
+data({ params }) {
   const store = this.ctx.store;
   const post = store.findOne('post', params.id);                // fetched if missing
   const author = post && store.findOne('user', post.authorId);  // next round

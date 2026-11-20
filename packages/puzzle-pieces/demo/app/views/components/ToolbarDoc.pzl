@@ -179,7 +179,7 @@ export default class ToolbarDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     const { marks, wrap, grid } = this.getData();
     return {
       ...this.getData(),

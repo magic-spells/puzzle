@@ -40,7 +40,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   class  rendered on <tab-panel>
 
 export default class TabsPanel extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       value: props.value == null ? undefined : String(props.value),
       panelClass: props.class || false,

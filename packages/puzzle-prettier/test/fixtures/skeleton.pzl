@@ -14,7 +14,7 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class PostDetail extends PuzzleView {
-  async data(params) {
+  async data({ params }) {
     const post=await fetch(`/api/posts/${params.id}`).then(r=>r.json())
     return { post };
   }

@@ -998,7 +998,7 @@ export default class RichTextEditor extends PuzzleView {
 		});
 	}
 
-	data(params, props) {
+	data({ props }) {
 		const g = this.getData();
 		const a = g.active || {};
 		const disabled = !!props.disabled;

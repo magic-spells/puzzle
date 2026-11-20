@@ -25,7 +25,7 @@ verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 Two intentionally asymmetric update paths:
 
 1. **Model path**: a store notification, prop change or route-param change reruns
-   `data(params, props)`. The settled result REPLACES the derived layer, then the
+   `data({ params, props })`. The settled result REPLACES the derived layer, then the
    view renders and patches.
 2. **Local path**: `setState()` writes the persistent state layer and schedules a
    render. When the write touches a key the last committed `data()` read through

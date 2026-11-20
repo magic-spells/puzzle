@@ -87,7 +87,7 @@ const codeSizes = `<Avatar name="Ada Lovelace" size="sm" />
 <Avatar name="Ada Lovelace" size="lg" />`;
 
 export default class AvatarDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       installCmd,
       usageImport,

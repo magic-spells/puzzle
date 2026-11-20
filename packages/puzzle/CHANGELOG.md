@@ -176,6 +176,20 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Breaking
 
+- **BREAKING: `data()` takes one object, and `share()` is new (D197).**
+  `data(params, props)` is now `data({ params, props, shared })`: destructure
+  only what you use (`data({ props })`, `data({ params })`, or `data()`). A
+  method left on the old form gets the whole object as its first argument and
+  `undefined` as `props`, so it fails at the first prop read; the compiler
+  warns on every `data(params, props)` / `data(params)` declaration. The new
+  optional `share()` method takes the same object and hands values and
+  callbacks to every view its template mounts, at any depth and through slots,
+  under `shared.<camelCaseClassName>` (`Tabs` → `shared.tabs`). `shared` is
+  always an object, handlers read it as `this.shared`, and only nested views
+  whose `data()` read a changed shared key re-run. A layout's `share()` does
+  not reach its routed page. Components named `Params`, `Props` or `Shared`
+  draw a compiler warning. In TypeScript, type the argument with the new
+  `DataInput<Props>` export.
 - **BREAKING: `setData()` is now `setState()`, and `getState()` is new (D191).**
   `this.setData(...)` is gone with no alias; rename every call to
   `this.setState(...)`, which takes the same `(key, value)` or object map and

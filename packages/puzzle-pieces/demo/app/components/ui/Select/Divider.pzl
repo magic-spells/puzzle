@@ -19,7 +19,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 const DIVIDER = 'my-1 block h-px bg-border';
 
 export default class SelectDivider extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { dividerClass: [DIVIDER, props.class].filter(Boolean).join(' ') };
   }
 }

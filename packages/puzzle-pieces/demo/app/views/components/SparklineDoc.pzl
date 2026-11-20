@@ -92,7 +92,7 @@ const codeColor = `// The stroke is currentColor — set any text-* color token 
 <Sparkline data={ series } area class="text-chart-5" width={ 200 } height={ 48 } />`;
 
 export default class SparklineDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

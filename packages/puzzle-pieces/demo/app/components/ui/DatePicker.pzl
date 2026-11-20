@@ -277,7 +277,7 @@ export default class DatePicker extends PuzzleView {
 
   // ---- render model --------------------------------------------------------
 
-  data(params, props) {
+  data({ props }) {
     const prev = this.getData();
     const open = this._effectiveOpen();
     const base = props.id || `pieces-date-picker-${this._uid}`;

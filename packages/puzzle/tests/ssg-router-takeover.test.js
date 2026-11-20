@@ -392,7 +392,7 @@ describe('router SSG takeover (M2)', () => {
 	it('trailing slash on a :param route does not leak into the capture', async () => {
 		let seenParams = null;
 		class UserView extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				seenParams = params;
 				return {};
 			}

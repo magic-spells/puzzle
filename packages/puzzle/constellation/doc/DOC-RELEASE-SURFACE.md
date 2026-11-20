@@ -94,7 +94,7 @@ Contract: §3–§6, §17, §18, §24, §28, §31, §43, §47, §57, §64–§67
 ## Component runtime
 
 - Two data layers: each `data()` result replaces the derived layer; `setState()` writes a state layer that wins until the next `data()` commit. Async `data()` is last-wins. Skeletons show only on first load.
-- Lifecycle: `created`, `mounted`, `beforeUpdate`, `afterUpdate(prev)` (D178), `destroyed`, `viewWillShow`/`viewDidShow`, `viewWillHide`/`viewDidHide`. Members: `this.route`, `this.element`, `this.refs`, `this.ctx`, `memo()`, `getData()`, `getState()`, `setState()` (D191; `setData()` is gone), `refresh()`, `renderTick()` (D188).
+- Lifecycle: `created`, `mounted`, `beforeUpdate`, `afterUpdate(prev)` (D178), `destroyed`, `viewWillShow`/`viewDidShow`, `viewWillHide`/`viewDidHide`. Members: `this.route`, `this.element`, `this.refs`, `this.ctx`, `memo()`, `getData()`, `getState()`, `setState()` (D191; `setData()` is gone), `refresh()`, `renderTick()` (D188), `data({ params, props, shared })` and `share()` with the `this.shared` getter (D197).
 - Incremental rendering ([[DECISION-D170-INCREMENTAL-VDOM-LISTS]]): keyed rows and static subtrees are cached; a record prop carries a render revision.
 - Errors (§60): `onError(error, { phase, view, route })` and an app-level `errorView` with `{ error, info, retry }`.
 - `app.idle({ timeout })` (D185) resolves `true` when the app is quiet, `false` on timeout (default 10000 ms), never rejects; `ctx.idle()` (D189) is the same method on every view's context.

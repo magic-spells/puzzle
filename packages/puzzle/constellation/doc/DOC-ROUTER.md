@@ -61,11 +61,11 @@ The first match wins, so declare `/user/new` before `/user/:id` (the router warn
 
 ## Params in `data()`
 
-`:param` values arrive as strings in `data(params, props)`. `data()` re-runs when they change; `/user/42` → `/user/7` keeps the same view instance:
+`:param` values arrive as strings in `data({ params, props })`. `data()` re-runs when they change; `/user/42` → `/user/7` keeps the same view instance:
 
 ```js
 export default class UserView extends PuzzleView {
-  data(params) {
+  data({ params }) {
     return { user: this.ctx.store.findOne('user', params.id) };
   }
 }
@@ -115,7 +115,7 @@ A layout is an ordinary view with one `<Slot/>` where the routed view renders. C
 
 - The parent view renders its matched child at its own `<Slot/>`; a non-leaf view without one warns in development.
 - Child paths are relative. Add an index child (`path: ''`) or the parent's bare URL falls through to the catch-all.
-- Every level's `data(params)` gets the full merged params.
+- Every level's `data({ params })` gets the full merged params.
 - Moving between siblings keeps the shell instance and swaps only the pane.
 - A child cannot declare `layout`, a leading-`/` path, or `'*'`, and a `:param` name may not repeat within one chain.
 
@@ -153,7 +153,7 @@ this.ctx.router.replace({ name: 'items', query: { q: 'cabin' } }); // → /items
 ```
 
 - Nested and index children resolve by their full path: `{ name: 'settings-profile' }` is `/settings/profile`.
-- Each param is URI-encoded, and `data(params)` gets the value back as a string. `query` repeats a key for an array and drops `null`/`undefined`; `hash` takes `'faq'` or `'#faq'`.
+- Each param is URI-encoded, and `data({ params })` gets the value back as a string. `query` repeats a key for an array and drops `null`/`undefined`; `hash` takes `'faq'` or `'#faq'`.
 - Mistakes throw a `[puzzle]` error naming the route: an unknown name, a missing param, a param the pattern lacks, an unknown key, or a link to the `'*'` route. A bad target makes `push()`/`replace()` throw before navigating, unlike their usual resolved `NavigationResult`. Two routes with one name throw at startup in development.
 - A guard may return a named target to redirect.
 - Static pages resolve names too: a page whose prerender rendered a named link ships the name table in a small data island.

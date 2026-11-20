@@ -55,7 +55,7 @@ const INPUT_CLASS =
   '[&::-webkit-search-cancel-button]:appearance-none';
 
 export default class SearchField extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const value = props.value ?? '';
     return {
       id: props.id || (this._fallbackId ??= `pp-search-${++uid}`),

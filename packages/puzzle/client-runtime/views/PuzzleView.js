@@ -130,6 +130,24 @@ function warnThisHandlers(view) {
  * @typedef {{ keys: Set<string>, all: boolean, open: boolean }} ReadRecord
  */
 
+/**
+ * The one object data() and share() receive (D197): the route params, the
+ * parent's props, and what sharing ancestors pass down, grouped by each
+ * sharer's name. `shared` is always an object, so destructuring it never throws.
+ * @typedef {{ params: Record<string, any>, props: any, shared: Record<string, any> }} DataInput
+ */
+
+/**
+ * The key a sharing view's values sit under in `shared` (D197): the compiler's
+ * `__share` stamp (a minified build renames classes, so a .pzl carries it), or
+ * for a hand-written class its name in camelCase — Filter → filter,
+ * FilterPanel → filterPanel, URLFilter → urlFilter.
+ * @param {Function & { __share?: string }} View
+ * @returns {string}
+ */
+const shareKey = (View) =>
+	View.__share ?? View.name.replace(/^[A-Z]+(?=[A-Z][a-z]|$)|^./, (head) => head.toLowerCase());
+
 export class PuzzleView {
 	// Two-layer component state (Change C, SPEC §4). #state holds values written
 	// via setState() (and created()-seeded state, which uses setState); #derived holds
@@ -243,6 +261,23 @@ export class PuzzleView {
 	// re-run it started already painted (a sync data() commits and renders).
 	#renderSeq = 0;
 	#runToken = 0;
+	// share() (D197). #shared is this view's last published share() output — null
+	// until its first run, and forever for a view without share(). #shareRaw is
+	// what share() itself returned, which the stable callback wrappers in
+	// #shareFns call through, so a child always calls the newest callback.
+	// #shareSubs maps each view that read a key of #shared to the keys it read;
+	// #shareFrom is the reverse, the sharers this view read from, so a new run or
+	// destroy() can take this view off their lists.
+	/** @type {Record<string, any> | null} */
+	#shared = null;
+	/** @type {Record<string, any>} */
+	#shareRaw = {};
+	/** @type {Record<string, (...args: any[]) => any> | null} */
+	#shareFns = null;
+	/** @type {Map<PuzzleView, ReadRecord> | null} */
+	#shareSubs = null;
+	/** @type {Set<PuzzleView> | null} */
+	#shareFrom = null;
 	// D161 settle loop: the run token of the refresh currently re-running data()
 	// behind fetches (0 = none), and whether a store change landed during it. A
 	// notification mid-settle folds into that run as one more pass rather than
@@ -342,6 +377,20 @@ export class PuzzleView {
 	 * @type {Record<string, Element | null>}
 	 */
 	refs = {};
+
+	/**
+	 * The view whose render tree mounted this one — the owner whose patch holds
+	 * its position, which for slot content is the component that renders the
+	 * slot, not the template that wrote it. Set by the ViewManager before the
+	 * child's first data() run (and by the prerender walks). share() (D197) walks
+	 * it to find sharing ancestors, and a failed mount walks it to mark every
+	 * view above for a re-walk (D170). Null for a root view.
+	 *
+	 * INTERNAL, like `__walk`; declared so every view keeps one hidden class.
+	 *
+	 * @type {PuzzleView | null}
+	 */
+	__parent = null;
 
 	/**
 	 * Per-instance static-subtree cache (D170). The compiler wraps every
@@ -533,6 +582,150 @@ export class PuzzleView {
 			return invoke();
 		} finally {
 			this.#recorder = outer;
+		}
+	}
+
+	// ---- share() (D197) -------------------------------------------------------
+
+	/**
+	 * What sharing ancestors pass down, for a handler: the same object data()
+	 * receives as `shared`, keyed by each sharer's name (Filter → `filter`), the
+	 * nearest ancestor of a name winning. Always an object — empty when no
+	 * ancestor shares. Reading it here records nothing; only a data() or
+	 * share() run that reads a key re-runs when that key changes.
+	 * @returns {Record<string, any>}
+	 */
+	get shared() {
+		return this.#inherited(false);
+	}
+
+	/**
+	 * The one object a data() or share() run receives (D197). Building it starts
+	 * the run's shared-read record over: the sharers this view read last time
+	 * forget it, and the run's own reads sign it up again.
+	 * @param {Record<string, any>} params
+	 * @param {any} props
+	 * @returns {DataInput}
+	 */
+	#input(params, props) {
+		this.#unwatch();
+		return { params, props, shared: this.#inherited(true) };
+	}
+
+	/**
+	 * Group every sharing ancestor's output under its name, nearest first, so the
+	 * nearest ancestor of a name wins. The walk follows the render tree up from
+	 * this view and stops at the first router-mounted view (one with a route
+	 * snapshot): the router loads a layout and its page side by side, so a
+	 * layout's share() reaches the components it renders but never its page.
+	 * With `track`, each sharer's values come wrapped so this view's reads sign
+	 * it up for that sharer's changes.
+	 * @param {boolean} track
+	 * @returns {Record<string, any>}
+	 */
+	#inherited(track) {
+		/** @type {Record<string, any>} */
+		const shared = {};
+		for (let view = this.#route ? null : this.__parent; view; view = view.#route ? null : view.__parent) {
+			if (typeof (/** @type {any} */ (view).share) !== 'function') continue;
+			const key = shareKey(view.constructor);
+			if (!(key in shared)) shared[key] = track ? view.#watched(this) : (view.#shared ?? {});
+		}
+		return shared;
+	}
+
+	/**
+	 * This sharer's current output, wrapped so every key `reader` reads off it is
+	 * recorded on this sharer's subscriber list. Enumerating it (a spread,
+	 * Object.keys) counts as reading every key. A sharer that has not published
+	 * yet hands out an empty object, and the reads still sign the reader up, so
+	 * the first publish reaches it.
+	 * @param {PuzzleView} reader
+	 * @returns {Record<string, any>}
+	 */
+	#watched(reader) {
+		const subs = (this.#shareSubs ??= new Map());
+		const sharer = this;
+		/** @param {string | symbol | null} key null = every key */
+		const watch = (key) => {
+			// a torn-down reader holding an old copy must not sign up again
+			if (reader.#destroyed || typeof key === 'symbol') return;
+			let rec = subs.get(reader);
+			if (!rec) {
+				subs.set(reader, (rec = { keys: new Set(), all: false, open: true }));
+				(reader.#shareFrom ??= new Set()).add(sharer);
+			}
+			if (key === null) rec.all = true;
+			else rec.keys.add(key);
+		};
+		return new Proxy(this.#shared ?? {}, {
+			get(target, key, receiver) {
+				watch(key);
+				return Reflect.get(target, key, receiver);
+			},
+			has(target, key) {
+				watch(key);
+				return Reflect.has(target, key);
+			},
+			ownKeys(target) {
+				watch(null);
+				return Reflect.ownKeys(target);
+			},
+		});
+	}
+
+	/** Take this view off the subscriber list of every sharer it read from. */
+	#unwatch() {
+		if (!this.#shareFrom) return;
+		for (const sharer of this.#shareFrom) sharer.#shareSubs?.delete(this);
+		this.#shareFrom = null;
+	}
+
+	/**
+	 * Run share() for the model that just committed, publish its output, and
+	 * re-run the data() of every descendant that read a key whose value changed
+	 * (D197). share() runs under the committed data() run's read record, so a
+	 * later setState() of a key share() read re-runs data() and share()
+	 * together (D23). A function value is published as a stable wrapper that
+	 * calls the newest one, so a callback never goes stale in a child and a new
+	 * closure on every run never counts as a change.
+	 */
+	#publish() {
+		const rec = this.#dataReads;
+		const outer = this.#recorder;
+		if (rec) rec.open = true;
+		this.#recorder = rec;
+		/** @type {any} */
+		let raw;
+		try {
+			// no #input(): that would wipe the shared reads the data() run just made
+			raw = /** @type {any} */ (this).share({ params: this.#params, props: this.#props, shared: this.#inherited(true) });
+		} finally {
+			this.#recorder = outer;
+			if (rec) rec.open = false;
+		}
+		this.#shareRaw = raw = raw || {};
+		const fns = (this.#shareFns ??= {});
+		const prev = this.#shared ?? {};
+		/** @type {Record<string, any>} */
+		const out = {};
+		for (const key of Object.keys(raw)) {
+			const value = raw[key];
+			out[key] = typeof value === 'function' ? (fns[key] ??= (...args) => this.#shareRaw[key](...args)) : value;
+		}
+		this.#shared = out;
+		const subs = this.#shareSubs;
+		if (!subs?.size) return;
+		/** @type {Set<string>} */
+		const changed = new Set();
+		for (const key of new Set([...Object.keys(prev), ...Object.keys(out)])) {
+			if (!Object.is(prev[key], out[key])) changed.add(key);
+		}
+		if (!changed.size) return;
+		// a copy: each re-run takes its reader off the list and signs it up again
+		for (const [view, reads] of [...subs]) {
+			if (reads.all || [...reads.keys].some((key) => changed.has(key)))
+				view.#refreshContained('[puzzle] data() failed after a shared value changed:', 'refresh');
 		}
 	}
 
@@ -999,7 +1192,7 @@ export class PuzzleView {
 			// and its closure stays spent. The owner's re-render refills it.
 			this.#errorView = null;
 			face.destroy();
-			const owner = this.__retryParent;
+			const owner = this.__parent;
 			// A failed child under a REUSED element vnode is unreachable by an
 			// ordinary refresh (D170): a cached list row, or slot content the owner
 			// (a wrapper) splices back in by reference, is the same object on both
@@ -1446,8 +1639,8 @@ export class PuzzleView {
 		const run = () => {
 			const out = this.#recordReads(() =>
 				typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
-					? devperfRunData(this, this.#params, this.#props)
-					: this.data(this.#params, this.#props)
+					? devperfRunData(this, this.#input(this.#params, this.#props))
+					: this.data(this.#input(this.#params, this.#props))
 			);
 			if (out && typeof out.then === 'function') this.#noteAsyncShape();
 			return out;
@@ -1608,8 +1801,8 @@ export class PuzzleView {
 			try {
 				out = this.#recordReads(() =>
 					typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
-						? devperfRunData(this, scope.params, scope.props)
-						: this.data(scope.params, scope.props)
+						? devperfRunData(this, this.#input(scope.params, scope.props))
+						: this.data(this.#input(scope.params, scope.props))
 				);
 			} catch (err) {
 				this.#endEvalRun(mine);
@@ -1863,6 +2056,9 @@ export class PuzzleView {
 		this.#currentAnimation?.cancel();
 		this.#currentAnimation = null;
 		this.ctx.store?.unsubscribe(this);
+		// share() (D197): leave every sharer's list, and drop this view's own
+		this.#unwatch();
+		this.#shareSubs = null;
 		this.#vm?.clear();
 		// A view that never mounted (no outlet ever placed it) still owns the routed
 		// levels below it.
@@ -1895,12 +2091,13 @@ export class PuzzleView {
 
 	/**
 	 * Component model; defaults to the props, so a template reads `{ tone }`.
+	 * Takes one object (D197) — destructure what the view needs:
+	 * `data({ params, props, shared })`.
 	 *
-	 * @param {Record<string, any>} params
-	 * @param {any} props
+	 * @param {DataInput} input
 	 * @returns {any} the model object (or a promise of it)
 	 */
-	data(params, props) {
+	data({ props }) {
 		return props;
 	}
 
@@ -2536,6 +2733,9 @@ export class PuzzleView {
 			this.#derived = model;
 			this.#recompose();
 		}
+		// share() (D197) runs once the model it derives from is in place, and before
+		// the render, so a descendant whose data() read a changed key re-runs now.
+		if (typeof (/** @type {any} */ (this).share) === 'function') this.#publish();
 		// Anti-flash hold (v1.20, D52). The FIRST data() result normally flips
 		// #loaded and swaps the skeleton for the real template. If a skeleton was
 		// actually shown and it has not yet been up for skeletonMinDuration ms,

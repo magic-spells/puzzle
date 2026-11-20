@@ -101,7 +101,7 @@ export default class Block extends PuzzleView {
     this._slashAt = 0;
   }
 
-  data(params, props) {
+  data({ props }) {
     const indent = props.indent || 0;
     return {
       id: props.id,

@@ -23,7 +23,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class __NAME__ extends PuzzleView {
   // ` + "`label`" + ` is a prop passed by the parent component.
-  data(params, props) {
+  data({ props }) {
     return {
       label: props.label || '__NAME__'
     };
@@ -64,7 +64,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 export default class __NAME__ extends PuzzleView {
   // Family members compose: <Children/> above renders whatever the caller
   // nests inside <__NAME__>. ` + "`class`" + ` is the usual caller override prop.
-  data(params, props) {
+  data({ props }) {
     return {
       classes: ['__NAME__', props.class].filter(Boolean).join(' ')
     };
@@ -80,7 +80,7 @@ export default class __NAME__ extends PuzzleView {
 `
 
 // viewTemplate compiles in view mode (D20): the `<puzzle-view>` root becomes a
-// real element and may carry attributes. data(params, props) returns the model.
+// real element and may carry attributes. data({ params, props }) returns the model.
 const viewTemplate = `<puzzle-view class="__NAME__">
   <h1>{ title }</h1>
   <p>{ message }</p>
@@ -90,7 +90,7 @@ const viewTemplate = `<puzzle-view class="__NAME__">
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class __NAME__ extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       title: '__NAME__',
       message: 'This view was scaffolded by puzzle generate.'
@@ -122,7 +122,7 @@ const layoutTemplate = `<puzzle-view class="__NAME__">
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class __NAME__ extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       title: props.title || '__NAME__'
     };
@@ -177,7 +177,7 @@ const componentTemplateTS = `<puzzle-view>
 </puzzle-view>
 
 <script lang="ts">
-import { PuzzleView } from '@magic-spells/puzzle';
+import { PuzzleView, type DataInput } from '@magic-spells/puzzle';
 
 // ` + "`label`" + ` is a prop passed by the parent component.
 interface __NAME__Props {
@@ -190,7 +190,7 @@ interface __NAME__Model {
 }
 
 export default class __NAME__ extends PuzzleView<__NAME__Props> {
-  data(_params: Record<string, string>, props: __NAME__Props): __NAME__Model {
+  data({ props }: DataInput<__NAME__Props>): __NAME__Model {
     return {
       label: props.label || '__NAME__',
     };
@@ -220,7 +220,7 @@ const familyTemplateTS = `<puzzle-view>
 </puzzle-view>
 
 <script lang="ts">
-import { PuzzleView } from '@magic-spells/puzzle';
+import { PuzzleView, type DataInput } from '@magic-spells/puzzle';
 
 // ` + "`class`" + ` is the usual caller override prop.
 interface __NAME__Props {
@@ -235,7 +235,7 @@ interface __NAME__Model {
 export default class __NAME__ extends PuzzleView<__NAME__Props> {
   // Family members compose: <Children/> above renders whatever the caller
   // nests inside <__NAME__>.
-  data(_params: Record<string, string>, props: __NAME__Props): __NAME__Model {
+  data({ props }: DataInput<__NAME__Props>): __NAME__Model {
     return {
       classes: ['__NAME__', props.class].filter(Boolean).join(' '),
     };
@@ -292,7 +292,7 @@ const layoutTemplateTS = `<puzzle-view class="__NAME__">
 </puzzle-view>
 
 <script lang="ts">
-import { PuzzleView } from '@magic-spells/puzzle';
+import { PuzzleView, type DataInput } from '@magic-spells/puzzle';
 
 interface __NAME__Props {
   title?: string;
@@ -304,7 +304,7 @@ interface __NAME__Model {
 }
 
 export default class __NAME__ extends PuzzleView<__NAME__Props> {
-  data(_params: Record<string, string>, props: __NAME__Props): __NAME__Model {
+  data({ props }: DataInput<__NAME__Props>): __NAME__Model {
     return {
       title: props.title || '__NAME__',
     };

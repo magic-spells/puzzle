@@ -191,7 +191,7 @@ export default class DropdownPanel extends PuzzleView {
     if (result === false) event.preventDefault();
   };
 
-  data(params, props) {
+  data({ props }) {
     const declarations = [];
     if (props.effectDuration) declarations.push(`--dp-effect-duration:${props.effectDuration}`);
     if (props.effectEasing) declarations.push(`--dp-effect-easing:${props.effectEasing}`);

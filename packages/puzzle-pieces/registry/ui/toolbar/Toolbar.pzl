@@ -139,7 +139,7 @@ const ON = 'bg-faint text-ink hover:bg-faint';
 const ICON_CLASS = 'size-4 shrink-0';
 
 export default class Toolbar extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const source = Array.isArray(props.items) ? props.items : [];
     const groupDisabled = !!props.disabled;
     const orientation = props.orientation === 'vertical' ? 'vertical' : 'horizontal';

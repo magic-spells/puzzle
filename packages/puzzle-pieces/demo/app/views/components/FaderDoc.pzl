@@ -187,7 +187,7 @@ export default class FaderDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       thresholdTicks,

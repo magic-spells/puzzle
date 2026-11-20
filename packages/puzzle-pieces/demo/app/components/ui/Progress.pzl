@@ -40,7 +40,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 const TRACK_SIZE = { sm: 'h-1.5', md: 'h-2.5' };
 
 export default class Progress extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const max = typeof props.max === 'number' && props.max > 0 ? props.max : 100;
     const hasValue = typeof props.value === 'number' && !Number.isNaN(props.value);
     const indeterminate = !hasValue;

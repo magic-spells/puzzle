@@ -113,7 +113,7 @@ export default class ToggleGroupDoc extends PuzzleView {
     this.setState({ align: 'left', marks: ['bold'] });
   }
 
-  data(params, props) {
+  data() {
     const { marks } = this.getData();
     return {
       ...this.getData(),

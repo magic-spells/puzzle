@@ -838,7 +838,7 @@ describe('Router — same-path push is a no-op (v-next)', () => {
 	it('/user/1 → /user/2 params-only refresh still works (only byte-identical short-circuits)', async () => {
 		let seen;
 		class UserView extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				seen = params.id;
 				return { id: params.id };
 			}
@@ -1200,7 +1200,7 @@ describe('Router — matching', () => {
 	it('decodes URI-encoded param values', async () => {
 		let seen;
 		class UserView extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				seen = params.id;
 				return { id: params.id };
 			}
@@ -1226,7 +1226,7 @@ describe('Router — params-only change (D19 §5)', () => {
 			created() {
 				created.push(this);
 			}
-			data(params) {
+			data({ params }) {
 				seenParams.push(params.id);
 				return { id: params.id };
 			}
@@ -1251,7 +1251,7 @@ describe('Router — params-only change (D19 §5)', () => {
 
 	it('a rejecting data() on a params-only change leaves the URL untouched (D19)', async () => {
 		class UserView extends PuzzleView {
-			async data(params) {
+			async data({ params }) {
 				if (params.id === 'bad') throw new Error('boom');
 				return { id: params.id };
 			}

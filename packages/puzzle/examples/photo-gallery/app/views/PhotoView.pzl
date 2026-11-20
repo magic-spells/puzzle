@@ -48,7 +48,7 @@ export default class PhotoView extends PuzzleView {
     };
   }
 
-  data(params, props) {
+  data({ params }) {
     // Works in BOTH mounts: top-level /photo/:id (All Photos) and the nested
     // /album/:slug/photo/:id child (params merge down the chain, so params.id is
     // present in both; params.slug is present only under an album). Capture the

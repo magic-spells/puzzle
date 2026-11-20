@@ -122,7 +122,7 @@ const STEP_BASE =
   'hover:bg-surface-sunken hover:text-ink disabled:pointer-events-none disabled:opacity-40';
 
 export default class NumberField extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     // Fallback id generated once per instance (survives re-renders); explicit id wins.
     const id = props.id || (this._fallbackId ??= `pp-numberfield-${++uid}`);
     const error = props.error || '';

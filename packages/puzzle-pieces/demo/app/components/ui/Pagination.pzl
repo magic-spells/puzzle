@@ -163,7 +163,7 @@ const NAV_BTN =
 const ELLIPSIS = 'inline-flex items-center justify-center size-9 text-muted';
 
 export default class Pagination extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const count = Math.max(0, Math.floor(props.count) || 0);
     const page = Math.min(Math.max(Math.floor(props.page) || 1, 1), Math.max(count, 1));
 

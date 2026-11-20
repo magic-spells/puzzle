@@ -27,6 +27,7 @@ import {
 	lazy,
 } from '@magic-spells/puzzle';
 import type {
+	DataInput,
 	PuzzleAppConfig,
 	Route,
 	RouteSnapshot,
@@ -251,8 +252,8 @@ class TodoListView extends PuzzleView {
 		rename: (id: string, title: string) => this.ctx.store.findOne('todo', id)?.update({ title }),
 	};
 
-	async data(params?: Record<string, string>, props?: any): Promise<object> {
-		const id = params?.id ?? props?.id;
+	async data({ params, props }: DataInput): Promise<object> {
+		const id = params.id ?? props?.id;
 		const todo = await this.ctx.store.findOne('todo', id);
 		const todos = this.ctx.store.findMany('todo', { filter: (t) => !t.done });
 
@@ -521,9 +522,9 @@ const configuredAdapter: AdapterCapability = adapter.defaults(appDefaults);
 adapter.defaults({ publish: (_fetch: AdapterFetch) => Promise.resolve() });
 
 class AppErrorView extends PuzzleView {
-	data(_params?: Record<string, string>, props?: PuzzleErrorViewProps) {
-		props?.retry();
-		return { message: String(props?.error), phase: props?.info.phase };
+	data({ props }: DataInput<PuzzleErrorViewProps>) {
+		props.retry();
+		return { message: String(props.error), phase: props.info.phase };
 	}
 }
 
@@ -888,10 +889,21 @@ interface CardProps {
 }
 
 class Card extends PuzzleView<CardProps> {
-	events = { open: (event: Event) => this.props.open(event) };
+	events = {
+		open: (event: Event) => this.props.open(event),
+		// handlers read what ancestors share through this.shared
+		pick: () => this.shared.picker?.set('a'),
+	};
 
-	data(_params: Record<string, string>, props: CardProps) {
-		return { heading: props.title };
+	data({ props, shared }: DataInput<CardProps>) {
+		// shared is always an object, so a missing sharer destructures to the default
+		const { theme = {} } = shared;
+		return { heading: props.title, tone: theme.tone };
+	}
+
+	// share() takes the same object and returns values and callbacks for nested views
+	share({ props }: DataInput<CardProps>) {
+		return { title: props.title, open: (event: Event) => props.open(event) };
 	}
 
 	afterUpdate(prev: PrevViewState<CardProps>): void {
@@ -909,7 +921,7 @@ class Card extends PuzzleView<CardProps> {
 
 class MismatchedCard extends PuzzleView<CardProps> {
 	// @ts-expect-error data()'s props parameter is the view's Props
-	data(_params: Record<string, string>, props: { count: number }) {
+	data({ props }: DataInput<{ count: number }>) {
 		return props;
 	}
 

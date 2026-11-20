@@ -144,7 +144,7 @@ const INITIAL_FILES = [
 ];
 
 export default class ChatAttachmentDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     const prev = this.getData();
     return {
       installCmd,

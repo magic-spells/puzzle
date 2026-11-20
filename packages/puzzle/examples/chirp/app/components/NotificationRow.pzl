@@ -54,7 +54,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import Avatar from './Avatar.pzl';
 
 export default class NotificationRow extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const n = props.notification;
     const store = this.ctx.store;
 

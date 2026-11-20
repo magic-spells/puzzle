@@ -106,7 +106,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class TrackList extends PuzzleView {
   // Runs on mount and whenever the props or the store data it read change.
-  data(params, props) {
+  data({ props }) {
     return { title: props.title, tracks: props.tracks };
   }
 
@@ -208,7 +208,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import TrackList from '@/components/TrackList.pzl';
 
 export default class Album extends PuzzleView {
-  data(params) {
+  data({ params }) {
     // Reading the store here subscribes the view: a like, a new track or a
     // deleted one re-runs data() and re-renders.
     const tracks = this.ctx.store

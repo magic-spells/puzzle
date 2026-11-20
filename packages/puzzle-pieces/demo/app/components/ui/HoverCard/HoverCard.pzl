@@ -75,7 +75,7 @@ function delay(value, fallback) {
 }
 
 export default class HoverCard extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       rootClass: props.class || false,
       openState: props.open,

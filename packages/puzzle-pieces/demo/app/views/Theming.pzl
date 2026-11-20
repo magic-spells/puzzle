@@ -366,7 +366,7 @@ const addSteps = [
 ];
 
 export default class Theming extends PuzzleView {
-	data(params, props) {
+	data() {
 		return {
 			htmlTag: '<html>',
 			headTag: '<head>',

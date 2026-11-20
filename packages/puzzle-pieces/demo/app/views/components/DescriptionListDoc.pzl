@@ -103,7 +103,7 @@ const codeSizes = `<DescriptionList items={ items } layout="inline" divider size
 <DescriptionList items={ items } layout="inline" divider size="md" />`;
 
 export default class DescriptionListDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

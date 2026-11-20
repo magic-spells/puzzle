@@ -57,7 +57,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class ListingCard extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const listing = props.listing;
 
     // Defensive cover-icon lookup: photos is a Puzzle.array() that may be empty

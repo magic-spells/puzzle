@@ -116,7 +116,7 @@ export default class VirtualList extends PuzzleView {
     this._warnedRowHeight = false;
   }
 
-  data(params, props) {
+  data({ props }) {
     const items = Array.isArray(props.items) ? props.items : [];
     const requestedRowHeight = positiveNumber(props.rowHeight);
     if (!requestedRowHeight && !this._warnedRowHeight) {

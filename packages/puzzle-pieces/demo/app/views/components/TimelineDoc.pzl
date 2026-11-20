@@ -270,7 +270,7 @@ const codeCompact = `<!-- Omit description for a dense title + time feed. -->
 ] }/>`;
 
 export default class TimelineDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

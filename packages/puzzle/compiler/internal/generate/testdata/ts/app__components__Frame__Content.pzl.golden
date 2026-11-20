@@ -5,7 +5,7 @@
 </puzzle-view>
 
 <script lang="ts">
-import { PuzzleView } from '@magic-spells/puzzle';
+import { PuzzleView, type DataInput } from '@magic-spells/puzzle';
 
 // `class` is the usual caller override prop.
 interface ContentProps {
@@ -20,7 +20,7 @@ interface ContentModel {
 export default class Content extends PuzzleView<ContentProps> {
   // Family members compose: <Children/> above renders whatever the caller
   // nests inside <Content>.
-  data(_params: Record<string, string>, props: ContentProps): ContentModel {
+  data({ props }: DataInput<ContentProps>): ContentModel {
     return {
       classes: ['Content', props.class].filter(Boolean).join(' '),
     };

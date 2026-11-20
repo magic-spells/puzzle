@@ -124,7 +124,7 @@ export default class TodoHome extends PuzzleView {
     this.setState({ newTodoText: '', currentFilter: 'all' });
   }
 
-  data(params, props) {
+  data() {
     const todos = this.ctx.store.findMany('todo'); // auto-subscribes
     const local = this.getData();
     return {
@@ -153,7 +153,9 @@ export default class TodoHome extends PuzzleView {
 
 | Member | Kind | Notes |
 | --- | --- | --- |
-| `data(params, props)` | method (may be `async`) | Returns the component model; the base class returns `props`. Re-runs on mount, prop change, route-param change, subscribed store changes, and a `setState()` of a key the last committed run read through `getData()`/`getState()` (once per burst of writes, before the render; [[DECISION-D23-REFRESH-PATTERN]]). A key it never read does not re-run it. **Two-layer state:** each successful result **replaces** the derived layer, so a key the new run omits disappears from `getData()` unless `setState` wrote it. A successful **non-object** result (`undefined`, `null`, a primitive) keeps the previous derived layer but still counts as a load. `setState` writes a persistent state layer: a `data()` commit wins over an *earlier* `setState` for the same key, a *later* `setState` wins until the next commit, and local keys the model never returns survive every re-run. |
+| `data({ params, props, shared })` | method (may be `async`) | Takes **one object** ([[DECISION-D197-SHARE]]): `params` (route params), `props`, and `shared` (what ancestor views' `share()` hands down, keyed by camelCase class name; always an object, `{}` when nothing is shared). Destructure only what it uses. Returns the component model; the base class returns `props`. Re-runs on mount, prop change, route-param change, subscribed store changes, and a `setState()` of a key the last committed run read through `getData()`/`getState()` (once per burst of writes, before the render; [[DECISION-D23-REFRESH-PATTERN]]). A key it never read does not re-run it. **Two-layer state:** each successful result **replaces** the derived layer, so a key the new run omits disappears from `getData()` unless `setState` wrote it. A successful **non-object** result (`undefined`, `null`, a primitive) keeps the previous derived layer but still counts as a load. `setState` writes a persistent state layer: a `data()` commit wins over an *earlier* `setState` for the same key, a *later* `setState` wins until the next commit, and local keys the model never returns survive every re-run. |
+| `share({ params, props, shared })` | optional method (synchronous) | Hands values and callbacks to every view its render tree mounts, at any depth, including slotted children ([[DECISION-D197-SHARE]]). It receives the same object as `data()`, with the view's own inherited `shared`, and runs after each `data()` commit. Its return reaches descendants as `shared.<camelCaseName>`; the nearest same-named ancestor wins. A function value is passed as a stable wrapper that always calls the newest closure, so a re-run never counts it as a change. Children change the sharer's state only by calling its callbacks. A `setState()` of a key `share()` read re-runs it, and only descendants whose `data()` read a changed key re-run. The chain stops at a routed view: a layout's `share()` does not reach the page. |
+| `shared` | getter | The same `shared` object `data()` receives, read without tracking, for handlers: `this.shared.tabs.select(id)`. |
 | `setState(key, value)` / `setState(partial)` | method | Writes the state layer and schedules a re-render ([[DECISION-D191-SET-STATE-GET-STATE]]); the render re-runs `data()` first when `data()` read a written key (D23). Safe in `created()`, where it seeds what the first `data()` run reads back. |
 | `getState()` | method | A fresh shallow copy of the state layer alone: what `setState()` wrote, without `data()`'s values over it. |
 | `getData()` | method | A fresh shallow copy of the merged model the template reads: the state layer with the derived layer over it. |
@@ -218,7 +220,7 @@ export default class Home extends PuzzleView {
 - **`import.meta.env`:** `puzzle-env.d.ts` also declares `ImportMeta.env` as `ImportMetaEnv` (any key, `string | number | boolean | undefined`), so config `env` reads (§2) type-check; augment `ImportMetaEnv` for exact keys ([[DECISION-D190-CONFIG-ENV]]).
 - **Scaffold:** `puzzle init --typescript` (or the TypeScript prompt, §42) writes every component as `<script lang="ts">` with typed `data()`, props, events and hooks; `app/app.ts`, `app/routes.ts` and (todos) `.ts` models; a strict/noEmit `tsconfig.json`; and a `package.json` with `typescript` `^7` and `"check": "puzzle check"`. The default stays JavaScript.
 - **Generate:** with a `tsconfig.json` at the project root, `puzzle generate` writes TypeScript stubs ([[DOC-SPEC-BUILD]] §13).
-- **Authoring note:** under `strict`/`noImplicitAny`, annotate `data(params, props)` and handler params; TypeScript does not contextually type a subclass override from the base declaration.
+- **Authoring note:** under `strict`/`noImplicitAny`, annotate `data({ params, props }: DataInput<Props>)` and handler params; TypeScript does not contextually type a subclass override from the base declaration.
 
 ## 29. Scoped styles: `<style scoped>`
 

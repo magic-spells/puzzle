@@ -155,7 +155,7 @@ export default class NumberFieldDoc extends PuzzleView {
     this.setState({ qty: 3, weight: 68.5, rating: 3, discount: null, level: 40 });
   }
 
-  data(params, props) {
+  data() {
     const state = this.getData();
     return {
       ...state,

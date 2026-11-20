@@ -65,7 +65,7 @@ const TONES = {
 };
 
 export default class StateGroup extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const entries = Array.isArray(props.entries) ? props.entries : [];
     const tone = TONES[props.tone] ?? TONES.plain;
 

@@ -67,7 +67,7 @@ export default class Composer extends PuzzleView {
     this.setState({ draft: '', model: 'puzzle-core' });
   }
 
-  data(params, props) {
+  data({ props }) {
     const draft = this.getData().draft ?? '';
     return {
       draft,

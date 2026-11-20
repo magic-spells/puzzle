@@ -20,7 +20,7 @@ const ORIENTATION = {
 };
 
 export default class Separator extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const vertical = props.orientation === 'vertical';
     return {
       classes: [

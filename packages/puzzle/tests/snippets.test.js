@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 class Regions extends PuzzleView {
-	data(params, props) {
+	data({ props }) {
 		return { users: props.users, group: props.group };
 	}
 	render() {
@@ -110,7 +110,7 @@ describe('snippets — runtime join (D166)', () => {
 		let nextInstance = 0;
 		class StatefulStamp extends PuzzleView {
 			created() { this.instanceId = ++nextInstance; }
-			data(params, props) { return { label: props.label }; }
+			data({ props }) { return { label: props.label }; }
 			render() {
 				return h('button', { class: 'stateful-stamp' }, [
 					text(`${this.getData().label}:${this.instanceId}`),
@@ -599,7 +599,7 @@ describe('snippets — development diagnostics', () => {
 describe('snippets — SSG', () => {
 	it('serializes stamped snippets through the shared expansion pipe', async () => {
 		class ServerList extends PuzzleView {
-			data(params, props) { return { rows: props.rows }; }
+			data({ props }) { return { rows: props.rows }; }
 			render() {
 				return h('ul', {}, this.getData().rows.map((row) =>
 					h('li', { key: row.id }, [marker('row', { row })])

@@ -138,7 +138,7 @@ export default class SearchView extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data({ params }) {
     const store = this.ctx.store;
     const state = this.getData();
     // The destination text comes from the parsed route snapshot (v1.49, D83) —

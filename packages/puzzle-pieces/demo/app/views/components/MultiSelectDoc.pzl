@@ -222,7 +222,7 @@ export default class MultiSelectDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

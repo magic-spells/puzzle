@@ -129,7 +129,7 @@ function attr(value) {
 }
 
 export default class ScrollStack extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const declarations = [];
     if (props.gap) declarations.push(`--scroll-stack-gap:${props.gap}`);
     if (props.style) declarations.push(String(props.style));

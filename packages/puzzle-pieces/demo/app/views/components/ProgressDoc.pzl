@@ -92,7 +92,7 @@ export default class ProgressDoc extends PuzzleView {
     this.setState({ pct: 30 });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

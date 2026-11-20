@@ -44,7 +44,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 const WRAPPER = 'inline-flex items-start gap-2 select-none';
 
 export default class Checkbox extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const disabled = !!props.disabled;
     return {
       wrapperClass: [

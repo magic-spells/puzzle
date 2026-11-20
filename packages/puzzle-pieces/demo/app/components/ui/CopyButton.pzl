@@ -95,7 +95,7 @@ export default class CopyButton extends PuzzleView {
     if (this._timer) clearTimeout(this._timer);
   }
 
-  data(params, props) {
+  data({ props }) {
     const variant = VARIANT[props.variant] ? props.variant : 'ghost';
     const size = SIZE[props.size] ? props.size : 'md';
     const label = props.label || '';

@@ -21,7 +21,7 @@ import ChirpCard from '@/components/ChirpCard.pzl';
 const byNewest = (a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
 
 export default class ProfileChirps extends PuzzleView {
-  data(params, props) {
+  data({ params }) {
     const store = this.ctx.store;
     const user = store.findMany('user', { filter: (u) => u.handle === params.handle })[0] || null;
 

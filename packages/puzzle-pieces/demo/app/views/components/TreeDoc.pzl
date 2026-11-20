@@ -297,7 +297,7 @@ export default class TreeDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     const d = this.getData();
     return {
       ...d,

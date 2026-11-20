@@ -67,7 +67,7 @@ function num(value) {
 export default class Content extends PuzzleView {
   #initialOpen;
 
-  data(params, props) {
+  data({ props }) {
     // Frozen on the FIRST data() call and never recomputed. A later render must
     // not move this attribute — see the rule above.
     this.#initialOpen ??= !!(props.open ?? props.defaultOpen);

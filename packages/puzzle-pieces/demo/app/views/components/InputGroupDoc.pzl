@@ -145,7 +145,7 @@ export default class InputGroupDoc extends PuzzleView {
     this.setState({ site: '', link: 'https://acme.example/s/9f2a1', query: '' });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

@@ -35,7 +35,7 @@ const BASE = 'relative w-full';
 const WRAPPER = 'absolute inset-0 [&>*]:size-full [&>img]:object-cover [&>video]:object-cover';
 
 export default class AspectRatio extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const ratio = Number(props.ratio) > 0 ? Number(props.ratio) : 1;
     return {
       classes: [BASE, props.class || ''].join(' '),

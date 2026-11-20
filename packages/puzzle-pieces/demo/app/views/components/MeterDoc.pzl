@@ -168,7 +168,7 @@ export default class MeterDoc extends PuzzleView {
     this.setState({ disk: 72 });
   }
 
-  data(params, props) {
+  data() {
     const disk = this.getData().disk;
     return {
       ...this.getData(),

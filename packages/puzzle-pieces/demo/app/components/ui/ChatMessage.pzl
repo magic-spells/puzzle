@@ -99,7 +99,7 @@ const VARIANT = {
 };
 
 export default class ChatMessage extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const end = props.align === 'end';
     const showMeta = props.showMeta !== false;
     const avatarSrc = props.avatarSrc || '';

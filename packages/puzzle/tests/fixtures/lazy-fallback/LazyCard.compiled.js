@@ -7,7 +7,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // after it is the sibling whose identity must survive a toggling call-site
 // {#if} (a fallback that builds nothing keeps the marker's arity constant).
 export default class LazyCard extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { label: props.label, tips: Array.isArray(props.tips) ? props.tips : [] };
   }
 }

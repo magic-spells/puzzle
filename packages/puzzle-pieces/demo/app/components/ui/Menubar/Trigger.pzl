@@ -43,7 +43,7 @@ const ITEM =
   'hover:bg-surface-sunken hover:text-ink ' + FOCUS;
 
 export default class Trigger extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       arrow: props.variant === 'item',
       triggerClass: [props.variant === 'item' ? ITEM : BAR, props.class]

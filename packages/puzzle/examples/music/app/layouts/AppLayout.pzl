@@ -106,7 +106,7 @@ export default class AppLayout extends PuzzleView {
   // leaf is 'artist-index' / 'artist-info' while the section it belongs to is
   // still 'artist'. chain[0].name is 'artist' for both — flat routes are a
   // one-element chain, so every other comparison is unchanged.
-  data(params, props) {
+  data() {
     const name = this.route.chain[0].name;
     const section =
       name === 'library' ||

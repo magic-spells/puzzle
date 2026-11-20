@@ -154,7 +154,7 @@ const codeIconOnly = `// iconOnly hides the label text (kept sr-only) and mirror
 ]}/>`;
 
 export default class ButtonGroupDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       formatItems,
       alignItems,

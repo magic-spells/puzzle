@@ -300,7 +300,7 @@ export default class Command extends PuzzleView {
     return { rows, options };
   }
 
-  data(params, props) {
+  data({ props }) {
     const prev = this.getData();
     const query = prev.query ?? '';
     const { rows, options } = this._build(props, query);

@@ -9,7 +9,7 @@
 </puzzle-view>
 
 <script lang="ts">
-import { PuzzleView } from '@magic-spells/puzzle';
+import { PuzzleView, type DataInput } from '@magic-spells/puzzle';
 
 interface AdminProps {
   title?: string;
@@ -21,7 +21,7 @@ interface AdminModel {
 }
 
 export default class Admin extends PuzzleView<AdminProps> {
-  data(_params: Record<string, string>, props: AdminProps): AdminModel {
+  data({ props }: DataInput<AdminProps>): AdminModel {
     return {
       title: props.title || 'Admin',
     };

@@ -80,7 +80,7 @@ function mount(props = {}) {
 	};
 
 	harness.flush = () => {
-		harness.view._data = harness.view.data({}, harness.view.props);
+		harness.view._data = harness.view.data({ props: harness.view.props });
 		for (const item of harness.view._data.items) {
 			if (item.kind !== 'cell') continue;
 			harness.items[item.index] = item;

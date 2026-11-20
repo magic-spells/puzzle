@@ -90,7 +90,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 const ROOT = 'inline-block';
 
 export default class ContextMenu extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       rootClass: [ROOT, props.class].filter(Boolean).join(' '),
       // `false` is the compiler's omit sentinel: no attribute at all, so the

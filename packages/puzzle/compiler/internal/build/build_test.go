@@ -559,7 +559,7 @@ export default class Home extends PuzzleView {
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class ScopedList extends PuzzleView {
-  data(params, props) { return { items: props.items }; }
+  data({ props }) { return { items: props.items }; }
 }
 </script>
 `

@@ -41,7 +41,7 @@ afterEach(() => {
 });
 
 class Card extends PuzzleView {
-	data(_params, props) { return props; }
+	data({ props }) { return props; }
 	render() { return h('section', {}, [text(this.getData().title), h(SLOT_TAG)]); }
 }
 class TaskCard extends Card {}

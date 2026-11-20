@@ -2,7 +2,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class Skeleton extends PuzzleView {
-  async data(params) {
+  async data({ params }) {
     const post = await this.ctx.store.findOne('post', params.id);
     return { post };
   }

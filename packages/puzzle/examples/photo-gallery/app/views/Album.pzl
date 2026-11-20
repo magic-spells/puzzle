@@ -50,7 +50,7 @@ export default class AlbumView extends PuzzleView {
   // subscribes this view, so if the seeded photo set changed the album would
   // stay in sync. `album` carries the display name + count; `photos` is the
   // author's photos in store order.
-  data(params, props) {
+  data({ params }) {
     const all = this.ctx.store.findMany('photo');
     const album = groupAlbums(all).find((a) => a.slug === params.slug) || null;
     const photos = album ? all.filter((p) => albumSlug(p.author) === params.slug) : [];

@@ -59,7 +59,7 @@ class TodosView extends PuzzleView {
 
 let seenUserId;
 class UserView extends PuzzleView {
-	data(params) {
+	data({ params }) {
 		seenUserId = params.id;
 		return { id: params.id };
 	}

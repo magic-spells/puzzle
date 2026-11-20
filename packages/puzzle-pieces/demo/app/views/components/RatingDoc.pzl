@@ -144,7 +144,7 @@ export default class RatingDoc extends PuzzleView {
     this.setState({ score: 3, formScore: 4, kbdScore: 2 });
   }
 
-  data(params, props) {
+  data() {
     const d = this.getData();
     return {
       ...d,

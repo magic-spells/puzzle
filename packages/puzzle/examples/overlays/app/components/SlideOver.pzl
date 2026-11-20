@@ -35,7 +35,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // trap and Escape-to-close should be a native <dialog>.showModal() instead
 // (see NativeModal.pzl) — the top layer gives both for free.
 export default class SlideOver extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       open: !!props.open,
       title: props.title || 'Panel',

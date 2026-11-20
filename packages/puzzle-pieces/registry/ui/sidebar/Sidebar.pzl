@@ -556,7 +556,7 @@ export default class Sidebar extends PuzzleView {
 
   // ---- render model --------------------------------------------------------
 
-  data(params, props) {
+  data({ props }) {
     const activePath = props.activePath || '';
     const collapsed = this._collapsed();
     const collapsible = props.collapsible !== false;

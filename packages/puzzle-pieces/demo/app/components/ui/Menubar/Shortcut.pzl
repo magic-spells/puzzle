@@ -25,7 +25,7 @@ const KBD =
   'font-sans text-xs text-muted shadow-kbd';
 
 export default class Shortcut extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { kbdClass: [KBD, props.class].filter(Boolean).join(' ') };
   }
 }

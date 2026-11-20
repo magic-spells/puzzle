@@ -36,7 +36,7 @@ const moduleSource = script.replace(
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(moduleSource).toString('base64')}`;
 const { default: SplitPanel } = await import(moduleUrl);
 
-const snapAttr = (snap) => new SplitPanel().data({}, { snap }).snapAttr;
+const snapAttr = (snap) => new SplitPanel().data({ props: { snap } }).snapAttr;
 
 // Upstream's reader, verbatim from @magic-spells/split-panel 0.2.0 #snapShare.
 function upstreamPoints(raw) {
@@ -88,7 +88,7 @@ test('no snap prop omits the attribute entirely', () => {
 
 test('the other root props are untouched by the snap normalisation', () => {
 	const view = new SplitPanel();
-	const data = view.data({}, { snap: true, direction: 'vertical', disabled: true, id: 'editor' });
+	const data = view.data({ props: { snap: true, direction: 'vertical', disabled: true, id: 'editor' } });
 	assert.equal(data.direction, 'vertical');
 	assert.equal(data.disabled, true);
 	assert.equal(data.id, 'editor');

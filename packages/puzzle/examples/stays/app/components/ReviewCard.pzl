@@ -35,7 +35,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class ReviewCard extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       review: props.review,
       index: props.index ?? 0

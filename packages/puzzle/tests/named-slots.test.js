@@ -149,7 +149,7 @@ describe('named slots — slotted components + control flow (D53)', () => {
 	it('a slotted component tag mounts, patches, and destroys correctly', async () => {
 		const destroyed = vi.fn();
 		class Chip extends PuzzleView {
-			data(params, props) {
+			data({ props }) {
 				return { label: props.label };
 			}
 			render() {

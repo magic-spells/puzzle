@@ -190,7 +190,7 @@ export default class MarkdownEditorDoc extends PuzzleView {
 		this.setState({ md: SAMPLE_MD, tableMd: TABLE_MD });
 	}
 
-	data(params, props) {
+	data() {
 		return {
 			...this.getData(),
 			installCmd,

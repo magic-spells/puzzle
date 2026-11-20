@@ -3,7 +3,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import Frame from '../components/Frame';
 
 export default class ComponentFamily extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       title: props.title || 'Frame',
       body: props.body || ''

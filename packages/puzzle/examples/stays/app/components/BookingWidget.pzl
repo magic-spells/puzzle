@@ -70,7 +70,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class BookingWidget extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const listing = props.listing || null;
     const checkIn = props.checkIn || '';
     const checkOut = props.checkOut || '';

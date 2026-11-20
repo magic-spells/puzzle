@@ -101,7 +101,7 @@ const codeIcon = `// A static inline SVG on the icon slot; stroke/fill currentCo
 </Empty>`;
 
 export default class EmptyDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

@@ -221,7 +221,7 @@ const RAIL_LABELS = ['Overview', 'Tokens', 'Schemes', 'Shell', 'Pieces'];
 const ACTIVE_INDEX = 1;
 
 export default class ShellMock extends PuzzleView {
-	data(params, props) {
+	data({ props }) {
 		const size = props.size === 'full' ? 'full' : 'mini';
 		const t = size === 'full' ? FULL : MINI;
 		const scheme = SCHEMES.includes(props.scheme) ? props.scheme : 'default';

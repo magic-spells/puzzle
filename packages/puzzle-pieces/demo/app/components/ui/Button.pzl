@@ -63,7 +63,7 @@ const SIZE = {
 };
 
 export default class Button extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const loading = !!props.loading;
     return {
       classes: [

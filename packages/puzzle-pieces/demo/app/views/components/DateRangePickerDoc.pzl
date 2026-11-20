@@ -253,7 +253,7 @@ export default class DateRangePickerDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     const d = this.getData();
     return {
       ...d,

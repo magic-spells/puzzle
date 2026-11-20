@@ -188,7 +188,7 @@ const NAMES = [
 ];
 
 export default class AvatarGroupDoc extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       installCmd,
       usageImport,

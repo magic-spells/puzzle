@@ -79,7 +79,7 @@ export default class CheckboxDoc extends PuzzleView {
     this.setState({ subscribe: true, shipIt: false });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

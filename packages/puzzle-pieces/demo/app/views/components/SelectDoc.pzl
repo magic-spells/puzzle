@@ -320,7 +320,7 @@ export default class SelectDoc extends PuzzleView {
     });
   }
 
-  data(params, props) {
+  data() {
     const state = this.getData();
     return {
       ...state,

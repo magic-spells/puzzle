@@ -120,7 +120,7 @@ const commonRatios = [
 ];
 
 export default class AspectRatioDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       installCmd,
       usageImport,

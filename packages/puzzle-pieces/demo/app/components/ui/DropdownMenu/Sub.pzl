@@ -62,7 +62,7 @@ import DropdownMenu from './DropdownMenu.pzl';
 //   class    merged onto the host, after the load-bearing `block!`
 
 export default class Sub extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       rootClass: ['block!', props.class].filter(Boolean).join(' '),
       triggerMode: props.trigger || 'both',

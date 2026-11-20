@@ -224,6 +224,20 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 			return "", err
 		}
 	}
+	// D197: a component named Params, Props or Shared draws a warning, at the
+	// class name (or the file start, for a class named from the filename).
+	namePos := parser.Position{Line: 1, Col: 1}
+	if strings.TrimSpace(sec.Scripts) != "" {
+		if _, off, _, found := findDefaultClass(scriptToks); found {
+			namePos = sec.ScriptsPos.Advance(sec.Scripts[:off])
+		}
+	}
+	warnReservedComponentName(className, opts.Filename, namePos, warnings)
+	// D197: data() and share() take one object; the old positional
+	// `data(params, props)` still parses but reads the wrong values.
+	if method, off, ok := positionalDataParams(scriptToks); ok {
+		warnPositionalData(method, opts.Filename, sec.ScriptsPos.Advance(sec.Scripts[:off]), warnings)
+	}
 
 	c := &compiler{
 		src:                   sec.Source,
@@ -425,6 +439,13 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	//     Absent when no site carries a mask, which is the common case — a view
 	//     with no `__roots` skips the mask computation entirely.
 	b.WriteString(c.emitRootsStamp(className))
+	// 3d. share() key (D197): the camelcase name nested views find this view's
+	//     shared values under. A minified build renames the class, so the name
+	//     the runtime would derive from it is lost; stamped only when the script
+	//     declares share().
+	if declaresShare(scriptToks) {
+		b.WriteString(className + ".__share = " + jsString(shareKey(className)) + ";\n")
+	}
 	// 4. skeleton tail (v1.8, D39), same prototype-assignment idiom as render().
 	if skel != nil {
 		b.WriteString("\n")

@@ -14,7 +14,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class SkeletonInlineComponent extends PuzzleView {
-  async data(params, props) {
+  async data({ props }) {
     const user = await this.ctx.store.findOne('user', props.userId);
     return { user };
   }

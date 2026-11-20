@@ -166,7 +166,7 @@ export default class QuantityInput extends PuzzleView {
     el.setAttribute('value', String(Math.trunc(value)));
   }
 
-  data(params, props) {
+  data({ props }) {
     const min = int(props.min, 1);
     const max = Number.isFinite(props.max) ? Math.trunc(props.max) : undefined;
     const rawStep = int(props.step, 1);

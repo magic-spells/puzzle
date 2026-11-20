@@ -222,7 +222,7 @@ export default class AreaChart extends PuzzleView {
     this._ro = null;
   }
 
-  data(params, props) {
+  data({ props }) {
     const rows = Array.isArray(props.data) ? props.data : [];
     const xKey = props.xKey;
     const fmt = typeof props.formatValue === 'function' ? props.formatValue : formatTick;

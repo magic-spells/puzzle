@@ -43,7 +43,7 @@ import DropdownMenu from '../DropdownMenu/index.js';
 //   class   merged onto <dropdown-panel>, after the padding
 
 export default class Content extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       contentClass: props.class || false,
       opens: props.opens,

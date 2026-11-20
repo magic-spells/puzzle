@@ -53,7 +53,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 //            events are filtered out by the base — see DropdownPanel.pzl.
 
 export default class Menu extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       rootClass: ['block', props.class].filter(Boolean).join(' '),
       triggerMode: props.trigger || 'both',

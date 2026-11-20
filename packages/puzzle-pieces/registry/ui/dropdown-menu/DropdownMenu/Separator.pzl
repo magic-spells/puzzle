@@ -21,7 +21,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 const RULE = 'my-1 border-t border-border';
 
 export default class Separator extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { ruleClass: [RULE, props.class].filter(Boolean).join(' ') };
   }
 }

@@ -2,7 +2,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class InlineComponent extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return { label: props.label };
   }
   events = {

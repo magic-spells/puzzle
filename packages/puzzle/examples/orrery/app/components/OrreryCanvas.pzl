@@ -53,7 +53,7 @@ const MAX_ORBIT = 280;
 export default class OrreryCanvas extends PuzzleView {
   // findMany('body') here is what subscribes the canvas to the scene. props flow
   // down from the Home view (the toolbar owns running/trails/selection).
-  data(params, props) {
+  data({ props }) {
     return {
       bodies: this.ctx.store.findMany('body'),
       running: !!props.running,

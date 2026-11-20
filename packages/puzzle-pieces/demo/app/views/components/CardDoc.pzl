@@ -86,7 +86,7 @@ const codeFooter = `<Card title="Delete project?">
 </Card>`;
 
 export default class CardDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

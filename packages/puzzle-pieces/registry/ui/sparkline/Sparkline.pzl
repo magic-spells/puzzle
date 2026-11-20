@@ -46,7 +46,7 @@ import { extent, linearScale, linePath, areaPath } from '../../lib/chart-math.js
 const PAD = 2; // vertical inset so the 2px stroke never clips at the edges
 
 export default class Sparkline extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const width = Number(props.width) > 0 ? Number(props.width) : 120;
     const height = Number(props.height) > 0 ? Number(props.height) : 32;
 

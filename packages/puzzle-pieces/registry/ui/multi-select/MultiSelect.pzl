@@ -475,7 +475,7 @@ export default class MultiSelect extends PuzzleView {
     return { rows, options };
   }
 
-  data(params, props) {
+  data({ props }) {
     const prev = this.getData();
     const open = this._effectiveOpen();
     const query = prev.query ?? '';

@@ -16,6 +16,7 @@ connections:
   - DECISION-D178-AFTERUPDATE-PREV
   - DECISION-D188-TICK
   - DECISION-D191-SET-STATE-GET-STATE
+  - DECISION-D197-SHARE
 verified_at: '2026-11-01T19:26:46.557Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 notes:
@@ -52,7 +53,7 @@ handle, by this view, during its own evaluation, may fault
 
 ## State and refresh
 
-- Two layers: a successful `data(params, props)` REPLACES the derived layer;
+- Two layers: a successful `data({ params, props })` REPLACES the derived layer;
   `setState()` writes a persistent state layer that wins until the next derived
   commit. It rerenders, and when the last `data()` run read a written key
   (through `getData()`/`getState()`) the render re-runs `data()` first, once

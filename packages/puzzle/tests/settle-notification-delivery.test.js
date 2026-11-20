@@ -80,7 +80,7 @@ describe('a store change folded into an owned settle run', () => {
 		const store = makeStore();
 		const renders = [];
 		class V extends PuzzleView {
-			data(params) {
+			data({ params }) {
 				const post = this.ctx.store.findOne('post', 'p1');
 				// The prepared destination is a one-round query; the committed
 				// (owned) run is a two-round waterfall, so it is still in flight

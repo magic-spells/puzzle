@@ -40,7 +40,7 @@ import { intParam, sleep } from '../scenario-utils.js';
 // ---------------------------------------------------------------------------
 
 export default class RcLeaf extends PuzzleView {
-  async data(params) {
+  async data({ params }) {
     rcMetrics.dataRuns[RC_LEAF_LEVEL] += 1;
 
     // The loader. Read off the frozen route snapshot rather than location, so a

@@ -72,7 +72,7 @@ export default class SelectOption extends PuzzleView {
     else el.setAttribute('value', next);
   }
 
-  data(params, props) {
+  data({ props }) {
     return {
       disabledAttr: props.disabled ? true : false,
       optionClass: [OPTION, props.class].filter(Boolean).join(' '),

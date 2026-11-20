@@ -20,7 +20,7 @@
 </puzzle-view>
 
 <script lang="ts">
-import { PuzzleView } from '@magic-spells/puzzle';
+import { PuzzleView, type DataInput } from '@magic-spells/puzzle';
 
 interface LayoutProps {
   title?: string;
@@ -31,7 +31,7 @@ interface LayoutModel {
 }
 
 export default class DefaultLayout extends PuzzleView<LayoutProps> {
-  data(_params: Record<string, string>, props: LayoutProps): LayoutModel {
+  data({ props }: DataInput<LayoutProps>): LayoutModel {
     return {
       title: props.title || 'Puzzle App',
     };

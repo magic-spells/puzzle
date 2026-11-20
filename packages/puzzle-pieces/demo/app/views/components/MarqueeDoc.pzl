@@ -228,7 +228,7 @@ export default class MarqueeDoc extends PuzzleView {
     this.setState({ promoIndex: 0 });
   }
 
-  data(params, props) {
+  data() {
     return {
       promo: PROMOS[this.getData().promoIndex % PROMOS.length],
       installCmd,

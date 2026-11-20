@@ -76,7 +76,7 @@ const TH_BASE = 'whitespace-nowrap px-4 py-3 text-sm font-medium text-muted';
 const TD_BASE = 'px-4 py-3 text-sm text-body';
 
 export default class Table extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const rawColumns = Array.isArray(props.columns) ? props.columns : [];
 
     // Normalize columns once: resolve the alignment class up front and key each

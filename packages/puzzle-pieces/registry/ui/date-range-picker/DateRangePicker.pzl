@@ -282,7 +282,7 @@ export default class DateRangePicker extends PuzzleView {
 
   // ---- render model --------------------------------------------------------
 
-  data(params, props) {
+  data({ props }) {
     const prev = this.getData();
     const open = this._effectiveOpen();
     const base = props.id || `pieces-date-range-picker-${this._uid}`;

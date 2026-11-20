@@ -308,7 +308,7 @@ export default class Slider extends PuzzleView {
     if (this._overlayTimer) clearTimeout(this._overlayTimer);
   }
 
-  data(params, props) {
+  data({ props }) {
     const cfg = configFrom(props);
     const range = this._isRange(props);
     const committed = this._committed(props, cfg);

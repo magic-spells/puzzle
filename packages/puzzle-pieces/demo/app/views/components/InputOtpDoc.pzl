@@ -133,7 +133,7 @@ export default class InputOtpDoc extends PuzzleView {
     this.setState({ code: '', grouped: '', alnum: '', badCode: '123', otp: '', confirmed: false });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

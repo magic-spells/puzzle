@@ -189,7 +189,7 @@ const codeColumns = `<Masonry columns={ 4 } gap={ 3 }>
 </Masonry>`;
 
 export default class MasonryDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       responsiveCols: { base: 1, sm: 2, lg: 3 },

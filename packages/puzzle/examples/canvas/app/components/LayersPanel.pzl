@@ -29,7 +29,7 @@ const GLYPHS = { frame: '▣', rect: '▭', ellipse: '◯', text: 'T' };
 // reversed) children, indented. Clicks forward the raw DOM event so the Editor
 // can honor shift-toggle.
 export default class LayersPanel extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const nodes = props.nodes || [];
     const rows = [];
 

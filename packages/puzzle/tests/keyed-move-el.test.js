@@ -101,7 +101,7 @@ const rowList = (Row) => (view, d) =>
 function gatedRow({ skeleton = false } = {}) {
 	const gates = [];
 	class Row extends PuzzleView {
-		async data(params, props) {
+		async data({ props }) {
 			await new Promise((resolve) => gates.push(resolve));
 			return { id: props.item.id };
 		}
@@ -152,7 +152,7 @@ describe('keyed move guard: every paired row carries a node', () => {
 	it('component rows whose mount failed (placeholder left, no errorView)', async () => {
 		vi.spyOn(console, 'error').mockImplementation(() => {});
 		class Row extends PuzzleView {
-			data(params, props) {
+			data({ props }) {
 				if (props.item.id === 'b') throw new Error('row boom');
 				return { id: props.item.id };
 			}
@@ -174,7 +174,7 @@ describe('keyed move guard: every paired row carries a node', () => {
 			}
 		}
 		class Row extends PuzzleView {
-			data(params, props) {
+			data({ props }) {
 				if (props.item.id === 'b') throw new Error('b');
 				return { id: props.item.id };
 			}
@@ -191,7 +191,7 @@ describe('keyed move guard: every paired row carries a node', () => {
 	it('a component row destroyed out of band', async () => {
 		const rows = {};
 		class Row extends PuzzleView {
-			data(params, props) {
+			data({ props }) {
 				rows[props.item.id] = this;
 				return { id: props.item.id };
 			}
@@ -212,7 +212,7 @@ describe('keyed move guard: every paired row carries a node', () => {
 		vi.spyOn(console, 'error').mockImplementation(() => {});
 		// Row.pzl is `<Inner item={ item }/>` as its root; Inner fails for `b`.
 		class Inner extends PuzzleView {
-			data(params, props) {
+			data({ props }) {
 				if (props.item.id === 'b') throw new Error('inner boom');
 				return { id: props.item.id };
 			}

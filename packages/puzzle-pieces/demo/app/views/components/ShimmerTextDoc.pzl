@@ -106,7 +106,7 @@ const codeWithSpinner = `<div class="flex items-center gap-2.5">
 </div>`;
 
 export default class ShimmerTextDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       installCmd,
       usageImport,

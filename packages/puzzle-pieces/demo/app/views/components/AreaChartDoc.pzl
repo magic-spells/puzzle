@@ -165,7 +165,7 @@ const compareSeries = [
 ];
 
 export default class AreaChartDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

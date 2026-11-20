@@ -423,7 +423,7 @@ export default class Combobox extends PuzzleView {
     return { rows, options };
   }
 
-  data(params, props) {
+  data({ props }) {
     const prev = this.getData();
     const open = this._effectiveOpen();
     const value = props.value ?? null;

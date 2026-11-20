@@ -246,7 +246,7 @@ export default class KanbanDoc extends PuzzleView {
     this.setState({ board: INITIAL_BOARD, lastMove: 'none' });
   }
 
-  data(params, props) {
+  data() {
     const d = this.getData();
     return {
       ...d,

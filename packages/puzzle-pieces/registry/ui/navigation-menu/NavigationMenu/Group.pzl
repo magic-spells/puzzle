@@ -43,7 +43,7 @@ const GROUP = 'flex min-w-0 flex-col gap-0.5';
 const HEADING = 'px-3 pb-1.5 text-xs font-semibold uppercase tracking-widest text-muted';
 
 export default class Group extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const label = props.label != null && props.label !== '' ? String(props.label) : '';
     return {
       label,

@@ -24,7 +24,7 @@ import ChirpCard from '@/components/ChirpCard.pzl';
 const byNewest = (a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
 
 export default class ProfileLikes extends PuzzleView {
-  data(params, props) {
+  data() {
     // Liked chirps (local flag) — subscribes to posts, so un-liking one elsewhere
     // drops it from this grid live.
     const liked = this.ctx.store

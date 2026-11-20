@@ -197,7 +197,7 @@ describe('slot filled rule (D173 V14)', () => {
 describe('default markers in exclusive branches (D173 V13)', () => {
 	it('the same call-site content moves between branch markers on toggle', async () => {
 		class Flex extends PuzzleView {
-			data(params, props) {
+			data({ props }) {
 				return { compact: props.compact };
 			}
 			render() {

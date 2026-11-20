@@ -1137,7 +1137,7 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 		(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && vnode.takeoverPreloaded;
 	/** @type {PuzzleView} */
 	const child = pinned ?? new vnode.tag(ctx);
-	child.__retryParent = owner;
+	child.__parent = owner;
 	vnode.component = child;
 	// A parked routed view (D30 conditional outlet) moves in instead of mounting.
 	if ((typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) && (placed(child), pinned?.element)) {
@@ -1200,7 +1200,7 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 				// holds this child. So the owner's next render, and the next render of
 				// every view above it that mounted it, walks its reused vnodes once
 				// (PuzzleView#__walk).
-				for (let view = owner; view; view = view.__retryParent) view.__walk = true;
+				for (let view = owner; view; view = view.__parent) view.__walk = true;
 				// Gated: ungated this would ADD the property outside the constructor in a
 				// non-takeover build — exactly the hidden-class transition the gate above
 				// exists to avoid.

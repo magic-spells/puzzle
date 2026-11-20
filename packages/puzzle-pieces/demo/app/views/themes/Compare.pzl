@@ -80,7 +80,7 @@ const CELL_BASE = 'rounded-xl border border-border bg-surface p-3';
 const CELL_ON = 'ring-2 ring-ring ring-offset-2 ring-offset-surface-panel';
 
 export default class Compare extends PuzzleView {
-	data(params, props) {
+	data() {
 		const live = current();
 		// A null mode means "follow the OS": resolve it so exactly one tile can be
 		// marked as in use. Guarded — data() also runs under Node at build time.

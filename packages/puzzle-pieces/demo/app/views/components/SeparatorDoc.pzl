@@ -100,7 +100,7 @@ const codeOrientation = `<div class="flex items-center gap-4">
 </div>`;
 
 export default class SeparatorDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

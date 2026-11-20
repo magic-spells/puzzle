@@ -47,7 +47,7 @@ const HEIGHT = { sm: 'h-8', md: 'h-9', lg: 'h-10' };
 const PRIMARY_PAD = { sm: 'px-3 text-sm', md: 'px-4 text-sm', lg: 'px-5 text-base' };
 
 export default class Action extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const variant = VARIANT[props.variant] ? props.variant : 'primary';
     const size = HEIGHT[props.size] ? props.size : 'md';
 

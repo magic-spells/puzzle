@@ -84,7 +84,7 @@ export default class Thread extends PuzzleView {
   // data() receives the chain's full merged params (D30), so params.id is the
   // open conversation. The store queries here auto-subscribe this view: a streamed
   // token (message.update) OR an updatedAt bump (conversation.update) re-runs it.
-  data(params) {
+  data({ params }) {
     const store = this.ctx.store;
     const id = params.id;
 

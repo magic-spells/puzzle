@@ -22,7 +22,7 @@ const SIZES = {
 };
 
 export default class Avatar extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const user = props.user || null;
     return {
       icon: (user && user.avatarIcon) || '🐦',

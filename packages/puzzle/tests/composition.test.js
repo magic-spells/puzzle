@@ -30,7 +30,7 @@ class Todo extends PuzzleModel {
 
 describe('composition — inline rendering (D20)', () => {
 	class Label extends PuzzleView {
-		data(params, props) {
+		data({ props }) {
 			return { label: props.label };
 		}
 		render() {
@@ -58,7 +58,7 @@ describe('composition — inline rendering (D20)', () => {
 
 describe('composition — prop reactivity (APP_ANATOMY §4)', () => {
 	class Label extends PuzzleView {
-		data(params, props) {
+		data({ props }) {
 			return { label: props.label };
 		}
 		render() {
@@ -208,7 +208,7 @@ describe('composition — keyed component list (APP_ANATOMY §4)', () => {
 		created() {
 			instances[this.props.id] = this;
 		}
-		data(params, props) {
+		data({ props }) {
 			return { id: props.id };
 		}
 		render() {

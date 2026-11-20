@@ -70,7 +70,7 @@ export default class SearchView extends PuzzleView {
     this.setState({ query: '' });
   }
 
-  data(params, props) {
+  data() {
     const store = this.ctx.store;
     const query = this.getData().query || '';
     const q = query.trim().toLowerCase();

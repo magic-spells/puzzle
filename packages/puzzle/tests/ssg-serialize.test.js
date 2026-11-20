@@ -204,7 +204,7 @@ describe('SSG serializer (M1)', () => {
 	describe('nested components with preloaded data', () => {
 		it('constructs + preloads nested components, threading props into data()', async () => {
 			class Inner extends PuzzleView {
-				data(params, props) {
+				data({ props }) {
 					return { label: props.label };
 				}
 				render() {

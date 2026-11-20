@@ -134,7 +134,7 @@ export default class Collapsible extends PuzzleView {
     }
   }
 
-  data(params, props) {
+  data({ props }) {
     return {
       rootClass: props.class || false,
     };

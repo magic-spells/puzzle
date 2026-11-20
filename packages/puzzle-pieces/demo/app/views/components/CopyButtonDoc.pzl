@@ -131,7 +131,7 @@ const codeSnippet = `<div class="flex items-center justify-between rounded-lg bo
 const codeDisabled = `<CopyButton value={ testKey } label="Copy" disabled/>`;
 
 export default class CopyButtonDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       testKey,
       shareUrl,

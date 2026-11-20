@@ -40,7 +40,7 @@
 </puzzle-view>
 
 <script lang="ts">
-import { PuzzleView } from '@magic-spells/puzzle';
+import { PuzzleView, type DataInput } from '@magic-spells/puzzle';
 import type { TodoRecord } from '../models/todo';
 
 // `todo` is a prop from the parent; `remove` is a callback prop (SPEC §6)
@@ -59,7 +59,7 @@ export default class TodoItem extends PuzzleView<TodoItemProps> {
   // Returning the record itself is what makes the checkbox writable: the
   // template's `checked={ todo.completed }` resolves to this record, so the
   // synthesized handler has something to call update() on.
-  data(_params: Record<string, string>, props: TodoItemProps): TodoItemModel {
+  data({ props }: DataInput<TodoItemProps>): TodoItemModel {
     return { todo: props.todo };
   }
 

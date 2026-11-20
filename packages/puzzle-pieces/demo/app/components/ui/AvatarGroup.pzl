@@ -160,7 +160,7 @@ const CHIP_SIZE = {
 };
 
 export default class AvatarGroup extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const size = SIZES[props.size] ? props.size : 'md';
     const direction = props.direction === 'rtl' ? 'rtl' : 'ltr';
     const { box, pull, shift, faceShift } = SIZES[size];

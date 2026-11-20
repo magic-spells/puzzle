@@ -25,7 +25,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
  * it re-renders on its own when the bridge pushes a message.
  */
 export default class EventList extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const limit = props.limit ?? 12;
     // Not named `events`: that is PuzzleView's handler map, and `puzzle check`
     // types a template read against the instance.

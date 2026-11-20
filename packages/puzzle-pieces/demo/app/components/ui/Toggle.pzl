@@ -63,7 +63,7 @@ const VARIANT = {
 };
 
 export default class Toggle extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const pressed = !!props.pressed;
     const variant = VARIANT[props.variant] || VARIANT.default;
     return {

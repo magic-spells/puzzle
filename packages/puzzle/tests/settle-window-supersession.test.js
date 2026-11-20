@@ -71,7 +71,7 @@ describe('D161 settle window — only the run that owns it may clear the dirty f
 		const releaseGate = () => gates.shift()?.();
 
 		class View extends PuzzleView {
-			async data(params) {
+			async data({ params }) {
 				const ticks = store.findMany('tick').length;
 				if (params.fault) store.findOne('post', 'p1');
 				await gate();

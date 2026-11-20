@@ -68,7 +68,7 @@ The full machine, with leaving and failure states, is [[STATE-VIEW-LIFECYCLE]].
 
 - **created**: `created()` fires at the start of `mount()` (or `preload()` for a
   router-preloaded view), after class fields such as `events` exist.
-- **loading**: `data(params, props)` runs inside `store.withTracking`; an async
+- **loading**: `data({ params, props })` runs inside `store.withTracking`; an async
   `data()` holds here. On first load a `<puzzle-skeleton>` renders at once
   ([[DECISION-D39-SKELETON]]) and `mounted()` fires against it. Without one,
   nothing shows until the first tree lands. On re-runs the previous render stays

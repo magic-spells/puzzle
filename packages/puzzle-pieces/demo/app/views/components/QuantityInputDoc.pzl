@@ -128,7 +128,7 @@ export default class QuantityInputDoc extends PuzzleView {
     this.setState({ qty: 1, boxes: 2, cart: 1, pack: 10 });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

@@ -95,7 +95,7 @@ export default class SwitchDoc extends PuzzleView {
     this.setState({ wifi: true, notify: false });
   }
 
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,

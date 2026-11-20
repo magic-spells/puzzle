@@ -60,7 +60,7 @@ describe('PuzzleView — lifecycle', () => {
 	it('data() receives params and props from mount', async () => {
 		let seen;
 		class V extends PuzzleView {
-			data(params, props) { seen = { params, props }; return {}; }
+			data({ params, props }) { seen = { params, props }; return {}; }
 		}
 		await new V().mount(container(), { params: { id: '42' }, props: { userId: 7 } });
 		expect(seen).toEqual({ params: { id: '42' }, props: { userId: 7 } });
@@ -135,7 +135,7 @@ describe('PuzzleView — lifecycle', () => {
 		let mountedEl;
 		const mountedSpy = vi.fn();
 		class V extends PuzzleView {
-			async data(params, props) {
+			async data({ props }) {
 				const { val } = await gates[props.which ?? 'one'].promise;
 				return { val };
 			}
@@ -197,7 +197,7 @@ describe('PuzzleView — lifecycle', () => {
 				super(...args);
 				instances.push(this);
 			}
-			async data(params, props) {
+			async data({ props }) {
 				const value = await gates[props.which].promise;
 				return { value };
 			}
@@ -347,7 +347,7 @@ describe('PuzzleView — afterUpdate(prev) (D178)', () => {
 	it('an async refresh({ props }) hands the props of the last render, not those refresh swapped in', async () => {
 		const seen = [];
 		class V extends PuzzleView {
-			async data(params, props) {
+			async data({ props }) {
 				await Promise.resolve();
 				return { n: props.n };
 			}
@@ -364,7 +364,7 @@ describe('PuzzleView — afterUpdate(prev) (D178)', () => {
 	it('parent-driven prop change: prev.props is the object the previous render received', async () => {
 		const seen = [];
 		class Child extends PuzzleView {
-			data(params, props) { return { doubled: props.n * 2 }; }
+			data({ props }) { return { doubled: props.n * 2 }; }
 			afterUpdate(prev) { seen.push({ prev, props: this.props, data: this.getData() }); }
 			render() { return h('span', {}, [text(String(this.getData().doubled))]); }
 		}
@@ -828,7 +828,7 @@ describe('PuzzleView — two-layer data()/setState semantics (Change C, SPEC §4
 	it('6. a superseded stale-token data() run touches neither layer', async () => {
 		const slow = mkGate();
 		class V extends PuzzleView {
-			async data(params, props) {
+			async data({ props }) {
 				if (props.tag === 'slow') { await slow.promise; return { stale: true, val: 'slow' }; }
 				return { val: 'fast' };
 			}
@@ -923,7 +923,7 @@ describe('PuzzleView — store reactivity (the full loop)', () => {
 	it('a newer refresh supersedes a stale in-flight async data() run', async () => {
 		let delay = 20;
 		class V extends PuzzleView {
-			async data(params) {
+			async data({ params }) {
 				const d = delay;
 				await new Promise((r) => setTimeout(r, d));
 				return { label: `${params.id} (after ${d}ms)` };
@@ -1112,7 +1112,7 @@ describe('PuzzleView — fire-and-forget refresh rejections are logged (not unha
 	it('a parent prop update whose data() rejects is logged, not unhandled', async () => {
 		let shouldReject = false;
 		class V extends PuzzleView {
-			async data(params, props) {
+			async data({ props }) {
 				if (shouldReject) throw new Error('prop boom');
 				return { label: props.label ?? 'init' };
 			}
@@ -1183,7 +1183,7 @@ describe('PuzzleView — a synchronously throwing data() is contained, not propa
 	it('a sync-throwing data() during a parent prop update is logged, not propagated', async () => {
 		let shouldThrow = false;
 		class V extends PuzzleView {
-			data(params, props) {
+			data({ props }) {
 				if (shouldThrow) throw new Error('prop sync boom');
 				return { label: props.label ?? 'init' };
 			}

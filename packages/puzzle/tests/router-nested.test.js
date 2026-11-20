@@ -40,7 +40,7 @@ class AppLayout extends PuzzleView {
 // A parent SHELL view that hosts its child route at a <Slot/>.
 function makeShell(name, onData) {
 	return class extends PuzzleView {
-		data(params, props) {
+		data({ params, props }) {
 			if (onData) onData(params, props, this);
 			return { name };
 		}
@@ -56,7 +56,7 @@ function makeShell(name, onData) {
 // A leaf view (no <Slot/>).
 function makeLeaf(name, onData) {
 	return class extends PuzzleView {
-		data(params, props) {
+		data({ params, props }) {
 			if (onData) onData(params, props, this);
 			return { name };
 		}
@@ -325,7 +325,7 @@ describe('Router nested — prefix reuse', () => {
 			created() {
 				settingsCreated++;
 			}
-			data(params) {
+			data({ params }) {
 				settingsParams.push(params.id ?? null);
 				return {};
 			}
@@ -401,7 +401,7 @@ describe('Router nested — prefix reuse', () => {
 			created() {
 				created.push(this);
 			}
-			data(params) {
+			data({ params }) {
 				return { pane: params.pane ?? this.props.pane };
 			}
 			render() {
@@ -443,7 +443,7 @@ describe('Router nested — params-only chain refresh', () => {
 			created() {
 				orgCreated++;
 			}
-			data(params) {
+			data({ params }) {
 				orgSeen.push(params.orgId);
 				return {};
 			}
@@ -455,7 +455,7 @@ describe('Router nested — params-only chain refresh', () => {
 			created() {
 				memberCreated++;
 			}
-			data(params) {
+			data({ params }) {
 				memberSeen.push(params.memberId);
 				return {};
 			}
@@ -486,7 +486,7 @@ describe('Router nested — params-only chain refresh', () => {
 	it('a rejection during a params-only chain refresh leaves the URL untouched', async () => {
 		const Org = makeShell('org');
 		const Member = class extends PuzzleView {
-			async data(params) {
+			async data({ params }) {
 				if (params.memberId === 'bad') throw new Error('boom');
 				return {};
 			}

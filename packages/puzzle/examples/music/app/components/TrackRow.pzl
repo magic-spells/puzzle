@@ -87,7 +87,7 @@ import Icon from './Icon.pzl';
 // / navigate) driven by a local `menuOpen` flag, plus the toast notifications
 // those actions fire.
 export default class TrackRow extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     // Read playlists here (findMany subscribes this row) so the menu's
     // add-to-playlist list stays live as playlists are created/deleted.
     const playlists = this.ctx.store

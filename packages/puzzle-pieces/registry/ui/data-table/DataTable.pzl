@@ -298,7 +298,7 @@ export default class DataTable extends PuzzleView {
 
   // ---- render model ---------------------------------------------------------
 
-  data(params, props) {
+  data({ props }) {
     const rawColumns = Array.isArray(props.columns) ? props.columns : [];
     const rawRows = Array.isArray(props.rows) ? props.rows : [];
     const rowKey = typeof props.rowKey === 'string' && props.rowKey ? props.rowKey : '';

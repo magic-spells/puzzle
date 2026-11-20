@@ -159,7 +159,7 @@ export default class SplitText extends PuzzleView {
   #lastPlay;
   #pendingPlay = false;
 
-  data(params, props) {
+  data({ props }) {
     return {
       rootClass: props.class || false,
       splitAttr: oneOf(props.split, ['words', 'chars', 'lines']),

@@ -224,7 +224,7 @@ export default class Fader extends PuzzleView {
     if (this._overlayTimer) clearTimeout(this._overlayTimer);
   }
 
-  data(params, props) {
+  data({ props }) {
     const cfg = configFrom(props);
     const axis = this._axis(props);
     const committed = this._committed(props, cfg);

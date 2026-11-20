@@ -292,7 +292,7 @@ export default class RichTextEditorDoc extends PuzzleView {
 		this.setState({ doc: SAMPLE_DOC, mediaDoc: MEDIA_DOC, blocksDoc: BLOCKS_DOC });
 	}
 
-	data(params, props) {
+	data() {
 		return {
 			...this.getData(),
 			installCmd,

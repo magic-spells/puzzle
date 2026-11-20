@@ -177,7 +177,7 @@ export default class Doc extends PuzzleView {
   // numbering are computed here (never in the template, SPEC §6). Both queries
   // auto-subscribe, so edits to any block re-run this and repaint. Islands make
   // the per-keystroke repaint safe — the editable subtree is never reconciled.
-  data(params) {
+  data({ params }) {
     const store = this.ctx.store;
     const page = store.findOne('page', params.id);
 

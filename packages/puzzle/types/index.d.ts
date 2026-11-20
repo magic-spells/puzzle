@@ -726,6 +726,25 @@ export interface PuzzleLocale {
 // ----------------------------------------------------------------------------
 
 /**
+ * The one object `data()` and `share()` receive (D197). Destructure only what
+ * the view needs: `data({ params, props, shared })`. `params`, `props` and
+ * `shared` are reserved names; later built-ins join this object.
+ */
+export interface DataInput<Props = any, Shared extends Record<string, any> = Record<string, any>> {
+	/** Route params of the navigation that mounted this view (empty off-router). */
+	params: Record<string, string>;
+	/** Props passed from the parent component. */
+	props: Props;
+	/**
+	 * What sharing ancestors pass down, grouped under each sharer's name in
+	 * camelCase (`Filter` → `shared.filter`), the nearest ancestor of a name
+	 * winning. Always an object, empty when no ancestor shares, so
+	 * `shared: { filter = {} }` never throws.
+	 */
+	shared: Shared;
+}
+
+/**
  * Base class for every `.pzl` component, view, and layout
  * (constellation/doc/DOC-SPEC.md §4). Subclass it and override `data()` when
  * the model is more than the props;
@@ -776,10 +795,28 @@ export declare class PuzzleView<Props = any> {
 
 	/**
 	 * The component model. Runs on mount and whenever a subscribed store query,
-	 * prop, or route param changes. May be async. The base returns `props`;
-	 * override it when the model is more than the props.
+	 * prop, route param, or shared value it read changes. May be async. Takes one
+	 * object (D197): `data({ params, props, shared })`. The base returns
+	 * `props`; override it when the model is more than the props.
 	 */
-	data(params?: Record<string, string>, props?: Props): any | Promise<any>;
+	data(input: DataInput<Props>): any | Promise<any>;
+
+	/**
+	 * Values and callbacks for nested views at any depth, slot content included
+	 * (D197). Runs after each `data()` commit with the same object `data()`
+	 * receives, so a nested sharer can build on its own `shared`. Descendants
+	 * read the result as `shared.<name>`, the camelCase component name, and only
+	 * those whose `data()` read a changed key re-run. A function value reaches
+	 * them as a stable wrapper that calls the newest one. Declared by the
+	 * subclass: the base class has none.
+	 */
+	share?(input: DataInput<Props>): Record<string, any>;
+
+	/**
+	 * What sharing ancestors pass down, for a handler: the same object `data()`
+	 * receives as `shared`. Reading it records nothing (D197).
+	 */
+	readonly shared: Record<string, any>;
 
 	/** Read the current component model: local state with data()'s values over it. */
 	getData<T = any>(): T;

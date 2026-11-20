@@ -174,7 +174,7 @@ const SWATCHES = [
 // (continuous); number fields on @change (commit). All writes go through the
 // live record in props.single; multi-select fans out over props.selectedIds.
 export default class Inspector extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const el = props.single || null;
     const type = el ? el.type : '';
     return {

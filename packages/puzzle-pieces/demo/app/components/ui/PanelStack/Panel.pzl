@@ -26,7 +26,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 const PANEL = 'bg-surface';
 
 export default class PanelStackPanel extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     return {
       handle: props.handle == null ? undefined : String(props.handle),
       panelClass: [PANEL, props.class].filter(Boolean).join(' '),

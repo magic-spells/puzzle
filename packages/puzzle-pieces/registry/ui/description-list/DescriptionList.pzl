@@ -53,7 +53,7 @@ const ROW_LAYOUT = {
 };
 
 export default class DescriptionList extends PuzzleView {
-  data(params, props) {
+  data({ props }) {
     const layout = props.layout === 'inline' ? 'inline' : 'stacked';
     const divider = !!props.divider;
     const size = props.size === 'sm' ? 'sm' : 'md';

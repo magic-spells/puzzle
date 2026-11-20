@@ -164,7 +164,7 @@ const revenueSeries = [
 const singleSeries = [{ key: 'revenue', label: 'Revenue' }];
 
 export default class LineChartDoc extends PuzzleView {
-  data(params, props) {
+  data() {
     return {
       ...this.getData(),
       installCmd,
