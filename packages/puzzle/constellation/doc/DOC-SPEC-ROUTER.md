@@ -111,7 +111,7 @@ The router owns **window scroll** across navigations (D33, D41).
 **Mechanics:**
 - `history.scrollRestoration = 'manual'` between `start()` and `stop()` (restored on stop), because browser restoration fires on popstate before the swap.
 - Positions are keyed by a per-entry `__puzzleScrollKey` in `history.state`: `pushState` carries a fresh key; foreign or initial entries get one lazily via `replaceState` (other state preserved).
-- The outgoing position is captured when the navigation starts (by commit time the old view is gone and `scrollY` is clamped) and saved at commit, so scrolling during the `out` animation is remembered. On popstate it is saved under the router's in-memory current key, since `history.state` has already moved.
+- The outgoing position is captured when the navigation starts (by commit time the old view is gone and `scrollY` is clamped) and saved at commit. On popstate it is saved under the router's in-memory current key, since `history.state` has already moved. The position saved on popstate is the one from the last `scroll` event, never a live read: WebKit and Firefox scroll to a fragment before they fire popstate.
 - The map mirrors to one `sessionStorage` key (`__puzzleScroll`), hydrated by `start()`, so reload + back/forward restores. Capped at **50 entries**, oldest evicted; all storage access is fail-soft.
 
 **`scrollBehavior` config:** omitted → default; **`false`** → never touch scroll or storage (for shells that scroll an inner panel); **`(to, from, savedPosition) => {x, y} | null`** → custom, where `to`/`from` are frozen snapshots (§19/§44; `from` null on navigation #0) and `savedPosition` is non-null only on a pop. A falsy return leaves scroll alone; a throw is logged and treated as falsy.
