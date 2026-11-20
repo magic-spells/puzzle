@@ -211,7 +211,7 @@ export default class Home extends PuzzleView {}
 		"void (Math.round(__d.n));",
 		"void (__puzzle_check_list(__d.items).filter((t) => !t.done).length);",
 		"void (__d.tags?.at(0) ?? 'none');",
-		"void (Object.keys(__d.counts).length);",
+		"void (Object.keys(__puzzle_check_list(__d.counts)).length);",
 		`void (__puzzle_app_fn("myFormat")(__d.name));`,
 		"= (event) => this.events.save(__puzzle_fn.t('saved'), event.target.value);",
 	} {
@@ -226,8 +226,8 @@ func TestExpressionLanguageTypeChecksWithLiveTSC(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Untyped data() values are any, so an arrow over one must not be an
-	// implicit-any error; a typed field keeps its own checking.
+	// Template data is any, so an arrow over it must not be an implicit-any
+	// error; a typed value (a library result, Object.keys) keeps its own checking.
 	writeLiveView(t, root, `<puzzle-view>
   <p>{ name.trim().toUpperCase() } { currency(price, '$', 2) } { truncate(title, 20) }</p>
   <p>{ list.filter(x => x.on).map((x, i) => i + x.n).join(', ') } { list.reduce((s, x) => s + x.n, 0) }</p>
@@ -258,9 +258,9 @@ export default class Home extends PuzzleView {
 		name, template, at, message string
 	}{
 		// A method from the table that the receiver's type does not have.
-		{"method on the wrong type", "{ n.trim() }", "trim", "Property 'trim' does not exist on type 'number'."},
+		{"method on the wrong type", "{ round(n).trim() }", "trim", "Property 'trim' does not exist on type 'number'."},
 		// An arrow over a typed list is typed: its parameter is a string.
-		{"typed arrow parameter", "{ tags.filter(t => t.done) }", "done", "Property 'done' does not exist on type 'string'."},
+		{"typed arrow parameter", "{ Object.keys(counts).filter(k => k.done) }", "done", "Property 'done' does not exist on type 'string'."},
 		// A standard function's signature.
 		{"library signature", "{ currency(price, 2) }", "2", "Argument of type 'number' is not assignable to parameter of type 'string'."},
 	} {
@@ -268,7 +268,7 @@ export default class Home extends PuzzleView {
 			source := `<puzzle-view><p>` + tc.template + `</p></puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
-export default class Home extends PuzzleView { n = 1; price = 3; tags: string[] = []; }
+export default class Home extends PuzzleView { n = 1; price = 3; counts = {}; }
 </script>
 `
 			writeLiveView(t, root, source)

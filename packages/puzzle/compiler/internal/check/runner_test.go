@@ -106,7 +106,7 @@ func TestRunWithLiveTSC(t *testing.T) {
 	if err := os.MkdirAll(viewDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	source := `<puzzle-view><p>{ value.upper }</p></puzzle-view>
+	source := `<puzzle-view><p>{ round(value).upper }</p></puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView { value = 123; }
@@ -120,9 +120,43 @@ export default class Home extends PuzzleView { value = 123; }
 	if err == nil {
 		t.Fatal("expected template type error")
 	}
-	want := "app/views/Home.pzl:1:25: Property 'upper' does not exist on type 'number'."
+	want := "app/views/Home.pzl:1:32: Property 'upper' does not exist on type 'number'."
 	if got := err.Error(); got != want {
 		t.Fatalf("live tsc output mismatch\nwant: %s\ngot:  %s", want, got)
+	}
+}
+
+// A template reads what data() returns, not the view instance. Each of these
+// correct views was reported against the class's own declared fields, or
+// against the index signature that stood in for the rest — or, for
+// Object.values and entries, as unknown values inferred from untyped data.
+func TestLiveTSCTemplateReadsDataNotTheInstance(t *testing.T) {
+	const objectWalks = `{#for user in Object.values(users)}<i>{ user.name }</i>{/for}{#for pair in Object.entries(users)}<i>{ pair[1].name }</i>{/for}{ Object.values(users).map(u => u.name).join(', ') }`
+	for _, tc := range []struct{ name, template, members string }{
+		{"private field mirrored in data()", "{ count }", "private count = 0;\n  data() { return { count: this.count }; }"},
+		{"nullable field normalised in data()", "{ user.name }", "user: { name: string } | null = null;\n  data() { return { user: this.user ?? { name: 'guest' } }; }"},
+		{"data key named like a view member", "{ events.length }", "data() { return { events: [{ title: 'Launch' }] }; }"},
+		{"data()-only key read with a dot", "{ total }", "data() { return { total: 3 }; }"},
+		{"Object.values and entries over a data()-only key", objectWalks, "data() { return { users: { a: { name: 'A' } } }; }"},
+		{"Object.values and entries over a declared field", objectWalks, "users: Record<string, { name: string }> = {};\n  data() { return { users: this.users }; }"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := liveTSCApp(t)
+			if err := os.WriteFile(filepath.Join(root, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"noPropertyAccessFromIndexSignature":true}}`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			writeLiveView(t, root, `<puzzle-view><p>`+tc.template+`</p></puzzle-view>
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {
+  `+tc.members+`
+}
+</script>
+`)
+			if _, err := Run(root); err != nil {
+				t.Fatalf("a template reading data() must check clean: %v", err)
+			}
+		})
 	}
 }
 
@@ -156,13 +190,13 @@ export default class Home extends PuzzleView {
 
 func TestPlainJSTemplateErrorsAreReported(t *testing.T) {
 	root := liveTSCApp(t)
-	writeLiveView(t, root, plainJSComponent("value.upper"))
+	writeLiveView(t, root, plainJSComponent("round(value).upper"))
 
 	_, err := Run(root)
 	if err == nil {
 		t.Fatal("expected checked template expression to fail")
 	}
-	want := "app/views/Home.pzl:1:25: Property 'upper' does not exist on type 'number'."
+	want := "app/views/Home.pzl:1:32: Property 'upper' does not exist on type 'number'."
 	if got := err.Error(); got != want {
 		t.Fatalf("plain-JS template diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
 	}
@@ -229,6 +263,26 @@ func TestTSCRunsUnderNodeFromAPathWithSpaces(t *testing.T) {
 	}
 	if err := requireTypeScript7(tool); err != nil {
 		t.Fatalf("requireTypeScript7: %v", err)
+	}
+}
+
+// npm and Yarn workspaces hoist an app's typescript to the workspace root's
+// node_modules, where Node finds it by walking up from the app.
+func TestResolveTSCFindsAWorkspaceHoistedInstall(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not available on PATH")
+	}
+	workspace := t.TempDir()
+	entry := filepath.Join(workspace, "node_modules", "typescript", "bin", "tsc")
+	if err := os.MkdirAll(filepath.Dir(entry), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(entry, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tool, err := resolveTSC(filepath.Join(workspace, "apps", "web"))
+	if err != nil || tool.entry != entry {
+		t.Fatalf("resolveTSC = %q, %v; want the workspace root's %q", tool.entry, err, entry)
 	}
 }
 
@@ -518,7 +572,7 @@ func TestTableIndexKeysMatchRemapLookup(t *testing.T) {
 // expression. The negative half runs first so a silently-skipped emission
 // cannot pass this test.
 func TestDottedComponentTagChecksProps(t *testing.T) {
-	bad := `<puzzle-view><Frame.Wrapper label={ value.upper }><Frame.Content/></Frame.Wrapper></puzzle-view>
+	bad := `<puzzle-view><Frame.Wrapper label={ round(value).upper }><Frame.Content/></Frame.Wrapper></puzzle-view>
 <script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView { value = 123; }
@@ -530,7 +584,7 @@ export default class Home extends PuzzleView { value = 123; }
 	if err == nil {
 		t.Fatal("expected the prop expression on a dotted component tag to be checked")
 	}
-	want := "app/views/Home.pzl:1:43: Property 'upper' does not exist on type 'number'."
+	want := "app/views/Home.pzl:1:50: Property 'upper' does not exist on type 'number'."
 	if got := err.Error(); got != want {
 		t.Fatalf("dotted-tag diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
 	}
@@ -603,12 +657,12 @@ func TestJSHandlerArityIsNotChecked(t *testing.T) {
 // literal as open, so a misspelled handler was not reported before.
 func TestJSHandlerArgumentsAndNameAreChecked(t *testing.T) {
 	root := liveTSCApp(t)
-	writeLiveView(t, root, handlerArityComponent("", "value.upper"))
+	writeLiveView(t, root, handlerArityComponent("", "round(value).upper"))
 	_, err := Run(root)
 	if err == nil {
 		t.Fatal("expected a JavaScript handler's argument expression to be checked")
 	}
-	want := "app/views/Home.pzl:2:31: Property 'upper' does not exist on type 'number'."
+	want := "app/views/Home.pzl:2:38: Property 'upper' does not exist on type 'number'."
 	if got := err.Error(); got != want {
 		t.Fatalf("handler argument diagnostic mismatch\nwant: %s\ngot:  %s", want, got)
 	}

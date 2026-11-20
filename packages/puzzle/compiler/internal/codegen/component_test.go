@@ -56,8 +56,14 @@ export default class Home extends PuzzleView { data() { const current = TaskCard
 	}
 }
 
+// scriptSelectorBindings is the module-binding half of the selector scan.
+func scriptSelectorBindings(script string) map[string]int {
+	bindings, _ := scriptSelectorBindingInfo(tokenizeJS(script))
+	return bindings
+}
+
 func TestComponentSelectorSimpleDeclarationLists(t *testing.T) {
-	bindings := ScriptValueBindings(`import Card from './Card.pzl';
+	bindings := scriptSelectorBindings(`import Card from './Card.pzl';
 const ignored = 1, embeds = {card: Card};
 let first = () => {}, current = Card;
 var helper = class Inner {}, variant = Card;
@@ -123,8 +129,8 @@ func TestComponentSelectorASIDeclarators(t *testing.T) {
 		{"continued declarator list", "var ignored = null, intermediate\n, current\nexport default class Home extends Object {}"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, ok := ScriptValueBindings(tc.script)["current"]; !ok {
-				t.Error("puzzle check must expose the ASI-terminated module binding")
+			if _, ok := scriptSelectorBindings(tc.script)["current"]; !ok {
+				t.Error("the module scan must find the ASI-terminated binding")
 			}
 			got := compileSrc(t, `<puzzle-view><Component is={current} title={current}/>{#for row in rows}<Component is={current}/>{/for}</puzzle-view>
 <script>`+tc.script+`</script>`)
@@ -139,7 +145,7 @@ func TestComponentSelectorASIDeclarators(t *testing.T) {
 		"let ignored\nleft, current\nexport default class Home extends Object {}",
 		"var ignored = null, last\nleft, current\nexport default class Home extends Object {}",
 	} {
-		if _, ok := ScriptValueBindings(script)["current"]; ok {
+		if _, ok := scriptSelectorBindings(script)["current"]; ok {
 			t.Error("a comma expression after the ASI boundary must not add a module binding")
 		}
 	}

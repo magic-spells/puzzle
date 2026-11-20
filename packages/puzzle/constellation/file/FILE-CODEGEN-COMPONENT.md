@@ -7,7 +7,6 @@ summary: Module bindings in Component is, helper emission and shared component p
 connections:
   - COMPONENT-CODEGEN
   - DECISION-D180-COMPONENT-SLOT
-  - FILE-CHECK-COMPONENT
 verified_at: '2026-11-01T19:19:18.479Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 notes:
@@ -15,9 +14,7 @@ notes:
     text: >-
       2026-11-08 codegen trims: getter aliases are numbered by count (__pzlComponentSelector0, 1,
       …); the loop that skipped an alias the user's own source already spelled is deleted (unusual
-      input, owner rule), along with componentSelectorSource and hasComponentSlot. The check
-      emitter's mirror (compiler/internal/check/component.go) still has its own skip loop; it was
-      out of this PR's scope.
+      input, owner rule), along with componentSelectorSource and hasComponentSlot.
 ---
 
 # component.go
@@ -25,10 +22,7 @@ notes:
 Emission for the reserved `<Component is={…}>` tag
 ([[DECISION-D180-COMPONENT-SLOT]]). [[COMPONENT-CODEGEN]] owns `is` scope, normal
 props/events/default slots and the per-use runtime import; no registry or module
-resolver is ever emitted. The `puzzle check` emitter calls
-`ComponentSelectorBindings` and `ScriptValueBindings` from here
-([[FILE-CHECK-COMPONENT]]), so the two hosts agree on which module names `is` may
-read.
+resolver is ever emitted.
 
 - **Selector hygiene.** A selector binding that starts `__` or collides with a
   generated row scope (`s`, `s1`, …) is read through a fresh module-scope

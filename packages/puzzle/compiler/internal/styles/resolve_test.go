@@ -111,6 +111,11 @@ func TestResolveCLIs(t *testing.T) {
 		if clis[0].Exec != "node" {
 			t.Fatalf("expected walk-up to resolve the parent's v4 CLI, got %+v", clis[0])
 		}
+		// puzzle doctor passes its dir as typed, "." by default.
+		t.Chdir(nested)
+		if clis := resolveCLIs("."); clis[0].Exec != "node" {
+			t.Fatalf("a relative dir must walk up too, got %+v", clis[0])
+		}
 	})
 
 	t.Run("bin as a bare string", func(t *testing.T) {

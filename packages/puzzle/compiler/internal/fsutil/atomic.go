@@ -13,6 +13,28 @@ func FileExists(path string) bool {
 	return err == nil && !info.IsDir()
 }
 
+// FindUp returns the first existing <dir>/rel, or "" if there is none, in a
+// lexical walk up from the absolute start directory to the filesystem root (a
+// symlinked project directory is not resolved). A dependency hoisted to a
+// workspace root's node_modules is found from every app below it.
+func FindUp(start, rel string) string {
+	dir, err := filepath.Abs(start)
+	if err != nil {
+		return ""
+	}
+	for {
+		candidate := filepath.Join(dir, rel)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
 // RejectSymlink returns an error when path exists and is a symbolic link or a
 // non-directory. A missing path is fine — the caller creates it. Tool-owned
 // scratch directories are created, swept, and removed wholesale, so a symlinked

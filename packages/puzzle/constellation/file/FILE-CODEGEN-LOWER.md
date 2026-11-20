@@ -50,9 +50,10 @@ the file:
   emits TypeScript with no added guards and no `?? {}` on the `Object` globals
   (TypeScript 5.6+ reports a `??` whose left side can never be nullish), a
   standard library call as the shim's `__puzzle_fn.name(…)`, any other bare call
-  (an app function) as `__puzzle_app_fn("name")(…)`, and a method call with an
-  arrow argument taking its receiver through `__puzzle_check_list(…)`.
-- **D180 selector check scope:** `WriteCheckSelectorValue` augments the check scope with the private module getter references after template locals; arrow parameters keep their normal shadowing. It shares the existing lowerer and source-position writer, so hygienic module reads and mapped diagnostics do not introduce a second expression grammar.
+  (an app function) as `__puzzle_app_fn("name")(…)`, a method call with an
+  arrow argument taking its receiver through `__puzzle_check_list(…)`, and an
+  `Object.keys`/`values`/`entries` argument through `__puzzle_check_list(…)` (the
+  render target's `?? {}` position).
 - **Render facts come from the same tree** (`exprFacts`): which parent data roots
   a loop body reads, which members it reads off the row item, and whether it is
   volatile (a `timeago` call) — the inputs to D170 list blocks — plus the D62
