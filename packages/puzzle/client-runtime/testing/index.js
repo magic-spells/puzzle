@@ -64,7 +64,7 @@ export { installFixtures } from '../fixtures/index.js';
  * @property {Store} [store]
  * @property {Router | InertRouter} [router]
  * @property {Record<string, any>} [models]
- * @property {Record<string, Formatter>} [formatters]
+ * @property {Record<string, Formatter>} [functions] the app's own template functions
  * @property {AdapterCapability} [adapter] the adapter capability (validated by installAdapterCapability)
  * @property {TestI18nOptions} [i18n]
  */
@@ -223,6 +223,11 @@ export async function createTestApp(config = {}) {
  * @returns {TestContext}
  */
 function makeContext(options) {
+	// the option was `formatters` before 0.10 (D199); a test that still passes
+	// it would mount with none of its functions, so it fails here instead.
+	if (/** @type {any} */ (options).formatters !== undefined) {
+		throw new Error('[puzzle] the formatters option is functions since 0.10 — rename it (puzzle check --fix does it)');
+	}
 	const supplied = options.ctx ?? {};
 	const store =
 		options.store ??
@@ -232,7 +237,7 @@ function makeContext(options) {
 		options.router ?? supplied.router ?? makeInertRouter(options.route ?? null);
 	const formatters =
 		supplied.formatters ??
-		makeFormatterRegistry(options.formatters ?? {}, (path) => router.url(path));
+		makeFormatterRegistry(options.functions ?? {}, (path) => router.url(path));
 	// ctx.idle (D189): with no app to observe, it drives work to a fixed point.
 	const idle = supplied.idle ?? (() => settled().then(() => true));
 	/** @type {TestContext} */

@@ -3,7 +3,7 @@
 // Nested routes & nested view slots (D30, v1.3). Exercises the
 // chain-prefix navigation pipeline: relative-path composition, index children,
 // bare-parent no-match, merged params at every level, fail-fast route config
-// throws, deep composition through nested <Slot/>s, prefix REUSE (ancestor kept +
+// throws, deep composition through nested <Outlet/>s, prefix REUSE (ancestor kept +
 // awaited pre-commit, URL gated on all loads), the same-view-class sibling key
 // trap, params-only nested refresh, and failure/cancel teardown of the fresh
 // sub-chain only. Mirrors tests/router.test.js's fake view/layout helpers.
@@ -27,7 +27,7 @@ const container = () => {
 
 const ctx = (store = null) => ({ store, router: null, formatters: null });
 
-// A layout with a single <Slot/> the root view renders into.
+// A layout with a single <Outlet/> the root view renders into.
 class AppLayout extends PuzzleView {
 	render() {
 		return h('puzzle-view', { class: 'layout' }, [
@@ -37,7 +37,7 @@ class AppLayout extends PuzzleView {
 	}
 }
 
-// A parent SHELL view that hosts its child route at a <Slot/>.
+// A parent SHELL view that hosts its child route at an <Outlet/>.
 function makeShell(name, onData) {
 	return class extends PuzzleView {
 		data({ params, props }) {
@@ -53,7 +53,7 @@ function makeShell(name, onData) {
 	};
 }
 
-// A leaf view (no <Slot/>).
+// A leaf view (no <Outlet/>).
 function makeLeaf(name, onData) {
 	return class extends PuzzleView {
 		data({ params, props }) {
@@ -730,7 +730,7 @@ describe('Router nested — skeleton leaf under a reused ancestor', () => {
 		const store = new Store();
 		const gate = deferred();
 
-		// Parent SHELL: SYNCHRONOUS data() + a <Slot/>. Its refresh is the thing
+		// Parent SHELL: SYNCHRONOUS data() + an <Outlet/>. Its refresh is the thing
 		// that must not get deferred behind the leaf's async preload.
 		let shellDataRuns = 0;
 		class Shell extends PuzzleView {

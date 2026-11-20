@@ -4,7 +4,7 @@ status: verified
 path: parser/slot.go
 language: Go
 summary: >-
-  Composition-marker validation: <Children>/<Slot>/<Portal>/<Snippet> attribute shapes, call-site
+  Composition-marker validation: <Children>/<Outlet>/<Slot>/<Portal>/<Snippet> attribute shapes, call-site
   slot rules, and the D173 V13 per-render-path marker uniqueness pass
   (validateSlots/walkSlots/walkBranches).
 verified_at: '2026-11-01T19:25:05.616Z'

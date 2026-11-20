@@ -106,7 +106,7 @@ export default class __NAME__ extends PuzzleView {
 </style>
 `
 
-// layoutTemplate is a view-mode file that hosts its routed child at <Slot/>
+// layoutTemplate is a view-mode file that hosts its routed child at <Outlet/>
 // (see examples/todos/app/layouts/Default.pzl).
 const layoutTemplate = `<puzzle-view class="__NAME__">
   <header>
@@ -114,7 +114,7 @@ const layoutTemplate = `<puzzle-view class="__NAME__">
   </header>
 
   <main>
-    <Slot/>
+    <Outlet/>
   </main>
 </puzzle-view>
 
@@ -287,7 +287,7 @@ const layoutTemplateTS = `<puzzle-view class="__NAME__">
   </header>
 
   <main>
-    <Slot/>
+    <Outlet/>
   </main>
 </puzzle-view>
 

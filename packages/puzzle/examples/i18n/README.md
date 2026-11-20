@@ -56,7 +56,7 @@ app/
 │   ├── index.js            # model registry
 │   └── cart.js             # the cart record (count)
 ├── layouts/
-│   └── Default.pzl         # header, translated nav, LocaleSwitcher, <Slot/>
+│   └── Default.pzl         # header, translated nav, LocaleSwitcher, <Outlet/>
 ├── components/
 │   └── LocaleSwitcher.pzl  # one link per configured locale; a click → setLocale()
 ├── views/

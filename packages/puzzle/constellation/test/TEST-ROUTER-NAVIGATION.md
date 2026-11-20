@@ -38,7 +38,7 @@ verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 The largest suite, guarding the sharpest invariant: navigation loads before it commits,
 and URL, history, mounted tree, route snapshot, outgoing scroll save and reused-ancestor
 state commit together or not at all. The machine it exercises is [[STATE-NAVIGATION]].
-Run with `npx vitest run tests/router tests/route-tree-shared`.
+Run with `npx vitest run tests/router tests/route-tree-shared tests/auth-example`.
 
 - **Core** (`router`, `router-nested`, `router-constructor-throw`, `router-lazy`):
   initial navigation, commit ordering, cancellation under the monotonic token, nested
@@ -66,7 +66,10 @@ Run with `npx vitest run tests/router tests/route-tree-shared`.
   prerendered tags.
 - **Guards and failure** (`router-guard-redirect-pop-url`, `router-failed-pop-url`,
   `router-leave-hook-failure`): guard redirects and failed pops repairing the URL, a
-  throwing leave hook not leaking the incoming chain.
+  throwing leave hook not leaking the incoming chain. `auth-example` boots the compiled
+  `examples/auth` over its mock backend: an async guard that refreshes before it lets
+  you in, a named redirect to sign-in and back, a shared refresh, a 401 renewed by the
+  error view, a restored session, and a sign-out that leaves nothing for the next user.
 - **Reused ancestors** (`router-ancestor-transaction`,
   `router-prepared-commit-containment`, D146): overlapping prepares, conflicting-commit
   convergence, exception safety, the mid-gate scope fence.

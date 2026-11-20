@@ -132,7 +132,7 @@ child without it. Gated by `__PUZZLE_HAS_COMPONENT_SLOT__`.
 ## Composition markers
 
 `SLOT_TAG` + the shared `expandSlots` (also used by SSG/static): `<Children/>` →
-default bucket, `<Slot name>` → named, `<Slot/>` → router outlet; `SNIPPET_TAG`
+default bucket, `<Slot name>` → named, `<Outlet/>` → router outlet; `SNIPPET_TAG`
 children form a bucket keyed by `fits`. Semantics: [[DOC-SPEC-TEMPLATE]] §24/§64.
 
 - **One helper, `fill(out, nodes, marker, parts)`.** The "filled" test (any node

@@ -21,9 +21,9 @@ verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 The runtime half of the template function library. [[DECISION-D174-FUNCTION-LIBRARY]] owns
 each function's contract, [[DECISION-D176-EXPRESSION-LANGUAGE]] rule 4 the call form. Code
 keeps the `formatters` names (`client-runtime/formatters.js`, `client-runtime/formatters/`,
-the `@magic-spells/puzzle/formatters/manifest` alias, the app's `formatters` config key)
-because the compiler and package exports address them by those paths; everywhere else they
-are "functions".
+the `@magic-spells/puzzle/formatters/manifest` alias)
+because the compiler and package exports address them by those paths; everywhere else,
+the app's `functions` config key included (since 0.10, D7), they are "functions".
 
 ## Wiring
 

@@ -228,7 +228,7 @@ func TestSkillTemplateExamplesCompile(t *testing.T) {
 	// Bare expressions in the template-expression sections: from "Template
 	// syntax:" through the `puzzle check` bullet, and the translations section.
 	sections := []struct{ from, to string }{
-		{"Template syntax:", "- **Three marker tags"},
+		{"Template syntax:", "- **Four marker tags"},
 		{"## Translations", "- Script: `this.ctx.i18n"},
 	}
 	bare := 0

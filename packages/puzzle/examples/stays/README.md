@@ -27,7 +27,7 @@ puzzle dev examples/stays        # from packages/puzzle: go run ./compiler/cmd/p
   localStorage persistence for wishlist hearts + locally-created trips.
 - **app/routes.js** — flat routes plus a **nested `/account` branch**: the
   `AccountShell` view renders its matched child (`''` | `trips` | `wishlist`)
-  at `<Slot/>`; children inherit the chain's layout.
+  at `<Outlet/>`; children inherit the chain's layout.
 - **app/storage.js** — the snapshot save/load pair behind the persistence.
 
 ### Models (`app/models/`)
@@ -57,7 +57,7 @@ puzzle dev examples/stays        # from packages/puzzle: go run ./compiler/cmd/p
   `checkIn`/`checkOut` state that survives `data()` re-runs, and the
   reserve flow: create a trip record, `router.push('/account/trips')`.
 - **account/AccountShell.pzl** — the nested-route shell: identity strip, tab
-  nav computed from `this.route` (D47), `<Slot/>` for the child.
+  nav computed from `this.route` (D47), `<Outlet/>` for the child.
 - **account/Profile.pzl** — the travel-stamp passport wall.
 - **account/Trips.pzl** — upcoming/completed split with map joins.
 - **account/Wishlist.pzl** — `findMany('listing', { filter })` subscription:
@@ -79,7 +79,7 @@ puzzle dev examples/stays        # from packages/puzzle: go run ./compiler/cmd/p
 
 ## Framework surface exercised
 
-Nested routes + `<Slot/>` chains, route params, the catch-all, callback props
+Nested routes + `<Outlet/>` chains, route params, the catch-all, callback props
 (`@select`, `@reserve`), per-node DOM events, `{#for}` loop counters (D29),
 display functions with arguments, `get animations()` for per-instance staggered
 entrances, view in/out transitions, store filters as live subscriptions, and

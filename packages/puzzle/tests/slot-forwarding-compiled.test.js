@@ -5,7 +5,7 @@
 // (tests/fixtures/slot-forwarding/*.compiled.js, produced by `npm run
 // build:slot-forwarding` from the .pzl sources in the same directory) — the
 // hand-written-tree suite is tests/slot-forwarding.test.js. Green here means a
-// real `.pzl` layout wrapping its `<Slot/>` in a component invocation compiles
+// real `.pzl` layout wrapping its `<Outlet/>` in a component invocation compiles
 // to a working app: the routed view mounts inside the wrapper's default slot
 // and no literal <slot> element ever reaches the DOM.
 import { describe, it, expect, afterEach } from 'vitest';

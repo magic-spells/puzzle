@@ -10,7 +10,7 @@
     </Children>
   </Card>
 
-  <Slot>{ number_with_delimiter(count) } remaining{#svg 'icons/empty.svg'}</Slot>
+  <Outlet>{ number_with_delimiter(count) } remaining{#svg 'icons/empty.svg'}</Outlet>
 
   <Children/>
   <Slot name="footer"/>

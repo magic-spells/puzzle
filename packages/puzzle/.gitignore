@@ -6,6 +6,8 @@ tests/fixtures/todos-compiled/
 tests/fixtures/virtual-scroll/
 # Compiler-generated fixtures for the paginated-posts example (npm run build:paginated-posts)
 tests/fixtures/paginated-posts/
+# Compiler-generated fixtures for the auth example (npm run build:auth-example)
+tests/fixtures/auth-example/
 # Version stamp written by `puzzle add skills` into an install destination
 skills/puzzle/.puzzle-skill-version
 # Repo-local Go build cache (sandboxed tools that can't reach the default GOCACHE)

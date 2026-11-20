@@ -96,12 +96,42 @@ func warnReservedComponentName(className, file string, pos parser.Position, warn
 // the pre-0.10 positional form, `data(params, props) {`, and returns the byte
 // offset of its name (ok false when there is none). the runtime passes one
 // object now (D197), so such a method gets the whole object as `params` and
-// `undefined` as `props`. a declaration counts when the name is not a property
+// `undefined` as `props`. the first declaration is the one the warning names;
+// positionalDataDecls finds them all.
+func positionalDataParams(toks []jsTok) (name string, off int, ok bool) {
+	decls := positionalDataDecls(toks)
+	if len(decls) == 0 {
+		return "", 0, false
+	}
+	return decls[0].Method, decls[0].NameOff, true
+}
+
+// DataDecl is one pre-0.10 positional data() or share() declaration: the
+// method name and the byte offsets (into the scanned script body) of the name
+// and of the parameter list's '(' and ')'. the upgrade codemod (D199) rewrites
+// the text between OpenOff and CloseOff.
+type DataDecl struct {
+	Method   string
+	NameOff  int
+	OpenOff  int
+	CloseOff int
+}
+
+// PositionalDataDecls returns every positional data()/share() declaration in a
+// script body, in source order — the same rule as the D197 warning, exported
+// for `puzzle check --fix`.
+func PositionalDataDecls(script string) []DataDecl {
+	return positionalDataDecls(tokenizeJS(script))
+}
+
+// positionalDataDecls lists every data() or share() declaration in the
+// positional form. a declaration counts when the name is not a property
 // access or a `function` name, and its parameter list is followed by `{` (or
 // `:` for a typescript return type). it is positional when the list has a
 // top-level comma, or its first name is `params` / `_params`; `data(input)`
 // with one other name is the object form, just not destructured.
-func positionalDataParams(toks []jsTok) (name string, off int, ok bool) {
+func positionalDataDecls(toks []jsTok) []DataDecl {
+	var decls []DataDecl
 	// skip comment tokens in either direction
 	nextTok := func(i int) int {
 		for i < len(toks) && toks[i].comment {
@@ -165,10 +195,10 @@ func positionalDataParams(toks []jsTok) (name string, off int, ok bool) {
 			continue
 		}
 		if comma || first == "params" || first == "_params" {
-			return t.ident, t.off, true
+			decls = append(decls, DataDecl{Method: t.ident, NameOff: t.off, OpenOff: toks[open].off, CloseOff: toks[end].off})
 		}
 	}
-	return "", 0, false
+	return decls
 }
 
 // warnPositionalData warns about a data() or share() declaration in the old

@@ -79,7 +79,7 @@ const SHELL =
 const staticConfig = () => ({
 	target: '#app',
 	models: { note: Note },
-	formatters: {},
+	functions: {},
 	routes: [
 		{ path: '/', name: 'home', view: Home, layout: Layout, meta: { title: 'Home' } },
 		{
@@ -523,7 +523,7 @@ describe('static prerender (D81)', () => {
 			expect(summary.mode).toBe('static');
 			expect(summary.target).toBe('app');
 			expect(summary.apiURL).toBeNull();
-			expect(summary.hasFormatters).toBe(false);
+			expect(summary.hasFunctions).toBe(false);
 			expect(summary.hasAdapter).toBe(false);
 		});
 
@@ -537,19 +537,19 @@ describe('static prerender (D81)', () => {
 			expect(appJsWarnings).toHaveLength(1);
 		});
 
-		it('reports apiURL + hasFormatters + hasAdapter from config', async () => {
+		it('reports apiURL + hasFunctions + hasAdapter from config', async () => {
 			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-cfg-'));
 			const shellPath = writeShell(outDir);
 			const cfg = {
 				target: '#app',
 				apiURL: 'https://api.example.com',
 				adapter,
-				formatters: { shout: (s) => String(s).toUpperCase() },
+				functions: { shout: (s) => String(s).toUpperCase() },
 				routes: [{ path: '/', name: 'home', view: Home }],
 			};
 			const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
 			expect(summary.apiURL).toBe('https://api.example.com');
-			expect(summary.hasFormatters).toBe(true);
+			expect(summary.hasFunctions).toBe(true);
 			expect(summary.hasAdapter).toBe(true);
 		});
 

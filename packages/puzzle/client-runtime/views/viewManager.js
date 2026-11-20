@@ -545,7 +545,7 @@ export class ViewManager {
  * Substitute the slot markers in `vnode`'s tree with the call-site content
  * captured in `slotChildren`. Named slots (v1.21, D53) partition the content
  * once per render (partitionSlots) by each direct child's stripped `slot`
- * attribute; <Children/> and the bare <Slot/> take the unattributed remainder.
+ * attribute; <Children/> and <Outlet/> take the unattributed remainder.
  * Snippet-free AND slot-attr-free call sites take the same fast path they
  * always did — the default bucket is the original `slotChildren` array (no
  * clones) and no vnode changes unless a marker is actually present. A bare

@@ -5,7 +5,7 @@
     aria-pressed={ pressedAttr }
     disabled={ disabled }
     @click={ handleClick }>
-    <Slot/>
+    <Children/>
   </button>
 </puzzle-view>
 
@@ -14,7 +14,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 
 // Toggle — a two-state <button aria-pressed>: a TOOL state (bold/italic in a
 // text editor, grid/list view), not a call to action. Controlled: the parent
-// owns `pressed` and flips it from @change. The default <Slot/> holds the
+// owns `pressed` and flips it from @change. The <Children/> marker holds the
 // content — an icon, text, or both. Pressed reads as a filled well
 // (bg-faint text-ink); unpressed is ghost-like (transparent, hover raises a
 // subtle surface). The class recipes here match ToggleGroup's buttons so a lone

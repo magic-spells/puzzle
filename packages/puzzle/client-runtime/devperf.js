@@ -684,7 +684,7 @@ function markCauseImpl(view, cause) {
  * times per navigation and most of those are legitimately zero-mutation, so a
  * five-level route tree reaches 60-renders-per-second at roughly 8.6 navigations
  * per second — a developer clicking quickly. Suppressing that ancestor stopped
- * it re-rendering its <Slot/>, the routed child never mounted, and the app broke
+ * it re-rendering its <Outlet/>, the routed child never mounted, and the app broke
  * in front of the developer. A dev-only instrument must not change what the app
  * does, so the cross-frame case warns and nothing more.
  *

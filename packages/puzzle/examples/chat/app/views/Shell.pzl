@@ -1,6 +1,6 @@
 <puzzle-view class="flex h-full">
   <!-- Sidebar. Part of the persistent Shell frame, so it stays mounted while the
-       Welcome/Thread child swaps at <Slot /> below — only the child animates. -->
+       Welcome/Thread child swaps at <Outlet /> below — only the child animates. -->
   <aside class="w-72 shrink-0 flex flex-col bg-surface border-r border-hairline">
     <div class="flex items-center gap-2.5 px-4 h-16 border-b border-hairline">
       <span class="grid place-items-center w-8 h-8 rounded-lg bg-accent text-white text-sm font-bold">P</span>
@@ -30,7 +30,7 @@
 
   <!-- The matched child (Welcome index, or Thread at c/:id) renders here. -->
   <div class="flex-1 min-w-0 flex flex-col">
-    <Slot />
+    <Outlet />
   </div>
 </puzzle-view>
 
@@ -39,7 +39,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import ConversationItem from '../components/ConversationItem.pzl';
 
 // The persistent sidebar-plus-pane frame and the nested-route parent (D30): it
-// renders its matched child at <Slot />. data({ params }) receives the FULL merged
+// renders its matched child at <Outlet />. data({ params }) receives the FULL merged
 // params, so `params.id` is set whenever a thread is open — that drives the
 // active-row highlight. The conversation query auto-subscribes, so creating a
 // thread or bumping one's updatedAt (a streamed reply) reorders the list live.

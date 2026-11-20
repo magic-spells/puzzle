@@ -101,12 +101,12 @@ describe('gnarly template body is byte-preserved', () => {
 
 describe('paired composition markers (D141)', () => {
 	// The splitter works on section boundaries only — it never parses template
-	// tags — so paired <Slot>/<Children> bodies are just template bytes. This
+	// tags — so paired <Outlet>/<Children> bodies are just template bytes. This
 	// pins that: the whole <puzzle-view> body survives untouched for both the
 	// paired and the self-closing marker forms, and the script/style around it
 	// still format. Idempotency and the trailing-newline rule come free from
 	// the fixture sweeps below.
-	it('preserves paired <Slot>/<Children> fallback bodies byte-for-byte', async () => {
+	it('preserves paired <Outlet>/<Children> fallback bodies byte-for-byte', async () => {
 		const input = read('paired-markers.pzl');
 		const out = await format(input);
 		const a = sectionMap(input);
@@ -118,7 +118,7 @@ describe('paired composition markers (D141)', () => {
 		expect(out).toContain('<Slot name="header"><h2>{ capitalize(title) }</h2></Slot>');
 		expect(out).toContain('<Children>');
 		expect(out).toContain('</Children>');
-		expect(out).toContain("<Slot>{ number_with_delimiter(count) } remaining{#svg 'icons/empty.svg'}</Slot>");
+		expect(out).toContain("<Outlet>{ number_with_delimiter(count) } remaining{#svg 'icons/empty.svg'}</Outlet>");
 		expect(out).toContain('<Children/>');
 		expect(out).toContain('<Slot name="footer"/>');
 		// the surrounding script and style still got formatted

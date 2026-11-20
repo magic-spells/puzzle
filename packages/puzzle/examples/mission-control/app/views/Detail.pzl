@@ -71,7 +71,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import { fleet, missions, crew, tone } from '../data/catalog.js';
 
 // The slide-in details panel, now a ROUTED VIEW (nested routes, v1.3/D30)
-// rather than an {#if}-gated component: it fills the section view's <Slot/>
+// rather than an {#if}-gated component: it fills the section view's <Outlet/>
 // whenever a /fleet/:id, /missions/:id or /crew/:id URL is active. Ids are
 // unique across all three catalogs, so one detail view serves every section.
 //
