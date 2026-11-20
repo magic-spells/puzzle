@@ -20,7 +20,7 @@ Puzzle is a SPA-first JavaScript framework: `.pzl` single-file components, a rea
 - npm `latest` is **0.9.0**. **`release/0.10.0` is the working trunk** (unpublished). Check `npm view @magic-spells/puzzle version` and `git tag` before trusting this line. Never recommend 0.3.0 (published broken).
 - The repo is a monorepo ([[DECISION-D162-MONOREPO-PACKAGES]]); every package in the release train carries the framework version. `packages/puzzle-lang` is tagged `packages/puzzle-lang/vX.Y.Z` and may ship Go-module-only patch releases (0.9.1 added the Sites `|` pipes, `Options.Pipes`).
 - The three editor grammars are separate, dev-install-only repos with their own versions; sweep them whenever the template grammar changes.
-- **The next free decision number is D199.** The 0.10 work holds D192 (forms), D193 (server queries), D194 (Vitest plugin), D195 (link prefetch), D196 (named routes), D197 (share()) and D198 (deploy templates).
+- **The next free decision number is D199.** The 0.10 work holds D191 (setState/getState), D192 (forms), D193 (server queries), D194 (Vitest plugin), D195 (link prefetch), D196 (named routes), D197 (share()) and D198 (deploy templates).
 
 ## Open and deferred
 
@@ -30,7 +30,7 @@ The "Deferred features" section of [[DOC-SPEC]] lists deferred and rejected feat
 - Height animations need explicit px; WAAPI cannot animate to `auto`.
 - `setState()` re-renders, and re-runs `data()` with that render when `data()` read the written key ([[DECISION-D23-REFRESH-PATTERN]]). `refresh()` is only for on-purpose re-runs.
 
-Unscheduled ideas (no design yet): `<KeepAlive>`-style view retention, global event bindings, per-subtree provide/inject, `build --analyze`, content collections, Tailwind standalone-binary support, the playground's worker/UI phases (the WASM core is [[COMPONENT-PLAYGROUND-COMPILER]]).
+Unscheduled ideas (no design yet): `<KeepAlive>`-style view retention, global event bindings, `build --analyze`, content collections, Tailwind standalone-binary support, the playground's worker/UI phases (the WASM core is [[COMPONENT-PLAYGROUND-COMPILER]]).
 
 ## Releasing
 

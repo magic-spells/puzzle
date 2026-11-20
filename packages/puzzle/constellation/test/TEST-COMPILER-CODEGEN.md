@@ -55,7 +55,9 @@ reach them).
   bindings); `component_test.go` and `binding_scope_test.go` (D180 `is` scope: module
   bindings and imports for `is`, data scope for every other prop, loop-local precedence,
   ASI-terminated declarators, generated-name hygiene, positioned errors for a
-  missing/non-expression `is` and for `flip`, the reserved `Component` name). The rest
+  missing/non-expression `is` and for `flip`, the reserved `Component` name);
+  `sharekey_test.go` (the D197 `__share` stamp and the positional-`data()` and
+  reserved-name warnings). The rest
   are named for what they pin: handler caching, class names, attributes, conditional
   arity, loop keys, inline SVG, scoped styles, script collisions, module stamps, refs,
   reserved bindings, skeleton min-duration, raw blocks, display coercion, text-run
