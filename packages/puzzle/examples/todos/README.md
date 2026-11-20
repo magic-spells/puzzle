@@ -84,7 +84,7 @@ called the same way:
 ```javascript
 // A function of your own in app.js (this example registers none),
 // called in a template as { todoDate(todo.createdAt) }
-formatters: {
+functions: {
   todoDate: (date) => formatRelativeDate(date)
 }
 ```

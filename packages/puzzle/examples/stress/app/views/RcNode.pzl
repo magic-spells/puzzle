@@ -1,7 +1,7 @@
 <puzzle-view>
   <div class="rc-node" data-rc-level={ level }>
     <span class="rc-tick hidden">{ probe.tick }</span>
-    <Slot/>
+    <Outlet/>
   </div>
 </puzzle-view>
 
@@ -25,7 +25,7 @@ import { rcMetrics, RC_TICK } from '../rc-metrics.js';
 // Its rendered output is CONSTANT. `level` never changes for an instance and
 // `probe.tick` is a fixed string, so every render this view performs SHOULD
 // produce zero DOM mutations — except at the divergence level, where the
-// cascade patches a different child into <Slot/>. That is precisely the
+// cascade patches a different child into <Outlet/>. That is precisely the
 // question: how many times does a reused ancestor render per committed
 // navigation, and how many of those renders changed nothing.
 //

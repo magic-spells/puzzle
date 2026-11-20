@@ -41,7 +41,7 @@ const app = new PuzzleApp({
   // Display-only formatters (logic belongs in data(), per SPEC §8). These only
   // shape values for presentation — relative/absolute times and word forms.
   // Big counts use the built-in compact_number (847 -> "847", 3.4M). ChirpCard/NotificationRow/PostDetail lean on these heavily.
-  formatters: {
+  functions: {
     // Twitter-style relative time. 'now' (<60s), '5m', '2h', '3d' (<7d), then
     // 'Jul 3' for older-this-year, and 'Jul 3, 2025' when the year differs.
     // Degrades to '' on junk input so a bad timestamp never breaks a row.

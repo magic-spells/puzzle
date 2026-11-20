@@ -1,5 +1,5 @@
 <puzzle-view>
-  <!-- Index child of /account (path ''). Renders inside AccountShell's <Slot/>
+  <!-- Index child of /account (path ''). Renders inside AccountShell's <Outlet/>
        at the bare /account URL. As the topmost swapped view on a pane change it
        animates alone while the shell above holds still (D30). -->
   <div class="space-y-10">

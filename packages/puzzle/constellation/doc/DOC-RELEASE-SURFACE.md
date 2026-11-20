@@ -79,7 +79,7 @@ Contract: §3–§6, §17, §18, §24, §28, §31, §43, §47, §57, §64–§67
 - **Events:** `@event` handlers with `prevent`, `stop`, `once`, `outside`, `passive`, `capture` and key filters. On a component, `@event` is a callback prop.
 - **Components:** a tag whose first character is not ASCII `a`–`z` is a component; names validate as `Ident('.'Ident)*`. A dotted tag (`<Frame.Wrapper>`) is a family member, grouped by an `index.js` barrel ([[DECISION-D167-COMPONENT-FAMILIES]]).
 - **`<Component is={ … }>`** ([[DECISION-D180-COMPONENT-SLOT]]): picks one constructor the file imports; nullish renders nothing; children are its default slot. `Component` is a reserved tag/family root.
-- **Composition:** `<Children/>`, `<Slot name="…"/>`, bare `<Slot/>` router outlet; paired marker bodies are fallbacks. `<Snippet fits="row" user>…</Snippet>` passes a parameterized body the component stamps through `<Slot name="row" user={ u }>` or `<Children user={ u }>`. `<Portal>…</Portal>` renders into an app-root outlet.
+- **Composition:** `<Children/>`, `<Slot name="…"/>`, `<Outlet/>` router outlet (a bare `<Slot/>` is an error since 0.10, D199); paired marker bodies are fallbacks. `<Snippet fits="row" user>…</Snippet>` passes a parameterized body the component stamps through `<Slot name="row" user={ u }>` or `<Children user={ u }>`. `<Portal>…</Portal>` renders into an app-root outlet.
 - `key`, `ref="name"` (`this.refs`), `island`, `flip`. The compiler warns (never errors) on five a11y mistakes.
 
 ## Function library
@@ -87,7 +87,7 @@ Contract: §3–§6, §17, §18, §24, §28, §31, §43, §47, §57, §64–§67
 [[DECISION-D174-FUNCTION-LIBRARY]], [[COMPONENT-FORMATTERS]].
 
 - 19 standard functions shared with Sites — `round`, `currency`, `percentage`, `number_with_delimiter`, `compact_number`, `capitalize`, `truncate`, `strip_html`, `strip_newlines`, `pluralize`, `escape`, `raw`, `newline_to_br`, `json`, `date`, `time`, `datetime`, `in_timezone`, `t` — plus PuzzleKit-only `link` and `timeago`.
-- Calls nest. Apps register their own under the `formatters` config key; overriding a standard name warns in dev. A removed library name is a dev error naming the JS replacement.
+- Calls nest. Apps register their own under the `functions` config key; overriding a standard name warns in dev. A removed library name is a dev error naming the JS replacement.
 - `raw` and `newline_to_br` must be the outermost call of a text interpolation. `raw` always runs the allowlist sanitizer (`client-runtime/sanitize.js`).
 - **Translations** ([[DECISION-D175-TRANSLATIONS]], D177): `i18n` config plus `app/locales/<tag>.json`; the build emits hashed `dist/locales/<tag>.*.json` and the browser fetches only the active locale. `ctx.i18n` / `app.i18n` expose `t`, `locale`, `locales` (the switcher list `[{ locale, label, href, active }]`), `defaultLocale`, `dir`, and `setLocale(tag)` (persists to `localStorage.__puzzleLocale`).
 
@@ -144,7 +144,7 @@ Commands live in `compiler/cmd/puzzle`. Global: `--no-color`; `puzzle version` =
 - `puzzle dev [dir]` — `-p/--port` (3000), `--strict-port`, `--host`, `-o/--open`, `--fixtures`, `--profile-build`.
 - `puzzle build [dir]` — `-m/--mode production|development`, `--static`, `--hybrid`, `--fixtures` (not with prerender), `-q/--quiet` (skips the summary, page report and update notice), `--profile-build` (or `PUZZLE_PROFILE_BUILD=1`). Entry is `app/app.ts` else `app/app.js`; both is an error.
 - `puzzle preview [dir]` — `-p/--port` (4000), `--strict-port`, `--host`.
-- `puzzle check [dir]` — type-checks `.pzl` with the app's TypeScript (7 or later), run as `node <dir>/node_modules/typescript/bin/tsc`, where `<dir>` is the app or the nearest parent folder that has it.
+- `puzzle check [dir] [--fix]` — lists code written for an older Puzzle that 0.10 renamed (`<Slot/>` → `<Outlet/>`/`<Children/>`, `setData` → `setState`, positional `data()`, `formatters` → `functions`) and fails; `--fix` rewrites it ([[DECISION-D199-UPGRADE-PASS]]). Then type-checks `.pzl` with the app's TypeScript (7 or later), run as `node <dir>/node_modules/typescript/bin/tsc`, where `<dir>` is the app or the nearest parent folder that has it.
 - `puzzle generate|g <component|view|layout|model> <Name>` — `--path`, `-f/--force`, `--dir`, `--family A,B` (component only).
 - `puzzle add tailwind | piece <name…> | theme [name…] | deploy <host> | skills` — `--registry`, `--pieces-version`, `-f/--force`, `-y/--yes`, `--dir`, `--skill-root <dir>` (repeatable). `add deploy` writes a tested host config for `vercel`, `netlify`, `cloudflare`, `nginx` or `apache`, picked by the config's `output` or `--static`/`--hybrid`; with no host it lists them ([[DECISION-D198-DEPLOY-TEMPLATES]]).
 - `puzzle upgrade [--check] [-y]`, `puzzle upgrade skills`; `dev`/`build` show a TTY-only update notice (`PUZZLE_NO_UPDATE_CHECK=1` opts out; skipped in CI).

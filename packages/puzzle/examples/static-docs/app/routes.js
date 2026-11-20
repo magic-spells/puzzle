@@ -35,7 +35,7 @@ export default [
   },
 
   // Nested routes (v1.3, D30): the Guide shell renders its matched child pane at
-  // its own <Slot/>. Child paths are RELATIVE and JOIN onto /guide, so the build
+  // its own <Outlet/>. Child paths are RELATIVE and JOIN onto /guide, so the build
   // emits dist/guide/index.html (the index child) and dist/guide/templates/index.html
   // (the sibling). The index child defines no meta.title, so the leaf → root walk
   // falls through to the shell's "Guide · …" — demonstrating the title walk. The

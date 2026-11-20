@@ -278,7 +278,7 @@ func TestIntegrationDefaultPzl(t *testing.T) {
 		t.Fatalf("Default.pzl must parse cleanly, got: %v", err)
 	}
 
-	// It contains exactly one <Slot/>.
+	// It contains exactly one <Outlet/>.
 	var slots int
 	walk(pf.Root, func(n Node) {
 		if _, ok := n.(*Slot); ok {
@@ -286,7 +286,7 @@ func TestIntegrationDefaultPzl(t *testing.T) {
 		}
 	})
 	if slots != 1 {
-		t.Errorf("expected exactly one <Slot/>, got %d", slots)
+		t.Errorf("expected exactly one <Outlet/>, got %d", slots)
 	}
 
 	if !strings.Contains(pf.Scripts, "export default class DefaultLayout extends PuzzleView") {

@@ -224,7 +224,7 @@ import {
 //     are false when `range` is absent. The snippet replaces only the button's INNER
 //     content — Calendar retains the button, ARIA, grid roles, keyboard behavior, and
 //     range classes. Normal markup, components, and control flow are allowed; nested
-//     <Children>/<Slot>/<Snippet> markers and `ref=` are compile errors.
+//     <Children>/<Outlet>/<Slot>/<Snippet> markers and `ref=` are compile errors.
 //     The content is stamped INSIDE the day <button>, so it must be NON-INTERACTIVE:
 //     no nested <button>, <a href>, <input>, or any other focusable control. Nesting
 //     one is invalid HTML and it breaks the grid's roving-tabindex/gridcell model

@@ -1,0 +1,11 @@
+<puzzle-view>
+  <h1 class="text-2xl font-semibold tracking-tight">Page not found</h1>
+  <p class="mt-3"><a class="text-indigo-600 hover:underline" href={ link({ name: 'home' }) }>Back home</a></p>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// the catch-all route's page
+export default class NotFoundView extends PuzzleView {}
+</script>

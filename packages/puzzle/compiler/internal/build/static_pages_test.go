@@ -168,7 +168,7 @@ func cannedSummary() staticSummary {
 		APIURL:               json.RawMessage(`"https://api.example.com"`),
 		RouterBase:           json.RawMessage(`"/docs"`),
 		HasModels:            true,
-		HasFormatters:        true,
+		HasFunctions:         true,
 		HasAdapter:           true,
 		AdapterConfigured:    false,
 		AdapterModuleMatches: nil,
@@ -192,7 +192,7 @@ func cannedSummary() staticSummary {
 }
 
 // TestStaticEntrySourceFull generates the entry for a page that has a layout and
-// whose app ships both a models registry and a formatters module.
+// whose app ships both a models registry and a functions module.
 func TestStaticEntrySourceFull(t *testing.T) {
 	root := "/abs/app-root"
 	s := cannedSummary()
@@ -202,7 +202,7 @@ func TestStaticEntrySourceFull(t *testing.T) {
 		s.Written[0],
 		s,
 		"app/models/index.ts",
-		"app/formatters.ts",
+		"app/functions.ts",
 		"",
 	)
 	if err != nil {
@@ -214,13 +214,13 @@ func TestStaticEntrySourceFull(t *testing.T) {
 		`import V0 from "/abs/app-root/app/views/Home.pzl";`,
 		`import L0 from "/abs/app-root/app/layouts/Default.pzl";`,
 		`import models from "/abs/app-root/app/models/index.ts";`,
-		`import formatters from "/abs/app-root/app/formatters.ts";`,
+		`import functions from "/abs/app-root/app/functions.ts";`,
 		`target: "#app",`,
 		`views: [V0],`,
 		`layout: L0,`,
 		`route: {"path":"/","params":{},"chain":[{"path":"/","name":"home"}]},`,
 		`models,`,
-		`formatters,`,
+		`functions,`,
 		`adapter,`,
 		`apiURL: "https://api.example.com",`,
 		`routerBase: "/docs",`,
@@ -437,7 +437,7 @@ func TestStaticPrerenderStdinImportsTheAdapterModule(t *testing.T) {
 }
 
 // TestStaticEntrySourceMinimal generates the entry for a layout-less, multi-view
-// page in an app with NO models and NO formatters files: those imports and the
+// page in an app with NO models and NO functions files: those imports and the
 // call shorthands must be omitted, layout is null, apiURL is null.
 func TestStaticEntrySourceMinimal(t *testing.T) {
 	root := "/abs/app-root"
@@ -462,14 +462,14 @@ func TestStaticEntrySourceMinimal(t *testing.T) {
 			t.Errorf("generated entry missing %q\n---\n%s", w, src)
 		}
 	}
-	// No layout import, and no models/formatters imports or shorthands.
+	// No layout import, and no models/functions imports or shorthands.
 	for _, absent := range []string{
 		"import L0",
 		"import models",
-		"import formatters",
+		"import functions",
 		"import { adapter }",
 		"\n  models,",
-		"\n  formatters,",
+		"\n  functions,",
 		"\n  adapter,",
 		"\n  storage:",
 		"\n  routerMode:",

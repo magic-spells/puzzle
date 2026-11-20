@@ -37,7 +37,7 @@
     </section>
   </div>
 
-  <Slot/>
+  <Outlet/>
 </puzzle-view>
 
 <script>

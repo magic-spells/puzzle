@@ -103,7 +103,7 @@ export async function assembleChain(entry, ctx, route = makeRouteSnapshot(entry)
 		}
 		let topVnode = childVnode;
 
-		// A top-level layout wraps the whole chain, hosting it at its <Slot/>.
+		// A top-level layout wraps the whole chain, hosting it at its <Outlet/>.
 		if (LayoutClass) {
 			const layout = new (/** @type {typeof PuzzleView} */ (LayoutClass))(ctx);
 			instances.push(layout);

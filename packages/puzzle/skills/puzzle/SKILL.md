@@ -26,12 +26,12 @@ the working example apps in `examples/` at https://github.com/magic-spells/puzzl
 my-app/
 ├── puzzle.config.js       # { styles: { use: ['tailwindcss'] }, output: 'static' | 'hybrid' }
 └── app/
-    ├── app.js             # new PuzzleApp({ target: '#app', routes, models, formatters }); MUST `export default app` for prerender modes
+    ├── app.js             # new PuzzleApp({ target: '#app', routes, models, functions }); MUST `export default app` for prerender modes
     │                      #   (app.ts in a TypeScript app — the build takes app/app.ts over app/app.js and refuses both)
     ├── routes.js          # route table (see below)
     ├── public/index.html  # the shell: #app mount + <script type="module" src="/app.js">
     ├── styles/styles.css  # global entry; Tailwind v4 via the config's styles pipeline
-    ├── layouts/*.pzl      # chrome with <Slot/>
+    ├── layouts/*.pzl      # chrome with <Outlet/>
     ├── views/*.pzl        # pages
     ├── components/*.pzl
     ├── locales/<tag>.json # translations, only with `i18n` in puzzle.config.js (see Translations)
@@ -62,6 +62,11 @@ has a `tsconfig.json`),
   version. Re-running `puzzle add skills` skips an install that is already
   current and asks before replacing an older one (a non-interactive run needs
   `--force` for that).
+- Upgrading from 0.9: `puzzle check` lists every site 0.10 renamed (a bare
+  `<Slot/>` router outlet, `this.setData(`, positional `data(params, props)`,
+  the `formatters` config key) and fails; `puzzle check --fix` rewrites them
+  (`<Outlet/>` in layouts and views, `<Children/>` in components), then
+  type-checks.
 
 ## Build configuration
 
@@ -232,8 +237,8 @@ functions** either — shape a list with array methods (`items.filter(…)`,
 call (`upcase(name)`) is NOT a compile error: it passes the value through
 unchanged, with a dev error naming the replacement, so convert an old pipe
 to the method, never to a same-named call. App functions register through the
-`formatters` config map (the key keeps its name) and are called like the
-built-ins: `{ specialFormat(product.title) }`. Don't register one under a
+`functions` config map (the pre-0.10 `formatters` key throws) and are called
+like the built-ins: `{ specialFormat(product.title) }`. Don't register one under a
 standard name (it wins, with a dev warning, and changes what the name means).
 Keep an app function a pure function of its arguments: a cached `{#for}` row
 does not re-run its calls, so one that reads the clock or other ambient state
@@ -417,15 +422,17 @@ Rules that bite:
   `.replaceAll()` and `.toSorted()` type in templates — and in that file's
   `<script>` too, which can hide a method your `target` lacks from the check
   (the build is unaffected). `puzzle check` needs TypeScript 7 or later.
-- **Three marker tags, four meanings.** `<Children/>` marks where a component's
-  default children render; `<Slot name="x"/>` declares a named region (the
-  caller routes a direct child in with a static `slot="x"` attribute);
-  `<Slot/>` is the ROUTER outlet where a child route or routed view renders;
+- **Four marker tags, one meaning each.** `<Children/>` marks where a
+  component's default children render; `<Slot name="x"/>` declares a named
+  region (the caller routes a direct child in with a static `slot="x"`
+  attribute); `<Outlet/>` is the ROUTER outlet in a layout or view, where a
+  child route or routed view renders (a `<Slot>` with no name is a compile
+  error since 0.10);
   `<Snippet>` passes a reusable template that the component may stamp repeatedly
   with fresh data. Composition `<Children>` and named `<Slot>` markers may carry
   data attributes, and a snippet declares matching parameters as bare
   attributes; binding is by name. `fits="x"` routes it to `<Slot name="x">`,
-  while omitted `fits` targets `<Children>`. Ordinary Children/Slot markers may
+  while omitted `fits` targets `<Children>`. Children, Outlet and Slot markers may
   be paired with fallback content, which supplied content replaces entirely —
   and content only counts when it renders something, so a false `{#if}` or an
   empty `{#for}` at the call site shows the fallback (the empty-state idiom).
@@ -451,7 +458,7 @@ Rules that bite:
 - **Component families are dotted tags + a barrel** (puzzle ≥ 0.7.0). A
   capitalized tag must be `Ident('.'Ident)*` — `<Card>` or `<Frame.Wrapper>`;
   a dash, a colon, or an empty segment is a compile error, and a marker name
-  (`Children`/`Slot`/`Snippet`/`Portal`/`Component`) cannot be a family root. A dotted tag
+  (`Children`/`Outlet`/`Slot`/`Snippet`/`Portal`/`Component`) cannot be a family root. A dotted tag
   is a plain member expression resolved against module scope, so group the
   family in a directory with a plain JS barrel — `.pzl` stays ONE class per
   file, and there is no registry or compiler magic:
@@ -681,7 +688,7 @@ export default class EditPost extends PuzzleView {
   strings `'hash'`/`'memory'` throw at construction (the error names the
   import) — path-mode apps ship none of the other modes' code.
 - Nested routes: `children` with **relative** paths render at the parent view's
-  `<Slot/>`; `layout` is top-level-only; params merge down the chain.
+  `<Outlet/>`; `layout` is top-level-only; params merge down the chain.
 - **Route guards** (puzzle ≥ 0.2.0): `guard: ({ to, from, ctx }) => verdict` on
   any route covers that node AND all its children — guard the top-level route
   once to lock the whole layout subtree; a child may add its own stricter
@@ -1125,7 +1132,7 @@ await app.router.push('/todos/1');
 
 - `mountView(ViewClass, options)` mounts ONE view against a detached container.
   Options: `params`, `props`, `children`, `ref`, `route`, `models`, `store`,
-  `router`, `formatters`, `adapter`, `ctx`, `i18n: { locale, strings }` (a
+  `router`, `functions`, `adapter`, `ctx`, `i18n: { locale, strings }` (a
   translated view with no fetch; `strings` is the flat dotted-key table).
   Returns a handle: `instance`, `container`,
   `element`, `ctx`, `store`, `router`, `find(sel)`, `findAll(sel)`,
@@ -1291,8 +1298,8 @@ for the app's output mode; don't hand-write a `/* /index.html 200` rule
    output and as `#/...` in a hash-mode SPA, from the same template.
    `ctx.router` methods throw; `push()` calls
    are a bug — use plain links. App functions must be exported from
-   `app/formatters.js` to exist client-side (functions only in the app.js
-   `formatters` config trigger a build warning); models are picked up from
+   `app/functions.js` to exist client-side (functions only in the app.js
+   `functions` config trigger a build warning); models are picked up from
    `app/models/index.js`. The `link` function is absent client-side in static
    output — its pass-through fallback still yields correct plain-path hrefs.
    A configured adapter (`adapter.defaults(...)`) is best exported from

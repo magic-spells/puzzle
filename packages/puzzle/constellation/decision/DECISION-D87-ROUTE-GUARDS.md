@@ -59,7 +59,8 @@ Guarding a top-level route locks its whole layout subtree. Spec:
 - **Idioms:** restore sessions in `beforeMount` (D66) so guards stay
   synchronous store reads; redirect-after-login uses the query
   (`'/login?redirect=' + encodeURIComponent(to.path)`, read via D83).
-  `examples/stays` is the acceptance flow.
+  `examples/stays` is the acceptance flow; `examples/auth` adds token refresh
+  in an async guard.
 
 ## Gotchas
 

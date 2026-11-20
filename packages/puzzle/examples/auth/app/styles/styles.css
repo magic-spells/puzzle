@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+/*
+ * tailwind v4 content detection: scan the app's .pzl views and layouts and
+ * its js so the utility classes they use are generated. paths are relative
+ * to this stylesheet (app/styles/), so "../" is the app root.
+ */
+@source "../**/*.pzl";
+@source "../**/*.js";
+@source "../public/**/*.html";
