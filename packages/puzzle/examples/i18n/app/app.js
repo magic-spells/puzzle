@@ -10,6 +10,7 @@ import models from './models/index.js';
 // A language switch is a page load under prefix routing (/about → /es/about), so
 // the store persists to localStorage: the cart is still there in the new language.
 // `storage` persists every model in the store to localStorage, not just the cart.
+// That holds for SPA and hybrid output; a `--static` page has no persistence layer.
 const storage = typeof window !== 'undefined' ? window.localStorage : undefined;
 
 const app = new PuzzleApp({

@@ -881,7 +881,12 @@ Builders: `string() number() boolean() date() array() object()`, plus
 store). Chainable modifiers: `.primary() .required() .default() .min() .max()
 .oneOf([...]) .validate(fn)`. **Always use the function form of `.default()` for
 arrays/objects** (`.default(() => [])`) so records don't share one instance.
-Register model classes in the app's `models` config.
+Register model classes in the app's `models` config. In TypeScript, type the
+fields with a fields interface (`type TodoRecord = Todo & TodoFields`, as
+`puzzle init --typescript` scaffolds) or `declare text: string`, never
+`text!: string`: unless your tsconfig sets a `target` below ES2022 (the
+scaffold uses ES2020), that emits a real class field, which resets the field to
+`undefined` on every record.
 
 Views reach the store as `this.ctx.store`:
 
@@ -1155,9 +1160,11 @@ Schema-driven fake data, generated from the model `static schema` alone:
 ```js
 // app/fixtures.js
 export default {
-  seed: { todo: 12 },                       // generate 12 todos from the schema
+  seed: 42,                                 // one PRNG seed: the same fake data every run
   mock: { todo: { latency: 150 } },         // intercept adapter calls for this type
-  setup(store) { /* optional hand-tuning after seeding */ },
+  setup(app) {                              // runs before the first data()
+    app.store.seed('todo', 12);             // 12 todos generated from the schema
+  },
 };
 ```
 
@@ -1172,12 +1179,13 @@ mock, not a dev-only mock server.
 
 ## DevTools
 
-A Chrome DevTools extension (separate repo, `magic-spells/puzzle-devtools`)
-inspects views, store records, and the subscription graph. The framework ships
-only a dev-only bridge that activates when the extension is installed; it costs
-**zero production bytes** and needs no config. Nothing to wire up — but if you
-are debugging reactivity, `window.__PUZZLE_APP__` is also available in dev
-builds.
+A Chrome DevTools extension (`packages/puzzle-devtools` in the framework
+monorepo) inspects views, store records, and the subscription graph. The
+framework ships only a dev-only bridge that activates when the extension is
+installed; it costs **zero production bytes** and needs no config. Nothing to
+wire up — but if you are debugging reactivity, `window.__PUZZLE_APP__` is also
+available in dev builds. Pages built with `output: 'static'` have neither: they
+run no `PuzzleApp`, so the extension reports no app there.
 
 ## Loading skeletons
 

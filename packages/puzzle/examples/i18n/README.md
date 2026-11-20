@@ -34,7 +34,7 @@ strings.
 | Nav links stay in the language you are reading | `{ link('/about') }` adds the page's locale prefix (`/es/about`); `link(path, { locale: 'pl' })` targets one language and `{ locale: false }` skips the prefix for a file |
 | English / Español / Polski links | `this.ctx.i18n.locales` — `{ locale, label, href, active }` per language, `href` being this page in that language. The links are real `<a href>`s a crawler follows; a plain click calls `setLocale(tag)`, which remembers the choice and loads the same page under the other prefix (`LocaleSwitcher.pzl`) |
 | A first visit lands in your language | An unprefixed URL opened from another site is redirected once to the stored choice or the browser's language (`i18n.detect: false` turns it off) |
-| The cart count survives a switch | The cart is a store record persisted to `localStorage` (`app.js`); a switch is a page load |
+| The cart count survives a switch | The cart is a store record persisted to `localStorage` (`app.js`); a switch is a page load. SPA and hybrid output only: a static page has no persistence layer |
 | A translated string read from script | `this.ctx.i18n.t('nav.about')` in `About.pzl` |
 | `<html lang>` tracks the language | Set from the URL's locale |
 

@@ -23,7 +23,7 @@
             <button type="button" class="lc-label flex-1 min-w-0 truncate text-left text-sm text-fg" data-id={ row.id } @click={ selectRow(row) }>{ row.label }</button>
             <span class="lc-value font-mono text-[11px] tabular-nums text-muted w-10 shrink-0 text-right">{ row.value }</span>
             <span class="lc-version font-mono text-[11px] tabular-nums text-faint w-10 shrink-0 text-right">v{ row.version }</span>
-            <button class="lc-remove w-6 h-6 shrink-0 rounded text-faint hover:text-danger" data-id={ row.id } @click={ removeRow(row) }><span class="lc-x block leading-none text-base">&times;</span></button>
+            <button class="lc-remove w-6 h-6 shrink-0 rounded text-faint hover:text-danger" data-id={ row.id } @click={ removeRow(row) }><span class="lc-x block leading-none text-base">×</span></button>
           </div>
         {/for}
       {:else if isStable}
@@ -33,7 +33,7 @@
             <button type="button" class="lc-label flex-1 min-w-0 truncate text-left text-sm text-fg" data-id={ row.id } @click={ selectAny }>{ row.label }</button>
             <span class="lc-value font-mono text-[11px] tabular-nums text-muted w-10 shrink-0 text-right">{ row.value }</span>
             <span class="lc-version font-mono text-[11px] tabular-nums text-faint w-10 shrink-0 text-right">v{ row.version }</span>
-            <button class="lc-remove w-6 h-6 shrink-0 rounded text-faint hover:text-danger" data-id={ row.id } @click={ removeAny }><span class="lc-x block leading-none text-base">&times;</span></button>
+            <button class="lc-remove w-6 h-6 shrink-0 rounded text-faint hover:text-danger" data-id={ row.id } @click={ removeAny }><span class="lc-x block leading-none text-base">×</span></button>
           </div>
         {/for}
       {:else}
@@ -43,7 +43,7 @@
             <button type="button" class="lc-label flex-1 min-w-0 truncate text-left text-sm text-fg" data-id={ row.id }>{ row.label }</button>
             <span class="lc-value font-mono text-[11px] tabular-nums text-muted w-10 shrink-0 text-right">{ row.value }</span>
             <span class="lc-version font-mono text-[11px] tabular-nums text-faint w-10 shrink-0 text-right">v{ row.version }</span>
-            <button class="lc-remove w-6 h-6 shrink-0 rounded text-faint hover:text-danger" data-id={ row.id }><span class="lc-x block leading-none text-base">&times;</span></button>
+            <button class="lc-remove w-6 h-6 shrink-0 rounded text-faint hover:text-danger" data-id={ row.id }><span class="lc-x block leading-none text-base">×</span></button>
           </div>
         {/for}
       {/if}
