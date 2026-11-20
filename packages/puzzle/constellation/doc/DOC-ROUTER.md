@@ -256,6 +256,8 @@ this.ctx.router.replace(typeof redirect === 'string' ? redirect : '/');
 
 Guards are UX, not security — authorize on the server. Hybrid builds warn for each prerendered guarded page (add `prerender: false`); static builds warn that guards never run (§48).
 
+`examples/auth` is the whole flow in a working app: a guard that refreshes an expiring token before it lets you in, `beforeRequest` adding the bearer, an error view that renews and retries after a 401, and a sign-out that revokes the refresh token and clears the user's records.
+
 ## Transitions and morphs
 
 Declare `animations` on views and layouts; navigation plays the old view's `out`, then the new view's `in` ([[DOC-SPEC-VIEW]] §12). `transitionMode: 'overlap'` (app-wide, per route, or per view class) plays them together (§26, §33). A `<puzzle-skeleton>` view commits at once and shows its skeleton while data loads. Shared-element morphs come from `enableMorph(app)` and `data-puzzle-morph` attributes ([[DOC-SPEC-VIEW]] §37, `examples/music`, `examples/kanban-morph`).

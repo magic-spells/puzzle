@@ -1,0 +1,17 @@
+{
+  "name": "auth",
+  "version": "1.0.0",
+  "description": "Sign-in, token refresh, a guarded route and logout, served by a fixtures mock backend",
+  "type": "module",
+  "scripts": {
+    "dev": "puzzle dev --fixtures",
+    "build": "puzzle build --fixtures"
+  },
+  "dependencies": {
+    "@magic-spells/puzzle": "^0.9.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.14",
+    "tailwindcss": "^4.1.14"
+  }
+}

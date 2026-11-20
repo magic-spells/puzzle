@@ -888,14 +888,17 @@ export declare class PuzzleView<Props = any> {
 /**
  * The request handed to an `adapter.mock.handler` (D95). `path` is
  * relative to `apiURL + endpoint` (`''` for the collection), `body` is the parsed
- * request body, and `collection` is the mock's LIVE state — a `Map` keyed by
- * primary key, so a handler can read and mutate it.
+ * request body, `headers` the request's headers after `beforeRequest` ran
+ * (lower-case names, so an auth mock reads `headers.authorization`), and
+ * `collection` is the mock's LIVE state — a `Map` keyed by primary key, so a
+ * handler can read and mutate it.
  */
 export interface AdapterMockRequest {
 	method: string;
 	url: string;
 	path: string;
 	body: any;
+	headers: Record<string, string>;
 	collection: Map<any, any>;
 }
 

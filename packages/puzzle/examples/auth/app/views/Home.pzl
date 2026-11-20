@@ -1,0 +1,32 @@
+<puzzle-view>
+  <h1 class="text-3xl font-semibold tracking-tight">Sign in, stay signed in, sign out</h1>
+  <p class="mt-3 text-slate-600">
+    A reference app for authentication in Puzzle. The notes page and the account page are guarded:
+    open one signed out and you land on the sign-in page, which sends you back once you are in.
+  </p>
+
+  <div class="mt-8 flex gap-3">
+    {#if session}
+      <a class="rounded-lg bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-500" href={ link({ name: 'dashboard' }) }>Open your notes</a>
+    {:else}
+      <a class="rounded-lg bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-500" href={ link({ name: 'dashboard' }) }>Try the guarded page</a>
+    {/if}
+  </div>
+
+  <ul class="mt-10 space-y-3 text-sm text-slate-600">
+    <li><strong class="text-slate-900">Access token:</strong> 30 seconds, kept in memory, added to every request by beforeRequest.</li>
+    <li><strong class="text-slate-900">Refresh token:</strong> one day, used once and replaced on every refresh.</li>
+    <li><strong class="text-slate-900">Refresh:</strong> a timer renews ahead of expiry, and the guard renews before a protected page loads.</li>
+  </ul>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// the public landing page. it reads the session only to pick its button.
+export default class HomeView extends PuzzleView {
+  data() {
+    return { session: this.ctx.store.findOne('session', 'current') };
+  }
+}
+</script>

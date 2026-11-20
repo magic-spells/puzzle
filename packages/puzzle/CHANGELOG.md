@@ -402,6 +402,18 @@ one is *not* a compile error; it silently builds a different product.
   `this.props`. `PuzzleViewConstructor` is the type for any view class; a
   `typeof PuzzleView` annotation rejects a typed one. The `.pzl` module shim
   types an import as `typeof PuzzleView<any>`.
+- **`examples/auth`, a reference app for sign-in, token refresh, a guarded
+  route and logout.** A pattern to copy, not an auth library: one plain
+  `app/auth.js` module holds the tokens, `beforeRequest` (D91) adds the bearer,
+  a route `guard` (D87) refreshes an expiring token before a protected page
+  loads, a timer refreshes ahead of expiry, the `errorView` (D145) renews and
+  retries after a 401, and signing out revokes the refresh token and clears the
+  user's records. The sign-in form uses `/forms` (D192) and every route is
+  named (D196). It runs with `puzzle dev --fixtures` against a mock backend
+  that checks the token. `tests/auth-example.test.js` runs the same flow.
+- **A fixtures mock `handler` receives the request's `headers`.** The header
+  set after `beforeRequest` ran, as a plain object with lower-case names, so a
+  mock can answer 401 for a missing or expired token the way a real API does.
 
 ### Changed
 

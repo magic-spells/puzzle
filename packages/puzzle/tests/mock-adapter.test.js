@@ -441,6 +441,42 @@ describe('handler — the custom-path escape hatch', () => {
 		expect(received.collection).toBeInstanceOf(Map);
 	});
 
+	it('receives the post-hook headers with lower-case names', async () => {
+		let received = null;
+		const store = storeWith(
+			{
+				data: [],
+				handler(request) {
+					received = request;
+					return { body: {} };
+				},
+			},
+			{
+				// beforeRequest adds the token; the handler must see it, the way a
+				// real server would (examples/auth checks it to answer 401)
+				beforeRequest: (init) => ({ ...init, headers: { ...init.headers, Authorization: 'Bearer abc' } }),
+			}
+		);
+
+		await store.request('todo', '/me', { headers: { 'X-Trace': '7' } });
+		expect(received.headers).toEqual({ authorization: 'Bearer abc', 'x-trace': '7' });
+
+		// a Headers instance and an array of pairs read the same way
+		const viaHeaders = storeWith(
+			{ data: [], handler: (request) => ((received = request), { body: {} }) },
+			{ beforeRequest: (init) => ({ ...init, headers: new Headers({ Authorization: 'Bearer h' }) }) }
+		);
+		await viaHeaders.request('todo', '/me');
+		expect(received.headers).toEqual({ authorization: 'Bearer h' });
+
+		const viaPairs = storeWith(
+			{ data: [], handler: (request) => ((received = request), { body: {} }) },
+			{ beforeRequest: (init) => ({ ...init, headers: [['Authorization', 'Bearer p']] }) }
+		);
+		await viaPairs.request('todo', '/me');
+		expect(received.headers).toEqual({ authorization: 'Bearer p' });
+	});
+
 	it('an omitted body is an empty response — request() resolves null', async () => {
 		const store = storeWith({ data: [], handler: () => ({ status: 204 }) });
 		await expect(store.request('todo', '/ping')).resolves.toBeNull();
