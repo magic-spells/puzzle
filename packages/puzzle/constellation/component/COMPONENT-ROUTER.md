@@ -52,6 +52,11 @@ notes:
       Rejected: returning the `[autofocus]` element as the target (a closed dialog's button takes no
       focus, so focus fell to body); autofocus-only (a view focusing in mounted() would still lose
       focus); a reused-view flag to keep D135's old push behaviour.
+  - kind: state
+    text: >-
+      Popstate saves the outgoing position from `#shown`, the window position as of the last
+      `scroll` event (listener added in `start()` when scroll is enabled, removed in `stop()`); a
+      push saves `departScroll`. Neither path reads the window at commit.
 ---
 
 # Router

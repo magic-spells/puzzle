@@ -100,7 +100,16 @@ const ROUTES = [
 	},
 ];
 
+// A browser follows every move with a `scroll` event, which is what the router
+// reads the departing position from on popstate.
 function setScroll(x, y) {
+	jump(x, y);
+	window.dispatchEvent(new Event('scroll'));
+}
+
+// A move whose scroll event has not fired yet: WebKit's and Firefox's jump to a
+// fragment, which lands BEFORE popstate (its event follows on the next frame).
+function jump(x, y) {
 	Object.defineProperty(window, 'scrollX', { configurable: true, writable: true, value: x });
 	Object.defineProperty(window, 'scrollY', { configurable: true, writable: true, value: y });
 }
@@ -312,6 +321,38 @@ describe('Router fragment pop — back/forward traversal (D41)', () => {
 		expect(window.scrollY).toBe(640);
 		expect(router.current.path).toBe('/docs#faq');
 		expect(runs).toEqual({ home: 0, about: 0, shell: 1, docs: 1 });
+	});
+
+	it('restores the reading position when the browser jumped before popstate (WebKit, Firefox)', async () => {
+		await boot(ROUTES, undefined, '/docs');
+		const docsState = history.state;
+
+		setScroll(0, 220);
+		jump(0, 640); // the anchor jump, ahead of popstate and of its own scroll event
+		browserFragmentNav('/docs#faq');
+		await tick();
+		setScroll(0, 640); // that scroll event, a frame later
+
+		traverseTo(docsState, '/docs');
+		await tick();
+
+		expect(window.scrollY).toBe(220);
+	});
+
+	it('restores the position start() found when the page never scrolled before the jump', async () => {
+		jump(0, 300); // where the page stood when the router started (a reload, a remount)
+		await boot(ROUTES, undefined, '/docs');
+		const docsState = history.state;
+
+		jump(0, 640);
+		browserFragmentNav('/docs#faq');
+		await tick();
+		setScroll(0, 640);
+
+		traverseTo(docsState, '/docs');
+		await tick();
+
+		expect(window.scrollY).toBe(300);
 	});
 
 	it('does not move focus or announce on a traversal either', async () => {

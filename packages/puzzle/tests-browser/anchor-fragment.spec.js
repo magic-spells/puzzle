@@ -97,6 +97,8 @@ test('A3. control — history.back() off a fragment URL also fires popstate', as
 	await openProbe(page);
 	await page.locator('#jump').click();
 	await expect.poll(() => page.evaluate(() => location.hash)).toBe('#faq');
+	// The hash moves before the click's hashchange fires; clear the log after it.
+	await expect.poll(async () => (await readLog(page)).map((e) => e.type)).toContain('hashchange');
 	await clearLog(page);
 
 	await page.goBack();
@@ -291,14 +293,11 @@ test('B3. back/forward across the /#fragment pair restores scroll without naviga
 	expect((await routerState(page)).route).toBe('home');
 	expect(await focusedRoots(page)).toBe(0);
 	expect(await announced(page)).toBe(announcedBefore);
-	// The traversal restored a position; it did NOT reset the page to the top.
-	// Only "not the top" is asserted here, deliberately. The exact value is
-	// engine-dependent because this entry's position was recorded during the
-	// FRESH fragment navigation: Chromium fires popstate BEFORE its anchor jump
-	// (so the pre-click 400 is what #savePosition reads), while WebKit and
-	// Firefox jump first (so the anchor offset is what it reads). The precise
-	// restore is pinned on the hop below instead, where every engine agrees.
-	expect(await scrollY(page)).toBeGreaterThan(0);
+	// The traversal restored where the reader was before the click. This entry's
+	// position was recorded during the FRESH fragment navigation: Chromium fires
+	// popstate BEFORE its anchor jump, while WebKit and Firefox jump first — so
+	// the router saves the position of the last scroll event, never a live read.
+	await expect.poll(() => scrollY(page)).toBe(400);
 
 	// --- forward to the fragment, then assert an EXACT restore ----------------
 	mark = await eventCount(page);
@@ -311,10 +310,9 @@ test('B3. back/forward across the /#fragment pair restores scroll without naviga
 	expect(await focusedRoots(page)).toBe(0);
 	expect(await scrollY(page)).toBeGreaterThan(0);
 
-	// Read further down the fragment entry, then leave it. The move away targets
-	// a URL with NO fragment, so no engine performs an anchor jump ahead of
-	// popstate and #savePosition's live read is trustworthy everywhere — this is
-	// the case that pins the restore to an exact number.
+	// Read further down the fragment entry, then leave it: the bare entry gets
+	// its 400 back, though WebKit jumped to the anchor ahead of the Forward's
+	// popstate.
 	await page.evaluate(() => window.scrollTo(0, 1500));
 	await expect.poll(() => scrollY(page)).toBe(1500);
 
@@ -323,6 +321,7 @@ test('B3. back/forward across the /#fragment pair restores scroll without naviga
 	await expect.poll(() => page.evaluate(() => location.hash)).toBe('');
 	await page.waitForTimeout(400);
 	expect(await eventsSince(page, mark)).not.toContain('route-commit');
+	expect(await scrollY(page)).toBe(400);
 
 	// --- forward again: 1500 must come back exactly, on every engine ----------
 	mark = await eventCount(page);
