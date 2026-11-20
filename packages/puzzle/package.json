@@ -129,6 +129,9 @@
 	"bugs": {
 		"url": "https://github.com/magic-spells/puzzle/issues"
 	},
+	"engines": {
+		"node": ">=24"
+	},
 	"peerDependencies": {
 		"@magic-spells/morph-engine": ">=0.1.0"
 	},

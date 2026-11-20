@@ -67,8 +67,8 @@ function stubFetch(byPath, { fail = [], gates = {} } = {}) {
 	return { fetch, calls };
 }
 
-// Node 25 ships a global localStorage that shadows jsdom's and is inert without
-// --localstorage-file, so the suite installs a plain in-memory Storage.
+// A plain in-memory Storage, installed in beforeEach so each test gets a
+// fresh store.
 function memoryStorage() {
 	const map = new Map();
 	return {

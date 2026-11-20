@@ -276,8 +276,8 @@ enforced, not merely advised.
   **D202** (the 0.10 work holds D191 setState/getState, D192 forms, D193
   server queries, D194 the Vitest plugin, D195 link prefetch, D196 named
   routes, D197 share(), D198 deploy templates, D199 the upgrade pass,
-  `puzzle check --fix`, with the `<Outlet/>` and `functions` renames, and
-  D201 dev.proxy `changeOrigin`).
+  `puzzle check --fix`, with the `<Outlet/>` and `functions` renames, D200
+  the Node 24 minimum, and D201 dev.proxy `changeOrigin`).
 - Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
   amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74, D160 = v1.75,

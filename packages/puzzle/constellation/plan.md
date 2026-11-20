@@ -20,7 +20,7 @@ Puzzle is a SPA-first JavaScript framework: `.pzl` single-file components, a rea
 - npm `latest` is **0.9.0**. **`release/0.10.0` is the working trunk** (unpublished). Check `npm view @magic-spells/puzzle version` and `git tag` before trusting this line. Never recommend 0.3.0 (published broken).
 - The repo is a monorepo ([[DECISION-D162-MONOREPO-PACKAGES]]); every package in the release train carries the framework version. `packages/puzzle-lang` is tagged `packages/puzzle-lang/vX.Y.Z` and may ship Go-module-only patch releases (0.9.1 added the Sites `|` pipes, `Options.Pipes`).
 - The three editor grammars are separate, dev-install-only repos with their own versions; sweep them whenever the template grammar changes.
-- **The next free decision number is D202.** The 0.10 work holds D191 (setState/getState), D192 (forms), D193 (server queries), D194 (Vitest plugin), D195 (link prefetch), D196 (named routes), D197 (share()), D198 (deploy templates), D199 (the upgrade pass, puzzle check --fix, with the Outlet and functions renames) and D201 (dev.proxy changeOrigin).
+- **The next free decision number is D202.** The 0.10 work holds D191 (setState/getState), D192 (forms), D193 (server queries), D194 (Vitest plugin), D195 (link prefetch), D196 (named routes), D197 (share()), D198 (deploy templates), D199 (the upgrade pass, puzzle check --fix, with the Outlet and functions renames), D200 (Node 24 minimum) and D201 (dev.proxy changeOrigin).
 
 ## Open and deferred
 
