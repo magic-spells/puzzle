@@ -78,8 +78,9 @@ and `compiler/internal/{dev,serve,preview,ui}`. Run from `packages/puzzle` with
 - **Caching and performance**: the build-scoped compile cache and its eviction, the scan
   memo, the pass context, route-level invalidation, the build profile output.
 - **Dev**: change detection, the rebuild pipeline, warm static rebuilds, the local server
-  with SSE reload, port scanning, proxy prefix validation, preview serving (it recognizes
-  hashed entries), and terminal UI rendering.
+  with SSE reload, port scanning, proxy prefix and entry validation, the proxied `Host`
+  with and without `changeOrigin` for requests and upgrades (`TestDevProxyChangeOrigin`),
+  preview serving (it recognizes hashed entries), and terminal UI rendering.
 
 Gotchas: `watch_bench_test.go` and `watch_static_bench_test.go` measure rebuild cost
 but are not a pass/fail timing gate. Multi-tab dev reload is a browser concern, covered

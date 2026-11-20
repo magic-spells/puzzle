@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -391,13 +392,29 @@ func TestLoadConfigHashNames(t *testing.T) {
 
 func TestLoadConfigDevProxy(t *testing.T) {
 	requireNode(t)
-	root := writeConfig(t, "export default { dev: { proxy: { '/api': 'http://localhost:3091' } } };\n")
+	// The string form is the target alone. The object form is Vite's; a key other
+	// than target and changeOrigin is ignored, like any unknown config key.
+	root := writeConfig(t, "export default { dev: { proxy: { '/api': 'http://localhost:3091', '/auth': { target: 'https://auth.test', changeOrigin: true }, '/ws': { target: 'http://localhost:3092', ws: true } } } };\n")
 	cfg, err := LoadConfig(root)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got := cfg.Dev.Proxy["/api"]; got != "http://localhost:3091" {
-		t.Fatalf("Dev.Proxy[/api] = %q, want http://localhost:3091", got)
+	want := map[string]Proxy{
+		"/api":  {Target: "http://localhost:3091"},
+		"/auth": {Target: "https://auth.test", ChangeOrigin: true},
+		"/ws":   {Target: "http://localhost:3092"},
+	}
+	if !maps.Equal(cfg.Dev.Proxy, want) {
+		t.Fatalf("Dev.Proxy = %+v, want %+v", cfg.Dev.Proxy, want)
+	}
+}
+
+func TestLoadConfigDevProxyChangeOriginMustBeBoolean(t *testing.T) {
+	requireNode(t)
+	root := writeConfig(t, "export default { dev: { proxy: { '/api': { target: 'http://localhost:3091', changeOrigin: 'yes' } } } };\n")
+	_, err := LoadConfig(root)
+	if err == nil || !strings.Contains(err.Error(), `dev.proxy changeOrigin for "/api" must be a boolean; got "yes"`) {
+		t.Fatalf("want the changeOrigin type error, got %v", err)
 	}
 }
 
@@ -431,6 +448,10 @@ func TestLoadConfigNullBehavesAsUnset(t *testing.T) {
 			name: "proxy target undefined",
 			body: "export default { dev: { proxy: { '/api': undefined } } };\n",
 		},
+		{
+			name: "proxy target unset in either form",
+			body: "export default { dev: { proxy: { '/api': { target: undefined, changeOrigin: true }, '/auth': null } } };\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -449,6 +470,9 @@ func TestLoadConfigNullBehavesAsUnset(t *testing.T) {
 			}
 			if cfg.Output != "" {
 				t.Errorf("Output = %q, want the unset default \"\"", cfg.Output)
+			}
+			if len(cfg.Dev.Proxy) != 0 {
+				t.Errorf("Dev.Proxy = %v, want no proxied prefix", cfg.Dev.Proxy)
 			}
 		})
 	}
@@ -488,13 +512,15 @@ func TestLoadConfigDevProxyPrefixMustStartWithSlash(t *testing.T) {
 
 func TestLoadConfigDevProxyTargetMustBeAbsoluteHTTPURL(t *testing.T) {
 	requireNode(t)
-	root := writeConfig(t, "export default { dev: { proxy: { '/api': 'localhost:3091' } } };\n")
-	_, err := LoadConfig(root)
-	if err == nil {
-		t.Fatal("expected an error for a non-URL dev.proxy target")
-	}
-	if !strings.Contains(err.Error(), `dev.proxy target for "/api" must be an absolute http or https URL`) {
-		t.Fatalf("unexpected error: %v", err)
+	// The object form's target follows the string form's rule, a non-string
+	// target fails it too, and the message shows the whole entry.
+	for _, entry := range []string{`'localhost:3091'`, `3091`, `{ target: 'localhost:3091' }`, `{ target: 3091 }`} {
+		t.Run(entry, func(t *testing.T) {
+			_, err := LoadConfig(writeConfig(t, "export default { dev: { proxy: { '/api': "+entry+" } } };\n"))
+			if err == nil || !strings.Contains(err.Error(), `dev.proxy target for "/api" must be an absolute http or https URL; got `) {
+				t.Fatalf("want the target error, got %v", err)
+			}
+		})
 	}
 }
 
@@ -546,8 +572,8 @@ func TestLoadConfigDevProxyTrailingSlashAndSiblingsAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got := cfg.Dev.Proxy["/api/"]; got != "http://localhost:3091" {
-		t.Fatalf("Dev.Proxy[/api/] = %q, want http://localhost:3091", got)
+	if got := cfg.Dev.Proxy["/api/"].Target; got != "http://localhost:3091" {
+		t.Fatalf("Dev.Proxy[/api/].Target = %q, want http://localhost:3091", got)
 	}
 	if len(cfg.Dev.Proxy) != 3 {
 		t.Fatalf("Dev.Proxy = %v, want all three prefixes preserved", cfg.Dev.Proxy)

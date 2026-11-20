@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/serve"
 )
 
@@ -261,7 +262,7 @@ func TestDevProxy(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	backendURL := "http://backend.test"
-	srv := newServer(dist, serve.ModeSPA, ctx, map[string]string{"/api": backendURL})
+	srv := newServer(dist, serve.ModeSPA, ctx, map[string]config.Proxy{"/api": {Target: backendURL}})
 	var proxyLog bytes.Buffer
 	srv.proxyLog = &proxyLog
 	handler := srv.handler()
@@ -310,6 +311,39 @@ func TestDevProxy(t *testing.T) {
 	}
 }
 
+// TestDevProxyChangeOrigin pins the Host header the backend receives: the
+// browser's by default (the string form), the target's with changeOrigin, for a
+// plain request and a WebSocket upgrade alike.
+func TestDevProxyChangeOrigin(t *testing.T) {
+	sent := make(chan *http.Request, 1)
+	oldTransport := http.DefaultTransport
+	http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		sent <- r
+		return &http.Response{StatusCode: http.StatusNoContent, Body: http.NoBody, Request: r}, nil
+	})
+	t.Cleanup(func() { http.DefaultTransport = oldTransport })
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	dist := writeDist(t)
+	for _, tt := range []struct {
+		changeOrigin bool
+		want         string
+	}{{false, "puzzle.test"}, {true, "backend.test:8000"}} {
+		handler := newServer(dist, serve.ModeSPA, ctx, map[string]config.Proxy{"/api": {Target: "http://backend.test:8000", ChangeOrigin: tt.changeOrigin}}).handler()
+		for _, upgrade := range []bool{false, true} {
+			req := httptest.NewRequest(http.MethodGet, "http://puzzle.test/api/socket", nil)
+			if upgrade {
+				req.Header.Set("Connection", "Upgrade")
+				req.Header.Set("Upgrade", "websocket")
+			}
+			handler.ServeHTTP(httptest.NewRecorder(), req)
+			if got := <-sent; got.Host != tt.want || (got.Header.Get("Upgrade") == "websocket") != upgrade {
+				t.Errorf("changeOrigin %v, upgrade %v: backend got Host %q, Upgrade %q; want Host %q", tt.changeOrigin, upgrade, got.Host, got.Header.Get("Upgrade"), tt.want)
+			}
+		}
+	}
+}
+
 // TestProxyPrefixShapesDoNotPanic covers the two proxy maps that used to take
 // `puzzle dev` down with a raw http.ServeMux panic — an empty pattern from a "/"
 // prefix, and a repeated pattern from two prefixes that normalize to the same
@@ -328,25 +362,25 @@ func TestProxyPrefixShapesDoNotPanic(t *testing.T) {
 	dist := writeDist(t)
 	tests := []struct {
 		name           string
-		proxies        map[string]string
+		proxies        map[string]config.Proxy
 		proxiedPath    string
 		wantRootStatus int
 	}{
 		{
 			name:           "single prefix",
-			proxies:        map[string]string{"/api": down},
+			proxies:        map[string]config.Proxy{"/api": {Target: down}},
 			proxiedPath:    "/api/todos",
 			wantRootStatus: http.StatusOK, // the SPA shell still owns /
 		},
 		{
 			name:           "duplicate after normalization",
-			proxies:        map[string]string{"/api": down, "/api/": down},
+			proxies:        map[string]config.Proxy{"/api": {Target: down}, "/api/": {Target: down}},
 			proxiedPath:    "/api/todos",
 			wantRootStatus: http.StatusOK,
 		},
 		{
 			name:           "root prefix",
-			proxies:        map[string]string{"/": down},
+			proxies:        map[string]config.Proxy{"/": {Target: down}},
 			proxiedPath:    "/anything",
 			wantRootStatus: http.StatusBadGateway, // the proxy owns everything
 		},

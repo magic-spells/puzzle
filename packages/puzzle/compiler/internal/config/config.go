@@ -124,8 +124,15 @@ type Build struct {
 
 // Dev mirrors the `dev` block of puzzle.config.js.
 type Dev struct {
-	// Proxy maps same-origin path prefixes to backend origins for puzzle dev.
-	Proxy map[string]string `json:"proxy"`
+	// Proxy maps same-origin path prefixes to the backend puzzle dev forwards them to.
+	Proxy map[string]Proxy
+}
+
+// Proxy is one dev.proxy entry, Vite's { target, changeOrigin }; a bare URL
+// string is the target alone.
+type Proxy struct {
+	Target       string // the backend's absolute http(s) URL
+	ChangeOrigin bool   // send the target's host as Host, not the browser's
 }
 
 // TailwindEnabled reports whether the Tailwind pipeline is declared.
@@ -186,7 +193,10 @@ type rawConfig struct {
 		Splitting   json.RawMessage `json:"splitting"`
 		HashNames   json.RawMessage `json:"hashNames"`
 	} `json:"build"`
-	Dev Dev `json:"dev"`
+	Dev struct {
+		// Proxy values are a URL string or an object, told apart in validate.
+		Proxy map[string]json.RawMessage `json:"proxy"`
+	} `json:"dev"`
 	// Output is kept raw so a non-string or unsupported value can be named
 	// precisely in the rejection message (parallel to build.dropConsole).
 	Output json.RawMessage `json:"output"`
@@ -400,8 +410,11 @@ func validate(raw rawConfig) (Config, error) {
 	}
 
 	// dev.proxy is consumed only by puzzle dev. Prefixes stay intact when
-	// forwarded, so each key must be an absolute request path prefix and each
-	// target must name an http(s) backend origin.
+	// forwarded, so each key must be an absolute request path prefix. Each value
+	// is a target URL string or Vite's { target, changeOrigin }, whose other keys
+	// are ignored. The target must name an http(s) backend origin; an unset one
+	// (a dev-only process.env value) leaves its prefix unproxied in either form,
+	// so it never fails `puzzle build`.
 	//
 	// Two further rules exist because dev registers each prefix with a
 	// http.ServeMux, and ServeMux PANICS on a bad or repeated pattern — a panic on
@@ -417,8 +430,17 @@ func validate(raw rawConfig) (Config, error) {
 	}
 	sort.Strings(prefixes)
 	routes := make(map[string]string, len(prefixes))
+	cfg.Dev.Proxy = make(map[string]Proxy, len(prefixes))
 	for _, prefix := range prefixes {
-		target := raw.Dev.Proxy[prefix]
+		value := raw.Dev.Proxy[prefix]
+		target := value
+		var entry map[string]json.RawMessage
+		if json.Unmarshal(value, &entry) == nil {
+			target = entry["target"]
+		}
+		if unset(target) {
+			continue
+		}
 		if !strings.HasPrefix(prefix, "/") {
 			return Config{}, fmt.Errorf(
 				"%s: dev.proxy prefix %q must start with '/'",
@@ -443,15 +465,23 @@ func validate(raw rawConfig) (Config, error) {
 			)
 		}
 		routes[route] = prefix
-		parsed, err := url.Parse(target)
-		if err != nil || !parsed.IsAbs() || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		var p Proxy
+		if v := entry["changeOrigin"]; !unset(v) && json.Unmarshal(v, &p.ChangeOrigin) != nil {
 			return Config{}, fmt.Errorf(
-				"%s: dev.proxy target for %q must be an absolute http or https URL; got %q",
-				ConfigFileName, prefix, target,
+				"%s: dev.proxy changeOrigin for %q must be a boolean; got %s",
+				ConfigFileName, prefix, strings.TrimSpace(string(v)),
 			)
 		}
+		_ = json.Unmarshal(target, &p.Target) // a non-string target stays "" and fails below
+		parsed, err := url.Parse(p.Target)
+		if err != nil || !parsed.IsAbs() || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return Config{}, fmt.Errorf(
+				"%s: dev.proxy target for %q must be an absolute http or https URL; got %s",
+				ConfigFileName, prefix, strings.TrimSpace(string(value)),
+			)
+		}
+		cfg.Dev.Proxy[prefix] = p
 	}
-	cfg.Dev.Proxy = raw.Dev.Proxy
 
 	// output: the prerender opt-in. Absent leaves it "" (the default SPA build);
 	// the accepted values are 'static' (true static pages) and 'hybrid'

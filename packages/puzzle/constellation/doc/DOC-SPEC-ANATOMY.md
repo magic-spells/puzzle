@@ -73,7 +73,7 @@ app.mount();
 | `build.sourceMap` | Boolean, default `false`: a linked source map for builds ([[DECISION-D88-SOURCEMAP-OPT-OUT]]). |
 | `build.splitting` | Boolean, default `false`: lazy chunks for dynamic `import()` (§59). |
 | `build.hashNames` | Boolean, on by default in production: content-hashed output names (§59). |
-| `dev.proxy` | `{ '/api': 'http://localhost:8080' }`: same-origin prefixes `puzzle dev` forwards ([[DECISION-D110-DEV-PROXY-PREFIX-VALIDATION]]). |
+| `dev.proxy` | `{ '/api': 'http://localhost:8080' }`: same-origin prefixes `puzzle dev` forwards, with the browser's `Host`; `{ target, changeOrigin: true }` sends the target's `Host` instead ([[DECISION-D110-DEV-PROXY-PREFIX-VALIDATION]], [[DECISION-D201-DEV-PROXY-CHANGE-ORIGIN]]). |
 | `output` | `'static'` or `'hybrid'`; absent is the SPA build (§36). |
 | `i18n` | `{ locales, defaultLocale, routing?: 'prefix', detect?: boolean }`: translations (§11, §66, [[DOC-SPEC-BUILD]] §13). |
 | `site` | The app's public origin, for `hreflang` and the sitemap ([[DOC-SPEC-BUILD]] §13). |
