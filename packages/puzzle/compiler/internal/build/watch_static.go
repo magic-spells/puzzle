@@ -10,9 +10,9 @@ package build
 // What makes static mode different, and why this file exists at all:
 //
 //   - A static build is THREE esbuild passes, not one — the browser app.js pass
-//     (which in this mode exists only to collect <style> and report compile
-//     errors; its output is discarded, exactly as the one-shot build discards
-//     staging/app.js), the node-platform prerender bundle, and the multi-entry
+//     (which in this mode collects <style> and reports compile errors; only its
+//     app.css can ship, for a public page that links it, exactly as in the
+//     one-shot build), the node-platform prerender bundle, and the multi-entry
 //     per-page pass whose entry set is not known until the prerender has run.
 //   - The output cannot be patched in place. Pages, page bundles, and the
 //     stylesheet must all appear together or not at all, so every rebuild
@@ -153,6 +153,9 @@ type StaticWatchBuilder struct {
 	// its files are written into each one; nothing needs pruning.
 	locales          *locales.Result
 	lastI18nWarnings string
+
+	// warnedCSS: the unloaded-CSS warning prints once per session, as WatchBuilder's does.
+	warnedCSS bool
 }
 
 // StaticWatchOptions configure the static dev builder.
@@ -294,9 +297,10 @@ func (b *StaticWatchBuilder) buildContexts() error {
 	// on so a since-un-imported .pzl's <style> can be pruned from the collector
 	// exactly as WatchBuilder.Rebuild does. Write is OFF: static output ships no
 	// app.js (the one-shot build deletes staging/app.js before the swap), so this
-	// pass exists purely to compile every view once — surfacing errors and
-	// filling the CSS collector — and its bytes are dropped.
-	appOpts := newBundleOptions(b.root, b.entry, filepath.Join(b.warm, "app"), b.appPl, bundleFlags{Env: b.cfg.Env, Dev: true, Takeover: false})
+	// pass compiles every view once — surfacing errors and filling the CSS
+	// collector — and only its app.css can ship (rebuildInto). Outdir is the warm
+	// root, at staging depth, so that file's source map matches a one-shot build's.
+	appOpts := newBundleOptions(b.root, b.entry, b.warm, b.appPl, bundleFlags{Env: b.cfg.Env, Dev: true, Takeover: false})
 	appOpts.Write = false
 	appOpts.Metafile = true
 	appCtx, ctxErr := api.Context(appOpts)
@@ -566,6 +570,17 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *PhaseProfile, pla
 		}
 	}
 	candidateCSS := b.appPl.CSS()
+	// The pass's app.css ships only for a public page that links it (prerenderStaticPages, step 5).
+	linkedCSS := shellHashSupport(b.root).appCSS
+	if linkedCSS {
+		for _, out := range appResult.OutputFiles {
+			if name := filepath.Base(out.Path); strings.HasPrefix(name, "app.css") {
+				if err := os.WriteFile(filepath.Join(staging, name), out.Contents, 0o644); err != nil {
+					return fmt.Errorf("writing %s: %w", name, err)
+				}
+			}
+		}
+	}
 
 	// 2. Public assets, into the private staging tree (plain writes, no atomic
 	//    dance: nothing can observe staging until the swap).
@@ -692,6 +707,9 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *PhaseProfile, pla
 		if err := linkStaticPages(staging, b.warm, pagesMetafile, summary.Written, false); err != nil {
 			return err
 		}
+	}
+	if !linkedCSS && !b.warnedCSS {
+		b.warnedCSS = warnUnloadedCSS(b.root, appResult.Metafile, pagesMetafile, b.warm)
 	}
 
 	// 7. Refresh the reverse dependency graph from the two metafiles this rebuild

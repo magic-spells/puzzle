@@ -29,7 +29,8 @@ siblings such as buttons.
 
 ## Decision
 
-1. **Whitespace with no newline collapses to one space.**
+1. **Whitespace with no newline collapses to one space** (whitespace is ASCII
+   space, tab, CR and LF; U+00A0 and other non-ASCII spaces are text).
 2. **Newline-bearing whitespace at a parent's first/last-child edge is
    dropped.** A parent is an element, a component's children, a marker's
    fallback body, a snippet body, or a control block's own body (a `{#for}`
