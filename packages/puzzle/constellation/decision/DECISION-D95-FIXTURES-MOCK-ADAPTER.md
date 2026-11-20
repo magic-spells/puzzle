@@ -53,8 +53,12 @@ invented.
 - `latency` (number or `[min, max]`); `failRate` / `fail: true` produce non-ok
   responses that flow through the real error path (`PuzzleAdapterError`, with
   the `status` D161 reads to recognise `404` absence) rather than rejecting the
-  fetch. `handler({ method, url, path, body, collection })` covers
+  fetch. `handler({ method, url, path, body, headers, collection })` covers
   `store.request()`'s arbitrary paths; a falsy return falls through to CRUD.
+  `headers` is the post-`beforeRequest` header set as a plain object with
+  lower-case names (from a plain object, a `Headers` instance or an array of
+  pairs), so a mock can stand in for a server that checks a token
+  (`examples/auth`).
 - Returns a Response-shaped stand-in (the real `Response` isn't uniformly
   available) branded `[Symbol.for('puzzle.response')]: true`, which the
   adapter's `isResponse()` accepts. Each module declares the registry symbol
