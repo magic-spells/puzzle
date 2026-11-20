@@ -271,14 +271,12 @@ func prerenderStaticPages(absRoot, appEntry, staging, appMetafile string, public
 	dead := []string{"app.js", "app.js.map"}
 	if !linkedCSS {
 		dead = append(dead, "app.css", "app.css.map")
-		for _, css := range unloadedCSS(appMetafile, pagesMetafile, staging) {
-			if rel, err := filepath.Rel(absRoot, css); err == nil {
-				css = filepath.ToSlash(rel)
-			}
-			fmt.Fprintf(os.Stderr, "warning: %s is imported outside every page's views and layouts, so no static page loads it; import it from a layout or view\n", css)
-		}
+		warnUnloadedCSS(absRoot, appMetafile, pagesMetafile, staging)
 	}
 	for _, name := range dead {
+		if publicFiles[name] {
+			continue // the author's own public/app.css, copied over any compiler output
+		}
 		if err := os.Remove(filepath.Join(staging, name)); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("puzzle build --static: removing staging/%s: %w", name, err)
 		}
@@ -349,32 +347,29 @@ func linkStaticPages(staging, base, metafile string, written []staticPage, prelo
 	return nil
 }
 
-// unloadedCSS lists the CSS files the app entry's graph imports (paths relative
-// to the working directory) that no page graph does (relative to pagesBase).
-func unloadedCSS(appMetafile, pagesMetafile, pagesBase string) []string {
+// warnUnloadedCSS names each CSS file the app entry's graph imports (keys
+// relative to the working directory) that no page graph does (relative to
+// pagesBase), and reports whether there was one.
+func warnUnloadedCSS(absRoot, appMetafile, pagesMetafile, pagesBase string) bool {
 	app, err := metafileAllInputs(appMetafile)
 	if err != nil {
-		return nil
+		return false
 	}
-	var pages struct {
-		Inputs map[string]json.RawMessage `json:"inputs"`
-	}
-	_ = json.Unmarshal([]byte(pagesMetafile), &pages)
-	loaded := make(map[string]bool, len(pages.Inputs))
-	for key := range pages.Inputs {
-		if !filepath.IsAbs(key) {
-			key = filepath.Join(pagesBase, filepath.FromSlash(key))
-		}
-		loaded[resolvePath(key)] = true
-	}
+	loaded, _ := metafileGraph(pagesMetafile, pagesBase)
 	var out []string
 	for path := range app {
-		if filepath.Ext(path) == ".css" && !loaded[path] {
+		if _, ok := loaded[path]; !ok && filepath.Ext(path) == ".css" {
+			if rel, err := filepath.Rel(absRoot, path); err == nil {
+				path = filepath.ToSlash(rel)
+			}
 			out = append(out, path)
 		}
 	}
 	sort.Strings(out)
-	return out
+	for _, css := range out {
+		fmt.Fprintf(os.Stderr, "warning: %s is imported outside every page's views and layouts, so no static page loads it; import it from a layout or view\n", css)
+	}
+	return len(out) > 0
 }
 
 // staticPrerenderStdin builds the generated node entry for the static prerender

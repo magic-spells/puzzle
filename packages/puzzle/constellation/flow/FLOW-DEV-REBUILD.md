@@ -80,8 +80,9 @@ and gotchas live on [[COMPONENT-DEV-SERVER]].
 ## Static specifics ([[FLOW-PRERENDER]])
 
 Every rebuild runs the real pipeline, so the developer sees the artifact, not a router
-that won't ship. The app-bundle pass still runs with its bytes discarded — it compiles
-every view (surfacing errors) and fills the `<style>` collector. The `node` prerender
+that won't ship. The app-bundle pass still runs — it compiles every view (surfacing
+errors) and fills the `<style>` collector; of its output only `app.css` ships, and only
+for a public page that links it, as in the one-shot build. The `node` prerender
 subprocess stays cold per rebuild; a persistent render worker is out of scope (module
 invalidation and app global state in a long-lived Node process).
 

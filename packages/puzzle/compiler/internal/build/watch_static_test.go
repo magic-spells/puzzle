@@ -355,6 +355,14 @@ export default class DefaultLayout extends PuzzleView {}
 `)
 	})
 
+	// CSS that only app.js imports ships as app.css while a public page links
+	// /app.css; the next step's shell drops the link and with it the file.
+	step("shell links app.js CSS", []string{abs("app/app.js"), abs("app/public/index.html")}, &wantPlan{full: true}, func() {
+		write("app/entry.css", "body { margin: 0; }\n")
+		write("app/app.js", "import './entry.css';\n"+readFile(t, abs("app/app.js")))
+		write("app/public/index.html", strings.Replace(readFile(t, abs("app/public/index.html")), "</head>", "  <link href=\"/app.css\" rel=\"stylesheet\">\n</head>", 1))
+	})
+
 	// The shell is spliced into every page and belongs to no module graph.
 	step("shell edit", []string{abs("app/public/index.html")}, &wantPlan{full: true}, func() {
 		write("app/public/index.html", `<!DOCTYPE html>
@@ -467,6 +475,27 @@ export default [
 	})
 	if got := builder.lastPlan.reason; got != "a locale file changed" {
 		t.Errorf("locale edit classified as %q, want the locale classification", got)
+	}
+}
+
+// CSS only app.js imports reaches no static page. The one-shot build names it
+// on every run; a dev session names it once, like the SPA dev builder.
+func TestStaticWatchWarnsUnloadedCSSOnce(t *testing.T) {
+	requireStaticRuntime(t)
+	files := baseSSGFixture()
+	files["app/entry.css"] = "body { margin: 0; }\n"
+	files["app/app.js"] = "import './entry.css';\n" + files["app/app.js"]
+	root := writeSSGFixture(t, files)
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer builder.Dispose()
+	for i, want := range []int{1, 0} {
+		stderr := captureStderr(t, func() { err = builder.Rebuild(nil) })
+		if got := strings.Count(stderr, "app/entry.css is imported outside every page's views and layouts"); err != nil || got != want {
+			t.Fatalf("rebuild %d: %v; warning printed %d times, want %d: %s", i+1, err, got, want, stderr)
+		}
 	}
 }
 

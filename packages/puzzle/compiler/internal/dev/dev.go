@@ -842,14 +842,15 @@ func (s *server) reverseProxy(prefix, targetURL string) http.Handler {
 	proxy := httputil.NewSingleHostReverseProxy(target)
 
 	// NewSingleHostReverseProxy normally prepends a path carried by the target
-	// URL. dev.proxy has no rewrite semantics, so keep the browser's path and
-	// query byte-for-byte while still letting the standard director set the
-	// backend scheme, host, and forwarding headers.
+	// URL and keeps the browser's Host header. dev.proxy has no rewrite
+	// semantics, so keep the browser's path and query byte-for-byte, and send the
+	// target's Host header: a hosted API routes on it.
 	director := proxy.Director
 	proxy.Director = func(r *http.Request) {
 		requestPath, requestRawPath, requestQuery := r.URL.Path, r.URL.RawPath, r.URL.RawQuery
 		director(r)
 		r.URL.Path, r.URL.RawPath, r.URL.RawQuery = requestPath, requestRawPath, requestQuery
+		r.Host = target.Host
 	}
 	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
 		fmt.Fprintf(s.proxyLog, "proxy %s → %s refused — is the backend running?\n", prefix, targetURL)

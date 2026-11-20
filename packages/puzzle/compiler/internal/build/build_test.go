@@ -2802,12 +2802,13 @@ func TestSplitShellWithoutRecognizedEntrySkipsPreloads(t *testing.T) {
 func TestBuildUnlinkedEntryCSSWarning(t *testing.T) {
 	for _, tc := range []struct {
 		name, page, output string
-		dev, noCSS         bool
+		dev, noCSS, public bool
 	}{
 		{name: "production"},
 		{name: "development", dev: true},
 		{name: "static", output: "static"},
 		{name: "static linked", output: "static", page: "index.html"},
+		{name: "static public app.css", output: "static", page: "index.html", noCSS: true, public: true},
 		{name: "linked", page: "index.html"},
 		{name: "other page links", page: "embed.html"},
 		{name: "no CSS", noCSS: true},
@@ -2829,6 +2830,9 @@ func TestBuildUnlinkedEntryCSSWarning(t *testing.T) {
 					body += readFile(t, page)
 				}
 				write(t, page, body)
+			}
+			if tc.public {
+				write(t, filepath.Join(root, "app", "public", "app.css"), "body { color: blue; }")
 			}
 			var err error
 			stderr := captureStderr(t, func() { err = Build(root, Options{Development: tc.dev, Output: tc.output}) })

@@ -44,8 +44,10 @@ and the warm `tailwindcss --watch` child. Output is byte-for-byte what
   `SweepWorkDirs` prefix, so an idle session's tree survives.
 - **Page and app passes run `Write: false`.** Page `OutputFiles` are written
   into staging, which prunes deleted routes and superseded chunks for free. The
-  app pass only compiles views, fills the `<style>` collector and surfaces
-  errors (static ships no `app.js`).
+  app pass compiles views, fills the `<style>` collector and surfaces errors; of
+  its output only `app.css` (and its map) is written, and only when a public
+  page links `/app.css`, as the one-shot build keeps it (static ships no
+  `app.js`). Its Outdir is the warm root so that map matches a one-shot build's.
 - **Contexts are replaced, never mutated, on the two frozen facts**: a usage
   `Features` bit flip (all three Defines) or a route-set change (page entries).
   Everything else is esbuild's own invalidation. When in doubt, tear down.

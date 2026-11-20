@@ -2052,7 +2052,7 @@ var wsRun = regexp.MustCompile(`[ \t\r\n]+`)
 // boundary at that edge still separates words (see the package doc). A dropped
 // whitespace-only node reports both.
 func processText(raw string) (s string, keep, padL, padR bool) {
-	if strings.TrimSpace(raw) == "" {
+	if strings.Trim(raw, " \t\r\n") == "" {
 		if strings.ContainsAny(raw, "\n\r") {
 			return "", false, true, true
 		}
