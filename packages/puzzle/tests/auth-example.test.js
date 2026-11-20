@@ -242,6 +242,53 @@ describe('examples/auth', () => {
 		expect(app.container.textContent).not.toContain('Try again');
 	});
 
+	it('renews and retries a page whose first load gets a 401', async () => {
+		await boot('/login');
+		await signInWith('ada@example.com', 'puzzle');
+		await vi.waitFor(() => expect(currentPath()).toBe('/dashboard'));
+
+		// a reload, and the server refuses the first notes read: a revoked token
+		app.destroy();
+		const saved = localStorage.getItem('puzzle-auth-example');
+		clearSession(app.store);
+		localStorage.setItem('puzzle-auth-example', saved);
+		let refused = 0;
+		noteOverride = (r) => (r.method === 'GET' && !refused++ ? { status: 401, body: { error: 'revoked' } } : undefined);
+		await boot('/dashboard');
+
+		// the error view takes the page's place, renews, and loads it, layout and all
+		await vi.waitFor(() => expect(app.findAll('.notes li')).toHaveLength(2));
+		expect(app.find('header').textContent).toContain('Ada Lovelace');
+	});
+
+	it('offers Try again when a first load fails for another reason, and it loads the page', async () => {
+		await boot('/login');
+		await signInWith('ada@example.com', 'puzzle');
+		await vi.waitFor(() => expect(currentPath()).toBe('/dashboard'));
+
+		// a reload while the server fails every notes read with a 500
+		app.destroy();
+		const saved = localStorage.getItem('puzzle-auth-example');
+		clearSession(app.store);
+		localStorage.setItem('puzzle-auth-example', saved);
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		noteOverride = (r) => (r.method === 'GET' ? { status: 500, body: { error: 'Down.' } } : undefined);
+		await boot('/dashboard');
+		const tryAgain = await vi.waitFor(() => {
+			const button = [...app.findAll('button')].find((b) => b.textContent.includes('Try again'));
+			expect(button).toBeTruthy();
+			return button;
+		});
+		// the error view stands in for the layout too
+		expect(app.find('header')).toBeNull();
+
+		// the server is back: the button loads the page, layout and all
+		noteOverride = null;
+		await app.click(tryAgain);
+		await vi.waitFor(() => expect(app.findAll('.notes li')).toHaveLength(2));
+		expect(app.find('header').textContent).toContain('Ada Lovelace');
+	});
+
 	it('sends you to sign in again when the refresh token is refused too', async () => {
 		await boot('/login');
 		await signInWith('ada@example.com', 'puzzle');
