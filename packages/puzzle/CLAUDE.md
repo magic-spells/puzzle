@@ -68,8 +68,8 @@ enforced, not merely advised.
   `0.1.2` (the embedded agent skill + `puzzle add skills`, D78/v1.45), `0.2.0`
   (2026-07-24), `0.3.0` (2026-07-25), `0.3.1` (2026-07-25), `0.4.0`
   (2026-07-28), `0.5.0` (2026-08-07), `0.6.0` (2026-08-15), `0.7.0`
-  (2026-09-09), and **`0.8.0` (2026-10-01, the current `latest`)** are live on
-  npm (six packages since 0.7.0 — the root plus five platform binaries — MIT,
+  (2026-09-09), `0.8.0` (2026-10-01), and **`0.9.0` (2026-10-21, the current
+  `latest`)** are live on npm (six packages since 0.7.0 — the root plus five platform binaries — MIT,
   manual publish via
   `npm run release:prep` — there is no CI publish). Everything from D88 onward
   shipped in `0.3.0` — minor, not patch: two new export subpaths (`./testing`,
@@ -215,7 +215,7 @@ enforced, not merely advised.
   version-floor mechanism closes the gap as D169 (0.8.0): each piece manifest
   now pins the floor it needs, so the gate becomes "every floor a manifest
   declares is published on npm".
-- **`0.8.0` (2026-10-01, published — the current `latest`; tagged `v0.8.0`
+- **`0.8.0` (2026-10-01, published; tagged `v0.8.0`
   with `packages/puzzle-lang/v0.8.0`; `0.7.1` was never published and is
   folded in):** one language, incremental rendering. D169 registry version
   floors; D170 incremental rendering (persistent `{#for}` row blocks,
@@ -243,9 +243,10 @@ enforced, not merely advised.
   DECISION-D176-EXPRESSION-LANGUAGE). Heavily BREAKING for templates — the
   CHANGELOG opens the entry with an "Upgrading from 0.7" checklist.
   Production sizes: hello-world **21.9 KB gzip**, todos **26.0 KB gzip**.
-- **`0.9.0` (ready to publish (stamps bumped; Cory tags and publishes) —
-  until he does, `0.8.0` stays npm `latest`; there is no npm
-  `0.8.1`, which was the Go-module-only `packages/puzzle-lang/v0.8.1` tag):** multilingual static sites. D177
+- **`0.9.0` (2026-10-21, published; tagged `v0.9.0` with
+  `packages/puzzle-lang/v0.9.0` and merged to `main`; there is no npm
+  `0.8.1`, which was the Go-module-only `packages/puzzle-lang/v0.8.1` tag, and
+  `packages/puzzle-lang/v0.9.1` is Go-module-only too):** multilingual static sites. D177
   locale URL prefixes (`i18n.routing: 'prefix'`, per-locale prerender in
   static and hybrid plus SPA path routing, `hreflang` + `site`, sitemap,
   first-visit redirect, `<html dir>`, translated `meta` titles; BREAKING:
@@ -256,9 +257,9 @@ enforced, not merely advised.
   `is={ cards[key] }` forwards children as the normal default slot; nullish
   selection renders nothing; BREAKING: `Component` is a reserved tag/family
   root); and D181 content-hashed production entry/CSS/page
-  module names and static-import modulepreloads (`build.hashNames` is on
-  by default in production, with a `false` opt-out; a shell that cannot follow
-  a default-hashed name keeps the fixed name with a warning). The agent/tooling APIs:
+  module names and static-import modulepreloads (`build.hashNames` followed
+  `build.splitting` in 0.9.0; 0.10.0 turns it on for every production
+  build). The agent/tooling APIs:
   D182 `push()`/`replace()` resolve a never-rejecting `NavigationResult`;
   D183 `router.views` and the `agent` route field; D184 `store.observe()`;
   D185 `app.idle()`; D186 dynamic URL bindings drop script schemes; D187
@@ -272,12 +273,27 @@ enforced, not merely advised.
   `data-theme` is `dark | dim | mixed | light`, BREAKING for copied theme
   files) and every item-form `{#for}` row keyed. Production sizes: hello-world
   **23.0 KB gzip**, todos **27.0 KB gzip** (about +1 KB each over 0.8.0,
-  mostly the D182–D189 built-in APIs). The next free decision number is
-  **D202** (the 0.10 work holds D191 setState/getState, D192 forms, D193
-  server queries, D194 the Vitest plugin, D195 link prefetch, D196 named
-  routes, D197 share(), D198 deploy templates, D199 the upgrade pass,
-  `puzzle check --fix`, with the `<Outlet/>` and `functions` renames, D200
-  the Node 24 minimum, and D201 dev.proxy `changeOrigin`).
+  mostly the D182–D189 built-in APIs).
+- **`0.10.0` (ready to publish (stamps bumped; Cory tags and publishes) —
+  until he does, `0.9.0` stays npm `latest`):** forms, server queries, tests
+  and deploys. D190 `env` config values (`import.meta.env.KEY`); D191
+  `setState()`/`getState()` (BREAKING: `setData()` is gone; a `setState()` of
+  a key `data()` read re-runs `data()`, D23); D192 the opt-in `/forms`
+  subpath (`createForm`); D193 server queries (`findMany` `query`,
+  `store.invalidate()`, `store.syncStatus()`); D194 the `/vitest` plugin and
+  the scaffolded test suite; D195 lazy-route link prefetch; D196 named routes;
+  D197 `data({ params, props, shared })` and `share()` (BREAKING); D198 deploy
+  templates (`puzzle add deploy <host>`); D199 the upgrade pass,
+  `puzzle check --fix`, with the `<Outlet/>` rename (a bare `<Slot/>` is an
+  error) and the `functions` config key (BREAKING); D200 the Node 24 minimum
+  (BREAKING); D201 `dev.proxy` `{ target, changeOrigin }`. Also BREAKING:
+  production builds hash output names by default (D181), `puzzle check` needs
+  TypeScript 7, React/Vue/Svelte spellings are compile errors (D147),
+  `StoreOptions`/`PuzzleValue` are removed, and `injectShell` /
+  `injectStaticShell` take no `title`. New examples: `auth`,
+  `paginated-posts`. Production sizes: hello-world **24.2 KB gzip**, todos
+  **28.1 KB gzip** (+1.2 / +1.1 KB over 0.9.0). The next free decision number
+  is **D202**.
 - Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
   amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74, D160 = v1.75,
@@ -290,7 +306,8 @@ enforced, not merely advised.
   decision record — do not restate them here; they move faster than this file.
   (There is deliberately no DOC-DECISIONS index card: each decision lives in
   its numbered card only, never in two spots.)
-- Public package: `@magic-spells/puzzle`, with root, `./adapter`, `./morph`,
+- Public package: `@magic-spells/puzzle`, with root, `./adapter`, `./forms`
+  (D192), `./morph`,
   `./router-modes`, `./ssg`, `./static`, `./testing`, `./fixtures`,
   `./vitest` (Node-only, D194), and `./puzzle-env` exports (plus the build-served `./formatters/manifest` and
   `./i18n/manifest`, which a Puzzle build replaces at bundle time)

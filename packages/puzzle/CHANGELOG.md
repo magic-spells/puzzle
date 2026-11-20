@@ -203,7 +203,10 @@ Pick `<Children/>` if that position received content from the call site, or
 `'static'` now produces a genuinely static site — no router, no `app.js`. This
 one is *not* a compile error; it silently builds a different product.
 
-## 0.10.0 — unreleased
+## 0.10.0 — 2026-11-20
+
+Production sizes: hello-world **24.2 KB gzip** (23.0 in 0.9.0), todos
+**28.1 KB gzip** (27.0).
 
 ### Breaking
 
@@ -583,7 +586,6 @@ one is *not* a compile error; it silently builds a different product.
 - **`sheet` and `bottom-sheet` overlays use `--color-scrim`
   (puzzle-pieces).** In light mode the scrim is the palette's slate at 0.4
   instead of black at 0.5, so it reads lighter and tinted.
-
 - **Every piece writes state with `setState()` (puzzle-pieces).** The pieces
   moved off `setData()` (D191) and dropped the `refresh()` calls D23 made
   redundant. State that feeds a render now lives in state keys rather than
