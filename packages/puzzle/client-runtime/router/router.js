@@ -1715,11 +1715,11 @@ export class Router {
 		// template — the prerendered content is replaced by identical real content in
 		// ONE synchronous swap, no skeleton shown (so #shouldHold's D52 hold never
 		// engages either — it needs a skeleton to have actually rendered). Scoped
-		// TIGHTLY to nav #0 + marker present; a data() rejection here follows the
-		// normal initial-nav gate-failure path (catch below: stay put, URL untouched,
-		// prerendered DOM left intact). All other D39 behavior — SPA cold boot with a
-		// skeleton, subsequent client-side navigations to skeleton views — is
-		// byte-identical (isSSGTakeover false ⇒ skeletonExempt is the old check).
+		// TIGHTLY to nav #0 + marker present; a data() rejection here stays put
+		// (catch below: URL untouched, prerendered DOM left intact). All other D39
+		// behavior — SPA cold boot with a skeleton, subsequent client-side
+		// navigations to skeleton views — is byte-identical (isSSGTakeover false ⇒
+		// skeletonExempt is the old check).
 		//
 		// __PUZZLE_TAKEOVER__ leads the conjunction so a plain SPA build folds the
 		// whole probe to `false` at compile time. Probed INLINE (never hoisted into

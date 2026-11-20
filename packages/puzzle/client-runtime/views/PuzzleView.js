@@ -1439,7 +1439,7 @@ export class PuzzleView {
 				// reserved position NOW and resolve the mount — the real render
 				// patches over it when data() commits. The mount promise no longer
 				// waits on data, so a data() rejection surfaces here (logged), not to
-				// the caller; the skeleton stays up.
+				// the caller; §60 replaces the skeleton.
 				pending.catch((err) =>
 					this.#handleViewFailure('[puzzle] data() failed behind a skeleton:', err, 'mount')
 				);
