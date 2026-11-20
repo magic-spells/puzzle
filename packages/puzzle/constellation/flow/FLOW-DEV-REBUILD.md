@@ -81,8 +81,10 @@ and gotchas live on [[COMPONENT-DEV-SERVER]].
 
 Every rebuild runs the real pipeline, so the developer sees the artifact, not a router
 that won't ship. The app-bundle pass still runs — it compiles every view (surfacing
-errors) and fills the `<style>` collector; of its output only `app.css` ships, and only
-for a public page that links it, as in the one-shot build. The `node` prerender
+errors) and fills the `<style>` collector. Of its output only `app.css` and its linked
+map `app.css.map` (a dev pass always emits one) are written, and only when a public
+page links the compiler's `/app.css`, as the one-shot build keeps them; an author's own
+`public/app.css` is copied over the compiler's. The `node` prerender
 subprocess stays cold per rebuild; a persistent render worker is out of scope (module
 invalidation and app global state in a long-lived Node process).
 

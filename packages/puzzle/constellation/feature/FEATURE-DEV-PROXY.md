@@ -34,12 +34,9 @@ export default { dev: { proxy: { '/api': 'http://localhost:3091' } } };
 - **Routing** ([[FILE-DEV-SERVER]]): prefixes register on the mux (both `/api`
   and `/api/` forms, sorted) before the static catch-all, backed by
   `httputil.NewSingleHostReverseProxy`. Streaming responses (SSE) pass through.
-- **No path rewriting.** A wrapped director restores the browser's path, raw
-  path and query byte-for-byte; the scheme, address and `Host` header come from
-  the target (a hosted API routes on `Host`), and the proxy appends
-  `X-Forwarded-For`. The proxy adds no `X-Forwarded-Host` (one the client sent
-  passes through), so a backend on `localhost` sees its own `localhost:<port>`,
-  not the dev server's. A path carried by the target URL is ignored.
+- **No rewriting.** A wrapped director restores the browser's path, raw path and
+  query byte-for-byte; only scheme, host and forwarding headers come from the
+  target. A path carried by the target URL is ignored.
 - **Backend down** → one log line (`proxy /api → … refused — is the backend
   running?`) and a 502 `puzzle dev: backend unavailable`.
 - Config is read once at startup; edits need a restart, like every other key.

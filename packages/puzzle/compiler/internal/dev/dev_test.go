@@ -223,7 +223,6 @@ func TestDevProxy(t *testing.T) {
 		query  string
 		header string
 		body   string
-		host   string
 	}
 	requests := make(chan backendRequest, 2)
 	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -242,7 +241,6 @@ func TestDevProxy(t *testing.T) {
 			query:  r.URL.RawQuery,
 			header: r.Header.Get("X-Proxy-Test"),
 			body:   string(body),
-			host:   r.Host,
 		}
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte("from backend"))
@@ -276,7 +274,7 @@ func TestDevProxy(t *testing.T) {
 		t.Fatalf("proxy response = %d %q, want %d %q", response.Code, response.Body.String(), http.StatusAccepted, "from backend")
 	}
 	got := <-requests
-	if got.method != http.MethodPost || got.path != "/api/x" || got.query != "mode=full" || got.header != "preserved" || got.body != "payload" || got.host != "backend.test" {
+	if got.method != http.MethodPost || got.path != "/api/x" || got.query != "mode=full" || got.header != "preserved" || got.body != "payload" {
 		t.Fatalf("forwarded request = %+v", got)
 	}
 

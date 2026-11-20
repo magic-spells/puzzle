@@ -318,7 +318,7 @@ Pass `models` to `mountView` for a view that reads the store, or boot the whole 
 export default { dev: { proxy: { '/api': 'http://localhost:3091' } } };
 ```
 
-`puzzle dev` forwards `/api` and `/api/*` with the path unchanged and the backend's own `Host` header, so the app can use `apiURL: ''` and stay same-origin. A prefix must start with `/` and cannot be the root. Restart after changing it; production builds ignore it.
+`puzzle dev` forwards `/api` and `/api/*` with the path unchanged, so the app can use `apiURL: ''` and stay same-origin. A prefix must start with `/` and cannot be the root. Restart after changing it; production builds ignore it.
 
 ## Commands
 
