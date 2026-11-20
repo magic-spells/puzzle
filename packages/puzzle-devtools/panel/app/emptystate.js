@@ -20,7 +20,7 @@ const MISMATCH_HINT =
 	'The page speaks a wire protocol this extension cannot render, so nothing below would be trustworthy. See the Connection panel.';
 
 const WAITING_HINT =
-	'This panel reads a dev-only runtime bridge. Run the app with `puzzle dev` (or build with --mode development), then reload the page with DevTools open.';
+	"This panel reads a dev-only runtime bridge, which pages built with `output: 'static'` never load. Run the app with `puzzle dev` (or build with --mode development), then reload the page with DevTools open.";
 
 /**
  * Title + description for a panel's disconnected Empty block.

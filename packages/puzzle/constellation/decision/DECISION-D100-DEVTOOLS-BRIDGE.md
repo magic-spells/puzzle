@@ -41,6 +41,9 @@ framework internals. The protocol contract is SPEC §55.
   notification delivery (flush keys + notified set), router `#commitState`, and
   devstate's `registerView`/`unregisterView`. `PuzzleView` carries inert readers
   `_derived()` and `_vnodeTree()`, and the bridge reads the state layer through the public `getState()` (D191).
+- **Static pages** (`output: 'static'`, D81) mount through `mountStatic` with no
+  `PuzzleApp`, so they never register; the extension shows its no-app state
+  there and says why.
 - **Protocol:** envelope `{ puzzle: 1, v: 1, type, payload }`. Events `hello`,
   `app-mounted`, `app-unmounted`, `view-mounted`, `view-destroyed`, `flush`,
   `route-commit`; requests `snapshot:views|records|subscriptions|route|profile`,
