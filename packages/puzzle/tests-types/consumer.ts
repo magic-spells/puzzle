@@ -533,7 +533,7 @@ const config: PuzzleAppConfig = {
 	routes,
 	models: { todo: Todo },
 	adapter,
-	formatters: { upcase },
+	functions: { upcase },
 	apiURL: '',
 	beforeRequest: attachAuth,
 	// Path routing is the default and needs no `routerMode`; the opt-in modes
@@ -821,7 +821,7 @@ const staticOptions: MountStaticOptions = {
 	layout: null,
 	route: staticRoute,
 	models: { todo: Todo },
-	formatters: { upcase },
+	functions: { upcase },
 	apiURL: '',
 	adapter,
 	// The three options the kernel destructures beyond the summary basics. (A static

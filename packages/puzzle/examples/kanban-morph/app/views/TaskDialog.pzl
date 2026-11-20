@@ -26,7 +26,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // Routed overlay for a task's details — the leaf child of the board route
-// (path 'task/:taskId'), rendered inside Board's <Slot/> so the board (and the
+// (path 'task/:taskId'), rendered inside Board's <Outlet/> so the board (and the
 // clicked card) stays mounted beneath it. There is ZERO morph code in this
 // view: the shell shares its data-puzzle-morph value with the card, and the
 // router pairs them on the way in and out (D55) — including the browser back

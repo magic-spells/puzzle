@@ -14,6 +14,7 @@ connections:
   - DECISION-D114-CALENDAR-DATE-FORMATTERS
   - DECISION-D150-RAW-TEMPLATE-BLOCK
   - DECISION-D79-LINK-FUNCTION
+  - DECISION-D199-UPGRADE-PASS
 ---
 
 # D174 — The function library
@@ -264,8 +265,10 @@ operators), `default` (→ `??`), `split` (→ `.split()`), `noescape` (→ a pl
 
 ## Registration and shadowing
 
-- **Apps register through the `formatters` config map** (the key keeps its
-  name; no `app.formatter()`), called bare: `{ specialFormat(x) }`. Order:
+- **Apps register through the `functions` config map** (no `app.function()`),
+  called bare: `{ specialFormat(x) }`; a static build reads the same map from
+  `app/functions.js`. The pre-0.10 `formatters` key throws, naming `functions`
+  and `puzzle check --fix` ([[DECISION-D199-UPGRADE-PASS]]). Order:
   manifest-selected built-ins, then app functions over them, then the
   router-backed `link` only if the app provided none. Runtime modules keep
   `formatters` names because they are compiler-facing
@@ -323,7 +326,11 @@ unknown-dynamic-preset default.
 - **Fixed en-US/UTC output** — every reader would see a format not theirs.
 - **Throw when an app shadows a standard name** — too strict; dev warning.
 - **`percentage` as a ratio** — authors type `12.5`.
-- **Rename the registration key to `functions`** — kept `formatters`.
+- **Keep the `formatters` registration key** — the project calls these
+  functions everywhere else, so the config key was the one place an author met
+  the old word, and it read as a second concept. Renamed to `functions` in
+  0.10; the runtime's internal names (`ctx.formatters`, the registry) stay,
+  since no app writes them.
 
 ## Open
 

@@ -171,7 +171,7 @@ func Generate(opts Options) (*Result, error) {
 // scaffolded component may be named one — plain, family root, or family member:
 // the compiler matches these tags before it resolves a component, so <Slot>,
 // <Slot.Foo>, and <Frame.Slot> are markers or compile errors, never yours.
-var markerNames = []string{"Children", "Slot", "Snippet", "Portal"}
+var markerNames = []string{"Children", "Outlet", "Slot", "Snippet", "Portal"}
 
 func isMarkerName(s string) bool {
 	for _, m := range markerNames {
@@ -352,8 +352,8 @@ func render(kind Kind, name string, ts bool) (content, filename string, err erro
 			return "", "", fmt.Errorf("Component is a reserved built-in tag — rename Component.pzl (for example, Card.pzl) and its imports")
 		}
 		// The compiler matches the composition markers BEFORE it resolves a
-		// capitalized tag as a component (D134), so <Slot>, <Children>, <Snippet>,
-		// and <Portal> can never name YOUR component — a scaffold at one of those
+		// capitalized tag as a component (D134), so <Slot>, <Children>, <Outlet>,
+		// <Snippet>, and <Portal> can never name YOUR component — a scaffold at one of those
 		// names is a file nothing can ever invoke. Views and layouts are routed by
 		// class, never written as tags, so the guard is component-only.
 		if kind == KindComponent && isMarkerName(name) {

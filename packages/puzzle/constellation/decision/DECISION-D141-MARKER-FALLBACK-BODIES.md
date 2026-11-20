@@ -26,11 +26,11 @@ gating prop always has a value (an emoji picker's `label` is its aria-label).
 ## Decision
 
 Paired composition markers carry a fallback body — `<Children>…</Children>`,
-`<Slot name="x">…</Slot>`, `<Slot>…</Slot>`. The fallback renders only when
+`<Slot name="x">…</Slot>`, `<Outlet>…</Outlet>`. The fallback renders only when
 nothing fills that position; supplied content (call site or router) replaces it
 entirely. Self-closing markers and empty paired bodies have no fallback.
 
-- **One mechanism.** `<Children>` and bare `<Slot>` are the same AST node, so
+- **One mechanism.** `<Children>` and `<Outlet>` are the same AST node, so
   fallback works identically for default content, named slots, and the router
   outlet (shown when no child route occupies it).
 - **"Filled" means rendered.** A position is filled only when its content

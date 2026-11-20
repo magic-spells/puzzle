@@ -38,7 +38,7 @@ For code that **restructures or owns** children: `contenteditable` surfaces, car
 
 1. `island={ expr }` or any valued `island="…"` — it must be bare and static. Toggling would resume patching against restructured DOM, and the runtime keys on presence, so `island="false"` would still freeze.
 2. `island` on a component tag — put it on a plain element inside the component.
-3. A component tag, `<Children/>`, `<Slot/>`, `<Snippet>` or `<Portal>` anywhere inside an island — a live instance in browser-owned DOM can be destroyed out from under the framework, a marker would splice parent-owned vnodes into an unreconciled subtree, and a portal would never mount or tear down.
+3. A component tag, `<Children/>`, `<Outlet/>`, `<Slot name>`, `<Snippet>` or `<Portal>` anywhere inside an island — a live instance in browser-owned DOM can be destroyed out from under the framework, a marker would splice parent-owned vnodes into an unreconciled subtree, and a portal would never mount or tear down.
 4. `island` on the `<puzzle-view>` root — the navigation/animation boundary.
 
 Inside `{#raw}` an `island` attribute is authored sample markup, not the directive ([[DECISION-D150-RAW-TEMPLATE-BLOCK]]).

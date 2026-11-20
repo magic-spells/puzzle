@@ -41,4 +41,4 @@ public helpers rotting relative to the internal ones. Run with
   interception with no network, the five default CRUD shapes, first-save pk adoption
   from a mock response, the latency knob (makes skeleton timing developable), the
   failure knob (the supported way to make `data()` reject on purpose), and the
-  custom-path handler.
+  custom-path handler, which sees the post-`beforeRequest` headers by lower-case name.

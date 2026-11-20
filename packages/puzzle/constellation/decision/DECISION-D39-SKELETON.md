@@ -31,7 +31,7 @@ An optional `.pzl` section whose content renders while the component's **first**
 - **Router — the one narrowing of [[DECISION-D19-NAVIGATION-COMMIT]].** A **fresh** routed view or layout with `renderSkeleton` does not gate the commit: its `preload()` starts unawaited, the URL and title move immediately, and the real render patches in when `data()` commits. **Reused ancestors always gate.**
 - **Failure after commit.** A skeleton view's `data()` rejection lands after the URL moved. It is reported through the `onError` funnel (`[puzzle] skeleton view data() failed:`) and that position is replaced by the app `errorView` (or the recovery placeholder) ([[DECISION-D145-ERROR-BOUNDARIES]]). A rejection that lands before `mount()` built the view is buffered and shown at the end of mount, so the user is never left on the skeleton.
 - **The exemption is off where a skeleton would flash over real content:** navigation #0 of a hybrid-prerendered app (container carries `data-puzzle-ssg`, [[DECISION-D67-HYBRID-PRERENDER]]) and a same-location locale rebuild ([[DECISION-D175-TRANSLATIONS]]). There the chain's `preload()` is awaited like any view and the real template replaces the page in one swap.
-- The missing-`<Slot/>` dev warning skips a parent that is not `loaded` yet — its routed child mounts when the real template lands.
+- The missing-`<Outlet/>` dev warning skips a parent that is not `loaded` yet — its routed child mounts when the real template lands.
 
 ## Alternatives rejected
 - Showing the skeleton on every refresh — flashes placeholders over real content.

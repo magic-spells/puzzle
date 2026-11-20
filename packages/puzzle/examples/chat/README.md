@@ -39,7 +39,7 @@ Every checklist feature maps to a specific file:
 | 3 | **`{#unless}`** (v1.7, SPEC §6) | `app/views/Thread.pzl` — the empty-thread state |
 | 4 | **Event modifiers** (v1.7, SPEC §5) | `@submit:prevent` + `@keydown:escape` in `app/components/Composer.pzl`; `@click:stop` on the delete button in `app/components/ConversationItem.pzl`; `@click:once` on the suggestion cards in `app/views/Welcome.pzl` |
 | 5 | **`{#for … , i}` loop counter** (v1.2) | `app/views/Shell.pzl` — the sidebar list; the index drives each `ConversationItem`'s staggered enter-animation delay |
-| 6 | **Nested routes + `<Slot />`** (v1.3) | `app/routes.js` + `app/views/Shell.pzl` — the Shell parent hosts a Welcome index child (`''`) and a Thread child (`c/:id`) at `<Slot />` |
+| 6 | **Nested routes + `<Outlet />`** (v1.3) | `app/routes.js` + `app/views/Shell.pzl` — the Shell parent hosts a Welcome index child (`''`) and a Thread child (`c/:id`) at `<Outlet />` |
 | 7 | **`animations = { in, out }`** (v1.1) | view transitions in every view; message/list-item enters in `MessageBubble.pzl`, `ConversationItem.pzl`, `TypingIndicator.pzl` |
 | 8 | **Built-in `timeago` + one custom function** | `timeago` on `conversation.updatedAt` in `ConversationItem.pzl`; the custom `clock` function is registered under `formatters` in `app/app.js` and used on message timestamps in `MessageBubble.pzl` |
 | 9 | **Controlled input `value={ draft }` + `@input`** | `app/components/Composer.pzl`; the handler owns the write, so the implicit two-way bind (D147) stays off |
@@ -68,7 +68,7 @@ Every checklist feature maps to a specific file:
 
 ### Views (`app/views/`)
 - **Shell.pzl** — the persistent sidebar-plus-pane frame and nested-route
-  parent; renders its matched child at `<Slot />`.
+  parent; renders its matched child at `<Outlet />`.
 - **Welcome.pzl** — the index child: hero + suggestion cards that create a
   conversation and hand off to the thread.
 - **Thread.pzl** — the centerpiece: skeleton, message list, typing indicator,

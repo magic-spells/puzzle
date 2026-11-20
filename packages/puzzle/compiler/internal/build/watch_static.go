@@ -315,7 +315,7 @@ func (b *StaticWatchBuilder) buildContexts() error {
 	)
 	// The prerender bundle's module graph is what tells a change apart from a
 	// render-wide one (route_deps.go): app.js, routes.js, the models registry and
-	// the formatters module live here and nowhere else.
+	// the functions module live here and nowhere else.
 	preOpts.Metafile = true
 	preCtx, ctxErr := api.Context(preOpts)
 	if ctxErr != nil {
@@ -883,7 +883,7 @@ func (b *StaticWatchBuilder) reusePages(staging string, summary staticSummary) e
 // than re-reading and re-bundling every page on every save.
 func (b *StaticWatchBuilder) syncPageEntries(summary staticSummary) ([]string, error) {
 	modelsModule := findStaticModule(b.root, "app/models/index.js", "app/models/index.ts")
-	formattersModule := findStaticModule(b.root, "app/formatters.js", "app/formatters.ts")
+	functionsModule := findStaticModule(b.root, "app/functions.js", "app/functions.ts")
 	// b.adapterModule, not a fresh resolve: the summary being turned into entries
 	// was produced by a prerender entry built against THAT value, and the identity
 	// answer it reports is only about that module.
@@ -901,7 +901,7 @@ func (b *StaticWatchBuilder) syncPageEntries(summary staticSummary) ([]string, e
 	var entryFiles []string
 	live := map[string]bool{}
 	for _, page := range pages {
-		src, err := staticEntrySource(b.root, b.entry, page.staticPage, summary, modelsModule, formattersModule, adapterModule)
+		src, err := staticEntrySource(b.root, b.entry, page.staticPage, summary, modelsModule, functionsModule, adapterModule)
 		if err != nil {
 			return nil, err
 		}

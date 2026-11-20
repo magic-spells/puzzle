@@ -1,5 +1,5 @@
 <puzzle-view>
-  <span class={ classes }><Slot/></span>
+  <span class={ classes }><Children/></span>
 </puzzle-view>
 
 <script>

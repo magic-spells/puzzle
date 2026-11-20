@@ -18,7 +18,7 @@ verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 
 # D30 — Nested routes: children arrays, chain-prefix reuse, root-only layouts
 
-A routed view hosts a child routed view at its `<Slot/>` outlet. This is router work only; slot composition, keyed component vnodes and cascading `destroy()` are generic. See [[DOC-SPEC-ROUTER]] §9 and [[DOC-ROUTER]].
+A routed view hosts a child routed view at its `<Outlet/>`. This is router work only; slot composition, keyed component vnodes and cascading `destroy()` are generic. See [[DOC-SPEC-ROUTER]] §9 and [[DOC-ROUTER]].
 
 ## Decision
 
@@ -33,7 +33,7 @@ A routed view hosts a child routed view at its `<Slot/>` outlet. This is router 
 - **Keys:** a reused level keeps its committed key; a fresh level gets `fullPaths[i] + '\x00' + navToken`, so the keyed patch reuses exactly what the router reused.
 - **Interruption:** a navigation arriving while a previous out is animating clamps `keep` to exclude the doomed `#pendingOut` subtree; when `#pendingOut` sits deeper than the winner's own old animator, that animator is destroyed synchronously too.
 - **Title:** `meta.title` resolves nearest-defined, leaf → root.
-- A non-leaf template with no `<Slot/>` preloads its child but never mounts it; a dev warning fires post-commit.
+- A non-leaf template with no `<Outlet/>` preloads its child but never mounts it; a dev warning fires post-commit.
 - **Conditional outlets** (an outlet inside `{#if}`) keep the routed views alive. The machinery ships only when the usage scan sets `__PUZZLE_HAS_CONDITIONAL_SLOT__` ([[DECISION-D89-FEATURE-USAGE-TREESHAKE]]). Every routed vnode pins its router-owned instance. A hidden outlet parks the current chain off-document; a returning outlet adopts its existing root without a second mount. The slot owner pushes the newest child chain into a parked or never-mounted pin at the end of its render pass and releases such pins when destroyed. A forwarding wrapper torn down in the same render pass parks the pin instead of destroying it.
 
 ## Gotchas

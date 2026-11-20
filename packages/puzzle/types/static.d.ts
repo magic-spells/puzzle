@@ -43,8 +43,8 @@ export interface MountStaticOptions {
 	route: StaticRoute;
 	/** The app models map. */
 	models?: Record<string, any>;
-	/** The app custom formatters map. */
-	formatters?: Record<string, any>;
+	/** The app's custom template functions map. */
+	functions?: Record<string, any>;
 	/** The store's base API URL. */
 	apiURL?: string;
 	/** Storage-like object for opt-in persistence, handed to the Store. */

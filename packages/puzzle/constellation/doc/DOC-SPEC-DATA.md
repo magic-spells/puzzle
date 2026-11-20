@@ -180,7 +180,7 @@ Development/test affordances in `@magic-spells/puzzle/fixtures` (D95, D98), outs
 
 **Mock adapter.** `static adapter = { endpoint, mock: { data, latency, failRate, fail, handler } }` (and/or the install config's `mock[type]`) serves requests from an in-memory collection, deep-cloned from `mock.data` on first use.
 - Interception returns a Response-shaped object, so `loadMany`/`loadOne`/`save`/`delete`/`request` and §61 fetches run **unmodified** through the real paths.
-- Default CRUD: `GET` endpoint → array; `GET endpoint/:id` → object or 404; `POST` → insert (201); `PUT endpoint/:id` → merge (200, the stored pk wins); `DELETE endpoint/:id` → 204. `handler({ method, url, path, body, collection })` overrides any of it (and serves deeper `request()` paths); a falsy return falls through.
+- Default CRUD: `GET` endpoint → array; `GET endpoint/:id` → object or 404; `POST` → insert (201); `PUT endpoint/:id` → merge (200, the stored pk wins); `DELETE endpoint/:id` → 204. `handler({ method, url, path, body, headers, collection })` overrides any of it (and serves deeper `request()` paths); a falsy return falls through.
 - `latency` (number or `[min, max]`) makes skeletons and `min-duration` developable. `failRate`/`fail` produce **non-OK responses** (500), so failures run through the real `PuzzleAdapterError` paths; a mock 404 exercises §61's negative cache.
 - `beforeRequest` still runs; no network call happens. A one-time `console.warn` per model fires on first interception.
 - **Without `installFixtures`, a model's `mock` block is inert** and requests reach the real endpoint.

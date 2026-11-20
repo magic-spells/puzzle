@@ -14,7 +14,7 @@
     easing={ easingAttr }
     reduced-motion={ reducedMotionAttr }
     disabled={ disabledAttr }>
-    <Slot/>
+    <Children/>
   </scroll-stack>
 </puzzle-view>
 
