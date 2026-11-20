@@ -74,7 +74,7 @@ func resolveCLIs(appRoot string) []ResolvedCLI {
 // the absolute path to its "bin" script (the file `node` should execute), or ""
 // if the package is not installed anywhere up the tree.
 func findV4CLI(appRoot string) string {
-	pkgDir := findUp(appRoot, filepath.Join("node_modules", "@tailwindcss", "cli"))
+	pkgDir := fsutil.FindUp(appRoot, filepath.Join("node_modules", "@tailwindcss", "cli"))
 	if pkgDir == "" {
 		return ""
 	}
@@ -92,7 +92,7 @@ func findV4CLI(appRoot string) string {
 // findV3Bin walks up from appRoot for the node_modules/.bin/tailwindcss shim
 // (Tailwind v3's CLI entry) and returns its absolute path, or "".
 func findV3Bin(appRoot string) string {
-	bin := findUp(appRoot, filepath.Join("node_modules", ".bin", "tailwindcss"))
+	bin := fsutil.FindUp(appRoot, filepath.Join("node_modules", ".bin", "tailwindcss"))
 	if bin == "" || !fsutil.FileExists(bin) {
 		return ""
 	}
@@ -131,23 +131,4 @@ func binScript(pkgPath, name string) string {
 		}
 	}
 	return ""
-}
-
-// findUp returns the first existing <ancestor>/rel walking up from start
-// (start included), or "" if none exists up to the filesystem root. This mirrors
-// Node's node_modules resolution: a dependency may live in a parent's
-// node_modules (e.g. the in-repo examples/todos resolves to the repo-root install).
-func findUp(start, rel string) string {
-	dir := start
-	for {
-		candidate := filepath.Join(dir, rel)
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
-	}
 }

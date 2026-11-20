@@ -58,9 +58,11 @@ import (
 // same tree as TypeScript with three differences: no member guard is added (an
 // authored `?.` stays), a standard library call is `__puzzle_fn.name(…)` so the
 // shim's signatures type it (an app function is `__puzzle_app_fn("name")(…)`,
-// untyped), and a method call whose arguments hold an arrow takes
-// its receiver through `__puzzle_check_list(…)`, which gives the arrow's
-// parameters a type when the receiver is an untyped data value.
+// untyped), and a method call whose arguments hold an arrow takes its receiver,
+// and an Object global its argument, through `__puzzle_check_list(…)`, which
+// types an untyped data value as any[]: the arrow's parameters are any, and so
+// are the values `Object.values`/`entries` return (not the unknown TypeScript
+// infers from an any argument).
 
 // ---- scope ------------------------------------------------------------------
 
@@ -592,7 +594,7 @@ func (l *lowerer) call(c *expr.Call) {
 		l.libraryCall(callee, c.Args)
 	case *expr.Global:
 		l.global(callee)
-		if callee.Namespace == "Object" && len(c.Args) > 0 && l.target != targetCheck {
+		if callee.Namespace == "Object" && len(c.Args) > 0 {
 			l.objectGlobalArgs(c.Args)
 			return
 		}
@@ -697,13 +699,20 @@ func (l *lowerer) args(args []expr.Node) {
 // defaulted to `{}`: JavaScript throws on a null or undefined argument, and a
 // missing value never throws in a template (D173 V4), so `Object.keys(x)` with
 // `x` missing is `[]`. Any other value — a string, a number, a list — reaches
-// the global unchanged. The render target only: the check target adds no
-// guards, as it adds no `?.` — and TypeScript 5.6+ reports a `??` whose left
-// side can never be nullish (`Object.keys({ a: 1 } ?? {})`, TS2869).
+// the global unchanged. The check target adds no guards, as it adds no `?.` —
+// and TypeScript 5.6+ reports a `??` whose left side can never be nullish
+// (`Object.keys({ a: 1 } ?? {})`, TS2869); it passes the first argument
+// through `__puzzle_check_list` instead, so untyped data walks as any.
 func (l *lowerer) objectGlobalArgs(args []expr.Node) {
 	l.w.WriteString("(")
-	l.logicalOperand("??", args[0], precOr)
-	l.w.WriteString(" ?? {}")
+	if l.target == targetCheck {
+		l.w.WriteString("__puzzle_check_list(")
+		l.top(args[0])
+		l.w.WriteString(")")
+	} else {
+		l.logicalOperand("??", args[0], precOr)
+		l.w.WriteString(" ?? {}")
+	}
 	for _, a := range args[1:] {
 		l.w.WriteString(", ")
 		l.top(a)
@@ -1168,18 +1177,6 @@ func checkScope(names map[string]bool) scopeMap {
 // reads `__d`.
 func WriteCheckValue(w ExprWriter, n expr.Node, scope map[string]bool) {
 	newLowerer(w, targetCheck, checkScope(scope), nil).value(n)
-}
-
-// WriteCheckSelectorValue preserves selector-only module references while
-// template locals and arrow parameters retain their usual lexical precedence.
-func WriteCheckSelectorValue(w ExprWriter, n expr.Node, scope map[string]bool, modules map[string]string) {
-	selection := checkScope(scope)
-	for name, ref := range modules {
-		if _, local := selection[name]; !local {
-			selection[name] = ref
-		}
-	}
-	newLowerer(w, targetCheck, selection, nil).value(n)
 }
 
 // WriteCheckEvent writes an @event value as TypeScript for puzzle check. src

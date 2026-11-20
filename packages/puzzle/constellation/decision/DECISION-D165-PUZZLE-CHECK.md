@@ -19,10 +19,9 @@ notes:
       signatures on the `Store` and `Router` interfaces in types/index.d.ts are gone, so
       `this.ctx.store.findall()` / `this.ctx.router?.pushh()` in a lang="ts" view are now errors
       ("Did you mean 'push'?") and fixture-only `seed()` type-checks only where
-      `@magic-spells/puzzle/fixtures` is imported (D98). The view-`this` index signature this card
-      describes is unchanged. `puzzle check` is clean on all 22 examples; test:types and
-      test:runtime-types pass. Also removed the unreferenced `StoreOptions` and `PuzzleValue`
-      exports (noted in the 0.10.0 CHANGELOG under Breaking).
+      `@magic-spells/puzzle/fixtures` is imported (D98). `puzzle check` is clean on all 22 examples;
+      test:types and test:runtime-types pass. Also removed the unreferenced `StoreOptions` and
+      `PuzzleValue` exports (noted in the 0.10.0 CHANGELOG under Breaking).
 ---
 
 # D165 — `puzzle check`: virtual files + the app's own tsc
@@ -41,13 +40,13 @@ app/components/TodoItem.pzl:11:16: Property 'remov' does not exist on type '{ to
 ## Decision
 
 **Virtual files.** Each `.pzl` under `app/` becomes files under `.puzzle/check/src/` (D153 scratch dir), mirroring the tree; the workspace is rebuilt every run so a deleted file leaves no ghost.
-- `lang="ts"`: one `.pzl.ts` — the script verbatim, then a never-executed `void function (this: InstanceType<typeof Class> & { [key: string]: any }): void { const __d = this; … }` that gives every template expression a typed home.
+- `lang="ts"`: one `.pzl.ts` — the script verbatim, then a never-executed `void function (this: InstanceType<typeof Class>): void { const __d: any = this; … }`: `this` types handler names against the view's `events`; template data reads `__d`, which is `any`.
 - JavaScript: a pair — `<name>.pzl.script.js` (unchecked mirror, `checkJs: false`) and the checked `<name>.pzl.ts` wrapper that imports it. The `.script` infix is load-bearing: without it TS extension substitution resolves `./X.pzl.js` to the wrapper itself.
 
 **Template lowering** uses codegen's own lowerer (`WriteCheckValue` / `WriteCheckEvent`) over the parser's tree:
 - `{#if}`/`{#case}` → `if`/`switch`; `{#for}` → `__puzzle_check_each`, whose item type is destructured from the collection with a conditional type (a `readonly T[]` parameter would infer `unknown` from untyped collections).
 - A standard-library call → `__puzzle_fn.name(…)`, typed by `libraryFunctionSignatures`; any other bare call (an app function from the `formatters` config) → `__puzzle_app_fn("name")(…)`, typed `(...args: any[]) => any` — a call, not an index signature, so it survives `noUncheckedIndexedAccess`.
-- A method call with an arrow argument takes its receiver through `__puzzle_check_list(…)`, so untyped receivers give `any` params. Methods map 1:1 onto `lib.d.ts`; the shim references the lib files the D176 method table needs (ES2016–ES2023 string, array and object libs) whatever the app's `target` (`languageLibs` in `emitter.go`).
+- A method call with an arrow argument takes its receiver through `__puzzle_check_list(…)`, so untyped receivers give `any` params. An `Object.keys`/`values`/`entries` argument goes through it too: TypeScript infers `values`' and `entries`' element type from an `any` argument as `unknown`, so a walk over untyped data would report "is of type 'unknown'" on a correct template; a typed argument passes through unchanged. Methods map 1:1 onto `lib.d.ts`; the shim references the lib files the D176 method table needs (ES2016–ES2023 string, array and object libs) whatever the app's `target` (`languageLibs` in `emitter.go`).
 - `@event` bindings are assigned to a `((event: any) => any) | null` const; inside, free `event` is the DOM event.
 - Every emitted expression statement is parenthesized — `void a + 1` would check `undefined + 1`.
 - The author's spelling is kept: no added `?.` guards and no `?? {}` on `Object.keys/values/entries` (tsc reports a `??` that can never be nullish).
@@ -64,11 +63,11 @@ app/components/TodoItem.pzl:11:16: Property 'remov' does not exist on type '{ to
 
 **One bad file doesn't abort.** A `.pzl` that fails to parse or compile becomes a positioned diagnostic printed with the type errors and is skipped; the virtual files don't link to each other.
 
-**tsc is resolved, never installed, always run under `node`:** `node <app>/node_modules/typescript/bin/tsc …` (works under npm, pnpm, yarn). `tsc --version` is read once per run, before anything is generated; a major below 7 stops the run with `puzzle check needs TypeScript 7 or later, found 5.9.3: npm install -D typescript@latest`. Other errors: `puzzle check needs TypeScript: npm install -D typescript`, `puzzle check needs Node.js on PATH: …`; "not in a Puzzle project" is checked first. The `.bin` shims are avoided on purpose: Windows `tsc.cmd` must run via `cmd.exe /s`, which strips the quotes around a path with a space.
+**tsc is resolved, never installed, always run under `node`:** `node <dir>/node_modules/typescript/bin/tsc …`, where `<dir>` is the app or its nearest ancestor holding that file — a lexical walk up from the absolute app path (`fsutil.FindUp`; a symlinked project directory is not resolved first), so an npm or Yarn 1 workspace root's hoisted install is found; pnpm links it into the app's own `node_modules`. `tsc --version` is read once per run, before anything is generated; a major below 7 stops the run with `puzzle check needs TypeScript 7 or later, found 5.9.3: npm install -D typescript@latest`. Other errors: `puzzle check needs TypeScript: npm install -D typescript`, `puzzle check needs Node.js on PATH: …`; "not in a Puzzle project" is checked first. The `.bin` shims are avoided on purpose: Windows `tsc.cmd` must run via `cmd.exe /s`, which strips the quotes around a path with a space.
 
 **Scope of typing.**
-- Expressions check against the class's declared fields; `data()`-derived keys fall through the inline `{ [key: string]: any }` and are unchecked, so a misspelled data field (`{ user.nmae }`) is not reported (known gap: under `noPropertyAccessFromIndexSignature` a dotted `data()`-only read is itself a diagnostic). The fallback is an inline index signature, not `Record`, so an authored class named `Record` cannot capture it.
-- A JS component's `this` is `__PuzzleCheckJSView<InstanceType<typeof Class>> & { [key: string]: any }`, which types each declared `events` handler `(...args: any[]) => any`: arity is not checked (`@click={ play(event) }` against `play: () => {}` passes), but names are — `plya(event)`, or a handler attached at runtime instead of declared in `events`, is reported. `lang="ts"` components check against their declared handlers.
+- Template data is untyped: the wrapper's `__d` is `any`, because a template reads `getData()` — what `data()` returns plus local state (`setState()`) — not the class's fields. A misspelled or mistyped data read (`{ user.nmae }`) is not reported, and neither is a `<Component is>` selector's data or module read, which reads like data; a typed sub-expression inside a selector (`cards[round(kind).missing]`) is still checked. `Object.values`/`entries` over data give `any` values. `this` stays typed, so handler names are checked against `events`.
+- A JS component's `this` is `__PuzzleCheckJSView<InstanceType<typeof Class>>`, which types each declared `events` handler `(...args: any[]) => any`: arity is not checked (`@click={ play(event) }` against `play: () => {}` passes), but names are — `plya(event)`, or a handler attached at runtime instead of declared in `events`, is reported. `lang="ts"` components check against their declared handlers.
 - `PuzzleView.events` is optional in `types/index.d.ts` (the base class has none), so a template handler on a view that declares no `events` reports "possibly 'undefined'" — a real runtime TypeError.
 
 ## Alternatives rejected
@@ -79,7 +78,8 @@ app/components/TodoItem.pzl:11:16: Property 'remov' does not exist on type '{ to
 - Source maps instead of segments — lossy at column level; segments make an unmappable diagnostic detectable.
 - Promoting JS components into `checkJs` — a wall of inference noise on untyped apps.
 - Checking JS handler arity — flags the documented `play(event)` idiom everywhere.
-- Inferring `data()` or snippet-parameter types cross-file — guesses the author can't see the basis for. A possible follow-up: type the wrapper's `this` from `data()`'s declared return type.
+- Inferring `data()` or snippet-parameter types cross-file — guesses the author can't see the basis for.
+- Typing template data against the class's declared fields — the template reads `getData()`, not the instance, so it reports false errors (a TS `private` field mirrored in `data()`, a nullable field normalised there, a data key named `events`), breaks the documented `cards[embed.type]` under strict, and makes dotted data reads TS4111 under `noPropertyAccessFromIndexSignature`. Typing `__d` from `data()`'s return type misses local state, which `getData()` also carries. An explicit `Object.values<any>(…)` for the Object globals drops lib's non-generic overload, which makes `Object.values(<number>)` a new error and untypes a literal's values.
 - Supporting compilers before TypeScript 7 — a second tsconfig shape (`baseUrl` + `node` resolution, pinned `module`, `allowSyntheticDefaultImports`) and version-gated lib references, kept alive for compilers nobody runs. TS 7, the native Go compiler, is the only one Puzzle targets, and an older one is refused with a clear error rather than half-supported.
 
 ## Consequences

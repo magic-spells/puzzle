@@ -64,9 +64,10 @@ this card holds the implementation rules behind it.
 - **`preview`** — `internal/preview` over the shared `internal/serve` resolver; no watcher.
 - **`check`** ([[DECISION-D165-PUZZLE-CHECK]]) — `internal/check`. The JS mirror is
   `.pzl.script.js`: the `.script` infix stops TypeScript resolving the wrapper's import
-  back to itself. tsc runs as `node <app>/node_modules/typescript/bin/tsc`, never a `.bin`
-  shim or `cmd.exe`, so spaces in Windows paths work. The not-a-project test runs before
-  the missing-tsc test.
+  back to itself. tsc runs as `node <dir>/node_modules/typescript/bin/tsc` (`<dir>` = the
+  app or the nearest ancestor with it, `fsutil.FindUp`), never a `.bin` shim or
+  `cmd.exe`, so spaces in Windows paths work. The not-a-project test runs before the
+  missing-tsc test.
 - **`--fixtures`** (D98) — `build/fixtures.go` writes the wrapper under `.puzzle/fixtures/`;
   [[DECISION-D153-PUZZLE-SCRATCH-DIR]].
 - **`init`** — embedded `default`/`todos` trees plus `-ts` overlays (`internal/scaffold`);

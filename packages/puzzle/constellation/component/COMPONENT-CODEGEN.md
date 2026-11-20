@@ -109,7 +109,8 @@ table in `lower.go`'s header comment is the contract; the language rules are D17
   its `.pzl` offset): no added guards or `?? {}`; standard call → `__puzzle_fn.name(…)`; app
   call → `__puzzle_app_fn("name")(…)` (a call, not an index signature, so it passes
   `noUncheckedIndexedAccess`); arrow-taking method receivers via `__puzzle_check_list(…)`;
-  bare handler → `this.events.name`.
+  an `Object.keys`/`values`/`entries` argument through `__puzzle_check_list(…)` (the render
+  target's `?? {}` position); bare handler → `this.events.name`.
 
 **Lists that must move together:** `codegen.LibraryFunctionNames` (21 names: the runtime's 19
 built-ins + `link` + `t`), `check.libraryFunctionSignatures`
@@ -160,9 +161,9 @@ must never be imported from inside `client-runtime/` ([[FILE-LIST-BLOCK]]).
 - **`<Component>`** (`component.go`, [[FILE-CODEGEN-COMPONENT]]): emits `__dc(…)`; children are
   normal default-slot content; other attrs (including `name` and `from`) are data-scoped
   props/events plus source-ordered `SpreadAttr` emission. Non-component literal `is`, an
-  authored `flip`, and a user `Component` file/tag binding get positioned errors. The check
-  emitter (`compiler/internal/check/component.go`) keeps selector scope in its TypeScript
-  mirror.
+  authored `flip`, and a user `Component` file/tag binding get positioned errors.
+  `puzzle check` reads a selector's data and module names like any template data, untyped;
+  a typed sub-expression inside it is still checked ([[DECISION-D165-PUZZLE-CHECK]]).
 - **Loop domain is guarded** (D173 V12): `__e(coll).map(…)` / `__r(from, to).map(…)`, so a
   missing collection loops zero times. Integer-literal ranges fold: an array literal up to 16
   items, `Array.from` beyond, `[]` when end < start — no `loopRange` import.
