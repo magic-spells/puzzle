@@ -19,10 +19,12 @@ This plugin is a **processor**, not a new parser:
 - It extracts the `<script>` body into one virtual file
   (`your-file.pzl/0_scripts.js` or `.ts`) and hands it to ESLint, so every rule
   you already run — and any parser you layer on — applies to it unchanged.
-- The virtual file is the original source with everything outside the
-  `<script>` body blanked to spaces (newlines preserved), so reported
-  line/column positions **and autofix ranges** land exactly on the real file.
-  Autofixes only ever touch bytes inside `<script>`.
+- The virtual file is the original source up to the end of the `<script>`
+  body, with everything before the body blanked to spaces (newlines
+  preserved), so reported line/column positions **and autofix ranges** land
+  exactly on the real file. Autofixes only ever touch bytes inside
+  `<script>`: whitespace rules see the blanked lead-in as blank lines and
+  trailing spaces, so a message whose fix would reach into it is dropped.
 - It validates section structure and reports problems (missing `<puzzle-view>`,
   duplicate sections, illegal section attributes, a `<script>`/`<style>` body
   truncated by a stray close tag, stray top-level content) as ESLint messages
@@ -54,9 +56,8 @@ export default [
   // applies to the virtual `*.pzl/0_scripts.js` files the processor emits.
   js.configs.recommended,
 
-  // Wire the Puzzle processor onto every .pzl file, mark components rendered
-  // as template tags as used, and relax a couple of whitespace/BOM rules on
-  // the extracted virtual files.
+  // Wire the Puzzle processor onto every .pzl file and mark components
+  // rendered as template tags as used.
   ...puzzle.configs.recommended,
 
   // Any extra rules you want on the <script> body:
@@ -96,12 +97,19 @@ does not count as a use of an import named `Component`.
 
 ### TypeScript (`<script lang="ts">`)
 
+typescript-eslint does not support TypeScript 7 yet (as of 8.73, November
+2026): its peer range ends below 6.1. In a `puzzle init --typescript` app,
+which installs TypeScript 7, `npm install typescript-eslint` fails with
+`ERESOLVE`, and a forced install throws "typescript-eslint does not support
+TS 7.0" when the config loads. Until a release supports TypeScript 7, the
+setups below cannot run in a Puzzle TypeScript app.
+
 The processor names a TypeScript block `*.pzl/0_scripts.ts`. `recommended`
 covers only the JS blocks, because a TS block needs a TS parser: without one,
 ESLint would parse it as JavaScript and stop with a fatal error, so
 `recommended` leaves TS blocks unlinted. Add `puzzle.configs.typescript` after
 your TypeScript config to lint them with the same setup the JS blocks get
-(`puzzle/uses-template-components` on, the whitespace/BOM rules off):
+(`puzzle/uses-template-components` on):
 
 ```js
 import js from '@eslint/js';
@@ -161,6 +169,10 @@ export default [
   expressions too; they live in template bytes, so ESLint does not see them.
 - A `.pzl` file with no `<script>` section produces no JS blocks (but section
   errors are still reported).
+- Format `.pzl` files with `@magic-spells/prettier-plugin-puzzle`.
+  `eslint-plugin-prettier` is safe here, but Prettier's diff folds a change on
+  the first line of the `<script>` body into the blanked region before it, so
+  that change is neither fixed nor reported.
 - **Section-error columns count UTF-16 code units.** The compiler's splitter
   counts UTF-8 bytes, so on a line holding non-ASCII text (`café`, `金額`, an
   emoji) a section error from this plugin and the same error from
