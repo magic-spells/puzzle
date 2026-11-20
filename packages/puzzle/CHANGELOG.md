@@ -407,6 +407,19 @@ one is *not* a compile error; it silently builds a different product.
   own keys. A key that is not a JavaScript identifier, or a value of another
   type (an unset `process.env` variable included), is a one-line config error.
   `puzzle dev` reads the config once; restart it after an edit.
+- **`dev.proxy` takes Vite's `{ target, changeOrigin }` form (D201).** A
+  hosted API behind a platform router, CDN or virtual host picks the site by
+  the `Host` header, and the proxy sends the browser's (`localhost:<port>`), so
+  it answered with an error page (404, 403 or 421) or the wrong site. Write
+  `'/api': { target: 'https://api.example.com', changeOrigin: true }` and
+  `puzzle dev` sends the target's host instead, for requests and WebSocket
+  upgrades alike. As in Vite, `Origin` is left alone, so a backend that
+  compares `Origin` with `Host` (Django's CSRF check, Rails, Go WebSocket
+  servers) rejects POSTs and WebSocket connects unless it trusts the dev
+  origin. The string form is unchanged and keeps the browser's `Host` (in Vite
+  it implies `changeOrigin: true`). Only `target` and `changeOrigin` are
+  read: Vite's `rewrite` and other options are ignored, and a path in the
+  target URL is dropped.
 - **Lazy routes prefetch before the click (D195).** When a link points at a
   route whose view or layout is `lazy()`, its code starts loading as soon as
   the pointer rests on the link for 60 ms, a finger touches it, or keyboard

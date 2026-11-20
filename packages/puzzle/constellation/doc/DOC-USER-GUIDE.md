@@ -315,10 +315,17 @@ Pass `models` to `mountView` for a view that reads the store, or boot the whole 
 
 ```javascript
 // puzzle.config.js
-export default { dev: { proxy: { '/api': 'http://localhost:3091' } } };
+export default {
+	dev: {
+		proxy: {
+			'/api': 'http://localhost:3091',
+			'/cms': { target: 'https://cms.example.com', changeOrigin: true },
+		},
+	},
+};
 ```
 
-`puzzle dev` forwards `/api` and `/api/*` with the path unchanged, so the app can use `apiURL: ''` and stay same-origin. A prefix must start with `/` and cannot be the root. Restart after changing it; production builds ignore it.
+`puzzle dev` forwards `/api` and `/api/*` with the path unchanged, so the app can use `apiURL: ''` and stay same-origin. The backend gets the browser's `Host` header (`localhost:<dev port>`), which is what a local backend expects. A hosted backend behind a platform router, CDN or virtual host picks the site by `Host` and answers that with an error page (404, 403 or 421) or the wrong site; give it the object form with `changeOrigin: true` and it gets its own host instead, for requests and WebSocket upgrades alike. As in Vite, `changeOrigin` never touches `Origin`, so a backend that compares `Origin` with `Host` (Django's CSRF check, Rails' origin check, Go WebSocket servers) then rejects POSTs and WebSocket connects unless it trusts the dev origin (Django's `CSRF_TRUSTED_ORIGINS`, for one). In Vite the string form also sets `changeOrigin`; here it does not, so a Vite string entry for a hosted API needs the object form. Only `target` and `changeOrigin` are read: Vite's `rewrite` and other options are ignored, and a path in the target URL is dropped. A prefix must start with `/` and cannot be the root. Restart after changing it; production builds ignore it.
 
 ## Commands
 

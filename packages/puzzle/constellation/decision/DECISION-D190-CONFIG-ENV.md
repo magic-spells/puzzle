@@ -23,11 +23,10 @@ notes:
     text: >-
       The node script's JSON.stringify replacer keeps an unset value as `null` only inside `env`
       (`this === c.env`), so `validate` can name the key (`env.API_URL … got null`) instead of the
-      key silently vanishing. Every other key keeps JSON's drop-undefined behaviour, which existing
-      configs rely on: `dev: { proxy: { '/api': process.env.API_ORIGIN } }` with the variable unset
-      must still build. A whole-config replacer turns that target into null, it fails proxy
-      validation, and every command stops; TestLoadConfigNullBehavesAsUnset has a `proxy target
-      undefined` row for it.
+      key silently vanishing. Every other key keeps JSON's drop-undefined behaviour. An unset
+      `dev.proxy` target, `'/api': process.env.API_ORIGIN` or `{ target: process.env.API_ORIGIN, …
+      }`, leaves its prefix unproxied, so the config still builds
+      ([[DECISION-D201-DEV-PROXY-CHANGE-ORIGIN]]); TestLoadConfigNullBehavesAsUnset pins both forms.
 ---
 
 # D190 — `env` config values, read as `import.meta.env.KEY`

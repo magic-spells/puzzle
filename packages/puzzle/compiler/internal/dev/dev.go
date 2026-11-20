@@ -768,7 +768,7 @@ type server struct {
 	// so every page it serves carries the client.
 	mode     string
 	hub      *hub
-	proxies  map[string]string
+	proxies  map[string]config.Proxy
 	proxyLog io.Writer
 	// Unlike the fan-out hub, this is retained state for clients that connect
 	// after a failed build or refresh while it remains broken (D92).
@@ -779,7 +779,7 @@ type server struct {
 	ctx context.Context
 }
 
-func newServer(dist, mode string, ctx context.Context, proxies map[string]string) *server {
+func newServer(dist, mode string, ctx context.Context, proxies map[string]config.Proxy) *server {
 	return &server{dist: dist, mode: mode, hub: newHub(), proxies: proxies, proxyLog: os.Stderr, ctx: ctx}
 }
 
@@ -837,22 +837,27 @@ func (s *server) handler() http.Handler {
 	return mux
 }
 
-func (s *server) reverseProxy(prefix, targetURL string) http.Handler {
-	target, _ := url.Parse(targetURL) // validated by config.LoadConfig
+func (s *server) reverseProxy(prefix string, p config.Proxy) http.Handler {
+	target, _ := url.Parse(p.Target) // validated by config.LoadConfig
 	proxy := httputil.NewSingleHostReverseProxy(target)
 
 	// NewSingleHostReverseProxy normally prepends a path carried by the target
 	// URL. dev.proxy has no rewrite semantics, so keep the browser's path and
 	// query byte-for-byte while still letting the standard director set the
-	// backend scheme, host, and forwarding headers.
+	// backend scheme, host, and forwarding headers. The Host header stays the
+	// browser's unless the entry sets changeOrigin. WebSocket upgrades take this
+	// director too.
 	director := proxy.Director
 	proxy.Director = func(r *http.Request) {
 		requestPath, requestRawPath, requestQuery := r.URL.Path, r.URL.RawPath, r.URL.RawQuery
 		director(r)
 		r.URL.Path, r.URL.RawPath, r.URL.RawQuery = requestPath, requestRawPath, requestQuery
+		if p.ChangeOrigin {
+			r.Host = target.Host
+		}
 	}
 	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
-		fmt.Fprintf(s.proxyLog, "proxy %s → %s refused — is the backend running?\n", prefix, targetURL)
+		fmt.Fprintf(s.proxyLog, "proxy %s → %s refused — is the backend running?\n", prefix, p.Target)
 		http.Error(w, "puzzle dev: backend unavailable", http.StatusBadGateway)
 	}
 	return proxy

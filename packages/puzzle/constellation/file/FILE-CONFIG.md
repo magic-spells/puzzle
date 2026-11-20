@@ -39,9 +39,13 @@ Traps:
   ([[DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD]]). Build callers apply the
   production-only gate and read the raw `Build.HashNames` pointer to tell default-on
   (falls back with a warning) from an explicit `true` (errors).
-- **`dev.proxy`** keys must be absolute `/`-prefixed paths and targets absolute
-  http(s) URLs; `/` and colliding normalized prefixes are errors
-  ([[FEATURE-DEV-PROXY]]).
+- **`dev.proxy`** keys must be absolute `/`-prefixed paths. Each value is a
+  target string or `{ target, changeOrigin }`, kept as `json.RawMessage` until
+  `validate` decodes it into one `Proxy { Target, ChangeOrigin }`
+  (`Config.Dev.Proxy`). Targets are absolute http(s) URLs (the error prints the
+  whole entry), `changeOrigin` is a boolean, and an undefined or null target
+  skips the entry; `/` and colliding normalized prefixes are errors
+  ([[FEATURE-DEV-PROXY]], [[DECISION-D201-DEV-PROXY-CHANGE-ORIGIN]]).
 - **`i18n`** ([[DECISION-D175-TRANSLATIONS]]): `Config.I18n` is nil when absent
   (`I18nEnabled()`). `locales` must be a non-empty array of tags passing
   `ValidLocaleTag` with no case-insensitive duplicate, and `defaultLocale` (the
