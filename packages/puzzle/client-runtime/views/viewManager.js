@@ -1078,10 +1078,11 @@ export function mount(vnode, parent, ref, ctx, owner = null) {
 					mount(child, el, null, ctx, owner);
 				}
 		}
-		// A <select>'s controlled `value` is applied by setAttr above, BEFORE its
-		// <option> children exist, so the browser silently falls back to the first
-		// option. Re-assert it now that the options are mounted (SPEC §5).
-		reassertSelectValue(el, vnode.attrs);
+		// A control's `value` is applied by setAttr above in authored order: a
+		// <select>'s BEFORE its <option> children exist (the browser silently falls
+		// back to the first option), a range's before a later `min`/`max`/`step` (the
+		// browser clamps it to the defaults). Re-assert it now that both are in (SPEC §5).
+		syncControl(el, vnode.attrs, owner);
 	}
 	// Insertion stays LAST: mount() builds detached and attaches the finished subtree
 	// in one move, so a throw leaves the container holding nothing this call put there.
@@ -1462,9 +1463,10 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 
 	// The option list may have changed under a <select> whose controlled `value`
 	// was unchanged (patchAttrs skips it) or churned entirely — either way the
-	// selection can desync. Re-assert the controlled value after the children
-	// settle so option-list churn can't leave the wrong option selected (SPEC §5).
-	reassertSelectValue(el, newVnode.attrs);
+	// selection can desync — and a range's new `value` was clamped to its old
+	// `max` when a later attr raised it in this same pass. Re-assert the
+	// controlled value once attrs and children have settled (SPEC §5).
+	syncControl(el, newVnode.attrs, owner);
 }
 
 /**
@@ -1484,15 +1486,22 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
  * while component state says otherwise — so compare the property (React/Vue
  * force-sync it every patch for exactly this reason). The per-keystroke echo
  * case (bound value already equals the live property) still writes NOTHING, so
- * the caret is preserved. Non-form elements carrying a plain `value` (<li>,
- * <progress>, <button>) never reach here and keep the vnode compare.
+ * the caret is preserved — and a number field already holding the bound number
+ * in another spelling ("10.0", "1e1", "007") is that echo too, as React treats
+ * it: rewriting it to "10" would drop the digits under the caret. Non-form
+ * elements carrying a plain `value` (<li>, <progress>, <button>) never reach
+ * here and keep the vnode compare.
  *
  * @param {HTMLInputElement | HTMLTextAreaElement} el
  * @param {unknown} value the bound value
  * @param {PuzzleView | null} owner
  */
 function syncControlValue(el, value, owner) {
-	if (el.value !== stringify(value, 0, ' ')) setAttr(el, 'value', value, owner);
+	if (
+		el.value !== stringify(value, 0, ' ') &&
+		(typeof value != 'number' || /** @type {HTMLInputElement} */ (el).valueAsNumber !== value)
+	)
+		setAttr(el, 'value', value, owner);
 }
 
 /**

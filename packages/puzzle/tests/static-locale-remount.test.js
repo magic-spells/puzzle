@@ -208,8 +208,10 @@ describe('static kernel: setLocale remount', () => {
 	});
 
 	it('leaves a plain-string title alone, and syncs nothing when the viewer reads the page locale', async () => {
+		// A prerendered page: its <title> is the build's (a client-rendered page
+		// takes its route title, see static-kernel.test.js).
 		document.body.innerHTML =
-			'<div id="app"></div>' +
+			'<div id="app" data-puzzle-static><h1>Welcome</h1></div>' +
 			`<script type="application/json" data-puzzle-locale="en">${JSON.stringify(EN)}</script>`;
 		document.title = 'Prerendered';
 		let i18n;
