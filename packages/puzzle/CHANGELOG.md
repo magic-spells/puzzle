@@ -498,6 +498,23 @@ one is *not* a compile error; it silently builds a different product.
   untyped. `puzzle check` type-checks `lang="ts"` scripts, template event
   handlers (a handler that does not exist, the wrong number of arguments, or
   an argument of a known type that does not fit) and standard-function calls.
+- **`puzzle check` no longer reports correct templates that read `data()`
+  (D165).** It typed template reads against the view class's declared
+  members, but a template reads what `data()` returns, so it reported a
+  `private` field mirrored in `data()`, a nullable field `data()` normalises,
+  a data key named like a view member (`events`, `props`, `route`), a dotted
+  read of a `data()`-only key under `noPropertyAccessFromIndexSignature`, and
+  a loop over `Object.values()` or `Object.entries()` of untyped data.
+  Template data is now untyped, so a mistake made through a typed class field
+  (a misspelt member of a declared field, or a declared field passed as the
+  wrong argument) is no longer reported either. Handler names, `lang="ts"`
+  handler calls, standard-function calls, and members of literals, function
+  results and `Object.keys()` results are still checked.
+- **The documented `<Component is={ cards[embed.type] }>` passes
+  `puzzle check` under `strict`.** The check typed the script's `cards` map
+  and indexed it with untyped data, which `noImplicitAny` rejects ("Element
+  implicitly has an 'any' type"). A selector is now checked like other
+  template data; a typed sub-expression inside it still is.
 - **Buttons are quiet: no brand fill (puzzle-pieces).** A screen with many
   buttons no longer reads as a wall of indigo. `button` `primary` is solid ink
   with the page colour as its text (`bg-ink text-page hover:bg-ink/85`):
@@ -550,6 +567,62 @@ one is *not* a compile error; it silently builds a different product.
 
 Re-add a piece with `puzzle add piece <name> --force` to pick up these
 changes.
+
+### Fixed
+
+- **A failed `app.mount()` or `i18n.setLocale()` that nothing awaits is
+  reported again.** A bare `app.mount()`, as every scaffolded `app.js` has,
+  failed with a blank page and an empty console (since 0.7.0), and a failed
+  in-place locale switch that nothing awaited, such as a language button's,
+  reported nothing (since 0.9.0). Both now reach the console as an unhandled
+  rejection. A failed `record.save()` or `.delete()` that nothing awaits is
+  now reported the same way.
+- **Back after a bare `#anchor` link returns to the reading position in
+  Safari and every iOS browser.** WebKit jumps to the anchor before it fires
+  `popstate`, so the router saved the anchor's position for the entry the
+  reader left, and Back landed on the anchor again. The router now saves the
+  position from the last `scroll` event.
+- **A range input keeps its `value` when `value` comes before `min`, `max` or
+  `step`.** Attributes are written in authored order, and the browser clamps a
+  range to the bounds it has at that moment, so the value was clamped at mount
+  (to 0–100 by default) and when an update raised `value` and `max` together.
+  The value is now applied again once every attribute is in.
+- **A number input whose `@input` stores a number keeps what you type.** With
+  a handler that stores `Number(event.target.value)`, typing `10.05` stored
+  `105`: at `10.0` the field was rewritten to `10` under the caret. A field
+  whose number already equals the bound value is now left alone.
+- **A static `prerender: false` page shows its route's title.** In
+  `output: 'static'` it kept the shell's `<title>` in the browser tab; it now
+  takes the route's `meta.title`, as the SPA router does.
+- **`output: 'static'` warns about an ignored `storage` even when the config
+  guards `window`.** The build reads the config in Node, where
+  `typeof window !== 'undefined' ? window.localStorage : undefined` is
+  `undefined`, so that spelling never drew the warning. It now prints whenever
+  the config has a `storage` key.
+- **`puzzle check` finds a TypeScript hoisted to a workspace root, and
+  `puzzle doctor` a Tailwind CLI in a parent folder.** Both looked only in the
+  app's own `node_modules`, so in an npm or Yarn 1 workspace, which hoists
+  packages to its root, `check` said TypeScript was missing and `doctor`
+  reported no local Tailwind install. Both now look in each parent folder's
+  `node_modules` too.
+- **The Store panel's History stays readable (puzzle-devtools).** After the
+  first update, every later update quoted the earlier rows' values again and
+  lost their times.
+- **DevTools says why a static page shows no app (puzzle-devtools).** Pages
+  built with `output: 'static'` never load the DevTools bridge, so the panels
+  find no app even under `puzzle dev`. The "No Puzzle app detected" state now
+  says so, where it only told you to run `puzzle dev`.
+- **`eslint --fix` no longer deletes a `.pzl` file's template
+  (eslint-plugin-puzzle).** Whitespace and formatting rules (core
+  `no-multiple-empty-lines`, `@stylistic`, `neostandard`,
+  `@antfu/eslint-config`, `eslint-plugin-prettier`) saw the template, the
+  `<script>` tags and the `<style>` section as blank lines and trailing
+  spaces, and `--fix` removed them. A fix now never reaches outside the
+  `<script>` body, and `recommended` and `typescript` no longer turn off
+  `eol-last`, `no-trailing-spaces` and `unicode-bom`. Under
+  `eslint-plugin-prettier`, a change Prettier wants on the first line of the
+  body is neither fixed nor reported; format `.pzl` files with
+  `@magic-spells/prettier-plugin-puzzle`.
 
 ### CLI
 
