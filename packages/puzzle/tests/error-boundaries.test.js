@@ -982,6 +982,151 @@ describe('errorView retry', () => {
 	});
 });
 
+// A failed load stays on the page it left (D19); a first load left none.
+describe('a first load whose data() fails', () => {
+	it.each([
+		['throws', () => {
+			throw new Error('api down');
+		}],
+		['rejects', async () => {
+			throw new Error('api down');
+		}],
+	])('shows the error view in the page’s place when data() %s', async (_, data) => {
+		const errorViews = [];
+		const reports = [];
+		let paints = 0;
+		let mounts = 0;
+		class Page extends PuzzleView {
+			data = data;
+			mounted() {
+				mounts++;
+			}
+			render() {
+				paints++;
+				return h('span', { class: 'page' }, [text('page')]);
+			}
+		}
+
+		const app = await createTestApp({
+			routes: [{ path: '/', view: Page }],
+			errorView: errorViewClass(errorViews),
+			onError(error, info) {
+				reports.push({ error, info });
+			},
+		});
+		apps.push(app);
+		await flush();
+
+		expect(app.find('.app-error .message').textContent).toBe('api down');
+		expect(reports).toHaveLength(1);
+		expect(reports[0].info.phase).toBe('navigation');
+		expect(errorViews[0].props.info).toBe(reports[0].info);
+		expect(app.router.current.path).toBe('/');
+		expect([paints, mounts]).toEqual([0, 0]); // the failed page never painted
+	});
+
+	it('takes the layout’s place, and retry rebuilds the page inside it', async () => {
+		let down = true;
+		let layoutsDestroyed = 0;
+		const errorViews = [];
+		class Layout extends PuzzleView {
+			destroyed() {
+				layoutsDestroyed++;
+			}
+			render() {
+				return h('main', { class: 'layout' }, [new ViewNode(SLOT_TAG)]);
+			}
+		}
+		class Page extends PuzzleView {
+			async data() {
+				if (down) throw new Error('still down');
+				return {};
+			}
+			render() {
+				return h('span', { class: 'page' }, [text('page')]);
+			}
+		}
+
+		const app = await createTestApp({
+			routes: [{ path: '/', view: Page, layout: Layout }],
+			errorView: errorViewClass(errorViews),
+			onError() {},
+		});
+		apps.push(app);
+		await flush();
+		expect(app.find('.app-error')).not.toBeNull();
+		expect(app.find('.layout')).toBeNull();
+		expect(layoutsDestroyed).toBe(1);
+
+		await errorViews[0].props.retry(); // the server is still down
+		await flush();
+		expect(errorViews).toHaveLength(2);
+		expect(app.find('.app-error .message').textContent).toBe('still down');
+
+		down = false;
+		await errorViews[1].props.retry();
+		await flush();
+		expect(app.find('.layout .page').textContent).toBe('page');
+		expect(app.find('.app-error')).toBeNull();
+	});
+
+	it('takes a nested route’s place without blaming a missing <Outlet/>', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		class Parent extends PuzzleView {
+			render() {
+				return h('section', { class: 'parent' }, [new ViewNode(SLOT_TAG)]);
+			}
+		}
+		class Child extends PuzzleView {
+			data() {
+				throw new Error('api down');
+			}
+		}
+
+		const app = await createTestApp({
+			routes: [{ path: '/p', view: Parent, children: [{ path: 'c', view: Child }] }],
+			routerInitialPath: '/p/c',
+			errorView: errorViewClass(),
+			onError() {},
+		});
+		apps.push(app);
+		await flush();
+		expect(app.find('.app-error .message').textContent).toBe('api down');
+		expect(app.find('.parent')).toBeNull();
+		expect(warn.mock.calls.flat().join(' ')).not.toContain('<Outlet/>');
+	});
+
+	it('without an errorView reports once, and a push to the same path rebuilds', async () => {
+		let down = true;
+		const reports = [];
+		class Page extends PuzzleView {
+			data() {
+				if (down) throw new Error('api down');
+				return {};
+			}
+			render() {
+				return h('span', { class: 'page' }, [text('page')]);
+			}
+		}
+
+		const app = await createTestApp({
+			routes: [{ path: '/', view: Page }],
+			onError(error, info) {
+				reports.push(info.phase);
+			},
+		});
+		apps.push(app);
+		await flush();
+		expect(app.container.children).toHaveLength(0);
+		expect(reports).toEqual(['navigation']);
+
+		down = false;
+		await app.router.push('/');
+		await flush();
+		expect(app.find('.page').textContent).toBe('page');
+	});
+});
+
 describe('error view terminal failure and defaults', () => {
 	it("reports an error-view failure once with phase 'error-view' and never recurses", async () => {
 		const reports = [];

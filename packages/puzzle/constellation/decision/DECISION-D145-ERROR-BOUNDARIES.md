@@ -82,8 +82,10 @@ their state. Props: `error`, `info` (the same frozen object), and `retry`
   router-owned descendants.
 - **The error view failing** reports once as `error-view` and stops; the
   placeholder stays for a later patch or navigation.
-- **SSG takeover:** the error view renders first; only without one (or if it
-  fails) is the prerendered page restored (D140).
+- **SSG takeover:** a mount failure renders the error view first; only
+  without one (or if it fails) is the prerendered page restored (D140). A
+  takeover whose `data()` fails keeps the prerendered page untouched: the
+  clear runs after the data gate.
 - **No `errorView`:** the funnel still reports, the invisible placeholder
   stays, and the owner's `refresh()` remounts through it. No built-in error UI.
 - **Prerender:** a build-time failure fails the build; the error view never
@@ -98,9 +100,12 @@ their state. Props: `error`, `info` (the same frozen object), and `retry`
   `clear()` runs the same release. Known limit: bracketing needs the old root
   to be a direct child of the container; otherwise `unknownRange` is null, and
   fresh content can land beside the corrupt content. Undecided.
-- **Pre-mount failures are buffered.** A skeleton view's preload rejecting
-  before `mount()` parks on the instance and is flushed once after the first
-  render attempt.
+- **Pre-mount failures are buffered.** A failure that reaches a preloaded view
+  before its `mount()` (a skeleton view's preload rejecting, the gate failure
+  a load with nothing committed yet hands its top unit
+  ([[DECISION-D19-NAVIGATION-COMMIT]]), or a store-change refresh failing in
+  between) parks on the instance; `mount()` flushes it before the first
+  render, so the failed view never paints or fires `mounted()`.
 - **Cleanup is exactly-once** — subscriptions, descendants, refs, `:outside`
   listeners, portal ranges; a throwing teardown hook cannot block the
   replacement.

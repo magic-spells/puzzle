@@ -973,7 +973,9 @@ What follows from the rule:
 - **`data()` must tolerate running several times per navigation.** Keep it a
   pure derivation — no side effects, no one-shot gates.
 - **Errors fail the navigation.** A network failure, a 500, or a malformed body
-  rejects the run and goes to `errorView`. Only a 404 becomes a committed
+  rejects the run and reports to `onError`. A later navigation stays on the
+  current page; a first load shows `errorView` in the page's place, and a
+  skeleton view shows it in that view's place. Only a 404 becomes a committed
   `null`.
 
 Skeletons need no change: every settle round counts as one load, so a

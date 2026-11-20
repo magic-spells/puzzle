@@ -1715,11 +1715,11 @@ export class Router {
 		// template — the prerendered content is replaced by identical real content in
 		// ONE synchronous swap, no skeleton shown (so #shouldHold's D52 hold never
 		// engages either — it needs a skeleton to have actually rendered). Scoped
-		// TIGHTLY to nav #0 + marker present; a data() rejection here follows the
-		// normal initial-nav gate-failure path (catch below: stay put, URL untouched,
-		// prerendered DOM left intact). All other D39 behavior — SPA cold boot with a
-		// skeleton, subsequent client-side navigations to skeleton views — is
-		// byte-identical (isSSGTakeover false ⇒ skeletonExempt is the old check).
+		// TIGHTLY to nav #0 + marker present; a data() rejection here stays put
+		// (catch below: URL untouched, prerendered DOM left intact). All other D39
+		// behavior — SPA cold boot with a skeleton, subsequent client-side
+		// navigations to skeleton views — is byte-identical (isSSGTakeover false ⇒
+		// skeletonExempt is the old check).
 		//
 		// __PUZZLE_TAKEOVER__ leads the conjunction so a plain SPA build folds the
 		// whole probe to `false` at compile time. Probed INLINE (never hoisted into
@@ -1772,8 +1772,8 @@ export class Router {
 							);
 							// Straight through: preload() runs off-DOM, so this rejection can
 							// land before mount() ever creates the view's ViewManager. The
-							// view buffers the error in that window and flushes it at the end
-							// of mount() (PuzzleView #pendingFailure) — deferring by a
+							// view buffers the error in that window and flushes it when its
+							// mount() starts (PuzzleView #pendingFailure) — deferring by a
 							// microtask never reached the mount and left the user on the
 							// skeleton forever.
 							v.__showErrorView?.(err, info);
@@ -1813,46 +1813,53 @@ export class Router {
 					'[puzzle] navigation data() failed:',
 					err
 				);
-				for (const v of freshViews) v.destroy();
-				if (layout && !reuseLayout) layout.destroy();
-				// D146: unwind every prepared ancestor. Subscription-only — the ancestors
-				// were never touched, so nothing renders, no hook fires, and the D145 error
-				// funnel above stays the single report for this failure.
-				discardPrepared();
-				// Strand recovery: our token bump doomed any transition still animating
-				// out (its post-playOut check will #abandon against our newer token), but
-				// by failing here we never reach #swap — the only place that destroys a
-				// stalled #pendingOut. Left alone, that outgoing unit sits fully played
-				// out (held invisible by the out animation's `fill`) over an UNCHANGED
-				// #state that still claims it as the current view. Restore it: cancel the
-				// out animation (WAAPI cancel clears the effect, finished-and-filling
-				// included — and resolves a still-parked playOut await, so the doomed
-				// navigation abandons promptly), clear its leaving/inert guard, and refresh
-				// once to re-track the store subscription playOut dropped. Only when WE are
-				// still the latest navigation — a newer one owns the cleanup via its own
-				// clamp + #swap skipOut path. The restored unit's playOut memo stays spent:
-				// a later navigation away swaps it out instantly, no second out animation.
-				this.#recoverFailedNavigation(token);
-				// Pop-only URL repair, same as the two pre-commit catches above (token
-				// guard included): the browser already moved the address bar onto the
-				// popped entry and we are staying put, so restore it before the retry
-				// redraw paints a face for a route the URL would otherwise claim we are on.
-				if (pop && cur && token === this.#token && this.#state === cur)
-					this.#restoreCommittedUrl(cur.path);
-				// Retry redraw (D145/v1.71). Staying put means the user keeps the page still
-				// on screen, and a retry navigation keeps its error view mounted for exactly
-				// that reason — so this position is not blank, it is showing a face for the
-				// error BEFORE this one, holding a closure that already fired. Swap it for a
-				// face carrying THIS failure's error/info and a fresh retry. Nothing about
-				// the commit contract moves: no URL, no history entry, no half-built page —
-				// only what an already-failed position DISPLAYS. Skipped once a newer
-				// navigation owns the token (the #recoverFailedNavigation posture): that one
-				// owns the outcome, and the held face — original error, re-armed retry —
-				// stays up either way, so nothing here can leave the position empty.
-				if (retryView && token === this.#token) {
-					await retryView.__retryErrorView?.(err, info);
+				// Staying put needs a page on screen. A first load has none (a hybrid one
+				// keeps its prerendered page): its top unit commits anyway and shows the
+				// error view in its place, as a skeleton view's failed load does (D145).
+				const top = !cur && !isSSGTakeover && (layout ?? freshViews[0]);
+				for (const v of freshViews) if (v !== top) v.destroy();
+				if (top) top.__showErrorView(err, info);
+				else {
+					if (layout && !reuseLayout) layout.destroy();
+					// D146: unwind every prepared ancestor. Subscription-only — the ancestors
+					// were never touched, so nothing renders, no hook fires, and the D145 error
+					// funnel above stays the single report for this failure.
+					discardPrepared();
+					// Strand recovery: our token bump doomed any transition still animating
+					// out (its post-playOut check will #abandon against our newer token), but
+					// by failing here we never reach #swap — the only place that destroys a
+					// stalled #pendingOut. Left alone, that outgoing unit sits fully played
+					// out (held invisible by the out animation's `fill`) over an UNCHANGED
+					// #state that still claims it as the current view. Restore it: cancel the
+					// out animation (WAAPI cancel clears the effect, finished-and-filling
+					// included — and resolves a still-parked playOut await, so the doomed
+					// navigation abandons promptly), clear its leaving/inert guard, and refresh
+					// once to re-track the store subscription playOut dropped. Only when WE are
+					// still the latest navigation — a newer one owns the cleanup via its own
+					// clamp + #swap skipOut path. The restored unit's playOut memo stays spent:
+					// a later navigation away swaps it out instantly, no second out animation.
+					this.#recoverFailedNavigation(token);
+					// Pop-only URL repair, same as the two pre-commit catches above (token
+					// guard included): the browser already moved the address bar onto the
+					// popped entry and we are staying put, so restore it before the retry
+					// redraw paints a face for a route the URL would otherwise claim we are on.
+					if (pop && cur && token === this.#token && this.#state === cur)
+						this.#restoreCommittedUrl(cur.path);
+					// Retry redraw (D145/v1.71). Staying put means the user keeps the page still
+					// on screen, and a retry navigation keeps its error view mounted for exactly
+					// that reason — so this position is not blank, it is showing a face for the
+					// error BEFORE this one, holding a closure that already fired. Swap it for a
+					// face carrying THIS failure's error/info and a fresh retry. Nothing about
+					// the commit contract moves: no URL, no history entry, no half-built page —
+					// only what an already-failed position DISPLAYS. Skipped once a newer
+					// navigation owns the token (the #recoverFailedNavigation posture): that one
+					// owns the outcome, and the held face — original error, re-armed retry —
+					// stays up either way, so nothing here can leave the position empty.
+					if (retryView && token === this.#token) {
+						await retryView.__retryErrorView?.(err, info);
+					}
+					return fail('error', err); // stay put, no history entry (reused ancestors kept — soft-violation)
 				}
-				return fail('error', err); // stay put, no history entry (reused ancestors kept — soft-violation)
 			}
 
 			// A newer navigation started while we awaited — discard this one.
@@ -3713,13 +3720,14 @@ function warnOutsideBaseOnce(pathname, base) {
  * child instance has no ViewManager and reports a null element. A parent
  * still showing its skeleton (v1.8, D39 — not `loaded` yet) is skipped: its
  * child legitimately mounts later, when the real template (and its <Outlet/>)
- * lands.
+ * lands. So is a destroyed parent (a failed first load's chain): it never
+ * rendered a template to check.
  *
  * @param {PuzzleView[]} views
  */
 function warnMissingSlots(views) {
 	for (let i = 0; i < views.length - 1; i++) {
-		if (views[i] && !views[i].loaded) continue;
+		if (views[i] && (!views[i].loaded || views[i].isDestroyed)) continue;
 		if (views[i + 1] && views[i + 1].element == null) {
 			console.warn(
 				'[puzzle] a routed child did not mount — does the parent view template include an <Outlet/>?'

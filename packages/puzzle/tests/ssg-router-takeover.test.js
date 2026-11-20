@@ -651,6 +651,35 @@ describe('router SSG takeover (M2)', () => {
 		expect(el.querySelector('.rejecting-leaf')).toBe(null);
 	});
 
+	it('keeps the prerendered page when the routed data() fails at takeover, even with an errorView', async () => {
+		let failOnClient = false;
+		class Page extends PuzzleView {
+			data() {
+				if (failOnClient) throw new Error('api down');
+				return { label: 'BUILD-CONTENT' };
+			}
+			render() {
+				return h('main', { class: 'page' }, [text(this.getData().label)]);
+			}
+		}
+		class AppError extends PuzzleView {
+			render() {
+				return h('p', { class: 'app-error' }, [text('error')]);
+			}
+		}
+		const routes = [{ path: '/', name: 'page', view: Page }];
+		const { pages } = await prerender({ target: '#app', routes }, { mode: 'hybrid' });
+		const el = ssgContainer(pages[0].html);
+		const prerendered = el.innerHTML;
+		failOnClient = true;
+		const app = boot({ target: '#app', routes, routerMode: memoryRouter(), errorView: AppError, onError() {} });
+
+		await app.mount();
+
+		expect(el.innerHTML).toBe(prerendered);
+		expect(el.querySelector('.app-error')).toBe(null);
+	});
+
 	it('mounts the hybrid page when a nested component CONSTRUCTOR throws', async () => {
 		// A field initializer or constructor body throws before preload() is ever
 		// reached, so the construction has to sit inside the same fail-soft try: this
