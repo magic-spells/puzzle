@@ -212,7 +212,8 @@ one is *not* a compile error; it silently builds a different product.
   and the test helpers — needs 24 or later. `@magic-spells/puzzle`,
   `@magic-spells/puzzle-pieces` and the ESLint and Prettier plugins declare
   `"engines": { "node": ">=24" }`, so npm warns `EBADENGINE` when it installs
-  them on an older Node. CI runs the framework suites on Node 24 and Node 26.
+  them on an older Node. CI runs the framework's JavaScript suites on Node 24
+  and Node 26.
 - **BREAKING: `setData()` is now `setState()`, and `getState()` is new (D191).**
   `this.setData(...)` is gone with no alias; rename every call to
   `this.setState(...)`, which takes the same `(key, value)` or object map.
