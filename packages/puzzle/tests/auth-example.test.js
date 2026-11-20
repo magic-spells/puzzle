@@ -220,6 +220,28 @@ describe('examples/auth', () => {
 		expect(app.find('[role="alert"]')).toBeNull();
 	});
 
+	it('offers Try again when a load fails for another reason, and it loads the page', async () => {
+		await boot('/login');
+		await signInWith('ada@example.com', 'puzzle');
+		await vi.waitFor(() => expect(app.findAll('.notes li')).toHaveLength(2));
+
+		// the server fails the next notes read with a 500, not a 401
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		noteOverride = (request) => (request.method === 'GET' ? { status: 500, body: { error: 'Down.' } } : undefined);
+		app.store.invalidate('note');
+		const tryAgain = await vi.waitFor(() => {
+			const button = [...app.findAll('button')].find((b) => b.textContent.includes('Try again'));
+			expect(button).toBeTruthy();
+			return button;
+		});
+
+		// the server is back: the button loads the page again
+		noteOverride = null;
+		await app.click(tryAgain);
+		await vi.waitFor(() => expect(app.findAll('.notes li')).toHaveLength(2));
+		expect(app.container.textContent).not.toContain('Try again');
+	});
+
 	it('sends you to sign in again when the refresh token is refused too', async () => {
 		await boot('/login');
 		await signInWith('ada@example.com', 'puzzle');

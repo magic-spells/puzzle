@@ -36,7 +36,11 @@ export default class ErrorView extends PuzzleView {
   }
 
   data() {
-    return { ...this.getState(), retry: this.props.retry };
+    return this.getState();
   }
+
+  events = {
+    retry: () => this.props.retry(),
+  };
 }
 </script>
