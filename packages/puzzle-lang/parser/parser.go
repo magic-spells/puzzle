@@ -472,7 +472,7 @@ var voidElements = map[string]bool{
 }
 
 // parseElement parses an element, component, or composition marker
-// (<Children>, <Slot>, <Slot name="x">, or <Snippet>) starting at the
+// (<Children>, <Outlet>, <Slot name="x">, or <Snippet>) starting at the
 // current TokTagOpen.
 func (p *parser) parseElement() (Node, *ParseError) {
 	open := p.cur
@@ -524,7 +524,10 @@ func (p *parser) parseElement() (Node, *ParseError) {
 					return nil, errAt(p.file, pos, `named slots are spelled <Slot name="…"/> (D134)`)
 				}
 			}
-			return nil, errAt(p.file, pos, "bare <slot> is not a marker — use <Children/> for call-site content or <Slot/> for the router outlet (D134)")
+			return nil, errAt(p.file, pos, "bare <slot> is not a marker — use <Children/> for call-site content or <Outlet/> for the router outlet (D134/D199)")
+		}
+		if name == "outlet" {
+			return nil, errAt(p.file, pos, "the router outlet is spelled <Outlet/> (D199)")
 		}
 		if name == "portal" {
 			return nil, errAt(p.file, pos, "the portal marker is spelled <Portal>…</Portal> (D134/D144)")
@@ -553,6 +556,13 @@ func (p *parser) parseElement() (Node, *ParseError) {
 			}
 			if selfClose {
 				return nil, errAt(p.file, pos, "<Portal/> is paired-only — a portal carries the children it teleports: write <Portal>…</Portal>")
+			}
+		}
+		if name == "Outlet" {
+			// the router outlet (D199) takes no attributes: the router fills it
+			// with the current page, so there is nothing to name or hand over.
+			if perr := outletMarkerAttrs(attrs, p.file); perr != nil {
+				return nil, perr
 			}
 		}
 		if name == "Children" || name == "Slot" {
@@ -598,10 +608,15 @@ func (p *parser) parseElement() (Node, *ParseError) {
 
 	if !p.raw {
 		if name == "Children" {
-			return &Slot{Args: slotArgs, Children: children, Pos: pos}, nil
+			return &Slot{Marker: "Children", Args: slotArgs, Children: children, Pos: pos}, nil
+		}
+		if name == "Outlet" {
+			return &Slot{Marker: "Outlet", Children: children, Pos: pos}, nil
 		}
 		if name == "Slot" {
-			return &Slot{Name: slotName, Args: slotArgs, Children: children, Pos: pos}, nil
+			// a <Slot> without a name parses (a host that runs its own slot rules
+			// may still use it), and the composition check rejects it (D199).
+			return &Slot{Name: slotName, Marker: "Slot", Args: slotArgs, Children: children, Pos: pos}, nil
 		}
 		if name == "Snippet" {
 			return &Snippet{Fits: snippetFits, Params: snippetParams, Body: children, Pos: pos}, nil
@@ -1537,12 +1552,12 @@ func isComponentName(s string) bool {
 }
 
 // isCompositionMarker reports whether name is one of the reserved capitalized
-// composition markers (D134/D141/D144/D166). Markers are exact-match: a dotted
+// composition markers (D134/D141/D144/D166/D199). Markers are exact-match: a dotted
 // name is never a marker, which is why checkComponentName rejects a marker root
 // rather than routing it here.
 func isCompositionMarker(name string) bool {
 	switch name {
-	case "Children", "Slot", "Snippet", "Portal":
+	case "Children", "Outlet", "Slot", "Snippet", "Portal":
 		return true
 	}
 	return false

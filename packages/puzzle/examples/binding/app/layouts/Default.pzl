@@ -4,7 +4,7 @@
     <p>An input field bound to a record in the datastore.</p>
   </header>
   <main>
-    <Slot/>
+    <Outlet/>
   </main>
 </puzzle-view>
 

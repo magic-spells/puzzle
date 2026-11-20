@@ -1,0 +1,42 @@
+<puzzle-view class="block rounded-lg border border-red-200 bg-red-50 p-6">
+  {#if renewing}
+    <p class="text-slate-700">Renewing your session…</p>
+  {:else if expired}
+    <p class="font-medium text-red-800">Your session has ended.</p>
+    <p class="mt-3"><a class="text-indigo-600 hover:underline" href={ link({ name: 'login' }) }>Sign in again</a></p>
+  {:else}
+    <p class="font-medium text-red-800">Something went wrong loading this page.</p>
+    <button type="button" class="mt-3 rounded-lg bg-white px-3 py-1.5 border border-red-200" @click={ retry }>Try again</button>
+  {/if}
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { refresh } from '../auth.js';
+
+/**
+ * the app's error view (D145): it replaces a page or component whose data()
+ * failed, with props { error, info, retry }.
+ *
+ * a 401 here means the server refused a token that looked fresh to us (it
+ * was revoked, or the laptop slept through the refresh timer). so try one
+ * refresh and retry the page; if the refresh is refused too, the session is
+ * over and the only way on is to sign in again.
+ */
+export default class ErrorView extends PuzzleView {
+  created() {
+    const unauthorized = this.props.error?.status === 401;
+    this.setState({ renewing: unauthorized, expired: false });
+    if (!unauthorized) return;
+
+    refresh(this.ctx.store).then(
+      () => this.props.retry(),
+      () => this.setState({ renewing: false, expired: true })
+    );
+  }
+
+  data() {
+    return { ...this.getState(), retry: this.props.retry };
+  }
+}
+</script>

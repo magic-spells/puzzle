@@ -47,7 +47,7 @@ function makeView(name, log, { animations = { in: IN, out: OUT } } = {}) {
 	};
 }
 
-// A plain shared layout that never animates on a view swap — its <Slot/> hosts
+// A plain shared layout that never animates on a view swap — its <Outlet/> hosts
 // the routed view, exercising the reuseLayout / patch-driven overlap path.
 class PlainLayout extends PuzzleView {
 	render() {

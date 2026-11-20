@@ -241,7 +241,7 @@ CLI — it is unrelated and must not be bumped along with the release.
   wrapping genuinely can't work** (rule set 2026-08-19 as "wrap when simple", strengthened
   2026-08-22 — see `constellation/decision/DECISION-WRAP-WEB-COMPONENTS.md`; `scroll-stack`
   is the exemplar; `sheet` was the first conversion, 2026-08-22). A wrapper piece renders the
-  custom element's markup around `<Slot/>`, binds props to attributes, declares the npm
+  custom element's markup around `<Children/>`, binds props to attributes, declares the npm
   package in `piece.json.dependencies`, and upgrades it via **dynamic import in
   `mounted()`** — never a top-level import, because the package's `class extends
   HTMLElement` crashes Node prerendering. The component's stylesheet is imported at the
@@ -355,9 +355,10 @@ CLI — it is unrelated and must not be bumped along with the release.
   can't be routed to a slot (compile error: "ambiguous"). Make the condition internal —
   either a direct-child wrapper that carries the `slot` attribute with the control flow
   inside it, or branch the entire component call.
-- **Composition markers are capitalized (D134, puzzle 0.4.0).** `<Children/>` receives
-  untagged call-site content, `<Slot/>` is the router outlet, and `<Slot name="x"/>` is a
-  named slot. The `slot="x"` call-site attribute is unchanged. Lowercase
+- **Composition markers are capitalized (D134, puzzle 0.4.0; renamed D199, 0.10).**
+  `<Children/>` receives untagged call-site content (every piece uses this one),
+  `<Outlet/>` is the router outlet in layouts and views, and `<Slot name="x"/>` is a
+  named slot. A bare `<Slot/>` is a compile error since 0.10. The `slot="x"` call-site attribute is unchanged. Lowercase
   `<slot>`/`<children>` are compile errors in every form.
 - **Stock chrome goes in a marker's FALLBACK BODY (D141).** A paired marker's body is
   fallback content: it renders only when nothing fills that position, and call-site

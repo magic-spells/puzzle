@@ -13,7 +13,7 @@ export default [
       title: 'Puzzle Kanban — Morph'
     },
     // The board stays mounted while the task dialog swaps in and out of its
-    // <Slot/> — the shape a shared-element morph needs (the card must survive
+    // <Outlet/> — the shape a shared-element morph needs (the card must survive
     // the dialog's whole lifetime; D55).
     children: [
       { path: '', name: 'board-index', view: EmptyOverlay },

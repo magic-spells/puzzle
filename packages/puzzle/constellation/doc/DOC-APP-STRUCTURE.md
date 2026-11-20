@@ -20,7 +20,7 @@ connections:
 
 The shape of a Puzzle app; `examples/todos/` is the reference. The contract is [[DOC-SPEC-ANATOMY]] §2 and §11.
 
-- `app/app.ts` (TypeScript app) or `app/app.js` is the build entry; having both is an error. It creates one [[COMPONENT-PUZZLE-APP]] with `target`, `routes`, `models` and optional `formatters`, `apiURL`, `storage`, `adapter`, router mode and hooks, then calls `mount()`. Translations are configured in `puzzle.config.js`, not here; the build wires them in.
+- `app/app.ts` (TypeScript app) or `app/app.js` is the build entry; having both is an error. It creates one [[COMPONENT-PUZZLE-APP]] with `target`, `routes`, `models` and optional `functions`, `apiURL`, `storage`, `adapter`, router mode and hooks, then calls `mount()`. Translations are configured in `puzzle.config.js`, not here; the build wires them in.
 - `app/routes.js` exports route records (`path`, `view`, optional `layout`, `children`, `name`, `guard`, `meta`, …); `view` and `layout` may be `lazy()` markers. [[COMPONENT-ROUTER]] owns navigation, layout reuse and params.
 - Every `.pzl` template sits in a `<puzzle-view>` section. In routed files (`app/views/**`, `app/layouts/**`) it is the render root and keeps its attributes. In components (`app/components/**`) it renders nothing and holds one root element; call-site content flows through `<Children/>` and `<Slot name>`. A family is a directory of members plus a JS barrel ([[COMPONENT-CODEGEN]]).
 - `app/models/` exports [[COMPONENT-PUZZLE-MODEL]] subclasses, registered in the app config; [[COMPONENT-STORE]] instantiates records and wires reactivity.

@@ -1,0 +1,79 @@
+<puzzle-view>
+  <h1 class="text-2xl font-semibold tracking-tight">Your notes</h1>
+  <p class="mt-2 text-sm text-slate-600">
+    Loaded from <code>GET /api/notes</code>, which answers 401 without a live access token.
+  </p>
+
+  <form class="mt-6 flex gap-2" @submit={ add(event) }>
+    <input
+      class="flex-1 rounded-lg border border-slate-300 px-3 py-2 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+      placeholder="Write a note"
+      aria-label="New note"
+      value={ draft } />
+    <button
+      type="submit"
+      class="rounded-lg bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+      disabled={ !canAdd }>
+      Add
+    </button>
+  </form>
+  {#if error}<p class="mt-2 text-sm text-red-600" role="alert">{ error }</p>{/if}
+
+  {#if notes.length > 0}
+    <ul class="notes mt-6 space-y-2">
+      {#for note in notes}
+        <li class="rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <p>{ note.text }</p>
+          {#if note.createdAt}<p class="mt-1 text-xs text-slate-400">{ note.createdAt }</p>{/if}
+        </li>
+      {/for}
+    </ul>
+  {:else}
+    <p class="mt-6 text-slate-500">No notes yet.</p>
+  {/if}
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { withFreshToken } from '../auth.js';
+
+export default class DashboardView extends PuzzleView {
+  created() {
+    this.setState({ draft: '', error: null });
+  }
+
+  data() {
+    const { draft, error } = this.getState();
+    return {
+      // a tracked find fetches the list (D161). the guard already refreshed
+      // the token, and beforeRequest adds it, so nothing here mentions auth.
+      notes: this.ctx.store.findMany('note'),
+      draft,
+      error,
+      canAdd: draft.trim() !== '',
+    };
+  }
+
+  events = {
+    // add a note. it shows at once (it is in the store), then the save sends
+    // POST /api/notes. withFreshToken retries once after a refresh if the
+    // server says the token is no longer good.
+    add: async (event) => {
+      event.preventDefault();
+      const text = this.getState().draft.trim();
+      if (!text) return;
+
+      const store = this.ctx.store;
+      const note = store.createRecord('note', { text });
+      this.setState({ draft: '', error: null });
+      try {
+        await withFreshToken(store, () => note.save());
+      } catch (error) {
+        // the save failed for good: take the note back out and say why
+        note.destroy();
+        this.setState({ draft: text, error: error?.body?.error ?? 'The note could not be saved.' });
+      }
+    },
+  };
+}
+</script>

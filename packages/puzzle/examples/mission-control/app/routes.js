@@ -13,7 +13,7 @@ import AppShell from './layouts/AppShell.pzl';
 //
 // The three list sections use NESTED ROUTES (v1.3, D30) for the details panel:
 // child paths are relative, `layout` stays top-level-only, and the section
-// view renders its matched child at <Slot/>. `path: ''` is the index child —
+// view renders its matched child at <Outlet/>. `path: ''` is the index child —
 // required for the bare section URL to match — and renders nothing (panel
 // closed); `path: ':id'` slides in the shared Detail view. Swapping between
 // siblings keeps the section view mounted (chain-prefix reuse), so only the

@@ -1,0 +1,96 @@
+<puzzle-view class="block max-w-sm mx-auto">
+  <h1 class="text-2xl font-semibold tracking-tight">Sign in</h1>
+  <p class="mt-2 text-sm text-slate-600">
+    Try <code class="text-slate-900">ada@example.com</code> or <code class="text-slate-900">grace@example.com</code>,
+    password <code class="text-slate-900">puzzle</code>.
+  </p>
+
+  <!-- one focusout handler marks whichever field you leave as touched, so its
+       error shows only after you have had a go at it (D192) -->
+  <form class="mt-8 space-y-5" @submit={ submit(event) } @focusout={ touch(event) } novalidate>
+    <label class="block">
+      <span class="text-sm font-medium text-slate-700">Email</span>
+      <input
+        class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+        type="email"
+        name="email"
+        autocomplete="username"
+        value={ form.values.email } />
+      {#if form.errors.email}<span class="mt-1 block text-sm text-red-600">{ form.errors.email }</span>{/if}
+    </label>
+
+    <label class="block">
+      <span class="text-sm font-medium text-slate-700">Password</span>
+      <input
+        class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+        type="password"
+        name="password"
+        autocomplete="current-password"
+        value={ form.values.password } />
+      <!-- a wrong password comes back from the server as
+           { errors: { password } }, and the form puts it here -->
+      {#if form.errors.password}<span class="mt-1 block text-sm text-red-600">{ form.errors.password }</span>{/if}
+    </label>
+
+    {#if form.error}<p class="text-sm text-red-600" role="alert">{ form.error }</p>{/if}
+
+    <button
+      type="submit"
+      class="w-full rounded-lg bg-indigo-600 px-4 py-2 font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+      disabled={ form.submitting }>
+      {#if form.submitting}Signing in…{:else}Sign in{/if}
+    </button>
+  </form>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { createForm } from '@magic-spells/puzzle/forms';
+import Credentials from '../models/credentials.js';
+import { signIn } from '../auth.js';
+
+export default class LoginView extends PuzzleView {
+  created() {
+    // the draft, its errors, touched fields and the submitting flag, kept in
+    // view state under `form` so the template reads form.values.email
+    this.form = createForm(this, Credentials, {
+      from: { email: '', password: '' },
+      fields: ['email', 'password'],
+    });
+  }
+
+  data() {
+    // the guard sent us here with ?redirect=/where-you-were
+    return { redirect: safeRedirect(this.route.query.redirect) };
+  }
+
+  events = {
+    // validate, then sign in. a thrown 401 maps onto the password field;
+    // submit() itself never rejects, so there is nothing to catch here.
+    submit: (event) => {
+      this.form.submit(event, async (values) => {
+        await signIn(this.ctx.store, values);
+        // replace, not push: back from the dashboard should not land on a
+        // sign-in form you already used
+        await this.ctx.router.replace(this.getData().redirect);
+      });
+    },
+
+    touch: (event) => this.form.touch(event),
+  };
+}
+
+/**
+ * where to go after signing in. only a path inside this app counts, so a
+ * crafted ?redirect=https://evil.example or //evil.example falls back to the
+ * dashboard instead of leaving the app or failing the navigation.
+ * @param {unknown} value the raw query value
+ * @returns {string | { name: string }}
+ */
+function safeRedirect(value) {
+  if (typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/\\')) {
+    return value;
+  }
+  return { name: 'dashboard' };
+}
+</script>

@@ -15,7 +15,7 @@ import DefaultLayout from './layouts/Default.pzl';
 //
 // • An album ('/album/:slug' → '/album/:slug/photo/:id') is a NESTED CHILD swap
 //   (D30). AlbumView is the shared parent and stays mounted while only its
-//   <Slot/> child swaps (AlbumIndex → PhotoView), so the grid card <img> and the
+//   <Outlet/> child swaps (AlbumIndex → PhotoView), so the grid card <img> and the
 //   fullscreen <img> are BOTH in the DOM at once — a D55 LIVE PAIR the engine
 //   morphs with a real show/hide round trip (and flies back on close/back).
 //
@@ -28,7 +28,7 @@ export default [
     view: AlbumView,
     layout: DefaultLayout,
     meta: { title: 'Album · Puzzle Photos' },
-    // AlbumView renders its matched child at <Slot/>. The index child renders
+    // AlbumView renders its matched child at <Outlet/>. The index child renders
     // nothing (AlbumView owns the grid); the photo child overlays fullscreen.
     // Keeping AlbumView mounted across the child swap is what makes the album
     // morph a live pair instead of a capture flight (see the note above).

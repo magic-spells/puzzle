@@ -721,7 +721,7 @@ does. 0.7.0 on the same machine and browser measured `params-burst` at 18.0ms;
 its `navigate-burst` has no timing (see [Across releases](#across-releases)).
 
 That is 0.28ms per leaf-divergence navigation against 0.16ms for the params-only
-control. The ancestors here render one span and a `<Slot/>`, so the time says
+control. The ancestors here render one span and an `<Outlet/>`, so the time says
 little on its own; the counters are the finding, and a real app's layouts
 multiply them by whatever they do per render.
 

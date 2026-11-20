@@ -1,0 +1,22 @@
+<puzzle-view class="min-h-screen">
+  <!-- the routed page lands in the <Slot/> below -->
+  <header><Slot name="nav"/></header>
+  {#if ready}
+    <main><Outlet/></main>
+  {:else}
+    <main><Outlet>
+      <p>Loading…</p>
+    </Outlet></main>
+  {/if}
+  {#raw}<Slot/>{/raw}
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Default extends PuzzleView {
+  data() {
+    return { ready: true };
+  }
+}
+</script>

@@ -53,12 +53,12 @@ own `@theme` palette in `app/styles/styles.css`.
 - **NotFound.pzl** — the view rendered by the `*` route.
 - **settings/** — `Settings.pzl`, a shell that stays mounted while its matched
   child pane (`General`, `Profile`, `Notifications`) swaps through its
-  `<Slot/>`.
+  `<Outlet/>`.
 
 ### Components (`app/components/`)
 Reusable components render **inline** (D20): their `<puzzle-view>` carries no
 attributes and wraps a single root element.
-- **Button.pzl** — `variant`/`type`/`disabled` props, a `<Slot/>` for the label,
+- **Button.pzl** — `variant`/`type`/`disabled` props, a `<Children/>` for the label,
   and a guarded `@press` callback prop.
 - **PostCard.pzl** — an object `post` prop rendered as a real `<a href>` (the
   router intercepts the click); the `truncate`/`timeago` functions.
@@ -66,7 +66,7 @@ attributes and wraps a single root element.
   callback prop (the parent owns the mutation).
 
 ### Layout (`app/layouts/`)
-- **Default.pzl** — nav + `<Slot/>` + footer. The base element styles live in
+- **Default.pzl** — nav + `<Outlet/>` + footer. The base element styles live in
   `app/styles/styles.css`.
 
 ## How server data gets here

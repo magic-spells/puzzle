@@ -1,7 +1,7 @@
 <puzzle-view class="h-screen flex flex-col bg-bg text-fg overflow-hidden">
   <div class="flex-1 flex min-h-0">
     <!-- Sidebar. Stays mounted across Library/Artist/Album/Search navigations
-         because they all reuse this layout — only <Slot/> swaps. -->
+         because they all reuse this layout — only <Outlet/> swaps. -->
     <aside class="hidden sm:flex w-60 shrink-0 flex-col bg-surface border-r border-line p-3">
       <a href="{ link('/') }" class="flex items-center gap-2.5 px-3 py-3 mb-4 font-display text-lg font-bold text-fg hover:no-underline">
         <span class="inline-block w-7 h-7 rounded-lg" style="background:linear-gradient(135deg,#7c5cff,#22d3ee)"></span>
@@ -50,7 +50,7 @@
          scrolls away with the content. -->
     <main class="flex-1 min-h-0 overflow-y-auto relative isolate">
       <div class="max-w-5xl mx-auto px-5 sm:px-8 py-8">
-        <Slot/>
+        <Outlet/>
       </div>
     </main>
   </div>

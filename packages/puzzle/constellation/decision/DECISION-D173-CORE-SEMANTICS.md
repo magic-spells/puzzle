@@ -123,7 +123,7 @@ V3's strict comparison, V5, V15, V17 and the V18 styles.
   integer); a missing bound runs zero times. Index: `{#for item in items, i}`
   (0-based); `{#for 1...n, x}` binds the number. No `loop.first`/`loop.last`
   helpers — compare the index. PuzzleKit: codegen loop guard + `listRows`.
-- **V13 — at most one default marker (`<Children/>` or bare `<Slot/>`), and
+- **V13 — at most one default marker (`<Children/>` or `<Outlet/>`), and
   one `<Slot name="x">` per name, per render path.** Markers in mutually
   exclusive `{#if}`/`{:else}`/`{#case}` branches are legal. Checked in the
   shared parser (`walkBranches` in `packages/puzzle-lang/parser/slot.go`).

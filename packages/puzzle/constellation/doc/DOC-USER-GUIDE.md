@@ -47,7 +47,7 @@ my-app/
 │   ├── models/           # PuzzleModel classes + index.js registry
 │   ├── views/            # routed .pzl views
 │   ├── components/       # reusable .pzl components
-│   ├── layouts/          # route layouts with <Slot/>
+│   ├── layouts/          # route layouts with <Outlet/>
 │   ├── assets/           # source assets, incl. {#svg} files
 │   ├── locales/          # <tag>.json translations (optional)
 │   ├── styles/           # Tailwind entry + global CSS
@@ -75,7 +75,7 @@ const app = new PuzzleApp({
   models,
   adapter,          // opt-in server sync; tracked finds fetch on miss
   apiURL: '/api',   // adapter endpoints join onto this
-  formatters: {     // app functions, called by name in templates
+  functions: {      // app functions, called by name in templates
     byline: (name) => (name ? `By ${name}` : 'By an unknown author')
   }
 });
@@ -88,7 +88,7 @@ All config keys: [[DOC-SPEC-ANATOMY]] §2. There is no seeding step.
 
 ## Routes
 
-`app/routes.js` exports `{ path, name, view, layout?, meta? }` entries. A `:id` segment arrives as `params.id` in `data({ params, props })`; `'*'` matches last and renders the 404 view. A layout renders the routed view at `<Slot/>`. Nesting, guards, lazy views, query, head, scroll and focus: [[DOC-ROUTER]].
+`app/routes.js` exports `{ path, name, view, layout?, meta? }` entries. A `:id` segment arrives as `params.id` in `data({ params, props })`; `'*'` matches last and renders the 404 view. A layout renders the routed view at `<Outlet/>`. Nesting, guards, lazy views, query, head, scroll and focus: [[DOC-ROUTER]].
 
 ## Models
 

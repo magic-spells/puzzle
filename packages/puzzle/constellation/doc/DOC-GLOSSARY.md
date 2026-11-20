@@ -31,11 +31,11 @@ Current terms. [[DOC-SPEC]] is authoritative.
 
 **development-state transfer** — The one-shot snapshot/restore `puzzle dev` uses across full reloads for store records and JSON-safe local view data. Not per-module hot replacement.
 
-**function** — A display transform a template calls by name, value first: `{ currency(price) }`, `{ truncate(title, 40) }`. The library is 19 standard functions plus PuzzleKit's `link` and `timeago`, tree-shaken to what templates call; apps register their own under the `formatters` config key. Never call one a filter or a pipe.
+**function** — A display transform a template calls by name, value first: `{ currency(price) }`, `{ truncate(title, 40) }`. The library is 19 standard functions plus PuzzleKit's `link` and `timeago`, tree-shaken to what templates call; apps register their own under the `functions` config key. Never call one a filter or a pipe.
 
 **island** — A host element whose children belong to the browser or a third-party library after mount; its own attributes and listeners still patch.
 
-**layout** — A routed view wrapping a route chain; `<Slot/>` marks the outlet.
+**layout** — A routed view wrapping a route chain; `<Outlet/>` marks the outlet.
 
 **list block** — The persistent per-key row state behind an item-form `{#for}`; an unchanged row returns its cached vnode subtree.
 
@@ -57,7 +57,7 @@ Current terms. [[DOC-SPEC]] is authoritative.
 
 **render revision** — A record's last notification sequence, compared when a record is passed as a prop, so a child refreshes on that record's mutations.
 
-**router outlet** — Bare `<Slot/>`, where a routed child mounts.
+**router outlet** — `<Outlet/>`, where a routed child mounts (a bare `<Slot/>` before 0.10, D199).
 
 **scoped styles** — `<style scoped>`, wrapped in native `@scope` and anchored by a compiler-generated `data-<id>` root attribute.
 

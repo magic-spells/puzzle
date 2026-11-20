@@ -13,7 +13,7 @@
        any ancestor up to <body> may carry transform / filter / contain — those
        would re-root the overlap pin's `position: fixed` and break the effect. -->
   <main class="demo-stage">
-    <Slot/>
+    <Outlet/>
   </main>
 </puzzle-view>
 

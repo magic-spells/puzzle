@@ -161,7 +161,7 @@
     <main class="relative min-w-0 flex-1 overflow-y-auto overflow-x-hidden border-t border-panel-edge bg-surface-panel shadow-panel lg:rounded-tl-xl lg:border-l">
       <!-- pb-dock-clear below lg: the floating docs pill must not sit on the footer. -->
       <div class="px-gutter pt-10 pb-dock-clear lg:pb-10">
-        <Slot/>
+        <Outlet/>
 
         <footer class="mt-16 border-t border-border pt-6 text-sm text-muted">
           Puzzle Pieces · { pieceCount } copy-in components, rendered live from the registry · built with the Puzzle framework.

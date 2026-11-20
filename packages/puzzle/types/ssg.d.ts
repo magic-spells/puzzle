@@ -170,8 +170,8 @@ export interface PrerenderToDirResult {
 	routerBase?: string;
 	/** Whether the config registered any models — static mode only. */
 	hasModels?: boolean;
-	/** Whether the config registered any custom formatters — static mode only. */
-	hasFormatters?: boolean;
+	/** Whether the config registered any custom template functions — static mode only. */
+	hasFunctions?: boolean;
 	/** Whether the app passed the adapter capability — static mode only. */
 	hasAdapter?: boolean;
 	/**

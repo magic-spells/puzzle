@@ -7,7 +7,7 @@ import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 
 // Hand-written stand-ins for what the compiler emits (SPEC §4): render()
 // returns a ViewNode tree, a component vnode is `new ViewNode(Class, props,
-// slotChildren)`, and a `<Children/>`/`<Slot/>` becomes `new ViewNode(SLOT_TAG)`.
+// slotChildren)`, and a `<Children/>`/`<Outlet/>` becomes `new ViewNode(SLOT_TAG)`.
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
 const comp = (Class, props = {}, children = []) => new ViewNode(Class, props, children);
