@@ -177,6 +177,20 @@ describe('ViewManager — form bindings (properties, not attributes)', () => {
 		vm.render(h('input', { type: 'text', value: 'a' }));
 		expect(input.value).toBe('a');
 	});
+
+	it('keeps a number field’s spelling of the bound number — typing 10.05 through 10.0', () => {
+		// An @input handler storing Number(event.target.value): "10.0" stores 10, and
+		// rewriting the field to "10" would make the next keystroke "105".
+		const { container, vm } = setup();
+		vm.render(h('input', { type: 'number', value: 10 }));
+		const input = container.querySelector('input');
+		input.value = '10.0';
+		vm.render(h('input', { type: 'number', value: 10 }));
+		expect(input.value).toBe('10.0');
+		// A genuinely different number still writes.
+		vm.render(h('input', { type: 'number', value: 11 }));
+		expect(input.value).toBe('11');
+	});
 });
 
 describe('ViewManager — events (@ attrs)', () => {
@@ -401,6 +415,24 @@ describe('ViewManager — select controlled value', () => {
 		// jsdom leaves nothing selected when the value matches no option.
 		expect(select.selectedIndex).toBe(-1);
 		expect(select.value).toBe('');
+	});
+});
+
+// A range's `value` is clamped against the bounds it has when it is written, and
+// attrs apply in authored order: written before a later `max`, it is clamped to
+// the default (or the old) max and stays there.
+describe('ViewManager — range value written before its bounds', () => {
+	it('mounts the bound value when `value` precedes `max`', () => {
+		const { container, vm } = setup();
+		vm.render(h('input', { type: 'range', value: 150, min: '0', max: '200' }));
+		expect(container.querySelector('input').value).toBe('150');
+	});
+
+	it('patches the bound value when `max` grows past the old one in the same pass', () => {
+		const { container, vm } = setup();
+		vm.render(h('input', { type: 'range', value: 0, min: '0', max: '100' }));
+		vm.render(h('input', { type: 'range', value: 240, min: '0', max: '300' }));
+		expect(container.querySelector('input').value).toBe('240');
 	});
 });
 

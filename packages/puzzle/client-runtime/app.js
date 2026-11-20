@@ -264,14 +264,12 @@ export class PuzzleApp {
 	 */
 	mount() {
 		if (this.#mountPromise) return this.#mountPromise;
-		const p = this.#mount();
-		this.#mountPromise = p;
-		// Not .finally(): that mints a second promise whose rejection nobody handles.
-		const clear = () => {
+		// Hand out the finally() promise itself, so a rejection nobody handles is
+		// still reported by the browser.
+		const p = this.#mount().finally(() => {
 			if (this.#mountPromise === p) this.#mountPromise = null;
-		};
-		p.then(clear, clear);
-		return p;
+		});
+		return (this.#mountPromise = p);
 	}
 
 	/**

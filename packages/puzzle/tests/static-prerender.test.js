@@ -828,6 +828,20 @@ describe('static output ignores storage with a warning (D81, item B3)', () => {
 		expect('storage' in summary).toBe(false);
 	});
 
+	it('warns for a window-guarded storage, which reads undefined at build time', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-guarded-storage-'));
+		const shellPath = writeShell(outDir);
+		const cfg = {
+			target: '#app',
+			// What `typeof window !== 'undefined' ? window.localStorage : undefined`
+			// reads in the Node build (this file runs under jsdom, so spelled out).
+			storage: undefined,
+			routes: [{ path: '/', name: 'home', view: Home, layout: Layout, meta: { title: 'Home' } }],
+		};
+		const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+		expect(summary.warnings.some((w) => w.includes('static output ignores `storage`'))).toBe(true);
+	});
+
 	it('no storage configured → no warning', async () => {
 		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-nostorage-'));
 		const shellPath = writeShell(outDir);

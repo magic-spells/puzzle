@@ -81,7 +81,9 @@ bridge's last message.
 
 - `mount()` latches the private `#mount()` promise until it settles: concurrent
   calls share it, so a second `mount()` during navigation zero can't resolve early
-  or swallow the first's rejection.
+  or swallow the first's rejection. The promise handed out is the latch's own
+  `finally()` promise, so a failure nothing awaits (a bare `app.mount()` in
+  `app.js`) still reaches the console as an unhandled rejection.
 - Each attempt claims `#mountEpoch`; any teardown burns it. Every continuation
   after an await checks it still owns the app, so unmount + remount around an await
   can't double-start the router, double-fire `mounted`, or let a stale abort tear

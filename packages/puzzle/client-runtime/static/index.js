@@ -254,9 +254,11 @@ export async function mountStatic({
 		}
 	};
 
-	// An unmarked prerender:false page has no fallback DOM to preserve and keeps the
-	// original mount path byte-for-byte.
+	// An unmarked prerender:false page has no fallback DOM to preserve. Its HTML is
+	// the verbatim shell, so its route title is set here, as the SPA router's
+	// navigation zero does (a `{ t }` title was synced above; syncTitle skips it).
 	if (!isTakeover) {
+		syncTitle(resolveHeadField(chain, 'title'));
 		targetEl.replaceChildren();
 		mount(topVnode, targetEl, null, ctx);
 		armRemount(topVnode.instance);

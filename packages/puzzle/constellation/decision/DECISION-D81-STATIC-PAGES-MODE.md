@@ -43,7 +43,7 @@ notes:
 
 Other static-mode rules:
 - `prerender: false` writes an empty-target shell that still gets a data island and entry script — rendered fully client-side.
-- `config.storage` is ignored with a warning (a live object serializes to a dead `{}`); a direct `mountStatic({ storage })` caller still gets persistence.
+- `config.storage` is ignored (a live object serializes to a dead `{}`), with a warning whenever the config names the key, so a `window`-guarded value that reads `undefined` at build time still warns; a direct `mountStatic({ storage })` caller still gets persistence.
 - Shadowed routes are still written (no router, no matching — D126); two routes declaring the same path skip the second with reason `duplicate`.
 - `staging/.puzzle-prerender` and `_puzzle` are reserved in public output (both modes).
 - **Locale prefix routing** ([[DECISION-D177-LOCALE-URL-PREFIXES]]): every route is written once per locale (`dist/<locale>/…`, default locale at the root), each `WrittenPage` carrying its `locale`. A route's locale pages share one slug and one entry module (`uniqueEntryPages` takes the first per slug; a slug whose pages name different modules is an error). The kernel takes the page's locale from the URL prefix, then its table island, and wraps the stub with `localizeRouterStub` so hrefs carry the prefix. Default-locale pages (404 included) carry the inline first-visit redirect script (`ssg/redirect.js`) unless `i18n.detect: false`.

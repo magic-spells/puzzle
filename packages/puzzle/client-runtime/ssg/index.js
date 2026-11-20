@@ -1562,10 +1562,11 @@ async function writeStaticDir({
 
 	// Static output has no persistence layer: a live Storage object can't cross the
 	// build→client boundary (it JSON-serializes to a dead `{}`), so a static build
-	// never threads `config.storage`. Warn when it's set so the missing persistence
-	// isn't a silent surprise (records won't survive a page load). A direct
-	// mountStatic({storage}) caller can still wire real persistence by hand.
-	if (config.storage != null) {
+	// never threads `config.storage`. Warn when the config names it (by key: a
+	// window-guarded value reads undefined in this Node build) so the missing
+	// persistence isn't a silent surprise (records won't survive a page load). A
+	// direct mountStatic({storage}) caller can still wire persistence by hand.
+	if ('storage' in config) {
 		warnings.push(
 			'[puzzle] static output ignores `storage` — a static page has no persistence layer, ' +
 				"so records won't persist across page loads. Remove `storage` from the config, or use " +
