@@ -144,7 +144,7 @@ Commands live in `compiler/cmd/puzzle`. Global: `--no-color`; `puzzle version` =
 - `puzzle dev [dir]` — `-p/--port` (3000), `--strict-port`, `--host`, `-o/--open`, `--fixtures`, `--profile-build`.
 - `puzzle build [dir]` — `-m/--mode production|development`, `--static`, `--hybrid`, `--fixtures` (not with prerender), `-q/--quiet` (skips the summary, page report and update notice), `--profile-build` (or `PUZZLE_PROFILE_BUILD=1`). Entry is `app/app.ts` else `app/app.js`; both is an error.
 - `puzzle preview [dir]` — `-p/--port` (4000), `--strict-port`, `--host`.
-- `puzzle check [dir]` — type-checks `.pzl` with the app's own `node node_modules/typescript/bin/tsc` (TypeScript 7 or later).
+- `puzzle check [dir]` — type-checks `.pzl` with the app's TypeScript (7 or later), run as `node <dir>/node_modules/typescript/bin/tsc`, where `<dir>` is the app or the nearest parent folder that has it.
 - `puzzle generate|g <component|view|layout|model> <Name>` — `--path`, `-f/--force`, `--dir`, `--family A,B` (component only).
 - `puzzle add tailwind | piece <name…> | theme [name…] | deploy <host> | skills` — `--registry`, `--pieces-version`, `-f/--force`, `-y/--yes`, `--dir`, `--skill-root <dir>` (repeatable). `add deploy` writes a tested host config for `vercel`, `netlify`, `cloudflare`, `nginx` or `apache`, picked by the config's `output` or `--static`/`--hybrid`; with no host it lists them ([[DECISION-D198-DEPLOY-TEMPLATES]]).
 - `puzzle upgrade [--check] [-y]`, `puzzle upgrade skills`; `dev`/`build` show a TTY-only update notice (`PUZZLE_NO_UPDATE_CHECK=1` opts out; skipped in CI).
