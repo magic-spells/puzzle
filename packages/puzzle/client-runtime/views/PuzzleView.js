@@ -1460,7 +1460,6 @@ export class PuzzleView {
 				// refresh committed normally, #loaded is already true → complete inline.
 				if (!this.#loaded) {
 					this.#pendingMountHook = true;
-					this.#flushPendingFailure();
 					return this;
 				}
 			}
