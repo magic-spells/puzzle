@@ -53,8 +53,9 @@ export default {
   true` sends the target URL's host (and written port) instead, for a backend
   that routes on `Host`, on requests and WebSocket upgrades alike. `Origin` is
   never rewritten, so under `changeOrigin` a backend with that check rejects
-  unsafe requests and WebSocket connects unless it trusts the dev origin. This is
-  Vite's meaning; Vite's string shorthand also implies `changeOrigin: true`,
+  unsafe requests and WebSocket connects unless it is set to accept the dev
+  origin; Rails has no allowlist, so there only turning the check off helps. This
+  is Vite's meaning; Vite's string shorthand also implies `changeOrigin: true`,
   Puzzle's does not ([[DECISION-D201-DEV-PROXY-CHANGE-ORIGIN]]).
 - **Backend down** → one log line (`proxy /api → … refused — is the backend
   running?`) and a 502 `puzzle dev: backend unavailable`.

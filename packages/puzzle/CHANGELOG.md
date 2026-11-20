@@ -426,8 +426,9 @@ one is *not* a compile error; it silently builds a different product.
   `puzzle dev` sends the target's host instead, for requests and WebSocket
   upgrades alike. As in Vite, `Origin` is left alone, so a backend that
   compares `Origin` with `Host` (Django's CSRF check, Rails, Go WebSocket
-  servers) rejects POSTs and WebSocket connects unless it trusts the dev
-  origin. The string form is unchanged and keeps the browser's `Host` (in Vite
+  servers) rejects POSTs and WebSocket connects unless it is set to accept
+  the dev origin (Rails has no allowlist, so there only turning its origin
+  check off helps). The string form is unchanged and keeps the browser's `Host` (in Vite
   it implies `changeOrigin: true`). Only `target` and `changeOrigin` are
   read: Vite's `rewrite` and other options are ignored, and a path in the
   target URL is dropped.
