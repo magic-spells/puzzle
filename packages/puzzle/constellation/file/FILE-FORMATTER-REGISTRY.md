@@ -4,7 +4,7 @@ status: verified
 path: client-runtime/formatters.js
 language: javascript
 summary: >-
-  FormatterRegistry: function registration (the formatters config), lookup, overrides with the
+  FormatterRegistry: function registration (the `functions` config), lookup, overrides with the
   shadowing warning, the missing-name guard naming removed names' replacements, and the
   handler-shadow warning.
 connections:

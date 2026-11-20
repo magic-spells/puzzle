@@ -29,7 +29,7 @@ A routed layout may wrap its outlet in reusable chrome, and the routed page must
 
 ## Decision
 
-- The expansion walk (`expandSlots` in `viewManager.js`) descends into a component vnode's call-site children. A default marker there (`<Children/>`, or `<Slot/>` in a layout — the same marker node) consumes the enclosing template's default bucket before the inner component renders; the substituted vnodes become ordinary default children of the inner component.
+- The expansion walk (`expandSlots` in `viewManager.js`) descends into a component vnode's call-site children. A default marker there (`<Children/>`, or `<Outlet/>` in a layout — the same marker node) consumes the enclosing template's default bucket before the inner component renders; the substituted vnodes become ordinary default children of the inner component.
 - Mounted vnode identity and instance pointers survive expansion, so patching and teardown stay correct.
 - Named markers inside a component invocation are compile errors (through nested elements, control flow and deeper invocations): the router fills only the default bucket.
 - Per-body slot-name uniqueness counts inside the invocation — a default marker inside and outside would splice the same bucket twice.

@@ -4,7 +4,7 @@
     <h1 class="font-display text-4xl md:text-5xl text-ink">How Puzzle fits together</h1>
     <p class="mt-4 text-muted leading-relaxed">
       A nested-routes shell (v1.3, D30): this view stays mounted while the pane
-      below swaps through its <code class="font-mono text-sm bg-surface-2 border border-line-2 rounded px-1 py-0.5">{ '<Slot/>' }</code>.
+      below swaps through its <code class="font-mono text-sm bg-surface-2 border border-line-2 rounded px-1 py-0.5">{ '<Outlet/>' }</code>.
       In static mode each pane is prerendered to its own joined path.
     </p>
 
@@ -15,7 +15,7 @@
   </section>
 
   <section class="mt-8 max-w-2xl">
-    <Slot />
+    <Outlet />
   </section>
 </puzzle-view>
 

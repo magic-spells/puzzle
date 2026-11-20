@@ -24,7 +24,7 @@ verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 # Composition markers, snippets, slots, and Portal
 
 Proves the composition surface ([[DOC-SPEC-TEMPLATE]] §24, §64, §67): `<Children>` as the
-default marker, `<Slot name="x">` as a named slot, `<Slot>` as the router outlet,
+default marker, `<Slot name="x">` as a named slot, `<Outlet>` as the router outlet,
 `<Snippet>` as caller-owned stamped content, `<Portal>` as the out-of-tree escape, and
 `<Component>` selection. Run with
 `npx vitest run tests/composition tests/named-slots tests/slot- tests/marker-fallbacks tests/lazy-slot-fallback tests/snippet tests/portal tests/conditional-router-slot tests/component-slot`.

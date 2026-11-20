@@ -7,7 +7,7 @@
     @focusout={ onFocusOut(event) }
     @keydown:escape={ onEscape }
     @keydown:escape:outside={ onEscape }>
-    <Slot/>
+    <Children/>
     {#if visible}
       <span class={ panelClass } id={ tipId } role="tooltip" data-tooltip-panel>
         { text }
@@ -20,7 +20,7 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
-// Tooltip — a hover/focus text hint that WRAPS its target (the default <Slot/>,
+// Tooltip — a hover/focus text hint that WRAPS its target (its <Children/>,
 // usually a caller-provided button). It is text-only BY DESIGN: the `text` prop
 // is required, and there is no content slot for the hint — a tooltip that can hold
 // arbitrary interactive markup is a popover, use Popover for that.

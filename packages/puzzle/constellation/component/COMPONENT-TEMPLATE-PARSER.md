@@ -181,12 +181,15 @@ collisions are the compiler's. Selector scope and slot semantics:
 
 ## Composition markers
 
-`<Children>`, `<Slot>` (outlet), `<Slot name>`, `<Snippet>`, `<Portal>` are reserved before
+`<Children>`, `<Outlet>`, `<Slot name>`, `<Snippet>`, `<Portal>` are reserved before
 component resolution (not inside `{#raw}`); semantics in [[DOC-SPEC-TEMPLATE]] §24/§64.
 Parser-enforced rules (`slot.go`, skipped by `SkipSlotCheck`):
 
-- `<Children>`/`<Slot>` are self-closing or paired (body = fallback); a marker inside
-  another marker's fallback is an error. Lowercase `<children>`/`<slot>`/`<portal>` and a
+- `<Children>`/`<Outlet>`/`<Slot name>` are self-closing or paired (body = fallback); a
+  marker inside another marker's fallback is an error. A `<Slot>` with no name is an
+  error naming all three (D199); `<Outlet>` takes no attributes. Each `*Slot` node
+  records the tag written in `Marker` (`Children`, `Outlet` or `Slot`), which the
+  post-pass and the codemod read. Lowercase `<children>`/`<slot>`/`<outlet>`/`<portal>` and a
   lowercase `<snippet>` with `fits`/params are steering errors; `<template>` is HTML,
   `<Template>` a component.
 - `<Portal>` is paired-only, takes no attributes (`to`/`name`/`ref` get specific messages),

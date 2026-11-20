@@ -178,3 +178,15 @@ func remapTSCOutput(appRoot, output string, tables map[string]*SegmentTable) str
 	}
 	return formatted
 }
+
+// HasTypeScript reports whether the app under appRoot has its own TypeScript
+// compiler installed, without running it. `puzzle check --fix` asks first so
+// an app with nothing to type-check with still gets its upgrade (D199).
+func HasTypeScript(appRoot string) bool {
+	root, err := filepath.Abs(appRoot)
+	if err != nil {
+		return false
+	}
+	_, err = resolveTSC(root)
+	return err == nil
+}

@@ -1,6 +1,6 @@
 <puzzle-view class="min-h-screen bg-white text-ink">
   <!-- Fixed left sidebar + scrollable main. The layout stays mounted across
-       every route (all routes share it), so only <Slot/> swaps on navigation
+       every route (all routes share it), so only <Outlet/> swaps on navigation
        and the page list / active highlight persist. data({ params }) re-runs on each
        reused-layout navigation (SPEC §9), so `activeId` tracks the URL. -->
   <aside class="fixed inset-y-0 left-0 z-10 w-60 flex flex-col bg-sidebar border-r border-line">
@@ -41,7 +41,7 @@
   </aside>
 
   <main class="ml-60 min-h-screen">
-    <Slot/>
+    <Outlet/>
   </main>
 </puzzle-view>
 

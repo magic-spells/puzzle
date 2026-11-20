@@ -24,7 +24,7 @@ const app = new PuzzleApp({
 
 	// Global formatters available in every template
 	// (display transformation only — logic belongs in data())
-	formatters: {
+	functions: {
 		shout: (value) => `${String(value).toUpperCase()}!`,
 	},
 });

@@ -7,7 +7,7 @@
       role="log"
       aria-label={ label }
       @scroll={ onScroll }>
-      <div data-scroll-inner><Slot/></div>
+      <div data-scroll-inner><Children/></div>
     </div>
 
     {#if !pinned}

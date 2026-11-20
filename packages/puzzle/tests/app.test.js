@@ -10,7 +10,7 @@ import { installFakeAnimate } from './helpers/fake-waapi.js';
 
 // Hand-written stand-ins for what the compiler emits (same convention as
 // tests/router.test.js): a render() returns a ViewNode tree, views/layouts emit
-// a <puzzle-view> root (D20), and <Slot/> is a SLOT_TAG node.
+// a <puzzle-view> root (D20), and <Outlet/> is a SLOT_TAG node.
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
 const slot = () => new ViewNode(SLOT_TAG);
@@ -225,7 +225,7 @@ describe('PuzzleApp — formatters', () => {
 		const app = make({
 			target: '#app',
 			routes: [{ path: '/', name: 'fmt', view: FormatView, layout: DefaultLayout }],
-			formatters: {
+			functions: {
 				shout: (s) => String(s).toUpperCase() + '!',
 				timeago: () => 'OVERRIDDEN', // shadows the built-in timeago
 			},
@@ -320,7 +320,7 @@ describe('PuzzleApp — unmount()', () => {
 				{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
 				{ path: '/other', name: 'other', view: FormatView, layout: DefaultLayout },
 			],
-			formatters: { shout: (s) => String(s) },
+			functions: { shout: (s) => String(s) },
 		});
 		await app.mount();
 		expect(el.querySelector('.home')).not.toBeNull();
@@ -359,7 +359,7 @@ describe('PuzzleApp — full teardown (unmount destroys the view chain)', () => 
 		const log = [];
 
 		// A component nested inside the routed view (not itself routed) — proves the
-		// teardown cascade reaches ordinary components, not only <Slot/> views.
+		// teardown cascade reaches ordinary components, not only <Outlet/> views.
 		class Widget extends PuzzleView {
 			data() {
 				return { todos: this.ctx.store.findMany('todo') }; // subscribes 'todo'

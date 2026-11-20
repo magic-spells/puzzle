@@ -12,7 +12,7 @@ package build
 //     whose page bundle (and therefore whose rendered chain) contains it. A file
 //     in this set is attributable: only its routes can change.
 //   - The PRERENDER bundle's metafile is the graph rooted at the app entry —
-//     app.js, routes.js, the models registry, the formatters module, every
+//     app.js, routes.js, the models registry, the functions module, every
 //     lifecycle hook, and transitively every view. The part of THIS graph that
 //     sits ABOVE the route chain is global to the render: it can move
 //     `beforeMount`, the route table, the store seed, or the formatter set, and
@@ -140,7 +140,7 @@ func buildRouteGraph(pagesMetafile, pagesBase, preMetafile, preBase string, entr
 // renderWide is the prerender graph ABOVE the route chain: walk it from its
 // roots and stop at every chain root, and what the walk reached is exactly the
 // set of modules that shape every page — the app entry, the route table, the
-// store seed, the models registry, the formatters module, the lifecycle hooks
+// store seed, the models registry, the functions module, the lifecycle hooks
 // and whatever those pull in. Membership here is computed WITHOUT reference to
 // page attribution, so a module that is both keeps its render-wide standing
 // (classify consults this set first).

@@ -1,6 +1,6 @@
 <puzzle-view>
   <label for={ forId } class={ classes }>
-    <Slot/>
+    <Children/>
   </label>
 </puzzle-view>
 

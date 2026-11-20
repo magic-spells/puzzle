@@ -1,0 +1,30 @@
+<puzzle-view>
+  <Card title={ title }>
+    <Outlet />
+  </Card>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Card from '@/components/Card.pzl';
+
+export default class Shell extends PuzzleView {
+  data({ params, props }) {
+    // this.setData('ignored', 1) in a comment stays
+    return { title: props.title ?? params.id };
+  }
+
+  share({ params }) {
+    return { id: params.id };
+  }
+
+  events = {
+    pick(event) {
+      this.setState('picked', true);
+      super.setState('also', 1);
+      event.dataTransfer.setData('text/plain', 'x');
+      other.setData('maybe', 2);
+    },
+  };
+}
+</script>

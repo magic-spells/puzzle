@@ -170,7 +170,7 @@ my-puzzle-app/
 │   ├── models/               # Optional models and adapters
 │   ├── views/                # Routed .pzl views
 │   ├── components/           # Reusable .pzl components
-│   ├── layouts/              # Route layouts with <Slot/>
+│   ├── layouts/              # Route layouts with <Outlet/>
 │   ├── assets/               # Source assets, including {#svg} files
 │   ├── styles/               # Tailwind entry + global CSS
 │   └── public/               # Static assets + index.html
@@ -313,10 +313,10 @@ See [constellation/doc/DOC-TEMPLATE-SYNTAX.md](constellation/doc/DOC-TEMPLATE-SY
 ### Slots & Nested Routing
 
 ```html
-<!-- Layout slot: the routed view renders at <Slot/> -->
+<!-- Layout outlet: the routed view renders at <Outlet/> -->
 <div class="user-layout">
   <nav><!-- user navigation --></nav>
-  <Slot />
+  <Outlet />
   <!-- routed view renders here -->
 </div>
 
@@ -360,7 +360,7 @@ shaped with array methods (`items.filter(…)`, `.toSorted(…)`, `.at(-1)`) or 
 
 The library is the **standard set** — the same names, arguments and meaning
 in PuzzleKit and in Sites — plus the browser-only `link` and `timeago`. An
-app registers its own through the `formatters` config map and calls them the
+app registers its own through the `functions` config map and calls them the
 same way (`{ specialFormat(product.title) }`); one that reuses a standard name
 wins, with a development warning. An unregistered name never crashes a render —
 the value passes through unchanged and a single `console.error` names the

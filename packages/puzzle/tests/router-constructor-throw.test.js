@@ -41,7 +41,7 @@ function makeLeafThrowingOnce(name, error) {
 	};
 }
 
-/** A shell view that hosts its child route at a <Slot/>, with a created() spy. */
+/** A shell view that hosts its child route at an <Outlet/>, with a created() spy. */
 function makeShell(name, onCreated) {
 	return class extends PuzzleView {
 		created() {

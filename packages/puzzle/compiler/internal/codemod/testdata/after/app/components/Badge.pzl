@@ -1,0 +1,3 @@
+<puzzle-view>
+  <span class="badge"><Children/></span>
+</puzzle-view>

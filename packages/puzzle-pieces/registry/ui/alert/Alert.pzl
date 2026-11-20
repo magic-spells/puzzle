@@ -17,7 +17,7 @@
       {#if title}
         <p class="font-medium text-ink">{ title }</p>
       {/if}
-      <div class="text-sm text-body"><Slot/></div>
+      <div class="text-sm text-body"><Children/></div>
     </div>
   </div>
 </puzzle-view>
