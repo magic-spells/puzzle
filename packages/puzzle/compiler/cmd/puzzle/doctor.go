@@ -134,11 +134,13 @@ func doctorChecks(dir string) []doctorCheck {
 	fail := func(label, detail string) { add(doctorFail, label, detail) }
 	warn := func(label, detail string) { add(doctorWarn, label, detail) }
 
-	// node on PATH.
-	if ver, ok := nodeVersion(); ok {
-		pass("node", ver)
-	} else {
+	// node on PATH, at the floor or later.
+	if ver, ok := nodeVersion(); !ok {
 		fail("node", "not found on PATH — install Node.js")
+	} else if nodeMajor(ver) < minNodeMajor {
+		fail("node", fmt.Sprintf("%s — Puzzle needs Node %d or later", ver, minNodeMajor))
+	} else {
+		pass("node", ver)
 	}
 
 	// Entry point — the one path build.Build strictly requires, resolved by the
@@ -209,7 +211,17 @@ func doctorChecks(dir string) []doctorCheck {
 	return checks
 }
 
-// nodeVersion returns `node --version` output (e.g. "v20.11.0") when node is on
+// minNodeMajor is Puzzle's Node floor (D200); every `engines` field declares it.
+const minNodeMajor = 24
+
+// nodeMajor reads the major from `node --version` output; anything else reads
+// as 0, below the floor.
+func nodeMajor(ver string) (major int) {
+	fmt.Sscanf(ver, "v%d", &major)
+	return major
+}
+
+// nodeVersion returns `node --version` output (e.g. "v24.11.0") when node is on
 // PATH and runnable.
 func nodeVersion() (string, bool) {
 	path, err := exec.LookPath("node")

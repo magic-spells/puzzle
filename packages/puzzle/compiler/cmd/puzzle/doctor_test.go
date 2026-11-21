@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -47,6 +48,25 @@ func TestDoctorHealthy(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "all checks passed") {
 		t.Errorf("expected a success summary, got:\n%s", buf.String())
+	}
+}
+
+// The node line holds the Node 24 floor (D200): an older Node fails naming its
+// version, 24 and later pass.
+func TestDoctorNodeFloor(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script node stub")
+	}
+	for ver, want := range map[string]doctorCheck{
+		"v22.11.0": {"node", doctorFail, "v22.11.0 — Puzzle needs Node 24 or later"},
+		"v24.0.0":  {"node", doctorPass, "v24.0.0"},
+	} {
+		bin := t.TempDir()
+		mustWriteExecutable(t, filepath.Join(bin, "node"), "#!/bin/sh\necho "+ver+"\n")
+		t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+		if got := doctorChecks(t.TempDir())[0]; got != want {
+			t.Errorf("node %s: got %+v, want %+v", ver, got, want)
+		}
 	}
 }
 

@@ -9,6 +9,9 @@
     "test": "vitest run",
     "check": "puzzle check"
   },
+  "engines": {
+    "node": ">=24"
+  },
   "dependencies": {
     "@magic-spells/puzzle": "^0.10.0"
   },
