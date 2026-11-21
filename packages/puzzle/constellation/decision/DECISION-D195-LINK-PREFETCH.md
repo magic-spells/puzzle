@@ -1,6 +1,6 @@
 ---
 name: 'D195 — Link prefetch: lazy route code loads on intent, guarded routes only on request'
-status: built
+status: verified
 connections:
   - DECISION-D163-LAZY-ROUTE-VIEWS
   - DECISION-D160-SPA-CODE-SPLITTING
@@ -15,6 +15,8 @@ connections:
   - DOC-SPEC-ROUTER
   - DOC-ROUTER
   - DOC-RELEASE-SURFACE
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 ## Context

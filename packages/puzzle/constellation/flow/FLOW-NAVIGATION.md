@@ -29,8 +29,9 @@ connections:
   - DECISION-D182-NAVIGATION-RESULT
   - DECISION-D67-HYBRID-PRERENDER
   - DECISION-D140-TAKEOVER-MOUNT-RESTORATION
-verified_at: '2026-11-01T19:25:13.521Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+  - DECISION-D196-NAMED-ROUTES
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: state
     text: >-
@@ -49,17 +50,17 @@ What runs, in what order, for one navigation, and which step owns each failure. 
 
 The shape is **load, then leave, then commit**: nothing the user can see moves until the last step that can fail has passed. Every exit resolves the caller's `push()`/`replace()` with a `NavigationResult` ([[DECISION-D182-NAVIGATION-RESULT]]).
 
-1. **Request.** `push()`, `replace()`, an intercepted same-origin link click, a popstate (back/forward or `go()`), or navigation zero from `router.start()`.
+1. **Request.** `push()`, `replace()`, an intercepted same-origin link click, a popstate (back/forward or `go()`), or navigation zero from `router.start()`. A named target (`{ name, params, query, hash }`) resolves to its path first; an unknown name or a missing param throws before anything starts ([[DECISION-D196-NAMED-ROUTES]]).
    - the committed path, with the chain intact and nothing in flight → no-op: no history entry, no `data()`, no scroll change; resolves `ok`
    - the committed path while something is in flight, or over an invalidated chain → a real navigation with replace semantics (an ordinary push over a path/hash-mode pop in flight)
    - the *in-flight* navigation's path → that navigation's own promise, so a double-click settles once, at its commit
    - a request from inside the commit window is parked in one last-wins slot and re-dispatched after the window closes; a displaced entry resolves `'superseded'`
 2. **Match** the path against the flattened leaf matchers in declaration order, the top-level `*` catch-all last; a trailing slash is insignificant.
    - no match and no catch-all → warn, stay, resolve `'not-found'`; the cancellation token is left alone
-3. **Claim the token and freeze the snapshot** — `{ path, pathname, query, hash, route, params, chain }`, parsed once — and capture the departure scroll position while the outgoing page still has its full height.
+3. **Claim the token and freeze the snapshot** — `{ path, pathname, query, hash, route, params, chain }`, parsed once — and capture the departure scroll position while the outgoing page still has its full height. A pop's outgoing position is not read here: the popstate handler already saved it from the last `scroll` event, since some browsers jump to an anchor before `popstate` fires.
 4. **Run the guard chain** root → leaf, sequentially, before any view or layout exists ([[DECISION-D87-ROUTE-GUARDS]]).
    - `false` → stay put (`'blocked'`); a throw → stay put (`'error'`, reported to `onError`); a blocked popstate rewrites the address bar back to the committed route
-   - a path string → redirect with the denied verb — `push()` for a push, `replace()` for a pop or navigation zero; the denied URL never enters history; ten redirects without a commit trip the cycle cap (`'error'`)
+   - a path string or named target → redirect with the denied verb — `push()` for a push, `replace()` for a pop or navigation zero; the denied URL never enters history; ten redirects without a commit trip the cycle cap (`'error'`)
    - a newer token across an awaited guard → abandon silently (`'superseded'`)
 5. **Resolve `lazy()` markers** for the whole chain in one `Promise.all` ([[DECISION-D163-LAZY-ROUTE-VIEWS]]); a rejection is a pre-commit failure that stays put (`'error'`), even with nothing committed yet, since no instance exists to hold an error view.
 6. **Plan the chain.** Diff old and new route-node chains by identity: `keep` is the shared-prefix length, clamped back past any instance inside a still-animating outgoing unit. Fresh instances are constructed for `[keep..N]`; the layout is reused unless its class changed. A constructor throw is a pre-commit failure (instances dropped, never destroyed).

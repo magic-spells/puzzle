@@ -1,6 +1,6 @@
 ---
 name: D190 — `env` config values, read as `import.meta.env.KEY`
-status: built
+status: verified
 connections:
   - FILE-CONFIG
   - FILE-BUILD
@@ -27,6 +27,8 @@ notes:
       `dev.proxy` target, `'/api': process.env.API_ORIGIN` or `{ target: process.env.API_ORIGIN, …
       }`, leaves its prefix unproxied, so the config still builds
       ([[DECISION-D201-DEV-PROXY-CHANGE-ORIGIN]]); TestLoadConfigNullBehavesAsUnset pins both forms.
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D190 — `env` config values, read as `import.meta.env.KEY`

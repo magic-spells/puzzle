@@ -16,8 +16,8 @@ connections:
   - DECISION-D81-STATIC-PAGES-MODE
   - DECISION-D154-STATIC-DEV-WARM-REBUILDS
   - DECISION-D155-ROUTE-LEVEL-INVALIDATION
-verified_at: '2026-11-01T19:19:25.478Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: gotcha
     text: >-

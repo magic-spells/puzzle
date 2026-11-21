@@ -1,7 +1,7 @@
 ---
 name: 'D81 — output: ''static'' is a true static site: no router, per-page mount modules, path-shaped hrefs'
 status: verified
-verified_at: '2026-11-01T19:23:12.785Z'
+verified_at: '2026-11-21T18:53:41.145Z'
 connections:
   - DECISION-D67-HYBRID-PRERENDER
   - DECISION-D01-SPA-ONLY
@@ -15,7 +15,7 @@ connections:
   - FILE-BUILD-PRERENDER-PAGES
   - TEST-PRERENDER-OUTPUT
   - FLOW-PRERENDER
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: verified
     text: >-
@@ -35,14 +35,14 @@ notes:
 ## Decision
 
 1. **`__pzlModule` stamps.** Codegen stamps every compiled class with its app-root-relative source path so the build can generate a per-page import graph — in every build except a production SPA one (`output` unset, not `--mode development`), where nothing reads the stamp and the plugin compiles without it (`Plugin.SetStripStamps`, one value per build because the passes share a compile cache). Dev diagnostics and DevTools read it too, so development builds keep it.
-2. **Per-page entry** at `dist/_puzzle/<slug>.js` — content-hashed `<slug>-<hash>.js` in production when `build.hashNames` is on (D181). Slugs: `/`→`index`, `*`→`404`, else `/`→`--`, collisions suffixed `-2`, `-3`…. Each imports `mountStatic` from `@magic-spells/puzzle/static` plus exactly that page's view/layout/component classes. An esbuild splitting pass factors shared code into `dist/_puzzle/chunks/`. The shell's `/app.js` tag is stripped; `dist/` has no `app.js`. The injected script path carries the normalized `routerBase`.
+2. **Per-page entry** at `dist/_puzzle/<slug>.js` — content-hashed `<slug>-<hash>.js` in production when `build.hashNames` is on (D181). Slugs: `/`→`index`, `*`→`404`, else `/`→`--`, collisions suffixed `-2`, `-3`…. Each imports `mountStatic` from `@magic-spells/puzzle/static` plus exactly that page's view/layout/component classes. An esbuild splitting pass factors shared code into `dist/_puzzle/chunks/`. A page whose module graph imports CSS links its own stylesheet (`_puzzle/<slug>.css`, hashed like the module) at the end of its `<head>`. The shell's `/app.js` tag is stripped; `dist/` has no `app.js`. `app.css` ships only when a `public/` page links it; CSS the app entry imports that no page loads draws a warning. The injected script path carries the normalized `routerBase`.
 3. **Browser kernel** (`client-runtime/static/index.js`, `mountStatic`): builds the same ctx the prerenderer built (Store + FormatterRegistry + router stub), rehydrates the inline data island, assembles and preloads the chain via `assembleChain`, skips enter animations and replaces the prerendered children flash-free. The target is stamped `data-puzzle-static`, not `data-puzzle-ssg`.
 4. **Build-time data.** `beforeMount` runs only at build time. Each page's store is serialized into `<script type="application/json" data-puzzle-static-data>` (escaped per D113) and rehydrated in replace mode before preload, so `data()` re-renders identically with no network.
 5. **Router stub parity.** Both phases use `makeRouterStub` (`ssg/assemble.js`) over the per-page route snapshot: `url()` and `current` work, navigation methods throw. Its encoding is **always path-shaped** — the file layout is the URL space and there is no click interception — so prerendered and rehydrated hrefs are byte-identical. `routerBase` still prefixes. A configured `routerMode` produces a build warning and never reaches the page.
 6. **Go pipeline:** `compiler/internal/build/prerender_pages.go`. `models` load from `app/models/index.{js,ts}` and `functions` from `app/functions.{js,ts}`; ones registered only in the app entry trigger a warning (present at build time, missing client-side).
 
 Other static-mode rules:
-- `prerender: false` writes an empty-target shell that still gets a data island and entry script — rendered fully client-side.
+- `prerender: false` writes an empty-target shell that still gets a data island and entry script — rendered fully client-side. The kernel sets its route title, and its topmost view plays its enter, as on an SPA's first navigation.
 - `config.storage` is ignored (a live object serializes to a dead `{}`), with a warning whenever the config names the key, so a `window`-guarded value that reads `undefined` at build time still warns; a direct `mountStatic({ storage })` caller still gets persistence.
 - Shadowed routes are still written (no router, no matching — D126); two routes declaring the same path skip the second with reason `duplicate`.
 - `staging/.puzzle-prerender` and `_puzzle` are reserved in public output (both modes).

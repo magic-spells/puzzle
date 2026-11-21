@@ -1,7 +1,7 @@
 ---
 name: Function library (the formatter registry)
 status: verified
-verified_at: '2026-11-01T19:25:08.617Z'
+verified_at: '2026-11-21T19:10:06.943Z'
 connections:
   - COMPONENT-PUZZLE-APP
   - COMPONENT-CODEGEN
@@ -13,7 +13,7 @@ connections:
   - FILE-FORMATTER-REGISTRY
   - FILE-FORMATTER-BUILTINS
   - FILE-FORMATTER-ALL
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # Function library (the formatter registry)
@@ -45,6 +45,8 @@ the app's `functions` config key included (since 0.10, D7), they are "functions"
 - **`makeFormatterRegistry(custom, url)`** builds every registry (app, static kernel, SSG,
   `/testing`): built-ins, then app functions, then `link` unless the app supplied one. `link`
   delegates to `router.url()` through a closure that reads the router lazily (re-mount safe).
+  A plain object (`constructor === Object`) reaches `url()` as a named target
+  ([[DECISION-D196-NAMED-ROUTES]]); every other value is stringified as a path.
   `t` is installed afterwards by `installTranslate(registry, i18n)` (i18n.js) only when `i18n`
   is configured and the app has no `t`, so formatters.js never imports i18n. Neither enters
   the manifest; the scan records `t` literal keys separately (`Usage.TKeys`) for the

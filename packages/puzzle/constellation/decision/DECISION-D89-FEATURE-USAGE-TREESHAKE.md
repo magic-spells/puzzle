@@ -18,8 +18,8 @@ connections:
   - FILE-BUILD-OPTIONS
   - DOC-SPEC
   - DOC-RELEASE-SURFACE
-verified_at: '2026-11-01T19:23:00.473Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:53:41.145Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 name: 'D89 — Pay-for-what-you-use runtime: a feature-usage scan drives DCE defines'
 ---
 
@@ -42,7 +42,7 @@ is guarded by them. The same scan feeds the function manifest (D31).
 | `__PUZZLE_HAS_LISTENER_OPTIONS__` | the native listener-options branch (D187) | a `passive` or `capture` modifier |
 | `__PUZZLE_HAS_RAW_AT__` | the D150 literal-`@` attribute shim | over-inclusive: any `{#raw}` block |
 | `__PUZZLE_HAS_RAW_HTML__` / `__PUZZLE_HAS_RAW_SANITIZE__` | live-HTML node / sanitizer (D174) | a text interpolation whose outermost call is `raw` or `newline_to_br`; only `raw` keeps the sanitizer |
-| `__PUZZLE_HAS_LAZY__` | `router/lazy.js` (D163) | over-inclusive; the one **script** fact (below) |
+| `__PUZZLE_HAS_LAZY__` | `router/lazy.js` (D163) and link prefetch, `router/prefetch.js` (D195) | over-inclusive; the one **script** fact (below) |
 
 `__PUZZLE_HAS_I18N__` and `__PUZZLE_HAS_LOCALE_ROUTING__` use the same probe
 shape but are **config** facts (D175, D177), not scan results: script code can

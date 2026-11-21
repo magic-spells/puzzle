@@ -1,6 +1,6 @@
 ---
 name: Tree
-status: built
+status: verified
 framework: puzzle
 props:
   - name: nodes
@@ -23,6 +23,8 @@ code_refs:
 connections:
   - DOC-REGISTRY
   - DECISION-CONFIG-FIRST-API
+verified_at: '2026-11-21T19:13:00.327Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # Tree

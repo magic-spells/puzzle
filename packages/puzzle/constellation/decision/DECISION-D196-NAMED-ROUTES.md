@@ -1,6 +1,6 @@
 ---
 name: D196 — Named route targets for link(), url(), push() and replace()
-status: built
+status: verified
 connections:
   - COMPONENT-ROUTER
   - COMPONENT-FORMATTERS
@@ -18,6 +18,8 @@ connections:
   - DECISION-D87-ROUTE-GUARDS
   - DECISION-D177-LOCALE-URL-PREFIXES
   - DECISION-D182-NAVIGATION-RESULT
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D196 — Named route targets for `link()`, `url()`, `push()` and `replace()`
@@ -33,8 +35,8 @@ Routes already take a `name`, but it was informational: every link and navigatio
 - **The table.** Every route node with a string `name` registers its full path, parents and `path: ''` index children included, so nested routes resolve by full path. The `'*'` route is in the table with no URL. In development a name used by two nodes throws when the Router is constructed; production keeps the first.
 - **Params.** Each whole `:param` segment is filled with `encodeURIComponent(String(value))`; the matcher's `decodeURIComponent` gives `data({ params })` the value back. `query` builds through `URLSearchParams` (an array repeats its key, `null`/`undefined` are dropped); `hash` takes `'faq'` or `'#faq'`.
 - **Errors throw**, tagged `[puzzle]` and naming the route: an unknown name (development lists the named routes), the catch-all's name, a missing or empty param, and in development a param the pattern lacks or a key other than the four. `push()`/`replace()` throw synchronously on a bad target instead of resolving a `NavigationResult` ([[DECISION-D182-NAVIGATION-RESULT]] covers navigations, and a bad target is a coding error that never starts one). A bad target returned by a guard is a guard throw ([[DECISION-D87-ROUTE-GUARDS]]).
-- **`link`** passes a plain object (`value.constructor === Object`) to `url()` and stringifies every other value as before, so a number, an array or a `URL` object renders as it did. Without a router (the app before start) a named target renders `''`; `mountView`'s inert router throws and points at `mountApp`.
-- **Static output.** A static page ships no route table. The prerender's stub resolves names against the app's table and records that it did; a page that resolved a named target, or a `prerender: false` page of an app that names a route, carries the table as `<script type="application/json" data-puzzle-static-names>`. The kernel reads it lazily on the first named link and throws a clear error when it is missing. Pages without a named link are byte-identical to before.
+- **`link`** passes a plain object (`value.constructor === Object`) to `url()` and stringifies every other value, so a number, an array or a `URL` object renders as a path string. Without a router (the app before start) a named target renders `''`; `mountView`'s inert router throws and tells the test to pass a router.
+- **Static output.** A static page ships no route table. The prerender's stub resolves names against the app's table and records that it did; a page that resolved a named target, or a `prerender: false` page of an app that names a route, carries the table as `<script type="application/json" data-puzzle-static-names>`. The kernel reads it lazily on the first named link and throws a clear error when it is missing. Pages without a named link carry no table.
 - **Not built:** a `puzzle check` error for an unknown name. Routes are runtime JavaScript (often composed or imported), and a template link's argument is an arbitrary expression, so a check would either miss most cases or flag good ones. The runtime throw, and the build failure a prerender turns it into, catch the mistake instead.
 
 ## Alternatives rejected

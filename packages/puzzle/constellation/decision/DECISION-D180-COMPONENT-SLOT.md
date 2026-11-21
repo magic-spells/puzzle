@@ -1,6 +1,6 @@
 ---
 name: D180 — bounded runtime component selection
-status: built
+status: verified
 connections:
   - DOC-SPEC
   - DOC-SPEC-TEMPLATE
@@ -26,6 +26,8 @@ connections:
   - FILE-CODEGEN-COMPONENT
   - DECISION-D173-CORE-SEMANTICS
   - FILE-CODEGEN-LOWER
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D180 — bounded runtime component selection

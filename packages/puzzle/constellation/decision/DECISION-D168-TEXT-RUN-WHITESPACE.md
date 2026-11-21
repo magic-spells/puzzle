@@ -1,6 +1,6 @@
 ---
 name: 'D168 — Template whitespace: one merged rule for both hosts'
-status: built
+status: verified
 connections:
   - COMPONENT-CODEGEN
   - DOC-SPEC-TEMPLATE
@@ -9,6 +9,8 @@ connections:
   - DOC-LANGUAGE-CORE
   - DECISION-D173-CORE-SEMANTICS
   - DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D168 — Template whitespace: one merged rule for both hosts

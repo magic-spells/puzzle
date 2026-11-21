@@ -19,8 +19,8 @@ connections:
   - FLOW-PRERENDER
   - DECISION-D160-SPA-CODE-SPLITTING
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
-verified_at: '2026-11-01T19:26:04.240Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # Build flow
@@ -47,19 +47,22 @@ orchestration → esbuild with [[COMPONENT-ESBUILD-PLUGIN]] → section parsing
    concurrently; browser errors are reported before Tailwind errors. Each pass ends with
    the per-file usage check: a compiled `.pzl` the scan never read that needs a
    compiled-out feature or function fails the pass, before anything is swapped.
-5. Compose the global stylesheet: Tailwind output, then collected component styles in
-   deterministic order — `styles-<ContentHash>.css` when hashed, else `styles.css`.
-6. Copy public assets and write the bundle (lazy chunks in `chunks/` under
+5. Outside `static` output, warn on stderr (also under `-q`) when the bundle emitted
+   `app.css` and no shell page links it, naming the `<link>` to add.
+6. Compose the global stylesheet: Tailwind output, then collected component styles in
+   deterministic order (minified in production) — `styles-<ContentHash>.css` when hashed,
+   else `styles.css`.
+7. Copy public assets and write the bundle (lazy chunks in `chunks/` under
    `build.splitting`) into staging under `.puzzle/tmp/`
    ([[DECISION-D153-PUZZLE-SCRATCH-DIR]]).
-7. In production, [[FILE-BUILD-SHELL]] rewrites the copied shell to the emitted entry/CSS
+8. In production, [[FILE-BUILD-SHELL]] rewrites the copied shell to the emitted entry/CSS
    names and inserts the entry's static-import modulepreloads. Under an explicit
    `hashNames: true` a missing entry reference fails here, before the swap; public files
    keep their names.
-8. For `hybrid`/`static` output, bundle for Node and run [[COMPONENT-SSG]] into staging
-   ([[FLOW-PRERENDER]]).
-9. Atomically replace `dist/` (the previous output is renamed into `.puzzle/tmp/`, then
-   removed). A failed build leaves the last good output intact.
+9. For `hybrid`/`static` output, bundle for Node and run [[COMPONENT-SSG]] into staging
+   ([[FLOW-PRERENDER]]). Static pages link their own CSS.
+10. Atomically replace `dist/` (the previous output is renamed into `.puzzle/tmp/`, then
+    removed). A failed build leaves the last good output intact.
 
 Production output is minified ES2022 ESM with console calls removed unless config opts
 out. Linked production source maps are opt-in.

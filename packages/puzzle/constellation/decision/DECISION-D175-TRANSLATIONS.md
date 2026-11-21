@@ -2,7 +2,7 @@
 name: >-
   D175 — Translations: t(key, vars), one build-filled hashed locale file per language, loaded before
   first render
-status: built
+status: verified
 connections:
   - DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS
   - DECISION-D173-CORE-SEMANTICS
@@ -36,6 +36,8 @@ connections:
   - DECISION-D154-STATIC-DEV-WARM-REBUILDS
   - DECISION-D155-ROUTE-LEVEL-INVALIDATION
   - DECISION-D160-SPA-CODE-SPLITTING
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D175 — Translations: `t(key, vars)`, one locale file per language

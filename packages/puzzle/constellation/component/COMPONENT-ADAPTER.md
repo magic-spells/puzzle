@@ -21,8 +21,9 @@ connections:
   - DECISION-D158-ADAPTER-FETCH-FUNCTIONS
   - DECISION-D161-AUTO-FETCHING-FINDS
   - DECISION-D185-APP-IDLE
-verified_at: '2026-11-01T19:23:56.488Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+  - DECISION-D193-SERVER-QUERIES
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: state
     text: >-
@@ -51,7 +52,7 @@ The `@magic-spells/puzzle/adapter` subpath (`client-runtime/datastore/adapter.js
 - [[COMPONENT-PUZZLE-MODEL]]: `save()`, `delete()`.
 - [[COMPONENT-PUZZLE-VIEW]]: `_settleData`, the D161 settle loop.
 
-**Method presence never means "this app opted in".** The store's own capability (`store._a`) does: PuzzleView takes the settle loop on `store._a && this._settleData`, and `withTracking` installs a request map only when `_a` is set (`tests/adapter-realm-isolation.test.js`). [[COMPONENT-PUZZLE-APP]] rejects a truthy non-capability `adapter`, installs before constructing the Store, and dev-warns when a model declares `static adapter` with no capability. SSG, `/static`, `/testing` and `/fixtures` validate-and-install through `capabilities.js`'s `installAdapterCapability`.
+**Method presence never means "this app opted in".** The store's own capability (`store._a`) does: PuzzleView takes the settle loop on `store._a && this._settleData`, and `withTracking` installs a request map only when `_a` is set (`tests/adapter-realm-isolation.test.js`). [[COMPONENT-PUZZLE-APP]] rejects a truthy non-capability `adapter`, installs before constructing the Store, and dev-warns when a model declares `static adapter` with no capability. SSG, `/static` and `/testing` validate-and-install through `capabilities.js`'s `installAdapterCapability`; `/fixtures` calls `adapter.install()` itself.
 
 ## The per-view handle (D161 attribution)
 

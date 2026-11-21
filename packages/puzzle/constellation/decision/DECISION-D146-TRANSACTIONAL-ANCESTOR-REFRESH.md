@@ -8,11 +8,12 @@ connections:
   - DECISION-D61-ATOMIC-LOCATION-COMMIT
   - DECISION-D39-SKELETON
   - DECISION-D145-ERROR-BOUNDARIES
+  - DECISION-D197-SHARE
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-STORE
-verified_at: '2026-11-01T19:19:25.478Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 code_refs:
   - client-runtime/views/PuzzleView.js
   - client-runtime/router/router.js
@@ -116,8 +117,9 @@ ancestors already on the new route.
 - Bump `#runToken` at prepare — suppresses correct mid-gate store refreshes.
 - Commit the prepared model unconditionally — clobbers a mid-gate store
   refresh with pre-edit data.
-- Pass the destination as an explicit `data()` argument — closes the closure
-  residual but breaks the D47 `data()` contract and every app's signature.
+- Rely on the `data({ params, props })` argument alone
+  ([[DECISION-D197-SHARE]]) — it carries no route, and `this.params` /
+  `this.route` reads inside `data()` would still see the committed route.
 
 ## Consequences
 

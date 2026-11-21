@@ -12,8 +12,8 @@ connections:
   - FILE-STORE
   - FILE-PUZZLE-MODEL
   - FILE-ADAPTER
-verified_at: '2026-11-01T19:21:40.935Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D125 — A save response never overwrites a field edited while its request was in flight
@@ -40,9 +40,9 @@ not multi-client conflict resolution.
 - `safeMerge(record, src, throughRevision)` skips fields stamped after
   `throughRevision`. Storage hydration omits the argument (server-authoritative);
   `loadMany`/`loadOne` pass their own dispatch-time snapshot (D138).
-- Every save-response branch reconciles through it — normal merge, mismatched-pk
-  and null-pk branches, and pk adoption, which forces the server-assigned pk
-  through unconditionally and reconciles the rest.
+- Every save-response branch reconciles through it — normal merge, a mismatched
+  pk on an update (dropped with a warning), and pk adoption, which forces the
+  server-assigned pk through unconditionally and reconciles the rest.
 - A queued save re-serializes after the previous response settles, so it sends
   the newer local value.
 - **`_synced` still flips true on a divergent reconcile.** `_synced` is

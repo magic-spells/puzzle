@@ -13,8 +13,8 @@ connections:
   - FILE-DEVPERF
   - FILE-TESTING-RENDER-PROFILE
   - TEST-BUILD-AND-DEV-PIPELINE
-verified_at: '2026-11-01T19:21:40.935Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D121 — Dev-only runtime performance profiling with zero production bytes
@@ -47,13 +47,13 @@ production.
     left routed children unmounted under fast clicking. `runawayUntil` is only
     the re-warn throttle. A dev instrument must not change what the app does.
 - **Scopes pop on every exit.** Every pushed scope is popped on all exits, throws
-  included (`#renderNow`'s dev branch calls `devperfRenderEnd` from its catch
-  before rethrowing). Per-subject marks are a **LIFO stack** wherever the operation can
-  re-enter — `activeStoreFlushes` (a subscriber may call `store.flush()`) and
-  `activeRenders` (a ref callback or `connectedCallback` inside the render span
-  can call `refresh()` with a sync `data()`). A single-slot mark leaks the outer
-  scope, and the leaked chain later trips the recursion guard on legitimate
-  renders.
+  included (`#renderNowInner`'s dev branch calls `devperfRenderEnd` from its
+  catch before rethrowing). Per-subject marks are a **LIFO stack** wherever the
+  operation can re-enter — `activeStoreFlushes` (a subscriber may call
+  `store.flush()`) and `activeRenders` (a ref callback or `connectedCallback`
+  inside the render span can call `refresh()` with a sync `data()`). A
+  single-slot mark leaks the outer scope, and the leaked chain later trips the
+  recursion guard on legitimate renders.
 - **Zero production bytes is a contract.** Class-method touchpoints spell
   `typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__` inline in a positive
   branch; module functions may use a module `DEV` const. No bare define reads,

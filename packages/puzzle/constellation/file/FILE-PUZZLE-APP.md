@@ -7,16 +7,17 @@ summary: Application service wiring, lifecycle, mount, unmount, HMR, and morph f
 connections:
   - COMPONENT-PUZZLE-APP
   - COMPONENT-DEVSTATE
-verified_at: '2026-11-01T19:28:54.178Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:49:58.010Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # app.js
 
-`PuzzleApp` ([[COMPONENT-PUZZLE-APP]]). The constructor stores config only; `mount()`
-builds the store, function registry and router, injects `ctx` into every view, and
-runs navigation zero. Also the HMR snapshot/restore entry points and the morph
-handler slot (`setMorphHandler`, callable before or after mount).
+`PuzzleApp` ([[COMPONENT-PUZZLE-APP]]). The constructor only checks and stores
+config; `mount()` builds the store, function registry and router, injects `ctx`
+into every view, and runs navigation zero. Also the HMR snapshot/restore entry
+points and the morph handler slot (`setMorphHandler`, callable before or after
+mount).
 
 - **Every app pulls this in**, so every import it adds is paid by hello-world.
   Optional runtime stays behind its gate: devtools/devstate behind

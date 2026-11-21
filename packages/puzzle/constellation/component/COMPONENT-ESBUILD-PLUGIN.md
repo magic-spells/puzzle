@@ -15,8 +15,9 @@ connections:
   - FILE-CONFIG
   - FILE-STYLES
   - FILE-STYLES-WATCH
-verified_at: '2026-11-01T19:26:04.240Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+  - DECISION-D190-CONFIG-ENV
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: state
     text: >-
@@ -38,11 +39,12 @@ is [[DOC-SPEC-BUILD]] (§13, §36, §54 defines, §59 names); the end-to-end ord
 ## The `.pzl` transform
 
 The onLoad plugin splits/parses a file, generates JavaScript and returns positioned
-esbuild messages, writing no intermediate modules. Scripts use the JS or TS loader per
-`<script lang>`; styles collect in a mutex-protected path map; `{#svg}` files join the
-watch set. The generated module keeps the opaque script at its original line and byte
-column by padding its start with whitespace, so native JS/TS syntax and import errors
-report `.pzl` coordinates without rewriting script bytes
+esbuild messages, writing no intermediate modules. Each message carries its source line
+(`sourceLocation`), read from the `.pzl` or from the `{#svg}` asset the error names.
+Scripts use the JS or TS loader per `<script lang>`; styles collect in a mutex-protected
+path map; `{#svg}` files join the watch set. The generated module keeps the opaque script
+at its original line and byte column by padding its start with whitespace, so native
+JS/TS syntax and import errors report `.pzl` coordinates without rewriting script bytes
 (`TestPluginScriptErrorPositions`).
 
 - **The transform is pass-independent** (a pure function of app root, path, bytes), so a
@@ -52,6 +54,9 @@ report `.pzl` coordinates without rewriting script bytes
   compile; fresh message/watch slices). Codegen warnings print once per build. The SPA dev
   path attaches no cache (esbuild's incremental cache is the memo); the static dev builder
   holds one per session ([[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]).
+- A production SPA build compiles without the `Class.__pzlModule` stamp
+  (`SetStripStamps`); only dev diagnostics and the static/hybrid prerender read it. Every
+  pass sharing one `CompileCache` must agree on it.
 - `Evict` is indexed path → keys for a `.pzl` AND every file it inlines with `{#svg}`,
   because the nested SVG memo is keyed by PATH; both sides are symlink-resolved.
   `AssetConsumers` indexes asset → consuming `.pzl` for route-level invalidation
@@ -98,6 +103,8 @@ where no template parse reaches.
   `app.config`, so `mount()` is inert). Every runtime probe uses
   `typeof X === 'undefined' || X`, so an absent define means ON (vitest, third-party
   bundlers).
+- **`env`** ([[DECISION-D190-CONFIG-ENV]]): every pass defines `import.meta.env` as the
+  config's `env` object (`{}` without one) and each `import.meta.env.KEY` as its literal.
 
 ## Passes and output
 
@@ -106,7 +113,9 @@ composed CSS, then public assets are copied. The three passes' options come from
 `newBundleOptions`, `prerenderBundleOptions` and `staticPagesBundleOptions`, so the static
 dev builder holds the identical passes open and bytes can't depend on the driver.
 
-- Production: ES2022, minified, console dropped unless `build.dropConsole: false`.
+- Production: ES2022, minified, console dropped unless `build.dropConsole: false`. The
+  collected `<style>` CSS is minified too (`styles.Minify`, esbuild with no browser
+  targets, so vendor-prefixed duplicates survive).
 - **The per-page pass anchors `AbsWorkingDir`** to its output tree (unminified output
   carries `// <input path>` comments; otherwise a staging suffix leaks into
   `_puzzle/*.js`). The SPA pass must NOT anchor it — `metafileAllInputs` resolves against
@@ -164,10 +173,14 @@ retries. Full atomicity belongs to the staged pipelines.
   `build.hashNames`, `output`) go through `unset()`, which treats **JSON `null` as unset**
   — `json.Unmarshal` of `null` into a scalar is a silent no-op, so `dropConsole: null`
   would otherwise read as `false`.
+- `env` must be a flat object of string, number or boolean literals under identifier keys;
+  anything else is a one-line config error naming the key. The loader keeps an `undefined`
+  value as `null` only inside `env`, so validation can name it.
 - `aliasRuntime` maps the root package and every subpath (`/adapter`, `/morph`,
-  `/router-modes`, `/ssg`, `/static`, `/testing`, `/fixtures`, `/forms`) explicitly — the bare alias
-  resolves to a file and can't take suffixes; longest key wins. `@/…` resolves from `app/`
-  without capturing scoped packages. `PUZZLE_RUNTIME` overrides the in-repo walk and
-  `node_modules`; a wrong value is a hard stop.
+  `/router-modes`, `/ssg`, `/static`, `/testing`, `/fixtures`, `/forms`, `/vitest`) explicitly —
+  the bare alias resolves to a file and can't take suffixes; longest key wins. `/vitest` is
+  Node-only and no app bundle imports it. `@/…` resolves from `app/` without capturing
+  scoped packages. `PUZZLE_RUNTIME` overrides the in-repo walk and `node_modules`; a wrong
+  value is a hard stop.
 - Under `--fixtures`, a resolver plugin pins the wrapper's two imports `SideEffects: true`
   — the package declares `"sideEffects": false`, and esbuild would tree-shake both away.

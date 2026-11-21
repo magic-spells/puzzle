@@ -2,7 +2,7 @@
 name: >-
   D170 — Persistent list blocks and an incremental virtual DOM (keep the VDOM; cache what did not
   change)
-status: built
+status: verified
 connections:
   - DECISION-D17-RENDER-FUNCTIONS-VDOM
   - DECISION-D58-LIST-KEYING
@@ -16,6 +16,8 @@ connections:
   - COMPONENT-PUZZLE-MODEL
   - FLOW-REACTIVITY
   - DOC-VIEW-LIFECYCLE
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D170 — Persistent list blocks and an incremental virtual DOM
@@ -59,8 +61,10 @@ templates rebuild thousands of vnodes for zero DOM writes.
    (duplicate warns once in dev). A nested block's owner is the enclosing
    row, so inner blocks die with it.
 2. **`patch()` short-circuits when old and new are the same object**, except:
-   a live component's `el` is refreshed from the instance, and a component
-   vnode with no live instance falls through to recovery. Cached subtrees
+   a live component's `el` is refreshed from the instance, a component vnode
+   with no live instance falls through to recovery, and during a one-shot
+   `__walk` render, elements and marked components fall through (see the
+   errorView retry below). Cached subtrees
    re-assert controlled form values from a `controls` list collected at build
    ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]), including a vnode that is
    itself a controlled element. `collectControls` stops at an `island`'s
@@ -128,8 +132,12 @@ counter, fallback loop local, snippet parameter, arrow parameter) becomes
 - `patch()`'s replace arm unmounts before it mounts (a cached subtree is the
   same object in both trees).
 - A block that missed a render rebuilds every row: it records the view's
-  `__rgen` counter, since the root mask is a per-render delta. An errorView
-  retry bumps `__rgen` so a failed child under a cached row is revisited.
+  `__rgen` counter, since the root mask is a per-render delta.
+- A failed child under a reused vnode (a cached row, or slot content a
+  wrapper splices back by reference) is otherwise never revisited. The
+  failure marks the owning view and every view above it with the one-shot
+  `__walk` flag, and an errorView retry marks the owner it refreshes, so that
+  render walks reused vnodes down to the dead child and remounts it.
 - `mountComponent` ignores a destroyed pinned instance and `unmount` nulls
   `component`/`instance`, so a cached vnode can unmount and remount.
 

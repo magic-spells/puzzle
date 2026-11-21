@@ -17,8 +17,8 @@ connections:
   - DECISION-D188-TICK
   - DECISION-D191-SET-STATE-GET-STATE
   - DECISION-D197-SHARE
-verified_at: '2026-11-01T19:26:46.557Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: state
     text: >-
@@ -53,13 +53,21 @@ handle, by this view, during its own evaluation, may fault
 
 ## State and refresh
 
-- Two layers: a successful `data({ params, props })` REPLACES the derived layer;
+- Two layers: a successful `data({ params, props, shared })` REPLACES the derived layer;
   `setState()` writes a persistent state layer that wins until the next derived
   commit. It rerenders, and when the last `data()` run read a written key
   (through `getData()`/`getState()`) the render re-runs `data()` first, once
   per burst ([[DECISION-D23-REFRESH-PATTERN]]). Keep raw local values and
   `data()`-derived display values under different keys, or the commit erases the
   raw one.
+- **`share()`** ([[DECISION-D197-SHARE]]) runs after each derived commit and
+  before the render, under that `data()` run's read record, so a `setState()` of
+  a key it read re-runs both. Function values publish as stable wrappers that call
+  the newest closure. A reader's `shared` comes from walking `__parent` up to the
+  first router-mounted view, so a layout's `share()` never reaches its page. Each
+  sharer hands readers a Proxy that records the keys they read (enumerating counts
+  as every key); a publish re-runs `data()` only in readers of a key that changed
+  under `Object.is`.
 - A `setState()` render goes through `schedule()` in `scheduler.js` (the shared
   [[DECISION-D63-HIDDEN-TAB-FLUSH]] frame rule). A render that lands first clears
   the flag, so the later frame is a no-op. `renderTick()` returns that module's
@@ -97,7 +105,10 @@ destroys the instance ([[DECISION-D145-ERROR-BOUNDARIES]]). With an app
 `errorView`, a fresh view mounts there with `{ error, info, retry }`. Retry is
 stable and single-flight, and delegates to the Router (routed) or the parent's
 `refresh()` (child). A component retry sets `owner.__walk` first, so the owner's
-next patch walks reused vnodes down to the destroyed child.
+next patch walks reused vnodes down to the destroyed child. `__showErrorView` on a
+view with no manager yet parks the failure; the preloaded `mount()` flushes it
+before it paints, which is how a failed first load shows the error view in the
+page's place.
 
 A hand-written `render()` returning null clears its tree and holds the position
 with a comment, anchored after `elementEnd` (the end of the component's complete

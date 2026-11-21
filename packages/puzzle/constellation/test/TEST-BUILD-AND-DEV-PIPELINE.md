@@ -39,8 +39,8 @@ connections:
   - FEATURE-DEV-PROXY
   - DOC-TESTING
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
-verified_at: '2026-11-01T19:24:02.433Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: state
     text: >-
@@ -50,6 +50,13 @@ notes:
       (TestLoadConfigEnv / EnvUnset / EnvInvalid) and an unset `dev.proxy` target in
       TestLoadConfigNullBehavesAsUnset; `check/runner_test.go` TestImportMetaEnvCheck proves `puzzle
       check` types `import.meta.env`; `dev_test.go` checks the fallback warning names env values.
+  - kind: state
+    text: >-
+      CSS output: `TestBuildUnlinkedEntryCSSWarning` and `TestWatchBuilderUnlinkedEntryCSSWarning`
+      pin the warning for emitted CSS no page links; `TestBuildStaticLinksPageCSS` pins each static
+      page linking its own CSS; `TestStaticWatchWarnsUnloadedCSSOnce` pins the static dev warning.
+      `TestMinifyKeepsVendorPrefixes` covers production `<style>` minify, `TestStripStamps` the SPA
+      production stamp strip, `TestPluginDiagnosticFrames` the source line in `.pzl` diagnostics.
 ---
 
 # Build pipeline, watch, and dev server

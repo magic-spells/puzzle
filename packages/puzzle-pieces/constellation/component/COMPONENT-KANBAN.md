@@ -1,6 +1,6 @@
 ---
 name: Kanban
-status: built
+status: verified
 framework: puzzle
 props:
   - name: columns
@@ -53,6 +53,8 @@ notes:
       disc is hsl(hue 45% 32%), down from 45%, matching Avatar and ChatMessage. White initials at
       L45 failed WCAG AA on 181/360 hues (worst 2.57:1); L32 is the highest lightness at S45 where
       every hue passes (min 4.75:1). Keep the three copies of this formula in step.
+verified_at: '2026-11-21T19:13:00.327Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # Kanban

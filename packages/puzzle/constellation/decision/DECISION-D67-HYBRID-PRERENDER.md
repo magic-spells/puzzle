@@ -1,7 +1,7 @@
 ---
 name: D67 — Build-time prerendering; the hybrid output mode (prerendered pages + SPA takeover)
 status: verified
-verified_at: '2026-11-01T19:23:12.785Z'
+verified_at: '2026-11-21T18:53:41.145Z'
 connections:
   - DECISION-D01-SPA-ONLY
   - DECISION-D81-STATIC-PAGES-MODE
@@ -15,7 +15,7 @@ code_refs:
   - client-runtime/ssg/serialize.js
   - client-runtime/router/router.js
   - compiler/internal/build/prerender.go
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D67 — Build-time prerendering; the hybrid output mode

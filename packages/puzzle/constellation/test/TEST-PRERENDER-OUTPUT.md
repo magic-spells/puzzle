@@ -27,8 +27,9 @@ connections:
   - DOC-SPEC-BUILD
   - DOC-TESTING
   - DECISION-D179-STATIC-PATHS
-verified_at: '2026-11-01T19:24:02.433Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+  - TEST-ROUTER-NAVIGATION
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # Hybrid and static prerender output
@@ -50,9 +51,10 @@ markup up. Run with
 - **Static** (`output: 'static'`; `static-kernel`, `static-prerender`,
   `static-docs-example`): the per-page `mountStatic` kernel and its router facade,
   base-prefixed page-module hrefs, hash and memory modes flattened or refused, storage
-  ignored with a warning, and the route-subset render used by incremental rebuilds.
-  `static-docs-example` runs a built `examples/static-docs` (pretest
-  `build:static-docs`).
+  ignored with a warning (a window-guarded value too), a `prerender: false` page playing
+  its enter and taking its route title, and the route-subset render used by incremental
+  rebuilds. `static-docs-example` runs a built `examples/static-docs` (pretest
+  `build:static-docs`) and checks that no page module ships the router.
 - **`staticPaths`** (D179): `static-prerender` covers the value forms and model
   shorthand, the build errors (missing or unservable values, non-array results, no
   `:param`, a parent route, a throwing function), duplicates, empty lists, encoding,
@@ -73,5 +75,6 @@ markup up. Run with
 - **Route tree** (`route-tree-shared`): a drift guard that SSG enumeration and the router
   table agree.
 
-Locale prerendering is in [[TEST-I18N]]; the golden file
+Named links in prerendered output are in [[TEST-ROUTER-NAVIGATION]]
+(`router-named-routes`); locale prerendering is in [[TEST-I18N]]; the golden file
 `tests/fixtures/prerender-golden/golden.json` pins every prerendered file.

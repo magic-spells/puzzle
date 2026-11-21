@@ -1,7 +1,7 @@
 ---
 name: 'D56 — Overlapping route transitions: opt-in `transitionMode: ''overlap''` with fixed-pin positioning'
 status: verified
-verified_at: '2026-11-01T19:23:24.972Z'
+verified_at: '2026-11-21T18:53:41.145Z'
 connections:
   - DECISION-D28-ANIMATIONS
   - DECISION-D19-NAVIGATION-COMMIT
@@ -14,7 +14,7 @@ connections:
 code_refs:
   - client-runtime/router/router.js
   - client-runtime/app.js
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D56 — Overlapping route transitions: opt-in `transitionMode: 'overlap'`

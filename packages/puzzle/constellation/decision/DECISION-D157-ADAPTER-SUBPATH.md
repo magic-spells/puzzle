@@ -15,8 +15,8 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - DOC-SPEC
   - DOC-RELEASE-SURFACE
-verified_at: '2026-11-01T19:19:25.478Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 code_refs:
   - client-runtime/datastore/adapter.js
   - client-runtime/capabilities.js
@@ -61,7 +61,8 @@ none of the adapter (D98's exclusion-by-unreferenced-module).
 - **Opaque capability.** `client-runtime/datastore/adapter.js` exports a frozen
   `adapter` whose internal, idempotent `install()` grafts descriptors onto
   `Store.prototype` (`loadMany`, `loadOne`, `adapter`, `upsert`, `saveRecord`,
-  `deleteRecord`, `request`, private dispatch/network/write-chain helpers),
+  `deleteRecord`, `request`, the D193 `findMany`/`invalidate`/`syncStatus`,
+  private dispatch/network/write-chain helpers),
   `PuzzleModel.prototype` (`save`, `delete`) and `PuzzleView.prototype` (the
   [[DECISION-D161-AUTO-FETCHING-FINDS]] settle executor `_settleData`; core
   keeps only the call seam).

@@ -50,9 +50,17 @@ transitions:
     action: >-
       mounted() never fires — a torn-down instance must not re-subscribe, start timers, or take
       focus
+  - from: loading
+    to: failed
+    guard: a router preload whose data() failed on a first load, with nothing committed yet
+    action: >-
+      the failure is parked until the commit; the preloaded mount() flushes it before painting, so
+      the app errorView takes the page's place
   - from: mounted
     to: updating
-    action: a store change matching a tracked query, refresh(), setState(), or a parent prop or slot update
+    action: >-
+      a store change matching a tracked query, refresh(), setState(), or a parent prop or slot
+      update
   - from: updating
     to: mounted
     action: >-
@@ -130,8 +138,8 @@ connections:
   - DECISION-D73-SCROLL-TRIGGER-ANIMATIONS
   - DECISION-D178-AFTERUPDATE-PREV
   - DECISION-D161-AUTO-FETCHING-FINDS
-verified_at: '2026-11-01T19:24:02.433Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # PuzzleView lifecycle machine
@@ -152,6 +160,7 @@ stateDiagram-v2
   skeleton --> mounted: first data() commits (after any min-duration hold)
   loading --> mounted: data() resolved, first tree rendered
   loading --> destroyed: destroyed while data() was awaited
+  loading --> failed: first load's preload failed, parked until commit
   mounted --> updating: store change / refresh / setState / parent update
   updating --> mounted: beforeUpdate, patch, afterUpdate(prev)
   mounted --> preparing: prepareRefresh() for a gated navigation
@@ -174,7 +183,8 @@ stateDiagram-v2
   `loading` phase can span several fetch rounds.
 - **updating** is reached two ways that look the same in the DOM: a `data()` re-run
   (derived layer replaced, subscriptions re-derived to exactly what the run queried) or
-  `setState()` (state layer only, no re-run). `afterUpdate(prev)` gets a frozen shallow
+  `setState()` (state layer; the render re-runs `data()` first only when the last run
+  read a written key, D23). `afterUpdate(prev)` gets a frozen shallow
   copy of the props, params, route and merged data the previous render drew; it never
   fires for the first render, which is `mounted()`. Trigger table: [[FLOW-REACTIVITY]].
 - **preloaded** makes the navigation commit atomic: `created()` + `data()` run with no

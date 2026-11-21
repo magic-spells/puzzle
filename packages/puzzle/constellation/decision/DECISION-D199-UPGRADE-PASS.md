@@ -1,6 +1,6 @@
 ---
 name: D199 — the 0.10 upgrade pass, `puzzle check --fix`
-status: built
+status: verified
 connections:
   - DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS
   - DECISION-D174-FUNCTION-LIBRARY
@@ -17,7 +17,8 @@ code_refs:
   - compiler/internal/codemod/testdata/
   - compiler/cmd/puzzle/checkcmd.go
   - compiler/internal/codegen/outletwarn.go
-  - packages/puzzle-lang/parser/slot.go
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D199 — the 0.10 upgrade pass, `puzzle check --fix`

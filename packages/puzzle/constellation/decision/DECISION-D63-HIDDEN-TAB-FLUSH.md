@@ -1,11 +1,11 @@
 ---
 name: D63 — One frame scheduler with a hidden-tab timer fallback
 status: verified
-verified_at: '2026-11-01T19:23:12.785Z'
+verified_at: '2026-11-21T18:53:41.145Z'
 connections:
   - COMPONENT-STORE
   - DOC-DATASTORE
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 code_refs:
   - client-runtime/scheduler.js
   - client-runtime/datastore/store.js

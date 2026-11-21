@@ -2,7 +2,7 @@
 name: >-
   D177 — Locale URL prefixes: i18n.routing 'prefix', one prerendered page per locale, link() adds
   the prefix
-status: built
+status: verified
 connections:
   - DECISION-D175-TRANSLATIONS
   - DECISION-D79-LINK-FUNCTION
@@ -23,6 +23,8 @@ connections:
   - DOC-SPEC-BUILD
   - DOC-SPEC-ROUTER
   - TEST-I18N
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D177 — Locale URL prefixes

@@ -1,7 +1,7 @@
 ---
 name: Dev server & watcher
 status: verified
-verified_at: '2026-11-01T19:26:04.240Z'
+verified_at: '2026-11-21T19:10:06.943Z'
 connections:
   - COMPONENT-ESBUILD-PLUGIN
   - COMPONENT-DEVSTATE
@@ -14,7 +14,7 @@ connections:
   - DECISION-D154-STATIC-DEV-WARM-REBUILDS
   - DECISION-D155-ROUTE-LEVEL-INVALIDATION
   - DECISION-D156-BUILD-PIPELINE-PERFORMANCE
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # Dev server (`puzzle dev`)
@@ -90,15 +90,17 @@ node prerender bundle, multi-entry page pass), the warm Tailwind child, a sessio
 memo and an incremental usage scan, composed into fresh staging and atomically swapped.
 If construction fails it degrades to a one-shot `build.Build` per save (identical
 output). Nothing writes into served `dist/` out-of-band; a Tailwind rewrite drives a
-debounced styles-only rebuild.
+debounced styles-only rebuild. As in the one-shot build, the app pass's `app.css` ships
+only when the shell links it, and the warning for CSS no page loads prints once per
+session.
 
 **Route-level invalidation** ([[DECISION-D155-ROUTE-LEVEL-INVALIDATION]]): the batch is
 classified against a reverse dependency graph from the previous rebuild's two metafiles
 (per-page pass → routes whose chain contains a file; prerender bundle → render-wide inputs
-like `app/app.js`, `routes.js`, the models registry, formatters) plus the compile cache's
-`{#svg}` edge. The prerender runs with an `argv[4]` route filter; unrendered pages are
-hardlinked from the served tree into staging. Anything unplaceable — and any partial that
-can't complete — is a full render inside the same `Rebuild`; a compile error is NOT a
+like `app/app.js`, `routes.js`, the models registry, `app/functions.js`) plus the compile
+cache's `{#svg}` edge. The prerender runs with an `argv[4]` route filter; unrendered pages
+are hardlinked from the served tree into staging. Anything unplaceable — and any partial
+that can't complete — is a full render inside the same `Rebuild`; a compile error is NOT a
 fallback trigger. A locale file is render-wide (read from disk, never imported). A public
 path the committed graph knows is classified as that module; only a path in neither graph
 set is a zero-route copy. Locale failure memory tests the accumulated `pending` batch.
@@ -126,7 +128,10 @@ can't drift: SPA keeps history fallback and injects the reload client only into 
 index; static resolves clean URLs, answers real 404s (per-locale
 `dist/<first-segment>/404.html` first, exact case, read from the file layout not the
 config — [[DECISION-D177-LOCALE-URL-PREFIXES]]), and injects the client into EVERY HTML
-response at serve time. `dev.proxy` prefixes register before the catch-all.
+response at serve time. `dev.proxy` prefixes register before the catch-all. A proxied
+request keeps the browser's path, query and `Host` header; an entry with
+`changeOrigin: true` sends the target's host instead
+([[DECISION-D201-DEV-PROXY-CHANGE-ORIGIN]]). WebSocket upgrades take the same director.
 `/__puzzle/reload` uses buffered per-client channels and non-blocking broadcasts. Before
 reloading, the client invokes [[COMPONENT-DEVSTATE]]; the page always fully reloads.
 

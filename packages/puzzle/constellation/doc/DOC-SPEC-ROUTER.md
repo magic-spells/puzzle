@@ -13,8 +13,8 @@ connections:
   - DECISION-D183-ROUTE-VIEWS-AGENT-FIELD
   - DECISION-D195-LINK-PREFETCH
   - DECISION-D196-NAMED-ROUTES
-verified_at: '2026-11-01T19:25:13.521Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 code_refs:
   - client-runtime/router/router.js
   - client-runtime/router/modes.js

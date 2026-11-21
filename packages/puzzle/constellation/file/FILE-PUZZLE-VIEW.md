@@ -6,8 +6,8 @@ language: javascript
 summary: Component state, lifecycle, tracking, refs, memo, skeleton, and animation orchestration.
 connections:
   - COMPONENT-PUZZLE-VIEW
-verified_at: '2026-11-01T19:28:54.178Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:49:58.010Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # PuzzleView.js
@@ -21,8 +21,7 @@ compiler attaches `render()` after the user's class.
   byte gate) or anything else optional; dev-only helpers sit behind
   `__PUZZLE_DEV__`.
 - The base class never reads `this.events` (class fields initialize after
-  `super()`), except for the dev-only handler/library-name collision warning at
-  mount.
+  `super()`), except for the dev-only handler warnings at mount.
 - A null render captures `elementEnd.nextSibling` before teardown, so the
   placeholder and a later remount land outside the departing range and before
   trailing siblings.

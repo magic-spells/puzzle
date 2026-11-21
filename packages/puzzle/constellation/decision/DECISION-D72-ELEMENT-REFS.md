@@ -11,12 +11,12 @@ connections:
   - DOC-SPEC-VIEW
   - DECISION-D44-DOM-ISLANDS
   - DECISION-D62-HANDLER-CACHING
-verified_at: '2026-11-01T19:23:12.785Z'
+verified_at: '2026-11-21T18:53:41.145Z'
 code_refs:
   - client-runtime/views/PuzzleView.js
   - client-runtime/views/viewManager.js
   - client-runtime/ssg/serialize.js
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D72 — Element refs: static `ref="name"` → `this.refs.name`

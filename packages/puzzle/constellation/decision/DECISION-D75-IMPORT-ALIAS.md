@@ -9,12 +9,12 @@ connections:
   - DOC-USER-GUIDE
   - DECISION-D03-SCRIPTS-REAL-JS
   - DECISION-D67-HYBRID-PRERENDER
-verified_at: '2026-11-01T19:23:12.785Z'
+verified_at: '2026-11-21T18:53:41.145Z'
 code_refs:
   - compiler/internal/build/options.go
   - compiler/cmd/puzzle/initcmd.go
   - compiler/internal/scaffold/scaffold.go
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D75 — The `@` app import alias

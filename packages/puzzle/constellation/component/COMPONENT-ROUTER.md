@@ -18,8 +18,8 @@ connections:
   - DECISION-D182-NAVIGATION-RESULT
   - DECISION-D195-LINK-PREFETCH
   - DECISION-D196-NAMED-ROUTES
-verified_at: '2026-11-01T19:25:13.521Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: state
     text: >-
@@ -68,6 +68,7 @@ Route compiler and navigation state machine. The public contract is [[DOC-SPEC-R
 - `router/router.js` — the Router class: route compile, `#navigate`, `#swap`, `#commitLocation`, `#commitState`, scroll, focus, interception. Also exports `encodeURL`, `normalizeBase`, `localeBase`, `linkLocale`, `localePage`.
 - `router/routeTree.js` — the one nested-routes → leaf flatten (`walkRouteTree`), shared with the SSG pass.
 - `router/routePath.js` — path canonicalization and dynamic-segment shape (D126), shared with prerender.
+- `router/routeNames.js` — named route targets ([[DECISION-D196-NAMED-ROUTES]]): the name table and `targetPath`, which turns `{ name, params, query, hash }` into a path string before anything else reads it. DOM-free, so the live Router (`url`, `push`, `replace`, guard redirects), the hybrid prerender's `url()` shadow, the static router stub and the static page kernel (which reads the table from the page's names island) resolve names by one rule.
 - `router/viewClass.js` — view/layout value checks, kept out of `lazy.js` so validation survives the `__PUZZLE_HAS_LAZY__` fold.
 - `router/lazy.js` — the `lazy()` marker and resolver ([[DECISION-D163-LAZY-ROUTE-VIEWS]]).
 - `router/prefetch.js` — link prefetch ([[DECISION-D195-LINK-PREFETCH]]): document intent listeners, the `data-prefetch="visible"` scan, the per-router `prefetch` default in a WeakMap. Reached only behind the `__PUZZLE_HAS_LAZY__` probe.

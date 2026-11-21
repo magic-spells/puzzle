@@ -9,8 +9,9 @@ connections:
   - DOC-SPEC-DATA
   - FILE-STORE
   - FILE-ADAPTER
-verified_at: '2026-11-01T19:21:40.935Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+  - DECISION-D193-SERVER-QUERIES
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D138 — background loads respect in-flight edits and dispatch order
@@ -52,6 +53,9 @@ stale response still proves the identity or collection exists.
   ahead of every read already dispatched, so a stale response for that identity
   is dropped, including its `clearAbsent`. The absence-cache rules live on
   [[DECISION-D161-AUTO-FETCHING-FINDS]]; this card owns the counter.
+- `store.invalidate()` stamps its stale marks from the same counter, so a read
+  dispatched before the mark leaves the data stale
+  ([[DECISION-D193-SERVER-QUERIES]]).
 
 ## Alternatives rejected
 

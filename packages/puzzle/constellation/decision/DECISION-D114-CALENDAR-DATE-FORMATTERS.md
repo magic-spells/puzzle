@@ -7,8 +7,8 @@ connections:
   - COMPONENT-FORMATTERS
   - FILE-FORMATTER-BUILTINS
   - DECISION-D112-STORE-ID-KEY-NORMALIZATION
-verified_at: '2026-11-01T19:23:00.473Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 code_refs:
   - client-runtime/dates.js
   - client-runtime/formatters/builtins.js

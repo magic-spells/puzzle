@@ -7,8 +7,8 @@ summary: Module bindings in Component is, helper emission and shared component p
 connections:
   - COMPONENT-CODEGEN
   - DECISION-D180-COMPONENT-SLOT
-verified_at: '2026-11-01T19:19:18.479Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:49:58.010Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: state
     text: >-

@@ -10,9 +10,10 @@ connections:
   - COMPONENT-ADAPTER
   - DECISION-D157-ADAPTER-SUBPATH
   - DECISION-D158-ADAPTER-FETCH-FUNCTIONS
+  - DECISION-D193-SERVER-QUERIES
   - DOC-SPEC-DATA
-verified_at: '2026-11-01T19:19:18.479Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:49:58.010Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # adapter.js
@@ -20,8 +21,10 @@ verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
 The opt-in `@magic-spells/puzzle/adapter` capability ([[DECISION-D157-ADAPTER-SUBPATH]]).
 Importing it has no side effects; passing the capability to `PuzzleApp` installs
 the server verbs on `Store`/`PuzzleModel` (`loadOne`/`loadMany`, `save()`,
-`delete()`, `store.request()`, `store.upsert()`), the fetch-function dispatch tier
-([[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]]), the per-record write chain, and the
-D161 read state (dedup, negative cache, settle loop). Apps that never pass it
-keep all of this out of the bundle. Contract: [[DOC-SPEC-DATA]] §22, §58, §61;
-behavior on [[COMPONENT-ADAPTER]].
+`delete()`, `store.request()`, `store.upsert()`, `store.invalidate()`,
+`store.syncStatus()`), the fetch-function dispatch tier
+([[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]]), the per-record write chain, the
+D161 read state (dedup, negative cache, settle loop) and the server-query cache
+([[DECISION-D193-SERVER-QUERIES]]). Apps that never pass it keep all of this out
+of the bundle. Contract: [[DOC-SPEC-DATA]] §22, §58, §61, §68; behavior on
+[[COMPONENT-ADAPTER]].

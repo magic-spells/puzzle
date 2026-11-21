@@ -12,8 +12,8 @@ connections:
   - FILE-DEVTOOLS
   - FILE-PUZZLE-APP
   - FILE-DEV-SERVER
-verified_at: '2026-11-01T19:26:46.557Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # Development reload state
@@ -36,7 +36,8 @@ model values.
 **Restore** is two-phase. After `beforeMount`, before navigation zero, records
 hydrate in identity-preserving replace mode, then `hydrateReadState` applies
 (records first, so a stale absence is dropped). After the route chain mounts,
-local view state is applied with `setState()`. Blobs are deleted before parsing,
+local view state is applied with `setState()` and each view then refreshes, so
+`data()`-derived keys see the restored state. Blobs are deleted before parsing,
 expire after 10 s (`MAX_AGE_MS`), and every step fails soft to a cold start. App
 persistence (localStorage) stays records-only.
 

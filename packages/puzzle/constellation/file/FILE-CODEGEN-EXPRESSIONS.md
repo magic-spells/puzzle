@@ -10,8 +10,8 @@ summary: >-
 connections:
   - COMPONENT-CODEGEN
   - FILE-CODEGEN-LOWER
-verified_at: '2026-11-01T19:19:18.479Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:49:58.010Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # expr.go
@@ -24,6 +24,6 @@ lowered from their AST in [[FILE-CODEGEN-LOWER]].
 - `startsWithObjectLiteral` raises the positioned error for `{ { a: 1 } }` (D173
   V8 — pass the object as a function argument or build it in `data()`).
 - `identRunEnd` / `startsNonASCIIIdent` extend `parser.LexSkip` (ASCII only)
-  through the non-ASCII runes `jsident` accepts, so the `<script>` scans
-  (`tokenizeJS` and the `__d.` collision scan in `scriptcollide.go`) read
-  `Straßenkarte` and `金額` as one name (D176 rule 8).
+  through the non-ASCII runes `jsident` accepts, so `tokenizeJS`
+  (`scriptcollide.go`), the one `<script>` scanner, reads `Straßenkarte` and
+  `金額` as one name (D176 rule 8).

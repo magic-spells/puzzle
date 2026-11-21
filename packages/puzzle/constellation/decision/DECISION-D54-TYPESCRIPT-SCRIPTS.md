@@ -3,7 +3,7 @@ name: >-
   D54 — TypeScript: `<script lang="ts">` transpile-only, an `app/app.ts` entry, typed scaffolds and
   stubs
 status: verified
-verified_at: '2026-11-01T19:23:24.972Z'
+verified_at: '2026-11-21T18:53:41.145Z'
 connections:
   - DECISION-D03-SCRIPTS-REAL-JS
   - DECISION-D09-GO-ESBUILD-COMPILER
@@ -16,6 +16,7 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-ANATOMY
   - DOC-COMPILER-DESIGN
+  - DECISION-D197-SHARE
 code_refs:
   - compiler/cmd/puzzle/initcmd.go
   - compiler/cmd/pzlc/main.go
@@ -26,7 +27,7 @@ code_refs:
   - compiler/internal/build/entry.go
   - compiler/internal/generate/generate.go
   - compiler/internal/generate/templates.go
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D54 — TypeScript: `<script lang="ts">`, transpile-only
@@ -39,10 +40,10 @@ A `.pzl` opts its script into TypeScript with `<script lang="ts">`; esbuild stri
 - **Transpile-only.** No type-checking in the build; the editor and `puzzle check` ([[DECISION-D165-PUZZLE-CHECK]]) own correctness.
 - **One loader for the whole module.** The generated module is the user's script verbatim plus an injected runtime import and the appended `Name.prototype.render` — plain JS, which is valid TS — so the plugin sets `Loader: LoaderTS` for `lang="ts"`. Standalone `pzlc` strips types with esbuild's Transform API so its output stays runnable JS. Codegen bytes are identical either way.
 - **Typings.** `types/index.d.ts` types the package exports (wired via `exports.types`); the shipped `puzzle-env.d.ts` declares `'*.pzl'` as `typeof PuzzleView<any>` for editors — an untyped view, so the instance of an import has `any` props (bare `typeof PuzzleView` is the generic constructor, whose `InstanceType` is `PuzzleView<unknown>`). Under `puzzle check` a `.pzl` import resolves to the component's own virtual file and carries the real class.
-- **Typed props: `PuzzleView<Props = any>`.** The type parameter types `this.props`, `data()`'s `props` parameter (an override declaring another shape is an error) and `afterUpdate`'s `prev.props` (`PrevViewState<Props>`); `/testing` reads it off the view for `mountView`'s `props` option and `setProps()`. A plain `extends PuzzleView` is `PuzzleView<any>`, so untyped views compile unchanged. The TypeScript scaffolds, the TypeScript `puzzle generate` stubs that take props, and `examples/typed-todos` name the interface (`extends PuzzleView<TodoItemProps>`) and never cast `this.props`. Types only: the runtime class has no type parameter — its JSDoc types props `any`, and the drift check allows a declaration narrower than the runtime. A typed view is not assignable to the generic `typeof PuzzleView`; `PuzzleViewConstructor` is the type that takes any view constructor.
+- **Typed props: `PuzzleView<Props = any>`.** The type parameter types `this.props`, the `props` of `data()`'s input (`DataInput<Props>`, [[DECISION-D197-SHARE]]; an override declaring another shape is an error) and `afterUpdate`'s `prev.props` (`PrevViewState<Props>`); `/testing` reads it off the view for `mountView`'s `props` option and `setProps()`. A plain `extends PuzzleView` is `PuzzleView<any>`, so untyped views compile unchanged. The TypeScript scaffolds, the TypeScript `puzzle generate` stubs that take props, and `examples/typed-todos` name the interface (`extends PuzzleView<TodoItemProps>`) and never cast `this.props`. Types only: the runtime class has no type parameter — its JSDoc types props `any`, and the drift check allows a declaration narrower than the runtime. A typed view is not assignable to the generic `typeof PuzzleView`; `PuzzleViewConstructor` is the type that takes any view constructor.
 - **`import.meta.env`.** `puzzle-env.d.ts` also declares `ImportMetaEnv` and `ImportMeta.env`, so editors and `puzzle check` accept reads of config `env` values; an app augments `ImportMetaEnv` with its exact keys ([[DECISION-D190-CONFIG-ENV]]).
 - **Entry: `app/app.ts` or `app/app.js`.** Both present is a hard error naming both; neither is "entry point not found". One helper, `build.ResolveEntry` (`compiler/internal/build/entry.go`), holds the rule for every consumer (build, dev watchers, both prerender passes, the `--fixtures` wrapper, `puzzle doctor`) — never re-derive it. A dev session's esbuild context is frozen over its starting entry, so a rebuild that resolves differently fails with "restart puzzle dev". Output stays `dist/app.js`. `puzzle.config.js` stays JavaScript (node reads it before bundling).
-- **`puzzle init --typescript`** (or answering the prompt) lays an overlay `templates/<name>-ts/` over the base template. An overlay file replaces the base file at the same path, and an overlay `x.ts` drops the base `x.js` it ports. The overlay holds only what differs — every component as `<script lang="ts">` with typed data, props, events and hooks; `app/app.ts`; `routes.ts` and models as `.ts`; the README; and a `package.json` that is the base plus `typescript` (`^7`) and a `"check": "puzzle check"` script. Init then writes a strict, noEmit `tsconfig.json` (with the `@` alias and the `puzzle-env.d.ts` include). Scaffold tests hold the TS variant to its JS twin (same markup, same package.json plus exactly those two additions) and type-check it with `puzzle check` under TypeScript 7; `release:prep` asserts the overlay framework ranges.
+- **`puzzle init --typescript`** (or answering the prompt) lays an overlay `templates/<name>-ts/` over the base template. An overlay file replaces the base file at the same path, and an overlay `x.ts` drops the base `x.js` it ports. The overlay holds only what differs — every component as `<script lang="ts">` with typed data, props, events and hooks; `app/app.ts`; `routes.ts`, models and tests as `.ts`; the README; and a `package.json` that is the base plus `typescript` (`^7`) and a `"check": "puzzle check"` script. Init then writes a strict, noEmit `tsconfig.json` (with the `@` alias and the `puzzle-env.d.ts` include). Scaffold tests hold the TS variant to its JS twin (same markup, same package.json plus exactly those two additions) and type-check it with `puzzle check` under TypeScript 7; `release:prep` asserts the overlay framework ranges.
 - **`puzzle generate` writes TypeScript in a TypeScript app** — one with a root `tsconfig.json` (`generate.IsTypeScriptApp`; a JavaScript scaffold gets `jsconfig.json`). Stubs use `<script lang="ts">` with named interfaces for props and the `data()` model and typed handlers (no `any`), keeping the JavaScript stub's markup and style; `model` writes `app/models/<name>.ts` with a fields interface and a `<Name>Record` type; a family barrel is `index.ts`. Both variants are pinned by goldens in `internal/generate/testdata/{js,ts}`.
 - `examples/typed-todos` (entry `app/app.ts`) builds in the `pretest` example gate.
 

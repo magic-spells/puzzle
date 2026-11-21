@@ -20,14 +20,16 @@ connections:
   - DECISION-D165-PUZZLE-CHECK
   - DECISION-D176-EXPRESSION-LANGUAGE
   - DOC-TESTING
-verified_at: '2026-11-01T19:24:02.433Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+  - DECISION-D198-DEPLOY-TEMPLATES
+  - DECISION-D199-UPGRADE-PASS
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # CLI commands, scaffolds, and pieces
 
 The `puzzle` binary's command surface and the code it writes into user projects.
-Packages: `compiler/cmd/puzzle` and `compiler/internal/{scaffold,generate,pieces,update,check}`.
+Packages: `compiler/cmd/puzzle` and `compiler/internal/{scaffold,generate,pieces,update,check,codemod}`.
 Run from `packages/puzzle` with `go test ./compiler/cmd/... ./compiler/internal/...`.
 
 - **Commands**: `init` with its prompts, `add` (skills included), `doctor`, `info`,
@@ -40,6 +42,13 @@ Run from `packages/puzzle` with `go test ./compiler/cmd/... ./compiler/internal/
   `--port`/`--host`, `--no-color`, `version` matching `--version`, and stable
   `info --json` / `doctor --json` keys. A renamed or dropped flag fails here, not in
   someone's script.
+- **`doctor`'s Node floor**: `TestDoctorNodeFloor` fails Node below 24 and passes 24.
+- **`puzzle add deploy`** (`add_deploy_test.go`, D198): the host list, refuse then
+  `--force`, the `output` and public-folder rules, and each host's routing and cache headers.
+- **`puzzle check --fix`** (`internal/codemod/codemod_test.go`, `checkcmd_test.go`, D199):
+  a dry run lists the sites and writes nothing, the fix is idempotent, and
+  `app/functions.js` is never overwritten.
+- **`puzzle compile`** (`compilecmd_test.go`): the hidden command the `/vitest` plugin runs.
 - **`puzzle check`** (`internal/check`, D165): the TypeScript emitter and runner,
   library signatures agreeing with codegen and the public types, value and call
   positions. The live cases run a real `tsc` and skip when `node` or the package's
@@ -48,7 +57,8 @@ Run from `packages/puzzle` with `go test ./compiler/cmd/... ./compiler/internal/
   view/component/layout/model generators. Generated `.pzl` is compiled in the test, so a
   template that drifts from the grammar fails here, not in a user's first `puzzle dev`.
   `TestGenerateRejectsReservedComponentName` pins the D180 refusal (no files written) for
-  every scaffold kind in JS and TS apps.
+  every scaffold kind in JS and TS apps. `TestEveryTemplateShipsATestSuite` pins the test
+  suite every template ships.
 - **The embedded agent skill**: `skill_examples_test.go` compiles every template example
   `skills/puzzle/SKILL.md` presents as working and requires the ones it shows as errors to
   fail, so the skill cannot teach syntax the compiler rejects.

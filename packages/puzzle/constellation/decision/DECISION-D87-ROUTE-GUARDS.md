@@ -13,8 +13,8 @@ connections:
   - DECISION-D66-APP-LIFECYCLE-HOOKS
   - DECISION-D83-QUERY-REPLACE
   - FILE-ROUTER
-verified_at: '2026-11-01T19:23:00.473Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:53:41.145Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D87 — Route guards: the inherited `guard` route field
@@ -36,10 +36,12 @@ Guarding a top-level route locks its whole layout subtree. Spec:
   query-only included. The token is rechecked after every await. Unguarded
   routes keep a synchronous path (no added microtask).
 - **Verdicts are return values:** `undefined`/`true` allow, `false` blocks
-  (stay put), a string path redirects. A throw is reported through `onError`
-  (D145) and stays put. `push()`/`replace()` resolve the outcome (D182):
-  `reason: 'blocked'` for `false`, `'error'` for a throw or the redirect limit,
-  `redirectedFrom` on a redirected success.
+  (stay put), a string path or a named target
+  ([[DECISION-D196-NAMED-ROUTES]]) redirects. A throw, or a named target that
+  does not resolve, is reported through `onError` (D145) and stays put.
+  `push()`/`replace()` resolve the outcome (D182): `reason: 'blocked'` for
+  `false`, `'error'` for a throw or the redirect limit, `redirectedFrom` on a
+  redirected success.
 - **Redirects go through the public seam and inherit the denied navigation's
   verb:** a denied push redirects via `push()` (Back still reaches the origin
   page); a denied pop or navigation #0 via `replace()` (the browser already sits

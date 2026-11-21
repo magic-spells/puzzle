@@ -13,8 +13,8 @@ connections:
   - FILE-PZLC
   - FILE-STANDALONE-COMPILE
   - DECISION-D194-VITEST-PLUGIN
-verified_at: '2026-11-01T19:26:04.240Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # Compiler CLI
@@ -68,6 +68,11 @@ this card holds the implementation rules behind it.
   app or the nearest ancestor with it, `fsutil.FindUp`), never a `.bin` shim or
   `cmd.exe`, so spaces in Windows paths work. The not-a-project test runs before the
   missing-tsc test.
+- **`check --fix`** ([[DECISION-D199-UPGRADE-PASS]], `internal/codemod`) — the upgrade pass
+  runs before the type check, so old code is named for what changed instead of surfacing
+  as type errors. Without `--fix`, found sites are listed and `check` exits non-zero.
+  `--fix` rewrites them in place and lists the sites it can't rewrite safely; with no
+  TypeScript installed it then skips the type check with a note, not a failure.
 - **`--fixtures`** (D98) — `build/fixtures.go` writes the wrapper under `.puzzle/fixtures/`;
   [[DECISION-D153-PUZZLE-SCRATCH-DIR]].
 - **`init`** — embedded `default`/`todos` trees plus `-ts` overlays (`internal/scaffold`);
@@ -88,6 +93,11 @@ this card holds the implementation rules behind it.
   so `add piece` and `add theme` agree about the same styles.css. Dependency specs
   carry a version floor (D169): split on the LAST `@`, merged by package name keeping the
   highest floor. `add theme` lives in `internal/pieces/themes.go`.
+- **`add deploy`** ([[DECISION-D198-DEPLOY-TEMPLATES]], `add_deploy.go`) — the templates
+  are embedded from the package's `deploy/` folder. `--static`/`--hybrid` picks the
+  template, else the config's `output`; a config that fails to load is an error, never a
+  guess. Every destination is resolved before the first write, so a clash without
+  `--force` leaves the app untouched.
 - **`add skills` / `upgrade skills`** ([[DECISION-D78-AGENT-SKILL-DISTRIBUTION]]) —
   symlinked destinations are written through only under `--force`, never removed.
 - **`upgrade`** ([[DECISION-D76-CLI-UPGRADE]]) — `detectInstallContext` classifies from
@@ -103,7 +113,11 @@ this card holds the implementation rules behind it.
 ## Rules
 
 - **D3 boundary**: add/generate never parse or rewrite user JavaScript and never install
-  npm dependencies; `check` resolves the app's own `tsc` and never installs one.
+  npm dependencies; `check` resolves the app's own `tsc` and never installs one. The one
+  command that edits user source is `check --fix`, and only with the idempotent D199
+  rewrites: the router `<Slot/>` → `<Outlet/>` (or `<Children/>` in a component),
+  `setData(` → `setState(`, positional `data()`/`share()` → the one-object form, and the
+  `formatters` key and `app/formatters.js` → `functions`.
 - **Piece registries are untrusted**: no absolute/parent traversal in target/file/lib/theme
   paths, no symlink escape from the app or (local fetches) the registry root.
 - Atomic writes where a partial artifact would hurt. TTY gates use a real isatty check —

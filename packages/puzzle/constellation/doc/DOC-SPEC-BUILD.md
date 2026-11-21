@@ -13,8 +13,8 @@ connections:
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
   - DECISION-D76-CLI-UPGRADE
   - DECISION-D194-VITEST-PLUGIN
-verified_at: '2026-11-01T19:26:04.240Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: verified
     text: >-

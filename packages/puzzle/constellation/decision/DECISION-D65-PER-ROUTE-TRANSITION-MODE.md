@@ -1,7 +1,7 @@
 ---
 name: D65 — Per-route/per-view transitionMode, resolved destination-only
 status: verified
-verified_at: '2026-11-01T19:23:12.785Z'
+verified_at: '2026-11-21T18:53:41.145Z'
 connections:
   - DECISION-D56-OVERLAP-TRANSITIONS
   - DECISION-D30-NESTED-ROUTES
@@ -13,7 +13,7 @@ connections:
   - DOC-SPEC
 code_refs:
   - client-runtime/router/router.js
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D65 — Per-route/per-view `transitionMode`, resolved destination-only

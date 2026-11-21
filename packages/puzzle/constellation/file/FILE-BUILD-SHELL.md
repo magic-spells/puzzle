@@ -11,8 +11,8 @@ connections:
   - FILE-BUILD-OPTIONS
   - DOC-SPEC-BUILD
   - TEST-BUILD-AND-DEV-PIPELINE
-verified_at: '2026-11-01T19:19:18.479Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:49:58.010Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: state
     text: >-
@@ -26,7 +26,8 @@ notes:
 Production HTML rewriting for the shell (`public/index.html`), every other copied
 public `.html`, and generated static pages: maps compiler names (`app.js`,
 `app.css`, `styles.css`) to the emitted hashed names and inserts static-import
-`modulepreload` links. Development skips rewriting. Intent:
+`modulepreload` links. A static page also gets its own stylesheet link, ahead of
+its preloads; that link is the only rewrite development makes. Intent:
 [[DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD]].
 
 - **The pre-check runs before bundling** (`shellHashSupport` → `shellHashPlan`):

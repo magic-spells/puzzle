@@ -16,8 +16,9 @@ connections:
   - DECISION-D133-RESERVED-SCRIPT-BINDINGS
   - DECISION-D180-COMPONENT-SLOT
   - DECISION-D197-SHARE
-verified_at: '2026-11-01T19:25:08.617Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+  - DECISION-D199-UPGRADE-PASS
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # Render-function codegen
@@ -120,6 +121,7 @@ runtime mirrors them in `STANDARD_FORMATTERS` + `PUZZLEKIT_FORMATTERS` ([[COMPON
 
 ## Checks before emission (`markup.go`, `presets.go`, `a11y.go`)
 
+
 `checkTemplateExprs` walks template + skeleton first so emitters can trust every tree:
 
 - **Markup placement** ([[DECISION-D174-FUNCTION-LIBRARY]]): `raw`/`newline_to_br` only as
@@ -134,6 +136,9 @@ runtime mirrors them in `STANDARD_FORMATTERS` + `PUZZLEKIT_FORMATTERS` ([[COMPON
 - **`this`**: safety net behind the parser; `thisMsg` must stay word-for-word equal to
   puzzle-lang's `expr.msgThis`.
 - **Handler/library collision** (`checkHandler`): non-fatal warning.
+- **Router outlet** ([[DECISION-D199-UPGRADE-PASS]], `outletwarn.go`): an `<Outlet/>` in a
+  component warns, since the router never fills one there (spell it `<Children/>`). A file
+  named `Outlet.pzl` is a positioned error: `Outlet` is a reserved tag.
 - **a11y** ([[DECISION-D82-A11Y-WARNINGS]]): five conservative warnings on the pre-`{#svg}`
   AST; output unchanged.
 
@@ -170,7 +175,8 @@ must never be imported from inside `client-runtime/` ([[FILE-LIST-BLOCK]]).
 - **Whitespace** ([[DECISION-D168-TEXT-RUN-WHITESPACE]]): `processChildren` classifies one
   children list; each coalesced run knows whether each edge borders a sibling node or the
   parent edge, and `buildTextRun` restores one space at every stripped edge except a parent
-  edge. `<pre>`/`<textarea>` bodies are verbatim under the `preserveWS` counter. **Every
+  edge. Only ASCII space, tab, CR and LF are whitespace; a non-ASCII space (U+00A0, …) is
+  content. `<pre>`/`<textarea>` bodies are verbatim under the `preserveWS` counter. **Every
   walker that descends into children and calls `processChildren` must raise it for those
   tags** — today `emitElement` and `staticSubtree` — or the static-cache look-ahead counts
   different text vnodes than emission. `preservedBody` drops the one newline after the start

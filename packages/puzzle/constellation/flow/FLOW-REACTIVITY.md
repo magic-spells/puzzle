@@ -16,17 +16,19 @@ connections:
   - DECISION-D161-AUTO-FETCHING-FINDS
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
   - DECISION-D188-TICK
-verified_at: '2026-11-01T19:26:46.557Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+  - DECISION-D197-SHARE
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # Reactivity flow
 
 Two intentionally asymmetric update paths:
 
-1. **Model path**: a store notification, prop change or route-param change reruns
-   `data({ params, props })`. The settled result REPLACES the derived layer, then the
-   view renders and patches.
+1. **Model path**: a store notification, prop change, route-param change, or a
+   change to a `shared` key the last run read ([[DECISION-D197-SHARE]]) reruns
+   `data({ params, props, shared })`. The settled result REPLACES the derived layer,
+   then the view renders and patches.
 2. **Local path**: `setState()` writes the persistent state layer and schedules a
    render. When the write touches a key the last committed `data()` read through
    `getData()` or `getState()`, that render re-runs `data()` first, once for the

@@ -1,6 +1,6 @@
 ---
 name: D182 — push()/replace() resolve a NavigationResult
-status: built
+status: verified
 connections:
   - DECISION-D87-ROUTE-GUARDS
   - DECISION-D19-NAVIGATION-COMMIT
@@ -22,6 +22,8 @@ notes:
       "pop in flight" row), and #navigate's departScroll reads null there (nothing departed over a
       pop still loading). Test for the latch: tests/router-navigation-result.test.js "a replace()
       whose constructor throws leaves nothing in flight".
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D182 — push()/replace() resolve a NavigationResult

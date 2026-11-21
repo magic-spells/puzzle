@@ -3,8 +3,8 @@ name: Template parser, expression language, and section splitting
 kind: unit
 status: verified
 framework: go test
-verified_at: '2026-11-01T19:25:05.616Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:12:59.382Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 connections:
   - FILE-PARSER
   - FILE-PARSER-SECTIONS
@@ -50,6 +50,11 @@ loosening one fails a test on purpose.
   `is`, ordinary `name`/`from` props, spread operands with parsed trees and
   original positions; errors for missing/literal/duplicate `is`, authored `flip`,
   `Component` as a family root, and spreads where they are not allowed.
+- **Router outlet** (`outlet_test.go`, D199): each default-position marker
+  records the tag written (`TestMarkerRecordsSpelling`); a `<Slot>` with no name
+  is an error with its note, and parses with `SkipSlotCheck`; `<Outlet>` takes no
+  attributes; `<outlet>` steers to `<Outlet/>`; `<Outlet/>` and `<Children/>`
+  share one default position per render path.
 - **D167 tag names** (`TestParseComponentNamesD167`): `Straßenkarte`,
   `Übersicht`, `概要`, `Frame.Übersicht`, `ärmel`, `_x` are components;
   `straße-karte` stays an element; `<Über-sicht>`, `<Frame.٣x>`, `<Frame-x>`,
@@ -139,4 +144,4 @@ DECISION-D150-RAW-TEMPLATE-BLOCK, DECISION-D164-PLAYGROUND-WASM-BOUNDARY,
 DECISION-D166-SNIPPETS, DECISION-D167-COMPONENT-FAMILIES,
 DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS, DECISION-D173-CORE-SEMANTICS,
 DECISION-D176-EXPRESSION-LANGUAGE, DECISION-D180-COMPONENT-SLOT,
-DOC-LANGUAGE-CORE, DOC-SPEC-TEMPLATE.
+DECISION-D199-UPGRADE-PASS, DOC-LANGUAGE-CORE, DOC-SPEC-TEMPLATE.

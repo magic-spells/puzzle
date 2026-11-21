@@ -1,11 +1,13 @@
 ---
 name: D169 — registry dependencies carry a version floor; `add piece` prints `name@range`
-status: built
+status: verified
 connections:
   - COMPONENT-COMPILER-CLI
   - DECISION-D32-CLI-TOOLING
   - DECISION-D167-COMPONENT-FAMILIES
   - FILE-PIECES
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D169 — registry dependencies carry a version floor; `add piece` prints `name@range`

@@ -9,8 +9,8 @@ connections:
   - COMPONENT-SSG
   - DECISION-D81-STATIC-PAGES-MODE
   - DECISION-D179-STATIC-PATHS
-verified_at: '2026-11-01T19:19:18.479Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:49:58.010Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: state
     text: >-
@@ -35,8 +35,8 @@ The `output: 'static'` pipeline ([[DECISION-D81-STATIC-PAGES-MODE]],
 [[COMPONENT-SSG]]): one `dist/_puzzle/<slug>.js` `mountStatic` entry per written
 page (content-hashed in production under `build.hashNames`), keyed on the codegen
 `__pzlModule` stamps; slug derivation with collision suffixes; detection of the
-models/formatters/adapter modules (`findStaticModule` probes `.ts` as well as
-`.js`) with warnings for app.js-only formatters and a missing models module; and
+models/functions/adapter modules (`findStaticModule` probes `.ts` as well as
+`.js`) with warnings for app.js-only functions and a missing models module; and
 removal of `staging/app.js`. The pass runs with `Splitting` on, so shared code lands
 in `_puzzle/chunks/`.
 

@@ -51,11 +51,15 @@ transitions:
     action: restore a stalled leaver; a blocked pop rewrites the address bar back to the committed route
   - from: guarding
     to: failed
-    guard: a guard threw, or an eleventh redirect ran without a commit
+    guard: >-
+      a guard threw or returned a named target that does not resolve, or an eleventh redirect ran
+      without a commit
     action: report phase 'navigation', restore a stalled leaver, repair a popped URL
   - from: guarding
     to: redirected
-    guard: a guard returned a path string and fewer than ten redirects have run without a commit
+    guard: >-
+      a guard returned a path string or named target and fewer than ten redirects have run without a
+      commit
     action: >-
       re-enter through push() when the denied navigation was a push, replace() for a pop or
       navigation zero; this attempt ends here
@@ -134,8 +138,9 @@ connections:
   - DECISION-D140-TAKEOVER-MOUNT-RESTORATION
   - DECISION-D159-ROUTER-MODE-FACTORIES
   - DECISION-D182-NAVIGATION-RESULT
-verified_at: '2026-11-01T19:24:02.433Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+  - DECISION-D196-NAMED-ROUTES
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # Navigation state machine
@@ -156,7 +161,7 @@ stateDiagram-v2
   guarding --> loading: every guard allows
   guarding --> blocked: false
   guarding --> failed: throw, or redirect cap
-  guarding --> redirected: path string
+  guarding --> redirected: path string or named target
   guarding --> superseded: newer token
   loading --> committing: params-only (keep == chain length)
   loading --> leaving: gate resolved
@@ -219,6 +224,8 @@ mounted), and rollback (racier than never committing).
   stacking a duplicate). A second push to the in-flight target returns the first push's
   promise, so `await router.push(p)` always means "p landed or failed". Guard redirects are
   exempt from the join, or a guard redirecting to its own path would await itself.
+- A named target passed to `push()` or `replace()` resolves to a path before the machine
+  starts; one that does not resolve throws synchronously and never enters it.
 - A pop is asymmetric: the browser already moved the URL, so commit contributes only title
   (and memory index); every non-committing exit on a pop must restore the committed URL.
 - `entering` isn't awaited, so the machine is idle when the commit window closes. A push or

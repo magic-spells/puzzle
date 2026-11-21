@@ -24,8 +24,8 @@ connections:
   - DOC-EVENTS
   - DOC-THIRD-PARTY-DOM
   - DOC-TESTING
-verified_at: '2026-11-01T19:24:02.433Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # ViewManager DOM patching, events, and bindings

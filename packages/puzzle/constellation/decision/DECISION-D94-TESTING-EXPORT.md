@@ -10,8 +10,8 @@ connections:
   - DECISION-D63-HIDDEN-TAB-FLUSH
   - DECISION-D73-SCROLL-TRIGGER-ANIMATIONS
   - DOC-SPEC
-verified_at: '2026-11-01T19:23:00.473Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D94 — `@magic-spells/puzzle/testing`: app-author test utilities
@@ -35,7 +35,7 @@ and flaky.
 - **`mountView(ViewClass, options)`** mounts into a detached container with a
   test `ctx` (store, an inert router unless one is passed, function registry,
   `idle`, optional `i18n`). Options: `props`, `params`, `children`, `ref`,
-  `store`/`models`/`formatters`/`adapter`, `router`, `ctx`, `i18n`; `route` or
+  `store`/`models`/`functions`/`adapter`, `router`, `ctx`, `i18n`; `route` or
   `preloaded: true` follows the router's preload → atomic mount path. The handle
   has `element`, `find`, `findAll`, `click`, `type`, `setProps`, `destroy`.
   `click()` completes submit-button activation and checkbox/radio

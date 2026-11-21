@@ -15,8 +15,8 @@ connections:
   - FILE-ROUTER
   - FILE-FORMATTER-REGISTRY
   - COMPONENT-SSG
-verified_at: '2026-11-01T19:23:12.785Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:53:41.145Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D79 — Path-shaped template links: `router.url()` + the router-bound `link()` function
@@ -28,8 +28,8 @@ The href attribute is the one surface a click interceptor cannot repair: cmd-cli
 ## Decision
 
 - **`encodeURL(path, mode, base)`** (exported from `router/router.js`) is the single encoder; `Router.url(path)`, the static router stub and the hybrid prerender ctx all call it, so prerendered and client hrefs cannot drift. Path in, mode-encoded out: path routing (no mode object) → `base + path`; otherwise the mode object's `encode(path, base)` (D159) — hash → `'#' + base + path`, memory → unchanged.
-- A string not starting with `/` passes through untouched (external URLs, `mailto:`, `#anchor`, already-encoded `#/x`, `''`) — the navigate-away escape hatch. Query/hash suffixes ride along. Non-string input to `router.url()` throws.
-- **`link()` is registered by `makeFormatterRegistry`** from the app's live `url` encoder, **only if absent** — an app-supplied `link` wins (it is a PuzzleKit-only built-in, not a standard function). The closure reads the router lazily, so a re-mount never strands a stale one. Fail-soft: nullish → `''`, otherwise `url(String(value))`.
+- A string not starting with `/` passes through untouched (external URLs, `mailto:`, `#anchor`, already-encoded `#/x`, `''`) — the navigate-away escape hatch. Query/hash suffixes ride along. `router.url()` also takes a named target ([[DECISION-D196-NAMED-ROUTES]]); any other non-string throws.
+- **`link()` is registered by `makeFormatterRegistry`** from the app's live `url` encoder, **only if absent** — an app-supplied `link` wins (it is a PuzzleKit-only built-in, not a standard function). The closure reads the router lazily, so a re-mount never strands a stale one. Fail-soft: nullish → `''`, a plain object → `url(value)` (a named target), anything else → `url(String(value))`.
 - Prerender and the static kernel wire the same registry, so prerendered hrefs match the client's.
 - **Locale prefixes** ([[DECISION-D177-LOCALE-URL-PREFIXES]]): under `i18n.routing: 'prefix'`, `link(path)` / `router.url(path)` add the active locale's prefix. `link(path, { locale: 'es' })` encodes for that configured tag (case-insensitive; an unconfigured one throws a `RangeError`); `{ locale: false }` skips the prefix but keeps `routerBase` — for a file that exists once. `linkLocale` reads the option; **`localeBase(routerBase, locale, defaultLocale)`** composes the base, and all four encoders call it — `Router.url`, the router's write side, the static stub (`localizeRouterStub`) and the hybrid prerender's `url` shadow. A parity test pins them. Without prefix routing `link` ships the one-argument form (`__PUZZLE_HAS_LOCALE_ROUTING__`).
 

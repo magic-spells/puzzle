@@ -8,8 +8,8 @@ connections:
   - DOC-RELEASE-SURFACE
   - FLOW-RELEASE
   - DECISION-D120-TARBALL-PUBLISH
-verified_at: '2026-11-01T19:19:18.479Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:49:58.010Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: state
     text: >-
@@ -24,9 +24,10 @@ The root manifest of the published `@magic-spells/puzzle` package. This card
 owns the shape; the release mechanics live on [[FLOW-RELEASE]] and
 [[DECISION-D120-TARBALL-PUBLISH]].
 
-- **Exports map** — nine normal subpaths point into `client-runtime/` with a
-  `types` condition into `types/`: `.`, `./adapter`, `./morph`, `./router-modes`,
-  `./ssg`, `./static`, `./testing`, `./fixtures`, `./forms`. Three are shaped differently:
+- **Exports map** — ten normal subpaths point into `client-runtime/` with a
+  `types` condition into `types/`: `.`, `./adapter`, `./forms`, `./morph`,
+  `./router-modes`, `./ssg`, `./static`, `./testing`, `./fixtures`, `./vitest`
+  (Node-only). Three are shaped differently:
   `./puzzle-env` is types-only (the `.pzl` ambient-module shim), and
   `./formatters/manifest` and `./i18n/manifest` are bare strings into
   `client-runtime/` with no `types` condition. A new normal subpath needs all

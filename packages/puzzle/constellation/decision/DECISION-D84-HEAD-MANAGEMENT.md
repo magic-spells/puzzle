@@ -18,8 +18,8 @@ connections:
   - FILE-HEAD-TAGS
   - TEST-PRERENDER-OUTPUT
   - FLOW-PRERENDER
-verified_at: '2026-11-01T19:23:12.785Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:53:41.145Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 code_refs:
   - client-runtime/head.js
   - client-runtime/headTags.js
@@ -38,7 +38,7 @@ Route `meta` carries four reserved head fields — `title`, `description`, `cano
 - **Generated tags:** `title` → `<title>` + `og:title` + `twitter:title`; `description` → `description` + `og:`/`twitter:description`; `canonical` → `<link rel="canonical">` + `og:url`; `socialImage` → `og:image` + `twitter:image` + `twitter:card=summary_large_image`. Each carries `data-puzzle-head="<field>"`; the framework only touches tags bearing it.
 - **hreflang alternates** (prefix routing only): `<link rel="alternate" hreflang>` per locale plus `x-default`, tagged `data-puzzle-head="alternate"` — a managed *set*: every shell alternate is stripped and the page's own set inserted.
 - **Build time** (`ssg/index.js` + `headTags.js`'s `MANAGED_TAGS`): the SSG resolves all fields (`resolveHead`) and string-injects the escaped tags into the shell — replace same-identity tags, insert the rest before `</head>`, no HTML parser. `headTags.js`, `resolveHead` and `HEAD_FIELDS` never reach a browser bundle (plain tree-shaking).
-- **Browser:** the router's `#syncHead` is `syncTitle(headText(resolveHeadField(entry.chain, 'title'), i18n))` inside the D61 commit window, so a failed or superseded navigation never touches it (`headText` only behind `__PUZZLE_HAS_I18N__`). Every navigation, every mode except memory (D42 — an embed never touches the host's head). The static kernel syncs a `{ t }` title on load and after a locale remount.
+- **Browser:** the router's `#syncHead` is `syncTitle(headText(resolveHeadField(entry.chain, 'title'), i18n))` inside the D61 commit window, so a failed or superseded navigation never touches it (`headText` only behind `__PUZZLE_HAS_I18N__`). Every navigation, every mode except memory (D42 — an embed never touches the host's head). The static kernel syncs a `{ t }` title on load and after a locale remount, and sets the route title on a `prerender: false` page, whose HTML is the bare shell.
 - **Crawlers never client-navigate**, so the baked per-page tags are what they read. After a client navigation in hybrid, managed tags in the live DOM keep navigation zero's values — pinned by `tests/router-head.test.js`.
 - **Build warnings** (`route_head_warning.go`, lexing only `app/**/routes.{js,ts}` — comment/string/regex/template aware, key-position match inside `meta: { … }`, so prose never trips them): in plain SPA output (no `output` set) `description`/`canonical`/`socialImage` are inert and `warnDeadSPARouteMeta` says so with file:line:col; a `{ t }` head value in a project with no `i18n` block warns in every mode (`warnUntranslatedRouteMeta`) — at runtime it prints nothing and warns once in dev.
 

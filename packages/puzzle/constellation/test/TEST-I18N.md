@@ -14,8 +14,8 @@ connections:
   - FILE-STATIC-MOUNT
   - DOC-SPEC-TEMPLATE
   - DOC-TESTING
-verified_at: '2026-11-01T19:24:02.433Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # Translations: i18n service, app wiring, prerender, locale files
@@ -42,12 +42,13 @@ D177 also has blocks in `static-kernel`, `ssg-head`, `router-head` and
   `/es//evil.example/`).
 - **App wiring** (`i18n-app`): strings load before navigation zero; `ctx.i18n` and
   `app.i18n`; `setLocale`'s same-location rebuild through the router (keep 0, replace,
-  no animation, scroll or focus change). Hangs are turned into rejections so a deadlock
-  fails by name. Prefix routing: the URL locale beats the stored choice; push, `link()`
-  and `router.url()` carry the prefix; `setLocale` from a guard, `data()`, or a
-  superseded, blocked or first navigation loads the right page; the first-visit
-  redirect (skipped on a prerendered page); hash/memory routing and a route on a locale
-  prefix are refused at mount.
+  no animation, scroll or focus change); a failed switch nobody awaits is an unhandled
+  rejection. Hangs are turned into rejections so a deadlock fails by name. Prefix
+  routing: the URL locale beats the stored choice; push, `link()` and `router.url()`
+  carry the prefix; `setLocale` from a guard, `data()`, or a superseded, blocked or
+  first navigation loads the right page; the first-visit redirect (skipped on a
+  prerendered page); hash/memory routing and a route on a locale prefix are refused at
+  mount.
 - **Router** (`router-locale-prefix`): reading and writing under the composed base,
   `url()` options, click interception (a link is taken only when its locale base equals
   the router's), the route-collision throw, the four encoders that call `localeBase`

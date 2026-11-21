@@ -1,6 +1,6 @@
 ---
 name: Forms module (@magic-spells/puzzle/forms)
-status: built
+status: verified
 connections:
   - DECISION-D192-FORMS-MODULE
   - DECISION-D147-IMPLICIT-TWO-WAY-BINDING
@@ -14,6 +14,8 @@ code_refs:
   - tests/forms.test.js
   - tests/fixtures/forms/PostForm.pzl
   - examples/blog/app/views/PostDetail.pzl
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # Forms module

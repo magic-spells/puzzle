@@ -1,6 +1,6 @@
 ---
 name: D198 — deploy templates and `puzzle add deploy <host>`
-status: built
+status: verified
 connections:
   - DECISION-D32-CLI-TOOLING
   - DECISION-D03-SCRIPTS-REAL-JS
@@ -19,6 +19,8 @@ notes:
     text: >-
       Cloudflare Pages does not read `package.json` `engines`, and its default Node can be below the
       D200 floor, so `deploy/README.md` says to set `NODE_VERSION`.
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D198 — deploy templates and `puzzle add deploy <host>`
@@ -58,6 +60,8 @@ tested config per host, and `puzzle add deploy <host>` copies it in.
   and with no top-level `404.html` it already serves the shell for non-files;
   in static mode it serves the nearest `404.html` up the tree. The CLI warns
   when an SPA has `app/public/404.html` (it would switch Pages to 404 mode).
+  Pages does not read `engines`, so the printed steps name the `NODE_VERSION`
+  to set (`minNodeMajor`).
 - **Per-locale 404s** (`i18n.routing: 'prefix'`, static): Cloudflare does it
   natively; Netlify, nginx and Apache carry a commented example block, and the
   CLI prints the exact line per non-default locale. Vercel can't (only the

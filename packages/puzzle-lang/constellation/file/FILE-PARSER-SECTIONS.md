@@ -4,8 +4,8 @@ status: verified
 path: parser/sections.go
 language: go
 summary: Top-level section discovery with close-aware scanning and positioned offsets.
-verified_at: '2026-11-01T19:25:05.616Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:12:59.382Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 connections:
   - FILE-PARSER
   - FILE-PARSER-SCANNER

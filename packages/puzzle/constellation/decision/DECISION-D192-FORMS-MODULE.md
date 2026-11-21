@@ -1,6 +1,6 @@
 ---
 name: D192 — an optional /forms module holds a form's draft, touched, changed, errors and submitting state
-status: built
+status: verified
 connections:
   - FEATURE-FORMS
   - DECISION-D147-IMPLICIT-TWO-WAY-BINDING
@@ -16,8 +16,9 @@ code_refs:
   - client-runtime/forms.js
   - types/forms.d.ts
   - compiler/internal/codegen/binding.go
-  - ../puzzle-pieces/registry/ui/field/Field.pzl
   - tests/forms.test.js
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 ## Context

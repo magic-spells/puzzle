@@ -15,8 +15,8 @@ connections:
   - FILE-PUZZLE-APP
   - FILE-RUNTIME-ENTRY
   - DOC-SPEC-ANATOMY
-verified_at: '2026-11-01T19:26:46.557Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # PuzzleApp
@@ -27,8 +27,9 @@ built from the build-served `@magic-spells/puzzle/i18n/manifest`.
 
 ## Construction vs. mount
 
-The constructor stores config and validates only two keys: `adapter` must be the
-capability from `@magic-spells/puzzle/adapter`, and `errorView` must be a
+The constructor stores config and validates only three keys: a set `formatters`
+key throws, naming `functions` and `puzzle check --fix`; `adapter` must be the
+capability from `@magic-spells/puzzle/adapter`; and `errorView` must be a
 `PuzzleView` constructor. Everything else is checked in `mount()`: the hooks
 (`beforeMount`, `mounted`, `beforeUnmount`, `onError`) must be functions, and the
 Router it constructs throws on a `routerMode` string or a `routerBase` holding
@@ -53,10 +54,11 @@ before mount and after unmount. External wiring does
    mode, else against the manifest's `base`; memory mode leaves `<html lang>`
    alone. A locale switch re-runs the committed location via
    `router.__failedView(null, true)`.
-5. FormatterRegistry with a router-bound `link` (reads `this.router` lazily; an
-   app `link` wins), then `installTranslate` for `t`.
+5. FormatterRegistry from `config.functions`, with a router-bound `link` (reads
+   `this.router` lazily; with no router yet a path passes through and a named target
+   renders no href; an app `link` wins), then `installTranslate` for `t`.
 6. Router (`focusBehavior`, `routerMode`, `routerBase`, `transitionMode` forwarded
-   only when set). `ctx = { store, router, formatters, idle }`, plus `i18n` when
+   only when set; `prefetch` forwarded behind `__PUZZLE_HAS_LAZY__`). `ctx = { store, router, formatters, idle }`, plus `i18n` when
    configured; `idle` is the bound `app.idle` ([[DECISION-D189-AGENT-HOOKS]]).
    `onError`/`errorView` live in a WeakMap keyed by the app ctx, so ctx stays
    exactly those services; per-view ctx lookups resolve through the prototype

@@ -6,8 +6,8 @@ language: go
 summary: In-memory pzl onLoad transform, CSS collection, and diagnostics.
 connections:
   - COMPONENT-ESBUILD-PLUGIN
-verified_at: '2026-11-01T19:28:54.178Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:49:58.010Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: state
     text: >-
@@ -28,3 +28,6 @@ Every positioned `.pzl` plugin message uses `sourceLocation` for its code frame.
 - `relName` falls back to the absolute path for a `.pzl` outside the app root
   (symlinks, monorepos); callers must accept absolute paths
   ([[FILE-BUILD-PRERENDER-PAGES]]).
+- A production SPA build compiles without the `Class.__pzlModule` stamp
+  (`SetStripStamps`): only development diagnostics and the prerender passes read
+  it. Every pass that shares one `CompileCache` must use the same setting.

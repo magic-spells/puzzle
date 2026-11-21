@@ -1,6 +1,6 @@
 ---
 name: D183 — router.views and the agent route field
-status: built
+status: verified
 connections:
   - FILE-ROUTE-VIEWS
   - COMPONENT-ROUTER
@@ -12,6 +12,8 @@ connections:
   - DECISION-D87-ROUTE-GUARDS
   - DECISION-D84-HEAD-MANAGEMENT
   - DECISION-D177-LOCALE-URL-PREFIXES
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D183 — router.views and the agent route field

@@ -19,6 +19,7 @@ connections:
   - DECISION-D47-ROUTE-SNAPSHOT
   - DECISION-D51-ROUTER-BASE-PATH
   - DECISION-D195-LINK-PREFETCH
+  - DECISION-D196-NAMED-ROUTES
   - DECISION-D61-ATOMIC-LOCATION-COMMIT
   - DECISION-D79-LINK-FUNCTION
   - DECISION-D83-QUERY-REPLACE
@@ -29,8 +30,8 @@ connections:
   - DECISION-D159-ROUTER-MODE-FACTORIES
   - DECISION-D163-LAZY-ROUTE-VIEWS
   - DOC-TESTING
-verified_at: '2026-11-01T19:24:02.433Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # Router navigation, matching, and commit atomicity
@@ -58,10 +59,15 @@ Run with `npx vitest run tests/router tests/route-tree-shared tests/auth-example
   document-level work.
 - **URLs** (`router-url`): `router.url()` argument guarding, per-mode output, the `link`
   function.
+- **Named routes** (`router-named-routes`, D196): the name table and duplicate names,
+  `targetPath` params, encoding and errors, named targets in `url()`, `push()`,
+  `replace()`, guards and `link` in every mode, and the same hrefs from hybrid prerender,
+  the static stub and the static kernel's names island.
 - **Scroll, focus, fragments** (`router-scroll`, `router-focus`, `router-fragment-pop`):
   scroll defaults, config, anchors, sessionStorage persistence; focus and announcement on
-  commit, tabindex hygiene, skip cases, a custom behavior; a same-document fragment pop
-  settles in place with no load, focus move or announcement.
+  commit, a view's own focus or `[autofocus]`, tabindex hygiene, skip cases, a custom
+  behavior; a same-document fragment pop settles in place with no load, focus move or
+  announcement.
 - **Head** (`router-head`): title sync at the commit point only; hybrid takeover leaves
   prerendered tags.
 - **Guards and failure** (`router-guard-redirect-pop-url`, `router-failed-pop-url`,

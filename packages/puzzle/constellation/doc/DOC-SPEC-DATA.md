@@ -13,8 +13,8 @@ connections:
   - DECISION-D184-STORE-OBSERVE
   - DECISION-D189-AGENT-HOOKS
   - DECISION-D193-SERVER-QUERIES
-verified_at: '2026-11-01T19:23:56.488Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 The contract for the data layer: models and schema builders, the store, validation, relationships, adapter sync, `beforeRequest`, fixtures and the mock adapter, the opt-in `/adapter` subpath, and auto-fetching finds. See [[DOC-SPEC]] for the section index.

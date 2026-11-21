@@ -6,15 +6,16 @@ language: javascript
 summary: Failure-safe Web Animations API wrapper and reduced-motion handling.
 connections:
   - COMPONENT-ANIMATIONS
-verified_at: '2026-11-01T19:28:54.178Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:49:58.010Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # animate.js
 
-The one wrapper around the Web Animations API ([[COMPONENT-ANIMATIONS]]): nothing
-else in the runtime calls `el.animate` directly. Imported by `PuzzleView.js` and
-`flip.js`; it imports nothing.
+The Web Animations API wrapper behind enter and leave animations
+([[COMPONENT-ANIMATIONS]]). Imported by `PuzzleView.js`, and by `flip.js` for
+`prefersReducedMotion` only (FLIP moves call `el.animate` themselves); it
+imports nothing.
 
 - **Never throws.** Missing WAAPI (jsdom), a malformed spec or rejected keyframes
   degrade to an instant finish; the element always ends visible.

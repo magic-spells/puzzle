@@ -1,6 +1,6 @@
 ---
 name: D181 — Hashed production output names and modulepreload
-status: built
+status: verified
 connections:
   - DECISION-D160-SPA-CODE-SPLITTING
   - DECISION-D81-STATIC-PAGES-MODE
@@ -19,6 +19,8 @@ notes:
       for preloads, so a stale `/app.css` link failed the build that the opt-out should have left
       lenient (review F7-B1, 2026-11-08). `TestStaleShellAssetOnlyFailsExplicitHash` has an
       `explicit false with splitting` row.
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D181 — Hashed production output names and modulepreload

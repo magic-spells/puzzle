@@ -10,8 +10,8 @@ connections:
   - DOC-PUZZLE-FILE
   - FILE-CODEGEN
   - DECISION-D176-EXPRESSION-LANGUAGE
-verified_at: '2026-09-25T10:41:55.889Z'
-verified_sha: a602784a9822fa3ff63123e597f72624b3c9ffff
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D167 — component families: dotted component tags + the family barrel convention
@@ -56,8 +56,8 @@ compiled into broken JS.
   elements, namespaced SVG) are untouched.
 - **Attribute and prop names may be non-ASCII**: `<Card größe={ 3 }>` →
   `props.größe`.
-- **Built-in names cannot be a family root**: `Children.X`, `Slot.X`,
-  `Snippet.X`, `Portal.X`, `Component.X` are errors
+- **Built-in names cannot be a family root**: `Children.X`, `Outlet.X`,
+  `Slot.X`, `Snippet.X`, `Portal.X`, `Component.X` are errors
   ([[DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS]]); built-ins match
   exactly, never dotted. `Component` is the runtime-selection built-in (D180),
   so a user component or import with that name needs a rename.

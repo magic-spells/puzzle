@@ -1,7 +1,7 @@
 ---
 name: Puzzle Stress Lab (examples/stress) — the performance measurement app
 kind: reference-app
-status: built
+status: verified
 connections:
   - DECISION-D128-BENCHMARK-METHODOLOGY
   - DECISION-D121-DEV-PERFORMANCE-PROFILING
@@ -11,6 +11,8 @@ connections:
   - DOC-ARCHITECTURE
   - FLOW-REACTIVITY
   - FILE-DEVPERF
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # Puzzle Stress Lab (examples/stress)

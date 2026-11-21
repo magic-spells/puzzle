@@ -3,7 +3,7 @@ name: >-
   D27 — Fast dev rebuilds: direct CLI resolution, a warm Tailwind watcher, an esbuild incremental
   context
 status: verified
-verified_at: '2026-11-01T19:19:59.201Z'
+verified_at: '2026-11-21T18:53:41.145Z'
 connections:
   - COMPONENT-DEV-SERVER
   - COMPONENT-ESBUILD-PLUGIN
@@ -19,7 +19,7 @@ code_refs:
   - compiler/internal/styles/resolve.go
   - compiler/internal/styles/styles.go
   - compiler/internal/styles/watch.go
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # D27 — Fast dev rebuilds: direct CLI resolution, warm Tailwind watcher, esbuild incremental context
@@ -34,9 +34,10 @@ Production `puzzle build` keeps [[DECISION-D26-TAILWIND-PIPELINE]]'s one-shot pa
 - "rebuilt in Xms" covers what the serving mode rebuilds: the incremental esbuild rebuild plus compose on the SPA path; the whole staged rebuild on the static path ([[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]).
 
 ## Fallbacks (dev never loses CSS updates)
+
 - No incremental context → warn and run a full `build.Build` per change.
 - Warm child fails to start or dies → log it and compose with one-shot Tailwind runs for the rest of the session.
-- Unreadable `puzzle.config.js` → one warning, zero-value defaults (no Tailwind, no `dev.proxy`), advise a restart. The config is read once at startup; a live edit prints "restart to apply".
+- Unreadable `puzzle.config.js` → one warning, zero-value defaults (no Tailwind, no `env`, no `dev.proxy`), advise a restart. The config is read once at startup; a live edit prints "restart to apply".
 
 ## Gotchas
 - The v4 `--watch` CLI exits on stdin EOF, so the watcher holds a stdin pipe open for the child's lifetime.

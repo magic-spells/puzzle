@@ -64,6 +64,10 @@ transitions:
     action: >-
       removeRecord, but only if this is still the indexed record at the key captured before the
       await
+  - from: synced
+    to: removed
+    guard: a tracked refetch of a record invalidate() marked stale answers 404
+    action: removeRecord if it is still the indexed record, so the next pass reads null
 connections:
   - FLOW-ADAPTER-SYNC
   - FLOW-REACTIVITY
@@ -84,8 +88,8 @@ connections:
   - FEATURE-VALIDATE-PK-PARITY
   - FILE-ADAPTER
   - DECISION-D161-AUTO-FETCHING-FINDS
-verified_at: '2026-11-01T19:24:02.433Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # Store record lifecycle
@@ -116,6 +120,7 @@ stateDiagram-v2
   synced --> local: dev HMR replace-mode restore
   synced --> removed: destroy, server row survives
   synced --> removed: delete acknowledged
+  synced --> removed: stale refetch answers 404
   removed --> [*]
 ```
 

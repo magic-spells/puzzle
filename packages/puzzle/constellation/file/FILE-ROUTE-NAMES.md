@@ -14,12 +14,14 @@ connections:
   - FILE-SSG-RUNTIME
   - FILE-STATIC-MOUNT
   - DECISION-D196-NAMED-ROUTES
+verified_at: '2026-11-21T18:49:58.010Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 # routeNames.js
 
 - `routeNames(routes)` walks the route definitions and returns a `Map` of name → full path pattern (`null` for the top-level catch-all). A duplicate name throws in development and keeps the first in production. The Router calls it once in its constructor; the prerender calls it once per pass.
 - `routeNamesJSON(table)` is the plain object a static page's names island carries (catch-all left out).
-- `targetPath(target, names)` returns a string unchanged and resolves an object; anything else throws the same `[puzzle]` error `router.url()` gave a non-string. `names` may be the `Map` or the island's plain object (looked up with `Object.hasOwn`).
+- `targetPath(target, names)` returns a string unchanged and resolves an object; anything else throws a `[puzzle]` error. `names` is always the `Map`: a static page rebuilds one from its `data-puzzle-static-names` island, which the prerender writes only when the page resolved a named link or is a `prerender: false` page.
 
 DOM-free and imports only `routeTree.js` and `routePath.js`, so it runs in the browser bundle and under Node unchanged. Development-only checks (unknown keys, unused params, the list of named routes in an unknown-name error) sit behind `__PUZZLE_DEV__`.

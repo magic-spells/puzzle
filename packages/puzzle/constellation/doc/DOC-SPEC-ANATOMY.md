@@ -12,8 +12,8 @@ connections:
   - DECISION-D188-TICK
   - DECISION-D189-AGENT-HOOKS
   - DECISION-D178-AFTERUPDATE-PREV
-verified_at: '2026-11-01T19:26:46.557Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T19:10:06.943Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 
 The contract for app shape: exports and entry points, the app and build config surfaces, `.pzl` file anatomy, the real-JavaScript `<script>` rule, component context, project layout, TypeScript scripts, scoped styles, and the `@` module alias. See [[DOC-SPEC]] for the section index.
@@ -34,7 +34,7 @@ import { PuzzleApp, PuzzleView, PuzzleModel, Puzzle, lazy } from '@magic-spells/
 | `Puzzle` | Schema field builders (`Puzzle.string()`, …). |
 | `lazy` | Lazy route views (§62). |
 
-The root also exports `PuzzleValidationError` (§20) and, for compiled modules only (not user surface), `FormatterRegistry`, `ViewNode`, the marker tags (`SLOT_TAG`, `SNIPPET_TAG`, `PORTAL_TAG`), `displayValue`, `urlValue`, `listRows`, `loopItems`, `loopRange` and `dynamicComponent`. Subpaths: `./adapter` (§58), `./router-modes` (§15), `./morph` (§37), `./ssg`, `./static`, `./testing` (§53), `./fixtures` (§52), `./forms` (opt-in form controller, D192), `./puzzle-env`, plus `./formatters/manifest` and `./i18n/manifest`, which a Puzzle build replaces at bundle time.
+The root also exports `PuzzleValidationError` (§20) and, for compiled modules only (not user surface), `FormatterRegistry`, `ViewNode`, the marker tags (`SLOT_TAG`, `SNIPPET_TAG`, `PORTAL_TAG`), `displayValue`, `urlValue`, `listRows`, `loopItems`, `loopRange` and `dynamicComponent`. Subpaths: `./adapter` (§58), `./router-modes` (§15), `./morph` (§37), `./ssg`, `./static`, `./testing` (§53), `./fixtures` (§52), `./vitest` (the Vitest plugin, §53, D194), `./forms` (opt-in form controller, D192), `./puzzle-env`, plus `./formatters/manifest` and `./i18n/manifest`, which a Puzzle build replaces at bundle time.
 
 - Apps start with **`app.mount()`**.
 - Components are **class-based** (`extends PuzzleView`). `PuzzleView` is a **plain JavaScript class**, not a custom element and no shadow DOM; the ViewManager owns all DOM work ([[DOC-VIEW-LIFECYCLE]]). `<puzzle-view>` is only the template root element name.

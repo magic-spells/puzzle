@@ -24,8 +24,8 @@ connections:
   - COMPONENT-TEMPLATE-PARSER
   - DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS
   - DECISION-D192-FORMS-MODULE
-verified_at: '2026-11-01T19:19:25.478Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-21T18:57:28.823Z'
+verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 code_refs:
   - client-runtime/views/PuzzleView.js
   - client-runtime/views/viewManager.js
@@ -136,11 +136,11 @@ row block re-asserts its collected control vnodes through the same
 
 ### Gotchas
 
-- **Layer clobber** — `#recompose` composes model over local, so binding a bare
-  key that `data()` also derives is reverted next commit. Bind the path you want
-  written (`value={ profile.name }` for records, bare `value={ draft }` for
-  drafts). A dev-only diagnostic warns once per key when a recompose reverts a
-  bound local.
+- **Layer clobber** — `#recompose` lays the `data()` result over state, so
+  binding a bare key that `data()` also derives is reverted next commit. Bind
+  the path you want written (`value={ profile.name }` for records, bare
+  `value={ draft }` for drafts). A dev-only diagnostic warns once per key when
+  a `data()` commit reverts a bound state key.
 - **Rebuilt member root** — `data() { return { form: { name: '' } } }` returns a
   new object each run, so every keystroke is erased. Dev-only diagnostic (armed
   on the write, checked at the end of the next render; fires only when the old
