@@ -1,7 +1,7 @@
 ---
 name: 'D32 — CLI tooling: init, generate, add, doctor, info'
 status: verified
-verified_at: '2026-11-21T18:53:41.145Z'
+verified_at: '2026-11-21T22:33:06.881Z'
 connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
@@ -24,7 +24,7 @@ code_refs:
   - compiler/internal/pieces/lock.go
   - compiler/internal/scaffold/templates/default/package.json
   - compiler/internal/scaffold/templates/todos/package.json
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_sha: c4c10f303caeac8050633ea434af17e4d3a75001
 ---
 
 # D32 — CLI tooling: `init`, `generate`, `add`, `doctor`, `info`

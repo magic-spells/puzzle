@@ -18,8 +18,8 @@ connections:
   - DECISION-D87-ROUTE-GUARDS
   - DECISION-D177-LOCALE-URL-PREFIXES
   - DECISION-D182-NAVIGATION-RESULT
-verified_at: '2026-11-21T18:57:28.823Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-21T22:33:06.881Z'
+verified_sha: c4c10f303caeac8050633ea434af17e4d3a75001
 ---
 
 # D196 — Named route targets for `link()`, `url()`, `push()` and `replace()`
