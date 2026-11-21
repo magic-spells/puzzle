@@ -8,6 +8,13 @@ connections:
   - COMPONENT-COMPILER-CLI
 verified_at: '2026-11-01T19:25:05.957Z'
 verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+notes:
+  - kind: gotcha
+    text: >-
+      Each template's `package.json` also declares `"engines": { "node": ">=24" }` (D200), which
+      deploy hosts read to pick the build's Node. It is embedded like the framework range, so
+      raising the floor means editing all four templates and rebuilding the binary;
+      `TestTypeScriptPackageJSONTracksTheBase` fails if a template and its `-ts` overlay disagree.
 ---
 
 # scaffold.go

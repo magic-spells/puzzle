@@ -42,7 +42,7 @@ What `@magic-spells/puzzle` ships on the current release branch, as a map. [[DOC
 
 ## Package
 
-- **Node 24 or later** ([[DECISION-D200-MINIMUM-NODE]]): `"engines": { "node": ">=24" }` on this package, `@magic-spells/puzzle-pieces` and the ESLint and Prettier plugins. CI tests Node 24 and Node 26.
+- **Node 24 or later** ([[DECISION-D200-MINIMUM-NODE]]): `"engines": { "node": ">=24" }` on this package, `@magic-spells/puzzle-pieces`, the ESLint and Prettier plugins and every `puzzle init` app; `puzzle doctor` fails below 24. CI tests Node 24 and Node 26.
 - **Root exports:** `PuzzleApp`, `PuzzleView`, `PuzzleModel`, `Puzzle`, `PuzzleValidationError`, `FormatterRegistry`, `lazy`. Compiler-support exports a compiled module imports only when it emits them: `ViewNode`, `SLOT_TAG`/`SNIPPET_TAG`/`PORTAL_TAG`, `displayValue`, `urlValue`, `listRows`/`loopItems`/`loopRange`, `dynamicComponent`. Root types include `NavigationResult`, `PrevViewState`, `RouteView`, `StaticPathsEntry`/`StaticPathsContext`/`StaticPathsFn`.
 - **Subpaths** (each typed in `types/*.d.ts`):
   - `/adapter` — the frozen `adapter` capability (`adapter.defaults()` is the app-wide dialect tier) and `PuzzleAdapterError`. Also exports untyped read-state helpers the static build uses.

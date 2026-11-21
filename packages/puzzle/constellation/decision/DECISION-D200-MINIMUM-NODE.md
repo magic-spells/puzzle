@@ -8,6 +8,7 @@ connections:
   - COMPONENT-COMPILER-CLI
   - DECISION-D162-MONOREPO-PACKAGES
   - DECISION-D165-PUZZLE-CHECK
+  - FILE-SCAFFOLD
 ---
 
 # D200 — Node 24 is the minimum; CI tests Node 24 and Node 26
@@ -21,7 +22,8 @@ Node runs the `puzzle` shim (`bin/puzzle.js`), `puzzle.config.js`, prerendering 
 ## Decision
 
 - **The floor is Node 24**, a long-term-support line that deploy hosts already offer, so a Puzzle app deploys without waiting for its host to add a runtime.
-- **Declared in `engines`** on the four public packages that run on Node — not on the private DevTools packages, and not on the five platform packages, which hold only the Go binary. On an older Node, npm warns `EBADENGINE` at install (an error under `engine-strict`). Nothing checks the version at runtime.
+- **Declared in `engines`** on the four public packages that run on Node and in every `puzzle init` template's `package.json`, which deploy hosts such as Vercel and Render read to pick the build's Node — not on the private DevTools packages, and not on the five platform packages, which hold only the Go binary. On an older Node, npm warns `EBADENGINE` at install (an error under `engine-strict`).
+- **`puzzle doctor` checks it.** Its node line fails below 24, naming the version it found (`minNodeMajor` in `compiler/cmd/puzzle/doctor.go`). Nothing else checks the version at runtime.
 - **CI covers both ends.** The `js` job (`npm test`, `verify:pack`, `test:types`, `test:runtime-types`) runs a matrix of Node 24, the floor, and Node 26, the current long-term-support line. The Go, Windows, e2e-pack, browser, pieces, devtools and plugins jobs run Node 26.
 - **Node 25 and later define a global `localStorage`**, undefined unless Node starts with `--localstorage-file`, and Vitest's jsdom environment keeps a global that already exists, so jsdom's working Storage is hidden. `tests/setup.js` puts `jsdom.window.localStorage` back on `globalThis` for every jsdom suite.
 
@@ -33,4 +35,4 @@ Node runs the `puzzle` shim (`bin/puzzle.js`), `puzzle.config.js`, prerendering 
 ## Consequences
 
 - Code may use anything Node 24 ships, with no fallback for older lines.
-- Raising the floor means changing the four `engines` fields (then `npm install --package-lock-only` in each package), the `js` matrix, the README and plugin READMEs, the agent skill's CLI line, [[DOC-DEVELOPMENT]] (Prerequisites), [[DOC-RELEASE-SURFACE]] (Package), and this card.
+- Raising the floor means changing the four `engines` fields (then `npm install --package-lock-only` in each package), the four scaffold templates' `engines` (`compiler/internal/scaffold/templates/*/package.json`, embedded in the binary), `minNodeMajor` in `compiler/cmd/puzzle/doctor.go`, the `js` matrix, the README and plugin READMEs, the agent skill's CLI line, [[DOC-DEVELOPMENT]] (Prerequisites), [[DOC-RELEASE-SURFACE]] (Package), and this card.

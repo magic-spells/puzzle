@@ -714,6 +714,10 @@ habit. Nothing existing breaks: renamed spellings stay accepted.
   un-upgraded app with the command that fixes it. The pass uses the parser and
   script tokenizer, not text search, so comments, strings and `{#raw}` are
   left alone, and a second run finds nothing.
+- **`puzzle doctor` fails on Node below 24 (D200)**, naming the version it
+  found: `v22.11.0 — Puzzle needs Node 24 or later`.
+- **`puzzle init` apps declare `"engines": { "node": ">=24" }`**, which deploy
+  hosts such as Vercel and Render read to pick the build's Node version.
 
 ## 0.9.1 — 2026-10-22 (Go module only)
 
