@@ -380,7 +380,7 @@ export function mockFetch(store, type, config, url, init) {
 	if (!WARNED.has(Model)) {
 		WARNED.add(Model);
 		console.warn(
-			`[puzzle] model '${type}' is served by its adapter mock — no request reaches ${Model.adapter?.endpoint}`
+			`[puzzle] model '${type}' is served by its adapter mock — no request reaches ${Model.adapter?.endpoint ?? 'the network'}`
 		);
 	}
 

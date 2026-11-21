@@ -199,7 +199,7 @@ func TestI18nWarnings(t *testing.T) {
 
 	// Without i18n: `t` used, and an app/locales folder.
 	got := i18nWarnings(root, config.Config{}, usage, nil)
-	if len(got) != 1 || !strings.Contains(got[0], "configures no i18n") || !strings.Contains(got[0], "unless the app registers its own t formatter") {
+	if len(got) != 1 || !strings.Contains(got[0], "configures no i18n") || !strings.Contains(got[0], "unless the app registers its own t function") {
 		t.Fatalf("t without i18n: %q", got)
 	}
 	if err := os.MkdirAll(filepath.Join(root, "app", "locales"), 0o755); err != nil {

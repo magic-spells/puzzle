@@ -638,7 +638,6 @@ export function safeMerge(record, src, throughRevision) {
 
 /**
  * Does `key` resolve to a plain method on this model's prototype chain?
- * Stops before Object.prototype, mirroring resolveCollision's walk.
  */
 // Walks to Object.prototype for the same reason resolveCollision does: a schema
 // field named `toString`/`valueOf` is unusable by construction, so the two walks

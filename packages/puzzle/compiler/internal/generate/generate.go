@@ -173,6 +173,8 @@ func Generate(opts Options) (*Result, error) {
 // <Slot.Foo>, and <Frame.Slot> are markers or compile errors, never yours.
 var markerNames = []string{"Children", "Outlet", "Slot", "Snippet", "Portal"}
 
+var markerList = strings.Join(markerNames, ", ")
+
 func isMarkerName(s string) bool {
 	for _, m := range markerNames {
 		if s == m {
@@ -203,7 +205,7 @@ func generateFamily(opts Options, ts bool) (*Result, error) {
 		return nil, fmt.Errorf("Component is a reserved built-in tag — rename Component.pzl (for example, Card.pzl) and its imports")
 	}
 	if isMarkerName(opts.Name) {
-		return nil, fmt.Errorf("component family root %q is a reserved composition marker (Children, Slot, Snippet, Portal)", opts.Name)
+		return nil, fmt.Errorf("component family root %q is a reserved composition marker (%s)", opts.Name, markerList)
 	}
 
 	seen := map[string]bool{opts.Name: true}
@@ -216,7 +218,7 @@ func generateFamily(opts Options, ts bool) (*Result, error) {
 		case member == "Component":
 			return nil, fmt.Errorf("Component is a reserved built-in tag — rename Component.pzl (for example, Card.pzl) and its imports")
 		case isMarkerName(member):
-			return nil, fmt.Errorf("family member %q is a reserved composition marker (Children, Slot, Snippet, Portal)", member)
+			return nil, fmt.Errorf("family member %q is a reserved composition marker (%s)", member, markerList)
 		case member == opts.Name:
 			return nil, fmt.Errorf("family member %q collides with the family root", member)
 		case seen[member]:
@@ -357,7 +359,7 @@ func render(kind Kind, name string, ts bool) (content, filename string, err erro
 		// names is a file nothing can ever invoke. Views and layouts are routed by
 		// class, never written as tags, so the guard is component-only.
 		if kind == KindComponent && isMarkerName(name) {
-			return "", "", fmt.Errorf("component name %q is a reserved composition marker (Children, Slot, Snippet, Portal) — the compiler resolves <%s> itself, so a component by that name could never be invoked", name, name)
+			return "", "", fmt.Errorf("component name %q is a reserved composition marker (%s) — the compiler resolves <%s> itself, so a component by that name could never be invoked", name, markerList, name)
 		}
 		tmpl := map[Kind]string{
 			KindComponent: componentTemplate,

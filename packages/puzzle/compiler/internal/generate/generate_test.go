@@ -157,6 +157,7 @@ func TestGenerateNameValidation(t *testing.T) {
 		{KindComponent, "Children"},  // reserved composition marker (D134)
 		{KindComponent, "Snippet"},   // reserved composition marker (D134)
 		{KindComponent, "Portal"},    // reserved composition marker (D134)
+		{KindComponent, "Outlet"},    // reserved composition marker (D167)
 		{KindModel, "User"},          // uppercase model
 		{KindModel, "user-profile"},  // hyphen in model
 		{KindModel, "2fast"},         // leading digit

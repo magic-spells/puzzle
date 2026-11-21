@@ -331,7 +331,7 @@ function makeInertRouter(current) {
 		url: /** @param {string | import('../../types/index.js').NamedRouteTarget} target */ (target) => {
 			if (typeof target === 'string') return target;
 			throw new Error(
-				'[puzzle] mountView has no route table to resolve a named link — test it with mountApp and your routes, or pass a router'
+				'[puzzle] mountView has no route table to resolve a named link — test it with createTestApp and your routes, or pass a router'
 			);
 		},
 		setMorphHandler: () => {},

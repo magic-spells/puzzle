@@ -146,7 +146,7 @@ files or merges locales.
 6. The usage scan checks every literal `t('…')` key (cooked) against the
    default table — warning when missing. Runtime-built keys are unchecked.
 7. `t` without `i18n`, or `app/locales/` without config, warns ("unless the
-   app registers its own t formatter" — the compiler can't read `app.js`).
+   app registers its own t function" — the compiler can't read `app.js`).
 
 **Dev watch.** SPA: a locale class in `build/watch.go` re-emits files,
 refreshes the manifest, rebuilds, reloads; superseded hashed files are pruned
