@@ -8,11 +8,17 @@ connections:
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC-BUILD
+  - DECISION-D200-MINIMUM-NODE
 code_refs:
   - deploy/embed.go
   - deploy/README.md
   - compiler/cmd/puzzle/add_deploy.go
   - compiler/cmd/puzzle/add_deploy_test.go
+notes:
+  - kind: gotcha
+    text: >-
+      Cloudflare Pages does not read `package.json` `engines`, and its default Node can be below the
+      D200 floor, so `deploy/README.md` says to set `NODE_VERSION`.
 ---
 
 # D198 — deploy templates and `puzzle add deploy <host>`

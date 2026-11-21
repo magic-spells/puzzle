@@ -192,7 +192,7 @@ func renderDeployNextSteps(w io.Writer, out *ui.Printer, host deploytemplates.Ho
 			}
 		}
 	case "cloudflare":
-		steps = append(steps, "Run puzzle build (dist/_headers comes from the public folder), then set the Pages build command to npm run build and the output directory to dist.")
+		steps = append(steps, fmt.Sprintf("Run puzzle build (dist/_headers comes from the public folder), then set the Pages build command to npm run build, the output directory to dist and NODE_VERSION to %d (Pages does not read engines).", minNodeMajor))
 		if output == "" {
 			// cloudflare pages leaves spa mode the moment a top-level 404.html
 			// ships, and every client route then answers with that page.

@@ -107,6 +107,8 @@ its `_redirects` rules apply even when a file exists, so the usual
   `styles-*.css`, `chunks/`, `_puzzle/chunks/` and `locales/`.
 
 Set the build command to `npm run build` and the output directory to `dist`.
+Set the `NODE_VERSION` environment variable to `24` too: Pages does not read
+`engines`, and its default Node can be older than Puzzle supports.
 
 ## nginx
 
