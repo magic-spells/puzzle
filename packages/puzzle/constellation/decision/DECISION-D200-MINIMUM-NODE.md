@@ -9,6 +9,8 @@ connections:
   - DECISION-D162-MONOREPO-PACKAGES
   - DECISION-D165-PUZZLE-CHECK
   - FILE-SCAFFOLD
+  - DOC-SPEC-BUILD
+  - DECISION-D32-CLI-TOOLING
 ---
 
 # D200 — Node 24 is the minimum; CI tests Node 24 and Node 26
@@ -35,4 +37,4 @@ Node runs the `puzzle` shim (`bin/puzzle.js`), `puzzle.config.js`, prerendering 
 ## Consequences
 
 - Code may use anything Node 24 ships, with no fallback for older lines.
-- Raising the floor means changing the four `engines` fields (then `npm install --package-lock-only` in each package), the four scaffold templates' `engines` (`compiler/internal/scaffold/templates/*/package.json`, embedded in the binary), `minNodeMajor` in `compiler/cmd/puzzle/doctor.go`, the `js` matrix, the README and plugin READMEs, the agent skill's CLI line, [[DOC-DEVELOPMENT]] (Prerequisites), [[DOC-RELEASE-SURFACE]] (Package), and this card.
+- Raising the floor means changing the four `engines` fields (then `npm install --package-lock-only` in each package), the four scaffold templates' `engines` (`compiler/internal/scaffold/templates/*/package.json`, embedded in the binary), `minNodeMajor` in `compiler/cmd/puzzle/doctor.go`, the `js` matrix, the README and plugin READMEs, the Cloudflare Pages `NODE_VERSION` in `deploy/README.md`, the agent skill's CLI line, [[DOC-DEVELOPMENT]] (Prerequisites), [[DOC-RELEASE-SURFACE]] (Package), [[DOC-SPEC-BUILD]] §13, and this card.

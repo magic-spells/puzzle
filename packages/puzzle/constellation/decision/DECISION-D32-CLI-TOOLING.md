@@ -42,7 +42,7 @@ The scaffolding and tooling commands beside `dev`/`build` ([[DECISION-D13-CLI-DE
   - The registry theme is copied verbatim to `app/styles/pieces.css` (locked by hash) when the app has neither the tokens nor the file; only the `@import './pieces.css';` line stays a printed step, because `styles.css` is user-owned.
   - Overwrite refusal is all-or-nothing: a pre-flight lists every conflict before any write; `-f/--force` overwrites.
   - The npm install line is **printed, never run** ([[DECISION-D169-REGISTRY-VERSION-FLOORS]] shapes it).
-- **`puzzle doctor [dir]`** runs ✓/✘/! environment checks (node at the Node 24 floor of [[DECISION-D200-MINIMUM-NODE]], entry, `index.html`, config load, Tailwind CLI resolution, runtime package) and exits 1 on any failure. **`puzzle info [dir]`** prints versions, platform, project root, source/output dirs and the styles pipeline. Both take `--json`. `puzzle --version` and `puzzle version` print the same stamped `internal/version`.
+- **`puzzle doctor [dir]`** runs ✓/✘/! environment checks (node at the [[DECISION-D200-MINIMUM-NODE]] floor, entry, `index.html`, config load, Tailwind CLI resolution, runtime package) and exits 1 on any failure. **`puzzle info [dir]`** prints versions, platform, project root, source/output dirs and the styles pipeline. Both take `--json`. `puzzle --version` and `puzzle version` print the same stamped `internal/version`.
 
 ## Rules
 - **`add`/`generate` never rewrite user JavaScript** ([[DECISION-D03-SCRIPTS-REAL-JS]]): model `generate` does not edit `app/models/index.js`, and an existing `puzzle.config.js` is never rewritten; the needed registration is printed as an exact snippet.

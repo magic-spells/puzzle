@@ -215,8 +215,10 @@ Production sizes: hello-world **24.2 KB gzip** (23.0 in 0.9.0), todos
   and the test helpers — needs 24 or later. `@magic-spells/puzzle`,
   `@magic-spells/puzzle-pieces` and the ESLint and Prettier plugins declare
   `"engines": { "node": ">=24" }`, so npm warns `EBADENGINE` when it installs
-  them on an older Node. CI runs the framework's JavaScript suites on Node 24
-  and Node 26.
+  them on an older Node. `puzzle doctor` fails below 24, and every
+  `puzzle init` template declares the same `engines`, which deploy hosts such
+  as Vercel and Render read to pick the build's Node. CI runs the framework's
+  JavaScript suites on Node 24 and Node 26.
 - **BREAKING: `setData()` is now `setState()`, and `getState()` is new (D191).**
   `this.setData(...)` is gone with no alias; rename every call to
   `this.setState(...)`, which takes the same `(key, value)` or object map.
@@ -457,7 +459,8 @@ Production sizes: hello-world **24.2 KB gzip** (23.0 in 0.9.0), todos
   year while HTML revalidates. The template follows the config's `output`, or
   `--static` / `--hybrid`. An existing file is refused unless `--force`, and
   running it again changes nothing. `puzzle add deploy` with no host lists them;
-  [`deploy/README.md`](deploy/README.md) explains each file.
+  [`deploy/README.md`](deploy/README.md) explains each file, plus the
+  `NODE_VERSION` that Cloudflare Pages needs.
 - **`PuzzleView<Props>` types a component's props.**
   `class TodoItem extends PuzzleView<TodoItemProps>` types `this.props`,
   `data()`'s `props` and `afterUpdate`'s `prev.props`, and `mountView` /
@@ -714,10 +717,6 @@ habit. Nothing existing breaks: renamed spellings stay accepted.
   un-upgraded app with the command that fixes it. The pass uses the parser and
   script tokenizer, not text search, so comments, strings and `{#raw}` are
   left alone, and a second run finds nothing.
-- **`puzzle doctor` fails on Node below 24 (D200)**, naming the version it
-  found: `v22.11.0 — Puzzle needs Node 24 or later`.
-- **`puzzle init` apps declare `"engines": { "node": ">=24" }`**, which deploy
-  hosts such as Vercel and Render read to pick the build's Node version.
 
 ## 0.9.1 — 2026-10-22 (Go module only)
 
