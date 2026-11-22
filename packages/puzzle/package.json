@@ -124,7 +124,8 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/magic-spells/puzzle.git"
+		"url": "git+https://github.com/magic-spells/puzzle.git",
+		"directory": "packages/puzzle"
 	},
 	"bugs": {
 		"url": "https://github.com/magic-spells/puzzle/issues"

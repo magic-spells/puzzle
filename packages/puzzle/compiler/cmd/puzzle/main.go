@@ -54,17 +54,18 @@ dist/chunks/ and the shell gets modulepreload links for its static-import
 chunks. Development builds keep fixed names and add no preloads; public/
 assets are never renamed.
 
-With --static, additionally emit true static pages: each static route becomes
-its own dist/<path>/index.html plus a small per-page module bundle under
-dist/_puzzle/ — no router, no SPA takeover. Production pages preload their
-shared chunks, and page modules are <slug>-<hash>.js unless build.hashNames is
-false.
+With --static, emit true static pages instead of the SPA bundle: each static
+route becomes its own dist/<path>/index.html plus a small per-page module
+bundle under dist/_puzzle/ — no router, no app.js. Production pages preload
+their shared chunks, and page modules are <slug>-<hash>.js unless
+build.hashNames is false.
 With --hybrid, prerender each static route to dist/<path>/index.html that the
-full SPA runtime takes over on load (the mode formerly spelled --static).
-Either flag has a puzzle.config.js
-equivalent (output: 'static' | 'hybrid'); passing a flag that disagrees with
-the config output value is an error. Dynamic (:id / *) routes are skipped with
-a warning.
+full SPA runtime takes over on load.
+Either flag has a puzzle.config.js equivalent (output: 'static' | 'hybrid');
+passing a flag that disagrees with the config output value is an error. A
+:param route is prerendered only when its staticPaths field lists its values;
+otherwise it is skipped with a warning. The top-level '*' route becomes
+dist/404.html.
 
 With --fixtures, wire app/fixtures.js (or .ts) through the fixtures/mock runtime
 module so the built app seeds and mocks itself. Without the flag nothing from

@@ -4,7 +4,7 @@ import models from './models/index.js';
 
 // Create and configure the Puzzle app.
 // The v1 config surface is intentionally small: target, routes, models,
-// adapter, formatters, apiURL — see constellation/doc/DOC-SPEC.md §2.
+// adapter, functions, apiURL — see constellation/doc/DOC-SPEC.md §2.
 const app = new PuzzleApp({
   // Where the app mounts
   target: '#app',
@@ -15,7 +15,7 @@ const app = new PuzzleApp({
   // Models registration
   models,
 
-  // App lifecycle hook (D60), run once before the first navigation. This starter
+  // App lifecycle hook (D66), run once before the first navigation. This starter
   // has no backend, so the store is seeded here and every read — findMany(),
   // findOne(), createRecord(), update(), destroy() — is purely local.
   //

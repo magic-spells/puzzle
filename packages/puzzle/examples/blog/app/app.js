@@ -5,7 +5,7 @@ import models from './models/index.js';
 
 // Create and configure the Puzzle app.
 // The v1 config surface is intentionally small: target, routes, models,
-// formatters, apiURL — see constellation/doc/DOC-SPEC.md §2.
+// functions, apiURL — see constellation/doc/DOC-SPEC.md §2.
 const app = new PuzzleApp({
   // Where the app mounts
   target: '#app',
@@ -27,7 +27,7 @@ const app = new PuzzleApp({
   // app/public/api/ into dist/api/ at build time.
   apiURL: '/api',
 
-  // Global formatters available in all templates
+  // App functions, called by name in any template
   // (display transformation only — logic belongs in data())
   functions: {
     byline: (name) => (name ? `By ${name}` : 'By an unknown author')

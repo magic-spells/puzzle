@@ -1,4 +1,4 @@
-Register it in app/models/index.js:
+Register it in app/models/index.js (create it if the app has none, and pass it to new PuzzleApp as models):
     import User from './user.js';
     // then add to the registry object:
     user: User
