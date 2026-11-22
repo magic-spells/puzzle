@@ -1034,13 +1034,7 @@ export class PuzzleView {
 				// The store's batched flush drives the re-render and the persistence write.
 				target.update({ [key]: value });
 			} catch (err) {
-				reportError(
-					this.ctx,
-					err,
-					{ phase: 'bind', view: this, route: this.route },
-					'[puzzle] bound write rejected:',
-					err
-				);
+				this.#report('bind', '[puzzle] bound write rejected:', err);
 			}
 		} else {
 			// Contain the assignment exactly like the record arm above. The write target
@@ -1053,13 +1047,7 @@ export class PuzzleView {
 			try {
 				target[key] = value;
 			} catch (err) {
-				reportError(
-					this.ctx,
-					err,
-					{ phase: 'bind', view: this, route: this.route },
-					'[puzzle] bound write rejected:',
-					err
-				);
+				this.#report('bind', '[puzzle] bound write rejected:', err);
 				// Stop here rather than falling through. Nothing was written, so the
 				// clobber diagnostic below has no write to watch for and the refresh
 				// would re-render byte-identical state whose only visible effect is
@@ -1978,6 +1966,17 @@ export class PuzzleView {
 	}
 
 	/**
+	 * Report `err` into the D145 funnel as this view's, under `phase`.
+	 * @param {ErrorSite['phase']} phase
+	 * @param {string} message the console prefix
+	 * @param {unknown} err
+	 * @returns {ErrorInfo}
+	 */
+	#report(phase, message, err) {
+		return reportError(this.ctx, err, { phase, view: this, route: this.route }, message, err);
+	}
+
+	/**
 	 * Report a view failure into the D145 funnel. Normally logging is enough, but
 	 * an anchor-race mount whose superseding first render failed can never reach
 	 * #completeMount(). Recover through the same instance-owned placeholder
@@ -1991,13 +1990,7 @@ export class PuzzleView {
 	 * @param {ErrorSite['phase']} phase
 	 */
 	#handleViewFailure(message, err, phase) {
-		const info = reportError(
-			this.ctx,
-			err,
-			{ phase: this.__errorViewFailed ? 'error-view' : phase, view: this, route: this.route },
-			message,
-			err
-		);
+		const info = this.#report(this.__errorViewFailed ? 'error-view' : phase, message, err);
 		if (this.__errorViewFailed) {
 			const marker = this.#vm?.plantFailurePlaceholder();
 			this.__errorViewFailed();
@@ -2065,13 +2058,7 @@ export class PuzzleView {
 			// D146: user code, fenced to committed params/route.
 			this.#withCommittedScope(() => this.destroyed());
 		} catch (err) {
-			reportError(
-				this.ctx,
-				err,
-				{ phase: 'unmount', view: this, route: this.route },
-				'[puzzle] destroyed hook error:',
-				err
-			);
+			this.#report('unmount', '[puzzle] destroyed hook error:', err);
 		}
 	}
 
@@ -2399,13 +2386,7 @@ export class PuzzleView {
 					try {
 						this.viewWillShow();
 					} catch (err) {
-						reportError(
-							this.ctx,
-							err,
-							{ phase: 'enter', view: this, route: this.route },
-							'[puzzle] enter hook failed during a visible-trigger reveal:',
-							err
-						);
+						this.#report('enter', '[puzzle] enter hook failed during a visible-trigger reveal:', err);
 					}
 					handle.play();
 				// handle.finished NEVER rejects — playAnimation normalises WAAPI's
@@ -2420,13 +2401,7 @@ export class PuzzleView {
 							try {
 								this.viewDidShow(); // skipped entirely if destroyed mid-enter
 							} catch (err) {
-								reportError(
-									this.ctx,
-									err,
-									{ phase: 'enter', view: this, route: this.route },
-									'[puzzle] enter hook failed during a visible-trigger reveal:',
-									err
-								);
+								this.#report('enter', '[puzzle] enter hook failed during a visible-trigger reveal:', err);
 							}
 						}
 					this.#settleEnter();
@@ -2624,13 +2599,7 @@ export class PuzzleView {
 		try {
 			hook();
 		} catch (err) {
-			reportError(
-				this.ctx,
-				err,
-				{ phase: 'enter', view: this, route: this.route },
-				'[puzzle] show hook failed while restoring a stalled outgoing view:',
-				err
-			);
+			this.#report('enter', '[puzzle] show hook failed while restoring a stalled outgoing view:', err);
 		}
 	}
 
@@ -2656,13 +2625,7 @@ export class PuzzleView {
 			// leave-hook guard, router.js #startOverlapLeave). The destroyed-mid-playOut
 			// interrupt path resolves (never rejects), so its early-return / did-hook-skip
 			// semantics are untouched — only the throw path lands here.
-			reportError(
-				this.ctx,
-				err,
-				{ phase: 'leave', view: this, route: this.route },
-				'[puzzle] leave hook failed during teardown:',
-				err
-			);
+			this.#report('leave', '[puzzle] leave hook failed during teardown:', err);
 		}
 		this.destroy();
 	}
@@ -2778,13 +2741,7 @@ export class PuzzleView {
 			if (this.#enterPending) {
 				this.#enterPending = false;
 				Promise.resolve(this.playIn()).catch((err) =>
-					reportError(
-						this.ctx,
-						err,
-						{ phase: 'enter', view: this, route: this.route },
-						'[puzzle] child enter animation failed:',
-						err
-					)
+					this.#report('enter', '[puzzle] child enter animation failed:', err)
 				);
 			}
 		}
