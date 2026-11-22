@@ -31,7 +31,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   disabled  boolean — dims the button and blocks the callback
 //   class     appended last to the root <button>
 // Callback:
-//   @change(pressed, event)  fired on click with the NEXT pressed value (value-
+//   @change(pressed)         fired on click with the NEXT pressed value (value-
 //                            first); typeof-guarded so it's optional
 //
 // aria-pressed is emitted in STRING form ('true' | 'false') — a boolean-valued

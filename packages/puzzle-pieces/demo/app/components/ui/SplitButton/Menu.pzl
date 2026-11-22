@@ -49,7 +49,7 @@ import DropdownMenu from '../DropdownMenu/index.js';
 //   class     merged onto <dropdown-trigger>, after the chrome
 // Callbacks
 //   @show() / @hide()       the menu opened or closed
-//   @select(value, event)   a row was chosen. Fires once; the menu then closes
+//   @select(value)          a row was chosen. Fires once; the menu then closes
 //             and focus returns to the caret.
 
 const BUTTON_BASE =

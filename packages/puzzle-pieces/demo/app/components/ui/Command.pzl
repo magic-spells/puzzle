@@ -132,7 +132,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // against an already-closed panel.
 //
 // TWO CALLBACKS, TWO MEANINGS:
-//   @select(value, event) — fires when an item is activated (Enter or click).
+//   @select(value) — fires when an item is activated (Enter or click).
 //     The parent decides what happens next, INCLUDING whether to close (flip
 //     `open`). Command does NOT auto-close after a select — a palette often runs
 //     an action and stays open, so that call belongs to the parent.

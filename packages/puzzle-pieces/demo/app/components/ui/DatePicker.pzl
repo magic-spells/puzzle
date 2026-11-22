@@ -155,9 +155,8 @@ import { parseISODate, toDate } from '../../lib/date-math.js';
 //     spans, icons, dots, badges.
 //
 // CALLBACKS
-//   @change(isoValue, date)  re-emitted from Calendar on day selection; DatePicker
-//                            then closes and returns focus to the trigger. `date` is
-//                            a local-time Date.
+//   @change(isoValue)        re-emitted from Calendar on day selection; DatePicker
+//                            then closes and returns focus to the trigger.
 //   @show() / @hide()        fire on the user's open/close INTENT (trigger, Escape,
 //                            outside-click, or a committed selection) — like Dialog's
 //                            @hide, so a controlled parent can flip `open`.

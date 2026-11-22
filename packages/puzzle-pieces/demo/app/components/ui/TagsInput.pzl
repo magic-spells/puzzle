@@ -77,7 +77,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // `value` is an ARRAY of strings (controlled: props in, callbacks out). The ONLY
 // local state is the in-progress input text (`draft`); the chips always render
-// from the parent-owned `value`. `@change(nextTags, event)` fires value-first with
+// from the parent-owned `value`. `@change(nextTags)` fires value-first with
 // the NEXT array — one MORE entry on add, one FEWER on remove.
 //
 // CHROME = InputGroup's grouped-field pattern: one bordered wrapper owns the

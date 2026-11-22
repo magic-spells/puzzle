@@ -161,7 +161,7 @@ import Pagination from './Pagination.pzl';
 //
 // CALLBACKS  (value-first; every one fires in BOTH controlled and uncontrolled mode)
 //   @sortChange(next)     next sort descriptor ({ key, dir } | null) after a header click.
-//   @select(keys, event)  the next array of selected rowKey values.
+//   @select(keys)         the next array of selected rowKey values.
 //   @pageChange(n)        the next 1-based page.
 //
 //   NAMING NOTE / deviation from a plain @sort/@page: Puzzle compiles an `@event`

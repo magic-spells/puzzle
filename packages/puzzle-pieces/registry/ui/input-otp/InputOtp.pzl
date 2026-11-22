@@ -38,7 +38,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // (native caret, mobile keyboard, per-cell focus) plus an optional hidden
 // aggregate <input name> for form submission. Controlled: `value` is the full
 // string and each cell derives its char from it; edits go out through
-// `@change(value, event)`, and `@complete(value)` fires once the moment the
+// `@change(value)`, and `@complete(value)` fires once the moment the
 // value first reaches `length`. No autoSubmit — `@complete` is the parent's hook.
 //
 //   <InputOtp value={ code } @change={ setCode } @complete={ verify } />

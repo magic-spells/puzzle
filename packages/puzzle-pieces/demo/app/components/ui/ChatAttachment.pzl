@@ -53,7 +53,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   disabled   dims the chip and disables the remove button
 //   class      appended to the root chip
 // Callback:
-//   @remove(name, event)  fired from the × button with the filename first
+//   @remove(name)         fired from the × button with the filename first
 //
 // The leading glyphs are inline stroke-current SVG PATHS only (no <text>)
 // tinted text-muted. Without `href` the body is an <a> with no href: a

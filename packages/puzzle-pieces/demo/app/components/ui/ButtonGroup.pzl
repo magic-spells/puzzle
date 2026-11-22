@@ -25,7 +25,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // ButtonGroup — a joined row of ACTION buttons (a segmented toolbar cluster:
 // text-format bar, alignment actions, paging controls). This is NOT ToggleGroup:
 // there is no pressed/selected state and no value memory — every button just
-// FIRES an action through @press(value, event). Config-first: the whole strip
+// FIRES an action through @press(value). Config-first: the whole strip
 // renders from one `items` array.
 //
 // ICON STORY: unlike ToggleGroup (which can't render per-item icons), a `d`
@@ -60,7 +60,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   disabled disables every button in the group.
 //   class    appended to the wrapper.
 // Callback:
-//   @press(value, event)  value-first, typeof-guarded. Disabled buttons no-op.
+//   @press(value)  value-first, typeof-guarded. Disabled buttons no-op.
 //
 // JOINED-ROW TREATMENT (copied from ToggleGroup's intent, different mechanism):
 // buttons overlap by -ml-px so adjacent borders collapse into one hairline; only

@@ -63,7 +63,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // This is progress PRESENTATION, not a tablist — there is deliberately NO roving
 // tabindex. When `clickable`, every REACHABLE step (completed or current) becomes
 // a real, natively-tabbable <button>; upcoming steps stay non-interactive spans.
-// Activating a reachable step fires @stepChange(index, event).
+// Activating a reachable step fires @stepChange(index).
 //
 //   <Stepper steps={ steps } value={ current } />
 //   <Stepper steps={ steps } value={ current } orientation="vertical" />
@@ -81,7 +81,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   class        string   appended to the root <ol> (callers win).
 //
 // CALLBACK
-//   @stepChange(index, event)  fires only in `clickable` mode when a reachable step
+//   @stepChange(index)         fires only in `clickable` mode when a reachable step
 //                              is activated. Named to differ from the `value` prop
 //                              (the @event-vs-prop-name collision trap): a controlled
 //                              parent flips `value` in response.
