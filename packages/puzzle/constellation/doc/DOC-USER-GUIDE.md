@@ -20,7 +20,7 @@ The path an app author takes, worked against the in-repo `examples/blog` referen
 
 ## Quick start
 
-The CLI is a prebuilt Go binary shipped through npm.
+The CLI is a prebuilt Go binary shipped through npm. Puzzle needs Node 24 or later.
 
 ```bash
 npm install -g @magic-spells/puzzle
@@ -134,7 +134,7 @@ export default class Post extends PuzzleModel {
 ## Views
 
 ```html
-<!-- app/views/PostDetail.pzl (abridged) -->
+<!-- a post page with a hand-written comment form; examples/blog's PostDetail.pzl uses createForm (Forms, below) -->
 <puzzle-view class="detail">
   {#if post}
     <h1>{ post.title }</h1>
@@ -329,4 +329,4 @@ export default {
 
 ## Commands
 
-`puzzle dev`, `puzzle build` (`--static`, `--hybrid`), `puzzle preview`, `puzzle check`, `puzzle generate`, `puzzle add tailwind|theme|piece|skills`, `puzzle doctor`, `puzzle info`, `puzzle upgrade`. Flags: [[DOC-RELEASE-SURFACE]] and [[DOC-SPEC-BUILD]] §13.
+`puzzle dev`, `puzzle build` (`--static`, `--hybrid`), `puzzle preview`, `puzzle check` (`--fix` rewrites code written for an older Puzzle), `puzzle generate`, `puzzle add tailwind|theme|piece|deploy|skills`, `puzzle doctor`, `puzzle info`, `puzzle upgrade`. Flags: [[DOC-RELEASE-SURFACE]] and [[DOC-SPEC-BUILD]] §13.

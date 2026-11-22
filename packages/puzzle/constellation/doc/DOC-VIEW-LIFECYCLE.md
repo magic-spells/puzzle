@@ -100,7 +100,7 @@ MATCH route ── no match → catch-all `*`, else warn + stay (no token bump)
             │  token bumped only now
             ▼
 GUARDS root → leaf, before any view exists:
-       false/throw → stay; string → redirect via replace()
+       false/throw → stay; path or { name } → redirect (push stays push, else replace())
             ▼
 LOAD   keep = shared chain-prefix length; instantiate fresh views [keep..N]
        (+ layout if its class changed); await fresh data(); PREPARE reused
@@ -149,7 +149,9 @@ contract is [[DOC-SPEC-ROUTER]] §30. The rules that shape the diagram:
 | Parent re-renders with changed props | yes | shallow compare; a store record prop also compares by render revision |
 | Two-way bind write-back | yes | `setState` + `refresh`, or `record.update()` and its flush |
 | Parent re-render with new slot content only | no | re-render with the existing model (once mounted) |
-| `this.setState(...)` | no | state merged, one render scheduled per frame |
+| `this.setState(...)` of a key `data()` read through `getData()` or `getState()` | yes | `data()` re-runs once before the next render, however many writes came first (D23) |
+| `this.setState(...)` of any other key | no | state merged, one render scheduled per frame |
+| A `shared` key this view's `data()` read changes | yes | the sharer's `share()` runs after its own commit; only views that read a changed key re-run ([[DECISION-D197-SHARE]]) |
 | Anything else (locals, direct DOM pokes) | no | not reactive by design |
 
 Both paths batch on the shared frame scheduler (`scheduler.js`,

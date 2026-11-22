@@ -29,7 +29,7 @@ Puzzle is **one template language with two dialects**. A `.pzl` file is HTML plu
 - **PuzzleKit**, the app framework in this package, compiles `.pzl` to JavaScript that renders in the browser.
 - **Magic Spells Sites** renders themes on the server: it parses with the same module and evaluates the tree in Go.
 
-One parser, `packages/puzzle-lang` (`parser` + `expr`), reads both; each host turns switches on or off (`parser.Options`: `Let`, `Pipes`, the island/slot/ref checks, `MaxDepth`). The zero `Options` is PuzzleKit's grammar.
+One parser, `packages/puzzle-lang` (`parser` + `expr`), reads both; each host turns switches on or off (`parser.Options`: `Let`, `Pipes`, the island/slot/ref checks, the foreign-syntax check, `MaxDepth`). The zero `Options` is PuzzleKit's grammar.
 
 The rule that holds them together: **a dialect may add constructs or restrict the core, but never gives shared syntax a different meaning.** A proposal needing one spelling to behave differently per host gets a new spelling. Rationale and naming: [[DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS]].
 
@@ -107,7 +107,7 @@ A tag whose name does **not** start with a lowercase ASCII letter is a component
 
 - The name is `Ident('.'Ident)*` of `$`-free JavaScript identifiers in any script; the dotted form is a **component family** member. §65, [[DECISION-D167-COMPONENT-FAMILIES]].
 - **Props are attributes**: static → a string, brace-only → the value (a list stays a list), quoted with interpolation → the assembled string. Prop names may use any script.
-- `Children`, `Slot`, `Snippet`, `Portal` and `Component` are reserved tag names (and cannot root a dotted name).
+- `Children`, `Outlet`, `Slot`, `Snippet`, `Portal` and `Component` are reserved tag names (and cannot root a dotted name).
 - How a name finds its file and how a component reads props is host-defined (D173 V15): PuzzleKit resolves `<script>` imports and passes props to `data({ params, props })`, whose default returns them; Sites resolves `components/<Name>.pzl` and exposes props as bare names.
 
 ## Slots
@@ -238,7 +238,7 @@ A computed method call (`a[name]()`), calling a call's result (`f(x)(y)`) and an
 | Expressions | the whole grammar, lowered to JavaScript, plus the `@event` handler | the same tree with pipes on, evaluated in Go with JavaScript's semantics; **no methods** (each refused with a steer to the pipe to write) and **no arrow functions**; globals are only `parseInt`, `parseFloat`, `encodeURIComponent`, `Math.min`, `Math.max`, `Math.PI`, `Math.E` |
 | Naming a computed value | a `data()` field (no `{#let}`) | `{#let}` |
 | Adds | `<Component>` runtime selection (§67); `@event` + modifiers (§5, §47); callback props; implicit two-way binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]); `<Portal>` ([[DECISION-D144-PORTAL]]); `island` (§17); `key` (§28); `ref` (§38); `flip` (§46); `link`, `timeago` and app-registered functions | `{#let}`; pipes; display-transform functions in place of methods (`upcase`, `downcase`, `strip`, `split`, `replace`, `join`, `slice`, `contains`, `first`, `last`, `reverse`, `compact`, `uniq`, `sort`, `where`, `reject`, `find`, `map`, `default`, `abs`, `ceil`, `floor`); platform functions (`url`, `asset_url`, `menu_link`, `image_url`, `image_srcset`, `image_tag`, `class_map`, `sum`, `size`); `<Form>`; reserved layout slots and section groups |
-| Restricts | — | `@event`, `<Portal>` and `<Snippet>` are errors; `ref`/`key`/`flip`/`island` dropped with a warning; an unknown function or wrong argument count is a compile error; a `<style>` is an error |
+| Restricts | On an element, React, Vue and Svelte attribute spellings (`className`, `onClick={ … }`, `v-if`, `on:click`, `class:x`) are compile errors that name the Puzzle form (§6) | `@event`, `<Portal>` and `<Snippet>` are errors; `ref`/`key`/`flip`/`island` dropped with a warning; an unknown function or wrong argument count is a compile error; a `<style>` is an error |
 
 So a template does not move between hosts unchanged: PuzzleKit writes `name.toUpperCase()` and `currency(price)`, Sites writes `name | upcase` and `price | currency`. Sites's own record of the split is its `engine/docs/template-language.md` ("Sites and Puzzle") and its `DECISION-EXPRESSION-SUBSET` / `DECISION-SITES-TEMPLATE-ALLOWLIST` cards.
 

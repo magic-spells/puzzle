@@ -86,7 +86,7 @@ The contract is split across six chapter cards; this card is the entry point. Se
 | 56 | Dev-only runtime performance profiling + render assertions | [[DOC-SPEC-BUILD]] |
 | 57 | Raw template blocks: `{#raw}…{/raw}` | [[DOC-SPEC-TEMPLATE]] |
 | 58 | Opt-in server adapter subpath | [[DOC-SPEC-DATA]] |
-| 59 | Opt-in SPA code splitting — `build.splitting` | [[DOC-SPEC-BUILD]] |
+| 59 | SPA code splitting and production names — `build.splitting`, `build.hashNames` | [[DOC-SPEC-BUILD]] |
 | 60 | App-level error handling: `onError` + `errorView` | [[DOC-SPEC-VIEW]] |
 | 61 | Auto-fetching finds: tracked fetch and the settle loop | [[DOC-SPEC-DATA]] |
 | 62 | Lazy route views: `lazy()` | [[DOC-SPEC-ROUTER]] |

@@ -115,9 +115,11 @@ A brace-only value controls the attribute: `false`, `null` and `undefined` remov
 
 A dynamic URL attribute (`href`, `src`, `action`, …) never carries `javascript:` or `vbscript:`, and `data:` only in image positions: a blocked value leaves the attribute off, with a development warning. A quoted value whose literal start fixes the scheme (`href="/users/{ id }"`) skips the check (§6, [[DECISION-D186-DYNAMIC-URL-SAFETY]]).
 
+On an HTML element, spellings from other frameworks are compile errors that name the Puzzle form: `className` → `class`, `htmlFor` → `for`, `onClick={ save }` → `@click={ save }`, `v-if` → `{#if}`, `v-model` → `value={ … }`, `:title` or `v-bind:title` → `title={ … }`, `on:click` → `@click={ … }`, `class:active` → `class="{#if cond}active{/if}"` (§6).
+
 ## Two-way form binding
 
-On a plain `<input>`, `<textarea>` or `<select>`, `value={ path }` and `checked={ path }` bind both ways when `path` is a bare name or a one-level path. No handler, no `bind:` prefix:
+On a plain `<input>`, `<textarea>` or `<select>`, `value={ path }` and `checked={ path }` bind both ways when `path` is a bare name or a plain member path of any depth (`todo.completed`, `form.values.title`). No handler, no `bind:` prefix:
 
 ```html
 <input type="text" placeholder="What needs doing?" value={ newTodoText } />
@@ -125,7 +127,7 @@ On a plain `<input>`, `<textarea>` or `<select>`, `value={ path }` and `checked=
 ```
 
 - A bare name writes local state (`setState` + `refresh`, so `data()`-derived values like `canAdd` stay current as you type).
-- A path writes its root: a store record through validated `update()`; a plain object is mutated. **Bind the path you want written.**
+- A path writes the object that owns its last step: a store record through validated `update()`; a plain object is mutated. **Bind the path you want written.**
 - Numbers, checkboxes, dates and selects commit on `change`; text fields on `input`.
 - Opt out with your own `@input`/`@change`, a non-path expression (`value={ draft ?? '' }`), or static `readonly`. Other events (`@keydown:enter`, `@blur`) coexist with the bind — [[DOC-EVENTS]] shows the patterns.
 - A bound plain object must keep its identity across `data()` runs — hold it in `created()` or `this.memo()`, not a fresh literal each run.

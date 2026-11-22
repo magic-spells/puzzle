@@ -115,8 +115,8 @@ created() {
 ## Consequences
 
 - New subpath export, alias in the build's runtime table, `types/forms.d.ts`
-  and a drift entry. Target: about 1.5 KB gzip, measured by
-  `scripts/measure-size.mjs`.
+  and a drift entry. The module is about 1.3 KB gzip, and only an app that
+  imports it ships it.
 - D147's trigger rule (`ident` or `ident.ident`) is rewritten in place to allow
   deeper plain paths; its "display-only paths write back" gotcha covers more
   shapes.

@@ -1,5 +1,5 @@
 ---
-name: D193 — Server queries: query keys on findMany, store.invalidate(), and write status
+name: 'D193 — Server queries: query keys on findMany, store.invalidate(), and write status'
 status: built
 connections:
   - DECISION-D161-AUTO-FETCHING-FINDS
@@ -81,8 +81,8 @@ store.invalidate('post', { query: { page: 2 } }); // one query (exact key match)
 
 ```js
 events = {
-  async publish() {
-    const save = this.props.post.update({ published: true }).save();
+  publish: async () => {
+    const save = this.getData().post.update({ published: true }).save();
     // save.pending is true and save.error is null until it settles
     try { await save; } catch {}   // save.error now holds the rejection
     this.ctx.store.invalidate('post');
@@ -122,8 +122,8 @@ Everything here is adapter-side, grafted onto the Store prototype by `installAda
 
 ## Consequences
 
-- [[DOC-SPEC-DATA]] §8, §22 and §61 change: `findMany`'s `query` option and result `meta`, `invalidate()`, `syncStatus()`, the `{ records, meta }` response shape, and the "Not supported" line loses query/pagination keys and invalidation (TTL and refetch-on-focus stay deferred). The deferred list in [[DOC-SPEC]] loses the same items.
-- `types/index.d.ts` gains `FindManyOptions.query`, a `QueryResult` array type with `meta`, and the adapter-installed `invalidate()`/`syncStatus()`; `types/adapter.d.ts` gains the `{ records, meta }` result shape and `pending`/`error` on the write promises.
+- The contract is [[DOC-SPEC-DATA]] §68: `findMany`'s `query` option and result `meta`, `invalidate()`, `syncStatus()` and the `{ records, meta }` response shape; §8, §22 and §61 point to it. TTL and refetch-on-focus stay deferred in §61 and in the deferred list in [[DOC-SPEC]].
+- `types/index.d.ts` has `FindManyOptions.query` and `FindManyResult`, the array type with `meta`. `types/adapter.d.ts` has `AdapterLoadManyResult` (the `{ records, meta }` shape), `WritePromise` (`pending`/`error`), `SyncStatus`, and `invalidate()`/`syncStatus()` on the Store.
 - No existing behavior changes: a `findMany` without `query`, a `loadMany` without options and every write path keep their current contracts.
 
 ## Out of scope (later)

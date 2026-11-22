@@ -44,15 +44,16 @@ A query-only navigation (`?page=3`) re-runs `data()` with the new route query ([
 data() {
   // cursors walked so far live in view state; '' means the first page
   const cursors = this.getState().cursors ?? [''];
+  // the first page still sends limit: an empty query is no query
   const pages = cursors.map((after) =>
-    this.ctx.store.findMany('post', { query: after ? { after } : {} })
+    this.ctx.store.findMany('post', { query: after ? { after, limit: 10 } : { limit: 10 } })
   );
   const last = pages[pages.length - 1];
   return { posts: pages.flat(), nextCursor: last.meta?.nextCursor ?? null };
 }
 
 events = {
-  loadMore() {
+  loadMore: () => {
     const { cursors = [''] } = this.getState();
     this.setState('cursors', [...cursors, this.getData().nextCursor]);
   },
@@ -71,7 +72,7 @@ data() {
 }
 
 events = {
-  async publish() {
+  publish: async () => {
     try {
       await this.getData().post.update({ published: true }).save();
     } catch {
@@ -106,13 +107,13 @@ const api = adapter.defaults({
 });
 ```
 
-The mock adapter (`/fixtures`) learns to serve `?page`/`?limit` and an `after` cursor by default, answering `{ records, meta: { page, nextPage, nextCursor, total } }` when a request carries any of those params and the plain array otherwise, so `--fixtures` apps paginate without a handler.
+The mock adapter (`/fixtures`) serves `?page`/`?limit` and an `after` cursor by default, answering `{ records, meta: { page, limit, total, nextPage, nextCursor } }` when a request carries any of those params and the plain array otherwise, so `--fixtures` apps paginate without a handler.
 
 ## Build plan
 
 **Runtime (`client-runtime/datastore/adapter.js`, all adapter-side):**
 - Read state gains `queries` (LRU `Map` of canonical key → `{ type, query, rows, meta, gen, mark }`), `staleType` (`type → gen`) and `staleRecord` (`identity → gen`).
-- `canonicalQuery(type, query)` builds the key and validates values in development.
+- `canonicalQuery(type, query)` builds the key and throws on a value that is not a string, finite number, boolean or an array of those.
 - `_findManyTracked` routes a query read to a new `_faultQuery` (dedupe on `state.many` under the query key) and returns the entry's rows with `meta`; `_findOneTracked` checks the stale marks on a hit.
 - `loadMany` accepts `{ records, meta }`, and with options writes the query entry.
 - The adapter overrides `Store.prototype.findMany` only for the `query` branch, so an untracked query read returns cached rows; a no-query call goes straight to core.
@@ -125,9 +126,9 @@ The mock adapter (`/fixtures`) learns to serve `?page`/`?limit` and an `after` c
 
 **Types:** `types/index.d.ts` (`FindManyOptions.query`, `FindManyResult<T>` with `meta`), `types/adapter.d.ts` (`AdapterLoadManyResult`, `WritePromise<T>` with `pending`/`error`, `SyncStatus`, and `invalidate`/`syncStatus` on the Store), plus the installed-method drift guard.
 
-**Tests (vitest):** canonical keys and dev errors; a query read faults once, dedupes across views, keeps server order and `meta`; pages share records with `findOne`; untracked query reads are local; `invalidate` in all three forms marks, notifies and refetches only what a view reads, holding old rows until the settle commit; a stale refetch failure reaches `errorView` and retries; generations keep a pre-invalidate response from clearing staleness; `syncStatus` flips and notifies through queued writes; promise `pending`/`error`; read-state serialization round-trip; mock pagination; LRU eviction. TypeScript fixtures under `tests-types`. An end-to-end test of the example (`tests/paginated-posts-example.test.js`) over its compiled views and fixtures.
+**Tests (vitest):** canonical keys and their errors; a query read faults once, dedupes across views, keeps server order and `meta`; pages share records with `findOne`; untracked query reads are local; `invalidate` in all three forms marks, notifies and refetches only what a view reads, holding old rows until the settle commit; a stale refetch failure reaches `errorView` and retries; generations keep a pre-invalidate response from clearing staleness; `syncStatus` flips and notifies through queued writes; promise `pending`/`error`; read-state serialization round-trip; mock pagination; LRU eviction. TypeScript fixtures under `tests-types`. An end-to-end test of the example (`tests/paginated-posts-example.test.js`) over its compiled views and fixtures.
 
-**Docs:** [[DOC-SPEC-DATA]] §8/§22/§61, [[DOC-SPEC]] deferred list, [[DOC-DATASTORE]], [[DOC-MODELS]], [[COMPONENT-STORE]], [[COMPONENT-ADAPTER]], [[DOC-RELEASE-SURFACE]], the user guide's data chapter, the agent skill, and a CHANGELOG entry under 0.10.0. D193 and this card flip to `built`.
+**Docs:** [[DOC-SPEC-DATA]] §68 (§8, §22 and §61 point to it), [[DOC-SPEC]] deferred list, [[DOC-DATASTORE]], [[DOC-MODELS]], [[COMPONENT-STORE]], [[COMPONENT-ADAPTER]], [[DOC-RELEASE-SURFACE]], the user guide's data chapter, the agent skill, and a CHANGELOG entry under 0.10.0. D193 and this card flip to `built`.
 
 **Example:** `examples/paginated-posts`: a fixtures-backed post list with page links, a detail view with Publish (pending and error state, then `invalidate`), and a cursor "load more" comments list.
 

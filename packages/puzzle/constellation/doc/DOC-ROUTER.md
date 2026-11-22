@@ -140,7 +140,7 @@ Plain `<a>` tags are intercepted — there is no link component. The browser kee
 
 ### By name
 
-Anywhere a path goes, a named target works too: `{ name, params, query?, hash? }`. The router builds the path from the route's pattern, so a route can move without its links changing ([[DECISION-D196-NAMED-ROUTES]]):
+`link()`, `router.url()`, `push()`, `replace()` and a guard's redirect take a named target as well as a path: `{ name, params, query?, hash? }`. The router builds the path from the route's pattern, so a route can move without its links changing ([[DECISION-D196-NAMED-ROUTES]]):
 
 ```html
 <a href="{ link({ name: 'album', params: { id: album.id } }) }">{ album.title }</a>
@@ -335,4 +335,3 @@ Each entry is `{ path, params, name, meta, title, agent, chain }`. `agent` resol
 | `url(target, options?)` | Mode-, base- and locale-correct href for a path or named target (what `link()` calls). |
 | `current` | The committed snapshot `{ path, pathname, query, hash, route, params, chain }`. |
 | `views` | Every leaf route as frozen `{ path, params, name, meta, title, agent, chain }` entries. |
-

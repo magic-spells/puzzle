@@ -27,7 +27,7 @@ Current terms. [[DOC-SPEC]] is authoritative.
 
 **default children** — Content inside a component invocation, placed by the child with `<Children/>`.
 
-**derived layer** — The values returned by the latest successful `data()`; replaced wholesale on each commit, below the state layer.
+**derived layer** — The values returned by the latest successful `data()`; replaced wholesale on each commit and laid over the state layer.
 
 **development-state transfer** — The one-shot snapshot/restore `puzzle dev` uses across full reloads for store records and JSON-safe local view data. Not per-module hot replacement.
 
@@ -65,7 +65,7 @@ Current terms. [[DOC-SPEC]] is authoritative.
 
 **snippet** — `<Snippet fits="name" params…>` at a call site: a parameterized body the component stamps per item through its own markers.
 
-**state layer** — Persistent component state set by `setState()`; overrides same-named derived-layer values and re-renders; a write to a key `data()` read re-runs `data()` with that render (D23).
+**state layer** — Persistent component state set by `setState()`; it survives every `data()` run and re-renders. A write shows at once, and the next `data()` commit wins for a key `data()` also returns. A write to a key `data()` read re-runs `data()` with that render (D23).
 
 **store** — Per-app record registry, query and subscription engine, and persistence owner; with the adapter capability it also fetches and syncs.
 

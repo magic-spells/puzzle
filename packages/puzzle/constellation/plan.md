@@ -51,4 +51,4 @@ Unscheduled ideas (no design yet): `<KeepAlive>`-style view retention, global ev
 - A SPEC change needs a decision card: a new question gets the next number; a changed answer rewrites its existing card in place (one decision, one card), with the discarded approach as a short line under Alternatives.
 - Component, flow and doc cards describe current behavior and durable gotchas; git and CHANGELOG.md keep the history.
 - Label future and rejected ideas explicitly; never blur them into the shipped surface.
-- Terms: template library entries are *functions* (never filters or pipes; `formatters` is only the config key); the default router mode is *path routing*, never "history".
+- Terms: template library entries are *functions* (never filters or pipes; apps register theirs under the `functions` config key, and `formatters` is only the runtime's internal name); the default router mode is *path routing*, never "history".

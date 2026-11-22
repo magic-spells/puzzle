@@ -87,8 +87,9 @@ transport needs `PUZZLE_PIECES_REGISTRY` unset (the maintainer's shell sets it).
 2. `<script>` is real JavaScript (D3); TypeScript is transpile-only. To prove a block
    parses, extract it to `.mjs` and run `node --check`.
 3. Define `events` as arrow-function class fields so handlers keep the instance.
-4. Call template library entries functions — never filters or pipes; `formatters`
-   survives only as the config key and in registry code names.
+4. Call template library entries functions — never filters or pipes. Apps register theirs
+   under the `functions` config key; `formatters` survives only in registry code names
+   (`ctx.formatters`, `FormatterRegistry`).
 5. Keep `examples/todos/` and the relevant focused examples aligned with the public docs.
 6. Label unshipped ideas as future or rejected.
 7. A [[DOC-SPEC]] change needs a decision card: a new question gets the next number; a

@@ -63,7 +63,8 @@ The exported class extends `PuzzleView`:
 
 | Member | What it is |
 | --- | --- |
-| `data({ params, props })` | Returns the model the template reads. May be `async`. |
+| `data({ params, props, shared })` | Returns the model the template reads. May be `async`. |
+| `share({ params, props, shared })` | Optional. Returns what nested views read under `shared` ([below](#sharing-with-nested-views)). Synchronous. |
 | `events` | A class field of arrow functions — the template's handlers ([[DOC-EVENTS]]). |
 | `created`, `mounted`, `beforeUpdate`, `afterUpdate(prev)`, `destroyed` | Lifecycle hooks, in that order. `viewWillShow`/`viewDidShow`/`viewWillHide`/`viewDidHide` bracket enter/leave animations. |
 | `animations` | A class field `{ in?, out? }` of Web Animations specs (§12). |
