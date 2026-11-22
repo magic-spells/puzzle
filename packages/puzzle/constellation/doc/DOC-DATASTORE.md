@@ -78,7 +78,7 @@ data() {
 ```
 
 - `query` goes to the server (the generated REST verb puts it in the URL); `filter` stays local and can narrow the page. Values are strings, numbers, booleans or arrays of those, and key order does not matter.
-- `posts.meta` is whatever the server sent beside the rows: return `{ records, meta }` from an authored `loadMany` (or a `defaults()` dialect) for an API that wraps its rows. A plain array has no meta. Cursors are just params: put `meta.nextCursor` in the next query.
+- `posts.meta` is whatever the server sent beside the rows: return `{ records, meta }` from an authored `loadMany` (or a `defaults()` dialect) for an API that wraps its rows. A plain array has no meta. Cursors are just params: put `meta.nextCursor` in the next query. The first page has no cursor, so send another param with it (`limit`, say): a query whose values are all `null` or `undefined` is no query, and reads the whole collection with no `meta`.
 - The page you came from stays cached, so going back costs no request. The 200 most recently read queries are kept.
 - After a write that changes what lists show, call `store.invalidate('post')`. Nothing fetches until a view reads the data again, and that view keeps showing the old rows until the new ones land. `invalidate('post', id)` refreshes one record; `invalidate('post', { query })` one page.
 - `store.syncStatus(record)` shows a save or delete while it runs, and its error after it fails; the promise from `save()`/`delete()` carries the same `pending` and `error`.

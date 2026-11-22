@@ -92,8 +92,10 @@ export default class EditPost extends PuzzleView {
   `view.setState(key, controller)`, which schedules a render. `data()` re-runs
   only if its last run read that key (D23), so a value derived from the draft
   stays current without a `refresh()`.
-- **Records loaded later.** When the record arrives after `created()`, reseed
-  once it exists: `afterUpdate() { const { post } = this.getData(); if (post && this.form.source !== post) this.form.reset(post); }`.
+- **Records loaded later.** A record `data()` loads is not there in
+  `created()`, and `afterUpdate()` skips the first render, so seed from both
+  `mounted()` and `afterUpdate()`:
+  `seed() { const { post } = this.getData(); if (post && this.form.source !== post) this.form.reset(post); }`.
 - **After success** the baseline becomes the submitted values, so `dirty` goes
   false; touched clears.
 - **Invalid submit** focuses the first invalid control found by `name` in the

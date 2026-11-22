@@ -30,7 +30,7 @@ Routes already take a `name`, but it was informational: every link and navigatio
 
 ## Decision
 
-- **One target shape.** Wherever a path string goes, `{ name, params?, query?, hash? }` goes too: `router.url()` (so the `link` library function), `router.push()`, `router.replace()` and a guard's redirect verdict. Path strings keep working exactly as before.
+- **One target shape.** `router.url()` (so the `link` library function), `router.push()`, `router.replace()` and a guard's redirect verdict take `{ name, params?, query?, hash? }` as well as a path string. Path strings keep working exactly as before. `router.prefetch()` takes a path string only.
 - **One resolver.** `client-runtime/router/routeNames.js` turns a named target into the path string, and every caller then runs the path form unchanged: encoding, `routerBase`, the locale prefix (`link(target, { locale })` composes), the same-path no-op, guards. It is DOM-free and shared by the live Router, the hybrid prerender's `url()` shadow, the static router stub and the static page kernel, so a prerendered href and the browser's re-render cannot disagree.
 - **The table.** Every route node with a string `name` registers its full path, parents and `path: ''` index children included, so nested routes resolve by full path. The `'*'` route is in the table with no URL. In development a name used by two nodes throws when the Router is constructed; production keeps the first.
 - **Params.** Each whole `:param` segment is filled with `encodeURIComponent(String(value))`; the matcher's `decodeURIComponent` gives `data({ params })` the value back. `query` builds through `URLSearchParams` (an array repeats its key, `null`/`undefined` are dropped); `hash` takes `'faq'` or `'#faq'`.

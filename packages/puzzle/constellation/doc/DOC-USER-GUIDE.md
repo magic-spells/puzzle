@@ -248,7 +248,8 @@ events = {
 - **Errors come from the model** (`Model.validate`), and show once the user leaves a field (the `@focusout` handler, which needs a `name` on each control) or tries to submit. After that they clear the moment the value is fixed.
 - **`submit()`** focuses the first invalid control, ignores a second submit while one is running, and maps a server's field errors (a thrown `PuzzleValidationError`, or a 4xx body with `errors`) onto `form.errors`. Anything else lands in `form.error` and reaches `onError` with `phase: 'submit'`.
 - **`form.dirty`**, **`form.changed.title`** and **`form.valid`** are ready for a Save button or a leave-page prompt; `form.reset()` goes back to the saved values.
-- **The Field piece** takes `form={ form } name="text"` and wires the value, the error and the blur itself.
+- **The Field piece** takes `form={ form } name="text"` and wires the value, the error and the blur itself. It writes the input's text as a string, so bind a number field with a plain `<input type="number" name="price" value={ form.values.price } />` instead.
+- **Bind a field itself, never a step inside it.** A bind on `form.values.address.city` writes onto the source's own object, so `dirty` stays false and `reset()` cannot undo it. Change an object field whole in a handler: `this.form.set('address', { ...this.form.values.address, city })`.
 - Import it as `createForm`. A template reading `form` means the state key, and an imported `form` would shadow it.
 
 ## Components
@@ -287,7 +288,7 @@ The parent writes `<Button variant="primary" @press={ goToPosts }>Browse</Button
 
 - **Never call `store.loadMany`/`loadOne` inside `data()`** — tracked finds already fetch, and dev warns. The explicit loads are for event handlers; `store.loadOne` there is the force-refresh idiom.
 - **Relationships never fetch** (`post.author`), so a 50-row list never fires 50 GETs; write the tracked find on the foreign key when a view needs the record.
-- **`setState()` is enough** ([[DECISION-D23-REFRESH-PATTERN]]). When `data()` read the key through `this.getData()` or `this.getState()`, the next render re-runs `data()` first, once however many writes came before it; a key `data()` never read just re-renders. Call `this.refresh()` only to re-run `data()` on purpose, when it derives from an instance field or other state the runtime cannot see, or when you need the new model rendered before your next line runs.
+- **`setState()` is enough** ([[DECISION-D23-REFRESH-PATTERN]]). When `data()` read the key through `this.getData()` or `this.getState()`, the next render re-runs `data()` first, once however many writes came before it; a key `data()` never read just re-renders. In an async `data()`, call `getData()`/`getState()` before the first `await`; a call after it is not tracked. Call `this.refresh()` only to re-run `data()` on purpose, when it derives from an instance field or other state the runtime cannot see, or when you need the new model rendered before your next line runs.
 - **`getState()` reads only what `setState()` wrote** ([[DECISION-D191-SET-STATE-GET-STATE]]); `getData()` reads the merged model, with `data()`'s values over local state.
 - **Stable object props:** props compare with `===`, so a fresh object from every `data()` run re-runs the child. Wrap derived objects in `this.memo(key, deps, factory)` ([[DOC-SPEC-VIEW]] §32). Primitive props need no memo, and data-independent callback props are cached by the compiler.
 - **Animations:** an `animations = { in, out }` class field animates the instance root via WAAPI; `to` must equal the resting style and height cannot animate to `auto` ([[DOC-SPEC-VIEW]] §12, §39).

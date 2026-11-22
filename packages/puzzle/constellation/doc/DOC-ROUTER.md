@@ -156,7 +156,7 @@ this.ctx.router.replace({ name: 'items', query: { q: 'cabin' } }); // → /items
 - Each param is URI-encoded, and `data({ params })` gets the value back as a string. `query` repeats a key for an array and drops `null`/`undefined`; `hash` takes `'faq'` or `'#faq'`.
 - Mistakes throw a `[puzzle]` error naming the route: an unknown name, a missing param, a param the pattern lacks, an unknown key, or a link to the `'*'` route. A bad target makes `push()`/`replace()` throw before navigating, unlike their usual resolved `NavigationResult`. Two routes with one name throw at startup in development.
 - A guard may return a named target to redirect.
-- Static pages resolve names too: a page whose prerender rendered a named link ships the name table in a small data island.
+- Static pages resolve names too: a page whose prerender rendered a named link ships the name table in a small data island. On a prerendered page that rendered none, a named link that first renders in the browser (after a click, say) throws: link to it by path.
 - `puzzle check` does not check route names; an unknown name throws when the link renders, and a prerender fails the build.
 
 `await router.push(path)` tells you what happened (§30):

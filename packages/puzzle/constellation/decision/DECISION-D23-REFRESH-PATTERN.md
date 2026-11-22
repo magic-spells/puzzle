@@ -12,6 +12,7 @@ connections:
 # D23 — `setState()` re-runs `data()` when `data()` read the written key
 
 ## Decision
+
 While `data()` runs, the runtime records every key it reads through `getData()` or `getState()`. Enumerating a copy (a spread, `Object.keys`, `JSON.stringify`) counts as reading every key, including keys written later. A successful commit keeps that run's keys.
 
 `setState()` always writes the state layer and schedules a render ([[DOC-SPEC-ANATOMY]] §4). When it writes a key the last committed `data()` read, the scheduled render re-runs `data()` first. Every write before that render lands in the state layer, so a burst of writes costs one `data()` run and one render. A key `data()` never read only re-renders, as before.
@@ -23,6 +24,7 @@ Details:
 - A sync `data()` commits and renders inside the flush. An async `data()` is started by the flush, which renders the written values at once; the commit renders again when it resolves. Last-wins applies as for any refresh.
 - A view mid-settle ([[DECISION-D161-AUTO-FETCHING-FINDS]]) folds the write into that run as one more pass.
 - A `setState()` made while `data()` itself is running never schedules a re-run, so `data()` cannot loop on its own writes. Writes after an `await` in an async `data()` are ordinary writes.
+- In an async `data()`, only `getData()`/`getState()` calls made before the first `await` are tracked. A copy taken there keeps recording after it; a call made after it records nothing. Read state before the first `await`.
 - An explicit `refresh()` clears a pending re-run, so `setState()` then `refresh()` still runs `data()` once.
 - A sync `data()` throw on the re-run goes to the error funnel with phase `refresh`, like a store-change refresh.
 
