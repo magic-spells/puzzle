@@ -437,6 +437,10 @@ export default class DatePicker extends PuzzleView {
   _onOpened() {
     document.addEventListener('pointerdown', this._onDocPointer);
     const morphOn = this._wantMorph(this.props);
+    // A morph target rests invisible (the engine's rule; it reveals the panel inline), so
+    // neither the frame before the grow nor the one after the shrink paints it. Set as
+    // the open starts, never on a plain panel that is already open.
+    if (morphOn) this.element.querySelector('[data-datepicker-panel]')?.classList.add('invisible');
 
     // The panel mounted on this render; wait one frame so it exists, then correct the
     // side against its real height and (for morph) animate from the trigger.

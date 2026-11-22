@@ -499,6 +499,8 @@ export default class EmojiPicker extends PuzzleView {
   _onOpened() {
     document.addEventListener('pointerdown', this._onDocPointer);
     const morphOn = this._wantMorph(this.props);
+    // A morph target rests invisible until the engine reveals it (DatePicker).
+    if (morphOn) this.element.querySelector('[data-emoji-panel]')?.classList.add('invisible');
 
     requestAnimationFrame(() => {
       if (!this._effectiveOpen() || !this.element) return;

@@ -334,8 +334,11 @@ CLI — it is unrelated and must not be bumped along with the release.
 - **Morph:** the ported picker overlays (DatePicker, EmojiPicker, EmojiPickerSimple) expose
   an opt-in `morph` prop. Morphable roots must not use
   transform positioning, stylesheet `opacity`, a changing dynamic `style={}` binding, or
-  `animations.in/out`. Trigger↔panel morph imports `@magic-spells/morph-engine` (declare it
-  in `dependencies`). `prefers-reduced-motion` is respected.
+  `animations.in/out`. A morph panel rests `invisible` (the engine's rule for targets; it
+  reveals the panel inline): `_onOpened` adds the class as a morph open starts, so the
+  frames before the grow and after the shrink never paint it. Trigger↔panel morph imports
+  `@magic-spells/morph-engine` (declare it in `dependencies`). `prefers-reduced-motion` is
+  respected.
 - Per-piece specifics live in each `piece.json` description and the file's header comment —
   don't duplicate them here.
 
