@@ -948,7 +948,7 @@ function pageRenderer(config, { isStatic, routed, tags, defaultLocale, routeRout
 	};
 	/**
 	 * @param {RouteEntry} entry the route
-	 * @param {string} pagePath the generated page that is not written
+	 * @param {string} pagePath the page (or, for an empty list, the route) that is not written
 	 * @param {string} warning
 	 * @param {string} [reason]
 	 */
@@ -1227,10 +1227,12 @@ function pageRenderer(config, { isStatic, routed, tags, defaultLocale, routeRout
 	const reportEmpty = () => {
 		for (const { entry, paths } of plan) {
 			if (!paths || listed.get(entry.fullPath)) continue;
-			/** @type {SkippedRoute} */
-			const record = { path: entry.fullPath, reason: 'empty staticPaths' };
-			if (isStatic) record.modules = collectSkippedModules(entry);
-			skipped.push(record);
+			skipGenerated(
+				entry,
+				entry.fullPath,
+				`[puzzle] skipped route "${entry.fullPath}" — its \`staticPaths\` lists no pages`,
+				'empty staticPaths'
+			);
 		}
 	};
 

@@ -492,7 +492,7 @@ func readFile(t *testing.T, path string) string {
 
 // TestBuildQuietSilencesPageReport pins `puzzle build -q` (Options.Quiet): the
 // static and hybrid success headers disappear, but the skipped-route warning
-// lines still print — downstream sites gate on them. Quiet:false keeps the
+// still prints, once — downstream sites gate on it. Quiet:false keeps the
 // header so the assertion cannot pass by the report never printing at all.
 func TestBuildQuietSilencesPageReport(t *testing.T) {
 	cases := []struct {
@@ -521,8 +521,8 @@ func TestBuildQuietSilencesPageReport(t *testing.T) {
 				if got := strings.Contains(out, tc.header) || regexp.MustCompile(`\d+ pages? prerendered`).MatchString(out); got == quiet {
 					t.Errorf("quiet=%v: report header present=%v, got:\n%s", quiet, got, out)
 				}
-				if !strings.Contains(out, "skipped") {
-					t.Errorf("quiet=%v: skipped-route warning must still print, got:\n%s", quiet, out)
+				if strings.Count(out, "skipped") != 1 {
+					t.Errorf("quiet=%v: the skipped route must print exactly once, got:\n%s", quiet, out)
 				}
 			})
 		}

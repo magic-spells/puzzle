@@ -1517,6 +1517,7 @@ describe('staticPaths (D179)', () => {
 		expect(warnings.filter((w) => w.includes('duplicate'))).toEqual([
 			'[puzzle] staticPaths of route "/blog/:slug" lists 1 duplicate entry (/blog/a) — each page renders once',
 		]);
+		expect(warnings).toContain('[puzzle] skipped route "/tag/:tag" — its `staticPaths` lists no pages');
 		expect(skipped).toEqual([
 			{ path: '/tag/:tag', reason: 'empty staticPaths', modules: { views: ['app/views/Post.pzl'], layout: null } },
 		]);
