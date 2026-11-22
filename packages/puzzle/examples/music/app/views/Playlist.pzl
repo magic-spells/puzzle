@@ -140,9 +140,6 @@ export default class PlaylistView extends PuzzleView {
       headerGlow: playlist && playlist.accent ? (playlist.accent.from || '#7c5cff') + '4d' : '',
       trackIds: tracks.map((t) => t.id),
       totalMin: Math.max(1, Math.round(totalSec / 60)),
-      // Local UI flag for the inline rename (setState does not re-run data(), so
-      // we read it back through getData — same pattern as the layout's queueOpen).
-      renaming: this.getData().renaming || false,
       currentTrackId: player ? player.currentTrackId : '',
       isPlaying: player ? player.isPlaying : false
     };
