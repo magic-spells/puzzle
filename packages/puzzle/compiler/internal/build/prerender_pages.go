@@ -37,8 +37,9 @@ const staticPagesDir = "_puzzle"
 
 // staticSummary mirrors the JSON the SSG runtime's prerenderToDir prints after
 // the sentinel in `mode: 'static'`. It extends the hybrid summary (prerender.go
-// ssgSummary) with the per-page module/entry/route facts and the top-level
-// mode/target/store/router wiring facts the per-page entry generation needs.
+// ssgSummary) with the skipped routes, the per-page module/entry/route facts
+// and the top-level mode/target/store/router wiring facts the per-page entry
+// generation needs.
 type staticSummary struct {
 	Written  []staticPage    `json:"written"`
 	Skipped  []staticSkipped `json:"skipped"`
@@ -800,9 +801,9 @@ func staticPagesBundleOptions(absRoot string, entryFiles []string, outdir string
 
 // printStaticSummary reports the static build result in the build-summary style:
 // the header, the prerendered-page count (with any prerender:false pages noted
-// as empty islands), the per-page bundle count, then advisory warnings and
-// skipped routes. quiet (`puzzle build -q`) drops the header and counts; the
-// warning and skipped-route lines always print.
+// as empty islands), the per-page bundle count, then the warnings — every
+// skipped route carries one. quiet (`puzzle build -q`) drops the header and
+// counts; the warning lines always print.
 func printStaticSummary(s staticSummary, bundleCount int, quiet bool) {
 	prerendered := 0
 	for _, w := range s.Written {
@@ -831,13 +832,6 @@ func printStaticSummary(s staticSummary, bundleCount int, quiet bool) {
 	}
 	for _, w := range s.Warnings {
 		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"), w)
-	}
-	for _, sk := range s.Skipped {
-		fmt.Fprintf(os.Stdout, "  %s %s %s\n",
-			out.Yellow("!"),
-			out.Dim("skipped"),
-			fmt.Sprintf("%s (%s)", sk.Path, sk.Reason),
-		)
 	}
 }
 

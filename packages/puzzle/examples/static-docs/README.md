@@ -160,7 +160,6 @@ no file:
 
 ```
 ! [puzzle] skipped dynamic route "/tags/:tag" — a :param route is prerendered only when it lists its values in a `staticPaths` route field
-! skipped /tags/:tag (dynamic)
 ```
 
 There is no router in the output, so a skipped route can't run client-side

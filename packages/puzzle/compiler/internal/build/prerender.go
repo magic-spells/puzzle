@@ -80,9 +80,9 @@ func checkPrerenderScratchCollision(absRoot, staging, label string) error {
 }
 
 // ssgSummary mirrors the JSON the SSG runtime's prerenderToDir prints after the
-// sentinel: the files written, the routes it skipped (dynamic routes in v1), and
-// any advisory warnings. The output file path lets the build compare each route
-// output with the public assets copied into staging before the prerender pass.
+// sentinel: the files written and any advisory warnings (a skipped route is
+// one). The output file path lets the build compare each route output with the
+// public assets copied into staging before the prerender pass.
 type ssgSummary struct {
 	Written []struct {
 		Path string `json:"path"`
@@ -91,10 +91,6 @@ type ssgSummary struct {
 		// at its path instead of rendered markup (an SPA island, SPEC §36).
 		Prerender bool `json:"prerender"`
 	} `json:"written"`
-	Skipped []struct {
-		Path   string `json:"path"`
-		Reason string `json:"reason"`
-	} `json:"skipped"`
 	Warnings []string `json:"warnings"`
 }
 
@@ -346,10 +342,10 @@ func prerenderDetail(stderr, stdout string, err error) string {
 }
 
 // printPrerenderSummary reports the prerender result to stdout in the style of
-// the build summary: a header with the page count, then each skipped route and
-// each advisory warning as a dimmed/yellow line. It degrades cleanly on a
+// the build summary: a header with the page count, then each warning as a
+// yellow line — every skipped route carries one. It degrades cleanly on a
 // non-TTY (the ui.Printer no-ops color). quiet (`puzzle build -q`) drops the
-// header; the warning and skipped-route lines always print.
+// header; the warning lines always print.
 func printPrerenderSummary(s ssgSummary, quiet bool) {
 	prerendered := 0
 	for _, w := range s.Written {
@@ -374,12 +370,5 @@ func printPrerenderSummary(s ssgSummary, quiet bool) {
 	}
 	for _, w := range s.Warnings {
 		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"), w)
-	}
-	for _, sk := range s.Skipped {
-		fmt.Fprintf(os.Stdout, "  %s %s %s\n",
-			out.Yellow("!"),
-			out.Dim("skipped"),
-			fmt.Sprintf("%s (%s)", sk.Path, sk.Reason),
-		)
 	}
 }
