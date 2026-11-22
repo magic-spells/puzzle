@@ -254,7 +254,7 @@
  * family — Dialog, AlertDialog, Sheet and the docs SearchDialog all paint their
  * scrim on it (BottomSheet is the one exception: its stylesheet hides the
  * element and paints the native ::backdrop instead). The colour and blur stay
- * where each piece puts them (`bg-black/50 backdrop-blur-sm`); this adds the
+ * where each piece puts them (`bg-scrim backdrop-blur-sm`); this adds the
  * site's texture on top, once, so every overlay on the docs site matches.
  *
  * Unlayered on purpose: sheet.css sets the scrim with the `background`
