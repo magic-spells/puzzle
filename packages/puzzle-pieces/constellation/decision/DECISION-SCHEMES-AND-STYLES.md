@@ -53,8 +53,8 @@ notes:
       every hover is written `not-disabled:hover:…` (compiles to `:not(:disabled):hover`). Why:
       pointer-events-none killed the `title` tooltip, so apps wrapped disabled buttons in `<span
       title>`. Applies to button, button-group, split-button Action, copy-button, alert-dialog and
-      popconfirm buttons, pagination prev/next, toggle, toggle-group. Non-<button> triggers
-      (split-button Menu, dropdown-menu Trigger) cannot match :disabled and are unchanged.
+      popconfirm buttons, pagination prev/next, toggle, toggle-group, toolbar items. Non-<button>
+      triggers (split-button Menu, dropdown-menu Trigger) cannot match :disabled and are unchanged.
   - kind: state
     text: >-
       2026-11-08 (feat/0.10-pieces-dialog-chat, review P09-Q6 / P13-Q8): the token contract gains

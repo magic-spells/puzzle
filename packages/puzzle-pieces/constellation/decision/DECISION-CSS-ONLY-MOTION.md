@@ -39,4 +39,3 @@ notes:
 ## Consequences
 
 - The component CSS is appended after Tailwind's output, so `@layer components` there joins Tailwind's own components layer (declared before utilities).
-- `code`'s header comment still calls itself "the only piece that carries a `<style>` block" — stale since 0.8.0.

@@ -40,10 +40,11 @@ notes:
       (8px). This replaces raw `rgb(0_0_0_/_0.5)` + `8px`, so the light scrim (slate/0.4) and the
       palettes now apply. No new blur token was needed: Tailwind v4 keeps a default-theme var when
       any generated utility (including an arbitrary property) references it via var(). Checked with
-      the demo's tailwindcss 4 CLI and in Chromium (`--blur-sm: 8px` emitted on :root). Still on
-      `bg-black/50` for a follow-up: Dialog.pzl:205, AlertDialog.pzl:157, Command.pzl:179 (their own
-      PRs) → `bg-scrim`. The `[--bs-handle-*:0px]` / `[--sheet-handle-*:0px]` zeros stay: zero is
-      not a design value, so a token for it would be noise.
+      the demo's tailwindcss 4 CLI and in Chromium (`--blur-sm: 8px` emitted on :root). Dialog,
+      AlertDialog and Command use `bg-scrim` too. Dialog and AlertDialog write it as
+      `[:where(&)]:bg-scrim`, so a colour in `backdropClass` still wins. The `[--bs-handle-*:0px]` /
+      `[--sheet-handle-*:0px]` zeros stay: zero is not a design value, so a token for it would be
+      noise.
   - kind: state
     text: >-
       pieces.css now has a second, type-only `@theme` block after the palette block, holding
