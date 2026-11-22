@@ -49,7 +49,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   label   → aria-label on the role="group" container (omit and it's absent)
 //   class   appended last to the container
 // Callback:
-//   @change(value, event)  value-first, typeof-guarded. single → the new value,
+//   @change(value)         value-first, typeof-guarded. single → the new value,
 //                          or '' when the active item is deselected. multiple →
 //                          the new array of selected values (items-order preserved,
 //                          newly added appended).

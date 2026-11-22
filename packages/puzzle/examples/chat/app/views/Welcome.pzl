@@ -41,7 +41,7 @@ export default class Welcome extends PuzzleView {
   data() {
     return {
       suggestions: [
-        { title: 'Formatters', prompt: 'What are formatters?' },
+        { title: 'Template functions', prompt: 'What are template functions?' },
         { title: 'Animations', prompt: 'How do animations work?' },
         { title: 'Nested routes', prompt: 'Explain nested routes' },
         { title: 'The store', prompt: 'How does store reactivity work?' },

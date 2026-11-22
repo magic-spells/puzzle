@@ -128,7 +128,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   class        string   appended to the root element.
 //
 // CALLBACKS
-//   @change(value, event)  the new "HH:MM[:SS]" 24-hour string. Value-first. Fires on
+//   @change(value)         the new "HH:MM[:SS]" 24-hour string. Value-first. Fires on
 //                          every column pick (click / arrow / Enter) — the controlled
 //                          way; the popover does NOT close per pick.
 //   @show() / @hide()      fire on the user's open/close INTENT (trigger, Escape,

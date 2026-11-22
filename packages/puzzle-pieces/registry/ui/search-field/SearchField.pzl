@@ -39,8 +39,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 
 // SearchField — a type="search" input with a leading (decorative) magnifier and
 // a trailing clear button that appears only while there's a value. Clearing
-// fires `change('', event)` and refocuses the input; pressing Enter fires
-// `submit(value, event)`. The native WebKit cancel button is suppressed so the
+// fires `change('')` and refocuses the input; pressing Enter fires
+// `submit(value)`. The native WebKit cancel button is suppressed so the
 // custom clear button is the only one. Value is controlled via `@change`.
 //
 //   <SearchField value={ q } @change={ setQuery } @submit={ runSearch } />

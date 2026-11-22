@@ -78,7 +78,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 // Callbacks
 //   @show()                 the menu opened
 //   @hide()                 the menu closed
-//   @select(value, event)   a row was activated, anywhere in the chain. Fires
+//   @select(value)          a row was activated, anywhere in the chain. Fires
 //             exactly once per activation; `value` is data-value, then value,
 //             then href, else null. Return false to keep the menu open.
 //

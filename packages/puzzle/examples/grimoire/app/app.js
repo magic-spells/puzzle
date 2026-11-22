@@ -95,7 +95,7 @@ function seedGrimoire(store) {
       { type: 'paragraph', text: 'Tomes to study before the next full moon.' },
       { type: 'numbered', text: 'The Compendium of Reactive Runes' },
       { type: 'numbered', text: 'On the Weaving of Single-File Components' },
-      { type: 'numbered', text: 'Liquid Formatters & Other Display Sorcery' },
+      { type: 'numbered', text: 'Template Functions & Other Display Sorcery' },
       { type: 'numbered', text: 'A Field Guide to Client-Side Routing' },
     ]
   );

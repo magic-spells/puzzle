@@ -52,7 +52,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   disabled  boolean — dims the button and blocks the callback
 //   class     merged onto the root <button>
 // Callback
-//   @change(nextOpen, event)  the NEXT open value (value-first); optional
+//   @change(nextOpen)         the NEXT open value (value-first); optional
 //
 // COLOR. The bars paint in currentColor, inherited from the parent like
 // Spinner's currentColor variants, so the icon matches a header's text colour

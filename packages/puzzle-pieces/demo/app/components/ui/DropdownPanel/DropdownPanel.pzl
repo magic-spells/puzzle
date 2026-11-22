@@ -74,7 +74,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // events pass straight through this one on their way up, and reporting those as
 // ours would tell the parent the wrong panel moved.
 //
-//   @select(value, event)   menu mode only: a row was activated
+//   @select(value)          menu mode only: a row was activated
 //
 // SELECT IS FILTERED THE OTHER WAY ROUND, AND THAT IS DELIBERATE. A choice made
 // in a submenu closes the WHOLE chain and returns focus to the ROOT trigger —

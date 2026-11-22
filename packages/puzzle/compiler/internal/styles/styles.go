@@ -12,13 +12,14 @@
 //
 // # What Tailwind v4 scans, and how the compiler stays out of its way
 //
-// Verified against @tailwindcss/cli 4.3.3. When the input CSS does not pin its
-// own sources — no `@import "tailwindcss" source(…)`, no `@source` directives —
-// the CLI registers ONE source root of `**/*` based at `--cwd`, which defaults
-// to process.cwd(). Both runners set the child's working directory to the app
-// root, so Tailwind walks the whole app root. The walk honors .gitignore, and
-// there is no CLI flag for excluding a path: negative sources exist only as
-// `@source not "…"` INSIDE the CSS, which is the user's file.
+// Verified against @tailwindcss/cli 4.3.3. Unless the input CSS moves or turns
+// off its root with `@import "tailwindcss" source(…)`, the CLI registers ONE
+// source root of `**/*` based at `--cwd`, which defaults to process.cwd(). An
+// `@source` directive adds to that root; it does not replace it. Both runners
+// set the child's working directory to the app root, so Tailwind walks the
+// whole app root. The walk honors .gitignore, and there is no CLI flag for
+// excluding a path: negative sources exist only as `@source not "…"` INSIDE
+// the CSS, which is the user's file.
 //
 // So the only lever the compiler has over that scan is what is gitignored, and
 // the only tree it may take is its own. That is why every transient build

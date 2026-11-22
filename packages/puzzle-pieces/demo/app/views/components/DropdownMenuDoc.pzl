@@ -263,7 +263,7 @@ const reference = [
       { name: 'open', desc: 'Optional-controlled and edge-triggered, forwarded to the base.' },
       { name: 'class', desc: 'Merged onto the host, after the load-bearing `inline-block relative`.' },
       { name: '@show / @hide', desc: "Fired when THIS menu opens or closes; a Sub's are filtered out." },
-      { name: '@select', desc: 'Value-first: select(value, event). Fires once per activation, submenus included. Return false to cancel the close.' },
+      { name: '@select', desc: 'Value-first: select(value). Fires once per activation, submenus included. Return false to cancel the close.' },
     ],
   },
   {

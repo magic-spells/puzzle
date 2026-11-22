@@ -82,7 +82,8 @@ import ExampleBox from '@/components/docs/ExampleBox.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
 
-const installCmd = 'puzzle add piece code';
+const installCmd = `puzzle add piece code
+npm install highlight.js@^11.11.1`;
 const usageImport = `import Code from '@/components/ui/Code.pzl';`;
 const usageMarkup = `<Code code={ snippet }/>`;
 

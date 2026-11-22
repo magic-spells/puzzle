@@ -25,7 +25,7 @@ const app = new PuzzleApp({
   // time but be missing client-side (the build warns). see app/functions.js.
   functions,
 
-  // App lifecycle hook (v1.28, D60). In static mode (D81) this runs ONLY at build
+  // App lifecycle hook (v1.28, D66). In static mode (D81) this runs ONLY at build
   // time with a `{ store, config }` facade before the routes are prerendered. Any
   // records seeded here flow into the first data() of every page, land in the
   // static HTML, and are serialized into an inline data island that the client

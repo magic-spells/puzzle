@@ -108,7 +108,7 @@ import { EMOJI_GROUPS } from '../../lib/emoji-data.js';
 //   <EmojiPickerSimple open={ open } @change={ addEmoji }
 //                      @show={ onShow } @hide={ onHide } />    // controlled open
 //
-// NO VALUE. Same contract as EmojiPicker: emits @change(char, event), closes,
+// NO VALUE. Same contract as EmojiPicker: emits @change(char), closes,
 // and returns focus to the trigger — no selected state to control.
 //
 // TRIGGER CHROME — the "trigger" slot's FALLBACK BODY is the stock chrome (D141): a

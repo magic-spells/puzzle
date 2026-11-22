@@ -7,7 +7,7 @@ import models from './models/index.js';
 import { loadState, saveState } from './storage.js';
 
 // The v1 config surface is intentionally small: target, routes, models,
-// formatters, apiURL — see constellation/doc/DOC-SPEC.md §2.
+// functions, apiURL — see constellation/doc/DOC-SPEC.md §2.
 const app = new PuzzleApp({
   target: '#app',
   routes,
@@ -23,7 +23,7 @@ const app = new PuzzleApp({
   // Point apiURL at a CDN/host later and the same endpoints follow it.
   apiURL: '',
 
-  // Display-only formatters (logic belongs in data()). `duration` turns a track's
+  // Display-only functions (logic belongs in data()). `duration` turns a track's
   // durationSec into m:ss; `plural` picks a word form. Big play counts use the
   // built-in compact_number.
   functions: {

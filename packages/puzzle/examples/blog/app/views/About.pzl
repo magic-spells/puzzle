@@ -5,7 +5,7 @@
       Puzzle Press is a small demo blog that ships with the Puzzle framework. Its
       job is to exercise the v1 feature set end to end — routing with params and a
       catch-all, multiple models seeded over the network, reusable components with
-      props and callbacks, custom formatters, and derived lists — in an app you can
+      props and callbacks, app functions, and derived lists — in an app you can
       read in a few minutes.
     </p>
     <div class="flex gap-1.5 mt-6 mb-2">

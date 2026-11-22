@@ -81,7 +81,7 @@ import DropdownPanel from '../DropdownPanel/index.js';
 // Callbacks
 //   @show()                 this menu opened
 //   @hide()                 this menu closed
-//   @select(value, event)   a row was activated, anywhere in the chain —
+//   @select(value)          a row was activated, anywhere in the chain —
 //            including inside a Sub, because a submenu choice closes the whole
 //            chain and focus returns to THIS trigger. Fires exactly once per
 //            activation. `value` is data-value, then value, then href, else

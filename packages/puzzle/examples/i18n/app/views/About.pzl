@@ -8,7 +8,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // Script code reads the same service: this.ctx.i18n.t(key, vars) is exactly
-// what the `t` formatter calls, and .locale is the active tag.
+// what the `t` function calls, and .locale is the active tag.
 export default class About extends PuzzleView {
   data() {
     return { locale: `${this.ctx.i18n.locale} · ${this.ctx.i18n.t('nav.about')}` };

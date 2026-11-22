@@ -112,7 +112,7 @@ import { EMOJI_KEYWORDS } from '../../lib/emoji-keywords.js';
 //   <EmojiPicker morph @change={ addEmoji } />
 //
 // NO VALUE. The picker is an action menu, not a value holder: it emits
-// @change(char, event) with the picked emoji STRING, closes, and returns focus
+// @change(char) with the picked emoji STRING, closes, and returns focus
 // to the trigger. The parent decides what to do with the character (append it
 // to an input, react to a message, …) — there is no selected state to control.
 //

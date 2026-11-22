@@ -84,7 +84,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   class     merged onto the root; a text color token here retints the filled stars
 //
 // Callback (value-first)
-//   @change(value, event)  fires on click and on each keyboard step, with the new
+//   @change(value)         fires on click and on each keyboard step, with the new
 //                          whole-star value.
 //
 // COLOR MODEL (Sparkline's trick). Filled stars use `fill-current` and inherit

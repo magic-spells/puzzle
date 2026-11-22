@@ -74,7 +74,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // Props (all of Field's, plus the two slots):
 //   label, hint, error, placeholder, value, type, disabled, name, id, required,
-//   class, and @change(value, event) (value-first). Named slots: prefix, suffix.
+//   class, and @change(value) (value-first). Named slots: prefix, suffix.
 let uid = 0;
 
 const GROUP_BASE =

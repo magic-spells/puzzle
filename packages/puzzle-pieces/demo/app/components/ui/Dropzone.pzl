@@ -100,8 +100,8 @@ import ChatAttachment from './ChatAttachment.pzl';
 //              internal validation messages)
 //   class      appended to the root last, so callers win
 // Callbacks:
-//   @change(files, event)      the new accepted array (value-first)
-//   @reject(rejections, event) [{ file, reason, message }] for failed files
+//   @change(files)             the new accepted array (value-first)
+//   @reject(rejections)        [{ file, reason, message }] for failed files
 //
 // A11y: the real <input type="file"> stays sr-only but reachable, so keyboard /
 // AT users tab to it (labeled, describedby, aria-invalid) and open the native

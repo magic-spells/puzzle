@@ -69,7 +69,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   count   total number of pages
 //   class   appended to the root <nav>
 // Callback:
-//   @change(page, event)  fired on a page/prev/next click; NEVER called with the
+//   @change(page)         fired on a page/prev/next click; NEVER called with the
 //                         current page or an out-of-range page (the click is
 //                         guarded and prev/next disable at the ends).
 //
