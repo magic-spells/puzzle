@@ -85,12 +85,10 @@ type staticSummary struct {
 	AdapterModuleMatches *bool `json:"adapterModuleMatches"`
 }
 
-// staticSkipped is one route the prerender did not render. Modules carries its
-// chain's view/layout stamps in static mode — a skipped route ships no page, but
-// its views are still chain roots for the dev builder's render-wide walk (D155).
+// staticSkipped is the part of a skipped route the build reads: its chain's
+// view/layout stamps. A skipped route ships no page, but its views are still
+// chain roots for the dev builder's render-wide walk (D155).
 type staticSkipped struct {
-	Path    string        `json:"path"`
-	Reason  string        `json:"reason"`
 	Modules staticModules `json:"modules"`
 }
 
