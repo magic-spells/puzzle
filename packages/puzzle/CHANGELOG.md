@@ -30,12 +30,16 @@ your deploy host's build to Node 24 or later first. On an older Node, npm warns
 D191, D197).** Both are loud. `this.setData()` is gone: rename it to
 `this.setState()`, including in pieces copied before 0.10 (re-add them with
 `--force`); a leftover call throws `this.setData is not a function`.
-`data(params, props)` is `data({ params, props, shared })`, and every old
-declaration draws a compiler warning. Heed it: at runtime the whole object
-arrives as the first argument, so `data(params, props)` throws at its first
-prop read and `data(params)` reads `params.id` as `undefined`. Write
+`data(params, props)` is `data({ params, props, shared })`, and a declaration
+written `data(params, props)` or `data(params)` draws a compiler warning. Heed
+it: at runtime the whole object arrives as the first argument, so
+`data(params, props)` throws at its first prop read and `data(params)` reads
+`params.id` as `undefined`. Write
 `data({ props })`, `data({ params })` or plain `data()` for what the method
-uses. One more change needs no edit:
+uses. One declaration is quiet: a single parameter that is destructured or has
+another name (`data({ id })`, `data(p)`) looks like the new form, so it draws
+no warning and `--fix` leaves it alone. Change it by hand to
+`data({ params: { id } })` or `data({ params: p })`. One more change needs no edit:
 `setState()` now re-runs `data()` when `data()` read the key (D23), so the
 `refresh()` that followed it can go.
 
@@ -191,12 +195,12 @@ offers both:
 
 ```
 bare <slot> is not a marker — use <Children/> for call-site content
-or <Slot/> for the router outlet (D134)
+or <Outlet/> for the router outlet (D134/D199)
 ```
 
 Pick `<Children/>` if that position received content from the call site, or
-`<Slot/>` if it received a child route. Since 0.10 that second spelling is
-`<Outlet/>`, and `puzzle check --fix` picks between the two by directory.
+`<Outlet/>` if it received a child route. `puzzle check --fix` rewrites only
+the capitalized `<Slot/>`, so change a lowercase `<slot>` by hand.
 
 **`output: 'static'` changed meaning (0.2.0, D81).** If you set it before
 0.2.0, rename it to `output: 'hybrid'` to keep the behavior you had. The name
@@ -247,7 +251,10 @@ Production sizes: hello-world **24.2 KB gzip** (23.0 in 0.9.0), todos
   only what you use (`data({ props })`, `data({ params })`, or `data()`). A
   method left on the old form gets the whole object as its first argument and
   `undefined` as `props`, so it fails at the first prop read; the compiler
-  warns on every `data(params, props)` / `data(params)` declaration. The new
+  warns on every `data(params, props)` / `data(params)` declaration. A single
+  parameter that is destructured or has another name (`data({ id })`,
+  `data(p)`) looks like the new form, so it draws no warning and reads
+  `undefined`: change it by hand. The new
   optional `share()` method takes the same object and hands values and
   callbacks to every view its template mounts, at any depth and through slots,
   under `shared.<camelCaseClassName>` (`Tabs` → `shared.tabs`). `shared` is
@@ -450,9 +457,9 @@ Production sizes: hello-world **24.2 KB gzip** (23.0 in 0.9.0), todos
   code and resolves `true` once it is loaded. Apps without `lazy()` grow by
   about 60 B gzip; apps with it by about 0.75 KB.
 - **`puzzle add deploy <host>` writes a tested host config (D198).** One
-  template per host in `deploy/`: `vercel` (`vercel.json`), `netlify`
-  (`netlify.toml`), `cloudflare` (`app/public/_headers`), `nginx` (a
-  `nginx.conf` server block) and `apache` (`app/public/.htaccess`). Each one
+  file per host, from the templates in `deploy/`: `vercel` (`vercel.json`),
+  `netlify` (`netlify.toml`), `cloudflare` (`app/public/_headers`), `nginx`
+  (a `nginx.conf` server block) and `apache` (`app/public/.htaccess`). Each one
   sends client routes to the shell after real files (SPA and `hybrid`) or
   serves `404.html` with a 404 status and never the shell (`static`), and
   caches the hashed `app-`, `styles-`, `chunks/` and `locales/` files for a
@@ -515,6 +522,10 @@ Production sizes: hello-world **24.2 KB gzip** (23.0 in 0.9.0), todos
   section, `{#svg}` asset or usage-check error used to print an empty code
   frame with the caret in column 0. The frame now shows the line, with the
   caret under the reported column, in `build`, `dev` and the browser overlay.
+- **The `|` error names Sites.** In a template expression a `|` now fails
+  with "`| name` pipes are Sites theme syntax — in a Puzzle app write
+  `name(value)`". The 0.9.1 language module introduced the text; this is the
+  first npm compiler to print it.
 - **A warning when imported CSS is built but no page links it.** CSS imported
   from JavaScript is bundled to `app.css` (`app-<hash>.css` in production).
   When no page under `public/` references `app.css`, those rules never load;
@@ -549,10 +560,11 @@ Production sizes: hello-world **24.2 KB gzip** (23.0 in 0.9.0), todos
   template data; a typed sub-expression inside it still is.
 - **Buttons are quiet: no brand fill (puzzle-pieces).** A screen with many
   buttons no longer reads as a wall of indigo. `button` `primary` is solid ink
-  with the page colour as its text (`bg-ink text-page hover:bg-ink/85`):
-  near-black on light, white on dark. `secondary` is an ink tint
-  (`bg-ink/6 text-ink hover:bg-ink/10`), a small visible step off any ground
-  in every style, where `bg-surface-sunken` nearly vanished in dark.
+  with the page colour as its text
+  (`bg-ink text-page not-disabled:hover:bg-ink/85`): near-black on light,
+  white on dark. `secondary` is an ink tint
+  (`bg-ink/6 text-ink not-disabled:hover:bg-ink/10`), a small visible step off
+  any ground in every style, where `bg-surface-sunken` nearly vanished in dark.
   `outline` is transparent with a `border-border-strong` hairline and the same
   tint on hover, and `ghost` hovers on that tint too. `destructive` and the
   variant names are unchanged. The same recipes now paint `split-button`,
@@ -595,9 +607,33 @@ Production sizes: hello-world **24.2 KB gzip** (23.0 in 0.9.0), todos
   instance fields (Hamburger, Tree, Sidebar, VirtualList, Select); the
   `refresh()` calls left are deliberate and commented. A piece copied before
   0.10 still calls `setData()` and throws on 0.10 until it is re-added.
+- **`panel-stack` hands `@push`, `@pop` and `@reset` the event
+  (puzzle-pieces).** They received the event's `detail`. Read
+  `event.detail.toHandle` where you read `detail.toHandle`;
+  `event.preventDefault()` in `@push` now cancels the push.
+- **`KanbanCard` is content only (puzzle-pieces).** `Kanban` owns the card
+  surface. The `variant`, `grabbed`, `disabled` and `class` props and the
+  `@pointerdown` / `@keydown` callbacks are gone.
+- **`tooltip` shows on keyboard focus, not on a click (puzzle-pieces).** A
+  clicked trigger no longer pins the hint, and Escape hides a hint that hover
+  opened.
+- **`rich-text-editor` links no longer open in a new tab (puzzle-pieces).**
+  The editor added `target="_blank"` to every link in the text; it adds no
+  `target` now.
+- **`sidebar` drops the brand stripe beside the active submenu row
+  (puzzle-pieces).** The row keeps its tint and weight.
+- **`carousel` with one slide shows no dots and no arrows (puzzle-pieces).**
+  While autoplay rotates, its live region stays quiet.
+- **Pieces use two new theme tokens (puzzle-pieces).** `--shadow-kbd` (the
+  keycap seam in `kbd` and the menu `Shortcut`s) and `--text-code` (13px code
+  text in `code`, `markdown`, `markdown-editor`, `rich-text` and
+  `rich-text-editor`) are new in `pieces.css`. A theme copied before 0.10 lacks
+  them, and those pieces lose that styling with no error.
 
 Re-add a piece with `puzzle add piece <name> --force` to pick up these
-changes.
+changes. If you copied the theme, refresh it first with
+`puzzle add theme default` (plus each palette you copied; add `--force` if
+you edited the files).
 
 ### Fixed
 
@@ -608,6 +644,11 @@ changes.
   reported nothing (since 0.9.0). Both now reach the console as an unhandled
   rejection. A failed `record.save()` or `.delete()` that nothing awaits is
   now reported the same way.
+- **A save whose response body breaks off fails (`/adapter`).** When the
+  connection dropped after a 2xx status line, the body read failed quietly and
+  the record was marked synced, as if the server had sent no body. The save now
+  rejects and the record stays unsynced, so a retry sends it again. A 4xx or
+  5xx keeps its `PuzzleAdapterError` status.
 - **A first page load whose `data()` fails shows the app's `errorView`.** On a
   cold load, refresh or deep link whose routed `data()` threw or rejected, the
   router stayed put on a page that was not there yet, so `#app` stayed empty
@@ -620,10 +661,10 @@ changes.
   resolves `ok`. A hybrid prerendered page whose `data()` fails at takeover
   keeps its prerendered content.
 - **Back after a bare `#anchor` link returns to the reading position in
-  Safari and every iOS browser.** WebKit jumps to the anchor before it fires
-  `popstate`, so the router saved the anchor's position for the entry the
-  reader left, and Back landed on the anchor again. The router now saves the
-  position from the last `scroll` event.
+  Safari, Firefox and every iOS browser.** WebKit and Firefox jump to the
+  anchor before they fire `popstate`, so the router saved the anchor's
+  position for the entry the reader left, and Back landed on the anchor again.
+  The router now saves the position from the last `scroll` event.
 - **A range input keeps its `value` when `value` comes before `min`, `max` or
   `step`.** Attributes are written in authored order, and the browser clamps a
   range to the bounds it has at that moment, so the value was clamped at mount
@@ -636,11 +677,18 @@ changes.
 - **A static `prerender: false` page shows its route's title.** In
   `output: 'static'` it kept the shell's `<title>` in the browser tab; it now
   takes the route's `meta.title`, as the SPA router does.
+- **A static `prerender: false` page plays its view's enter animation.** In
+  `output: 'static'` such a page paints into an empty target, but only its
+  nested components animated in; the routed view skipped its enter. The view
+  now plays in and the layout does not, as on an SPA's first navigation.
 - **`output: 'static'` warns about an ignored `storage` even when the config
   guards `window`.** The build reads the config in Node, where
   `typeof window !== 'undefined' ? window.localStorage : undefined` is
   `undefined`, so that spelling never drew the warning. It now prints whenever
   the config has a `storage` key.
+- **`output: 'static'` pages no longer ship the router.** A static page never
+  runs the router, but its code came along with the path helpers every static
+  page imports (since 0.9.0). The shared page code is about 7 KB gzip smaller.
 - **Static `puzzle dev` serves `/app.css` when a public page links it.**
   `puzzle build` and `puzzle preview` shipped the compiled `app.css` for such
   a page, but the dev server answered 404. Dev now writes it too; your own
@@ -649,12 +697,43 @@ changes.
   only U+00A0, or another non-ASCII space such as U+3000, compiled to a plain
   space, so the line could break there; with a line break beside it, it was
   dropped. Template whitespace is ASCII space, tab, CR and LF only.
+- **A dev reload keeps what `data()` derives from view state.** `puzzle dev`
+  restores each view's state across a reload, but `data()` did not run again,
+  so a derived value stayed stale (the todos example showed the restored
+  filter tab over the whole list). It now runs once the state is back.
+  Development only.
 - **`puzzle check` finds a TypeScript hoisted to a workspace root, and
   `puzzle doctor` a Tailwind CLI in a parent folder.** Both looked only in the
   app's own `node_modules`, so in an npm or Yarn 1 workspace, which hoists
   packages to its root, `check` said TypeScript was missing and `doctor`
   reported no local Tailwind install. Both now look in each parent folder's
   `node_modules` too.
+- **Pieces fixes (puzzle-pieces).** Re-add a piece to pick up its fix.
+  - `multi-select`: a pick no longer blurs the input.
+  - `multi-select` and `tags-input`: chip remove buttons are tab stops.
+  - `tags-input` pastes at the caret.
+  - `date-picker` closes when Tab leaves it.
+  - `select`: a preselected value no longer shows in placeholder grey.
+  - `toast`: a toast that arrives while you hover starts paused.
+  - `time-picker`: one Escape fires `@hide` once.
+  - `slider` and `fader`: a press with a little vertical movement no longer
+    drops.
+  - `rich-text-editor` and `markdown-editor`: undo after a new `value` no
+    longer brings the old document back, and Link at a bare caret inserts
+    linked text.
+  - `copy-button` with a label announces "Copied" once, not twice.
+  - `number-field` steps without float noise (`0.1 + 0.2`).
+  - `progress` shows no "0%" when indeterminate.
+  - `badge` `outline` is the same height as the other variants.
+  - `aspect-ratio` keeps its ratio under a max width or in a grid track.
+  - `progress-ring`, `rating` and `sparkline` take a text colour from `class`.
+  - `line-chart` and `area-chart` drop the label gutter when `showGrid` is
+    off.
+  - Submenu rows in `dropdown-menu` and `menubar` show their chevron.
+  - `avatar` initials pass AA contrast.
+  - The `split-button` and `dropdown-menu` examples wired a row's `@press`
+    and the menu's `@select`, so one pick ran its action twice. Keep
+    `@select` only.
 - **The Store panel's History stays readable (puzzle-devtools).** After the
   first update, every later update quoted the earlier rows' values again and
   lost their times.
@@ -662,6 +741,10 @@ changes.
   built with `output: 'static'` never load the DevTools bridge, so the panels
   find no app even under `puzzle dev`. The "No Puzzle app detected" state now
   says so, where it only told you to run `puzzle dev`.
+- **The DevTools panels stay connected on a quiet tab (puzzle-devtools).**
+  Chrome restarts the extension's worker often, and the page relay gave up
+  after 20 reconnects with no message between them, so after about ten minutes
+  on an idle tab the panels stopped updating. It now reconnects every time.
 - **`eslint --fix` no longer deletes a `.pzl` file's template
   (eslint-plugin-puzzle).** Whitespace and formatting rules (core
   `no-multiple-empty-lines`, `@stylistic`, `neostandard`,
@@ -709,7 +792,7 @@ habit. Nothing existing breaks: renamed spellings stay accepted.
   gone.
 - **`puzzle check --fix` (D199)** rewrites the four 0.10 renames in `app/`
   and `tests/`: `this.setData(` → `this.setState(`, positional
-  `data(params, props)` / `share(…)` → `data({ params, props })`, a bare
+  `data(params, props)` → `data({ params, props })` (`share()` too), a bare
   `<Slot/>` → `<Outlet/>` in layouts and views or `<Children/>` elsewhere, and
   the `formatters` config key (plus `app/formatters.js`) → `functions`. Bare
   `puzzle check` is the dry run: it prints each site as `file:line:col  old →
