@@ -21,7 +21,7 @@ npm run build           # production: minified, console-stripped
 The build prints raw and gzip sizes per file, e.g.:
 
 ```
-dist/app-YHPHZ3MT.js  72.7 KB │ 24.1 KB gzip
+dist/app-BLEYULFC.js  72.4 KB │ 24.0 KB gzip
 ```
 
 The `app-<hash>.js` line is the framework size. `styles.css` is empty by design — this

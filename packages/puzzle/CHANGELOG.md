@@ -211,7 +211,7 @@ one is *not* a compile error; it silently builds a different product.
 
 ## 0.10.0 — 2026-11-20
 
-Production sizes: hello-world **24.2 KB gzip** (23.0 in 0.9.0), todos
+Production sizes: hello-world **24.1 KB gzip** (23.0 in 0.9.0), todos
 **28.1 KB gzip** (27.0).
 
 ### Breaking
@@ -288,8 +288,11 @@ Production sizes: hello-world **24.2 KB gzip** (23.0 in 0.9.0), todos
   helpers, naming the new key and `puzzle check --fix`. A static build reads
   `app/functions.js|ts`; a leftover `app/formatters.js|ts` draws a warning
   naming the rename. The prerender summary's `hasFormatters` field is
-  `hasFunctions`. Internal names (`ctx.formatters`, the
-  `@magic-spells/puzzle/formatters/manifest` alias) are unchanged.
+  `hasFunctions`. A registration error says `function` where it said
+  `formatter`:
+  `[puzzle] function "money" must be a function (got undefined)`. Internal
+  names (`ctx.formatters`, the `@magic-spells/puzzle/formatters/manifest`
+  alias) are unchanged.
 - **BREAKING: production builds hash their output names by default (D181).**
   `build.hashNames` no longer follows `build.splitting`: with the key unset,
   every production build emits `app-<hash>.js` and `styles-<hash>.css`
@@ -357,12 +360,15 @@ Production sizes: hello-world **24.2 KB gzip** (23.0 in 0.9.0), todos
   export, `createForm(view, Model, { from, fields, key, serverErrors })`. It
   keeps a draft in view state that binds directly
   (`value={ form.values.title }`), shows the model's validation errors once a
-  field is touched or a submit was tried, tracks `changed`/`dirty`/`valid`,
-  and its `submit(event, fn)` focuses the first invalid control, ignores a
-  second submit while one runs, and maps a thrown `PuzzleValidationError` or a
-  4xx body's `errors` back onto fields. An error that maps to no field becomes
-  `form.error` and reaches `onError` with the new phase `submit`. Apps that
-  don't import it ship none of it. The blog example's comment form uses it.
+  field is touched (a submit attempt touches every field), tracks
+  `changed`/`dirty`/`valid`, and its `submit(event, fn)` focuses the first
+  invalid control, ignores a second submit while one runs, and maps a thrown
+  `PuzzleValidationError` or a 4xx body's `errors` back onto fields. A
+  successful submit clears touched and takes the values it sent as the saved
+  values, so a field edited during the save stays dirty. An error that maps to
+  no field becomes `form.error` and reaches `onError` with the new phase
+  `submit`. Apps that don't import it ship none of it. The blog example's
+  comment form uses it.
 - **The Field piece takes `form` and `name` (puzzle-pieces).**
   `<Field form={ form } name="title" label="Title"/>` reads the value and
   error from the form, writes through it and marks the field touched on blur.
@@ -586,11 +592,11 @@ Production sizes: hello-world **24.2 KB gzip** (23.0 in 0.9.0), todos
 - **A disabled button shows its `title` tooltip and a not-allowed cursor
   (puzzle-pieces).** The button family (`button`, `button-group`,
   `split-button`'s action, `copy-button`, the `alert-dialog` and `popconfirm`
-  buttons, `pagination`'s prev/next, `toggle`, `toggle-group`) drops
-  `disabled:pointer-events-none` for `disabled:cursor-not-allowed`, so a hint
-  no longer needs a wrapping `<span title>`. Every hover is written
-  `not-disabled:hover:…`, so a disabled button stays flat; it still fires no
-  click.
+  buttons, `pagination`'s prev/next, `toggle`, `toggle-group`, `toolbar`'s
+  buttons) drops `disabled:pointer-events-none` for
+  `disabled:cursor-not-allowed`, so a hint no longer needs a wrapping
+  `<span title>`. Every hover is written `not-disabled:hover:…`, so a disabled
+  button stays flat; it still fires no click.
 - **`calendar` drops `@monthChange` and gains an optional `month` prop
   (puzzle-pieces).** `@monthChange` missed same-month year jumps and nothing
   called it, so it is gone. `month` (an ISO date) picks the shown month without
@@ -602,11 +608,14 @@ Production sizes: hello-world **24.2 KB gzip** (23.0 in 0.9.0), todos
   picking a day in the right grid no longer moves both grids or drops focus;
   each open lands on the start month. Under `sm` the presets rail stacks above
   the grids, so the panel fits a 375px screen.
-- **`image-zoom` `@change(scale)` takes one argument (puzzle-pieces).** The
-  documented second argument never arrived.
-- **`sheet` and `bottom-sheet` overlays use `--color-scrim`
-  (puzzle-pieces).** In light mode the scrim is the palette's slate at 0.4
-  instead of black at 0.5, so it reads lighter and tinted.
+- **Piece callbacks pass one argument (puzzle-pieces).** A component callback
+  forwards only the first value the child passes. The piece headers that
+  named a second one (`@change(value, event)`, `@select(value, event)`,
+  `calendar`'s `@change(iso, date)`, `image-zoom`'s pan) now show one.
+- **`sheet`, `bottom-sheet`, `dialog`, `alert-dialog` and `command` overlays
+  use `--color-scrim` (puzzle-pieces).** In light mode the scrim is the
+  palette's slate at 0.4 instead of black at 0.5, so it reads lighter and
+  tinted.
 - **Every piece writes state with `setState()` (puzzle-pieces).** The pieces
   moved off `setData()` (D191) and dropped the `refresh()` calls D23 made
   redundant. State that feeds a render now lives in state keys rather than
@@ -671,6 +680,10 @@ you edited the files).
   anchor before they fire `popstate`, so the router saved the anchor's
   position for the entry the reader left, and Back landed on the anchor again.
   The router now saves the position from the last `scroll` event.
+- **A link clicked while Back is still loading puts the URL back when it does
+  not land.** Back moves the address bar at once, so when that link was
+  blocked by a guard, failed to load or redirected to the page on screen, the
+  address bar stayed on the page Back was loading while the view stayed put.
 - **A range input keeps its `value` when `value` comes before `min`, `max` or
   `step`.** Attributes are written in authored order, and the browser clamps a
   range to the bounds it has at that moment, so the value was clamped at mount
@@ -699,6 +712,10 @@ you edited the files).
   `puzzle build` and `puzzle preview` shipped the compiled `app.css` for such
   a page, but the dev server answered 404. Dev now writes it too; your own
   `public/app.css` still takes its place, as in the build.
+- **A static build run from a symlinked path loads its pages' scripts.** With
+  `output: 'static'`, `puzzle build` run from a symlink with more path parts
+  than its target wrote page script URLs that pointed into `.puzzle/tmp/`, so
+  no page loaded its JavaScript.
 - **A text node made only of non-breaking spaces keeps them.** A node holding
   only U+00A0, or another non-ASCII space such as U+3000, compiled to a plain
   space, so the line could break there; with a line break beside it, it was
@@ -708,6 +725,10 @@ you edited the files).
   so a derived value stayed stale (the todos example showed the restored
   filter tab over the whole list). It now runs once the state is back.
   Development only.
+- **`puzzle check` reports a handler a JavaScript view never declared.**
+  Without a strict `tsconfig.json`, as in the default JavaScript scaffold,
+  `@click={ save }` on a view with no `events` field passed the check and
+  threw on the first click.
 - **`puzzle check` finds a TypeScript hoisted to a workspace root, and
   `puzzle doctor` a Tailwind CLI in a parent folder.** Both looked only in the
   app's own `node_modules`, so in an npm or Yarn 1 workspace, which hoists
@@ -718,7 +739,7 @@ you edited the files).
   - `multi-select`: a pick no longer blurs the input.
   - `multi-select` and `tags-input`: chip remove buttons are tab stops.
   - `tags-input` pastes at the caret.
-  - `date-picker` closes when Tab leaves it.
+  - `date-picker` and `date-range-picker` close when Tab leaves them.
   - `select`: a preselected value no longer shows in placeholder grey.
   - `toast`: a toast that arrives while you hover starts paused.
   - `time-picker`: one Escape fires `@hide` once.
@@ -730,6 +751,8 @@ you edited the files).
   - `copy-button` with a label announces "Copied" once, not twice.
   - `number-field` steps without float noise (`0.1 + 0.2`).
   - `progress` shows no "0%" when indeterminate.
+  - `meter` without `valueText` no longer warns about an undefined value in
+    development.
   - `badge` `outline` is the same height as the other variants.
   - `aspect-ratio` keeps its ratio under a max width or in a grid track.
   - `progress-ring`, `rating` and `sparkline` take a text colour from `class`.

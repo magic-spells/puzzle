@@ -524,10 +524,11 @@ puzzle-devtools repos are archived on GitHub, never deleted.
   it. `PuzzleView` is a plain class, not an HTMLElement.
 - `data()` owns the replace-on-commit derived layer. `setState()` owns persistent
   local UI state; a write to a key `data()` read (through `getData()` or
-  `getState()`) re-runs `data()` with the next render, once per burst, and any
-  other key just rerenders (D23). `refresh()` is only for on-purpose re-runs:
-  `data()` reading an instance field, a module variable or the clock, or a
-  caller that needs the new model rendered synchronously.
+  `getState()`, called before its first `await`) re-runs `data()` with the
+  next render, once per burst, and any other key just rerenders (D23).
+  `refresh()` is only for on-purpose re-runs: `data()` reading an instance
+  field, a module variable or the clock, or a caller that needs the new
+  model rendered synchronously.
 - Store queries inside `data()` auto-subscribe, and on an adapter-backed model a
   tracked `findOne`/`findMany` that misses queues a fetch and re-runs the pass
   rather than committing (D161). Reads outside `data()` never fetch. A record
