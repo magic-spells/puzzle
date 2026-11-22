@@ -170,8 +170,9 @@ CLI — it is unrelated and must not be bumped along with the release.
   follows a `setState()`. Keep instance fields for bookkeeping that never feeds `data()` (timers,
   listener flags, a pending-focus marker). Call `refresh()` only on purpose: `data()` reads
   something the runtime cannot see (a module store), or the next line needs the new model in
-  the DOM now (focusing a just-opened row, a FLIP measurement, a placement correction measured in
-  `afterUpdate()`/rAF that must paint this frame). Say why in a comment beside it.
+  the DOM now (focusing a just-opened row, a FLIP measurement, a placement correction or a size
+  measured in `afterUpdate()`, rAF or a ResizeObserver callback that must paint this frame: a
+  `setState()` render lands a frame late). Say why in a comment beside it.
 
 ## Themes — four schemes × four styles
 
