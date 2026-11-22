@@ -176,7 +176,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 let uid = 0;
 
 // The overlay: the look the rest of the overlay family lands on.
-const OVERLAY = 'bg-black/50 backdrop-blur-sm motion-reduce:duration-1';
+const OVERLAY = 'bg-scrim backdrop-blur-sm motion-reduce:duration-1';
 
 // The panel. `m-auto` is not decoration: a modal <dialog> is centred by the
 // browser through `margin: auto` against four zeroed insets, and Tailwind's

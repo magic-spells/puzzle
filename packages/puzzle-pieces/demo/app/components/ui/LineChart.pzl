@@ -198,6 +198,8 @@ export default class LineChart extends PuzzleView {
       const w = Math.round(entries[0]?.contentRect?.width || this.element.clientWidth || 0);
       if (w > 0 && w !== this.getData().measuredWidth) {
         this.setState({ measuredWidth: w });
+        // refresh() on purpose: a ResizeObserver measure has to paint this frame.
+        this.refresh();
       }
     });
     this._ro.observe(this.element);

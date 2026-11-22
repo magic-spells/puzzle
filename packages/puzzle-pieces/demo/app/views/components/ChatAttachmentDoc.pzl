@@ -104,12 +104,12 @@ const codeHero = `<ChatAttachment name="proposal.pdf" size="2.4 MB" />
 
 const codeRemovable = `// The chip is value-first: it fires @remove(name, event). The parent owns
 // the list and filters the removed file out.
-data() {
-  return { files: [
+created() {
+  this.setState({ files: [
     { name: 'proposal.pdf', size: '2.4 MB' },
     { name: 'hero.png', size: '840 KB' },
     { name: 'assets.zip', size: '18 MB' },
-  ] };
+  ] });
 }
 events = {
   removeFile: (name) =>

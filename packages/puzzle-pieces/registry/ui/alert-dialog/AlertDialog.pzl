@@ -151,9 +151,10 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //     capture-phase flag described above.
 let uid = 0;
 
-// The overlay. Same look the rest of the overlay family lands on (Sheet and
-// BottomSheet set the same pair through their components' custom properties).
-const OVERLAY = 'bg-black/50 backdrop-blur-sm';
+// The overlay. Same look the rest of the overlay family lands on (Sheet sets
+// the same pair through its component's custom properties). The scrim has zero
+// specificity, so a colour in backdropClass wins.
+const OVERLAY = '[:where(&)]:bg-scrim backdrop-blur-sm';
 
 // The panel, capped at max-w-md — a prompt is narrow. `m-auto` is not
 // decoration: a modal <dialog> is centred by the browser through `margin: auto`

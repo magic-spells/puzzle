@@ -57,8 +57,8 @@ import { highlight } from '../../lib/highlight.js';
 //
 // Requires: npm install highlight.js (declared in piece.json) plus the
 // lib/highlight.js registry file. The syntax-token CSS travels with this file
-// — the only piece that carries a <style> block, because highlight.js
-// generates its class names at runtime so they can't be Tailwind utilities.
+// because highlight.js generates its class names at runtime, so they can't be
+// Tailwind utilities.
 //
 //   <Code code={ snippet }/>                            framed, numbers, copy
 //   <Code code={ installCmd } numbers={ false }/>       command block

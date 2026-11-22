@@ -177,6 +177,8 @@ export default class BarChart extends PuzzleView {
       const w = Math.round(entries[0].contentRect.width);
       if (w && w !== this.getData().width) {
         this.setState({ width: w });
+        // refresh() on purpose: a ResizeObserver measure has to paint this frame.
+        this.refresh();
       }
     });
     this._ro.observe(this.element);

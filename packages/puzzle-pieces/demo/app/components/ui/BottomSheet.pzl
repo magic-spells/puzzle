@@ -178,9 +178,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //     notched phone.
 //   * The `hidden` detail carries no reason, so @hide cannot tell Escape from a
 //     backdrop tap from a swipe. Only a [data-action-hide-dialog] close is
-//     distinguishable, through `result` — and a KEYBOARD activation of such a
-//     button reports null, because dialog-panel reads a pointerless click at
-//     (0,0) as a backdrop tap before the delegated handler runs.
+//     distinguishable, through `result`.
 //   * maxDisplayWidth refuses the open silently: show() returns early and no
 //     event fires, so a parent that set open={true} above the ceiling stays out
 //     of sync until it flips the flag back.

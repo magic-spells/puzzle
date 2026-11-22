@@ -170,8 +170,9 @@ CLI — it is unrelated and must not be bumped along with the release.
   follows a `setState()`. Keep instance fields for bookkeeping that never feeds `data()` (timers,
   listener flags, a pending-focus marker). Call `refresh()` only on purpose: `data()` reads
   something the runtime cannot see (a module store), or the next line needs the new model in
-  the DOM now (focusing a just-opened row, a FLIP measurement, a placement correction measured in
-  `afterUpdate()`/rAF that must paint this frame). Say why in a comment beside it.
+  the DOM now (focusing a just-opened row, a FLIP measurement, a placement correction or a size
+  measured in `afterUpdate()`, rAF or a ResizeObserver callback that must paint this frame: a
+  `setState()` render lands a frame late). Say why in a comment beside it.
 
 ## Themes — four schemes × four styles
 
@@ -333,8 +334,11 @@ CLI — it is unrelated and must not be bumped along with the release.
 - **Morph:** the ported picker overlays (DatePicker, EmojiPicker, EmojiPickerSimple) expose
   an opt-in `morph` prop. Morphable roots must not use
   transform positioning, stylesheet `opacity`, a changing dynamic `style={}` binding, or
-  `animations.in/out`. Trigger↔panel morph imports `@magic-spells/morph-engine` (declare it
-  in `dependencies`). `prefers-reduced-motion` is respected.
+  `animations.in/out`. A morph panel rests `invisible` (the engine's rule for targets; it
+  reveals the panel inline): `PANEL_MORPH` carries the class, so the frames before the
+  grow and after the shrink never paint it. Trigger↔panel morph imports
+  `@magic-spells/morph-engine` (declare it in `dependencies`). `prefers-reduced-motion` is
+  respected.
 - Per-piece specifics live in each `piece.json` description and the file's header comment —
   don't duplicate them here.
 

@@ -153,7 +153,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // THEME. dialog-panel publishes exactly one custom property
 // (--dialog-backdrop-z-index), so unlike Sheet there is no variable bridge to
 // build: the panel is styled with ordinary token utilities, and the overlay is
-// two more of them on <dialog-backdrop> (black at 50%, blurred — the same look
+// two more of them on <dialog-backdrop> (--color-scrim, blurred — the same look
 // the other three overlays land on). Raise the backdrop's stacking level from
 // your own CSS if the page needs it: dialog-panel { --dialog-backdrop-z-index: … }.
 //
@@ -189,9 +189,10 @@ import { PuzzleView } from '@magic-spells/puzzle';
 let uid = 0;
 
 // The overlay. dialog-panel's own default is a lighter, unblurred scrim; this
-// is the look the rest of the overlay family lands on (Sheet and BottomSheet
-// set the same pair through their components' custom properties).
-const OVERLAY = 'bg-black/50 backdrop-blur-sm';
+// is the look the rest of the overlay family lands on (Sheet sets the same
+// pair through its component's custom properties). The scrim has zero
+// specificity, so a colour in backdropClass wins.
+const OVERLAY = '[:where(&)]:bg-scrim backdrop-blur-sm';
 
 // The panel. `m-auto` is not decoration: a modal <dialog> is centred by the
 // browser through `margin: auto` against four zeroed insets, and Tailwind's

@@ -9,6 +9,7 @@ import './split-text-wrapper.test.js';
 import './layout-wrapper.test.js';
 import './calendar-snippet.test.js';
 import './input-otp-component.test.js';
+import './date-range-picker-dismiss.test.js';
 import './rich-text-doc.test.js';
 import './rich-text-blocks.test.js';
 import './markdown-doc.test.js';

@@ -1,5 +1,5 @@
 <puzzle-view>
-  <div class={ rootClass }>
+  <div class={ rootClass } @focusout={ onFocusOut(event) }>
     {#if label}
       <label for={ triggerId } class="mb-1.5 block text-sm font-medium text-ink">{ label }</label>
     {/if}
@@ -201,7 +201,8 @@ import { parseISODate, formatISODate, toDate, fromDate, addMonths, clampDate, co
 // height in a rAF; Calendar's `autofocus` lands focus on the active day; Escape closes and
 // returns focus to the trigger (Calendar's days-view Escape bubbles up; its months/years
 // views consume it to back out); outside-click dismisses via a document pointerdown
-// listener bounded to the open state. No morph (kept out of scope for v1).
+// listener bounded to the open state; tabbing out of the panel closes it too. No morph
+// (kept out of scope for v1).
 
 let uid = 0;
 
@@ -347,7 +348,6 @@ export default class DateRangePicker extends PuzzleView {
       endName: props.name ? `${props.name}-end` : false,
       startValue: start,
       endValue: end,
-      placement,
       rootClass: props.class || '',
       triggerClass: [TRIGGER_BASE, error ? TRIGGER_ERROR : TRIGGER_OK].join(' '),
       panelClass: [PANEL_CARD, placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'].join(' '),
@@ -495,6 +495,12 @@ export default class DateRangePicker extends PuzzleView {
         event.preventDefault();
         this._requestOpen();
       }
+    },
+
+    // Tab out closes. A null relatedTarget (non-focusable click, re-rendered cell) is not leaving.
+    onFocusOut: (event) => {
+      const to = event.relatedTarget;
+      if (to && !this.element.contains(to)) this._requestClose({ restoreFocus: false });
     },
 
     onEscape: (event) => {

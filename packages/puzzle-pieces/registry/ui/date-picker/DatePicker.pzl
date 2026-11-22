@@ -211,7 +211,7 @@ const TRIGGER_ERROR = 'border-danger outline-danger focus-visible:outline-danger
 const PANEL_CARD =
   'absolute z-50 overflow-hidden rounded-xl border border-border bg-surface shadow-lg';
 const PANEL_DROPDOWN = 'left-0';
-const PANEL_MORPH = 'inset-x-0 mx-auto w-fit';
+const PANEL_MORPH = 'inset-x-0 mx-auto w-fit invisible';
 
 export default class DatePicker extends PuzzleView {
   created() {
@@ -317,7 +317,6 @@ export default class DatePicker extends PuzzleView {
       disabled: !!props.disabled,
       name: props.name || false,
       hiddenValue: hasValue ? value : '',
-      placement,
       rootClass: props.class || '',
       triggerClass: [TRIGGER_BASE, error ? TRIGGER_ERROR : TRIGGER_OK].join(' '),
       panelClass: this._wantMorph(props)
