@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/base64"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,6 +99,44 @@ func TestCompileOneReportsPositionedErrors(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "Bad.pzl:2:") {
 		t.Errorf("error is not positioned at the .pzl line: %v", err)
+	}
+}
+
+// a throw inside a .pzl script names its .pzl line in a test: a js script sits
+// at its source line, and a lang="ts" module, which esbuild reprints, carries
+// an inline source map back to it. a ts syntax error names the .pzl line too.
+func TestCompileOneKeepsScriptLines(t *testing.T) {
+	src := "<puzzle-view>\n  <p>{ n }</p>\n</puzzle-view>\n\n<script%s>\nimport { PuzzleView } from '@magic-spells/puzzle';\n" +
+		"export default class C extends PuzzleView {\n  data() { return { n: %s }; }\n}\n</script>\n"
+	root := writeApp(t, map[string]string{
+		"app/components/Js.pzl":  fmt.Sprintf(src, "", "1"),
+		"app/components/Ts.pzl":  fmt.Sprintf(src, ` lang="ts"`, "1 as number"),
+		"app/components/Bad.pzl": fmt.Sprintf(src, ` lang="ts"`, "1 as"),
+	})
+	null, _ := os.Open(os.DevNull)
+	defer null.Close()
+	compile := func(name string) (string, error) {
+		return compileOne(filepath.Join(root, "app", "components", name), null)
+	}
+
+	js, err := compile("Js.pzl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if line := 1 + strings.Count(js[:strings.Index(js, "export default class C")], "\n"); line != 7 {
+		t.Errorf("the class is on module line %d, want its .pzl line 7:\n%s", line, js)
+	}
+	ts, err := compile("Ts.pzl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the map names the .pzl the module stands in for, beside it
+	_, b64, _ := strings.Cut(ts, "\n//# sourceMappingURL=data:application/json;base64,")
+	if m, _ := base64.StdEncoding.DecodeString(strings.TrimSpace(b64)); !strings.Contains(string(m), `"sources": ["Ts.pzl"]`) {
+		t.Errorf("the ts module carries no inline source map to Ts.pzl:\n%s", ts)
+	}
+	if _, err := compile("Bad.pzl"); err == nil || !strings.Contains(err.Error(), "Bad.pzl:8:") {
+		t.Errorf("the ts syntax error is not on .pzl line 8: %v", err)
 	}
 }
 

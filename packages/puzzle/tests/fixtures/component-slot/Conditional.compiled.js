@@ -1,4 +1,4 @@
-
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 import Card from './Card.pzl';
 export default class Conditional extends PuzzleView {

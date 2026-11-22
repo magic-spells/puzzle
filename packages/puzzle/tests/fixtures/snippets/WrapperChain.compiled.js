@@ -1,4 +1,12 @@
 
+
+
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 import Wrapper from './Wrapper.compiled.js';
 

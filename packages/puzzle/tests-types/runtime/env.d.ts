@@ -78,6 +78,10 @@ declare module 'node:child_process' {
 	): unknown;
 }
 
+declare module 'node:buffer' {
+	const Buffer: { from(data: string, encoding: 'base64'): { toString(): string } };
+}
+
 declare module 'node:url' {
 	function fileURLToPath(url: URL | string): string;
 }

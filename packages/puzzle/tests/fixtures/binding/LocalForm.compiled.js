@@ -1,4 +1,17 @@
 
+
+
+
+
+
+
+
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 
 const WORDS = ['alpha', 'beta', 'gamma', 'delta'];

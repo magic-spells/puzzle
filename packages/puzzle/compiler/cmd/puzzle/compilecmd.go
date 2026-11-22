@@ -25,9 +25,10 @@ var compileCmd = &cobra.Command{
 The emission mode follows the build's directory rule: files under app/views/
 and app/layouts/ compile as views, everything else as a component. {#svg}
 assets resolve from the nearest app/assets/ directory and are inlined. A
-lang="ts" script has its types stripped. <style> blocks are not part of the
-module. Errors print as file:line:col: message on stderr and exit 1; warnings
-print to stderr and the module is still printed.`,
+lang="ts" script has its types stripped, and an inline source map takes the
+module back to its .pzl lines. <style> blocks are not part of the module.
+Errors print as file:line:col: message on stderr and exit 1; warnings print
+to stderr and the module is still printed.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		js, err := compileOne(args[0], os.Stderr)

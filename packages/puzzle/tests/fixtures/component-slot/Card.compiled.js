@@ -1,4 +1,4 @@
-
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Card extends PuzzleView {
   events = { close: () => this.props.close?.(this.props.title) };

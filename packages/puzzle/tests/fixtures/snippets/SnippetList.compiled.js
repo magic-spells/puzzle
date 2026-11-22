@@ -1,4 +1,26 @@
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class SnippetList extends PuzzleView {
