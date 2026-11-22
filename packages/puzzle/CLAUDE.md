@@ -291,8 +291,8 @@ enforced, not merely advised.
   TypeScript 7, React/Vue/Svelte spellings are compile errors (D147),
   `StoreOptions`/`PuzzleValue` are removed, and `injectShell` /
   `injectStaticShell` take no `title`. New examples: `auth`,
-  `paginated-posts`. Production sizes: hello-world **24.2 KB gzip**, todos
-  **28.1 KB gzip** (+1.2 / +1.1 KB over 0.9.0). The next free decision number
+  `paginated-posts`. Production sizes: hello-world **24.1 KB gzip**, todos
+  **28.1 KB gzip** (+1.1 KB each over 0.9.0). The next free decision number
   is **D202**.
 - Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
