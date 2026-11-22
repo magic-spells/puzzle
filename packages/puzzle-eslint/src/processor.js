@@ -20,15 +20,7 @@
 // during preprocess and injected as synthetic ESLint messages in postprocess,
 // keyed by filename through a module-level Map.
 
-import {
-	splitSections,
-	scanBraceGroup,
-	scanInlineComment,
-	isBlockCommentOpen,
-	scanBlockComment,
-	isBlockRawOpen,
-	scanBlockRaw,
-} from './split.js';
+import { splitSections, scanBraceGroup, skipBraceSpan, isBlockRawOpen, scanBlockRaw } from './split.js';
 import { Linter } from 'eslint';
 
 // Carries each file's splitter errors and <script> body start from preprocess
@@ -118,22 +110,6 @@ function matchAt(re, s, i) {
 	re.lastIndex = i;
 	const m = re.exec(s);
 	return m ? m[0] : '';
-}
-
-// skipBraceSpan steps over a template construct opening at s[i] === '{': an
-// inline {## } or block {#comment} comment, or a balanced {…} group. A
-// malformed group advances one char, leaving the rest for the compiler to
-// report, as findTemplateClose in split.js does.
-function skipBraceSpan(s, i) {
-	let res;
-	if (s.startsWith('{##', i)) {
-		res = scanInlineComment(s, i);
-	} else if (isBlockCommentOpen(s, i)) {
-		res = scanBlockComment(s, i);
-	} else {
-		res = scanBraceGroup(s, i);
-	}
-	return res.err ? i + 1 : res.end;
 }
 
 // skipQuotedValue steps from an attribute value's opening quote at s[open] to
