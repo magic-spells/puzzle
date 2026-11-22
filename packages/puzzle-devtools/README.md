@@ -89,7 +89,7 @@ window.__PUZZLE_DEVTOOLS_HOOK__ = {
   hookVersion: 1,        // shape of THIS object
   protocolVersion: 1,    // wire protocol it expects
   emit(message),         // runtime → extension; buffered until the panel attaches
-  onRequest(handler),    // handler(message) => payload; returns an unsubscribe fn
+  onRequest(handler),    // handler(message) => payload; a later call replaces it
 };
 ```
 
@@ -106,7 +106,7 @@ Every message, both directions, is:
 ```
 
 Protocol **v1**. The authority is the framework spec —
-[`constellation/doc/DOC-SPEC.md` §55, "The DevTools bridge and wire protocol"](https://github.com/magic-spells/puzzle)
+[`packages/puzzle/constellation/doc/DOC-SPEC-BUILD.md` §55, "The DevTools bridge and wire protocol"](../puzzle/constellation/doc/DOC-SPEC-BUILD.md)
 — and `protocol/constants.js` transcribes it. `tests/protocol.test.js` asserts the name
 lists literally, so a rename upstream breaks this repo's suite instead of silently
 breaking the panel.

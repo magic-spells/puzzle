@@ -46,8 +46,9 @@ npm install --save-dev @magic-spells/eslint-plugin-puzzle eslint
 
 ## Usage (flat config)
 
-The `recommended` config only wires up the processor — you still bring your own
-JavaScript rules. A typical `eslint.config.js`:
+The `recommended` config wires up the processor and turns on
+`puzzle/uses-template-components` — you still bring your own JavaScript rules.
+A typical `eslint.config.js`:
 
 ```js
 import js from '@eslint/js';

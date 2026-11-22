@@ -390,8 +390,8 @@ CLI — it is unrelated and must not be bumped along with the release.
 
 ## The `add` CLI (shipped in the Puzzle Go CLI)
 
-`puzzle add piece <name…>` lives in the framework (`../puzzle/compiler/internal/pieces/`
-+ `add.go`) — there is NO npm package for the CLI itself; the default registry is the
+`puzzle add piece <name…>` lives in the framework (`../puzzle/compiler/internal/pieces/` and
+`../puzzle/compiler/cmd/puzzle/add.go`) — there is NO npm package for the CLI itself; the default registry is the
 `@magic-spells/puzzle-pieces` npm package. Contract this registry must stay compatible
 with:
 
@@ -403,7 +403,7 @@ with:
   the package is never installed. The old raw-GitHub default is gone as of 0.6.0.
 - Reads `registry.json`, resolves `registryDependencies` transitively (dedupe), copies each
   file to its manifest `targetDir` (`app/components/ui/` for pieces, `app/lib/` for lib
-  files). **Refuses to overwrite an existing target unless `--force` (`-f`; `--overwrite` is the deprecated alias)** (all-or-nothing
+  files). **Refuses to overwrite an existing target unless `--force` (`-f`; `--overwrite` is a hidden alias)** (all-or-nothing
   pre-flight). PRINTS — never auto-runs — npm installs for accumulated `dependencies`.
 - The printed line is `npm install <name>@<range> …`, one entry per package, sorted by
   package name (D169). Specs merge by NAME across the resolved set, so a package two

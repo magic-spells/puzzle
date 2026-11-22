@@ -35,8 +35,8 @@ build it once with `npm run build:compiler` (repo root delegates into `packages/
 
 ## Invariants that are easy to break
 
-- **The protocol is the only interface.** `constellation/doc/DOC-SPEC.md` §55 in the
-  framework repo is the authority; `protocol/constants.js` transcribes it and
+- **The protocol is the only interface.** `../puzzle/constellation/doc/DOC-SPEC-BUILD.md`
+  §55 is the authority; `protocol/constants.js` transcribes it and
   `tests/protocol.test.js` pins the names literally. Never reach into framework
   internals from this repo, and never assume a version — `hello` negotiates.
 - **The message set grows ADDITIVELY; do not bump `PROTOCOL_VERSION` to add one.**
