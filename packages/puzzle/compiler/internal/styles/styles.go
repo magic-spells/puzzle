@@ -1,9 +1,9 @@
 // Package styles owns the CSS side of a build: running the Tailwind pipeline
-// (D12/D26) and composing the final dist/styles.css.
+// (D12/D26) and composing the final stylesheet.
 //
 // Composition (SPEC §3): the final stylesheet is the Tailwind output (when the
 // pipeline is enabled) followed by the collected <style> blocks. index.html
-// links a single /styles.css, so both layers must land in one file with the
+// links a single stylesheet, so both layers must land in one file with the
 // Tailwind utilities first and hand-written global CSS appended after.
 //
 // The Tailwind invocation is behind the Runner interface so builds can be
@@ -72,7 +72,7 @@ type RunOptions struct {
 	CLIs []ResolvedCLI
 }
 
-// Compose builds the final dist/styles.css contents: the Tailwind layer first,
+// Compose builds the final stylesheet's contents: the Tailwind layer first,
 // then the collected <style> blocks. Either part may be empty. A single
 // trailing newline is guaranteed when there is any content.
 func Compose(tailwindCSS, collected string) string {

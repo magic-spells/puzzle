@@ -192,12 +192,12 @@ func autoBindKV(bind *autoBind, scope scopeMap) string {
 				target += "?." + step
 			}
 		}
-		// A member-path bind whose root is missing must stay inert, not fall into
+		// A member-path bind whose owner is missing must stay inert, not fall into
 		// __bind's `target == null` branch, which belongs to the bare-local form
 		// and would write the field as a stray top-level local. Coalescing to a
-		// primitive routes it to INERT_BIND — the same one-way display a
-		// primitive-rooted path gets — and the guarded value read (D173 V4) shows
-		// nothing. The next render with a real root binds normally.
+		// primitive routes it to INERT_BIND — the same one-way display a path
+		// with a primitive owner gets — and the guarded value read (D173 V4)
+		// shows nothing. The next render with a real owner binds normally.
 		target += " ?? 0"
 	}
 	return jsKey("@"+bind.event+":bind") + ": this.__bind(" +
