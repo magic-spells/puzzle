@@ -262,13 +262,6 @@
               component's deliberate trade, not a piece limitation.
             </p>
             <p>
-              A <strong class="font-medium text-ink">keyboard</strong> activation of a
-              data-action-hide-dialog button closes the sheet but reports result: null. A
-              pointerless click carries coordinates of 0,0, which dialog-panel reads as a tap
-              outside the dialog before the delegated handler runs. A mouse click reports the
-              data-result correctly. Fix pending upstream in dialog-panel.
-            </p>
-            <p>
               On the currently published pair — bottom-sheet 2.0.2 with dialog-panel 2.0.3 — two
               overlays paint at once, so the scrim reads darker than the token the piece sets:
               2.0.2 still paints its scrim on the dialog's native ::backdrop and tries to hide
