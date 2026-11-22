@@ -2973,13 +2973,13 @@ export class PuzzleView {
 		) {
 			return;
 		}
-		// A render is landing NOW with the current state, so any frame #scheduleRender
-		// armed is already satisfied — clear the flag so its rAF no-ops instead of
-		// repeating this render with byte-identical state (a synchronous refresh() after
-		// a setState used to render twice). Deliberately AFTER both bails: clearing above
-		// them would silently drop a legitimately pending local-state render. A setState
-		// later in this same tick sees the flag false and re-arms normally.
-		this.#updateScheduled = false;
+		// A render landing NOW satisfies the frame #scheduleRender armed, so its rAF
+		// no-ops instead of repeating it — unless that frame also owes the D23 data()
+		// re-run, which only the flush pays (a slot-only parent update or an older async
+		// commit renders without running data()). `&&=`: a re-run flagged with no frame
+		// armed never claims one. AFTER both bails, which must not drop a pending render;
+		// a setState later in this same tick re-arms if the flag cleared.
+		this.#updateScheduled &&= this.#rerunData;
 		this.#renderSeq++;
 		const isUpdate = this.#mounted;
 

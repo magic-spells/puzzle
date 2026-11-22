@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
-import { ViewNode } from '../client-runtime/views/ViewNode.js';
+import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { Store } from '../client-runtime/datastore/store.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { installFakeAnimate } from './helpers/fake-waapi.js';
@@ -710,6 +710,90 @@ describe('PuzzleView — setState() re-runs data() when data() read the key (D23
 		release();
 		await new Promise((r) => setTimeout(r, 0));
 		expect(el.textContent).toBe('cats|results for cats');
+	});
+
+	// A render that lands before the flush but runs no data() must not swallow the re-run.
+	it('a slotted child that tells its parent, then writes its own state, still re-runs data()', async () => {
+		let runs = 0;
+		let renders = 0;
+		// an uncontrolled tab strip: it reports the pick, then moves its own highlight
+		class Tabs extends PuzzleView {
+			created() { this.setState('active', 'a'); }
+			data() {
+				runs++;
+				const { active } = this.getState();
+				return { marks: ['a', 'b'].map((id) => (id === active ? `[${id}]` : id)).join(' ') };
+			}
+			pick(id) {
+				this.props.onPick(id);
+				this.setState('active', id);
+			}
+			render() {
+				renders++;
+				return h('div', {}, [h('button', { '@click': () => this.pick('b') }, [text(this.getData().marks)]), h(SLOT_TAG)]);
+			}
+		}
+		class Page extends PuzzleView {
+			pick = (id) => this.setState('last', id);
+			render() { return h('main', {}, [comp(Tabs, { onPick: this.pick }, [text(`panel ${this.getData().last ?? 'a'}`)])]); }
+		}
+		const el = container();
+		await new Page().mount(el);
+		runs = renders = 0;
+		el.querySelector('button').click(); // the parent's frame is armed first, so it re-renders the tabs' slot
+		await afterFrame();
+		expect(el.textContent).toBe('a [b]panel b');
+		expect(runs).toBe(1);
+		expect(renders).toBe(2); // the parent's slot update, then the re-run's commit
+	});
+
+	it('an older async run that commits before the flush keeps the re-run for the newer write', async () => {
+		const gates = [];
+		let runs = 0;
+		let renders = 0;
+		class Search extends PuzzleView {
+			async data() {
+				runs++;
+				const q = this.getState().q ?? '';
+				await new Promise((r) => gates.push(r));
+				return { result: `results for ${q}` };
+			}
+			render() {
+				renders++;
+				return h('p', {}, [text(`${this.getData().q ?? ''}|${this.getData().result}`)]);
+			}
+		}
+		const v = new Search();
+		const el = container();
+		const mounting = v.mount(el);
+		gates.shift()();
+		await mounting;
+		v.setState('q', 'c');
+		await v.renderTick(); // the run for "c" is in flight
+		runs = renders = 0;
+		v.setState('q', 'ca'); // the next keystroke arms a flush…
+		gates.shift()(); // …and the response for "c" lands before it
+		await afterFrame();
+		gates.splice(0).forEach((r) => r());
+		await new Promise((r) => setTimeout(r, 0));
+		expect(el.textContent).toBe('ca|results for ca');
+		expect(runs).toBe(1);
+		expect(renders).toBe(3); // the "c" commit, the flush while "ca" runs, the "ca" commit
+	});
+
+	it('a re-run flagged before mount never claims a frame nobody armed', async () => {
+		class V extends PuzzleView {
+			data() { return { doubled: (this.getState().n ?? 0) * 2 }; }
+			render() { return h('p', {}, [text(`${this.getData().n ?? 0}|${this.getData().doubled}`)]); }
+		}
+		const v = new V();
+		await v.preload();
+		v.setState('n', 1); // not mounted yet: the re-run is flagged, no frame is armed
+		const el = container();
+		await v.mount(el, { preloaded: true });
+		v.setState('n', 2);
+		await afterFrame();
+		expect(el.textContent).toBe('2|4');
 	});
 
 	it('a sync data() throw on the re-run is contained, not rethrown from the flush', async () => {
