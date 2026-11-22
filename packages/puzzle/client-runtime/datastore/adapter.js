@@ -1011,11 +1011,15 @@ class AdapterStoreMethods {
 		// the tracked findMany stops faulting either way. It answers "is this
 		// identity absent?" for every id it omits only when the FRAMEWORK built the
 		// request — an authored loadMany may well have returned page one (D161). An
-		// empty array counts; an options-bearing call marks nothing.
+		// empty array counts; an options-bearing call marks nothing, and neither does
+		// a load dispatched before an invalidate(type): its rows land, but the
+		// collection stays stale, as a query entry does (D193).
 		if (options == null) {
 			const state = readStateFor(this);
-			state.loaded.add(type);
-			if (isGeneratedVerb(this, type, 'loadMany')) state.complete.add(type);
+			if (gen > (state.staleType.get(type) ?? 0)) {
+				state.loaded.add(type);
+				if (isGeneratedVerb(this, type, 'loadMany')) state.complete.add(type);
+			}
 		} else {
 			this._storeQuery(type, options, records, meta, gen);
 		}
