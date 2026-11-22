@@ -230,8 +230,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      # Go builds the compiler binary build.mjs defaults to (../../puzzle);
-      # without a compiled panel bundle the 88 panel-app suites skip silently.
+      # Go builds the compiler binary build.mjs defaults to (../puzzle/puzzle);
+      # without a compiled panel bundle the panel-app tests skip silently.
       - uses: actions/setup-go@v6
         with:
           go-version-file: packages/puzzle/go.mod

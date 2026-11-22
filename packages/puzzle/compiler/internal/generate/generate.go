@@ -410,12 +410,12 @@ func pascal(s string) string {
 func modelHint(name string, ts bool) string {
 	cls := pascal(name)
 	if ts {
-		return "Register it in app/models/index.ts:\n" +
+		return "Register it in app/models/index.ts (create it if the app has none, and pass it to new PuzzleApp as models):\n" +
 			fmt.Sprintf("    import %s from './%s';\n", cls, name) +
 			"    // then add to the registry object:\n" +
 			fmt.Sprintf("    %s: %s", name, cls)
 	}
-	return "Register it in app/models/index.js:\n" +
+	return "Register it in app/models/index.js (create it if the app has none, and pass it to new PuzzleApp as models):\n" +
 		fmt.Sprintf("    import %s from './%s.js';\n", cls, name) +
 		"    // then add to the registry object:\n" +
 		fmt.Sprintf("    %s: %s", name, cls)

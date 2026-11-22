@@ -2,7 +2,7 @@ import { PuzzleApp } from '@magic-spells/puzzle';
 import routes from './routes.js';
 
 // Create and configure the Puzzle app. The v1 config surface is intentionally
-// small: target, routes, models, formatters, apiURL.
+// small: target, routes, models, functions, apiURL.
 const app = new PuzzleApp({
 	// Where the app mounts (matches #app in public/index.html)
 	target: '#app',
