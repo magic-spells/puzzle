@@ -994,7 +994,8 @@ describe('static kernel — read-state island (D161)', () => {
 	it.each([
 		{ label: 'one record', records: [{ id: 'p1', title: 'build-time post' }] },
 		{ label: 'an empty collection', records: [] },
-	])('transfers authored loadMany state for $label without refetching at mount', async ({ records }) => {
+		{ label: 'a server query', records: [{ id: 'p1', title: 'build-time post' }], query: { page: 1 } },
+	])('transfers authored loadMany state for $label without refetching at mount', async ({ records, query }) => {
 		const loadMany = vi
 			.fn()
 			.mockResolvedValueOnce(records)
@@ -1008,7 +1009,7 @@ describe('static kernel — read-state island (D161)', () => {
 				lastStore = this.ctx.store;
 			}
 			data() {
-				return { posts: this.ctx.store.findMany('post') };
+				return { posts: this.ctx.store.findMany('post', query && { query }) };
 			}
 			render() {
 				return h('ul', {},
@@ -1027,7 +1028,10 @@ describe('static kernel — read-state island (D161)', () => {
 			{ mode: 'static' }
 		);
 		const page = pages[0];
-		const readState = { v: 1, complete: [], loaded: ['post'], absent: [] };
+		// a query load marks no collection LOADED (D193): its entry is all it settles
+		const readState = query
+			? { v: 1, complete: [], loaded: [], absent: [], queries: [['post?[["page",1]]', 'post', query, ['p1'], null]] }
+			: { v: 1, complete: [], loaded: ['post'], absent: [] };
 		expect(page.readState).toEqual(readState);
 		expect(loadMany).toHaveBeenCalledTimes(1);
 		document.body.innerHTML = injectStaticShell('<div id="app"></div>', {

@@ -121,13 +121,12 @@ export function hydrateReadState(store, envelope) {
 }
 
 /**
- * Whether an envelope carries anything worth transferring. An empty one is
+ * Whether an envelope carries anything worth transferring: any of its lists,
+ * additive ones like `queries` included, holds an entry. An empty one is
  * omitted from the wire so an adapter-less page stays byte-identical.
  * @param {Partial<ReadStateEnvelope> | null | undefined} envelope
  * @returns {boolean}
  */
 export function hasReadState(envelope) {
-	return Boolean(
-		envelope && (envelope.complete?.length || envelope.loaded?.length || envelope.absent?.length)
-	);
+	return Object.values(envelope ?? {}).some((list) => Array.isArray(list) && list.length > 0);
 }

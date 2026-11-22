@@ -47,6 +47,8 @@ export interface PrerenderReadState {
 	loaded?: string[];
 	/** Identity keys (`type` + separator + `id`) settled as absent by a 404. */
 	absent: string[];
+	/** Server queries the page read (D193), `[key, type, query, rows, meta]` each; omitted when none. */
+	queries?: [string, string, Record<string, unknown>, string[], Record<string, unknown> | null][];
 }
 
 /** A prerendered page. `html`/`title`/`head` are null for a `prerender: false` route. */
