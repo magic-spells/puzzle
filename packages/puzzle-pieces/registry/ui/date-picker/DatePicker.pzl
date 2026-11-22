@@ -317,7 +317,6 @@ export default class DatePicker extends PuzzleView {
       disabled: !!props.disabled,
       name: props.name || false,
       hiddenValue: hasValue ? value : '',
-      placement,
       rootClass: props.class || '',
       triggerClass: [TRIGGER_BASE, error ? TRIGGER_ERROR : TRIGGER_OK].join(' '),
       panelClass: this._wantMorph(props)

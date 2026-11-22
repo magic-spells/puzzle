@@ -348,7 +348,6 @@ export default class DateRangePicker extends PuzzleView {
       endName: props.name ? `${props.name}-end` : false,
       startValue: start,
       endValue: end,
-      placement,
       rootClass: props.class || '',
       triggerClass: [TRIGGER_BASE, error ? TRIGGER_ERROR : TRIGGER_OK].join(' '),
       panelClass: [PANEL_CARD, placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'].join(' '),
