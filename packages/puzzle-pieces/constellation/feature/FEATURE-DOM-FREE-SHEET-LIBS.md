@@ -37,7 +37,7 @@ notes:
 
 # Port DOM-free sheet motion libraries
 
-Bring the source sheet motion engine, policy, and drag gesture into the copy-in registry as plain JavaScript, preserving the source behavior and pure exports. This extends [[DOC-REGISTRY]] under the dependency boundary already established by [[DECISION-SPRING-PHYSICS]].
+History: the sheet's motion libraries were ported here, then deleted when Sheet and BottomSheet became wrappers ([[DECISION-WRAP-WEB-COMPONENTS]]). The scope below is what the port covered; none of it is in `registry/lib/`.
 
 ## Scope
 

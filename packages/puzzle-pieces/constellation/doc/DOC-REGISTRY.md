@@ -177,7 +177,7 @@ notes:
 
 # The registry — source of truth
 
-`registry/` is the canonical home of every piece; everything else (the demo, the future CLI, external apps) is downstream. Its shape is deliberately conventional for a copy-in registry ([[DECISION-REGISTRY-SHAPED-REPO]]) so distribution is pure copying ([[DECISION-COPY-IN-DISTRIBUTION]]).
+`registry/` is the canonical home of every piece; everything else (the demo, the `puzzle add` CLI, external apps) is downstream. Its shape is deliberately conventional for a copy-in registry ([[DECISION-REGISTRY-SHAPED-REPO]]) so distribution is pure copying ([[DECISION-COPY-IN-DISTRIBUTION]]).
 
 ```
 registry/
@@ -194,7 +194,7 @@ registry/
 The manifest schema and per-field meaning live in CLAUDE.md; the load-bearing rules:
 - `files` copy to `targetDir` (default `app/components/ui/`).
 - `registryDependencies` are resolved **transitively**: `lib/*.js` → `app/lib/`, sibling pieces (e.g. `date-picker` → `calendar`) → their own `targetDir`.
-- `dependencies` are **real npm packages, plain JS only** — `.pzl` never appears there. Morph pieces (Select, Dialog, DatePicker) list `@magic-spells/morph-engine`.
+- `dependencies` are **real npm packages, plain JS only** — `.pzl` never appears there. The morph pieces (DatePicker, EmojiPicker, EmojiPickerSimple) list `@magic-spells/morph-engine`.
 - Each `dependencies` entry is an npm INSTALL SPEC carrying a semver **floor**, not a bare package name: `"@magic-spells/collapsible-content@^1.2.0"`. The floor is the version the piece was built and demoed against, so it must equal what `demo/package.json` installs; one floor per package registry-wide. `puzzle add piece` prints the spec verbatim, which is what stops a wrapper from resolving against an npm `latest` older than the element it wraps (D169 in the framework plan — 0.7.0's `add piece accordion` installed collapsible-content 1.1.1 and lost `<collapsible-group>`). The CLI still accepts a bare name so third-party registries keep working; nothing here may ship one, and `test/registry-deps.test.js` enforces both that and the demo agreement.
 - `description` is reused verbatim as the docs subtitle, so it must read as one clean sentence.
 
@@ -217,6 +217,6 @@ Two attributes drive it: `data-scheme` = palette, `data-theme` = style (`dark | 
 
 ## lib/ convention
 
-`registry/lib/` holds shared plain-JS helpers copied to the consumer's `app/lib/`; examples include date math for Calendar/DatePicker, panel-state helpers, document models, chart/slider math, and Code's highlight adapter. They are pulled in only via a piece's `registryDependencies` — no piece imports another piece's `.pzl`, only its lib.
+`registry/lib/` holds shared plain-JS helpers copied to the consumer's `app/lib/`; examples include date math for Calendar/DatePicker, document models, chart/slider math, and Code's highlight adapter. They are pulled in only via a piece's `registryDependencies`. A piece built on another piece lists it there too and imports the copied sibling file (DataTable imports `./Pagination.pzl`, AvatarGroup imports `./Avatar.pzl`).
 
 Per-piece specifics stay in each manifest and file header by default; broad catalog cards would drift. A behavior-bearing composition contract may earn a focused COMPONENT card when its cross-file ownership or constraints are not obvious from one source file. [[COMPONENT-TREE]] and [[COMPONENT-KANBAN]] are the current examples. See [[DECISION-WRAP-WEB-COMPONENTS]] and [[DECISION-CONFIG-FIRST-API]] for the conventions all pieces share.

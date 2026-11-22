@@ -1,6 +1,6 @@
 ---
 name: Virtual list piece
-status: building
+status: built
 change: feature
 connections:
   - DOC-REGISTRY

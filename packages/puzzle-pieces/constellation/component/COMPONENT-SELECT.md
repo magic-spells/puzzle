@@ -61,9 +61,8 @@ options and re-applies a pending value, a value-carrying `select-dropdown:change
 other element child, the `body:has(select-dropdown[visible])` scroll lock and the host
 layout defaults deleted, and three bugs the wrapper build found: `role` set in
 constructors (throws on `createElement` after definition), `aria-hidden` written before
-focus left the panel, and `show()` closed by the click that called it. The published
-0.2.0 cannot be wrapped — the demo pins the `open-sourcery/select-dropdown-wt` worktree via
-`file:` until 0.3.0 ships.
+focus left the panel, and `show()` closed by the click that called it. 0.2.0 cannot be
+wrapped, so the piece's floor is `@magic-spells/select-dropdown@^0.3.0`.
 
 ## `value` is never bound, and `Select.Option` sets its attribute by hand
 

@@ -17,7 +17,7 @@ Pieces are `.pzl` single-file components for the [Puzzle framework](../puzzle). 
 
 ## Decision
 
-Pieces are distributed as **source copied into the consumer's `app/components/ui/`** — never installed from npm. The published package (when it ships) carries the registry + CLI; nobody imports it at runtime.
+Pieces are distributed as **source copied into the consumer's `app/components/ui/`** — never installed from npm. The published package carries the registry only; the CLI is the framework's `puzzle add`. Apps install the package only to import the theme files and the appearance helper.
 
 ## Alternatives rejected
 

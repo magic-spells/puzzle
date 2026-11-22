@@ -7,10 +7,10 @@ connected_repos:
       The Puzzle framework — the .pzl compiler + runtime pieces are built for. Has its own
       constellation plan.
   - name: morph-engine
-    path: ../../../morph-engine
+    path: ../../../../open-sourcery/morph-engine
     description: >-
-      @magic-spells/morph-engine — the one published npm dep morph pieces (Select, Dialog,
-      DatePicker) declare.
+      @magic-spells/morph-engine — the npm dependency the morph pieces (DatePicker, EmojiPicker,
+      EmojiPickerSimple) declare.
   - name: magic-spells-site
     path: ../../../magic-spells-site
     description: Astro marketing site — the future home of long-form public docs (DECISION-DOCS-DEMO-SPLIT).
@@ -30,21 +30,20 @@ connections:
 # Puzzle Pieces
 
 A **copy-in** UI component registry for the [Puzzle framework](../puzzle):
-100 Tailwind-styled, accessible, morph-aware `.pzl` pieces distributed as **source you
+104 Tailwind-styled, accessible, morph-aware `.pzl` pieces distributed as **source you
 copy into a consumer app**, not packages you install. This card is the map; the
 always-load rules, conventions, and hard-won gotchas live in `CLAUDE.md` (read it every
 session) and are not duplicated here.
 
 ## The whole idea in one paragraph
 
-
-`.pzl` single-file components can't ship via npm (the Puzzle compiler prunes
-`node_modules` and `.pzl` isn't resolvable there; Tailwind only scans `app/`), so pieces
-land in the consumer's own `app/components/ui/` where their `puzzle build` compiles them
-and their Tailwind scan picks up the classes. Everything downstream of that choice — the
-registry shape, the CLI, how a piece is built (a thin wrapper over the published web
-component where possible, a native rebuild otherwise) — follows from it. See
-[[DECISION-COPY-IN-DISTRIBUTION]] and [[DECISION-WRAP-WEB-COMPONENTS]].
+A Puzzle app can compile `.pzl` files from an installed package, but its Tailwind
+scan skips `node_modules`, so an installed piece would render unstyled, and it would not be
+the app's to edit. So pieces land in the consumer's own `app/components/ui/`, where their
+`puzzle build` compiles them and their Tailwind scan picks up the classes. Everything
+downstream of that choice — the registry shape, the CLI, how a piece is built (a thin
+wrapper over the published web component where possible, a native rebuild otherwise) —
+follows from it. See [[DECISION-COPY-IN-DISTRIBUTION]] and [[DECISION-WRAP-WEB-COMPONENTS]].
 
 ## How the repo fits together
 
@@ -69,8 +68,7 @@ component where possible, a native rebuild otherwise) — follows from it. See
 
 ## Current state
 
-
-All 100 pieces are built, compile-verified against the real compiler, and demo-verified.
+All 104 pieces are built, compile-verified against the real compiler, and demo-verified.
 The [[FEATURE-ADD-CLI]] shipped in the Puzzle Go CLI (`puzzle add piece`).
 [[RELEASE-V0-1-0]] records the first publish (2026-07-22, the repo going public); since
 then the registry itself ships as the npm package `@magic-spells/puzzle-pieces`, which
@@ -78,26 +76,17 @@ then the registry itself ships as the npm package `@magic-spells/puzzle-pieces`,
 major.minor** — so this package's version must equal the framework's exactly, and the
 matching pieces release must publish at or before the CLI release.
 
-**`0.7.0` is live on npm and is the current `latest`,** published 2026-09-09 alongside
-framework 0.7.0. The version-locked transport is verified end to end: the framework's
-`verify:published` asserts `@magic-spells/puzzle-pieces` exists at the EXACT framework
-version, then scaffolds an app with the installed CLI and confirms `add piece` resolves
-`npm:@magic-spells/puzzle-pieces@0.7.0` — with `PUZZLE_PIECES_REGISTRY` deleted from the
-child env, so local registry files cannot satisfy the check, and with the
-compatibility-fallback notice treated as a failure. A fresh-app smoke went further:
-`puzzle init`, then `add piece accordion`, then `@magic-spells/collapsible-content`
-1.2.0, builds with the web component bundled.
+The framework's `verify:published` checks the transport end to end: it asserts
+`@magic-spells/puzzle-pieces` exists at the framework version, scaffolds an app with the
+installed CLI, and confirms `add piece` resolves `npm:@magic-spells/puzzle-pieces@<version>`.
+It deletes `PUZZLE_PIECES_REGISTRY` from the child env, so local registry files cannot pass
+the check, and it fails if `add piece` falls back to an older pieces line.
 
-**Publishing lesson from that release, still unfixed in the registry format:** a
-`piece.json` declares its web-component dependencies by **bare name**, so npm resolves
-them to `latest`. The 0.7.0 families were authored against unpublished local versions,
-which meant eight upstream components had to be published by hand before the release
-could go out at all — collapsible-content 1.2.0, dropdown-panel 2.1.0, tab-group 1.2.0,
-select-dropdown 0.3.0, split-panel 0.2.0, panel-stack 0.2.0, scrolling-content 2.1.0,
-quantity-input 1.1.0 — and the demo's own `file:` paths swapped to npm. Until registry
-version floors land as D169 in framework 0.7.1, treat "every web component a piece
-depends on is published at the version the piece was built against" as a hard release
-gate. See [[DECISION-WRAP-WEB-COMPONENTS]].
+Every npm dependency in a `piece.json` carries a version floor
+(`@magic-spells/collapsible-content@^1.2.0`), and `puzzle add piece` prints it as is (framework
+D169). A floor must be published on npm before the pieces release ships.
+`test/registry-deps.test.js` holds every floor to `demo/package.json`. See
+[[DECISION-WRAP-WEB-COMPONENTS]].
 
 This package lives at `packages/puzzle-pieces` inside the `magic-spells/puzzle`
 monorepo (framework decision D162), with its own npm install and lockfile — there are
