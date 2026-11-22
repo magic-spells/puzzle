@@ -87,13 +87,13 @@ export default class HomeView extends PuzzleView {
   }
 
   async data() {
+    const activeTab = this.getData().activeTab || 'for-you';
     // Skeleton view: kick (or join) the memoized seed, then read synchronously.
     // Because seedStore() is memoized this is safe to await on every data() run —
     // it never re-initiates a load (the D21 gotcha the seed contract guards).
     await seedStore(this.ctx.store);
 
     const store = this.ctx.store;
-    const activeTab = this.getData().activeTab || 'for-you';
 
     const users = store.findMany('user');
     const topLevel = store.findMany('post').filter((p) => !p.isReply).sort(byNewest);
@@ -112,8 +112,8 @@ export default class HomeView extends PuzzleView {
   }
 
   events = {
-    // Flip the tab; data() reads activeTab, so the write re-runs it and
-    // `feed` recomputes (SPEC §4).
+    // Flip the tab; data() reads activeTab before its await, so the write
+    // re-runs it and `feed` recomputes (SPEC §4).
     setTab: (tab) => this.setState('activeTab', tab),
   };
 
