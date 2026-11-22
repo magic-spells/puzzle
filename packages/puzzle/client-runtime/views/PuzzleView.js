@@ -3156,15 +3156,8 @@ export class PuzzleView {
 			return true;
 		}
 		const seq = this.#renderSeq;
-		const message = '[puzzle] data() failed during a setState() re-run:';
-		try {
-			this.refresh()?.catch((err) => this.#handleViewFailure(message, err, 'refresh'));
-		} catch (err) {
-			// a sync data() throw is already reported; rendering on top of it would
-			// report the same broken view twice
-			this.#handleViewFailure(message, err, 'refresh');
-			return false;
-		}
+		// a sync data() throw has already destroyed the view through the D145 funnel
+		this.#refreshContained('[puzzle] data() failed during a setState() re-run:', 'refresh');
 		return seq === this.#renderSeq && !this.#destroyed;
 	}
 }
