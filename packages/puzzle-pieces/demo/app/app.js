@@ -9,8 +9,7 @@ import { ignoreAutofill } from './lib/no-autofill.js';
 // document before any view reads current().
 bootAppearance();
 
-// Create and configure the Puzzle app. The v1 config surface is intentionally
-// small: target, routes, models, formatters, apiURL.
+// Create and configure the Puzzle app.
 const app = new PuzzleApp({
 	// Where the app mounts (matches #app in public/index.html)
 	target: '#app',
@@ -21,12 +20,6 @@ const app = new PuzzleApp({
 	// Hash-based routing so the static bundle deep-links correctly from any
 	// host without server rewrites (GitHub Pages serves only real files).
 	routerMode: hashRouter(),
-
-	// Global formatters available in every template
-	// (display transformation only — logic belongs in data())
-	functions: {
-		shout: (value) => `${String(value).toUpperCase()}!`,
-	},
 });
 
 // Start the app
