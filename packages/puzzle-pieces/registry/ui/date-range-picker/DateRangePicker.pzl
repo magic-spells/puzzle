@@ -1,5 +1,5 @@
 <puzzle-view>
-  <div class={ rootClass }>
+  <div class={ rootClass } @focusout={ onFocusOut(event) }>
     {#if label}
       <label for={ triggerId } class="mb-1.5 block text-sm font-medium text-ink">{ label }</label>
     {/if}
@@ -201,7 +201,8 @@ import { parseISODate, formatISODate, toDate, fromDate, addMonths, clampDate, co
 // height in a rAF; Calendar's `autofocus` lands focus on the active day; Escape closes and
 // returns focus to the trigger (Calendar's days-view Escape bubbles up; its months/years
 // views consume it to back out); outside-click dismisses via a document pointerdown
-// listener bounded to the open state. No morph (kept out of scope for v1).
+// listener bounded to the open state; tabbing out of the panel closes it too. No morph
+// (kept out of scope for v1).
 
 let uid = 0;
 
@@ -235,6 +236,7 @@ export default class DateRangePicker extends PuzzleView {
     this._uid = ++uid;
     this._wasOpen = false; // last effective-open seen by the transition detector
     this._pendingRestoreFocus = true; // whether the next close returns focus to the trigger
+    this._hideSent = false; // a controlled @hide the parent has not rendered yet
     // Local UI state (open placement + hover preview). Never returned from data() as `open`
     // when controlled — `props.open` wins there.
     this.setState({ uncontrolledOpen: false, placement: 'bottom', preview: '' });
@@ -409,11 +411,16 @@ export default class DateRangePicker extends PuzzleView {
   }
 
   _requestClose({ restoreFocus = true } = {}) {
-    if (!this._effectiveOpen()) return;
+    if (!this._effectiveOpen() || this._hideSent) return;
     this._pendingRestoreFocus = restoreFocus;
     const { hide } = this.props;
     if (typeof hide === 'function') hide();
-    if (this._controlled()) return; // parent unmounts the panel; focus return in _onClosed
+    if (this._controlled()) {
+      // The parent unmounts the panel on its next render (focus return in _onClosed).
+      // Until then the focusout that follows an outside press does not ask again.
+      this._hideSent = true;
+      return;
+    }
     this.setState({ uncontrolledOpen: false });
   }
 
@@ -431,6 +438,7 @@ export default class DateRangePicker extends PuzzleView {
   }
 
   afterUpdate() {
+    this._hideSent = false; // a render carries the parent's answer
     this._syncOpenEffects();
   }
 
@@ -495,6 +503,12 @@ export default class DateRangePicker extends PuzzleView {
         event.preventDefault();
         this._requestOpen();
       }
+    },
+
+    // Tab out closes. A null relatedTarget (non-focusable click, re-rendered cell) is not leaving.
+    onFocusOut: (event) => {
+      const to = event.relatedTarget;
+      if (to && !this.element.contains(to)) this._requestClose({ restoreFocus: false });
     },
 
     onEscape: (event) => {
