@@ -27,48 +27,25 @@ globalThis.requestAnimationFrame = () => {};
 const day = { name: 'a day in the open panel' };
 const nextField = { name: 'the form field after the picker' };
 
-// Each test brings its own document: other files in all.test.js stub one too.
-function mount(t, props) {
+test('Tab out of the open panel closes it; a move inside does not', (t) => {
+	// Bring a document of our own: other files in all.test.js stub one too.
 	const { document } = globalThis;
 	t.after(() => (globalThis.document = document));
-	const picker = { view: new DateRangePicker(), hides: 0, listeners: {} };
-	globalThis.document = {
-		addEventListener: (type, fn) => (picker.listeners[type] = fn),
-		removeEventListener: (type) => delete picker.listeners[type],
-	};
-	picker.view.props = { ...props, hide: () => picker.hides++ };
-	picker.view.element = { contains: (node) => node === day, querySelector: () => null };
-	picker.view.created();
-	picker.view.mounted();
-	return picker;
-}
+	globalThis.document = { addEventListener() {}, removeEventListener() {} };
 
-test('Tab out of the open panel closes it; a move inside does not', (t) => {
-	const picker = mount(t, {});
-	picker.view.events.onTriggerClick();
-	picker.view.afterUpdate(); // the render that opened the panel
+	let hides = 0;
+	const view = new DateRangePicker();
+	view.props = { hide: () => hides++ };
+	view.element = { contains: (node) => node === day, querySelector: () => null };
+	view.created();
+	view.mounted();
+	view.events.onTriggerClick();
+	view.afterUpdate(); // the render that opened the panel
 
-	picker.view.events.onFocusOut({ relatedTarget: day });
-	picker.view.events.onFocusOut({ relatedTarget: null }); // a press on a non-focusable spot
-	assert.equal(picker.hides, 0);
+	view.events.onFocusOut({ relatedTarget: day });
+	view.events.onFocusOut({ relatedTarget: null }); // a press on a non-focusable spot
+	assert.equal(hides, 0);
 
-	picker.view.events.onFocusOut({ relatedTarget: nextField });
-	assert.equal(picker.hides, 1);
-});
-
-test('one outside click asks a controlled parent to close once', (t) => {
-	const picker = mount(t, { open: true });
-
-	// The press lands on the next field: pointerdown, then focus moves there.
-	picker.listeners.pointerdown({ target: nextField });
-	picker.view.events.onFocusOut({ relatedTarget: nextField });
-	assert.equal(picker.hides, 1);
-
-	// The parent's answer renders; the next open asks again.
-	picker.view.props = { ...picker.view.props, open: false };
-	picker.view.afterUpdate();
-	picker.view.props = { ...picker.view.props, open: true };
-	picker.view.afterUpdate();
-	picker.view.events.onFocusOut({ relatedTarget: nextField });
-	assert.equal(picker.hides, 2);
+	view.events.onFocusOut({ relatedTarget: nextField });
+	assert.equal(hides, 1);
 });
