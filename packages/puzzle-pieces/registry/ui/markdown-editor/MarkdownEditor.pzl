@@ -38,7 +38,7 @@
 
     <div class={ frameClass }>
       <div island ref="mount"></div>
-      {#if showPlaceholder}
+      {#if placeholder && empty}
         <div aria-hidden="true" class="pointer-events-none absolute left-3 top-2 leading-7 text-muted">{ placeholder }</div>
       {/if}
     </div>
@@ -167,7 +167,7 @@ export default class MarkdownEditor extends PuzzleView {
 		this._pending = [];
 		this.setState({
 			active: {},
-			empty: true,
+			empty: isEmpty(this.props.value),
 			linkOpen: false,
 			linkDraft: '',
 		});
@@ -177,7 +177,6 @@ export default class MarkdownEditor extends PuzzleView {
 		const g = this.getData();
 		const a = g.active || {};
 		const disabled = !!props.disabled;
-		const empty = this._editor ? !!g.empty : isEmpty(props.value);
 		const toggle = (value, label, icon, pressed) => ({
 			type: 'toggle', value, label, icon, iconOnly: true, pressed: !!pressed,
 		});
@@ -188,7 +187,6 @@ export default class MarkdownEditor extends PuzzleView {
 			label: props.label,
 			labelId: `${this._fallbackId}-label`,
 			placeholder: props.placeholder ?? null,
-			showPlaceholder: !!props.placeholder && empty,
 			disabled,
 			linkOpen: !!g.linkOpen,
 			linkDraft: g.linkDraft ?? '',
@@ -234,9 +232,6 @@ export default class MarkdownEditor extends PuzzleView {
 		const value = String(this.props.value ?? '');
 		// A mounted editor starts with no outstanding emissions from this instance.
 		this._pending = [];
-		// Seed the emptiness flag data() switches to post-mount, or a non-empty
-		// starting value would render under the placeholder until the first edit.
-		this.setState('empty', isEmpty(value));
 		this._editor = new Editor({
 			element: this.refs.mount,
 			editable: !this.props.disabled,
