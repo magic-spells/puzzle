@@ -775,10 +775,10 @@ export class Router {
 	 * Load the code a path's route needs — every `lazy()` view and layout in its
 	 * matched chain (D163) — without navigating (D195). No guard runs and no view
 	 * is constructed; a later navigation to the path finds the classes already
-	 * resolved and runs synchronously. Called by name, so a guarded route loads
+	 * resolved and runs synchronously. An explicit call, so a guarded route loads
 	 * too (only automatic link prefetch skips those). Never rejects.
 	 *
-	 * @param {string} path a router path, as push() takes it
+	 * @param {string} path a router path string, not a named target
 	 * @returns {Promise<boolean>} true once the route's code is in memory (also
 	 *   for a route with none to load); false when nothing matched or a load failed
 	 */

@@ -65,7 +65,7 @@ import {
 // DCEs the calls and the registry import tree-shakes away. An undefined
 // define (unbundled vitest) reads as true.
 
-// The write-back for a bind whose resolved root is a primitive (D147; see
+// The write-back for a bind whose resolved target is a primitive (D147; see
 // __bind). One shared function for the whole module: identity-stable by
 // definition, so the differ never churns the listener, and typing does nothing.
 const INERT_BIND = () => {};
@@ -887,7 +887,7 @@ export class PuzzleView {
 	 * `'@input:bind': this.__bind(null, 'draft', 'v')`.
 	 *
 	 * - `target` is null for a bare identifier bind (local component state) or the
-	 *   resolved ROOT object of a one-member path (`todo.completed` → the loop
+	 *   resolved object that owns the path's last step (`todo.completed` → the loop
 	 *   variable, `profile.hue` → the data() value). The write arm is chosen from
 	 *   the target at write time, not here — a data() commit can swap a plain
 	 *   object for a record between renders.
@@ -901,16 +901,16 @@ export class PuzzleView {
 	 * INTERNAL — underscore-prefixed like the rest of the compiler-facing surface;
 	 * never spelled in a template. Not part of the public typed API.
 	 *
-	 * @param {any} target null, or the bound path's resolved root (any app value)
+	 * @param {any} target null, or the object that owns the bound field (any app value)
 	 * @param {string} key
 	 * @param {'v' | 'vn' | 'c'} spec
 	 * @returns {BindHandler}
 	 */
 	__bind(target, key, spec) {
-		// A member path whose ROOT resolves to a primitive is not a writable target
+		// A member path whose owner resolves to a primitive is not a writable target
 		// — `value={ title.length }` over a string `title` is the classic case. The
 		// compiler cannot see runtime types, so it emits the bind for any qualifying
-		// one-member path; the primitive-rooted ones degrade here to the one-way
+		// member path; the primitive-owned ones degrade here to the one-way
 		// display binding they always were, instead of throwing at render (a
 		// primitive is not a legal WeakMap key). No memo entry: INERT_BIND is a
 		// single shared function, so the identity is stable without one.

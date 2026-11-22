@@ -392,7 +392,7 @@ function readStateFor(store) {
 	if (!state) {
 		state = {
 			one: new Map(), // "type id" → in-flight single-record request
-			many: new Map(), // type → in-flight complete-collection request
+			many: new Map(), // type or query key → in-flight loadMany request
 			absent: new Map(), // "type id" → absence generation, insertion-ordered (LRU)
 			// Two facts, not one (D161). `loaded`: a no-options collection request
 			// finished, so a tracked findMany must not re-fault. `complete`: that
