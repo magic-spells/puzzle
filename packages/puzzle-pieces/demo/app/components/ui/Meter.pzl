@@ -110,8 +110,8 @@ export default class Meter extends PuzzleView {
       value,
       label,
       // aria-valuetext is only emitted when the caller supplies a formatted
-      // string; otherwise AT falls back to computing it from value/min/max.
-      valueTextAttr: hasValueText ? props.valueText : undefined,
+      // string; false omits it and AT computes one from value/min/max.
+      valueTextAttr: hasValueText && props.valueText,
       valueLabel,
       showHeader: showValue,
       trackClass: [
