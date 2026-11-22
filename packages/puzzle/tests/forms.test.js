@@ -196,6 +196,28 @@ describe('createForm — the controller', () => {
 		expect(form.touched.title).toBe(false);
 	});
 
+	it('rebases on what was sent: an edit made during the save stays dirty, a reseed keeps its baseline', async () => {
+		const form = createForm(stubView(), Post, { from: { title: 'A' }, fields: ['title'] });
+		form.set('title', 'B');
+		let gate = deferred();
+		let pending = form.submit(() => gate.promise);
+		form.set('title', 'B and more');
+		gate.resolve();
+		await expect(pending).resolves.toBe(true);
+		expect(form.values.title).toBe('B and more');
+		expect(form.changed.title).toBe(true);
+		expect(form.dirty).toBe(true);
+
+		// a reseed while the save runs keeps the new record's baseline
+		gate = deferred();
+		pending = form.submit(() => gate.promise);
+		form.reset({ title: 'Next record' });
+		gate.resolve();
+		await expect(pending).resolves.toBe(true);
+		expect(form.values.title).toBe('Next record');
+		expect(form.dirty).toBe(false);
+	});
+
 	it('maps a model validation error onto its fields', async () => {
 		const form = createForm(stubView(), Post, { from: { title: 'A' }, fields: ['title'] });
 		const fn = () => {

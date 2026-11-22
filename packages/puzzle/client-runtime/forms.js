@@ -218,8 +218,12 @@ class PuzzleForm {
 
 		this.submitting = true;
 		this.#commit();
+		// the draft as sent, and the baseline it was edited against: the draft
+		// can change while fn runs, and a reset(from) swaps the baseline
+		const sent = { ...this.#current };
+		const baseline = this.#baseline;
 		try {
-			await fn?.(/** @type {V} */ ({ ...this.#current }));
+			await fn?.(/** @type {V} */ ({ ...sent }));
 		} catch (err) {
 			this.submitting = false;
 			this.#fail(err);
@@ -227,9 +231,10 @@ class PuzzleForm {
 			return false;
 		}
 
-		// success: what was submitted is the new baseline, so dirty goes false
+		// success: what was sent becomes the baseline, so a field edited while
+		// fn ran stays changed; after a reseed this writes the orphaned baseline
 		this.submitting = false;
-		this.#baseline = { ...this.#current };
+		Object.assign(baseline, sent);
 		this.#untouch();
 		this.#commit();
 		return true;
