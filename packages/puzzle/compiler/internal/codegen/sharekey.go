@@ -92,20 +92,6 @@ func warnReservedComponentName(className, file string, pos parser.Position, warn
 	})
 }
 
-// positionalDataParams finds a data() or share() declaration still written in
-// the pre-0.10 positional form, `data(params, props) {`, and returns the byte
-// offset of its name (ok false when there is none). the runtime passes one
-// object now (D197), so such a method gets the whole object as `params` and
-// `undefined` as `props`. the first declaration is the one the warning names;
-// positionalDataDecls finds them all.
-func positionalDataParams(toks []jsTok) (name string, off int, ok bool) {
-	decls := positionalDataDecls(toks)
-	if len(decls) == 0 {
-		return "", 0, false
-	}
-	return decls[0].Method, decls[0].NameOff, true
-}
-
 // DataDecl is one pre-0.10 positional data() or share() declaration: the
 // method name and the byte offsets (into the scanned script body) of the name
 // and of the parameter list's '(' and ')'. the upgrade codemod (D199) rewrites
@@ -202,7 +188,7 @@ func positionalDataDecls(toks []jsTok) []DataDecl {
 }
 
 // warnPositionalData warns about a data() or share() declaration in the old
-// positional form (see positionalDataParams). pos is the method name's
+// positional form (see positionalDataDecls). pos is the method name's
 // position.
 func warnPositionalData(method, file string, pos parser.Position, warnings *[]Warning) {
 	*warnings = append(*warnings, Warning{

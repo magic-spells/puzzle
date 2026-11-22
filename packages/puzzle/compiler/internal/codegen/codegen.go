@@ -255,9 +255,10 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	}
 	warnReservedComponentName(className, opts.Filename, namePos, warnings)
 	// D197: data() and share() take one object; the old positional
-	// `data(params, props)` still parses but reads the wrong values.
-	if method, off, ok := positionalDataParams(scriptToks); ok {
-		warnPositionalData(method, opts.Filename, sec.ScriptsPos.Advance(sec.Scripts[:off]), warnings)
+	// `data(params, props)` still parses but reads the wrong values. The first
+	// such declaration draws the warning.
+	if decls := positionalDataDecls(scriptToks); len(decls) > 0 {
+		warnPositionalData(decls[0].Method, opts.Filename, sec.ScriptsPos.Advance(sec.Scripts[:decls[0].NameOff]), warnings)
 	}
 
 	c := &compiler{
