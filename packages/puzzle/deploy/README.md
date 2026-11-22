@@ -151,9 +151,11 @@ overrides for that folder (`AllowOverride All`, or at least `FileInfo`).
   under that path: the fallback becomes `/app/index.html`, and the static 404
   becomes `/app/404.html`. The templates assume the app is served from `/`.
 - **Lazy chunks across a deploy:** with `build.splitting`, a tab opened before
-  a deploy asks for the old chunk names. Hosts that keep each deploy's files
-  (Vercel, Netlify and Cloudflare Pages do) serve them. On your own server,
-  keep the previous `dist/chunks/` for a while after uploading the new build.
+  a deploy asks for the old chunk names. Do not count on the host to keep
+  them: Vercel and Netlify serve the site from the newest deploy only, and
+  Cloudflare Pages makes no promise. That navigation fails until the tab
+  reloads. On your own server, keep the previous `dist/chunks/` for a while
+  after uploading the new build.
 - **Hash routing** (`routerMode: hashRouter()`) needs no fallback at all, since
   the route lives after the `#`; the caching rules still help.
 - **Magic Spells Sites** has no template yet: its config format is not

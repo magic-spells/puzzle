@@ -41,7 +41,9 @@ another name (`data({ id })`, `data(p)`) looks like the new form, so it draws
 no warning and `--fix` leaves it alone. Change it by hand to
 `data({ params: { id } })` or `data({ params: p })`. One more change needs no edit:
 `setState()` now re-runs `data()` when `data()` read the key (D23), so the
-`refresh()` that followed it can go.
+`refresh()` that followed it can go. In an async `data()`, only a
+`getData()`/`getState()` call made before the first `await` is tracked, so
+move it above the `await` or keep the `refresh()`.
 
 **The router outlet is `<Outlet/>`, and the config key is `functions` (0.10.0,
 D134, D7).** Both are loud. A bare `<Slot/>` is a compile error: write
@@ -239,7 +241,9 @@ Production sizes: hello-world **24.2 KB gzip** (23.0 in 0.9.0), todos
   `this.getState()`, writing that key re-runs `data()` with the next render,
   once however many writes came before it, so `this.setState('filter', 'done')`
   alone narrows a list `data()` filters. A key `data()` never read still only
-  re-renders. A leftover `setState()` + `refresh()` pair keeps working and
+  re-renders. In an async `data()`, only `getData()`/`getState()` calls made
+  before the first `await` are tracked, so read state above it. A leftover
+  `setState()` + `refresh()` pair keeps working and
   still runs `data()` once; delete the `refresh()` when convenient. Keep
   `refresh()` where `data()` derives from something the runtime cannot see (an
   instance field, a module variable, the clock) or where the caller needs the
@@ -404,7 +408,9 @@ Production sizes: hello-world **24.2 KB gzip** (23.0 in 0.9.0), todos
   param throws a `[puzzle]` error that names the route, and two routes with one
   name throw at startup in development. Static pages resolve names too: a page
   that renders a named link carries the route-name table in a small JSON
-  island.
+  island. Behavior change: a guard that returns any other object (a session
+  record, say) is read as a named target and fails the navigation, so return
+  `true` or nothing to allow.
 - **Static pages link their own CSS.** In `output: 'static'`, a view, layout
   or component script that does `import './page.css'` now gets that CSS on its
   own page only: each page links `_puzzle/<slug>.css` (`<slug>-<hash>.css`

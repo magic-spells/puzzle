@@ -37,7 +37,7 @@ serves `index.html` and the flat seed JSON next to it.
 | --- | --- |
 | Route in `location.hash`, static-host friendly | **Hash routing** — `routerMode: hashRouter()`, imported from `@magic-spells/puzzle/router-modes` (SPEC §15, D34/D159) |
 | Links are written path-shaped (`{ link('/album/' + album.id) }`) and the function emits the mode-appropriate href, so switching `routerMode` needs no template changes | **Built-in `link` function** (D79) |
-| Home / Artist / Album paint a skeleton, then swap in real data | **Skeleton loading** — `<puzzle-skeleton>` + async `data()` (SPEC §16, D39); the store itself is seeded in the app's `beforeMount` hook (SPEC §30, D60) |
+| Home / Artist / Album paint a skeleton, then swap in real data | **Skeleton loading** — `<puzzle-skeleton>` + async `data()` (SPEC §16, D39); the store itself is seeded in the app's `beforeMount` hook (SPEC §34, D66) |
 | Icon set picks its glyph by name; repeat button picks its icon by mode | **`{#case}` / `{:when}`** multi-branch (D37) |
 | Time-of-day greeting on Home (night / morning / afternoon / evening) | **`{:else if}` chaining** (D40) |
 | AlbumCard's hover play button plays without following the card link | **Event modifiers** `@click:prevent:stop` (D38) |
@@ -114,7 +114,7 @@ dependency — an app that imports none of these paths bundles none of it.
 
 ```
 app/
-├── app.js              # PuzzleApp config (hash mode, functions) + parallel seed in beforeMount (D60)
+├── app.js              # PuzzleApp config (hash mode, functions) + parallel seed in beforeMount (D66)
 ├── routes.js           # 8 top-level routes across two layouts (AppLayout vs PlayerLayout); /artist/:id nests the info overlay
 ├── storage.js          # localStorage load/save (one key: puzzle-sounds/v1)
 ├── models/

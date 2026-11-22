@@ -45,9 +45,10 @@ own `@theme` palette in `app/styles/styles.css`.
   transforms don't apply to inline boxes.
 - **PostDetail.pzl** — the auto-fetch showcase: `findOne('post', params.id)` and
   a second find on `post.authorId`, deep-linkable into an empty store with no
-  loading flag in sight; the post's comments; a comment form (one-way `value={}`
-  + manual `@input`, then `createRecord`); `<CommentItem @remove={
-  removeComment(comment) }>`; the `byline`/`date`/`pluralize` functions.
+  loading flag in sight; the post's comments; a comment form (`createForm` over
+  the `Comment` model, inputs bound to `form.values`, `form.submit` then
+  `createRecord`); `<CommentItem @remove={ removeComment(comment) }>`; the
+  `byline`/`date`/`pluralize` functions.
 - **About.pzl** — `findMany('user')`, the `capitalize` function, and a
   `{#for 1...3}` range loop.
 - **NotFound.pzl** — the view rendered by the `*` route.
@@ -109,7 +110,7 @@ Three consequences worth internalizing:
    `post.authorId` instead of leaning on `post.author` alone. Once the user is
    in the store, both spellings resolve.
 3. **Event handlers read local state only.** Reads outside a tracked `data()`
-   run never fetch. A handler that needs fresh server data uses `setState()` to
+   run never fetch. A handler that needs other server data uses `setState()` to
    write a key that `data()` reads. That re-runs `data()`, which re-enters the
    settle loop.
 

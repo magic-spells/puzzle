@@ -301,7 +301,7 @@ See [constellation/doc/DOC-TEMPLATE-SYNTAX.md](constellation/doc/DOC-TEMPLATE-SY
   <select value={ selectedOption }></select>
 </form>
 
-<!-- A one-member path writes the record itself, through validated update() -->
+<!-- A record's field writes the record itself, through validated update() -->
 <input type="checkbox" checked={ todo.completed } />
 
 <!-- Event modifiers: prevent / stop / once / passive / capture + key filters, and they stack -->

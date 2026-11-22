@@ -195,7 +195,10 @@ commit, and must be synchronous. `shared` is always an object, so
 Children change the parent only by calling a shared callback
 (`select: (id) => this.setState({ active: id })`); there is no `setShared()`.
 The nearest same-named ancestor wins, and a layout's `share()` does not reach
-its routed page. Don't name a component `Params`, `Props` or `Shared`.
+its routed page. A view whose `data()` read a changed key runs `data()` again
+before the sharer renders, so a view the change removes runs once more on the
+new values: guard the read (`byId[props.id]?.label`). Don't name a component
+`Params`, `Props` or `Shared`.
 
 Names starting with `__` belong to the compiler: don't define `__`-prefixed
 fields or methods on a component (`__c`, `__lists`, `__dirty`, `__rgen`,
@@ -595,9 +598,11 @@ Rules that bite:
   the other modifiers (`@pointerdown:outside:passive`). `passive` with
   `prevent` is a compile error: a passive listener cannot cancel.
 - On COMPONENT tags, `@save={ savePost }` is NOT a DOM event — it's a **callback
-  prop**. The child invokes it as `this.props.save(...)`. There is no `$emit`
-  and no event bubbling between components; child→parent communication is
-  callback props. Modifiers are compile errors on component callback props.
+  prop**. The child invokes it as `this.props.save(payload)`, with one argument.
+  A second argument never reaches the parent, so send one object to pass more.
+  There is no `$emit` and no event bubbling between components; child→parent
+  communication is callback props. Modifiers are compile errors on component
+  callback props.
 - `ref="name"` on a plain element in your OWN template gives `this.refs.name`
   (live node, populated before `mounted()`). `ref` is NOT allowed on component
   tags — when a parent needs a child's imperative handle (a carousel's
@@ -682,13 +687,22 @@ export default class EditPost extends PuzzleView {
 - `form.values.x` binds directly. Rules come from `Model.validate()`; an error
   shows once the field is touched (blurred, given a `name`) or after a submit
   attempt, then clears as soon as the value is fixed.
+- Bind a field itself, never a step inside it. A bind on
+  `form.values.address.city` writes into the source's own object, so `dirty`
+  stays false and `reset()` cannot undo it. Change an object field whole, in a
+  handler: `this.form.set('address', { ...this.form.values.address, city })`.
 - `submit(event, fn)` validates, focuses the first invalid control, guards a
   double submit, and awaits `fn(values)`. A thrown `PuzzleValidationError` or a
   4xx body with `errors` maps onto fields; anything else becomes `form.error`
   and reaches `onError` with `phase: 'submit'`. It resolves `true` on success.
-- `form.dirty`, `form.changed.x`, `form.valid`, `form.reset(from?)`. Reseed
-  after the record reloads with `form.reset(newRecord)`.
+- `form.dirty`, `form.changed.x`, `form.valid`, `form.reset(from?)`. A record
+  that `data()` loads is not there in `created()`: seed it in both `mounted()`
+  and `afterUpdate()` (which skips the first render) with
+  `if (post && this.form.source !== post) this.form.reset(post)`. Without the
+  `source` check, every render resets the form and wipes the draft.
 - The Field piece takes `form` + `name` and wires value, error and blur itself.
+  It writes the input's text, a string, so a number field binds a plain
+  `<input type="number" name="price" value={ form.values.price } />` instead.
 
 ## Routing
 
@@ -798,11 +812,12 @@ export default class EditPost extends PuzzleView {
   `mailto:`, `#anchor`). Hand-written `#/...` hrefs still work in hash mode,
   but `link()` hrefs are the portable spelling.
 - Link or navigate **by route name** (puzzle ≥ 0.10.0) with an object of
-  `name`, `params` and optional `query` and `hash` anywhere a path goes:
+  `name`, `params` and optional `query` and `hash`:
   `href="{ link({ name: 'todo', params: { id: t.id } }) }"`,
   `router.push({ name: 'todo', params: { id } })`, `replace()`, or a guard's
-  redirect. Names must be unique; nested and index routes resolve by full
-  path; params are URI-encoded. An unknown name or a missing param throws.
+  redirect. `router.prefetch()` takes a path only. Names must be unique;
+  nested and index routes resolve by full path; params are URI-encoded. An
+  unknown name or a missing param throws.
 
 ## Translations (puzzle ≥ 0.8.0)
 
@@ -974,7 +989,7 @@ What follows from the rule:
   handle, and a read through it, by this view, during this view's own `data()`
   run is the one thing that can fault: event handlers, model methods, timers,
   and a store captured in a module variable all get a local snapshot and never
-  issue a request. A handler that needs fresh server data writes a key
+  issue a request. A handler that needs other server data writes a key
   `data()` reads with `setState()` (or calls `this.refresh()`), which re-enters
   the loop. Calling
   `store.loadOne`/`store.loadMany` from inside
@@ -1049,6 +1064,9 @@ data() {
   returns an object with `records` and `meta` for an API that wraps rows; a plain array has no
   meta. A cursor is just another param: put `meta.nextCursor` in the next query,
   and keep the cursors walked so far in `setState` for a "load more" list.
+  The first page has no cursor, so send another param with it (`limit`, say):
+  a query whose values are all `null` or `undefined` is no query, and reads the
+  whole collection with no `meta`.
 - After a write that changes what lists show, call
   `this.ctx.store.invalidate('post')` (or `invalidate('post', id)`,
   `invalidate('post', { query })`). It never fetches: views reading that data
@@ -1107,7 +1125,9 @@ The reactivity contract — the three methods are not interchangeable:
 - **`setState(patch)`** owns persistent local UI state (open panels, drafts).
   It survives `data()` re-runs. When `data()` read the written key through
   `getData()` or `getState()`, the next render re-runs `data()` first (one run
-  per burst of writes); any other key just re-renders. `getState()` reads the
+  per burst of writes); any other key just re-renders. In an async `data()`,
+  only `getData()`/`getState()` calls made before the first `await` are
+  tracked, so read state above it. `getState()` reads the
   state layer alone; `getData()` reads the merged model the template sees.
   There is no `setData()` (removed in 0.10.0).
 - **`refresh()`** re-runs `data()` on purpose. Do not put it after a
@@ -1176,6 +1196,9 @@ await app.router.push('/todos/1');
   Returns a handle: `instance`, `container`,
   `element`, `ctx`, `store`, `router`, `find(sel)`, `findAll(sel)`,
   `click(target)`, `type(target, text)`, `setProps(props)`, `destroy()`.
+  Without a `router` option the view gets a router with no routes, so a
+  navigation goes nowhere: test navigation with `createTestApp`, or pass a
+  `router`.
 - `createTestApp(config)` boots a REAL `PuzzleApp` — `target` and memory
   routing are forced (`routerInitialPath` seeds it), everything else passes
   through (`i18n: { locale, strings }` too). Handle: `app`, `store`, `router`, `ctx`,
@@ -1420,7 +1443,10 @@ piece imports the registry package (only the optional theme CSS and the
 piece + its transitive piece/lib dependencies verbatim, records hashes in
 `pieces.lock`; refuses to overwrite any existing file unless `--force` (`-f`);
 never runs npm or edits styles.css: required npm packages and the theme
-merge are printed as next steps). When the app has no theme yet it writes
+merge are printed as next steps). A piece that needs its web component's
+stylesheet says so in a `STYLESHEET` comment in the copied file, and the CLI
+does not print that line: add its `@import … layer(components);` once.
+When the app has no theme yet it writes
 `app/styles/pieces.css` and prints the `@import` line. When the app's
 `pieces.css` differs from the registry's, it prints a hint: run
 `puzzle add theme default` for an unmodified older copy (0.8 pieces use
