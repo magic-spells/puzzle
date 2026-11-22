@@ -676,6 +676,18 @@ func TestJSHandlerArgumentsAndNameAreChecked(t *testing.T) {
 	if got := err.Error(); !strings.HasPrefix(got, "app/views/Home.pzl:2:20: Property 'plya' does not exist on type") {
 		t.Fatalf("handler name diagnostic mismatch: %s", got)
 	}
+
+	// With no events field the base class's optional events must not let a
+	// handler name through when strict is off: the click would throw.
+	undeclared := liveTSCApp(t)
+	writeLiveView(t, undeclared, strings.Replace(handlerArityComponent("", "event"), "events = {", "actions = {", 1))
+	_, err = Run(undeclared)
+	if err == nil {
+		t.Fatal("expected a handler on a JavaScript component with no events field to be reported")
+	}
+	if got := err.Error(); !strings.HasPrefix(got, "app/views/Home.pzl:2:20: Property 'play' does not exist on type 'never'.") {
+		t.Fatalf("undeclared handler diagnostic mismatch: %s", got)
+	}
 }
 
 func TestImportMetaEnvCheck(t *testing.T) {

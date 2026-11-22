@@ -44,20 +44,25 @@ func Compile(filename string, src []byte, mode codegen.EmissionMode, assetsDir s
 	if err != nil {
 		return nil, err
 	}
-	code := res.JS
+	code := codegen.AlignScript(sec, res.JS)
 	// typescript scripts (v1.22, D54): with no bundler to strip the types, run
-	// esbuild's transform api here so the result is plain runnable esm.
+	// esbuild's transform api here so the result is plain runnable esm. it
+	// reprints the module, so an inline source map takes it back to the .pzl
+	// lines. the module stands in for the .pzl beside it, so the map names that
+	// file by its base name and leaves its content to the copy on disk.
 	if sec.ScriptsLang == "ts" {
 		tr := api.Transform(code, api.TransformOptions{
-			Loader:     api.LoaderTS,
-			Format:     api.FormatESModule,
-			Sourcefile: filename,
+			Loader:         api.LoaderTS,
+			Format:         api.FormatESModule,
+			Sourcefile:     filepath.Base(filename),
+			Sourcemap:      api.SourceMapInline,
+			SourcesContent: api.SourcesContentExclude,
 		})
 		if len(tr.Errors) > 0 {
 			msgs := make([]string, 0, len(tr.Errors))
 			for _, m := range tr.Errors {
 				if m.Location != nil {
-					msgs = append(msgs, fmt.Sprintf("%s:%d:%d: %s", m.Location.File, m.Location.Line, m.Location.Column, m.Text))
+					msgs = append(msgs, fmt.Sprintf("%s:%d:%d: %s", filename, m.Location.Line, m.Location.Column, m.Text))
 				} else {
 					msgs = append(msgs, m.Text)
 				}

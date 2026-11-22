@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/magic-spells/puzzle/compiler/internal/codegen"
+	"github.com/magic-spells/puzzle/compiler/internal/generate"
 	"github.com/magic-spells/puzzle/compiler/internal/standalone"
 	"github.com/spf13/cobra"
 )
@@ -25,9 +26,10 @@ var compileCmd = &cobra.Command{
 The emission mode follows the build's directory rule: files under app/views/
 and app/layouts/ compile as views, everything else as a component. {#svg}
 assets resolve from the nearest app/assets/ directory and are inlined. A
-lang="ts" script has its types stripped. <style> blocks are not part of the
-module. Errors print as file:line:col: message on stderr and exit 1; warnings
-print to stderr and the module is still printed.`,
+lang="ts" script has its types stripped, and an inline source map takes the
+module back to its .pzl lines. <style> blocks are not part of the module.
+Errors print as file:line:col: message on stderr and exit 1; warnings print
+to stderr and the module is still printed.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		js, err := compileOne(args[0], os.Stderr)
@@ -46,10 +48,17 @@ func compileOne(path string, warn *os.File) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// the build's d20 directory rule picks view or component mode. it matches
-	// "/app/views/" anywhere in the path, so an absolute path works too.
-	mode := codegen.ModeForPath(filepath.ToSlash(path))
-	res, err := standalone.Compile(path, src, mode, standalone.AssetsDirFor(path))
+	// compile under the build's name for the file, its path from the project
+	// root: that name picks the d20 view or component mode and keys the
+	// <style scoped> id (d59), so both match the build on every machine.
+	abs, _ := filepath.Abs(path)
+	root, err := generate.FindProjectRoot(filepath.Dir(abs))
+	if err != nil {
+		return "", err
+	}
+	rel, _ := filepath.Rel(root, abs)
+	name := filepath.ToSlash(rel)
+	res, err := standalone.Compile(name, src, codegen.ModeForPath(name), standalone.AssetsDirFor(path))
 	if err != nil {
 		return "", err
 	}

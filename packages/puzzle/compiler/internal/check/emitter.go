@@ -89,14 +89,15 @@ __LIBRARY_SIGNATURES__
   // this type, which lets every handler take any arguments and closes the set
   // of handler NAMES to the keys of its events field: TypeScript reads a JS
   // object literal as open, so a misspelled handler was never reported until
-  // this type made it one. A handler attached at runtime rather than declared
-  // in events (this.events.play = … in the constructor or created()) is
-  // reported too. The argument expressions are still checked where they are
-  // written. A TypeScript component is never wrapped, so its handler calls
-  // stay fully checked.
+  // this type made it one. A component with no events field has no handlers
+  // at all (the base's optional events would pass any name), and a handler
+  // attached at runtime rather than declared in events (this.events.play = …
+  // in the constructor or created()) is reported too. The argument expressions
+  // are still checked where they are written. A TypeScript component is never
+  // wrapped, so its handler calls stay fully checked.
   type __PuzzleCheckJSView<V> = V extends { events: infer E }
     ? Omit<V, 'events'> & { events: { [K in keyof E]: (...args: any[]) => any } }
-    : V;
+    : V & { events: never };
 }
 
 export {};

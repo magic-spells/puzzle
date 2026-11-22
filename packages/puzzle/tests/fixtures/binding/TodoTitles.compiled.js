@@ -1,4 +1,8 @@
 
+
+
+
+        
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // A sibling view subscribed to the same records RecordForm binds: its data()

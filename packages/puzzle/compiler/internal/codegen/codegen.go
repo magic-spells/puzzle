@@ -188,6 +188,17 @@ func Compile(sec *parser.Sections, opts Options) (*Result, error) {
 	return &Result{JS: js, InlinedFiles: uniqueSorted(inlined), Warnings: warnings}, err
 }
 
+// AlignScript pads js, the module Compile emitted for sec, so its <script>
+// (kept first and verbatim) sits at its .pzl line and column: native JS/TS
+// diagnostics and stack traces then name the .pzl position. Both the bundled
+// build and the standalone compile run it.
+func AlignScript(sec *parser.Sections, js string) string {
+	if sec.Scripts == "" {
+		return js
+	}
+	return strings.Repeat("\n", sec.ScriptsPos.Line-1) + strings.Repeat(" ", sec.ScriptsPos.Col-1) + js
+}
+
 // compile is Compile's body; it appends every {#svg} file path to *inlined (even
 // on failure), collects out-of-band diagnostics into *warnings, and returns the
 // generated JS (empty on error).

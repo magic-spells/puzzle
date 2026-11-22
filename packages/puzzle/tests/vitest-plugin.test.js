@@ -85,6 +85,15 @@ describe('puzzle() vitest plugin', () => {
 		expect(out.map).toBeNull();
 	});
 
+	it('hands a ts module\'s inline source map to vite as its map', async () => {
+		const map = Buffer.from('{"version":3}').toString('base64');
+		const bin = fakeBin(
+			`process.stdout.write('export default 1;\\n//# sourceMappingURL=data:application/json;base64,${map}\\n');`
+		);
+		const out = await puzzle({ bin }).transform.call({}, '', '/app/x.pzl');
+		expect(out).toEqual({ code: 'export default 1;', map: '{"version":3}' });
+	});
+
 	it('takes the executable from PUZZLE_BIN when no bin option is given', async () => {
 		process.env.PUZZLE_BIN = fakeBin(
 			"process.stdout.write('export default 2;');"

@@ -42,11 +42,14 @@ export interface PuzzleVitePlugin {
 		defineCacheKeyGenerator?: PuzzleCacheKeyHook;
 		experimental_defineCacheKeyGenerator?: PuzzleCacheKeyHook;
 	}): void;
-	/** Compiles a `.pzl` module through `puzzle compile`; other ids pass through. */
+	/**
+	 * Compiles a `.pzl` module through `puzzle compile`; other ids pass through.
+	 * `map` is the source map of a `lang="ts"` script back to the `.pzl` lines.
+	 */
 	transform(
 		code: string,
 		id: string
-	): Promise<{ code: string; map: null } | null>;
+	): Promise<{ code: string; map: string | null } | null>;
 }
 
 /**

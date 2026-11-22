@@ -21,6 +21,7 @@
  *     test: { environment: 'jsdom' },
  *   });
  */
+import { Buffer } from 'node:buffer';
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -161,7 +162,15 @@ export function puzzle(options = {}) {
 			const { code, warnings } = await compile(file);
 			// codegen warnings are advisory; surface them without failing the test
 			if (warnings) this.warn?.(warnings);
-			return { code, map: /** @type {null} */ (null) };
+			// a lang="ts" module ends in an inline source map back to the .pzl
+			// lines. vite drops inline maps, so hand it over as the module's map
+			const [js, map] = code.split(
+				'\n//# sourceMappingURL=data:application/json;base64,'
+			);
+			return {
+				code: js,
+				map: map ? Buffer.from(map, 'base64').toString() : null,
+			};
 		},
 	};
 }
