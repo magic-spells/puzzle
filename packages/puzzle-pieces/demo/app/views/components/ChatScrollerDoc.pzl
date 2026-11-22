@@ -107,8 +107,8 @@ const usageMarkup = `<ChatScroller height={ 360 } @pin={ setPinned }></ChatScrol
 
 const codeHero = `// The scroller owns scrolling; the parent owns the messages. Appending
 // while pinned auto-follows; scroll up and the "Jump to latest" pill appears.
-data() {
-  return { log: seededMessages() /* ~15 rows */ };
+created() {
+  this.setState({ log: seededMessages() /* ~15 rows */ });
 }
 events = {
   addMessage: () => {
