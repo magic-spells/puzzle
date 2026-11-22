@@ -45,7 +45,7 @@ npm install -D @magic-spells/puzzle
 > [CHANGELOG.md](CHANGELOG.md#upgrading-across-versions) before upgrading.
 >
 > **[constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) is the canonical, frozen v1
-> contract** — it indexes the numbered sections (§1–§67) across six domain
+> contract** — it indexes the numbered sections (§1–§69) across six domain
 > cards, and they are the source of truth for exactly what ships; if anything
 > here conflicts with it, the spec wins.
 
@@ -55,6 +55,7 @@ npm install -D @magic-spells/puzzle
 - **Snippets** — `<Snippet fits="row" user>…</Snippet>` hands a component a template it can stamp repeatedly with its own data; parameters are declared as bare attributes, and a snippet forwards through a wrapper's `<Children/>`
 - **Component families** — related components import as one unit and invoke with dot notation (`<Frame.Wrapper>`), scaffolded by `puzzle generate component Frame --family Wrapper,Content`
 - **Reactive data** with automatic view updates
+- **Values for nested views without prop drilling** — a view's `share()` hands values and callbacks to every view its template mounts, at any depth; a nested view reads them in `data({ shared })` under the sharer's class name in camelCase (`Tabs` → `shared.tabs`)
 - **Two-way form binding with no directive** — `value={ draft }` and `checked={ todo.completed }` read *and* write; the compiler synthesizes the handler, so there is no `bind:` prefix and no mirror handler to maintain
 - **Forms without the bookkeeping** — `createForm(this, Post, { from: post })` from the opt-in `@magic-spells/puzzle/forms` subpath gives a bindable draft (`value={ form.values.title }`), errors from the model's rules shown once a field is touched, `dirty`/`changed`, a double-submit guard, server field errors mapped back onto fields, and `reset()`
 - **Model/store architecture** with adapters, relationships, schema validation, persistence, and read/write server sync — opt-in via the `@magic-spells/puzzle/adapter` subpath (local-only apps ship none of it)
@@ -64,11 +65,11 @@ npm install -D @magic-spells/puzzle
 - **Translations** — `{ t('cart.title') }` with one `app/locales/<tag>.json` per language: nested files, CLDR plurals through `Intl.PluralRules`, missing keys filled from the default at build time, and only the active locale's hashed file downloaded; `this.ctx.i18n.setLocale('es')` switches in place. Apps without `i18n` configured ship none of it
 - **Multilingual static sites** — `i18n.routing: 'prefix'` gives every non-default language its own URLs (`/es/about`) and its own prerendered pages, with `hreflang` alternates, a `sitemap.xml` once `site` is set, a first-visit language redirect, `<html dir>` for right-to-left locales and translated page titles
 - **Raw template blocks** — `{#raw}…{/raw}` turns off template-expression parsing so JSON, JavaScript, CSS, and syntax examples with literal braces compile as-is (HTML inside still renders normally)
-- **Nested routing** with view slots — path routing by default, hash/memory via `hashRouter()`/`memoryRouter()` from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` function
+- **Nested routing** with `<Outlet/>`, where a layout or view receives its child route — path routing by default, hash/memory via `hashRouter()`/`memoryRouter()` from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` function; named routes, so `link({ name: 'post', params: { slug } })` and `router.push({ name, params })` keep working when a path moves
 - **Prerendered `:param` routes** — `staticPaths` lists a route's pages at build time (`/blog/:slug` becomes one page per post, per language), as an array, a function, or a model name
 - **Runtime component selection** — `<Component is={ cards[embed.type] }>` picks one of the constructors the file imports; no registry, no runtime module lookup
 - **Hooks for tests and tools** — `router.push()` resolves a `NavigationResult` instead of rejecting, `router.views` lists every page (with an optional `agent` description per route), `store.observe()` watches records from outside a view, and `await app.idle()` waits for the app to go quiet
-- **On-demand route views** — `view: lazy(() => import('./views/Admin.pzl'))` in the route table downloads a view or layout the first time a navigation needs it, guards first
+- **On-demand route views** — `view: lazy(() => import('./views/Admin.pzl'))` in the route table downloads a view or layout on demand, guards first. A link to an unguarded lazy route starts the download when the pointer rests on it, a finger touches it or keyboard focus reaches it; `data-prefetch="off"` on a link or `prefetch: false` in the app config turns that off
 - **Virtual DOM** with efficient diffing, pk-aware list keying, and `{#for}` rows and static markup cached between renders
 - **Built-in view & component animations** (Web Animations API), including visibility-triggered enters and app lifecycle hooks
 - **Route transitions**: sequential by default; overlapping cross-fades and shared-element morphs *(experimental — see below)*
@@ -139,7 +140,8 @@ npm run dev
 Every component is `<script lang="ts">` with typed `data()`, props, events and
 lifecycle hooks. A component names its props interface on the base class —
 `class TodoItem extends PuzzleView<TodoItemProps>` — so `this.props` is typed
-with no cast and a `data()` override's `props` parameter must fit it; plain
+with no cast and the `props` a `data()` override receives
+(`data({ props }: DataInput<TodoItemProps>)`) must fit it; plain
 `extends PuzzleView` leaves props `any`. The modules are `.ts` — the build
 entry `app/app.ts`, `routes.ts`, the todos template's models — and `package.json` adds
 `typescript` plus a `check` script. The build starts from `app/app.ts` when it
@@ -176,7 +178,9 @@ my-puzzle-app/
 │   ├── assets/               # Source assets, including {#svg} files
 │   ├── styles/               # Tailwind entry + global CSS
 │   └── public/               # Static assets + index.html
+├── tests/                    # Vitest tests (npm test)
 ├── puzzle.config.js          # Compiler, styles, and output config
+├── vitest.config.js          # puzzle() compiles .pzl imports in tests; jsdom for the DOM
 └── package.json
 ```
 
@@ -306,7 +310,7 @@ See [constellation/doc/DOC-TEMPLATE-SYNTAX.md](constellation/doc/DOC-TEMPLATE-SY
 <div @wheel:passive={ onScroll }>…</div>
 ```
 
-**Two-way binding** (D147): `value=` and `checked=` on a plain `<input>`, `<textarea>`, or `<select>` bind in both directions when the expression is a bare identifier or a one-member path — the compiler synthesizes the write-back handler. A bare identifier writes local state; a path writes the record through validated `update()`. Opt out with your own `@input`/`@change`, a non-path expression (`value={ x ?? '' }`), or a static `readonly`. Handlers on other events (`@blur`, `@keydown:enter`) coexist with the bind.
+**Two-way binding** (D147): `value=` and `checked=` on a plain `<input>`, `<textarea>`, or `<select>` bind in both directions when the expression is a bare identifier or a path of plain `.name` steps (`todo.completed`, `form.values.title`) — the compiler synthesizes the write-back handler. A bare identifier writes local state. A path writes its last field on the object the rest of the path names: a store record through validated `update()`, a plain object in place. Opt out with your own `@input`/`@change`, a non-path expression (`value={ x ?? '' }`), or a static `readonly`. Handlers on other events (`@blur`, `@keydown:enter`) coexist with the bind.
 
 **Event modifiers** (`prevent`, `stop`, `once`, and key filters like `:enter`/`:escape`) stack; the canonical order is key-gate → once-spend → preventDefault → stopPropagation → handler. `passive` and `capture` set the native listener options (D187); `passive` with `prevent` is a compile error.
 
@@ -643,7 +647,7 @@ puzzle add piece <name>
 ```
 
 Pieces are fetched from the `@magic-spells/puzzle-pieces` npm package,
-version-matched to your CLI — puzzle 0.8.x pulls the newest pieces 0.8.x — so a
+version-matched to your CLI — puzzle 0.10.x pulls the newest pieces 0.10.x — so a
 piece is always authored for the compiler installing it. `--pieces-version`
 pins an exact release; `--registry` accepts `npm:pkg[@version]`, a local
 directory, or an http(s) URL.
@@ -671,7 +675,7 @@ Install instructions are in each repository's README.
 - **[User Guide](constellation/doc/DOC-USER-GUIDE.md)** - Complete guide to building Puzzle applications
 - **[Component Reference](constellation/doc/DOC-PUZZLE-FILE.md)** - Complete .pzl component documentation
 - **[Data Layer](constellation/doc/DOC-DATASTORE.md)** - Models, adapters, and store management
-- **[Build Process](constellation/doc/DOC-COMPILATION-FLOW.md)** - Compiler and build system details
+- **[Build Process](constellation/doc/DOC-COMPILER-DESIGN.md)** - Compiler and build system details
 - **[Deploying](deploy/README.md)** - Host configs for Vercel, Netlify, Cloudflare Pages, nginx and Apache (`puzzle add deploy <host>`)
 
 ### AI project memory
@@ -865,6 +869,15 @@ function called with the wrong number of arguments or an argument of a known typ
 that does not fit — not a misspelled data field such as `{ user.nmae }`. A plain-JavaScript component
 gets its template expressions checked and its script body left alone.
 
+Before it type-checks, `puzzle check` looks for spellings Puzzle has renamed:
+`this.setData(` (now `setState(`), `data(params, props)` (now
+`data({ params, props })`), an unnamed `<Slot/>` (now `<Outlet/>` in a
+layout or view, `<Children/>` in a component), and the `formatters` config key
+and `app/formatters.js` (now `functions` and `app/functions.js`). It lists each
+one and stops with an error. `puzzle check --fix` rewrites them in `app/` and
+`tests/`, then type-checks. A site it cannot rewrite safely is listed for you
+to finish by hand.
+
 The full CLI surface (see [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §13): `init`, `generate`, `add`, `check`, `doctor`, and `info` join `dev` and `build`.
 
 ```bash
@@ -876,7 +889,7 @@ puzzle init ../apps/my-app -y
 
 # Generate a stub (component, view, layout, or model) — TypeScript stubs in an
 # app with a tsconfig.json
-puzzle generate component UserCard --path components/ui/
+puzzle generate component UserCard --path app/components/ui/
 
 # Wire up Tailwind, install a piece or a palette (see Puzzle Pieces above), or run diagnostics
 puzzle add tailwind
@@ -908,7 +921,7 @@ and `init --dir` still work as hidden compatibility aliases (no notice in
 | `dev [dir]` | `-p, --port <n>` (3000), `--strict-port`, `--host [ip]` / `--host=<addr>`, `-o, --open`, `--fixtures`, `--profile-build` |
 | `build [dir]` | `-m, --mode <production\|development>`, `--static`, `--hybrid`, `--fixtures`, `-q, --quiet`, `--profile-build` |
 | `preview [dir]` | `-p, --port <n>` (4000), `--strict-port`, `--host [ip]` / `--host=<addr>` |
-| `check [dir]` | (none) |
+| `check [dir]` | `--fix` |
 | `generate <type> <Name>` (alias `g`) | `--path <dir>`, `--family <A,B>`, `-f, --force`, `--dir <app-root>` |
 | `add <integration\|piece\|theme\|deploy\|skills> [name…]` | `-f, --force`, `-y, --yes`, `--dir <app-root>`, `--registry <source>`, `--pieces-version <v>`, `--skill-root <dir>`, `--static`, `--hybrid` (deploy) |
 | `upgrade` | `--check`, `-y, --yes` |

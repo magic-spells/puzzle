@@ -31,9 +31,10 @@ puzzle build   # production build to dist/
 ```
 
 `puzzle init my-app --template todos` starts from a todo app with a model and
-the store instead. Prebuilt binaries ship for macOS and Linux (arm64, x64) and
-Windows x64. Puzzle is pre-1.0, so a 0.x minor can carry breaking changes; read
-the [CHANGELOG](packages/puzzle/CHANGELOG.md) before you upgrade.
+the store instead. Puzzle needs Node 24 or later. Prebuilt binaries ship for
+macOS and Linux (arm64, x64) and Windows x64. Puzzle is pre-1.0, so a 0.x minor
+can carry breaking changes; read the [CHANGELOG](packages/puzzle/CHANGELOG.md)
+before you upgrade.
 
 ## App structure
 
@@ -150,7 +151,7 @@ import Default from './layouts/Default.pzl';
 export default [
   { path: '/', name: 'home', view: Home, layout: Default, meta: { title: 'Home' } },
   { path: '/album/:id', name: 'album', view: Album, layout: Default },
-  // Downloaded the first time a navigation needs it.
+  // Downloaded on demand; a link to it starts the download on hover, touch or focus.
   { path: '/settings', name: 'settings', view: lazy(() => import('./views/Settings.pzl')), layout: Default },
   { path: '*', name: 'not-found', view: NotFound, layout: Default },
 ];

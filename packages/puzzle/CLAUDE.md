@@ -82,7 +82,7 @@ enforced, not merely advised.
   — check `npm view @magic-spells/puzzle versions` before trusting this
   paragraph.
   `0.2.0` adds path-shaped links via
-  `router.url()` + the `link` formatter (D79/v1.46) and the true static-pages
+  `router.url()` + the `link` function (D79/v1.46) and the true static-pages
   output mode (`output: 'static'` / `--static`, D81/v1.47); the D67
   prerendered-SPA mode is renamed `output: 'hybrid'` / `--hybrid` — the config
   rename is why this is 0.2.0, not 0.1.3. Also in 0.2.0: compiler a11y
@@ -226,12 +226,12 @@ enforced, not merely advised.
   each `vX.Y.Z`); D173 core semantics (`?.` member guarding on every step,
   loop domain, slot-filled rule, value printing, script-less components); D174
   the function library (19 standard functions plus PuzzleKit's `link` and
-  `timeago`; formatters that duplicated JS methods, the list formatters and
+  `timeago`; functions that duplicated JS methods, the list functions and
   `noescape` removed; sanitized `raw`; apps register under the `functions`
   config key since 0.10); D175 translations (`t`, `ctx.i18n`); D176 the
   expression language — a closed JavaScript-shaped grammar parsed once in
   `packages/puzzle-lang/expr`, functions instead of `|` pipes (the `|` steer
-  names each removed formatter's replacement), `.length` not `.size`, no
+  names each removed function's replacement), `.length` not `.size`, no
   `this`; D168 rewritten as the merged whitespace rule. Also in: any
   JavaScript identifier as a component class or tag name, TypeScript apps
   end to end (`init --typescript`, `app/app.ts`, typed `puzzle generate`
@@ -328,8 +328,9 @@ enforced, not merely advised.
   `FRAMEWORK_VERSION` literal in `client-runtime/devtools.js` (it ships in the
   runtime), and the sibling-package train: pieces (package.json,
   demo/package.json, the demo header badge in
-  `demo/app/layouts/Default.pzl`) and devtools (package.json,
-  panel/package.json, extension/manifest.json). The repo manifest must **not** declare
+  `demo/app/layouts/Default.pzl`), the ESLint and Prettier plugins
+  (package.json each) and devtools (package.json, panel/package.json,
+  extension/manifest.json). The repo manifest must **not** declare
   `optionalDependencies` — the platform pins are injected at pack time by
   `scripts/inject-platform-pins.mjs` (`prepack` injects, `postpack` restores),
   and `npm run verify:pack` fails if the repo manifest carries them. Then run
@@ -429,13 +430,16 @@ lockfile, or `npm ci` hard-fails). The three editor grammars
 (puzzle-vscode/sublime/zed) stay in separate repos and are **not part of the
 npm release train**: each is **dev-install only** — cloned and linked into the
 editor by hand, never published to a marketplace — and each is **versioned
-independently** of the framework (all three are stamped `0.4.0`, the 0.8.0
-grammar, on their own `release/0.4.0` branches; each is tagged `v0.3.0`, the
-0.7.0 grammar). Because they carry their own copy of the template grammar,
-sweep all three whenever the grammar changes, as a PR into a new
-`release/x.y.z` in each repo; the 0.7.0 sweep added dotted tags, `<Snippet>`,
-and the `\{` / `\}` brace escape in text and attribute values, and the 0.8.0
-sweep added the expression language. The absorbed puzzle-pieces and
+independently** of the framework (all three are stamped `0.5.0` on their own
+`release/0.5.0` branches, which carry the 0.9.0 grammar plus the 0.10.0 sweep;
+puzzle-vscode and puzzle-sublime are tagged `v0.5.0`, the 0.9.0 grammar).
+Because they carry their own copy of the template grammar, sweep all three
+whenever the grammar changes, as a PR into a new `release/x.y.z` in each repo;
+the 0.7.0 sweep added dotted tags, `<Snippet>`, and the `\{` / `\}` brace
+escape in text and attribute values, the 0.8.0 sweep added the expression
+language, and the 0.10.0 sweep (PR #8 in each repo, merged into
+`release/0.5.0`) added the `<Outlet>` marker and, in puzzle-vscode, the
+`data({ … })`, `share()` and `setState()` snippets. The absorbed puzzle-pieces and
 puzzle-devtools repos are archived on GitHub, never deleted.
 
 ## Architecture at a glance

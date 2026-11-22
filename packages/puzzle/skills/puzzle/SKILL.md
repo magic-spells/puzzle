@@ -17,8 +17,9 @@ a Go + esbuild toolchain, with an optional static-prerender (SSG) mode. Puzzle i
 NEW — assume you have no training data about it; this skill is the source of
 truth, and Puzzle is not React/Vue/Svelte (no hooks, no `$emit`, no SFC
 `<template>` conventions). When you need more than this file covers, learn from
-the working example apps in `examples/` at https://github.com/magic-spells/puzzle
-(`examples/todos` is the canonical app).
+the working example apps in `packages/puzzle/examples/` at
+https://github.com/magic-spells/puzzle (`packages/puzzle/examples/todos` is the
+canonical app).
 
 ## App skeleton
 
@@ -48,7 +49,8 @@ modules with an `app/app.ts` entry, a strict tsconfig and an
 `npm run check` script), `generate` (TypeScript stubs — `<script lang="ts">`,
 `app/models/<name>.ts`, an `index.ts` family barrel — when the project root
 has a `tsconfig.json`),
-`add` (tailwind integration, `piece <name…>`, `theme <name…>`, `skills`),
+`add` (tailwind integration, `piece <name…>`, `theme <name…>`, `deploy <host>`,
+`skills`),
 `upgrade`, `doctor`, `info`.
 
 - `dev` and `build` both take `--fixtures` (see Fixtures below).
@@ -105,9 +107,10 @@ Linked source maps are **opt-in** in production (`build: { sourceMap: true }`);
 dev always emits them. Note that a JSON `null` means "unset" for these keys, not
 `false`.
 
-**Code splitting.** By default the SPA build emits ONE `dist/app.js` and a
-dynamic `import()` is inlined into it — a heavy on-demand dependency (mermaid, a
-chart library, an editor) is paid for on every page load. Set
+**Code splitting.** By default the SPA build emits ONE app bundle
+(`dist/app-<hash>.js` in production) and a dynamic `import()` is inlined into
+it — a heavy on-demand dependency (mermaid, a chart library, an editor) is paid
+for on every page load. Set
 `build: { splitting: true }` and each dynamic `import()` becomes a lazy chunk
 under `dist/chunks/`, fetched by the browser only when that code path runs.
 The build adds `modulepreload` links to the shell for the entry's transitive
@@ -129,8 +132,8 @@ no chunk-loader runtime, so it adds no runtime bytes. Notes:
 - **`chunks/` becomes a reserved output name** while the flag is on: a
   root-level `public/chunks` asset fails the build (as `app.js` already does).
 - `output: 'static'` always splits its own per-page bundles and ships no app
-  entry. Its hashing default still follows the configured `build.splitting`.
-  `hybrid` splits like the SPA.
+  entry. Its page modules and stylesheet are hashed in production too;
+  `hashNames: false` keeps the fixed names. `hybrid` splits like the SPA.
 - The build's size banner prints a **largest-dependencies** breakdown from
   esbuild's metafile and, in production, flags any single dependency over
   200 KB — the signal to move it behind a dynamic `import()`. Your own code and
@@ -674,8 +677,8 @@ export default class EditPost extends PuzzleView {
 
 - `createForm(view, Model, { from, fields, key, serverErrors })` writes the
   controller to view state under `key` (default `'form'`). Name the import
-  `createForm`; never import it as `form`, or the template's `form` reads the
-  import (undefined in templates) instead of the state key.
+  `createForm`; an import named `form` makes the build warn about the
+  template's `form` reads.
 - `form.values.x` binds directly. Rules come from `Model.validate()`; an error
   shows once the field is touched (blurred, given a `name`) or after a submit
   attempt, then clears as soon as the value is fixed.
@@ -722,6 +725,15 @@ export default class EditPost extends PuzzleView {
   order). Route views/layouts may be statically imported or wrapped in
   `lazy(() => import('./View.pzl'))`; guards run before a lazy module downloads,
   and `build.splitting: true` lets the dynamic import become its own chunk.
+- **Links prefetch lazy routes** (puzzle ≥ 0.10.0). A link to a `lazy()` route
+  loads that route's code when the pointer rests on it, a touch lands on it or
+  it takes focus. Only code loads: no guard and no `data()` runs. A route
+  behind a guard is skipped. Per link: a bare `data-prefetch` loads a guarded
+  route too, `data-prefetch="visible"` also loads when the link scrolls into
+  view, and `data-prefetch="off"` never loads. `prefetch: false` in the app
+  config turns the default off. `await router.prefetch(path)` loads a route's
+  code from a script and resolves `true` when it is ready. Links do not
+  prefetch under Save-Data or on a 2g connection.
 - **Head metadata lives on `meta`** (puzzle ≥ 0.2.0): `title`, `description`,
   `canonical`, `socialImage` — static strings, each inherited leaf→root
   independently (`null` suppresses an inherited value). Define root-route
@@ -742,8 +754,10 @@ export default class EditPost extends PuzzleView {
   a transient `tabindex="-1"` that also suppresses `outline`/`box-shadow` for
   its lifetime — no focus ring around the view) and announces the committed
   title in a
-  framework-owned visually-hidden `aria-live` region. You get accessible SPA
-  navigation for free — don't hand-roll it. `focusBehavior` mirrors
+  framework-owned visually-hidden `aria-live` region. A view can choose its own
+  focus: focus that `mounted()` put inside the view stays there, and an
+  `autofocus` element in the view is focused instead of the root. You get
+  accessible SPA navigation for free — don't hand-roll it. `focusBehavior` mirrors
   `scrollBehavior`: omit for the default, `false` to disable entirely
   (announcement included), or a function to take over. Memory mode and
   navigation #0 are no-ops; static output has no router, so it gets neither.
@@ -829,9 +843,15 @@ many other`) is a plural entry and must have `other`.
 - With `i18n` configured, `date`/`time`/`datetime`, `number_with_delimiter`,
   `compact_number`, the `pluralize` count and `timeago` follow the ACTIVE
   locale (not the browser's); pass an explicit locale to `date(…)` to pin one.
-- Route `meta.title` stays a static string — it is not translated.
+- Translate a route's `meta.title` or `meta.description` with a reference in
+  place of the string: `meta: { title: { t: 'products.title' } }`. A plain
+  string is not translated.
 - Prerendered pages (`--hybrid`/`--static`) render in `defaultLocale` and carry
   its table inline; a viewer in another locale sees one swap after load.
+- `ctx.i18n.locales` is a list of objects, one per configured locale: `locale`
+  is the tag, `label` the language's own name, `href` the current page in that
+  locale and `active` marks the active one. Return it from `data()` to render
+  a language switcher that calls `setLocale(entry.locale)`.
 
 ## Data layer
 
@@ -889,8 +909,9 @@ export default adapter.defaults({
 Builders: `string() number() boolean() date() array() object()`, plus
 `belongsTo(type)` / `hasMany(type)` relationships (lazy getters backed by the
 store). Chainable modifiers: `.primary() .required() .default() .min() .max()
-.oneOf([...]) .validate(fn)`. **Always use the function form of `.default()` for
-arrays/objects** (`.default(() => [])`) so records don't share one instance.
+.oneOf([...]) .validate(fn)`. A literal array or object default
+(`.default([])`) is cloned for each record. Use the function form for a value
+computed per record (`.default(() => new Date())`).
 Register model classes in the app's `models` config. In TypeScript, type the
 fields with a fields interface (`type TodoRecord = Todo & TodoFields`, as
 `puzzle init --typescript` scaffolds) or `declare text: string`, never
@@ -1035,8 +1056,9 @@ data() {
   land. Don't call `loadMany` to refresh a list.
 - Show a save without your own flags: `store.syncStatus(record)` in `data()`
   returns `pending` (`'save'`, `'delete'` or `null`) and `error`, and re-runs the view
-  as it changes. The promise from `save()`/`delete()` also carries `pending` and
-  `error`.
+  as it changes. The promise from `save()`/`delete()` carries its own
+  `pending` (`true` until it settles) and `error`. Those two do not re-run a
+  view, so read `syncStatus()` in `data()`.
 - No TTL, no refetch on focus: data stays until you invalidate it.
 
 Using global `fetch` instead of the supplied parameter is legal and literal:
@@ -1257,7 +1279,7 @@ Rules that bite:
 - The initial page load never morphs (deep links render plainly), and
   `prefers-reduced-motion` disables morphing entirely — both by design.
 
-Working example: `examples/kanban-morph` in the framework repo.
+Working example: `packages/puzzle/examples/kanban-morph` in the framework repo.
 
 ## Prerendered output — THE RULES (bugs happen when these are missed)
 
@@ -1303,31 +1325,44 @@ for the app's output mode; don't hand-write a `/* /index.html 200` rule
    (CMS fetches etc.) are serialized into an inline JSON island per page and
    rehydrated before mount — so build-time credentials stay build-side, and
    browser-only setup must not live in `beforeMount`.
-3. **`:param` routes are SKIPPED by the prerenderer** (no `staticPaths()` hook
-   yet) — a warning is printed and no file is written. For content sites, every
-   page must be an explicit static route. Treat any "skipped" in the build
-   summary as a regression.
+3. **A `:param` route prerenders only the values its `staticPaths` lists.**
+   Declare `staticPaths` on the leaf route in `app/routes.js`. It is an array
+   of params objects (`staticPaths: [{ slug: 'hello' }, { slug: 'intro' }]`),
+   a function that returns one and runs at build time after `beforeMount`
+   (`staticPaths: async ({ store }) => (await store.loadMany('post')).map((post) => ({ slug: post.slug }))`),
+   or a model name: `staticPaths: 'post'` makes one page per `post` record and
+   reads each param from the record field of the same name. Each entry needs
+   every param in the route's full path. A `:param` route with no `staticPaths`
+   is skipped: a warning is printed and no file is written. Treat any
+   "skipped" in the build summary as a regression.
 4. **Inline `<script>` inside route markup is dead in both modes** — the mount
    over the prerendered markup discards it. Only the shell
    (`app/public/index.html`) may carry inline scripts (analytics, theme
    pre-paint). All other behavior: `mounted()` / cleanup in `destroyed()`.
 5. **Static mode has no router and emits only plain path hrefs.** Hash-style
-   `#/...` links are an SPA/hybrid concern (`routerMode: hashRouter()`) with no
-   meaning on a static site — never hand-write them in templates that build
-   statically; path-shaped `link()` hrefs render as plain paths in static
-   output and as `#/...` in a hash-mode SPA, from the same template.
+   `#/...` links belong to a hash-mode SPA (`routerMode: hashRouter()`) and
+   have no meaning on a static site — never hand-write them in templates that
+   build statically; path-shaped `link()` hrefs render as plain paths in
+   static output and as `#/...` in a hash-mode SPA, from the same template.
+   A hybrid build needs path routing: it fails when the app sets `routerMode`.
    `ctx.router` methods throw; `push()` calls
    are a bug — use plain links. App functions must be exported from
    `app/functions.js` to exist client-side (functions only in the app.js
    `functions` config trigger a build warning); models are picked up from
-   `app/models/index.js`. The `link` function is absent client-side in static
-   output — its pass-through fallback still yields correct plain-path hrefs.
+   `app/models/index.js`. `link()` works on a static page too: it returns a
+   plain path, base-prefixed under `routerBase`. A named link
+   (`link({ name })`) resolves in the browser only on a page whose prerender
+   rendered one. Markup that first shows a named link after a click should
+   link by path.
    A configured adapter (`adapter.defaults(...)`) is best exported from
    `app/adapter.js` and passed to the app from there: each static page then
    imports just that module. Configuring it inline in `app.js` still builds
    and behaves identically — the build falls back to importing the app entry
    from every page to reach the exact configured value (an advisory notes the
    page-weight cost). A bare `adapter` needs no file either way.
+   The app config's `storage`, `beforeRequest`, `onError` and `errorView` do
+   not reach a static page (`beforeRequest` still runs at build time). Use
+   `output: 'hybrid'` when a page needs one of them.
 6. `prerender: false` on a route emits an empty shell (invisible to any static
    search indexer): in hybrid it's an SPA island; in static it still gets its
    per-page module and renders fully client-side. Escape hatch for
@@ -1336,8 +1371,10 @@ for the app's output mode; don't hand-write a `/* /index.html 200` rule
    (content is baked into `#app`). Since puzzle 0.2.0 the build writes
    `<title>` PLUS og/twitter/canonical tags from the route `meta` head fields
    (see Routing) — and the build is the ONLY place those tags are ever written,
-   so prerendering is what makes them exist at all. Sitemap generation still
-   needs your own Node script.
+   so prerendering is what makes them exist at all. Set the top-level
+   `site: 'https://example.com'` (the origin only) in puzzle.config.js and the
+   build writes `dist/sitemap.xml`; a `public/sitemap.xml` of your own is kept
+   instead.
 
 ## Styling
 
@@ -1350,7 +1387,9 @@ every page links its own `_puzzle/<slug>.css` (hashed with the page module)
 holding only the CSS its graph imports, in `build` and `dev` alike, so
 page-only CSS loads only on that page. CSS imported from `app.js` reaches no
 static page (the build warns); import it from a layout. SPA/hybrid builds emit
-script-imported CSS as `app.css` for `public/index.html` to link. For puzzle-pieces apps, import the theme after
+script-imported CSS as `app.css` (`app-<hash>.css` in production). Link
+`/app.css` in `public/index.html`; the build rewrites the link to the emitted
+name. For puzzle-pieces apps, import the theme after
 `@import "tailwindcss"` — `@import "@magic-spells/puzzle-pieces/themes/default.css"`
 (or the copied `app/styles/pieces.css`) plus any palette you offer
 (`/themes/cool.css`, `/themes/warm.css`, `/themes/void.css`) — and style ONLY via
