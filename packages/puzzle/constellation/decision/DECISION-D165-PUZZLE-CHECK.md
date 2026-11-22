@@ -68,7 +68,7 @@ app/components/TodoItem.pzl:11:16: Property 'remov' does not exist on type '{ to
 **Scope of typing.**
 - Template data is untyped: the wrapper's `__d` is `any`, because a template reads `getData()` — what `data()` returns plus local state (`setState()`) — not the class's fields. A misspelled or mistyped data read (`{ user.nmae }`) is not reported, and neither is a `<Component is>` selector's data or module read, which reads like data; a typed sub-expression inside a selector (`cards[round(kind).missing]`) is still checked. `Object.values`/`entries` over data give `any` values. `this` stays typed, so handler names are checked against `events`.
 - A JS component's `this` is `__PuzzleCheckJSView<InstanceType<typeof Class>>`, which types each declared `events` handler `(...args: any[]) => any`: arity is not checked (`@click={ play(event) }` against `play: () => {}` passes), but names are — `plya(event)`, or a handler attached at runtime instead of declared in `events`, is reported. `lang="ts"` components check against their declared handlers.
-- `PuzzleView.events` is optional in `types/index.d.ts` (the base class has none), so a template handler on a view that declares no `events` reports "possibly 'undefined'" — a real runtime TypeError.
+- `PuzzleView.events` is optional in `types/index.d.ts` (the base class has none), and a template handler on a view that declares no `events` is a real runtime TypeError. A JavaScript view with no `events` field gets `events: never` from the check type, so the handler is reported as `Property 'x' does not exist on type 'never'` in every config. A `lang="ts"` view is not wrapped, so under `strict` it reports "possibly 'undefined'".
 
 ## Alternatives rejected
 

@@ -35,13 +35,14 @@ verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: state
     text: >-
-      History/scroll while a pop is still loading: the browser has already moved to the popped entry
-      and #scrollKey names it, but the window still shows the committed page. So (a) a popstate back
-      onto the committed entry (Back then Forward during a slow load) supersedes the pending pop and
-      settles as a D41 fragment pop, which restores the committed entry's saved position, and the
-      URL, tree and snapshot stay on the committed route; (b) step 3's departure capture is skipped
-      (null) and a second popstate saves nothing, so no entry is given a position from a page it
-      never showed. The committed page's position was saved when the first pop left it.
+      History/scroll while the browser sits on a popped entry (a pop still loading, or a navigation
+      that superseded one): the browser has already moved to the popped entry and #scrollKey names
+      it, but the window still shows the committed page. So (a) a popstate back onto the committed
+      entry (Back then Forward during a slow load) supersedes a pop still loading and settles as a
+      D41 fragment pop, which restores the committed entry's saved position, and the URL, tree and
+      snapshot stay on the committed route; (b) step 3's departure capture is skipped (null) and a
+      second popstate saves nothing, so no entry is given a position from a page it never showed.
+      The committed page's position was saved when the first pop left it.
 ---
 
 # Navigation pipeline
@@ -52,7 +53,7 @@ The shape is **load, then leave, then commit**: nothing the user can see moves u
 
 1. **Request.** `push()`, `replace()`, an intercepted same-origin link click, a popstate (back/forward or `go()`), or navigation zero from `router.start()`. A named target (`{ name, params, query, hash }`) resolves to its path first; an unknown name or a missing param throws before anything starts ([[DECISION-D196-NAMED-ROUTES]]).
    - the committed path, with the chain intact and nothing in flight → no-op: no history entry, no `data()`, no scroll change; resolves `ok`
-   - the committed path while something is in flight, or over an invalidated chain → a real navigation with replace semantics (an ordinary push over a path/hash-mode pop in flight)
+   - the committed path while something is in flight, or over an invalidated chain → a real navigation with replace semantics (an ordinary push while the browser sits on a popped entry: a path/hash-mode pop in flight, or a navigation that superseded one)
    - the *in-flight* navigation's path → that navigation's own promise, so a double-click settles once, at its commit
    - a request from inside the commit window is parked in one last-wins slot and re-dispatched after the window closes; a displaced entry resolves `'superseded'`
 2. **Match** the path against the flattened leaf matchers in declaration order, the top-level `*` catch-all last; a trailing slash is insignificant.

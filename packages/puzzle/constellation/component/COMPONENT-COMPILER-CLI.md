@@ -125,6 +125,7 @@ this card holds the implementation rules behind it.
 - `pzlc` (`cmd/pzlc`) is the test/tooling single-file compiler with explicit mode; not the
   app workflow.
 - The hidden `puzzle compile <file.pzl>` (`cmd/puzzle/compilecmd.go`) shares pzlc's
-  pipeline (`internal/standalone`) but picks the mode by the D20 directory rule; its one
-  caller is the `/vitest` plugin, so app tests can import `.pzl` (D194).
+  pipeline (`internal/standalone`) but compiles under the file's path from the project
+  root, the name the build uses, so the D20 mode and the `<style scoped>` id match the
+  build; its one caller is the `/vitest` plugin, so app tests can import `.pzl` (D194).
 - Flag-convention tests live in `cmd/puzzle/cli_conventions_test.go`.

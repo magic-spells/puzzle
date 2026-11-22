@@ -86,7 +86,7 @@ The `@magic-spells/puzzle/adapter` subpath (`client-runtime/datastore/adapter.js
 
 ## Gotchas
 
-- LOADED marks on a successful no-options load (`undefined`/`null` options count, `{}` does not), so tracked `findMany` stops re-requesting. EXHAUSTIVE needs the generated transport too. `loadOne`, `createRecord`, `upsert`, `save`, hydration and options-bearing loads mark neither; an empty-array REST success marks both.
+- LOADED marks on a successful no-options load (`undefined`/`null` options count, `{}` does not), so tracked `findMany` stops re-requesting. EXHAUSTIVE needs the generated transport too. A load dispatched before an `invalidate(type)` marks neither: its rows land, and the collection stays stale. `loadOne`, `createRecord`, `upsert`, `save`, hydration and options-bearing loads mark neither; an empty-array REST success marks both.
 - The `mock` key is allow-listed for [[COMPONENT-FIXTURES]], which installs this module itself before replacing `_network`.
 - `request()` resolves its URL from `endpoint`, so it requires one even when all five verbs are author functions.
 - Only the generated transports are REST-specific; validation, identity, ordering, reconciliation and notification are the same when every verb is replaced.

@@ -75,7 +75,7 @@ store.invalidate('post', { query: { page: 2 } }); // one query (exact key match)
 - **Refetch replaces a query's rows.** The new response's row list replaces the entry's old one, so a row the server dropped leaves that page. Records themselves are not deleted from the store by a refetch.
 - **Failures.** A refetch that fails rejects that view's run into the normal `errorView` path, as a first load does, and leaves the entry stale so the next run retries. A 404 on a stale record's refetch means the server no longer has it: the record is removed locally (which records it absent, D161) and the next pass reads `null`.
 - **Local edits.** A stale record's refetch is an ordinary `loadOne`, so D138's per-field merge applies: fields edited while the refetch was in flight keep their local value; unsaved edits made before it take the server's. Save before invalidating a record you are editing.
-- Concurrency: a response dispatched before an invalidation still lands its rows (it is not dropped), but the entry stays stale, because its generation is older than the mark.
+- Concurrency: a response dispatched before an invalidation still lands its rows (it is not dropped), but its generation is older than the mark, so a query entry stays stale and a whole-collection load sets neither LOADED nor EXHAUSTIVE.
 
 ### 3. Write status on `save()` and `delete()`
 

@@ -165,7 +165,7 @@ data() {
 - **A mounted view's `this.route` is the last committed navigation, fragment included.** An in-page anchor move is not a navigation (§15) and delivers no snapshot or re-render; read the live fragment from `router.current.hash` with a `hashchange`/`popstate` listener.
 - `this.route` is `null` for components the router does not manage; pass route state down as props.
 - **Failures:** a failed or superseded navigation changes neither the URL, `router.current`, nor a reused ancestor's params or snapshot; an ancestor's gated run commits only with the navigation (D146).
-- **A failed pop repairs the URL.** The browser moved the address bar before the router ran, so a pre-commit failure (guard block, no-op guard redirect, `lazy()` rejection, constructor throw, `data()` rejection) restores the committed URL with `replaceState` — no history entry added. Only the failing navigation repairs; one already superseded restores nothing. A guard redirect continues the pop under the redirect target and repairs the same way while its redirect chain still owns the location.
+- **A failed pop repairs the URL.** The browser moved the address bar before the router ran, so a pre-commit failure (guard block, no-op guard redirect, `lazy()` rejection, constructor throw, `data()` rejection) restores the committed URL with `replaceState` — no history entry added. The navigation that owns the location when it stops repairs, once: the pop, a guard redirect continuing it, or a push or replace that superseded the pop while it loaded (the browser is still on the popped entry). One already superseded restores nothing.
 - A reused root layout's post-commit refresh runs **after** the state commit, so `router.current` read there is current.
 
 **Idiom:** compare route **names** (`this.route.route.name`, or `this.route.chain[0].name` for the section), not `path`, which is the raw pushed path with any query and anchor.
@@ -216,7 +216,7 @@ The location side effects — `pushState`/`replaceState`, `document.title`, the 
   | Nothing in flight, chain intact | No-op, `ok` with the current route (`catchAll: true` on the catch-all) |
   | Nothing in flight, chain invalid (failed view) | Rebuild with replace semantics; history unchanged |
   | A push/replace in flight (URL not moved yet) | Supersede it; rebuild with replace semantics; history unchanged |
-  | A pop in flight, path or hash mode (browser already moved) | An ordinary push (`pushState`) |
+  | A pop in flight, or a push/replace that superseded one, path or hash mode (browser already moved) | An ordinary push (`pushState`) |
   | A pop in flight, memory mode (index not moved) | Replace semantics |
   | Any row above, called twice in a row | The second call returns the identical promise; `data()` runs once |
 

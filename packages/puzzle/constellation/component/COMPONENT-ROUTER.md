@@ -23,17 +23,17 @@ verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: state
     text: >-
-      Pop still loading (`#popInFlight && #pendingNavPromise`, the D182 pair push() already reads)
-      is now one rule in #handlePopState and #navigate: (1) a popstate home to the committed entry
-      (the D41 fragment branch, e.g. Back then Forward before the Back lands) supersedes the stale
-      pop with `#recoverFailedNavigation(++#token)` before #applyFragmentPop, so URL and tree stay
-      together (review C2#1); (2) no scroll save while a pop loads: #scrollKey already names the
-      popped entry, which was never on screen, so neither a second popstate nor a push over it files
-      the live position under that key (departScroll is null; #commitLocation skips the save)
-      (F1-B2/C2#2). No new state field. Regression tests: tests/router-fragment-pop.test.js "over a
-      pop still loading". Open and NOT built: F1-B1 (overlap recover restores a dead leaver), and
-      F1-B3 (nav #0 is invisible to the same-path rules; the fragment guard still needs a committed
-      #state).
+      While the browser sits on a popped entry, two rules hold in #handlePopState and #navigate: (1)
+      a popstate home to the committed entry (the D41 fragment branch, e.g. Back then Forward before
+      the Back lands) supersedes a pop still loading (`#popInFlight && #pendingNavPromise`) with
+      `#recoverFailedNavigation(++#token)` before #applyFragmentPop, so URL and tree stay together;
+      a push or replace still loading writes its own URL at commit, so it is left to land; (2) no
+      scroll save while `#urlMoved` is set: #scrollKey already names the popped entry, which was
+      never on screen, so neither a second popstate nor a push over it files the live position under
+      that key (departScroll is null; #commitLocation skips the save). Tests:
+      tests/router-fragment-pop.test.js "over a pop still loading". Open and not built: an overlap
+      recover restores a dead leaver; navigation zero is invisible to the same-path rules (the
+      fragment guard still needs a committed #state).
   - kind: decision
     text: >-
       0.10.0 F3 (review 2026-11-08, V-features F3): the router focus step honours an element the
@@ -119,13 +119,13 @@ Each leaf precomputes its guard chain (`entry.guards`, root → leaf) and, when 
 - **Every `#navigate` exit returns a `NavigationResult`** — `fail(reason, err)`, `SUPERSEDED`, or `succeed(route)`. A new exit path that forgets this makes `push()` resolve `undefined`.
 - **The in-flight slot.** `#navigate` opens `#pendingNavPromise` with the module-private `PENDING` promise at its token bump; every verb's caller pairs the real promise through `#trackNav`, which writes only over `PENDING`. A navigation that ended inside its synchronous start has already cleared the slot, so nothing latches and `navigating()` (D185) reads false.
 - `#isCommittedNoop` gates the same-path no-op: committed path, chain intact, nothing in flight (`#guardRedirecting` exempt). `#joinInFlight` hands a same-key push or replace the in-flight navigation's promise from `#pendingNavPath`/`#pendingNavPromise` (a `PENDING` slot is re-read one microtask later); a guard redirect skips the join, or a guard redirecting to its own path would await itself forever.
-- **Commit-window throws:** the outer catch around the load/`#swap` block may run after `#commitLocation`, while `#state` still names the old route. When it owns the token it clears `#pendingNavPath`, `#pendingNavPromise` and the locale target, and sets `#state.chainInvalid`. It rethrows only for navigation zero (or a guard redirect whose chain box has `start`), so `app.mount()` keeps its teardown.
+- **Commit-window throws:** the outer catch around the load/`#swap` block may run after `#commitLocation`, while `#state` still names the old route. When it owns the token it clears `#pendingNavPath`, `#pendingNavPromise` and the locale target, and sets `#state.chainInvalid`. It rethrows only for navigation zero (or a guard redirect continuing it, which `#guardStart` marks), so `app.mount()` keeps its teardown.
 - **`#pendingPush`** (the commit-window deferral slot) carries the caller's resolver. Anything that clears the slot — a displacing `#defer`, `stop()` — must resolve the old entry `SUPERSEDED`, or that caller waits forever.
 
 ## Failure invariants
 
 - **A view/layout constructor throw** is a pre-commit failure like a lazy rejection: `onError` phase `navigation`, shared recovery (`#recoverFailedNavigation`), retryable. Abandoned instances are dropped, never `destroy()`ed (their `created()` never ran).
-- **Failed-pop URL repair.** A push never moved the URL (pushState at commit); a pop did. All five pre-commit failure sites (blocked guard, no-op redirect, lazy rejection, constructor throw, `data()` rejection) run `if (pop && cur && this.#state === cur) this.#restoreCommittedUrl(cur.path)`. A guard-redirect continuation carries a mutable ownership box re-stamped on every re-entry; it repairs only when the box's token is still current **and** the state is still `cur` — neither test alone works across re-entry. Tests: `tests/router-failed-pop-url.test.js`.
+- **Failed-pop URL repair.** A push moves the URL only at commit (pushState); a popstate moves it first. `#urlMoved` says the browser sits on a popped entry: `#handlePopState` sets it, a navigation that supersedes a pop still loading keeps it, and `#commitLocation` clears it. Every pre-commit exit (blocked guard, no-op redirect, lazy rejection, constructor throw, `data()` rejection) goes through `#recoverFailedNavigation`, which repairs the URL once, for the token owner only. Tests: `tests/router-failed-pop-url.test.js`.
 - **Fragment pops** (`#applyFragmentPop`) mutate `#state` in place, so `router.current.hash` moves but a view's frozen `this.route` does not (D41: not a navigation).
 - **A `data()` failure with nothing committed yet** (a first load, or a navigation that starts before anything has committed; not a hybrid takeover) cannot stay put. The gate catch parks the failure on the top unit (layout, else root view) through `__showErrorView`, destroys the other fresh views and commits. The top unit's preloaded `mount()` flushes it before painting, so the error view (or marker) takes its position, the chain commits invalid (retry is a full rebuild), and the dev missing-`<Outlet/>` warning skips the destroyed chain.
 - **Routed mount/refresh failure** ([[DECISION-D145-ERROR-BOUNDARIES]]) marks the chain non-reusable, destroys the failed view, and puts the app error view (or an invisible marker) in its exact position. Retry forces a same-location `replace` with `chainInvalid` (keep = 0); the replacement is held until the commit disposes it or a new failure swaps it, so no pre-commit exit leaves the position empty.

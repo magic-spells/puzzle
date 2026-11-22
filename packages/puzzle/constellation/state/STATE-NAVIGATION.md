@@ -203,8 +203,9 @@ mounted), and rollback (racier than never committing).
 
 - **unmatched** → `not-found`. Nothing happened; no token, so an in-flight navigation is
   untouched.
-- **blocked** → `blocked`. A guard returned `false`; nothing was constructed. A blocked pop
-  repairs the address bar (the browser moved it before the guard ran). An entry guard that
+- **blocked** → `blocked`. A guard returned `false`; nothing was constructed. A block with
+  the browser on a popped entry (the pop, or a navigation that superseded it) repairs the
+  address bar (the browser moved it before the guard ran). An entry guard that
   blocks navigation zero leaves the container empty and warns that it should redirect.
 - **redirected** → the redirect's own result, plus `redirectedFrom`. The redirect inherits
   the denied verb (push mints its own entry; pop and navigation zero replace).
@@ -227,7 +228,9 @@ mounted), and rollback (racier than never committing).
 - A named target passed to `push()` or `replace()` resolves to a path before the machine
   starts; one that does not resolve throws synchronously and never enters it.
 - A pop is asymmetric: the browser already moved the URL, so commit contributes only title
-  (and memory index); every non-committing exit on a pop must restore the committed URL.
+  (and memory index). While the browser sits on a popped entry, every non-committing exit
+  by the navigation that owns the token restores the committed URL, once. That holds for a
+  push or replace that superseded the pop too.
 - `entering` isn't awaited, so the machine is idle when the commit window closes. A push or
   replace from a `mounted()` hook lands in that window: it is parked in one last-wins slot
   and re-dispatched afterwards, and its promise settles with that navigation.

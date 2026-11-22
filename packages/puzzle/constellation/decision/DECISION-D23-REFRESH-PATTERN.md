@@ -17,7 +17,7 @@ While `data()` runs, the runtime records every key it reads through `getData()` 
 
 `setState()` always writes the state layer and schedules a render ([[DOC-SPEC-ANATOMY]] §4). When it writes a key the last committed `data()` read, the scheduled render re-runs `data()` first. Every write before that render lands in the state layer, so a burst of writes costs one `data()` run and one render. A key `data()` never read only re-renders, as before.
 
-So a filter tab narrowing a list is `this.setState('filter', 'done')` and nothing else. `refresh()` is for re-running `data()` on purpose: when it derives from something the runtime cannot see (an instance field, a module variable, the clock), or when the caller needs the new model rendered before its next line runs.
+So a filter tab narrowing a list is `this.setState('filter', 'done')` and nothing else. `refresh()` is for re-running `data()` on purpose: when it derives from something the runtime cannot see (an instance field, a module variable, the clock), or when the caller needs the new model rendered before its next line runs. The scheduled render lands on the next frame, so a ResizeObserver or `requestAnimationFrame` callback whose value must paint in this frame calls `refresh()` too.
 
 Details:
 
@@ -29,7 +29,9 @@ Details:
 - A sync `data()` throw on the re-run goes to the error funnel with phase `refresh`, like a store-change refresh.
 
 ## Alternatives rejected
+
 - **`setState()` never re-runs `data()`, `refresh()` by hand** (the rule until 0.10.0). Every derived value needed a `refresh()` after the write, and agent-written code added it after writes that fed nothing.
 - **`setState()` always re-runs `data()`.** Re-runs fetching `data()` on every keystroke into a field it never reads.
+- **Record reads made after an `await`.** The flush renders while an async `data()` is still running, and the compiled `render()` reads `getData()`, so the template's keys would land in the read set: typing into a field only the template reads would re-run a fetching `data()`.
 - **Declared dependencies** (a `watch` list, computed keys). A second place to keep in sync with what `data()` already says by reading.
 - **Moving pure UI state into the store.** Heavyweight.

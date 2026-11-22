@@ -96,8 +96,8 @@ export default class EditPost extends PuzzleView {
   `created()`, and `afterUpdate()` skips the first render, so seed from both
   `mounted()` and `afterUpdate()`:
   `seed() { const { post } = this.getData(); if (post && this.form.source !== post) this.form.reset(post); }`.
-- **After success** the baseline becomes the submitted values, so `dirty` goes
-  false; touched clears.
+- **After success** the baseline becomes the values `fn` was sent, so `dirty`
+  goes false unless a field was edited while `fn` ran; touched clears.
 - **Invalid submit** focuses the first invalid control found by `name` in the
   submitted form's `elements`.
 - **Destroyed view.** Writes after the view is destroyed are dropped (the

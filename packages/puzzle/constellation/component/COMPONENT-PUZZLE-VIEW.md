@@ -70,7 +70,9 @@ handle, by this view, during its own evaluation, may fault
   under `Object.is`.
 - A `setState()` render goes through `schedule()` in `scheduler.js` (the shared
   [[DECISION-D63-HIDDEN-TAB-FLUSH]] frame rule). A render that lands first clears
-  the flag, so the later frame is a no-op. `renderTick()` returns that module's
+  the flag, so the later frame is a no-op, unless a D23 `data()` re-run is still
+  owed: then the flag stays set and the frame's flush runs `data()`.
+  `renderTick()` returns that module's
   `tick()`: it resolves once no store flush or view render is pending anywhere in
   the runtime ([[DECISION-D188-TICK]]).
 - Async refresh is last-wins; a destroyed view can't be resubscribed by a late

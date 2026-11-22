@@ -41,6 +41,11 @@ skipped; a symlinked `.puzzle` disables the sweep, and `ensureWorkTmp` /
 `check.Generate` reject it with a diagnostic. The sweep also removes the legacy
 app-root names (`.dist-staging-*`, `dist.old-*`).
 
+`ensureWorkTmp` returns the symlink-resolved path. esbuild resolves symlinks in
+its working dir but not in its outdir, so an app reached through a symlinked
+path gets page URLs that point into `.puzzle/tmp` unless every outdir under it
+uses the resolved spelling.
+
 `dist/` itself is left alone: templates gitignore it, and excluding it
 otherwise would change Tailwind's sources unasked.
 
