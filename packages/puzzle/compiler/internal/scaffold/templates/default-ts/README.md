@@ -16,7 +16,7 @@ Then open http://localhost:3000. Run the tests with `npm test`.
 ```
 __APP_NAME__/
 ├── app/
-│   ├── app.ts            # Build entry: app initialization (mount target, routes, formatters)
+│   ├── app.ts            # Build entry: app initialization (mount target, routes, functions)
 │   ├── routes.ts         # Route definitions
 │   ├── components/       # Reusable .pzl components (Counter.pzl)
 │   ├── layouts/          # Layout components (Default.pzl)

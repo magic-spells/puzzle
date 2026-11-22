@@ -41,12 +41,12 @@ Every checklist feature maps to a specific file:
 | 5 | **`{#for … , i}` loop counter** (v1.2) | `app/views/Shell.pzl` — the sidebar list; the index drives each `ConversationItem`'s staggered enter-animation delay |
 | 6 | **Nested routes + `<Outlet />`** (v1.3) | `app/routes.js` + `app/views/Shell.pzl` — the Shell parent hosts a Welcome index child (`''`) and a Thread child (`c/:id`) at `<Outlet />` |
 | 7 | **`animations = { in, out }`** (v1.1) | view transitions in every view; message/list-item enters in `MessageBubble.pzl`, `ConversationItem.pzl`, `TypingIndicator.pzl` |
-| 8 | **Built-in `timeago` + one custom function** | `timeago` on `conversation.updatedAt` in `ConversationItem.pzl`; the custom `clock` function is registered under `formatters` in `app/app.js` and used on message timestamps in `MessageBubble.pzl` |
+| 8 | **Built-in `timeago` + one custom function** | `timeago` on `conversation.updatedAt` in `ConversationItem.pzl`; the custom `clock` function is registered under `functions` in `app/app.js` and used on message timestamps in `MessageBubble.pzl` |
 | 9 | **Controlled input `value={ draft }` + `@input`** | `app/components/Composer.pzl`; the handler owns the write, so the implicit two-way bind (D147) stays off |
 | 10 | **Store reactivity spanning views** | `app/views/Thread.pzl` — streaming tokens `record.update()` the message *through the store*, which re-renders the thread AND bumps `conversation.updatedAt`, reordering the sidebar (`Shell.pzl` subscribes to the conversation collection) |
 
 ### App wiring
-- **app/app.js** — `PuzzleApp` config (target, routes, models, formatters), the
+- **app/app.js** — `PuzzleApp` config (target, routes, models, functions), the
   custom `clock` function, and a `beforeMount` hook that calls `seed(store)`
   before the first navigation.
 - **app/routes.js** — one top-level route with `children`: `''` → Welcome,

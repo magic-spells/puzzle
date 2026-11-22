@@ -20,8 +20,9 @@ Everything lives in [`app/views/Home.pzl`](./app/views/Home.pzl):
    (`allRows.slice(start, start + WINDOW)`), where `start` is the only reactive
    piece of state.
 4. **The scroll handler recomputes the window's start bucket** and calls
-   `setState('start', …)` + `refresh()` **only when the bucket actually changed** —
-   so a fast flick doesn't trigger a render on every scroll pixel.
+   `setState('start', …)` **only when the bucket actually changed** —
+   so a fast flick doesn't trigger a render on every scroll pixel. `data()`
+   reads `start`, so that one write re-runs it.
 5. **Two spacer divs** with interpolated inline heights
    (`style="height:{ topPx }px"`) reserve the off-window geometry, so the native
    scrollbar behaves exactly as if all 10,000 rows were present. The invariant

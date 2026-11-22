@@ -12,7 +12,7 @@ own `@theme` palette in `app/styles/styles.css`.
 
 ### App wiring
 - **app/app.js** — `PuzzleApp` config (`target`, `routes`, `models`,
-  `formatters`, `apiURL`), the `adapter` capability, and a custom `byline`
+  `functions`, `apiURL`), the `adapter` capability, and a custom `byline`
   function. There is no seeding step and no loading code anywhere in the app.
 - **app/routes.js** — six top-level routes including a dynamic segment
   (`/posts/:id`), a nested `/settings` section loaded with `lazy()`, and the
@@ -109,8 +109,9 @@ Three consequences worth internalizing:
    `post.authorId` instead of leaning on `post.author` alone. Once the user is
    in the store, both spellings resolve.
 3. **Event handlers read local state only.** Reads outside a tracked `data()`
-   run never fetch. A handler that needs fresh server data changes state and
-   calls `this.refresh()`, which re-enters the settle loop.
+   run never fetch. A handler that needs fresh server data uses `setState()` to
+   write a key that `data()` reads. That re-runs `data()`, which re-enters the
+   settle loop.
 
 ### Mapping a per-record read onto a static file
 

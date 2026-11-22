@@ -602,7 +602,7 @@ component, `<Children/>` or `<Outlet/>` anywhere in an island subtree.
 
 ## Scenario 8 — `formatters`
 
-**Probes:** what does the built-in formatter registry cost across a large
+**Probes:** what does the built-in function registry cost across a large
 re-render, and how much of it is `Intl` construction?
 
 10,000 rows through `{ datetime(row.createdAt, 'short') }` and
@@ -615,11 +615,11 @@ questions honestly:
 - `count-intl` — the formatted arm again with `Intl` patched and the registry
   entries wrapped. Its *counts* are exact; its *milliseconds* carry the probe.
 
-Timing a wrapped formatter would add two `performance.now()` calls to each of
+Timing a wrapped function would add two `performance.now()` calls to each of
 20,000 invocations — several milliseconds of pure instrument against the thing
 being measured. That is why the share comes from the A/B, not from the wrapper.
 
-### The formatters are ~23% of the re-render, down from 91%
+### The functions are ~23% of the re-render, down from 91%
 
 Production medians, 15 iterations, no instrumentation in either arm:
 
@@ -627,11 +627,11 @@ Production medians, 15 iterations, no instrumentation in either arm:
 | --- | ---: | ---: |
 | `rerender` (date + timeago) | **40.8ms** | 40.8ms |
 | `rerender-raw` (control) | **31.4ms** | 31.4ms |
-| difference — the formatters | **9.4ms** | **23%** |
+| difference — the functions | **9.4ms** | **23%** |
 
 The same tree, the same 10,000-node patch, the same records. Before
 `builtins.js` cached its Intl objects this table read **376.1ms against
-32.4ms** — the formatters were **91.4%** of the formatted arm, ten times the
+32.4ms** — the functions were **91.4%** of the formatted arm, ten times the
 cost of rendering the rows they sat in — and this A/B is the measurement that
 priced the cache. In the CDP decomposition the two arms still have identical
 layout cost (~48ms each) and diverge only in `other`, the framework's own
@@ -649,13 +649,13 @@ probe arm.
 | `Intl.DateTimeFormat` | **0** |
 | `Intl.RelativeTimeFormat` | **0** |
 
-20,000 formatter calls, zero constructions: `date()` caches its
+20,000 function calls, zero constructions: `date()` caches its
 `Intl.DateTimeFormat` per `(locale, options)`, `timeago()` its
 `RelativeTimeFormat` outright, both built on first use — and everything this op
 runs is already warm from the arms before it. Before the cache this table read
 **10,000 and 10,000**, exactly one construction per call. The op is now the
 cache's regression pin; `fmtFormatterCalls` staying at 20,000 is what proves
-the formatters still ran.
+the functions still ran.
 
 The `Intl` patch lives in the scenario, on `globalThis.Intl` — the runtime is not
 modified. The point is to find out what it currently does, not to change it.
@@ -664,7 +664,7 @@ modified. The point is to find out what it currently does, not to change it.
 cache has regressed, or its key has fractured), `fmtFormatterCalls` diverging
 from 20,000 (the scenario is not measuring what it thinks), or `rerender-raw`
 costing the same as `rerender` (which would mean the formatted arm never ran
-the formatters).
+the functions).
 
 ## Scenario 9 — `listener-churn`
 

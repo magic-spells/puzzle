@@ -2,7 +2,7 @@
 
 The smallest possible [Puzzle](https://github.com/magic-spells/puzzle) app: boot
 the runtime and paint one view. It exists as a **baseline for measuring the
-framework's size** — a minimal "Hello World" number — so there are deliberately no layouts, components, styles, formatters, or
+framework's size** — a minimal "Hello World" number — so there are deliberately no layouts, components, styles, functions, or
 extra routes to muddy the bundle.
 
 ## What ships in the bundle

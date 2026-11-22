@@ -79,7 +79,7 @@ bind — the handler owns the write instead.
 
 ### 4. Display Functions
 `datetime(todo.createdAt, 'short')` above is a standard display function, called
-by name. Your own register through the `formatters` config in app.js and are
+by name. Your own register through the `functions` config in app.js and are
 called the same way:
 ```javascript
 // A function of your own in app.js (this example registers none),

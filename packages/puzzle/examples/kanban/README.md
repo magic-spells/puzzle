@@ -70,7 +70,7 @@ DnD possible with **zero framework changes**:
    card between columns automatically re-renders both columns. Filters are applied
    after the fact, in JS.
 5. **Store notifications batch into ONE `requestAnimationFrame` flush.** `_notify`
-   accumulates keys in a Set; N `record.update()` calls in one tick → each subscriber
+   accumulates keys in a Map; N `record.update()` calls in one tick → each subscriber
    notified at most once. The drop commit below issues up to ~10 updates and produces
    exactly one board re-render.
 6. **`setState()` re-runs `data()` when `data()` read the key** (D23). `data()` reads
@@ -81,7 +81,7 @@ DnD possible with **zero framework changes**:
    animates retained rows from their old visual position to their new one — measured
    before the patch, played after it, inside `patchKeyedChildren`. This board used to
    hand-roll it from `beforeUpdate()` / `afterUpdate()`, which still wrap every patch
-   synchronously (`beforeUpdate → patch → afterUpdate` in one tick, `PuzzleView._render`)
+   synchronously (`beforeUpdate → patch → afterUpdate` in one tick, `PuzzleView`'s `#renderNowInner`)
    and are still the right hooks for measurements the framework does *not* do for you.
    Position-on-reorder is no longer one of them.
 8. **`{#for}` bodies are auto-keyed** — the codegen keys the single root with

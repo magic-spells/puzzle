@@ -114,7 +114,7 @@ dependency — an app that imports none of these paths bundles none of it.
 
 ```
 app/
-├── app.js              # PuzzleApp config (hash mode, formatters) + parallel seed in beforeMount (D60)
+├── app.js              # PuzzleApp config (hash mode, functions) + parallel seed in beforeMount (D60)
 ├── routes.js           # 8 top-level routes across two layouts (AppLayout vs PlayerLayout); /artist/:id nests the info overlay
 ├── storage.js          # localStorage load/save (one key: puzzle-sounds/v1)
 ├── models/
