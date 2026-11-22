@@ -500,7 +500,7 @@ func TestStaticWatchWarnsUnloadedCSSOnce(t *testing.T) {
 }
 
 // An app reached through a symlink (macOS /tmp and /var are links) must serve
-// the pages a one-shot build ships, not URLs naming the link's target.
+// the pages a one-shot build ships, not ../ URLs into .puzzle/tmp.
 func TestStaticWatchSymlinkedRootMatchesOneShot(t *testing.T) {
 	requireStaticRuntime(t)
 	target := writeSSGFixture(t, baseSSGFixture())
