@@ -32,15 +32,12 @@ import {
 import { Linter } from 'eslint';
 
 // Carries each file's splitter errors and <script> body start from preprocess
-// to postprocess, keyed by filename.
+// to postprocess, and the component names its template renders to the
+// puzzle/uses-template-components rule, keyed by filename.
 const fileStore = new Map();
 
 // SECTION_RULE_ID is the synthetic rule id attached to injected section errors.
 const SECTION_RULE_ID = 'puzzle/no-invalid-sections';
-
-// Carries the component names each file's template renders, keyed by filename,
-// from preprocess to the puzzle/uses-template-components rule.
-const tagStore = new Map();
 
 // TAG_ROOT reads a tag name's root identifier after '<'. Tag names start like
 // the compiler lexer's startsTagName (ASCII letter, '_', or a non-ASCII
@@ -288,8 +285,7 @@ export const processor = {
 		const script = sections.scripts;
 		// The body start in fix-range offsets, which count from after a leading BOM.
 		const bom = text[0] === '\uFEFF' ? 1 : 0;
-		fileStore.set(filename, { errors, start: script?.contentStart - bom });
-		tagStore.set(filename, componentTags(sections));
+		fileStore.set(filename, { errors, start: script?.contentStart - bom, tags: componentTags(sections) });
 
 		// No <script> section → nothing to lint as JS. Splitter errors are still
 		// surfaced in postprocess (which ESLint calls with an empty message set).
@@ -307,7 +303,6 @@ export const processor = {
 	postprocess(messages, filename) {
 		const { errors, start } = fileStore.get(filename);
 		fileStore.delete(filename);
-		tagStore.delete(filename);
 
 		// One block at most (the <script> body). A message whose fix reaches into
 		// the blanked lead-in goes, so --fix cannot delete it.
@@ -344,7 +339,7 @@ export const usesTemplateComponents = {
 	create(context) {
 		return {
 			Program() {
-				for (const name of tagStore.get(context.physicalFilename) || []) {
+				for (const name of fileStore.get(context.physicalFilename)?.tags || []) {
 					context.sourceCode.markVariableAsUsed(name);
 				}
 			},
