@@ -71,8 +71,9 @@ A route may declare `staticPaths`, in the route table (`app/routes.js`):
   dot segments would overwrite other pages.
 - **Errors and warnings**: an entry missing a param is a build error naming the
   route. Duplicates render once, with a warning. An empty list renders nothing
-  (skip reason `'empty staticPaths'`). A parameterised route without
-  `staticPaths` keeps the skip warning, which names the field.
+  and is skipped with a warning naming the field (skip reason
+  `'empty staticPaths'`). A parameterised route without `staticPaths` keeps the
+  skip warning, which names the field.
 - **Static output**: all pages of a route share one page module, slug
   `blog--_slug` (`:` becomes `_`, which Windows file names allow). Each page
   carries `<script type="application/json" data-puzzle-static-route>` with its

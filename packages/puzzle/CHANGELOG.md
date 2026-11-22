@@ -716,6 +716,10 @@ you edited the files).
   `output: 'static'`, `puzzle build` run from a symlink with more path parts
   than its target wrote page script URLs that pointed into `.puzzle/tmp/`, so
   no page loaded its JavaScript.
+- **A skipped route prints once in static and hybrid builds.** Each skip
+  printed its `[puzzle] skipped …` warning and then a short
+  `! skipped /path (reason)` line. Now only the warning prints, and a route
+  whose `staticPaths` lists no pages gets one too.
 - **A text node made only of non-breaking spaces keeps them.** A node holding
   only U+00A0, or another non-ASCII space such as U+3000, compiled to a plain
   space, so the line could break there; with a line break beside it, it was
