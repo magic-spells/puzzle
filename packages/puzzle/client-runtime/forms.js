@@ -105,8 +105,6 @@ class PuzzleForm {
 	#baseline = {};
 	/** @type {Record<string, string>} server messages, cleared per field on edit */
 	#server = {};
-	/** @type {boolean} a submit was attempted, so every error shows */
-	#attempted = false;
 	/** @type {ServerErrorMapper} */
 	#mapErrors;
 
@@ -204,10 +202,9 @@ class PuzzleForm {
 		/** @type {Event | null | undefined} */ (event)?.preventDefault?.();
 		if (this.submitting) return false;
 
-		// a submit attempt shows every error and drops the last server answer
-		this.#attempted = true;
-		this.#server = {};
-		this.error = null;
+		// a submit attempt touches every field, so every error shows, and drops
+		// the last server answer
+		this.#markAll(true);
 		this.#commit();
 		if (!this.valid) {
 			// put the cursor on the first invalid control the submitted form holds
@@ -235,7 +232,7 @@ class PuzzleForm {
 		// fn ran stays changed; after a reseed this writes the orphaned baseline
 		this.submitting = false;
 		Object.assign(baseline, sent);
-		this.#untouch();
+		this.#markAll(false);
 		this.#commit();
 		return true;
 	}
@@ -250,7 +247,7 @@ class PuzzleForm {
 		if (from !== undefined) this.#seed(from);
 		else {
 			this.#current = { ...this.#baseline };
-			this.#untouch();
+			this.#markAll(false);
 			this.#commit();
 		}
 	}
@@ -274,16 +271,18 @@ class PuzzleForm {
 		this.source = from;
 		this.#baseline = seeded;
 		this.#current = { ...seeded };
-		this.#untouch();
+		this.#markAll(false);
 		this.#commit();
 	}
 
-	/** forget touched, the submit attempt and every server answer. */
-	#untouch() {
-		this.#attempted = false;
+	/**
+	 * set every field's touched flag, and forget every server answer.
+	 * @param {boolean} touched
+	 */
+	#markAll(touched) {
 		this.#server = {};
 		this.error = null;
-		this.touched = /** @type {any} */ (Object.fromEntries(this.#fields.map((field) => [field, false])));
+		this.touched = /** @type {any} */ (Object.fromEntries(this.#fields.map((field) => [field, touched])));
 	}
 
 	/**
@@ -330,10 +329,9 @@ class PuzzleForm {
 		const changed = {};
 		let dirty = false;
 		for (const field of this.#fields) {
-			// a server message wins; a model message shows once the user left the
-			// field or tried to submit ("late to show, quick to clear")
-			const shown = this.touched[field] || this.#attempted;
-			visible[field] = this.#server[field] ?? ((shown && first[field]) || null);
+			// a server message wins; a model message shows once the field is
+			// touched, by leaving it or by a submit ("late to show, quick to clear")
+			visible[field] = this.#server[field] ?? ((this.touched[field] && first[field]) || null);
 			changed[field] = !same(this.#current[field], this.#baseline[field]);
 			dirty ||= changed[field];
 		}

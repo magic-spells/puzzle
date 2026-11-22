@@ -149,7 +149,7 @@ describe('createForm — the controller', () => {
 		expect(form.values).toBe(values);
 	});
 
-	it('refuses an invalid submit, shows every error and never calls fn', async () => {
+	it('refuses an invalid submit, touches every field, shows every error and never calls fn', async () => {
 		const form = createForm(stubView(), Post, { fields: ['title', 'body'] });
 		const fn = vi.fn();
 		const event = { preventDefault: vi.fn() };
@@ -157,6 +157,7 @@ describe('createForm — the controller', () => {
 		expect(event.preventDefault).toHaveBeenCalled();
 		expect(fn).not.toHaveBeenCalled();
 		expect(form.errors.title).toBe('Title is required');
+		expect(form.touched).toEqual({ title: true, body: true });
 		expect(form.submitting).toBe(false);
 	});
 
