@@ -209,9 +209,15 @@ export class Router {
 	// Cleared in #commitState, #recoverFailedNavigation, the commit-window catch and stop().
 	/** @type {Promise<NavigationResult> | null} */
 	#pendingNavPromise = null;
-	// Whether the navigation that owns the token is a pop (D182: a push to the
-	// committed path over a path/hash-mode pop is a real push, not a rewrite).
+	// Whether the navigation that owns the token is a pop: a Forward home to the
+	// committed entry supersedes it (#handlePopState).
 	#popInFlight = false;
+	// Whether a popstate left the address bar on an entry nothing has committed
+	// since. Set in #handlePopState, cleared when a navigation commits its
+	// location or a failed one puts the URL back (#recoverFailedNavigation). A
+	// navigation that supersedes a pop still loading starts on that entry too, so
+	// it inherits the flag (D182: a push to the committed path is then a real push).
+	#urlMoved = false;
 	// Whether a router has a navigation in flight, for PuzzleApp.idle() (D185). A
 	// method, not a static block: a block is a side effect that would keep the whole
 	// class in output:'static' bundles, which import only path helpers from here.
@@ -235,19 +241,10 @@ export class Router {
 	// at #navigate's token bump). Distinguishes those re-entries from externally-
 	// initiated navigations so the #guardRedirectCount reset skips them.
 	#guardRedirecting = false;
-	// Ownership record of the guard-redirect chain currently in flight, or null:
-	// a mutable `{ token }` box created by the frame that STARTS a chain and
-	// re-stamped by every re-entry of that same chain (the nested guard→A→B case
-	// keeps one box, so the whole chain reads as one logical navigation). The
-	// redirect continuation holds the box by identity and reads it back after its
-	// await, so it can tell "the chain still owns the location" from "something
-	// newer superseded us" — a bare token compare cannot, because the re-entrant
-	// #navigate always bumps #token. A LATER, unrelated chain installs its own box
-	// here, which is exactly why the continuation keeps its own reference instead
-	// of reading this slot again.
-	// `start` marks a chain that continues navigation zero (see `initial` in #navigate).
-	/** @type {{ token: number, start?: boolean } | null} */
-	#guardChain = null;
+	// Whether the guard-redirect re-entry #guardRedirecting tags continues
+	// navigation zero (see `initial` in #navigate). Set beside that flag, so each
+	// frame of a nested guard→A→B chain hands its own `initial` to the next.
+	#guardStart = false;
 	// The instance an in-flight transition is currently animating OUT (or null).
 	// A newer navigation reads this to cancel the running out and proceed
 	// immediately (constellation/doc/DOC-SPEC.md §12 interruption rule).
@@ -724,7 +721,6 @@ export class Router {
 		this.#mode?.reset?.();
 		this.#guardRedirectCount = 0;
 		this.#guardRedirecting = false;
-		this.#guardChain = null;
 		this.#pendingNavPath = null;
 		this.#pendingNavPromise = null;
 		this.#positions.clear();
@@ -883,14 +879,12 @@ export class Router {
 		// invalidated chain) — the D182 table. The app is still standing on the
 		// committed entry, so the navigation REWRITES it instead of stacking a
 		// duplicate (no extra history entry; memory mode keeps one entry while a
-		// back() is loading) — except over a path/hash-mode pop in flight, where the
-		// browser has already moved onto the popped entry: rewriting that would
-		// overwrite it, so this is an ordinary push. Tracked like a push either
-		// way, so a second click returns this navigation's promise (above).
-		const asReplace =
-			!!this.#state &&
-			key === sameNavKey(this.#state.path) &&
-			!(this.#pendingNavPromise && this.#popInFlight && !this.#mode?.urlless);
+		// back() is loading) — except when the browser has already moved onto a
+		// popped entry (#urlMoved: a path/hash-mode pop in flight, or a navigation
+		// that superseded one): rewriting that would overwrite it, so this is an
+		// ordinary push. Tracked like a push either way, so a second click returns
+		// this navigation's promise (above).
+		const asReplace = !!this.#state && key === sameNavKey(this.#state.path) && !this.#urlMoved;
 		// `track` makes the replace record its target at the token bump, as a push
 		// does, BEFORE #navigate runs into preload()/created(): a same-path push
 		// from created() then joins this navigation (the in-flight guard above)
@@ -1247,9 +1241,32 @@ export class Router {
 
 	/**
 	 * A latest navigation that stops before #swap must restore any older
-	 * transition it superseded and clear a memory-pop target, exactly like the
-	 * data()-failure path. Guard blocks/failures use this before any fresh view
-	 * exists; data failures call it after destroying their fresh instances.
+	 * transition it superseded, clear a memory-pop target and put a moved URL
+	 * back, exactly like the data()-failure path. Guard blocks/failures use this
+	 * before any fresh view exists; data failures call it after destroying their
+	 * fresh instances.
+	 *
+	 * The URL (D87): after a popstate (#urlMoved) the browser moved the address
+	 * bar before the router ran, but the mounted tree stayed on the committed
+	 * route — a share/bookmark would capture the wrong URL, violating the router's
+	 * "URL and mounted tree commit together" invariant. Rewrite the entry the
+	 * browser popped to back to the committed path. Only the token owner does,
+	 * once: a superseded navigation never drags the URL back under a newer one,
+	 * and a guard redirect chain repairs from whichever frame stopped. `#state` is
+	 * null only when a popstate beat navigation zero's commit: nothing to restore.
+	 *
+	 * We do NOT history.go(delta) back to the pre-pop entry: path/hash mode keeps
+	 * no browser-history index (only a urlless mode tracks its own entry stack), so
+	 * the delta is unknowable. replaceState COLLAPSES the guarded entry — trading the
+	 * exact back/forward stack shape for the URL/tree invariant (the guarded forward
+	 * entry is lost). Because replaceState fires no popstate there is no echo
+	 * navigation to suppress and the guard cannot re-run — the very reason a
+	 * history.go revert (which would echo a popstate targeting `path`) was avoided.
+	 * The URL is re-encoded exactly as #commitLocation writes it (shared #encodedUrl:
+	 * base prefix, plain in path mode / '#'-encoded in hash mode); history.state rides through
+	 * untouched so the entry keeps whatever __puzzleScrollKey #handlePopState settled
+	 * on it. A urlless mode has no browser URL and no popstate listener, so the
+	 * flag is never set there: its index already stayed on the committed entry.
 	 *
 	 * @param {number} token
 	 */
@@ -1272,40 +1289,16 @@ export class Router {
 			setLocaleTarget(this, null);
 		}
 		this.#pendingNavPromise = null;
-	}
-
-	/**
-	 * Restore the committed URL after a guard refused a POPSTATE (D87). The browser
-	 * had already moved the address bar to the guarded entry before the guard ran,
-	 * but the mounted tree stayed on the committed route — a share/bookmark would
-	 * capture the wrong URL, violating the router's "URL and mounted tree commit
-	 * together" invariant. Rewrite the entry the browser popped to back to `path`.
-	 *
-	 * We do NOT history.go(delta) back to the pre-pop entry: path/hash mode keeps
-	 * no browser-history index (only a urlless mode tracks its own entry stack), so
-	 * the delta is unknowable. replaceState COLLAPSES the guarded entry — trading the
-	 * exact back/forward stack shape for the URL/tree invariant (the guarded forward
-	 * entry is lost). Because replaceState fires no popstate there is no echo
-	 * navigation to suppress and the guard cannot re-run — the very reason a
-	 * history.go revert (which would echo a popstate targeting `path`) was avoided.
-	 * The URL is re-encoded exactly as #commitLocation writes it (shared #encodedUrl:
-	 * base prefix, plain in path mode / '#'-encoded in hash mode); history.state rides through
-	 * untouched so the entry keeps whatever __puzzleScrollKey #handlePopState settled
-	 * on it. A urlless mode has no browser URL (and no popstate listener); its index
-	 * already stayed on the committed entry (the blocked pop cleared the pending pop
-	 * target without moving the index), so there is nothing to repair.
-	 *
-	 * @param {string} path
-	 */
-	#restoreCommittedUrl(path) {
-		if (this.#mode?.urlless) return;
-		history.replaceState(history.state, '', this.#encodedUrl(path));
+		if (this.#urlMoved && this.#state) {
+			this.#urlMoved = false;
+			history.replaceState(history.state, '', this.#encodedUrl(this.#state.path));
+		}
 	}
 
 	/**
 	 * The one write-side URL encoder: path routing prefixes the base (v1.19, D51);
 	 * every other mode owns the whole encoding (hash returns `'#' + base + path`,
-	 * D34 — modes.js). Every writer (#commitLocation, #restoreCommittedUrl) must
+	 * D34 — modes.js). Every writer (#commitLocation, #recoverFailedNavigation) must
 	 * go through here so committed and restored URLs stay byte-identical.
 	 *
 	 * @param {string} path
@@ -1388,12 +1381,10 @@ export class Router {
 		// #swap has destroyed the outgoing view, the page has collapsed, and a real
 		// browser clamps scrollY to 0 (jsdom does no layout; only the Playwright
 		// suite sees the clamp). D61 atomicity holds: a superseded/failed nav never
-		// reaches #commitLocation, so the value is simply discarded. Over a pop still
-		// loading nothing is departed (#handlePopState): null, read before the reset.
+		// reaches #commitLocation, so the value is simply discarded. With the browser
+		// on a popped entry (#urlMoved) nothing is departed (#handlePopState): null.
 		const departScroll =
-			typeof window !== 'undefined' && !(this.#popInFlight && this.#pendingNavPromise)
-				? { x: window.scrollX || 0, y: window.scrollY || 0 }
-				: null;
+			typeof window !== 'undefined' && !this.#urlMoved ? { x: window.scrollX || 0, y: window.scrollY || 0 } : null;
 		// This navigation is now REAL (matched) and owns the token: record its target
 		// so a same-key push() arriving mid-flight no-ops instead of superseding (the
 		// double-click guard in push()), and reset the guard-redirect budget UNLESS
@@ -1415,10 +1406,10 @@ export class Router {
 		// promise for a navigation that is already over.
 		this.#pendingNavPath = push || track ? rawPath : null;
 		this.#pendingNavPromise = PENDING;
-		// Read by push() only while #pendingNavPromise is set, so a stale value from
-		// a finished navigation is never consulted. A guard redirect re-enters as a
+		// Read only while #pendingNavPromise is set, so a stale value from a
+		// finished navigation is never consulted. A guard redirect re-enters as a
 		// replace but continues the denied navigation, so it keeps that one's flag:
-		// a redirected pop still has the browser on the popped entry.
+		// a Forward home supersedes a redirected pop as it would the pop itself.
 		this.#popInFlight = this.#guardRedirecting ? this.#popInFlight : pop;
 		// Locale prefix routing (D177): every verb's target, for localePage — a
 		// setLocale from this navigation's guard or data() reloads the page it is
@@ -1430,14 +1421,10 @@ export class Router {
 		const guardReentry = this.#guardRedirecting;
 		this.#guardRedirecting = false;
 		if (!guardReentry) this.#guardRedirectCount = 0;
-		// A guard-redirect re-entry IS the chain that started it, continued: stamp the
-		// chain's box with the token this frame just took, so the waiting continuation
-		// can recognize its own redirect as the current owner of the location.
-		else if (this.#guardChain) this.#guardChain.token = token;
 		// Navigation zero — start()'s, the only #navigate with no verb — or a guard
 		// redirect continuing it. Its commit-window throw rethrows (below) so
 		// app.mount() rejects and tears down; every other navigation resolves.
-		const initial = guardReentry ? this.#guardChain?.start : !(push || pop || replace);
+		const initial = guardReentry ? this.#guardStart : !(push || pop || replace);
 		// A real push supersedes any in-flight memory pop and truncates forward
 		// entries (D42), so the pending pop target is moot — reset it here (at the
 		// point supersession becomes real) so a go() arriving before this push commits
@@ -1477,6 +1464,8 @@ export class Router {
 			if (token !== this.#token || guardVerdict === null) return SUPERSEDED;
 			// `false`, or the { error } marker of a throwing guard / the redirect cap.
 			if (guardVerdict === false || typeof guardVerdict === 'object') {
+				// Puts a popped URL back too; a push never moved it, and staying silently
+				// put is its correct outcome (D87).
 				this.#recoverFailedNavigation(token);
 				if (cur == null && !guardVerdict) {
 					// Initial navigation refused with nothing yet committed (D87): there is
@@ -1490,13 +1479,6 @@ export class Router {
 							"Entry guards should return a redirect path (e.g. '/login') instead of " +
 							'false so first paint always has a route to render.'
 					);
-				} else if (pop && cur) {
-					// A blocked POPSTATE: the browser already moved the address bar to the
-					// guarded entry before the guard ran, but the tree stayed on `cur`. Put
-					// the URL back so URL and mounted tree stay consistent. A plain push never
-					// moved the URL (pushState fires only at commit) and staying silently put
-					// is its correct outcome (D87), so only pops repair here.
-					this.#restoreCommittedUrl(cur.path);
 				}
 				// Reported to onError means 'error' (D182); a plain `false` is a block.
 				return guardVerdict ? fail('error', guardVerdict.error) : fail('blocked');
@@ -1520,13 +1502,7 @@ export class Router {
 				// site). A pop or nav #0 redirect still replaces: the browser already sits
 				// on the denied URL, so the destination takes that entry over (D87's
 				// documented collapse).
-				//
-				// The chain's ownership box (#guardChain): a nested redirect continues the
-				// box it re-entered on, an externally-initiated one starts a fresh box.
-				// Held by identity across the await so a LATER chain installing its own box
-				// cannot be mistaken for ours.
-				const chain = guardReentry && this.#guardChain ? this.#guardChain : { token, start: initial };
-				this.#guardChain = chain;
+				this.#guardStart = initial;
 				this.#guardRedirecting = true;
 				let redirected;
 				try {
@@ -1534,22 +1510,11 @@ export class Router {
 				} finally {
 					this.#guardRedirecting = false;
 				}
+				// Acts only when the redirect no-op'd (its target is the committed route,
+				// or unmatched) and never took the token: that puts a popped URL back like
+				// the block case. A redirect that ran owns its own outcome — it committed
+				// its URL, or recovered (and repaired) from its own frame.
 				this.#recoverFailedNavigation(token);
-				// A redirect that no-op'd (its target is already the committed route, or is
-				// unmatched) left #state and the URL untouched, so after a POPSTATE the
-				// browser still sits on the guarded entry — repair it exactly like the block
-				// case. A redirect that COMMITTED already rewrote the URL through
-				// #commitLocation (#state moved off `cur`), and a push never moved the URL,
-				// so both skip this. `cur` is non-null on any pop (pops follow a commit).
-				//
-				// Ownership is checked against the CHAIN's token, not `token`: the
-				// re-entrant #navigate unconditionally bumps #token, so a bare
-				// `token === this.#token` would disable every legitimate repair here.
-				// `#state === cur` alone is equally insufficient — a newer POP still in its
-				// load phase shares this same `cur`, and a pop commit writes no URL, so an
-				// unguarded replaceState would strand the address bar on our route forever.
-				if (pop && cur && this.#token === chain.token && this.#state === cur)
-					this.#restoreCommittedUrl(cur.path);
 				// The final navigation's result (D182); a chain names its first request,
 				// since each outer frame overwrites the field on the way back out.
 				return redirected.ok ? { ...redirected, redirectedFrom: rawPath } : redirected;
@@ -1590,17 +1555,12 @@ export class Router {
 				);
 				// Pre-commit failure, exactly like the data() failure below: no fresh view
 				// exists yet, so history and the mounted tree are untouched and this is a
-				// plain failed push (D61). The ADDRESS BAR is the pop-only exception — the
-				// browser moved it before we ran — so put it back (see #restoreCommittedUrl).
-				//
-				// Token-guarded like every other statement in this catch. `#state === cur`
-				// alone only rules out a newer navigation that already COMMITTED; a newer
-				// pop still in its load phase shares this same `cur`, and #commitLocation
-				// writes no URL for a pop commit, so an unguarded replaceState here would
-				// win permanently and strand the address bar on OUR route.
+				// plain failed push (D61). The ADDRESS BAR is the exception after a
+				// popstate — the browser moved it before we ran — and recovery puts it
+				// back, token-guarded like every other statement in this catch: a newer
+				// navigation owns the URL, and a pop commit writes none, so a repair from
+				// here would strand the address bar on OUR route.
 				this.#recoverFailedNavigation(token);
-				if (pop && cur && token === this.#token && this.#state === cur)
-					this.#restoreCommittedUrl(cur.path);
 				if (retryView && token === this.#token) {
 					await retryView.__retryErrorView?.(err, info);
 				}
@@ -1675,13 +1635,11 @@ export class Router {
 			// Constructed-only instances own nothing yet — created() runs in preload()
 			// and registerView in mount() — so they are dropped, not destroy()ed:
 			// destroy() would fire destroyed() for a view that never ran created().
-			this.#recoverFailedNavigation(token);
-			// Pop-only URL repair, same as the lazy rejection above. No await sits
+			// The URL repair rides along, as for the lazy rejection above. No await sits
 			// between the token check after the lazy load and here, so only a
 			// navigation a constructor fired synchronously before throwing can own the
 			// token now — that one owns the URL and the outcome.
-			if (pop && cur && token === this.#token && this.#state === cur)
-				this.#restoreCommittedUrl(cur.path);
+			this.#recoverFailedNavigation(token);
 			if (retryView && token === this.#token) {
 				await retryView.__retryErrorView?.(err, info);
 			}
@@ -1838,13 +1796,9 @@ export class Router {
 					// still the latest navigation — a newer one owns the cleanup via its own
 					// clamp + #swap skipOut path. The restored unit's playOut memo stays spent:
 					// a later navigation away swaps it out instantly, no second out animation.
+					// The same call puts a popped URL back before the retry redraw below
+					// paints a face for a route the URL would otherwise claim we are on.
 					this.#recoverFailedNavigation(token);
-					// Pop-only URL repair, same as the two pre-commit catches above (token
-					// guard included): the browser already moved the address bar onto the
-					// popped entry and we are staying put, so restore it before the retry
-					// redraw paints a face for a route the URL would otherwise claim we are on.
-					if (pop && cur && token === this.#token && this.#state === cur)
-						this.#restoreCommittedUrl(cur.path);
 					// Retry redraw (D145/v1.71). Staying put means the user keeps the page still
 					// on screen, and a retry navigation keeps its error view mounted for exactly
 					// that reason — so this position is not blank, it is showing a face for the
@@ -2121,7 +2075,7 @@ export class Router {
 			// #state/current either way.
 			const url = this.#encodedUrl(rawPath);
 			if (this.#scrollEnabled()) {
-				// #navigate's departScroll, never a live read; null over a loading pop.
+				// #navigate's departScroll, never a live read; null on a popped entry.
 				if (next.departScroll) this.#savePosition(next.departScroll);
 				this.#scrollKey = this.#newEntryKey();
 				history.pushState({ __puzzleScrollKey: this.#scrollKey }, '', url);
@@ -2143,6 +2097,8 @@ export class Router {
 				history.replaceState({}, '', url);
 			}
 		}
+		// The address bar names this navigation now (a pop's was already there).
+		this.#urlMoved = false;
 		this.#syncHead(entry);
 	}
 
@@ -3301,12 +3257,12 @@ export class Router {
 		// switched entries, so save the outgoing position under #scrollKey and adopt
 		// the target's key — even if the navigation later fails or is superseded,
 		// the URL really moved (the soft violation D19 accepts for a failed pop).
-		// While a pop still loads, #scrollKey names ITS target, never on screen: the
-		// window shows the committed page, saved when that pop left it — no save.
-		const popping = this.#popInFlight && this.#pendingNavPromise;
+		// While the address bar is still on a popped entry (#urlMoved), #scrollKey
+		// names that entry, never on screen: the window shows the committed page,
+		// saved when the first pop left it — no save.
 		let savedPosition = null;
 		if (this.#scrollEnabled()) {
-			if (!popping) this.#savePosition(this.#shown);
+			if (!this.#urlMoved) this.#savePosition(this.#shown);
 			this.#scrollKey = this.#adoptEntryKey();
 			savedPosition = this.#positions.get(this.#scrollKey) || null;
 		}
@@ -3329,11 +3285,15 @@ export class Router {
 		// on the element, moved focus to the leaf view root and announced the
 		// route — for a URL whose route, params and query never moved.
 		if (this.#state && sameDocKey(path) === sameDocKey(this.#state.path)) {
-			// Back-then-Forward home while that Back loads: the stale pop must not land.
-			if (popping) this.#recoverFailedNavigation(++this.#token);
+			// Home on the committed document: nothing to put back. Back-then-Forward
+			// while that Back loads: the stale pop must not land. A push or replace
+			// still loading writes its own URL at commit, so it may.
+			this.#urlMoved = false;
+			if (this.#popInFlight && this.#pendingNavPromise) this.#recoverFailedNavigation(++this.#token);
 			this.#applyFragmentPop(path, savedPosition);
 			return;
 		}
+		this.#urlMoved = true;
 		this.#trackNav(this.#navigate(path, { push: false, pop: true, savedPosition }));
 	}
 

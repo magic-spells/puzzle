@@ -490,6 +490,28 @@ describe('Router fragment pop — over a pop still loading', () => {
 		expect(router.current.path).toBe('/docs');
 		expect(savedY(slowState)).toBe(100);
 	});
+
+	it('Forward home does not cancel a push that superseded the Back: the push writes its own URL', async () => {
+		const { router, el } = await boot([...SLOW_ROUTES, { path: '/slow2', view: SlowView }], undefined, '/slow');
+		await router.push('/about'); // history: [/slow, /about]
+		const popped = () => new Promise((r) => window.addEventListener('popstate', r, { once: true }));
+
+		gate = deferred();
+		let moved = popped();
+		history.back(); // to /slow, whose data() is held
+		await moved;
+		const push = router.push('/slow2'); // held too
+		moved = popped();
+		history.forward(); // home to /about while both load
+		await moved;
+		expect(location.pathname).toBe('/about');
+		gate.resolve();
+
+		expect((await push).ok).toBe(true);
+		expect(router.current.path).toBe('/slow2');
+		expect(location.pathname).toBe('/slow2');
+		expect(el.textContent).toBe('SLOW');
+	});
 });
 
 // ---- hash routing keeps its own D34/D41 behavior ---------------------------

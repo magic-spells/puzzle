@@ -782,6 +782,36 @@ describe('router.push() — the committed path when it is not a no-op (D182)', (
 		Login.gate = null;
 	});
 
+	it('row 4 — a push that superseded a pop leaves the browser on the popped entry: a normal push', async () => {
+		const Prev = loadingView('prev');
+		const Other = loadingView('other');
+		const { router } = await boot([
+			{ path: '/', name: 'prev', view: Prev },
+			{ path: '/a', name: 'a', view: AboutView },
+			{ path: '/other', name: 'other', view: Other },
+		]);
+		await router.push('/a'); // history: [/, /a]
+		const before = history.length;
+		Prev.gate = new Promise(() => {}); // Back to / never finishes loading
+		Other.gate = new Promise(() => {}); // nor does the push that supersedes it
+		history.back();
+		await tick();
+		await tick();
+		router.push('/other');
+		expect(location.pathname).toBe('/'); // still the popped entry
+
+		const pushState = vi.spyOn(history, 'pushState');
+		const replaceState = vi.spyOn(history, 'replaceState');
+		expect((await router.push('/a')).ok).toBe(true);
+
+		expect(pushState).toHaveBeenCalledTimes(1);
+		expect(replaceState).not.toHaveBeenCalled();
+		expect(router.current.path).toBe('/a');
+		// The popped / entry survives: [/, /a] again, not [/a, /a].
+		expect(history.length).toBe(before);
+		Prev.gate = Other.gate = null;
+	});
+
 	it('row 6 — called twice: one promise and one data() run (push in flight, failed view, memory pop)', async () => {
 		const A = loadingView('a');
 		const Other = loadingView('other');

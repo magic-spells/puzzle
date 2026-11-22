@@ -8,7 +8,7 @@
 // or a reload lands on a page the app was not showing.
 //
 // The guard paths (blocked guard, no-op guard redirect) always did this through
-// #restoreCommittedUrl. These three cover the other three ways a pop can fail
+// #recoverFailedNavigation. These three cover the other three ways a pop can fail
 // pre-commit: a lazy marker whose loader rejects (D163), a view constructor /
 // field-initializer throw, and a data() rejection. The repair is a replaceState,
 // so it must never add a history entry.
@@ -197,6 +197,80 @@ describe('a failed popstate restores the committed URL', () => {
 		expect(replaceSpy).not.toHaveBeenCalled();
 		expect(location.pathname).toBe('/');
 		replaceSpy.mockRestore();
+	});
+});
+
+// Back moves the address bar at once; a link clicked while that Back still loads
+// supersedes it with the browser still on the popped entry. If that navigation
+// (or one after it) never commits, the URL must come back to the page on screen.
+describe('a navigation over a pop still loading restores the committed URL', () => {
+	let gate = null;
+	class SlowView extends PuzzleView {
+		async data() {
+			await gate?.promise;
+			return {};
+		}
+		render() {
+			return h('puzzle-view', { class: 'slow' }, [text('SLOW')]);
+		}
+	}
+	const view = (name, data) =>
+		class extends PuzzleView {
+			async data() {
+				await data?.();
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: name }, [text(name)]);
+			}
+		};
+
+	it.each([
+		['fails its load', [], '/bad', { ok: false, reason: 'error' }],
+		['is blocked by a guard', [], '/blocked', { ok: false, reason: 'blocked' }],
+		['redirects to the page still shown', [], '/admin', { ok: true, redirectedFrom: '/admin' }],
+		['redirects to a page that fails', [], '/to-bad', { ok: false, reason: 'error' }],
+		['fails after another push superseded the pop', ['/slower'], '/bad', { ok: false, reason: 'error' }],
+	])('a push that %s puts the URL back, once', async (_, via, target, expected) => {
+		history.replaceState({}, '', '/slow');
+		const { router, el } = await boot(
+			[
+				{ path: '/slow', view: SlowView },
+				{ path: '/slower', view: SlowView },
+				{ path: '/c', view: view('c') },
+				{ path: '/bad', view: view('bad', () => Promise.reject(new Error('load failed'))) },
+				{ path: '/blocked', view: view('blocked'), guard: () => false },
+				{ path: '/admin', view: view('admin'), guard: () => '/c' },
+				{ path: '/to-bad', view: view('to-bad'), guard: () => '/bad' },
+			],
+			{ onError: () => {} }
+		);
+		await router.push('/c');
+		const entries = history.length;
+		let release;
+		gate = { promise: new Promise((r) => (release = r)) };
+
+		const popped = new Promise((r) => window.addEventListener('popstate', r, { once: true }));
+		history.back(); // to /slow, whose data() is held
+		await popped;
+		await tick();
+		expect(location.pathname).toBe('/slow');
+		expect(router.current.path).toBe('/c');
+
+		const replaceState = vi.spyOn(history, 'replaceState');
+		for (const path of via) router.push(path);
+		const result = await router.push(target);
+		release();
+		gate = null;
+		await tick();
+
+		expect(result).toMatchObject(expected);
+		expect(router.current.path).toBe('/c');
+		expect(el.querySelector('.c')).not.toBeNull();
+		expect(location.pathname).toBe('/c');
+		expect(history.length).toBe(entries);
+		expect(replaceState).toHaveBeenCalledTimes(1);
+		replaceState.mockRestore();
 	});
 });
 
