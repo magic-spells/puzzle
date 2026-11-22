@@ -223,8 +223,6 @@ import Toc from '@/components/docs/Toc.pzl';
 // consts because literal tag names and {#…} tokens would be parsed as template
 // syntax in prose.
 const installCmd = 'puzzle add piece panel-stack';
-// TODO: switch to ^0.2.0 once published — the demo pins the package by file:
-// path while 0.2.0 is unreleased. Consumers install the published range.
 const installDep = 'npm install @magic-spells/panel-stack@^0.2.0';
 const installCss = `/* app/styles/styles.css */
 @import "tailwindcss";

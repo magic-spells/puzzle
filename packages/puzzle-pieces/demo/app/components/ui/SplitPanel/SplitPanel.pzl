@@ -61,9 +61,6 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // The group fills its container, so give it (or a wrapper) an explicit height.
 //
-// TODO: switch to ^0.2.0 once published — this repo's demo pins the package by
-// file: path while 0.2.0 is unreleased. Consumers install ^0.2.0.
-//
 // Props
 //   direction   'horizontal' (default) | 'vertical'
 //   snap        true for the default 0/50/100 travel points, or a string /
