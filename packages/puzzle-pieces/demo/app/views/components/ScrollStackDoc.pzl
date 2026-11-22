@@ -49,7 +49,7 @@
         </p>
         <CodeBlock code={ installCmd }/>
         <p class="mb-3 mt-4 text-sm text-body">
-          Unlike every other piece, this one has a runtime dependency: the web component it wraps.
+          This piece has a runtime dependency: the web component it wraps.
         </p>
         <CodeBlock code={ installDep }/>
         <p class="mb-3 mt-4 text-sm text-body">

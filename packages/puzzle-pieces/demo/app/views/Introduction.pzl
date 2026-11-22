@@ -18,12 +18,12 @@
         <h2 class="mb-3 text-xl font-semibold tracking-tight text-ink">Why copy-in?</h2>
         <p class="text-sm/relaxed text-body">
           Puzzle compiles <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">.pzl</code>
-          single-file components, and <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">.pzl</code>
-          files can't live in node_modules — the compiler doesn't scan there. So instead of
-          fighting that, Puzzle Pieces embraces it: every piece is source you copy into
+          single-file components, including ones from an installed package that declares
+          Puzzle. But Tailwind does not scan node_modules, so an installed piece would render
+          unstyled, and its code would not be yours to edit. So every piece is source you copy into
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">app/components/ui/</code>.
           Your build compiles it, your Tailwind scan picks up its classes, and the code is
-          yours to restyle and rework — for Puzzle it's the structurally correct model.
+          yours to restyle and rework.
         </p>
       </section>
 

@@ -234,7 +234,7 @@ const reference = [
       { name: 'disabled', desc: 'Greys the caret out and blocks clicks. The keyboard still opens the menu until dropdown-panel gives the trigger a disabled state.' },
       { name: 'class', desc: 'Merged onto the caret, after the chrome.' },
       { name: '@show / @hide', desc: 'The menu opened or closed.' },
-      { name: '@select', desc: 'Value-first: select(value, event). Fires once; the menu then closes and focus returns to the caret.' },
+      { name: '@select', desc: 'Value-first: select(value). Fires once; the menu then closes and focus returns to the caret.' },
     ],
   },
   {

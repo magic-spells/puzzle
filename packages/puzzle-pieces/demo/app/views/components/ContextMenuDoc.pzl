@@ -238,7 +238,7 @@ const reference = [
       { name: 'class', desc: 'Merged onto the host, after `inline-block`.' },
       { name: 'open', desc: 'NOT a prop, on purpose — the coordinates only exist at the moment of the gesture. To summon one yourself, call showAt(x, y) on a DropdownPanel.' },
       { name: '@show / @hide', desc: 'Report-only: the menu opened or closed.' },
-      { name: '@select', desc: 'Value-first: select(value, event). Fires once per activation, submenus included. Return false to cancel the close.' },
+      { name: '@select', desc: 'Value-first: select(value). Fires once per activation, submenus included. Return false to cancel the close.' },
     ],
   },
   {
