@@ -497,28 +497,15 @@ export class PuzzleView {
 	 */
 	setState(key, value) {
 		if (this.#destroyed || this.#leaving) return;
-		if (typeof key === 'object' && key !== null) {
-			Object.assign(this.#state, key);
-			Object.assign(this.#data, key);
-		} else {
-			this.#state[/** @type {string} */ (key)] = value;
-			this.#data[/** @type {string} */ (key)] = value;
-		}
+		const patch = typeof key === 'object' && key !== null ? key : { [/** @type {string} */ (key)]: value };
+		Object.assign(this.#state, patch);
+		Object.assign(this.#data, patch);
 		// A write to a key the last committed data() read re-runs data() with the
 		// render (D23). A write made while data() itself is running never does: the
 		// run in progress already sees it, and re-running would loop.
 		const reads = this.#dataReads;
-		if (reads && !this.#recorder && !this.#rerunData) {
-			if (reads.all) this.#rerunData = true;
-			else if (typeof key === 'object' && key !== null) {
-				for (const k of Object.keys(key)) {
-					if (reads.keys.has(k)) {
-						this.#rerunData = true;
-						break;
-					}
-				}
-			} else if (reads.keys.has(/** @type {string} */ (key))) this.#rerunData = true;
-		}
+		if (reads && !this.#recorder && !this.#rerunData)
+			this.#rerunData = reads.all || Object.keys(patch).some((k) => reads.keys.has(k));
 		this.#scheduleRender();
 	}
 
