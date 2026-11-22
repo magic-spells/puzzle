@@ -131,6 +131,39 @@ function warnThisHandlers(view) {
  */
 
 /**
+ * Wrap `target` so every key read off it lands on the record `recordFor()`
+ * returns (none when it returns nothing). Enumerating it (a spread, Object.keys,
+ * JSON.stringify) counts as reading every key, present or future.
+ * @param {Record<string, any>} target
+ * @param {() => ReadRecord | null | false} recordFor
+ * @returns {Record<string, any>}
+ */
+function trackReads(target, recordFor) {
+	/** @param {string | symbol | null} key null = every key */
+	const note = (key) => {
+		if (typeof key === 'symbol') return;
+		const rec = recordFor();
+		if (!rec) return;
+		if (key === null) rec.all = true;
+		else rec.keys.add(key);
+	};
+	return new Proxy(target, {
+		get(target, key, receiver) {
+			note(key);
+			return Reflect.get(target, key, receiver);
+		},
+		has(target, key) {
+			note(key);
+			return Reflect.has(target, key);
+		},
+		ownKeys(target) {
+			note(null);
+			return Reflect.ownKeys(target);
+		},
+	});
+}
+
+/**
  * The one object data() and share() receive (D197): the route params, the
  * parent's props, and what sharing ancestors pass down, grouped by each
  * sharer's name. `shared` is always an object, so destructuring it never throws.
@@ -525,30 +558,15 @@ export class PuzzleView {
 
 	/**
 	 * Hand out `copy` as is, or — while this view's data() is running — wrapped so
-	 * every key data() reads off it is recorded (D23). Enumerating it (a spread,
-	 * Object.keys, JSON.stringify) counts as reading every key, present or future.
-	 * The record closes when its run commits, so a proxy data() returned inside its
-	 * model stops recording from then on.
+	 * every key data() reads off it is recorded (D23). The record closes when its
+	 * run commits, so a proxy data() returned inside its model stops recording
+	 * from then on.
 	 * @param {Record<string, any>} copy
 	 * @returns {Record<string, any>}
 	 */
 	#tracked(copy) {
 		const rec = this.#recorder;
-		if (!rec) return copy;
-		return new Proxy(copy, {
-			get(target, key, receiver) {
-				if (rec.open && typeof key === 'string') rec.keys.add(key);
-				return Reflect.get(target, key, receiver);
-			},
-			has(target, key) {
-				if (rec.open && typeof key === 'string') rec.keys.add(key);
-				return Reflect.has(target, key);
-			},
-			ownKeys(target) {
-				if (rec.open) rec.all = true;
-				return Reflect.ownKeys(target);
-			},
-		});
+		return rec ? trackReads(copy, () => rec.open && rec) : copy;
 	}
 
 	/**
@@ -630,8 +648,7 @@ export class PuzzleView {
 
 	/**
 	 * This sharer's current output, wrapped so every key `reader` reads off it is
-	 * recorded on this sharer's subscriber list. Enumerating it (a spread,
-	 * Object.keys) counts as reading every key. A sharer that has not published
+	 * recorded on this sharer's subscriber list. A sharer that has not published
 	 * yet hands out an empty object, and the reads still sign the reader up, so
 	 * the first publish reaches it.
 	 * @param {PuzzleView} reader
@@ -639,32 +656,15 @@ export class PuzzleView {
 	 */
 	#watched(reader) {
 		const subs = (this.#shareSubs ??= new Map());
-		const sharer = this;
-		/** @param {string | symbol | null} key null = every key */
-		const watch = (key) => {
+		return trackReads(this.#shared ?? {}, () => {
 			// a torn-down reader holding an old copy must not sign up again
-			if (reader.#destroyed || typeof key === 'symbol') return;
+			if (reader.#destroyed) return null;
 			let rec = subs.get(reader);
 			if (!rec) {
 				subs.set(reader, (rec = { keys: new Set(), all: false, open: true }));
-				(reader.#shareFrom ??= new Set()).add(sharer);
+				(reader.#shareFrom ??= new Set()).add(this);
 			}
-			if (key === null) rec.all = true;
-			else rec.keys.add(key);
-		};
-		return new Proxy(this.#shared ?? {}, {
-			get(target, key, receiver) {
-				watch(key);
-				return Reflect.get(target, key, receiver);
-			},
-			has(target, key) {
-				watch(key);
-				return Reflect.has(target, key);
-			},
-			ownKeys(target) {
-				watch(null);
-				return Reflect.ownKeys(target);
-			},
+			return rec;
 		});
 	}
 
