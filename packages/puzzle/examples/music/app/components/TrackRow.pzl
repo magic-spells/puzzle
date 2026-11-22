@@ -102,10 +102,7 @@ export default class TrackRow extends PuzzleView {
       // Optional: playlist views pass removable + a `remove` callback. Absent
       // everywhere else (Album/Artist/Search), so the button never renders there.
       removable: !!props.removable,
-      playlists,
-      // Local UI flag (setState does not re-run data(), so read it back through
-      // getData — same pattern the layout uses for queueOpen).
-      menuOpen: this.getData().menuOpen || false
+      playlists
     };
   }
 
@@ -146,8 +143,7 @@ export default class TrackRow extends PuzzleView {
     },
 
     // Navigation — path-shaped pushes (hash mode encodes them, D34). Close the
-    // menu BEFORE navigating: the push may tear this row's view down, and we
-    // don't want _closeMenu()'s refresh() racing that teardown.
+    // menu first, so it is already shut while the next route loads.
     menuGoAlbum: () => {
       const albumId = this.getData().track.albumId;
       this._closeMenu();

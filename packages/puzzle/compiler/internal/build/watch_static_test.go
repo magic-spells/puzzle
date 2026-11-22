@@ -499,6 +499,37 @@ func TestStaticWatchWarnsUnloadedCSSOnce(t *testing.T) {
 	}
 }
 
+// An app reached through a symlink (macOS /tmp and /var are links) must serve
+// the pages a one-shot build ships, not ../ URLs into .puzzle/tmp.
+func TestStaticWatchSymlinkedRootMatchesOneShot(t *testing.T) {
+	requireStaticRuntime(t)
+	target := writeSSGFixture(t, baseSSGFixture())
+	root := target + "-link"
+	if err := os.Symlink(target, root); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	t.Cleanup(func() { os.Remove(root) })
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer builder.Dispose()
+	if err := builder.Rebuild(nil); err != nil {
+		t.Fatal(err)
+	}
+	dist := filepath.Join(root, "dist")
+	warm := snapshotTree(t, dist)
+	if !strings.Contains(warm["about/index.html"], `src="/_puzzle/about.js"`) {
+		t.Errorf("about page does not load /_puzzle/about.js:\n%s", warm["about/index.html"])
+	}
+	if err := Build(root, Options{Development: true, Output: "static"}); err != nil {
+		t.Fatal(err)
+	}
+	if d := diffTrees(warm, snapshotTree(t, dist)); d != "" {
+		t.Errorf("dev output is not the one-shot output:\n%s", d)
+	}
+}
+
 // TestStaticWatchRecomposeStylesRendersNoRoutes: the warm Tailwind child
 // rewrites its output after every save, and a styles-only change must cost
 // exactly one stylesheet write. Not a single page may be re-rendered.

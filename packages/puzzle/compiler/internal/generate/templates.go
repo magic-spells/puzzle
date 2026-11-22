@@ -80,7 +80,7 @@ export default class __NAME__ extends PuzzleView {
 `
 
 // viewTemplate compiles in view mode (D20): the `<puzzle-view>` root becomes a
-// real element and may carry attributes. data({ params, props }) returns the model.
+// real element and may carry attributes. data() returns the model.
 const viewTemplate = `<puzzle-view class="__NAME__">
   <h1>{ title }</h1>
   <p>{ message }</p>
@@ -122,9 +122,9 @@ const layoutTemplate = `<puzzle-view class="__NAME__">
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class __NAME__ extends PuzzleView {
-  data({ props }) {
+  data() {
     return {
-      title: props.title || '__NAME__'
+      title: '__NAME__'
     };
   }
 }
@@ -292,21 +292,17 @@ const layoutTemplateTS = `<puzzle-view class="__NAME__">
 </puzzle-view>
 
 <script lang="ts">
-import { PuzzleView, type DataInput } from '@magic-spells/puzzle';
-
-interface __NAME__Props {
-  title?: string;
-}
+import { PuzzleView } from '@magic-spells/puzzle';
 
 // What data() hands the template.
 interface __NAME__Model {
   title: string;
 }
 
-export default class __NAME__ extends PuzzleView<__NAME__Props> {
-  data({ props }: DataInput<__NAME__Props>): __NAME__Model {
+export default class __NAME__ extends PuzzleView {
+  data(): __NAME__Model {
     return {
-      title: props.title || '__NAME__',
+      title: '__NAME__',
     };
   }
 }

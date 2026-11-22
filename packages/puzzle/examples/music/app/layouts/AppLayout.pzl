@@ -129,7 +129,7 @@ export default class AppLayout extends PuzzleView {
       .findMany('playlist')
       .slice()
       .sort((a, b) => a.order - b.order);
-    return { queueOpen: this.getData().queueOpen, section, artists, playlists };
+    return { section, artists, playlists };
   }
 
   events = {
