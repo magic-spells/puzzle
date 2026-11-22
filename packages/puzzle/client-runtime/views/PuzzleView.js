@@ -565,24 +565,31 @@ export class PuzzleView {
 	}
 
 	/**
-	 * Run one data() invocation with read tracking on. Only the synchronous part
-	 * of the call installs the recorder; an async data() keeps recording through
-	 * any getData()/getState() copy it took before its first await.
-	 * @template R
-	 * @param {() => R} invoke
-	 * @returns {R}
+	 * Run one data() invocation with read tracking on — the one place data() is
+	 * called. Only the synchronous part of the call installs the recorder; an async
+	 * data() keeps recording through any getData()/getState() copy it took before
+	 * its first await.
+	 * @param {Record<string, any>} params
+	 * @param {any} props
+	 * @returns {any} the model, or a promise of it
 	 */
-	#recordReads(invoke) {
+	#runData(params, props) {
 		/** @type {ReadRecord} */
 		const rec = { keys: new Set(), all: false, open: true };
 		this.#lastReads = rec;
 		const outer = this.#recorder;
 		this.#recorder = rec;
+		let out;
 		try {
-			return invoke();
+			out =
+				typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
+					? devperfRunData(this, this.#input(params, props))
+					: this.data(this.#input(params, props));
 		} finally {
 			this.#recorder = outer;
 		}
+		if (out && typeof out.then === 'function') this.#noteAsyncShape();
+		return out;
 	}
 
 	// ---- share() (D197) -------------------------------------------------------
@@ -1569,8 +1576,8 @@ export class PuzzleView {
 
 	/**
 	 * Latch `_dataAsyncShape` the first time a data() invocation comes back thenable
-	 * (D161). Called from every eval wrapper, so the flag engages whichever entry
-	 * point happened to run first. In dev it also steers a .then-style data() at the
+	 * (D161). Called from #runData, so the flag engages whichever entry point
+	 * happened to run first. In dev it also steers a .then-style data() at the
 	 * declaration that would have made it serialize from the start; a declared-async
 	 * data() latches the flag silently, since it already defers up front.
 	 */
@@ -1638,44 +1645,13 @@ export class PuzzleView {
 		// queued later is delivered, never dropped.
 		const mark = this.ctx.store?._notifySeq || 0;
 		this.#snapshotPropRevs(this.#props);
-		const run = () => {
-			const out = this.#recordReads(() =>
-				typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
-					? devperfRunData(this, this.#input(this.#params, this.#props))
-					: this.data(this.#input(this.#params, this.#props))
-			);
-			if (out && typeof out.then === 'function') this.#noteAsyncShape();
-			return out;
-		};
-		const store = this.ctx.store;
-		const expectsAsync = this._dataAsyncShape || this.data.constructor.name === 'AsyncFunction';
-		let result;
-		if (!store) {
-			result = run();
-		} else if (!store._a || !this._settleData) {
-			// No adapter capability on THIS app's store: no query can fault, so this is
-			// the single-evaluation path it has always been, and without the capability
-			// anywhere in the realm the settle loop is not even in the bundle (D157
-			// boundary — the capability installs it).
-			//
-			// The seam is the STORE's capability, not `_settleData`'s presence.
-			// install() copies the methods onto the shared prototypes once per realm
-			// and never removes them (concurrent apps depend on that), so an app
-			// mounted after an adapter app would otherwise inherit the settle path and
-			// fault reads it deliberately opted out of.
-			result = store.withTracking(this, run, expectsAsync);
-		} else {
-			// The loop owns the settle window it opens under `token`, so this stays one
-			// call and the commit tail below is the same one it always was.
-			result = this._settleData(
-				store,
-				run,
-				expectsAsync,
-				() => /** @type {boolean} */ (this.#destroyed || this.#leaving || token !== this.#runToken),
-				null,
-				token
-			);
-		}
+		// The settle loop owns the window it opens under `token`.
+		const result = this.#evaluate(
+			() => this.#runData(this.#params, this.#props),
+			() => /** @type {boolean} */ (this.#destroyed || this.#leaving || token !== this.#runToken),
+			null,
+			token
+		);
 
 		if (result && typeof result.then === 'function') {
 			return result.then(
@@ -1687,6 +1663,34 @@ export class PuzzleView {
 			);
 		}
 		this.#commit(token, result, mark);
+	}
+
+	/**
+	 * Evaluate `run` (one #runData call) through this view's store. With no adapter
+	 * capability on THIS app's store no query can fault, so it is one tracked
+	 * evaluation, and without the capability anywhere in the realm the settle loop
+	 * is not even in the bundle (D157 boundary — the capability installs it).
+	 *
+	 * The seam is the STORE's capability, not `_settleData`'s presence. install()
+	 * copies the methods onto the shared prototypes once per realm and never removes
+	 * them (concurrent apps depend on that), so an app mounted after an adapter app
+	 * would otherwise inherit the settle path and fault reads it deliberately opted
+	 * out of.
+	 *
+	 * @param {() => any} run
+	 * @param {() => boolean} isStale
+	 * @param {any} [pending] prepareRefresh's held-eval channel (D146)
+	 * @param {number} [token] the refresh run that owns the settle window
+	 * @returns {any} the model, or a promise of it
+	 */
+	#evaluate(run, isStale, pending = null, token) {
+		const store = this.ctx.store;
+		const expectsAsync = this._dataAsyncShape || this.data.constructor.name === 'AsyncFunction';
+		return !store
+			? run()
+			: store._a && this._settleData
+				? this._settleData(store, run, expectsAsync, isStale, pending, token)
+				: store.withTracking(this, run, expectsAsync, pending);
 	}
 
 	/**
@@ -1801,17 +1805,12 @@ export class PuzzleView {
 			const mine = this.#beginEvalRun(scope);
 			let out;
 			try {
-				out = this.#recordReads(() =>
-					typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
-						? devperfRunData(this, this.#input(scope.params, scope.props))
-						: this.data(this.#input(scope.params, scope.props))
-				);
+				out = this.#runData(scope.params, scope.props);
 			} catch (err) {
 				this.#endEvalRun(mine);
 				throw err;
 			}
 			if (out && typeof out.then === 'function') {
-				this.#noteAsyncShape();
 				return out.then(
 					(/** @type {any} */ model) => {
 						this.#endEvalRun(mine);
@@ -1827,26 +1826,13 @@ export class PuzzleView {
 			return out;
 		};
 
-		const store = this.ctx.store;
-		const mark = store?._notifySeq || 0; // see #refreshInner
-		const expectsAsync = this._dataAsyncShape || this.data.constructor.name === 'AsyncFunction';
+		const mark = this.ctx.store?._notifySeq || 0; // see #refreshInner
 		// D161: a prepared run settles through the same loop. Intermediate passes are
 		// discarded as they are anywhere else; the FINAL pass's reconcile is parked on
 		// `pending`, so commit()/discard() below are unchanged. Store notifications
-		// are NOT coalesced here — while the gate is open the ancestor still shows its
-		// committed route and must keep taking live updates (D146). Gated on the
-		// STORE's capability for the same realm-leak reason as #refreshInner above.
-		const result = !store
-			? run()
-			: store._a && this._settleData
-				? this._settleData(
-						store,
-						run,
-						expectsAsync,
-						() => /** @type {boolean} */ (this.#destroyed || this.#leaving),
-						pending
-					)
-				: store.withTracking(this, run, expectsAsync, pending);
+		// are NOT coalesced here (no token) — while the gate is open the ancestor still
+		// shows its committed route and must keep taking live updates (D146).
+		const result = this.#evaluate(run, () => /** @type {boolean} */ (this.#destroyed || this.#leaving), pending);
 
 		/** @type {any} the prepared data() result */
 		let model;
