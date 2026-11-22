@@ -1,7 +1,7 @@
 {
   "name": "i18n",
   "version": "0.1.0",
-  "description": "Translations with the t formatter — en, es and pl, plurals, and a live locale switch",
+  "description": "Translations with the t function — en, es and pl, plurals, and a live locale switch",
   "type": "module",
   "scripts": {
     "dev": "puzzle dev",

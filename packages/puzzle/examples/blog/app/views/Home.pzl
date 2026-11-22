@@ -3,7 +3,7 @@
     <h1 class="mb-3 text-4xl text-ink">Notes on building Puzzle</h1>
     <p class="max-w-[34rem] mx-auto mb-6 text-body text-[1.05rem]">
       A running blog about the framework itself — single-file components, the Go
-      compiler, the formatter system, and the reactive data layer.
+      compiler, the function library, and the reactive data layer.
     </p>
     <Button variant="primary" @press={ goToPosts }>Browse all posts</Button>
   </section>
