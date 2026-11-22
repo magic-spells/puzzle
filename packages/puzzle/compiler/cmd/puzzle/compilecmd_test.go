@@ -7,13 +7,16 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/magic-spells/puzzle/compiler/internal/codegen"
 )
 
-// writeApp lays out files (slash paths → contents) under a temp project root
-// and returns that root.
+// writeApp lays out files (slash paths → contents) under a temp project root,
+// marked by its package.json, and returns that root.
 func writeApp(t *testing.T, files map[string]string) string {
 	t.Helper()
 	root := t.TempDir()
+	files["package.json"] = "{}"
 	for p, body := range files {
 		dest := filepath.Join(root, filepath.FromSlash(p))
 		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
@@ -33,6 +36,7 @@ func TestCompileOneFollowsTheDirectoryRule(t *testing.T) {
 	body := "<puzzle-view>\n  <p>{ msg }</p>\n</puzzle-view>\n\n<script>\nimport { PuzzleView } from '@magic-spells/puzzle';\nexport default class X extends PuzzleView {\n  data() { return { msg: 'hi' }; }\n}\n</script>\n"
 	root := writeApp(t, map[string]string{
 		"app/views/Page.pzl":      body,
+		"app/views/app/Page.pzl":  body,
 		"app/layouts/Shell.pzl":   body,
 		"app/components/Chip.pzl": body,
 	})
@@ -44,6 +48,7 @@ func TestCompileOneFollowsTheDirectoryRule(t *testing.T) {
 		viewRoot bool
 	}{
 		{"app/views/Page.pzl", true},
+		{"app/views/app/Page.pzl", true},
 		{"app/layouts/Shell.pzl", true},
 		{"app/components/Chip.pzl", false},
 	} {
@@ -81,6 +86,29 @@ func TestCompileOneStripsTypesAndInlinesSVG(t *testing.T) {
 	}
 	if !strings.Contains(js, "circle") {
 		t.Errorf("the {#svg} asset was not inlined:\n%s", js)
+	}
+}
+
+// a <style scoped> root stamp is keyed on the file's path from the project
+// root, the name the build compiles it under, never the checkout's absolute
+// path, so a test sees the markup the build ships on every machine (d59).
+func TestCompileOneStampsTheBuildScopeID(t *testing.T) {
+	chip := "<puzzle-view>\n  <b>hi</b>\n</puzzle-view>\n\n<style scoped>\nb { color: red; }\n</style>\n"
+	root := writeApp(t, map[string]string{
+		"app/components/Chip.pzl":     chip,
+		"app/components/app/Chip.pzl": chip,
+	})
+	null, _ := os.Open(os.DevNull)
+	defer null.Close()
+
+	for _, name := range []string{"app/components/Chip.pzl", "app/components/app/Chip.pzl"} {
+		js, err := compileOne(filepath.Join(root, filepath.FromSlash(name)), null)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := "data-" + codegen.ScopeID(name); !strings.Contains(js, want) {
+			t.Errorf("%s: root stamp is not %s:\n%s", name, want, js)
+		}
 	}
 }
 

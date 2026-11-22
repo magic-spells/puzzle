@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/magic-spells/puzzle/compiler/internal/codegen"
+	"github.com/magic-spells/puzzle/compiler/internal/generate"
 	"github.com/magic-spells/puzzle/compiler/internal/standalone"
 	"github.com/spf13/cobra"
 )
@@ -47,10 +48,17 @@ func compileOne(path string, warn *os.File) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// the build's d20 directory rule picks view or component mode. it matches
-	// "/app/views/" anywhere in the path, so an absolute path works too.
-	mode := codegen.ModeForPath(filepath.ToSlash(path))
-	res, err := standalone.Compile(path, src, mode, standalone.AssetsDirFor(path))
+	// compile under the build's name for the file, its path from the project
+	// root: that name picks the d20 view or component mode and keys the
+	// <style scoped> id (d59), so both match the build on every machine.
+	abs, _ := filepath.Abs(path)
+	root, err := generate.FindProjectRoot(filepath.Dir(abs))
+	if err != nil {
+		return "", err
+	}
+	rel, _ := filepath.Rel(root, abs)
+	name := filepath.ToSlash(rel)
+	res, err := standalone.Compile(name, src, codegen.ModeForPath(name), standalone.AssetsDirFor(path))
 	if err != nil {
 		return "", err
 	}
