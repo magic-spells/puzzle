@@ -1,8 +1,8 @@
 /**
  * FormatterRegistry — the function library (D176 §4): the built-in functions and
  * the app's own, which a template calls as `name(value, …args)` for display-only
- * transforms (constellation/doc/DOC-SPEC.md §6). Apps register theirs through
- * the `formatters` config map, which keeps its name.
+ * transforms (constellation/doc/DOC-SPEC.md §6). Apps register theirs under the
+ * `functions` config key.
  *
  * Compiled render code receives the RAW function map (getAll()), never the registry
  * instance: it calls `__formatters.escape(...)` and, for every library call,
@@ -204,10 +204,10 @@ export class FormatterRegistry {
 	/** @param {string} name @param {Formatter} fn */
 	register(name, fn) {
 		if (typeof name !== 'string' || name === '') {
-			throw new Error('[puzzle] formatter name must be a non-empty string');
+			throw new Error('[puzzle] function name must be a non-empty string');
 		}
 		if (typeof fn !== 'function') {
-			throw new Error(`[puzzle] formatter "${name}" must be a function (got ${typeof fn})`);
+			throw new Error(`[puzzle] function "${name}" must be a function (got ${typeof fn})`);
 		}
 		this.formatters[name] = fn;
 	}
