@@ -6,7 +6,7 @@ import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { adapter } from '../client-runtime/datastore/adapter.js';
 
-// App lifecycle hooks (v1.28, SPEC §30, D60): beforeMount / mounted /
+// App lifecycle hooks (v1.28, SPEC §34, D66): beforeMount / mounted /
 // beforeUnmount on the PuzzleApp config. Conventions copied from tests/app.test.js
 // (hand-written render() stand-ins, h/text/slot helpers, container(), the apps[]
 // + make() cleanup pattern).
@@ -86,7 +86,7 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-describe('PuzzleApp — beforeMount (SPEC §30, D60)', () => {
+describe('PuzzleApp — beforeMount (SPEC §34, D66)', () => {
 	it('seeds the store before navigation #0 — the first render sees the records', async () => {
 		const el = container();
 		const app = make({
@@ -181,7 +181,7 @@ describe('PuzzleApp — beforeMount (SPEC §30, D60)', () => {
 	});
 });
 
-describe('PuzzleApp — mounted (SPEC §30, D60)', () => {
+describe('PuzzleApp — mounted (SPEC §34, D66)', () => {
 	it('fires after the initial route is in the DOM', async () => {
 		const el = container();
 		let contentInsideHook = null;
@@ -236,7 +236,7 @@ describe('PuzzleApp — mounted (SPEC §30, D60)', () => {
 	});
 });
 
-describe('PuzzleApp — beforeUnmount (SPEC §30, D60)', () => {
+describe('PuzzleApp — beforeUnmount (SPEC §34, D66)', () => {
 	it('fires before teardown (store still readable) and a throw is logged while teardown completes', async () => {
 		const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const el = container();
@@ -313,7 +313,7 @@ describe('PuzzleApp — beforeUnmount (SPEC §30, D60)', () => {
 	});
 });
 
-describe('PuzzleApp — mount/unmount cycles (SPEC §30, D60)', () => {
+describe('PuzzleApp — mount/unmount cycles (SPEC §34, D66)', () => {
 	it('re-fires all three hooks on every mount/unmount cycle', async () => {
 		container();
 		const counts = { beforeMount: 0, mounted: 0, beforeUnmount: 0 };
@@ -340,7 +340,7 @@ describe('PuzzleApp — mount/unmount cycles (SPEC §30, D60)', () => {
 	});
 });
 
-describe('PuzzleApp — hook validation (SPEC §30, D60)', () => {
+describe('PuzzleApp — hook validation (SPEC §34, D66)', () => {
 	it('a non-function hook value rejects mount() with a clear error, before any wiring', async () => {
 		const el = container();
 		const app = make({
@@ -359,7 +359,7 @@ describe('PuzzleApp — hook validation (SPEC §30, D60)', () => {
 	});
 });
 
-describe('PuzzleApp — unmount during in-flight beforeMount (SPEC §30, D60)', () => {
+describe('PuzzleApp — unmount during in-flight beforeMount (SPEC §34, D66)', () => {
 	it('the router never starts, nothing mounts, mount() settles with no render and no unhandled rejection', async () => {
 		const el = container();
 		let release;
@@ -390,7 +390,7 @@ describe('PuzzleApp — unmount during in-flight beforeMount (SPEC §30, D60)', 
 	});
 });
 
-describe('PuzzleApp — no hooks (SPEC §30, D60)', () => {
+describe('PuzzleApp — no hooks (SPEC §34, D66)', () => {
 	it('mounts and renders exactly as before when no hooks are configured', async () => {
 		const el = container();
 		const app = make({ target: '#app', routes: homeRoutes() });
