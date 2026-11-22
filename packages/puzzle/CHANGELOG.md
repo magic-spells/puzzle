@@ -753,6 +753,8 @@ you edited the files).
   - `progress` shows no "0%" when indeterminate.
   - `meter` without `valueText` no longer warns about an undefined value in
     development.
+  - `emoji-picker`: the search box has its height, border, padding and focus
+    ring.
   - `badge` `outline` is the same height as the other variants.
   - `aspect-ratio` keeps its ratio under a max width or in a grid track.
   - `progress-ring`, `rating` and `sparkline` take a text colour from `class`.
