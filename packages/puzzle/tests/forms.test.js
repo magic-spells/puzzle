@@ -149,7 +149,7 @@ describe('createForm — the controller', () => {
 		expect(form.values).toBe(values);
 	});
 
-	it('refuses an invalid submit, shows every error and never calls fn', async () => {
+	it('refuses an invalid submit, touches every field, shows every error and never calls fn', async () => {
 		const form = createForm(stubView(), Post, { fields: ['title', 'body'] });
 		const fn = vi.fn();
 		const event = { preventDefault: vi.fn() };
@@ -157,6 +157,7 @@ describe('createForm — the controller', () => {
 		expect(event.preventDefault).toHaveBeenCalled();
 		expect(fn).not.toHaveBeenCalled();
 		expect(form.errors.title).toBe('Title is required');
+		expect(form.touched).toEqual({ title: true, body: true });
 		expect(form.submitting).toBe(false);
 	});
 
@@ -194,6 +195,28 @@ describe('createForm — the controller', () => {
 		expect(form.submitting).toBe(false);
 		expect(form.dirty).toBe(false);
 		expect(form.touched.title).toBe(false);
+	});
+
+	it('rebases on what was sent: an edit made during the save stays dirty, a reseed keeps its baseline', async () => {
+		const form = createForm(stubView(), Post, { from: { title: 'A' }, fields: ['title'] });
+		form.set('title', 'B');
+		let gate = deferred();
+		let pending = form.submit(() => gate.promise);
+		form.set('title', 'B and more');
+		gate.resolve();
+		await expect(pending).resolves.toBe(true);
+		expect(form.values.title).toBe('B and more');
+		expect(form.changed.title).toBe(true);
+		expect(form.dirty).toBe(true);
+
+		// a reseed while the save runs keeps the new record's baseline
+		gate = deferred();
+		pending = form.submit(() => gate.promise);
+		form.reset({ title: 'Next record' });
+		gate.resolve();
+		await expect(pending).resolves.toBe(true);
+		expect(form.values.title).toBe('Next record');
+		expect(form.dirty).toBe(false);
 	});
 
 	it('maps a model validation error onto its fields', async () => {

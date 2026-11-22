@@ -524,6 +524,39 @@ describe('D193 in a mounted view', () => {
 		await vi.waitFor(() => expect(el.textContent).toBe('UnoTwo'));
 	});
 
+	it('a collection load still out when invalidate() runs fetches again once it lands', async () => {
+		const posts = [{ id: 'p1', title: 'One' }];
+		let release;
+		const held = new Promise((resolve) => (release = resolve));
+		// the server answers with what it holds at dispatch; the first answer lands late
+		const fetchMock = vi.fn(async () => {
+			const answer = json(posts.map((p) => ({ ...p })));
+			if (fetchMock.mock.calls.length === 1) await held;
+			return answer;
+		});
+		vi.stubGlobal('fetch', fetchMock);
+		const store = makeStore();
+		class List extends PuzzleView {
+			data() {
+				return { posts: this.ctx.store.findMany('post') };
+			}
+			render() {
+				return h('p', {}, [text(this.getData().posts.map((p) => p.title).join(','))]);
+			}
+		}
+		const el = document.createElement('div');
+		document.body.appendChild(el);
+		const mounted = new List({ store, router: null, formatters: null }).mount(el);
+		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+		posts[0].title = 'Uno';
+		store.invalidate('post');
+		release();
+		await mounted;
+		expect(el.textContent).toBe('Uno');
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
 	it('a query-only change of params fetches the new page and caches the old one', async () => {
 		const { calls } = servePosts(fivePosts());
 		const store = makeStore();
