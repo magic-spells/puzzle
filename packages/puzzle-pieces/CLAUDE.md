@@ -18,7 +18,7 @@ version stamps at release time.
 
 **Why pieces don't ship as npm imports:** a Puzzle app can import `.pzl` files from an
 installed package that lists `@magic-spells/puzzle` in `peerDependencies` (the usage scan
-reads them, framework D89), but the app's Tailwind `@source` scan only covers `app/`, so a
+reads them, framework D89), but the app's Tailwind scan skips `node_modules`, so a
 package-shipped piece would render unstyled, and an installed piece is not the app's to
 edit. So pieces land in the app's own `app/components/ui/`, where the consumer's
 `puzzle build` compiles them and their Tailwind scan picks up the classes. This is why the
@@ -165,7 +165,9 @@ CLI — it is unrelated and must not be bumped along with the release.
   editing token VALUES there changes every consumer.
 - **Local UI state: seed, derive, set.** Seed render-feeding state with `setState()` in
   `created()`, read it back in `data()` through `this.getState()` / `this.getData()` and derive
-  the render model there, and have handlers call `setState()` only. A write to a key the last
+  the render model there, and have handlers call `setState()` only. `getData()` is the merged
+  model: if `data()` returns a different value under a state key's name, `getData()` can hand
+  that back, so read that key through `getState()`. A write to a key the last
   `data()` run read re-runs `data()` with the next render (framework D23), so no `refresh()`
   follows a `setState()`. Keep instance fields for bookkeeping that never feeds `data()` (timers,
   listener flags, a pending-focus marker). Call `refresh()` only on purpose: `data()` reads
@@ -298,7 +300,9 @@ CLI — it is unrelated and must not be bumped along with the release.
   in Puzzle. Nested-config props (`items[].children[]`) are the anti-pattern; flat leaf
   lists (`options`, `steps`, `columns`) stay config (`DECISION-CONFIG-FIRST-API`).
 - **Controlled-component discipline everywhere.** The parent owns `value`/`open` state;
-  props in, callbacks out. Callbacks are **value-first** (`this.props.change(value)`).
+  props in, callbacks out. Callbacks are **value-first** and pass one argument
+  (`this.props.change(value)`). The parent's `@change` handler gets only the first argument,
+  so a piece that needs to send more sends one object (Kanban's `@move`).
   Standard vocabulary: `variant`, `size`, `disabled`, `value`, `label`, `placeholder`,
   `class` (merged onto root); callbacks `@change`, `@press`, `@show`, `@hide`, `@ready`.
 - **Native `<dialog>` overlays** (dialog, alert-dialog, command, sheet, bottom-sheet) all
@@ -320,7 +324,8 @@ CLI — it is unrelated and must not be bumped along with the release.
   `focus-visible:outline-2` reveal.
 - **Implicit two-way binding is ON (D147, puzzle ≥ 0.5.0) — pieces must stay handler-owned.**
   The compiler auto-binds a `value=`/`checked=` on a plain `<input>`/`<textarea>`/`<select>`
-  when the expression is exactly `ident` or `ident.ident` AND the element has no author
+  when the expression is a plain path (`ident`, `ident.ident`, `a.b.c`: any number of `.name`
+  steps, no `[k]` or `?.`) AND the element has no author
   `@input`/`@change`. Component tags never bind (props are props). Nearly every piece is
   already suppressed because it carries the `@change` that routes through its callback
   prop — that is the correct pattern, not legacy, and the handler must never be deleted to

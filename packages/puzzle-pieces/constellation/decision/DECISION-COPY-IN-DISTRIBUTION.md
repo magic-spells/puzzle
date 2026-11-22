@@ -24,7 +24,7 @@ Pieces are distributed as **source copied into the consumer's `app/components/ui
 
 - **npm-import distribution of `.pzl`** — rejected as the pieces distribution, though the framework supports the mechanism:
   1. A `.pzl` imported from `node_modules` (with its extension) is compiled by the app's build like its own, and the usage scan reads the `.pzl` files of an installed package whose `package.json` lists `@magic-spells/puzzle` in `peerDependencies` (framework D89). An undeclared package's `.pzl` that needs a compiled-out feature fails the build, naming the file. So a component package can work; pieces still choose copy-in for the reasons below.
-  2. The app's Tailwind `@source` scan only covers `app/`, so a package-shipped piece renders **unstyled** unless the app adds the package to its sources.
+  2. The app's Tailwind scan skips `node_modules`, so a package-shipped piece renders **unstyled** unless the app adds the package to its sources.
   3. Pieces are meant to be owned: restyled, forked and edited in place, which an installed package cannot be.
   Copied files land in `app/`, compile with the consumer's own `puzzle build`, and their classes get scanned. Plain-JS npm packages work in `node_modules` too — that is why `dependencies` in a manifest (e.g. `@magic-spells/morph-engine`) are real npm installs while the piece's `.pzl` is copied.
 

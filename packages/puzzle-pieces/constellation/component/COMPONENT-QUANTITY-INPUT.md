@@ -48,8 +48,8 @@ The piece renders the same at-bounds state from props for prerender and never fi
 Puzzle's `patchAttrs` force-syncs `value` on an `<input>` against the LIVE DOM property
 every patch, so the NumberField-style frozen seed was re-asserted after each render and
 reverted what the component had written (host 3, field 1 after two clicks). The input
-renders `value={ String(current) }` — the `String()` keeps D147 from auto-binding — and
-carries an authored `@change` so the component's own `change` handling is untouched.
+renders `value={ current ?? '' }`: the `?? ''` keeps D147 from auto-binding, and the input
+has no handler of its own.
 Host `value` is never template-bound; the root writes `element.value` after the dynamic
 import resolves and in `afterUpdate()` when `props.value` moved. Upstream never dispatches
 `quantity-input:change` from a programmatic write, so no `#syncing` guard is needed.

@@ -16,7 +16,7 @@ live docs and examples for every piece.
 
 Puzzle compiles `.pzl` single-file components. It can compile `.pzl` files from an
 installed package that declares `@magic-spells/puzzle` as a peer dependency, but your
-Tailwind scan covers only `app/`, so a piece imported from `node_modules` would render
+Tailwind scan skips `node_modules`, so a piece imported from there would render
 unstyled, and it would not be yours to edit. So puzzle-pieces is copy-in: each piece is
 source you copy into `app/components/ui/`.
 Your `puzzle build` compiles it, your Tailwind scan picks up its classes, and the
@@ -38,6 +38,10 @@ don't have them yet, and prints — never auto-runs — any npm install you need
 line carries a version floor per package (`npm install
 @magic-spells/collapsible-content@^1.2.0`) — the release the piece was built
 against — so run it as printed rather than installing the bare name.
+Most pieces that wrap a web component also need its stylesheet, which the CLI
+does not print: the copied file's `STYLESHEET` comment gives the line to add
+once to `app/styles/styles.css` (for Dialog,
+`@import "@magic-spells/dialog-panel/css" layer(components);`).
 Existing files are never overwritten unless you pass `--force` (`-f`), and a
 `pieces.lock` of content hashes is kept so a future `diff`/`update` command can tell
 upstream changes from your local edits.
