@@ -12,9 +12,6 @@ import "github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 // warnOutletInComponent walks a component template and warns once per
 // <Outlet> marker it finds, at the marker's position.
 func warnOutletInComponent(nodes []parser.Node, file string, warnings *[]Warning) {
-	if warnings == nil {
-		return
-	}
 	for _, n := range nodes {
 		switch node := n.(type) {
 		case *parser.Slot:

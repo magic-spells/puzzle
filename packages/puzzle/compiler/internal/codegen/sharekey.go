@@ -81,7 +81,7 @@ var reservedShareNames = map[string]bool{"params": true, "props": true, "shared"
 // Shared. pos is the class name's position (or the file start for a scriptless
 // component, whose class is named from the filename).
 func warnReservedComponentName(className, file string, pos parser.Position, warnings *[]Warning) {
-	if warnings == nil || !reservedShareNames[shareKey(className)] {
+	if !reservedShareNames[shareKey(className)] {
 		return
 	}
 	*warnings = append(*warnings, Warning{
@@ -205,9 +205,6 @@ func positionalDataDecls(toks []jsTok) []DataDecl {
 // positional form (see positionalDataParams). pos is the method name's
 // position.
 func warnPositionalData(method, file string, pos parser.Position, warnings *[]Warning) {
-	if warnings == nil {
-		return
-	}
 	*warnings = append(*warnings, Warning{
 		File: file, Line: pos.Line, Col: pos.Col,
 		Message: fmt.Sprintf(
