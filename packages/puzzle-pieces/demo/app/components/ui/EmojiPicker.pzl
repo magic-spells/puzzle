@@ -42,7 +42,7 @@
           <input
             data-emoji-search
             type="text"
-            class={ inputClass }
+            class="h-8 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-muted transition-colors focus-visible:outline-2 outline-ring focus-visible:outline-ring"
             placeholder={ placeholder }
             aria-label={ placeholder }
             aria-controls={ listId }
@@ -179,11 +179,6 @@ const ALIGN = {
   center: 'left-1/2 -translate-x-1/2',
   end: 'right-0',
 };
-
-const INPUT_CLASS =
-  'h-8 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-ink ' +
-  'placeholder:text-muted transition-colors ' +
-  'focus-visible:outline-2 outline-ring focus-visible:outline-ring';
 
 const HEADER_CLASS =
   'col-span-full px-1 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted select-none';
