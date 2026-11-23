@@ -317,18 +317,29 @@ function holdLocaleSlots() {
 	};
 }
 
-/** @param {RouteSnapshot | null} current */
+/**
+ * The public Router with no route table: a push or replace of the current path
+ * is the same-path no-op and any other target matches nothing (D182), so
+ * prefetch() has nothing to load (D195).
+ * @param {RouteSnapshot | null} current
+ * @returns {import('../../types/index.js').Router}
+ */
 function makeInertRouter(current) {
+	/** @type {import('../../types/index.js').Router['push']} */
+	const navigate = async (target) =>
+		target === current?.path ? { ok: true, route: current } : { ok: false, reason: 'not-found' };
 	return {
 		current,
-		push: async () => {},
-		replace: async () => {},
+		views: Object.freeze([]),
+		push: navigate,
+		replace: navigate,
+		prefetch: async () => false,
 		go: async () => {},
 		back: async () => {},
 		forward: async () => {},
 		// a path passes through; a named target (D196) needs a route table this
 		// inert router does not have, so it says so instead of rendering a dead href.
-		url: /** @param {string | import('../../types/index.js').NamedRouteTarget} target */ (target) => {
+		url: (target) => {
 			if (typeof target === 'string') return target;
 			throw new Error(
 				'[puzzle] mountView has no route table to resolve a named link — test it with createTestApp and your routes, or pass a router'
