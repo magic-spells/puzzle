@@ -8,7 +8,7 @@ import { ViewNode, SLOT_TAG } from '@magic-spells/puzzle';
 DefaultLayout.prototype.render = function () {
   const __d = this.getData();
 
-  return new ViewNode('puzzle-view', { class: 'relative min-h-screen flex flex-col bg-ink text-fg' }, [
+  return new ViewNode('puzzle-view', { class: 'relative min-h-screen flex flex-col bg-page text-ink' }, [
     new ViewNode('div', { class: 'app-glow pointer-events-none absolute inset-x-0 top-0 h-[440px]' }, []),
     (this.__c[0] ??= new ViewNode('header', { class: 'relative pt-16 pb-10' }, [
       new ViewNode('div', { class: 'max-w-xl mx-auto px-6 text-center' }, [
@@ -19,7 +19,7 @@ DefaultLayout.prototype.render = function () {
           ]),
           new ViewNode('span', { class: 'h-px w-8 bg-hairline' }, []),
         ]),
-        new ViewNode('h1', { class: 'font-display text-6xl md:text-7xl leading-none text-fg' }, [
+        new ViewNode('h1', { class: 'font-display text-6xl md:text-7xl leading-none text-ink' }, [
           new ViewNode('text', { value: 'Todos' }),
         ]),
         new ViewNode('p', { class: 'mt-4 text-sm text-muted' }, [

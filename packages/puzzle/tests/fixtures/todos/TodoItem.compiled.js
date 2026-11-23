@@ -63,7 +63,7 @@ TodoItem.prototype.render = function () {
             ? [
                 (this.__c[0] ??= new ViewNode('div', { class: 'absolute inset-0 flex items-center justify-center' }, [
                   new ViewNode('svg', {
-                    class: 'w-3 h-3 text-ink',
+                    class: 'w-3 h-3 text-page',
                     fill: 'currentColor',
                     viewBox: '0 0 20 20',
                   }, [
@@ -81,7 +81,7 @@ TodoItem.prototype.render = function () {
         ]),
       ]),
       new ViewNode('span', {
-        class: `flex-1 truncate ${__d.todo?.completed ? 'text-faint line-through' : ''}${!__d.todo?.completed ? 'text-fg' : ''}`,
+        class: `flex-1 truncate ${__d.todo?.completed ? 'text-faint line-through' : ''}${!__d.todo?.completed ? 'text-ink' : ''}`,
       }, [
         new ViewNode('text', { value: __s(__d.todo?.text, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'todo.text' : 0) }),
       ]),
