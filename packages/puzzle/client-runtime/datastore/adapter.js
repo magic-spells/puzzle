@@ -64,8 +64,8 @@ import {
 
 /**
  * A record's write status (D193): which write is running at the front of its
- * D132 chain, how many are queued behind it, and the last failure.
- * @typedef {{ pending: 'save' | 'delete' | null, error: unknown, queued: number }} WriteStatus
+ * D132 chain, the chain's last link, and the last failure.
+ * @typedef {{ pending: 'save' | 'delete' | null, error: unknown, tail: Promise<any> | null }} WriteStatus
  */
 
 /**
@@ -88,8 +88,6 @@ const LEGACY_LOAD_ALL = 'loadAll';
 const MAX_SETTLE_ROUNDS = 10;
 
 const noop = () => {};
-/** @type {WeakMap<object, WeakMap<object, Promise<any>>>} */
-const writeChainsByStore = new WeakMap();
 // record → its D193 write status, created on its first save()/delete(). Keyed by
 // the record so the entry dies with it.
 /** @type {WeakMap<object, WriteStatus>} */
@@ -346,19 +344,6 @@ async function generatedTransport(url, verb, fetch, arg) {
 	// recognises absence by `status === 404`, and a plain Error carries no status.
 	if (verb === 'delete' && response.status === 404) return;
 	return responseData(response);
-}
-
-/**
- * @param {object} store
- * @returns {WeakMap<object, Promise<any>>}
- */
-function writeChainsFor(store) {
-	let chains = writeChainsByStore.get(store);
-	if (!chains) {
-		chains = new WeakMap();
-		writeChainsByStore.set(store, chains);
-	}
-	return chains;
 }
 
 // ---- read state (D161) -------------------------------------------------------
@@ -1198,11 +1183,7 @@ class AdapterStoreMethods {
 	 */
 	_findOneTracked(type, id, requests) {
 		const record = this._findOneLocal(type, id);
-		if (!requests) return record;
-		if (!record) this._faultOne(type, id, requests);
-		// D193: a present record an invalidate() covered refetches. The settle loop
-		// holds the commit until it lands, so the old fields stay on screen.
-		else this._faultStale(type, id, record, requests);
+		if (requests) this._faultOne(type, id, requests, record);
 		return record;
 	}
 
@@ -1220,14 +1201,16 @@ class AdapterStoreMethods {
 			const state = readStateFor(this);
 			const entry = touchQuery(state, key);
 			if (requests && (!entry || isQueryStale(state, entry))) {
-				this._faultQuery(type, key, /** @type {Record<string, any>} */ (options?.query), requests);
+				this._faultMany(type, key, /** @type {Record<string, any>} */ (options?.query), requests);
 			}
 			this._subscribe(type);
 			return queryRows(this, type, entry, options);
 		}
 		// The collection, not the filter, is what can be missing: a filter is always
-		// applied locally and is never serialized into a request.
-		if (requests) this._faultMany(type, requests);
+		// applied locally and is never serialized into a request. `loaded` is not
+		// record presence — local records prove nothing about the rest — and an
+		// authored loadMany sets it too, so a paginated adapter loads page one once.
+		if (requests && !readStateFor(this).loaded.has(type)) this._faultMany(type, type, undefined, requests);
 		return this._findManyLocal(type, options);
 	}
 
@@ -1429,22 +1412,25 @@ class AdapterStoreMethods {
 	}
 
 	/**
-	 * Core Store calls this from findOne() when a tracked evaluation missed. It
-	 * decides — with all the state that decision needs living out here — whether a
-	 * request is owed, and records the one to wait for under its diagnostic key.
+	 * The findOne half: decides — with all the state that decision needs living
+	 * out here — whether a request is owed, and records the one to wait for under
+	 * its diagnostic key.
 	 *
-	 * Silent (no request, no entry) when: the id is nullish or unkeyable, the
-	 * type's collection is known exhaustive, the identity is known absent, or the
-	 * model declares no loadOne of its own and no endpoint (see faultVerb — an app-wide dialect
-	 * alone never makes a local model fault). A pending identical request is
-	 * joined rather than reissued.
+	 * A miss is silent (no request, no entry) when: the id is nullish or
+	 * unkeyable, the type's collection is known exhaustive, or the identity is
+	 * known absent. A present `record` refetches only when an invalidate()
+	 * covered it (D193); the settle loop holds the commit until it lands, so the
+	 * old fields stay on screen. Either way nothing fetches when the model
+	 * declares no loadOne of its own and no endpoint (see faultVerb — an app-wide
+	 * dialect alone never makes a local model fault), and a pending identical
+	 * request is joined rather than reissued.
 	 * @this {AdapterStore}
 	 * @param {string} type
 	 * @param {unknown} id
 	 * @param {RequestMap} requests
+	 * @param {StoreRecord | null} [record] the record already present, if any
 	 */
-	_faultOne(type, id, requests) {
-		if (id == null) return;
+	_faultOne(type, id, requests, record) {
 		const key = identityKey(type, id);
 		if (key === null) return;
 		const state = readStateFor(this);
@@ -1454,8 +1440,7 @@ class AdapterStoreMethods {
 		// turns a known absence into a failed view. `loaded` is deliberately NOT the
 		// test: an authored loadMany may have returned page one, and an id it left
 		// out is a record that exists.
-		if (state.complete.has(type)) return;
-		if (isAbsent(state, key)) return;
+		if (record ? !isRecordStale(state, type, record, key) : state.complete.has(type) || isAbsent(state, key)) return;
 		const inflight = state.one.get(key);
 		if (inflight) {
 			requests.set(key, inflight);
@@ -1468,8 +1453,11 @@ class AdapterStoreMethods {
 				await this._loadOne(type, id, true);
 			} catch (err) {
 				// A 404 is an answer: the identity is absent, the round resolves, and the
-				// committed null means "does not exist". Everything else fails the run.
+				// committed null means "does not exist". Everything else fails the run
+				// (a stale record stays stale, so the next run retries). A stale record the
+				// server no longer has is removed locally, which records it absent.
 				if (!(err instanceof PuzzleAdapterError) || err.status !== 404) throw err;
+				if (record && this._typeMap(type).get(recordKey(id)) === record) this.removeRecord(record);
 			} finally {
 				if (state.one.get(key) === request) state.one.delete(key);
 			}
@@ -1480,52 +1468,19 @@ class AdapterStoreMethods {
 	}
 
 	/**
-	 * The findMany half. Having loaded is tracked independently of record
-	 * presence: local records prove nothing about the rest of the collection, so
-	 * the first tracked findMany on a type still loads it once. Filters stay
-	 * local. This half asks only "has the collection request run?" — an authored
-	 * loadMany answers that as well as a generated one, which is what keeps a
-	 * paginated adapter from re-requesting page one on every settle pass.
+	 * The findMany half: fetch the collection (keyed by its bare type) or one
+	 * query key (D193) that is missing or stale, deduped with any request already
+	 * in flight for the same key (concurrent views share it). The two share
+	 * `state.many` — a query key always holds a '?', which no model type name
+	 * does. Failure clears the in-flight entry WITHOUT marking anything loaded
+	 * (loadMany marks only on success), so a retry is a real retry.
 	 * @this {AdapterStore}
 	 * @param {string} type
+	 * @param {string} key the canonical query key, or the type for the collection
+	 * @param {Record<string, any> | undefined} query
 	 * @param {RequestMap} requests
 	 */
-	_faultMany(type, requests) {
-		const state = readStateFor(this);
-		if (state.loaded.has(type)) return;
-		const inflight = state.many.get(type);
-		if (inflight) {
-			requests.set(type, inflight);
-			return;
-		}
-		if (!faultVerb(this, type, 'loadMany')) return;
-
-		const request = (async () => {
-			try {
-				await this.loadMany(type);
-			} finally {
-				// Failure clears the in-flight entry WITHOUT marking the type complete
-				// (loadMany marks it only on success), so a retry is a real retry.
-				if (state.many.get(type) === request) state.many.delete(type);
-			}
-		})();
-		state.many.set(type, request);
-		request.catch(noop);
-		requests.set(type, request);
-	}
-
-	/**
-	 * The query half (D193): fetch one query key that is missing or stale,
-	 * deduped with any request already in flight for the same key (concurrent
-	 * views share it). Shares `state.many` with collection loads — a query key
-	 * always holds a '?', which no model type name does.
-	 * @this {AdapterStore}
-	 * @param {string} type
-	 * @param {string} key the canonical query key
-	 * @param {Record<string, any>} query
-	 * @param {RequestMap} requests
-	 */
-	_faultQuery(type, key, query, requests) {
+	_faultMany(type, key, query, requests) {
 		const state = readStateFor(this);
 		const inflight = state.many.get(key);
 		if (inflight) {
@@ -1541,43 +1496,6 @@ class AdapterStoreMethods {
 			}
 		})();
 		state.many.set(key, request);
-		request.catch(noop);
-		requests.set(key, request);
-	}
-
-	/**
-	 * Refetch a present record an invalidate() covered (D193). A 404 means the
-	 * server no longer has it, so the record is removed locally (which records
-	 * it absent) and the next pass reads null. Any other failure fails the run
-	 * and leaves the record stale, so the next run retries.
-	 * @this {AdapterStore}
-	 * @param {string} type
-	 * @param {unknown} id
-	 * @param {StoreRecord} record
-	 * @param {RequestMap} requests
-	 */
-	_faultStale(type, id, record, requests) {
-		const state = readStateByStore.get(this);
-		if (!state || (state.staleType.size === 0 && state.staleRecord.size === 0)) return;
-		const key = identityKey(type, id);
-		if (key === null || !isRecordStale(state, type, record, key)) return;
-		const inflight = state.one.get(key);
-		if (inflight) {
-			requests.set(key, inflight);
-			return;
-		}
-		if (!faultVerb(this, type, 'loadOne')) return;
-		const request = (async () => {
-			try {
-				await this._loadOne(type, id, true);
-			} catch (err) {
-				if (!(err instanceof PuzzleAdapterError) || err.status !== 404) throw err;
-				if (this._typeMap(type).get(recordKey(id)) === record) this.removeRecord(record);
-			} finally {
-				if (state.one.get(key) === request) state.one.delete(key);
-			}
-		})();
-		state.one.set(key, request);
 		request.catch(noop);
 		requests.set(key, request);
 	}
@@ -1748,7 +1666,7 @@ class AdapterStoreMethods {
 	 * drops it from the merge. On success the record is marked synced.
 	 *
 	 * Concurrent writes on ONE record serialize through its write chain (see
-	 * _chain): a second save waits for the first to settle, then re-evaluates
+	 * _write): a second save waits for the first to settle, then re-evaluates
 	 * wasSynced — so a double-click POSTs once then PUTs, never double-creates.
 	 * A save that finds its record already removed when its turn comes sends
 	 * nothing and rejects with the same message record.save() gives at call time —
@@ -1766,6 +1684,22 @@ class AdapterStoreMethods {
 	 * `pending` names the write at the front of the chain, `error` holds the
 	 * last failure, and every change notifies the record. The promise returned
 	 * carries the same two facts as plain properties for code that holds it.
+	 *
+	 * Save AND delete share the one per-record chain. Both verbs mutate the SAME
+	 * server row and the same map entry, so ordering them separately is not
+	 * enough: an unchained delete racing a first save either orphans the row the
+	 * POST creates or builds its URL from a client-side pk the POST is about to
+	 * replace, and then removes nothing anywhere while resolving successfully.
+	 *
+	 * Each link reads the record's state when it REACHES the front of the queue,
+	 * never when it was enqueued — that is what makes a queued delete see the
+	 * adopted primary key and a queued save see a removal that happened while it
+	 * waited.
+	 *
+	 * The prior link's rejection is swallowed FOR CHAINING ONLY; its own caller
+	 * still observes it (they hold that promise). This holds ACROSS verbs: a
+	 * queued delete does not inherit a failed save's rejection, and vice versa.
+	 * Every caller observes exactly its own outcome.
 	 * @template T
 	 * @this {AdapterStore}
 	 * @param {StoreRecord} record
@@ -1776,11 +1710,10 @@ class AdapterStoreMethods {
 	_write(record, kind, fn) {
 		let status = WRITE_STATUS.get(record);
 		if (!status) {
-			status = { pending: null, error: null, queued: 0 };
+			status = { pending: null, error: null, tail: null };
 			WRITE_STATUS.set(record, status);
 		}
 		const s = status;
-		s.queued++;
 		// the status notification goes to the record's key as it is NOW — a first
 		// save may re-key it, so this is read again at each flip
 		const changed = () => {
@@ -1789,18 +1722,22 @@ class AdapterStoreMethods {
 			const id = record[this.modelFor(type).primaryKey()];
 			notifyKey(this, type + REC_SEP + id, record);
 		};
-		const run = this._chain(record, () => {
+		const run = (s.tail ? s.tail.then(noop, noop) : Promise.resolve()).then(() => {
 			s.pending = kind;
 			s.error = null;
 			changed();
 			return fn();
 		});
+		s.tail = run;
 		/** @type {any} */
 		let out;
 		/** @param {unknown} [err] */
 		const settle = (err) => {
-			s.queued--;
-			if (s.queued === 0) s.pending = null;
+			// the last link settling empties the chain
+			if (s.tail === run) {
+				s.tail = null;
+				s.pending = null;
+			}
 			if (err !== undefined) s.error = err;
 			out.pending = false;
 			out.error = err ?? null;
@@ -1820,41 +1757,6 @@ class AdapterStoreMethods {
 		out.pending = true;
 		out.error = null;
 		return out;
-	}
-
-	/**
-	 * Serialize one record's server writes — save AND delete — behind a single
-	 * per-record chain. Both verbs mutate the SAME server row and the same map
-	 * entry, so ordering them separately is not enough: an unchained delete
-	 * racing a first save either orphans the row the POST creates or builds its
-	 * URL from a client-side pk the POST is about to replace, and then removes
-	 * nothing anywhere while resolving successfully.
-	 *
-	 * Each link reads the record's state when it REACHES the front of the queue,
-	 * never when it was enqueued — that is what makes a queued delete see the
-	 * adopted primary key and a queued save see a removal that happened while it
-	 * waited.
-	 *
-	 * The prior link's rejection is swallowed FOR CHAINING ONLY; its own caller
-	 * still observes it (they hold that promise). This holds ACROSS verbs: a
-	 * queued delete does not inherit a failed save's rejection, and vice versa.
-	 * Every caller observes exactly its own outcome.
-	 * @template T
-	 * @this {AdapterStore}
-	 * @param {object} record
-	 * @param {() => Promise<T>} fn
-	 * @returns {Promise<T>}
-	 */
-	_chain(record, fn) {
-		const chains = writeChainsFor(this);
-		const prev = chains.get(record);
-		const run = (prev ? prev.then(noop, noop) : Promise.resolve()).then(fn);
-		chains.set(record, run);
-		const cleanup = () => {
-			if (chains.get(record) === run) chains.delete(record);
-		};
-		run.then(cleanup, cleanup);
-		return run;
 	}
 
 	/**
@@ -1980,7 +1882,7 @@ class AdapterStoreMethods {
 	 * generated DELETE endpoint/:id treats 404 as already gone. A returned non-OK
 	 * Response rejects with PuzzleAdapterError and the record stays.
 	 *
-	 * Serialized behind the record's write chain (see _chain), so a delete fired
+	 * Serialized behind the record's write chain (see _write), so a delete fired
 	 * during a save waits for it: the URL below is then built from the primary key
 	 * the save reconciled, which is the row the server actually created.
 	 *

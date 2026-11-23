@@ -637,29 +637,6 @@ export function safeMerge(record, src, throughRevision) {
 }
 
 /**
- * Does `key` resolve to a plain method on this model's prototype chain?
- */
-// Walks to Object.prototype for the same reason resolveCollision does: a schema
-// field named `toString`/`valueOf` is unusable by construction, so the two walks
-// must agree on what "is a method" means. If this one stopped short, such a field
-// would register cleanly and then never hold data — the exact trap this check
-// exists to close.
-/**
- * @param {object} proto
- * @param {string} key
- * @returns {boolean}
- */
-function resolvesToMethod(proto, key) {
-	let owner = proto;
-	while (owner) {
-		const descriptor = Object.getOwnPropertyDescriptor(owner, key);
-		if (descriptor) return !('get' in descriptor) && typeof descriptor.value === 'function';
-		owner = Object.getPrototypeOf(owner);
-	}
-	return false;
-}
-
-/**
  * Reject a schema entry whose NAME the record shape has already spoken for —
  * checked once, when the Store registers the model, so the mistake surfaces at
  * app construction instead of as a `TypeError: record.update is not a function`
@@ -691,7 +668,8 @@ export function assertSchemaNames(Model, type) {
 	if (typeof Model !== 'function' || !Model.prototype) return;
 	const schema = Model.schema;
 	if (!schema || typeof schema !== 'object') return;
-	const proto = Model.prototype;
+	// the payload path's own walk, on a probe with no own keys standing in for a record
+	const probe = Object.create(Model.prototype);
 	for (const name of Object.keys(schema)) {
 		// Reserved first: `constructor` is in both families, and "reserved" is the
 		// more useful thing to tell someone who declared it.
@@ -700,7 +678,7 @@ export function assertSchemaNames(Model, type) {
 				`[puzzle] model "${type}" declares schema entry "${name}", which is a reserved record field — every merge path (update, upsert, save response, storage hydration) drops it, so the field can never hold data: a required rule on it fails forever and save() rejects without dispatching. Rename the field.`
 			);
 		}
-		if (!resolvesToMethod(proto, name)) continue;
+		if (resolveCollision(probe, name) !== COLLIDES_METHOD) continue;
 		throw new Error(
 			`[puzzle] model "${type}" declares schema entry "${name}", which is a method on ${Model.name || 'the model class'} — a field cannot shadow a model method (payloads carrying it are dropped). Rename the field or the method.`
 		);
