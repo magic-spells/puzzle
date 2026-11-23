@@ -151,19 +151,9 @@ type staticModules struct {
 // (profiling off); it splits this pass into its three expensive steps — the node
 // prerender bundle, the render run, and the per-page browser bundles.
 func prerenderStaticPages(absRoot, appEntry, staging, appMetafile string, publicFiles map[string]bool, cfg config.Config, dev, quiet, linkedCSS bool, prof *PhaseProfile, pc *passContext) error {
-	// A public/ asset that already produced a staging/_puzzle would be clobbered
-	// by the per-page bundles — reject it up front (extends the reserved-output
-	// collision guard to the static tree). copyPublic has already run, so the
-	// collision is observable here, before the splitting pass writes anything.
-	if pagesOut := filepath.Join(staging, staticPagesDir); dirExists(pagesOut) || fsutil.FileExists(pagesOut) {
-		return fmt.Errorf(
-			"public asset would overwrite compiler output dist/%s (a reserved output name in static mode); rename or remove it",
-			staticPagesDir,
-		)
-	}
-	// Same class of collision for the prerender scratch dir, which is overwritten
-	// by the generated bundle and then deleted before the swap.
-	if err := checkPrerenderScratchCollision(absRoot, staging, "--static"); err != nil {
+	// copyPublic has already run, so a public asset at a reserved name is
+	// observable here, before the splitting pass writes anything.
+	if err := checkStaticReserved(absRoot, staging); err != nil {
 		return err
 	}
 

@@ -56,9 +56,8 @@ const prerenderDir = ".puzzle-prerender"
 //
 // The check reads the post-copyPublic STAGING state rather than the app tree, so
 // neither the app/public vs flat public/ resolution nor a file-instead-of-dir
-// spelling can dodge it. It mirrors the reserved-name guard the static mode
-// already applies to staging/_puzzle (prerender_pages.go). label names the mode
-// in the error, as elsewhere in this file.
+// spelling can dodge it. label names the mode in the error, as elsewhere in this
+// file.
 func checkPrerenderScratchCollision(absRoot, staging, label string) error {
 	scratch := filepath.Join(staging, prerenderDir)
 	if !dirExists(scratch) && !fsutil.FileExists(scratch) {
@@ -67,7 +66,7 @@ func checkPrerenderScratchCollision(absRoot, staging, label string) error {
 	// Name the user's file where it can be resolved; the staging copy is a temp
 	// path that is gone by the time the error is read.
 	source := prerenderDir
-	if pub := publicDir(absRoot); pub != "" {
+	if pub := PublicDir(absRoot); pub != "" {
 		if rel, err := filepath.Rel(absRoot, filepath.Join(pub, prerenderDir)); err == nil {
 			source = filepath.ToSlash(rel)
 		}
@@ -77,6 +76,20 @@ func checkPrerenderScratchCollision(absRoot, staging, label string) error {
 			"(%s is a reserved output name); rename or remove it",
 		label, source, prerenderDir,
 	)
+}
+
+// checkStaticReserved runs static mode's reserved-output guards against the
+// post-copyPublic staging tree: a public asset at _puzzle would be clobbered by
+// the per-page bundles, and one at .puzzle-prerender consumed by the prerender
+// step.
+func checkStaticReserved(absRoot, staging string) error {
+	if pagesOut := filepath.Join(staging, staticPagesDir); dirExists(pagesOut) || fsutil.FileExists(pagesOut) {
+		return fmt.Errorf(
+			"public asset would overwrite compiler output dist/%s (a reserved output name in static mode); rename or remove it",
+			staticPagesDir,
+		)
+	}
+	return checkPrerenderScratchCollision(absRoot, staging, "--static")
 }
 
 // ssgSummary mirrors the JSON the SSG runtime's prerenderToDir prints after the
@@ -211,7 +224,7 @@ func checkPrerenderCollision(absRoot, staging string, publicOwners map[string]st
 		return nil
 	}
 
-	publicPath, err := filepath.Rel(absRoot, filepath.Join(publicDir(absRoot), filepath.FromSlash(owner)))
+	publicPath, err := filepath.Rel(absRoot, filepath.Join(PublicDir(absRoot), filepath.FromSlash(owner)))
 	if err != nil {
 		return fmt.Errorf("resolving public asset for prerender output %s: %w", outputFile, err)
 	}

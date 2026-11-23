@@ -30,10 +30,7 @@ With --json, print the results as one JSON object on stdout instead: dir, ok
 the same either way.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		dir := "."
-		if len(args) == 1 {
-			dir = args[0]
-		}
+		dir := dirArg(args)
 		var fails int
 		if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
 			var err error

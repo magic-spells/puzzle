@@ -76,10 +76,7 @@ Setting PUZZLE_PROFILE_BUILD=1 does the same, and reaches the builds 'puzzle
 dev' runs for an output: 'static' project.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		dir := "."
-		if len(args) == 1 {
-			dir = args[0]
-		}
+		dir := dirArg(args)
 
 		mode, _ := cmd.Flags().GetString("mode")
 		quiet, _ := cmd.Flags().GetBool("quiet")
@@ -150,7 +147,7 @@ stderr. PUZZLE_PROFILE_BUILD=1 enables the same profiling.`,
 	Args: serverArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		host := serverHost(cmd)
-		dir := serverDir(args)
+		dir := dirArg(args)
 		port, _ := cmd.Flags().GetInt("port")
 		strictPort, _ := cmd.Flags().GetBool("strict-port")
 		open, _ := cmd.Flags().GetBool("open")
@@ -188,7 +185,7 @@ what a static host does.`,
 	Args: serverArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		host := serverHost(cmd)
-		dir := serverDir(args)
+		dir := dirArg(args)
 		port, _ := cmd.Flags().GetInt("port")
 		strictPort, _ := cmd.Flags().GetBool("strict-port")
 		return preview.Serve(dir, preview.Options{
@@ -213,6 +210,14 @@ func outputFlag(static, hybrid bool) (string, error) {
 	default:
 		return "", nil
 	}
+}
+
+// dirArg returns a command's optional [dir] positional, "." when it is omitted.
+func dirArg(args []string) string {
+	if len(args) == 1 {
+		return args[0]
+	}
+	return "."
 }
 
 func init() {

@@ -238,7 +238,7 @@ type shellHashPlan struct {
 
 func shellHashSupport(root string) shellHashPlan {
 	var plan shellHashPlan
-	src := publicDir(root)
+	src := PublicDir(root)
 	if src == "" {
 		return plan
 	}

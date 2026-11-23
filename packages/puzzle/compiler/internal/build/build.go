@@ -604,19 +604,11 @@ var reservedOutputNames = map[string]bool{
 // listing the name in reservedOutputNames.
 const chunksDirName = "chunks"
 
-// PublicDir returns the resolved static-assets source directory (app/public,
-// else a root-level public/), or "" if neither exists. Exported so `puzzle dev`
-// can watch a root-level public/ tree that lies OUTSIDE the watched app/ dir
-// (app/public is already inside it). It delegates to the same resolver the
-// copier uses, so the watched dir and the copied dir never diverge.
-func PublicDir(root string) string {
-	return publicDir(root)
-}
-
-// publicDir returns the app's static-assets source directory, or "" if none.
+// PublicDir returns the app's static-assets source directory, or "" if none.
 // The examples keep assets under app/public/; a flat public/ at the root is also
-// honored (app/public/ wins when both exist).
-func publicDir(root string) string {
+// honored (app/public/ wins when both exist). Exported so `puzzle dev` watches,
+// and `puzzle add deploy` writes into, the same folder the copier reads.
+func PublicDir(root string) string {
 	src := filepath.Join(root, "app", "public")
 	if dirExists(src) {
 		return src
@@ -647,7 +639,7 @@ func publicDir(root string) string {
 // dist/<tag>/, so a public/<tag> folder or file would be merged into or
 // clobbered by them.
 func ValidatePublic(root string, splitting bool, i18n *config.I18n) error {
-	src := publicDir(root)
+	src := PublicDir(root)
 	if src == "" {
 		return nil
 	}
@@ -731,7 +723,7 @@ const (
 // mirror built from it can never delete a build output.
 func copyPublic(root, outdir string, mode publicCopyMode) (map[string]bool, error) {
 	copied := make(map[string]bool)
-	src := publicDir(root)
+	src := PublicDir(root)
 	if src == "" {
 		return copied, nil // nothing to copy is not an error
 	}

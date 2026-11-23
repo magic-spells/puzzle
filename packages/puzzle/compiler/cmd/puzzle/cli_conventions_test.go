@@ -541,7 +541,7 @@ func TestNoColorReachesPrintersInRunE(t *testing.T) {
 	}
 	var allowed, enabled bool
 	probe := &cobra.Command{Use: "color-probe", RunE: func(cmd *cobra.Command, args []string) error {
-		allowed = ui.ColorAllowed()
+		allowed = os.Getenv("NO_COLOR") == "" // TERM is pinned above
 		enabled = ui.New(os.Stdout).Enabled()
 		return nil
 	}}

@@ -5,26 +5,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
+	"github.com/magic-spells/puzzle/compiler/internal/build"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/generate"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 	deploytemplates "github.com/magic-spells/puzzle/deploy"
 )
-
-// deployWrite is one template resolved against an app: the bytes to write and
-// the absolute and app-relative paths they go to.
-type deployWrite struct {
-	data []byte
-	// abs is the absolute destination path.
-	abs string
-	// rel is the slash-separated, app-root-relative path, for messages.
-	rel string
-	// current is true when the destination already holds exactly these bytes.
-	current bool
-}
 
 // addDeploy is `puzzle add deploy [host]` (D198). with no host it lists the
 // hosts; with one it copies that host's config template into the app, picking
@@ -64,80 +54,53 @@ func addDeploy(w io.Writer, out *ui.Printer, dir, flagOutput string, overwrite b
 	if output == "" {
 		output = cfg.Output
 	}
-	static := output == "static"
 
-	files := host.SPA
-	if static {
-		files = host.Static
+	template := host.SPA
+	if output == "static" {
+		template = host.Static
 	}
-
-	// resolve every destination first, so a refusal leaves the app untouched
-	// (all or nothing, the add piece pre-flight).
-	writes := make([]deployWrite, 0, len(files))
-	var clashes []string
-	for _, file := range files {
-		data, err := deploytemplates.FS.ReadFile(file.Template)
-		if err != nil {
-			return fmt.Errorf("reading embedded deploy template %s: %w", file.Template, err)
-		}
-		rel := deployDestination(root, file)
-		abs := filepath.Join(root, filepath.FromSlash(rel))
-		write := deployWrite{data: data, abs: abs, rel: rel}
-		existing, readErr := os.ReadFile(abs)
-		switch {
-		case readErr == nil && bytes.Equal(existing, data):
-			write.current = true
-		case readErr == nil:
-			clashes = append(clashes, rel)
-		case os.IsNotExist(readErr):
-			// nothing there yet: a plain write.
-		default:
-			return fmt.Errorf("checking %s: %w", rel, readErr)
-		}
-		writes = append(writes, write)
+	data, err := deploytemplates.FS.ReadFile(template)
+	if err != nil {
+		return fmt.Errorf("reading embedded deploy template %s: %w", template, err)
 	}
-	if len(clashes) > 0 && !overwrite {
-		return fmt.Errorf("refusing to overwrite %s (use --force to replace it with the %s template)",
-			strings.Join(clashes, ", "), host.Label)
-	}
-
-	for _, write := range writes {
-		if write.current {
-			fmt.Fprintf(w, "%s %s already matches the %s template — nothing to do.\n",
-				out.Green("✓"), write.rel, host.Label)
-			continue
+	rel := deployDestination(root, host, template)
+	abs := filepath.Join(root, filepath.FromSlash(rel))
+	existing, err := os.ReadFile(abs)
+	switch {
+	case err == nil && bytes.Equal(existing, data):
+		fmt.Fprintf(w, "%s %s already matches the %s template — nothing to do.\n",
+			out.Green("✓"), rel, host.Label)
+	case err == nil && !overwrite:
+		return fmt.Errorf("refusing to overwrite %s (use --force to replace it with the %s template)", rel, host.Label)
+	case err != nil && !os.IsNotExist(err):
+		return fmt.Errorf("checking %s: %w", rel, err)
+	default:
+		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+			return fmt.Errorf("creating %s: %w", filepath.Dir(rel), err)
 		}
-		if err := os.MkdirAll(filepath.Dir(write.abs), 0o755); err != nil {
-			return fmt.Errorf("creating %s: %w", filepath.Dir(write.rel), err)
+		if err := os.WriteFile(abs, data, 0o644); err != nil {
+			return fmt.Errorf("writing %s: %w", rel, err)
 		}
-		if err := os.WriteFile(write.abs, write.data, 0o644); err != nil {
-			return fmt.Errorf("writing %s: %w", write.rel, err)
-		}
-		fmt.Fprintf(w, "%s Wrote %s (%s, %s).\n", out.Green("✓"), write.rel, host.Label, deployShape(output))
+		fmt.Fprintf(w, "%s Wrote %s (%s, %s).\n", out.Green("✓"), rel, host.Label, deployShape(output))
 	}
 
 	renderDeployNextSteps(w, out, host, root, cfg, output)
 	return nil
 }
 
-// deployDestination is the app-relative slash path a template is written to.
-// a Public file follows the build's own public folder rule: app/public/ when
-// it exists, else public/ when that exists, else app/public/ (created), the
-// layout puzzle init scaffolds.
-func deployDestination(root string, file deploytemplates.File) string {
-	if file.Place != deploytemplates.Public {
-		return file.Name
+// deployDestination is the app-relative slash path a template is written to,
+// under the template's own name. a Public host's file follows the build's own
+// public folder rule: app/public/ when it exists, else public/ when that
+// exists, else app/public/ (created), the layout puzzle init scaffolds.
+func deployDestination(root string, host deploytemplates.Host, template string) string {
+	name := path.Base(template)
+	if !host.Public {
+		return name
 	}
-	if !dirExists(filepath.Join(root, "app", "public")) && dirExists(filepath.Join(root, "public")) {
-		return "public/" + file.Name
+	if build.PublicDir(root) == filepath.Join(root, "public") {
+		return "public/" + name
 	}
-	return "app/public/" + file.Name
-}
-
-// dirExists reports whether path is an existing directory.
-func dirExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
+	return "app/public/" + name
 }
 
 // deployShape names the routing the written template does, for the success line.
@@ -157,17 +120,13 @@ func renderDeployHosts(w io.Writer, out *ui.Printer) {
 	fmt.Fprintln(w, "Deploy hosts (puzzle add deploy <host>):")
 	fmt.Fprintln(w)
 	for _, host := range deploytemplates.Hosts {
-		// the spa and static templates of a host always land in the same place,
-		// so either list names the file.
-		dests := make([]string, 0, len(host.SPA))
-		for _, file := range host.SPA {
-			if file.Place == deploytemplates.Public {
-				dests = append(dests, "app/public/"+file.Name)
-			} else {
-				dests = append(dests, file.Name)
-			}
+		// the spa and static templates of a host share a file name, so either
+		// names the file.
+		dest := path.Base(host.SPA)
+		if host.Public {
+			dest = "app/public/" + dest
 		}
-		fmt.Fprintf(w, "  %s %-17s writes %s\n", out.Bold(fmt.Sprintf("%-11s", host.Name)), host.Label, strings.Join(dests, ", "))
+		fmt.Fprintf(w, "  %s %-17s writes %s\n", out.Bold(fmt.Sprintf("%-11s", host.Name)), host.Label, dest)
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "The template follows the config's output key; --static or --hybrid picks one instead.")
@@ -197,7 +156,7 @@ func renderDeployNextSteps(w io.Writer, out *ui.Printer, host deploytemplates.Ho
 			// cloudflare pages leaves spa mode the moment a top-level 404.html
 			// ships, and every client route then answers with that page.
 			for _, name := range []string{"app/public/404.html", "public/404.html"} {
-				if fileExists(filepath.Join(root, filepath.FromSlash(name))) {
+				if fsFileExists(filepath.Join(root, filepath.FromSlash(name))) {
 					steps = append(steps, fmt.Sprintf("%s turns off Cloudflare Pages' spa fallback: every client route would get that page. Remove it and draw not-found in a catch-all route.", name))
 				}
 			}
@@ -244,10 +203,4 @@ func otherLocales(cfg config.Config) []string {
 		}
 	}
 	return locales
-}
-
-// fileExists reports whether path is an existing regular file.
-func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
 }

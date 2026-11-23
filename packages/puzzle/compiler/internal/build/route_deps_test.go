@@ -191,7 +191,7 @@ func TestRouteGraphClassify(t *testing.T) {
 	}
 }
 
-// A root-level public/ is a documented layout (publicDir resolves it and
+// A root-level public/ is a documented layout (PublicDir resolves it and
 // `puzzle dev` watches it), so the shell special-case and the public-asset
 // skip have to find it there too — hardcoding app/public/ dropped every
 // root-public project onto the "an unknown file changed" full-render path.
@@ -199,7 +199,7 @@ func TestRouteGraphClassifyRootPublic(t *testing.T) {
 	root, g := testGraph(t)
 	rel := func(p string) string { return filepath.Join(root, filepath.FromSlash(p)) }
 
-	// Move the public tree to <root>/public so publicDir resolves the fallback.
+	// Move the public tree to <root>/public so PublicDir resolves the fallback.
 	if err := os.RemoveAll(rel("app/public")); err != nil {
 		t.Fatal(err)
 	}

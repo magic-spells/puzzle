@@ -55,7 +55,7 @@ type WatchBuilder struct {
 	prevPublic map[string]bool
 	// publicSource is the source directory used by the last successful public
 	// sync ("" when the project had no public tree). Keeping it separately from
-	// publicDir(root)'s current answer is what lets a delete/rename of app/public
+	// PublicDir(root)'s current answer is what lets a delete/rename of app/public
 	// switch cleanly to the root fallback, and what makes a public tree that
 	// APPEARS mid-session sync on the next rebuild: the two disagree, and no
 	// changed path need touch either directory.
@@ -283,7 +283,7 @@ func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildRes
 	if err := entryUnchanged(b.root, b.appEntry); err != nil {
 		return out, err
 	}
-	currentPublic := publicDir(b.root)
+	currentPublic := PublicDir(b.root)
 	syncPublic := !b.landed || currentPublic != b.publicSource ||
 		pathsTouchDir(changed, currentPublic) || pathsTouchDir(changed, b.publicSource)
 	publicOnly := b.landed && !b.pendingBundleCommit && b.haveBundleInputs && len(changed) > 0 &&
@@ -391,7 +391,7 @@ func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildRes
 		}
 		b.prevPublic = copied
 		b.cssLinked = false
-		b.publicSource = publicDir(b.root)
+		b.publicSource = PublicDir(b.root)
 		out.PublicSynced = true
 		endPublic()
 	}
