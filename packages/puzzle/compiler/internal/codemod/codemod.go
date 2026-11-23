@@ -80,12 +80,10 @@ func Run(root string, apply bool) (*Result, error) {
 		return nil, errNotPuzzleApp
 	}
 	res := &Result{}
-	touched := map[string]bool{}
 
 	// 1. the conventional static-mode module is renamed first, so the import
-	//    rewrite below can point at a file that exists. the old path is kept
-	//    around to match imports against.
-	moduleRenamed, oldModule, err := renameFunctionsModule(abs, apply, res, touched)
+	//    rewrite below can point at a file that exists.
+	moduleRenamed, err := renameFunctionsModule(abs, apply, res)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +104,7 @@ func Run(root string, apply bool) (*Result, error) {
 		if strings.HasSuffix(rel, ".pzl") {
 			edits, notes = pzlEdits(rel, string(src))
 		} else {
-			edits, notes = scriptFileEdits(rel, string(src), moduleRenamed, oldModule)
+			edits, notes = scriptFileEdits(rel, string(src), moduleRenamed)
 		}
 		res.Notes = append(res.Notes, notes...)
 		if len(edits) == 0 {
@@ -114,7 +112,6 @@ func Run(root string, apply bool) (*Result, error) {
 		}
 		out, changes := applyEdits(rel, string(src), edits)
 		res.Changes = append(res.Changes, changes...)
-		touched[rel] = true
 		if apply {
 			// the file exists (it was just read), so WriteFile keeps its mode.
 			if err := os.WriteFile(full, []byte(out), 0o644); err != nil {
@@ -122,7 +119,11 @@ func Run(root string, apply bool) (*Result, error) {
 			}
 		}
 	}
-	res.Files = len(touched)
+	seen := map[string]bool{}
+	for _, c := range res.Changes {
+		seen[c.File] = true
+	}
+	res.Files = len(seen)
 	sortByPos(res.Changes)
 	sortByPos(res.Notes)
 	return res, nil
@@ -383,14 +384,14 @@ func scriptEdits(rel, file, script string, base int) ([]edit, []Change) {
 // scriptFileEdits returns the rewrites for a plain .js / .mjs / .ts file:
 // setData calls, the formatters config key, and (when the module was renamed)
 // imports of app/formatters.
-func scriptFileEdits(rel, src string, moduleRenamed bool, oldModule string) ([]edit, []Change) {
+func scriptFileEdits(rel, src string, moduleRenamed bool) ([]edit, []Change) {
 	toks := codegen.TokenizeScript(src)
 	edits, notes := setStateEdits(rel, src, toks, 0)
 	ke, kn := functionsKeyEdits(rel, src, toks)
 	edits = append(edits, ke...)
 	notes = append(notes, kn...)
 	if moduleRenamed {
-		edits = append(edits, importEdits(rel, src, toks, oldModule)...)
+		edits = append(edits, importEdits(rel, src, toks)...)
 	}
 	return edits, notes
 }
@@ -765,12 +766,11 @@ func objectKeyEdits(toks []codegen.ScriptToken, open int) []edit {
 
 // renameFunctionsModule renames app/formatters.js (or .ts) to app/functions.js
 // when no app/functions.* exists yet. moved reports whether a rename happened
-// (or would, in a dry run), and old is the app-relative module path without
-// its extension, for the import rewrite.
-func renameFunctionsModule(abs string, apply bool, res *Result, touched map[string]bool) (moved bool, old string, err error) {
+// (or would, in a dry run).
+func renameFunctionsModule(abs string, apply bool, res *Result) (moved bool, err error) {
 	for _, ext := range []string{".js", ".ts"} {
 		if fileExists(filepath.Join(abs, "app", "functions"+ext)) {
-			return false, "", nil
+			return false, nil
 		}
 	}
 	for _, ext := range []string{".js", ".ts"} {
@@ -781,15 +781,14 @@ func renameFunctionsModule(abs string, apply bool, res *Result, touched map[stri
 		rel := "app/formatters" + ext
 		res.Changes = append(res.Changes, Change{File: rel, Line: 1, Col: 1, Rule: "functions-module",
 			Message: rel + " → app/functions" + ext})
-		touched[rel] = true
 		if apply {
 			if err := os.Rename(from, filepath.Join(abs, "app", "functions"+ext)); err != nil {
-				return false, "", err
+				return false, err
 			}
 		}
-		return true, "app/formatters", nil
+		return true, nil
 	}
-	return false, "", nil
+	return false, nil
 }
 
 // fileExists reports whether p is an existing regular file.
@@ -801,7 +800,7 @@ func fileExists(p string) bool {
 // importEdits rewrites import specifiers that name the renamed module:
 // './formatters.js' in app/app.js, '../app/formatters.js' in a test, or the
 // '@/formatters.js' alias, each keeping its quotes and extension.
-func importEdits(rel, src string, toks []codegen.ScriptToken, oldModule string) []edit {
+func importEdits(rel, src string, toks []codegen.ScriptToken) []edit {
 	var edits []edit
 	dir := path.Dir(rel)
 	for i, t := range toks {
@@ -823,7 +822,7 @@ func importEdits(rel, src string, toks []codegen.ScriptToken, oldModule string) 
 			continue
 		}
 		spec := lit[1 : len(lit)-1]
-		if resolveSpecifier(dir, spec) != oldModule {
+		if resolveSpecifier(dir, spec) != "app/formatters" {
 			continue
 		}
 		idx := strings.LastIndex(spec, "formatters")
