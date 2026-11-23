@@ -1979,7 +1979,9 @@ function patchAttrs(el, oldAttrs, newAttrs, owner = null) {
 		// A control's `value` (input/textarea) and `checked` (input) compare against
 		// the LIVE DOM, not the old vnode (see syncControlValue). syncControl at the
 		// end of patch() checks them again after children, but an island returns
-		// before it, so this pass must not skip them. A <select>'s `value` takes the
+		// before it, so this pass must not skip them. Skipping them would also move
+		// the write after the element's other attrs, which shows (a radio's `checked`
+		// against a `name` patched in the same pass). A <select>'s `value` takes the
 		// generic path; it is re-asserted once its options have patched.
 		if (name === 'value' && (el.nodeName === 'INPUT' || el.nodeName === 'TEXTAREA')) {
 			syncControlValue(/** @type {HTMLInputElement | HTMLTextAreaElement} */ (el), value, owner);
