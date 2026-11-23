@@ -89,8 +89,8 @@ It is also the ONLY way a changed attribute reaches the screen: the element decl
 
 ## Verified
 
-`test/split-text-wrapper.test.js` guards the manifest, the registry.json mirror, the
-byte-identical demo copy, the dynamic import inside `mounted()`, the absent `style` /
-`aria-label` bindings and the edge-triggered `play`. Browser-smoked on the docs page:
+`test/split-text-wrapper.test.js` guards the manifest, the dynamic import inside
+`mounted()`, the absent `style` / `aria-label` bindings and the edge-triggered `play`.
+Browser-smoked on the docs page:
 word / chars / lines splitting, replay, the eight effects behind one token, the
 scroll-triggered reveal and a reduced-motion context (revealed, 0 units).

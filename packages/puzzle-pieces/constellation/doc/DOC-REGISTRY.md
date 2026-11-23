@@ -173,6 +173,14 @@ notes:
       (P10-B2/Q2). Progress binds false, not undefined, for absent aria-valuenow/aria-label and
       shows no "0%" while indeterminate (P10-B4). ScrollArea min-h-6/min-w-6 (P10-Q4); Textarea
       drops its dead child text (P10-Q7).
+  - kind: state
+    text: >-
+      Each registry check has one owner. test/registry-parity.test.js byte-compares every demo copy.
+      test/registry-deps.test.js holds every registry.json row to its piece.json with one deepEqual
+      and keeps the rows alphabetical. A piece's own suite carries no inline byte-compare,
+      registry.json mirror or "exists on disk" check; add those to the owner instead. A new suite
+      needs no wiring: `npm test` runs every test/*.test.js and test/*.test.mjs file once.
+    sha: f90f22201ff6b00245f353d5f5f90bb7634bb963
 ---
 
 # The registry — source of truth

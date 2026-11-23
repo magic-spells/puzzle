@@ -67,8 +67,9 @@ compose it inside their popovers. Prop and callback details live in the file hea
 
 ## The shown month is separate from the selection
 
-The displayed month, drill-down view and roving focus are LOCAL state. They are seeded on
-the first `data()` run and re-seeded whenever `month || value` changes. `month` (an ISO
+The displayed month, drill-down view and roving focus are LOCAL state. The view is seeded
+`'days'` in `created()`; the month and focus are seeded on the first `data()` run and
+re-seeded whenever `month || value` changes. `month` (an ISO
 date, added 0.10.0) decides the shown month and paints no selection disc; without it the
 `value` anchors the grid, then today clamped into `min`/`max`.
 
