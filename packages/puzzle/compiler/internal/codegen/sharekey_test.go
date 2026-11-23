@@ -158,9 +158,42 @@ func TestPositionalDataWarning(t *testing.T) {
 		"  data({ props }: DataInput<A, B>): any { return props; }",
 		"  data({ props, shared: { tabs = {} } }) { return props; }",
 		"  created() { this.ctx.store.data(1, 2); }",
+		"  events = { share(url, title) { navigator.share({ url, title }); } };",
+		"  go() { return ok ? share(this.url, this.title) : null; }",
+		"  rows() { return ok ? data(this.a, this.b) : []; }",
+		"  x = ok ? api.share(a, b) : null;",
 	}
 	for _, body := range quiet {
 		if res := compileShare(t, wrap(body), "app/components/Card.pzl"); len(res.Warnings) != 0 {
+			t.Errorf("%q: expected no warning, got %#v", body, res.Warnings)
+		}
+	}
+}
+
+// TestPositionalDataInClassBodies: a local base class's data(params, props)
+// is the view's inherited hook and warns, as does the view's own behind an
+// object type in the extends clause; a type's member and an object outside
+// any class do not.
+func TestPositionalDataInClassBodies(t *testing.T) {
+	script := func(body string) string {
+		return "<puzzle-view><div></div></puzzle-view>\n\n<script>\nimport { PuzzleView } from '@magic-spells/puzzle';\n" + body + "\n</script>\n"
+	}
+	warns := []string{
+		"class Base extends PuzzleView {\n  data(params, props) { return props; }\n}\nexport default class Card extends Base {}",
+		"export default class Card extends PuzzleView<{ a: () => void }> {\n  data(params, props) { return props; }\n}",
+	}
+	for _, body := range warns {
+		res := compileShare(t, script(body), "app/components/Card.pzl")
+		if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0].Message, "takes one object") {
+			t.Errorf("%q: expected one positional warning, got %#v", body, res.Warnings)
+		}
+	}
+	quiet := []string{
+		"interface Sharer { share(url: string, title: string): Promise<void> }\nexport default class Card extends PuzzleView {}",
+		"export default class Card extends PuzzleView {}\nconst o = { data(params, props) { return {}; } };",
+	}
+	for _, body := range quiet {
+		if res := compileShare(t, script(body), "app/components/Card.pzl"); len(res.Warnings) != 0 {
 			t.Errorf("%q: expected no warning, got %#v", body, res.Warnings)
 		}
 	}
