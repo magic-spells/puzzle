@@ -453,7 +453,6 @@ export default class Calendar extends PuzzleView {
     this._lastAnchor = anchorKey;
 
     const seed = {};
-    if (local.view == null) seed.view = 'days';
     if (local.viewYear == null || anchorChanged) {
       const anchor = parseISODate(props.month) || committed || clampDate(fromDate(new Date()), min, max);
       seed.viewYear = anchor.year;
@@ -463,7 +462,7 @@ export default class Calendar extends PuzzleView {
     }
     if (Object.keys(seed).length) this.setState(seed);
 
-    const view = seed.view ?? local.view ?? 'days';
+    const view = local.view;
     const viewYear = seed.viewYear ?? local.viewYear;
     const viewMonth = seed.viewMonth ?? local.viewMonth;
     const focusedIso = seed.focusedIso ?? local.focusedIso;

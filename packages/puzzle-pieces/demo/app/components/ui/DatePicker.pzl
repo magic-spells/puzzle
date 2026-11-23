@@ -321,7 +321,7 @@ export default class DatePicker extends PuzzleView {
       panelClass: this._wantMorph(props)
         ? [PANEL_CARD, PANEL_MORPH].join(' ')
         : [PANEL_CARD, PANEL_DROPDOWN, placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'].join(' '),
-      panelStyle: this._wantMorph(props) ? `top:${prev.morphTop ?? 0}px;` : '',
+      panelStyle: this._wantMorph(props) ? `top:${prev.morphTop}px;` : '',
       // The in-panel label header restates the field label while the morph panel
       // covers it; the plain dropdown leaves the field label visible, so none.
       panelHeader: this._wantMorph(props) ? props.label || '' : '',

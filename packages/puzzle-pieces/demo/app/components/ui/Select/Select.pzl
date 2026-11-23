@@ -210,7 +210,7 @@ export default class Select extends PuzzleView {
   }
 
   data({ props }) {
-    const label = this.getState().label || '';
+    const label = this.getState().label;
     const placeholder = props.placeholder ?? 'Select…';
     return {
       triggerText: label || placeholder,

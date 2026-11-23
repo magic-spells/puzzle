@@ -25,8 +25,6 @@ const TEXT_GROUNDS = [
 	'--color-surface-card',
 ];
 
-export const GROUPS = ['text', 'surfaces', 'brand', 'status', 'lines', 'charts', 'shell', 'alpha', 'shadows'];
-
 export const ROLES = [
 	color('ink', 'text', { contrast: { on: TEXT_GROUNDS, min: 4.5 } }),
 	color('body', 'text', { contrast: { on: TEXT_GROUNDS, min: 4.5 } }),

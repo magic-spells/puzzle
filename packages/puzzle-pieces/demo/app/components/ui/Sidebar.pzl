@@ -465,7 +465,7 @@ export default class Sidebar extends PuzzleView {
   }
 
   _openMap() {
-    return this.getState().openMap || {};
+    return this.getState().openMap;
   }
 
   // ---- collapsed: optional-controlled resolution ---------------------------

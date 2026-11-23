@@ -201,7 +201,6 @@ function bandArea(top, bottom) {
 export default class AreaChart extends PuzzleView {
   created() {
     this._cxs = [];
-    this._width = DEFAULT_WIDTH;
     this._ro = null;
     this.setState({ measuredWidth: 0, hover: null });
   }
@@ -242,7 +241,6 @@ export default class AreaChart extends PuzzleView {
     const measured = this.getData().measuredWidth;
     const width = measured > 0 ? measured : DEFAULT_WIDTH;
     const height = Number(props.height) > 0 ? Number(props.height) : 288;
-    this._width = width;
 
     const label = props.label || (series.length ? series.map((s) => s.label).join(', ') : 'Chart');
     const showLegend =

@@ -478,8 +478,7 @@ export default class MultiSelect extends PuzzleView {
   data({ props }) {
     const prev = this.getData();
     const open = this._effectiveOpen();
-    const query = prev.query ?? '';
-    const activeIndex = prev.activeIndex ?? -1;
+    const { query, activeIndex } = prev;
     const selectedSet = new Set(this._values(props));
 
     // Closed → no filter (query is cleared on close anyway); open filters live.
