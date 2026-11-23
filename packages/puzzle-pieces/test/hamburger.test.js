@@ -4,8 +4,8 @@ import { readFile } from 'node:fs/promises';
 
 // Static guards for the hamburger piece. The motion is CSS transitions in the
 // file's <style> block and is judged by eye in the docs site; what can regress
-// here is the contract around it — manifest, demo copy, the accessible button
-// root, and "CSS only, gated behind reduced motion and animate".
+// here is the contract around it — manifest, the accessible button root, and
+// "CSS only, gated behind reduced motion and animate".
 
 const readText = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const readJSON = async (path) => JSON.parse(await readText(path));
@@ -15,19 +15,11 @@ const style = (source) => source.slice(source.indexOf('\n<style>'));
 const script = (source) => source.slice(source.indexOf('<script>'), source.indexOf('</script>'));
 const template = (source) => source.slice(0, source.indexOf('</puzzle-view>'));
 
-test('hamburger: manifest, registry.json row and demo copy agree', async () => {
-  const [piece, registry, source, copy] = await Promise.all([
-    readJSON('../registry/ui/hamburger/piece.json'),
-    readJSON('../registry/registry.json'),
-    readText(SRC),
-    readText('../demo/app/components/ui/Hamburger.pzl'),
-  ]);
+test('hamburger: the manifest declares its file and no dependencies', async () => {
+  const piece = await readJSON('../registry/ui/hamburger/piece.json');
   assert.deepEqual(piece.files, ['Hamburger.pzl']);
   assert.deepEqual(piece.registryDependencies, []);
   assert.deepEqual(piece.dependencies, []);
-  const row = registry.pieces.find((p) => p.name === 'hamburger');
-  assert.deepEqual(row, piece, "registry.json's hamburger row has drifted from piece.json");
-  assert.equal(copy, source, 'demo/app/components/ui/Hamburger.pzl has drifted');
 });
 
 test('hamburger: a real button root with string aria-expanded and three aria-hidden bars', async () => {

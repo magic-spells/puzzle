@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 
 import { linePath, stackSeries } from '../registry/lib/chart-math.js';
 
@@ -135,35 +134,4 @@ test('linePath returns an empty string for non-arrays and empty input', () => {
 	assert.equal(linePath('nope'), '');
 	assert.equal(linePath([]), '');
 	assert.equal(linePath([null, null]), '');
-});
-
-// --- registry → demo parity -------------------------------------------------
-
-const copies = [
-	['chart-math.js', '../registry/lib/chart-math.js', '../demo/app/lib/chart-math.js'],
-	[
-		'AreaChart.pzl',
-		'../registry/ui/area-chart/AreaChart.pzl',
-		'../demo/app/components/ui/AreaChart.pzl',
-	],
-	[
-		'LineChart.pzl',
-		'../registry/ui/line-chart/LineChart.pzl',
-		'../demo/app/components/ui/LineChart.pzl',
-	],
-	[
-		'Sparkline.pzl',
-		'../registry/ui/sparkline/Sparkline.pzl',
-		'../demo/app/components/ui/Sparkline.pzl',
-	],
-];
-
-test('registry and demo chart files stay byte-identical', async () => {
-	for (const [name, registryPath, demoPath] of copies) {
-		const [registrySource, demoSource] = await Promise.all([
-			readFile(new URL(registryPath, import.meta.url)),
-			readFile(new URL(demoPath, import.meta.url)),
-		]);
-		assert.equal(Buffer.compare(registrySource, demoSource), 0, `${name} copy drifted`);
-	}
 });

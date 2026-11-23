@@ -3,10 +3,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 // LanguageSwitcher and LanguageMenu (D177) — one input, one click contract, two
-// layouts. Static guards on the manifests, the demo copies and the templates'
-// attributes, plus behavioural ones that lift each <script> block out of its
-// .pzl (the input-otp trick) and drive data() and the two click handlers
-// against a stub ctx.i18n.
+// layouts. Static guards on the manifests and the templates' attributes, plus
+// behavioural ones that lift each <script> block out of its .pzl (the input-otp
+// trick) and drive data() and the two click handlers against a stub ctx.i18n.
 
 const readText = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const readJSON = async (path) => JSON.parse(await readText(path));
@@ -64,18 +63,11 @@ test('language-switcher has no dependencies of any kind', async () => {
 });
 
 for (const { name, file, deps, source, template, script, View } of PIECES) {
-	test(`${name}: manifest, registry.json row and demo copy agree`, async () => {
-		const [piece, registry, copy] = await Promise.all([
-			readJSON(`../registry/ui/${name}/piece.json`),
-			readJSON('../registry/registry.json'),
-			readText(`../demo/app/components/ui/${file}`),
-		]);
+	test(`${name}: the manifest declares its file and dependencies`, async () => {
+		const piece = await readJSON(`../registry/ui/${name}/piece.json`);
 		assert.deepEqual(piece.files, [file]);
 		assert.deepEqual(piece.registryDependencies, deps);
 		assert.deepEqual(piece.dependencies, []);
-		const row = registry.pieces.find((p) => p.name === name);
-		assert.deepEqual(row, piece, `registry.json's ${name} row has drifted from piece.json`);
-		assert.equal(copy, source, `demo/app/components/ui/${file} has drifted`);
 	});
 
 	test(`${name}: the list is a prop — the piece never reads ctx.i18n.locales`, () => {

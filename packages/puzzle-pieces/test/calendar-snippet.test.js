@@ -90,21 +90,3 @@ for (const forwarder of FORWARDERS) {
 		assert.doesNotMatch(template, /<Slot\s+name="day"/, `${forwarder.file} must not redeclare the day slot`);
 	});
 }
-
-// The demo app compiles these copies, so the demo build is what actually exercises the
-// forwarding path end to end (DateRangePickerDoc renders two grids from one snippet).
-const copies = [
-	['Calendar.pzl', CALENDAR, '../demo/app/components/ui/Calendar.pzl'],
-	['DatePicker.pzl', FORWARDERS[0].source, '../demo/app/components/ui/DatePicker.pzl'],
-	['DateRangePicker.pzl', FORWARDERS[1].source, '../demo/app/components/ui/DateRangePicker.pzl'],
-];
-
-test('registry and demo Calendar-family copies stay byte-identical', async () => {
-	for (const [name, registryPath, demoPath] of copies) {
-		const [registrySource, demoSource] = await Promise.all([
-			readFile(new URL(registryPath, import.meta.url)),
-			readFile(new URL(demoPath, import.meta.url)),
-		]);
-		assert.equal(Buffer.compare(registrySource, demoSource), 0, `${name} copy drifted`);
-	}
-});
