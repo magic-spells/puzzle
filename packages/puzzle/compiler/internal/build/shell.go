@@ -6,6 +6,7 @@ import (
 	"html"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -113,28 +114,29 @@ func attrValue(raw string) string {
 }
 
 // Local references may carry a deployment base. Copied public files take
-// precedence over compiler filenames, including under that base.
-func shellReference(value string, publicFiles map[string]bool) (prefix, name, suffix string) {
+// precedence over compiler filenames, including under that base. dir is the
+// page's own directory in public/, which a relative reference resolves against.
+func shellReference(value, dir string, publicFiles map[string]bool) (prefix, name, suffix string) {
 	if i := strings.IndexAny(value, "?#"); i >= 0 {
 		suffix, value = value[i:], value[:i]
 	}
 	if strings.HasPrefix(value, "./") {
 		prefix, value = "./", value[2:]
 	} else if strings.HasPrefix(value, "/") {
-		prefix, value = "/", value[1:]
+		prefix, value, dir = "/", value[1:], ""
 	}
-	if strings.HasPrefix(value, "/") || strings.Contains(value, ":") {
+	if strings.HasPrefix(value, "/") || strings.Contains(value, ":") || publicFiles[path.Join(dir, value)] {
 		return "", "", ""
 	}
-	for path := value; path != ""; {
-		if publicFiles[path] {
+	for file := value; file != ""; {
+		if publicFiles[file] {
 			return "", "", ""
 		}
-		i := strings.IndexByte(path, '/')
+		i := strings.IndexByte(file, '/')
 		if i < 0 {
 			break
 		}
-		path = path[i+1:]
+		file = file[i+1:]
 	}
 	if i := strings.LastIndexByte(value, '/'); i >= 0 {
 		prefix, value = prefix+value[:i+1], value[i+1:]
@@ -163,7 +165,7 @@ func shellRenames(outputs map[string]bundleOutput, stylesheet, entryPoint string
 // references from a script src or link href it can rewrite. strict makes a reference to one of those
 // names with no emitted output an error; otherwise it is left as written (the
 // build.hashNames-unset path, where an unhashed build never checked it).
-func rewriteShellHTMLRefs(source string, renames map[string]string, chunks []string, publicFiles map[string]bool, strict bool) (string, bool, map[string]bool, error) {
+func rewriteShellHTMLRefs(source, dir string, renames map[string]string, chunks []string, publicFiles map[string]bool, strict bool) (string, bool, map[string]bool, error) {
 	entryFound := false
 	refs := map[string]bool{}
 	var entryPrefix, crossorigin string
@@ -194,7 +196,7 @@ func rewriteShellHTMLRefs(source string, renames map[string]string, chunks []str
 				continue
 			}
 			raw := tag[a[6]:a[7]]
-			prefix, name, suffix := shellReference(attrValue(raw), publicFiles)
+			prefix, name, suffix := shellReference(attrValue(raw), dir, publicFiles)
 			if name == "app.js" || name == "app.css" || name == "styles.css" {
 				refs[name] = true
 			}
@@ -244,11 +246,11 @@ func shellHashSupport(root string) shellHashPlan {
 	}
 	publicFiles := map[string]bool{}
 	var pages []string
-	_ = filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+	_ = filepath.WalkDir(src, func(file string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
 		}
-		if rel, err := filepath.Rel(src, path); err == nil {
+		if rel, err := filepath.Rel(src, file); err == nil {
 			rel = filepath.ToSlash(rel)
 			publicFiles[rel] = true
 			if rel != "index.html" && strings.EqualFold(filepath.Ext(rel), ".html") {
@@ -262,7 +264,7 @@ func shellHashSupport(root string) shellHashPlan {
 	// error (a shell with no </head>) is irrelevant to which names it loads.
 	if source, err := os.ReadFile(filepath.Join(src, "index.html")); err == nil {
 		var refs map[string]bool
-		_, plan.entry, refs, _ = rewriteShellHTMLRefs(string(source), nil, nil, publicFiles, false)
+		_, plan.entry, refs, _ = rewriteShellHTMLRefs(string(source), "", nil, nil, publicFiles, false)
 		plan.styles = refs["styles.css"]
 		plan.appCSS = refs["app.css"]
 	}
@@ -271,7 +273,7 @@ func shellHashSupport(root string) shellHashPlan {
 		if err != nil {
 			continue
 		}
-		_, _, refs, _ := rewriteShellHTMLRefs(string(source), nil, nil, publicFiles, false)
+		_, _, refs, _ := rewriteShellHTMLRefs(string(source), path.Dir(page), nil, nil, publicFiles, false)
 		plan.appCSS = plan.appCSS || refs["app.css"]
 		if refs["app.js"] || refs["app.css"] {
 			plan.entryPages = append(plan.entryPages, "public/"+page)
@@ -368,7 +370,7 @@ func rewriteShell(staging, metafile, stylesheet, entryPoint string, hashEntry, p
 	if preload {
 		chunks = staticImportClosure(outputs, entry)
 	}
-	rewritten, entryFound, _, err := rewriteShellHTMLRefs(string(source), renames, chunks, publicFiles, strict)
+	rewritten, entryFound, _, err := rewriteShellHTMLRefs(string(source), "", renames, chunks, publicFiles, strict)
 	if hashEntry && !entryFound {
 		return fmt.Errorf("public/index.html must load app.js when entry names are hashed; set build.hashNames: false to keep fixed names")
 	}
@@ -395,19 +397,19 @@ func rewritePublicPages(staging string, renames map[string]string, publicFiles m
 	}
 	sort.Strings(pages)
 	for _, rel := range pages {
-		path := filepath.Join(staging, filepath.FromSlash(rel))
-		source, err := os.ReadFile(path)
+		file := filepath.Join(staging, filepath.FromSlash(rel))
+		source, err := os.ReadFile(file)
 		if err != nil {
 			return fmt.Errorf("reading public/%s: %w", rel, err)
 		}
-		rewritten, _, refs, err := rewriteShellHTMLRefs(string(source), renames, nil, publicFiles, strict)
+		rewritten, _, refs, err := rewriteShellHTMLRefs(string(source), path.Dir(rel), renames, nil, publicFiles, strict)
 		if err != nil {
 			return fmt.Errorf("rewriting public/%s: %w", rel, err)
 		}
 		if len(refs) == 0 || rewritten == string(source) {
 			continue
 		}
-		if err := os.WriteFile(path, []byte(rewritten), 0o644); err != nil {
+		if err := os.WriteFile(file, []byte(rewritten), 0o644); err != nil {
 			return fmt.Errorf("writing rewritten public/%s: %w", rel, err)
 		}
 	}

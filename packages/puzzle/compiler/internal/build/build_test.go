@@ -2620,6 +2620,48 @@ func TestPublicPagesFollowHashedNames(t *testing.T) {
 	}
 }
 
+// A nested public page's relative styles.css and app.js are the files beside
+// it, not the compiler's: under either hashing setting the page ships as
+// written and the app's own outputs stay hashed, with no warning.
+func TestNestedPublicPageKeepsItsOwnAssets(t *testing.T) {
+	requireNodeBin(t)
+	page := `<link rel="stylesheet" href="styles.css"><script src="app.js"></script>`
+	for _, cfg := range []string{
+		`export default { styles: { use: ['tailwindcss'] } };`,
+		`export default { styles: { use: ['tailwindcss'] }, build: { hashNames: true } };`,
+	} {
+		t.Run(cfg, func(t *testing.T) {
+			root := writeSplitFixture(t, cfg)
+			docs := filepath.Join(root, "app", "public", "docs")
+			if err := os.MkdirAll(docs, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			for name, body := range map[string]string{"index.html": page, "styles.css": "p{}", "app.js": ""} {
+				if err := os.WriteFile(filepath.Join(docs, name), []byte(body), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var buildErr error
+			stderr := captureStderr(t, func() { buildErr = Build(root, Options{Runner: &fakeRunner{css: ".tw{color:red}"}}) })
+			if buildErr != nil {
+				t.Fatal(buildErr)
+			}
+			if strings.Contains(stderr, "build.hashNames") {
+				t.Errorf("the page's own files must not hold a fixed name:\n%s", stderr)
+			}
+			dist := filepath.Join(root, "dist")
+			for _, fixed := range []string{"app.js", "styles.css"} {
+				if _, err := os.Stat(filepath.Join(dist, fixed)); !os.IsNotExist(err) {
+					t.Errorf("dist/%s must be hashed", fixed)
+				}
+			}
+			if got := readFile(t, filepath.Join(dist, "docs", "index.html")); got != page {
+				t.Errorf("docs/index.html must keep its own links; got:\n%s", got)
+			}
+		})
+	}
+}
+
 // A shell <link href="/app.css"> left over from an entry that no longer imports
 // CSS built before hashing became the default, and still does with hashNames
 // unset: the reference is left as written. Explicit true keeps the error.
