@@ -2,7 +2,7 @@
   <header class="border-b border-gray-800">
     <div class="max-w-2xl mx-auto px-6 py-5 flex items-center gap-3">
       <span class="text-lg font-semibold tracking-tight">Puzzle</span>
-      <span class="text-sm text-gray-500">starter</span>
+      <span class="text-sm text-gray-400">starter</span>
     </div>
   </header>
 
@@ -13,7 +13,7 @@
   </main>
 
   <footer class="border-t border-gray-800">
-    <div class="max-w-2xl mx-auto px-6 py-6 text-sm text-gray-500">
+    <div class="max-w-2xl mx-auto px-6 py-6 text-sm text-gray-400">
       Built with the Puzzle framework.
     </div>
   </footer>
@@ -22,11 +22,5 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
-export default class DefaultLayout extends PuzzleView {
-  data({ props }) {
-    return {
-      title: props.title || 'Puzzle App',
-    };
-  }
-}
+export default class DefaultLayout extends PuzzleView {}
 </script>

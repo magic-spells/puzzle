@@ -12,7 +12,7 @@
 /*
  * "Night desk" theme — a quiet, near-monochrome dark palette with a single
  * warm amber accent. Tokens become utilities (bg-page, text-ink, …); shared
- * roles use the puzzle-pieces names, so pieces you add paint in this palette.
+ * roles use the puzzle-pieces names, so pieces you add stay readable here.
  */
 @theme {
   /* Type — editorial serif display, grotesque UI, mono for numerals */
