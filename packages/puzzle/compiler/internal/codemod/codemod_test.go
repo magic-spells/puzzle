@@ -155,6 +155,23 @@ func TestFixRewritesToExpected(t *testing.T) {
 	compareTrees(t, readTree(t, dir), readTree(t, "testdata/after"))
 }
 
+// a TypeScript module moves as functions.ts, and the '.js' spellings of it,
+// which the bundler resolves to the .ts, follow it.
+func TestFixMovesATypeScriptModule(t *testing.T) {
+	dir := copyTree(t, "testdata/before")
+	app := filepath.Join(dir, "app")
+	if err := os.Rename(filepath.Join(app, "formatters.js"), filepath.Join(app, "formatters.ts")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(dir, true); err != nil {
+		t.Fatal(err)
+	}
+	want := readTree(t, "testdata/after")
+	want["app/functions.ts"] = want["app/functions.js"]
+	delete(want, "app/functions.js")
+	compareTrees(t, readTree(t, dir), want)
+}
+
 // a second run over the rewritten app finds nothing to change: every
 // rewrite produces a spelling no rule matches.
 func TestFixIsIdempotent(t *testing.T) {

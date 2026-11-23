@@ -796,11 +796,11 @@ func renameFunctionsModule(abs string, apply bool, res *Result) (string, error) 
 }
 
 // importEdits rewrites import specifiers that name the moved module, whose
-// extension is movedExt ("" when nothing moved): './formatters.js' in
-// app/app.js, '../app/formatters.js' in a test or '@/formatters' in a
-// component, each keeping its quotes and extension. a specifier with another
-// extension names some other file. src is the script toks came from, starting
-// at byte base of the file.
+// extension is movedExt ("" when nothing moved): './formatters.js' in app.js,
+// '../app/formatters.js' in a test or '@/formatters' in a component, each
+// keeping its quotes and extension. '.js' names the moved module either way
+// (the bundler resolves it to a .ts); another extension names some other
+// file. src is the script toks came from, starting at byte base of the file.
 func importEdits(rel, src string, toks []codegen.ScriptToken, base int, movedExt string) []edit {
 	if movedExt == "" {
 		return nil
@@ -826,7 +826,7 @@ func importEdits(rel, src string, toks []codegen.ScriptToken, base int, movedExt
 			continue
 		}
 		spec := lit[1 : len(lit)-1]
-		if p := resolveSpecifier(dir, spec); p != "app/formatters" && p != "app/formatters"+movedExt {
+		if p := resolveSpecifier(dir, spec); p != "app/formatters" && p != "app/formatters.js" && p != "app/formatters"+movedExt {
 			continue
 		}
 		idx := strings.LastIndex(spec, "formatters")
