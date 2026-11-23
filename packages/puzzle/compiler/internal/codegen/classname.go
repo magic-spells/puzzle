@@ -24,38 +24,38 @@ import (
 // `export default class Fake` sitting at column 0 used to win the regex match
 // and emit `Fake.prototype.render = …`, a ReferenceError at module load.
 
-// extractClassName finds the exported class name in the opaque <script> body.
-// It returns a positioned error when there is no `export default class`
-// declaration or when the class is anonymous. toks is the shared token stream
-// for `scripts` (tokenizeJS, computed once per compile).
-func extractClassName(scripts string, toks []jsTok, file string, scriptsPos parser.Position) (string, error) {
+// extractClassName finds the exported class name in the opaque <script> body,
+// and its position. It returns a positioned error when there is no `export
+// default class` declaration or when the class is anonymous. toks is the shared
+// token stream for `scripts` (tokenizeJS, computed once per compile).
+func extractClassName(scripts string, toks []jsTok, file string, scriptsPos parser.Position) (name string, pos parser.Position, err error) {
 	name, nameOff, hasExtends, found := findDefaultClass(toks)
 	if !found {
-		return "", &parser.ParseError{
+		return "", pos, &parser.ParseError{
 			File: file, Line: scriptsPos.Line, Col: scriptsPos.Col,
 			Message: "no `export default class <Name> extends PuzzleView` declaration found in <script> (SPEC §4, D24)",
 		}
 	}
 	if name == "" {
-		return "", &parser.ParseError{
+		return "", pos, &parser.ParseError{
 			File: file, Line: scriptsPos.Line, Col: scriptsPos.Col,
 			Message: "anonymous default class export is not supported — name your component class (D24)",
 		}
 	}
+	pos = scriptsPos.Advance(scripts[:nameOff])
 	if nameCut(scripts[nameOff+len(name):]) {
-		pos := scriptsPos.Advance(scripts[:nameOff])
-		return "", &parser.ParseError{
+		return "", pos, &parser.ParseError{
 			File: file, Line: pos.Line, Col: pos.Col,
 			Message: fmt.Sprintf("class name `%s` is followed by a character the compiler cannot read as part of an identifier (a `\\u` escape, or a letter newer than its Unicode tables) — rename the class (D24)", name),
 		}
 	}
 	if !hasExtends {
-		return "", &parser.ParseError{
+		return "", pos, &parser.ParseError{
 			File: file, Line: scriptsPos.Line, Col: scriptsPos.Col,
 			Message: "the default export must extend PuzzleView (directly or through a base class) — add an `extends` clause (SPEC §4, D24)",
 		}
 	}
-	return name, nil
+	return name, pos, nil
 }
 
 // nameCut reports whether rest — the bytes right after the class name token —

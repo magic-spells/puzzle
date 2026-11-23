@@ -235,29 +235,25 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		return "", &parser.ParseError{File: opts.Filename, Line: 1, Col: 1, Message: "Outlet is a reserved built-in tag (the router outlet, D199) — rename Outlet.pzl (for example, PageOutlet.pzl) and its imports"}
 	}
 	var className string
+	namePos := parser.Position{Line: 1, Col: 1}
 	if strings.TrimSpace(scripts) == "" {
 		className = classNameFromFilename(opts.Filename)
 		scripts = "import { PuzzleView } from '@magic-spells/puzzle';\n" +
 			"export default class " + className + " extends PuzzleView {}\n"
 	} else {
-		className, err = extractClassName(scripts, scriptToks, opts.Filename, sec.ScriptsPos)
+		className, namePos, err = extractClassName(scripts, scriptToks, opts.Filename, sec.ScriptsPos)
 		if err != nil {
 			return "", err
 		}
 	}
 	// D197: a component named Params, Props or Shared draws a warning, at the
 	// class name (or the file start, for a class named from the filename).
-	namePos := parser.Position{Line: 1, Col: 1}
-	if strings.TrimSpace(sec.Scripts) != "" {
-		if _, off, _, found := findDefaultClass(scriptToks); found {
-			namePos = sec.ScriptsPos.Advance(sec.Scripts[:off])
-		}
-	}
 	warnReservedComponentName(className, opts.Filename, namePos, warnings)
 	// D197: data() and share() take one object; the old positional
-	// `data(params, props)` still parses but reads the wrong values.
-	if method, off, ok := positionalDataParams(scriptToks); ok {
-		warnPositionalData(method, opts.Filename, sec.ScriptsPos.Advance(sec.Scripts[:off]), warnings)
+	// `data(params, props)` still parses but reads the wrong values. The first
+	// such declaration draws the warning.
+	if decls := positionalDataDecls(scriptToks); len(decls) > 0 {
+		warnPositionalData(decls[0].Method, opts.Filename, sec.ScriptsPos.Advance(sec.Scripts[:decls[0].NameOff]), warnings)
 	}
 
 	c := &compiler{

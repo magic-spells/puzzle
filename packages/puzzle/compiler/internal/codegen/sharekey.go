@@ -81,7 +81,7 @@ var reservedShareNames = map[string]bool{"params": true, "props": true, "shared"
 // Shared. pos is the class name's position (or the file start for a scriptless
 // component, whose class is named from the filename).
 func warnReservedComponentName(className, file string, pos parser.Position, warnings *[]Warning) {
-	if warnings == nil || !reservedShareNames[shareKey(className)] {
+	if !reservedShareNames[shareKey(className)] {
 		return
 	}
 	*warnings = append(*warnings, Warning{
@@ -90,20 +90,6 @@ func warnReservedComponentName(className, file string, pos parser.Position, warn
 			"component name %q reads like a built-in: params, props and shared are the reserved keys of the object data() and share() receive (D197) — rename the component (for example, %sPanel)",
 			className, className),
 	})
-}
-
-// positionalDataParams finds a data() or share() declaration still written in
-// the pre-0.10 positional form, `data(params, props) {`, and returns the byte
-// offset of its name (ok false when there is none). the runtime passes one
-// object now (D197), so such a method gets the whole object as `params` and
-// `undefined` as `props`. the first declaration is the one the warning names;
-// positionalDataDecls finds them all.
-func positionalDataParams(toks []jsTok) (name string, off int, ok bool) {
-	decls := positionalDataDecls(toks)
-	if len(decls) == 0 {
-		return "", 0, false
-	}
-	return decls[0].Method, decls[0].NameOff, true
 }
 
 // DataDecl is one pre-0.10 positional data() or share() declaration: the
@@ -202,12 +188,9 @@ func positionalDataDecls(toks []jsTok) []DataDecl {
 }
 
 // warnPositionalData warns about a data() or share() declaration in the old
-// positional form (see positionalDataParams). pos is the method name's
+// positional form (see positionalDataDecls). pos is the method name's
 // position.
 func warnPositionalData(method, file string, pos parser.Position, warnings *[]Warning) {
-	if warnings == nil {
-		return
-	}
 	*warnings = append(*warnings, Warning{
 		File: file, Line: pos.Line, Col: pos.Col,
 		Message: fmt.Sprintf(

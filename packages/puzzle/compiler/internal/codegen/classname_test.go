@@ -205,7 +205,7 @@ func TestExtractClassName(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := extractClassName(tc.scripts, tokenizeJS(tc.scripts), "T.pzl", pos)
+			got, _, err := extractClassName(tc.scripts, tokenizeJS(tc.scripts), "T.pzl", pos)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("extractClassName() = %q, want error", got)
