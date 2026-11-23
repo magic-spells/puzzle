@@ -27,10 +27,7 @@ globalThis.requestAnimationFrame = () => {};
 const day = { name: 'a day in the open panel' };
 const nextField = { name: 'the form field after the picker' };
 
-test('Tab out of the open panel closes it; a move inside does not', (t) => {
-	// Bring a document of our own: other files in all.test.js stub one too.
-	const { document } = globalThis;
-	t.after(() => (globalThis.document = document));
+test('Tab out of the open panel closes it; a move inside does not', () => {
 	globalThis.document = { addEventListener() {}, removeEventListener() {} };
 
 	let hides = 0;
