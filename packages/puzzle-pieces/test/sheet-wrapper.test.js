@@ -8,9 +8,9 @@ import { readFile } from 'node:fs/promises';
 // open/close state machine all live in @magic-spells/sheet,
 // @magic-spells/bottom-sheet and @magic-spells/dialog-panel now, and are
 // tested there. What can still regress here is the wiring: the declared
-// dependencies, the manifest/index agreement, and the two prerender rules a
-// wrapper piece has to keep (no top-level import of a package that defines
-// custom elements at module scope, and no customElements touch of its own).
+// dependencies and the two prerender rules a wrapper piece has to keep (no
+// top-level import of a package that defines custom elements at module scope,
+// and no customElements touch of its own).
 
 const readJSON = async (path) =>
 	JSON.parse(await readFile(new URL(path, import.meta.url), 'utf8'));
@@ -80,21 +80,6 @@ for (const wrapper of WRAPPERS) {
 				`piece.json must declare ${pkg} — dialog-panel is a peer that yarn 1 will not install on its own`
 			);
 		}
-	});
-
-	test(`registry.json mirrors the ${wrapper.piece} manifest`, async () => {
-		const [piece, registry] = await Promise.all([
-			readJSON(wrapper.manifest),
-			readJSON('../registry/registry.json'),
-		]);
-		const entry = registry.pieces.find((row) => row.name === wrapper.piece);
-
-		assert.ok(entry, `registry.json has no ${wrapper.piece} entry`);
-		assert.equal(entry.description, piece.description);
-		assert.deepEqual(entry.files, piece.files);
-		assert.deepEqual(entry.registryDependencies, piece.registryDependencies);
-		assert.deepEqual(entry.dependencies, piece.dependencies);
-		assert.equal(entry.targetDir, piece.targetDir);
 	});
 
 	test(`${wrapper.file} loads the package lazily and never touches customElements`, async () => {

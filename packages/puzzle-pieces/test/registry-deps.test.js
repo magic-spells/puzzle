@@ -94,13 +94,13 @@ test('registry.json mirrors every manifest, including the floors', async () => {
 		const row = rows.get(piece.name);
 		assert.ok(row, `registry.json has no ${piece.name} entry`);
 		assert.equal(piece.name, name, `${name}/piece.json names itself ${piece.name}`);
-		assert.equal(row.description, piece.description);
-		assert.deepEqual(row.files, piece.files);
-		assert.deepEqual(row.registryDependencies, piece.registryDependencies);
-		assert.deepEqual(row.dependencies, piece.dependencies);
-		assert.deepEqual(row.themes, piece.themes);
-		assert.equal(row.targetDir, piece.targetDir);
+		assert.deepEqual(row, piece, `registry.json's ${name} row has drifted from piece.json`);
 	}
+});
+
+test('registry.json pieces stay alphabetical', async () => {
+	const names = (await readJSON('../registry/registry.json')).pieces.map((p) => p.name);
+	assert.deepEqual(names, [...names].sort());
 });
 
 // `themes` is print-only (the CLI prints `puzzle add theme …`), so a name the

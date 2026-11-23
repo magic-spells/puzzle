@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, access } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 
 // Static guards for the image-zoom WRAPPER piece. The gesture state machine,
 // the rubber band, the translate clamping and the double-tap discriminator all
@@ -13,7 +13,6 @@ const PACKAGE = '@magic-spells/image-zoom';
 const DEP = `${PACKAGE}@^0.1.0`;
 const SPECIFIER = PACKAGE.replace('/', '\\/');
 const FILE = '../registry/ui/image-zoom/ImageZoom.pzl';
-const COPY = '../demo/app/components/ui/ImageZoom.pzl';
 
 const readText = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const readJSON = async (path) => JSON.parse(await readText(path));
@@ -24,25 +23,6 @@ test('the image-zoom manifest declares its file and dependency', async () => {
 	assert.deepEqual(piece.registryDependencies, []);
 	assert.deepEqual(piece.dependencies, [DEP]);
 	assert.equal(piece.targetDir, 'app/components/ui');
-	await access(new URL(FILE, import.meta.url));
-});
-
-test('registry.json mirrors the image-zoom manifest', async () => {
-	const [piece, registry] = await Promise.all([
-		readJSON('../registry/ui/image-zoom/piece.json'),
-		readJSON('../registry/registry.json'),
-	]);
-	const row = registry.pieces.find((p) => p.name === 'image-zoom');
-	assert.ok(row, 'registry.json has no image-zoom entry');
-	assert.equal(row.description, piece.description);
-	assert.deepEqual(row.files, piece.files);
-	assert.deepEqual(row.dependencies, piece.dependencies);
-	assert.equal(row.targetDir, piece.targetDir);
-});
-
-test('the demo copy is byte-identical to the registry source', async () => {
-	const [source, copy] = await Promise.all([readText(FILE), readText(COPY)]);
-	assert.equal(copy, source, 'demo/app/components/ui/ImageZoom.pzl has drifted from the registry');
 });
 
 test('the package is imported dynamically, inside mounted(), and never at module scope', async () => {

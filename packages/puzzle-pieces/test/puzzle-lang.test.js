@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, access } from 'node:fs/promises';
+import { access } from 'node:fs/promises';
 
 // The Code piece's `.pzl` highlighter (lib/puzzle-lang.js). highlight.js is a
 // demo dependency, not a package one, so the grammar is loaded through the demo
-// copy and these tests skip when demo/node_modules hasn't been installed. The
-// registry copy is pinned byte-identical to it below, so both are covered.
+// copy and these tests skip when demo/node_modules hasn't been installed.
+// registry-parity.test.js pins the registry copy byte-identical to it, so both
+// are covered.
 
-const registryCopy = new URL('../registry/lib/puzzle-lang.js', import.meta.url);
 const demoCopy = new URL('../demo/app/lib/puzzle-lang.js', import.meta.url);
 const hljsDir = new URL('../demo/node_modules/highlight.js/lib/', import.meta.url);
 
@@ -39,11 +39,6 @@ const span = (scope, text) => {
 	const cls = [`hljs-${head}`, ...rest.map((r) => `${r}_`)].join(' ');
 	return `<span class="${cls}">${text}</span>`;
 };
-
-test('registry and demo puzzle-lang.js stay byte-identical', async () => {
-	const [a, b] = await Promise.all([readFile(registryCopy), readFile(demoCopy)]);
-	assert.equal(Buffer.compare(a, b), 0, 'puzzle-lang.js copy drifted');
-});
 
 test('a bare library call is a built-in; app functions and methods are functions', { skip }, () => {
 	const out = highlight('<p>{ currency(cart.total) } { shout(name) } { title.trim().toUpperCase() }</p>');
