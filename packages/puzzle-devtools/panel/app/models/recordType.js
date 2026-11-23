@@ -17,6 +17,5 @@ export default class RecordType extends PuzzleModel {
 		count: Puzzle.number().default(0),
 		/** Set when a `flush` names a key in this type; cleared by the next snapshot. */
 		dirty: Puzzle.boolean().default(false),
-		snapshotAt: Puzzle.number().default(0),
 	};
 }

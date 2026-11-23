@@ -463,7 +463,7 @@ export default class ViewsView extends PuzzleView {
       if (this.getData().selectedId !== id) return;
       this.setState({ inspect: result ?? null, inspectError: '' });
       const record = this.ctx.store.findOne('pview', id);
-      if (record) record.update({ inspected: result ?? null, inspectedAt: Date.now() });
+      if (record) record.update({ inspected: result ?? null });
     } catch (err) {
       if (this.getData().selectedId !== id) return;
       this.setState({ inspect: null, inspectError: err?.message ?? String(err) });

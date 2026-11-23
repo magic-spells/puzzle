@@ -47,20 +47,7 @@ export default class Connection extends PuzzleModel {
 		 */
 		perfSeq: Puzzle.number().default(0),
 		eventCount: Puzzle.number().default(0),
-		lastEventAt: Puzzle.number().default(0),
 		/** Set when the panel's own request plumbing fails, so the UI can say so. */
 		error: Puzzle.string().default(() => null),
 	};
-
-	get isConnected() {
-		return this.state === CONNECTION_STATE.CONNECTED;
-	}
-
-	get isMismatch() {
-		return this.state === CONNECTION_STATE.MISMATCH;
-	}
-
-	get isWaiting() {
-		return this.state === CONNECTION_STATE.WAITING;
-	}
 }

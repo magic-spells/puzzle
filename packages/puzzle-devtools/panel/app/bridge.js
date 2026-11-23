@@ -12,7 +12,6 @@
 import {
 	EVENTS,
 	REQUESTS,
-	PROTOCOL_VERSION,
 	SUPPORTED_PROTOCOL_VERSIONS,
 	isEnvelope,
 } from '../../protocol/constants.js';
@@ -392,7 +391,6 @@ export function applyRecordSnapshot(result, type) {
 			records: rows,
 			count: rows.length,
 			dirty: false,
-			snapshotAt: Date.now(),
 		});
 		names.push(name);
 	}
@@ -650,7 +648,6 @@ export function resetSession({ port = 'connected' } = {}) {
 		flushSeq: 0,
 		perfSeq: 0,
 		eventCount: 0,
-		lastEventAt: 0,
 		error: null,
 	};
 	if (existing) existing.update(fresh);
@@ -677,10 +674,7 @@ function recordEvent(message) {
 	}
 
 	const connection = store.findOne('connection', CONNECTION_ID);
-	patchConnection({
-		eventCount: (connection?.eventCount ?? 0) + 1,
-		lastEventAt: Date.now(),
-	});
+	patchConnection({ eventCount: (connection?.eventCount ?? 0) + 1 });
 }
 
 let eventSeq = 0;
@@ -714,5 +708,3 @@ function summarize(message) {
 			return '';
 	}
 }
-
-export { PROTOCOL_VERSION, CONNECTION_STATE, CONNECTION_ID };

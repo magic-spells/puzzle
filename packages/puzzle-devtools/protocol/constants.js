@@ -86,13 +86,6 @@ export const REQUEST_TYPES = Object.freeze(Object.values(REQUESTS));
 /** The global the extension installs at document_start; the bridge looks for it. */
 export const HOOK_GLOBAL = '__PUZZLE_DEVTOOLS_HOOK__';
 
-/**
- * Hook API version. Distinct from PROTOCOL_VERSION: this numbers the shape of
- * `window.__PUZZLE_DEVTOOLS_HOOK__` itself (emit / onRequest), not the messages
- * that travel through it.
- */
-export const HOOK_API_VERSION = 1;
-
 /* -------------------------------------------------------------------------- */
 /* Transport — internal to this extension, NOT part of SPEC §55.               */
 /* -------------------------------------------------------------------------- */
@@ -117,9 +110,6 @@ export const CONTROL = Object.freeze({
 
 /** Max events the page hook buffers before the panel attaches. */
 export const HOOK_BUFFER_LIMIT = 500;
-
-/** How long panel-glue waits for a request answer before rejecting. */
-export const REQUEST_TIMEOUT_MS = 5000;
 
 /** Build a protocol envelope. */
 export function envelope(type, payload) {
