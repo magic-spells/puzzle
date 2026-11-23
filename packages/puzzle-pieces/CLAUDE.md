@@ -169,12 +169,15 @@ CLI — it is unrelated and must not be bumped along with the release.
   model: if `data()` returns a different value under a state key's name, `getData()` can hand
   that back, so read that key through `getState()`. A write to a key the last
   `data()` run read re-runs `data()` with the next render (framework D23), so no `refresh()`
-  follows a `setState()`. Keep instance fields for bookkeeping that never feeds `data()` (timers,
-  listener flags, a pending-focus marker). Call `refresh()` only on purpose: `data()` reads
-  something the runtime cannot see (a module store), or the next line needs the new model in
-  the DOM now (focusing a just-opened row, a FLIP measurement, a placement correction or a size
-  measured in `afterUpdate()`, rAF or a ResizeObserver callback that must paint this frame: a
-  `setState()` render lands a frame late). Say why in a comment beside it.
+  follows a `setState()`. Read a state key in `data()` only to derive from it. A key the
+  template shows as it is (an input's draft text) needs no read: the template gets it from
+  state, and the read re-runs `data()` on every write. Keep instance fields for bookkeeping
+  that never feeds `data()` (timers, listener flags, a pending-focus marker). Call
+  `refresh()` only on purpose: `data()` reads something the runtime cannot see (a module
+  store), or the next line needs the new model in the DOM now (focusing a just-opened row, a
+  FLIP measurement, a placement correction or a size measured in `afterUpdate()`, rAF or a
+  ResizeObserver callback that must paint this frame: a `setState()` render lands a frame
+  late). Say why in a comment beside it.
 
 ## Themes — four schemes × four styles
 

@@ -211,8 +211,8 @@ one is *not* a compile error; it silently builds a different product.
 
 ## 0.10.0 — 2026-11-20
 
-Production sizes: hello-world **24.1 KB gzip** (23.0 in 0.9.0), todos
-**28.1 KB gzip** (27.0).
+Production sizes: hello-world **23.9 KB gzip** (23.0 in 0.9.0), todos
+**27.9 KB gzip** (27.0).
 
 ### Breaking
 
@@ -267,7 +267,8 @@ Production sizes: hello-world **24.1 KB gzip** (23.0 in 0.9.0), todos
   rewrites old declarations, D199). A layout's `share()` does
   not reach its routed page. Components named `Params`, `Props` or `Shared`
   draw a compiler warning. In TypeScript, type the argument with the new
-  `DataInput<Props>` export.
+  `DataInput<Props>` export. The DevTools Views inspector shows the `shared`
+  values a view receives, beside its params and props.
 - **BREAKING: the router outlet is `<Outlet/>`; a bare `<Slot/>` is an error
   (D134).** Each marker now has one role: `<Outlet/>` is where a layout or
   view receives its child route, `<Children/>` is where a component receives
@@ -716,6 +717,13 @@ you edited the files).
   `output: 'static'`, `puzzle build` run from a symlink with more path parts
   than its target wrote page script URLs that pointed into `.puzzle/tmp/`, so
   no page loaded its JavaScript.
+- **An app that uses `{#svg}` gets the same hashed file names wherever it is
+  built.** The svg file's full path on the build machine went into the hash
+  of each hashed file that held the icon: a lazy chunk under
+  `build.splitting` (since 0.6.0), the entry file (hashed since 0.9.0), and
+  in `output: 'static'` a page module or a shared chunk. The same commit
+  built in two folders, such as a laptop and CI, gave the same bytes
+  different names.
 - **A skipped route prints once in static and hybrid builds.** Each skip
   printed its `[puzzle] skipped …` warning and then a short
   `! skipped /path (reason)` line. Now only the warning prints, and a route
@@ -729,6 +737,14 @@ you edited the files).
   so a derived value stayed stale (the todos example showed the restored
   filter tab over the whole list). It now runs once the state is back.
   Development only.
+- **A view that reads a navigation result can be tested with `mountView`
+  (`/testing`).** The default router's `push()` and `replace()` resolved
+  `undefined` (since 0.9.0), so a handler that read
+  `(await this.ctx.router.push(path)).ok` threw; with no routes, they now
+  resolve `{ ok: true, route }` for the current path and
+  `{ ok: false, reason: 'not-found' }` for any other, and `prefetch()`
+  resolves `false`. To test a navigation that lands, pass a `router` or use
+  `createTestApp`.
 - **`puzzle check` reports a handler a JavaScript view never declared.**
   Without a strict `tsconfig.json`, as in the default JavaScript scaffold,
   `@click={ save }` on a view with no `events` field passed the check and
@@ -759,6 +775,8 @@ you edited the files).
     development.
   - `emoji-picker`: the search box has its height, border, padding and focus
     ring.
+  - `emoji-picker` and `emoji-picker-simple` build their grid only while
+    open, so a page with a picker on every row does not pay for every grid.
   - `badge` `outline` is the same height as the other variants.
   - `aspect-ratio` keeps its ratio under a max width or in a grid track.
   - `progress-ring`, `rating` and `sparkline` take a text colour from `class`.
@@ -834,7 +852,9 @@ habit. Nothing existing breaks: renamed spellings stay accepted.
   new` and exits non-zero before type-checking, so CI fails on an
   un-upgraded app with the command that fixes it. The pass uses the parser and
   script tokenizer, not text search, so comments, strings and `{#raw}` are
-  left alone, and a second run finds nothing.
+  left alone, and a second run finds nothing. A site it cannot rewrite
+  safely, such as a `data()` parameter list with a rest parameter or a
+  comment in it, is listed for you to finish by hand.
 
 ## 0.9.1 — 2026-10-22 (Go module only)
 
