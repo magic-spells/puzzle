@@ -68,25 +68,25 @@ export function unwatchLinks(router) {
 
 /**
  * How one link prefetches: `'auto'` (the app default — skips guarded routes),
- * `'intent'` / `'visible'` (asked for by name — guarded routes too), or null
- * (never).
+ * `'intent'` (asked for by name — guarded routes too; `"visible"` links also
+ * join the scroll-into-view scan below), or null (never).
  *
  * @param {Element} a the link
  * @param {boolean} auto the app-wide `prefetch` config
- * @returns {'auto' | 'intent' | 'visible' | null}
+ * @returns {'auto' | 'intent' | null}
  */
 function linkMode(a, auto) {
 	const value = a.getAttribute('data-prefetch');
 	// no attribute: the app default decides.
 	if (value == null) return auto ? 'auto' : null;
 	if (value === 'off') return null;
-	if (value === 'visible') return 'visible';
-	// a bare `data-prefetch` and the spelled-out value are the same request.
+	// a bare `data-prefetch` and the spelled-out values are the same request.
 	// anything else is a typo; it still prefetches on intent, and development
 	// says which spellings exist.
 	if (
 		value !== '' &&
 		value !== 'intent' &&
+		value !== 'visible' &&
 		(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
 	) {
 		console.warn(
