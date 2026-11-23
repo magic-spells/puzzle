@@ -141,7 +141,7 @@ describe('fixture page ↔ page hook', () => {
 
 	it('answers inspect:view with the derived and state layers reported separately', () => {
 		const { result } = request(REQUESTS.INSPECT_VIEW, { id: 2 });
-		expect(Object.keys(result).sort()).toEqual(['local', 'model', 'module', 'name', 'params', 'props']);
+		expect(Object.keys(result).sort()).toEqual(['local', 'model', 'module', 'name', 'params', 'props', 'shared']);
 		expect(result.model).toEqual({ todos: 3, activeTodos: 2 });
 		expect(result.local).toEqual({ newTodoText: '', currentFilter: 'active' });
 	});
