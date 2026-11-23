@@ -38,10 +38,7 @@ rewrites them in place, then type-checks. Sites it cannot rewrite safely are
 listed for you to finish by hand.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		dir := "."
-		if len(args) == 1 {
-			dir = args[0]
-		}
+		dir := dirArg(args)
 		fix, _ := cmd.Flags().GetBool("fix")
 		out := ui.New(os.Stdout)
 		// the upgrade pass (D199) runs first: code written for an older release

@@ -26,10 +26,7 @@ are stable: puzzle, platform, node (null when node is not on PATH), projectRoot
 (absolute), sourceDir, outputDir, styles.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		dir := "."
-		if len(args) == 1 {
-			dir = args[0]
-		}
+		dir := dirArg(args)
 		if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
 			return runInfoJSON(os.Stdout, dir)
 		}

@@ -131,11 +131,3 @@ func normalizeHostArgs(args []string) []string {
 func looksLikeHost(s string) bool {
 	return net.ParseIP(s) != nil || strings.EqualFold(s, serve.DefaultHost)
 }
-
-// serverDir returns the optional [dir] positional for dev and preview.
-func serverDir(args []string) string {
-	if len(args) == 1 {
-		return args[0]
-	}
-	return "."
-}
