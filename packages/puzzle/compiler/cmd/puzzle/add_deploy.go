@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/magic-spells/puzzle/compiler/internal/build"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/generate"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
@@ -128,16 +129,10 @@ func deployDestination(root string, file deploytemplates.File) string {
 	if file.Place != deploytemplates.Public {
 		return file.Name
 	}
-	if !dirExists(filepath.Join(root, "app", "public")) && dirExists(filepath.Join(root, "public")) {
+	if build.PublicDir(root) == filepath.Join(root, "public") {
 		return "public/" + file.Name
 	}
 	return "app/public/" + file.Name
-}
-
-// dirExists reports whether path is an existing directory.
-func dirExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
 }
 
 // deployShape names the routing the written template does, for the success line.

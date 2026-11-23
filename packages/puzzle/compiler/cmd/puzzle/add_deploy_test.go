@@ -112,7 +112,7 @@ func TestAddDeployWritesEachHostTemplate(t *testing.T) {
 }
 
 // an app that keeps its public folder at the root gets the public templates
-// there, because that is the folder the build copies (publicDir's rule).
+// there, because that is the folder the build copies (build.PublicDir's rule).
 func TestAddDeployUsesRootPublicFolder(t *testing.T) {
 	root := newDeployApp(t)
 	if err := os.Mkdir(filepath.Join(root, "public"), 0o755); err != nil {

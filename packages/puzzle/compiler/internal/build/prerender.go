@@ -67,7 +67,7 @@ func checkPrerenderScratchCollision(absRoot, staging, label string) error {
 	// Name the user's file where it can be resolved; the staging copy is a temp
 	// path that is gone by the time the error is read.
 	source := prerenderDir
-	if pub := publicDir(absRoot); pub != "" {
+	if pub := PublicDir(absRoot); pub != "" {
 		if rel, err := filepath.Rel(absRoot, filepath.Join(pub, prerenderDir)); err == nil {
 			source = filepath.ToSlash(rel)
 		}
@@ -211,7 +211,7 @@ func checkPrerenderCollision(absRoot, staging string, publicOwners map[string]st
 		return nil
 	}
 
-	publicPath, err := filepath.Rel(absRoot, filepath.Join(publicDir(absRoot), filepath.FromSlash(owner)))
+	publicPath, err := filepath.Rel(absRoot, filepath.Join(PublicDir(absRoot), filepath.FromSlash(owner)))
 	if err != nil {
 		return fmt.Errorf("resolving public asset for prerender output %s: %w", outputFile, err)
 	}

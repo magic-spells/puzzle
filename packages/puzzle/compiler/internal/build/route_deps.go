@@ -305,13 +305,13 @@ func (g *routeGraph) classify(root string, changed []string, assetConsumers func
 	}
 
 	// The public tree is app/public/ in the examples but a root-level public/ is
-	// equally supported (publicDir, which the copier and the dev watcher both go
+	// equally supported (PublicDir, which the copier and the dev watcher both go
 	// through). Resolving it the same way here is what keeps the two rules below
 	// alive for a root-public project: hardcoding app/public made every public
 	// asset save an unknown path, so the whole fast path collapsed to a full
 	// render on a documented layout.
 	var shell, publicPrefix string
-	if src := publicDir(root); src != "" {
+	if src := PublicDir(root); src != "" {
 		shell = resolvePath(filepath.Join(src, "index.html"))
 		publicPrefix = resolvePath(src) + string(filepath.Separator)
 	}
