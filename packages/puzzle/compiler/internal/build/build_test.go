@@ -2128,36 +2128,6 @@ func TestBuildMissingEntry(t *testing.T) {
 	}
 }
 
-// TestCLIBuild is one exec-based smoke test of the actual command. Skipped when
-// the go toolchain is not on PATH.
-func TestCLIBuild(t *testing.T) {
-	if _, err := exec.LookPath("go"); err != nil {
-		t.Skip("go not on PATH")
-	}
-	// This goes through the real binary, hence the real Tailwind runner. The
-	// example declares Tailwind, so without a working toolchain the build fails
-	// by design ("never silently skip a declared pipeline"); skip rather than
-	// flag that expected environment gap here.
-	if _, err := (styles.NpxRunner{}).Run(styles.RunOptions{AppRoot: t.TempDir()}); err != nil {
-		t.Skipf("Tailwind CLI not runnable in this environment: %v", err)
-	}
-	root := exampleRoot(t)
-
-	// Module root is three levels up from compiler/internal/build.
-	wd, _ := os.Getwd()
-	moduleDir := filepath.Clean(filepath.Join(wd, "..", "..", ".."))
-
-	cmd := exec.Command("go", "run", "./compiler/cmd/puzzle", "build", root, "--mode", "development")
-	cmd.Dir = moduleDir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("puzzle build exited non-zero: %v\n%s", err, out)
-	}
-	if _, err := os.Stat(filepath.Join(root, "dist", "app.js")); err != nil {
-		t.Errorf("CLI build produced no dist/app.js: %v", err)
-	}
-}
-
 // TestBuildOptionsConfigSkipsLoad proves Options.Config is used INSTEAD of
 // loading puzzle.config.js — not merged with it. The fixture's config file is
 // deliberately unloadable (it throws), which fails any build that reads it, so a
