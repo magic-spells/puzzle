@@ -266,44 +266,26 @@ function onFlush(payload) {
 		if (bucket) bucket.update({ dirty: true });
 	}
 
-	pulseViews(notified);
-	pulseSubscriptions(keys);
+	pulse('pview', notified);
+	pulse('subscription', keys);
 }
 
 /**
- * Light up the subscription keys this flush named. Same 600ms class discipline
- * as the tree's rows, and the same shared timer clears both.
- */
-function pulseSubscriptions(keys) {
-	const now = Date.now();
-	let lit = false;
-	for (const key of keys) {
-		const entry = store.findOne('subscription', String(key));
-		if (!entry) continue;
-		entry.update({ pulseAt: now });
-		lit = true;
-	}
-	if (!lit) return;
-	clearTimeout(pulseTimer);
-	pulseTimer = setTimeout(clearPulses, PULSE_MS);
-}
-
-/**
- * Light up the views this flush actually re-rendered. `notified` carries view
- * ids plus the literal 'fn' for function subscribers (SPEC §55) — the lookup
- * simply misses on those.
+ * Light up the views this flush re-rendered and the subscription keys it named.
+ * `notified` carries view ids plus the literal 'fn' for function subscribers
+ * (SPEC §55) — the lookup simply misses on those.
  *
  * One shared timer clears every pulse: overlapping flushes extend the glow
  * rather than each arming their own timeout, which keeps a chatty app from
  * queueing hundreds of timers.
  */
-function pulseViews(notified) {
+function pulse(type, ids) {
 	const now = Date.now();
 	let lit = false;
-	for (const id of notified) {
-		const view = store.findOne('pview', id);
-		if (!view) continue;
-		view.update({ pulseAt: now });
+	for (const id of ids) {
+		const record = store.findOne(type, id);
+		if (!record) continue;
+		record.update({ pulseAt: now });
 		lit = true;
 	}
 	if (!lit) return;
