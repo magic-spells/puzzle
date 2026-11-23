@@ -157,18 +157,20 @@ export function makeRouteSnapshot({ chain, fullPath, params = {} }) {
 const ROUTER_METHODS = ['push', 'replace', 'back', 'forward', 'go', 'start', 'stop'];
 
 /**
- * Router-shaped static stub, DOM-free and shared by BOTH the true-static browser
- * kernel (static/index.js) and the static-mode prerender ctx (ssg/index.js) so
- * `url()` and `current` are byte-identical between the prerendered HTML and the
- * client re-render. Navigation throws; `url()` IS Router.url's encoder (the shared
- * encodeURL), so the two can never drift; `current` is the page snapshot.
+ * Router-shaped static stub, DOM-free and shared by the true-static browser
+ * kernel (static/index.js) and the prerender ctx (ssg/index.js: static mode
+ * renders through it, hybrid takes only its `url()`) so `url()` and `current`
+ * are byte-identical between the prerendered HTML and the client re-render.
+ * Navigation throws; `url()` IS Router.url's encoder (the shared encodeURL), so
+ * the two can never drift; `current` is the page snapshot.
  *
  * Encoding is HISTORY-style, hard-coded (D159): a static page physically lives at
  * /about/index.html and ships no router or click interception, so a hash-shaped
  * href would be a dead link and a memory-shaped one would drop the base. Both
  * callers already forced 'history' before the mode became an object.
  *
- * @param {object} route the D83 route snapshot (makeRouteSnapshot output)
+ * @param {object | null} route the D83 route snapshot (makeRouteSnapshot output);
+ *   null for a prerender context that renders no page (only its `url()` is used)
  * @param {{ base?: string }} [opts]
  * @returns {RouterStub} a `{ url, current, push, replace, … }` router facade
  */
