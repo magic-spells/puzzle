@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "puzzle dev",
     "build": "puzzle build",
+    "preview": "puzzle preview",
     "test": "vitest run",
     "check": "puzzle check"
   },

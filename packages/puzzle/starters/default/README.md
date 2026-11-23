@@ -11,6 +11,13 @@ npm run dev
 
 Then open http://localhost:3000. Run the tests with `npm test`.
 
+To build the app and check it the way a host will serve it:
+
+```bash
+npm run build
+npm run preview
+```
+
 ## Project layout
 
 ```
@@ -33,12 +40,20 @@ __APP_NAME__/
 
 - `npm run dev` — watch + rebuild + live-reload dev server.
 - `npm run build` — production build into `dist/`.
+- `npm run preview` — serve `dist/` the way a host does: every path gets the
+  app, so a reload or a shared link works.
 - `npm test` — run the tests in `tests/` once with Vitest. They mount
   components and views with `@magic-spells/puzzle/testing` and click and type
   the way a user would; `tests/` starts with a component test for Counter.pzl.
 
 ## Next steps
 
-- Add a view under `app/views/` and register it in `app/routes.js`.
+- Add a view under `app/views/` (`npx puzzle generate view About`) and
+  register it in `app/routes.js`.
 - Build reusable UI in `app/components/`.
+- Puzzle builds a single-page app by default; `output: 'hybrid'` in
+  `puzzle.config.js` also prerenders each route to HTML, and
+  `output: 'static'` writes plain HTML pages with no router, as the
+  [static starter](https://github.com/magic-spells/puzzle-starter-static) does.
+- Deploy: `npx puzzle add deploy` lists the hosts it writes a config for.
 - Read the docs at https://github.com/magic-spells/puzzle.
