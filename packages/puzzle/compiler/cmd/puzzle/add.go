@@ -72,7 +72,8 @@ Pieces (copy-in components):
                                lib dependencies) from a registry into the app,
                                verbatim, and records hashes in pieces.lock. It never
                                runs npm and never edits styles.css — required npm
-                               packages, the theme merge, the palettes a piece
+                               packages, the theme merge, the stylesheets of the
+                               web components a piece wraps, the palettes it
                                needs, and a hint when app/styles/pieces.css is
                                older than the registry's are printed as next
                                steps (D3). Refuses to overwrite existing files

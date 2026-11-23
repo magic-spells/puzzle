@@ -11,5 +11,8 @@
   "dependencies": [
     "@magic-spells/collapsible-content@^1.2.0"
   ],
+  "styles": [
+    "@magic-spells/collapsible-content/css"
+  ],
   "targetDir": "app/components/ui"
 }

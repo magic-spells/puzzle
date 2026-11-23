@@ -103,6 +103,22 @@ test('registry.json pieces stay alphabetical', async () => {
 	assert.deepEqual(names, [...names].sort());
 });
 
+// `styles` is print-only too: the CLI prints `@import "<spec>" layer(components);`
+// for each one, so its package must be one the same manifest installs, and the
+// demo, which exercises every wrapper, imports it the same way.
+test('every piece.json style comes from a package the piece installs', async () => {
+	const demo = await readFile(new URL('../demo/app/styles/styles.css', import.meta.url), 'utf8');
+	for (const [name, piece] of await manifests()) {
+		const pkgs = (piece.dependencies ?? []).map((spec) => splitSpec(spec)[0]);
+		for (const p of pkgs) if (demo.includes(`@import "${p}/css" layer(components);`)) assert.ok(piece.styles?.includes(`${p}/css`), `${name} installs ${p} but does not list its stylesheet`);
+		for (const style of piece.styles ?? []) {
+			const pkg = style.split('/').slice(0, style.startsWith('@') ? 2 : 1).join('/');
+			assert.ok(pkgs.includes(pkg), `${name}/piece.json imports ${style} but does not install ${pkg}`);
+			assert.ok(demo.includes(`@import "${style}" layer(components);`), `the demo does not import ${style}`);
+		}
+	}
+});
+
 // `themes` is print-only (the CLI prints `puzzle add theme …`), so a name the
 // registry does not ship would print a command that fails.
 test('every piece.json theme names a palette registry.json ships', async () => {

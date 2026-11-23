@@ -4,5 +4,6 @@
   "files": ["BottomSheet.pzl"],
   "registryDependencies": [],
   "dependencies": ["@magic-spells/bottom-sheet@^2.0.2", "@magic-spells/dialog-panel@^2.0.3"],
+  "styles": ["@magic-spells/dialog-panel/css", "@magic-spells/bottom-sheet/css"],
   "targetDir": "app/components/ui"
 }

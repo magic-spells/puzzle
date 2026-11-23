@@ -4,5 +4,6 @@
   "files": ["SplitText.pzl"],
   "registryDependencies": [],
   "dependencies": ["@magic-spells/split-text@^0.2.0"],
+  "styles": ["@magic-spells/split-text/css"],
   "targetDir": "app/components/ui"
 }

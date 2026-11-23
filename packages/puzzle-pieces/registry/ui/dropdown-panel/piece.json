@@ -11,5 +11,8 @@
   "dependencies": [
     "@magic-spells/dropdown-panel@^2.1.1"
   ],
+  "styles": [
+    "@magic-spells/dropdown-panel/css"
+  ],
   "targetDir": "app/components/ui"
 }

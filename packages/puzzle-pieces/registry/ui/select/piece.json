@@ -4,5 +4,6 @@
   "files": ["Select/Select.pzl", "Select/Option.pzl", "Select/Label.pzl", "Select/Divider.pzl", "Select/index.js"],
   "registryDependencies": [],
   "dependencies": ["@magic-spells/select-dropdown@^0.3.0"],
+  "styles": ["@magic-spells/select-dropdown/css"],
   "targetDir": "app/components/ui"
 }

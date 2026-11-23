@@ -4,5 +4,6 @@
   "files": ["ImageZoom.pzl"],
   "registryDependencies": [],
   "dependencies": ["@magic-spells/image-zoom@^0.1.0"],
+  "styles": ["@magic-spells/image-zoom/css"],
   "targetDir": "app/components/ui"
 }

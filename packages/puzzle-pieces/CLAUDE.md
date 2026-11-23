@@ -50,9 +50,9 @@ Rules that follow from this:
 - **Edit a piece in `registry/` first, then sync the copy in `demo/app/components/ui/`**
   (and `demo/app/lib/` for lib files). The demo copies are strictly downstream; never let
   them drift from the registry source.
-- **`registry.json` is generated** by aggregating the `piece.json` manifests. When you add
-  or rename a piece, add its manifest and regenerate/extend the index (keep pieces
-  alphabetical; represent lib files the way `date-math.js` / `chart-math.js` are).
+- **`registry.json` is the aggregation of the `piece.json` manifests, kept by hand** (no
+  generator): mirror every manifest edit in its row, pieces alphabetical. `registry.json
+  mirrors every manifest` in `test/registry-deps.test.js` fails when the two drift.
 - A new piece's demo surface is: the copied file(s), a `*Doc.pzl` page under
   `app/views/components/`, a `nav.js` entry, and a `routes.js` entry. Untracked new files do
   NOT ride along in another session's refactor commits — re-check any new Doc page against
@@ -109,6 +109,16 @@ Rules that follow from this:
   `puzzle add theme <names…>` for the ones the app has neither on disk nor package-imported.
   Deliberately NOT `registryDependencies` — an older CLI would read the name as a piece.
   `test/registry-deps.test.js` checks every name is a shipped palette.
+- `styles` — the REQUIRED stylesheets of the web component a wrapper piece installs, in
+  load order, a peer's first (`sheet` → `@magic-spells/dialog-panel/css`,
+  `@magic-spells/sheet/css`). Print-only: `add piece` unions them over the resolved set
+  (first occurrence wins, never sorted) and prints an `@import "<spec>" layer(components);`
+  step for each, the first after `@import "tailwindcss";` and each later one after the
+  line before it. Only the piece that installs the package lists it (the
+  dropdown families get `dropdown-panel`'s through `registryDependencies`); an optional
+  sheet (`…/dropdown-panel/css/effects`) stays in the header comment. An older CLI ignores
+  the key, so the schema stays `version: 1`. `test/registry-deps.test.js` checks each
+  one's package is in the same manifest's `dependencies` and that the demo imports it.
 
 ## Versioning
 
@@ -248,13 +258,14 @@ CLI — it is unrelated and must not be bumped along with the release.
   2026-08-22 — see `constellation/decision/DECISION-WRAP-WEB-COMPONENTS.md`; `scroll-stack`
   is the exemplar; `sheet` was the first conversion, 2026-08-22). A wrapper piece renders the
   custom element's markup around `<Children/>`, binds props to attributes, declares the npm
-  package in `piece.json.dependencies`, and upgrades it via **dynamic import in
-  `mounted()`** — never a top-level import, because the package's `class extends
-  HTMLElement` crashes Node prerendering. The component's stylesheet is imported at the
-  app entry in `layer(components)` (e.g. `@import "@magic-spells/scroll-stack/css"
-  layer(components)`) so utilities on the host still win; document it in the piece's
-  installation section. A package with a peer that ships its own CSS needs BOTH imports,
-  peer first (`sheet` → `@magic-spells/dialog-panel/css` then `@magic-spells/sheet/css`),
+  package in `piece.json.dependencies` and its required stylesheets in `styles`, and
+  upgrades it via **dynamic import in `mounted()`** — never a top-level import, because
+  the package's `class extends HTMLElement` crashes Node prerendering. The component's
+  stylesheet is imported at the app entry in `layer(components)` (e.g. `@import
+  "@magic-spells/scroll-stack/css" layer(components)`) so utilities on the host still
+  win; document it in the piece's installation section. A package with a peer that
+  ships its own CSS needs BOTH imports, peer first (`sheet` →
+  `@magic-spells/dialog-panel/css` then `@magic-spells/sheet/css`),
   and a package may ship an optional second sheet (`dropdown-panel` →
   `@magic-spells/dropdown-panel/css`, required, then `…/css/effects` for the entrance
   effects and the arrow). Why wrap: a port is a fork — every upstream fix has to be

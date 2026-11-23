@@ -1448,10 +1448,10 @@ piece imports the registry package (only the optional theme CSS and the
 `puzzle add piece <name…>` (copies each
 piece + its transitive piece/lib dependencies verbatim, records hashes in
 `pieces.lock`; refuses to overwrite any existing file unless `--force` (`-f`);
-never runs npm or edits styles.css: required npm packages and the theme
-merge are printed as next steps). A piece that needs its web component's
-stylesheet says so in a `STYLESHEET` comment in the copied file, and the CLI
-does not print that line: add its `@import … layer(components);` once.
+never runs npm or edits styles.css: required npm packages, the theme merge
+and the stylesheets of the web components a piece wraps are printed as next
+steps). Add each printed `@import "…" layer(components);` once, after
+`@import "tailwindcss";` and in the printed order: each line names the one it follows.
 When the app has no theme yet it writes
 `app/styles/pieces.css` and prints the `@import` line. When the app's
 `pieces.css` differs from the registry's, it prints a hint: run
