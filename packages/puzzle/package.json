@@ -112,6 +112,7 @@
 		"verify:pack": "node scripts/verify-pack.mjs",
 		"measure:size": "node scripts/measure-size.mjs",
 		"verify:published": "node scripts/verify-published.mjs",
+		"starter-repos": "node scripts/starter-repos.mjs",
 		"prepublishOnly": "node scripts/refuse-directory-publish.mjs",
 		"prepack": "node scripts/inject-platform-pins.mjs inject",
 		"postpack": "node scripts/inject-platform-pins.mjs restore",

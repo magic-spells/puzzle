@@ -343,6 +343,9 @@ enforced, not merely advised.
   `prepublishOnly` now refuses a directory publish outright. After publishing,
   run `npm run verify:published` — it is the only check that inspects the
   registry metadata npm actually resolves against.
+- Then `npm run starter-repos -- --push` regenerates the starter repos
+  (`magic-spells/puzzle-starter`, `puzzle-starter-static`) from `starters/`,
+  one commit per release; without `--push` it only writes the folders to look at.
 - Every framework tag `vX.Y.Z` needs a companion `packages/puzzle-lang/vX.Y.Z`
   tag, pushed with it (`git tag packages/puzzle-lang/vX.Y.Z && git push origin
   packages/puzzle-lang/vX.Y.Z`): Go finds a subdirectory module's versions only
