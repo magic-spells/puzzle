@@ -616,15 +616,8 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *PhaseProfile, pla
 	}
 
 	// 4. The same reserved-name guards the one-shot build applies once public/
-	//    has landed: a public asset sitting at _puzzle/ or .puzzle-prerender/
-	//    would be silently consumed.
-	if pagesOut := filepath.Join(staging, staticPagesDir); dirExists(pagesOut) || fsutil.FileExists(pagesOut) {
-		return fmt.Errorf(
-			"public asset would overwrite compiler output dist/%s (a reserved output name in static mode); rename or remove it",
-			staticPagesDir,
-		)
-	}
-	if err := checkPrerenderScratchCollision(b.root, staging, "--static"); err != nil {
+	//    has landed.
+	if err := checkStaticReserved(b.root, staging); err != nil {
 		return err
 	}
 
