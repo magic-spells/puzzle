@@ -292,7 +292,7 @@ function isKnownBlockCloserAt(s, open) {
 
 // scanInlineComment scans a {## … } inline comment (D70). Dumb scanner: only
 // tracks brace nesting and honors \{ / \} escapes. Returns { end, err }.
-export function scanInlineComment(s, open) {
+function scanInlineComment(s, open) {
 	let depth = 0;
 	for (let i = open; i < s.length; i++) {
 		const c = s[i];
@@ -310,7 +310,7 @@ export function scanInlineComment(s, open) {
 	return { end: 0, err: 'unclosed {## comment' };
 }
 
-export function isBlockCommentOpen(s, open) {
+function isBlockCommentOpen(s, open) {
 	if (open + 2 > s.length || s[open] !== '{' || s[open + 1] !== '#') return false;
 	return firstWord(s.slice(open + 2)) === 'comment';
 }
@@ -330,7 +330,7 @@ function matchCommentCloser(s, open) {
 
 // scanBlockComment scans a {#comment} … {/comment} block (D70) from the opening
 // '{'. Body consumed raw; nested openers counted. Returns { end, err }.
-export function scanBlockComment(s, open) {
+function scanBlockComment(s, open) {
 	let depth = 1;
 	for (let i = open + 1; i < s.length;) {
 		if (s[i] !== '{') {
@@ -393,6 +393,21 @@ export function scanBlockRaw(s, open) {
 	return { end: 0, err: 'unterminated {#raw} — expected {/raw}' };
 }
 
+// skipBraceSpan steps over a template construct opening at s[i] === '{': an
+// inline {## } or block {#comment} comment, or a balanced {…} group. A
+// malformed group advances one char, leaving the template lexer to report it.
+export function skipBraceSpan(s, i) {
+	let res;
+	if (s.startsWith('{##', i)) {
+		res = scanInlineComment(s, i);
+	} else if (isBlockCommentOpen(s, i)) {
+		res = scanBlockComment(s, i);
+	} else {
+		res = scanBraceGroup(s, i);
+	}
+	return res.err ? i + 1 : res.end;
+}
+
 // ---------------------------------------------------------------------------
 // Section close-tag scanners (mirror of sections.go)
 // ---------------------------------------------------------------------------
@@ -430,20 +445,7 @@ function findTemplateClose(s, from, closeTag) {
 			if (k >= 0 && inRaw < 0) inRaw = i + k - from;
 			i = end;
 		} else if (s[i] === '{') {
-			let res;
-			if (s.startsWith('{##', i)) {
-				res = scanInlineComment(s, i);
-			} else if (isBlockCommentOpen(s, i)) {
-				res = scanBlockComment(s, i);
-			} else {
-				const bg = scanBraceGroup(s, i);
-				res = { end: bg.end, err: bg.err };
-			}
-			if (res.err) {
-				i++; // let the template lexer report the malformed group later
-				continue;
-			}
-			i = res.end;
+			i = skipBraceSpan(s, i);
 		} else {
 			i++;
 		}

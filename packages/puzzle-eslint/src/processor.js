@@ -20,27 +20,16 @@
 // during preprocess and injected as synthetic ESLint messages in postprocess,
 // keyed by filename through a module-level Map.
 
-import {
-	splitSections,
-	scanBraceGroup,
-	scanInlineComment,
-	isBlockCommentOpen,
-	scanBlockComment,
-	isBlockRawOpen,
-	scanBlockRaw,
-} from './split.js';
+import { splitSections, scanBraceGroup, skipBraceSpan, isBlockRawOpen, scanBlockRaw } from './split.js';
 import { Linter } from 'eslint';
 
 // Carries each file's splitter errors and <script> body start from preprocess
-// to postprocess, keyed by filename.
+// to postprocess, and the component names its template renders to the
+// puzzle/uses-template-components rule, keyed by filename.
 const fileStore = new Map();
 
 // SECTION_RULE_ID is the synthetic rule id attached to injected section errors.
 const SECTION_RULE_ID = 'puzzle/no-invalid-sections';
-
-// Carries the component names each file's template renders, keyed by filename,
-// from preprocess to the puzzle/uses-template-components rule.
-const tagStore = new Map();
 
 // TAG_ROOT reads a tag name's root identifier after '<'. Tag names start like
 // the compiler lexer's startsTagName (ASCII letter, '_', or a non-ASCII
@@ -121,22 +110,6 @@ function matchAt(re, s, i) {
 	re.lastIndex = i;
 	const m = re.exec(s);
 	return m ? m[0] : '';
-}
-
-// skipBraceSpan steps over a template construct opening at s[i] === '{': an
-// inline {## } or block {#comment} comment, or a balanced {…} group. A
-// malformed group advances one char, leaving the rest for the compiler to
-// report, as findTemplateClose in split.js does.
-function skipBraceSpan(s, i) {
-	let res;
-	if (s.startsWith('{##', i)) {
-		res = scanInlineComment(s, i);
-	} else if (isBlockCommentOpen(s, i)) {
-		res = scanBlockComment(s, i);
-	} else {
-		res = scanBraceGroup(s, i);
-	}
-	return res.err ? i + 1 : res.end;
 }
 
 // skipQuotedValue steps from an attribute value's opening quote at s[open] to
@@ -288,8 +261,7 @@ export const processor = {
 		const script = sections.scripts;
 		// The body start in fix-range offsets, which count from after a leading BOM.
 		const bom = text[0] === '\uFEFF' ? 1 : 0;
-		fileStore.set(filename, { errors, start: script?.contentStart - bom });
-		tagStore.set(filename, componentTags(sections));
+		fileStore.set(filename, { errors, start: script?.contentStart - bom, tags: componentTags(sections) });
 
 		// No <script> section → nothing to lint as JS. Splitter errors are still
 		// surfaced in postprocess (which ESLint calls with an empty message set).
@@ -307,7 +279,6 @@ export const processor = {
 	postprocess(messages, filename) {
 		const { errors, start } = fileStore.get(filename);
 		fileStore.delete(filename);
-		tagStore.delete(filename);
 
 		// One block at most (the <script> body). A message whose fix reaches into
 		// the blanked lead-in goes, so --fix cannot delete it.
@@ -344,7 +315,7 @@ export const usesTemplateComponents = {
 	create(context) {
 		return {
 			Program() {
-				for (const name of tagStore.get(context.physicalFilename) || []) {
+				for (const name of fileStore.get(context.physicalFilename)?.tags || []) {
 					context.sourceCode.markVariableAsUsed(name);
 				}
 			},
