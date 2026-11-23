@@ -3760,8 +3760,8 @@ export function normalizeBase(base) {
  * The one render-time URL encoder (v1.46, D79) behind Router.url() — see its doc
  * comment for the contract. Exported as a pure function because the DOM-free
  * prerender paths need the SAME encoding without a live Router: the static router
- * stub (ssg/assemble.js) and the hybrid prerender ctx (ssg/index.js) both call it,
- * so a prerendered `href` and the client's re-render can never disagree. `base` is
+ * stub (ssg/assemble.js), whose url() both prerender modes use, calls it, so a
+ * prerendered `href` and the client's re-render can never disagree. `base` is
  * an ALREADY-normalized base (normalizeBase above); `mode` is a Router mode
  * instance (router/modes.js) or null/undefined for path encoding — the SSG
  * callers are path-only by construction and pass nothing.

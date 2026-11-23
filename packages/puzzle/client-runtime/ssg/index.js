@@ -41,13 +41,13 @@ import {
 } from '../capabilities.js';
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
-import { Router, encodeURL, linkLocale, localeBase, normalizeBase } from '../router/router.js';
+import { Router, encodeURL, localeBase, normalizeBase } from '../router/router.js';
 import { memoryRouter } from '../router/modes.js';
 import { findShadowedPaths, isDynamicSegment } from '../router/routePath.js';
 import { walkRouteTree } from '../router/routeTree.js';
 import { serialize, escapeText, escapeAttr, escapeScriptJson } from './serialize.js';
 import { assembleChain, localizeRouterStub, makeRouteSnapshot, makeRouterStub } from './assemble.js';
-import { routeNames, routeNamesJSON, targetPath } from '../router/routeNames.js';
+import { routeNames, routeNamesJSON } from '../router/routeNames.js';
 import { isLazyView, resolveRouteViews } from '../router/lazy.js';
 import { resolveHead } from '../head.js';
 import { MANAGED_TAGS } from '../headTags.js';
@@ -920,8 +920,8 @@ function pageRenderer(config, { isStatic, routed, tags, defaultLocale, routeRout
 	/** @type {Set<string>} */
 	const canonicalWarned = new Set();
 	let builtContext = false;
-	// route name → pattern, for named links in both modes (D196): the hybrid url()
-	// shadow resolves through it, and the static stub gets it per page.
+	// route name → pattern, for named links in both modes (D196): every page's
+	// router stub resolves through it.
 	const routeNameTable = routeNames(config.routes ?? []);
 
 	// staticPaths bookkeeping (D179). A fixed route's page always wins its output
@@ -964,43 +964,6 @@ function pageRenderer(config, { isStatic, routed, tags, defaultLocale, routeRout
 	// (D177). Pages render one at a time, so createPageContext just moves it.
 	let pageHref = '';
 
-	// The hybrid ctx router: the build's ONE unstarted memory Router, with url()
-	// shadowed from the app's `routerBase` (a config constant) — once, or once per
-	// locale pass under prefix routing (D177). Lazy so a hybrid build that renders
-	// nothing never pays for it and a malformed `routerBase` still throws at the
-	// first page, exactly as before.
-	/** @type {string | null | undefined} */
-	let hybridLocale;
-	/** @param {string | null} passLocale */
-	const hybridRouter = (passLocale) => {
-		if (hybridLocale !== passLocale) {
-			const locale = (hybridLocale = passLocale);
-			// …a memory router carries no URL, so its url() returns paths UNPREFIXED: a
-			// based app would prerender `/about` where the live app renders `/docs/about`
-			// — a broken href for crawlers, no-JS visitors, and anyone clicking before
-			// takeover. Shadow url() with HISTORY encoding over the app's real base,
-			// through the same encoder Router.url() and the static stub use: hybrid
-			// output is path-only by construction (the guard in prerenderPass refuses
-			// anything else). The compiled route table stays the real memory Router the
-			// takeover expects. Under prefix routing the base is the pass locale's, and
-			// link()'s { locale } options resolve as Router.url resolves them.
-			const base = normalizeBase(config.routerBase);
-			/** @type {(path: string, options?: import('../../types/index.js').LinkOptions) => string} */
-			// A named target (D196) resolves through the route table first, as the
-			// live Router.url() resolves it.
-			const url = routed
-				? (path, options) =>
-						encodeURL(
-							targetPath(path, routeNameTable),
-							null,
-							localeBase(base, linkLocale(options, locale, tags), defaultLocale)
-						)
-				: (path) => encodeURL(targetPath(path, routeNameTable), null, base);
-			routeRouter.url = url;
-		}
-		return routeRouter;
-	};
-
 	/**
 	 * Start one locale pass: one i18n service over that locale's filled table
 	 * (D175), created right before the pass's pages, since it points the
@@ -1040,27 +1003,34 @@ function pageRenderer(config, { isStatic, routed, tags, defaultLocale, routeRout
 		// the shared memory Router. The beforeMount-only fallback has no entry — it
 		// never renders, so a null route is fine.
 		const route = entry ? makeRouteSnapshot(entry) : null;
-		let router;
-		if (isStatic && route) {
-			router = makeRouterStub(route, { base: config.routerBase });
-			// The stub resolves named links through the build's table (D196) and
-			// marks itself when it does, so attachStaticFields knows the page needs
-			// the table in its names island.
-			router.names = routeNameTable;
-			// Locale prefix routing (D177): the static stub encodes under the locale
-			// being rendered and resolves link()'s { locale } options exactly as the
-			// browser kernel's stub does. An unconfigured { locale } tag throws here,
-			// so it fails the build.
-			if (routed) {
-				localizeRouterStub(router, {
-					base: config.routerBase,
-					locale: /** @type {string} */ (locale),
-					defaultLocale: /** @type {string} */ (defaultLocale),
-					locales: tags,
-				});
-			}
-		} else {
-			router = hybridRouter(locale);
+		/** @type {Router | RouterStub} */
+		let router = makeRouterStub(route, { base: config.routerBase });
+		// The stub resolves named links through the build's table (D196) and
+		// marks itself when it does, so attachStaticFields knows the page needs
+		// the table in its names island.
+		router.names = routeNameTable;
+		// Locale prefix routing (D177): the stub encodes under the locale being
+		// rendered and resolves link()'s { locale } options exactly as the browser
+		// kernel's stub does. An unconfigured { locale } tag throws here, so it
+		// fails the build.
+		if (routed) {
+			localizeRouterStub(router, {
+				base: config.routerBase,
+				locale: /** @type {string} */ (locale),
+				defaultLocale: /** @type {string} */ (defaultLocale),
+				locales: tags,
+			});
+		}
+		if (!isStatic || !route) {
+			// Hybrid renders through the build's ONE unstarted memory Router, the
+			// compiled route table the takeover expects. A memory router carries no
+			// URL, so its own url() returns paths UNPREFIXED: a based app would
+			// prerender `/about` where the live app renders `/docs/about` — a broken
+			// href for crawlers, no-JS visitors, and anyone clicking before takeover.
+			// The stub's url() shadows it: hybrid output is path-only by construction
+			// (the guard in prerenderPass refuses anything else).
+			routeRouter.url = router.url;
+			router = routeRouter;
 			if (route) {
 				// Own property shadows the prototype getter — the same instance-shadowing
 				// trick url() uses above, and for the same reason: `current` reads private
