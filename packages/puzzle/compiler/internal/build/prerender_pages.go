@@ -56,7 +56,7 @@ type staticSummary struct {
 	APIURL json.RawMessage `json:"apiURL"`
 	// RouterBase preserves the app config value for the browser-side static
 	// context. A missing JSON field stays nil, so the generated mount call
-	// preserves app.js's conditional passthrough. (`routerMode` is deliberately NOT
+	// omits the key and the kernel defaults it. (`routerMode` is deliberately NOT
 	// carried: static pages have no router, the kernel ignored it, and since D159 a
 	// mode is an object that would serialize to a dead `{}` here anyway. Storage is
 	// not carried for the same serialization reason — the JS side warns instead; a

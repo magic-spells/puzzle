@@ -334,10 +334,7 @@ function buildStaticContext({
 	route,
 }) {
 	installAdapterCapability(adapter, 'config.adapter');
-	/** @type {{ apiURL?: string, adapter?: AdapterCapability, storage?: Pick<Storage, 'getItem' | 'setItem'> }} */
-	const storeOptions = { apiURL, adapter };
-	if (storage !== undefined) storeOptions.storage = storage;
-	const store = new Store(models, storeOptions);
+	const store = new Store(models, { apiURL, adapter, storage });
 
 	// The stub encodes HISTORY-style, and the prerenderer's stub does the same
 	// (ssg/index.js buildContext) so the hrefs this re-render produces are

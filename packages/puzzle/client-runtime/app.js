@@ -500,32 +500,22 @@ export class PuzzleApp {
 		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n)
 			installTranslate(this.formatters, this.i18n);
 
-		// 4. Router + the shared context object injected into every view. Pass
-		//    `mode` through only when routerMode is set, so the Router's own default
-		//    (path routing, inline) stands otherwise — mirroring how `storage` is
-		//    conditionally passed to the Store above (D34/D159).
+		// 4. Router + the shared context object injected into every view. An unset
+		//    option arrives undefined, and the Router's own defaults apply (path
+		//    routing, no base, 'sequential', default focus + announce).
 		/** @type {NonNullable<ConstructorParameters<typeof Router>[1]>} */
 		const routerOptions = {
 			scrollBehavior,
+			focusBehavior,
+			mode: /** @type {import('./router/modes.js').RouterModeDescriptor} */ (routerMode),
+			base: routerBase,
+			transitionMode,
 			// Locale prefix routing (D177): the page's locale and the configured ones,
 			// so the router reads and writes URLs under the locale's prefix. Folds
 			// away without the define.
 			...((typeof __PUZZLE_HAS_LOCALE_ROUTING__ === 'undefined' || __PUZZLE_HAS_LOCALE_ROUTING__) &&
 				prefixRouterOptions(this.config)),
 		};
-		// focusBehavior → Router `focusBehavior`, passed through ONLY when set so the
-		// Router's own default (focus the committed leaf root + announce the title)
-		// stands otherwise (v1.56, D93) — mirroring the conditional passthroughs below.
-		if (focusBehavior !== undefined) routerOptions.focusBehavior = focusBehavior;
-		if (routerMode !== undefined) routerOptions.mode = /** @type {import('./router/modes.js').RouterModeDescriptor} */ (routerMode);
-		// routerBase → Router `base`, passed through ONLY when set so the Router's own
-		// default ('' — no base) stands otherwise (v1.19, D51) — mirroring the
-		// routerMode conditional passthrough.
-		if (routerBase !== undefined) routerOptions.base = routerBase;
-		// transitionMode → Router `transitionMode`, passed through ONLY when set so
-		// the Router's own default ('sequential' — byte-identical to v1.23) stands
-		// otherwise (v1.24, D56) — mirroring the conditional passthroughs above.
-		if (transitionMode !== undefined) routerOptions.transitionMode = transitionMode;
 		// prefetch → Router `prefetch` (D195). Undefined lets the Router's own
 		// default (true) stand. Behind the lazy gate: an app with no lazy() route
 		// has nothing to prefetch, so it carries neither the key nor the check.

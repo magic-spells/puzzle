@@ -57,7 +57,7 @@ import { formatLocale, setFormatLocale } from '../formatters/locale.js';
 import { redirectScript } from './redirect.js';
 
 /** @import { FormatterRegistry } from '../formatters.js' */
-/** @import { AdapterCapability, ReadStateEnvelope } from '../capabilities.js' */
+/** @import { ReadStateEnvelope } from '../capabilities.js' */
 /** @import { RouterStub } from './assemble.js' */
 /** @import { WrittenPage } from '../../types/ssg.js' */
 
@@ -1893,18 +1893,11 @@ async function buildContext(config, { router, i18n = null }) {
 	const { models = {}, functions = {}, apiURL, storage, adapter, beforeRequest } = config;
 
 	installAdapterCapability(adapter, 'config.adapter');
-	/**
-	 * @type {{ apiURL?: string, adapter?: AdapterCapability,
-	 *   storage?: Pick<Storage, 'getItem' | 'setItem'> | null, beforeRequest?: Function }}
-	 */
-	const storeOptions = { apiURL, adapter };
-	if (storage !== undefined) storeOptions.storage = storage;
 	// The adapter request hook rides along (v1.55, D91) so a build-time beforeMount
 	// seed hits an authenticated API exactly the way the browser store would. (The
 	// static browser kernel cannot: its options are serialized into a generated
 	// per-page entry module by the Go build, and a function does not survive that.)
-	if (beforeRequest !== undefined) storeOptions.beforeRequest = beforeRequest;
-	const store = new Store(models, storeOptions);
+	const store = new Store(models, { apiURL, adapter, storage, beforeRequest });
 	const registry = makeFormatterRegistry(functions, (path, options) => router.url(path, options));
 
 	/** @type {PrerenderContext} */
