@@ -10,8 +10,8 @@ connections:
   - DECISION-D32-CLI-TOOLING
   - FILE-CLI-ADD
   - TEST-CLI-COMMANDS
-verified_at: '2026-11-21T18:53:41.145Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-23T21:17:35.592Z'
+verified_sha: 6e9f34cfcf702663b2c22300ef8f3ffa3090a74d
 code_refs:
   - compiler/cmd/puzzle/add.go
   - compiler/cmd/puzzle/add_skills.go
@@ -36,8 +36,8 @@ The repo ships an AI-agent skill for building Puzzle apps (`skills/puzzle/SKILL.
 
 **Refresh**
 
-- **After `puzzle upgrade` installs a new version** (never on `--check`, already-current, or the manual/`go install` branch), it offers to refresh existing installs only — real `<root>/skills/puzzle/` dirs under detected roots; symlinks are reported and skipped. TTY asks; `--yes` refreshes without asking; plain non-TTY prints a hint and writes nothing.
-- The running process holds the *old* embedded skill, so the refresh **re-execs the newly installed binary** (`add skills --force --skill-root …`). Candidates in order — project install: `node_modules/@magic-spells/puzzle-<platform>/bin/puzzle`, then `node_modules/.bin/puzzle`; global: `exec.LookPath("puzzle")`, then the running executable — must each answer `--version` with exactly the target (whole-field equality, so 0.2.10 never satisfies 0.2.1). No verified candidate → print the manual command. Nothing here can fail the upgrade; problems print one `!` line.
+- **After `puzzle upgrade` upgrades at least one scope** (never on `--check`, or when nothing was upgraded), it offers to refresh existing installs only — real `<root>/skills/puzzle/` dirs under detected roots; symlinks are reported and skipped. TTY asks; `--yes` refreshes without asking; plain non-TTY prints a hint and writes nothing.
+- The running process holds the *old* embedded skill, so the refresh **re-execs the newly installed binary** (`add skills --force --skill-root …`). Candidates come from each scope just upgraded, global first, starting from the copy the read-back confirmed: the platform binary beside it (or nested in it, where npm -g puts it), then `node_modules/.bin/puzzle` for a project, or `exec.LookPath("puzzle")` and then the running executable for a global. When only the project moved, its binary supplies the skill, so the skill matches the version the agent writes code for. Each must answer `--version` with exactly the target (whole-field equality, so 0.2.10 never satisfies 0.2.1). No verified candidate → print the manual command. Nothing here can fail the upgrade; problems print one `!` line.
 - **`puzzle upgrade skills`** refreshes existing installs from the running binary — no registry fetch, no re-exec — and runs on a non-TTY without prompting (the command names the intent).
 - `confirmSkillUpdate` is the single test seam for the confirm prompt.
 

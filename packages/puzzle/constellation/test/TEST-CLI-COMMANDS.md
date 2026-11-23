@@ -33,8 +33,7 @@ Packages: `compiler/cmd/puzzle` and `compiler/internal/{scaffold,generate,pieces
 Run from `packages/puzzle` with `go test ./compiler/cmd/... ./compiler/internal/...`.
 
 - **Commands**: `init` with its prompts, `add` (skills included), `doctor`, `info`,
-  `generate`, `upgrade` resolving its install context from the running executable (not
-  the cwd), the output-mode flags, the build summary, the profile flag, and the runtime
+  `generate`, `upgrade`, the output-mode flags, the build summary, the profile flag, and the runtime
   preflight. `cli_conventions_test.go` pins flag conventions against the real registered
   commands: `--force`/`-f` on `add` and `generate`, `--overwrite` as a silent hidden
   alias (a 0.9 `upgrade` re-execs the new binary with it, so it must not print a
@@ -43,6 +42,14 @@ Run from `packages/puzzle` with `go test ./compiler/cmd/... ./compiler/internal/
   `info --json` / `doctor --json` keys. A renamed or dropped flag fails here, not in
   someone's script.
 - **`doctor`'s Node floor**: `TestDoctorNodeFloor` fails Node below 24 and passes 24.
+- **`puzzle upgrade`** (`upgrade_test.go`, D76): the running binary's install context
+  from the executable, never the cwd; both scopes listed and asked about, one scope, and
+  up to date; `--check`, `--yes`, and a run without a terminal from either binary; the
+  breaking-release wording; a project above the cwd named in the row and the question
+  before the install; the project walk stopping at the nearest `package.json`, at home,
+  and at one that does not parse; npm and pnpm workspace members; a project with nothing
+  installed; the skill-refresh binary for a global found on disk (npm -g and pnpm -g);
+  and each refusal still offering the global CLI.
 - **`puzzle add deploy`** (`add_deploy_test.go`, D198): the host list, refuse then
   `--force`, the `output` and public-folder rules, and each host's routing and cache headers.
 - **`puzzle check --fix`** (`internal/codemod/codemod_test.go`, `checkcmd_test.go`, D199):

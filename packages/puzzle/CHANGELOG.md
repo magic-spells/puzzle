@@ -859,6 +859,53 @@ habit. Nothing existing breaks: renamed spellings stay accepted.
   `npm run preview`, and write every other command as `npx puzzle …`.
 - **`-y` / `--yes`** on `init`, `add` and `upgrade` (and `upgrade skills`)
   takes every prompt's default without asking.
+- **`puzzle upgrade` upgrades the global CLI and this project.** Before it
+  changes anything, it prints one row for each, with the installed and latest
+  versions:
+
+  ```
+    the global CLI  0.9.0 → 0.10.0  (npm)
+    this project    0.9.0 → 0.10.0  /Users/you/my-app (npm)
+  ```
+
+  The global CLI row shows only when one is installed: `puzzle upgrade` never
+  installs one. "This project" is the nearest `package.json` at or above the
+  current folder, no higher than your home folder, when it lists
+  `@magic-spells/puzzle` in `dependencies` or `devDependencies`. A nearer
+  `package.json` that does not list it, or does not parse, means no project.
+  In a terminal it asks about each one that is behind
+  (`Upgrade the global CLI?`, `Upgrade this project in /Users/you/my-app?`),
+  and it asks everything before it installs anything. `--yes` upgrades every
+  one that is behind without asking, and `--check` only prints the rows.
+  - The project upgrade runs in the folder whose `package.json` lists Puzzle,
+    with the package manager of the first lockfile at or above it, so
+    `package.json` and the lockfile both move. In a workspace that folder is
+    the member, and the lockfile is the root's.
+  - When the project crosses a release that may break code (a new minor
+    before 1.0, a new major after it), the question adds
+    `0.9.0 → 0.10.0 may have breaking changes`. After the upgrade, one line
+    points at "Upgrading across versions" in the installed `CHANGELOG.md` and
+    at `npx puzzle check --fix`.
+  - Each upgrade is confirmed by reading the installed version back from disk:
+    `✓ upgraded the global CLI 0.9.0 → 0.10.0` and
+    `✓ upgraded this project 0.9.0 → 0.10.0`. If one fails, the other still
+    runs, and the command exits non-zero naming the one that failed.
+  - When the running CLI is a copy it cannot upgrade (a workspace root's, a
+    nested copy, an `npx` cache, a source build, or an install it does not
+    recognise), it still explains how to upgrade that copy, then offers the
+    global CLI and, unless the copy is a workspace root's or a nested one,
+    this project.
+
+  For scripts: without a terminal and without `--yes`, only the install the
+  command runs from is upgraded. The other prints as the exact command to
+  run, such as
+  `! To upgrade this project, run npm install @magic-spells/puzzle@0.10.0 in /Users/you/my-app`.
+  So a run inside a project now mentions the project, even from the global
+  CLI, and still exits 0. An install it does not recognise is now a `!` line
+  with exit 0, where it was an error. `--check` prints the rows where it
+  printed `✨ puzzle <latest> available (current <v>)`. A project's result
+  line is `✓ upgraded this project <old> → <new>`, where it was
+  `✓ upgraded @magic-spells/puzzle <old> → <new> in <dir>`.
 - **`--host`** on `dev` and `preview`: a bare `--host` listens on every
   interface and the banner adds a `Network:` URL per LAN address. `--host <ip>`
   (an IP literal or `localhost` right after the flag) or `--host=<addr>` binds

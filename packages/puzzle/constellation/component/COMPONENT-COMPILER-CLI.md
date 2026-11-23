@@ -100,9 +100,17 @@ this card holds the implementation rules behind it.
   `--force` is refused before anything is written.
 - **`add skills` / `upgrade skills`** ([[DECISION-D78-AGENT-SKILL-DISTRIBUTION]]) —
   symlinked destinations are written through only under `--force`, never removed.
-- **`upgrade`** ([[DECISION-D76-CLI-UPGRADE]]) — `detectInstallContext` classifies from
-  the running executable only; `upgradedBinaryCandidates` + `binaryReportsVersion` prove
-  the new binary before the skill re-exec (`add skills --force`).
+- **`upgrade`** ([[DECISION-D76-CLI-UPGRADE]]) — `detectInstallContext` classifies the
+  running binary from its executable only. `upgradeScopes` lists the scopes, global first:
+  the running binary is its own scope when it is a global or project install, a workspace
+  or nested binary leaves the project out, and every other scope comes from disk
+  (`installedGlobal`, and `projectAt` from the cwd). Every scope goes through
+  `printScope`, `question` and `upgradeScope`, and `installed()` names the copy each one
+  reports; a project's is looked up afresh each call, so the read-back finds it wherever
+  the install put it. One walk, `upward`, finds a project's `package.json`, lockfile and
+  copy, and stops at home or the filesystem root. `confirmUpgrade` is the prompt seam.
+  `upgradedBinaryCandidates` + `binaryReportsVersion` prove the new binary before the
+  skill re-exec (`add skills --force`).
   `platformPackageNameFor`/`platformBinaryNameFor` take GOOS/GOARCH explicitly (Node
   spelling: `win32`, `x64`; win32-arm64 folds onto x64) so every target is testable from
   one host.

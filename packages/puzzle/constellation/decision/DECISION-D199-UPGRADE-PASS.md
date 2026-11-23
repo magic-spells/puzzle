@@ -83,8 +83,8 @@ first release published for outside feedback, so its renames get one.
 
 ## Alternatives rejected
 
-- **A separate codemod command** — `puzzle upgrade` already means upgrading
-  the CLI itself, and a second command an author must know about is one they
+- **A separate codemod command** — `puzzle upgrade` already means installing a
+  newer Puzzle, and a second command an author must know about is one they
   skip. Folding the pass into `check` means the upgrade surfaces the
   first time they check, and CI catches an app that skipped it.
 - **Rewrite by default, `--dry-run` to preview** — a tool named `check` that
