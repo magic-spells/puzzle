@@ -318,11 +318,9 @@ export default class SubscriptionsView extends PuzzleView {
       // opened straight to this tab could only print bare `#2` ids.
       await Promise.all([ensureSubscriptions({ force }), ensureViews({ force })]);
     } catch (err) {
-      if (!this.isDestroyed) this.setState('error', err?.message ?? String(err));
+      this.setState('error', err?.message ?? String(err));
     } finally {
-      if (!this.isDestroyed) {
-        this.setState('loading', false);
-      }
+      this.setState('loading', false);
     }
   }
 

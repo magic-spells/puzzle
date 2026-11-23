@@ -428,12 +428,9 @@ export default class StoreView extends PuzzleView {
       // Every re-snapshot is a chance to see what changed under the open card.
       this.syncWatched();
     } catch (err) {
-      if (this.isDestroyed) return;
       this.setState('error', err?.message ?? String(err));
     } finally {
-      if (!this.isDestroyed) {
-        this.setState('loading', false);
-      }
+      this.setState('loading', false);
     }
   }
 
@@ -486,7 +483,6 @@ export default class StoreView extends PuzzleView {
     this.setState('editOk', message);
     this._okTimer = setTimeout(() => {
       this._okTimer = null;
-      if (this.isDestroyed) return;
       this.setState('editOk', '');
     }, OK_MS);
   }
@@ -579,12 +575,9 @@ export default class StoreView extends PuzzleView {
         // A §20 validation failure arrives here: panel-glue turns an `{ error }`
         // result into a rejection. The typed values stay in `edits` so the field
         // can be corrected instead of retyped.
-        if (this.isDestroyed) return;
         this.setState('editError', err?.message ?? String(err));
       } finally {
-        if (!this.isDestroyed) {
-          this.setState('applying', false);
-        }
+        this.setState('applying', false);
       }
     },
 

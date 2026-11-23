@@ -488,13 +488,9 @@ export default class PerformanceView extends PuzzleView {
       // Seeds the first report and, through adoptRecordingState, arms the poll.
       await this.loadSample();
     } catch (err) {
-      if (!this.isDestroyed) {
-        this.setState({ recording: false, error: err?.message ?? String(err) });
-      }
+      this.setState({ recording: false, error: err?.message ?? String(err) });
     } finally {
-      if (!this.isDestroyed) {
-        this.setState('busy', false);
-      }
+      this.setState('busy', false);
     }
   }
 
@@ -509,11 +505,9 @@ export default class PerformanceView extends PuzzleView {
       // whatever the poll happened to catch a fraction of a second earlier.
       await this.loadSample();
     } catch (err) {
-      if (!this.isDestroyed) this.setState('error', err?.message ?? String(err));
+      this.setState('error', err?.message ?? String(err));
     } finally {
-      if (!this.isDestroyed) {
-        this.setState('busy', false);
-      }
+      this.setState('busy', false);
     }
   }
 

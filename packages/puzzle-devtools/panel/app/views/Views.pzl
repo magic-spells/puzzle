@@ -438,12 +438,9 @@ export default class ViewsView extends PuzzleView {
       if (this.isDestroyed) return;
       applyViewSnapshot(result?.roots);
     } catch (err) {
-      if (this.isDestroyed) return;
       this.setState('treeError', err?.message ?? String(err));
     } finally {
-      if (!this.isDestroyed) {
-        this.setState('loadingTree', false);
-      }
+      this.setState('loadingTree', false);
     }
   }
 
@@ -476,7 +473,7 @@ export default class ViewsView extends PuzzleView {
       const record = this.ctx.store.findOne('pview', id);
       if (record) record.update({ inspected: result ?? null, inspectedAt: Date.now() });
     } catch (err) {
-      if (this.isDestroyed || this.getData().selectedId !== id) return;
+      if (this.getData().selectedId !== id) return;
       this.setState({ inspect: null, inspectError: err?.message ?? String(err) });
     }
   }
@@ -486,7 +483,6 @@ export default class ViewsView extends PuzzleView {
     this.setState('toast', message);
     this._toastTimer = setTimeout(() => {
       this._toastTimer = null;
-      if (this.isDestroyed) return;
       this.setState('toast', '');
     }, TOAST_MS);
   }
