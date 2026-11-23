@@ -160,6 +160,45 @@ describe('@magic-spells/puzzle/testing — mountView', () => {
 		expect(view.router.current).toBe(route);
 	});
 
+	it('the default router answers like a Router with no routes (D182, D183, D195)', async () => {
+		class Nav extends PuzzleView {
+			events = {
+				go: async () => {
+					const result = await this.ctx.router.push('/account');
+					this.setState({ landed: result.ok ? result.route.path : result.reason });
+				},
+			};
+			render() {
+				return h('button', { '@click': this.events.go }, [text(this.getState().landed ?? '')]);
+			}
+		}
+
+		const view = await mountView(Nav);
+		handles.push(view);
+		await view.click(view.element);
+		expect(view.element.textContent).toBe('not-found');
+		await expect(view.router.prefetch('/account')).resolves.toBe(false);
+		expect(view.router.views).toEqual([]);
+		expect(Object.isFrozen(view.router.views)).toBe(true);
+
+		const routeDef = { path: '/account', view: null };
+		const route = {
+			path: '/account',
+			pathname: '/account',
+			query: Object.freeze(Object.create(null)),
+			hash: '',
+			route: routeDef,
+			params: {},
+			chain: [routeDef],
+		};
+		const routed = await mountView(Nav, { route });
+		handles.push(routed);
+		await routed.click(routed.element);
+		expect(routed.element.textContent).toBe('/account');
+		await expect(routed.router.replace('/account')).resolves.toEqual({ ok: true, route });
+		await expect(routed.router.replace('/elsewhere')).resolves.toEqual({ ok: false, reason: 'not-found' });
+	});
+
 	it('click() waits for store.flush() and the async data() refresh it starts', async () => {
 		let nextGate = null;
 
