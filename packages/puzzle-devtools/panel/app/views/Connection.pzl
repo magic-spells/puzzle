@@ -99,7 +99,6 @@ export default class ConnectionView extends PuzzleView {
   data() {
     const store = this.ctx.store;
     const connection = store.findOne('connection', CONNECTION_ID);
-    const local = this.getData();
     const route = connection?.route ?? null;
 
     return {
@@ -115,9 +114,6 @@ export default class ConnectionView extends PuzzleView {
       portError: connection?.port === 'disconnected' && connection?.state !== 'waiting'
         ? 'Lost the connection to the inspected tab. Reopen DevTools to reconnect.'
         : (connection?.error ?? ''),
-      probing: local.probing,
-      probeResult: local.probeResult,
-      probeError: local.probeError,
     };
   }
 

@@ -334,12 +334,6 @@ export default class StoreView extends PuzzleView {
         from: preview(entry.from, 40),
         to: preview(entry.to, 40),
       })),
-
-      editError: local.editError,
-      editOk: local.editOk,
-      applying: local.applying,
-      loading: local.loading,
-      error: local.error,
     };
   }
 

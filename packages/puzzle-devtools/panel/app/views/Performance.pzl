@@ -351,7 +351,6 @@ export default class PerformanceView extends PuzzleView {
       elapsed: formatDuration(sample?.durationMs),
       statusNote: this.statusNote(local.recording, sample),
       loadingClass: local.busy ? 'animate-spin text-accent' : '',
-      error: local.error,
 
       // A report exists from the first snapshot on, but one full of zeros is not
       // worth a screen of empty tiles — the idle empty state says more. Once

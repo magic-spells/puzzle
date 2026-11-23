@@ -297,11 +297,8 @@ export default class ViewsView extends PuzzleView {
 
       rows,
       liveCount: views.filter((view) => view.live).length,
-      loadingTree: local.loadingTree,
       // The reload glyph IS the spinner while a snapshot is in flight.
       reloadClass: local.loadingTree ? 'animate-spin' : '',
-      treeError: local.treeError,
-      toast: local.toast,
 
       // The pane opens on SELECTION, not on a successful answer — a failed
       // inspect has to be able to say so somewhere.
@@ -310,7 +307,6 @@ export default class ViewsView extends PuzzleView {
       detailId: selectedId ?? '',
       detailName: inspect?.name ?? selectedRecord?.name ?? 'View',
       detailModule: inspect?.module ?? selectedRecord?.module ?? '—',
-      inspectError: local.inspectError,
 
       paramEntries: entriesOf(inspect?.params),
       propEntries: entriesOf(inspect?.props),

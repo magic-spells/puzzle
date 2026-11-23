@@ -157,7 +157,6 @@ export default class RouterView extends PuzzleView {
       history: this.toHistory(events),
 
       loadingClass: local.loading ? 'animate-spin text-accent' : '',
-      error: local.error,
     };
   }
 
