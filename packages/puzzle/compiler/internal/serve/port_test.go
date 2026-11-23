@@ -28,7 +28,7 @@ func TestListenUsesRequestedPortWhenFree(t *testing.T) {
 	want, held := occupy(t)
 	held.Close()
 
-	ln, err := Listen(want, false)
+	ln, err := ListenHost("", want, false)
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestListenUsesRequestedPortWhenFree(t *testing.T) {
 func TestListenScansPastBusyPort(t *testing.T) {
 	busy, _ := occupy(t)
 
-	ln, err := Listen(busy, false)
+	ln, err := ListenHost("", busy, false)
 	if err != nil {
 		t.Fatalf("Listen should have scanned past a busy port: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestListenScansPastBusyPort(t *testing.T) {
 func TestListenStrictPortFailsOnBusyPort(t *testing.T) {
 	busy, _ := occupy(t)
 
-	ln, err := Listen(busy, true)
+	ln, err := ListenHost("", busy, true)
 	if err == nil {
 		ln.Close()
 		t.Fatalf("strict mode bound port %d, want an error", BoundPort(ln, 0))
@@ -94,7 +94,7 @@ func TestListenExhaustedScanReportsRequestedPort(t *testing.T) {
 		}
 	}()
 
-	ln, err := Listen(first, false)
+	ln, err := ListenHost("", first, false)
 	if err == nil {
 		ln.Close()
 		t.Fatalf("exhausted scan bound port %d, want an error", BoundPort(ln, 0))
@@ -105,9 +105,9 @@ func TestListenExhaustedScanReportsRequestedPort(t *testing.T) {
 }
 
 func TestListenPortZeroTakesAnyFreePort(t *testing.T) {
-	ln, err := Listen(0, false)
+	ln, err := ListenHost("", 0, false)
 	if err != nil {
-		t.Fatalf("Listen(0): %v", err)
+		t.Fatalf("ListenHost(0): %v", err)
 	}
 	defer ln.Close()
 
@@ -119,13 +119,13 @@ func TestListenPortZeroTakesAnyFreePort(t *testing.T) {
 func TestListenRejectsOutOfRangePorts(t *testing.T) {
 	for _, port := range []int{-1, 70000} {
 		t.Run(fmt.Sprintf("%d", port), func(t *testing.T) {
-			ln, err := Listen(port, false)
+			ln, err := ListenHost("", port, false)
 			if ln != nil {
 				ln.Close()
-				t.Errorf("Listen(%d) returned a listener, want nil", port)
+				t.Errorf("ListenHost(%d) returned a listener, want nil", port)
 			}
 			if err == nil {
-				t.Fatalf("Listen(%d) returned nil error", port)
+				t.Fatalf("ListenHost(%d) returned nil error", port)
 			}
 			if !strings.Contains(err.Error(), fmt.Sprintf("%d", port)) {
 				t.Errorf("error should name invalid port %d, got: %v", port, err)

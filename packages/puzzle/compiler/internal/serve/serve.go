@@ -178,18 +178,11 @@ func withinDirResolved(dir, target string) bool {
 	return WithinDir(realDir, realTarget)
 }
 
-// PortScanLimit is how many consecutive ports Listen tries before giving up.
+// PortScanLimit is how many consecutive ports ListenHost tries before giving up.
 // A busy default port is a papercut, not a failure (the same posture as Vite,
 // Next, and Astro), but the scan is bounded so a wedged machine reports a real
 // error instead of walking the port space.
 const PortScanLimit = 10
-
-// Listen binds the first free loopback port at or above `port`, returning the
-// listener. With strict set, only `port` itself is tried (D90). It is
-// ListenHost with the default host.
-func Listen(port int, strict bool) (net.Listener, error) {
-	return ListenHost("", port, strict)
-}
 
 // ListenHost binds the first free port at or above `port` on host, returning
 // the listener. With strict set, only `port` itself is tried (D90).
