@@ -117,8 +117,8 @@ func TestDryRunListsSitesAndWritesNothing(t *testing.T) {
 		// app.js shorthand, the test's mountView and createTestApp
 		"functions-key":    3,
 		"functions-module": 1,
-		// app.js and the test import the renamed module
-		"functions-import": 2,
+		// app.js, the test and Row.pzl import the renamed module
+		"functions-import": 3,
 	}
 	got := rules(res)
 	for rule, n := range want {

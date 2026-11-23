@@ -84,8 +84,9 @@ func Run(root string, apply bool) (*Result, error) {
 	res := &Result{}
 
 	// 1. the conventional static-mode module is renamed first, so the import
-	//    rewrite below can point at a file that exists.
-	moduleRenamed, err := renameFunctionsModule(abs, apply, res)
+	//    rewrite below can point at a file that exists. movedExt is its
+	//    extension, "" when nothing moves.
+	movedExt, err := renameFunctionsModule(abs, apply, res)
 	if err != nil {
 		return nil, err
 	}
@@ -104,9 +105,9 @@ func Run(root string, apply bool) (*Result, error) {
 		var edits []edit
 		var notes []Change
 		if strings.HasSuffix(rel, ".pzl") {
-			edits, notes = pzlEdits(rel, string(src))
+			edits, notes = pzlEdits(rel, string(src), movedExt)
 		} else {
-			edits, notes = scriptFileEdits(rel, string(src), moduleRenamed)
+			edits, notes = scriptFileEdits(rel, string(src), movedExt)
 		}
 		res.Notes = append(res.Notes, notes...)
 		if len(edits) == 0 {
@@ -231,7 +232,7 @@ func lineCol(src string, off int) (int, int) {
 
 // pzlEdits returns the rewrites for one .pzl file. a file that does not split
 // into sections is left alone — the type check reports why.
-func pzlEdits(rel, src string) ([]edit, []Change) {
+func pzlEdits(rel, src, movedExt string) ([]edit, []Change) {
 	sec, err := parser.SplitSections(src, rel)
 	if err != nil {
 		return nil, nil
@@ -239,7 +240,7 @@ func pzlEdits(rel, src string) ([]edit, []Change) {
 	var edits []edit
 	var notes []Change
 	edits = append(edits, markerEdits(rel, src, sec)...)
-	se, sn := scriptEdits(rel, sec.Source, sec.Scripts, sec.ScriptsPos.Offset)
+	se, sn := scriptEdits(rel, sec.Source, sec.Scripts, sec.ScriptsPos.Offset, movedExt)
 	edits = append(edits, se...)
 	notes = append(notes, sn...)
 	return edits, notes
@@ -373,30 +374,28 @@ func findCloseTag(src string, from int, name string) int {
 // script bodies: setData, positional data(), the formatters key, imports
 // ---------------------------------------------------------------------------
 
-// scriptEdits returns the setData and data() rewrites for one script body
-// that starts at byte base of the file.
-func scriptEdits(rel, file, script string, base int) ([]edit, []Change) {
+// scriptEdits returns the setData, data() and import rewrites for one .pzl
+// script body that starts at byte base of the file.
+func scriptEdits(rel, file, script string, base int, movedExt string) ([]edit, []Change) {
 	if strings.TrimSpace(script) == "" {
 		return nil, nil
 	}
 	toks := codegen.TokenizeScript(script)
 	edits, notes := setStateEdits(rel, file, toks, base)
 	edits = append(edits, dataObjectEdits(rel, file, script, base, &notes)...)
+	edits = append(edits, importEdits(rel, script, toks, base, movedExt)...)
 	return edits, notes
 }
 
 // scriptFileEdits returns the rewrites for a plain .js / .mjs / .ts file:
-// setData calls, the formatters config key, and (when the module was renamed)
-// imports of app/formatters.
-func scriptFileEdits(rel, src string, moduleRenamed bool) ([]edit, []Change) {
+// setData calls, the formatters config key, and imports of the moved module.
+func scriptFileEdits(rel, src, movedExt string) ([]edit, []Change) {
 	toks := codegen.TokenizeScript(src)
 	edits, notes := setStateEdits(rel, src, toks, 0)
 	ke, kn := functionsKeyEdits(rel, src, toks)
 	edits = append(edits, ke...)
 	notes = append(notes, kn...)
-	if moduleRenamed {
-		edits = append(edits, importEdits(rel, src, toks)...)
-	}
+	edits = append(edits, importEdits(rel, src, toks, 0, movedExt)...)
 	return edits, notes
 }
 
@@ -773,12 +772,12 @@ func objectKeyEdits(toks []codegen.ScriptToken, open int) []edit {
 }
 
 // renameFunctionsModule renames app/formatters.js (or .ts) to app/functions.js
-// when no app/functions.* exists yet. moved reports whether a rename happened
-// (or would, in a dry run).
-func renameFunctionsModule(abs string, apply bool, res *Result) (moved bool, err error) {
+// when no app/functions.* exists yet. it returns the extension of the module
+// that moved (or would, in a dry run), "" when none does.
+func renameFunctionsModule(abs string, apply bool, res *Result) (string, error) {
 	for _, ext := range []string{".js", ".ts"} {
 		if fsutil.FileExists(filepath.Join(abs, "app", "functions"+ext)) {
-			return false, nil
+			return "", nil
 		}
 	}
 	for _, ext := range []string{".js", ".ts"} {
@@ -791,18 +790,24 @@ func renameFunctionsModule(abs string, apply bool, res *Result) (moved bool, err
 			Message: rel + " → app/functions" + ext})
 		if apply {
 			if err := os.Rename(from, filepath.Join(abs, "app", "functions"+ext)); err != nil {
-				return false, err
+				return "", err
 			}
 		}
-		return true, nil
+		return ext, nil
 	}
-	return false, nil
+	return "", nil
 }
 
-// importEdits rewrites import specifiers that name the renamed module:
-// './formatters.js' in app/app.js, '../app/formatters.js' in a test, or the
-// '@/formatters.js' alias, each keeping its quotes and extension.
-func importEdits(rel, src string, toks []codegen.ScriptToken) []edit {
+// importEdits rewrites import specifiers that name the moved module, whose
+// extension is movedExt ("" when nothing moved): './formatters.js' in
+// app/app.js, '../app/formatters.js' in a test or '@/formatters' in a
+// component, each keeping its quotes and extension. a specifier with another
+// extension names some other file. src is the script toks came from, starting
+// at byte base of the file.
+func importEdits(rel, src string, toks []codegen.ScriptToken, base int, movedExt string) []edit {
+	if movedExt == "" {
+		return nil
+	}
 	var edits []edit
 	dir := path.Dir(rel)
 	for i, t := range toks {
@@ -824,13 +829,13 @@ func importEdits(rel, src string, toks []codegen.ScriptToken) []edit {
 			continue
 		}
 		spec := lit[1 : len(lit)-1]
-		if resolveSpecifier(dir, spec) != "app/formatters" {
+		if p := resolveSpecifier(dir, spec); p != "app/formatters" && p != "app/formatters"+movedExt {
 			continue
 		}
 		idx := strings.LastIndex(spec, "formatters")
 		newSpec := spec[:idx] + "functions" + spec[idx+len("formatters"):]
 		edits = append(edits, edit{
-			start: t.Off + 1, end: t.Off + 1 + len(spec), text: newSpec,
+			start: base + t.Off + 1, end: base + t.Off + 1 + len(spec), text: newSpec,
 			rule: "functions-import", message: "'" + spec + "' → '" + newSpec + "'",
 		})
 	}
@@ -838,23 +843,15 @@ func importEdits(rel, src string, toks []codegen.ScriptToken) []edit {
 }
 
 // resolveSpecifier maps an import specifier written in a file under dir to an
-// app-relative module path without extension, or "" for a package import.
+// app-relative path, or "" for a package import.
 func resolveSpecifier(dir, spec string) string {
-	var p string
 	switch {
 	case strings.HasPrefix(spec, "@/"):
-		p = path.Join("app", spec[2:])
+		return path.Join("app", spec[2:])
 	case strings.HasPrefix(spec, "./") || strings.HasPrefix(spec, "../"):
-		p = path.Join(dir, spec)
-	default:
-		return ""
+		return path.Join(dir, spec)
 	}
-	for _, ext := range []string{".js", ".ts", ".mjs"} {
-		if strings.HasSuffix(p, ext) {
-			return strings.TrimSuffix(p, ext)
-		}
-	}
-	return p
+	return ""
 }
 
 // Format renders changes (or notes) for the terminal, one per line as
