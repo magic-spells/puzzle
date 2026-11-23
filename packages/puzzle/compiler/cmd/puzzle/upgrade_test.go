@@ -1466,6 +1466,7 @@ for arg in "$@"; do
 done
 mkdir -p "$target"
 printf '{"version":"%s"}\n' "$PUZZLE_TEST_VERSION" > "$target/package.json"
+echo "changed 1 package"
 `
 
 // upgradeStubs puts faithful npm/pnpm/yarn/bun stubs on PATH and returns a
@@ -1839,10 +1840,10 @@ func TestUpgradeBothScopesAsksForEach(t *testing.T) {
 			asked := answerUpgrades(t, tt.global, tt.project)
 			out := f.run(t, f.global, false, upgradeEnvironment{interactive: true})
 
-			if want := []string{"Upgrade the global CLI?", "Upgrade this project?"}; !reflect.DeepEqual(*asked, want) {
+			if want := []string{"Upgrade the global CLI?", "Upgrade this project (.)?"}; !reflect.DeepEqual(*asked, want) {
 				t.Errorf("asked %#v, want %#v", *asked, want)
 			}
-			rows := globalRow + projectRow + f.project + " (npm)\n"
+			rows := globalRow + projectRow + ". (npm)\n"
 			if !strings.HasPrefix(out, rows) {
 				t.Fatalf("output must open with both rows %q:\n%s", rows, out)
 			}
@@ -1894,7 +1895,7 @@ func TestUpgradeOneScope(t *testing.T) {
 		f := newScopeFixture(t, "0.10.2", "", "0.10.0")
 		asked := answerUpgrades(t, true)
 		out := f.run(t, f.local, false, upgradeEnvironment{interactive: true})
-		if !reflect.DeepEqual(*asked, []string{"Upgrade this project?"}) || strings.Contains(out, "the global CLI") {
+		if !reflect.DeepEqual(*asked, []string{"Upgrade this project (.)?"}) || strings.Contains(out, "the global CLI") {
 			t.Fatalf("asked %#v, output:\n%s", *asked, out)
 		}
 		if fsFileExists(f.globalPackage()) {
@@ -1934,7 +1935,7 @@ func TestUpgradeCheckAndYes(t *testing.T) {
 		f := newScopeFixture(t, "0.10.2", "0.10.0", "0.10.0")
 		answerUpgrades(t)
 		out := f.run(t, f.global, true, upgradeEnvironment{interactive: true})
-		if want := globalRow + projectRow + f.project + " (npm)\n"; out != want {
+		if want := globalRow + projectRow + ". (npm)\n"; out != want {
 			t.Fatalf("output = %q, want %q", out, want)
 		}
 		if got := f.argv(); got != nil {
@@ -2024,7 +2025,7 @@ func TestUpgradeProjectAcrossABreakingRelease(t *testing.T) {
 	f := newScopeFixture(t, "0.10.2", "0.9.1", "0.9.1")
 	asked := answerUpgrades(t, true, true)
 	out := f.run(t, f.global, false, upgradeEnvironment{interactive: true})
-	want := []string{"Upgrade the global CLI?", "Upgrade this project? 0.9.1 → 0.10.2 has breaking changes"}
+	want := []string{"Upgrade the global CLI?", "Upgrade this project (.)? 0.9.1 → 0.10.2 has breaking changes"}
 	if !reflect.DeepEqual(*asked, want) {
 		t.Errorf("asked %#v, want %#v", *asked, want)
 	}
@@ -2039,30 +2040,78 @@ func TestUpgradeProjectAcrossABreakingRelease(t *testing.T) {
 	}
 }
 
-// TestUpgradeFindsTheProjectFromASubfolder: the project is the nearest
-// package.json that declares the CLI, and its install runs at that root.
-func TestUpgradeFindsTheProjectFromASubfolder(t *testing.T) {
+// TestUpgradeNamesAProjectAboveTheCurrentFolder: run from a subfolder, the
+// project is the package.json above it, and the install runs there. Its full
+// path is in the row and the question, and under --yes the row is out before
+// the package manager starts.
+func TestUpgradeNamesAProjectAboveTheCurrentFolder(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell-script package-manager stub")
 	}
-	f := newScopeFixture(t, "0.10.2", "0.10.2", "0.10.0")
-	sub := filepath.Join(f.project, "app", "views")
-	// A package.json on the way up that does not declare the CLI is not the project.
-	mustWrite(t, filepath.Join(f.project, "app", "package.json"), `{"type":"module"}`)
-	if err := os.MkdirAll(sub, 0o755); err != nil {
-		t.Fatal(err)
+	for _, tt := range []struct {
+		name string
+		env  upgradeEnvironment
+		asks bool
+	}{
+		{"asked", upgradeEnvironment{interactive: true}, true},
+		{"--yes", upgradeEnvironment{yes: true}, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newScopeFixture(t, "0.10.2", "0.10.2", "0.10.0")
+			sub := filepath.Join(f.project, "app", "views")
+			if err := os.MkdirAll(sub, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			chdir(t, sub)
+			asked := answerUpgrades(t, true)
+			out := f.run(t, f.global, false, tt.env)
+
+			var want []string
+			if tt.asks {
+				want = []string{"Upgrade this project (" + f.project + ")?"}
+			}
+			if !reflect.DeepEqual(*asked, want) {
+				t.Errorf("asked %#v, want %#v", *asked, want)
+			}
+			row := projectRow + f.project + " (npm)\n"
+			if at, ran := strings.Index(out, row), strings.Index(out, "changed 1 package"); at < 0 || ran < 0 || at > ran {
+				t.Fatalf("the row %q must come before the install:\n%s", row, out)
+			}
+			if f.cwd() != f.project {
+				t.Errorf("the install ran in %q, want the project root %q", f.cwd(), f.project)
+			}
+			if got := versionAt(t, f.projectPackage()); got != "0.10.2" {
+				t.Errorf("project = %s, want 0.10.2", got)
+			}
+		})
 	}
-	chdir(t, sub)
-	answerUpgrades(t, true)
-	out := f.run(t, f.global, false, upgradeEnvironment{interactive: true})
-	if !strings.Contains(out, "  the global CLI  0.10.2, up to date  (npm)\n") {
-		t.Errorf("the global CLI should be listed as up to date:\n%s", out)
-	}
-	if f.cwd() != f.project {
-		t.Errorf("the install ran in %q, want the project root %q", f.cwd(), f.project)
-	}
-	if got := versionAt(t, f.projectPackage()); got != "0.10.2" {
-		t.Errorf("project = %s, want 0.10.2", got)
+}
+
+// TestProjectAtStopsWhereThePackageManagerWould: the walk ends at the nearest
+// package.json, as npm's does, and never climbs past the home folder.
+func TestProjectAtStopsWhereThePackageManagerWould(t *testing.T) {
+	root := realTempDir(t)
+	declares := `{"devDependencies":{"@magic-spells/puzzle":"^0.9.0"}}`
+	home := filepath.Join(root, "home")
+	app := filepath.Join(home, "my-app")
+	mustWrite(t, filepath.Join(root, "package.json"), declares)
+	mustWrite(t, filepath.Join(app, "package.json"), declares)
+	mustWrite(t, filepath.Join(app, "tools", "package.json"), `{"type":"module"}`)
+	for _, tt := range []struct{ name, cwd, want string }{
+		{"the project itself", app, app},
+		{"a subfolder", filepath.Join(app, "src", "views"), app},
+		{"below a package.json that does not declare the CLI", filepath.Join(app, "tools", "bin"), ""},
+		{"a folder in home outside any project", filepath.Join(home, "notes"), ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := os.MkdirAll(tt.cwd, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			project, ok, err := projectAt(tt.cwd, home)
+			if err != nil || ok != (tt.want != "") || project.dir != tt.want {
+				t.Fatalf("projectAt(%s) = %q, %v, %v; want %q", tt.cwd, project.dir, ok, err, tt.want)
+			}
+		})
 	}
 }
 
@@ -2076,10 +2125,10 @@ func TestUpgradeProjectWithNothingInstalled(t *testing.T) {
 	f := newScopeFixture(t, "0.10.2", "0.10.2", "")
 	asked := answerUpgrades(t, true)
 	out := f.run(t, f.global, false, upgradeEnvironment{interactive: true})
-	if row := "  this project    ^0.9.0 (not installed) → 0.10.2  " + f.project + " (npm)\n"; !strings.Contains(out, row) {
+	if row := "  this project    ^0.9.0 (not installed) → 0.10.2  . (npm)\n"; !strings.Contains(out, row) {
 		t.Errorf("output missing %q:\n%s", row, out)
 	}
-	if want := []string{"Upgrade this project? ^0.9.0 → 0.10.2 has breaking changes"}; !reflect.DeepEqual(*asked, want) {
+	if want := []string{"Upgrade this project (.)? ^0.9.0 → 0.10.2 has breaking changes"}; !reflect.DeepEqual(*asked, want) {
 		t.Errorf("asked %#v, want %#v", *asked, want)
 	}
 	if want := []string{"install", "@magic-spells/puzzle@0.10.2"}; !reflect.DeepEqual(f.argv(), want) {

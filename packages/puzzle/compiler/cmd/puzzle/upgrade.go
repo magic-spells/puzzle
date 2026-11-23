@@ -32,14 +32,17 @@ var confirmUpgrade = func(input io.Reader, output io.Writer, title string) (bool
 var upgradeCmd = &cobra.Command{
 	Use:   "upgrade",
 	Short: "Upgrade the global CLI and this project to the latest Puzzle",
-	Long: `Upgrade the global CLI, if one is installed, and this project: the nearest
-package.json at or above the current folder that declares ` + puzzlePackage + `.
+	Long: `Upgrade the global CLI, if one is installed, and this project: the package.json
+a package manager run here would install into (the nearest one at or above the
+current folder, no higher than the home folder), when it declares
+` + puzzlePackage + `.
 
-Both are listed with their installed and latest versions first, then a terminal
-asks about each one that is behind. --check only lists; --yes upgrades them all
-without asking. Without a terminal only the install this command runs from is
-upgraded, and the other is printed as the command to run. Afterwards it offers
-to refresh the agent skill (see ` + "`puzzle upgrade skills`" + `).`,
+Both are listed with their installed and latest versions and the project's
+folder first, then a terminal asks about each one that is behind. --check only
+lists; --yes upgrades them all without asking. Without a terminal only the
+install this command runs from is upgraded, and the other is printed as the
+command to run. Afterwards it offers to refresh the agent skill (see
+` + "`puzzle upgrade skills`" + `).`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		check, _ := cmd.Flags().GetBool("check")
@@ -350,16 +353,33 @@ func printScope(w io.Writer, out *ui.Printer, s installContext, latest string) {
 	case !s.behind(latest):
 		state = s.current + ", up to date"
 	}
-	fmt.Fprintf(w, "  %-15s %s  %s\n", s.name(), state, out.Dim(strings.TrimSpace(s.dir+" ("+s.manager+")")))
+	fmt.Fprintf(w, "  %-15s %s  %s\n", s.name(), state, out.Dim(strings.TrimSpace(folder(s.dir)+" ("+s.manager+")")))
 }
 
-// question is the prompt for one scope. A project upgrade that may break the
-// app says so, since that is the answer the person most needs before saying yes.
-func (s installContext) question(latest string) string {
-	if s.kind == installProject && breaking(s.from(), latest) {
-		return fmt.Sprintf("Upgrade %s? %s → %s has breaking changes", s.name(), s.from(), latest)
+// folder names a project directory in output: relative to the current folder
+// when it is that folder or inside it, absolute otherwise, so a project found
+// above the current folder reads as exactly that. The global CLI's empty dir
+// stays empty.
+func folder(dir string) string {
+	cwd, err := os.Getwd()
+	if rel, relErr := filepath.Rel(cwd, dir); err == nil && relErr == nil && filepath.IsLocal(rel) {
+		return rel
 	}
-	return "Upgrade " + s.name() + "?"
+	return dir
+}
+
+// question is the prompt for one scope. A project's names the folder the
+// package manager will run in, and says when the upgrade may break the app,
+// since that is the answer the person most needs before saying yes.
+func (s installContext) question(latest string) string {
+	if s.kind != installProject {
+		return "Upgrade " + s.name() + "?"
+	}
+	q := "Upgrade " + s.name() + " (" + folder(s.dir) + ")?"
+	if breaking(s.from(), latest) {
+		q += " " + s.from() + " → " + latest + " has breaking changes"
+	}
+	return q
 }
 
 // upgradeScope runs the package manager for s, then confirms the result by
@@ -736,7 +756,8 @@ func upgradeScopes(running installContext, roots *globalRoots) ([]installContext
 	if err != nil {
 		return nil, err
 	}
-	project, ok, err := projectAt(cwd)
+	home, _ := os.UserHomeDir()
+	project, ok, err := projectAt(cwd, home)
 	if ok {
 		scopes = append(scopes, project)
 	}
@@ -758,17 +779,20 @@ func installedGlobal(roots *globalRoots) (installContext, bool) {
 	return installContext{}, false
 }
 
-// projectAt finds the project a person standing in dir means: the nearest
-// package.json at or above it whose dependencies or devDependencies name the
-// CLI. Its installed copy is the one in its own node_modules; with none, the
-// declared range stands in for a version, and the upgrade installs it.
-func projectAt(dir string) (installContext, bool, error) {
+// projectAt finds the package.json a package manager run in dir would install
+// into, the nearest one at or above it, and looks no higher than home. npm
+// stops at the same file, so the upgrade never runs in a folder `npm install`
+// typed in dir would not reach. That file is the project only when its
+// dependencies or devDependencies name the CLI. Its installed copy is the one
+// in its own node_modules; with none, the declared range stands in for a
+// version, and the upgrade installs it.
+func projectAt(dir, home string) (installContext, bool, error) {
 	for {
 		manifest, err := readOwnerManifest(filepath.Join(dir, "package.json"))
-		if err != nil {
+		if err != nil || manifest.exists && manifest.wanted == "" {
 			return installContext{}, false, err
 		}
-		if manifest.wanted != "" {
+		if manifest.exists {
 			return installContext{
 				kind:        installProject,
 				dir:         dir,
@@ -779,7 +803,7 @@ func projectAt(dir string) (installContext, bool, error) {
 			}, true, nil
 		}
 		parent := filepath.Dir(dir)
-		if parent == dir {
+		if parent == dir || dir == home {
 			return installContext{}, false, nil
 		}
 		dir = parent
