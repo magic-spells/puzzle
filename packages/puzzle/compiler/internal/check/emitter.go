@@ -480,10 +480,6 @@ func emitFiles(source []byte, sourcePath, generatedBase, assetsDir string) ([]vi
 	if err != nil {
 		return nil, err
 	}
-	className, err := compiledClassName(compiled.JS)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", sourcePath, err)
-	}
 	root, err := parser.ParseTemplate(sec, sourcePath)
 	if err != nil {
 		return nil, err
@@ -494,7 +490,7 @@ func emitFiles(source []byte, sourcePath, generatedBase, assetsDir string) ([]vi
 	}
 
 	if sec.ScriptsLang == "ts" {
-		checked, err := emitCheckedFile(source, sourcePath, generatedBase+".ts", sec, root, skeleton, className, true, "")
+		checked, err := emitCheckedFile(source, sourcePath, generatedBase+".ts", sec, root, skeleton, compiled.ClassName, true, "")
 		if err != nil {
 			return nil, err
 		}
@@ -503,7 +499,7 @@ func emitFiles(source []byte, sourcePath, generatedBase, assetsDir string) ([]vi
 
 	// A .script infix prevents TypeScript's extension substitution from resolving
 	// an import of the JS mirror back to the sibling .pzl.ts wrapper itself.
-	mirror := emitJSMirror(source, sourcePath, generatedBase+".script.js", sec, className)
+	mirror := emitJSMirror(source, sourcePath, generatedBase+".script.js", sec, compiled.ClassName)
 	importPath := "./" + filepath.Base(filepath.FromSlash(generatedBase)) + ".script.js"
 	checked, err := emitCheckedFile(source, sourcePath, generatedBase+".ts", sec, root, skeleton, "__PuzzleCheckViewClass", false, importPath)
 	if err != nil {
@@ -586,29 +582,6 @@ func emitCheckedFile(
 	b.table.generatedBytes = []byte(b.String())
 	b.table.sourceBytes = source
 	return virtualFile{GeneratedPath: generatedPath, Contents: []byte(b.String()), Table: b.table}, nil
-}
-
-func compiledClassName(js string) (string, error) {
-	const marker = ".prototype.render = function () {"
-	i := strings.LastIndex(js, marker)
-	if i < 0 {
-		return "", fmt.Errorf("generated render function is missing")
-	}
-	j := i
-	for j > 0 && isIdentByte(js[j-1]) {
-		j--
-	}
-	if j == i {
-		return "", fmt.Errorf("generated render function has no class name")
-	}
-	return js[j:i], nil
-}
-
-// isIdentByte reports whether c can belong to the class name codegen wrote
-// before the render tail. Any byte >= 0x80 does: the name is a valid
-// identifier (`Übersicht`, `概要`) and the byte before it is a newline.
-func isIdentByte(c byte) bool {
-	return c == '_' || c == '$' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c >= 0x80
 }
 
 func (e *emitter) emitNodes(nodes []parser.Node, scope map[string]bool, indent int) error {

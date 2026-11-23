@@ -303,7 +303,7 @@ func TestEmitPreservesTypeScriptBytes(t *testing.T) {
 	}
 }
 
-// The class name is read back off the compiled render tail; a non-ASCII name
+// The class name comes from codegen's Result; a non-ASCII name
 // must come back whole, or the checked wrapper names a class that does not exist.
 func TestUnicodeClassNameReachesTheWrapper(t *testing.T) {
 	for _, className := range []string{"Übersicht", "概要", "Straßenkarte"} {
