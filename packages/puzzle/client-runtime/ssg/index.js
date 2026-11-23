@@ -1527,9 +1527,15 @@ async function writeStaticDir({
 	dress,
 	adapterModuleMatches = null,
 }) {
+	// Normalized route base ('' for a root deploy) — locates the app-bundle tag and
+	// prefixes each page's module href so a subpath deploy resolves it (item B5).
+	// Validated the same way the Router / the client stub validate it, so a
+	// malformed base fails the build here.
+	const base = normalizeBase(config.routerBase);
+
 	// The app-bundle tag is stripped once (the shell is identical for every page, up
 	// to its <html lang>) so a missing tag warns once, not per page.
-	const { shell: strippedShell, found } = stripAppBundle(shell, normalizeBase(config.routerBase));
+	const { shell: strippedShell, found } = stripAppBundle(shell, base);
 	const shells = localeShells(strippedShell);
 	if (!found) {
 		warnings.push(
@@ -1551,11 +1557,6 @@ async function writeStaticDir({
 				"output: 'hybrid' if you need the SPA store."
 		);
 	}
-
-	// Normalized route base ('' for a root deploy) — prefixes each page's module href
-	// so a subpath deploy resolves it (item B5). Validated the same way the Router /
-	// the client stub validate it, so a malformed base fails the build here.
-	const base = normalizeBase(config.routerBase);
 
 	const usedSlugs = new Set();
 	// route path → its slug, so a route's pages in every locale share one module
@@ -2357,23 +2358,15 @@ function uniqueSlug(base, used) {
  * tag). `(?<![-\w])id=` requires a real attribute boundary before `id=` — a plain
  * `\b` matches after a hyphen too, so `data-id="app"`/`aria-id="app"` would falsely
  * satisfy the id lookup; the lookbehind excludes a preceding hyphen or word char.
- * Compiled once per distinct target id (ids are config constants, so this is a
- * one-entry map in every real build).
- */
-/** @type {Map<string, RegExp>} */
-const targetRes = new Map();
-/**
+ * Its one caller, findTarget, memoizes the match on the shell plan, so it compiles
+ * once per shell.
+ *
  * @param {string} targetId
  * @returns {RegExp}
  */
 function targetElementRe(targetId) {
-	let re = targetRes.get(targetId);
-	if (!re) {
-		const idPattern = escapeRegExp(targetId);
-		re = new RegExp('<(\\w+)([^>]*(?<![-\\w])id=["\']' + idPattern + '["\'][^>]*)>\\s*</\\1>');
-		targetRes.set(targetId, re);
-	}
-	return re;
+	const idPattern = escapeRegExp(targetId);
+	return new RegExp('<(\\w+)([^>]*(?<![-\\w])id=["\']' + idPattern + '["\'][^>]*)>\\s*</\\1>');
 }
 
 // ---- the compiled shell plan (D151) -----------------------------------------
