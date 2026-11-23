@@ -1000,7 +1000,7 @@ export default class RichTextEditor extends PuzzleView {
 
 	data({ props }) {
 		const g = this.getData();
-		const a = g.active || {};
+		const a = g.active;
 		const disabled = !!props.disabled;
 		const empty = this._editor ? !!g.empty : isEmpty(props.value);
 		const toggle = (value, label, icon, pressed) => ({
@@ -1023,7 +1023,7 @@ export default class RichTextEditor extends PuzzleView {
 			: [];
 		const link = tools.has('link') ? [{ type: 'button', value: 'link', label: 'Link', icon: I.link, iconOnly: true }] : [];
 		const styleOpen = !!g.styleOpen;
-		const styleActive = g.styleActive ?? -1;
+		const styleActive = g.styleActive;
 		const styleOptions = BLOCK_STYLES.map((s, i) => {
 			const selected = s.level === level;
 			// The keyboard row wins the background so arrow navigation stays visible
@@ -1123,7 +1123,7 @@ export default class RichTextEditor extends PuzzleView {
 			glyphClass: cmd.danger ? `${MENU_GLYPH} text-danger` : MENU_GLYPH,
 		});
 		const blockMenuOpen = blocks && !!g.blockMenuOpen && !disabled;
-		const blockMenuIndex = g.blockMenuIndex || 0;
+		const blockMenuIndex = g.blockMenuIndex;
 		const blockMenuRows = blockMenuOpen
 			? this._menuCommands().map((cmd, i) => ({
 					...menuRow(cmd, i, blockMenuIndex),
@@ -1134,7 +1134,7 @@ export default class RichTextEditor extends PuzzleView {
 			: [];
 		const slashOpen = blocks && !!g.slashOpen && !disabled;
 		const slashList = slashOpen ? this._slashList() : [];
-		const slashActive = g.slashActive || 0;
+		const slashActive = g.slashActive;
 		const slashRows = slashList.map((cmd, i) => ({
 			...menuRow(cmd, i, slashActive),
 			domId: `${this._fallbackId}-slash-${cmd.id}`,
@@ -1180,7 +1180,7 @@ export default class RichTextEditor extends PuzzleView {
 			showPlaceholder: !!props.placeholder && empty && !g.uploading,
 			disabled,
 			linkOpen: !!g.linkOpen,
-			linkDraft: g.linkDraft ?? '',
+			linkDraft: g.linkDraft,
 			linkBtnClass: LINK_BTN,
 			rootClass: props.class || '',
 			frameClass: [blocks ? 'relative' : FRAME_BASE, disabled ? 'opacity-50' : ''].filter(Boolean).join(' '),
@@ -1412,7 +1412,7 @@ export default class RichTextEditor extends PuzzleView {
 		// and, paired with a render that dispatches its own transaction, spins
 		// the render cycle until Puzzle's perf breaker cuts the chain. Bail when
 		// nothing actually flipped.
-		const prev = this.getData().active || {};
+		const prev = this.getData().active;
 		const keys = Object.keys(next);
 		if (keys.every((k) => !!prev[k] === !!next[k])) return;
 		this.setState('active', next);
@@ -1464,14 +1464,14 @@ export default class RichTextEditor extends PuzzleView {
 	}
 
 	_setUploading(delta) {
-		this.setState('uploading', Math.max(0, (this.getData().uploading || 0) + delta));
+		this.setState('uploading', Math.max(0, this.getData().uploading + delta));
 	}
 
 	_uploadFiles(files, pos) {
 		const ed = this._editor;
 		const upload = this.props.uploadImage;
 		if (!ed || typeof upload !== 'function') return;
-		let room = docLimits.maxImages - countNodes(ed.state.doc, 'image') - (this.getData().uploading || 0);
+		let room = docLimits.maxImages - countNodes(ed.state.doc, 'image') - this.getData().uploading;
 		const at = this._insertPos(ed.state, pos);
 		for (const file of files) {
 			if (room-- <= 0) break;
@@ -1765,7 +1765,7 @@ export default class RichTextEditor extends PuzzleView {
 		if (g.slashOpen) {
 			const list = this._slashList();
 			const n = list.length;
-			const i = g.slashActive || 0;
+			const i = g.slashActive;
 			switch (event.key) {
 				case 'ArrowDown':
 					if (n) this._setSlashActive((i + 1) % n);
@@ -1922,7 +1922,7 @@ export default class RichTextEditor extends PuzzleView {
 	}
 
 	_focusBlockRow() {
-		const i = this.getData().blockMenuIndex || 0;
+		const i = this.getData().blockMenuIndex;
 		this.refs.blockMenu?.querySelector(`[data-menu-index="${i}"]`)?.focus();
 	}
 
@@ -1955,7 +1955,7 @@ export default class RichTextEditor extends PuzzleView {
 		const dom = this._editor?.view.dom;
 		if (!dom) return;
 		const g = this.getData();
-		const row = this._blocks() && g.slashOpen ? this._slashList()[g.slashActive || 0] : null;
+		const row = this._blocks() && g.slashOpen ? this._slashList()[g.slashActive] : null;
 		if (this._blocks() && g.slashOpen) {
 			dom.setAttribute('aria-controls', `${this._fallbackId}-slash-menu`);
 		} else {
@@ -2088,7 +2088,7 @@ export default class RichTextEditor extends PuzzleView {
 	// the trigger's label and which listbox row reads as selected. A paragraph
 	// inside a list, a blockquote and a code block all report 0 (Normal text).
 	_currentLevel() {
-		const a = this.getData().active || {};
+		const a = this.getData().active;
 		return a.h1 ? 1 : a.h2 ? 2 : a.h3 ? 3 : a.h4 ? 4 : 0;
 	}
 
@@ -2272,7 +2272,7 @@ export default class RichTextEditor extends PuzzleView {
 
 		applyLink: () => {
 			if (this.props.disabled) return;
-			const raw = (this.getData().linkDraft || '').trim();
+			const raw = this.getData().linkDraft.trim();
 			if (!raw) {
 				this.events.removeLink();
 				return;
@@ -2400,7 +2400,7 @@ export default class RichTextEditor extends PuzzleView {
 		onBlockMenuKey: (event) => {
 			const g = this.getData();
 			const n = this._menuCommands().length;
-			const i = g.blockMenuIndex || 0;
+			const i = g.blockMenuIndex;
 			let next = null;
 			switch (event.key) {
 				case 'ArrowDown':

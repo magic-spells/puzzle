@@ -145,7 +145,7 @@ export default class Rating extends PuzzleView {
     }
 
     // Input mode — whole stars, hover preview, roving tabindex.
-    const hover = this.getData().hover || 0;
+    const hover = this.getData().hover;
     const checked = value >= 1 ? Math.round(value) : 0;
     const previewing = hover > 0;
     const effective = previewing ? hover : checked;

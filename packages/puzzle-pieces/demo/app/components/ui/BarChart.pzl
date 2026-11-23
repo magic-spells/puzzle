@@ -348,7 +348,7 @@ export default class BarChart extends PuzzleView {
     }));
 
     // ---- tooltip ------------------------------------------------------------
-    const tip = local.tip || { visible: false, x: 0, y: 0, flipX: false, label: '', value: '' };
+    const tip = local.tip;
     const tipStyle =
       `left:${tip.x}px;top:${tip.y}px;` +
       `transform:translate(${tip.flipX ? 'calc(-100% - 14px)' : '14px'},-50%);`;

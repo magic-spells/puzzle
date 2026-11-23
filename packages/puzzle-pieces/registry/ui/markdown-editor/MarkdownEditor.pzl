@@ -175,7 +175,7 @@ export default class MarkdownEditor extends PuzzleView {
 
 	data({ props }) {
 		const g = this.getData();
-		const a = g.active || {};
+		const a = g.active;
 		const disabled = !!props.disabled;
 		const toggle = (value, label, icon, pressed) => ({
 			type: 'toggle', value, label, icon, iconOnly: true, pressed: !!pressed,
@@ -189,7 +189,7 @@ export default class MarkdownEditor extends PuzzleView {
 			placeholder: props.placeholder ?? null,
 			disabled,
 			linkOpen: !!g.linkOpen,
-			linkDraft: g.linkDraft ?? '',
+			linkDraft: g.linkDraft,
 			linkBtnClass: LINK_BTN,
 			rootClass: props.class || '',
 			frameClass: [FRAME_BASE, disabled ? 'opacity-50' : ''].filter(Boolean).join(' '),
@@ -395,7 +395,7 @@ export default class MarkdownEditor extends PuzzleView {
 		// and, paired with a render that dispatches its own transaction, spins
 		// the render cycle until Puzzle's perf breaker cuts the chain. Bail when
 		// nothing actually flipped.
-		const prev = this.getData().active || {};
+		const prev = this.getData().active;
 		const keys = Object.keys(next);
 		if (keys.every((k) => !!prev[k] === !!next[k])) return;
 		this.setState('active', next);
@@ -468,7 +468,7 @@ export default class MarkdownEditor extends PuzzleView {
 
 		applyLink: () => {
 			if (this.props.disabled) return;
-			const raw = (this.getData().linkDraft || '').trim();
+			const raw = this.getData().linkDraft.trim();
 			if (!raw) {
 				this.events.removeLink();
 				return;

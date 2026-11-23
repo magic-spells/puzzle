@@ -142,7 +142,7 @@ export default class VirtualList extends PuzzleView {
     const visibleCount = Math.max(1, Math.ceil(viewportHeight / rowHeight) + 1);
     const windowCount = visibleCount + overscan * 2;
     const maxStart = Math.max(0, items.length - windowCount);
-    const start = clamp(this.getState().windowStart || 0, 0, maxStart);
+    const start = clamp(this.getState().windowStart, 0, maxStart);
 
     const end = Math.min(items.length, start + windowCount);
     const visibleRows = items.slice(start, end).map((item, offset) => {

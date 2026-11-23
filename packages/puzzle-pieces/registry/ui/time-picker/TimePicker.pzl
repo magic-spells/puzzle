@@ -288,7 +288,7 @@ export default class TimePicker extends PuzzleView {
     const value = typeof props.value === 'string' ? props.value : '';
     const sel = parseTime(value);
     const hasValue = !!sel;
-    const active = prev.active || { h: 0, m: 0, s: 0 };
+    const active = prev.active;
 
     const locale = this._locale(props);
     const fmt = this.memo('trigfmt', [locale, hourCycle, showSeconds], () =>
@@ -552,8 +552,7 @@ export default class TimePicker extends PuzzleView {
   // Apply a pick in one column: recompute the composite 24h value, update the
   // active highlight, and emit @change. Parent owns `value` and writes it back.
   _applyPick(key, val, event) {
-    const cur = this.getData().active || { h: 0, m: 0, s: 0 };
-    let { h, m, s } = cur;
+    let { h, m, s } = this.getData().active;
     if (key === 'h') h = val;
     else if (key === 'm') m = val;
     else if (key === 's') s = val;

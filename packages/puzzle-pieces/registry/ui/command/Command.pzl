@@ -302,7 +302,7 @@ export default class Command extends PuzzleView {
 
   data({ props }) {
     const prev = this.getData();
-    const query = prev.query ?? '';
+    const query = prev.query;
     const { rows, options } = this._build(props, query);
 
     // -1 (each keystroke and open), a stale index or a disabled row: reseat.

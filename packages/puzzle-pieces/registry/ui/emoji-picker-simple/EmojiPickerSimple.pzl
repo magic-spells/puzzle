@@ -237,7 +237,7 @@ export default class EmojiPickerSimple extends PuzzleView {
     const open = this._effectiveOpen();
     const base = this._base();
 
-    const groupIndex = Math.min(prev.groupIndex ?? 0, EMOJI_GROUPS.length - 1);
+    const groupIndex = Math.min(prev.groupIndex, EMOJI_GROUPS.length - 1);
     const group = EMOJI_GROUPS[groupIndex];
 
     const cells = (open ? group.emoji : []).map(([char, name], i) => ({
@@ -249,7 +249,7 @@ export default class EmojiPickerSimple extends PuzzleView {
       active: false,
     }));
 
-    const activeIndex = Math.min(prev.activeIndex ?? 0, cells.length - 1);
+    const activeIndex = Math.min(prev.activeIndex, cells.length - 1);
     const activeOpt = cells[activeIndex];
     if (activeOpt) activeOpt.active = true;
     cells.forEach((c) => {
@@ -292,7 +292,7 @@ export default class EmojiPickerSimple extends PuzzleView {
             placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1',
             ALIGN[align],
           ].join(' '),
-      panelStyle: morphOn ? `top:${prev.morphTop ?? 0}px;` : '',
+      panelStyle: morphOn ? `top:${prev.morphTop}px;` : '',
     };
   }
 

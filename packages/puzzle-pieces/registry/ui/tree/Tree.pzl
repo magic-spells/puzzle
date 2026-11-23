@@ -185,7 +185,7 @@ export default class Tree extends PuzzleView {
       const arr = Array.isArray(this.props.expanded) ? this.props.expanded : [];
       return new Set(arr.map(String));
     }
-    const map = this.getState().expandedMap || {};
+    const map = this.getState().expandedMap;
     return new Set(Object.keys(map).filter((id) => map[id]));
   }
 
@@ -270,7 +270,7 @@ export default class Tree extends PuzzleView {
     if (typeof toggle === 'function') toggle({ id: row.id, expanded: nextArr });
 
     if (!this._expandedControlled()) {
-      const map = this.getState().expandedMap || {};
+      const map = this.getState().expandedMap;
       this.setState({ expandedMap: { ...map, [row.id]: willExpand } });
     }
   }

@@ -343,11 +343,11 @@ export default class EmojiPicker extends PuzzleView {
     const prev = this.getData();
     const open = this._effectiveOpen();
     const base = this._base();
-    const query = prev.query ?? '';
+    const query = prev.query;
 
     const { rows, options } = this._build(open ? this._matches(query) : []);
 
-    const activeIndex = Math.min(prev.activeIndex ?? 0, Math.max(options.length - 1, 0));
+    const activeIndex = Math.min(prev.activeIndex, Math.max(options.length - 1, 0));
     const activeOpt = options[activeIndex];
     if (activeOpt) activeOpt.active = true;
 
@@ -396,7 +396,7 @@ export default class EmojiPicker extends PuzzleView {
             placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1',
             ALIGN[align],
           ].join(' '),
-      panelStyle: morphOn ? `top:${prev.morphTop ?? 0}px;` : '',
+      panelStyle: morphOn ? `top:${prev.morphTop}px;` : '',
     };
   }
 

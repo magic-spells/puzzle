@@ -150,8 +150,8 @@ export default class Carousel extends PuzzleView {
 
   data({ props }) {
     const d = this.getData();
-    const n = d.slideCount || 0;
-    const view = clamp(d.viewIndex || 0, 0, Math.max(0, n - 1));
+    const n = d.slideCount;
+    const view = clamp(d.viewIndex, 0, Math.max(0, n - 1));
     const loop = !!props.loop;
     const atStart = view <= 0;
     const atEnd = view >= n - 1;

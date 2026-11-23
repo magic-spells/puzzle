@@ -427,9 +427,7 @@ export default class Combobox extends PuzzleView {
     const prev = this.getData();
     const open = this._effectiveOpen();
     const value = props.value ?? null;
-    const query = prev.query ?? '';
-    const pristine = prev.pristine ?? true;
-    const activeIndex = prev.activeIndex ?? -1;
+    const { query, pristine, activeIndex } = prev;
 
     // Closed, or freshly opened and unedited → full (unfiltered) list. Only a
     // live, edited query filters.

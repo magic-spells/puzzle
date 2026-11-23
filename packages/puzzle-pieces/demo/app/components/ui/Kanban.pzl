@@ -243,7 +243,7 @@ export default class Kanban extends PuzzleView {
     const dragFromCol = dragging ? d.dragFromCol : null;
     const hoveredColId = dragging ? d.hoveredColId : null;
     const targetIndex = dragging ? d.targetIndex : -1;
-    const grabbedId = d.grabbedId || null;
+    const grabbedId = d.grabbedId;
 
     // The board owns the draggable surface; KanbanCard owns only its stock inner
     // fallback. Whether ANY card is grabbed is board-wide knowledge, and it
@@ -327,7 +327,7 @@ export default class Kanban extends PuzzleView {
       disabled,
       dragging,
       ghostStyle: dragging ? `width:${d.ghostW || 288}px` : false,
-      announce: d.announce || '',
+      announce: d.announce,
     };
   }
 
