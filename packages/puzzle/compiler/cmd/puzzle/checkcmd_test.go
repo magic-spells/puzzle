@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/magic-spells/puzzle/compiler/internal/check"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
 
@@ -64,8 +65,9 @@ func TestCheckCodemodOutsideAnApp(t *testing.T) {
 	}
 }
 
-// an editor's dotted file is not read; any other file the pass cannot read
-// stops puzzle check --fix with its own error, not an unrelated one.
+// an editor's dotted file is not read, by the pass or the type check; any
+// other file the pass cannot read stops puzzle check --fix with its own
+// error, not an unrelated one.
 func TestCheckFixReportsWhatStoppedIt(t *testing.T) {
 	root := oldApp(t)
 	layouts := filepath.Join(root, "app", "layouts")
@@ -74,6 +76,9 @@ func TestCheckFixReportsWhatStoppedIt(t *testing.T) {
 	}
 	if _, err := execRoot(t, "check", "--fix", root); err != nil {
 		t.Errorf("an editor lock file stopped the pass: %v", err)
+	}
+	if _, err := check.Generate(root); err != nil {
+		t.Errorf("an editor lock file stopped the type check: %v", err)
 	}
 	if err := os.Symlink("gone", filepath.Join(layouts, "Gone.pzl")); err != nil {
 		t.Fatal(err)

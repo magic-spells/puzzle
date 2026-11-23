@@ -7,15 +7,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/magic-spells/puzzle/compiler/internal/codegen"
+	"github.com/magic-spells/puzzle/compiler/internal/codemod"
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
@@ -235,20 +234,16 @@ func Generate(appRoot string) (*Result, error) {
 		return nil, err
 	}
 
-	var files []string
-	err = filepath.WalkDir(appDir, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !entry.IsDir() && strings.EqualFold(filepath.Ext(path), ".pzl") {
-			files = append(files, path)
-		}
-		return nil
-	})
+	sources, err := codemod.SourceFiles(root)
 	if err != nil {
 		return nil, err
 	}
-	sort.Strings(files)
+	var files []string
+	for _, rel := range sources {
+		if strings.HasPrefix(rel, "app/") && strings.HasSuffix(rel, ".pzl") {
+			files = append(files, filepath.Join(root, filepath.FromSlash(rel)))
+		}
+	}
 
 	result := &Result{Dir: checkDir, Files: len(files)}
 	for _, sourceFile := range files {
