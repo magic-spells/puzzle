@@ -80,10 +80,8 @@ let profileSeq = 0;
  * state and every request rejects.
  */
 function offlineBridge() {
-	const noop = () => () => {};
+	const noop = () => {};
 	return {
-		tabId: null,
-		themeName: 'default',
 		offline: true,
 		onMessage: noop,
 		onStatus: noop,
