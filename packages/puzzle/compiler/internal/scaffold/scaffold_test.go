@@ -201,11 +201,11 @@ func TestTodosSeedsInsteadOfFetching(t *testing.T) {
 	}
 }
 
-// templateTree reads templates/<dir>/ from the embedded FS, placeholder
+// templateTree reads starters/<dir>/ from the embedded FS, placeholder
 // substituted the way Create writes it.
 func templateTree(t *testing.T, dir, appName string) map[string]string {
 	t.Helper()
-	files, err := readTree("templates/" + dir)
+	files, err := readTree(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +231,7 @@ func diskTree(t *testing.T, root string) map[string]string {
 }
 
 // TestCreateJavaScriptIsTheBaseTreeExactly pins the JavaScript scaffold to
-// templates/<name>/ byte for byte: the TypeScript overlay must never leak into
+// starters/<name>/ byte for byte: the TypeScript overlay must never leak into
 // it, so `puzzle init` without --typescript writes exactly what it always has.
 func TestCreateJavaScriptIsTheBaseTreeExactly(t *testing.T) {
 	for _, tpl := range Templates {
@@ -246,7 +246,7 @@ func TestCreateJavaScriptIsTheBaseTreeExactly(t *testing.T) {
 		}
 		for p, body := range want {
 			if got[p] != body {
-				t.Errorf("%s: %s differs from templates/%s/%s", tpl, p, tpl, p)
+				t.Errorf("%s: %s differs from starters/%s/%s", tpl, p, tpl, p)
 			}
 		}
 	}
@@ -321,7 +321,7 @@ func TestCreateTypeScriptVariants(t *testing.T) {
 			}
 			markup := func(s string) string { return s[:strings.Index(s, "\n<script")] }
 			if markup(body) != markup(jsTree[p]) {
-				t.Errorf("%s typescript: %s markup differs from templates/%s/%s", tpl, p, tpl, p)
+				t.Errorf("%s typescript: %s markup differs from starters/%s/%s", tpl, p, tpl, p)
 			}
 		}
 	}

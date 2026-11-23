@@ -10,8 +10,8 @@
 //   1. Version consistency — package.json vs compiler/internal/version/version.go,
 //      client-runtime/devtools.js FRAMEWORK_VERSION and each
 //      npm/puzzle-*/package.json (all must agree), plus the `@magic-spells/puzzle`
-//      dependency ranges no version field carries: the two go:embed-ed scaffold
-//      templates and examples/*/package.json. The packages/ train stamps ride
+//      dependency ranges no version field carries: the go:embed-ed starters
+//      and examples/*/package.json. The packages/ train stamps ride
 //      the same check: pieces (package.json, demo, demo header badge) and
 //      devtools (package.json, panel, extension manifest) must equal the root
 //      version — pieces because `add piece` resolves the CLI's major.minor.
@@ -163,18 +163,15 @@ for (const { pkg } of MATRIX) {
 }
 
 // The `@magic-spells/puzzle` dependency RANGES no version field carries. The
-// scaffold manifests (each template plus its TypeScript overlay, `<name>-ts`)
+// starter manifests (each starter plus its TypeScript overlay, `<name>-ts`)
 // are go:embed-ed into the CLI binary, so a stale range ships
 // a broken `puzzle init`: caret ranges do not cross a 0.x minor, so "^0.3.1"
 // installs 0.3.x into an app scaffolded by a 0.4.0 binary. It cannot be fixed by
 // republishing the JS — the platform binaries have to be rebuilt. Same
 // class of drift as FRAMEWORK_VERSION above, so it gets the same assert.
-const SCAFFOLD_TEMPLATES = [
-	'compiler/internal/scaffold/templates/default/package.json',
-	'compiler/internal/scaffold/templates/todos/package.json',
-	'compiler/internal/scaffold/templates/default-ts/package.json',
-	'compiler/internal/scaffold/templates/todos-ts/package.json',
-];
+const STARTER_MANIFESTS = readdirSync(join(repoRoot, 'starters'), { withFileTypes: true })
+	.filter((e) => e.isDirectory())
+	.map((e) => `starters/${e.name}/package.json`);
 
 // A range "resolves to" the release when its base version IS the release:
 // "0.4.0", "^0.4.0", "~0.4.0" and "=0.4.0" all install what is being published;
@@ -189,7 +186,7 @@ function puzzleDepRange(relPath) {
 	return (manifest.dependencies ?? {})['@magic-spells/puzzle'];
 }
 
-for (const rel of SCAFFOLD_TEMPLATES) {
+for (const rel of STARTER_MANIFESTS) {
 	const range = puzzleDepRange(rel);
 	if (!range) {
 		fail(`${rel} has no "@magic-spells/puzzle" entry in "dependencies" — a scaffolded app would not install the framework`);

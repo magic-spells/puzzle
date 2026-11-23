@@ -59,7 +59,7 @@ Two footguns in the scripts: `npm run build` in this package is aliased to
 `node scripts/release-prep.mjs`, so it runs the whole release preparation —
 cross-compiling five Go binaries and packing a tarball — not a framework build.
 And `release:prep` hard-fails on the `@magic-spells/puzzle` ranges in the
-scaffold templates and every `examples/*/package.json`, so that sweep is
+`starters/*/package.json` and every `examples/*/package.json`, so that sweep is
 enforced, not merely advised.
 
 ## Current release state
@@ -352,7 +352,7 @@ enforced, not merely advised.
 - Before every release, sweep the `@magic-spells/puzzle` dependency ranges that
   are NOT bumped by the version scripts and point them at the version being
   published:
-  - `compiler/internal/scaffold/templates/{default,todos}{,-ts}/package.json` — these
+  - `starters/*/package.json` (each starter and its `-ts` overlay) — these
     are `go:embed`ed into the binary, so a stale range ships a broken
     `puzzle init`: caret ranges do not cross 0.x minors, so `^0.1.0` installs
     `0.1.x` into an app scaffolded by a `0.3.0` binary. Fixing this requires
@@ -365,7 +365,7 @@ enforced, not merely advised.
     the "bump it at every release" comment did not stop it sitting at `0.3.0`
     through the `0.3.1` bump.
   Check with `rg -n '"@magic-spells/puzzle":' examples/*/package.json
-  compiler/internal/scaffold/templates/*/package.json`. Leave each template's
+  starters/*/package.json`. Leave each starter's
   own `"version"` field alone; that is the scaffolded app's starting version.
 - Since 0.6.0 the pieces registry is version-locked: `puzzle add piece`
   resolves `@magic-spells/puzzle-pieces` to the CLI's major.minor. Publish the
