@@ -810,6 +810,16 @@ you edited the files).
   body is neither fixed nor reported; format `.pzl` files with
   `@magic-spells/prettier-plugin-puzzle`.
 
+- **Pieces added to a new app are readable.** After `puzzle init`,
+  `puzzle add piece` and the printed `@import './pieces.css';` step, the
+  default starter's fixed `--color-surface` replaced the pieces' light/dark
+  pair. With the OS in dark mode, typed text was white on a near-white input.
+  The default starter is now dark only and sets `data-theme="dark"` on
+  `<html>`, which holds pieces to their dark style. It no longer declares
+  `--color-surface`. An app scaffolded earlier keeps its own files: delete
+  `--color-surface` from `app/styles/styles.css` to fix it. Only add
+  `data-theme="dark"` if the app also drops its light classes.
+
 ### CLI
 
 The CLI now answers to the flags people type from npm, gh, vite and cargo
@@ -827,6 +837,10 @@ habit. Nothing existing breaks: renamed spellings stay accepted.
   `../apps`, like create-vite. Usage reads `init [app-name]`. `--dir` still
   works as a hidden compatibility alias (to be deprecated later); given both,
   the path resolves against `--dir`.
+- **The default starter is dark only and links to the docs.** Its home page
+  has a row of links to the Puzzle docs, the tutorial, the Puzzle site and the
+  Puzzle Pieces site. Its muted text and hover colours are tuned for the dark
+  page.
 - **`-y` / `--yes`** on `init`, `add` and `upgrade` (and `upgrade skills`)
   takes every prompt's default without asking.
 - **`--host`** on `dev` and `preview`: a bare `--host` listens on every
