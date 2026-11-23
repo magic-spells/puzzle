@@ -7,7 +7,7 @@
       −
     </button>
 
-    <div class="text-center min-w-[4rem]">
+    <div class="text-center min-w-16">
       <div class="count font-mono text-2xl tabular-nums">{ count }</div>
       <div class="text-xs uppercase tracking-widest text-gray-400">{ label }</div>
     </div>
