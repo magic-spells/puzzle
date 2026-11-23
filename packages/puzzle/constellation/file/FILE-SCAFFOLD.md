@@ -8,6 +8,16 @@ connections:
   - COMPONENT-COMPILER-CLI
 verified_at: '2026-11-21T18:49:58.010Z'
 verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+notes:
+  - kind: gotcha
+    text: >-
+      The starters are dark only: `index.html` sets `color-scheme` to `dark` and `data-theme="dark"`
+      on `<html>` (the puzzle-pieces style attribute), so pieces added later stay dark in either OS
+      scheme. A template `@theme` token that shares a name with a puzzle-pieces token must mean what
+      pieces means by it: the printed `@import './pieces.css';` goes above the template's `@theme`,
+      and the last declaration wins. The default template declares only `accent` and `accent-2`,
+      which pieces does not use.
+    sha: b3321107
 ---
 
 # scaffold.go
