@@ -1198,11 +1198,7 @@ class AdapterStoreMethods {
 	 */
 	_findOneTracked(type, id, requests) {
 		const record = this._findOneLocal(type, id);
-		if (!requests) return record;
-		if (!record) this._faultOne(type, id, requests);
-		// D193: a present record an invalidate() covered refetches. The settle loop
-		// holds the commit until it lands, so the old fields stay on screen.
-		else this._faultStale(type, id, record, requests);
+		if (requests) this._faultOne(type, id, requests, record);
 		return record;
 	}
 
@@ -1429,22 +1425,25 @@ class AdapterStoreMethods {
 	}
 
 	/**
-	 * Core Store calls this from findOne() when a tracked evaluation missed. It
-	 * decides — with all the state that decision needs living out here — whether a
-	 * request is owed, and records the one to wait for under its diagnostic key.
+	 * The findOne half: decides — with all the state that decision needs living
+	 * out here — whether a request is owed, and records the one to wait for under
+	 * its diagnostic key.
 	 *
-	 * Silent (no request, no entry) when: the id is nullish or unkeyable, the
-	 * type's collection is known exhaustive, the identity is known absent, or the
-	 * model declares no loadOne of its own and no endpoint (see faultVerb — an app-wide dialect
-	 * alone never makes a local model fault). A pending identical request is
-	 * joined rather than reissued.
+	 * A miss is silent (no request, no entry) when: the id is nullish or
+	 * unkeyable, the type's collection is known exhaustive, or the identity is
+	 * known absent. A present `record` refetches only when an invalidate()
+	 * covered it (D193); the settle loop holds the commit until it lands, so the
+	 * old fields stay on screen. Either way nothing fetches when the model
+	 * declares no loadOne of its own and no endpoint (see faultVerb — an app-wide
+	 * dialect alone never makes a local model fault), and a pending identical
+	 * request is joined rather than reissued.
 	 * @this {AdapterStore}
 	 * @param {string} type
 	 * @param {unknown} id
 	 * @param {RequestMap} requests
+	 * @param {StoreRecord | null} [record] the record already present, if any
 	 */
-	_faultOne(type, id, requests) {
-		if (id == null) return;
+	_faultOne(type, id, requests, record) {
 		const key = identityKey(type, id);
 		if (key === null) return;
 		const state = readStateFor(this);
@@ -1454,8 +1453,7 @@ class AdapterStoreMethods {
 		// turns a known absence into a failed view. `loaded` is deliberately NOT the
 		// test: an authored loadMany may have returned page one, and an id it left
 		// out is a record that exists.
-		if (state.complete.has(type)) return;
-		if (isAbsent(state, key)) return;
+		if (record ? !isRecordStale(state, type, record, key) : state.complete.has(type) || isAbsent(state, key)) return;
 		const inflight = state.one.get(key);
 		if (inflight) {
 			requests.set(key, inflight);
@@ -1468,8 +1466,11 @@ class AdapterStoreMethods {
 				await this._loadOne(type, id, true);
 			} catch (err) {
 				// A 404 is an answer: the identity is absent, the round resolves, and the
-				// committed null means "does not exist". Everything else fails the run.
+				// committed null means "does not exist". Everything else fails the run
+				// (a stale record stays stale, so the next run retries). A stale record the
+				// server no longer has is removed locally, which records it absent.
 				if (!(err instanceof PuzzleAdapterError) || err.status !== 404) throw err;
+				if (record && this._typeMap(type).get(recordKey(id)) === record) this.removeRecord(record);
 			} finally {
 				if (state.one.get(key) === request) state.one.delete(key);
 			}
@@ -1541,43 +1542,6 @@ class AdapterStoreMethods {
 			}
 		})();
 		state.many.set(key, request);
-		request.catch(noop);
-		requests.set(key, request);
-	}
-
-	/**
-	 * Refetch a present record an invalidate() covered (D193). A 404 means the
-	 * server no longer has it, so the record is removed locally (which records
-	 * it absent) and the next pass reads null. Any other failure fails the run
-	 * and leaves the record stale, so the next run retries.
-	 * @this {AdapterStore}
-	 * @param {string} type
-	 * @param {unknown} id
-	 * @param {StoreRecord} record
-	 * @param {RequestMap} requests
-	 */
-	_faultStale(type, id, record, requests) {
-		const state = readStateByStore.get(this);
-		if (!state || (state.staleType.size === 0 && state.staleRecord.size === 0)) return;
-		const key = identityKey(type, id);
-		if (key === null || !isRecordStale(state, type, record, key)) return;
-		const inflight = state.one.get(key);
-		if (inflight) {
-			requests.set(key, inflight);
-			return;
-		}
-		if (!faultVerb(this, type, 'loadOne')) return;
-		const request = (async () => {
-			try {
-				await this._loadOne(type, id, true);
-			} catch (err) {
-				if (!(err instanceof PuzzleAdapterError) || err.status !== 404) throw err;
-				if (this._typeMap(type).get(recordKey(id)) === record) this.removeRecord(record);
-			} finally {
-				if (state.one.get(key) === request) state.one.delete(key);
-			}
-		})();
-		state.one.set(key, request);
 		request.catch(noop);
 		requests.set(key, request);
 	}
