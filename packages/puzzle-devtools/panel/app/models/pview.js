@@ -49,7 +49,7 @@ export default class PView extends PuzzleModel {
 		 * keys with no explanation.
 		 */
 		heldKeys: Puzzle.array().default(() => []),
-		/** The most recent `inspect:view` payload — { params, props, model, local }. */
+		/** The most recent `inspect:view` payload — { params, props, shared, model, local }. */
 		inspected: Puzzle.object().default(() => null),
 	};
 }

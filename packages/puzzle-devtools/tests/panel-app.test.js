@@ -70,6 +70,7 @@ function transcript() {
 				module: 'components/Row.pzl',
 				params: {},
 				props: { todo: 't2', index: 1 },
+				shared: { list: { filter: 'active' } },
 				model: { label: 'Ship the panel', completed: false },
 				local: { completed: true, draft: 'Ship the panel now' },
 			},
@@ -748,9 +749,10 @@ describe.skipIf(!built)('Views panel', () => {
 		expect(local.textContent).toContain('Ship the panel now');
 		expect(model.textContent).not.toContain('draft');
 
-		// params and props are their own groups, above the pair.
+		// params, props and shared are their own groups, above the pair.
 		expect(groupFor('props').textContent).toContain('t2');
 		expect(groupFor('params').textContent).toContain('no route params');
+		expect(groupFor('shared').textContent).toMatch(/list[\s\S]*filter/);
 
 		// And the explainer that says which one wins.
 		expect(document.body.textContent).toContain(

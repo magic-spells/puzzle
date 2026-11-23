@@ -119,11 +119,29 @@ class Runaway extends PuzzleView {
 }
 Runaway.__pzlModule = 'views/Runaway.pzl';
 
+/** A sharing page and the component whose data() reads what it shares (D197). */
+class TabPanel extends PuzzleView {
+	data({ shared }) {
+		return { active: shared.tabs.active };
+	}
+}
+
+class Tabs extends PuzzleView {
+	share() {
+		return { active: 'first', select: () => {} };
+	}
+
+	render() {
+		return h('puzzle-view', {}, [h(TabPanel, {})]);
+	}
+}
+
 const routes = [
 	{ path: '/', name: 'home', view: Home },
 	{ path: '/detail/:id', name: 'detail', view: Detail },
 	{ path: '/runaway', name: 'runaway', view: Runaway },
 	{ path: '/item/:id', name: 'item', view: Item },
+	{ path: '/tabs', name: 'tabs', view: Tabs },
 ];
 
 const handles = [];
@@ -278,6 +296,18 @@ describe('devtools bridge — requests', () => {
 		});
 		expect(inspected.model.draft).toBeUndefined();
 		expect(inspected.local.tag).toBeUndefined();
+	});
+
+	it('inspect:view shows the shared values data() received', async () => {
+		const hook = installHook();
+		const app = await bootApp();
+		await app.visit('/tabs');
+		const panelId = hook.of('view-mounted').find((e) => e.payload.name === 'TabPanel').payload.id;
+
+		const inspected = hook.request('inspect:view', { id: panelId });
+		// The callback is not JSON-safe, so only the value crosses the wire.
+		expect(inspected.shared).toEqual({ tabs: { active: 'first' } });
+		expect(inspected.model).toEqual({ active: 'first' });
 	});
 
 	it('inspect:view reports a missing id as an error payload', async () => {

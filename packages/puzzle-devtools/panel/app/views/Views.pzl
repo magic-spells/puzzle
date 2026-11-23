@@ -106,9 +106,10 @@
 
         {#if hasInspect}
           <div class="p-3 grid gap-3">
-            <div class="grid gap-3 grid-cols-1 lg:grid-cols-2">
+            <div class="grid gap-3 grid-cols-1 lg:grid-cols-3">
               <StateGroup title="params" tone="plain" entries={ paramEntries } emptyLabel="no route params" />
               <StateGroup title="props" tone="plain" entries={ propEntries } emptyLabel="no props" />
+              <StateGroup title="shared" tone="plain" entries={ sharedEntries } emptyLabel="nothing shared" />
             </div>
 
             <section class="rounded border border-accent-soft">
@@ -310,6 +311,7 @@ export default class ViewsView extends PuzzleView {
 
       paramEntries: entriesOf(inspect?.params),
       propEntries: entriesOf(inspect?.props),
+      sharedEntries: entriesOf(inspect?.shared),
       modelEntries: entriesOf(inspect?.model),
       localEntries: entriesOf(inspect?.local),
       // From snapshot:subscriptions.byView, folded onto the pview record — the
