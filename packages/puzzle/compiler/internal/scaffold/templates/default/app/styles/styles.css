@@ -9,9 +9,8 @@
 @source "../**/*.js";
 @source "../public/**/*.html";
 
-/* A couple of semantic tokens become Tailwind utilities (bg-surface, …). */
+/* A couple of semantic tokens become Tailwind utilities (bg-accent, …). */
 @theme {
-  --color-surface: #f7f7f8;
   --color-accent: #4f46e5;
   --color-accent-2: #6366f1;
 }

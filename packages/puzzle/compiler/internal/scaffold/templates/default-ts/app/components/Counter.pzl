@@ -1,7 +1,7 @@
 <puzzle-view>
-  <div class="inline-flex items-center gap-4 rounded-xl border border-gray-200 dark:border-gray-800 px-5 py-4">
+  <div class="inline-flex items-center gap-4 rounded-xl border border-gray-800 px-5 py-4">
     <button
-      class="h-9 w-9 rounded-lg border border-gray-300 dark:border-gray-700 text-lg leading-none hover:bg-surface dark:hover:bg-gray-800 transition-colors"
+      class="h-9 w-9 rounded-lg border border-gray-700 text-lg leading-none hover:bg-gray-800 transition-colors"
       @click={ decrement }
       aria-label="Decrease">
       −
@@ -9,7 +9,7 @@
 
     <div class="text-center min-w-[4rem]">
       <div class="count font-mono text-2xl tabular-nums">{ count }</div>
-      <div class="text-[11px] uppercase tracking-widest text-gray-500">{ label }</div>
+      <div class="text-[11px] uppercase tracking-widest text-gray-400">{ label }</div>
     </div>
 
     <button

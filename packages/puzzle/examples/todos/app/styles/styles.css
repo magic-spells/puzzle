@@ -11,8 +11,8 @@
 
 /*
  * "Night desk" theme — a quiet, near-monochrome dark palette with a single
- * warm amber accent. Semantic tokens defined here become Tailwind utilities
- * (bg-surface, text-muted, border-hairline, font-display, …).
+ * warm amber accent. Tokens become utilities (bg-page, text-ink, …); shared
+ * roles use the puzzle-pieces names, so pieces you add stay readable here.
  */
 @theme {
   /* Type — editorial serif display, grotesque UI, mono for numerals */
@@ -22,7 +22,7 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* Surfaces — layered neutral blacks */
-  --color-ink: #0a0a0c;
+  --color-page: #0a0a0c;
   --color-surface: #131317;
   --color-surface-2: #17171b;
   --color-elevated: #202027;
@@ -32,7 +32,7 @@
   --color-line: rgba(255, 255, 255, 0.055);
 
   /* Text — warm off-white stepping down to faint */
-  --color-fg: #ece9e3;
+  --color-ink: #ece9e3;
   --color-muted: #93929a;
   --color-faint: #5a5960;
 
@@ -45,12 +45,12 @@
 /* Base styles — dark canvas everywhere, refined text rendering */
 @layer base {
   html {
-    background-color: var(--color-ink);
+    background-color: var(--color-page);
   }
 
   body {
-    background-color: var(--color-ink);
-    color: var(--color-fg);
+    background-color: var(--color-page);
+    color: var(--color-ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
