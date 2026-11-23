@@ -327,9 +327,9 @@ func TestInitUsageAndFlags(t *testing.T) {
 	requireShorthand(t, initCmd, "template", "t")
 	requireShorthand(t, initCmd, "yes", "y")
 	requireHidden(t, initCmd, "dir")
-	parse(t, initCmd, "-t", "todos", "-y")
-	if got, _ := initCmd.Flags().GetString("template"); got != "todos" {
-		t.Errorf("-t todos parsed as %q", got)
+	parse(t, initCmd, "-t", "static", "-y")
+	if got, _ := initCmd.Flags().GetString("template"); got != "static" {
+		t.Errorf("-t static parsed as %q", got)
 	}
 	if got, _ := initCmd.Flags().GetBool("yes"); !got {
 		t.Error("-y should set yes")

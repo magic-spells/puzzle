@@ -44,9 +44,9 @@ CLI (bin `puzzle`, installed with `@magic-spells/puzzle`; needs Node 24 or later
 `--hybrid`, `--mode production|development`), `check` (run the app-installed
 TypeScript compiler over `.pzl` scripts and template expressions), `preview`
 (serve an existing `dist/` with production-host semantics), `init` (`--template
-default|todos`; `--typescript` scaffolds `<script lang="ts">` components, `.ts`
-modules with an `app/app.ts` entry, a strict tsconfig and an
-`npm run check` script), `generate` (TypeScript stubs — `<script lang="ts">`,
+default|static`, the second an `output: 'static'` site; `--typescript`
+scaffolds `<script lang="ts">` components, `.ts` modules with an `app/app.ts`
+entry, a strict tsconfig and an `npm run check` script), `generate` (TypeScript stubs — `<script lang="ts">`,
 `app/models/<name>.ts`, an `index.ts` family barrel — when the project root
 has a `tsconfig.json`),
 `add` (tailwind integration, `piece <name…>`, `theme <name…>`, `deploy <host>`,

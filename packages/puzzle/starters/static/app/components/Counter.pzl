@@ -1,0 +1,21 @@
+<puzzle-view>
+  <button class="rounded-lg border border-gray-700 px-4 py-2 text-sm hover:bg-gray-800 transition-colors" @click={ add }>
+    Clicked { count } { count === 1 ? 'time' : 'times' }
+  </button>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// A static page is plain HTML, and the components on it still run in the
+// browser: this one keeps a click count in its local state.
+export default class Counter extends PuzzleView {
+  created() {
+    this.setState({ count: 0 });
+  }
+
+  events = {
+    add: () => this.setState('count', this.getState().count + 1),
+  };
+}
+</script>

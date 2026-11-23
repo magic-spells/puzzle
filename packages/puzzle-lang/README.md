@@ -228,7 +228,7 @@ The parser's integration tests parse copies of the todos example's `.pzl`
 files, vendored under `parser/testdata/todos`, so the module's tests are
 self-contained and run the same from a monorepo checkout or the module cache.
 From a monorepo checkout, `TestCorpusExpressionsParse` also parses every
-`.pzl` file under the framework's examples, the scaffold templates, the pieces
+`.pzl` file under the framework's examples, the `puzzle init` starters, the pieces
 registry and demo, the DevTools panel, the runtime test fixtures, and the
 codegen and check goldens, and requires every expression in them to parse;
 outside the monorepo it skips.

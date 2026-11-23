@@ -1,0 +1,54 @@
+<puzzle-view>
+  <div class="inline-flex items-center gap-4 rounded-xl border border-gray-800 px-5 py-4">
+    <button
+      class="h-9 w-9 rounded-lg border border-gray-700 text-lg leading-none hover:bg-gray-800 transition-colors"
+      @click={ decrement }
+      aria-label="Decrease">
+      −
+    </button>
+
+    <div class="text-center min-w-16">
+      <div class="count font-mono text-2xl tabular-nums">{ count }</div>
+      <div class="text-xs uppercase tracking-widest text-gray-400">{ label }</div>
+    </div>
+
+    <button
+      class="h-9 w-9 rounded-lg bg-accent text-white text-lg leading-none hover:bg-accent-2 transition-colors"
+      @click={ increment }
+      aria-label="Increase">
+      +
+    </button>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Counter extends PuzzleView {
+  // Local UI state — seeded once before the first data() run.
+  created() {
+    this.setState({ count: 0 });
+  }
+
+  data({ props }) {
+    const { count = 0 } = this.getData();
+    return {
+      count,
+      label: props.label || 'Count',
+    };
+  }
+
+  // Event handlers are a class field of arrow functions so `this` is always the
+  // component instance. Method shorthand (increment() {}) gets the events object
+  // as `this` instead, so it breaks as soon as it touches `this` — `puzzle dev`
+  // warns in the console when a handler is written that way.
+  events = {
+    increment: () => {
+      this.setState('count', this.getData().count + 1);
+    },
+    decrement: () => {
+      this.setState('count', this.getData().count - 1);
+    },
+  };
+}
+</script>

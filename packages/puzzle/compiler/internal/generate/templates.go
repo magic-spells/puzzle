@@ -315,9 +315,9 @@ export default class __NAME__ extends PuzzleView {
 </style>
 `
 
-// modelTemplateTS mirrors the TypeScript todos scaffold's app/models/todo.ts:
-// the schema, plus a hand-written fields interface and a record type the rest
-// of the app types against.
+// modelTemplateTS is modelTemplate in TypeScript: the schema, plus a
+// hand-written fields interface and a record type the rest of the app types
+// against.
 const modelTemplateTS = `import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
 
 // The fields a __NAME__ record carries. Puzzle records are dynamic — the schema
