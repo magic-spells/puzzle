@@ -686,7 +686,7 @@ describe.skipIf(!built)('Views panel', () => {
 		expect(document.querySelector('[data-twisty="2"]').className).not.toContain('rotate-90');
 	});
 
-	it('colors a kind dot per row and bars the active row', async () => {
+	it('colors a kind dot per row and tints the active row', async () => {
 		const dot = (id) => treeRow(id).querySelector('[data-kind-dot]').className;
 		expect(dot('1')).toContain('bg-accent'); // layouts/
 		expect(dot('2')).toContain('bg-ok'); // views/
@@ -694,14 +694,12 @@ describe.skipIf(!built)('Views panel', () => {
 
 		treeRow('3').click();
 		await settle(app, 60);
-		expect(treeRow('3').className).toContain('dt-row-selected');
 		expect(treeRow('3').className).toContain('bg-accent-soft');
 
-		// Selection and pulse now ride different CSS properties, so a selected row
-		// that re-renders shows both at once.
+		// A selected row that re-renders stays selected while it pulses.
 		bridge.emit('flush', { keys: ['todo'], notified: [3] });
 		await settle(app);
-		expect(treeRow('3').className).toContain('dt-row-selected');
+		expect(treeRow('3').className).toContain('bg-accent-soft');
 		expect(treeRow('3').className).toContain('dt-pulse');
 	});
 
@@ -1349,7 +1347,7 @@ describe.skipIf(!built)('Subscriptions panel', () => {
 		await settle(app);
 
 		expect(document.querySelector('[data-sub-key="todo"]').className).toContain(
-			'dt-row-selected'
+			'bg-accent-soft'
 		);
 
 		// Ids resolve against the pview collection for name + module.
@@ -1448,7 +1446,7 @@ describe.skipIf(!built)('Subscriptions panel', () => {
 		expect(window.location.hash).toBe('#/views');
 		expect(treeIds().length).toBeGreaterThan(0);
 		// ...and the Views panel adopted the hand-off.
-		expect(treeRow('3').className).toContain('dt-row-selected');
+		expect(treeRow('3').className).toContain('bg-accent-soft');
 		expect(bridge.payloadsFor('inspect:view')).toContainEqual({ id: 3 });
 
 		// The intent is consumed, not sticky.
@@ -1766,7 +1764,7 @@ describe.skipIf(!built)('Performance panel', () => {
 		await settle(app, 120);
 
 		expect(window.location.hash).toBe('#/views');
-		expect(treeRow('3').className).toContain('dt-row-selected');
+		expect(treeRow('3').className).toContain('bg-accent-soft');
 		expect(bridge.payloadsFor('inspect:view')).toContainEqual({ id: 3 });
 		// The intent is consumed, not sticky.
 		expect(app.store.findOne('ui', 'main').pendingViewId).toBeNull();

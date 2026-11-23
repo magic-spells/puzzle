@@ -154,6 +154,9 @@ type Result struct {
 	// __d.<name> → undefined at render (SPEC §6). Out-of-band — the generated JS is
 	// unaffected, so goldens never move. The plugin/pzlc print them to stderr.
 	Warnings []Warning
+	// ClassName is the class the render tail is attached to; puzzle check
+	// names the view type with it.
+	ClassName string
 }
 
 // Warning is a positioned, non-fatal codegen diagnostic. See Result.Warnings.
@@ -183,9 +186,10 @@ func ModeForPath(path string) EmissionMode {
 // available to the caller for esbuild WatchFiles.
 func Compile(sec *parser.Sections, opts Options) (*Result, error) {
 	var inlined []string
-	var warnings []Warning
-	js, err := compile(sec, opts, &inlined, &warnings)
-	return &Result{JS: js, InlinedFiles: uniqueSorted(inlined), Warnings: warnings}, err
+	res := &Result{}
+	js, err := compile(sec, opts, &inlined, res)
+	res.JS, res.InlinedFiles = js, uniqueSorted(inlined)
+	return res, err
 }
 
 // AlignScript pads js, the module Compile emitted for sec, so its <script>
@@ -200,9 +204,10 @@ func AlignScript(sec *parser.Sections, js string) string {
 }
 
 // compile is Compile's body; it appends every {#svg} file path to *inlined (even
-// on failure), collects out-of-band diagnostics into *warnings, and returns the
-// generated JS (empty on error).
-func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]Warning) (string, error) {
+// on failure), collects out-of-band diagnostics and the class name into res, and
+// returns the generated JS (empty on error).
+func compile(sec *parser.Sections, opts Options, inlined *[]string, res *Result) (string, error) {
+	warnings := &res.Warnings
 	root, err := parser.ParseTemplate(sec, opts.Filename)
 	if err != nil {
 		return "", err
@@ -488,6 +493,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 			b.WriteString(";\n")
 		}
 	}
+	res.ClassName = className
 	return b.String(), nil
 }
 

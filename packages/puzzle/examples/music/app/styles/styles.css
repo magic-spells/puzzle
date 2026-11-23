@@ -1,15 +1,6 @@
 @import "tailwindcss";
 
 /*
- * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
- * and JS so the utility classes they use are generated. Paths are relative to
- * this stylesheet (app/styles/), so "../" is the app root.
- */
-@source "../**/*.pzl";
-@source "../**/*.js";
-@source "../public/**/*.html";
-
-/*
  * Puzzle Sounds palette (v4 @theme). A dark "player" chrome with a violet accent;
  * album/artist artwork carries its own per-record gradient (a Puzzle.object()
  * field) via inline styles, so the named tokens here only dress the shell.

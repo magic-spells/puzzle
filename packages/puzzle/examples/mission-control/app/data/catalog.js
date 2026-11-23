@@ -11,8 +11,8 @@
 
 // --- status tone → Tailwind utility classes --------------------------------
 // Kept as full literal strings so Tailwind's content scanner (which reads this
-// .js file via the @source glob) generates them. Consumed by ListRow /
-// DetailPanel / Overview to color status dots, pills, and event rows.
+// .js file) generates them. Consumed by ListRow / DetailPanel / Overview to
+// color status dots, pills, and event rows.
 export const TONE = {
   good: { dot: 'bg-good', text: 'text-good', ring: 'border-good/40 bg-good/10' },
   warn: { dot: 'bg-warn', text: 'text-warn', ring: 'border-warn/40 bg-warn/10' },

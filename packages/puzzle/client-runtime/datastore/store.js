@@ -341,7 +341,7 @@ export class Store {
 	 * @returns {StoreRecord}
 	 */
 	createRecord(type, data = {}) {
-		const record = this._instantiate(type, data, 'throw', true);
+		const record = this._instantiate(type, data, true);
 		this._notify(type, record[this.modelFor(type).primaryKey()]);
 		this._persist();
 		return record;
@@ -350,11 +350,6 @@ export class Store {
 	/**
 	 * @param {string} type
 	 * @param {Record<string, any>} data
-	 * @param {'throw'|'skip'} [onDuplicate='throw'] how to handle an explicit
-	 *   primary key that already indexes a live record. createRecord/_upsert
-	 *   throw (a duplicate id is a programming error); _load skips (keep the
-	 *   first hydrated record, warn) so a corrupt storage blob can't crash
-	 *   startup. Generated ids never collide (_genId probes the map).
 	 * @param {boolean} [validate=false] enforce schema validation rules
 	 *   (constellation/doc/DOC-SPEC.md §20, D48). Only createRecord passes true;
 	 *   hydration (_load) and server upserts (_upsert) leave it false — the
@@ -362,7 +357,7 @@ export class Store {
 	 *   read path may crash on data that would fail local validation.
 	 * @returns {StoreRecord}
 	 */
-	_instantiate(type, data, onDuplicate = 'throw', validate = false) {
+	_instantiate(type, data, validate = false) {
 		const Model = this.modelFor(type);
 		const map = this._typeMap(type);
 		const pk = Model.primaryKey();
@@ -385,13 +380,10 @@ export class Store {
 			if (errors.length) throw new PuzzleValidationError(errors);
 		}
 
+		// A duplicate id is a programming error; hydration resolves its own
+		// duplicates before it calls here. Generated ids never collide (_genId
+		// probes the map).
 		if (map.has(recordKey(withDefaults[pk]))) {
-			if (onDuplicate === 'skip') {
-				console.warn(
-					`[puzzle] duplicate primary key ${JSON.stringify(withDefaults[pk])} for model "${type}" during hydration — keeping the first record, skipping the rest`
-				);
-				return map.get(recordKey(withDefaults[pk]));
-			}
 			throw new Error(
 				`[puzzle] duplicate primary key ${JSON.stringify(withDefaults[pk])} for model "${type}" — a record with that ${pk} already exists`
 			);
@@ -1163,18 +1155,19 @@ export class Store {
 
 				const id = fields[pk];
 				const existing = id != null ? this._typeMap(type).get(recordKey(id)) : null;
-				if (existing && replace) {
-					// Overwrite in place — preserve identity (mirror _upsert's update
-					// branch), silent, no dup warning (replacing is the intent here).
-					safeMerge(existing, fields);
+				if (existing) {
+					// Replace overwrites in place, preserving identity (mirror _upsert's
+					// update branch); skip keeps the first record and warns.
+					if (replace) safeMerge(existing, fields);
+					else {
+						console.warn(
+							`[puzzle] duplicate primary key ${JSON.stringify(id)} for model "${type}" during hydration — keeping the first record, skipping the rest`
+						);
+					}
 					existing._synced = syncedTo;
 					continue;
 				}
-				// Skip-dup path (default), OR replace mode with no existing record:
-				// instantiate, keeping the first on a duplicate pk (warns in that case).
-				const record = this._instantiate(type, fields, 'skip'); // silent: no notify
-				// Guard the skip-dup case where _instantiate hands back an existing record.
-				if (record) record._synced = syncedTo;
+				this._instantiate(type, fields)._synced = syncedTo; // silent: no notify
 			}
 		}
 	}

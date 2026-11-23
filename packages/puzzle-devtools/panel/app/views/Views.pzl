@@ -188,10 +188,7 @@ const TREE_DEBOUNCE_MS = 120;
 const INSPECT_DEBOUNCE_MS = 150;
 const TOAST_MS = 2400;
 
-// Selection carries a 2px left accent bar (`dt-row-selected`, an inset shadow)
-// on top of the tint, so an active row still reads as active while the pulse
-// animation is repainting its background.
-const ROW_SELECTED = 'bg-accent-soft dt-row-selected';
+const ROW_SELECTED = 'bg-accent-soft';
 const ROW_IDLE = 'hover:bg-raised';
 
 /** Indent geometry, shared by the padding and the indent-guide gradient. */

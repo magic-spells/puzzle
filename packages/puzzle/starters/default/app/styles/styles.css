@@ -1,9 +1,8 @@
 @import "tailwindcss";
 
-/* A couple of semantic tokens become Tailwind utilities (bg-accent, …). */
+/* A semantic token becomes Tailwind utilities (bg-accent, …). */
 @theme {
   --color-accent: #4f46e5;
-  --color-accent-2: #6366f1;
 }
 
 @layer base {

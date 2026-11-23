@@ -237,7 +237,7 @@ import {
 const FLUSH_DEBOUNCE_MS = 200;
 const OK_MS = 2000;
 
-const ROW_SELECTED = 'bg-accent-soft dt-row-selected';
+const ROW_SELECTED = 'bg-accent-soft';
 const ROW_IDLE = 'hover:bg-raised';
 
 export default class StoreView extends PuzzleView {
@@ -353,7 +353,7 @@ export default class StoreView extends PuzzleView {
         // Cells are single-line and truncated; `full` is what hover reveals.
         value: preview(row?.[column], 80),
         full: preview(row?.[column], Infinity),
-        cls: column === shape.pk ? 'text-ink' : 'text-muted',
+        cls: column !== shape.pk ? 'text-muted' : isSelected ? 'text-accent font-semibold' : 'text-ink',
       })),
     };
   }

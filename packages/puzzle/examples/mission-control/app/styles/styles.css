@@ -1,16 +1,6 @@
 @import "tailwindcss";
 
 /*
- * Tailwind v4 content detection: scan the app's .pzl components/views/layouts and
- * JS (including data/catalog.js, where the status-tone utility classes live as
- * literal strings) so every class used is generated. Paths are relative to this
- * stylesheet (app/styles/), so "../" is the app root.
- */
-@source "../**/*.pzl";
-@source "../**/*.js";
-@source "../public/**/*.html";
-
-/*
  * "Mission Control" theme — a traditional dark web-app palette in deep navy blues,
  * with a single glowing blue accent for selection. Semantic @theme tokens become
  * Tailwind utilities (bg-panel, text-ink, border-hair, font-display, …) so the

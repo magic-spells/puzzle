@@ -1,10 +1,5 @@
 @import "tailwindcss";
 
-/* Tailwind v4 content detection — scan the app sources for utility classes. */
-@source "../**/*.pzl";
-@source "../**/*.js";
-@source "../public/**/*.html";
-
 /* "Night desk" theme — a quiet near-monochrome dark palette with one amber accent. */
 @theme {
   --font-display: "Instrument Serif", ui-serif, Georgia, serif;

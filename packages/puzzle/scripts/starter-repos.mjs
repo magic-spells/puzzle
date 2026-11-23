@@ -2,10 +2,12 @@
 // Writes the two starter repos from the starters this CLI embeds
 // (`npm run starter-repos`): magic-spells/puzzle-starter is the default
 // starter and magic-spells/puzzle-starter-static the static one. Each folder is
-// exactly what `puzzle init <repo> --template <name> --yes` writes, plus
-// `puzzle add deploy vercel` and `netlify`, so a host that clones a starter
-// into a new project builds it as is. The repos are output: nobody edits them
-// by hand. Change starters/ here, and run this after a release is published.
+// what `puzzle init <repo> --template <name> --yes` writes, plus
+// `puzzle add deploy vercel` and `netlify` (so a host that clones a starter
+// into a new project builds it as is) and this package's MIT LICENSE.txt. The
+// licence is added here, not in starters/, because an app made with `puzzle
+// init` is its owner's to license. The repos are output: nobody edits them by
+// hand. Change starters/ here, and run this after a release is published.
 //
 //   node scripts/starter-repos.mjs [--bin <puzzle>] [--out <dir>] [--push]
 //
@@ -16,7 +18,7 @@
 //           it nothing leaves the machine: the script says what it would push.
 
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { copyFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,6 +49,7 @@ for (const { repo, template } of REPOS) {
 	const dir = join(out, repo);
 	puzzle('init', dir, '--template', template, '--yes');
 	for (const host of ['vercel', 'netlify']) puzzle('add', 'deploy', host, '--dir', dir);
+	copyFileSync(join(repoRoot, 'LICENSE.txt'), join(dir, 'LICENSE.txt'));
 	console.log(`wrote ${dir} (puzzle ${version}, ${template} starter)`);
 }
 

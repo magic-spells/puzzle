@@ -88,7 +88,7 @@ func Run(root string, apply bool) (*Result, error) {
 	}
 
 	// 2. every source file under app/ and tests/, in a stable order.
-	files, err := sourceFiles(abs)
+	files, err := SourceFiles(abs)
 	if err != nil {
 		return nil, err
 	}
@@ -142,11 +142,12 @@ func sortByPos(cs []Change) {
 	})
 }
 
-// sourceFiles lists the files the codemod reads, app-relative and
-// forward-slashed: every .pzl, .js, .mjs and .ts under app/ and tests/,
-// skipping node_modules, anything dotted (.puzzle/ scratch, editor files) and
-// the public folder, which the build copies to dist as it is.
-func sourceFiles(abs string) ([]string, error) {
+// SourceFiles lists the app's source files, root-relative and forward-slashed:
+// every .pzl, .js, .mjs and .ts under app/ and tests/, skipping node_modules,
+// anything dotted (.puzzle/ scratch, editor files) and the public folder, which
+// the build copies to dist as it is. The upgrade pass reads these, and puzzle
+// check type-checks the .pzl files under app/ among them.
+func SourceFiles(abs string) ([]string, error) {
 	var out []string
 	public := build.PublicDir(abs)
 	for _, top := range []string{"app", "tests"} {

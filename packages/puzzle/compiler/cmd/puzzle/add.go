@@ -41,18 +41,9 @@ const tailwindConfigSnippet = `export default {
 	},
 };`
 
-// tailwindStylesCSS is the Tailwind v4 entry stylesheet, matching the todos
-// example's @import + @source detection block.
+// tailwindStylesCSS is the Tailwind v4 entry stylesheet. Tailwind already scans the app
+// root, minus what .gitignore lists (internal/styles), so the import is all it needs.
 const tailwindStylesCSS = `@import "tailwindcss";
-
-/*
- * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
- * and JS so the utility classes they use are generated. Paths are relative to
- * this stylesheet (app/styles/), so "../" is the app root.
- */
-@source "../**/*.pzl";
-@source "../**/*.js";
-@source "../public/**/*.html";
 `
 
 var addCmd = &cobra.Command{
