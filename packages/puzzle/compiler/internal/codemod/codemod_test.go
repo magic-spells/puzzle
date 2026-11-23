@@ -117,8 +117,8 @@ func TestDryRunListsSitesAndWritesNothing(t *testing.T) {
 		// app.js shorthand, the test's mountView and createTestApp
 		"functions-key":    3,
 		"functions-module": 1,
-		// app.js and the test import the renamed module
-		"functions-import": 2,
+		// app.js, the test and Row.pzl import the renamed module
+		"functions-import": 3,
 	}
 	got := rules(res)
 	for rule, n := range want {
@@ -131,13 +131,14 @@ func TestDryRunListsSitesAndWritesNothing(t *testing.T) {
 			t.Errorf("unexpected rule %s (%d changes)", rule, n)
 		}
 	}
-	// the receiver it cannot judge, and the file that defines its own setData
+	// the receiver it cannot judge, the file that defines its own setData, and
+	// the data() list holding a comment
 	var noteFiles []string
 	for _, n := range res.Notes {
 		noteFiles = append(noteFiles, n.File)
 	}
 	sort.Strings(noteFiles)
-	if strings.Join(noteFiles, ",") != "app/lib/fake.js,app/views/Shell.pzl,tests/home.test.js" {
+	if strings.Join(noteFiles, ",") != "app/components/Commented.pzl,app/lib/fake.js,app/views/Shell.pzl,tests/home.test.js" {
 		t.Errorf("notes in %v", noteFiles)
 	}
 	if res.Files != 8 {
@@ -152,6 +153,23 @@ func TestFixRewritesToExpected(t *testing.T) {
 		t.Fatal(err)
 	}
 	compareTrees(t, readTree(t, dir), readTree(t, "testdata/after"))
+}
+
+// a TypeScript module moves as functions.ts, and the '.js' spellings of it,
+// which the bundler resolves to the .ts, follow it.
+func TestFixMovesATypeScriptModule(t *testing.T) {
+	dir := copyTree(t, "testdata/before")
+	app := filepath.Join(dir, "app")
+	if err := os.Rename(filepath.Join(app, "formatters.js"), filepath.Join(app, "formatters.ts")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(dir, true); err != nil {
+		t.Fatal(err)
+	}
+	want := readTree(t, "testdata/after")
+	want["app/functions.ts"] = want["app/functions.js"]
+	delete(want, "app/functions.js")
+	compareTrees(t, readTree(t, dir), want)
 }
 
 // a second run over the rewritten app finds nothing to change: every
