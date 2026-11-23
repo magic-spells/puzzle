@@ -1,4 +1,4 @@
-<puzzle-view class="w-full">
+<puzzle-view>
   <div class="space-y-8">
     <div class="max-w-2xl space-y-2">
       <h1 class="text-3xl font-semibold tracking-tight">A small site, ready for your words</h1>

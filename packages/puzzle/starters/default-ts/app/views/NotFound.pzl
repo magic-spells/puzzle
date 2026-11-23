@@ -1,4 +1,4 @@
-<puzzle-view class="w-full">
+<puzzle-view>
   <div class="space-y-4 py-12 text-center">
     <p class="font-mono text-sm text-rose-500">404</p>
     <h1 class="text-3xl font-semibold tracking-tight">Page not found</h1>
