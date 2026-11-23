@@ -121,7 +121,8 @@ func Run(root string, apply bool) (*Result, error) {
 		res.Changes = append(res.Changes, changes...)
 		touched[rel] = true
 		if apply {
-			if err := writeKeepingMode(full, []byte(out)); err != nil {
+			// the file exists (it was just read), so WriteFile keeps its mode.
+			if err := os.WriteFile(full, []byte(out), 0o644); err != nil {
 				return nil, err
 			}
 		}
@@ -190,15 +191,6 @@ func sourceFiles(abs string) ([]string, error) {
 	}
 	sort.Strings(out)
 	return out, nil
-}
-
-// writeKeepingMode overwrites a file with data, keeping its permissions.
-func writeKeepingMode(full string, data []byte) error {
-	mode := fs.FileMode(0o644)
-	if info, err := os.Stat(full); err == nil {
-		mode = info.Mode().Perm()
-	}
-	return os.WriteFile(full, data, mode)
 }
 
 // applyEdits applies non-overlapping edits to src and returns the result plus
