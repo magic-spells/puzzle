@@ -141,7 +141,7 @@ import { ensureSubscriptions, ensureViews, isConnected, requestViewSelection } f
 /** Flushes arrive one per store batch; coalesce the re-snapshot they trigger. */
 const FLUSH_DEBOUNCE_MS = 200;
 
-const ROW_SELECTED = 'bg-accent-soft dt-row-selected';
+const ROW_SELECTED = 'bg-accent-soft';
 const ROW_IDLE = 'hover:bg-raised';
 
 /**

@@ -237,7 +237,7 @@ import {
 const FLUSH_DEBOUNCE_MS = 200;
 const OK_MS = 2000;
 
-const ROW_SELECTED = 'bg-accent-soft dt-row-selected';
+const ROW_SELECTED = 'bg-accent-soft';
 const ROW_IDLE = 'hover:bg-raised';
 
 export default class StoreView extends PuzzleView {
