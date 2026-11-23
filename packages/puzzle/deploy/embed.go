@@ -22,41 +22,23 @@ import (
 //go:embed all:vercel all:netlify all:cloudflare all:nginx all:apache
 var FS embed.FS
 
-// Place says where a template lands in the app.
-type Place int
-
-const (
-	// AppRoot puts the file beside package.json, where the host reads its
-	// project config (vercel.json, netlify.toml) or where the user keeps a
-	// server snippet (nginx.conf).
-	AppRoot Place = iota
-	// Public puts the file in the app's public folder (app/public/, or
-	// public/ when that is the one the app uses), so puzzle build copies it to
-	// dist/ as is. hosts that read their config from the published folder
-	// (cloudflare's _headers, apache's .htaccess) need this.
-	Public
-)
-
-// File is one template and where it goes.
-type File struct {
-	// Template is the path inside FS.
-	Template string
-	// Name is the file name written in the app.
-	Name string
-	// Place is the app folder Name is written into.
-	Place Place
-}
-
 // Host is one deploy target.
 type Host struct {
 	// Name is what the user types: puzzle add deploy <name>.
 	Name string
 	// Label is the host's own name, for messages.
 	Label string
-	// SPA is written for spa and hybrid builds.
-	SPA []File
-	// Static is written for output: 'static' builds.
-	Static []File
+	// Public puts the file in the app's public folder (app/public/, or
+	// public/ when that is the one the app uses), so puzzle build copies it to
+	// dist/ as is. hosts that read their config from the published folder
+	// (cloudflare's _headers, apache's .htaccess) need this. otherwise the file
+	// goes beside package.json, where the host reads its project config
+	// (vercel.json, netlify.toml) or where the user keeps a server snippet
+	// (nginx.conf).
+	Public bool
+	// SPA (spa and hybrid builds) and Static (output: 'static' builds) are
+	// template paths inside FS. the app's file takes the template's own name.
+	SPA, Static string
 }
 
 // Hosts lists every target in the order the cli and the docs show them.
@@ -64,34 +46,36 @@ var Hosts = []Host{
 	{
 		Name:   "vercel",
 		Label:  "Vercel",
-		SPA:    []File{{Template: "vercel/spa/vercel.json", Name: "vercel.json", Place: AppRoot}},
-		Static: []File{{Template: "vercel/static/vercel.json", Name: "vercel.json", Place: AppRoot}},
+		SPA:    "vercel/spa/vercel.json",
+		Static: "vercel/static/vercel.json",
 	},
 	{
 		Name:   "netlify",
 		Label:  "Netlify",
-		SPA:    []File{{Template: "netlify/spa/netlify.toml", Name: "netlify.toml", Place: AppRoot}},
-		Static: []File{{Template: "netlify/static/netlify.toml", Name: "netlify.toml", Place: AppRoot}},
+		SPA:    "netlify/spa/netlify.toml",
+		Static: "netlify/static/netlify.toml",
 	},
 	{
 		// cloudflare pages picks spa or static routing by itself (a top-level
 		// 404.html switches it), so both shapes share one headers file.
 		Name:   "cloudflare",
 		Label:  "Cloudflare Pages",
-		SPA:    []File{{Template: "cloudflare/_headers", Name: "_headers", Place: Public}},
-		Static: []File{{Template: "cloudflare/_headers", Name: "_headers", Place: Public}},
+		Public: true,
+		SPA:    "cloudflare/_headers",
+		Static: "cloudflare/_headers",
 	},
 	{
 		Name:   "nginx",
 		Label:  "nginx",
-		SPA:    []File{{Template: "nginx/spa/nginx.conf", Name: "nginx.conf", Place: AppRoot}},
-		Static: []File{{Template: "nginx/static/nginx.conf", Name: "nginx.conf", Place: AppRoot}},
+		SPA:    "nginx/spa/nginx.conf",
+		Static: "nginx/static/nginx.conf",
 	},
 	{
 		Name:   "apache",
 		Label:  "Apache",
-		SPA:    []File{{Template: "apache/spa/.htaccess", Name: ".htaccess", Place: Public}},
-		Static: []File{{Template: "apache/static/.htaccess", Name: ".htaccess", Place: Public}},
+		Public: true,
+		SPA:    "apache/spa/.htaccess",
+		Static: "apache/static/.htaccess",
 	},
 }
 

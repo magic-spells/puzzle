@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -88,23 +89,20 @@ func TestAddDeployWritesEachHostTemplate(t *testing.T) {
 				if _, err := runDeploy(t, root, mode, false, "  "+strings.ToUpper(host.Name)+" "); err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
-				files := host.SPA
+				template := host.SPA
 				if mode == "static" {
-					files = host.Static
+					template = host.Static
 				}
-				for _, file := range files {
-					want := embedded(t, file.Template)
-					dest := file.Name
-					if file.Place == deploytemplates.Public {
-						dest = filepath.Join("app", "public", file.Name)
-					}
-					got, err := os.ReadFile(filepath.Join(root, dest))
-					if err != nil {
-						t.Fatalf("expected %s written: %v", dest, err)
-					}
-					if !bytes.Equal(got, want) {
-						t.Errorf("%s does not match the %s template", dest, file.Template)
-					}
+				dest := path.Base(template)
+				if host.Public {
+					dest = filepath.Join("app", "public", dest)
+				}
+				got, err := os.ReadFile(filepath.Join(root, dest))
+				if err != nil {
+					t.Fatalf("expected %s written: %v", dest, err)
+				}
+				if !bytes.Equal(got, embedded(t, template)) {
+					t.Errorf("%s does not match the %s template", dest, template)
 				}
 			})
 		}
@@ -212,12 +210,10 @@ func TestAddDeployCloudflareWarnsAboutPublic404(t *testing.T) {
 func TestDeployTemplatesMatchHostTable(t *testing.T) {
 	listed := map[string]bool{}
 	for _, host := range deploytemplates.Hosts {
-		if len(host.SPA) == 0 || len(host.Static) == 0 {
-			t.Errorf("%s needs both an spa and a static template", host.Name)
-		}
-		for _, file := range append(append([]deploytemplates.File(nil), host.SPA...), host.Static...) {
-			embedded(t, file.Template)
-			listed[file.Template] = true
+		// embedded fails on a missing template, an empty path included.
+		for _, template := range []string{host.SPA, host.Static} {
+			embedded(t, template)
+			listed[template] = true
 		}
 	}
 	err := fs.WalkDir(deploytemplates.FS, ".", func(path string, entry fs.DirEntry, err error) error {
@@ -274,10 +270,10 @@ func TestDeployTemplateRouting(t *testing.T) {
 // cache never reaches html.
 func TestDeployTemplatesCacheHashedNames(t *testing.T) {
 	for _, host := range deploytemplates.Hosts {
-		for _, file := range append(append([]deploytemplates.File(nil), host.SPA...), host.Static...) {
-			body := string(embedded(t, file.Template))
+		for _, template := range []string{host.SPA, host.Static} {
+			body := string(embedded(t, template))
 			if !strings.Contains(body, "max-age=31536000, immutable") {
-				t.Errorf("%s should cache hashed assets for a year", file.Template)
+				t.Errorf("%s should cache hashed assets for a year", template)
 			}
 		}
 	}
