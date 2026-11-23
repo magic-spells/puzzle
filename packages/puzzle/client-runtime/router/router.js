@@ -118,7 +118,7 @@ import { reportError } from '../errors.js';
  * @typedef {{ rawPath: string, pathname: string, query: RouteQuery, hash: string, entry: RouteEntry,
  *   params: Record<string, string>, views: PuzzleView[], keys: string[], layout: PuzzleView | null,
  *   layoutClass: LayoutClassValue, scroll: ScrollSpec | null, focus: FocusSpec | null,
- *   prepared?: PreparedRefresh[] }} CommitInput
+ *   prepared: PreparedRefresh[] }} CommitInput
  */
 
 /**
@@ -1704,12 +1704,12 @@ export class Router {
 				this.#container.hasAttribute('data-puzzle-ssg')) ||
 			((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && retryView === REBUILD);
 		// EXCEPTION-SAFE handle sweep (D146). Every prepared handle is idempotent via
-		// its own `settled` flag, so discarding unconditionally on the way out is free
-		// on the success path (#commitState already committed them) and is the only
-		// thing that covers a THROW out of the synchronous commit block inside #swap —
-		// a user render()/afterUpdate() blowing up there reaches neither commit nor any
-		// of the explicit bail paths, and an unreleased hold fences the ancestor's keys
-		// in Store._heldKeys for the rest of the session.
+		// its own `settled` flag, so discarding unconditionally on the way out covers
+		// every SUPERSEDED return, is free on the success path (#commitState already
+		// committed them) and is the only thing that covers a THROW out of the
+		// synchronous commit block inside #swap — a user render()/afterUpdate() blowing
+		// up there reaches neither commit nor the data-failure bail, and an unreleased
+		// hold fences the ancestor's keys in Store._heldKeys for the rest of the session.
 		try {
 			try {
 				const loads = [];
@@ -1820,7 +1820,6 @@ export class Router {
 			if (token !== this.#token) {
 				for (const v of freshViews) v.destroy();
 				if (layout && !reuseLayout) layout.destroy();
-				discardPrepared(); // D146
 				return SUPERSEDED;
 			}
 
@@ -1965,7 +1964,6 @@ export class Router {
 					for (const instance of nestedInstances) instance.destroy();
 					for (const v of freshViews) v.destroy();
 					if (layout && !reuseLayout) layout.destroy();
-					discardPrepared(); // D146
 					return SUPERSEDED;
 				}
 				// Same suppression the routed chain gets below: mountComponent auto-chains
@@ -2675,7 +2673,7 @@ export class Router {
 		// chain, not the old one; on the D39 skeleton-leaf path the commit still lands
 		// here, in the immediate (un-awaited-leaf) commit, exactly like the old inline
 		// ancestor refresh did.
-		if (next.prepared) for (const p of next.prepared) p.commit();
+		for (const p of next.prepared) p.commit();
 		// Dev-only missing-<Outlet/> diagnostic — the module helper (and this whole
 		// per-commit walk) DCEs away in production (§27 define pattern).
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
@@ -3112,7 +3110,7 @@ export class Router {
 		// D146: a navigation superseded during its out phase never reaches
 		// #commitState, so its prepared ancestor runs are unwound here — otherwise
 		// their tracked subscriptions would be stranded on a live ancestor.
-		if (next.prepared) for (const p of next.prepared) p.discard();
+		for (const p of next.prepared) p.discard();
 	}
 
 	/**
