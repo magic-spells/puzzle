@@ -149,7 +149,6 @@ export default class TagsInput extends PuzzleView {
   // ---- render model --------------------------------------------------------
 
   data({ props }) {
-    const draft = this.getData().draft ?? '';
     const values = this._values(props);
     const chips = values.map((v, i) => ({
       id: `${this._base}-chip-${i}`,
@@ -166,7 +165,6 @@ export default class TagsInput extends PuzzleView {
 
     return {
       chips,
-      draft,
       label: props.label || '',
       hint,
       error,
@@ -250,8 +248,7 @@ export default class TagsInput extends PuzzleView {
 
     onInput: (event) => {
       this.setState({ draft: event.target.value });
-      // No refresh: the native input already shows the text; refreshing here would
-      // re-render mid-keystroke. The draft is read back on commit / keydown.
+      // data() never reads `draft`, so a keystroke only re-renders (D23).
     },
 
     onKey: (event) => {

@@ -240,7 +240,7 @@ export default class EmojiPickerSimple extends PuzzleView {
     const groupIndex = Math.min(prev.groupIndex ?? 0, EMOJI_GROUPS.length - 1);
     const group = EMOJI_GROUPS[groupIndex];
 
-    const cells = group.emoji.map(([char, name], i) => ({
+    const cells = (open ? group.emoji : []).map(([char, name], i) => ({
       kind: 'option',
       id: `${base}-opt-${i}`,
       optIndex: i,
@@ -250,7 +250,7 @@ export default class EmojiPickerSimple extends PuzzleView {
     }));
 
     const activeIndex = Math.min(prev.activeIndex ?? 0, cells.length - 1);
-    const activeOpt = open && cells.length ? cells[activeIndex] : null;
+    const activeOpt = cells[activeIndex];
     if (activeOpt) activeOpt.active = true;
     cells.forEach((c) => {
       c.cellClass = cellClass(c.active);
