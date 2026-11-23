@@ -18,7 +18,6 @@ package codemod
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -67,9 +66,6 @@ type edit struct {
 	message    string
 }
 
-// errNotPuzzleApp is returned when root has no app/ directory.
-var errNotPuzzleApp = errors.New("no app/ directory here — run puzzle check from a Puzzle project root")
-
 // Run scans the app under root and returns every upgrade site. With apply
 // true it also writes the rewrites to disk and renames app/formatters.js; with
 // apply false nothing on disk changes (the dry run).
@@ -79,7 +75,7 @@ func Run(root string, apply bool) (*Result, error) {
 		return nil, err
 	}
 	if info, err := os.Stat(filepath.Join(abs, "app")); err != nil || !info.IsDir() {
-		return nil, errNotPuzzleApp
+		return nil, fmt.Errorf("no app/ directory in %s — run puzzle check from a Puzzle project root", abs)
 	}
 	res := &Result{}
 
@@ -148,7 +144,7 @@ func sortByPos(cs []Change) {
 
 // sourceFiles lists the files the codemod reads, app-relative and
 // forward-slashed: every .pzl, .js, .mjs and .ts under app/ and tests/,
-// skipping node_modules, anything dotted (.puzzle/ scratch, editor dirs) and
+// skipping node_modules, anything dotted (.puzzle/ scratch, editor files) and
 // the public folder, which the build copies to dist as it is.
 func sourceFiles(abs string) ([]string, error) {
 	var out []string
@@ -174,8 +170,9 @@ func sourceFiles(abs string) ([]string, error) {
 			default:
 				return nil
 			}
-			// a .d.ts declares types and holds no code to rewrite.
-			if strings.HasSuffix(name, ".d.ts") {
+			// a dotted file is an editor's (an Emacs lock is a dangling .#Home.pzl
+			// link) and a .d.ts declares types: neither holds code to rewrite.
+			if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".d.ts") {
 				return nil
 			}
 			rel, err := filepath.Rel(abs, p)

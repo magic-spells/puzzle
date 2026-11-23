@@ -43,11 +43,10 @@ listed for you to finish by hand.`,
 		out := ui.New(os.Stdout)
 		// the upgrade pass (D199) runs first: code written for an older release
 		// would otherwise surface as type errors that do not say what changed.
-		ran, err := runCodemod(dir, fix, out)
-		if err != nil {
+		if err := runCodemod(dir, fix, out); err != nil {
 			return err
 		}
-		if fix && ran && !check.HasTypeScript(dir) {
+		if fix && !check.HasTypeScript(dir) {
 			// a fix has done its job even where the app has no TypeScript to
 			// type-check with, so that case is a note, not a failure.
 			fmt.Fprintf(os.Stdout, "%s skipped the type check: npm install -D typescript to run it\n", out.Dim("·"))
@@ -64,14 +63,11 @@ listed for you to finish by hand.`,
 
 // runCodemod runs the 0.10 codemod over the app. a dry run with sites to
 // rewrite prints them and returns an error, so check exits non-zero before it
-// type-checks; with fix it rewrites them and reports what changed. ran is true
-// when the pass found the app at all (no app/ directory is left for check.Run
-// to report).
-func runCodemod(dir string, fix bool, out *ui.Printer) (ran bool, err error) {
+// type-checks; with fix it rewrites them and reports what changed.
+func runCodemod(dir string, fix bool, out *ui.Printer) error {
 	res, err := codemod.Run(dir, fix)
 	if err != nil {
-		// no app/ here: check.Run gives the project-root error itself.
-		return false, nil
+		return err
 	}
 	if notes := codemod.Format(res.Notes); notes != "" {
 		fmt.Fprintf(os.Stdout, "%s left for you to finish (D199):\n%s", out.Yellow("!"), notes)
@@ -80,15 +76,15 @@ func runCodemod(dir string, fix bool, out *ui.Printer) (ran bool, err error) {
 		if fix {
 			fmt.Fprintf(os.Stdout, "%s nothing to upgrade\n", out.Green("✓"))
 		}
-		return true, nil
+		return nil
 	}
 	n := len(res.Changes)
 	if fix {
 		fmt.Fprintf(os.Stdout, "%s upgraded %d site%s in %d file%s for 0.10:\n%s", out.Green("✓"), n, textutil.Plural(n), res.Files, textutil.Plural(res.Files), codemod.Format(res.Changes))
-		return true, nil
+		return nil
 	}
 	fmt.Fprint(os.Stdout, codemod.Format(res.Changes))
-	return true, fmt.Errorf("%d site%s written for an older Puzzle (D199) — run puzzle check --fix to rewrite %s", n, textutil.Plural(n), them(n))
+	return fmt.Errorf("%d site%s written for an older Puzzle (D199) — run puzzle check --fix to rewrite %s", n, textutil.Plural(n), them(n))
 }
 
 // them is the pronoun for a count.
