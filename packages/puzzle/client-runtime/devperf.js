@@ -78,7 +78,7 @@
 /** @typedef {{ chain: Chain, render: RenderMark | null }} Scope */
 
 /**
- * A data() run claimed by prepareDataImpl, consumed by runDataImpl.
+ * A data() run claimed by devperfPrepareData, consumed by devperfRunData.
  * @typedef {{ view: PuzzleView, state: ViewState, chain: Chain, cause: string, depth: number,
  *   started: boolean }} PreparedData
  */
@@ -163,8 +163,8 @@ if (DEV && typeof globalThis !== 'undefined') {
 		Object.defineProperty(globalThis, PERF_SENTINEL, {
 			configurable: true,
 			value: Object.freeze({
-				snapshot: snapshotImpl,
-				subscribe: installSinkImpl,
+				snapshot: devperfSnapshot,
+				subscribe: devperfInstallSink,
 			}),
 		});
 	} catch {
@@ -172,191 +172,34 @@ if (DEV && typeof globalThis !== 'undefined') {
 	}
 }
 
-// ---- exported touchpoints --------------------------------------------------
-// Every runtime call site is itself inside a __PUZZLE_DEV__ guard, so the
-// exports it reaches call straight through; the void touchpoints keep a DEV
-// guard as a cheap one-line belt-and-braces. devperfInstallSink is the export
-// that genuinely needs one: /testing's measureRenders calls it UNGATED.
+// Every runtime call site is itself inside a __PUZZLE_DEV__ guard. The void
+// touchpoints keep a positive `if (DEV)` gate as cheap belt-and-braces;
+// devperfInstallSink is the export that genuinely needs one: /testing's
+// measureRenders calls it UNGATED.
+
+// ---- sink/global snapshots -------------------------------------------------
 
 /**
  * @param {PerfSink} sink
  * @returns {() => void} detach
  */
 export function devperfInstallSink(sink) {
-	if (DEV) return installSinkImpl(sink);
+	if (DEV) {
+		if (typeof sink !== 'function') {
+			throw new TypeError('[puzzle perf] sink must be a function');
+		}
+		sinks.add(sink);
+		let attached = true;
+		return () => {
+			if (!attached) return;
+			attached = false;
+			sinks.delete(sink);
+		};
+	}
 	return () => {};
 }
 
 export function devperfSnapshot() {
-	return snapshotImpl();
-}
-
-/**
- * @param {PuzzleView} view
- * @param {string} [cause]
- * @returns {true | null} null when the recursion guard blocked this run
- */
-export function devperfPrepareData(view, cause) {
-	return prepareDataImpl(view, cause);
-}
-
-/**
- * @param {PuzzleView} view
- * @param {import('./views/PuzzleView.js').DataInput} input the one object data() takes (D197)
- * @returns {any} whatever the view's data() returned
- */
-export function devperfRunData(view, input) {
-	return runDataImpl(view, input);
-}
-
-/**
- * @param {PuzzleView} view
- * @param {string} [cause]
- */
-export function devperfRenderScheduled(view, cause) {
-	if (DEV) renderScheduledImpl(view, cause);
-}
-
-/**
- * @param {PuzzleView} view
- * @param {string} cause
- */
-export function devperfMarkCause(view, cause) {
-	if (DEV) markCauseImpl(view, cause);
-}
-
-/**
- * @param {PuzzleView} view
- * @returns {boolean}
- */
-export function devperfCanRender(view) {
-	return canRenderImpl(view);
-}
-
-/** @param {PuzzleView} view */
-export function devperfRenderPrepare(view) {
-	return renderPrepareImpl(view);
-}
-
-/** @param {PuzzleView} view */
-export function devperfRenderTreeBuilt(view) {
-	if (DEV) renderTreeBuiltImpl(view);
-}
-
-/** @param {PuzzleView} view */
-export function devperfRenderStart(view) {
-	if (DEV) renderStartImpl(view);
-}
-
-/** @param {PuzzleView} view */
-export function devperfRenderEnd(view) {
-	if (DEV) renderEndImpl(view);
-}
-
-export function devperfMutation(count = 1) {
-	if (DEV) mutationImpl(count);
-}
-
-/**
- * @param {PuzzleView} view
- * @param {boolean} bailedOut
- */
-export function devperfComponentPatch(view, bailedOut) {
-	if (DEV) componentPatchImpl(view, bailedOut);
-}
-
-/** @param {PuzzleView} view */
-export function devperfSlotRender(view) {
-	if (DEV) slotRenderImpl(view);
-}
-
-/**
- * @param {PuzzleView} view
- * @param {number} cached
- * @param {number} built
- * @param {number} conservative 1 when the site could not cache its rows, else 0
- */
-export function devperfListRows(view, cached, built, conservative) {
-	if (DEV) listRowsImpl(view, cached, built, conservative);
-}
-
-/**
- * @param {PuzzleView} view
- * @param {number} built
- * @param {number} held
- */
-export function devperfStaticCache(view, built, held) {
-	if (DEV) staticCacheImpl(view, built, held);
-}
-
-/**
- * @param {PuzzleView} view
- * @param {string} key
- * @param {boolean} hit
- */
-export function devperfMemo(view, key, hit) {
-	if (DEV) memoImpl(view, key, hit);
-}
-
-/**
- * @param {Store} store
- * @param {unknown} subscriber the store's current tracking subscriber, if any
- */
-export function devperfStoreNotify(store, subscriber) {
-	if (DEV) storeNotifyImpl(store, subscriber);
-}
-
-/** @param {Store} store */
-export function devperfStoreFlushStart(store) {
-	if (DEV) storeFlushStartImpl(store);
-}
-
-/**
- * @param {Store} store
- * @param {unknown[]} keys
- * @param {Set<unknown>} notified
- */
-export function devperfStoreFlushNotifications(store, keys, notified) {
-	if (DEV) storeFlushNotificationsImpl(store, keys, notified);
-}
-
-/** @param {Store} store */
-export function devperfStoreFlushEnd(store) {
-	if (DEV) storeFlushEndImpl(store);
-}
-
-/**
- * @template T
- * @param {unknown} subscriber
- * @param {Promise<unknown>} pending
- * @param {() => T} retry
- * @param {string} kind
- * @returns {Promise<T>}
- */
-export function devperfTrackingDeferred(subscriber, pending, retry, kind) {
-	return trackingDeferredImpl(subscriber, pending, retry, kind);
-}
-
-// ---- sink/global snapshots -------------------------------------------------
-
-/**
- * @param {PerfSink} sink
- * @returns {() => void}
- */
-function installSinkImpl(sink) {
-	if (typeof sink !== 'function') {
-		throw new TypeError('[puzzle perf] sink must be a function');
-	}
-	sinks.add(sink);
-	let attached = true;
-	return () => {
-		if (!attached) return;
-		attached = false;
-		sinks.delete(sink);
-	};
-}
-
-function snapshotImpl() {
 	return Object.freeze({ ...totals });
 }
 
@@ -543,9 +386,9 @@ function claimExecution(state, chain, view) {
 /**
  * @param {PuzzleView} view
  * @param {string} [cause]
- * @returns {true | null}
+ * @returns {true | null} null when the recursion guard blocked this run
  */
-function prepareDataImpl(view, cause) {
+export function devperfPrepareData(view, cause) {
 	const state = viewState(view);
 	const chain = chainForView(state);
 	if (chain.blockedViews.has(state.id)) return null;
@@ -574,10 +417,10 @@ function prepareDataImpl(view, cause) {
 
 /**
  * @param {PuzzleView} view
- * @param {import('./views/PuzzleView.js').DataInput} input
- * @returns {any}
+ * @param {import('./views/PuzzleView.js').DataInput} input the one object data() takes (D197)
+ * @returns {any} whatever the view's data() returned
  */
-function runDataImpl(view, input) {
+export function devperfRunData(view, input) {
 	const queue = preparedData.get(view);
 	const prepared = queue?.shift();
 	if (queue?.length === 0) preparedData.delete(view);
@@ -653,25 +496,29 @@ function recordData(prepared, startedAt, async, failed) {
  * @param {PuzzleView} view
  * @param {string} [cause]
  */
-function renderScheduledImpl(view, cause) {
-	const state = viewState(view);
-	const chain = chainForView(state);
-	state.pendingChain = chain;
-	state.pendingCauses.add(cause || 'local-state');
-	chain.pendingViews.add(state.id);
-	touch(chain);
+export function devperfRenderScheduled(view, cause) {
+	if (DEV) {
+		const state = viewState(view);
+		const chain = chainForView(state);
+		state.pendingChain = chain;
+		state.pendingCauses.add(cause || 'local-state');
+		chain.pendingViews.add(state.id);
+		touch(chain);
+	}
 }
 
 /**
  * @param {PuzzleView} view
  * @param {string} cause
  */
-function markCauseImpl(view, cause) {
-	const state = viewState(view);
-	const chain = chainForView(state);
-	state.pendingChain = chain;
-	state.pendingCauses.add(cause);
-	touch(chain);
+export function devperfMarkCause(view, cause) {
+	if (DEV) {
+		const state = viewState(view);
+		const chain = chainForView(state);
+		state.pendingChain = chain;
+		state.pendingCauses.add(cause);
+		touch(chain);
+	}
 }
 
 /**
@@ -691,7 +538,7 @@ function markCauseImpl(view, cause) {
  * @param {PuzzleView} view
  * @returns {boolean}
  */
-function canRenderImpl(view) {
+export function devperfCanRender(view) {
 	const state = viewState(view);
 	const chain = chainForView(state);
 	const recursiveBlocked =
@@ -705,7 +552,7 @@ function canRenderImpl(view) {
 }
 
 /** @param {PuzzleView} view */
-function renderPrepareImpl(view) {
+export function devperfRenderPrepare(view) {
 	const state = viewState(view);
 	const chain = chainForView(state);
 	state.pendingChain = chain;
@@ -748,76 +595,84 @@ function currentRender(view) {
 }
 
 /** @param {PuzzleView} view */
-function renderTreeBuiltImpl(view) {
-	const mark = currentRender(view);
-	if (!mark || mark.ended) return;
-	mark.treeDuration = now() - mark.treeStartedAt;
+export function devperfRenderTreeBuilt(view) {
+	if (DEV) {
+		const mark = currentRender(view);
+		if (!mark || mark.ended) return;
+		mark.treeDuration = now() - mark.treeStartedAt;
+	}
 }
 
 /** @param {PuzzleView} view */
-function renderStartImpl(view) {
-	const mark = currentRender(view);
-	if (!mark || mark.ended) return;
-	mark.entered = true;
-	if (mark.state.dataExecutionChain === mark.chain) {
-		mark.state.dataExecutionChain = null;
-		mark.depth = mark.chain.executions.get(mark.state.id) ?? 1;
-	} else {
-		mark.depth = claimExecution(mark.state, mark.chain, mark.view);
+export function devperfRenderStart(view) {
+	if (DEV) {
+		const mark = currentRender(view);
+		if (!mark || mark.ended) return;
+		mark.entered = true;
+		if (mark.state.dataExecutionChain === mark.chain) {
+			mark.state.dataExecutionChain = null;
+			mark.depth = mark.chain.executions.get(mark.state.id) ?? 1;
+		} else {
+			mark.depth = claimExecution(mark.state, mark.chain, mark.view);
+		}
+		mark.patchStartedAt = now();
 	}
-	mark.patchStartedAt = now();
 }
 
 /** @param {PuzzleView} view */
-function renderEndImpl(view) {
-	const stack = activeRenders.get(view);
-	const mark = stack?.[stack.length - 1];
-	if (!mark || mark.ended) return;
-	mark.ended = true;
-	stack.pop();
-	if (stack.length === 0) activeRenders.delete(view);
-	const timestamp = now();
-	const patchDuration = mark.patchStartedAt ? timestamp - mark.patchStartedAt : 0;
-	if (mark.entered) {
-		const wasted = mark.mutations === 0;
-		totals.renders++;
-		totals.domMutations += mark.mutations;
-		if (wasted) totals.wastedRenders++;
-		emit(
-			'render',
-			{
-				viewId: mark.state.id,
-				viewName: mark.state.name,
-				chainId: mark.chain.id,
-				causes: Object.freeze([...mark.causes]),
-				depth: mark.depth,
-				treeDuration: mark.treeDuration,
-				patchDuration,
-				domMutations: mark.mutations,
-				wasted,
-				timestamp,
-			},
-			mark.view
-		);
-		checkRunaway(mark, timestamp, wasted);
+export function devperfRenderEnd(view) {
+	if (DEV) {
+		const stack = activeRenders.get(view);
+		const mark = stack?.[stack.length - 1];
+		if (!mark || mark.ended) return;
+		mark.ended = true;
+		stack.pop();
+		if (stack.length === 0) activeRenders.delete(view);
+		const timestamp = now();
+		const patchDuration = mark.patchStartedAt ? timestamp - mark.patchStartedAt : 0;
+		if (mark.entered) {
+			const wasted = mark.mutations === 0;
+			totals.renders++;
+			totals.domMutations += mark.mutations;
+			if (wasted) totals.wastedRenders++;
+			emit(
+				'render',
+				{
+					viewId: mark.state.id,
+					viewName: mark.state.name,
+					chainId: mark.chain.id,
+					causes: Object.freeze([...mark.causes]),
+					depth: mark.depth,
+					treeDuration: mark.treeDuration,
+					patchDuration,
+					domMutations: mark.mutations,
+					wasted,
+					timestamp,
+				},
+				mark.view
+			);
+			checkRunaway(mark, timestamp, wasted);
+		}
+		popScope(mark.scope);
 	}
-	popScope(mark.scope);
 }
 
 /** @param {number} count */
-function mutationImpl(count) {
-	for (let i = activeScopes.length - 1; i >= 0; i--) {
-		const mark = activeScopes[i].render;
-		if (!mark || mark.ended) continue;
-		mark.mutations += count;
-		return;
+export function devperfMutation(count = 1) {
+	if (DEV) {
+		for (let i = activeScopes.length - 1; i >= 0; i--) {
+			const mark = activeScopes[i].render;
+			if (!mark || mark.ended) continue;
+			mark.mutations += count;
+			return;
+		}
 	}
 }
 
 /**
  * The cross-frame guard: WARN-ONLY. It reports a view that renders a lot while
  * changing nothing, which is usually a render loop — but "usually" is not
- * "always" (see canRenderImpl), so it never suppresses a render.
+ * "always" (see devperfCanRender), so it never suppresses a render.
  *
  * `runawayUntil` is purely the re-warn throttle: one warning per rolling window
  * instead of one per frame.
@@ -864,27 +719,31 @@ function checkRunaway(mark, timestamp, wasted) {
  * @param {PuzzleView} view
  * @param {boolean} bailedOut
  */
-function componentPatchImpl(view, bailedOut) {
-	if (bailedOut) totals.componentPropBailouts++;
-	else totals.componentPropReruns++;
-	const state = viewState(view);
-	emit(
-		'component-props',
-		{
-			viewId: state.id,
-			viewName: state.name,
-			bailedOut,
-		},
-		view
-	);
+export function devperfComponentPatch(view, bailedOut) {
+	if (DEV) {
+		if (bailedOut) totals.componentPropBailouts++;
+		else totals.componentPropReruns++;
+		const state = viewState(view);
+		emit(
+			'component-props',
+			{
+				viewId: state.id,
+				viewName: state.name,
+				bailedOut,
+			},
+			view
+		);
+	}
 }
 
 /** @param {PuzzleView} view */
-function slotRenderImpl(view) {
-	totals.slotRenders++;
-	markCauseImpl(view, 'slots');
-	const state = viewState(view);
-	emit('slot-render', { viewId: state.id, viewName: state.name }, view);
+export function devperfSlotRender(view) {
+	if (DEV) {
+		totals.slotRenders++;
+		devperfMarkCause(view, 'slots');
+		const state = viewState(view);
+		emit('slot-render', { viewId: state.id, viewName: state.name }, view);
+	}
 }
 
 /**
@@ -895,24 +754,26 @@ function slotRenderImpl(view) {
  * @param {PuzzleView} view
  * @param {number} cached
  * @param {number} built
- * @param {number} conservative
+ * @param {number} conservative 1 when the site could not cache its rows, else 0
  */
-function listRowsImpl(view, cached, built, conservative) {
-	totals.listRowsCached += cached;
-	totals.listRowsBuilt += built;
-	totals.listSitesConservative += conservative;
-	const state = viewState(view);
-	emit(
-		'list-rows',
-		{
-			viewId: state.id,
-			viewName: state.name,
-			cached,
-			built,
-			conservative,
-		},
-		view
-	);
+export function devperfListRows(view, cached, built, conservative) {
+	if (DEV) {
+		totals.listRowsCached += cached;
+		totals.listRowsBuilt += built;
+		totals.listSitesConservative += conservative;
+		const state = viewState(view);
+		emit(
+			'list-rows',
+			{
+				viewId: state.id,
+				viewName: state.name,
+				cached,
+				built,
+				conservative,
+			},
+			view
+		);
+	}
 }
 
 /**
@@ -927,10 +788,12 @@ function listRowsImpl(view, cached, built, conservative) {
  * @param {number} built
  * @param {number} held
  */
-function staticCacheImpl(view, built, held) {
-	totals.staticSitesBuilt += built;
-	const state = viewState(view);
-	emit('static-cache', { viewId: state.id, viewName: state.name, built, held }, view);
+export function devperfStaticCache(view, built, held) {
+	if (DEV) {
+		totals.staticSitesBuilt += built;
+		const state = viewState(view);
+		emit('static-cache', { viewId: state.id, viewName: state.name, built, held }, view);
+	}
 }
 
 /**
@@ -938,68 +801,70 @@ function staticCacheImpl(view, built, held) {
  * @param {string} key
  * @param {boolean} hit
  */
-function memoImpl(view, key, hit) {
-	if (hit) totals.memoHits++;
-	else totals.memoMisses++;
-	const state = viewState(view);
-	emit(
-		'memo',
-		{
-			viewId: state.id,
-			viewName: state.name,
-			key,
-			hit,
-		},
-		view
-	);
+export function devperfMemo(view, key, hit) {
+	if (DEV) {
+		if (hit) totals.memoHits++;
+		else totals.memoMisses++;
+		const state = viewState(view);
+		emit(
+			'memo',
+			{
+				viewId: state.id,
+				viewName: state.name,
+				key,
+				hit,
+			},
+			view
+		);
+	}
 }
 
 // ---- Store metrics / propagation ------------------------------------------
 
 /**
  * @param {Store} store
- * @param {unknown} subscriber
+ * @param {unknown} subscriber the store's current tracking subscriber, if any
  */
-function storeNotifyImpl(store, subscriber) {
-	const state = subscriber && typeof subscriber === 'object' ? viewStates.get(subscriber) : null;
-	const chain =
-		(state?.activeDataChain && !state.activeDataChain.quiescent
-			? state.activeDataChain
-			: currentChain()) ||
-		(storeChains.get(store)?.quiescent ? null : storeChains.get(store)) ||
-		newChain();
-	storeChains.set(store, chain);
-	chain.pendingStores.add(store);
-	touch(chain);
+export function devperfStoreNotify(store, subscriber) {
+	if (DEV) {
+		const state = subscriber && typeof subscriber === 'object' ? viewStates.get(subscriber) : null;
+		const chain =
+			(state?.activeDataChain && !state.activeDataChain.quiescent
+				? state.activeDataChain
+				: currentChain()) ||
+			(storeChains.get(store)?.quiescent ? null : storeChains.get(store)) ||
+			newChain();
+		storeChains.set(store, chain);
+		chain.pendingStores.add(store);
+		touch(chain);
+	}
 }
 
-/**
- * @param {Store} store
- * @returns {StoreFlushMark}
- */
-function storeFlushStartImpl(store) {
-	const chain =
-		(storeChains.get(store)?.quiescent ? null : storeChains.get(store)) ||
-		currentChain() ||
-		newChain();
-	storeChains.set(store, chain);
-	chain.pendingStores.delete(store);
-	touch(chain);
-	const mark = {
-		store,
-		chain,
-		scope: pushScope(chain),
-		startedAt: now(),
-		keys: store?._pendingKeys?.size ?? 0,
-		notified: 0,
-	};
-	let stack = activeStoreFlushes.get(store);
-	if (!stack) {
-		stack = [];
-		activeStoreFlushes.set(store, stack);
+/** @param {Store} store */
+export function devperfStoreFlushStart(store) {
+	if (DEV) {
+		const chain =
+			(storeChains.get(store)?.quiescent ? null : storeChains.get(store)) ||
+			currentChain() ||
+			newChain();
+		storeChains.set(store, chain);
+		chain.pendingStores.delete(store);
+		touch(chain);
+		const mark = {
+			store,
+			chain,
+			scope: pushScope(chain),
+			startedAt: now(),
+			keys: store?._pendingKeys?.size ?? 0,
+			notified: 0,
+		};
+		let stack = activeStoreFlushes.get(store);
+		if (!stack) {
+			stack = [];
+			activeStoreFlushes.set(store, stack);
+		}
+		stack.push(mark);
 	}
-	stack.push(mark);
-	return mark;
 }
 
 /**
@@ -1007,33 +872,37 @@ function storeFlushStartImpl(store) {
  * @param {unknown[]} keys
  * @param {Set<unknown>} notified
  */
-function storeFlushNotificationsImpl(store, keys, notified) {
-	// Delivery belongs to the INNERMOST open flush — the one whose _deliverNotifications
-	// is running — so the counters land on the top of the stack.
-	const stack = activeStoreFlushes.get(store);
-	const mark = stack?.[stack.length - 1];
-	if (!mark) return;
-	mark.keys = keys.length;
-	mark.notified = notified.size;
+export function devperfStoreFlushNotifications(store, keys, notified) {
+	if (DEV) {
+		// Delivery belongs to the INNERMOST open flush — the one whose _deliverNotifications
+		// is running — so the counters land on the top of the stack.
+		const stack = activeStoreFlushes.get(store);
+		const mark = stack?.[stack.length - 1];
+		if (!mark) return;
+		mark.keys = keys.length;
+		mark.notified = notified.size;
+	}
 }
 
 /** @param {Store} store */
-function storeFlushEndImpl(store) {
-	const stack = activeStoreFlushes.get(store);
-	const mark = stack?.pop();
-	if (!mark) return;
-	if (stack.length === 0) activeStoreFlushes.delete(store);
-	totals.storeFlushes++;
-	totals.storeNotifications += mark.notified;
-	emit('store-flush', {
-		chainId: mark.chain.id,
-		duration: now() - mark.startedAt,
-		keys: mark.keys,
-		notified: mark.notified,
-	});
-	popScope(mark.scope);
-	if (!mark.chain.pendingStores.has(mark.store)) storeChains.delete(mark.store);
-	maybeQuiesce(mark.chain);
+export function devperfStoreFlushEnd(store) {
+	if (DEV) {
+		const stack = activeStoreFlushes.get(store);
+		const mark = stack?.pop();
+		if (!mark) return;
+		if (stack.length === 0) activeStoreFlushes.delete(store);
+		totals.storeFlushes++;
+		totals.storeNotifications += mark.notified;
+		emit('store-flush', {
+			chainId: mark.chain.id,
+			duration: now() - mark.startedAt,
+			keys: mark.keys,
+			notified: mark.notified,
+		});
+		popScope(mark.scope);
+		if (!mark.chain.pendingStores.has(mark.store)) storeChains.delete(mark.store);
+		maybeQuiesce(mark.chain);
+	}
 }
 
 /**
@@ -1044,7 +913,7 @@ function storeFlushEndImpl(store) {
  * @param {string} kind
  * @returns {Promise<T>}
  */
-function trackingDeferredImpl(subscriber, pending, retry, kind) {
+export function devperfTrackingDeferred(subscriber, pending, retry, kind) {
 	const state = subscriber && typeof subscriber === 'object' ? viewState(subscriber) : null;
 	const chain = state ? chainForView(state) : currentChain() || newChain();
 	const startedAt = now();
