@@ -63,8 +63,9 @@ func installRuntime(t *testing.T, appDir, root string) {
 
 // buildScaffold scaffolds template (its TypeScript variant when typescript is
 // set, with the tsconfig.json init adds) into a temp dir and runs a real
-// build.Build over it, asserting the expected dist artifacts appear. It proves
-// the emitted template source actually compiles. A TypeScript scaffold is also
+// build.Build over it, asserting the expected dist artifacts appear: the SPA's
+// bundle and shell, or for the static starter one HTML page per route. It
+// proves the emitted template source actually compiles. A TypeScript scaffold is also
 // run through `puzzle check` with the repo's own TypeScript, so the generated
 // app type-checks clean under its strict tsconfig.
 func buildScaffold(t *testing.T, template string, typescript bool) {
@@ -97,7 +98,11 @@ func buildScaffold(t *testing.T, template string, typescript bool) {
 	}
 
 	dist := filepath.Join(res.Dir, "dist")
-	for _, f := range []string{"app.js", "index.html", "styles.css"} {
+	want := []string{"app.js", "index.html", "styles.css"}
+	if template == "static" {
+		want = []string{"index.html", "about/index.html", "404.html", "styles.css"}
+	}
+	for _, f := range want {
 		if _, err := os.Stat(filepath.Join(dist, f)); err != nil {
 			t.Errorf("expected dist/%s for %q template: %v", f, template, err)
 		}
@@ -126,10 +131,16 @@ func buildScaffold(t *testing.T, template string, typescript bool) {
 
 func TestScaffoldDefaultBuilds(t *testing.T) { buildScaffold(t, "default", false) }
 
+func TestScaffoldStaticBuilds(t *testing.T) { buildScaffold(t, "static", false) }
+
 func TestScaffoldTodosBuilds(t *testing.T) { buildScaffold(t, "todos", false) }
 
 func TestScaffoldDefaultTypeScriptBuildsAndChecks(t *testing.T) {
 	buildScaffold(t, "default", true)
+}
+
+func TestScaffoldStaticTypeScriptBuildsAndChecks(t *testing.T) {
+	buildScaffold(t, "static", true)
 }
 
 func TestScaffoldTodosTypeScriptBuildsAndChecks(t *testing.T) {
@@ -137,7 +148,7 @@ func TestScaffoldTodosTypeScriptBuildsAndChecks(t *testing.T) {
 }
 
 // captureInitSummary returns what printInitSummary writes to os.Stdout.
-func captureInitSummary(t *testing.T, res *scaffold.Result, typescript bool) string {
+func captureInitSummary(t *testing.T, res *scaffold.Result, template string, typescript bool) string {
 	t.Helper()
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -145,7 +156,7 @@ func captureInitSummary(t *testing.T, res *scaffold.Result, typescript bool) str
 	}
 	orig := os.Stdout
 	os.Stdout = w
-	printInitSummary(ui.New(w), "app", "default", res, typescript)
+	printInitSummary(ui.New(w), "app", template, res, typescript)
 	os.Stdout = orig
 	w.Close()
 	out, err := io.ReadAll(r)
@@ -157,16 +168,21 @@ func captureInitSummary(t *testing.T, res *scaffold.Result, typescript bool) str
 
 // TestPrintInitSummaryNonTTY exercises the summary path on a non-TTY (the
 // captured stdout is a pipe, not a terminal) and checks the next steps: a
-// TypeScript app is told about `npm run check`, a JavaScript app is not.
+// TypeScript app is told about `npm run check`, a JavaScript app is not, and
+// only the static starter is told to build and preview its pages.
 func TestPrintInitSummaryNonTTY(t *testing.T) {
 	res := &scaffold.Result{Dir: filepath.Join(t.TempDir(), "app"), Files: []string{"package.json"}}
-	js := captureInitSummary(t, res, false)
-	if !strings.Contains(js, "npm run dev") || strings.Contains(js, "npm run check") {
-		t.Errorf("JavaScript next steps should list npm run dev and not npm run check:\n%s", js)
+	js := captureInitSummary(t, res, "default", false)
+	if !strings.Contains(js, "npm run dev") || strings.Contains(js, "npm run check") || strings.Contains(js, "npm run preview") {
+		t.Errorf("default JavaScript next steps should list npm run dev, not npm run check or preview:\n%s", js)
 	}
-	ts := captureInitSummary(t, res, true)
+	ts := captureInitSummary(t, res, "default", true)
 	if !strings.Contains(ts, "npm run check") || !strings.Contains(ts, "typescript") {
 		t.Errorf("TypeScript next steps should list npm run check:\n%s", ts)
+	}
+	static := captureInitSummary(t, res, "static", false)
+	if !strings.Contains(static, "npm run build") || !strings.Contains(static, "npm run preview") {
+		t.Errorf("static next steps should list npm run build and npm run preview:\n%s", static)
 	}
 }
 
@@ -208,7 +224,8 @@ func TestPromptAppNameEOF(t *testing.T) {
 	}
 }
 
-// TestPromptTemplateDefault confirms an empty line selects the default template.
+// TestPromptTemplateDefault confirms an empty line selects the default template,
+// and that the menu shows every template with its one-line description.
 func TestPromptTemplateDefault(t *testing.T) {
 	var out bytes.Buffer
 	got, err := promptTemplate(strings.NewReader("\n"), &out)
@@ -217,6 +234,11 @@ func TestPromptTemplateDefault(t *testing.T) {
 	}
 	if got != scaffold.DefaultTemplate {
 		t.Errorf("template: got %q, want %q", got, scaffold.DefaultTemplate)
+	}
+	for _, tpl := range scaffold.Templates {
+		if !strings.Contains(out.String(), tpl.Name+" ") || !strings.Contains(out.String(), tpl.About) {
+			t.Errorf("menu does not list %s with its description:\n%s", tpl.Name, out.String())
+		}
 	}
 }
 

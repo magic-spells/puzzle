@@ -94,7 +94,7 @@ is an error.`,
 		}
 
 		if !scaffold.ValidTemplate(template) {
-			return fmt.Errorf("invalid --template %q (available: %s)", template, strings.Join(scaffold.Templates, ", "))
+			return fmt.Errorf("invalid --template %q (available: %s)", template, strings.Join(scaffold.TemplateNames(), ", "))
 		}
 
 		// --typescript (D54) scaffolds the template's TypeScript variant: .pzl
@@ -126,7 +126,7 @@ is an error.`,
 
 func init() {
 	initCmd.Flags().StringP("template", "t", scaffold.DefaultTemplate,
-		fmt.Sprintf("Starter template (%s)", strings.Join(scaffold.Templates, "|")))
+		fmt.Sprintf("Starter template (%s)", strings.Join(scaffold.TemplateNames(), "|")))
 	// Hidden compatibility alias for the pre-path spelling (no notice in 0.10.x;
 	// to be deprecated in a later release). The positional path replaces it.
 	initCmd.Flags().String("dir", "", "Parent directory to create the app in (compatibility alias: pass a path as the argument)")
@@ -177,25 +177,30 @@ func promptAppName(r io.Reader, w io.Writer) (string, error) {
 	}
 }
 
-// promptTemplate reads a template choice from r, re-prompting until it names a
-// known template (scaffold.Templates). Empty input selects scaffold.DefaultTemplate,
-// so pressing Enter keeps the same default the --template flag carries. Invalid
-// input prints the accepted set and loops; EOF / a read error ends the loop with
-// an error so a closed stdin never hangs (mirroring promptAppName). Reader/Writer
-// so tests can drive it with plain buffers.
+// promptTemplate lists the templates, one line each, then reads a choice from r,
+// re-prompting until it names a known template (scaffold.Templates). Empty
+// input selects scaffold.DefaultTemplate, so pressing Enter keeps the same
+// default the --template flag carries. Invalid input prints the accepted set
+// and loops; EOF / a read error ends the loop with an error so a closed stdin
+// never hangs (mirroring promptAppName). Reader/Writer so tests can drive it
+// with plain buffers.
 func promptTemplate(r io.Reader, w io.Writer) (string, error) {
+	names := scaffold.TemplateNames()
+	for _, t := range scaffold.Templates {
+		fmt.Fprintf(w, "    %-8s %s\n", t.Name, t.About)
+	}
 	scanner := bufio.NewScanner(r)
 	for {
-		fmt.Fprintf(w, "  Template (%s) [%s] › ", strings.Join(scaffold.Templates, "/"), scaffold.DefaultTemplate)
+		fmt.Fprintf(w, "  Template (%s) [%s] › ", strings.Join(names, "/"), scaffold.DefaultTemplate)
 		if !scanner.Scan() {
-			return "", fmt.Errorf("template required (usage: puzzle init --template <%s>)", strings.Join(scaffold.Templates, "|"))
+			return "", fmt.Errorf("template required (usage: puzzle init --template <%s>)", strings.Join(names, "|"))
 		}
 		choice := strings.TrimSpace(scanner.Text())
 		if choice == "" {
 			return scaffold.DefaultTemplate, nil
 		}
 		if !scaffold.ValidTemplate(choice) {
-			fmt.Fprintf(w, "  invalid template %q (available: %s)\n", choice, strings.Join(scaffold.Templates, ", "))
+			fmt.Fprintf(w, "  invalid template %q (available: %s)\n", choice, strings.Join(names, ", "))
 			continue
 		}
 		return choice, nil
@@ -258,6 +263,11 @@ func printInitSummary(out *ui.Printer, appName, template string, res *Result, ty
 	fmt.Fprintf(os.Stdout, "    %s %s\n", out.Dim("$"), "npm run dev")
 	if typescript {
 		fmt.Fprintf(os.Stdout, "    %s %s\n", out.Dim("$"), "npm run check")
+	}
+	// a static site is HTML pages: build them, then serve dist/ as a host would
+	if template == "static" {
+		fmt.Fprintf(os.Stdout, "    %s %s\n", out.Dim("$"), "npm run build")
+		fmt.Fprintf(os.Stdout, "    %s %s\n", out.Dim("$"), "npm run preview")
 	}
 	fmt.Fprintln(os.Stdout)
 }

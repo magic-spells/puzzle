@@ -1,0 +1,22 @@
+<puzzle-view class="w-full">
+  <div class="space-y-8">
+    <div class="space-y-2">
+      <h1 class="text-3xl font-semibold tracking-tight">A small site, ready for your words</h1>
+      <p class="text-gray-400">Every page here is plain HTML, written when you build. It loads fast and reads well before any JavaScript runs.</p>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-4 rounded-xl border border-gray-800 p-5">
+      <p class="text-sm text-gray-400">Pages can still run components. This counter is one:</p>
+      <Counter/>
+    </div>
+
+    <p class="text-sm text-gray-400">Edit <code class="font-mono text-gray-300">app/views/Home.pzl</code> and save — the dev server rebuilds the page.</p>
+  </div>
+</puzzle-view>
+
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+import Counter from '../components/Counter.pzl';
+
+export default class Home extends PuzzleView {}
+</script>

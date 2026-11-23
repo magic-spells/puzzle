@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -35,9 +36,21 @@ import (
 // global string replace over each file is safe.
 const placeholder = "__APP_NAME__"
 
-// Templates lists the template names `puzzle init` accepts, in menu order. The
-// first entry is the default.
-var Templates = []string{"default", "todos"}
+// Template is one starter `puzzle init` can write.
+type Template struct {
+	// Name is what --template takes, and the starter's folder in starters/.
+	Name string
+	// About is the one line the interactive menu shows beside the name.
+	About string
+}
+
+// Templates lists the starters `puzzle init` accepts, in menu order. The first
+// entry is the default.
+var Templates = []Template{
+	{Name: "default", About: "a single-page app with a counter"},
+	{Name: "static", About: "a static site: an HTML page for each route, with Home and About"},
+	{Name: "todos", About: "a todo app with a model and the store"},
+}
 
 // DefaultTemplate is used when --template is not given.
 const DefaultTemplate = "default"
@@ -73,14 +86,18 @@ func ValidateName(name string) error {
 	return nil
 }
 
+// TemplateNames lists the template names, in menu order.
+func TemplateNames() []string {
+	names := make([]string, len(Templates))
+	for i, t := range Templates {
+		names[i] = t.Name
+	}
+	return names
+}
+
 // ValidTemplate reports whether name is a known template.
 func ValidTemplate(name string) bool {
-	for _, t := range Templates {
-		if t == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(TemplateNames(), name)
 }
 
 // Create scaffolds template into parentDir/appName and returns what it wrote.
@@ -99,7 +116,7 @@ func Create(parentDir, appName, template string, typescript bool) (*Result, erro
 		template = DefaultTemplate
 	}
 	if !ValidTemplate(template) {
-		return nil, fmt.Errorf("unknown template %q (available: %s)", template, strings.Join(Templates, ", "))
+		return nil, fmt.Errorf("unknown template %q (available: %s)", template, strings.Join(TemplateNames(), ", "))
 	}
 
 	if parentDir == "" {

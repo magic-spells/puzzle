@@ -1,0 +1,7 @@
+<puzzle-view class="w-full">
+  <div class="space-y-4">
+    <h1 class="text-3xl font-semibold tracking-tight">About us</h1>
+    <p class="text-gray-400">We are a small team that likes simple websites: pages that load fast, read well on a phone and keep working on a slow connection.</p>
+    <p class="text-gray-400">This is where your story goes. Say who you are, what you make and how people can reach you.</p>
+  </div>
+</puzzle-view>

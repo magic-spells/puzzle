@@ -93,6 +93,40 @@ func TestCreateDefault(t *testing.T) {
 	}
 }
 
+func TestCreateStatic(t *testing.T) {
+	res, err := Create(t.TempDir(), "my-site", "static", false)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	want := []string{
+		".gitignore",
+		"README.md",
+		"app/app.js",
+		"app/components/Counter.pzl",
+		"app/layouts/Default.pzl",
+		"app/public/index.html",
+		"app/routes.js",
+		"app/styles/styles.css",
+		"app/views/About.pzl",
+		"app/views/Home.pzl",
+		"app/views/NotFound.pzl",
+		"package.json",
+		"puzzle.config.js",
+		"tests/Home.test.js",
+		"vitest.config.js",
+	}
+	if got := collect(t, res.Dir); strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("static file set mismatch:\n got: %v\nwant: %v", got, want)
+	}
+	config, err := os.ReadFile(filepath.Join(res.Dir, "puzzle.config.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(config), "output: 'static'") {
+		t.Errorf("the static starter's puzzle.config.js does not build static pages:\n%s", config)
+	}
+}
+
 func TestCreateTodos(t *testing.T) {
 	parent := t.TempDir()
 	res, err := Create(parent, "tasks", "todos", false)
@@ -234,7 +268,7 @@ func diskTree(t *testing.T, root string) map[string]string {
 // starters/<name>/ byte for byte: the TypeScript overlay must never leak into
 // it, so `puzzle init` without --typescript writes exactly what it always has.
 func TestCreateJavaScriptIsTheBaseTreeExactly(t *testing.T) {
-	for _, tpl := range Templates {
+	for _, tpl := range TemplateNames() {
 		res, err := Create(t.TempDir(), "my-app", tpl, false)
 		if err != nil {
 			t.Fatalf("Create(%q): %v", tpl, err)
@@ -269,6 +303,23 @@ func TestCreateTypeScriptVariants(t *testing.T) {
 			"package.json",
 			"puzzle.config.js",
 			"tests/Counter.test.ts",
+			"vitest.config.js",
+		},
+		"static": {
+			".gitignore",
+			"README.md",
+			"app/app.ts",
+			"app/components/Counter.pzl",
+			"app/layouts/Default.pzl",
+			"app/public/index.html",
+			"app/routes.ts",
+			"app/styles/styles.css",
+			"app/views/About.pzl",
+			"app/views/Home.pzl",
+			"app/views/NotFound.pzl",
+			"package.json",
+			"puzzle.config.js",
+			"tests/Home.test.ts",
 			"vitest.config.js",
 		},
 		"todos": {
@@ -310,7 +361,8 @@ func TestCreateTypeScriptVariants(t *testing.T) {
 			if strings.Contains(body, placeholder) {
 				t.Errorf("%s typescript: %s still contains %q", tpl, p, placeholder)
 			}
-			if !strings.HasSuffix(p, ".pzl") {
+			// a .pzl with no script is the JavaScript template's own file
+			if !strings.HasSuffix(p, ".pzl") || !strings.Contains(body, "\n<script") {
 				continue
 			}
 			// Every component script is TypeScript, and the markup above it is
@@ -333,7 +385,7 @@ func TestCreateTypeScriptVariants(t *testing.T) {
 // in both (scripts/release-prep.mjs asserts each), and this catches one bumped
 // without the other.
 func TestTypeScriptPackageJSONTracksTheBase(t *testing.T) {
-	for _, tpl := range Templates {
+	for _, tpl := range TemplateNames() {
 		var js, ts map[string]any
 		if err := json.Unmarshal([]byte(templateTree(t, tpl, "x")["package.json"]), &js); err != nil {
 			t.Fatal(err)
@@ -362,7 +414,7 @@ func TestTypeScriptPackageJSONTracksTheBase(t *testing.T) {
 // and jsdom dev dependencies, a vitest.config.js wiring the .pzl plugin, and at
 // least one test under tests/ that imports the testing module.
 func TestEveryTemplateShipsATestSuite(t *testing.T) {
-	for _, tpl := range Templates {
+	for _, tpl := range TemplateNames() {
 		for _, ts := range []bool{false, true} {
 			res, err := Create(t.TempDir(), "my-app", tpl, ts)
 			if err != nil {
@@ -418,14 +470,12 @@ func TestEveryTemplateShipsATestSuite(t *testing.T) {
 }
 
 func TestCreateDefaultsToDefaultTemplate(t *testing.T) {
-	parent := t.TempDir()
-	res, err := Create(parent, "blank", "", false)
+	res, err := Create(t.TempDir(), "blank", "", false)
 	if err != nil {
 		t.Fatalf("Create with empty template: %v", err)
 	}
-	// Counter.pzl is unique to the default template.
-	if _, err := os.Stat(filepath.Join(res.Dir, "app", "components", "Counter.pzl")); err != nil {
-		t.Errorf("empty template did not fall back to default: %v", err)
+	if !reflect.DeepEqual(diskTree(t, res.Dir), templateTree(t, DefaultTemplate, "blank")) {
+		t.Errorf("an empty template did not write the %s starter", DefaultTemplate)
 	}
 }
 

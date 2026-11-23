@@ -9,5 +9,5 @@ import "embed"
 // FS holds every starter. the all: prefix keeps the dotfiles (.gitignore),
 // which a plain directory embed would silently drop.
 //
-//go:embed all:default all:default-ts all:todos all:todos-ts
+//go:embed all:default all:default-ts all:static all:static-ts all:todos all:todos-ts
 var FS embed.FS
