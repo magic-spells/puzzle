@@ -376,15 +376,20 @@ func installSkillTree(dest string) error {
 }
 
 func confirmSkillRefresh(input io.Reader, output io.Writer, targets []skillTarget, latest string) (bool, error) {
+	return confirm(input, output, fmt.Sprintf("Update the installed Puzzle skill to %s?", latest),
+		strings.Join(skillDestinationLines(targets), "\n"))
+}
+
+// confirm is the CLI's yes/no question, answered Yes by default.
+func confirm(input io.Reader, output io.Writer, title, description string) (bool, error) {
 	confirmed := true
 	field := huh.NewConfirm().
-		Title(fmt.Sprintf("Update the installed Puzzle skill to %s?", latest)).
-		Description(strings.Join(skillDestinationLines(targets), "\n")).
+		Title(title).
+		Description(description).
 		Affirmative("Yes").
 		Negative("No").
 		Value(&confirmed)
-	form := newSkillPromptForm(input, output, huh.NewGroup(field))
-	if err := form.Run(); err != nil {
+	if err := newSkillPromptForm(input, output, huh.NewGroup(field)).Run(); err != nil {
 		return false, err
 	}
 	return confirmed, nil

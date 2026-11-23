@@ -59,6 +59,11 @@ has a `tsconfig.json`),
   save feels slow.
 - A busy `--port` is not fatal: `dev` scans upward for the first free one and
   warns when it moved. `--strict-port` restores bind-or-fail.
+- `puzzle upgrade` lists the global CLI and the current project's
+  `@magic-spells/puzzle` with their versions, then asks about each one that is
+  behind (`--check` only lists, `--yes` upgrades all). Without a terminal it
+  upgrades only the install it was run from and prints the command for the
+  other, so in a script pass `--yes` or run that command.
 - `puzzle upgrade skills` refreshes the installed agent skill from the running
   binary. `puzzle upgrade` also offers the refresh after it installs a new
   version. Re-running `puzzle add skills` skips an install that is already
