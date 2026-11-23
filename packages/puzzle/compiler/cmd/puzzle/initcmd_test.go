@@ -133,18 +133,12 @@ func TestScaffoldDefaultBuilds(t *testing.T) { buildScaffold(t, "default", false
 
 func TestScaffoldStaticBuilds(t *testing.T) { buildScaffold(t, "static", false) }
 
-func TestScaffoldTodosBuilds(t *testing.T) { buildScaffold(t, "todos", false) }
-
 func TestScaffoldDefaultTypeScriptBuildsAndChecks(t *testing.T) {
 	buildScaffold(t, "default", true)
 }
 
 func TestScaffoldStaticTypeScriptBuildsAndChecks(t *testing.T) {
 	buildScaffold(t, "static", true)
-}
-
-func TestScaffoldTodosTypeScriptBuildsAndChecks(t *testing.T) {
-	buildScaffold(t, "todos", true)
 }
 
 // captureInitSummary returns what printInitSummary writes to os.Stdout.
@@ -245,12 +239,12 @@ func TestPromptTemplateDefault(t *testing.T) {
 // TestPromptTemplateValid confirms a valid named choice is returned as-is.
 func TestPromptTemplateValid(t *testing.T) {
 	var out bytes.Buffer
-	got, err := promptTemplate(strings.NewReader("todos\n"), &out)
+	got, err := promptTemplate(strings.NewReader("static\n"), &out)
 	if err != nil {
 		t.Fatalf("promptTemplate: %v", err)
 	}
-	if got != "todos" {
-		t.Errorf("template: got %q, want %q", got, "todos")
+	if got != "static" {
+		t.Errorf("template: got %q, want %q", got, "static")
 	}
 }
 
@@ -258,12 +252,12 @@ func TestPromptTemplateValid(t *testing.T) {
 // shown) and the loop accepts the next, valid line.
 func TestPromptTemplateReprompts(t *testing.T) {
 	var out bytes.Buffer
-	got, err := promptTemplate(strings.NewReader("nope\ntodos\n"), &out)
+	got, err := promptTemplate(strings.NewReader("nope\nstatic\n"), &out)
 	if err != nil {
 		t.Fatalf("promptTemplate: %v", err)
 	}
-	if got != "todos" {
-		t.Errorf("template: got %q, want %q", got, "todos")
+	if got != "static" {
+		t.Errorf("template: got %q, want %q", got, "static")
 	}
 	if !strings.Contains(out.String(), "invalid template") {
 		t.Errorf("output missing rejection message:\n%s", out.String())
@@ -370,7 +364,7 @@ func TestInitFlagsSkipPrompts(t *testing.T) {
 	if err := cmd.Flags().Set("dir", parent); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmd.Flags().Set("template", "todos"); err != nil {
+	if err := cmd.Flags().Set("template", "static"); err != nil {
 		t.Fatal(err)
 	}
 	if err := cmd.Flags().Set("typescript", "true"); err != nil {
@@ -389,9 +383,12 @@ func TestInitFlagsSkipPrompts(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(appDir, "jsconfig.json")); err == nil {
 		t.Errorf("unexpected jsconfig.json when --typescript was passed")
 	}
-	// --typescript also selects the template's TypeScript variant.
-	if _, err := os.Stat(filepath.Join(appDir, "app", "models", "todo.ts")); err != nil {
-		t.Errorf("expected the TypeScript todos variant (app/models/todo.ts): %v", err)
+	// --template and --typescript select the static starter's TypeScript variant.
+	if _, err := os.Stat(filepath.Join(appDir, "app", "views", "About.pzl")); err != nil {
+		t.Errorf("expected the static starter (app/views/About.pzl): %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(appDir, "app", "routes.ts")); err != nil {
+		t.Errorf("expected its TypeScript variant (app/routes.ts): %v", err)
 	}
 	pkg, err := os.ReadFile(filepath.Join(appDir, "package.json"))
 	if err != nil {

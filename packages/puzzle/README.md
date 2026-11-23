@@ -143,7 +143,7 @@ lifecycle hooks. A component names its props interface on the base class —
 with no cast and the `props` a `data()` override receives
 (`data({ props }: DataInput<TodoItemProps>)`) must fit it; plain
 `extends PuzzleView` leaves props `any`. The modules are `.ts` — the build
-entry `app/app.ts`, `routes.ts`, the todos template's models — and `package.json` adds
+entry `app/app.ts` and `routes.ts` — and `package.json` adds
 `typescript` plus a `check` script. The build starts from `app/app.ts` when it
 exists, otherwise `app/app.js`, and refuses an app that has both. It strips
 types without checking them; `npm run check` is the type check, under the
@@ -883,8 +883,8 @@ The full CLI surface (see [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-
 ```bash
 # Scaffold a project; omitting the name prompts only in an interactive terminal.
 # The argument may be a path: ../apps/my-app creates my-app inside ../apps.
-puzzle init my-app --template todos
-puzzle init my-app -t todos --typescript
+puzzle init my-site --template static
+puzzle init my-site -t static --typescript
 puzzle init ../apps/my-app -y
 
 # Generate a stub (component, view, layout, or model) — TypeScript stubs in an
@@ -917,7 +917,7 @@ and `init --dir` still work as hidden compatibility aliases (no notice in
 | --- | --- |
 | `puzzle` | `-v, --version`, `--no-color` |
 | `version` | (none) |
-| `init [app-name]` | `-t, --template <default\|todos>`, `--typescript`, `-y, --yes` |
+| `init [app-name]` | `-t, --template <default\|static>`, `--typescript`, `-y, --yes` |
 | `dev [dir]` | `-p, --port <n>` (3000), `--strict-port`, `--host [ip]` / `--host=<addr>`, `-o, --open`, `--fixtures`, `--profile-build` |
 | `build [dir]` | `-m, --mode <production\|development>`, `--static`, `--hybrid`, `--fixtures`, `-q, --quiet`, `--profile-build` |
 | `preview [dir]` | `-p, --port <n>` (4000), `--strict-port`, `--host [ip]` / `--host=<addr>` |

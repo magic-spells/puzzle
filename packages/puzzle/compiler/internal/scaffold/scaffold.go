@@ -49,7 +49,6 @@ type Template struct {
 var Templates = []Template{
 	{Name: "default", About: "a single-page app with a counter"},
 	{Name: "static", About: "a static site: an HTML page for each route, with Home and About"},
-	{Name: "todos", About: "a todo app with a model and the store"},
 }
 
 // DefaultTemplate is used when --template is not given.

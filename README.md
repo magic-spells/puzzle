@@ -30,11 +30,11 @@ npm test       # run the starter tests in tests/ with Vitest
 puzzle build   # production build to dist/
 ```
 
-`puzzle init my-app --template todos` starts from a todo app with a model and
-the store instead. Puzzle needs Node 24 or later. Prebuilt binaries ship for
-macOS and Linux (arm64, x64) and Windows x64. Puzzle is pre-1.0, so a 0.x minor
-can carry breaking changes; read the [CHANGELOG](packages/puzzle/CHANGELOG.md)
-before you upgrade.
+`puzzle init my-site --template static` starts from a static site instead:
+plain HTML pages for Home and About, with a header and a 404. Puzzle needs
+Node 24 or later. Prebuilt binaries ship for macOS and Linux (arm64, x64) and
+Windows x64. Puzzle is pre-1.0, so a 0.x minor can carry breaking changes; read
+the [CHANGELOG](packages/puzzle/CHANGELOG.md) before you upgrade.
 
 ## App structure
 
@@ -50,7 +50,7 @@ my-app/
 │   │   └── Default.pzl
 │   ├── components/         # reusable .pzl components
 │   │   └── Counter.pzl
-│   ├── models/             # store models: schema, getters, methods (todos template)
+│   ├── models/             # store models: schema, getters, methods
 │   ├── locales/            # en.json, es.json, … once i18n is configured
 │   ├── assets/             # source assets, e.g. SVGs inlined with {#svg 'icons/heart.svg'}
 │   ├── styles/

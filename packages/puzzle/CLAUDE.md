@@ -591,8 +591,6 @@ puzzle-devtools repos are archived on GitHub, never deleted.
 - Use `rg` / `rg --files` for discovery. Preserve unrelated user changes in a
   dirty worktree.
 - Keep changes narrow. Do not add abstraction layers for hypothetical needs.
-- `examples/todos` and scaffolded todos templates should stay aligned with the
-  grammar and public docs.
 - Generated `.pzl` templates must remain compiler-tested.
 - Function is the project term for the template library (`round`, `date`,
   `t`, …); never call one a filter or a pipe. Apps register theirs under the
