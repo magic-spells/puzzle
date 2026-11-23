@@ -131,6 +131,39 @@ function warnThisHandlers(view) {
  */
 
 /**
+ * Wrap `target` so every key read off it lands on the record `recordFor()`
+ * returns (none when it returns nothing). Enumerating it (a spread, Object.keys,
+ * JSON.stringify) counts as reading every key, present or future.
+ * @param {Record<string, any>} target
+ * @param {() => ReadRecord | null | false} recordFor
+ * @returns {Record<string, any>}
+ */
+function trackReads(target, recordFor) {
+	/** @param {string | symbol | null} key null = every key */
+	const note = (key) => {
+		if (typeof key === 'symbol') return;
+		const rec = recordFor();
+		if (!rec) return;
+		if (key === null) rec.all = true;
+		else rec.keys.add(key);
+	};
+	return new Proxy(target, {
+		get(target, key, receiver) {
+			note(key);
+			return Reflect.get(target, key, receiver);
+		},
+		has(target, key) {
+			note(key);
+			return Reflect.has(target, key);
+		},
+		ownKeys(target) {
+			note(null);
+			return Reflect.ownKeys(target);
+		},
+	});
+}
+
+/**
  * The one object data() and share() receive (D197): the route params, the
  * parent's props, and what sharing ancestors pass down, grouped by each
  * sharer's name. `shared` is always an object, so destructuring it never throws.
@@ -497,28 +530,15 @@ export class PuzzleView {
 	 */
 	setState(key, value) {
 		if (this.#destroyed || this.#leaving) return;
-		if (typeof key === 'object' && key !== null) {
-			Object.assign(this.#state, key);
-			Object.assign(this.#data, key);
-		} else {
-			this.#state[/** @type {string} */ (key)] = value;
-			this.#data[/** @type {string} */ (key)] = value;
-		}
+		const patch = typeof key === 'object' && key !== null ? key : { [/** @type {string} */ (key)]: value };
+		Object.assign(this.#state, patch);
+		Object.assign(this.#data, patch);
 		// A write to a key the last committed data() read re-runs data() with the
 		// render (D23). A write made while data() itself is running never does: the
 		// run in progress already sees it, and re-running would loop.
 		const reads = this.#dataReads;
-		if (reads && !this.#recorder && !this.#rerunData) {
-			if (reads.all) this.#rerunData = true;
-			else if (typeof key === 'object' && key !== null) {
-				for (const k of Object.keys(key)) {
-					if (reads.keys.has(k)) {
-						this.#rerunData = true;
-						break;
-					}
-				}
-			} else if (reads.keys.has(/** @type {string} */ (key))) this.#rerunData = true;
-		}
+		if (reads && !this.#recorder && !this.#rerunData)
+			this.#rerunData = reads.all || Object.keys(patch).some((k) => reads.keys.has(k));
 		this.#scheduleRender();
 	}
 
@@ -538,51 +558,43 @@ export class PuzzleView {
 
 	/**
 	 * Hand out `copy` as is, or — while this view's data() is running — wrapped so
-	 * every key data() reads off it is recorded (D23). Enumerating it (a spread,
-	 * Object.keys, JSON.stringify) counts as reading every key, present or future.
-	 * The record closes when its run commits, so a proxy data() returned inside its
-	 * model stops recording from then on.
+	 * every key data() reads off it is recorded (D23). The record closes when its
+	 * run commits, so a proxy data() returned inside its model stops recording
+	 * from then on.
 	 * @param {Record<string, any>} copy
 	 * @returns {Record<string, any>}
 	 */
 	#tracked(copy) {
 		const rec = this.#recorder;
-		if (!rec) return copy;
-		return new Proxy(copy, {
-			get(target, key, receiver) {
-				if (rec.open && typeof key === 'string') rec.keys.add(key);
-				return Reflect.get(target, key, receiver);
-			},
-			has(target, key) {
-				if (rec.open && typeof key === 'string') rec.keys.add(key);
-				return Reflect.has(target, key);
-			},
-			ownKeys(target) {
-				if (rec.open) rec.all = true;
-				return Reflect.ownKeys(target);
-			},
-		});
+		return rec ? trackReads(copy, () => rec.open && rec) : copy;
 	}
 
 	/**
-	 * Run one data() invocation with read tracking on. Only the synchronous part
-	 * of the call installs the recorder; an async data() keeps recording through
-	 * any getData()/getState() copy it took before its first await.
-	 * @template R
-	 * @param {() => R} invoke
-	 * @returns {R}
+	 * Run one data() invocation with read tracking on — the one place data() is
+	 * called. Only the synchronous part of the call installs the recorder; an async
+	 * data() keeps recording through any getData()/getState() copy it took before
+	 * its first await.
+	 * @param {Record<string, any>} params
+	 * @param {any} props
+	 * @returns {any} the model, or a promise of it
 	 */
-	#recordReads(invoke) {
+	#runData(params, props) {
 		/** @type {ReadRecord} */
 		const rec = { keys: new Set(), all: false, open: true };
 		this.#lastReads = rec;
 		const outer = this.#recorder;
 		this.#recorder = rec;
+		let out;
 		try {
-			return invoke();
+			out =
+				typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
+					? devperfRunData(this, this.#input(params, props))
+					: this.data(this.#input(params, props));
 		} finally {
 			this.#recorder = outer;
 		}
+		if (out && typeof out.then === 'function') this.#noteAsyncShape();
+		return out;
 	}
 
 	// ---- share() (D197) -------------------------------------------------------
@@ -636,8 +648,7 @@ export class PuzzleView {
 
 	/**
 	 * This sharer's current output, wrapped so every key `reader` reads off it is
-	 * recorded on this sharer's subscriber list. Enumerating it (a spread,
-	 * Object.keys) counts as reading every key. A sharer that has not published
+	 * recorded on this sharer's subscriber list. A sharer that has not published
 	 * yet hands out an empty object, and the reads still sign the reader up, so
 	 * the first publish reaches it.
 	 * @param {PuzzleView} reader
@@ -645,32 +656,15 @@ export class PuzzleView {
 	 */
 	#watched(reader) {
 		const subs = (this.#shareSubs ??= new Map());
-		const sharer = this;
-		/** @param {string | symbol | null} key null = every key */
-		const watch = (key) => {
+		return trackReads(this.#shared ?? {}, () => {
 			// a torn-down reader holding an old copy must not sign up again
-			if (reader.#destroyed || typeof key === 'symbol') return;
+			if (reader.#destroyed) return null;
 			let rec = subs.get(reader);
 			if (!rec) {
 				subs.set(reader, (rec = { keys: new Set(), all: false, open: true }));
-				(reader.#shareFrom ??= new Set()).add(sharer);
+				(reader.#shareFrom ??= new Set()).add(this);
 			}
-			if (key === null) rec.all = true;
-			else rec.keys.add(key);
-		};
-		return new Proxy(this.#shared ?? {}, {
-			get(target, key, receiver) {
-				watch(key);
-				return Reflect.get(target, key, receiver);
-			},
-			has(target, key) {
-				watch(key);
-				return Reflect.has(target, key);
-			},
-			ownKeys(target) {
-				watch(null);
-				return Reflect.ownKeys(target);
-			},
+			return rec;
 		});
 	}
 
@@ -1027,13 +1021,7 @@ export class PuzzleView {
 				// The store's batched flush drives the re-render and the persistence write.
 				target.update({ [key]: value });
 			} catch (err) {
-				reportError(
-					this.ctx,
-					err,
-					{ phase: 'bind', view: this, route: this.route },
-					'[puzzle] bound write rejected:',
-					err
-				);
+				this.#report('bind', '[puzzle] bound write rejected:', err);
 			}
 		} else {
 			// Contain the assignment exactly like the record arm above. The write target
@@ -1046,13 +1034,7 @@ export class PuzzleView {
 			try {
 				target[key] = value;
 			} catch (err) {
-				reportError(
-					this.ctx,
-					err,
-					{ phase: 'bind', view: this, route: this.route },
-					'[puzzle] bound write rejected:',
-					err
-				);
+				this.#report('bind', '[puzzle] bound write rejected:', err);
 				// Stop here rather than falling through. Nothing was written, so the
 				// clobber diagnostic below has no write to watch for and the refresh
 				// would re-render byte-identical state whose only visible effect is
@@ -1569,8 +1551,8 @@ export class PuzzleView {
 
 	/**
 	 * Latch `_dataAsyncShape` the first time a data() invocation comes back thenable
-	 * (D161). Called from every eval wrapper, so the flag engages whichever entry
-	 * point happened to run first. In dev it also steers a .then-style data() at the
+	 * (D161). Called from #runData, so the flag engages whichever entry point
+	 * happened to run first. In dev it also steers a .then-style data() at the
 	 * declaration that would have made it serialize from the start; a declared-async
 	 * data() latches the flag silently, since it already defers up front.
 	 */
@@ -1638,44 +1620,13 @@ export class PuzzleView {
 		// queued later is delivered, never dropped.
 		const mark = this.ctx.store?._notifySeq || 0;
 		this.#snapshotPropRevs(this.#props);
-		const run = () => {
-			const out = this.#recordReads(() =>
-				typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
-					? devperfRunData(this, this.#input(this.#params, this.#props))
-					: this.data(this.#input(this.#params, this.#props))
-			);
-			if (out && typeof out.then === 'function') this.#noteAsyncShape();
-			return out;
-		};
-		const store = this.ctx.store;
-		const expectsAsync = this._dataAsyncShape || this.data.constructor.name === 'AsyncFunction';
-		let result;
-		if (!store) {
-			result = run();
-		} else if (!store._a || !this._settleData) {
-			// No adapter capability on THIS app's store: no query can fault, so this is
-			// the single-evaluation path it has always been, and without the capability
-			// anywhere in the realm the settle loop is not even in the bundle (D157
-			// boundary — the capability installs it).
-			//
-			// The seam is the STORE's capability, not `_settleData`'s presence.
-			// install() copies the methods onto the shared prototypes once per realm
-			// and never removes them (concurrent apps depend on that), so an app
-			// mounted after an adapter app would otherwise inherit the settle path and
-			// fault reads it deliberately opted out of.
-			result = store.withTracking(this, run, expectsAsync);
-		} else {
-			// The loop owns the settle window it opens under `token`, so this stays one
-			// call and the commit tail below is the same one it always was.
-			result = this._settleData(
-				store,
-				run,
-				expectsAsync,
-				() => /** @type {boolean} */ (this.#destroyed || this.#leaving || token !== this.#runToken),
-				null,
-				token
-			);
-		}
+		// The settle loop owns the window it opens under `token`.
+		const result = this.#evaluate(
+			() => this.#runData(this.#params, this.#props),
+			() => /** @type {boolean} */ (this.#destroyed || this.#leaving || token !== this.#runToken),
+			null,
+			token
+		);
 
 		if (result && typeof result.then === 'function') {
 			return result.then(
@@ -1687,6 +1638,34 @@ export class PuzzleView {
 			);
 		}
 		this.#commit(token, result, mark);
+	}
+
+	/**
+	 * Evaluate `run` (one #runData call) through this view's store. With no adapter
+	 * capability on THIS app's store no query can fault, so it is one tracked
+	 * evaluation, and without the capability anywhere in the realm the settle loop
+	 * is not even in the bundle (D157 boundary — the capability installs it).
+	 *
+	 * The seam is the STORE's capability, not `_settleData`'s presence. install()
+	 * copies the methods onto the shared prototypes once per realm and never removes
+	 * them (concurrent apps depend on that), so an app mounted after an adapter app
+	 * would otherwise inherit the settle path and fault reads it deliberately opted
+	 * out of.
+	 *
+	 * @param {() => any} run
+	 * @param {() => boolean} isStale
+	 * @param {any} [pending] prepareRefresh's held-eval channel (D146)
+	 * @param {number} [token] the refresh run that owns the settle window
+	 * @returns {any} the model, or a promise of it
+	 */
+	#evaluate(run, isStale, pending = null, token) {
+		const store = this.ctx.store;
+		const expectsAsync = this._dataAsyncShape || this.data.constructor.name === 'AsyncFunction';
+		return !store
+			? run()
+			: store._a && this._settleData
+				? this._settleData(store, run, expectsAsync, isStale, pending, token)
+				: store.withTracking(this, run, expectsAsync, pending);
 	}
 
 	/**
@@ -1801,17 +1780,12 @@ export class PuzzleView {
 			const mine = this.#beginEvalRun(scope);
 			let out;
 			try {
-				out = this.#recordReads(() =>
-					typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
-						? devperfRunData(this, this.#input(scope.params, scope.props))
-						: this.data(this.#input(scope.params, scope.props))
-				);
+				out = this.#runData(scope.params, scope.props);
 			} catch (err) {
 				this.#endEvalRun(mine);
 				throw err;
 			}
 			if (out && typeof out.then === 'function') {
-				this.#noteAsyncShape();
 				return out.then(
 					(/** @type {any} */ model) => {
 						this.#endEvalRun(mine);
@@ -1827,26 +1801,13 @@ export class PuzzleView {
 			return out;
 		};
 
-		const store = this.ctx.store;
-		const mark = store?._notifySeq || 0; // see #refreshInner
-		const expectsAsync = this._dataAsyncShape || this.data.constructor.name === 'AsyncFunction';
+		const mark = this.ctx.store?._notifySeq || 0; // see #refreshInner
 		// D161: a prepared run settles through the same loop. Intermediate passes are
 		// discarded as they are anywhere else; the FINAL pass's reconcile is parked on
 		// `pending`, so commit()/discard() below are unchanged. Store notifications
-		// are NOT coalesced here — while the gate is open the ancestor still shows its
-		// committed route and must keep taking live updates (D146). Gated on the
-		// STORE's capability for the same realm-leak reason as #refreshInner above.
-		const result = !store
-			? run()
-			: store._a && this._settleData
-				? this._settleData(
-						store,
-						run,
-						expectsAsync,
-						() => /** @type {boolean} */ (this.#destroyed || this.#leaving),
-						pending
-					)
-				: store.withTracking(this, run, expectsAsync, pending);
+		// are NOT coalesced here (no token) — while the gate is open the ancestor still
+		// shows its committed route and must keep taking live updates (D146).
+		const result = this.#evaluate(run, () => /** @type {boolean} */ (this.#destroyed || this.#leaving), pending);
 
 		/** @type {any} the prepared data() result */
 		let model;
@@ -1992,6 +1953,17 @@ export class PuzzleView {
 	}
 
 	/**
+	 * Report `err` into the D145 funnel as this view's, under `phase`.
+	 * @param {ErrorSite['phase']} phase
+	 * @param {string} message the console prefix
+	 * @param {unknown} err
+	 * @returns {ErrorInfo}
+	 */
+	#report(phase, message, err) {
+		return reportError(this.ctx, err, { phase, view: this, route: this.route }, message, err);
+	}
+
+	/**
 	 * Report a view failure into the D145 funnel. Normally logging is enough, but
 	 * an anchor-race mount whose superseding first render failed can never reach
 	 * #completeMount(). Recover through the same instance-owned placeholder
@@ -2005,13 +1977,7 @@ export class PuzzleView {
 	 * @param {ErrorSite['phase']} phase
 	 */
 	#handleViewFailure(message, err, phase) {
-		const info = reportError(
-			this.ctx,
-			err,
-			{ phase: this.__errorViewFailed ? 'error-view' : phase, view: this, route: this.route },
-			message,
-			err
-		);
+		const info = this.#report(this.__errorViewFailed ? 'error-view' : phase, message, err);
 		if (this.__errorViewFailed) {
 			const marker = this.#vm?.plantFailurePlaceholder();
 			this.__errorViewFailed();
@@ -2079,13 +2045,7 @@ export class PuzzleView {
 			// D146: user code, fenced to committed params/route.
 			this.#withCommittedScope(() => this.destroyed());
 		} catch (err) {
-			reportError(
-				this.ctx,
-				err,
-				{ phase: 'unmount', view: this, route: this.route },
-				'[puzzle] destroyed hook error:',
-				err
-			);
+			this.#report('unmount', '[puzzle] destroyed hook error:', err);
 		}
 	}
 
@@ -2413,13 +2373,7 @@ export class PuzzleView {
 					try {
 						this.viewWillShow();
 					} catch (err) {
-						reportError(
-							this.ctx,
-							err,
-							{ phase: 'enter', view: this, route: this.route },
-							'[puzzle] enter hook failed during a visible-trigger reveal:',
-							err
-						);
+						this.#report('enter', '[puzzle] enter hook failed during a visible-trigger reveal:', err);
 					}
 					handle.play();
 				// handle.finished NEVER rejects — playAnimation normalises WAAPI's
@@ -2434,13 +2388,7 @@ export class PuzzleView {
 							try {
 								this.viewDidShow(); // skipped entirely if destroyed mid-enter
 							} catch (err) {
-								reportError(
-									this.ctx,
-									err,
-									{ phase: 'enter', view: this, route: this.route },
-									'[puzzle] enter hook failed during a visible-trigger reveal:',
-									err
-								);
+								this.#report('enter', '[puzzle] enter hook failed during a visible-trigger reveal:', err);
 							}
 						}
 					this.#settleEnter();
@@ -2638,13 +2586,7 @@ export class PuzzleView {
 		try {
 			hook();
 		} catch (err) {
-			reportError(
-				this.ctx,
-				err,
-				{ phase: 'enter', view: this, route: this.route },
-				'[puzzle] show hook failed while restoring a stalled outgoing view:',
-				err
-			);
+			this.#report('enter', '[puzzle] show hook failed while restoring a stalled outgoing view:', err);
 		}
 	}
 
@@ -2670,13 +2612,7 @@ export class PuzzleView {
 			// leave-hook guard, router.js #startOverlapLeave). The destroyed-mid-playOut
 			// interrupt path resolves (never rejects), so its early-return / did-hook-skip
 			// semantics are untouched — only the throw path lands here.
-			reportError(
-				this.ctx,
-				err,
-				{ phase: 'leave', view: this, route: this.route },
-				'[puzzle] leave hook failed during teardown:',
-				err
-			);
+			this.#report('leave', '[puzzle] leave hook failed during teardown:', err);
 		}
 		this.destroy();
 	}
@@ -2792,13 +2728,7 @@ export class PuzzleView {
 			if (this.#enterPending) {
 				this.#enterPending = false;
 				Promise.resolve(this.playIn()).catch((err) =>
-					reportError(
-						this.ctx,
-						err,
-						{ phase: 'enter', view: this, route: this.route },
-						'[puzzle] child enter animation failed:',
-						err
-					)
+					this.#report('enter', '[puzzle] child enter animation failed:', err)
 				);
 			}
 		}
@@ -3226,15 +3156,8 @@ export class PuzzleView {
 			return true;
 		}
 		const seq = this.#renderSeq;
-		const message = '[puzzle] data() failed during a setState() re-run:';
-		try {
-			this.refresh()?.catch((err) => this.#handleViewFailure(message, err, 'refresh'));
-		} catch (err) {
-			// a sync data() throw is already reported; rendering on top of it would
-			// report the same broken view twice
-			this.#handleViewFailure(message, err, 'refresh');
-			return false;
-		}
+		// a sync data() throw has already destroyed the view through the D145 funnel
+		this.#refreshContained('[puzzle] data() failed during a setState() re-run:', 'refresh');
 		return seq === this.#renderSeq && !this.#destroyed;
 	}
 }

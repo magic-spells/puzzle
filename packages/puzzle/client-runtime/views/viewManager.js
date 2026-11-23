@@ -1543,16 +1543,10 @@ function isControlTag(tag) {
 }
 
 /**
- * Re-assert every controlled value in ONE element's attrs — the element-level
- * composition of the three live-DOM comparisons the ordinary patch path runs
- * across patchAttrs and the post-children select re-assert.
- *
- * patchAttrs deliberately keeps its own per-attr dispatch instead of calling
- * this: hoisting the whole element to one call would move the `value`/`checked`
- * writes out of the attrs iteration order, and <select> must keep asserting its
- * controlled value AFTER its <option> children patch (see reassertSelectValue),
- * not during the attr pass. A cached subtree has no attr pass and no children
- * pass at all, so for it the order is this function's order.
+ * Re-assert every controlled value in ONE element's attrs against the live DOM.
+ * mount() and patch() run it once attrs and children have settled (a select's
+ * options, a range's min/max); the identity short-circuit runs it for a cached
+ * subtree, which has no attr or children pass of its own.
  *
  * @param {Node} el a control's live element (dispatched on nodeName)
  * @param {Record<string, any>} attrs
@@ -1982,23 +1976,11 @@ function patchAttrs(el, oldAttrs, newAttrs, owner = null) {
 			}
 			continue;
 		}
-		// Controlled property-backed attrs (`value` on an input/textarea, `checked`
-		// on a checkbox/radio) can drift from the live DOM through user interaction
-		// the app never mirrored back into state — typing into an input whose write
-		// commits on `change` (an author handler, or D147's synthesized
-		// '@change:bind'), clicking such a checkbox, or an in-flight IME composition
-		// whose write the bind guard is deliberately holding back. A later re-render whose BOUND value is
-		// unchanged would skip the write on a vnode-to-vnode compare (`'' === ''`),
-		// leaving the stale user text/state on screen while component state says
-		// otherwise. Compare against the LIVE DOM property instead so the controlled
-		// value is re-asserted regardless of vnode equality (React/Vue force-sync the
-		// property on every patch for exactly this reason). The per-keystroke echo case
-		// (bound value already equals the live property) still writes NOTHING — the
-		// caret is preserved. <select>'s `value` is (re)asserted AFTER its <option>
-		// children patch (reassertSelectValue); leave it to the generic path here since
-		// its options may not exist yet at attr-patch time. Non-form elements that carry
-		// a plain `value` (<li>, <progress>, <button>) keep the byte-identical vnode
-		// compare — they never drift out of band.
+		// A control's `value` (input/textarea) and `checked` (input) compare against
+		// the LIVE DOM, not the old vnode (see syncControlValue). syncControl at the
+		// end of patch() checks them again after children, but an island returns
+		// before it, so this pass must not skip them. A <select>'s `value` takes the
+		// generic path; it is re-asserted once its options have patched.
 		if (name === 'value' && (el.nodeName === 'INPUT' || el.nodeName === 'TEXTAREA')) {
 			syncControlValue(/** @type {HTMLInputElement | HTMLTextAreaElement} */ (el), value, owner);
 		} else if (name === 'checked' && el.nodeName === 'INPUT') {
