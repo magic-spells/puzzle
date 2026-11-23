@@ -2966,7 +2966,7 @@ export class Router {
 			return el && typeof el.focus === 'function' ? el : null;
 		}
 		for (let i = views.length - 1; i >= 0; i--) {
-			const el = /** @type {HTMLElement | null} */ (views[i]?.element);
+			const el = /** @type {HTMLElement | null} */ (views[i].element);
 			if (el && typeof el.focus === 'function') {
 				el.contains(document.activeElement) ||
 					/** @type {HTMLElement | null} */ (el.querySelector('[autofocus]'))?.focus({
@@ -3055,10 +3055,9 @@ export class Router {
 		this.#announcedTitle = title;
 		let text = title;
 		if (!moved) {
-			const chain = this.#state?.entry?.chain;
-			const leaf = chain ? chain[chain.length - 1] : null;
-			text = leaf?.name ?? this.#state?.path ?? '';
-			if (text === this.#liveRegion.textContent) text = this.#state?.path ?? text;
+			const { entry, path } = this.#state;
+			text = entry.chain[entry.chain.length - 1].name ?? path;
+			if (text === this.#liveRegion.textContent) text = path;
 		}
 		this.#liveRegion.textContent = text;
 	}
