@@ -110,6 +110,7 @@ test('every piece.json style comes from a package the piece installs', async () 
 	const demo = await readFile(new URL('../demo/app/styles/styles.css', import.meta.url), 'utf8');
 	for (const [name, piece] of await manifests()) {
 		const pkgs = (piece.dependencies ?? []).map((spec) => splitSpec(spec)[0]);
+		for (const p of pkgs) if (demo.includes(`@import "${p}/css" layer(components);`)) assert.ok(piece.styles?.includes(`${p}/css`), `${name} installs ${p} but does not list its stylesheet`);
 		for (const style of piece.styles ?? []) {
 			const pkg = style.split('/').slice(0, style.startsWith('@') ? 2 : 1).join('/');
 			assert.ok(pkgs.includes(pkg), `${name}/piece.json imports ${style} but does not install ${pkg}`);
