@@ -7,6 +7,7 @@ import (
 	"github.com/magic-spells/puzzle/compiler/internal/check"
 	"github.com/magic-spells/puzzle/compiler/internal/codemod"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
+	"github.com/magic-spells/puzzle/packages/puzzle-lang/textutil"
 	"github.com/spf13/cobra"
 )
 
@@ -59,7 +60,7 @@ listed for you to finish by hand.`,
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(os.Stdout, "%s no type errors in %s\n", out.Green("✓"), pluralFiles(files))
+		fmt.Fprintf(os.Stdout, "%s no type errors in %d .pzl file%s\n", out.Green("✓"), files, textutil.Plural(files))
 		return nil
 	},
 }
@@ -84,28 +85,13 @@ func runCodemod(dir string, fix bool, out *ui.Printer) (ran bool, err error) {
 		}
 		return true, nil
 	}
+	n := len(res.Changes)
 	if fix {
-		fmt.Fprintf(os.Stdout, "%s upgraded %s in %s for 0.10:\n%s", out.Green("✓"), pluralSites(len(res.Changes)), pluralFiles2(res.Files), codemod.Format(res.Changes))
+		fmt.Fprintf(os.Stdout, "%s upgraded %d site%s in %d file%s for 0.10:\n%s", out.Green("✓"), n, textutil.Plural(n), res.Files, textutil.Plural(res.Files), codemod.Format(res.Changes))
 		return true, nil
 	}
 	fmt.Fprint(os.Stdout, codemod.Format(res.Changes))
-	return true, fmt.Errorf("%s written for an older Puzzle (D199) — run puzzle check --fix to rewrite %s", pluralSites(len(res.Changes)), them(len(res.Changes)))
-}
-
-// pluralSites spells a count of rewrite sites.
-func pluralSites(n int) string {
-	if n == 1 {
-		return "1 site"
-	}
-	return fmt.Sprintf("%d sites", n)
-}
-
-// pluralFiles2 spells a count of files of any kind.
-func pluralFiles2(n int) string {
-	if n == 1 {
-		return "1 file"
-	}
-	return fmt.Sprintf("%d files", n)
+	return true, fmt.Errorf("%d site%s written for an older Puzzle (D199) — run puzzle check --fix to rewrite %s", n, textutil.Plural(n), them(n))
 }
 
 // them is the pronoun for a count.
@@ -114,13 +100,6 @@ func them(n int) string {
 		return "it"
 	}
 	return "them"
-}
-
-func pluralFiles(n int) string {
-	if n == 1 {
-		return "1 .pzl file"
-	}
-	return fmt.Sprintf("%d .pzl files", n)
 }
 
 func init() {
