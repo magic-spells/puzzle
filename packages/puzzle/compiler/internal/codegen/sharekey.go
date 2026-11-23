@@ -110,12 +110,15 @@ func PositionalDataDecls(script string) []DataDecl {
 	return positionalDataDecls(tokenizeJS(script))
 }
 
-// positionalDataDecls lists every data() or share() declaration in the
-// positional form. a declaration counts when the name is not a property
-// access or a `function` name, and its parameter list is followed by `{` (or
-// `:` for a typescript return type). it is positional when the list has a
-// top-level comma, or its first name is `params` / `_params`; `data(input)`
-// with one other name is the object form, just not destructured.
+// positionalDataDecls lists every data() or share() method declaration in the
+// positional form. a declaration is a name directly in a class body — the
+// view's, or a local base class whose hooks it inherits (D24) — that is not a
+// property access or a `function` name, and whose parameter list is followed
+// by `{` (or `:` for a typescript return type); a call inside a method, a
+// nested object's method or a type's member does not count. it is positional
+// when the list has a top-level comma, or its first name is `params` /
+// `_params`; `data(input)` with one other name is the object form, just not
+// destructured.
 func positionalDataDecls(toks []jsTok) []DataDecl {
 	var decls []DataDecl
 	// skip comment tokens in either direction
@@ -125,8 +128,33 @@ func positionalDataDecls(toks []jsTok) []DataDecl {
 		}
 		return i
 	}
+	// classBody has one entry per open bracket, true for a class body. heading
+	// is the bracket depth of a `class` keyword whose body has not opened yet
+	// (-1 for none), and typeArgs counts its '<' '>', so the '{' in
+	// `extends PuzzleView<{ a: string }>` is not the body.
+	var classBody []bool
+	heading, typeArgs := -1, 0
 	for i, t := range toks {
-		if t.ident != "data" && t.ident != "share" {
+		n := len(classBody)
+		switch {
+		case t.ident == "class":
+			// `class: 'x'` and `class() {}` are properties named class
+			if k := nextTok(i + 1); k < len(toks) && (toks[k].ident != "" || toks[k].ch == '{') {
+				heading, typeArgs = n, 0
+			}
+		case n == heading && t.ch == '<':
+			typeArgs++
+		case n == heading && t.ch == '>':
+			typeArgs--
+		case t.ch == '(' || t.ch == '[' || t.ch == '{':
+			classBody = append(classBody, n == heading && typeArgs == 0 && t.ch == '{')
+			if classBody[n] {
+				heading = -1
+			}
+		case (t.ch == ')' || t.ch == ']' || t.ch == '}') && n > 0:
+			classBody = classBody[:n-1]
+		}
+		if t.ident != "data" && t.ident != "share" || n == 0 || !classBody[n-1] {
 			continue
 		}
 		prev := i - 1
