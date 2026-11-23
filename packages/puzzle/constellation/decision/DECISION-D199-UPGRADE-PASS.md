@@ -17,8 +17,8 @@ code_refs:
   - compiler/internal/codemod/testdata/
   - compiler/cmd/puzzle/checkcmd.go
   - compiler/internal/codegen/outletwarn.go
-verified_at: '2026-11-21T18:57:28.823Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-23T05:34:09.489Z'
+verified_sha: f90f22201ff6b00245f353d5f5f90bb7634bb963
 ---
 
 # D199 — the 0.10 upgrade pass, `puzzle check --fix`
@@ -57,10 +57,14 @@ first release published for outside feedback, so its renames get one.
   comments, `{#raw}` and strings are left alone.
 - **`data()` and `share()` declarations** with one or two positional
   parameters become one destructured object: the first is `params`, the
-  second `props`. A name that matches stays shorthand, another becomes
+  second `props`. A declaration is a method directly in a class body (any
+  class in a `.pzl` script, so a local base class counts); a call named
+  `data` or `share`, or an object's method of that name, is not one. A name
+  that matches stays shorthand, another becomes
   `params: _params`, defaults stay (`props = {}`), and a `lang="ts"`
   declaration's parameter types move onto an inline object type. Rest
-  parameters and more than two parameters are listed, not rewritten.
+  parameters, more than two parameters and a parameter list holding a
+  comment are listed, not rewritten.
 - **`setData(` is rewritten only on `this.` and `super.`**, and never in a
   file that defines its own `setData`. `dataTransfer.setData` and
   `clipboardData.setData` are DOM methods and are skipped silently; any other
@@ -72,7 +76,10 @@ first release published for outside feedback, so its renames get one.
   listed. `app/formatters.{js,ts}` moves to `app/functions.{js,ts}` (never
   over an existing file) and imports of it follow.
 - **It reads `app/` and `tests/`** (`.pzl`, `.js`, `.mjs`, `.ts`), skipping
-  `node_modules`, dot directories and `.d.ts` files.
+  `node_modules`, dotted files and folders, the public folder (the build
+  copies it to `dist` as it is) and `.d.ts` files. An error the pass hits,
+  such as a file it cannot read, write or rename, stops `puzzle check` with
+  that error.
 
 ## Alternatives rejected
 

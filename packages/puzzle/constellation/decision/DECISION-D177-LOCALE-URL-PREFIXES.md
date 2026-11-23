@@ -76,11 +76,12 @@ document per language.
   (`/files/resume.pdf`). Same options on `router.url` (read from `arguments[1]`,
   typed with a JSDoc `@overload`).
 - **One helper computes the base**: `localeBase(routerBase, locale,
-  defaultLocale)`. All four encoders call it: `Router.url`, the router's write
-  side, the static router stub (`localizeRouterStub` in `ssg/assemble.js`, kept
-  apart from `makeRouterStub` because esbuild keeps unused destructured params)
-  and the hybrid prerender's `routeRouter.url` shadow, re-shadowed per locale.
-  A parity test pins all four, because they drifted once
+  defaultLocale)`. Three encoders call it: `Router.url`, the router's write
+  side, and the router stub (`localizeRouterStub` in `ssg/assemble.js`, kept
+  apart from `makeRouterStub` because esbuild keeps unused destructured params).
+  Both prerender modes use the stub's `url`: hybrid copies it onto the shared
+  memory Router for each page. A parity test pins all four call paths, the
+  hybrid one read from a real prerender pass, because they drifted once
   ([[DECISION-D79-LINK-FUNCTION]]).
 - **Build warning** for a literal root-relative `href` on `<a>`/`<area>` when
   routing is on. Skipped: `//host`, dynamic values, `{#raw}`, and a last static

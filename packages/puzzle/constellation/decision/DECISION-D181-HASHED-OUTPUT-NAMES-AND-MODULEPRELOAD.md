@@ -56,7 +56,7 @@ An **explicit** `hashNames: true` is strict: a missing shell or entry reference 
 
 ### Rewriting HTML
 
-The build rewrites local `src`/`href` references in script/link start tags, preserving bare, `./`, `/` and deployment-base prefixes, queries and fragments; remote URLs are unchanged, and copied public files win over compiler names, under a deployment base too. Tags inside an HTML comment (or an unterminated one to the end of the shell) are left alone: not rewritten, not checked, not read as the entry script. The scan steps over whole `<script>…</script>` bodies and quoted attribute values first, so a `<!--` inside either opens no comment. Static output strips the fixed app script under the normalized `routerBase` as well as the unprefixed spellings, with query and fragment suffixes.
+The build rewrites local `src`/`href` references in script/link start tags, preserving bare, `./`, `/` and deployment-base prefixes, queries and fragments; remote URLs are unchanged, copied public files win over compiler names, under a deployment base too, and a relative reference resolves against its own page's directory first, so `public/docs/index.html` loading the `styles.css` beside it keeps that file. Tags inside an HTML comment (or an unterminated one to the end of the shell) are left alone: not rewritten, not checked, not read as the entry script. The scan steps over whole `<script>…</script>` bodies and quoted attribute values first, so a `<!--` inside either opens no comment. Static output strips the fixed app script under the normalized `routerBase` as well as the unprefixed spellings, with query and fragment suffixes.
 
 ### Modulepreload
 
@@ -66,7 +66,7 @@ Every production splitting pass emits modulepreloads for its transitive static-i
 
 - **Leave hashing opt-in (default follows `build.splitting`)**: a plain app ships fixed `styles.css` and `_puzzle/<slug>.js`, and real browsers hold them past a deploy anyway (a stale stylesheet survived three days on magicspells.io). Cache-correct output should not depend on knowing a flag exists.
 - **Fail the build when a default-hashed name cannot be rewritten**: a shell that built fine before would break on upgrade without asking for hashing. Default-on falls back per file with a warning; only an explicit `true` errors.
-- **Rewrite other public pages by default**: `public/` files are verbatim, and relative references in nested pages would be guessed.
+- **Rewrite other public pages by default**: `public/` files are copied as they are. With the key unset, an output another public page links by its fixed name keeps that name, so the page needs no edit.
 - **Post-build JavaScript scripts**: duplicate compiler knowledge and fail outside the atomic staging guarantee.
 - **Scan emitted JavaScript for imports with a regexp**: the metafile is the authoritative graph and tells static, dynamic and external edges apart.
 - **Marker comments in the shell**: ordinary script/link references already identify the output.

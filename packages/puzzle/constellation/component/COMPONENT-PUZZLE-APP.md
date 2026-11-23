@@ -58,7 +58,8 @@ before mount and after unmount. External wiring does
    `this.router` lazily; with no router yet a path passes through and a named target
    renders no href; an app `link` wins), then `installTranslate` for `t`.
 6. Router (`focusBehavior`, `routerMode`, `routerBase`, `transitionMode` forwarded
-   only when set; `prefetch` forwarded behind `__PUZZLE_HAS_LAZY__`). `ctx = { store, router, formatters, idle }`, plus `i18n` when
+   as given, so an unset one arrives `undefined` and takes the Router's default;
+   `prefetch` forwarded behind `__PUZZLE_HAS_LAZY__`). `ctx = { store, router, formatters, idle }`, plus `i18n` when
    configured; `idle` is the bound `app.idle` ([[DECISION-D189-AGENT-HOOKS]]).
    `onError`/`errorView` live in a WeakMap keyed by the app ctx, so ctx stays
    exactly those services; per-view ctx lookups resolve through the prototype

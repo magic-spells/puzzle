@@ -16,10 +16,10 @@ verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 # D132 — `save()` and `delete()` serialize behind one per-record write chain
 
 Every server write for a record — `saveRecord` and `deleteRecord` — routes
-through one `_chain(record, fn)` helper (D50, SPEC §22). Chains are
-module-private WeakMap state in the `/adapter` subpath, keyed by Store then
-record, so core carries no write-queue field and a queue is released with its
-record.
+through one `_write(record, kind, fn)` helper (D50, SPEC §22). The chain's last
+link is kept in the record's write status, a module-private WeakMap in the
+`/adapter` subpath keyed by the record, so core carries no write-queue field and
+a queue is released with its record.
 
 Why: concurrent `save(); delete()` on a fresh record otherwise either orphans a
 server row (DELETE lands first and 404s, then POST creates the row) or silently

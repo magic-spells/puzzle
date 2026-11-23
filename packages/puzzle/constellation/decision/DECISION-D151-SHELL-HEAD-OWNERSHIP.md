@@ -34,7 +34,8 @@ inside the shell's head region** (`client-runtime/ssg/index.js`).
 - `compileShellPlan` locates, per shell: the head region (`<head …>` →
   `</head>`, case-insensitive), its `<title>`, every `data-puzzle-head` marker
   span inside the region, the empty target element, and `</body>`. Managed-tag
-  matchers are module constants; the target matcher is memoized per id. Plans are
+  matchers are module constants; the target element's match is kept on the
+  plan, per target id (`findTarget`). Plans are
   memoized per shell string in a small bounded map, so `injectShell` /
   `injectStaticShell` keep their signatures.
 - A page is one ordered splice: rebuilt head region, target with content, static

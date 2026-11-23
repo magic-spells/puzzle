@@ -60,9 +60,12 @@ breaks it. Class extraction requires a real named `export default class … exte
   gets `Name.__share = '<camelCaseName>';` after its class, because a production build
   minifies class names and the runtime keys `shared` by that name; a script without one gets
   no stamp. `shareKey` must stay the same rule as the runtime's in `PuzzleView.js`. Two
-  out-of-band warnings, never errors: a `data()` or `share()` declaration still written
-  positionally (a top-level comma in its parameter list, or a lone `params` / `_params`),
-  and a component named `Params`, `Props` or `Shared`.
+  out-of-band warnings, never errors: a `data()` or `share()` method declared in a class body
+  (any class in the script, so a local base class counts) still written positionally (a
+  top-level comma in its parameter list, or a lone `params` / `_params`), and a component
+  named `Params`, `Props` or `Shared`. A call named `data` or `share`, or an object's method
+  of that name, is not a declaration; `puzzle check` reads the same rule
+  (`PositionalDataDecls`).
 - A script-less file's class comes from its filename (`classNameFromFilename`: bad runes →
   `_`, `_` prefix when the first rune can't start an identifier or is reserved).
 - **A class name the scan can't read to its end is a positioned error** (`nameCut`): a `\u`

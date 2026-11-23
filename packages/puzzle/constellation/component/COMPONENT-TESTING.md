@@ -27,8 +27,8 @@ connections:
   - FILE-VITEST-PLUGIN
   - DECISION-D196-NAMED-ROUTES
   - DECISION-D199-UPGRADE-PASS
-verified_at: '2026-11-21T22:33:06.881Z'
-verified_sha: c4c10f303caeac8050633ea434af17e4d3a75001
+verified_at: '2026-11-23T03:11:02.446Z'
+verified_sha: f90f22201ff6b00245f353d5f5f90bb7634bb963
 ---
 
 # App-author test utilities
@@ -37,7 +37,7 @@ The published `@magic-spells/puzzle/testing` subpath (`client-runtime/testing/`)
 
 ## Entry points
 
-- **`mountView(ViewClass, options)`** mounts one view into a detached container with a `{ store, router, formatters, idle }` ctx and no app boot. Absent services are built: a Store over `options.models` (with `options.adapter` validated and installed, so tracked finds can fetch), a function registry over `options.functions` (a `formatters` option throws, naming the rename; [[DECISION-D199-UPGRADE-PASS]]), and an inert router (`url()` returns a path as is and throws on a named target, since it has no route table, [[DECISION-D196-NAMED-ROUTES]]; navigation methods resolve doing nothing). With no app to observe, `ctx.idle()` runs `settled()` and resolves `true` ([[DECISION-D189-AGENT-HOOKS]]); a caller's `ctx.idle` wins. `route` (or `preloaded: true`) takes the preload-then-mount path so the first `data()` sees a route. `i18n: { locale, strings }` builds a translations service into the ctx and installs `t` (a caller `ctx.i18n` wins), awaiting it before construction.
+- **`mountView(ViewClass, options)`** mounts one view into a detached container with a `{ store, router, formatters, idle }` ctx and no app boot. Absent services are built: a Store over `options.models` (with `options.adapter` validated and installed, so tracked finds can fetch), a function registry over `options.functions` (a `formatters` option throws, naming the rename; [[DECISION-D199-UPGRADE-PASS]]), and an inert router with no route table (`url()` returns a path as is and throws on a named target, [[DECISION-D196-NAMED-ROUTES]]; `push()`/`replace()` resolve a `NavigationResult`, the same-path no-op `{ ok: true, route }` for the current path and `{ ok: false, reason: 'not-found' }` for any other target, [[DECISION-D182-NAVIGATION-RESULT]]; `prefetch()` resolves `false`, `views` is frozen and empty, and `go`/`back`/`forward` resolve doing nothing). With no app to observe, `ctx.idle()` runs `settled()` and resolves `true` ([[DECISION-D189-AGENT-HOOKS]]); a caller's `ctx.idle` wins. `route` (or `preloaded: true`) takes the preload-then-mount path so the first `data()` sees a route. `i18n: { locale, strings }` builds a translations service into the ctx and installs `t` (a caller `ctx.i18n` wins), awaiting it before construction.
 - **`createTestApp(config)`** boots a real [[COMPONENT-PUZZLE-APP]] on a detached container in memory routing (`memoryRouter({ initialPath: routerInitialPath })` — `routerInitialPath` is consumed here and never reaches PuzzleApp; [[DECISION-D159-ROUTER-MODE-FACTORIES]]). It owns `target` and `routerMode`; everything else passes through. `i18n: { locale, strings }` goes through PuzzleApp's internal `__i18n` seam, so the real wiring runs. One table only; multi-locale tests stub `fetch`.
 - Handles expose `element`, `find`/`findAll`, `click`, `type`, `destroy`, plus `setProps` (view) and `visit` (app); every action settles before resolving.
 - Re-exports `settled()`, `measureRenders()` ([[FILE-TESTING-RENDER-PROFILE]]), the WAAPI and IntersectionObserver fakes, and `installFixtures` ([[COMPONENT-FIXTURES]]).

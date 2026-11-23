@@ -11,14 +11,14 @@ connections:
   - FILE-BUILD-OPTIONS
   - DOC-SPEC-BUILD
   - TEST-BUILD-AND-DEV-PIPELINE
-verified_at: '2026-11-21T18:49:58.010Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-23T03:17:08.026Z'
+verified_sha: f90f22201ff6b00245f353d5f5f90bb7634bb963
 notes:
   - kind: state
     text: >-
       2026-11-08 trims: the test-only `rewriteShellHTML` wrapper is gone;
-      `rewriteShellHTMLRefs(source, renames, chunks, publicFiles, strict)` is the one rewriter, and
-      shell tests call it directly.
+      `rewriteShellHTMLRefs(source, dir, renames, chunks, publicFiles, strict)` is the one rewriter,
+      and shell tests call it directly.
 ---
 
 # shell.go
@@ -46,7 +46,8 @@ its preloads; that link is the only rewrite development makes. Intent:
   pages (compiler-output references only, no preloads, file untouched when nothing
   changes), then rewrites the shell. Local references keep deployment prefixes,
   queries and fragments; remote URLs and copied public files that share a compiler
-  name are left alone.
+  name are left alone, and a relative reference resolves against its own page's
+  directory first.
 - **Metafile paths resolve against the emitting pass's working directory**: the
   SPA pass leaves `AbsWorkingDir` unset (cwd), the page pass anchors at staging;
   both against the symlink-resolved staging tree. The preload closure is

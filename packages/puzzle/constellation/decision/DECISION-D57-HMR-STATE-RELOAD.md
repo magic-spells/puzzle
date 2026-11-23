@@ -24,9 +24,9 @@ notes:
     text: >-
       2026-11-08 review B1 (V-views): phase 2 used `setState(saved)` only, so `data()` keys derived
       from local state stayed stale after a dev reload (todos Completed tab showed all rows, Add
-      stayed disabled with a restored draft). restoreViewsImpl now calls `view.refresh()` after
-      `setState`; no extra paint, 0 production bytes (DCE'd). Covered by the hmr-dev-reload "local
-      drafts" test (`hasDraft` derived key).
+      stayed disabled with a restored draft). restoreViewsFromStorage now calls `view.refresh()`
+      after `setState`; no extra paint, 0 production bytes (DCE'd). Covered by the hmr-dev-reload
+      "local drafts" test (`hasDraft` derived key).
 ---
 
 # D57 — HMR is a state-preserving reload, not a per-module swap

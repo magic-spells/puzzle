@@ -30,7 +30,7 @@ this card holds the implementation rules behind it.
   The root `PersistentPreRunE` turns `--no-color` into `NO_COLOR=1` for every printer and
   child process, so **no subcommand may define its own `PersistentPreRunE` without
   chaining it**. `main()` also scans argv for `--no-color` before parsing, so usage errors
-  print uncoloured (`ui.ColorAllowed()` exposes the env gate).
+  print uncoloured.
 - **Version.** `version.go` holds the one `versionTemplate` (`{{.Name}} version
   {{.Version}}`) shared by `--version`/`-v` and the `version` subcommand. The version must
   stay the LAST field: upgrade's `binaryReportsVersion` reads it.
@@ -96,8 +96,8 @@ this card holds the implementation rules behind it.
 - **`add deploy`** ([[DECISION-D198-DEPLOY-TEMPLATES]], `add_deploy.go`) — the templates
   are embedded from the package's `deploy/` folder. `--static`/`--hybrid` picks the
   template, else the config's `output`; a config that fails to load is an error, never a
-  guess. Every destination is resolved before the first write, so a clash without
-  `--force` leaves the app untouched.
+  guess. Each host writes one file under the template's own name, and a clash without
+  `--force` is refused before anything is written.
 - **`add skills` / `upgrade skills`** ([[DECISION-D78-AGENT-SKILL-DISTRIBUTION]]) —
   symlinked destinations are written through only under `--force`, never removed.
 - **`upgrade`** ([[DECISION-D76-CLI-UPGRADE]]) — `detectInstallContext` classifies from

@@ -9,8 +9,8 @@ summary: >-
 connections:
   - COMPONENT-TESTING
   - DECISION-D94-TESTING-EXPORT
-verified_at: '2026-11-21T22:33:06.881Z'
-verified_sha: c4c10f303caeac8050633ea434af17e4d3a75001
+verified_at: '2026-11-23T03:11:02.446Z'
+verified_sha: f90f22201ff6b00245f353d5f5f90bb7634bb963
 ---
 
 # testing/index.js

@@ -17,7 +17,7 @@ Enforced by [[DOC-SPEC-ANATOMY]] §2, which lists the current keys.
 
 ## Decision
 
-- The `PuzzleApp` config is one **flat** object. The core is `{ target, routes, models, functions, apiURL }`; every other key (`scrollBehavior`, `routerMode`, `routerBase`, `transitionMode`, `adapter`, `storage`, the app lifecycle hooks of [[DECISION-D66-APP-LIFECYCLE-HOOKS]], …) was added by its own decision and is passed through only when set.
+- The `PuzzleApp` config is one **flat** object. The core is `{ target, routes, models, functions, apiURL }`; every other key (`scrollBehavior`, `routerMode`, `routerBase`, `transitionMode`, `adapter`, `storage`, the app lifecycle hooks of [[DECISION-D66-APP-LIFECYCLE-HOOKS]], …) was added by its own decision, and an unset one takes its default.
 - New surface goes in as a flat key with an imported value when it needs one (`routerMode: hashRouter()`), never as a nested options object.
 - There is no app-level `computed`, `methods`, `settings` map or global `events` map: state lives in the store and in views.
 

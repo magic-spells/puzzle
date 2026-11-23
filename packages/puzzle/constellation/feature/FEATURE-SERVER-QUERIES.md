@@ -114,7 +114,7 @@ The mock adapter (`/fixtures`) serves `?page`/`?limit` and an `after` cursor by 
 **Runtime (`client-runtime/datastore/adapter.js`, all adapter-side):**
 - Read state gains `queries` (LRU `Map` of canonical key → `{ type, query, rows, meta, gen, mark }`), `staleType` (`type → gen`) and `staleRecord` (`identity → gen`).
 - `canonicalQuery(type, query)` builds the key and throws on a value that is not a string, finite number, boolean or an array of those.
-- `_findManyTracked` routes a query read to a new `_faultQuery` (dedupe on `state.many` under the query key) and returns the entry's rows with `meta`; `_findOneTracked` checks the stale marks on a hit.
+- `_findManyTracked` routes a query read to `_faultMany`, the one findMany fault (dedupe on `state.many` under the query key; the collection uses its bare type), and returns the entry's rows with `meta`; `_findOneTracked` hands a present record to `_faultOne`, which checks the stale marks.
 - `loadMany` accepts `{ records, meta }`, and with options writes the query entry.
 - The adapter overrides `Store.prototype.findMany` only for the `query` branch, so an untracked query read returns cached rows; a no-query call goes straight to core.
 - `invalidate()` and `syncStatus()` install on the Store prototype; `saveRecord`/`deleteRecord` run through `_write`, which sets and clears per-record status and notifies; `save()`/`delete()` decorate their promise with `pending`/`error`.

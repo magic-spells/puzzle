@@ -18,7 +18,7 @@ more.
 ## Decision
 
 - **Port scan:** `serve.ListenHost(host, port, strict)`
-  (`compiler/internal/serve`; `Listen` is the default-host form) tries
+  (`compiler/internal/serve`) tries
   `port … port+PortScanLimit-1` (`PortScanLimit = 10`). `puzzle dev` and
   `puzzle preview` (D148) both bind through it.
 - The banner and browser-open read `serve.BoundPort(ln, opts.Port)`, never

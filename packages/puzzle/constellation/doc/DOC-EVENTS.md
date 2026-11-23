@@ -75,7 +75,7 @@ Three forms (§5):
 | Shared records | `store.createRecord`, `record.update()`, `record.destroy()` | Yes, on every subscribed view |
 
 - `setState()` re-runs `data()` only when `data()` read a written key through `getData()` or `getState()` ([[DECISION-D23-REFRESH-PATTERN]]), so a field `data()` never looks at stays cheap. Several writes before the next render share one run. Do not add `this.refresh()` after it.
-- A `data()` commit replaces the model, so a view mixing local state and store data reads its local values back in `data()` with `this.getData()`.
+- A `data()` commit replaces only what `data()` returned. Values written with `setState()` stay in the model, so `data()` never has to return them. Read one in `data()` (with `this.getState()`) only to derive a value from it, and return that value under a different key, or it hides the raw one.
 - Mutate records through `update()` or the store, not by assigning fields or editing copies: a store mutation re-runs `data()` on every view that queried those records.
 
 ```js

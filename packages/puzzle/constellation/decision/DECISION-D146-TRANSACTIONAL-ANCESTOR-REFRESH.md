@@ -48,10 +48,12 @@ would no-op (destroyed, leaving, dev-profiler-blocked). The router pushes
 synchronously after `#state` is assigned, inside the `#committing` window.
 `commit()` swaps params/props/route, applies the held subscription reconcile,
 bumps `#runToken`, and re-renders from the computed model — `data()` runs once.
-Every non-committing exit calls `discard()` (gate catch, token supersession,
-SSG-takeover supersession, `#abandon`), and `#navigate` wraps the load phase
-and `#swap` in a `finally` that discards every handle, so even a user
-`render()`/`afterUpdate()` throw cannot strand holds. Handles are idempotent
+`#navigate` wraps the load phase and `#swap` in a `finally` that discards every
+handle. It covers every exit that does not commit, both supersession returns
+(token and SSG takeover) included, and even a user `render()`/`afterUpdate()`
+throw, so holds cannot strand. The data-failure catch also discards before its
+retry redraw awaits, and `#abandon` discards as it drops the fresh instances.
+Handles are idempotent
 (`settled`). A discard is invisible to the app: no render, hook, error view or
 `onStoreChange`; D145's `navigation` report is the only signal.
 

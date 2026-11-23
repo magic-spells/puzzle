@@ -6,8 +6,8 @@ language: javascript
 summary: Dev-only snapshot and two-phase restore across full reloads.
 connections:
   - COMPONENT-DEVSTATE
-verified_at: '2026-11-21T18:49:58.010Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-23T03:17:08.026Z'
+verified_sha: f90f22201ff6b00245f353d5f5f90bb7634bb963
 ---
 
 # devstate.js

@@ -51,8 +51,9 @@ D177 also has blocks in `static-kernel`, `ssg-head`, `router-head` and
   mount.
 - **Router** (`router-locale-prefix`): reading and writing under the composed base,
   `url()` options, click interception (a link is taken only when its locale base equals
-  the router's), the route-collision throw, the four encoders that call `localeBase`
-  agreeing.
+  the router's), the route-collision throw, the four call paths agreeing (`Router.url`,
+  the write side, the router stub, and the hybrid prerender's `url` read from a real
+  prerender pass).
 - **Hardening** (`i18n-hardening`): a tag Intl rejects picks a plural form instead of
   throwing mid-render; an overtaken `setLocale` never reports a switch that did not
   happen; the dev did-you-mean is computed only when its warning prints.

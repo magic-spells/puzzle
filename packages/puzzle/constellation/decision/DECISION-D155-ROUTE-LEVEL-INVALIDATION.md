@@ -62,7 +62,7 @@ byte-identical to `puzzle build --static` either way. Logic:
    [[DECISION-D175-TRANSLATIONS]]).
 3. A public path in neither graph set → copy only, zero routes (even if
    deleted). A public path the graph knows is a module first and falls through.
-   Public dir resolves via `publicDir(root)` (`app/public` or root `public/`).
+   Public dir resolves via `PublicDir(root)` (`app/public` or root `public/`).
 4. A vanished path (delete/rename) → full.
 5. **Render-wide checked first** → full. The sets overlap (a store seed
    `beforeMount` runs and one view imports); attributing it would leave other

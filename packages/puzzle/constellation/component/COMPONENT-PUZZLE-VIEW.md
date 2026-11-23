@@ -153,7 +153,8 @@ All are reserved by [[DOC-SPEC-ANATOMY]] §4 and never spelled in templates.
 - **No list method on the class, deliberately**: loops call `listRows` (imported
   as `__l`), and `PuzzleView` must never import `views/listBlock.js`, or loop-free
   apps pay for it ([[FILE-LIST-BLOCK]]).
-- Dev readers `_derived()`, `_vnodeTree()` (with the public `getState()`) serve the DevTools
+- Dev readers `_derived()`, `_vnodeTree()` (with the public `getState()` and
+  `shared`) serve the DevTools
   bridge ([[FILE-DEVTOOLS]]); profiler state lives in [[FILE-DEVPERF]] WeakMaps
   behind inline `__PUZZLE_DEV__` probes. Dev builds register mounted views with
   [[COMPONENT-DEVSTATE]].

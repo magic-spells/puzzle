@@ -66,11 +66,11 @@ tested config per host, and `puzzle add deploy <host>` copies it in.
   natively; Netlify, nginx and Apache carry a commented example block, and the
   CLI prints the exact line per non-default locale. Vercel can't (only the
   top-level `404.html`), and the CLI says so.
-- **Writes like `add piece`**: all destinations are checked before the first
-  write; identical bytes are "already matches … nothing to do"; differing
-  bytes are refused without `--force`. One host per run. No name lists the
-  hosts. D3 holds: the command writes whole template files and never edits a
-  user file in place; host-side steps are printed.
+- **Writes like `add piece`**: each host writes one file under the template's
+  own name, checked before it is written; identical bytes are "already matches
+  … nothing to do"; differing bytes are refused without `--force`. One host per
+  run. No name lists the hosts. D3 holds: the command writes whole template
+  files and never edits a user file in place; host-side steps are printed.
 - **go:embed needs `all:`** so `_headers` and `.htaccess` are embedded.
 - **Magic Spells Sites is not a host here**: its deploy config isn't
   documented in the repo. Add a row when it is.

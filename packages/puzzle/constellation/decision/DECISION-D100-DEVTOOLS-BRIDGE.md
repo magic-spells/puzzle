@@ -40,7 +40,7 @@ framework internals. The protocol contract is SPEC §55.
   dev-gated code — app mount/unmount (`__PUZZLE_APP__` publish/clear), store
   notification delivery (flush keys + notified set), router `#commitState`, and
   devstate's `registerView`/`unregisterView`. `PuzzleView` carries inert readers
-  `_derived()` and `_vnodeTree()`, and the bridge reads the state layer through the public `getState()` (D191).
+  `_derived()` and `_vnodeTree()`, and the bridge reads the state layer through the public `getState()` (D191) and what ancestors share through the public `shared` getter (D197).
 - **Static pages** (`output: 'static'`, D81) mount through `mountStatic` with no
   `PuzzleApp`, so they never register; the extension shows its no-app state
   there and says why.
