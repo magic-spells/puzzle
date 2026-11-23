@@ -53,6 +53,12 @@ has a `tsconfig.json`),
 `skills`),
 `upgrade`, `doctor`, `info`.
 
+- Inside a project, run the CLI as `npm run dev`, `npm run build` or
+  `npx puzzle <command>`, never a bare global `puzzle`: the project's own CLI
+  always matches its installed `@magic-spells/puzzle`. A CLI 0.10 or later from
+  another 0.x minor stops before compiling or writing code, naming both
+  versions, and `puzzle doctor` fails its runtime row the same way; an older
+  one builds against the wrong runtime without a word.
 - `dev` and `build` both take `--fixtures` (see Fixtures below).
 - `dev` and `build` both take `--profile-build` (or `PUZZLE_PROFILE_BUILD=1`):
   per-phase timing tables on stderr — check it before guessing why a build or
@@ -70,9 +76,9 @@ has a `tsconfig.json`),
   version. Re-running `puzzle add skills` skips an install that is already
   current and asks before replacing an older one (a non-interactive run needs
   `--force` for that).
-- Upgrading from 0.9: `puzzle check` lists every site 0.10 renamed (a bare
+- Upgrading from 0.9: `npx puzzle check` lists every site 0.10 renamed (a bare
   `<Slot/>` router outlet, `this.setData(`, positional `data(params, props)`,
-  the `formatters` config key) and fails; `puzzle check --fix` rewrites them
+  the `formatters` config key) and fails; `npx puzzle check --fix` rewrites them
   (`<Outlet/>` in layouts and views, `<Children/>` in components), then
   type-checks.
 

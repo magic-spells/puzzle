@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/magic-spells/puzzle/compiler/internal/build"
 	"github.com/magic-spells/puzzle/compiler/internal/check"
 	"github.com/magic-spells/puzzle/compiler/internal/codemod"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
@@ -41,6 +42,11 @@ listed for you to finish by hand.`,
 		dir := dirArg(args)
 		fix, _ := cmd.Flags().GetBool("fix")
 		out := ui.New(os.Stdout)
+		// a CLI on the other side of a breaking release from the project's install
+		// must not rewrite or check its code.
+		if _, err := build.PairRuntime(dir); err != nil {
+			return err
+		}
 		// the upgrade pass (D199) runs first: code written for an older release
 		// would otherwise surface as type errors that do not say what changed.
 		if err := runCodemod(dir, fix, out); err != nil {
@@ -84,7 +90,7 @@ func runCodemod(dir string, fix bool, out *ui.Printer) error {
 		return nil
 	}
 	fmt.Fprint(os.Stdout, codemod.Format(res.Changes))
-	return fmt.Errorf("%d site%s written for an older Puzzle (D199) — run puzzle check --fix to rewrite %s", n, textutil.Plural(n), them(n))
+	return fmt.Errorf("%d site%s written for an older Puzzle (D199) — run npx puzzle check --fix to rewrite %s", n, textutil.Plural(n), them(n))
 }
 
 // them is the pronoun for a count.

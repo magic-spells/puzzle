@@ -830,7 +830,7 @@ func printStaticSummary(s staticSummary, bundleCount int, quiet bool) {
 func missingFunctionsModuleNote(absRoot string) string {
 	if old := findStaticModule(absRoot, "app/formatters.js", "app/formatters.ts"); old != "" {
 		return "custom functions registered in the app entry will not exist client-side in static mode — " +
-			old + " is app/functions.js (or .ts) since 0.10: rename it (puzzle check --fix does it)"
+			old + " is app/functions.js (or .ts) since 0.10: rename it (npx puzzle check --fix does it)"
 	}
 	return "custom functions registered in the app entry will not exist client-side in static mode — export them from app/functions.js or app/functions.ts"
 }

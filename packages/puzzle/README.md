@@ -24,10 +24,17 @@ puzzle init my-app
 cd my-app
 npm install
 
-puzzle dev     # develop with live reload
-npm test       # run the starter test in tests/
-puzzle build   # build for production
+npm run dev     # develop with live reload
+npm test        # run the starter test in tests/
+npm run build   # build for production
 ```
+
+Inside a project, run Puzzle through its npm scripts or `npx puzzle <command>`.
+Both use the CLI installed with the project, which always matches the
+project's Puzzle; a global `puzzle` 0.10 or later from another 0.x minor stops
+and says so, but an older one builds against the wrong runtime without a word,
+so upgrade it (`puzzle upgrade`) or use the project's CLI.
+`npx @magic-spells/puzzle init my-app` scaffolds without the global install.
 
 Or add Puzzle to an existing project — one dev dependency gives you both the
 client runtime and the CLI:
@@ -643,7 +650,7 @@ Puzzle — ready-made `.pzl` components (and their styles) you can drop into any
 app. It lives in this monorepo and releases in lockstep with the framework:
 
 ```bash
-puzzle add piece <name>
+npx puzzle add piece <name>
 ```
 
 Pieces are fetched from the `@magic-spells/puzzle-pieces` npm package,
@@ -687,6 +694,12 @@ file relationships, flows, and plans so future AI conversations can recover the
 full project context and build better plans without re-deriving earlier work.
 
 ## CLI Commands
+
+Inside a project, type these as `npx puzzle <command>` (or use the npm
+scripts) so the project's own CLI runs: it always matches the project's
+installed Puzzle. A CLI 0.10 or later from another 0.x minor stops before
+compiling or writing code and names both versions (`puzzle doctor` reports the
+same); an older one builds against the wrong runtime without a word.
 
 ```bash
 # Development server with live reload (-p is --port; --host exposes it on the LAN)

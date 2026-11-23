@@ -208,7 +208,7 @@ func sourceDir(root string) (string, error) {
 	dir := filepath.Join(root, "app")
 	info, err := os.Stat(dir)
 	if err != nil || !info.IsDir() {
-		return "", fmt.Errorf("no app/ directory in %s — run puzzle check from a Puzzle project root", root)
+		return "", fmt.Errorf("no app/ directory in %s — run npx puzzle check from a Puzzle project root", root)
 	}
 	return dir, nil
 }

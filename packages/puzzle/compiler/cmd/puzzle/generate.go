@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/magic-spells/puzzle/compiler/internal/build"
 	"github.com/magic-spells/puzzle/compiler/internal/generate"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 	"github.com/spf13/cobra"
@@ -67,6 +68,10 @@ Existing files are never overwritten unless --force (-f) is given.`,
 		start, _ := cmd.Flags().GetString("dir")
 		root, err := generate.FindProjectRoot(start)
 		if err != nil {
+			return err
+		}
+		// a stub is written in this CLI's dialect, so it must pair with the install
+		if _, err := build.PairRuntime(root); err != nil {
 			return err
 		}
 

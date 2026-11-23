@@ -57,7 +57,7 @@ func TestBareSlotIsAnError(t *testing.T) {
 		if !strings.Contains(pe.Message, "<Slot> needs a name since 0.10 (D199)") {
 			t.Errorf("%s: message = %q", body, pe.Message)
 		}
-		for _, want := range []string{"<Outlet/>", "<Children/>", "puzzle check --fix"} {
+		for _, want := range []string{"<Outlet/>", "<Children/>", "npx puzzle check --fix"} {
 			if !strings.Contains(pe.Message+pe.Note, want) {
 				t.Errorf("%s: error and note never mention %s", body, want)
 			}

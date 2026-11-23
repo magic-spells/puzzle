@@ -1,9 +1,11 @@
 package main
 
 import (
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/magic-spells/puzzle/compiler/internal/build"
@@ -51,6 +53,28 @@ func stubProject(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return root
+}
+
+// generate and add piece write source for this CLI's release, so an install
+// across a breaking release stops them before anything is written; a matching
+// install does not.
+func TestWritingCommandsPairWithTheInstall(t *testing.T) {
+	reg := writeCmdFixtureRegistry(t)
+	for installed, stops := range map[string]bool{"0.9.0": true, "0.10.0": false} {
+		root := stubProject(t)
+		fakeRuntime(t, root, installed)
+		mustWrite(t, filepath.Join(root, "app", "styles", "styles.css"), "@import \"tailwindcss\";\n")
+		errs := map[string]error{
+			"app/layouts/Wide.pzl":         runGenerate(t, root, "layout", "Wide"),
+			"app/components/ui/Button.pzl": runAdd(io.Discard, plainPrinter(), root, []string{"piece", "button"}, reg, false),
+		}
+		for file, err := range errs {
+			stopped := err != nil && strings.Contains(err.Error(), "Puzzle 0.9.0 installed")
+			if written := fsFileExists(filepath.Join(root, file)); stopped != stops || written == stops {
+				t.Errorf("installed %s, %s: err = %v, written = %v", installed, file, err, written)
+			}
+		}
+	}
 }
 
 func TestGenerateCommandCreatesComponent(t *testing.T) {

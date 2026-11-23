@@ -43,6 +43,25 @@ func TestCompare(t *testing.T) {
 	}
 }
 
+func TestBreakingBoundary(t *testing.T) {
+	for _, tt := range []struct {
+		from, to string
+		want     bool
+	}{
+		{"0.9.1", "0.10.2", true},
+		{"0.10.0", "0.10.2", false},
+		{"^0.9.0", "0.10.2", true},
+		{"~0.10.0", "0.10.2", false},
+		{"1.2.0", "1.3.0", false},
+		{"1.9.0", "2.0.0", true},
+		{"latest", "0.10.2", false},
+	} {
+		if got := Breaking(tt.from, tt.to); got != tt.want {
+			t.Errorf("Breaking(%q, %q) = %v, want %v", tt.from, tt.to, got, tt.want)
+		}
+	}
+}
+
 // stubSpawn replaces the detached-helper spawn with a counter, so the tests
 // can observe that a refresh was REQUESTED without forking anything. The real
 // spawn is exercised end to end in TestDetachedRefreshOutlivesItsParent.

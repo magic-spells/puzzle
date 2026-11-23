@@ -5,7 +5,16 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/magic-spells/puzzle/compiler/internal/build"
 )
+
+// TestMain runs the package without the developer's PUZZLE_RUNTIME: every
+// command that compiles or writes source reads it first.
+func TestMain(m *testing.M) {
+	os.Unsetenv(build.RuntimeEnvVar)
+	os.Exit(m.Run())
+}
 
 func TestBuildRuntimePreflightStopsBeforeEsbuild(t *testing.T) {
 	dir := t.TempDir()

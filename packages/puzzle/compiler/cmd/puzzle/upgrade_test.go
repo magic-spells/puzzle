@@ -1808,7 +1808,7 @@ func (f scopeFixture) run(t *testing.T, executable string, check bool, env upgra
 
 func versionAt(t *testing.T, packageJSON string) string {
 	t.Helper()
-	v, err := installedVersion(packageJSON)
+	v, err := update.PackageVersion(packageJSON)
 	if err != nil {
 		return ""
 	}
@@ -1993,25 +1993,6 @@ func TestUpgradeWithoutTerminalUpgradesOnlyTheRunningInstall(t *testing.T) {
 			t.Errorf("output missing %q:\n%s", want, out)
 		}
 	})
-}
-
-func TestBreakingBoundary(t *testing.T) {
-	for _, tt := range []struct {
-		from, to string
-		want     bool
-	}{
-		{"0.9.1", "0.10.2", true},
-		{"0.10.0", "0.10.2", false},
-		{"^0.9.0", "0.10.2", true},
-		{"~0.10.0", "0.10.2", false},
-		{"1.2.0", "1.3.0", false},
-		{"1.9.0", "2.0.0", true},
-		{"latest", "0.10.2", false},
-	} {
-		if got := breaking(tt.from, tt.to); got != tt.want {
-			t.Errorf("breaking(%q, %q) = %v, want %v", tt.from, tt.to, got, tt.want)
-		}
-	}
 }
 
 // TestUpgradeProjectAcrossABreakingRelease: the question says the project is

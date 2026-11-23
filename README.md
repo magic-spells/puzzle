@@ -25,10 +25,18 @@ puzzle init my-app
 cd my-app
 npm install
 
-puzzle dev     # dev server with live reload
-npm test       # run the starter tests in tests/ with Vitest
-puzzle build   # production build to dist/
+npm run dev     # dev server with live reload
+npm test        # run the starter tests in tests/ with Vitest
+npm run build   # production build to dist/
 ```
+
+Inside a project, run Puzzle through its npm scripts or `npx puzzle <command>`.
+Both use the CLI installed with the project, which always matches the
+project's Puzzle; a global `puzzle` 0.10 or later from another 0.x minor stops
+and says so, but an older one builds against the wrong runtime without a word,
+so upgrade it (`puzzle upgrade`) or use the project's CLI.
+The global install is for `puzzle init`, and `npx @magic-spells/puzzle init
+my-app` works without it.
 
 `puzzle init my-site --template static` starts from a static site instead:
 plain HTML pages for Home and About, with a header and a 404. Puzzle needs
@@ -65,7 +73,7 @@ my-app/
 ```
 
 `puzzle build` writes `dist/`. `.puzzle/` is the compiler's scratch directory
-and is gitignored. `puzzle generate view Album` (or `component`, `layout`,
+and is gitignored. `npx puzzle generate view Album` (or `component`, `layout`,
 `model`) adds a stub in the right folder.
 
 ## How it works
@@ -346,7 +354,7 @@ Every package in the release train carries the framework's version.
 
 [Puzzle Pieces](packages/puzzle-pieces) is the official component library:
 ready-made `.pzl` components you copy into an app with
-`puzzle add piece <name>`. Preview them at
+`npx puzzle add piece <name>`. Preview them at
 [magicspells.io/puzzle-pieces](https://magicspells.io/puzzle-pieces).
 
 ### Editor support
