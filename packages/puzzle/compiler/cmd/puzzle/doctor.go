@@ -93,7 +93,8 @@ func runDoctor(w io.Writer, out *ui.Printer, dir string) int {
 		default:
 			mark, detail = out.Yellow("!"), out.Dim(c.Detail)
 		}
-		fmt.Fprintf(w, "  %s %s  %s\n", mark, fmt.Sprintf("%-20s", c.Name), detail)
+		// a detail's later lines start under its first
+		fmt.Fprintf(w, "  %s %-20s  %s\n", mark, c.Name, strings.ReplaceAll(detail, "\n", "\n"+strings.Repeat(" ", 24)))
 	}
 
 	fmt.Fprintln(w)
@@ -189,19 +190,24 @@ func doctorChecks(dir string) []doctorCheck {
 		}
 	}
 
-	// Runtime package (warning): the env override, the installed package, or the
-	// in-repo fallback — reported in the same precedence configureRuntime uses.
-	// The override is called out by name because it is invisible otherwise: a
+	// Runtime package: the env override, the in-repo runtime, or the installed
+	// package — reported in the same precedence configureRuntime uses. The
+	// override is called out by name because it is invisible otherwise: a
 	// build against a checkout you forgot you named looks exactly like a normal
-	// one, and mismatched compiler/runtime pairs are hard to diagnose after
-	// the fact.
+	// one. An installed package that does not pair with this CLI fails with the
+	// message build and dev stop on; a missing one is only a warning.
+	installed := build.FindInstalledRuntime(dir)
 	switch {
 	case os.Getenv(build.RuntimeEnvVar) != "":
 		pass("runtime package", build.RuntimeEnvVar+"="+os.Getenv(build.RuntimeEnvVar))
-	case build.FindInstalledRuntime(dir) != "":
-		pass("runtime package", "@magic-spells/puzzle installed")
 	case build.FindRuntime(dir) != "":
 		pass("runtime package", "@magic-spells/puzzle (in-repo runtime)")
+	case installed != "":
+		if v, err := build.InstalledVersion(installed); err != nil {
+			fail("runtime package", err.Error())
+		} else {
+			pass("runtime package", "@magic-spells/puzzle "+v+" installed")
+		}
 	default:
 		warn("runtime package", "@magic-spells/puzzle not installed — run npm install")
 	}

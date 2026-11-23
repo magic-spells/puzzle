@@ -115,6 +115,19 @@ func Compare(a, b string) (int, error) {
 	return comparePrerelease(av.pre, bv.pre), nil
 }
 
+// Breaking reports whether from → to crosses a release allowed to break code:
+// a new major, or a new minor while the major is 0. from may be a declared range
+// such as ^0.9.0. A string with no major.minor ("latest", "") reads as not
+// breaking.
+func Breaking(from, to string) bool {
+	f := strings.SplitN(strings.TrimLeft(from, "^~=v<> "), ".", 3)
+	t := strings.SplitN(to, ".", 3)
+	if len(f) < 2 || len(t) < 2 {
+		return false
+	}
+	return f[0] != t[0] || f[0] == "0" && f[1] != t[1]
+}
+
 type semver struct {
 	core [3]int
 	pre  string

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/magic-spells/puzzle/compiler/internal/build"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
 
@@ -68,6 +69,7 @@ func TestCheckCodemodOutsideAnApp(t *testing.T) {
 // stops puzzle check --fix with its own error, not an unrelated one.
 func TestCheckFixReportsWhatStoppedIt(t *testing.T) {
 	root := oldApp(t)
+	fakeRuntime(t, root, "0.10.0")
 	layouts := filepath.Join(root, "app", "layouts")
 	if err := os.Symlink("gone", filepath.Join(layouts, ".#Default.pzl")); err != nil {
 		t.Skipf("symlinks unsupported here: %v", err)
@@ -80,5 +82,19 @@ func TestCheckFixReportsWhatStoppedIt(t *testing.T) {
 	}
 	if _, err := execRoot(t, "check", "--fix", root); err == nil || !strings.Contains(err.Error(), "Gone.pzl") {
 		t.Errorf("a file the pass cannot read: err = %v, want its error", err)
+	}
+}
+
+// a CLI across a breaking release from the project's install stops before the
+// upgrade pass rewrites anything: the code would no longer fit the runtime.
+func TestCheckFixStopsOnAMismatchedInstall(t *testing.T) {
+	t.Setenv(build.RuntimeEnvVar, "")
+	root := oldApp(t)
+	fakeRuntime(t, root, "0.9.0")
+	if _, err := execRoot(t, "check", "--fix", root); err == nil || !strings.Contains(err.Error(), "Puzzle 0.9.0 installed") {
+		t.Errorf("err = %v, want the version-pair stop", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(root, "app", "layouts", "Default.pzl")); string(got) != oldLayout {
+		t.Errorf("the layout was rewritten:\n%s", got)
 	}
 }

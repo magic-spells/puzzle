@@ -9,7 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/magic-spells/puzzle/compiler/internal/build"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
+	"github.com/magic-spells/puzzle/compiler/internal/version"
 )
 
 func doctorRequireNode(t *testing.T) {
@@ -127,5 +129,35 @@ func TestDoctorCommandExitsNonZero(t *testing.T) {
 	err := doctorCmd.RunE(doctorCmd, []string{dir})
 	if err == nil {
 		t.Fatal("expected doctor to return an error when checks fail")
+	}
+}
+
+// fakeRuntime installs a stand-in runtime package at version v under dir and
+// returns its client-runtime/index.js, pinning this CLI to 0.10.0 for the test.
+func fakeRuntime(t *testing.T, dir, v string) string {
+	t.Helper()
+	previous := version.Version
+	version.Version = "0.10.0"
+	t.Cleanup(func() { version.Version = previous })
+	pkg := filepath.Join(dir, "node_modules", "@magic-spells", "puzzle")
+	mustWrite(t, filepath.Join(pkg, "package.json"), `{"name":"@magic-spells/puzzle","version":"`+v+`"}`)
+	mustWrite(t, filepath.Join(pkg, "client-runtime", "index.js"), "export {}\n")
+	return filepath.Join(pkg, "client-runtime", "index.js")
+}
+
+// The runtime row names the installed version, and a pair across a breaking
+// release fails with the message build and dev stop on.
+func TestDoctorRuntimeVersion(t *testing.T) {
+	t.Setenv(build.RuntimeEnvVar, "")
+	for installed, status := range map[string]string{"0.10.1": doctorPass, "0.9.0": doctorFail} {
+		dir := healthyProject(t)
+		want := doctorCheck{"runtime package", status, "@magic-spells/puzzle " + installed + " installed"}
+		if _, err := build.InstalledVersion(fakeRuntime(t, dir, installed)); err != nil {
+			want.Detail = err.Error()
+		}
+		checks := doctorChecks(dir)
+		if got := checks[len(checks)-1]; got != want {
+			t.Errorf("installed %s: got %+v, want %+v", installed, got, want)
+		}
 	}
 }

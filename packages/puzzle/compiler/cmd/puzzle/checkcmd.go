@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/magic-spells/puzzle/compiler/internal/build"
 	"github.com/magic-spells/puzzle/compiler/internal/check"
 	"github.com/magic-spells/puzzle/compiler/internal/codemod"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
@@ -41,6 +42,11 @@ listed for you to finish by hand.`,
 		dir := dirArg(args)
 		fix, _ := cmd.Flags().GetBool("fix")
 		out := ui.New(os.Stdout)
+		// the same stop build and dev make: a CLI on the other side of a breaking
+		// release from the project's install must not rewrite or check its code.
+		if err := build.PreflightRuntime(dir); err != nil {
+			return err
+		}
 		// the upgrade pass (D199) runs first: code written for an older release
 		// would otherwise surface as type errors that do not say what changed.
 		if err := runCodemod(dir, fix, out); err != nil {

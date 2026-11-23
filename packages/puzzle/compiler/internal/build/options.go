@@ -262,8 +262,9 @@ func configureRuntime(absRoot string, buildOpts *api.BuildOptions, pl *plugin.Pl
 // It exists for the `puzzle-dev`-style workflow: building a working-tree
 // COMPILER against a working-tree RUNTIME in some other project. Without it the
 // compiler can only ever swap itself — the runtime is whatever that project's
-// node_modules holds — so a dev CLI silently pairs new compiler with published
-// runtime, and nothing says so.
+// node_modules holds — so a dev CLI pairs new compiler with published runtime:
+// PreflightRuntime stops that pair across a breaking release, and within one
+// nothing says so.
 //
 // The value is the package ROOT (the directory holding client-runtime/), not
 // the index.js inside it, so it reads the same as a repo path:

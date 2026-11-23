@@ -1,6 +1,7 @@
 package build
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -8,6 +9,8 @@ import (
 	"path/filepath"
 
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
+	"github.com/magic-spells/puzzle/compiler/internal/update"
+	"github.com/magic-spells/puzzle/compiler/internal/version"
 )
 
 // PreflightRuntime verifies that the runtime resolver used by configureRuntime
@@ -18,6 +21,11 @@ import (
 // root is the raw command-line directory, so it is checked first: a mistyped
 // `puzzle build typo-dir` must say the directory is missing, not send the user
 // to npm install.
+//
+// An installed runtime must also pair with this CLI (InstalledVersion). The two
+// development sources are not compared: PUZZLE_RUNTIME names a checkout on
+// purpose, and an app inside this repo builds against the working tree, whose
+// version only moves at release time.
 func PreflightRuntime(root string) error {
 	if info, err := os.Stat(root); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -27,8 +35,12 @@ func PreflightRuntime(root string) error {
 	} else if !info.IsDir() {
 		return fmt.Errorf("puzzle: %s is not a directory", root)
 	}
-	if envRuntime() != "" || FindRuntime(root) != "" || FindInstalledRuntime(root) != "" {
+	if envRuntime() != "" || FindRuntime(root) != "" {
 		return nil
+	}
+	if runtime := FindInstalledRuntime(root); runtime != "" {
+		_, err := InstalledVersion(runtime)
+		return err
 	}
 
 	if command := packageManagerInstallCommand(root); command != "" {
@@ -40,6 +52,29 @@ func PreflightRuntime(root string) error {
 	return fmt.Errorf(
 		"puzzle: @magic-spells/puzzle is not installed in this project.\nRun `npm install` (or your package manager's install) and try again.",
 	)
+}
+
+// InstalledVersion reads the version of the installed runtime FindInstalledRuntime
+// found, and fails when it and this CLI are on different sides of a breaking
+// release (update.Breaking). The compiler emits code for its own runtime, so such
+// a pair builds without an error and ships a blank page. It happens when a global
+// CLI is run inside a project; the project's own CLI always matches its install.
+func InstalledVersion(runtime string) (string, error) {
+	var pkg struct {
+		Version string `json:"version"`
+	}
+	data, _ := os.ReadFile(filepath.Join(filepath.Dir(filepath.Dir(runtime)), "package.json"))
+	_ = json.Unmarshal(data, &pkg)
+	if !update.Breaking(pkg.Version, version.Version) {
+		return pkg.Version, nil
+	}
+	upgrade := "Or upgrade the project:     puzzle upgrade"
+	if cmp, _ := update.Compare(version.Version, pkg.Version); cmp < 0 {
+		upgrade = "Or upgrade this CLI:        puzzle upgrade"
+	}
+	return pkg.Version, fmt.Errorf("This project has Puzzle %s installed, and this CLI is %s.\n"+
+		"  Use the project's own CLI:  npm run dev, npm run build, or npx puzzle <command>\n  %s",
+		pkg.Version, version.Version, upgrade)
 }
 
 // packageManagerInstallCommand names the install command for the lockfile

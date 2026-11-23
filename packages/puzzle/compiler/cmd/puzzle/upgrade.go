@@ -224,18 +224,6 @@ func older(v, latest string) bool {
 	return err != nil || cmp < 0
 }
 
-// breaking reports whether from → to crosses a release allowed to break code:
-// a new major, or a new minor while the major is 0. from may be a declared range
-// such as ^0.9.0.
-func breaking(from, to string) bool {
-	f := strings.SplitN(strings.TrimLeft(from, "^~=v<> "), ".", 3)
-	t := strings.SplitN(to, ".", 3)
-	if len(f) < 2 || len(t) < 2 {
-		return false
-	}
-	return f[0] != t[0] || f[0] == "0" && f[1] != t[1]
-}
-
 // upgradeEnvironment carries what the post-upgrade skill refresh needs: where
 // agent config dirs live, and whether we may prompt.
 type upgradeEnvironment struct {
@@ -363,7 +351,7 @@ func (s installContext) question(latest string) string {
 		return "Upgrade " + s.name() + "?"
 	}
 	q := "Upgrade " + s.name() + " in " + s.dir + "?"
-	if breaking(s.from(), latest) {
+	if update.Breaking(s.from(), latest) {
 		q += " " + s.from() + " → " + latest + " may have breaking changes"
 	}
 	return q
@@ -395,7 +383,7 @@ func upgradeScope(stdout, stderr io.Writer, out *ui.Printer, s installContext, l
 		return fmt.Errorf("upgrade installed puzzle %s, expected %s", installed, latest)
 	}
 	fmt.Fprintf(stdout, "%s upgraded %s %s → %s\n", out.Green("✓"), s.name(), s.from(), installed)
-	if s.kind == installProject && breaking(s.from(), latest) {
+	if s.kind == installProject && update.Breaking(s.from(), latest) {
 		fmt.Fprintf(stdout, "%s %s may have breaking changes: read \"Upgrading across versions\" in %s and run %s in the project\n",
 			out.Yellow("!"), latest, filepath.Join(filepath.Dir(packageJSON), "CHANGELOG.md"), out.Bold("npx puzzle check --fix"))
 	}

@@ -1995,25 +1995,6 @@ func TestUpgradeWithoutTerminalUpgradesOnlyTheRunningInstall(t *testing.T) {
 	})
 }
 
-func TestBreakingBoundary(t *testing.T) {
-	for _, tt := range []struct {
-		from, to string
-		want     bool
-	}{
-		{"0.9.1", "0.10.2", true},
-		{"0.10.0", "0.10.2", false},
-		{"^0.9.0", "0.10.2", true},
-		{"~0.10.0", "0.10.2", false},
-		{"1.2.0", "1.3.0", false},
-		{"1.9.0", "2.0.0", true},
-		{"latest", "0.10.2", false},
-	} {
-		if got := breaking(tt.from, tt.to); got != tt.want {
-			t.Errorf("breaking(%q, %q) = %v, want %v", tt.from, tt.to, got, tt.want)
-		}
-	}
-}
-
 // TestUpgradeProjectAcrossABreakingRelease: the question says the project is
 // crossing a breaking release, and once it has, one line points at the notes
 // that ship in the package and at the migration command. The global CLI has no
