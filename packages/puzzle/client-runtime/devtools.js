@@ -496,6 +496,7 @@ function inspectView(id) {
 		// functions are dropped rather than serialized (or thrown on).
 		params: safeState(view.params),
 		props: safeState(view.props),
+		shared: safeState(view.shared),
 		// the wire keys stay `model` / `local` (the panel protocol); they carry the
 		// derived and state layers.
 		model: safeState(view._derived?.() ?? {}),
