@@ -1734,7 +1734,7 @@ export class Router {
 							// mount() starts (PuzzleView #pendingFailure) — deferring by a
 							// microtask never reached the mount and left the user on the
 							// skeleton forever.
-							v.__showErrorView?.(err, info);
+							v.__showErrorView(err, info);
 						});
 					} else {
 						loads.push(p);
@@ -1858,7 +1858,7 @@ export class Router {
 			const focus =
 				(typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && retryView === REBUILD
 					? null
-					: this.#resolveFocus({ to, from, push, pop, replace });
+					: this.#resolveFocus({ to, from, push });
 
 			// A same-location rebuild (D175 — a locale switch) changes the words on the
 			// page and nothing else — and nothing animates. Every fresh level
@@ -2452,7 +2452,7 @@ export class Router {
 				'[puzzle] routed view mount failed — the failed position was replaced:',
 				err
 			);
-			const shown = await view.__showErrorView?.(err, info);
+			const shown = await view.__showErrorView(err, info);
 			if (!shown) /** @type {(() => void) | null} */ (restoreTakeover)?.();
 		});
 	}
@@ -2891,11 +2891,10 @@ export class Router {
 	 * client-side history move, so back/forward needs focus management just as much
 	 * as a forward push.
 	 *
-	 * @param {{ to: RouteSnapshot, from: RouteSnapshot | null, push: boolean, pop: boolean,
-	 *   replace: boolean }} nav
+	 * @param {{ to: RouteSnapshot, from: RouteSnapshot | null, push: boolean }} nav
 	 * @returns {FocusSpec | null}
 	 */
-	#resolveFocus({ to, from, push, pop, replace }) {
+	#resolveFocus({ to, from, push }) {
 		if (!this.#focusEnabled()) return null;
 		// Navigation #0 — nothing has committed, so `from` is null. This also covers a
 		// guard redirect on nav #0, which re-enters as a REPLACE and would otherwise
