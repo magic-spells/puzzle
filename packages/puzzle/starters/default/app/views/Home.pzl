@@ -16,19 +16,19 @@
     </div>
 
     <nav class="grid gap-4 sm:grid-cols-2">
-      <a href="https://magicspells.io/puzzle/docs" class="space-y-1 rounded-xl border border-gray-800 p-5 hover:border-gray-600 hover:bg-gray-900">
+      <a href="https://magicspells.io/puzzle/docs" target="_blank" rel="noopener" class="space-y-1 rounded-xl border border-gray-800 p-5 hover:border-gray-600 hover:bg-gray-900">
         <h2 class="font-medium">Docs</h2>
         <p class="text-sm text-gray-400">Guides and reference for every part of Puzzle.</p>
       </a>
-      <a href="https://magicspells.io/puzzle/tutorial" class="space-y-1 rounded-xl border border-gray-800 p-5 hover:border-gray-600 hover:bg-gray-900">
+      <a href="https://magicspells.io/puzzle/tutorial" target="_blank" rel="noopener" class="space-y-1 rounded-xl border border-gray-800 p-5 hover:border-gray-600 hover:bg-gray-900">
         <h2 class="font-medium">Tutorial</h2>
         <p class="text-sm text-gray-400">Build a small app, one step at a time.</p>
       </a>
-      <a href="https://magicspells.io/puzzle" class="space-y-1 rounded-xl border border-gray-800 p-5 hover:border-gray-600 hover:bg-gray-900">
+      <a href="https://magicspells.io/puzzle" target="_blank" rel="noopener" class="space-y-1 rounded-xl border border-gray-800 p-5 hover:border-gray-600 hover:bg-gray-900">
         <h2 class="font-medium">Puzzle</h2>
         <p class="text-sm text-gray-400">What the framework does and how it works.</p>
       </a>
-      <a href="https://magicspells.io/puzzle-pieces" class="space-y-1 rounded-xl border border-gray-800 p-5 hover:border-gray-600 hover:bg-gray-900">
+      <a href="https://magicspells.io/puzzle-pieces" target="_blank" rel="noopener" class="space-y-1 rounded-xl border border-gray-800 p-5 hover:border-gray-600 hover:bg-gray-900">
         <h2 class="font-medium">Puzzle Pieces</h2>
         <p class="text-sm text-gray-400">Ready-made components you copy into your app.</p>
       </a>
