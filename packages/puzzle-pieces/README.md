@@ -38,10 +38,10 @@ don't have them yet, and prints — never auto-runs — any npm install you need
 line carries a version floor per package (`npm install
 @magic-spells/collapsible-content@^1.2.0`) — the release the piece was built
 against — so run it as printed rather than installing the bare name.
-Most pieces that wrap a web component also need its stylesheet, which the CLI
-does not print: the copied file's `STYLESHEET` comment gives the line to add
-once to `app/styles/styles.css` (for Dialog,
-`@import "@magic-spells/dialog-panel/css" layer(components);`).
+A piece that wraps a web component also prints that component's stylesheet
+import, `@import "@magic-spells/dialog-panel/css" layer(components);` for Dialog:
+add it once to `app/styles/styles.css` after `@import "tailwindcss";`, in the
+printed order (Sheet's own sheet follows dialog-panel's, which it overrides).
 Existing files are never overwritten unless you pass `--force` (`-f`), and a
 `pieces.lock` of content hashes is kept so a future `diff`/`update` command can tell
 upstream changes from your local edits.
@@ -95,8 +95,8 @@ and Tailwind utility classes against the semantic tokens in
 [`registry/theme/pieces.css`](./registry/theme/pieces.css) — no hex colors,
 controlled-component APIs throughout. Sixteen pieces are thin wrappers around a
 `@magic-spells` web component (the sheets, the dialogs, the dropdown-panel family,
-Tabs, Select, …); those declare the package in their `piece.json` and the CLI prints
-the `npm install` for you.
+Tabs, Select, …); those declare the package and its stylesheet in their `piece.json`,
+and the CLI prints the `npm install` and the `@import` for you.
 
 ## Themes
 

@@ -61,6 +61,10 @@ type Piece struct {
 	// line for the ones the app lacks (see missingThemes), never copies them (D3).
 	// Not a registryDependency: an older CLI would read the name as a piece.
 	Themes []string `json:"themes"`
+	// Styles are the stylesheets of the web component the piece wraps, in load
+	// order (a peer's sheet before the package's own). Print-only too: each one
+	// becomes a `layer(components)` import line (see collectStyles).
+	Styles []string `json:"styles"`
 	// TargetDir is the app-relative destination for this piece's files; empty
 	// means the default (app/components/ui).
 	TargetDir string `json:"targetDir"`

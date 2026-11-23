@@ -10,5 +10,8 @@
   "dependencies": [
     "@magic-spells/panel-stack@^0.2.0"
   ],
+  "styles": [
+    "@magic-spells/panel-stack/css"
+  ],
   "targetDir": "app/components/ui"
 }

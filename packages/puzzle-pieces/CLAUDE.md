@@ -109,6 +109,16 @@ Rules that follow from this:
   `puzzle add theme <names…>` for the ones the app has neither on disk nor package-imported.
   Deliberately NOT `registryDependencies` — an older CLI would read the name as a piece.
   `test/registry-deps.test.js` checks every name is a shipped palette.
+- `styles` — the REQUIRED stylesheets of the web component a wrapper piece installs, in
+  load order, a peer's first (`sheet` → `@magic-spells/dialog-panel/css`,
+  `@magic-spells/sheet/css`). Print-only: `add piece` unions them over the resolved set
+  (first occurrence wins, never sorted) and prints an `@import "<spec>" layer(components);`
+  step for each, the first after `@import "tailwindcss";` and each later one after the
+  line before it. Only the piece that installs the package lists it (the
+  dropdown families get `dropdown-panel`'s through `registryDependencies`); an optional
+  sheet (`…/dropdown-panel/css/effects`) stays in the header comment. An older CLI ignores
+  the key, so the schema stays `version: 1`. `test/registry-deps.test.js` checks each
+  one's package is in the same manifest's `dependencies` and that the demo imports it.
 
 ## Versioning
 
@@ -248,9 +258,9 @@ CLI — it is unrelated and must not be bumped along with the release.
   2026-08-22 — see `constellation/decision/DECISION-WRAP-WEB-COMPONENTS.md`; `scroll-stack`
   is the exemplar; `sheet` was the first conversion, 2026-08-22). A wrapper piece renders the
   custom element's markup around `<Children/>`, binds props to attributes, declares the npm
-  package in `piece.json.dependencies`, and upgrades it via **dynamic import in
-  `mounted()`** — never a top-level import, because the package's `class extends
-  HTMLElement` crashes Node prerendering. The component's stylesheet is imported at the
+  package in `piece.json.dependencies` and its required stylesheets in `styles`, and
+  upgrades it via **dynamic import in `mounted()`** — never a top-level import, because
+  the package's `class extends HTMLElement` crashes Node prerendering. The component's stylesheet is imported at the
   app entry in `layer(components)` (e.g. `@import "@magic-spells/scroll-stack/css"
   layer(components)`) so utilities on the host still win; document it in the piece's
   installation section. A package with a peer that ships its own CSS needs BOTH imports,

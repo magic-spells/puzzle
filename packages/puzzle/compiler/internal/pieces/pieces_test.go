@@ -441,6 +441,42 @@ func TestAddNpmDepsAccumulateDedupedInOutput(t *testing.T) {
 	}
 }
 
+// Stylesheets union in resolution order, never sorted: dialog and sheet share
+// dialog-panel's sheet (sheet lists it first), and menu reaches its sheet only
+// through a registryDependency. Each line is anchored to the one before it.
+func TestAddPiecePrintsStylesInLoadOrder(t *testing.T) {
+	reg := buildRegistry(t, `{"version":1,"theme":"theme/pieces.css","pieces":[
+	  {"name":"dialog","files":["Dialog.pzl"],"styles":["dp/css"]},
+	  {"name":"sheet","files":["Sheet.pzl"],"styles":["dp/css","sheet/css"]},
+	  {"name":"menu","files":["Menu.pzl"],"registryDependencies":["panel"]},
+	  {"name":"panel","files":["Panel.pzl"],"styles":["dd/css"]},
+	  {"name":"button","files":["Button.pzl"]}]}`,
+		fixtureFile{"ui/dialog/Dialog.pzl", "d\n"}, fixtureFile{"ui/sheet/Sheet.pzl", "s\n"},
+		fixtureFile{"ui/menu/Menu.pzl", "m\n"}, fixtureFile{"ui/panel/Panel.pzl", "p\n"},
+		fixtureFile{"ui/button/Button.pzl", "b\n"},
+	)
+	res, err := Add(Options{AppRoot: newApp(t, true), Names: []string{"dialog", "sheet", "menu"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(res.Styles, " "); got != "dp/css sheet/css dd/css" {
+		t.Errorf("styles = %s, want dp/css sheet/css dd/css", got)
+	}
+	want := "→ add `@import \"dp/css\" layer(components);` to app/styles/styles.css (after `@import \"tailwindcss\";`)\n" +
+		"    → add `@import \"sheet/css\" layer(components);` to app/styles/styles.css (after `@import \"dp/css\" layer(components);`)\n" +
+		"    → add `@import \"dd/css\" layer(components);` to app/styles/styles.css (after `@import \"sheet/css\" layer(components);`)\n"
+	if out := render(res); !strings.Contains(out, want) {
+		t.Errorf("summary should print the three imports, chained, got:\n%s", out)
+	}
+	res, err = Add(Options{AppRoot: newApp(t, true), Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out := render(res); strings.Contains(out, "layer(components)") {
+		t.Errorf("a piece with no styles prints no import, got:\n%s", out)
+	}
+}
+
 // themeFixture is the standard one-piece registry whose theme carries the marker,
 // reused across the theme-state tests.
 func themeFixture(t *testing.T) string {

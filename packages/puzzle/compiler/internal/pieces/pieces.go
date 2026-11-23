@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -53,6 +54,7 @@ type Result struct {
 	Source   string
 	Units    []Unit
 	NpmDeps  []string // deduped + sorted; never installed (D3)
+	Styles   []string // component stylesheets, in load order; never imported (D3)
 	Theme    string   // non-empty ⇒ the `@import './pieces.css';` next-step advisory
 	LockPath string
 	// ThemeHint is non-empty when an existing app/styles/pieces.css differs from
@@ -154,6 +156,7 @@ func Add(opts Options) (*Result, error) {
 	// Accumulate npm deps across every resolved piece (deduped, sorted). Printed
 	// as a next step, never executed (D3 — no network installs at build time).
 	result.NpmDeps = collectNpmDeps(resolvedPieces)
+	result.Styles = collectStyles(resolvedPieces)
 
 	// Theme is registry content too: pieces style themselves through its @theme
 	// tokens, so we COPY it into app/styles/pieces.css and lock it exactly like a
@@ -372,6 +375,21 @@ func collectNpmDeps(resolvedPieces []Piece) []string {
 	return deps
 }
 
+// collectStyles unions the stylesheets of every resolved piece, first occurrence
+// winning. Never sorted: each manifest lists its sheets in load order and the
+// union keeps it, so dialog-panel's sheet still precedes sheet's own.
+func collectStyles(resolvedPieces []Piece) []string {
+	var styles []string
+	for _, p := range resolvedPieces {
+		for _, s := range p.Styles {
+			if !slices.Contains(styles, s) {
+				styles = append(styles, s)
+			}
+		}
+	}
+	return styles
+}
+
 // themeImportAdvisory is the single manual line the user must add — styles.css is
 // user-owned, so we never edit it (D3), we only tell them the one import to wire.
 const themeImportAdvisory = "add `@import './pieces.css';` to app/styles/styles.css (after `@import \"tailwindcss\";`)"
@@ -560,7 +578,7 @@ func RenderSummary(w io.Writer, out *ui.Printer, res *Result) {
 			out.Green("✓"), out.Bold(u.Name), out.Dim(fmt.Sprintf("· %d file%s", n, textutil.Plural(n))))
 	}
 
-	if len(res.NpmDeps) == 0 && len(res.Themes) == 0 && res.Theme == "" && res.ThemeHint == "" {
+	if len(res.NpmDeps) == 0 && len(res.Styles) == 0 && len(res.Themes) == 0 && res.Theme == "" && res.ThemeHint == "" {
 		return
 	}
 	fmt.Fprintf(w, "\n  %s\n", out.Bold("Next steps"))
@@ -572,6 +590,15 @@ func RenderSummary(w io.Writer, out *ui.Printer, res *Result) {
 	}
 	if res.Theme != "" {
 		fmt.Fprintf(w, "    %s %s\n", out.Yellow("→"), res.Theme)
+	}
+	// Above Tailwind the components layer would be declared before its base layer
+	// and preflight would win. Each later sheet is anchored to the one before it,
+	// so lines added one at a time keep the manifests' load order.
+	after := `@import "tailwindcss";`
+	for _, s := range res.Styles {
+		line := `@import "` + s + `" layer(components);`
+		fmt.Fprintf(w, "    %s add `%s` to app/styles/styles.css (after `%s`)\n", out.Yellow("→"), line, after)
+		after = line
 	}
 	if res.ThemeHint != "" {
 		fmt.Fprintf(w, "    %s %s\n", out.Yellow("→"), res.ThemeHint)

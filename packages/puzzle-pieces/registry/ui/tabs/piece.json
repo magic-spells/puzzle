@@ -12,5 +12,8 @@
   "dependencies": [
     "@magic-spells/tab-group@^1.2.0"
   ],
+  "styles": [
+    "@magic-spells/tab-group/css"
+  ],
   "targetDir": "app/components/ui"
 }
