@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/magic-spells/puzzle/compiler/internal/codegen"
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
@@ -769,13 +770,13 @@ func objectKeyEdits(toks []codegen.ScriptToken, open int) []edit {
 // (or would, in a dry run).
 func renameFunctionsModule(abs string, apply bool, res *Result) (moved bool, err error) {
 	for _, ext := range []string{".js", ".ts"} {
-		if fileExists(filepath.Join(abs, "app", "functions"+ext)) {
+		if fsutil.FileExists(filepath.Join(abs, "app", "functions"+ext)) {
 			return false, nil
 		}
 	}
 	for _, ext := range []string{".js", ".ts"} {
 		from := filepath.Join(abs, "app", "formatters"+ext)
-		if !fileExists(from) {
+		if !fsutil.FileExists(from) {
 			continue
 		}
 		rel := "app/formatters" + ext
@@ -789,12 +790,6 @@ func renameFunctionsModule(abs string, apply bool, res *Result) (moved bool, err
 		return true, nil
 	}
 	return false, nil
-}
-
-// fileExists reports whether p is an existing regular file.
-func fileExists(p string) bool {
-	info, err := os.Stat(p)
-	return err == nil && !info.IsDir()
 }
 
 // importEdits rewrites import specifiers that name the renamed module:

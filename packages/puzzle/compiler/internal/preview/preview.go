@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/magic-spells/puzzle/compiler/internal/config"
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/keys"
 	"github.com/magic-spells/puzzle/compiler/internal/serve"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
@@ -224,7 +225,7 @@ var hashedAppName = regexp.MustCompile(`^app-[A-Z2-7]{8}\.js$`)
 // warning explains why the result may look wrong.
 func shapeWarning(dist, mode string) string {
 	appName := ""
-	if fileExists(filepath.Join(dist, "app.js")) {
+	if fsutil.FileExists(filepath.Join(dist, "app.js")) {
 		appName = "app.js"
 	} else {
 		entries, _ := os.ReadDir(dist)
@@ -273,11 +274,6 @@ func builtMode(dist string) string {
 		return serve.ModeHybrid
 	}
 	return ""
-}
-
-func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
 }
 
 func modeLabel(mode string) string {

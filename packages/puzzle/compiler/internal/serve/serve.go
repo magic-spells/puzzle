@@ -21,6 +21,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 )
 
 // The resolved output modes. They are the values `puzzle.config.js` `output`
@@ -67,7 +69,7 @@ func Resolve(dist, mode, urlPath string) Result {
 	clean := path.Clean(urlPath)
 	if clean == "/" || clean == "." {
 		if mode == ModeStatic {
-			if isFile(index) {
+			if fsutil.FileExists(index) {
 				return Result{File: index, HTML: true, Status: 200}
 			}
 			return missing(dist, clean)
@@ -80,7 +82,7 @@ func Resolve(dist, mode, urlPath string) Result {
 	// dist pointing outside. A path that escapes is treated as a miss, never
 	// served.
 	if WithinDir(dist, candidate) {
-		if isFile(candidate) && withinDirResolved(dist, candidate) {
+		if fsutil.FileExists(candidate) && withinDirResolved(dist, candidate) {
 			if candidate == index && mode != ModeStatic {
 				// "/index.html" is the root document, same as "/".
 				return Result{File: index, Shell: true, HTML: true, Status: 200}
@@ -93,7 +95,7 @@ func Resolve(dist, mode, urlPath string) Result {
 		// falling straight through to the shell.
 		if mode != ModeSPA {
 			pageIndex := filepath.Join(candidate, "index.html")
-			if isFile(pageIndex) && withinDirResolved(dist, pageIndex) {
+			if fsutil.FileExists(pageIndex) && withinDirResolved(dist, pageIndex) {
 				return Result{File: pageIndex, HTML: true, Status: 200}
 			}
 		}
@@ -120,12 +122,12 @@ func missing(dist, clean string) Result {
 	seg, _, _ := strings.Cut(strings.TrimPrefix(clean, "/"), "/")
 	if seg != "" && seg != "." && seg != ".." {
 		page := filepath.Join(dist, seg, "404.html")
-		if WithinDir(dist, page) && isFile(page) && hasEntryNamed(dist, seg) && withinDirResolved(dist, page) {
+		if WithinDir(dist, page) && fsutil.FileExists(page) && hasEntryNamed(dist, seg) && withinDirResolved(dist, page) {
 			return Result{File: page, HTML: true, Status: 404}
 		}
 	}
 	page := filepath.Join(dist, "404.html")
-	if isFile(page) {
+	if fsutil.FileExists(page) {
 		return Result{File: page, HTML: true, Status: 404}
 	}
 	return Result{Status: 404}
@@ -144,11 +146,6 @@ func hasEntryNamed(dir, name string) bool {
 		}
 	}
 	return false
-}
-
-func isFile(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
 }
 
 func isHTMLName(path string) bool {

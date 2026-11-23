@@ -197,7 +197,7 @@ func renderDeployNextSteps(w io.Writer, out *ui.Printer, host deploytemplates.Ho
 			// cloudflare pages leaves spa mode the moment a top-level 404.html
 			// ships, and every client route then answers with that page.
 			for _, name := range []string{"app/public/404.html", "public/404.html"} {
-				if fileExists(filepath.Join(root, filepath.FromSlash(name))) {
+				if fsFileExists(filepath.Join(root, filepath.FromSlash(name))) {
 					steps = append(steps, fmt.Sprintf("%s turns off Cloudflare Pages' spa fallback: every client route would get that page. Remove it and draw not-found in a catch-all route.", name))
 				}
 			}
@@ -244,10 +244,4 @@ func otherLocales(cfg config.Config) []string {
 		}
 	}
 	return locales
-}
-
-// fileExists reports whether path is an existing regular file.
-func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
 }
