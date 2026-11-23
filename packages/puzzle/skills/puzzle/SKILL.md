@@ -55,9 +55,10 @@ has a `tsconfig.json`),
 
 - Inside a project, run the CLI as `npm run dev`, `npm run build` or
   `npx puzzle <command>`, never a bare global `puzzle`: the project's own CLI
-  always matches its installed `@magic-spells/puzzle`. A CLI from another 0.x
-  minor stops before compiling, naming both versions, and `puzzle doctor` fails
-  its runtime row the same way.
+  always matches its installed `@magic-spells/puzzle`. A CLI 0.10 or later from
+  another 0.x minor stops before compiling or writing code, naming both
+  versions, and `puzzle doctor` fails its runtime row the same way; an older
+  one builds against the wrong runtime without a word.
 - `dev` and `build` both take `--fixtures` (see Fixtures below).
 - `dev` and `build` both take `--profile-build` (or `PUZZLE_PROFILE_BUILD=1`):
   per-phase timing tables on stderr — check it before guessing why a build or

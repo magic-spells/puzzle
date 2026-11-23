@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/magic-spells/puzzle/compiler/internal/build"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/generate"
 	"github.com/magic-spells/puzzle/compiler/internal/pieces"
@@ -231,6 +232,10 @@ func addPieces(w io.Writer, out *ui.Printer, dir, registry, piecesVersion string
 	// puzzle.config.js so `add piece` works from anywhere inside the app.
 	root, err := generate.FindProjectRoot(dir)
 	if err != nil {
+		return err
+	}
+	// a piece is written for this CLI's release, so it must pair with the install
+	if _, err := build.PairRuntime(root); err != nil {
 		return err
 	}
 

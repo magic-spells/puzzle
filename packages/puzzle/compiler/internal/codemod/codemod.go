@@ -75,7 +75,7 @@ func Run(root string, apply bool) (*Result, error) {
 		return nil, err
 	}
 	if info, err := os.Stat(filepath.Join(abs, "app")); err != nil || !info.IsDir() {
-		return nil, fmt.Errorf("no app/ directory in %s — run puzzle check from a Puzzle project root", abs)
+		return nil, fmt.Errorf("no app/ directory in %s — run npx puzzle check from a Puzzle project root", abs)
 	}
 	res := &Result{}
 

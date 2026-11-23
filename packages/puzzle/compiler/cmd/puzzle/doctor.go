@@ -203,7 +203,7 @@ func doctorChecks(dir string) []doctorCheck {
 	case build.FindRuntime(dir) != "":
 		pass("runtime package", "@magic-spells/puzzle (in-repo runtime)")
 	case installed != "":
-		if v, err := build.InstalledVersion(installed); err != nil {
+		if v, err := build.PairInstalled(installed); err != nil {
 			fail("runtime package", err.Error())
 		} else {
 			pass("runtime package", "@magic-spells/puzzle "+v+" installed")

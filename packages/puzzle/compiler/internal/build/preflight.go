@@ -1,7 +1,6 @@
 package build
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -15,17 +14,13 @@ import (
 
 // PreflightRuntime verifies that the runtime resolver used by configureRuntime
 // has at least one source available before a command constructs an esbuild
-// bundle. The CLI is often installed globally, so a missing project install
-// must be reported here instead of being left to esbuild's resolver walk.
+// bundle, and that it pairs with this CLI (PairRuntime). The CLI is often
+// installed globally, so a missing project install must be reported here
+// instead of being left to esbuild's resolver walk.
 //
 // root is the raw command-line directory, so it is checked first: a mistyped
 // `puzzle build typo-dir` must say the directory is missing, not send the user
 // to npm install.
-//
-// An installed runtime must also pair with this CLI (InstalledVersion). The two
-// development sources are not compared: PUZZLE_RUNTIME names a checkout on
-// purpose, and an app inside this repo builds against the working tree, whose
-// version only moves at release time.
 func PreflightRuntime(root string) error {
 	if info, err := os.Stat(root); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -35,11 +30,7 @@ func PreflightRuntime(root string) error {
 	} else if !info.IsDir() {
 		return fmt.Errorf("puzzle: %s is not a directory", root)
 	}
-	if envRuntime() != "" || FindRuntime(root) != "" {
-		return nil
-	}
-	if runtime := FindInstalledRuntime(root); runtime != "" {
-		_, err := InstalledVersion(runtime)
+	if found, err := PairRuntime(root); found || err != nil {
 		return err
 	}
 
@@ -54,27 +45,42 @@ func PreflightRuntime(root string) error {
 	)
 }
 
-// InstalledVersion reads the version of the installed runtime FindInstalledRuntime
-// found, and fails when it and this CLI are on different sides of a breaking
+// PairRuntime reports whether a runtime source resolves for root, and fails
+// when the one that wins is an installed package on the other side of a
+// breaking release from this CLI (PairInstalled). The two development sources
+// are not compared: PUZZLE_RUNTIME names a checkout on purpose, and an app
+// inside this repo builds against the working tree, whose version only moves at
+// release time. Commands that write or check source without bundling call it on
+// its own, so they still run before `npm install`.
+func PairRuntime(root string) (bool, error) {
+	if envRuntime() != "" || FindRuntime(root) != "" {
+		return true, nil
+	}
+	runtime := FindInstalledRuntime(root)
+	if runtime == "" {
+		return false, nil
+	}
+	_, err := PairInstalled(runtime)
+	return true, err
+}
+
+// PairInstalled returns the version of the installed runtime FindInstalledRuntime
+// found, and an error when it and this CLI are on different sides of a breaking
 // release (update.Breaking). The compiler emits code for its own runtime, so such
 // a pair builds without an error and ships a blank page. It happens when a global
 // CLI is run inside a project; the project's own CLI always matches its install.
-func InstalledVersion(runtime string) (string, error) {
-	var pkg struct {
-		Version string `json:"version"`
-	}
-	data, _ := os.ReadFile(filepath.Join(filepath.Dir(filepath.Dir(runtime)), "package.json"))
-	_ = json.Unmarshal(data, &pkg)
-	if !update.Breaking(pkg.Version, version.Version) {
-		return pkg.Version, nil
+func PairInstalled(runtime string) (string, error) {
+	installed, _ := update.PackageVersion(filepath.Join(filepath.Dir(filepath.Dir(runtime)), "package.json"))
+	if !update.Breaking(installed, version.Version) {
+		return installed, nil
 	}
 	upgrade := "Or upgrade the project:     puzzle upgrade"
-	if cmp, _ := update.Compare(version.Version, pkg.Version); cmp < 0 {
+	if cmp, _ := update.Compare(version.Version, installed); cmp < 0 {
 		upgrade = "Or upgrade this CLI:        puzzle upgrade"
 	}
-	return pkg.Version, fmt.Errorf("This project has Puzzle %s installed, and this CLI is %s.\n"+
+	return installed, fmt.Errorf("This project has Puzzle %s installed, and this CLI is %s.\n"+
 		"  Use the project's own CLI:  npm run dev, npm run build, or npx puzzle <command>\n  %s",
-		pkg.Version, version.Version, upgrade)
+		installed, version.Version, upgrade)
 }
 
 // packageManagerInstallCommand names the install command for the lockfile

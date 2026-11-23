@@ -146,18 +146,34 @@ func fakeRuntime(t *testing.T, dir, v string) string {
 }
 
 // The runtime row names the installed version, and a pair across a breaking
-// release fails with the message build and dev stop on.
+// release fails with the message build and dev stop on. As in the build,
+// PUZZLE_RUNTIME wins over the working tree, and the working tree over an
+// install under an example.
 func TestDoctorRuntimeVersion(t *testing.T) {
-	t.Setenv(build.RuntimeEnvVar, "")
 	for installed, status := range map[string]string{"0.10.1": doctorPass, "0.9.0": doctorFail} {
 		dir := healthyProject(t)
 		want := doctorCheck{"runtime package", status, "@magic-spells/puzzle " + installed + " installed"}
-		if _, err := build.InstalledVersion(fakeRuntime(t, dir, installed)); err != nil {
+		if _, err := build.PairInstalled(fakeRuntime(t, dir, installed)); err != nil {
 			want.Detail = err.Error()
 		}
 		checks := doctorChecks(dir)
 		if got := checks[len(checks)-1]; got != want {
 			t.Errorf("installed %s: got %+v, want %+v", installed, got, want)
 		}
+	}
+
+	repo := t.TempDir()
+	mustWrite(t, filepath.Join(repo, "package.json"), `{"name":"@magic-spells/puzzle"}`)
+	mustWrite(t, filepath.Join(repo, "client-runtime", "index.js"), "export {}\n")
+	example := filepath.Join(repo, "examples", "app")
+	fakeRuntime(t, example, "0.9.0")
+	checks := doctorChecks(example)
+	if got, want := checks[len(checks)-1], (doctorCheck{"runtime package", doctorPass, "@magic-spells/puzzle (in-repo runtime)"}); got != want {
+		t.Errorf("in-repo app: got %+v, want %+v", got, want)
+	}
+	t.Setenv(build.RuntimeEnvVar, "/checkout/client-runtime/index.js")
+	checks = doctorChecks(example)
+	if got, want := checks[len(checks)-1], (doctorCheck{"runtime package", doctorPass, build.RuntimeEnvVar + "=/checkout/client-runtime/index.js"}); got != want {
+		t.Errorf("PUZZLE_RUNTIME set: got %+v, want %+v", got, want)
 	}
 }

@@ -1808,7 +1808,7 @@ func (f scopeFixture) run(t *testing.T, executable string, check bool, env upgra
 
 func versionAt(t *testing.T, packageJSON string) string {
 	t.Helper()
-	v, err := installedVersion(packageJSON)
+	v, err := update.PackageVersion(packageJSON)
 	if err != nil {
 		return ""
 	}

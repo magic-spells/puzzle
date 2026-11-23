@@ -32,7 +32,9 @@ npm run build   # production build to dist/
 
 Inside a project, run Puzzle through its npm scripts or `npx puzzle <command>`.
 Both use the CLI installed with the project, which always matches the
-project's Puzzle; a global `puzzle` from another 0.x minor stops and says so.
+project's Puzzle; a global `puzzle` 0.10 or later from another 0.x minor stops
+and says so, but an older one builds against the wrong runtime without a word,
+so upgrade it (`puzzle upgrade`) or use the project's CLI.
 The global install is for `puzzle init`, and `npx @magic-spells/puzzle init
 my-app` works without it.
 

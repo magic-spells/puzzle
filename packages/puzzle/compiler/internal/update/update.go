@@ -115,6 +115,27 @@ func Compare(a, b string) (int, error) {
 	return comparePrerelease(av.pre, bv.pre), nil
 }
 
+// PackageVersion reads the version a Puzzle package.json declares.
+func PackageVersion(packageJSON string) (string, error) {
+	if packageJSON == "" {
+		return "", fmt.Errorf("could not locate @magic-spells/puzzle/package.json")
+	}
+	data, err := os.ReadFile(packageJSON)
+	if err != nil {
+		return "", err
+	}
+	var pkg struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		return "", err
+	}
+	if pkg.Version == "" {
+		return "", fmt.Errorf("%s has no version", packageJSON)
+	}
+	return pkg.Version, nil
+}
+
 // Breaking reports whether from → to crosses a release allowed to break code:
 // a new major, or a new minor while the major is 0. from may be a declared range
 // such as ^0.9.0. A string with no major.minor ("latest", "") reads as not

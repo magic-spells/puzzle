@@ -624,7 +624,7 @@ const bareSlotNote = `which tag replaces <Slot/> depends on who fills the positi
     a layout or a view that hosts a child route   →  <Outlet/>
     a component filled by what its caller writes  →  <Children/>
 
-puzzle check --fix makes this change for you: <Outlet/> in app/layouts and
+npx puzzle check --fix makes this change for you: <Outlet/> in app/layouts and
 app/views, <Children/> in app/components.`
 
 // controlFlowBranches returns the child-node lists of a control-flow node's

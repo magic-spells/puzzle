@@ -31,7 +31,9 @@ npm run build   # build for production
 
 Inside a project, run Puzzle through its npm scripts or `npx puzzle <command>`.
 Both use the CLI installed with the project, which always matches the
-project's Puzzle; a global `puzzle` from another 0.x minor stops and says so.
+project's Puzzle; a global `puzzle` 0.10 or later from another 0.x minor stops
+and says so, but an older one builds against the wrong runtime without a word,
+so upgrade it (`puzzle upgrade`) or use the project's CLI.
 `npx @magic-spells/puzzle init my-app` scaffolds without the global install.
 
 Or add Puzzle to an existing project — one dev dependency gives you both the
@@ -695,8 +697,9 @@ full project context and build better plans without re-deriving earlier work.
 
 Inside a project, type these as `npx puzzle <command>` (or use the npm
 scripts) so the project's own CLI runs: it always matches the project's
-installed Puzzle. A CLI from another 0.x minor stops before compiling and names
-both versions; `puzzle doctor` reports the same.
+installed Puzzle. A CLI 0.10 or later from another 0.x minor stops before
+compiling or writing code and names both versions (`puzzle doctor` reports the
+same); an older one builds against the wrong runtime without a word.
 
 ```bash
 # Development server with live reload (-p is --port; --host exposes it on the LAN)

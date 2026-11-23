@@ -255,7 +255,7 @@ func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, executable string, ch
 	var names []string
 	var stale []installContext
 	for i := range scopes {
-		scopes[i].current, _ = installedVersion(scopes[i].installed())
+		scopes[i].current, _ = update.PackageVersion(scopes[i].installed())
 		names = append(names, scopes[i].name())
 		if older(scopes[i].current, latest) {
 			stale = append(stale, scopes[i])
@@ -375,7 +375,7 @@ func upgradeScope(stdout, stderr io.Writer, out *ui.Printer, s installContext, l
 		// into) still resolve by walking up from the binary itself.
 		packageJSON = findGlobalPackageJSON(s.executable)
 	}
-	installed, err := installedVersion(packageJSON)
+	installed, err := update.PackageVersion(packageJSON)
 	if err != nil {
 		return fmt.Errorf("confirming installed version: %w", err)
 	}
@@ -1114,24 +1114,4 @@ func findGlobalPackageJSON(executable string) string {
 		}
 		dir = parent
 	}
-}
-
-func installedVersion(packageJSON string) (string, error) {
-	if packageJSON == "" {
-		return "", fmt.Errorf("could not locate %s/package.json", puzzlePackage)
-	}
-	data, err := os.ReadFile(packageJSON)
-	if err != nil {
-		return "", err
-	}
-	var pkg struct {
-		Version string `json:"version"`
-	}
-	if err := json.Unmarshal(data, &pkg); err != nil {
-		return "", err
-	}
-	if pkg.Version == "" {
-		return "", fmt.Errorf("%s has no version", packageJSON)
-	}
-	return pkg.Version, nil
 }
