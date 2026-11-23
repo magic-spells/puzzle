@@ -1216,14 +1216,16 @@ class AdapterStoreMethods {
 			const state = readStateFor(this);
 			const entry = touchQuery(state, key);
 			if (requests && (!entry || isQueryStale(state, entry))) {
-				this._faultQuery(type, key, /** @type {Record<string, any>} */ (options?.query), requests);
+				this._faultMany(type, key, /** @type {Record<string, any>} */ (options?.query), requests);
 			}
 			this._subscribe(type);
 			return queryRows(this, type, entry, options);
 		}
 		// The collection, not the filter, is what can be missing: a filter is always
-		// applied locally and is never serialized into a request.
-		if (requests) this._faultMany(type, requests);
+		// applied locally and is never serialized into a request. `loaded` is not
+		// record presence — local records prove nothing about the rest — and an
+		// authored loadMany sets it too, so a paginated adapter loads page one once.
+		if (requests && !readStateFor(this).loaded.has(type)) this._faultMany(type, type, undefined, requests);
 		return this._findManyLocal(type, options);
 	}
 
@@ -1481,52 +1483,19 @@ class AdapterStoreMethods {
 	}
 
 	/**
-	 * The findMany half. Having loaded is tracked independently of record
-	 * presence: local records prove nothing about the rest of the collection, so
-	 * the first tracked findMany on a type still loads it once. Filters stay
-	 * local. This half asks only "has the collection request run?" — an authored
-	 * loadMany answers that as well as a generated one, which is what keeps a
-	 * paginated adapter from re-requesting page one on every settle pass.
+	 * The findMany half: fetch the collection (keyed by its bare type) or one
+	 * query key (D193) that is missing or stale, deduped with any request already
+	 * in flight for the same key (concurrent views share it). The two share
+	 * `state.many` — a query key always holds a '?', which no model type name
+	 * does. Failure clears the in-flight entry WITHOUT marking anything loaded
+	 * (loadMany marks only on success), so a retry is a real retry.
 	 * @this {AdapterStore}
 	 * @param {string} type
+	 * @param {string} key the canonical query key, or the type for the collection
+	 * @param {Record<string, any> | undefined} query
 	 * @param {RequestMap} requests
 	 */
-	_faultMany(type, requests) {
-		const state = readStateFor(this);
-		if (state.loaded.has(type)) return;
-		const inflight = state.many.get(type);
-		if (inflight) {
-			requests.set(type, inflight);
-			return;
-		}
-		if (!faultVerb(this, type, 'loadMany')) return;
-
-		const request = (async () => {
-			try {
-				await this.loadMany(type);
-			} finally {
-				// Failure clears the in-flight entry WITHOUT marking the type complete
-				// (loadMany marks it only on success), so a retry is a real retry.
-				if (state.many.get(type) === request) state.many.delete(type);
-			}
-		})();
-		state.many.set(type, request);
-		request.catch(noop);
-		requests.set(type, request);
-	}
-
-	/**
-	 * The query half (D193): fetch one query key that is missing or stale,
-	 * deduped with any request already in flight for the same key (concurrent
-	 * views share it). Shares `state.many` with collection loads — a query key
-	 * always holds a '?', which no model type name does.
-	 * @this {AdapterStore}
-	 * @param {string} type
-	 * @param {string} key the canonical query key
-	 * @param {Record<string, any>} query
-	 * @param {RequestMap} requests
-	 */
-	_faultQuery(type, key, query, requests) {
+	_faultMany(type, key, query, requests) {
 		const state = readStateFor(this);
 		const inflight = state.many.get(key);
 		if (inflight) {
