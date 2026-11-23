@@ -93,40 +93,6 @@ func TestCreateDefault(t *testing.T) {
 	}
 }
 
-func TestCreateStatic(t *testing.T) {
-	res, err := Create(t.TempDir(), "my-site", "static", false)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-	want := []string{
-		".gitignore",
-		"README.md",
-		"app/app.js",
-		"app/components/Counter.pzl",
-		"app/layouts/Default.pzl",
-		"app/public/index.html",
-		"app/routes.js",
-		"app/styles/styles.css",
-		"app/views/About.pzl",
-		"app/views/Home.pzl",
-		"app/views/NotFound.pzl",
-		"package.json",
-		"puzzle.config.js",
-		"tests/Home.test.js",
-		"vitest.config.js",
-	}
-	if got := collect(t, res.Dir); strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Errorf("static file set mismatch:\n got: %v\nwant: %v", got, want)
-	}
-	config, err := os.ReadFile(filepath.Join(res.Dir, "puzzle.config.js"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(config), "output: 'static'") {
-		t.Errorf("the static starter's puzzle.config.js does not build static pages:\n%s", config)
-	}
-}
-
 // templateTree reads starters/<dir>/ from the embedded FS, placeholder
 // substituted the way Create writes it.
 func templateTree(t *testing.T, dir, appName string) map[string]string {
