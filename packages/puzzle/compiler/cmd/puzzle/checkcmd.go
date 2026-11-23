@@ -75,7 +75,7 @@ func runCodemod(dir string, fix bool, out *ui.Printer) (ran bool, err error) {
 		// no app/ here: check.Run gives the project-root error itself.
 		return false, nil
 	}
-	if notes := codemod.FormatNotes(res); notes != "" {
+	if notes := codemod.Format(res.Notes); notes != "" {
 		fmt.Fprintf(os.Stdout, "%s left for you to finish (D199):\n%s", out.Yellow("!"), notes)
 	}
 	if len(res.Changes) == 0 {
@@ -85,10 +85,10 @@ func runCodemod(dir string, fix bool, out *ui.Printer) (ran bool, err error) {
 		return true, nil
 	}
 	if fix {
-		fmt.Fprintf(os.Stdout, "%s upgraded %s in %s for 0.10:\n%s", out.Green("✓"), pluralSites(len(res.Changes)), pluralFiles2(res.Files), codemod.Format(res))
+		fmt.Fprintf(os.Stdout, "%s upgraded %s in %s for 0.10:\n%s", out.Green("✓"), pluralSites(len(res.Changes)), pluralFiles2(res.Files), codemod.Format(res.Changes))
 		return true, nil
 	}
-	fmt.Fprint(os.Stdout, codemod.Format(res))
+	fmt.Fprint(os.Stdout, codemod.Format(res.Changes))
 	return true, fmt.Errorf("%s written for an older Puzzle (D199) — run puzzle check --fix to rewrite %s", pluralSites(len(res.Changes)), them(len(res.Changes)))
 }
 

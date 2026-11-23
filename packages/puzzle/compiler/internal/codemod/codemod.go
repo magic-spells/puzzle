@@ -11,7 +11,7 @@
 //   - the `formatters` config key becomes `functions`, and the conventional
 //     static-mode module app/formatters.js becomes app/functions.js (D199).
 //
-// Anything it finds but cannot rewrite safely is reported as a Note for a
+// Anything it finds but cannot rewrite safely is reported as a note for a
 // person to finish. The rewrites are idempotent: a second run over its own
 // output finds nothing.
 package codemod
@@ -31,33 +31,28 @@ import (
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
 )
 
-// Change is one rewrite the codemod made (or, in a dry run, would make).
+// Change is one rewrite the codemod made (or, in a dry run, would make), or a
+// note: a site it left alone because the rewrite was not safe to make
+// mechanically, so a person has to finish it.
 type Change struct {
 	// File is the app-relative, forward-slashed path of the file.
 	File string
-	// Line and Col are 1-based, at the start of the rewritten text.
+	// Line and Col are 1-based, at the start of the old spelling.
 	Line int
 	Col  int
 	// Rule names the rewrite: "outlet", "children", "set-state",
 	// "data-object", "functions-key", "functions-module" or "functions-import".
+	// A note has none.
 	Rule string
-	// Message describes the rewrite for a person, old spelling → new.
-	Message string
-}
-
-// Note is a site the codemod found and left alone: the rewrite was not safe to
-// make mechanically, so a person has to finish it.
-type Note struct {
-	File    string
-	Line    int
-	Col     int
+	// Message describes the site for a person: old spelling → new, or what to
+	// finish by hand.
 	Message string
 }
 
 // Result is what one run found.
 type Result struct {
 	Changes []Change
-	Notes   []Note
+	Notes   []Change
 	// Files is the number of distinct files the changes touch.
 	Files int
 }
@@ -107,7 +102,7 @@ func Run(root string, apply bool) (*Result, error) {
 			return nil, err
 		}
 		var edits []edit
-		var notes []Note
+		var notes []Change
 		if strings.HasSuffix(rel, ".pzl") {
 			edits, notes = pzlEdits(rel, string(src))
 		} else {
@@ -128,24 +123,23 @@ func Run(root string, apply bool) (*Result, error) {
 		}
 	}
 	res.Files = len(touched)
-	sort.SliceStable(res.Changes, func(i, j int) bool {
-		return lessPos(res.Changes[i].File, res.Changes[i].Line, res.Changes[i].Col, res.Changes[j].File, res.Changes[j].Line, res.Changes[j].Col)
-	})
-	sort.SliceStable(res.Notes, func(i, j int) bool {
-		return lessPos(res.Notes[i].File, res.Notes[i].Line, res.Notes[i].Col, res.Notes[j].File, res.Notes[j].Line, res.Notes[j].Col)
-	})
+	sortByPos(res.Changes)
+	sortByPos(res.Notes)
 	return res, nil
 }
 
-// lessPos orders two file positions: by file, then line, then column.
-func lessPos(fa string, la, ca int, fb string, lb, cb int) bool {
-	if fa != fb {
-		return fa < fb
-	}
-	if la != lb {
-		return la < lb
-	}
-	return ca < cb
+// sortByPos orders sites by file, then line, then column.
+func sortByPos(cs []Change) {
+	sort.SliceStable(cs, func(i, j int) bool {
+		a, b := cs[i], cs[j]
+		if a.File != b.File {
+			return a.File < b.File
+		}
+		if a.Line != b.Line {
+			return a.Line < b.Line
+		}
+		return a.Col < b.Col
+	})
 }
 
 // sourceFiles lists the files the codemod reads, app-relative and
@@ -232,13 +226,13 @@ func lineCol(src string, off int) (int, int) {
 
 // pzlEdits returns the rewrites for one .pzl file. a file that does not split
 // into sections is left alone — the type check reports why.
-func pzlEdits(rel, src string) ([]edit, []Note) {
+func pzlEdits(rel, src string) ([]edit, []Change) {
 	sec, err := parser.SplitSections(src, rel)
 	if err != nil {
 		return nil, nil
 	}
 	var edits []edit
-	var notes []Note
+	var notes []Change
 	edits = append(edits, markerEdits(rel, src, sec)...)
 	se, sn := scriptEdits(rel, sec.Source, sec.Scripts, sec.ScriptsPos.Offset)
 	edits = append(edits, se...)
@@ -376,7 +370,7 @@ func findCloseTag(src string, from int, name string) int {
 
 // scriptEdits returns the setData and data() rewrites for one script body
 // that starts at byte base of the file.
-func scriptEdits(rel, file, script string, base int) ([]edit, []Note) {
+func scriptEdits(rel, file, script string, base int) ([]edit, []Change) {
 	if strings.TrimSpace(script) == "" {
 		return nil, nil
 	}
@@ -389,7 +383,7 @@ func scriptEdits(rel, file, script string, base int) ([]edit, []Note) {
 // scriptFileEdits returns the rewrites for a plain .js / .mjs / .ts file:
 // setData calls, the formatters config key, and (when the module was renamed)
 // imports of app/formatters.
-func scriptFileEdits(rel, src string, moduleRenamed bool, oldModule string) ([]edit, []Note) {
+func scriptFileEdits(rel, src string, moduleRenamed bool, oldModule string) ([]edit, []Change) {
 	toks := codegen.TokenizeScript(src)
 	edits, notes := setStateEdits(rel, src, toks, 0)
 	ke, kn := functionsKeyEdits(rel, src, toks)
@@ -407,18 +401,18 @@ var domSetDataOwners = map[string]bool{"dataTransfer": true, "clipboardData": tr
 
 // setStateEdits renames this.setData( (and super.setData() to setState(.
 // a setData( call on any other receiver may be a view held in a variable or a
-// DOM call the codemod cannot tell apart, so it becomes a Note — except on
+// DOM call the codemod cannot tell apart, so it becomes a note — except on
 // dataTransfer / clipboardData, which are DOM and left alone silently.
-func setStateEdits(rel, file string, toks []codegen.ScriptToken, base int) ([]edit, []Note) {
+func setStateEdits(rel, file string, toks []codegen.ScriptToken, base int) ([]edit, []Change) {
 	var edits []edit
-	var notes []Note
+	var notes []Change
 	// a file that defines a setData of its own (a method or a function, not a
 	// call on something) has a setData that is not the view's — renaming its
 	// calls would break them, so the whole file is left for a person.
 	for i, t := range toks {
 		if t.Ident == "setData" && (i == 0 || toks[i-1].Ch != '.') && i+1 < len(toks) && toks[i+1].Ch == '(' {
 			line, col := lineCol(file, base+t.Off)
-			return nil, []Note{{File: rel, Line: line, Col: col,
+			return nil, []Change{{File: rel, Line: line, Col: col,
 				Message: "this file defines its own setData — its setData( calls were left alone; rename the view ones to setState( by hand (D191)"}}
 		}
 	}
@@ -443,7 +437,7 @@ func setStateEdits(rel, file string, toks []codegen.ScriptToken, base int) ([]ed
 			// a DOM call, not a view's
 		default:
 			line, col := lineCol(file, base+t.Off)
-			notes = append(notes, Note{File: rel, Line: line, Col: col,
+			notes = append(notes, Change{File: rel, Line: line, Col: col,
 				Message: "setData( on something other than this — if it is a view, rename it to setState( (D191)"})
 		}
 	}
@@ -452,15 +446,15 @@ func setStateEdits(rel, file string, toks []codegen.ScriptToken, base int) ([]ed
 
 // dataObjectEdits rewrites each positional data()/share() parameter list to
 // the one-object form. a list the codemod cannot map (a rest parameter, more
-// than two parameters) is left alone with a Note.
-func dataObjectEdits(rel, file, script string, base int, notes *[]Note) []edit {
+// than two parameters) is left alone with a note.
+func dataObjectEdits(rel, file, script string, base int, notes *[]Change) []edit {
 	var edits []edit
 	for _, d := range codegen.PositionalDataDecls(script) {
 		inner := script[d.OpenOff+1 : d.CloseOff]
 		text, ok := objectParams(inner)
 		if !ok {
 			line, col := lineCol(file, base+d.NameOff)
-			*notes = append(*notes, Note{File: rel, Line: line, Col: col,
+			*notes = append(*notes, Change{File: rel, Line: line, Col: col,
 				Message: fmt.Sprintf("%s() still takes positional parameters — write %s({ params, props, shared }) by hand (D197)", d.Method, d.Method)})
 			continue
 		}
@@ -638,10 +632,10 @@ var configCalls = map[string]int{"PuzzleApp": 0, "createTestApp": 0, "mountView"
 // to new PuzzleApp(…), createTestApp(…) or mountView(view, …): `formatters:`
 // becomes `functions:`, and the shorthand `formatters` becomes
 // `functions: formatters`. a config built elsewhere and passed by name is a
-// Note, because the codemod cannot see which object reaches the call.
-func functionsKeyEdits(rel, src string, toks []codegen.ScriptToken) ([]edit, []Note) {
+// note, because the codemod cannot see which object reaches the call.
+func functionsKeyEdits(rel, src string, toks []codegen.ScriptToken) ([]edit, []Change) {
 	var edits []edit
-	var notes []Note
+	var notes []Change
 	for i, t := range toks {
 		argIndex, ok := configCalls[t.Ident]
 		if !ok || i+1 >= len(toks) || toks[i+1].Ch != '(' {
@@ -659,7 +653,7 @@ func functionsKeyEdits(rel, src string, toks []codegen.ScriptToken) ([]edit, []N
 		if toks[start].Ch != '{' {
 			if toks[start].Ident != "" && fileMentionsFormattersKey(toks) {
 				line, col := lineCol(src, toks[start].Off)
-				notes = append(notes, Note{File: rel, Line: line, Col: col,
+				notes = append(notes, Change{File: rel, Line: line, Col: col,
 					Message: "this config is built elsewhere — if it has a formatters key, rename it to functions (D199)"})
 			}
 			continue
@@ -671,7 +665,7 @@ func functionsKeyEdits(rel, src string, toks []codegen.ScriptToken) ([]edit, []N
 
 // fileMentionsFormattersKey reports whether any `formatters` identifier sits
 // in an object-key position in the file, so a config passed by name only
-// draws a Note when there is something to check.
+// draws a note when there is something to check.
 func fileMentionsFormattersKey(toks []codegen.ScriptToken) bool {
 	for i, t := range toks {
 		if t.Ident != "formatters" || i == 0 {
@@ -862,21 +856,12 @@ func resolveSpecifier(dir, spec string) string {
 	return p
 }
 
-// Format renders a result for the terminal: one line per change (and per note)
-// as `file:line:col  message`.
-func Format(res *Result) string {
+// Format renders changes (or notes) for the terminal, one per line as
+// `file:line:col  message`.
+func Format(cs []Change) string {
 	var b bytes.Buffer
-	for _, c := range res.Changes {
+	for _, c := range cs {
 		fmt.Fprintf(&b, "  %s:%d:%d  %s\n", c.File, c.Line, c.Col, c.Message)
-	}
-	return b.String()
-}
-
-// FormatNotes renders the notes, one per line.
-func FormatNotes(res *Result) string {
-	var b bytes.Buffer
-	for _, n := range res.Notes {
-		fmt.Fprintf(&b, "  %s:%d:%d  %s\n", n.File, n.Line, n.Col, n.Message)
 	}
 	return b.String()
 }
