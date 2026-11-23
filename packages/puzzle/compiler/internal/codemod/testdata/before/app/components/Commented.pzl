@@ -1,0 +1,18 @@
+<puzzle-view>
+  <p>{ label }</p>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// a comment inside the list: rebuilt on one line, the `//` would swallow the
+// object's closing brace, so this is left for a person
+export default class Commented extends PuzzleView {
+  data(
+    params, // the route's
+    props // the caller's
+  ) {
+    return { label: props.label ?? params.id };
+  }
+}
+</script>

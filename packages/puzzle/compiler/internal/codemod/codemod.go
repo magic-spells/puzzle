@@ -448,7 +448,7 @@ func setStateEdits(rel, file string, toks []codegen.ScriptToken, base int) ([]ed
 
 // dataObjectEdits rewrites each positional data()/share() parameter list to
 // the one-object form. a list the codemod cannot map (a rest parameter, more
-// than two parameters) is left alone with a note.
+// than two parameters, a comment) is left alone with a note.
 func dataObjectEdits(rel, file, script string, base int, notes *[]Change) []edit {
 	var edits []edit
 	for _, d := range codegen.PositionalDataDecls(script) {
@@ -564,12 +564,16 @@ func parseParam(s string) (param, bool) {
 }
 
 // splitTopLevel splits s on commas outside brackets, braces, parens, angle
-// brackets of a type, strings and comments.
+// brackets of a type and strings. a list holding a comment returns nil: the
+// object is rebuilt on one line, where a `//` would swallow its closing `}`.
 func splitTopLevel(s string) []string {
 	toks := codegen.TokenizeScript(s)
 	var parts []string
 	depth, last := 0, 0
 	for i, t := range toks {
+		if t.Comment {
+			return nil
+		}
 		switch t.Ch {
 		case '(', '[', '{', '<':
 			depth++

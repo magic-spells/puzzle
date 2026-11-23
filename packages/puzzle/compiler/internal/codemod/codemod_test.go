@@ -131,13 +131,14 @@ func TestDryRunListsSitesAndWritesNothing(t *testing.T) {
 			t.Errorf("unexpected rule %s (%d changes)", rule, n)
 		}
 	}
-	// the receiver it cannot judge, and the file that defines its own setData
+	// the receiver it cannot judge, the file that defines its own setData, and
+	// the data() list holding a comment
 	var noteFiles []string
 	for _, n := range res.Notes {
 		noteFiles = append(noteFiles, n.File)
 	}
 	sort.Strings(noteFiles)
-	if strings.Join(noteFiles, ",") != "app/lib/fake.js,app/views/Shell.pzl,tests/home.test.js" {
+	if strings.Join(noteFiles, ",") != "app/components/Commented.pzl,app/lib/fake.js,app/views/Shell.pzl,tests/home.test.js" {
 		t.Errorf("notes in %v", noteFiles)
 	}
 	if res.Files != 8 {
