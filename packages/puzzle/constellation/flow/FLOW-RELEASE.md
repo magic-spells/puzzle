@@ -43,7 +43,7 @@ that installs with no working `puzzle` behind it.
    (pieces package + demo package + demo header badge, eslint, prettier, devtools package +
    panel + extension manifest). Do not add `optionalDependencies` to the tracked manifest.
 2. **Sweep the `@magic-spells/puzzle` ranges** in
-   `compiler/internal/scaffold/templates/*/package.json` and `examples/*/package.json`
+   `starters/*/package.json` and `examples/*/package.json`
    (`rg -n '"@magic-spells/puzzle":' …`). The scaffold manifests are `go:embed`ed: a stale
    range ships a broken `puzzle init` that only rebuilt binaries can fix (carets don't
    cross a 0.x minor). Leave each template's own `version` alone.
@@ -83,7 +83,17 @@ that installs with no working `puzzle` behind it.
    temp-dir install runs `puzzle --version`, puzzle-pieces exists at the EXACT version, and
    a scaffolded app's `add piece` resolves to it (read from `pieces.lock`,
    `PUZZLE_PIECES_REGISTRY` deleted from the child env, fallback notice = failure).
-10. **Hand off to Cory**: the `vX.Y.Z` tag AND the companion `packages/puzzle-lang/vX.Y.Z`
+10. **`npm run starter-repos -- --push`** (`scripts/starter-repos.mjs`) rewrites the two
+    starter repos, `magic-spells/puzzle-starter` (`default`) and
+    `magic-spells/puzzle-starter-static` (`static`), with this checkout's CLI: each is
+    `puzzle init <repo> --template <name> --yes` plus `puzzle add deploy vercel` and
+    `netlify`, committed on top of the repo's `main` as `puzzle <version>` and pushed. Run
+    it from the published release commit, so the repos match what npm ships. Before the
+    first run, create both repos on GitHub empty (no README or licence: each push replaces
+    the whole tree). Never edit those repos by hand; change `starters/` and run this again.
+    Without `--push` it only writes the folders (a temp dir, or `--out <dir>`) and prints
+    what it would push.
+11. **Hand off to Cory**: the `vX.Y.Z` tag AND the companion `packages/puzzle-lang/vX.Y.Z`
     tag (Go resolves subdirectory modules only through prefixed tags), the merge into
     `main`, and the devtools zip (`npm run build:compiler`, then `npm run build:zip` in
     `../puzzle-devtools`), which is separate and unhurried.

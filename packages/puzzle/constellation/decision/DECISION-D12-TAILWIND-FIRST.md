@@ -13,7 +13,7 @@ code_refs:
   - compiler/internal/config/config.go
   - compiler/internal/plugin/plugin.go
   - compiler/internal/styles/styles.go
-  - compiler/internal/scaffold/templates/todos/puzzle.config.js
+  - starters/default/puzzle.config.js
 verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 

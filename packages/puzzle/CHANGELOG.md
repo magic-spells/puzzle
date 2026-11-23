@@ -354,6 +354,12 @@ Production sizes: hello-world **23.9 KB gzip** (23.0 in 0.9.0), todos
   a custom element (a tag with a hyphen) keeps its own `on…` attributes. A
   host of `packages/puzzle-lang` that has no `@event` syntax turns the checks
   off with `parser.Options.SkipForeignSyntaxCheck`.
+- **BREAKING: the `todos` starter is gone.** `puzzle init` now offers
+  `default` and `static` (see CLI). `puzzle init --template todos` (or
+  `-t todos`) prints `invalid --template "todos" (available: default, static)`,
+  exits 1 and writes nothing. Pass `-t default` or `-t static` instead. The
+  full todo app is still in the Puzzle repo as `examples/todos`, to read or
+  copy from.
 
 ### Added
 
@@ -376,8 +382,8 @@ Production sizes: hello-world **23.9 KB gzip** (23.0 in 0.9.0), todos
   An explicit `error` prop still wins; without `form`, Field is unchanged.
 - **New apps come with a test suite, and app tests can import `.pzl` (D194).**
   `puzzle init` now writes `tests/` with a starter test (`default`: a
-  component test that clicks the counter; `todos`: a view test that adds a
-  todo and a store test on the model; `.test.ts` under `--typescript`), a
+  component test that clicks the counter; `static`: a test that mounts the
+  home page and clicks its counter; `.test.ts` under `--typescript`), a
   `vitest.config.js`, a `"test": "vitest run"` script and `vitest` + `jsdom`
   dev dependencies, so `npm test` passes on a fresh app. The config uses the
   new `@magic-spells/puzzle/vitest` subpath: `puzzle()` is a Vite plugin that
@@ -838,9 +844,19 @@ habit. Nothing existing breaks: renamed spellings stay accepted.
   works as a hidden compatibility alias (to be deprecated later); given both,
   the path resolves against `--dir`.
 - **The default starter is dark only and links to the docs.** Its home page
-  has a row of links to the Puzzle docs, the tutorial, the Puzzle site and the
-  Puzzle Pieces site. Its muted text and hover colours are tuned for the dark
-  page.
+  ends with four boxes that link to the Puzzle docs, the tutorial, the Puzzle
+  site and the Puzzle Pieces site. Its muted text and hover colours are tuned
+  for the dark page.
+- **`puzzle init --template static`** writes a static site
+  (`output: 'static'`): a header with Home and About that marks the current
+  page, an About page, a 404 page, and a small counter that shows a static
+  page still runs components. Its home page ends with the same four boxes.
+  `--typescript` works with it. Its printed next steps add `npm run build`
+  and `npm run preview`. The template prompt now shows one line about each
+  starter.
+- **Both starters have a `preview` script** (`npm run preview` runs
+  `puzzle preview`). Their READMEs show `npm run build` and
+  `npm run preview`, and write every other command as `npx puzzle …`.
 - **`-y` / `--yes`** on `init`, `add` and `upgrade` (and `upgrade skills`)
   takes every prompt's default without asking.
 - **`--host`** on `dev` and `preview`: a bare `--host` listens on every

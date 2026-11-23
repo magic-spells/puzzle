@@ -58,7 +58,10 @@ Run from `packages/puzzle` with `go test ./compiler/cmd/... ./compiler/internal/
   template that drifts from the grammar fails here, not in a user's first `puzzle dev`.
   `TestGenerateRejectsReservedComponentName` pins the D180 refusal (no files written) for
   every scaffold kind in JS and TS apps. `TestEveryTemplateShipsATestSuite` pins the test
-  suite every template ships.
+  suite every template ships. `TestScaffoldDefaultBuilds`, `TestScaffoldStaticBuilds` and
+  their `…TypeScriptBuildsAndChecks` twins build each starter (the static one must write
+  `index.html`, `about/index.html` and `404.html`) and run `puzzle check` on the
+  TypeScript ones.
 - **The embedded agent skill**: `skill_examples_test.go` compiles every template example
   `skills/puzzle/SKILL.md` presents as working and requires the ones it shows as errors to
   fail, so the skill cannot teach syntax the compiler rejects.

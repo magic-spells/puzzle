@@ -75,9 +75,9 @@ this card holds the implementation rules behind it.
   TypeScript installed it then skips the type check with a note, not a failure.
 - **`--fixtures`** (D98) — `build/fixtures.go` writes the wrapper under `.puzzle/fixtures/`;
   [[DECISION-D153-PUZZLE-SCRATCH-DIR]].
-- **`init`** — embedded `default`/`todos` trees plus `-ts` overlays (`internal/scaffold`);
-  writes `tsconfig.json` or `jsconfig.json`, never both. TTY prompts (D77) are gated on a
-  real isatty check AND no `--yes`.
+- **`init`** — embedded `default`/`static` trees plus `-ts` overlays (`starters/`, written
+  by `internal/scaffold`); writes `tsconfig.json` or `jsconfig.json`, never both. TTY
+  prompts (D77) are gated on a real isatty check AND no `--yes`.
 - **`generate`** — `IsTypeScriptApp` (a root `tsconfig.json`) switches every stub. Reserved
   marker names are refused for components and `Component` for every `.pzl` scaffold
   (D180), with a rename hint before any write. Family collisions are all-or-nothing;

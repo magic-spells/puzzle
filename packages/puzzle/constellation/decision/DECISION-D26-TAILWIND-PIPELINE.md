@@ -20,8 +20,8 @@ code_refs:
   - compiler/internal/styles/resolve.go
   - compiler/internal/styles/styles.go
   - compiler/internal/styles/watch.go
-  - compiler/internal/scaffold/templates/todos/package.json
-  - compiler/internal/scaffold/templates/todos/puzzle.config.js
+  - starters/default/package.json
+  - starters/default/puzzle.config.js
 verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
 

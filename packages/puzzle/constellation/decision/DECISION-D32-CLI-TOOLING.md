@@ -22,8 +22,9 @@ code_refs:
   - compiler/internal/pieces/npm.go
   - compiler/internal/pieces/pieces.go
   - compiler/internal/pieces/lock.go
-  - compiler/internal/scaffold/templates/default/package.json
-  - compiler/internal/scaffold/templates/todos/package.json
+  - starters/default/package.json
+  - starters/static/package.json
+  - scripts/starter-repos.mjs
 verified_sha: c4c10f303caeac8050633ea434af17e4d3a75001
 ---
 
@@ -33,7 +34,7 @@ The scaffolding and tooling commands beside `dev`/`build` ([[DECISION-D13-CLI-DE
 
 ## Decision
 
-- **`puzzle init [app-name|path] [-t default|todos] [--typescript] [-y]`** scaffolds a Tailwind-first app (`app/` source, `app/app.js` or `app/app.ts` entry). A path such as `../apps/foo` creates `foo` inside `../apps` (`--dir <parent>` is a hidden alias). Names are validated npm-safe; a non-empty target is refused. It prompts only on a real terminal, for flags not passed explicitly ([[DECISION-D77-INIT-PROMPTS]]); under a pipe or CI nothing is prompted and a missing name is an error.
+- **`puzzle init [app-name|path] [-t default|static] [--typescript] [-y]`** scaffolds a Tailwind-first app (`app/` source, `app/app.js` or `app/app.ts` entry). A path such as `../apps/foo` creates `foo` inside `../apps` (`--dir <parent>` is a hidden alias). Names are validated npm-safe; a non-empty target is refused. It prompts only on a real terminal, for flags not passed explicitly ([[DECISION-D77-INIT-PROMPTS]]); under a pipe or CI nothing is prompted and a missing name is an error.
 - **`puzzle generate <component|view|layout|model> <Name> [--path <dir>] [-f/--force] [--dir <app-root>]`** (alias `g`) stubs into `app/components|views|layouts|models`, finding the project root by walking up for `package.json`/`puzzle.config.js`. TypeScript apps get TypeScript stubs ([[DECISION-D54-TYPESCRIPT-SCRIPTS]]); `--family` scaffolds a component family ([[DECISION-D167-COMPONENT-FAMILIES]]).
 - **`puzzle add tailwind`** writes `puzzle.config.js` + `app/styles/styles.css` when absent. `add theme` is [[DECISION-D171-ADD-THEME]]; `add deploy` is [[DECISION-D198-DEPLOY-TEMPLATES]]; `add skills` is [[DECISION-D78-AGENT-SKILL-DISTRIBUTION]].
 - **`puzzle add piece <name…>`** copies pieces from the puzzle-pieces registry (`compiler/internal/pieces`):
@@ -46,7 +47,8 @@ The scaffolding and tooling commands beside `dev`/`build` ([[DECISION-D13-CLI-DE
 
 ## Rules
 - **`add`/`generate` never rewrite user JavaScript** ([[DECISION-D03-SCRIPTS-REAL-JS]]): model `generate` does not edit `app/models/index.js`, and an existing `puzzle.config.js` is never rewritten; the needed registration is printed as an exact snippet.
-- **Templates are real embedded file trees** under `compiler/internal/scaffold/templates/` (`go:embed`, `__APP_NAME__` substituted at write time).
+- **Templates are real embedded file trees** under `starters/` (`starters/embed.go`, `go:embed`, `__APP_NAME__` substituted at write time).
+- **The starter repos are generated.** `npm run starter-repos` writes `magic-spells/puzzle-starter` (`default`) and `magic-spells/puzzle-starter-static` (`static`) as `puzzle init` output plus `add deploy vercel` and `add deploy netlify` ([[FLOW-RELEASE]]). Change `starters/`, never those repos by hand.
 - **Generated `.pzl` stubs are compile-checked** against the repo's own parser + codegen in tests, so the generators cannot drift from the language.
 - Each command registers itself from its own file in `compiler/cmd/puzzle/`; logic lives in `internal/scaffold` and `internal/generate`.
 - The scaffolded `package.json` pins `@magic-spells/puzzle` at the binary's release, and `release:prep` asserts it: a caret range does not cross a 0.x minor, and the embedded templates can only be corrected by rebuilding every platform binary.

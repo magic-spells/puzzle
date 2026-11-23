@@ -141,7 +141,7 @@ Contract: §3–§6, §17, §18, §24, §28, §31, §43, §47, §57, §64–§67
 
 Commands live in `compiler/cmd/puzzle`. Global: `--no-color`; `puzzle version` = `--version` = `-v`.
 
-- `puzzle init [app-name|path]` — `-t/--template default|todos`, `-y/--yes`, `--typescript`. Every template includes `tests/`, `vitest.config.js` and an `npm test` script.
+- `puzzle init [app-name|path]` — `-t/--template default|static`, `-y/--yes`, `--typescript`. `default` is a single-page app; `static` is an `output: 'static'` site. Every template includes `tests/`, `vitest.config.js`, and `npm test` and `npm run preview` scripts.
 - `puzzle dev [dir]` — `-p/--port` (3000), `--strict-port`, `--host`, `-o/--open`, `--fixtures`, `--profile-build`.
 - `puzzle build [dir]` — `-m/--mode production|development`, `--static`, `--hybrid`, `--fixtures` (not with prerender), `-q/--quiet` (skips the summary, page report and update notice), `--profile-build` (or `PUZZLE_PROFILE_BUILD=1`). Entry is `app/app.ts` else `app/app.js`; both is an error.
 - `puzzle preview [dir]` — `-p/--port` (4000), `--strict-port`, `--host`.
