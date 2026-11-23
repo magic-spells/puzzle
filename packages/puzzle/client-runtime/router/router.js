@@ -3787,9 +3787,6 @@ export function normalizeBase(base) {
  * @returns {string}
  */
 export function encodeURL(path, mode, base) {
-	if (typeof path !== 'string') {
-		throw new Error(`[puzzle] router.url(path) expects a string path (got ${typeof path})`);
-	}
 	if (path[0] !== '/') return path;
 	path = normalizeRoutePath(path);
 	return mode ? mode.encode(path, base) : base + path;
