@@ -436,6 +436,7 @@ describe('static output resolves named links and carries the table only where ne
 		expect(stub.url({ name: 'album', params: { id: 7 } })).toBe('/docs/albums/7');
 		expect(stub.named).toBe(true);
 		expect(stub.url('/about')).toBe('/docs/about');
+		for (const bad of [5, null, true]) expect(() => stub.url(bad)).toThrow(/\[puzzle\]/);
 	});
 
 	it('a page that renders a named link carries the names island; one that does not stays unchanged', async () => {
