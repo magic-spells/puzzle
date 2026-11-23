@@ -161,6 +161,7 @@ import {
   api,
   applyViewSnapshot,
   ensureSubscriptions,
+  isConnected,
   takeViewSelection,
 } from '../bridge.js';
 import { entriesOf, moduleLabel, moduleTitle, viewKind } from '../values.js';
@@ -237,7 +238,7 @@ export default class ViewsView extends PuzzleView {
   mounted() {
     // Tab activation. `data()` has already scheduled a debounced snapshot; this
     // collapses it into an immediate one so opening the panel is not laggy.
-    if (this.connected()) this.scheduleTree(0);
+    if (isConnected()) this.scheduleTree(0);
   }
 
   destroyed() {
@@ -290,20 +291,14 @@ export default class ViewsView extends PuzzleView {
     this._rows = rows;
 
     const inspect = local.inspect;
-    const empty = disconnectedEmpty(state);
 
     return {
-      disconnected: !connected,
-      emptyTitle: empty.title,
-      emptyHint: empty.description,
+      ...disconnectedEmpty(state),
 
       rows,
       liveCount: views.filter((view) => view.live).length,
-      loadingTree: local.loadingTree,
       // The reload glyph IS the spinner while a snapshot is in flight.
       reloadClass: local.loadingTree ? 'animate-spin' : '',
-      treeError: local.treeError,
-      toast: local.toast,
 
       // The pane opens on SELECTION, not on a successful answer — a failed
       // inspect has to be able to say so somewhere.
@@ -312,7 +307,6 @@ export default class ViewsView extends PuzzleView {
       detailId: selectedId ?? '',
       detailName: inspect?.name ?? selectedRecord?.name ?? 'View',
       detailModule: inspect?.module ?? selectedRecord?.module ?? '—',
-      inspectError: local.inspectError,
 
       paramEntries: entriesOf(inspect?.params),
       propEntries: entriesOf(inspect?.props),
@@ -415,12 +409,6 @@ export default class ViewsView extends PuzzleView {
     return rows;
   }
 
-  /** True once `hello` landed with a protocol version this build renders. */
-  connected() {
-    const connection = this.ctx.store.findOne('connection', CONNECTION_ID);
-    return connection?.state === CONNECTION_STATE.CONNECTED;
-  }
-
   /** Coalesce tree refreshes onto one timer; `delay` 0 is "as soon as possible". */
   scheduleTree(delay) {
     clearTimeout(this._treeTimer);
@@ -431,19 +419,16 @@ export default class ViewsView extends PuzzleView {
   }
 
   async loadTree() {
-    if (this.isDestroyed || !this.connected()) return;
+    if (this.isDestroyed || !isConnected()) return;
     this.setState({ loadingTree: true, treeError: '' });
     try {
       const result = await api.snapshotViews();
       if (this.isDestroyed) return;
       applyViewSnapshot(result?.roots);
     } catch (err) {
-      if (this.isDestroyed) return;
       this.setState('treeError', err?.message ?? String(err));
     } finally {
-      if (!this.isDestroyed) {
-        this.setState('loadingTree', false);
-      }
+      this.setState('loadingTree', false);
     }
   }
 
@@ -474,9 +459,9 @@ export default class ViewsView extends PuzzleView {
       if (this.getData().selectedId !== id) return;
       this.setState({ inspect: result ?? null, inspectError: '' });
       const record = this.ctx.store.findOne('pview', id);
-      if (record) record.update({ inspected: result ?? null, inspectedAt: Date.now() });
+      if (record) record.update({ inspected: result ?? null });
     } catch (err) {
-      if (this.isDestroyed || this.getData().selectedId !== id) return;
+      if (this.getData().selectedId !== id) return;
       this.setState({ inspect: null, inspectError: err?.message ?? String(err) });
     }
   }
@@ -486,7 +471,6 @@ export default class ViewsView extends PuzzleView {
     this.setState('toast', message);
     this._toastTimer = setTimeout(() => {
       this._toastTimer = null;
-      if (this.isDestroyed) return;
       this.setState('toast', '');
     }, TOAST_MS);
   }

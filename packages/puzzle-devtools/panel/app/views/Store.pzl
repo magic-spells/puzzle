@@ -208,7 +208,7 @@ import CopyButton from '../components/ui/CopyButton.pzl';
 import Empty from '../components/ui/Empty.pzl';
 import SplitPanel from '../components/ui/SplitPanel.pzl';
 import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
-import { api, applyRecordSnapshot } from '../bridge.js';
+import { api, applyRecordSnapshot, isConnected } from '../bridge.js';
 import { disconnectedEmpty } from '../emptystate.js';
 import {
   appendHistory,
@@ -269,7 +269,7 @@ export default class StoreView extends PuzzleView {
 
   mounted() {
     // Tab activation: one unfiltered snapshot establishes the type list.
-    if (this.connected()) this.loadTypes();
+    if (isConnected()) this.loadTypes();
   }
 
   destroyed() {
@@ -304,12 +304,9 @@ export default class StoreView extends PuzzleView {
 
     const selectedRowId = local.selectedRowId;
     const selectedRow = findRow(records, shape.pk, selectedRowId);
-    const empty = disconnectedEmpty(state);
 
     return {
-      disconnected: !connected,
-      emptyTitle: empty.title,
-      emptyHint: empty.description,
+      ...disconnectedEmpty(state),
 
       types: buckets.map((type) => ({
         id: type.id,
@@ -337,12 +334,6 @@ export default class StoreView extends PuzzleView {
         from: preview(entry.from, 40),
         to: preview(entry.to, 40),
       })),
-
-      editError: local.editError,
-      editOk: local.editOk,
-      applying: local.applying,
-      loading: local.loading,
-      error: local.error,
     };
   }
 
@@ -396,12 +387,6 @@ export default class StoreView extends PuzzleView {
 
   /* ---- requests ---------------------------------------------------------- */
 
-  /** True once `hello` landed with a protocol version this build renders. */
-  connected() {
-    const connection = this.ctx.store.findOne('connection', CONNECTION_ID);
-    return connection?.state === CONNECTION_STATE.CONNECTED;
-  }
-
   scheduleRefresh() {
     clearTimeout(this._flushTimer);
     this._flushTimer = setTimeout(() => {
@@ -415,7 +400,7 @@ export default class StoreView extends PuzzleView {
   }
 
   async loadTypes(type) {
-    if (this.isDestroyed || !this.connected()) return;
+    if (this.isDestroyed || !isConnected()) return;
     this.setState({ loading: true, error: '' });
     try {
       const result = await api.snapshotRecords(type);
@@ -428,12 +413,9 @@ export default class StoreView extends PuzzleView {
       // Every re-snapshot is a chance to see what changed under the open card.
       this.syncWatched();
     } catch (err) {
-      if (this.isDestroyed) return;
       this.setState('error', err?.message ?? String(err));
     } finally {
-      if (!this.isDestroyed) {
-        this.setState('loading', false);
-      }
+      this.setState('loading', false);
     }
   }
 
@@ -486,7 +468,6 @@ export default class StoreView extends PuzzleView {
     this.setState('editOk', message);
     this._okTimer = setTimeout(() => {
       this._okTimer = null;
-      if (this.isDestroyed) return;
       this.setState('editOk', '');
     }, OK_MS);
   }
@@ -579,12 +560,9 @@ export default class StoreView extends PuzzleView {
         // A §20 validation failure arrives here: panel-glue turns an `{ error }`
         // result into a rejection. The typed values stay in `edits` so the field
         // can be corrected instead of retyped.
-        if (this.isDestroyed) return;
         this.setState('editError', err?.message ?? String(err));
       } finally {
-        if (!this.isDestroyed) {
-          this.setState('applying', false);
-        }
+        this.setState('applying', false);
       }
     },
 

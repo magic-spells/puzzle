@@ -123,7 +123,7 @@ import SplitPanel from '../components/ui/SplitPanel.pzl';
 import ViewIdentity from '../components/ViewIdentity.pzl';
 import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
 import { disconnectedEmpty } from '../emptystate.js';
-import { ensureSubscriptions, ensureViews, requestViewSelection } from '../bridge.js';
+import { ensureSubscriptions, ensureViews, isConnected, requestViewSelection } from '../bridge.js';
 
 /**
  * The Subscriptions panel: which store keys exist, who listens to each, and
@@ -167,7 +167,7 @@ export default class SubscriptionsView extends PuzzleView {
   }
 
   mounted() {
-    if (this.connected()) this.load({ force: true });
+    if (isConnected()) this.load({ force: true });
   }
 
   destroyed() {
@@ -195,12 +195,9 @@ export default class SubscriptionsView extends PuzzleView {
 
     const selectedKey = local.selectedKey;
     const selected = selectedKey ? store.findOne('subscription', selectedKey) : null;
-    const empty = disconnectedEmpty(state);
 
     return {
-      disconnected: !connected,
-      emptyTitle: empty.title,
-      emptyHint: empty.description,
+      ...disconnectedEmpty(state),
 
       keyCount: entries.length,
       groups: [
@@ -217,7 +214,6 @@ export default class SubscriptionsView extends PuzzleView {
       heldNote: heldNote(selected),
 
       loadingClass: local.loading ? 'animate-spin text-accent' : '',
-      error: local.error,
     };
   }
 
@@ -293,11 +289,6 @@ export default class SubscriptionsView extends PuzzleView {
     });
   }
 
-  connected() {
-    const connection = this.ctx.store.findOne('connection', CONNECTION_ID);
-    return connection?.state === CONNECTION_STATE.CONNECTED;
-  }
-
   scheduleRefresh() {
     clearTimeout(this._flushTimer);
     this._flushTimer = setTimeout(() => {
@@ -307,7 +298,7 @@ export default class SubscriptionsView extends PuzzleView {
   }
 
   async load({ force = false } = {}) {
-    if (this.isDestroyed || !this.connected()) return;
+    if (this.isDestroyed || !isConnected()) return;
     this.setState({ loading: true, error: '' });
     try {
       // Shared with the Views inspector: within the window, whichever panel
@@ -318,11 +309,9 @@ export default class SubscriptionsView extends PuzzleView {
       // opened straight to this tab could only print bare `#2` ids.
       await Promise.all([ensureSubscriptions({ force }), ensureViews({ force })]);
     } catch (err) {
-      if (!this.isDestroyed) this.setState('error', err?.message ?? String(err));
+      this.setState('error', err?.message ?? String(err));
     } finally {
-      if (!this.isDestroyed) {
-        this.setState('loading', false);
-      }
+      this.setState('loading', false);
     }
   }
 

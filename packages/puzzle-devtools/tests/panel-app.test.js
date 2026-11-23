@@ -215,8 +215,6 @@ function stubBridge() {
 	const world = transcript();
 
 	return {
-		tabId: 1,
-		themeName: 'dark',
 		requests,
 		world,
 		/** Every request type the panels can issue; values may be functions of the payload. */
@@ -264,15 +262,12 @@ function stubBridge() {
 		},
 		onMessage(cb) {
 			subs.message.push(cb);
-			return () => {};
 		},
 		onStatus(cb) {
 			subs.status.push(cb);
-			return () => {};
 		},
 		onNavigated(cb) {
 			subs.nav.push(cb);
-			return () => {};
 		},
 		async request(type, payload) {
 			requests.push([type, payload]);

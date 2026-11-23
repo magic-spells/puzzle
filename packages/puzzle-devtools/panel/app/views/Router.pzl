@@ -88,7 +88,7 @@ import StateGroup from '../components/StateGroup.pzl';
 import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
 import { EVENTS } from '../../../protocol/constants.js';
 import { disconnectedEmpty } from '../emptystate.js';
-import { api } from '../bridge.js';
+import { api, isConnected } from '../bridge.js';
 import { entriesOf } from '../values.js';
 
 /**
@@ -114,7 +114,7 @@ export default class RouterView extends PuzzleView {
   }
 
   mounted() {
-    if (this.connected()) this.load();
+    if (isConnected()) this.load();
   }
 
   destroyed() {
@@ -144,12 +144,9 @@ export default class RouterView extends PuzzleView {
     // The pulled snapshot is richer; the last commit is the live fallback until
     // it lands (and after a panel opens mid-session).
     const route = local.route ?? commit ?? {};
-    const empty = disconnectedEmpty(state);
 
     return {
-      disconnected: !connected,
-      emptyTitle: empty.title,
-      emptyHint: empty.description,
+      ...disconnectedEmpty(state),
 
       pathname: route.pathname ?? '—',
       pattern: route.route ?? '',
@@ -160,7 +157,6 @@ export default class RouterView extends PuzzleView {
       history: this.toHistory(events),
 
       loadingClass: local.loading ? 'animate-spin text-accent' : '',
-      error: local.error,
     };
   }
 
@@ -205,11 +201,6 @@ export default class RouterView extends PuzzleView {
       }));
   }
 
-  connected() {
-    const connection = this.ctx.store.findOne('connection', CONNECTION_ID);
-    return connection?.state === CONNECTION_STATE.CONNECTED;
-  }
-
   scheduleReload() {
     clearTimeout(this._commitTimer);
     this._commitTimer = setTimeout(() => {
@@ -219,17 +210,15 @@ export default class RouterView extends PuzzleView {
   }
 
   async load() {
-    if (this.isDestroyed || !this.connected()) return;
+    if (this.isDestroyed || !isConnected()) return;
     this.setState({ loading: true, error: '' });
     try {
       const result = await api.snapshotRoute();
-      if (!this.isDestroyed) this.setState('route', result ?? null);
+      this.setState('route', result ?? null);
     } catch (err) {
-      if (!this.isDestroyed) this.setState('error', err?.message ?? String(err));
+      this.setState('error', err?.message ?? String(err));
     } finally {
-      if (!this.isDestroyed) {
-        this.setState('loading', false);
-      }
+      this.setState('loading', false);
     }
   }
 

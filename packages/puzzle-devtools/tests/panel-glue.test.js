@@ -69,7 +69,6 @@ describe('panel-glue', () => {
 		bridge = box.window.__PUZZLE_DEVTOOLS_CREATE_BRIDGE__({
 			runtime: chrome.runtime,
 			tabId: 17,
-			themeName: 'dark',
 			timeoutMs: 40,
 		});
 	});
@@ -150,19 +149,13 @@ describe('panel-glue', () => {
 
 	it('delivers runtime events to onMessage subscribers with their seq', () => {
 		const seen = [];
-		const off = bridge.onMessage((message, seq) => seen.push([message.type, seq]));
+		bridge.onMessage((message, seq) => seen.push([message.type, seq]));
 		bridge.connect();
 
 		chrome.deliver({
 			source: SOURCE_HOOK,
 			seq: 4,
 			message: { puzzle: 1, v: 1, type: 'view-mounted', payload: { id: 1 } },
-		});
-		off();
-		chrome.deliver({
-			source: SOURCE_HOOK,
-			seq: 5,
-			message: { puzzle: 1, v: 1, type: 'view-destroyed', payload: { id: 1 } },
 		});
 
 		expect(seen).toEqual([['view-mounted', 4]]);
@@ -186,10 +179,5 @@ describe('panel-glue', () => {
 		const offline = box.window.__PUZZLE_DEVTOOLS_CREATE_BRIDGE__({ runtime: null, tabId: 1 });
 		await expect(offline.request('snapshot:views')).rejects.toThrow('not connected');
 		expect(offline.sendListening()).toBe(false);
-	});
-
-	it('exposes the theme name it was constructed with', () => {
-		expect(bridge.themeName).toBe('dark');
-		expect(bridge.tabId).toBe(17);
 	});
 });

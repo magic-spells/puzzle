@@ -51,10 +51,5 @@ export default class PView extends PuzzleModel {
 		heldKeys: Puzzle.array().default(() => []),
 		/** The most recent `inspect:view` payload — { params, props, model, local }. */
 		inspected: Puzzle.object().default(() => null),
-		inspectedAt: Puzzle.number().default(0),
 	};
-
-	get label() {
-		return this.module ? `${this.name} · ${this.module}` : this.name;
-	}
 }
