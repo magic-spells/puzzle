@@ -92,8 +92,6 @@ import { arcPath, formatTick } from '../../lib/chart-math.js';
 // sweep clockwise; a small pad angle (≈2px at the outer radius) opens a surface gap
 // between neighbors. Hover keeps the pointed slice at full opacity and dims the rest.
 
-let uid = 0;
-
 const GAP = 2; // px surface gap between slices (converted to a pad angle)
 
 const TIP_CLASS =
@@ -129,7 +127,6 @@ function slicePaths(cx, cy, rO, rI, a0, a1) {
 
 export default class PieChart extends PuzzleView {
   created() {
-    this._uid = ++uid;
     this.setState({
       hoveredId: null,
       tip: { visible: false, x: 0, y: 0, flipX: false, label: '', value: '', percent: '' },

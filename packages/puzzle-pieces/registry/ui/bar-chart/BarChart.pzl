@@ -120,8 +120,6 @@ import {
 // the topmost segment is rounded. Hover dims the other marks to 60%. The SVG uses
 // explicit pixel width/height (no viewBox), so nothing scales or blurs.
 
-let uid = 0;
-
 const GAP = 2; // px between adjacent grouped bars and between stacked segments
 const MAX_BAR = 24; // px — cap bar thickness; let the band's leftover be air
 const MARGIN_TOP = 8;
@@ -162,7 +160,6 @@ function barPath(x, w, yTop, yBottom, r) {
 
 export default class BarChart extends PuzzleView {
   created() {
-    this._uid = ++uid;
     this.setState({
       width: 0,
       hoveredId: null,
