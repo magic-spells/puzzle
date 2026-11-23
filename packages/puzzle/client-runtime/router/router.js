@@ -104,10 +104,9 @@ import { reportError } from '../errors.js';
 
 /**
  * Everything #navigate resolved for one navigation, handed to #swap to commit.
- * @typedef {{ rawPath: string, pathname: string, query: RouteQuery, hash: string, entry: RouteEntry,
- *   params: Record<string, string>, views: PuzzleView[], keys: string[], layout: PuzzleView | null,
- *   layoutClass: LayoutClassValue, reuseLayout: boolean, keep: number, rootVnode: ViewNode,
- *   scroll: ScrollSpec | null, focus: FocusSpec | null, to: RouteSnapshot,
+ * @typedef {{ rawPath: string, entry: RouteEntry, views: PuzzleView[], keys: string[],
+ *   layout: PuzzleView | null, layoutClass: LayoutClassValue, reuseLayout: boolean, keep: number,
+ *   rootVnode: ViewNode, scroll: ScrollSpec | null, focus: FocusSpec | null, to: RouteSnapshot,
  *   prepared: PreparedRefresh[], push: boolean, replace?: boolean,
  *   memoryIndex: ?number, departScroll: ?{x: number, y: number} }} SwapInput
  */
@@ -115,10 +114,9 @@ import { reportError } from '../errors.js';
 /**
  * What #commitState records: a SwapInput, or the params-only subset #navigate
  * builds when the whole chain is reused.
- * @typedef {{ rawPath: string, pathname: string, query: RouteQuery, hash: string, entry: RouteEntry,
- *   params: Record<string, string>, views: PuzzleView[], keys: string[], layout: PuzzleView | null,
- *   layoutClass: LayoutClassValue, scroll: ScrollSpec | null, focus: FocusSpec | null,
- *   prepared?: PreparedRefresh[] }} CommitInput
+ * @typedef {{ to: RouteSnapshot, entry: RouteEntry, views: PuzzleView[], keys: string[],
+ *   layout: PuzzleView | null, layoutClass: LayoutClassValue, scroll: ScrollSpec | null,
+ *   focus: FocusSpec | null, prepared: PreparedRefresh[] }} CommitInput
  */
 
 /**
@@ -1704,12 +1702,12 @@ export class Router {
 				this.#container.hasAttribute('data-puzzle-ssg')) ||
 			((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && retryView === REBUILD);
 		// EXCEPTION-SAFE handle sweep (D146). Every prepared handle is idempotent via
-		// its own `settled` flag, so discarding unconditionally on the way out is free
-		// on the success path (#commitState already committed them) and is the only
-		// thing that covers a THROW out of the synchronous commit block inside #swap —
-		// a user render()/afterUpdate() blowing up there reaches neither commit nor any
-		// of the explicit bail paths, and an unreleased hold fences the ancestor's keys
-		// in Store._heldKeys for the rest of the session.
+		// its own `settled` flag, so discarding unconditionally on the way out covers
+		// every SUPERSEDED return, is free on the success path (#commitState already
+		// committed them) and is the only thing that covers a THROW out of the
+		// synchronous commit block inside #swap — a user render()/afterUpdate() blowing
+		// up there reaches neither commit nor the data-failure bail, and an unreleased
+		// hold fences the ancestor's keys in Store._heldKeys for the rest of the session.
 		try {
 			try {
 				const loads = [];
@@ -1734,7 +1732,7 @@ export class Router {
 							// mount() starts (PuzzleView #pendingFailure) — deferring by a
 							// microtask never reached the mount and left the user on the
 							// skeleton forever.
-							v.__showErrorView?.(err, info);
+							v.__showErrorView(err, info);
 						});
 					} else {
 						loads.push(p);
@@ -1820,7 +1818,6 @@ export class Router {
 			if (token !== this.#token) {
 				for (const v of freshViews) v.destroy();
 				if (layout && !reuseLayout) layout.destroy();
-				discardPrepared(); // D146
 				return SUPERSEDED;
 			}
 
@@ -1859,7 +1856,7 @@ export class Router {
 			const focus =
 				(typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && retryView === REBUILD
 					? null
-					: this.#resolveFocus({ to, from, push, pop, replace });
+					: this.#resolveFocus({ to, from, push });
 
 			// A same-location rebuild (D175 — a locale switch) changes the words on the
 			// page and nothing else — and nothing animates. Every fresh level
@@ -1883,12 +1880,8 @@ export class Router {
 				// old inline commit block.
 				this.#commitLocation({ rawPath, entry, push, replace, memoryIndex, departScroll });
 				this.#commitState({
-					rawPath,
-					pathname: loc.pathname,
-					query: loc.query,
-					hash: loc.hash,
+					to,
 					entry,
-					params,
 					views,
 					keys: cur.keys,
 					layout,
@@ -1965,7 +1958,6 @@ export class Router {
 					for (const instance of nestedInstances) instance.destroy();
 					for (const v of freshViews) v.destroy();
 					if (layout && !reuseLayout) layout.destroy();
-					discardPrepared(); // D146
 					return SUPERSEDED;
 				}
 				// Same suppression the routed chain gets below: mountComponent auto-chains
@@ -1976,13 +1968,7 @@ export class Router {
 
 			return await this.#swap(token, cur, {
 				rawPath,
-				// The parsed URL parts (v1.49, D83) — #commitState records them on
-				// #state so the `current` getter never reparses.
-				pathname: loc.pathname,
-				query: loc.query,
-				hash: loc.hash,
 				entry,
-				params,
 				views,
 				keys,
 				layout,
@@ -2119,7 +2105,7 @@ export class Router {
 	 * @returns {Promise<NavigationResult>}
 	 */
 	async #swap(token, cur, next) {
-		const { entry, params, views, layout, reuseLayout, keep, rootVnode } = next;
+		const { entry, views, layout, reuseLayout, keep, rootVnode } = next;
 
 		// The outgoing unit this transition animates out: the OLD layout when a
 		// fresh layout replaces it (layout swap, keep=0), otherwise the topmost
@@ -2282,7 +2268,7 @@ export class Router {
 					// chrome refresh below still runs last and now also sees ancestors
 					// whose params/route/data already name this route.
 					this.#commitState(next);
-					this.#refreshLogged(layout, params, next.to);
+					this.#refreshLogged(layout, next.to.params, next.to);
 				} else {
 					// Fresh root layout (keep === 0): layout swap OR initial nav.
 					if (cur) {
@@ -2454,7 +2440,7 @@ export class Router {
 				'[puzzle] routed view mount failed — the failed position was replaced:',
 				err
 			);
-			const shown = await view.__showErrorView?.(err, info);
+			const shown = await view.__showErrorView(err, info);
 			if (!shown) /** @type {(() => void) | null} */ (restoreTakeover)?.();
 		});
 	}
@@ -2639,15 +2625,16 @@ export class Router {
 	 */
 	#commitState(next) {
 		const layoutInvalid = !!next.layout?.isDestroyed;
+		const to = next.to;
 		this.#state = {
-			path: next.rawPath,
+			path: to.path,
 			// The parsed URL parts (v1.49, D83), split ONCE by #navigate's
 			// parseLocation — the `current` getter reads these, never reparses.
-			pathname: next.pathname,
-			query: next.query,
-			hash: next.hash,
+			pathname: to.pathname,
+			query: to.query,
+			hash: to.hash,
 			entry: next.entry,
-			params: next.params,
+			params: to.params,
 			views: next.views,
 			keys: next.keys,
 			layout: next.layout,
@@ -2675,7 +2662,7 @@ export class Router {
 		// chain, not the old one; on the D39 skeleton-leaf path the commit still lands
 		// here, in the immediate (un-awaited-leaf) commit, exactly like the old inline
 		// ancestor refresh did.
-		if (next.prepared) for (const p of next.prepared) p.commit();
+		for (const p of next.prepared) p.commit();
 		// Dev-only missing-<Outlet/> diagnostic — the module helper (and this whole
 		// per-commit walk) DCEs away in production (§27 define pattern).
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
@@ -2684,7 +2671,7 @@ export class Router {
 			// sync included — ran immediately before, so the document.title the
 			// bridge reports is already this route's (memory mode excepted, where
 			// #syncHead is a deliberate no-op, D42/D84).
-			devtoolsRouteCommit(next);
+			devtoolsRouteCommit(this.#state);
 		}
 		// Scroll lands here — synchronously after the new content is in the DOM
 		// (every #commitState call site mounts/patches first) and before the next
@@ -2893,11 +2880,10 @@ export class Router {
 	 * client-side history move, so back/forward needs focus management just as much
 	 * as a forward push.
 	 *
-	 * @param {{ to: RouteSnapshot, from: RouteSnapshot | null, push: boolean, pop: boolean,
-	 *   replace: boolean }} nav
+	 * @param {{ to: RouteSnapshot, from: RouteSnapshot | null, push: boolean }} nav
 	 * @returns {FocusSpec | null}
 	 */
-	#resolveFocus({ to, from, push, pop, replace }) {
+	#resolveFocus({ to, from, push }) {
 		if (!this.#focusEnabled()) return null;
 		// Navigation #0 — nothing has committed, so `from` is null. This also covers a
 		// guard redirect on nav #0, which re-enters as a REPLACE and would otherwise
@@ -2968,7 +2954,7 @@ export class Router {
 			return el && typeof el.focus === 'function' ? el : null;
 		}
 		for (let i = views.length - 1; i >= 0; i--) {
-			const el = /** @type {HTMLElement | null} */ (views[i]?.element);
+			const el = /** @type {HTMLElement | null} */ (views[i].element);
 			if (el && typeof el.focus === 'function') {
 				el.contains(document.activeElement) ||
 					/** @type {HTMLElement | null} */ (el.querySelector('[autofocus]'))?.focus({
@@ -3057,10 +3043,9 @@ export class Router {
 		this.#announcedTitle = title;
 		let text = title;
 		if (!moved) {
-			const chain = this.#state?.entry?.chain;
-			const leaf = chain ? chain[chain.length - 1] : null;
-			text = leaf?.name ?? this.#state?.path ?? '';
-			if (text === this.#liveRegion.textContent) text = this.#state?.path ?? text;
+			const { entry, path } = this.#state;
+			text = entry.chain[entry.chain.length - 1].name ?? path;
+			if (text === this.#liveRegion.textContent) text = path;
 		}
 		this.#liveRegion.textContent = text;
 	}
@@ -3112,7 +3097,7 @@ export class Router {
 		// D146: a navigation superseded during its out phase never reaches
 		// #commitState, so its prepared ancestor runs are unwound here — otherwise
 		// their tracked subscriptions would be stranded on a live ancestor.
-		if (next.prepared) for (const p of next.prepared) p.discard();
+		for (const p of next.prepared) p.discard();
 	}
 
 	/**
@@ -3787,9 +3772,6 @@ export function normalizeBase(base) {
  * @returns {string}
  */
 export function encodeURL(path, mode, base) {
-	if (typeof path !== 'string') {
-		throw new Error(`[puzzle] router.url(path) expects a string path (got ${typeof path})`);
-	}
 	if (path[0] !== '/') return path;
 	path = normalizeRoutePath(path);
 	return mode ? mode.encode(path, base) : base + path;
