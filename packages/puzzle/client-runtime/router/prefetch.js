@@ -63,7 +63,7 @@ export function setPrefetchDefault(router, value = true) {
 export function unwatchLinks(router) {
 	// stop() is idempotent (abort, disconnect and clear all are), so a second
 	// router.stop() needs no bookkeeping here.
-	routers.get(router)?.stop?.();
+	routers.get(router).stop?.();
 }
 
 /**
@@ -125,8 +125,7 @@ function connectionAllows() {
  *   guarded route loads too
  */
 export function watchLinks(router, { anchor, path, load }) {
-	const state = routers.get(router) ?? { auto: true };
-	routers.set(router, state);
+	const state = routers.get(router);
 	const auto = state.auto;
 	// one abort tears down every listener at once (state.stop below).
 	const controller = new AbortController();
