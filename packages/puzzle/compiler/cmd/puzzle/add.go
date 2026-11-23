@@ -40,8 +40,8 @@ const tailwindConfigSnippet = `export default {
 	},
 };`
 
-// tailwindStylesCSS is the Tailwind v4 entry stylesheet. Tailwind already scans
-// the whole app root (internal/styles), so the import is all it needs.
+// tailwindStylesCSS is the Tailwind v4 entry stylesheet. Tailwind already scans the app
+// root, minus what .gitignore lists (internal/styles), so the import is all it needs.
 const tailwindStylesCSS = `@import "tailwindcss";
 `
 
