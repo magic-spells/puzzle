@@ -104,10 +104,9 @@ import { reportError } from '../errors.js';
 
 /**
  * Everything #navigate resolved for one navigation, handed to #swap to commit.
- * @typedef {{ rawPath: string, pathname: string, query: RouteQuery, hash: string, entry: RouteEntry,
- *   params: Record<string, string>, views: PuzzleView[], keys: string[], layout: PuzzleView | null,
- *   layoutClass: LayoutClassValue, reuseLayout: boolean, keep: number, rootVnode: ViewNode,
- *   scroll: ScrollSpec | null, focus: FocusSpec | null, to: RouteSnapshot,
+ * @typedef {{ rawPath: string, entry: RouteEntry, views: PuzzleView[], keys: string[],
+ *   layout: PuzzleView | null, layoutClass: LayoutClassValue, reuseLayout: boolean, keep: number,
+ *   rootVnode: ViewNode, scroll: ScrollSpec | null, focus: FocusSpec | null, to: RouteSnapshot,
  *   prepared: PreparedRefresh[], push: boolean, replace?: boolean,
  *   memoryIndex: ?number, departScroll: ?{x: number, y: number} }} SwapInput
  */
@@ -115,10 +114,9 @@ import { reportError } from '../errors.js';
 /**
  * What #commitState records: a SwapInput, or the params-only subset #navigate
  * builds when the whole chain is reused.
- * @typedef {{ rawPath: string, pathname: string, query: RouteQuery, hash: string, entry: RouteEntry,
- *   params: Record<string, string>, views: PuzzleView[], keys: string[], layout: PuzzleView | null,
- *   layoutClass: LayoutClassValue, scroll: ScrollSpec | null, focus: FocusSpec | null,
- *   prepared: PreparedRefresh[] }} CommitInput
+ * @typedef {{ to: RouteSnapshot, entry: RouteEntry, views: PuzzleView[], keys: string[],
+ *   layout: PuzzleView | null, layoutClass: LayoutClassValue, scroll: ScrollSpec | null,
+ *   focus: FocusSpec | null, prepared: PreparedRefresh[] }} CommitInput
  */
 
 /**
@@ -1882,12 +1880,8 @@ export class Router {
 				// old inline commit block.
 				this.#commitLocation({ rawPath, entry, push, replace, memoryIndex, departScroll });
 				this.#commitState({
-					rawPath,
-					pathname: loc.pathname,
-					query: loc.query,
-					hash: loc.hash,
+					to,
 					entry,
-					params,
 					views,
 					keys: cur.keys,
 					layout,
@@ -1974,13 +1968,7 @@ export class Router {
 
 			return await this.#swap(token, cur, {
 				rawPath,
-				// The parsed URL parts (v1.49, D83) — #commitState records them on
-				// #state so the `current` getter never reparses.
-				pathname: loc.pathname,
-				query: loc.query,
-				hash: loc.hash,
 				entry,
-				params,
 				views,
 				keys,
 				layout,
@@ -2117,7 +2105,7 @@ export class Router {
 	 * @returns {Promise<NavigationResult>}
 	 */
 	async #swap(token, cur, next) {
-		const { entry, params, views, layout, reuseLayout, keep, rootVnode } = next;
+		const { entry, views, layout, reuseLayout, keep, rootVnode } = next;
 
 		// The outgoing unit this transition animates out: the OLD layout when a
 		// fresh layout replaces it (layout swap, keep=0), otherwise the topmost
@@ -2280,7 +2268,7 @@ export class Router {
 					// chrome refresh below still runs last and now also sees ancestors
 					// whose params/route/data already name this route.
 					this.#commitState(next);
-					this.#refreshLogged(layout, params, next.to);
+					this.#refreshLogged(layout, next.to.params, next.to);
 				} else {
 					// Fresh root layout (keep === 0): layout swap OR initial nav.
 					if (cur) {
@@ -2637,15 +2625,16 @@ export class Router {
 	 */
 	#commitState(next) {
 		const layoutInvalid = !!next.layout?.isDestroyed;
+		const to = next.to;
 		this.#state = {
-			path: next.rawPath,
+			path: to.path,
 			// The parsed URL parts (v1.49, D83), split ONCE by #navigate's
 			// parseLocation — the `current` getter reads these, never reparses.
-			pathname: next.pathname,
-			query: next.query,
-			hash: next.hash,
+			pathname: to.pathname,
+			query: to.query,
+			hash: to.hash,
 			entry: next.entry,
-			params: next.params,
+			params: to.params,
 			views: next.views,
 			keys: next.keys,
 			layout: next.layout,
@@ -2682,7 +2671,7 @@ export class Router {
 			// sync included — ran immediately before, so the document.title the
 			// bridge reports is already this route's (memory mode excepted, where
 			// #syncHead is a deliberate no-op, D42/D84).
-			devtoolsRouteCommit(next);
+			devtoolsRouteCommit(this.#state);
 		}
 		// Scroll lands here — synchronously after the new content is in the DOM
 		// (every #commitState call site mounts/patches first) and before the next
