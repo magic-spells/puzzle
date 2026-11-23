@@ -64,8 +64,8 @@ import {
 
 /**
  * A record's write status (D193): which write is running at the front of its
- * D132 chain, how many are queued behind it, and the last failure.
- * @typedef {{ pending: 'save' | 'delete' | null, error: unknown, queued: number }} WriteStatus
+ * D132 chain, the chain's last link, and the last failure.
+ * @typedef {{ pending: 'save' | 'delete' | null, error: unknown, tail: Promise<any> | null }} WriteStatus
  */
 
 /**
@@ -88,8 +88,6 @@ const LEGACY_LOAD_ALL = 'loadAll';
 const MAX_SETTLE_ROUNDS = 10;
 
 const noop = () => {};
-/** @type {WeakMap<object, WeakMap<object, Promise<any>>>} */
-const writeChainsByStore = new WeakMap();
 // record → its D193 write status, created on its first save()/delete(). Keyed by
 // the record so the entry dies with it.
 /** @type {WeakMap<object, WriteStatus>} */
@@ -346,19 +344,6 @@ async function generatedTransport(url, verb, fetch, arg) {
 	// recognises absence by `status === 404`, and a plain Error carries no status.
 	if (verb === 'delete' && response.status === 404) return;
 	return responseData(response);
-}
-
-/**
- * @param {object} store
- * @returns {WeakMap<object, Promise<any>>}
- */
-function writeChainsFor(store) {
-	let chains = writeChainsByStore.get(store);
-	if (!chains) {
-		chains = new WeakMap();
-		writeChainsByStore.set(store, chains);
-	}
-	return chains;
 }
 
 // ---- read state (D161) -------------------------------------------------------
@@ -1681,7 +1666,7 @@ class AdapterStoreMethods {
 	 * drops it from the merge. On success the record is marked synced.
 	 *
 	 * Concurrent writes on ONE record serialize through its write chain (see
-	 * _chain): a second save waits for the first to settle, then re-evaluates
+	 * _write): a second save waits for the first to settle, then re-evaluates
 	 * wasSynced — so a double-click POSTs once then PUTs, never double-creates.
 	 * A save that finds its record already removed when its turn comes sends
 	 * nothing and rejects with the same message record.save() gives at call time —
@@ -1699,6 +1684,22 @@ class AdapterStoreMethods {
 	 * `pending` names the write at the front of the chain, `error` holds the
 	 * last failure, and every change notifies the record. The promise returned
 	 * carries the same two facts as plain properties for code that holds it.
+	 *
+	 * Save AND delete share the one per-record chain. Both verbs mutate the SAME
+	 * server row and the same map entry, so ordering them separately is not
+	 * enough: an unchained delete racing a first save either orphans the row the
+	 * POST creates or builds its URL from a client-side pk the POST is about to
+	 * replace, and then removes nothing anywhere while resolving successfully.
+	 *
+	 * Each link reads the record's state when it REACHES the front of the queue,
+	 * never when it was enqueued — that is what makes a queued delete see the
+	 * adopted primary key and a queued save see a removal that happened while it
+	 * waited.
+	 *
+	 * The prior link's rejection is swallowed FOR CHAINING ONLY; its own caller
+	 * still observes it (they hold that promise). This holds ACROSS verbs: a
+	 * queued delete does not inherit a failed save's rejection, and vice versa.
+	 * Every caller observes exactly its own outcome.
 	 * @template T
 	 * @this {AdapterStore}
 	 * @param {StoreRecord} record
@@ -1709,11 +1710,10 @@ class AdapterStoreMethods {
 	_write(record, kind, fn) {
 		let status = WRITE_STATUS.get(record);
 		if (!status) {
-			status = { pending: null, error: null, queued: 0 };
+			status = { pending: null, error: null, tail: null };
 			WRITE_STATUS.set(record, status);
 		}
 		const s = status;
-		s.queued++;
 		// the status notification goes to the record's key as it is NOW — a first
 		// save may re-key it, so this is read again at each flip
 		const changed = () => {
@@ -1722,18 +1722,22 @@ class AdapterStoreMethods {
 			const id = record[this.modelFor(type).primaryKey()];
 			notifyKey(this, type + REC_SEP + id, record);
 		};
-		const run = this._chain(record, () => {
+		const run = (s.tail ? s.tail.then(noop, noop) : Promise.resolve()).then(() => {
 			s.pending = kind;
 			s.error = null;
 			changed();
 			return fn();
 		});
+		s.tail = run;
 		/** @type {any} */
 		let out;
 		/** @param {unknown} [err] */
 		const settle = (err) => {
-			s.queued--;
-			if (s.queued === 0) s.pending = null;
+			// the last link settling empties the chain
+			if (s.tail === run) {
+				s.tail = null;
+				s.pending = null;
+			}
 			if (err !== undefined) s.error = err;
 			out.pending = false;
 			out.error = err ?? null;
@@ -1753,41 +1757,6 @@ class AdapterStoreMethods {
 		out.pending = true;
 		out.error = null;
 		return out;
-	}
-
-	/**
-	 * Serialize one record's server writes — save AND delete — behind a single
-	 * per-record chain. Both verbs mutate the SAME server row and the same map
-	 * entry, so ordering them separately is not enough: an unchained delete
-	 * racing a first save either orphans the row the POST creates or builds its
-	 * URL from a client-side pk the POST is about to replace, and then removes
-	 * nothing anywhere while resolving successfully.
-	 *
-	 * Each link reads the record's state when it REACHES the front of the queue,
-	 * never when it was enqueued — that is what makes a queued delete see the
-	 * adopted primary key and a queued save see a removal that happened while it
-	 * waited.
-	 *
-	 * The prior link's rejection is swallowed FOR CHAINING ONLY; its own caller
-	 * still observes it (they hold that promise). This holds ACROSS verbs: a
-	 * queued delete does not inherit a failed save's rejection, and vice versa.
-	 * Every caller observes exactly its own outcome.
-	 * @template T
-	 * @this {AdapterStore}
-	 * @param {object} record
-	 * @param {() => Promise<T>} fn
-	 * @returns {Promise<T>}
-	 */
-	_chain(record, fn) {
-		const chains = writeChainsFor(this);
-		const prev = chains.get(record);
-		const run = (prev ? prev.then(noop, noop) : Promise.resolve()).then(fn);
-		chains.set(record, run);
-		const cleanup = () => {
-			if (chains.get(record) === run) chains.delete(record);
-		};
-		run.then(cleanup, cleanup);
-		return run;
 	}
 
 	/**
@@ -1913,7 +1882,7 @@ class AdapterStoreMethods {
 	 * generated DELETE endpoint/:id treats 404 as already gone. A returned non-OK
 	 * Response rejects with PuzzleAdapterError and the record stays.
 	 *
-	 * Serialized behind the record's write chain (see _chain), so a delete fired
+	 * Serialized behind the record's write chain (see _write), so a delete fired
 	 * during a save waits for it: the URL below is then built from the primary key
 	 * the save reconciled, which is the row the server actually created.
 	 *
