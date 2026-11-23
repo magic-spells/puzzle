@@ -32,10 +32,9 @@ var confirmUpgrade = func(input io.Reader, output io.Writer, title string) (bool
 var upgradeCmd = &cobra.Command{
 	Use:   "upgrade",
 	Short: "Upgrade the global CLI and this project to the latest Puzzle",
-	Long: `Upgrade the global CLI, if one is installed, and this project: the package.json
-a package manager run here would install into (the nearest one at or above the
-current folder, no higher than the home folder), when it declares
-` + puzzlePackage + `.
+	Long: `Upgrade the global CLI, if one is installed, and this project: the nearest
+package.json at or above the current folder, no higher than the home folder,
+when it declares ` + puzzlePackage + `.
 
 Both are listed with their installed and latest versions and the project's
 folder first, then a terminal asks about each one that is behind. --check only
@@ -91,7 +90,7 @@ where clobbering would be a side effect rather than the request.`,
 func init() {
 	upgradeCmd.Flags().Bool("check", false, "Report the current and latest versions without upgrading")
 	// Persistent so `puzzle upgrade skills -y` takes it too.
-	upgradeCmd.PersistentFlags().BoolP("yes", "y", false, "Accept the defaults without prompting: upgrade everything that is behind and refresh the installed agent skills")
+	upgradeCmd.PersistentFlags().BoolP("yes", "y", false, "Answer yes to every prompt instead of asking")
 	upgradeCmd.AddCommand(upgradeSkillsCmd)
 	rootCmd.AddCommand(upgradeCmd)
 }
@@ -176,16 +175,14 @@ const (
 // project — is a context of kind installGlobal or installProject, and every
 // scope is reported, asked about and upgraded by the same code.
 type installContext struct {
-	kind    installKind
-	dir     string
-	manager string
-	dev     bool
-	// executable is the running binary. Only the context detected from it has
-	// one; a scope found on disk leaves it empty, which is how a run without a
-	// terminal tells the install it was invoked through from one it only reports.
-	executable  string
+	kind       installKind
+	dir        string
+	manager    string
+	dev        bool
+	executable string
+	// packageJSON is a global's copy; a project's is looked up (installed).
 	packageJSON string
-	// current is the version packageJSON records, "" when nothing is installed;
+	// current is the installed copy's version, "" when nothing is installed;
 	// wanted is the range a project's package.json declares, shown in its place.
 	current, wanted string
 	// inspected is what detection actually looked at, so a refusal can name it.
@@ -211,12 +208,17 @@ func (s installContext) from() string {
 	return s.wanted
 }
 
-// behind reports whether s should move to latest. A project with nothing
-// installed is behind: the upgrade is what installs it.
-func (s installContext) behind(latest string) bool {
-	return s.current == "" || older(s.current, latest)
+// installed is the package.json of the copy s reports. A project's is looked up
+// each time, as the first node_modules/@magic-spells/puzzle at or above it (in a
+// workspace, the root's), so the read-back finds it wherever the install put it.
+func (s installContext) installed() string {
+	if s.kind == installProject {
+		return upward(s.dir, inside(filepath.Join("node_modules", "@magic-spells", "puzzle", "package.json")))
+	}
+	return s.packageJSON
 }
 
+// older reports whether v is behind latest; a missing version (nothing installed) is.
 func older(v, latest string) bool {
 	cmp, err := update.Compare(v, latest)
 	return err != nil || cmp < 0
@@ -258,19 +260,16 @@ func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, executable string, ch
 	if err != nil {
 		return err
 	}
-	scopes, err := upgradeScopes(running, roots)
-	if err != nil {
-		return err
-	}
+	scopes := upgradeScopes(running, roots)
 	// A running binary that is neither scope has no row: it gets the ✨ line, and
 	// how to upgrade it, when it is behind.
 	runningBehind := running.kind != installGlobal && running.kind != installProject && older(version.Version, latest)
 	var names []string
 	var stale []installContext
 	for i := range scopes {
-		scopes[i].current, _ = installedVersion(scopes[i].packageJSON)
+		scopes[i].current, _ = installedVersion(scopes[i].installed())
 		names = append(names, scopes[i].name())
-		if scopes[i].behind(latest) {
+		if older(scopes[i].current, latest) {
 			stale = append(stale, scopes[i])
 		}
 	}
@@ -313,7 +312,7 @@ func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, executable string, ch
 			if !ok {
 				continue
 			}
-		case s.executable == "":
+		case s.kind != running.kind:
 			// Without a terminal the command names the install it was run from,
 			// and only that one moves; the other is left for the person to run.
 			name, args := upgradeCommand(s, latest)
@@ -332,7 +331,7 @@ func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, executable string, ch
 	var errs []error
 	for _, s := range chosen {
 		if err := upgradeScope(stdout, stderr, out, s, latest); err != nil {
-			errs = append(errs, err)
+			errs = append(errs, fmt.Errorf("upgrading %s: %w", s.name(), err))
 			continue
 		}
 		upgraded = append(upgraded, s)
@@ -350,22 +349,10 @@ func printScope(w io.Writer, out *ui.Printer, s installContext, latest string) {
 	switch {
 	case s.current == "":
 		state = s.wanted + " (not installed) → " + latest
-	case !s.behind(latest):
+	case !older(s.current, latest):
 		state = s.current + ", up to date"
 	}
-	fmt.Fprintf(w, "  %-15s %s  %s\n", s.name(), state, out.Dim(strings.TrimSpace(folder(s.dir)+" ("+s.manager+")")))
-}
-
-// folder names a project directory in output: relative to the current folder
-// when it is that folder or inside it, absolute otherwise, so a project found
-// above the current folder reads as exactly that. The global CLI's empty dir
-// stays empty.
-func folder(dir string) string {
-	cwd, err := os.Getwd()
-	if rel, relErr := filepath.Rel(cwd, dir); err == nil && relErr == nil && filepath.IsLocal(rel) {
-		return rel
-	}
-	return dir
+	fmt.Fprintf(w, "  %-15s %s  %s\n", s.name(), state, out.Dim(strings.TrimSpace(s.dir+" ("+s.manager+")")))
 }
 
 // question is the prompt for one scope. A project's names the folder the
@@ -375,9 +362,9 @@ func (s installContext) question(latest string) string {
 	if s.kind != installProject {
 		return "Upgrade " + s.name() + "?"
 	}
-	q := "Upgrade " + s.name() + " (" + folder(s.dir) + ")?"
+	q := "Upgrade " + s.name() + " in " + s.dir + "?"
 	if breaking(s.from(), latest) {
-		q += " " + s.from() + " → " + latest + " has breaking changes"
+		q += " " + s.from() + " → " + latest + " may have breaking changes"
 	}
 	return q
 }
@@ -394,7 +381,7 @@ func upgradeScope(stdout, stderr io.Writer, out *ui.Printer, s installContext, l
 		return fmt.Errorf("%s failed: %w", strings.Join(append([]string{name}, args...), " "), err)
 	}
 
-	packageJSON := s.packageJSON
+	packageJSON := s.installed()
 	if s.kind == installGlobal && !fsFileExists(packageJSON) {
 		// Unusual global layouts (a store the owner directory does not link
 		// into) still resolve by walking up from the binary itself.
@@ -409,7 +396,7 @@ func upgradeScope(stdout, stderr io.Writer, out *ui.Printer, s installContext, l
 	}
 	fmt.Fprintf(stdout, "%s upgraded %s %s → %s\n", out.Green("✓"), s.name(), s.from(), installed)
 	if s.kind == installProject && breaking(s.from(), latest) {
-		fmt.Fprintf(stdout, "%s %s has breaking changes: read \"Upgrading across versions\" in %s and run %s in the project\n",
+		fmt.Fprintf(stdout, "%s %s may have breaking changes: read \"Upgrading across versions\" in %s and run %s in the project\n",
 			out.Yellow("!"), latest, filepath.Join(filepath.Dir(packageJSON), "CHANGELOG.md"), out.Bold("npx puzzle check --fix"))
 	}
 	return nil
@@ -537,19 +524,26 @@ func upgradedBinary(upgraded []installContext, latest string) (string, error) {
 	return "", fmt.Errorf("no binary on disk reports version %s", latest)
 }
 
+// upgradedBinaryCandidates starts from the copy the read-back confirmed. Its
+// platform package sits beside it, hoisted there by a local install or linked
+// there in pnpm's store (where the copy's symlink leads); npm -g nests it in
+// the copy's own node_modules instead.
 func upgradedBinaryCandidates(ctx installContext) []string {
-	if ctx.kind == installProject {
-		return []string{
-			// Hoisted layouts (npm/yarn/bun) expose the platform binary directly;
-			// pnpm keeps it in the store, so fall back to the package-manager shim.
-			filepath.Join(ctx.dir, "node_modules", "@magic-spells", platformPackageName(), "bin", platformBinaryName()),
-			filepath.Join(ctx.dir, "node_modules", ".bin", "puzzle"),
-		}
+	pkg := filepath.Dir(ctx.installed())
+	if real, err := filepath.EvalSymlinks(pkg); err == nil {
+		pkg = real
 	}
-	var candidates []string
-	// A global install replaces the package behind the same PATH shim; pnpm's
-	// versioned store means the currently running path may still be the old one,
-	// which is exactly why every candidate is version-checked.
+	bin := filepath.Join(platformPackageName(), "bin", platformBinaryName())
+	candidates := []string{
+		filepath.Join(filepath.Dir(pkg), bin),
+		filepath.Join(pkg, "node_modules", "@magic-spells", bin),
+	}
+	if ctx.kind == installProject {
+		return append(candidates, filepath.Join(ctx.dir, "node_modules", ".bin", "puzzle"))
+	}
+	// A global install replaces the package behind the same PATH shim, though
+	// PATH may reach a project's shim first (npx), and the running path may
+	// still be the old one — which is why every candidate is version-checked.
 	if path, err := exec.LookPath("puzzle"); err == nil {
 		candidates = append(candidates, path)
 	}
@@ -670,13 +664,12 @@ func detectInstallContext(executable string, roots *globalRoots) (installContext
 	}
 	if manifest.declared {
 		return installContext{
-			kind:        installProject,
-			dir:         owner,
-			manager:     detectPackageManager(owner),
-			dev:         manifest.dev,
-			executable:  resolved,
-			packageJSON: packageJSON,
-			inspected:   []string{owner},
+			kind:       installProject,
+			dir:        owner,
+			manager:    detectPackageManager(owner),
+			dev:        manifest.dev,
+			executable: resolved,
+			inspected:  []string{owner},
 		}, nil
 	}
 	// A workspace or monorepo root hoists its members' dependencies, so the
@@ -706,12 +699,11 @@ func detectInstallContext(executable string, roots *globalRoots) (installContext
 	// what the confirmation then reads back.
 	if manifest.exists && detectLockfile(owner) != "" {
 		return installContext{
-			kind:        installProject,
-			dir:         owner,
-			manager:     detectPackageManager(owner),
-			executable:  resolved,
-			packageJSON: packageJSON,
-			inspected:   []string{owner},
+			kind:       installProject,
+			dir:        owner,
+			manager:    detectPackageManager(owner),
+			executable: resolved,
+			inspected:  []string{owner},
 		}, nil
 	}
 	return installContext{kind: installUnresolved, dir: owner, executable: resolved,
@@ -739,7 +731,7 @@ func globalContext(executable, manager, packageJSON string) installContext {
 // nested copy holds the project's place: its note already names where that
 // tree's dependency lives, and a second answer for the same tree would
 // contradict it. Every other scope is found on disk.
-func upgradeScopes(running installContext, roots *globalRoots) ([]installContext, error) {
+func upgradeScopes(running installContext, roots *globalRoots) []installContext {
 	var scopes []installContext
 	if running.kind == installGlobal {
 		scopes = append(scopes, running)
@@ -748,20 +740,15 @@ func upgradeScopes(running installContext, roots *globalRoots) ([]installContext
 	}
 	switch running.kind {
 	case installProject:
-		return append(scopes, running), nil
+		return append(scopes, running)
 	case installWorkspace, installNested:
-		return scopes, nil
+		return scopes
 	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-	home, _ := os.UserHomeDir()
-	project, ok, err := projectAt(cwd, home)
-	if ok {
+	cwd, _ := os.Getwd()
+	if project, ok := projectAt(cwd); ok {
 		scopes = append(scopes, project)
 	}
-	return scopes, err
+	return scopes
 }
 
 // installedGlobal finds a global CLI the running binary is not: a puzzle
@@ -779,34 +766,50 @@ func installedGlobal(roots *globalRoots) (installContext, bool) {
 	return installContext{}, false
 }
 
-// projectAt finds the package.json a package manager run in dir would install
-// into, the nearest one at or above it, and looks no higher than home. npm
-// stops at the same file, so the upgrade never runs in a folder `npm install`
-// typed in dir would not reach. That file is the project only when its
-// dependencies or devDependencies name the CLI. Its installed copy is the one
-// in its own node_modules; with none, the declared range stands in for a
-// version, and the upgrade installs it.
-func projectAt(dir, home string) (installContext, bool, error) {
+// projectAt finds the nearest package.json at or above dir; npm stops at the
+// same file, so the upgrade never runs where `npm install` typed in dir would
+// not. It is the project when it reads and its dependencies or devDependencies
+// name the CLI. A workspace member stays the project: its package.json declares
+// the dependency, so the package manager runs there.
+func projectAt(dir string) (installContext, bool) {
+	packageJSON := upward(dir, inside("package.json"))
+	manifest, _ := readOwnerManifest(packageJSON)
+	if manifest.wanted == "" {
+		return installContext{}, false
+	}
+	dir = filepath.Dir(packageJSON)
+	return installContext{
+		kind:    installProject,
+		dir:     dir,
+		manager: detectPackageManager(dir),
+		dev:     manifest.dev,
+		wanted:  manifest.wanted,
+	}, true
+}
+
+// upward returns find's first non-empty answer for dir or a folder above it,
+// looking no higher than the home folder.
+func upward(dir string, find func(dir string) string) string {
+	home, _ := os.UserHomeDir()
 	for {
-		manifest, err := readOwnerManifest(filepath.Join(dir, "package.json"))
-		if err != nil || manifest.exists && manifest.wanted == "" {
-			return installContext{}, false, err
-		}
-		if manifest.exists {
-			return installContext{
-				kind:        installProject,
-				dir:         dir,
-				manager:     detectPackageManager(dir),
-				dev:         manifest.dev,
-				packageJSON: filepath.Join(dir, "node_modules", "@magic-spells", "puzzle", "package.json"),
-				wanted:      manifest.wanted,
-			}, true, nil
+		if found := find(dir); found != "" {
+			return found
 		}
 		parent := filepath.Dir(dir)
-		if parent == dir || dir == home {
-			return installContext{}, false, nil
+		if parent == dir || dir == filepath.Clean(home) {
+			return ""
 		}
 		dir = parent
+	}
+}
+
+// inside is a find for upward: the path of rel in a folder, when it exists.
+func inside(rel string) func(string) string {
+	return func(dir string) string {
+		if path := filepath.Join(dir, rel); fsFileExists(path) {
+			return path
+		}
+		return ""
 	}
 }
 
@@ -1037,8 +1040,10 @@ func detectLockfile(dir string) string {
 	return ""
 }
 
+// detectPackageManager names the manager of the first lockfile at or above dir:
+// a workspace member has none of its own, and the root's decides.
 func detectPackageManager(dir string) string {
-	if manager := detectLockfile(dir); manager != "" {
+	if manager := upward(dir, detectLockfile); manager != "" {
 		return manager
 	}
 	return "npm"

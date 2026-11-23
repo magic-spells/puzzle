@@ -63,7 +63,8 @@ has a `tsconfig.json`),
   `@magic-spells/puzzle` with their versions, then asks about each one that is
   behind (`--check` only lists, `--yes` upgrades all). Without a terminal it
   upgrades only the install it was run from and prints the command for the
-  other, so in a script pass `--yes` or run that command.
+  other, so in a script pass `--yes` (it upgrades the project too, across a
+  breaking release if there is one) or run that command.
 - `puzzle upgrade skills` refreshes the installed agent skill from the running
   binary. `puzzle upgrade` also offers the refresh after it installs a new
   version. Re-running `puzzle add skills` skips an install that is already

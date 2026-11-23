@@ -831,23 +831,24 @@ first, so a miss under `/es/` gets `dist/es/404.html`. It defaults to port 4000 
 runs alongside `puzzle dev`.
 
 `puzzle upgrade` covers both places Puzzle lives: the global CLI, if you have
-one, and this project: the `package.json` that `npm install` run in the same
-folder would use (the nearest one at or above it, no higher than your home
-folder), when it declares `@magic-spells/puzzle`. It lists both with their
-versions before changing anything, then asks about each one that is behind:
+one, and this project: the nearest `package.json` at or above the current
+folder (no higher than your home folder), when it declares
+`@magic-spells/puzzle`. It lists both with their versions before changing
+anything, then asks about each one that is behind:
 
 ```
   the global CLI  0.9.0 → 0.10.0  (npm)
-  this project    0.9.0 → 0.10.0  . (npm)
+  this project    0.9.0 → 0.10.0  /Users/you/my-app (npm)
 ```
 
-The project's folder is shown relative to where you are, or as a full path
-when the project is above you, and the question names it too.
+The row and the question name the project's folder, so you see where the
+package manager will run before it does.
 
-A project upgrade runs the project's own package manager, so `package.json` and
-the lockfile both move. When it crosses a breaking release (a new minor before
-1.0), the question says so, and afterwards it points at "Upgrading across
-versions" in the installed CHANGELOG and at `npx puzzle check --fix`.
+A project upgrade runs the package manager its lockfile names (in a workspace,
+the root's), so `package.json` and the lockfile both move. When the new
+version may have breaking changes (a new minor before 1.0), the question says
+so, and afterwards it points at "Upgrading across versions" in the installed
+CHANGELOG and at `npx puzzle check --fix`.
 `puzzle upgrade --check` only lists; `--yes` upgrades everything that is behind
 without asking. Without a terminal, only the install the command runs from is
 upgraded, and the other is printed as the command to run.
