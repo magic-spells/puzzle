@@ -303,9 +303,8 @@ export default class EmojiPicker extends PuzzleView {
   // best-ranked match's group leads, and the stable sort keeps tier order within
   // each group (a header renders once per group, never per tier run). `options`
   // is the cell-only list keyboard nav walks.
-  _build(query) {
+  _build(matched) {
     const base = this._base();
-    const matched = this._matches(query);
     const groupOrder = [];
     const byGroup = new Map();
     matched.forEach((e) => {
@@ -346,10 +345,10 @@ export default class EmojiPicker extends PuzzleView {
     const base = this._base();
     const query = prev.query ?? '';
 
-    const { rows, options } = this._build(open ? query : '');
+    const { rows, options } = this._build(open ? this._matches(query) : []);
 
     const activeIndex = Math.min(prev.activeIndex ?? 0, Math.max(options.length - 1, 0));
-    const activeOpt = open && options.length ? options[activeIndex] : null;
+    const activeOpt = options[activeIndex];
     if (activeOpt) activeOpt.active = true;
 
     rows.forEach((r) => {
