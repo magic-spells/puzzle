@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/magic-spells/puzzle/compiler/internal/build"
 	"github.com/magic-spells/puzzle/compiler/internal/codegen"
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/packages/puzzle-lang/parser"
@@ -146,9 +147,11 @@ func sortByPos(cs []Change) {
 
 // sourceFiles lists the files the codemod reads, app-relative and
 // forward-slashed: every .pzl, .js, .mjs and .ts under app/ and tests/,
-// skipping node_modules and anything dotted (.puzzle/ scratch, editor dirs).
+// skipping node_modules, anything dotted (.puzzle/ scratch, editor dirs) and
+// the public folder, which the build copies to dist as it is.
 func sourceFiles(abs string) ([]string, error) {
 	var out []string
+	public := build.PublicDir(abs)
 	for _, top := range []string{"app", "tests"} {
 		dir := filepath.Join(abs, top)
 		if _, err := os.Stat(dir); err != nil {
@@ -160,7 +163,7 @@ func sourceFiles(abs string) ([]string, error) {
 			}
 			name := d.Name()
 			if d.IsDir() {
-				if p != dir && (name == "node_modules" || strings.HasPrefix(name, ".")) {
+				if p != dir && (name == "node_modules" || strings.HasPrefix(name, ".") || p == public) {
 					return filepath.SkipDir
 				}
 				return nil
