@@ -503,7 +503,7 @@ export function applyProfileSnapshot(report) {
 	const source = report && typeof report === 'object' ? report : {};
 
 	profileSeq += 1;
-	upsert('profileSample', {
+	const sample = upsert('profileSample', {
 		id: profileSeq,
 		at: Date.now(),
 		recording: source.recording === true,
@@ -522,7 +522,7 @@ export function applyProfileSnapshot(report) {
 		for (let i = 0; i < overflow; i++) samples[i].destroy();
 	}
 
-	return store.findOne('profileSample', profileSeq);
+	return sample;
 }
 
 /**
@@ -578,9 +578,7 @@ export function ensureViews({ maxAgeMs = 250, force = false } = {}) {
 /** Ask the Views panel to select `id` the next time it renders. */
 export function requestViewSelection(id) {
 	if (!store) return;
-	const current = store.findOne('ui', UI_ID);
-	if (current) current.update({ pendingViewId: id });
-	else upsert('ui', { id: UI_ID, pendingViewId: id });
+	upsert('ui', { id: UI_ID, pendingViewId: id });
 }
 
 /** Consume the pending selection, if any. Reading it clears it. */
@@ -599,13 +597,7 @@ export function takeViewSelection() {
 /** Merge fields into the singleton connection record, creating it if needed. */
 export function patchConnection(patch) {
 	if (!store) return null;
-	const current = store.findOne('connection', CONNECTION_ID);
-	if (!current) {
-		upsert('connection', { id: CONNECTION_ID, ...patch });
-		return store.findOne('connection', CONNECTION_ID);
-	}
-	current.update(patch);
-	return current;
+	return upsert('connection', { id: CONNECTION_ID, ...patch });
 }
 
 /** True once `hello` landed with a protocol version this build renders. */
@@ -634,8 +626,7 @@ export function resetSession({ port = 'connected' } = {}) {
 	const ui = store.findOne('ui', UI_ID);
 	if (ui) ui.update({ pendingViewId: null });
 
-	const existing = store.findOne('connection', CONNECTION_ID);
-	const fresh = {
+	upsert('connection', {
 		id: CONNECTION_ID,
 		state: CONNECTION_STATE.WAITING,
 		port,
@@ -649,9 +640,7 @@ export function resetSession({ port = 'connected' } = {}) {
 		perfSeq: 0,
 		eventCount: 0,
 		error: null,
-	};
-	if (existing) existing.update(fresh);
-	else upsert('connection', fresh);
+	});
 }
 
 /** Push one message onto the capped event ring. */
