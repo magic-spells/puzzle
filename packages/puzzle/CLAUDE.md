@@ -346,6 +346,8 @@ enforced, not merely advised.
 - Then `npm run starter-repos -- --push` regenerates the starter repos
   (`magic-spells/puzzle-starter`, `puzzle-starter-static`) from `starters/`,
   one commit per release; without `--push` it only writes the folders to look at.
+  Before the first run, create both repos on GitHub empty (no README or licence:
+  each push replaces the whole tree). Run it from the published release commit.
 - Every framework tag `vX.Y.Z` needs a companion `packages/puzzle-lang/vX.Y.Z`
   tag, pushed with it (`git tag packages/puzzle-lang/vX.Y.Z && git push origin
   packages/puzzle-lang/vX.Y.Z`): Go finds a subdirectory module's versions only
