@@ -113,8 +113,9 @@ export class PuzzleApp {
 	// newer cycle down. So each mount() attempt claims a monotonic epoch and
 	// #teardown() burns the current one: `this.#mountEpoch !== epoch` is the
 	// authoritative staleness test — true iff anything tore down or re-mounted
-	// since this attempt began. The _mounted flag stays the "is anything mounted"
-	// question it always was (unmount()'s idempotency guard, the abort read).
+	// since this attempt began. A matching epoch also means mounted: only
+	// #teardown() clears _mounted, and it burns the epoch first. The _mounted flag
+	// stays the "is anything mounted" question (unmount()'s idempotency guard).
 	#mountEpoch = 0;
 
 	// The in-flight #mount() promise, so concurrent mount() calls share ONE
@@ -587,65 +588,53 @@ export class PuzzleApp {
 			devtoolsAppMounted(this);
 		}
 
-		// App lifecycle: beforeMount (v1.31, SPEC §34, D66). The three ctx services
-		// are live and the mounted flag is claimed, but navigation #0 has NOT run —
-		// so a store seed here lands before the first data(). AWAITED: an async hook
-		// finishes before router.start(). A throw/rejection ABORTS the mount — tear
-		// back down to the unmounted state and rethrow (mount() rejects; re-mounting
-		// later is legal). This abort path must NOT fire beforeUnmount (which pairs
-		// only with a completed mount), so it calls #teardown() directly. It must
-		// also tear down only ITS OWN cycle: an unmount() during the in-flight hook
-		// already tore us down (don't double-teardown), and a mount() after that
-		// unmount owns the app now — destroying IT because our stale hook rejected
-		// would kill a healthy cycle. The epoch comparison is what tells those apart
-		// (the flag reads `true` in both cases); a stale rejection just propagates,
-		// the newer cycle owns its own cleanup. Nothing is swallowed either way.
-		if (beforeMount != null) {
-			try {
-				await beforeMount.call(this, this);
-			} catch (err) {
-				if (this.#mountEpoch === epoch && this._mounted) this.#teardown();
-				throw err;
-			}
-		}
-
-		// Staleness gate (see the #mountEpoch field comment). unmount() may have run
-		// during an async beforeMount (SPEC §34) — its #teardown() dropped our
-		// services and burned our epoch — and a NEWER mount() may already own the
-		// app. Either way this continuation is stale: stay out, the router must never
-		// (re-)start from here. `#mountEpoch !== epoch` is the load-bearing half; the
-		// `!this._mounted` read stays as the plain torn-down case it always covered.
-		if (this.#mountEpoch !== epoch || !this._mounted) return this;
-
-		// The first render has its strings (D175): navigation #0 — its guards, its
-		// data(), its commit — never runs without the table. __ready follows any
-		// setLocale() beforeMount made, and rejects only when neither the active
-		// locale nor the default could load; that aborts the mount exactly like a
-		// rejected beforeMount.
-		if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n) {
-			try {
-				await this.i18n.__ready();
-			} catch (err) {
-				if (this.#mountEpoch === epoch && this._mounted) this.#teardown();
-				throw err;
-			}
-			if (this.#mountEpoch !== epoch || !this._mounted) return this;
-		}
-
-		// Dev HMR restore, phase 1 (§27, D57; Change D): consume the one-shot blob
-		// and transplant its STORE records BEFORE navigation #0, so nav #0's data()
-		// queries see the restored records (the old single-phase restore ran after
-		// start() — store-derived views rendered empty until the next mutation). The
-		// returned blob carries the view-local state to phase 2 (below). Gate spelled
-		// inline so production DCEs it and the devstate import tree-shakes away.
+		// The awaited boot: beforeMount (v1.31, SPEC §34, D66), the translations
+		// (D175), then navigation #0. A throw/rejection from any of them ABORTS the
+		// mount — tear back down to the unmounted state and rethrow (mount()
+		// rejects; re-mounting later is legal). This abort path must NOT fire
+		// beforeUnmount (which pairs only with a completed mount), so it calls
+		// #teardown() directly. It must also tear down only ITS OWN cycle: an
+		// unmount() during the await already tore us down (don't double-teardown),
+		// and a mount() after that unmount owns the app now — destroying IT because
+		// our stale step rejected would kill a healthy cycle. The epoch comparison
+		// tells those apart; a stale rejection just propagates, the newer cycle owns
+		// its own cleanup. Nothing is swallowed either way.
 		let hmrBlob = null;
-		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) hmrBlob = restoreStoreFromStorage(this);
-
-		// 5. Start routing — registers listeners and runs navigation #0.
 		try {
+			// The three ctx services are live and the mounted flag is claimed, but
+			// navigation #0 has NOT run — so a store seed here lands before the first
+			// data(). AWAITED: an async hook finishes before router.start().
+			if (beforeMount != null) await beforeMount.call(this, this);
+
+			// Staleness gate (see the #mountEpoch field comment). unmount() may have
+			// run during an async beforeMount (SPEC §34) — its #teardown() dropped our
+			// services and burned our epoch — and a NEWER mount() may already own the
+			// app. Either way this continuation is stale: stay out, the router must
+			// never (re-)start from here.
+			if (this.#mountEpoch !== epoch) return this;
+
+			// The first render has its strings (D175): navigation #0 — its guards, its
+			// data(), its commit — never runs without the table. __ready follows any
+			// setLocale() beforeMount made, and rejects only when neither the active
+			// locale nor the default could load.
+			if ((typeof __PUZZLE_HAS_I18N__ === 'undefined' || __PUZZLE_HAS_I18N__) && this.i18n) {
+				await this.i18n.__ready();
+				if (this.#mountEpoch !== epoch) return this;
+			}
+
+			// Dev HMR restore, phase 1 (§27, D57; Change D): consume the one-shot blob
+			// and transplant its STORE records BEFORE navigation #0, so nav #0's data()
+			// queries see the restored records (the old single-phase restore ran after
+			// start() — store-derived views rendered empty until the next mutation). The
+			// returned blob carries the view-local state to phase 2 (below). Fail-soft,
+			// it never throws. Gate spelled inline so production DCEs it and the
+			// devstate import tree-shakes away.
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) hmrBlob = restoreStoreFromStorage(this);
+
+			// 5. Start routing — registers listeners and runs navigation #0.
 			await this.router.start(el, this.ctx);
 		} catch (err) {
-			if (this.#mountEpoch === epoch && this._mounted) this.#teardown();
+			if (this.#mountEpoch === epoch) this.#teardown();
 			throw err;
 		}
 
@@ -656,7 +645,7 @@ export class PuzzleApp {
 		// restore HMR state onto another cycle's view tree, and do not fire `mounted`
 		// for a mount that no longer owns the app. Everything below this line is
 		// synchronous, so this single gate covers the phase-2 restore and the hook.
-		if (this.#mountEpoch !== epoch || !this._mounted) return this;
+		if (this.#mountEpoch !== epoch) return this;
 
 		// Dev HMR restore, phase 2 (§27, D57; Change D): the view chain is now
 		// mounted, so each saved view's LOCAL setState state (drafts, toggles) can be
