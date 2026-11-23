@@ -195,7 +195,7 @@ import ViewIdentity from '../components/ViewIdentity.pzl';
 import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
 import { EVENTS } from '../../../protocol/constants.js';
 import { disconnectedEmpty } from '../emptystate.js';
-import { api, applyProfileSnapshot, ensureViews, requestViewSelection } from '../bridge.js';
+import { api, applyProfileSnapshot, ensureViews, isConnected, requestViewSelection } from '../bridge.js';
 import {
   DEFAULT_PROFILE_DIRECTION,
   DEFAULT_PROFILE_SORT,
@@ -276,7 +276,7 @@ export default class PerformanceView extends PuzzleView {
     // One snapshot on arrival. It doubles as the resume path: if a recording is
     // still running from before a panel-tab switch, the report says so and
     // `adoptRecordingState` picks the polling back up.
-    if (this.connected()) this.scheduleSample(0);
+    if (isConnected()) this.scheduleSample(0);
   }
 
   destroyed() {
@@ -331,12 +331,9 @@ export default class PerformanceView extends PuzzleView {
     });
     const flushes = profileFlushes(sample?.flushes);
     const warnings = mergeWarnings(sample?.warnings, this.warningPayloads(events), knownIds);
-    const empty = disconnectedEmpty(state);
 
     return {
-      disconnected: !connected,
-      emptyTitle: empty.title,
-      emptyHint: empty.description,
+      ...disconnectedEmpty(state),
       idleHint:
         'Press Record, exercise the app, then press Stop. Renders, wasted renders and DOM ' +
         'mutations are counted per view while recording.',
@@ -403,11 +400,6 @@ export default class PerformanceView extends PuzzleView {
     return 'not recording';
   }
 
-  connected() {
-    const connection = this.ctx.store.findOne('connection', CONNECTION_ID);
-    return connection?.state === CONNECTION_STATE.CONNECTED;
-  }
-
   /* ---- sampling ---------------------------------------------------------- */
 
   /** A one-shot snapshot on its own timer, so it can never cancel the poll chain. */
@@ -437,7 +429,7 @@ export default class PerformanceView extends PuzzleView {
   }
 
   async loadSample() {
-    if (this.isDestroyed || !this.connected()) return null;
+    if (this.isDestroyed || !isConnected()) return null;
     try {
       const [report] = await Promise.all([
         api.snapshotProfile(),
@@ -480,7 +472,7 @@ export default class PerformanceView extends PuzzleView {
   }
 
   async startRecording() {
-    if (!this.connected() || this.getData().busy) return;
+    if (!isConnected() || this.getData().busy) return;
     this.setState({ busy: true, error: '', recording: true });
     try {
       await api.perfStart();

@@ -1,7 +1,7 @@
 /**
  * emptystate.js — the copy every panel shows when there is no app to inspect.
  *
- * Four panels render this identically, so it lives in one place: a wording
+ * Five panels render this identically, so it lives in one place: a wording
  * change is one edit, and the panels cannot drift into saying subtly different
  * things about the same condition.
  */
@@ -23,20 +23,17 @@ const WAITING_HINT =
 	"This panel reads a dev-only runtime bridge, which pages built with `output: 'static'` never load. Run the app with `puzzle dev` (or build with --mode development), then reload the page with DevTools open.";
 
 /**
- * Title + description for a panel's disconnected Empty block.
+ * The disconnected block every panel template reads: whether it shows, and its
+ * title and description.
  *
  * @param {string} state the connection singleton's `state`
- * @returns {{ title: string, description: string }}
+ * @returns {{ disconnected: boolean, emptyTitle: string, emptyHint: string }}
  */
 export function disconnectedEmpty(state) {
-	if (state === CONNECTION_STATE.MISMATCH) {
-		return {
-			title: 'Protocol version mismatch',
-			description: MISMATCH_HINT,
-		};
-	}
+	const mismatch = state === CONNECTION_STATE.MISMATCH;
 	return {
-		title: 'No Puzzle app detected',
-		description: `${WAITING_HINT} ${REFRESH_HINT}`,
+		disconnected: state !== CONNECTION_STATE.CONNECTED,
+		emptyTitle: mismatch ? 'Protocol version mismatch' : 'No Puzzle app detected',
+		emptyHint: mismatch ? MISMATCH_HINT : `${WAITING_HINT} ${REFRESH_HINT}`,
 	};
 }

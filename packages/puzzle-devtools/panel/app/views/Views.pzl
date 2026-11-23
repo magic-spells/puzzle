@@ -161,6 +161,7 @@ import {
   api,
   applyViewSnapshot,
   ensureSubscriptions,
+  isConnected,
   takeViewSelection,
 } from '../bridge.js';
 import { entriesOf, moduleLabel, moduleTitle, viewKind } from '../values.js';
@@ -237,7 +238,7 @@ export default class ViewsView extends PuzzleView {
   mounted() {
     // Tab activation. `data()` has already scheduled a debounced snapshot; this
     // collapses it into an immediate one so opening the panel is not laggy.
-    if (this.connected()) this.scheduleTree(0);
+    if (isConnected()) this.scheduleTree(0);
   }
 
   destroyed() {
@@ -290,12 +291,9 @@ export default class ViewsView extends PuzzleView {
     this._rows = rows;
 
     const inspect = local.inspect;
-    const empty = disconnectedEmpty(state);
 
     return {
-      disconnected: !connected,
-      emptyTitle: empty.title,
-      emptyHint: empty.description,
+      ...disconnectedEmpty(state),
 
       rows,
       liveCount: views.filter((view) => view.live).length,
@@ -415,12 +413,6 @@ export default class ViewsView extends PuzzleView {
     return rows;
   }
 
-  /** True once `hello` landed with a protocol version this build renders. */
-  connected() {
-    const connection = this.ctx.store.findOne('connection', CONNECTION_ID);
-    return connection?.state === CONNECTION_STATE.CONNECTED;
-  }
-
   /** Coalesce tree refreshes onto one timer; `delay` 0 is "as soon as possible". */
   scheduleTree(delay) {
     clearTimeout(this._treeTimer);
@@ -431,7 +423,7 @@ export default class ViewsView extends PuzzleView {
   }
 
   async loadTree() {
-    if (this.isDestroyed || !this.connected()) return;
+    if (this.isDestroyed || !isConnected()) return;
     this.setState({ loadingTree: true, treeError: '' });
     try {
       const result = await api.snapshotViews();

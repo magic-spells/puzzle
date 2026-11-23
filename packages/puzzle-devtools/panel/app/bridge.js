@@ -610,6 +610,11 @@ export function patchConnection(patch) {
 	return current;
 }
 
+/** True once `hello` landed with a protocol version this build renders. */
+export function isConnected() {
+	return store.findOne('connection', CONNECTION_ID)?.state === CONNECTION_STATE.CONNECTED;
+}
+
 /** Drop everything the previous document told us and start listening again. */
 export function resetSession({ port = 'connected' } = {}) {
 	if (!store) return;
