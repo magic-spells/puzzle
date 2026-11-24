@@ -718,20 +718,20 @@ export class PuzzleView {
 			if (!Object.is(prev[key], out[key])) changed.add(key);
 		}
 		if (!changed.size) return undefined;
-		// a copy: the render and each re-run take readers off the list and sign them up again
 		return [...subs].filter(([, reads]) => reads.all || [...reads.keys].some((key) => changed.has(key)));
 	}
 
 	/**
 	 * Re-run the readers #publish() returned that still hold the record they held
-	 * then (D197). One that left the list since (destroyed) or holds a new record
-	 * (it re-ran with new props, or an earlier reader's re-run re-ran it) is
-	 * skipped, so calling this again for the same commit re-runs nobody twice.
+	 * then (D197), and empty the list, so the call at the end of #commit re-runs
+	 * nobody the render already did. One that left the list since (destroyed) or
+	 * holds a new record (the patch re-ran it with new props, or an earlier
+	 * reader's re-run did) is skipped.
 	 * @param {[PuzzleView, ReadRecord][] | undefined} readers
 	 */
 	#rerunReaders(readers) {
 		if (!readers) return;
-		for (const [view, reads] of readers) {
+		for (const [view, reads] of readers.splice(0)) {
 			if (this.#shareSubs?.get(view) === reads)
 				view.#refreshContained('[puzzle] data() failed after a shared value changed:', 'refresh');
 		}
@@ -2685,11 +2685,7 @@ export class PuzzleView {
 			this.#derived = model;
 			this.#recompose();
 		}
-		// share() (D197) runs once the model it derives from is in place, and before
-		// the render, so a child the render mounts or hands new props reads the new
-		// values. The other readers of a changed key re-run inside the render, after
-		// its patch and before afterUpdate() (#renderSpan); the last line re-runs
-		// them when this commit renders nothing (a skeleton hold, a DOM-free preload).
+		// share() (D197) runs before the render; the last line re-runs readers if nothing renders
 		const readers = typeof (/** @type {any} */ (this).share) === 'function' ? this.#publish() : undefined;
 		// Anti-flash hold (v1.20, D52). The FIRST data() result normally flips
 		// #loaded and swaps the skeleton for the real template. If a skeleton was
@@ -3095,9 +3091,7 @@ export class PuzzleView {
 			this.#vm.clear();
 			this.#vm.anchorAt(ref);
 		}
-		// share() (D197): the readers of a changed key re-run now, inside this update
-		// and its DevTools span like the children the patch re-propped. The patch
-		// destroyed or already re-ran some of them, and #rerunReaders() skips those.
+		// share() (D197): re-run the readers inside this update, before afterUpdate()
 		this.#rerunReaders(readers);
 		// Rebuilt member-target diagnostic (D147, dev only). __bind collected the
 		// member objects this completed render actually used. Warn only when the

@@ -7,6 +7,7 @@ import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { serialize } from '../client-runtime/ssg/serialize.js';
 import { setErrorHandler } from '../client-runtime/errors.js';
+import { Store } from '../client-runtime/datastore/store.js';
 
 // hand-written stand-ins for what the compiler emits (see composition.test.js)
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
@@ -406,6 +407,79 @@ describe('share() (D197)', () => {
 		expect([...el.querySelectorAll('b')].map((b) => b.className + b.textContent)).toEqual(['off-', 'on*']);
 		expect(runs.a - before.a).toBe(1);
 		expect(runs.b - before.b).toBe(1);
+	});
+
+	it('re-runs each async reader once, even when the store holds back their runs', async () => {
+		const runs = { a: 0, b: 0, c: 0 };
+		class Panel extends PuzzleView {
+			async data({ props, shared: { tabs } }) {
+				runs[props.id]++;
+				const on = tabs.active === props.id;
+				await null;
+				return { on };
+			}
+			render() {
+				return h('p', {}, [text((this.getData().on ? 'on' : 'off') + this.props.id)]);
+			}
+		}
+		class Tabs extends PuzzleView {
+			created() {
+				this.setState('active', 'a');
+			}
+			share() {
+				return { active: this.getState().active };
+			}
+			render() {
+				return h('nav', {}, ['a', 'b', 'c'].map((id) => comp(Panel, { id, key: id })));
+			}
+		}
+		const el = container();
+		// with a Store, async data() runs one at a time: a later one waits for the one in flight
+		const tabs = new Tabs({ store: new Store({}) });
+		await tabs.mount(el);
+		await afterFrame();
+		const before = { ...runs };
+
+		tabs.setState('active', 'b');
+		await afterFrame();
+		expect(el.textContent).toBe('offaonboffc');
+		expect({ a: runs.a - before.a, b: runs.b - before.b, c: runs.c - before.c }).toEqual({ a: 1, b: 1, c: 1 });
+	});
+
+	it('re-runs a reader the held skeleton rendered', async () => {
+		let release;
+		class Count extends PuzzleView {
+			data({ shared: { counter } }) {
+				return { n: counter.n ?? '-' };
+			}
+			render() {
+				return h('output', {}, [text(this.getData().n)]);
+			}
+		}
+		class Counter extends PuzzleView {
+			async data() {
+				await new Promise((resolve) => (release = resolve));
+				return { n: 3 };
+			}
+			share() {
+				return { n: this.getData().n };
+			}
+			renderSkeleton() {
+				return h('div', {}, [comp(Count)]);
+			}
+			render() {
+				return h('div', {}, [comp(Count)]);
+			}
+		}
+		Counter.prototype.skeletonMinDuration = 60;
+		const el = container();
+		await new Counter().mount(el);
+		expect(el.textContent).toBe('-');
+
+		// data() commits inside the hold: the skeleton stays up, and its Count still re-runs
+		release();
+		await new Promise((resolve) => setTimeout(resolve, 120));
+		expect(el.textContent).toBe('3');
 	});
 
 	it('re-runs readers inside the sharer update: beforeUpdate() sees their old DOM, afterUpdate() their new', async () => {
