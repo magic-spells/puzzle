@@ -994,20 +994,19 @@ habit. Nothing existing breaks: renamed spellings stay accepted.
   `npx puzzle check --fix`. Only a 0.10 or later CLI can stop: an older global
   CLI still builds against the wrong runtime without a word, so upgrade the
   global CLI or use the project's own (`npm run …`, `npx puzzle …`).
-- **`puzzle add piece` and `add theme` never fall back across a breaking
+- **`puzzle add piece` and `add theme` no longer fall back to an older pieces
   release.** With no `@magic-spells/puzzle-pieces` release on the CLI's
   major.minor, which happens only while a framework release is on npm before
-  its pieces release, they used to copy the newest older pieces release. Below
-  1.0 every older minor is across a breaking release (the 0.9 pieces use the
-  bare `<Slot/>` that 0.10 rejects), so they now stop before writing anything:
+  its pieces release, they used to copy the newest older pieces release, which
+  may not compile across a breaking release (some 0.9 pieces use the bare
+  `<Slot/>` that 0.10 rejects). They now stop before writing anything:
 
   ```
   no @magic-spells/puzzle-pieces release matches puzzle 0.10.0 yet (need 0.10.x; published: 0.6.0, 0.7.0, 0.8.0, 0.9.0)
     (the default npm registry didn't yield a matching pieces release — point at a registry with --registry <path|url> or the PUZZLE_PIECES_REGISTRY env var)
   ```
 
-  From 1.0 an older minor of the same major is still used, with a notice. An
-  explicit `--pieces-version` still pins a release on purpose.
+  An explicit `--pieces-version` still pins a release on purpose.
 - **`puzzle add piece` prints the stylesheet imports a wrapper piece needs.** A
   piece that wraps a web component (`dialog`, `sheet`, `select`, `tabs`, the
   dropdown family, …) now prints one `@import "<package>/css" layer(components);`

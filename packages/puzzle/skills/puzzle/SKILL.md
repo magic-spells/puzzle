@@ -1448,31 +1448,31 @@ the stored choice paints before first paint.
 
 ## puzzle-pieces (component library)
 
-Copy-in registry, shadcn-style: the piece files land in your app, and no
-piece imports the registry package (only the optional theme CSS and the
+Copy-in registry, shadcn-style: the piece files land in your app, and no piece
+imports the registry package (only the optional theme CSS and the
 `appearance`/`pre-paint` helpers under Styling come from it). Use
-`puzzle add piece <name…>` (copies each
-piece + its transitive piece/lib dependencies verbatim, records hashes in
-`pieces.lock`; refuses to overwrite any existing file unless `--force` (`-f`);
-never runs npm or edits styles.css: required npm packages, the theme merge
-and the stylesheets of the web components a piece wraps are printed as next
-steps). Add each printed `@import "…" layer(components);` once, after
-`@import "tailwindcss";` and in the printed order: each line names the one it follows.
-When the app has no theme yet it writes
-`app/styles/pieces.css` and prints the `@import` line. When the app's
+`puzzle add piece <name…>` (copies each piece + its transitive piece/lib
+dependencies verbatim, records hashes in `pieces.lock`; refuses to overwrite any
+existing file unless `--force` (`-f`); never runs npm or edits styles.css:
+required npm packages, the theme merge and the stylesheets of the web components
+a piece wraps are printed as next steps). Add each printed
+`@import "…" layer(components);` once, after `@import "tailwindcss";` and in the
+printed order: each line names the one it follows. When the app has no theme yet
+it writes `app/styles/pieces.css` and prints the `@import` line. When the app's
 `pieces.css` differs from the registry's, it prints a hint: run
-`puzzle add theme default` for an unmodified older copy (0.8 pieces use
-tokens a 0.7 theme lacks, such as `surface-frame`, `bar-*` and `rail-*`),
-or hand-merge / `--force` an edited one. A piece that needs extra
-palettes prints `puzzle add theme <names…>` for the missing ones. The printed install line carries each
-package's version floor — `npm install @magic-spells/collapsible-content@^1.2.0`
-— so a piece never resolves against an npm `latest` older than the component it
-wraps; run it as printed. The default source is the
-`@magic-spells/puzzle-pieces` npm package: the newest release on the CLI's
-own major.minor, or an error when there is none. `--pieces-version` pins a release; `--registry` (or `$PUZZLE_PIECES_REGISTRY`)
+`puzzle add theme default` for an unmodified older copy (0.8 pieces use tokens a
+0.7 theme lacks, such as `surface-frame`, `bar-*` and `rail-*`), or hand-merge /
+`--force` an edited one. A piece that needs extra palettes prints
+`puzzle add theme <names…>` for the missing ones. The printed install line
+carries each package's version floor —
+`npm install @magic-spells/collapsible-content@^1.2.0` — so a piece never
+resolves against an npm `latest` older than the component it wraps; run it as
+printed. The default source is the `@magic-spells/puzzle-pieces` npm package:
+the newest release on the CLI's own major.minor, or an error when there is none.
+`--pieces-version` pins a release; `--registry` (or `$PUZZLE_PIECES_REGISTRY`)
 takes `npm:<package>[@version]`, a local directory, or an http(s) URL. Once
-copied, a piece is YOUR code: import it like any component (`import Button
-from '../components/ui/Button.pzl'`) and use it as a capitalized tag. Pieces
-follow a `BASE` + `VARIANT`/`SIZE` class-map convention with a
+copied, a piece is YOUR code: import it like any component
+(`import Button from '../components/ui/Button.pzl'`) and use it as a capitalized
+tag. Pieces follow a `BASE` + `VARIANT`/`SIZE` class-map convention with a
 `class` prop for caller overrides. Audit copied pieces for SSG rule #1 above
 before prerendering them.

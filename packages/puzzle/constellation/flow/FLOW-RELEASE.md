@@ -81,8 +81,8 @@ that installs with no working `puzzle` behind it.
 9. **`npm run verify:published`**: the root version and its packument's exact platform
    pins exist, each pinned platform version exists, the `puzzle` bin is declared, a real
    temp-dir install runs `puzzle --version`, puzzle-pieces exists at the EXACT version, and
-   a scaffolded app's `add piece` resolves to it (read from `pieces.lock`,
-   `PUZZLE_PIECES_REGISTRY` deleted from the child env, fallback notice = failure).
+   a scaffolded app's `add piece` resolves to it (read from `pieces.lock`, with
+   `PUZZLE_PIECES_REGISTRY` deleted from the child env).
 10. **`npm run starter-repos -- --push`** (`scripts/starter-repos.mjs`) rewrites the two
     starter repos, `magic-spells/puzzle-starter` (`default`) and
     `magic-spells/puzzle-starter-static` (`static`), with this checkout's CLI: each is

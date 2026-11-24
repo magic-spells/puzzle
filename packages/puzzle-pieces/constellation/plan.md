@@ -80,7 +80,7 @@ The framework's `verify:published` checks the transport end to end: it asserts
 `@magic-spells/puzzle-pieces` exists at the framework version, scaffolds an app with the
 installed CLI, and confirms `add piece` resolves `npm:@magic-spells/puzzle-pieces@<version>`.
 It deletes `PUZZLE_PIECES_REGISTRY` from the child env, so local registry files cannot pass
-the check, and it fails if `add piece` falls back to an older pieces line.
+the check.
 
 Every npm dependency in a `piece.json` carries a version floor
 (`@magic-spells/collapsible-content@^1.2.0`), and `puzzle add piece` prints it as is (framework

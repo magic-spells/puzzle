@@ -79,14 +79,15 @@ Run from `packages/puzzle` with `go test ./compiler/cmd/... ./compiler/internal/
 - **The embedded agent skill**: `skill_examples_test.go` compiles every template example
   `skills/puzzle/SKILL.md` presents as working and requires the ones it shows as errors to
   fail, so the skill cannot teach syntax the compiler rejects.
-- **Pieces**: registry resolution and the npm transport: version lock to the CLI's
-  major.minor, the fallback with its notice within one major, and its refusal across a
-  breaking release (`TestAddRefusesPiecesAcrossBreakingRelease`: nothing written, for
-  `add piece` and `add theme`), the lock file, and the manifests' `styles` printed in load
-  order (`TestAddPiecePrintsStylesInLoadOrder`).
+- **Pieces**: registry resolution and the npm transport: the version lock to the CLI's
+  major.minor (`TestSelectVersionPicksHighestLockstepPatch`,
+  `TestNpmFetcherResolvesLockstepAndFetches`), the error when no release matches it
+  (`TestNpmFetcherNoMatchNamesTheBoundary`; `TestAddRefusesPiecesAcrossBreakingRelease`:
+  nothing written, for `add piece` and `add theme`), the lock file, and the manifests'
+  `styles` printed in load order (`TestAddPiecePrintsStylesInLoadOrder`).
 
-Release scripts have JS suites: `tests/release-checks.test.js` (pieces fallback notice,
-packed-binary problems, tag reminder lines) and `tests/bin-shim-resolver.test.js`
+Release scripts have JS suites: `tests/release-checks.test.js` (packed-binary problems,
+tag reminder lines, README status line) and `tests/bin-shim-resolver.test.js`
 (`bin/puzzle.js` platform resolution).
 
 Gotcha: `PUZZLE_PIECES_REGISTRY` overrides the pieces transport, so a shell that exports
