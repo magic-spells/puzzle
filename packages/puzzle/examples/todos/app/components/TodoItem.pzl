@@ -1,6 +1,6 @@
 <puzzle-view>
   <div class="overflow-hidden">
-    <div class="group h-[65px] flex items-center px-5 border-b border-line hover:bg-surface-2 transition-colors">
+    <div class="group h-16.25 flex items-center px-5 border-b border-line hover:bg-surface-2 transition-colors">
       <label class="flex items-center cursor-pointer mr-4">
         <!-- `checked={ todo.completed }` binds the record field itself: the
              click writes through todo.update(), the store notifies, and every
@@ -26,7 +26,7 @@
         { todo.text }
       </span>
 
-      <span class="ml-4 shrink-0 font-mono text-[11px] text-faint tabular-nums">{ datetime(todo.createdAt, 'short') }</span>
+      <span class="ml-4 shrink-0 font-mono text-11 text-faint tabular-nums">{ datetime(todo.createdAt, 'short') }</span>
 
       <button
         class="ml-3 w-7 h-7 shrink-0 rounded-md flex items-center justify-center text-xl leading-none text-faint hover:text-danger hover:bg-danger/10 opacity-0 group-hover:opacity-100 transition-all"
@@ -65,7 +65,7 @@ export default class TodoItem extends PuzzleView {
   };
 
   // Enter/leave animations (constellation/doc/DOC-SPEC.md §12). The root div
-  // (overflow-hidden, no padding) is the animation target; the inner h-[65px]
+  // (overflow-hidden, no padding) is the animation target; the inner h-16.25
   // content div keeps the row from squishing while the root's height collapses.
   // The root's natural height IS 65px, so the enter `to` equals the element's
   // stylesheet state (the release contract in animate.js).
