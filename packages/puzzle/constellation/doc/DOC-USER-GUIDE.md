@@ -26,12 +26,14 @@ The CLI is a prebuilt Go binary shipped through npm. Puzzle needs Node 24 or lat
 npm install -g @magic-spells/puzzle
 puzzle init my-app            # --template default|static, --typescript
 cd my-app && npm install
-puzzle dev                    # watch + live reload
+npm run dev                   # watch + live reload
 npm test                      # the starter tests in tests/ (Vitest)
-puzzle build                  # production build
+npm run build                 # production build
 ```
 
 `puzzle init` is the only onboarding path; there is no `npx create-*` wrapper ([[DECISION-D77-INIT-PROMPTS]]). The app depends on `@magic-spells/puzzle` locally, so collaborators only need `npm install`; `npm install -D @magic-spells/puzzle` adds runtime + CLI to an existing project.
+
+Inside a project, run Puzzle through its npm scripts or `npx puzzle <command>`: the project's own CLI always matches its installed Puzzle. A global `puzzle` 0.10 or later stops when it is across a breaking release from the project ([[DECISION-D202-CLI-RUNTIME-VERSION-PAIR]]); an older one builds against the wrong runtime without a word.
 
 `--typescript` scaffolds `<script lang="ts">` components, `app/app.ts`, a strict `tsconfig.json` and a `check` script. The build strips types without checking them; `puzzle check` is the type check. With a `tsconfig.json`, `puzzle generate` writes TypeScript stubs.
 
@@ -330,4 +332,4 @@ export default {
 
 ## Commands
 
-`puzzle dev`, `puzzle build` (`--static`, `--hybrid`), `puzzle preview`, `puzzle check` (`--fix` rewrites code written for an older Puzzle), `puzzle generate`, `puzzle add tailwind|theme|piece|deploy|skills`, `puzzle doctor`, `puzzle info`, `puzzle upgrade`. Flags: [[DOC-RELEASE-SURFACE]] and [[DOC-SPEC-BUILD]] §13.
+In a project, run these as `npx puzzle <command>` (or the npm scripts) so the CLI matches the installed Puzzle. `puzzle dev`, `puzzle build` (`--static`, `--hybrid`), `puzzle preview`, `puzzle check` (`--fix` rewrites code written for an older Puzzle), `puzzle generate`, `puzzle add tailwind|theme|piece|deploy|skills`, `puzzle doctor`, `puzzle info`, `puzzle upgrade`. Flags: [[DOC-RELEASE-SURFACE]] and [[DOC-SPEC-BUILD]] §13.

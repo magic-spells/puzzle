@@ -26,6 +26,14 @@ requests.
 your deploy host's build to Node 24 or later first. On an older Node, npm warns
 `EBADENGINE` when it installs the packages (an error under `engine-strict`).
 
+**Upgrade a global `puzzle` CLI with the project (0.10.0, D202).** A 0.9 CLI
+cannot tell it is building a 0.10 app: the build exits 0 and the page is
+blank. A 0.9 `puzzle upgrade` moves only the CLI it runs from, so run it once,
+then run `puzzle upgrade` again: the 0.10 CLI offers the project too. Or skip
+the global CLI: `npm run dev`, `npm run build` and `npx puzzle <command>` use
+the project's own. From 0.10.0 on, a CLI across a breaking release from the
+project stops with a message instead.
+
 **Views write state with `setState()`, and `data()` takes one object (0.10.0,
 D191, D197).** Both are loud. `this.setData()` is gone: rename it to
 `this.setState()`, including in pieces copied before 0.10 (re-add them with
@@ -52,11 +60,12 @@ where a component receives call-site content. Named `<Slot name="…"/>` is
 unchanged. `new PuzzleApp({ formatters })` throws: the key is `functions`, and
 a static build's `app/formatters.js` is `app/functions.js`.
 
-**`puzzle check --fix` does all four 0.10 renames (D199).** Run `puzzle check`
-first: it lists every `setData(`, positional `data(params, props)`, bare
-`<Slot/>` and `formatters` key with its position and fails, then `--fix`
-rewrites them in place and type-checks. Sites it cannot judge (a config passed
-by name, a `setData` on another receiver) are listed for you to edit by hand.
+**`npx puzzle check --fix` does all four 0.10 renames (D199).** Upgrade a
+global `puzzle` first (above). Then `npx puzzle check` lists every `setData(`,
+positional `data(params, props)`, bare `<Slot/>` and `formatters` key with its
+position and fails, and `--fix` rewrites them in place and type-checks. Sites
+it cannot judge (a config passed by name, a `setData` on another receiver) are
+listed for you to edit by hand.
 
 **Production builds hash their output names (0.10.0, D181).** With no
 `build.hashNames` key, a production build now writes `app-<hash>.js`,
@@ -212,7 +221,7 @@ one is *not* a compile error; it silently builds a different product.
 ## 0.10.0 — 2026-11-20
 
 Production sizes: hello-world **23.9 KB gzip** (23.0 in 0.9.0), todos
-**27.9 KB gzip** (27.0).
+**27.8 KB gzip** (27.0).
 
 ### Breaking
 
@@ -274,7 +283,7 @@ Production sizes: hello-world **23.9 KB gzip** (23.0 in 0.9.0), todos
   view receives its child route, `<Children/>` is where a component receives
   call-site content, and `<Slot name="…"/>` is a named slot. A `<Slot>` with no
   name stops the build with a positioned error that names both replacements
-  and `puzzle check --fix`. `<Outlet/>` emits the same code as `<Children/>`,
+  and `npx puzzle check --fix`. `<Outlet/>` emits the same code as `<Children/>`,
   so the rename changes no runtime bytes, takes no attributes, and may carry a
   fallback body (`<Outlet><p>Loading</p></Outlet>`). In a component it
   compiles with a warning steering to `<Children/>`, since the router never
@@ -577,6 +586,15 @@ Production sizes: hello-world **23.9 KB gzip** (23.0 in 0.9.0), todos
   and indexed it with untyped data, which `noImplicitAny` rejects ("Element
   implicitly has an 'any' type"). A selector is now checked like other
   template data; a typed sub-expression inside it still is.
+- **`puzzle add tailwind` writes only `@import "tailwindcss";`.** The three
+  `@source` lines it used to add after it (which 0.9's `puzzle init`
+  stylesheets also had, and 0.10's do not) made Tailwind also read files under
+  `app/` that the project's `.gitignore` excludes. Nothing else changes:
+  Tailwind already scans the app root.
+- **The selected DevTools row has no left-edge bar (puzzle-devtools).** In the
+  Views, Subscriptions and Store panels the selected row is marked by its tint
+  and an accent, semibold name (in the Store table, the record's primary-key
+  cell).
 - **Buttons are quiet: no brand fill (puzzle-pieces).** A screen with many
   buttons no longer reads as a wall of indigo. `button` `primary` is solid ink
   with the page colour as its text
@@ -761,6 +779,11 @@ you edited the files).
   packages to its root, `check` said TypeScript was missing and `doctor`
   reported no local Tailwind install. Both now look in each parent folder's
   `node_modules` too.
+- **`puzzle check` no longer fails on an editor lock file.** Emacs keeps a
+  `.#Home.pzl` link beside a file it is editing, and `puzzle check` stopped
+  with `no such file or directory` trying to read it. The type check now reads
+  the same files as the upgrade pass, which skips dotted files and folders,
+  `node_modules` and the public folder.
 - **Pieces fixes (puzzle-pieces).** Re-add a piece to pick up its fix.
   - `multi-select`: a pick no longer blurs the input.
   - `multi-select` and `tags-input`: chip remove buttons are tab stops.
@@ -845,8 +868,8 @@ habit. Nothing existing breaks: renamed spellings stay accepted.
   the path resolves against `--dir`.
 - **The default starter is dark only and links to the docs.** Its home page
   ends with four boxes that link to the Puzzle docs, the tutorial, the Puzzle
-  site and the Puzzle Pieces site. Its muted text and hover colours are tuned
-  for the dark page.
+  site and the Puzzle Pieces site, each opening in a new tab. Its muted text
+  and hover colours are tuned for the dark page.
 - **`puzzle init --template static`** writes a static site
   (`output: 'static'`): a header with Home and About that marks the current
   page, an About page, a 404 page, and a small counter that shows a static
@@ -932,6 +955,42 @@ habit. Nothing existing breaks: renamed spellings stay accepted.
   left alone, and a second run finds nothing. A site it cannot rewrite
   safely, such as a `data()` parameter list with a rest parameter or a
   comment in it, is listed for you to finish by hand.
+- **The CLI stops when the project's Puzzle is across a breaking release
+  (D202).** The CLI and the project's installed `@magic-spells/puzzle` must be
+  on the same side of one (a new minor before 1.0, a new major after it).
+  `puzzle build` and `puzzle dev` stop on a mismatch, as they already did when
+  nothing is installed. `puzzle check` (with or without `--fix`), every
+  `puzzle generate` kind and `puzzle add piece` stop on a mismatch only, so
+  they still run before `npm install`. The message names both versions:
+
+  ```
+  This project has Puzzle 0.9.0 installed, and this CLI is 0.10.0.
+    Use the project's own CLI:  npm run dev, npm run build, or npx puzzle <command>
+    Or upgrade the project:     puzzle upgrade
+  ```
+
+  A CLI older than the project ends with the other way out:
+
+  ```
+  This project has Puzzle 0.11.0 installed, and this CLI is 0.10.0.
+    Use the project's own CLI:  npm run dev, npm run build, or npx puzzle <command>
+    Or upgrade this CLI:        puzzle upgrade
+  ```
+
+  `puzzle doctor` shows the installed version in its runtime package row and
+  fails that row with the same message. The CLI's own hints now say
+  `npx puzzle check --fix`. Only a 0.10 or later CLI can stop: an older global
+  CLI still builds against the wrong runtime without a word, so upgrade the
+  global CLI or use the project's own (`npm run …`, `npx puzzle …`).
+- **`puzzle add piece` prints the stylesheet imports a wrapper piece needs.** A
+  piece that wraps a web component (`dialog`, `sheet`, `select`, `tabs`, the
+  dropdown family, …) now prints one `@import "<package>/css" layer(components);`
+  line under Next steps per stylesheet, in load order: the first goes after
+  `@import "tailwindcss";`, each later one after the line before it. Before,
+  only a comment in the copied file mentioned them, and a dialog added by
+  following the printed steps had no scrim, width, animation or scroll lock.
+  A piece lists its sheets in a new `styles` field in `piece.json`
+  (puzzle-pieces); an older CLI ignores it.
 
 ## 0.9.1 — 2026-10-22 (Go module only)
 

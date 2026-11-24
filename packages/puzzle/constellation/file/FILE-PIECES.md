@@ -22,8 +22,8 @@ notes:
 
 `puzzle add piece` ([[COMPONENT-COMPILER-CLI]]): resolves requested pieces with
 their transitive deps, copies every file verbatim into the app, records hashes in
-`pieces.lock`, and returns next steps (npm install line, theme advisory) for the
-CLI to print. Siblings hold the rest: `deps.go`, `fetcher.go`/`npm.go`/
+`pieces.lock`, and returns next steps (npm install line, component stylesheet imports,
+theme advisory) for the CLI to print. Siblings hold the rest: `deps.go`, `fetcher.go`/`npm.go`/
 `registry.go` (sources), `lock.go`, `themes.go`.
 
 - **All-or-nothing.** Every file is fetched and every destination checked before

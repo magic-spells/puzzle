@@ -26,7 +26,7 @@ this card holds the implementation rules behind it.
 
 ## Command wiring
 
-- **Root.** `SilenceUsage`/`SilenceErrors`: `main()` prints the one error line and exits 1.
+- **Root.** `SilenceUsage`/`SilenceErrors`: `main()` prints the error and exits 1.
   The root `PersistentPreRunE` turns `--no-color` into `NO_COLOR=1` for every printer and
   child process, so **no subcommand may define its own `PersistentPreRunE` without
   chaining it**. `main()` also scans argv for `--no-color` before parsing, so usage errors
@@ -47,11 +47,20 @@ this card holds the implementation rules behind it.
   flag on `upgrade` so `upgrade skills -y` works.
 - **Runtime preflight.** `build` and `dev` call `build.PreflightRuntime` before any esbuild
   work: first `os.Stat` the directory (`directory not found` / `is not a directory`, not
-  bypassable by `PUZZLE_RUNTIME`), then require one runtime source (`PUZZLE_RUNTIME`, the
-  in-repo walk, the installed package); otherwise one message naming `<pm> install` from
-  the nearest lockfile. Rejected: auto-installing (the CLI never touches `node_modules` or
-  the network, would guess the manager, and could install a mismatched runtime).
-  `check`/`generate`/`preview` never bundle and are not gated.
+  bypassable by `PUZZLE_RUNTIME`), then `build.PairRuntime`. With no runtime source
+  (`PUZZLE_RUNTIME`, the in-repo walk, the installed package) it stops with one message
+  naming `<pm> install` from the nearest lockfile. Rejected: auto-installing (the CLI never
+  touches `node_modules` or the network, would guess the manager, and could install a
+  mismatched runtime).
+- **Version pair** ([[DECISION-D202-CLI-RUNTIME-VERSION-PAIR]]). `build.PairRuntime` takes
+  the sources in that order and compares only an installed package: `build.PairInstalled`
+  reads its version (`update.PackageVersion`) and, across a breaking release
+  (`update.Breaking`, both shared with `upgrade`), returns the message naming both
+  versions. `check` (and `check --fix`), every `generate` kind and `add piece` never bundle,
+  so they call `build.PairRuntime` alone, before they read or write source: a mismatch stops
+  them, and a missing runtime does not, so they run right after `init`. `doctor` calls
+  `build.PairInstalled` for its runtime row. `preview` and the other `add` kinds do not
+  compare versions.
 - **`build -q`** sets `build.Options.Quiet`, which gates the internal/build page report as
   well as the CLI summary and update notice.
 - **`--profile-build`** reads `PUZZLE_PROFILE_BUILD=1` too (that is how dev static
@@ -92,7 +101,11 @@ this card holds the implementation rules behind it.
   comment that mentions the file is not wiring) or the package import as "already wired",
   so `add piece` and `add theme` agree about the same styles.css. Dependency specs
   carry a version floor (D169): split on the LAST `@`, merged by package name keeping the
-  highest floor. `add theme` lives in `internal/pieces/themes.go`.
+  highest floor. The manifests' `styles` are unioned in resolution order (`collectStyles`:
+  first occurrence wins, never sorted, because each manifest lists its sheets in load
+  order) and printed as one `@import "<spec>" layer(components);` step each, the first
+  after `@import "tailwindcss";` and each later one after the line before it.
+  `add theme` lives in `internal/pieces/themes.go`.
 - **`add deploy`** ([[DECISION-D198-DEPLOY-TEMPLATES]], `add_deploy.go`) — the templates
   are embedded from the package's `deploy/` folder. `--static`/`--hybrid` picks the
   template, else the config's `output`; a config that fails to load is an error, never a

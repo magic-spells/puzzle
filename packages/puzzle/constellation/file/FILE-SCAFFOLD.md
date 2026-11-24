@@ -15,9 +15,9 @@ notes:
       on `<html>` (the puzzle-pieces style attribute), so pieces added later stay dark in either OS
       scheme. A template `@theme` token that shares a name with a puzzle-pieces token must mean what
       pieces means by it: the printed `@import './pieces.css';` goes above the template's `@theme`,
-      and the last declaration wins. The default template declares only `accent` and `accent-2`,
-      which pieces does not use.
-    sha: b3321107
+      and the last declaration wins. The default template declares only `accent`, which pieces does
+      not use.
+    sha: cc5cba34
 ---
 
 # scaffold.go

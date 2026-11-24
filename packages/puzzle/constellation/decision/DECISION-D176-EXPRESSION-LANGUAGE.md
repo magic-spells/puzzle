@@ -261,7 +261,7 @@ date takes only `< <= > >=` and binary `-` (milliseconds) in both hosts.
   lexer, template tag names (D167) and PuzzleKit's `<script>` scan
   (`extractClassName`, `classNameFromFilename` — `Übersicht.pzl` is class
   `Übersicht` — import bindings). `puzzle check`
-  reads the class name back from codegen's render tail. A class name the scan
+  takes the class name from codegen's `Result.ClassName`. A class name the scan
   cannot read to its end (a `\u` escape, or a character newer than Go's
   Unicode tables) is a positioned error, never a cut name.
   **PuzzleKit and Sites must build with the same Go minor**; identifier rows

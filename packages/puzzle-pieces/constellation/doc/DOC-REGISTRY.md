@@ -189,7 +189,7 @@ notes:
 
 ```
 registry/
-├── registry.json          # generated index aggregating every piece manifest
+├── registry.json          # index aggregating every piece manifest (kept by hand)
 ├── theme/pieces.css       # @theme design tokens (light + dark)
 ├── lib/*.js               # shared plain-JS helpers (copyable registryDependencies)
 └── ui/<name>/
@@ -204,13 +204,12 @@ The manifest schema and per-field meaning live in CLAUDE.md; the load-bearing ru
 - `registryDependencies` are resolved **transitively**: `lib/*.js` → `app/lib/`, sibling pieces (e.g. `date-picker` → `calendar`) → their own `targetDir`.
 - `dependencies` are **real npm packages, plain JS only** — `.pzl` never appears there. The morph pieces (DatePicker, EmojiPicker, EmojiPickerSimple) list `@magic-spells/morph-engine`.
 - Each `dependencies` entry is an npm INSTALL SPEC carrying a semver **floor**, not a bare package name: `"@magic-spells/collapsible-content@^1.2.0"`. The floor is the version the piece was built and demoed against, so it must equal what `demo/package.json` installs; one floor per package registry-wide. `puzzle add piece` prints the spec verbatim, which is what stops a wrapper from resolving against an npm `latest` older than the element it wraps (D169 in the framework plan — 0.7.0's `add piece accordion` installed collapsible-content 1.1.1 and lost `<collapsible-group>`). The CLI still accepts a bare name so third-party registries keep working; nothing here may ship one, and `test/registry-deps.test.js` enforces both that and the demo agreement.
+- `styles` lists the stylesheets a wrapper REQUIRES, in load order (`"@magic-spells/dialog-panel/css"`). `puzzle add piece` prints one `@import "<spec>" layer(components);` line per entry and never edits `styles.css`. dialog-panel is a peer of Sheet and BottomSheet, so they list its sheet before their own. Only the piece that installs a package lists its sheet: the dropdown family (DropdownMenu, Popover, HoverCard, …) gets dropdown-panel's through `registryDependencies`. An optional sheet such as a package's `/css/effects` is not listed; the piece's file header names it. `test/registry-deps.test.js` checks that each style's package is in the same manifest's `dependencies`, that the demo imports it the same way, and that a piece installing a package whose sheet the demo imports lists that sheet.
 - `description` is reused verbatim as the docs subtitle, so it must read as one clean sentence.
 
-## registry.json is generated
+## registry.json is kept by hand
 
-
-
-`registry.json` is not hand-maintained per entry — it is the aggregation of all `piece.json` manifests, pieces alphabetical, with a top-level `theme` pointer and `version`. **Regenerate it whenever a piece is added or renamed** (re-run the aggregation; lib files are represented via their consumers' `registryDependencies`, e.g. `lib/date-math.js`). Current count: **104 pieces** — keep the README count in sync when it changes (the demo shell's `Introduction.pzl`, `ComponentsIndex.pzl` and header badge compute `pieceCount`, so they follow on their own).
+`registry.json` is the aggregation of the `piece.json` manifests, kept by hand (there is no generator): mirror every manifest edit in its row, pieces alphabetical, with the top-level `version`, `theme`, `modes` and `themes`. `registry.json mirrors every manifest, including the floors` in `test/registry-deps.test.js` fails when a row drifts from its manifest. Lib files are represented via their consumers' `registryDependencies`, e.g. `lib/date-math.js`. Current count: **104 pieces** — keep the README count in sync when it changes (the demo shell's `Introduction.pzl`, `ComponentsIndex.pzl` and header badge compute `pieceCount`, so they follow on their own).
 
 ## theme/pieces.css is the token source
 

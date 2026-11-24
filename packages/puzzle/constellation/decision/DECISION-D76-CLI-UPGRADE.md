@@ -47,7 +47,7 @@ code_refs:
   - On a TTY there is one question per scope that is behind, and every question comes before any install. `--yes` upgrades all of them. Without a TTY, only the scope the running binary is gets upgraded (none, for a binary that is neither), and every other scope that is behind gets the exact command to run.
   - Each upgrade shells out to the exact command a careful user would type, so `package.json`, the lockfile and the exact-pinned platform packages stay consistent.
   - Success is verified by reading the copy back from disk with the same lookup; it must equal the fetched target. A failed scope does not stop the other; each error names its scope, and the exit is non-zero.
-  - A project upgrade that may have breaking changes (a new minor while the major is 0, else a new major, read from the version numbers) says so in its question, and afterwards points at "Upgrading across versions" in the installed `CHANGELOG.md` and at `npx puzzle check --fix`. The global CLI has no app code to migrate, so its question stays plain.
+  - A project upgrade that may have breaking changes (a new minor while the major is 0, else a new major: `update.Breaking`, the same rule the runtime version pair uses, [[DECISION-D202-CLI-RUNTIME-VERSION-PAIR]]) says so in its question, and afterwards points at "Upgrading across versions" in the installed `CHANGELOG.md` and at `npx puzzle check --fix`. The global CLI has no app code to migrate, so its question stays plain.
   - `--check` lists without upgrading. `--yes` also accepts the follow-up skill refresh (D78).
 
 ## Alternatives rejected

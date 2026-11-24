@@ -35,7 +35,7 @@ pickers (DatePicker, EmojiPicker, EmojiPickerSimple) do with `@magic-spells/morp
 
 ## Consequences
 
-- `puzzle add piece sheet` and `bottom-sheet` print only the wrapped package and its
-  `@magic-spells/dialog-panel` peer; npm installs the engines as that package's own
-  dependencies.
+- `puzzle add piece sheet` and `bottom-sheet` print an npm install of only the wrapped
+  package and its `@magic-spells/dialog-panel` peer; npm installs the engines as that
+  package's own dependencies.
 - The engine version is the wrapped package's choice, not a registry floor.

@@ -49,7 +49,7 @@ follows from it. See [[DECISION-COPY-IN-DISTRIBUTION]] and [[DECISION-WRAP-WEB-C
 
 - [[DIAGRAM-TOPOLOGY]] — registry → demo / CLI → consumer at a glance.
 - [[DOC-REGISTRY]] — `registry/` is the source of truth: `piece.json` manifests,
-  the generated `registry.json` index, `theme/pieces.css` tokens, `lib/` helpers.
+  the hand-kept `registry.json` index, `theme/pieces.css` tokens, `lib/` helpers.
 - [[DOC-DEMO-DOCS-SITE]] — the in-repo `demo/` Puzzle app (port 3070): the
   docs shell + dev/integration harness that consumes copies of the pieces.
 - [[FEATURE-ADD-CLI]] — the shipped `puzzle add piece <name…>` resolver+copier (lives in the Puzzle Go CLI).

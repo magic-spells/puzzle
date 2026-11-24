@@ -172,7 +172,7 @@ The `@magic-spells` ecosystem has 15+ mature web components (dialog-panel, sheet
 
 ## Decision (2026-08-22)
 
-**Wrap the web component directly whenever possible.** A wrapper piece renders the custom element's markup around `<Children/>`, binds props to attributes, declares the npm package in `piece.json.dependencies`, dynamic-imports the package in `mounted()` (module-scope `class extends HTMLElement` crashes Node prerender), and documents the stylesheet import (`@import "@magic-spells/<pkg>/css" layer(components)`) so Tailwind utilities on the host still win. Upstream fixes then reach every consumer through a version bump; nothing is re-ported. ScrollStack is the exemplar.
+**Wrap the web component directly whenever possible.** A wrapper piece renders the custom element's markup around `<Children/>`, binds props to attributes, declares the npm package in `piece.json.dependencies` and its required stylesheets in `styles`, dynamic-imports the package in `mounted()` (module-scope `class extends HTMLElement` crashes Node prerender), and documents the stylesheet import (`@import "@magic-spells/<pkg>/css" layer(components)`) so Tailwind utilities on the host still win. Upstream fixes then reach every consumer through a version bump; nothing is re-ported. ScrollStack is the exemplar.
 
 **Port (a native `.pzl` rebuild) only when wrapping genuinely can't work** — the behavior doesn't exist as a web component, or the piece's value is token-styled form-control markup where a wrapper would cost more than it saves (Calendar-style controls). Ported pieces keep the rules that make ports workable: no `<style>` blocks, no `customElements.define`, Tailwind semantic tokens only, config-first props.
 
@@ -187,7 +187,7 @@ Self-managed state is acceptable in a wrapper: the parent passes `open`, the com
 
 ## Consequences
 
-- Wrappers need the package installed (the CLI prints the npm install) and its stylesheet imported in `layer(components)` — two consumer steps, documented in each piece's installation section.
+- Wrappers need the package installed and its stylesheet imported in `layer(components)`. The CLI prints both steps: the npm install from `dependencies`, the import from the manifest's `styles` (required sheets only, a peer's first). Each piece's installation section documents them too.
 - Wrapped overlays self-close and notify; they don't wait for the parent to flip `open`. Piece docs must say so.
 - Theming goes through the component's CSS custom properties set on the host (e.g. `--sheet-panel-background: var(--color-surface)`) plus utilities; upstream defaults should stay minimal — placement and function, not colors.
 - Piece-only extras (a `top` sheet position, a grabber toggle, a close `reason`) go upstream first, not into a fork.

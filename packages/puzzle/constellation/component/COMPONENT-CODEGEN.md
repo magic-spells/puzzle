@@ -70,8 +70,8 @@ breaks it. Class extraction requires a real named `export default class … exte
   `_`, `_` prefix when the first rune can't start an identifier or is reserved).
 - **A class name the scan can't read to its end is a positioned error** (`nameCut`): a `\u`
   escape or a non-space non-ASCII byte right after it (e.g. a rune newer than Go's Unicode
-  tables) would bind the render tail to a cut name. `puzzle check` reads the name back from the
-  render tail (`compiledClassName`), counting every byte ≥ 0x80.
+  tables) would bind the render tail to a cut name. `puzzle check` takes the name from
+  `Result.ClassName`, never from the emitted JS.
 
 ## Expressions (`lower.go`)
 

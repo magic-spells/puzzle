@@ -139,7 +139,7 @@ Contract: §3–§6, §17, §18, §24, §28, §31, §43, §47, §57, §64–§67
 
 ## CLI
 
-Commands live in `compiler/cmd/puzzle`. Global: `--no-color`; `puzzle version` = `--version` = `-v`.
+Commands live in `compiler/cmd/puzzle`. Global: `--no-color`; `puzzle version` = `--version` = `-v`. `build`, `dev`, `check`, `generate` and `add piece` stop when the project's installed `@magic-spells/puzzle` is across a breaking release from the CLI, naming both versions; `doctor` reports it ([[DECISION-D202-CLI-RUNTIME-VERSION-PAIR]]).
 
 - `puzzle init [app-name|path]` — `-t/--template default|static`, `-y/--yes`, `--typescript`. `default` is a single-page app; `static` is an `output: 'static'` site. Every template includes `tests/`, `vitest.config.js`, and `npm test` and `npm run preview` scripts.
 - `puzzle dev [dir]` — `-p/--port` (3000), `--strict-port`, `--host`, `-o/--open`, `--fixtures`, `--profile-build`.

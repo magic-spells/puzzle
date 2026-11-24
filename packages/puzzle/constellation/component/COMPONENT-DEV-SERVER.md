@@ -35,8 +35,10 @@ rebuild. `filepath.EvalSymlinks` does not fix this on macOS (it keeps the caller
 spelling); symlinks are deliberately left unresolved, since Tailwind's watcher resolves
 them.
 
-Then `build.PreflightRuntime` (once; errors go up through Serve to one stderr line +
-exit 1) → `build.SweepWorkDirs` (the SPA path never calls `build.Build`, so it must sweep
+Then `build.PreflightRuntime` (once; a missing runtime, or an installed one across a
+breaking release from the CLI ([[DECISION-D202-CLI-RUNTIME-VERSION-PAIR]]), goes up
+through Serve to stderr + exit 1 before the listener binds) → `build.SweepWorkDirs` (the
+SPA path never calls `build.Build`, so it must sweep
 itself) → watchers → listener. The config loaded here is handed to every `build.Build` of
 the session (`build.Options.Config`), so rebuilds never re-spawn node to read it. A config
 that FAILS to load is non-fatal: dev serves from the zero `Config`, and

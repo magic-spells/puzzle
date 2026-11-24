@@ -39,7 +39,10 @@ Traps:
   its metafile input keys are resolved against the process cwd by
   `metafileAllInputs`, which drives dev CSS pruning; anchoring would silently
   break that whenever the app root is not the cwd.
-- **`configureRuntime` falls through silently** when no runtime source resolves.
-  The user-facing guard is `build.PreflightRuntime` (`preflight.go`), which
-  consults the same three sources in the same order — change the precedence in
-  one and you must change it in the other.
+- **`configureRuntime` falls through silently** when no runtime source resolves,
+  and it never compares versions: it runs on every esbuild pass and every dev
+  rebuild and has no error path. The user-facing guard is `build.PreflightRuntime`
+  (`preflight.go`), whose `PairRuntime` consults the same three sources in the
+  same order and stops on a missing runtime or on an installed one across a
+  breaking release from the CLI ([[DECISION-D202-CLI-RUNTIME-VERSION-PAIR]]) —
+  change the precedence in one and you must change it in the other.

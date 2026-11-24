@@ -87,12 +87,13 @@ that installs with no working `puzzle` behind it.
     starter repos, `magic-spells/puzzle-starter` (`default`) and
     `magic-spells/puzzle-starter-static` (`static`), with this checkout's CLI: each is
     `puzzle init <repo> --template <name> --yes` plus `puzzle add deploy vercel` and
-    `netlify`, committed on top of the repo's `main` as `puzzle <version>` and pushed. Run
-    it from the published release commit, so the repos match what npm ships. Before the
-    first run, create both repos on GitHub empty (no README or licence: each push replaces
-    the whole tree). Never edit those repos by hand; change `starters/` and run this again.
-    Without `--push` it only writes the folders (a temp dir, or `--out <dir>`) and prints
-    what it would push.
+    `netlify` and the package's MIT `LICENSE.txt` (kept out of `starters/`: an app
+    `puzzle init` makes is its owner's to license), committed on top of the repo's `main`
+    as `puzzle <version>` and pushed. Run it from the published release commit, so the
+    repos match what npm ships. Before the first run, create both repos on GitHub empty (no
+    README or licence: each push replaces the whole tree). Never edit those repos by hand;
+    change `starters/` and run this again. Without `--push` it only writes the folders (a
+    temp dir, or `--out <dir>`) and prints what it would push.
 11. **Hand off to Cory**: the `vX.Y.Z` tag AND the companion `packages/puzzle-lang/vX.Y.Z`
     tag (Go resolves subdirectory modules only through prefixed tags), the merge into
     `main`, and the devtools zip (`npm run build:compiler`, then `npm run build:zip` in

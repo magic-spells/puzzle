@@ -697,9 +697,10 @@ full project context and build better plans without re-deriving earlier work.
 
 Inside a project, type these as `npx puzzle <command>` (or use the npm
 scripts) so the project's own CLI runs: it always matches the project's
-installed Puzzle. A CLI 0.10 or later from another 0.x minor stops before
-compiling or writing code and names both versions (`puzzle doctor` reports the
-same); an older one builds against the wrong runtime without a word.
+installed Puzzle. A CLI 0.10 or later from another 0.x minor stops `build`,
+`dev`, `check`, `generate` and `add piece` and names both versions
+(`puzzle doctor` reports the same); an older one builds against the wrong
+runtime without a word.
 
 ```bash
 # Development server with live reload (-p is --port; --host exposes it on the LAN)

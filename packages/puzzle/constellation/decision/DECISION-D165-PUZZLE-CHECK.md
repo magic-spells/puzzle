@@ -39,7 +39,7 @@ app/components/TodoItem.pzl:11:16: Property 'remov' does not exist on type '{ to
 
 ## Decision
 
-**Virtual files.** Each `.pzl` under `app/` becomes files under `.puzzle/check/src/` (D153 scratch dir), mirroring the tree; the workspace is rebuilt every run so a deleted file leaves no ghost.
+**Virtual files.** Each `.pzl` under `app/` that the upgrade pass reads (`codemod.SourceFiles`: no dotted files or folders, such as an editor's `.#Home.pzl` lock link, no `node_modules` and no public folder) becomes files under `.puzzle/check/src/` (D153 scratch dir), mirroring the tree; the workspace is rebuilt every run so a deleted file leaves no ghost.
 - `lang="ts"`: one `.pzl.ts` — the script verbatim, then a never-executed `void function (this: InstanceType<typeof Class>): void { const __d: any = this; … }`: `this` types handler names against the view's `events`; template data reads `__d`, which is `any`.
 - JavaScript: a pair — `<name>.pzl.script.js` (unchecked mirror, `checkJs: false`) and the checked `<name>.pzl.ts` wrapper that imports it. The `.script` infix is load-bearing: without it TS extension substitution resolves `./X.pzl.js` to the wrapper itself.
 

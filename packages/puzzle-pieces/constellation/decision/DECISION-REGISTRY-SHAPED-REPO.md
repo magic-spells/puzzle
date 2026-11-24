@@ -24,5 +24,5 @@ Structure the repo as a **registry from the first commit**, with deliberately **
 
 ## Consequences
 
-- `registry.json` is **generated** by aggregating the `piece.json` manifests — it must be regenerated when pieces are added/renamed (see [[DOC-REGISTRY]]).
+- `registry.json` aggregates the `piece.json` manifests and is kept by hand: mirror every manifest edit in its row; `test/registry-deps.test.js` fails when they drift (see [[DOC-REGISTRY]]).
 - The CLI's whole job is reduced to the resolver-copier spec in [[FEATURE-ADD-CLI]].
