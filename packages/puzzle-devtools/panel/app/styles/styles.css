@@ -241,13 +241,14 @@
  * carries `hover:bg-raised` still flashes. (An animation would out-rank a
  * normal declaration anyway; being unlayered means the class works the same way
  * if it ever grows non-animated properties.)
+ *
+ * No end keyframe: the fade lands on the row's own background, so it never
+ * snaps back at the end. A selected row is already `accent-soft`, so it shows
+ * no pulse.
  */
 @keyframes dt-pulse {
 	0% {
 		background-color: var(--dt-accent-soft);
-	}
-	100% {
-		background-color: transparent;
 	}
 }
 
