@@ -770,7 +770,7 @@ describe.skipIf(!built)('Views panel', () => {
 		// The bug this pins: with a `shrink-0` key and no basis on the value, the
 		// key took whatever it wanted and the value was left with zero effective
 		// width — rendering as nothing but its ellipsis in a half-width card.
-		expect(key.className).toContain('max-w-[40%]');
+		expect(key.className).toContain('max-w-2/5');
 		expect(key.className).toContain('truncate');
 		expect(value.className).toContain('flex-1'); // basis 0 → takes the remainder
 		expect(value.className).toContain('min-w-0'); // ...and may shrink below content
@@ -1090,7 +1090,7 @@ describe.skipIf(!built)('Store panel', () => {
 		expect(local.textContent.trim()).toBe('local');
 		// Badge's own base class, compacted to DevTools scale by the class prop.
 		expect(synced.className).toContain('rounded-full');
-		expect(synced.className).toContain('text-[9px]!');
+		expect(synced.className).toContain('text-9!');
 		// Distinct variants, not just distinct text.
 		expect(synced.className).not.toBe(local.className);
 	});
@@ -1157,7 +1157,7 @@ describe.skipIf(!built)('Store panel', () => {
 		// Same width discipline as the inspector: bounded key, value takes the rest,
 		// full text on hover for the read-only fields that truncate.
 		const key = document.querySelector('[data-field="text"] dt');
-		expect(key.className).toContain('max-w-[35%]');
+		expect(key.className).toContain('max-w-7/20');
 		expect(key.className).toContain('truncate');
 		expect(document.querySelector('[data-field="_synced"] span[title]')).toBeTruthy();
 		expect(document.querySelector('[data-row="t1"] td[title]')).toBeTruthy();

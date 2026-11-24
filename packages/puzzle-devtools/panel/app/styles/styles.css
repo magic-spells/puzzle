@@ -62,6 +62,25 @@
 
 	--font-sans: var(--dt-font-sans);
 	--font-mono: var(--dt-font-mono);
+
+	/*
+	 * Type scale at DevTools density, in px like the 12px body. A size sets
+	 * font-size only, so a row keeps the line-height it inherits or names; the
+	 * Performance headline number carries its own.
+	 */
+	--text-8: 8px;
+	--text-9: 9px;
+	--text-10: 10px;
+	--text-11: 11px;
+	--text-12: 12px;
+	--text-13: 13px;
+	--text-15: 15px;
+	--text-26: 26px;
+	--text-26--line-height: 1.15;
+
+	/* Key/value rows: the inspector rows' leading and the Connection panel's grid. */
+	--leading-kv: 1.35;
+	--grid-template-columns-kv: 8rem 1fr;
 }
 
 :root {

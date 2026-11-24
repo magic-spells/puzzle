@@ -10,7 +10,7 @@
         data-perf-record
         aria-pressed="{ recordPressed }"
         title="{ recordTitle }"
-        class="flex items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-[11px] { recordClass }"
+        class="flex items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-11 { recordClass }"
         @click={ toggleRecord }>
         <span class="size-1.5 rounded-full { recordDotClass }" aria-hidden="true"></span>
         { recordLabel }
@@ -18,9 +18,9 @@
 
       <span
         data-perf-elapsed
-        class="font-mono text-[11px] tabular-nums text-ink"
+        class="font-mono text-11 tabular-nums text-ink"
         title="Elapsed recording time, as the runtime reports it">{ elapsed }</span>
-      <span class="min-w-0 truncate font-mono text-[10px] text-faint">{ statusNote }</span>
+      <span class="min-w-0 truncate font-mono text-10 text-faint">{ statusNote }</span>
 
       <button
         type="button"
@@ -33,7 +33,7 @@
     {#if error}
       <p
         data-perf-error
-        class="shrink-0 m-0 px-3 py-1 border-b border-line font-mono text-[10px] text-danger break-words">{ error }</p>
+        class="shrink-0 m-0 px-3 py-1 border-b border-line font-mono text-10 text-danger break-words">{ error }</p>
     {/if}
 
     <div class="flex-1 min-h-0 overflow-auto p-3 grid gap-3">
@@ -45,24 +45,24 @@
       {:else}
         <section class="rounded border border-line bg-canvas overflow-hidden" data-perf-totals>
           <div class="flex flex-wrap items-stretch">
-            <div class="flex-1 min-w-[190px] px-3 py-2 border-r border-line" data-perf-total="wastedRenders">
-              <p class="m-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Wasted renders</p>
+            <div class="flex-1 min-w-47.5 px-3 py-2 border-r border-line" data-perf-total="wastedRenders">
+              <p class="m-0 font-mono text-10 font-semibold uppercase tracking-wider text-faint">Wasted renders</p>
               <p class="m-0 flex items-baseline gap-2">
                 <span
                   data-perf-wasted
-                  class="font-mono text-[26px] leading-[1.15] font-semibold tabular-nums { wastedToneClass }">{ totalWasted }</span>
-                <span class="font-mono text-[12px] tabular-nums { wastedToneClass }">{ totalWastedPct }</span>
+                  class="font-mono text-26 font-semibold tabular-nums { wastedToneClass }">{ totalWasted }</span>
+                <span class="font-mono text-12 tabular-nums { wastedToneClass }">{ totalWastedPct }</span>
               </p>
-              <p class="m-0 text-[10px] leading-snug text-muted">{ wastedHint }</p>
+              <p class="m-0 text-10 leading-snug text-muted">{ wastedHint }</p>
             </div>
 
             {#for tile in totalTiles}
               <div
                 key={ tile.key }
                 data-perf-total="{ tile.key }"
-                class="min-w-[96px] px-3 py-2 border-r border-line last:border-r-0">
-                <p class="m-0 font-mono text-[10px] uppercase tracking-wider text-faint">{ tile.label }</p>
-                <p class="m-0 font-mono text-[15px] tabular-nums text-ink">{ tile.value }</p>
+                class="min-w-24 px-3 py-2 border-r border-line last:border-r-0">
+                <p class="m-0 font-mono text-10 uppercase tracking-wider text-faint">{ tile.label }</p>
+                <p class="m-0 font-mono text-15 tabular-nums text-ink">{ tile.value }</p>
               </div>
             {/for}
           </div>
@@ -71,23 +71,23 @@
         {#if hasWarnings}
           <section class="rounded border border-danger bg-danger-soft overflow-hidden" data-perf-warnings>
             <header class="flex items-baseline gap-2 px-2 py-1 border-b border-danger">
-              <h2 class="m-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-danger">
+              <h2 class="m-0 font-mono text-10 font-semibold uppercase tracking-wider text-danger">
                 Render loops detected
               </h2>
-              <span class="ml-auto font-mono text-[10px] tabular-nums text-danger">{ warningCount }</span>
+              <span class="ml-auto font-mono text-10 tabular-nums text-danger">{ warningCount }</span>
             </header>
             <ul class="m-0 p-0 list-none">
               {#for warning in warnings}
                 <li key={ warning.key }>
                   <div
                     data-perf-warning="{ warning.kind }"
-                    class="flex items-baseline gap-2 min-h-[24px] px-2 py-1 border-b border-line last:border-b-0 { warning.rowClass }"
+                    class="flex items-baseline gap-2 min-h-6 px-2 py-1 border-b border-line last:border-b-0 { warning.rowClass }"
                     title="{ warning.title }"
                     @click={ openView(warning.viewId) }>
-                    <span class="shrink-0 font-mono text-[9px] font-semibold uppercase tracking-wide text-danger">{ warning.kindLabel }</span>
-                    <span class="shrink-0 font-mono text-[11px] text-ink">{ warning.name }</span>
-                    <span class="min-w-0 flex-1 truncate text-[10px] text-muted">{ warning.detail }</span>
-                    <span class="shrink-0 font-mono text-[10px] tabular-nums text-danger">×{ warning.count }</span>
+                    <span class="shrink-0 font-mono text-9 font-semibold uppercase tracking-wide text-danger">{ warning.kindLabel }</span>
+                    <span class="shrink-0 font-mono text-11 text-ink">{ warning.name }</span>
+                    <span class="min-w-0 flex-1 truncate text-10 text-muted">{ warning.detail }</span>
+                    <span class="shrink-0 font-mono text-10 tabular-nums text-danger">×{ warning.count }</span>
                   </div>
                 </li>
               {/for}
@@ -97,13 +97,13 @@
 
         <section class="rounded border border-line bg-canvas overflow-hidden" data-perf-table>
           <header class="flex items-baseline gap-2 px-2 py-1 border-b border-line bg-surface">
-            <h2 class="m-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Views</h2>
-            <span class="font-mono text-[10px] tabular-nums text-faint">{ rowCount }</span>
-            <span class="ml-auto min-w-0 truncate text-[10px] text-faint">{ heatLegend }</span>
+            <h2 class="m-0 font-mono text-10 font-semibold uppercase tracking-wider text-faint">Views</h2>
+            <span class="font-mono text-10 tabular-nums text-faint">{ rowCount }</span>
+            <span class="ml-auto min-w-0 truncate text-10 text-faint">{ heatLegend }</span>
           </header>
 
           {#if rowCount === 0}
-            <p class="m-0 px-2 py-1.5 text-[11px] italic text-faint">No views rendered during this recording.</p>
+            <p class="m-0 px-2 py-1.5 text-11 italic text-faint">No views rendered during this recording.</p>
           {:else}
             <table class="w-full border-collapse text-left">
               <thead class="sticky top-0 bg-surface">
@@ -111,7 +111,7 @@
                   <th
                     scope="col"
                     title="Renders relative to the busiest view in this report"
-                    class="w-[76px] px-2 py-0.5 border-b border-line font-mono text-[10px] font-semibold uppercase tracking-wide text-faint">heat</th>
+                    class="w-19 px-2 py-0.5 border-b border-line font-mono text-10 font-semibold uppercase tracking-wide text-faint">heat</th>
                   {#for column in columns}
                     <th
                       key={ column.key }
@@ -119,8 +119,8 @@
                       data-perf-sort="{ column.key }"
                       aria-sort="{ column.ariaSort }"
                       title="{ column.hint }"
-                      class="cursor-pointer select-none whitespace-nowrap px-2 py-0.5 border-b border-line font-mono text-[10px] font-semibold uppercase tracking-wide { column.align } { column.cls }"
-                      @click={ sortBy(column.key) }>{ column.label }<span class="ml-0.5 text-[8px]">{ column.indicator }</span></th>
+                      class="cursor-pointer select-none whitespace-nowrap px-2 py-0.5 border-b border-line font-mono text-10 font-semibold uppercase tracking-wide { column.align } { column.cls }"
+                      @click={ sortBy(column.key) }>{ column.label }<span class="ml-0.5 text-8">{ column.indicator }</span></th>
                   {/for}
                 </tr>
               </thead>
@@ -140,19 +140,19 @@
                           style="width:{ row.heatWidth }"></span>
                       </span>
                     </td>
-                    <td class="max-w-[15rem] px-2 py-1 border-b border-line">
+                    <td class="max-w-60 px-2 py-1 border-b border-line">
                       <ViewIdentity name={ row.name } module={ row.module } dim={ row.dim } />
                     </td>
-                    <td class="px-2 py-1 border-b border-line text-right font-mono text-[11px] tabular-nums text-ink">{ row.renders }</td>
+                    <td class="px-2 py-1 border-b border-line text-right font-mono text-11 tabular-nums text-ink">{ row.renders }</td>
                     <td
                       data-perf-cell="wasted"
-                      class="whitespace-nowrap px-2 py-1 border-b border-line text-right font-mono text-[11px] tabular-nums { row.wastedClass }">
-                      { row.wasted }<span class="ml-1 text-[9px]">{ row.wastedPct }</span>
+                      class="whitespace-nowrap px-2 py-1 border-b border-line text-right font-mono text-11 tabular-nums { row.wastedClass }">
+                      { row.wasted }<span class="ml-1 text-9">{ row.wastedPct }</span>
                     </td>
-                    <td class="px-2 py-1 border-b border-line text-right font-mono text-[11px] tabular-nums text-muted">{ row.mutations }</td>
-                    <td class="px-2 py-1 border-b border-line text-right font-mono text-[11px] tabular-nums text-muted">{ row.renderMs }</td>
-                    <td class="px-2 py-1 border-b border-line text-right font-mono text-[11px] tabular-nums text-muted">{ row.patchMs }</td>
-                    <td class="px-2 py-1 border-b border-line text-right font-mono text-[11px] tabular-nums text-muted">{ row.dataMs }</td>
+                    <td class="px-2 py-1 border-b border-line text-right font-mono text-11 tabular-nums text-muted">{ row.mutations }</td>
+                    <td class="px-2 py-1 border-b border-line text-right font-mono text-11 tabular-nums text-muted">{ row.renderMs }</td>
+                    <td class="px-2 py-1 border-b border-line text-right font-mono text-11 tabular-nums text-muted">{ row.patchMs }</td>
+                    <td class="px-2 py-1 border-b border-line text-right font-mono text-11 tabular-nums text-muted">{ row.dataMs }</td>
                   </tr>
                 {/for}
               </tbody>
@@ -162,22 +162,22 @@
 
         <section class="rounded border border-line bg-canvas overflow-hidden" data-perf-flushes>
           <header class="flex items-baseline gap-2 px-2 py-1 border-b border-line bg-surface">
-            <h2 class="m-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Store flushes</h2>
-            <span class="ml-auto font-mono text-[10px] tabular-nums text-faint">{ flushCount }</span>
+            <h2 class="m-0 font-mono text-10 font-semibold uppercase tracking-wider text-faint">Store flushes</h2>
+            <span class="ml-auto font-mono text-10 tabular-nums text-faint">{ flushCount }</span>
           </header>
           {#if flushCount === 0}
-            <p class="m-0 px-2 py-1.5 text-[11px] italic text-faint">No store writes during this recording.</p>
+            <p class="m-0 px-2 py-1.5 text-11 italic text-faint">No store writes during this recording.</p>
           {:else}
             <ul class="m-0 p-0 list-none">
               {#for flush in flushes}
                 <li
                   key={ flush.key }
                   data-perf-flush
-                  class="flex items-baseline gap-2 min-h-[20px] px-2 py-0.5 border-b border-line last:border-b-0"
+                  class="flex items-baseline gap-2 min-h-5 px-2 py-0.5 border-b border-line last:border-b-0"
                   title="{ flush.title }">
-                  <span class="min-w-0 flex-1 truncate font-mono text-[11px] text-ink">{ flush.keys }</span>
-                  <span class="shrink-0 font-mono text-[10px] tabular-nums text-muted">{ flush.notified } notified</span>
-                  <span class="shrink-0 font-mono text-[10px] tabular-nums text-faint">{ flush.durationMs } ms</span>
+                  <span class="min-w-0 flex-1 truncate font-mono text-11 text-ink">{ flush.keys }</span>
+                  <span class="shrink-0 font-mono text-10 tabular-nums text-muted">{ flush.notified } notified</span>
+                  <span class="shrink-0 font-mono text-10 tabular-nums text-faint">{ flush.durationMs } ms</span>
                 </li>
               {/for}
             </ul>

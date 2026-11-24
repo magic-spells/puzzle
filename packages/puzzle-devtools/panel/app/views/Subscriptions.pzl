@@ -13,8 +13,8 @@
 
     <div slot="first" class="h-full flex flex-col min-h-0 overflow-hidden border-r border-line bg-surface">
       <header class="shrink-0 flex items-center gap-2 min-h-8 px-2 py-1.5 border-b border-line">
-        <span class="font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Keys</span>
-        <span class="font-mono text-[10px] tabular-nums text-faint">{ keyCount }</span>
+        <span class="font-mono text-10 font-semibold uppercase tracking-wider text-faint">Keys</span>
+        <span class="font-mono text-10 tabular-nums text-faint">{ keyCount }</span>
         <button
           type="button"
           data-reload-subs
@@ -24,38 +24,38 @@
       </header>
 
       {#if error}
-        <p class="m-0 px-2 py-1 font-mono text-[10px] text-danger break-all">{ error }</p>
+        <p class="m-0 px-2 py-1 font-mono text-10 text-danger break-all">{ error }</p>
       {/if}
 
       <div class="flex-1 min-h-0 overflow-auto">
         {#if keyCount === 0}
-          <p class="m-0 px-2 py-2 text-[11px] text-faint">Nothing is subscribed.</p>
+          <p class="m-0 px-2 py-2 text-11 text-faint">Nothing is subscribed.</p>
         {:else}
           {#for group in groups}
             <section key={ group.id } data-group="{ group.id }">
-              <h2 class="m-0 sticky top-0 z-10 bg-surface px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-faint border-b border-line">
+              <h2 class="m-0 sticky top-0 z-10 bg-surface px-2 py-1 font-mono text-9 font-semibold uppercase tracking-wider text-faint border-b border-line">
                 { group.label }
                 <span class="tabular-nums">{ group.rows.length }</span>
               </h2>
               {#if group.rows.length === 0}
-                <p class="m-0 px-2 py-1 text-[10px] italic text-faint">none</p>
+                <p class="m-0 px-2 py-1 text-10 italic text-faint">none</p>
               {:else}
                 <ul class="m-0 p-0 list-none">
                   {#for row in group.rows}
                     <li key={ row.id }>
                       <div
                         data-sub-key="{ row.id }"
-                        class="flex items-center gap-1.5 min-h-[22px] px-2 py-0.5 cursor-default { row.rowClass } { row.pulseClass }"
+                        class="flex items-center gap-1.5 min-h-5.5 px-2 py-0.5 cursor-default { row.rowClass } { row.pulseClass }"
                         title="{ row.id }"
                         @click={ selectKey(row.id) }>
-                        <span class="min-w-0 truncate font-mono text-[11px] { row.nameClass }">{ row.id }</span>
+                        <span class="min-w-0 truncate font-mono text-11 { row.nameClass }">{ row.id }</span>
                         {#if row.heldLabel}
                           <span
                             data-held="{ row.id }"
                             title="{ row.heldTitle }"
-                            class="ml-auto shrink-0 rounded-sm bg-raised px-1 font-mono text-[9px] uppercase tracking-wide text-warn">{ row.heldLabel }</span>
+                            class="ml-auto shrink-0 rounded-sm bg-raised px-1 font-mono text-9 uppercase tracking-wide text-warn">{ row.heldLabel }</span>
                         {/if}
-                        <span class="shrink-0 font-mono text-[10px] tabular-nums text-faint { row.countClass }">{ row.count }</span>
+                        <span class="shrink-0 font-mono text-10 tabular-nums text-faint { row.countClass }">{ row.count }</span>
                       </div>
                     </li>
                   {/for}
@@ -72,25 +72,25 @@
         <Empty description="Select a store key to see which views re-render when it changes." class="py-8! px-4!" />
       {:else}
         <header class="shrink-0 flex items-baseline gap-2 min-h-9 px-3 py-2 leading-relaxed border-b border-line bg-surface">
-          <span class="shrink-0 font-mono text-[12px] font-semibold text-ink">{ selectedKey }</span>
-          <span class="shrink-0 font-mono text-[10px] uppercase tracking-wide text-faint">{ selectedKind }</span>
-          <span class="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-faint">{ subscriberCount } subscriber{ subscriberSuffix }</span>
+          <span class="shrink-0 font-mono text-12 font-semibold text-ink">{ selectedKey }</span>
+          <span class="shrink-0 font-mono text-10 uppercase tracking-wide text-faint">{ selectedKind }</span>
+          <span class="ml-auto shrink-0 font-mono text-10 tabular-nums text-faint">{ subscriberCount } subscriber{ subscriberSuffix }</span>
         </header>
 
         {#if heldNote}
-          <p data-held-note class="m-0 shrink-0 px-3 py-1.5 border-b border-line bg-raised text-[10px] leading-snug text-warn">{ heldNote }</p>
+          <p data-held-note class="m-0 shrink-0 px-3 py-1.5 border-b border-line bg-raised text-10 leading-snug text-warn">{ heldNote }</p>
         {/if}
 
         <div class="flex-1 min-h-0 overflow-auto">
           {#if subscribers.length === 0}
-            <p class="m-0 px-3 py-2 text-[11px] text-faint">No live subscribers.</p>
+            <p class="m-0 px-3 py-2 text-11 text-faint">No live subscribers.</p>
           {:else}
             <ul class="m-0 p-0 list-none">
               {#for sub in subscribers}
                 <li key={ sub.key }>
                   <div
                     data-subscriber="{ sub.key }"
-                    class="group flex items-center gap-2 min-h-[22px] px-3 py-0.5 { sub.rowClass }"
+                    class="group flex items-center gap-2 min-h-5.5 px-3 py-0.5 { sub.rowClass }"
                     title="{ sub.title }"
                     @click={ openView(sub.viewId) }>
                     <ViewIdentity name={ sub.name } module={ sub.module } dim={ sub.dim } />
@@ -98,10 +98,10 @@
                       {#if sub.held}
                         <span
                           data-subscriber-held
-                          class="rounded-sm bg-raised px-1 font-mono text-[9px] uppercase tracking-wide text-warn">pending</span>
+                          class="rounded-sm bg-raised px-1 font-mono text-9 uppercase tracking-wide text-warn">pending</span>
                       {/if}
                       {#if sub.navigable}
-                        <span class="hidden group-hover:inline font-mono text-[9px] uppercase tracking-wide text-accent">show in views →</span>
+                        <span class="hidden group-hover:inline font-mono text-9 uppercase tracking-wide text-accent">show in views →</span>
                       {/if}
                     </span>
                   </div>
