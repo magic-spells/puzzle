@@ -208,9 +208,9 @@ Children change the parent only by calling a shared callback
 (`select: (id) => this.setState({ active: id })`); there is no `setShared()`.
 The nearest same-named ancestor wins, and a layout's `share()` does not reach
 its routed page. A view whose `data()` read a changed key runs `data()` again
-before the sharer renders, so a view the change removes runs once more on the
-new values: guard the read (`byId[props.id]?.label`). Don't name a component
-`Params`, `Props` or `Shared`.
+after the sharer renders and before the sharer's `afterUpdate()`: a view that
+render removes does not run, and one it hands new props runs once. Don't name
+a component `Params`, `Props` or `Shared`.
 
 Names starting with `__` belong to the compiler: don't define `__`-prefixed
 fields or methods on a component (`__c`, `__lists`, `__dirty`, `__rgen`,

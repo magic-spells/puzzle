@@ -292,7 +292,7 @@ enforced, not merely advised.
   `StoreOptions`/`PuzzleValue` are removed, and `injectShell` /
   `injectStaticShell` take no `title`. New examples: `auth`,
   `paginated-posts`. Production sizes: hello-world **23.9 KB gzip**, todos
-  **27.8 KB gzip** (+0.9 KB and +0.8 KB over 0.9.0). The next free decision number
+  **27.9 KB gzip** (+0.9 KB each over 0.9.0). The next free decision number
   is **D202**.
 - Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView

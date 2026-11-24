@@ -677,12 +677,14 @@ export class PuzzleView {
 
 	/**
 	 * Run share() for the model that just committed, publish its output, and
-	 * re-run the data() of every descendant that read a key whose value changed
+	 * return every descendant that read a key whose value changed, with the read
+	 * record it holds now, for #rerunReaders() to re-run once the render has patched
 	 * (D197). share() runs under the committed data() run's read record, so a
 	 * later setState() of a key share() read re-runs data() and share()
 	 * together (D23). A function value is published as a stable wrapper that
 	 * calls the newest one, so a callback never goes stale in a child and a new
 	 * closure on every run never counts as a change.
+	 * @returns {[PuzzleView, ReadRecord][] | undefined}
 	 */
 	#publish() {
 		const rec = this.#dataReads;
@@ -709,16 +711,28 @@ export class PuzzleView {
 		}
 		this.#shared = out;
 		const subs = this.#shareSubs;
-		if (!subs?.size) return;
+		if (!subs?.size) return undefined;
 		/** @type {Set<string>} */
 		const changed = new Set();
 		for (const key of new Set([...Object.keys(prev), ...Object.keys(out)])) {
 			if (!Object.is(prev[key], out[key])) changed.add(key);
 		}
-		if (!changed.size) return;
-		// a copy: each re-run takes its reader off the list and signs it up again
-		for (const [view, reads] of [...subs]) {
-			if (reads.all || [...reads.keys].some((key) => changed.has(key)))
+		if (!changed.size) return undefined;
+		// a copy: the render and each re-run take readers off the list and sign them up again
+		return [...subs].filter(([, reads]) => reads.all || [...reads.keys].some((key) => changed.has(key)));
+	}
+
+	/**
+	 * Re-run the readers #publish() returned that still hold the record they held
+	 * then (D197). One that left the list since (destroyed) or holds a new record
+	 * (it re-ran with new props, or an earlier reader's re-run re-ran it) is
+	 * skipped, so calling this again for the same commit re-runs nobody twice.
+	 * @param {[PuzzleView, ReadRecord][] | undefined} readers
+	 */
+	#rerunReaders(readers) {
+		if (!readers) return;
+		for (const [view, reads] of readers) {
+			if (this.#shareSubs?.get(view) === reads)
 				view.#refreshContained('[puzzle] data() failed after a shared value changed:', 'refresh');
 		}
 	}
@@ -2672,8 +2686,11 @@ export class PuzzleView {
 			this.#recompose();
 		}
 		// share() (D197) runs once the model it derives from is in place, and before
-		// the render, so a descendant whose data() read a changed key re-runs now.
-		if (typeof (/** @type {any} */ (this).share) === 'function') this.#publish();
+		// the render, so a child the render mounts or hands new props reads the new
+		// values. The other readers of a changed key re-run inside the render, after
+		// its patch and before afterUpdate() (#renderSpan); the last line re-runs
+		// them when this commit renders nothing (a skeleton hold, a DOM-free preload).
+		const readers = typeof (/** @type {any} */ (this).share) === 'function' ? this.#publish() : undefined;
 		// Anti-flash hold (v1.20, D52). The FIRST data() result normally flips
 		// #loaded and swaps the skeleton for the real template. If a skeleton was
 		// actually shown and it has not yet been up for skeletonMinDuration ms,
@@ -2698,24 +2715,24 @@ export class PuzzleView {
 					}
 				}, this.#holdRemaining());
 			}
-			return;
-		}
-		this.#swapLoaded();
+		} else this.#swapLoaded(readers);
+		this.#rerunReaders(readers);
 	}
 
 	/**
 	 * Flip #loaded and render the real template — the loaded swap (v1.8, D39).
 	 * Reached immediately on the first commit (no hold), at hold expiry (v1.20,
 	 * D52), and on every post-load refresh.
+	 * @param {[PuzzleView, ReadRecord][]} [readers] the commit's share() readers (#publish)
 	 */
-	#swapLoaded() {
+	#swapLoaded(readers) {
 		// Reachable independently of #commit through the D52 hold timer, so it carries
 		// the leave guard in its own right (D136 §3): a min-duration hold expiring
 		// after the owner removed the view must not paint the real template over a
 		// subtree that is on its way out.
 		if (this.#destroyed || this.#leaving) return;
 		this.#loaded = true;
-		this.#renderNow();
+		this.#renderNow(undefined, readers);
 		// Anchor-race gate (Change A): a superseded initial async mount() deferred its
 		// mounted() until a first render actually committed — this is that commit, so
 		// complete the mount now (AFTER #renderNow, so mounted() sees the real
@@ -2883,19 +2900,25 @@ export class PuzzleView {
 		return this.#withCommittedScope(fn);
 	}
 
-	/** @param {ViewNode} [preparedTree] a takeover's already-expanded tree */
-	#renderNow(preparedTree = undefined) {
+	/**
+	 * @param {ViewNode} [preparedTree] a takeover's already-expanded tree
+	 * @param {[PuzzleView, ReadRecord][]} [readers] share() readers to re-run after the patch
+	 */
+	#renderNow(preparedTree, readers) {
 		// D146: a render always draws COMMITTED state. A prepared data() run whose
 		// promise is suspended leaves #evalScope set, so a render that lands inside
 		// that window (a store-change refresh on this same view while the gate is
 		// open) would otherwise read the destination params/route through the getters
 		// and paint the route the router has not committed. Renders are synchronous,
 		// so clearing and restoring around the whole render is exact.
-		this.#withCommittedScope(() => this.#renderNowInner(preparedTree));
+		this.#withCommittedScope(() => this.#renderNowInner(preparedTree, readers));
 	}
 
-	/** @param {ViewNode} [preparedTree] */
-	#renderNowInner(preparedTree = undefined) {
+	/**
+	 * @param {ViewNode} [preparedTree]
+	 * @param {[PuzzleView, ReadRecord][]} [readers]
+	 */
+	#renderNowInner(preparedTree, readers) {
 		if (!this.#vm || this.#destroyed) return;
 		if (
 			(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
@@ -2933,13 +2956,13 @@ export class PuzzleView {
 			// trip the recursion guard). The wrapper is dev-only: production folds this
 			// branch out and calls the span directly.
 			try {
-				this.#renderSpan(preparedTree, showSkeleton);
+				this.#renderSpan(preparedTree, showSkeleton, readers);
 			} catch (error) {
 				devperfRenderEnd(this);
 				throw error;
 			}
 		} else {
-			this.#renderSpan(preparedTree, showSkeleton);
+			this.#renderSpan(preparedTree, showSkeleton, readers);
 		}
 		// Timestamp the FIRST actual skeleton render so the hold measures from when
 		// the skeleton became visible, not from mount (v1.20, D52). Set once.
@@ -3021,8 +3044,9 @@ export class PuzzleView {
 	 *
 	 * @param {ViewNode | undefined} preparedTree
 	 * @param {boolean} showSkeleton
+	 * @param {[PuzzleView, ReadRecord][] | undefined} readers
 	 */
-	#renderSpan(preparedTree, showSkeleton) {
+	#renderSpan(preparedTree, showSkeleton, readers) {
 		// Static-cache accounting (D170 §3.3), dev-only: how many `__c` sites this
 		// instance held before the tree was built, so the span can report how many
 		// this render had to ALLOCATE. Both reads sit inside the probe, so
@@ -3071,6 +3095,10 @@ export class PuzzleView {
 			this.#vm.clear();
 			this.#vm.anchorAt(ref);
 		}
+		// share() (D197): the readers of a changed key re-run now, inside this update
+		// and its DevTools span like the children the patch re-propped. The patch
+		// destroyed or already re-ran some of them, and #rerunReaders() skips those.
+		this.#rerunReaders(readers);
 		// Rebuilt member-target diagnostic (D147, dev only). __bind collected the
 		// member objects this completed render actually used. Warn only when the
 		// object that received the write never returned, exactly one replacement did,

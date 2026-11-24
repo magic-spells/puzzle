@@ -2,10 +2,11 @@
 // share() and the single-object data() (D197): a parent view passes values and
 // callbacks to nested views at any depth, grouped under its name in camelcase,
 // and only the descendants whose data() read a changed key re-run.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { serialize } from '../client-runtime/ssg/serialize.js';
+import { setErrorHandler } from '../client-runtime/errors.js';
 
 // hand-written stand-ins for what the compiler emits (see composition.test.js)
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
@@ -329,6 +330,159 @@ describe('share() (D197)', () => {
 		expect(runs.count - before.count).toBe(1);
 		expect(runs.label - before.label).toBe(0);
 		expect(runs.none - before.none).toBe(0);
+	});
+
+	it('re-runs readers after the sharer renders: a removed row never runs against the new values', async () => {
+		const runs = [];
+		class Row extends PuzzleView {
+			data({ props, shared: { list } }) {
+				runs.push(props.id);
+				return { label: list.byId[props.id].label };
+			}
+			render() {
+				return h('li', {}, [text(this.getData().label)]);
+			}
+		}
+		class List extends PuzzleView {
+			created() {
+				this.setState('items', [{ id: 'a', label: 'Apple' }, { id: 'b', label: 'Banana' }]);
+			}
+			data() {
+				return { items: this.getState().items };
+			}
+			share() {
+				return { byId: Object.fromEntries(this.getData().items.map((item) => [item.id, item])) };
+			}
+			render() {
+				return h('ul', {}, this.getData().items.map((item) => comp(Row, { id: item.id, key: item.id })));
+			}
+		}
+		const el = container();
+		const list = new List();
+		const onError = vi.fn();
+		setErrorHandler(list.ctx, onError);
+		await list.mount(el);
+		await afterFrame();
+		runs.length = 0;
+
+		list.setState('items', [{ id: 'a', label: 'Apricot' }]);
+		await afterFrame();
+		expect(el.textContent).toBe('Apricot');
+		expect(onError).not.toHaveBeenCalled();
+		expect(runs).toEqual(['a']);
+	});
+
+	it('re-runs a reader once when the sharer render also hands it new props', async () => {
+		const runs = { a: 0, b: 0 };
+		class Tab extends PuzzleView {
+			data({ props, shared: { tabs } }) {
+				runs[props.id]++;
+				return { on: tabs.active === props.id, mark: props.mark };
+			}
+			render() {
+				return h('b', { class: this.getData().on ? 'on' : 'off' }, [text(this.getData().mark)]);
+			}
+		}
+		class Tabs extends PuzzleView {
+			created() {
+				this.setState('active', 'a');
+			}
+			share() {
+				return { active: this.getState().active };
+			}
+			render() {
+				const { active } = this.getState();
+				return h('nav', {}, ['a', 'b'].map((id) => comp(Tab, { id, key: id, mark: id === active ? '*' : '-' })));
+			}
+		}
+		const el = container();
+		const tabs = new Tabs();
+		await tabs.mount(el);
+		await afterFrame();
+		const before = { ...runs };
+
+		tabs.setState('active', 'b');
+		await afterFrame();
+		expect([...el.querySelectorAll('b')].map((b) => b.className + b.textContent)).toEqual(['off-', 'on*']);
+		expect(runs.a - before.a).toBe(1);
+		expect(runs.b - before.b).toBe(1);
+	});
+
+	it('re-runs readers inside the sharer update: beforeUpdate() sees their old DOM, afterUpdate() their new', async () => {
+		const seen = [];
+		class Tab extends PuzzleView {
+			data({ props, shared: { tabs } }) {
+				return { on: tabs.active === props.id };
+			}
+			render() {
+				return h('b', { id: this.props.id, class: this.getData().on ? 'on' : 'off' });
+			}
+		}
+		class Tabs extends PuzzleView {
+			created() {
+				this.setState('active', 'a');
+			}
+			share() {
+				return { active: this.getState().active };
+			}
+			beforeUpdate() {
+				seen.push(`before:${this.element.querySelector('.on').id}`);
+			}
+			afterUpdate() {
+				seen.push(`after:${this.element.querySelector('.on').id}`);
+			}
+			render() {
+				return h('nav', {}, ['a', 'b'].map((id) => comp(Tab, { id, key: id })));
+			}
+		}
+		const tabs = new Tabs();
+		await tabs.mount(container());
+		await afterFrame();
+
+		tabs.setState('active', 'b');
+		await afterFrame();
+		expect(seen).toEqual(['before:a', 'after:b']);
+	});
+
+	it('finishes a change down a chain of sharers inside the outer sharer update', async () => {
+		const seen = [];
+		class Readout extends PuzzleView {
+			data({ shared: { filter } }) {
+				return { chain: filter.chain.join('>') };
+			}
+			render() {
+				return h('output', {}, [text(this.getData().chain)]);
+			}
+		}
+		class Filter extends PuzzleView {
+			created() {
+				this.setState({ value: this.props.value });
+			}
+			share({ shared: { filter } }) {
+				return { chain: [...(filter?.chain ?? []), this.getState().value] };
+			}
+			beforeUpdate() {
+				if (!this.shared.filter) seen.push(`before:${this.element.querySelector('output').textContent}`);
+			}
+			afterUpdate() {
+				if (!this.shared.filter) seen.push(`after:${this.element.querySelector('output').textContent}`);
+			}
+			render() {
+				return h('div', {}, [slot()]);
+			}
+		}
+		class Page extends PuzzleView {
+			render() {
+				return h('main', {}, [comp(Filter, { value: 'shoes' }, [comp(Filter, { value: 'red' }, [comp(Readout)])])]);
+			}
+		}
+		const page = new Page();
+		await page.mount(container());
+		await afterFrame();
+
+		page._vnodeTree().children[0].component.setState({ value: 'boots' });
+		await afterFrame();
+		expect(seen).toEqual(['before:shoes>red', 'after:boots>red']);
 	});
 
 	it('re-runs share() when setState() writes a key share() read but data() did not', async () => {
