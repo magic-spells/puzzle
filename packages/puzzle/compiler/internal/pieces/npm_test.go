@@ -174,7 +174,7 @@ func TestSortVersionsIsNumericNotLexicographic(t *testing.T) {
 }
 
 func TestSelectFallbackVersion(t *testing.T) {
-	published := []string{"0.9.0", "1.0.0", "1.1.3", "1.1.10", "1.2.0-rc.1", "1.3.0", "bogus"}
+	published := []string{"0.9.0", "1.0.0", "1.1.3", "1.1.10", "1.1.11-rc.1", "1.2.0-rc.1", "1.3.0", "bogus"}
 	if got := selectFallbackVersion(published, "1.2.0"); got != "1.1.10" {
 		t.Errorf("selectFallbackVersion(…, 1.2.0) = %q, want 1.1.10 (newest lower minor, numerically)", got)
 	}

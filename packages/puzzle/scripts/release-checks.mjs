@@ -8,8 +8,8 @@
  * pieces release exists on the CLI's own major.minor line and it silently drops
  * to an older one (compiler/internal/pieces/npm.go, resolve()).
  *
- * That fallback is CORRECT behaviour for a user on a fresh install — the CLI can
- * ship before the matching pieces minor exists — and a RELEASE DEFECT for us: it
+ * From 1.0 that fallback, within one major, is CORRECT for a user whose CLI
+ * ships before the matching pieces minor exists — and a RELEASE DEFECT for us: it
  * means we published the framework without publishing the pieces release the
  * D32 version lock promises. So the notice is exactly the string a post-publish
  * check has to treat as a failure.

@@ -26,16 +26,15 @@
 //   7. The installed CLI scaffolds an app and resolves `add piece` to that exact
 //      pieces version, with PUZZLE_PIECES_REGISTRY deleted from the child env.
 //
-// Steps 6-7 exist because the version lock has a silent failure mode of its own.
-// When no pieces release matches the CLI's major.minor, `add piece` does not
-// fail — it prints a note and falls back to the newest older line, which is right
-// for a user on a fresh install and wrong for us: it means the release shipped
-// half-published. Nothing else in the pipeline looks at the pieces registry at
-// all, so a framework release with no matching pieces release passed every check
-// and degraded every user's first `add piece`. The env var matters as much as the
-// assertion: PUZZLE_PIECES_REGISTRY is exported in the maintainer's shell and
-// points at the in-repo registry, which would make this check pass by reading
-// local files it is supposed to be proving are on npm.
+// Steps 6-7 exist because nothing else in the pipeline looks at the pieces
+// registry. When no pieces release matches the CLI's major.minor, a zero-config
+// `add piece` stops with an error, since before 1.0 every older minor is across
+// a breaking release (from 1.0 it falls back to an older minor of the same major
+// and prints a note). Either way the release shipped half-published, and it would
+// pass every other check. The env var matters as much as the assertion:
+// PUZZLE_PIECES_REGISTRY is exported in the maintainer's shell and points at the
+// in-repo registry, which would make this check pass by reading local files it
+// is supposed to be proving are on npm.
 //
 // Steps 1-4 are metadata checks: fast, and they name the exact defect when one
 // fires. Step 5 is the one that actually answers the question — the others infer
@@ -209,7 +208,8 @@ console.log(`  OK  installed puzzle --version → ${cliOut.trim()}`);
 // --- 6. The version-locked pieces release must exist ------------------------
 // `puzzle add piece` resolves @magic-spells/puzzle-pieces to the CLI's own
 // major.minor (D32 amendment). A framework release published without its pieces
-// release leaves zero-config `add piece` silently reaching for an older line.
+// release makes every zero-config `add piece` fail (from 1.0, fall back to an
+// older minor of the same major).
 const PIECES_PACKAGE = '@magic-spells/puzzle-pieces';
 const piecesDoc = await packument(PIECES_PACKAGE);
 if (!piecesDoc) fail(`${PIECES_PACKAGE} is not on the registry at all`);
@@ -218,8 +218,9 @@ if (!piecesDoc.versions?.[version]) {
 		`${PIECES_PACKAGE}@${version} is not on the registry`,
 		'The pieces registry is version-locked to the framework: `puzzle add piece`\n' +
 			`resolves ${PIECES_PACKAGE} to the CLI's major.minor. Without ${version} on the\n` +
-			'registry, every zero-config `add piece` falls back to an older line (or hard-fails\n' +
-			'when none exists). Publish it from ../puzzle-pieces, then re-run this check.\n' +
+			'registry, every zero-config `add piece` fails (from 1.0 it falls back to an\n' +
+			'older minor of the same major). Publish it from ../puzzle-pieces, then re-run\n' +
+			'this check.\n' +
 			`Published: ${Object.keys(piecesDoc.versions ?? {}).join(', ') || '(none)'}`
 	);
 }

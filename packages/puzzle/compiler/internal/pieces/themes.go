@@ -118,10 +118,11 @@ func fetchRegistry(f Fetcher) (*Registry, error) {
 		// A dead default source is almost always "no pieces release matches this
 		// CLI's major.minor yet / npm is unreachable" — name the two overrides,
 		// or the user is stuck staring at a bare error about a source they never
-		// chose. Not --pieces-version: an older pin is what the lock refused.
+		// chose. Not --pieces-version or an npm:pkg@version source: an older pin
+		// installs the release the version lock just refused.
 		if f.Source() == defaultRegistry {
 			return nil, fmt.Errorf(
-				"%w\n  (the default npm registry didn't yield a matching pieces release — point at a registry with --registry <path|url|npm:pkg[@version]> or the PUZZLE_PIECES_REGISTRY env var)", err)
+				"%w\n  (the default npm registry didn't yield a matching pieces release — point at a registry with --registry <path|url> or the PUZZLE_PIECES_REGISTRY env var)", err)
 		}
 		return nil, err
 	}
