@@ -47,7 +47,7 @@ describe('piecesFallbackNotice', () => {
 	// all), and it already exits non-zero, so the detector must not claim it.
 	it('does not fire on the no-compatible-release hard error', () => {
 		const hardError =
-			'no @magic-spells/puzzle-pieces release matches puzzle 0.7.0 (need 0.7.x; published: 0.5.0, 0.4.0)';
+			'no @magic-spells/puzzle-pieces release matches puzzle 0.7.0 yet (need 0.7.x; published: 0.5.0, 0.4.0)';
 		expect(piecesFallbackNotice(hardError)).toBeNull();
 	});
 

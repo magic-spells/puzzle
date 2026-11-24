@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/magic-spells/puzzle/compiler/internal/update"
 )
 
 // parseVersion splits a semver string into its numeric parts. A prerelease or
@@ -65,35 +67,30 @@ func selectVersion(published []string, cliVersion string) (string, error) {
 }
 
 // selectFallbackVersion implements the compatibility fallback for a zero-config
-// run whose own minor has no pieces release yet — the normal state of a fresh
-// `@magic-spells/puzzle` install, since the compiler and the registry are
-// published separately and the compiler usually goes first. It returns the
-// newest published NON-prerelease whose major.minor is strictly LOWER than the
-// CLI's, or "" when nothing older exists (the caller then keeps the hard error).
+// run whose own minor has no pieces release yet, which happens when the
+// compiler is published before the matching registry. It returns the newest
+// published NON-prerelease on a LOWER minor of the CLI's own major, or "" when
+// there is none (the caller then keeps the hard error).
 //
-// Older, never newer: a registry authored for a LATER compiler may use grammar
-// this binary does not have, which is the failure the lockstep rule exists to
-// prevent. An earlier registry only misses features, which is what a fallback
-// can honestly promise.
+// Older, never newer, and never across a breaking release (update.Breaking): a
+// registry authored for a later compiler may use grammar this binary does not
+// have, and one from before a breaking release may use grammar it no longer
+// accepts (0.9 pieces' bare <Slot/> under 0.10). Below 1.0 every minor is a
+// breaking release, so there is no fallback there.
 func selectFallbackVersion(published []string, cliVersion string) string {
-	cliMajor, cliMinor, _, _, ok := parseVersion(cliVersion)
+	_, cliMinor, _, _, ok := parseVersion(cliVersion)
 	if !ok {
 		return ""
 	}
-	best := ""
-	bestMajor, bestMinor, bestPatch := -1, -1, -1
+	best, bestMinor, bestPatch := "", -1, -1
 	for _, v := range published {
-		major, minor, patch, pre, ok := parseVersion(v)
-		if !ok || pre {
+		// No major test: update.Breaking already rejects every other major.
+		_, minor, patch, pre, ok := parseVersion(v)
+		if !ok || pre || minor >= cliMinor || update.Breaking(v, cliVersion) {
 			continue
 		}
-		if major > cliMajor || (major == cliMajor && minor >= cliMinor) {
-			continue
-		}
-		if major > bestMajor ||
-			(major == bestMajor && minor > bestMinor) ||
-			(major == bestMajor && minor == bestMinor && patch > bestPatch) {
-			best, bestMajor, bestMinor, bestPatch = v, major, minor, patch
+		if minor > bestMinor || minor == bestMinor && patch > bestPatch {
+			best, bestMinor, bestPatch = v, minor, patch
 		}
 	}
 	return best
@@ -389,14 +386,14 @@ func (n *npmFetcher) resolve() (version, tarballURL string, err error) {
 		}
 		if pick == "" {
 			cliMajor, cliMinor, _, _, _ := parseVersion(n.cliVersion)
-			// No release on this compiler's own line. That is the ordinary state of
-			// a fresh install — the compiler ships before the matching registry
-			// minor exists — so fall back to the newest OLDER release rather than
-			// making every zero-config `puzzle add piece` fail until pieces catches
-			// up. The notice names both versions so the mismatch is never silent.
+			// No release on this compiler's own line, which happens when the
+			// compiler ships before the matching registry minor exists — so fall
+			// back to the newest OLDER release on the same side of a breaking
+			// release, or fail when there is none. The notice names both versions
+			// so the mismatch is never silent.
 			fallback := selectFallbackVersion(published, n.cliVersion)
 			if fallback == "" {
-				return "", "", fmt.Errorf("no %s release matches puzzle %s (need %d.%d.x; published: %s)",
+				return "", "", fmt.Errorf("no %s release matches puzzle %s yet (need %d.%d.x; published: %s)",
 					n.pkg, n.cliVersion, cliMajor, cliMinor, newestPublished(published, maxListedVersions))
 			}
 			fmt.Fprintf(n.noticeWriter(),

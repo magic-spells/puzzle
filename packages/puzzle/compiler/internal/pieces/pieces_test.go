@@ -1281,13 +1281,13 @@ func (f *failFetcher) Source() string        { return f.source }
 func (f *failFetcher) Ref(rel string) string { return f.source + "/" + rel }
 
 func TestAddDefaultRegistryFailureHintsAtOverrides(t *testing.T) {
-	// The default npm source failing must name every override — that error is the
+	// The default npm source failing must name both overrides — that error is the
 	// first thing a user sees when no pieces release matches their CLI version.
 	_, err := Add(Options{AppRoot: t.TempDir(), Names: []string{"button"}, Fetcher: &failFetcher{source: defaultRegistry}})
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	for _, want := range []string{"--pieces-version", "--registry", "PUZZLE_PIECES_REGISTRY"} {
+	for _, want := range []string{"--registry", "PUZZLE_PIECES_REGISTRY"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("default-source error should mention %s, got: %v", want, err)
 		}
