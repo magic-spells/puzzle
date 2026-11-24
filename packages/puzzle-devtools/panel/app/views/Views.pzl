@@ -28,7 +28,7 @@
       {/if}
 
       <div
-        class="flex-1 min-h-0 overflow-auto outline-none"
+        class="flex-1 min-h-0 overflow-auto outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2"
         tabindex="0"
         aria-label="View tree"
         @keydown:up:prevent={ moveSelection(-1) }
