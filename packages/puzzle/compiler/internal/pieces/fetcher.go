@@ -18,11 +18,11 @@ import (
 // the compiler running it.
 //
 // That preference is not a requirement, because the two packages are published
-// separately and the compiler normally goes first: when this CLI's own minor has
-// no pieces release yet, the fetcher falls back to the newest published release
-// on a LOWER major.minor and says so (selectFallbackVersion). Only when nothing
-// older exists either — a registry that has never published anything this
-// compiler can use — is it a hard error. --pieces-version overrides all of it.
+// separately and the compiler may go first: when this CLI's own minor has no
+// pieces release yet, the fetcher falls back to the newest published release on
+// a LOWER minor of the same major and says so (selectFallbackVersion). When
+// there is none — below 1.0 every older minor is across a breaking release — it
+// is a hard error. --pieces-version overrides all of it.
 const defaultRegistry = npmScheme + defaultNpmPackage
 
 // httpTimeout bounds a single registry-file request off an http(s) mirror, and

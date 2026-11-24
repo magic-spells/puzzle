@@ -376,7 +376,8 @@ enforced, not merely advised.
   resolves `@magic-spells/puzzle-pieces` to the CLI's major.minor. Publish the
   matching pieces release (from `../puzzle-pieces` — the `release:prep`
   summary prints it in order) at or before the CLI release, or zero-config
-  `add piece` falls back to an older minor — or hard-fails when none exists.
+  `add piece` and `add theme` stop with an error: they never fall back across
+  a breaking release, and before 1.0 every older minor is one.
   The devtools zip (`npm run build:compiler`, then `build:zip` in
   `../puzzle-devtools`) is separate and unhurried.
 - Sweep the release-facing prose no script checks: CHANGELOG completeness for
