@@ -1,14 +1,6 @@
 @import "tailwindcss";
 
 /*
- * Tailwind v4 content detection. Paths are relative to this stylesheet
- * (app/styles/), so "../" is the app root.
- */
-@source "../**/*.pzl";
-@source "../**/*.js";
-@source "../public/**/*.html";
-
-/*
  * Theming: every semantic token is an `inline` theme entry pointing at a plain
  * custom property, so the generated utilities emit `var(--dt-…)` rather than a
  * baked value. Flipping `<html data-theme>` therefore re-themes the whole panel
