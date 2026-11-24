@@ -111,12 +111,12 @@ export default class Hamburger extends PuzzleView {
   }
 
   events = {
-    handleClick: (event) => {
+    handleClick: () => {
       if (this.props.disabled) return;
       const next = !this._open();
       if (!this._controlled()) this.setState({ uncontrolledOpen: next });
       const { change } = this.props;
-      if (typeof change === 'function') change(next, event);
+      if (typeof change === 'function') change(next);
     },
   };
 }

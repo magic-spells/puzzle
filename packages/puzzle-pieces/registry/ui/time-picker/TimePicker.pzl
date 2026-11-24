@@ -63,7 +63,7 @@
                       aria-selected={ opt.ariaSelected }
                       data-active={ opt.activeAttr }
                       class={ opt.rowClass }
-                      @click={ onPick(col, opt, event) }>
+                      @click={ onPick(col, opt) }>
                       <span class="tabular-nums">{ opt.label }</span>
                     </li>
                   {/for}
@@ -551,7 +551,7 @@ export default class TimePicker extends PuzzleView {
 
   // Apply a pick in one column: recompute the composite 24h value, update the
   // active highlight, and emit @change. Parent owns `value` and writes it back.
-  _applyPick(key, val, event) {
+  _applyPick(key, val) {
     let { h, m, s } = this.getData().active;
     if (key === 'h') h = val;
     else if (key === 'm') m = val;
@@ -561,7 +561,7 @@ export default class TimePicker extends PuzzleView {
     this.setState({ active: { h, m, s } });
 
     const { change } = this.props;
-    if (typeof change === 'function') change(compose(h, m, s, !!this.props.seconds), event);
+    if (typeof change === 'function') change(compose(h, m, s, !!this.props.seconds));
 
     // Keep the just-picked column's active row scrolled into view next frame.
     requestAnimationFrame(() => this._scrollActives());
@@ -589,8 +589,8 @@ export default class TimePicker extends PuzzleView {
     },
 
     // Click a specific option row.
-    onPick: (col, opt, event) => {
-      this._applyPick(col.key, opt.value, event);
+    onPick: (col, opt) => {
+      this._applyPick(col.key, opt.value);
     },
 
     // Per-column keyboard. Up/Down/Home/End move within the column (each move
@@ -607,22 +607,22 @@ export default class TimePicker extends PuzzleView {
         case 'ArrowDown': {
           event.preventDefault();
           const next = Math.min(len - 1, cur + 1);
-          this._applyPick(col.key, options[next].value, event);
+          this._applyPick(col.key, options[next].value);
           break;
         }
         case 'ArrowUp': {
           event.preventDefault();
           const prev = Math.max(0, cur - 1);
-          this._applyPick(col.key, options[prev].value, event);
+          this._applyPick(col.key, options[prev].value);
           break;
         }
         case 'Home':
           event.preventDefault();
-          this._applyPick(col.key, options[0].value, event);
+          this._applyPick(col.key, options[0].value);
           break;
         case 'End':
           event.preventDefault();
-          this._applyPick(col.key, options[len - 1].value, event);
+          this._applyPick(col.key, options[len - 1].value);
           break;
         case 'ArrowRight':
         case 'ArrowLeft': {
@@ -638,7 +638,7 @@ export default class TimePicker extends PuzzleView {
           event.preventDefault();
           // Confirm the current active value (guarantees an emit even if untouched)
           // and close, returning focus to the trigger.
-          this._applyPick(col.key, options[cur].value, event);
+          this._applyPick(col.key, options[cur].value);
           this._requestClose({ restoreFocus: true });
           break;
         }

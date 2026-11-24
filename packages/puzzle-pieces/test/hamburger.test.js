@@ -38,7 +38,7 @@ test('hamburger: a real button root with string aria-expanded and three aria-hid
 test('hamburger: optional-controlled — `open` detection, @change is not a prop name', async () => {
   const source = await readText(SRC);
   assert.match(source, /this\.props\.open !== undefined/);
-  assert.match(source, /change\(next, event\)/);
+  assert.match(source, /change\(next\)/);
 });
 
 test('hamburger: motion is CSS transitions on translate/rotate, gated on no-preference and animate', async () => {

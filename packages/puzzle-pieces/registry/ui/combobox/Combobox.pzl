@@ -69,7 +69,7 @@
                 aria-disabled={ row.ariaDisabled }
                 aria-hidden={ row.ariaHidden }
                 class={ row.rowClass }
-                @click={ choose(row, event) }
+                @click={ choose(row) }
                 @mouseenter={ hover(row) }>
                 {#if row.kind === 'option'}
                   <Slot
@@ -665,7 +665,7 @@ export default class Combobox extends PuzzleView {
     this.element.querySelector(`#${CSS.escape(activeId)}`)?.scrollIntoView({ block: 'nearest' });
   }
 
-  _selectActive(event) {
+  _selectActive() {
     const { options, activeIndex } = this.getData();
     const opt = options[activeIndex];
     // Strict select-only: no active/enabled option → no-op (allowCustomValue
@@ -673,7 +673,7 @@ export default class Combobox extends PuzzleView {
     if (!opt || opt.disabled) return;
     if (opt.value !== (this.props.value ?? null)) {
       const { change } = this.props;
-      if (typeof change === 'function') change(opt.value, event);
+      if (typeof change === 'function') change(opt.value);
     }
     this._requestClose({ restoreFocus: true });
   }
@@ -753,7 +753,7 @@ export default class Combobox extends PuzzleView {
         case 'Enter':
           if (!open) return;
           event.preventDefault();
-          this._selectActive(event);
+          this._selectActive();
           break;
         case 'Escape':
           if (!open) return;
@@ -777,11 +777,11 @@ export default class Combobox extends PuzzleView {
       this._setActive(row.optIndex, false);
     },
 
-    choose: (row, event) => {
+    choose: (row) => {
       if (row.kind !== 'option' || row.disabled) return;
       if (row.value !== (this.props.value ?? null)) {
         const { change } = this.props;
-        if (typeof change === 'function') change(row.value, event);
+        if (typeof change === 'function') change(row.value);
       }
       this._requestClose({ restoreFocus: true });
     },

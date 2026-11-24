@@ -15,7 +15,7 @@
               aria-label={ chip.removeLabel }
               disabled={ disabled }
               @mousedown={ keepFocus(event) }
-              @click={ removeChip(chip, event) }>
+              @click={ removeChip(chip) }>
               <svg
                 class="size-3"
                 viewBox="0 0 20 20"
@@ -92,7 +92,7 @@
                 aria-disabled={ row.ariaDisabled }
                 aria-hidden={ row.ariaHidden }
                 class={ row.rowClass }
-                @click={ choose(row, event) }
+                @click={ choose(row) }
                 @mouseenter={ hover(row) }>
                 {#if row.kind === 'option'}
                   <Slot
@@ -706,14 +706,14 @@ export default class MultiSelect extends PuzzleView {
 
   // Emit `change` with the value ADDED, clear the query, and reseat the active
   // option against the NEW (shorter) candidate list. The popup stays OPEN.
-  _add(value, event) {
+  _add(value) {
     if (this.props.disabled) return;
     const current = this._values(this.props);
     if (current.includes(value)) return;
     const next = current.concat([value]);
 
     const { change } = this.props;
-    if (typeof change === 'function') change(next, event);
+    if (typeof change === 'function') change(next);
 
     const { options } = this._build(this.props, '', new Set(next));
     this._scrollActive = false;
@@ -723,14 +723,14 @@ export default class MultiSelect extends PuzzleView {
 
   // Emit `change` with `value` REMOVED. Open state is untouched; focus returns to
   // the input. Reseats active against the NEW (longer) candidate list.
-  _remove(value, event) {
+  _remove(value) {
     if (this.props.disabled) return;
     const current = this._values(this.props);
     if (!current.includes(value)) return;
     const next = current.filter((v) => v !== value);
 
     const { change } = this.props;
-    if (typeof change === 'function') change(next, event);
+    if (typeof change === 'function') change(next);
 
     if (this._effectiveOpen()) {
       const { options } = this._build(this.props, this.getData().query, new Set(next));
@@ -742,11 +742,11 @@ export default class MultiSelect extends PuzzleView {
     this.element?.querySelector('[data-multiselect-input]')?.focus({ preventScroll: true });
   }
 
-  _selectActive(event) {
+  _selectActive() {
     const { options, activeIndex } = this.getData();
     const opt = options[activeIndex];
     if (!opt || opt.disabled) return;
-    this._add(opt.value, event);
+    this._add(opt.value);
   }
 
   events = {
@@ -820,7 +820,7 @@ export default class MultiSelect extends PuzzleView {
         case 'Enter':
           if (!open) return;
           event.preventDefault();
-          this._selectActive(event);
+          this._selectActive();
           break;
         case 'Backspace': {
           // Empty input → remove the last chip (whether open or closed).
@@ -828,7 +828,7 @@ export default class MultiSelect extends PuzzleView {
           const current = this._values(this.props);
           if (!current.length) return;
           event.preventDefault();
-          this._remove(current[current.length - 1], event);
+          this._remove(current[current.length - 1]);
           break;
         }
         case 'Escape':
@@ -850,13 +850,13 @@ export default class MultiSelect extends PuzzleView {
       this._setActive(row.optIndex, false);
     },
 
-    choose: (row, event) => {
+    choose: (row) => {
       if (row.kind !== 'option' || row.disabled) return;
-      this._add(row.value, event);
+      this._add(row.value);
     },
 
-    removeChip: (chip, event) => {
-      this._remove(chip.value, event);
+    removeChip: (chip) => {
+      this._remove(chip.value);
     },
   };
 }

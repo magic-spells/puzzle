@@ -90,7 +90,7 @@ export default class Field extends PuzzleView {
       const { change, form, name } = this.props;
       // write the draft first so a change callback reads the new value back
       if (form && name) form.set(name, event.target.value);
-      if (typeof change === 'function') change(event.target.value, event);
+      if (typeof change === 'function') change(event.target.value);
     },
     handleBlur: (event) => {
       const { blur, form, name } = this.props;

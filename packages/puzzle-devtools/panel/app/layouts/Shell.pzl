@@ -1,17 +1,17 @@
 <puzzle-view class="h-full flex flex-col bg-canvas text-ink">
   <header class="shrink-0 flex items-center gap-3 min-h-9 px-3 py-1 border-b border-line bg-surface">
-    <span class="shrink-0 font-mono text-[11px] font-semibold tracking-wider text-accent">PUZZLE</span>
+    <span class="shrink-0 font-mono text-11 font-semibold tracking-wider text-accent">PUZZLE</span>
 
     <nav class="flex items-center gap-1" aria-label="Panels">
       {#for item in nav}
         <a
           key={ item.path }
-          class="rounded px-2.5 py-1 text-[12px] no-underline { item.cls }"
+          class="rounded px-2.5 py-1 no-underline { item.cls }"
           href="{ link(item.path) }">{ item.label }</a>
       {/for}
     </nav>
 
-    <span class="ml-auto inline-flex items-center gap-1.5 text-[11px] text-muted">
+    <span class="ml-auto inline-flex items-center gap-1.5 text-11 text-muted">
       <span class="h-1.5 w-1.5 rounded-full { statusDotClass }"></span>
       { statusLabel }
     </span>

@@ -19,7 +19,7 @@
             disabled={ item.disabled }
             @focus={ focusItem(item.value) }
             @keydown={ handleKey(item.value, event) }
-            @click={ activate(item.value, event) }>
+            @click={ activate(item.value) }>
             {#if item.icon}
               <svg class={ iconClass } viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d={ item.icon }/>
@@ -241,7 +241,7 @@ export default class Toolbar extends PuzzleView {
   }
 
   events = {
-    activate: (value, event) => {
+    activate: (value) => {
       const item = this.getData().items.find(
         (i) => i.type !== 'separator' && i.value === value
       );
@@ -252,7 +252,7 @@ export default class Toolbar extends PuzzleView {
         if (typeof toggle === 'function') toggle({ value, pressed: !item.pressed });
       } else {
         const { press } = this.props;
-        if (typeof press === 'function') press(value, event);
+        if (typeof press === 'function') press(value);
       }
     },
 

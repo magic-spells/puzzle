@@ -14,7 +14,7 @@
             aria-label={ chip.removeLabel }
             disabled={ disabled }
             @mousedown={ onRemoveDown(event) }
-            @click={ removeTag(chip, event) }>
+            @click={ removeTag(chip) }>
             <svg
               class="size-3"
               viewBox="0 0 20 20"
@@ -206,7 +206,7 @@ export default class TagsInput extends PuzzleView {
   }
 
   // Commit the draft as a single tag; rejected non-empty text stays editable.
-  _commitDraft(event) {
+  _commitDraft() {
     if (this.props.disabled) return;
     const current = this._values(this.props);
     const draft = this.getData().draft;
@@ -214,21 +214,21 @@ export default class TagsInput extends PuzzleView {
     if (next !== current) {
       this.setState({ draft: '' });
       const { change } = this.props;
-      if (typeof change === 'function') change(next, event);
+      if (typeof change === 'function') change(next);
     } else if (!draft.trim()) {
       this.setState({ draft: '' });
     }
     this._focusInput();
   }
 
-  _remove(value, event) {
+  _remove(value) {
     if (this.props.disabled) return;
     const current = this._values(this.props);
     const idx = current.lastIndexOf(value);
     if (idx === -1) return;
     const next = current.slice(0, idx).concat(current.slice(idx + 1));
     const { change } = this.props;
-    if (typeof change === 'function') change(next, event);
+    if (typeof change === 'function') change(next);
     this._focusInput();
   }
 
@@ -257,7 +257,7 @@ export default class TagsInput extends PuzzleView {
       const delimiters = this._delimiters(this.props);
       if (delimiters.includes(event.key)) {
         event.preventDefault();
-        this._commitDraft(event);
+        this._commitDraft();
         return;
       }
       if (event.key === 'Backspace') {
@@ -266,7 +266,7 @@ export default class TagsInput extends PuzzleView {
         const current = this._values(this.props);
         if (!current.length) return;
         event.preventDefault();
-        this._remove(current[current.length - 1], event);
+        this._remove(current[current.length - 1]);
       }
     },
 
@@ -291,13 +291,13 @@ export default class TagsInput extends PuzzleView {
       this.setState({ draft: rejected.join(' ') });
       if (current !== before) {
         const { change } = this.props;
-        if (typeof change === 'function') change(current, event);
+        if (typeof change === 'function') change(current);
       }
       this._focusInput();
     },
 
-    removeTag: (chip, event) => {
-      this._remove(chip.value, event);
+    removeTag: (chip) => {
+      this._remove(chip.value);
     },
   };
 }

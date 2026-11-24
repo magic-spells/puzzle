@@ -56,7 +56,7 @@
               aria-label={ cell.name }
               title={ cell.name }
               class={ cell.cellClass }
-              @click={ choose(cell, event) }
+              @click={ choose(cell) }
               @mouseenter={ hover(cell) }>{ cell.char }</li>
           {/for}
         </ul>
@@ -498,10 +498,10 @@ export default class EmojiPickerSimple extends PuzzleView {
     }
   }
 
-  _pick(cell, event) {
+  _pick(cell) {
     if (!cell) return;
     const { change } = this.props;
-    if (typeof change === 'function') change(cell.char, event);
+    if (typeof change === 'function') change(cell.char);
     this._requestClose({ restoreFocus: true });
   }
 
@@ -561,7 +561,7 @@ export default class EmojiPickerSimple extends PuzzleView {
         case ' ': {
           event.preventDefault();
           const { cells, activeIndex } = this.getData();
-          this._pick(cells[activeIndex], event);
+          this._pick(cells[activeIndex]);
           break;
         }
         default:
@@ -596,8 +596,8 @@ export default class EmojiPickerSimple extends PuzzleView {
       this._setActive(cell.optIndex, false);
     },
 
-    choose: (cell, event) => {
-      this._pick(cell, event);
+    choose: (cell) => {
+      this._pick(cell);
     },
   };
 }

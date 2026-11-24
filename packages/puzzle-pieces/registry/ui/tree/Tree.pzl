@@ -15,7 +15,7 @@
         class={ row.rowClass }
         style={ row.indentStyle }
         @keydown={ handleKeydown(row.id, event) }
-        @click={ handleClick(row.id, event) }>
+        @click={ handleClick(row.id) }>
         {#if row.hasChildren}
           <svg
             class="size-4 shrink-0 text-muted transition-[rotate] duration-150 motion-reduce:transition-none {#if row.expanded}rotate-90{/if}"
@@ -252,13 +252,13 @@ export default class Tree extends PuzzleView {
 
   // ---- intent helpers ------------------------------------------------------
 
-  requestSelect(row, event) {
+  requestSelect(row) {
     if (!row || row.disabled) return;
     const { select } = this.props;
     if (typeof select === 'function') select(row.id);
   }
 
-  requestToggle(row, event) {
+  requestToggle(row) {
     if (!row || !row.hasChildren || row.disabled) return;
     const set = this._expandedSet();
     const willExpand = !set.has(row.id);
@@ -297,15 +297,15 @@ export default class Tree extends PuzzleView {
   }
 
   events = {
-    handleClick: (id, event) => {
+    handleClick: (id) => {
       const { rows } = this.getData();
       const row = rows.find((r) => r.id === id);
       if (!row || row.disabled) return;
       // A click focuses the <li> (it is tabindex-bearing), so the tab stop has to
       // move with it — otherwise clicking row 7 and tabbing back lands on row 1.
       this._setFocused(row.id);
-      this.requestSelect(row, event);
-      if (row.hasChildren) this.requestToggle(row, event);
+      this.requestSelect(row);
+      if (row.hasChildren) this.requestToggle(row);
     },
 
     handleKeydown: (id, event) => {
@@ -325,12 +325,12 @@ export default class Tree extends PuzzleView {
           break;
         case 'ArrowRight':
           event.preventDefault();
-          if (row.hasChildren && !row.expanded) this.requestToggle(row, event);
+          if (row.hasChildren && !row.expanded) this.requestToggle(row);
           else if (row.hasChildren && row.expanded) this.focusRow(idx + 1);
           break;
         case 'ArrowLeft':
           event.preventDefault();
-          if (row.hasChildren && row.expanded) this.requestToggle(row, event);
+          if (row.hasChildren && row.expanded) this.requestToggle(row);
           else this.focusRow(row.parentIndex);
           break;
         case 'Home':
@@ -348,8 +348,8 @@ export default class Tree extends PuzzleView {
           // This row already holds DOM focus (it is the keydown target); make the
           // tab stop agree even if the reader tabbed straight in and never arrowed.
           this._setFocused(row.id);
-          this.requestSelect(row, event);
-          if (row.hasChildren) this.requestToggle(row, event);
+          this.requestSelect(row);
+          if (row.hasChildren) this.requestToggle(row);
           break;
         default:
           return;

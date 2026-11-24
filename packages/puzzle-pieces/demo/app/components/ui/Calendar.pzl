@@ -7,7 +7,7 @@
         class={ navClass }
         aria-label={ prevLabel }
         disabled={ prevDisabled }
-        @click={ onPrev(event) }>
+        @click={ onPrev }>
         <svg class="size-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
           <path d="M12 5l-5 5 5 5" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
@@ -18,7 +18,7 @@
         class={ labelBtnClass }
         aria-label={ zoomLabel }
         aria-disabled={ zoomDisabled }
-        @click={ onZoomOut(event) }>
+        @click={ onZoomOut }>
         <span id={ labelId } aria-live="polite">{ monthLabel }</span>
         {#if showChevron}
           <svg class="size-4 text-muted" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
@@ -32,7 +32,7 @@
         class={ navClass }
         aria-label={ nextLabel }
         disabled={ nextDisabled }
-        @click={ onNext(event) }>
+        @click={ onNext }>
         <svg class="size-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
           <path d="M8 5l5 5-5 5" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
@@ -64,7 +64,7 @@
                   tabindex={ d.tabindex }
                   aria-label={ d.ariaLabel }
                   aria-disabled={ d.ariaDisabled }
-                  @click={ onDay(d, event) }>
+                  @click={ onDay(d) }>
                   <Slot
                     name="day"
                     date={ d.iso }
@@ -100,7 +100,7 @@
                   tabindex={ m.tabindex }
                   aria-label={ m.ariaLabel }
                   aria-disabled={ m.ariaDisabled }
-                  @click={ onMonth(m, event) }>{ m.label }</button>
+                  @click={ onMonth(m) }>{ m.label }</button>
               </div>
             {/for}
           </div>
@@ -124,7 +124,7 @@
                   tabindex={ y.tabindex }
                   aria-label={ y.ariaLabel }
                   aria-disabled={ y.ariaDisabled }
-                  @click={ onYear(y, event) }>{ y.label }</button>
+                  @click={ onYear(y) }>{ y.label }</button>
               </div>
             {/for}
           </div>
@@ -680,7 +680,7 @@ export default class Calendar extends PuzzleView {
     this.setState({ view: 'days', viewYear: parts.year, viewMonth: parts.month, focusedIso: iso, monthCursor: parts.month });
     this._pendingFocus = { type: 'day', iso };
     const { change } = this.props;
-    if (typeof change === 'function') change(iso, toDate(parts));
+    if (typeof change === 'function') change(iso);
   }
 
   // Months-view selection = pure navigation (date mode never commits here): drill down
@@ -751,7 +751,7 @@ export default class Calendar extends PuzzleView {
     onNext: () => this._navigate(1),
     onZoomOut: () => this._zoomOut(),
 
-    onDay: (d, event) => {
+    onDay: (d) => {
       if (d.ariaDisabled === 'true') return;
       this._selectDay(parseISODate(d.iso));
     },

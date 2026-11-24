@@ -24,7 +24,7 @@ export default class TodoItem extends PuzzleView {
   };
 
   // Enter/leave animations (constellation/doc/DOC-SPEC.md §12). The root div
-  // (overflow-hidden, no padding) is the animation target; the inner h-[65px]
+  // (overflow-hidden, no padding) is the animation target; the inner h-16.25
   // content div keeps the row from squishing while the root's height collapses.
   // The root's natural height IS 65px, so the enter `to` equals the element's
   // stylesheet state (the release contract in animate.js).
@@ -42,7 +42,7 @@ TodoItem.prototype.render = function () {
 
   return new ViewNode('div', { class: 'overflow-hidden' }, [
     new ViewNode('div', {
-      class: 'group h-[65px] flex items-center px-5 border-b border-line hover:bg-surface-2 transition-colors',
+      class: 'group h-16.25 flex items-center px-5 border-b border-line hover:bg-surface-2 transition-colors',
     }, [
       new ViewNode('label', { class: 'flex items-center cursor-pointer mr-4' }, [
         new ViewNode('input', {
@@ -85,7 +85,7 @@ TodoItem.prototype.render = function () {
       }, [
         new ViewNode('text', { value: __s(__d.todo?.text, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'todo.text' : 0) }),
       ]),
-      new ViewNode('span', { class: 'ml-4 shrink-0 font-mono text-[11px] text-faint tabular-nums' }, [
+      new ViewNode('span', { class: 'ml-4 shrink-0 font-mono text-11 text-faint tabular-nums' }, [
         new ViewNode('text', { value: __s((__f["datetime"] || __f.__missing("datetime"))(__d.todo?.createdAt, 'short'), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'datetime(todo.createdAt, \'short\')' : 0) }),
       ]),
       new ViewNode('button', {

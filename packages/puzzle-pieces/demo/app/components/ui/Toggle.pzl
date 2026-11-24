@@ -80,11 +80,11 @@ export default class Toggle extends PuzzleView {
   }
 
   events = {
-    handleClick: (event) => {
+    handleClick: () => {
       const { pressed, disabled } = this.getData();
       if (disabled) return;
       const { change } = this.props;
-      if (typeof change === 'function') change(!pressed, event);
+      if (typeof change === 'function') change(!pressed);
     },
   };
 }

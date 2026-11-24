@@ -212,7 +212,7 @@ export default class Dropzone extends PuzzleView {
   // and @reject with any failures, and stash rejection messages for the live
   // region. The rejections write re-runs data() with the next render, since
   // data() reads that key.
-  processFiles(fileList, event) {
+  processFiles(fileList) {
     const list = Array.from(fileList || []);
     if (!list.length) return;
 
@@ -247,8 +247,8 @@ export default class Dropzone extends PuzzleView {
     this.setState({ rejections: rejected });
 
     const { change, reject } = props;
-    if (accepted.length && typeof change === 'function') change(next, event);
-    if (rejected.length && typeof reject === 'function') reject(rejected, event);
+    if (accepted.length && typeof change === 'function') change(next);
+    if (rejected.length && typeof reject === 'function') reject(rejected);
   }
 
   events = {
@@ -264,7 +264,7 @@ export default class Dropzone extends PuzzleView {
 
     onInputChange: (event) => {
       const input = event.target;
-      this.processFiles(input.files, event);
+      this.processFiles(input.files);
       // Reset so re-selecting the same file fires `change` again.
       input.value = '';
     },
@@ -294,7 +294,7 @@ export default class Dropzone extends PuzzleView {
       event.stopPropagation();
       if (this.props.disabled) return;
       this.setState({ dragging: false });
-      this.processFiles(event.dataTransfer && event.dataTransfer.files, event);
+      this.processFiles(event.dataTransfer && event.dataTransfer.files);
     },
 
     // removal is by ROW INDEX: two files can share a name (and a size), so filtering

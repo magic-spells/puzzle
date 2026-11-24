@@ -22,8 +22,8 @@ describe('piecesFallbackNotice', () => {
 	// Verbatim from compiler/internal/pieces/npm.go, with the format verbs filled
 	// in the way the CLI fills them.
 	const NOTICE =
-		'note: no @magic-spells/puzzle-pieces release matches puzzle 0.7.0 (0.7.x is not published yet) ' +
-		'— using 0.6.0, the newest compatible release. Pin an exact one with --pieces-version.';
+		'note: no @magic-spells/puzzle-pieces release matches puzzle 1.3.0 (1.3.x is not published yet) ' +
+		'— using 1.2.0, the newest compatible release. Pin an exact one with --pieces-version.';
 
 	it('detects the fallback notice on its own', () => {
 		expect(piecesFallbackNotice(NOTICE)).toBe(NOTICE);
@@ -47,7 +47,7 @@ describe('piecesFallbackNotice', () => {
 	// all), and it already exits non-zero, so the detector must not claim it.
 	it('does not fire on the no-compatible-release hard error', () => {
 		const hardError =
-			'no @magic-spells/puzzle-pieces release matches puzzle 0.7.0 (need 0.7.x; published: 0.5.0, 0.4.0)';
+			'no @magic-spells/puzzle-pieces release matches puzzle 0.7.0 yet (need 0.7.x; published: 0.5.0, 0.4.0)';
 		expect(piecesFallbackNotice(hardError)).toBeNull();
 	});
 

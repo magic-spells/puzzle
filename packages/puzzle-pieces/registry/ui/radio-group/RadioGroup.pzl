@@ -14,7 +14,7 @@
               value={ opt.value }
               checked={ opt.value === value }
               disabled={ opt.disabled }
-              @change={ handleChange(opt.value, event) } />
+              @change={ handleChange(opt.value) } />
             <span class="pointer-events-none absolute inset-0 m-auto size-1.5 rounded-full bg-brand opacity-0 transition-opacity peer-checked:opacity-100"></span>
           </span>
           <span class="min-w-0">
@@ -71,9 +71,9 @@ export default class RadioGroup extends PuzzleView {
   }
 
   events = {
-    handleChange: (value, event) => {
+    handleChange: (value) => {
       const { change } = this.props;
-      if (typeof change === 'function') change(value, event);
+      if (typeof change === 'function') change(value);
     },
   };
 }

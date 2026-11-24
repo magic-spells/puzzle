@@ -5,9 +5,9 @@
     </div>
   {:else}
     <header class="shrink-0 flex items-baseline gap-2 min-h-9 px-3 py-2 leading-relaxed border-b border-line bg-surface">
-      <span class="shrink-0 font-mono text-[13px] font-semibold text-ink" data-pathname>{ pathname }</span>
+      <span class="shrink-0 font-mono text-13 font-semibold text-ink" data-pathname>{ pathname }</span>
       {#if hasPattern}
-        <span class="min-w-0 truncate font-mono text-[10px] text-faint" title="matched route pattern">{ pattern }</span>
+        <span class="min-w-0 truncate font-mono text-10 text-faint" title="matched route pattern">{ pattern }</span>
       {/if}
       <button
         type="button"
@@ -19,7 +19,7 @@
 
     <div class="flex-1 min-h-0 overflow-auto p-3 grid gap-3">
       {#if error}
-        <p class="m-0 rounded border border-danger px-2 py-1 font-mono text-[11px] text-danger">{ error }</p>
+        <p class="m-0 rounded border border-danger px-2 py-1 font-mono text-11 text-danger">{ error }</p>
       {/if}
 
       <div class="grid gap-3 grid-cols-1 lg:grid-cols-2">
@@ -29,25 +29,25 @@
 
       <section class="rounded border border-line bg-canvas overflow-hidden" data-chain>
         <header class="flex items-baseline gap-2 px-2 py-1 border-b border-line bg-surface">
-          <h2 class="m-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Matched chain</h2>
-          <span class="ml-auto font-mono text-[10px] tabular-nums text-faint">{ chain.length }</span>
+          <h2 class="m-0 font-mono text-10 font-semibold uppercase tracking-wider text-faint">Matched chain</h2>
+          <span class="ml-auto font-mono text-10 tabular-nums text-faint">{ chain.length }</span>
         </header>
         {#if chain.length === 0}
-          <p class="m-0 px-2 py-1.5 text-[11px] italic text-faint">No chain reported.</p>
+          <p class="m-0 px-2 py-1.5 text-11 italic text-faint">No chain reported.</p>
         {:else}
           <ol class="m-0 p-0 list-none">
             {#for link in chain}
               <li
                 key={ link.key }
                 data-chain-row="{ link.key }"
-                class="flex items-center gap-2 min-h-[22px] px-2 py-0.5 border-b border-line last:border-b-0 { link.rowClass }">
-                <span class="shrink-0 font-mono text-[10px] tabular-nums text-faint" style="padding-left:{ link.indent }">{ link.depth }</span>
-                <span class="shrink-0 font-mono text-[12px] leading-none { link.nameClass }">{ link.name }</span>
+                class="flex items-center gap-2 min-h-5.5 px-2 py-0.5 border-b border-line last:border-b-0 { link.rowClass }">
+                <span class="shrink-0 font-mono text-10 tabular-nums text-faint" style="padding-left:{ link.indent }">{ link.depth }</span>
+                <span class="shrink-0 font-mono leading-none { link.nameClass }">{ link.name }</span>
                 {#if link.hasPattern}
-                  <span class="min-w-0 truncate font-mono text-[10px] text-faint">{ link.pattern }</span>
+                  <span class="min-w-0 truncate font-mono text-10 text-faint">{ link.pattern }</span>
                 {/if}
                 {#if link.isLeaf}
-                  <span class="ml-auto shrink-0 font-mono text-[9px] uppercase tracking-wide text-accent">leaf</span>
+                  <span class="ml-auto shrink-0 font-mono text-9 uppercase tracking-wide text-accent">leaf</span>
                 {/if}
               </li>
             {/for}
@@ -57,21 +57,21 @@
 
       <section class="rounded border border-line bg-canvas overflow-hidden" data-history>
         <header class="flex items-baseline gap-2 px-2 py-1 border-b border-line bg-surface">
-          <h2 class="m-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Navigation history</h2>
-          <span class="ml-auto font-mono text-[10px] tabular-nums text-faint">{ history.length }</span>
+          <h2 class="m-0 font-mono text-10 font-semibold uppercase tracking-wider text-faint">Navigation history</h2>
+          <span class="ml-auto font-mono text-10 tabular-nums text-faint">{ history.length }</span>
         </header>
         {#if history.length === 0}
-          <p class="m-0 px-2 py-1.5 text-[11px] italic text-faint">No navigations captured yet.</p>
+          <p class="m-0 px-2 py-1.5 text-11 italic text-faint">No navigations captured yet.</p>
         {:else}
           <ul class="m-0 p-0 list-none">
             {#for entry in history}
               <li
                 key={ entry.id }
                 data-history-row="{ entry.id }"
-                class="flex items-baseline gap-2 min-h-[20px] px-2 py-0.5 border-b border-line last:border-b-0">
-                <span class="shrink-0 font-mono text-[10px] tabular-nums text-faint">{ entry.time }</span>
-                <span class="shrink-0 font-mono text-[11px] text-ink">{ entry.pathname }</span>
-                <span class="min-w-0 truncate text-[10px] text-muted">{ entry.title }</span>
+                class="flex items-baseline gap-2 min-h-5 px-2 py-0.5 border-b border-line last:border-b-0">
+                <span class="shrink-0 font-mono text-10 tabular-nums text-faint">{ entry.time }</span>
+                <span class="shrink-0 font-mono text-11 text-ink">{ entry.pathname }</span>
+                <span class="min-w-0 truncate text-10 text-muted">{ entry.title }</span>
               </li>
             {/for}
           </ul>

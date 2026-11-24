@@ -68,7 +68,7 @@ export default class Switch extends PuzzleView {
   events = {
     handleChange: (event) => {
       const { change } = this.props;
-      if (typeof change === 'function') change(event.target.checked, event);
+      if (typeof change === 'function') change(event.target.checked);
     },
   };
 }
