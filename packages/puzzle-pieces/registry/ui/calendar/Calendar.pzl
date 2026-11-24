@@ -680,7 +680,7 @@ export default class Calendar extends PuzzleView {
     this.setState({ view: 'days', viewYear: parts.year, viewMonth: parts.month, focusedIso: iso, monthCursor: parts.month });
     this._pendingFocus = { type: 'day', iso };
     const { change } = this.props;
-    if (typeof change === 'function') change(iso, toDate(parts));
+    if (typeof change === 'function') change(iso);
   }
 
   // Months-view selection = pure navigation (date mode never commits here): drill down

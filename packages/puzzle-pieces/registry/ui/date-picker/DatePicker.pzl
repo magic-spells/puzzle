@@ -561,9 +561,9 @@ export default class DatePicker extends PuzzleView {
 
     // Calendar committed a day: forward the value up (parent owns `value`), then close and
     // return focus to the trigger.
-    onCalendarChange: (iso, date) => {
+    onCalendarChange: (iso) => {
       const { change } = this.props;
-      if (typeof change === 'function') change(iso, date);
+      if (typeof change === 'function') change(iso);
       this._requestClose({ restoreFocus: true });
     },
   };

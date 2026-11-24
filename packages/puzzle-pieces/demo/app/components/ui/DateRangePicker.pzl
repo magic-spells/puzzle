@@ -54,7 +54,7 @@
                   <button
                     type="button"
                     class={ presetClass }
-                    @click={ onPreset(p, event) }
+                    @click={ onPreset(p) }
                     key={ p.key }>{ p.label }</button>
                 {/for}
               </div>
@@ -459,12 +459,12 @@ export default class DateRangePicker extends PuzzleView {
 
   // ---- selection -----------------------------------------------------------
 
-  _emit(range, event) {
+  _emit(range) {
     const { change } = this.props;
-    if (typeof change === 'function') change(range, event);
+    if (typeof change === 'function') change(range);
   }
 
-  _commitDay(iso, event) {
+  _commitDay(iso) {
     const { start, end } = this._value(this.props);
     if (start && !end) {
       // Complete the range, ordering so start ≤ end.
@@ -474,11 +474,11 @@ export default class DateRangePicker extends PuzzleView {
         anchor && picked && compareDates(picked, anchor) < 0
           ? { start: iso, end: start }
           : { start, end: iso };
-      this._emit(ordered, event);
+      this._emit(ordered);
       this._requestClose({ restoreFocus: true });
     } else {
       // Begin a fresh range: set start, clear end, keep the popover open.
-      this._emit({ start: iso, end: '' }, event);
+      this._emit({ start: iso, end: '' });
     }
   }
 
@@ -510,19 +510,19 @@ export default class DateRangePicker extends PuzzleView {
     },
 
     // A Calendar committed a day: run the two-endpoint state machine.
-    onCalendarChange: (iso, date, event) => {
-      this._commitDay(iso, event);
+    onCalendarChange: (iso) => {
+      this._commitDay(iso);
     },
 
     // Apply a preset range directly, then close.
-    onPreset: (p, event) => {
+    onPreset: (p) => {
       let { start, end } = p;
       const startDate = parseISODate(start);
       const endDate = parseISODate(end);
       if (startDate && endDate && compareDates(endDate, startDate) < 0) {
         [start, end] = [end, start]; // honor the @change ordering contract
       }
-      this._emit({ start, end }, event);
+      this._emit({ start, end });
       this._requestClose({ restoreFocus: true });
     },
 

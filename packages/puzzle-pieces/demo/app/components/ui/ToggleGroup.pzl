@@ -7,7 +7,7 @@
         class={ item.class }
         aria-pressed={ item.pressedAttr }
         disabled={ item.disabled }
-        @click={ toggle(item.value, event) }>
+        @click={ toggle(item.value) }>
         { item.label }
       </button>
     {/for}
@@ -108,7 +108,7 @@ export default class ToggleGroup extends PuzzleView {
   }
 
   events = {
-    toggle: (val, event) => {
+    toggle: (val) => {
       const { type, value, items } = this.getData();
       const item = items.find((i) => i.value === val);
       if (!item || item.disabled) return;
@@ -125,7 +125,7 @@ export default class ToggleGroup extends PuzzleView {
       }
 
       const { change } = this.props;
-      if (typeof change === 'function') change(next, event);
+      if (typeof change === 'function') change(next);
     },
   };
 }

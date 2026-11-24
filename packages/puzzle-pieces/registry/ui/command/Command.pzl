@@ -51,7 +51,7 @@
               aria-selected={ row.ariaSelected }
               aria-disabled={ row.ariaDisabled }
               class={ row.cls }
-              @click={ choose(row, event) }
+              @click={ choose(row) }
               @mouseenter={ hover(row) }>
               {#if row.kind === 'option'}
                 <Slot
@@ -518,7 +518,7 @@ export default class Command extends PuzzleView {
       const opt = options[activeIndex];
       if (!opt || opt.disabled) return;
       const { select } = this.props;
-      if (typeof select === 'function') select(opt.value, event);
+      if (typeof select === 'function') select(opt.value);
     },
 
     // Pointer hover seats the active row (no scroll — the pointer is already
@@ -529,10 +529,10 @@ export default class Command extends PuzzleView {
       this._setActive(row.optIndex, false);
     },
 
-    choose: (row, event) => {
+    choose: (row) => {
       if (row.kind !== 'option' || row.disabled) return;
       const { select } = this.props;
-      if (typeof select === 'function') select(row.value, event);
+      if (typeof select === 'function') select(row.value);
     },
   };
 }

@@ -124,7 +124,7 @@ export default class InputGroup extends PuzzleView {
   events = {
     handleInput: (event) => {
       const { change } = this.props;
-      if (typeof change === 'function') change(event.target.value, event);
+      if (typeof change === 'function') change(event.target.value);
     },
     handleBlur: (event) => {
       const { blur } = this.props;
