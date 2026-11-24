@@ -13,7 +13,7 @@
 
     <div slot="first" class="h-full flex flex-col min-h-0 overflow-hidden border-r border-line bg-surface">
       <header class="shrink-0 flex items-center gap-2 min-h-8 px-2 py-1.5 border-b border-line">
-        <span class="font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Types</span>
+        <span class="font-mono text-10 font-semibold uppercase tracking-wider text-faint">Types</span>
         <button
           type="button"
           title="Re-request snapshot:records"
@@ -22,25 +22,25 @@
       </header>
 
       {#if error}
-        <p class="m-0 px-2 py-1 font-mono text-[10px] text-danger break-all">{ error }</p>
+        <p class="m-0 px-2 py-1 font-mono text-10 text-danger break-all">{ error }</p>
       {/if}
 
       <div class="flex-1 min-h-0 overflow-auto">
         {#if types.length === 0}
-          <p class="m-0 px-2 py-2 text-[11px] text-faint">No record types.</p>
+          <p class="m-0 px-2 py-2 text-11 text-faint">No record types.</p>
         {:else}
           <ul class="m-0 p-0 list-none">
             {#for type in types}
               <li key={ type.id }>
                 <div
                   data-type="{ type.id }"
-                  class="flex items-center gap-1.5 min-h-[22px] px-2 py-0.5 cursor-default { type.rowClass }"
+                  class="flex items-center gap-1.5 min-h-5.5 px-2 py-0.5 cursor-default { type.rowClass }"
                   @click={ selectType(type.id) }>
-                  <span class="font-mono text-[12px] truncate { type.nameClass }">{ type.id }</span>
+                  <span class="font-mono truncate { type.nameClass }">{ type.id }</span>
                   {#if type.dirty}
-                    <span class="font-mono text-[10px] text-warn" title="a flush named this type">•</span>
+                    <span class="font-mono text-10 text-warn" title="a flush named this type">•</span>
                   {/if}
-                  <span class="ml-auto font-mono text-[11px] tabular-nums text-faint">{ type.count }</span>
+                  <span class="ml-auto font-mono text-11 tabular-nums text-faint">{ type.count }</span>
                 </div>
               </li>
             {/for}
@@ -54,10 +54,10 @@
         <Empty description="Select a record type to browse its rows." class="py-8! px-4!" />
       {:else}
         <header class="shrink-0 flex items-baseline gap-2 min-h-9 px-3 py-2 leading-relaxed border-b border-line bg-surface">
-          <span class="font-mono text-[12px] font-semibold text-ink">{ activeType }</span>
-          <span class="font-mono text-[10px] tabular-nums text-faint">{ rowCount } rows</span>
+          <span class="font-mono font-semibold text-ink">{ activeType }</span>
+          <span class="font-mono text-10 tabular-nums text-faint">{ rowCount } rows</span>
           {#if hiddenColumns}
-            <span class="font-mono text-[10px] text-faint">+{ hiddenColumns } more columns in detail</span>
+            <span class="font-mono text-10 text-faint">+{ hiddenColumns } more columns in detail</span>
           {/if}
         </header>
 
@@ -71,11 +71,11 @@
                   {#for column in columns}
                     <th
                       key={ column }
-                      class="px-2 py-0.5 border-b border-line font-mono text-[10px] font-semibold uppercase tracking-wide text-faint whitespace-nowrap">
+                      class="px-2 py-0.5 border-b border-line font-mono text-10 font-semibold uppercase tracking-wide text-faint whitespace-nowrap">
                       { column }
                     </th>
                   {/for}
-                  <th class="px-2 py-0.5 border-b border-line font-mono text-[10px] font-semibold uppercase tracking-wide text-faint">sync</th>
+                  <th class="px-2 py-0.5 border-b border-line font-mono text-10 font-semibold uppercase tracking-wide text-faint">sync</th>
                 </tr>
               </thead>
               <tbody>
@@ -89,14 +89,14 @@
                       <td
                         key={ cell.label }
                         title="{ cell.full }"
-                        class="max-w-[16rem] truncate px-2 py-1 border-b border-line font-mono text-[11px] { cell.cls }">
+                        class="max-w-64 truncate px-2 py-1 border-b border-line font-mono text-11 { cell.cls }">
                         { cell.value }
                       </td>
                     {/for}
                     <td class="px-2 py-1 border-b border-line">
                       <Badge
                         variant={ row.syncedVariant }
-                        class="px-1! py-0! font-mono text-[9px]! uppercase tracking-wide">{ row.syncedLabel }</Badge>
+                        class="px-1! py-0! font-mono text-9! uppercase tracking-wide">{ row.syncedLabel }</Badge>
                     </td>
                   </tr>
                 {/for}
@@ -106,10 +106,10 @@
         </div>
 
         {#if hasDetail}
-          <section class="shrink-0 max-h-[55%] flex flex-col min-h-0 border-t border-line bg-surface">
+          <section class="shrink-0 max-h-11/20 flex flex-col min-h-0 border-t border-line bg-surface">
             <header class="shrink-0 flex items-baseline gap-2 min-h-8 px-3 py-1.5 leading-relaxed border-b border-line">
-              <span class="shrink-0 font-mono text-[11px] font-semibold text-ink">{ activeType } · { detailId }</span>
-              <span class="min-w-0 truncate text-[10px] text-muted">edits go through the app's real record.update()</span>
+              <span class="shrink-0 font-mono text-11 font-semibold text-ink">{ activeType } · { detailId }</span>
+              <span class="min-w-0 truncate text-10 text-muted">edits go through the app's real record.update()</span>
               <CopyButton
                 value={ recordJson }
                 size="sm"
@@ -117,30 +117,30 @@
               <button
                 type="button"
                 data-apply="1"
-                class="rounded border border-line bg-raised px-1.5 font-mono text-[10px] text-ink hover:border-accent hover:text-accent disabled:opacity-50"
+                class="rounded border border-line bg-raised px-1.5 font-mono text-10 text-ink hover:border-accent hover:text-accent disabled:opacity-50"
                 disabled={ applying }
                 @click={ apply }>
                 { applying ? 'Applying…' : 'Apply' }
               </button>
               <button
                 type="button"
-                class="rounded px-1 font-mono text-[10px] text-faint hover:text-ink"
+                class="rounded px-1 font-mono text-10 text-faint hover:text-ink"
                 title="Close"
                 @click={ closeDetail }>×</button>
             </header>
 
             {#if editError}
-              <p class="m-0 px-3 py-1 border-b border-line font-mono text-[10px] text-danger break-words">{ editError }</p>
+              <p class="m-0 px-3 py-1 border-b border-line font-mono text-10 text-danger break-words">{ editError }</p>
             {/if}
             {#if editOk}
-              <p class="m-0 px-3 py-1 border-b border-line font-mono text-[10px] text-ok">{ editOk }</p>
+              <p class="m-0 px-3 py-1 border-b border-line font-mono text-10 text-ok">{ editOk }</p>
             {/if}
 
             <dl class="m-0 flex-1 min-h-0 overflow-auto">
               {#for field in fields}
-                <div key={ field.label } data-field="{ field.label }" class="group flex items-center gap-2 min-h-[24px] px-3 py-1 border-b border-line">
+                <div key={ field.label } data-field="{ field.label }" class="group flex items-center gap-2 px-3 py-1 border-b border-line">
                   <dt
-                    class="w-24 max-w-[35%] shrink-0 truncate font-mono text-[11px] leading-[1.35] text-muted"
+                    class="w-24 max-w-7/20 shrink-0 truncate font-mono text-11 leading-kv text-muted"
                     title="{ field.label }">{ field.label }</dt>
                   <dd class="m-0 flex-1 min-w-0">
                     {#if field.kind === 'boolean'}
@@ -153,14 +153,14 @@
                       <input
                         type="text"
                         spellcheck="false"
-                        class="w-full rounded border border-line bg-canvas px-1 py-0 font-mono text-[11px] text-ink focus:border-accent focus:outline-none"
+                        class="w-full rounded border border-line bg-canvas px-1 py-0 font-mono text-11 text-ink focus:border-accent focus:outline-none"
                         value={ field.input }
                         @input={ editField(field.label, event) } />
                     {:else}
-                      <span class="block truncate font-mono text-[11px] text-faint" title="{ field.full }">{ field.value }</span>
+                      <span class="block truncate font-mono text-11 text-faint" title="{ field.full }">{ field.value }</span>
                     {/if}
                   </dd>
-                  <span class="w-14 shrink-0 text-right font-mono text-[9px] uppercase tracking-wide text-faint">{ field.kindLabel }</span>
+                  <span class="w-14 shrink-0 text-right font-mono text-9 uppercase tracking-wide text-faint">{ field.kindLabel }</span>
                   <CopyButton
                     value={ field.copy }
                     class="size-5! rounded-sm! shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100" />
@@ -168,20 +168,20 @@
               {/for}
 
               <section data-history class="border-t border-line">
-                <h3 class="m-0 flex items-baseline gap-2 px-3 py-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-faint">
+                <h3 class="m-0 flex items-baseline gap-2 px-3 py-1 font-mono text-9 font-semibold uppercase tracking-wider text-faint">
                   History
                   <span class="tabular-nums">{ historyRows.length }</span>
-                  <span class="ml-auto font-normal normal-case tracking-normal text-[9px] text-faint">changes seen while this card was open</span>
+                  <span class="ml-auto font-normal normal-case tracking-normal text-9 text-faint">changes seen while this card was open</span>
                 </h3>
                 {#if historyRows.length === 0}
-                  <p class="m-0 px-3 pb-1.5 text-[10px] italic text-faint">No changes yet.</p>
+                  <p class="m-0 px-3 pb-1.5 text-10 italic text-faint">No changes yet.</p>
                 {:else}
                   <ul class="m-0 p-0 pb-1 list-none">
                     {#for entry in historyRows}
                       <li
                         key={ entry.key }
                         data-history-entry
-                        class="flex items-baseline gap-2 px-3 py-0.5 font-mono text-[10px]">
+                        class="flex items-baseline gap-2 px-3 py-0.5 font-mono text-10">
                         <span class="shrink-0 tabular-nums text-faint">{ entry.time }</span>
                         <span class="shrink-0 text-muted">{ entry.field }</span>
                         <span class="min-w-0 truncate text-faint line-through">{ entry.from }</span>

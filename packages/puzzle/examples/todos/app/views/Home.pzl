@@ -25,15 +25,15 @@
       <div class="grid grid-cols-3 divide-x divide-line border-b border-line">
         <div class="py-5 text-center">
           <div class="font-mono text-2xl tabular-nums text-ink">{ activeTodos.length }</div>
-          <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">active</div>
+          <div class="mt-1 text-10 uppercase tracking-label text-faint">active</div>
         </div>
         <div class="py-5 text-center">
           <div class="font-mono text-2xl tabular-nums text-ink">{ completedTodos.length }</div>
-          <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">done</div>
+          <div class="mt-1 text-10 uppercase tracking-label text-faint">done</div>
         </div>
         <div class="py-5 text-center">
           <div class="font-mono text-2xl tabular-nums text-ink">{ todos.length }</div>
-          <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">total</div>
+          <div class="mt-1 text-10 uppercase tracking-label text-faint">total</div>
         </div>
       </div>
 

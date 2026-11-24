@@ -1,29 +1,29 @@
 <puzzle-view class="block p-3">
   {#if state === 'waiting'}
     <section class="rounded border border-line bg-surface p-4">
-      <h1 class="m-0 text-[13px] font-semibold text-ink">No Puzzle app detected</h1>
-      <p class="mt-1.5 mb-0 text-[12px] text-muted leading-relaxed">
+      <h1 class="m-0 text-13 font-semibold text-ink">No Puzzle app detected</h1>
+      <p class="mt-1.5 mb-0 text-muted leading-relaxed">
         This page has not opened a DevTools bridge. That is expected when the page is
         not a Puzzle app, when it is a <strong class="font-medium text-ink">production build</strong>
         (the bridge is compiled out entirely), when it was built with
         <code class="font-mono text-accent">output: 'static'</code> (static pages never load
         the bridge), or when the framework predates the bridge.
       </p>
-      <ul class="mt-2.5 mb-0 pl-4 text-[11px] text-muted leading-relaxed">
+      <ul class="mt-2.5 mb-0 pl-4 text-11 text-muted leading-relaxed">
         <li>Run the app with <code class="font-mono text-accent">puzzle dev</code>, or build with <code class="font-mono text-accent">--mode development</code>.</li>
         <li>Reload the page with DevTools already open.</li>
         <li>Requires puzzle <code class="font-mono text-accent">0.7.0</code> or newer.</li>
       </ul>
-      <p class="mt-2.5 mb-0 text-[11px] text-faint leading-relaxed">{ refreshHint }</p>
+      <p class="mt-2.5 mb-0 text-11 text-faint leading-relaxed">{ refreshHint }</p>
     </section>
   {:else if state === 'version-mismatch'}
     <section class="rounded border border-warn bg-surface p-4">
-      <h1 class="m-0 text-[13px] font-semibold text-ink">Protocol version mismatch</h1>
-      <p class="mt-1.5 mb-0 text-[12px] text-muted leading-relaxed">
+      <h1 class="m-0 text-13 font-semibold text-ink">Protocol version mismatch</h1>
+      <p class="mt-1.5 mb-0 text-muted leading-relaxed">
         A Puzzle app is running, but it speaks a wire protocol this extension cannot
         render. Nothing below would be trustworthy, so the panels stay closed.
       </p>
-      <dl class="mt-3 mb-0 grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1 text-[11px]">
+      <dl class="mt-3 mb-0 grid grid-cols-kv gap-x-3 gap-y-1 text-11">
         <dt class="text-faint">app protocol</dt>
         <dd class="m-0 font-mono text-danger">v{ protocolVersion }</dd>
         <dt class="text-faint">extension supports</dt>
@@ -34,11 +34,11 @@
     </section>
   {:else}
     <section class="rounded border border-line bg-surface p-4">
-      <h1 class="m-0 flex items-center gap-2 text-[13px] font-semibold text-ink">
+      <h1 class="m-0 flex items-center gap-2 text-13 font-semibold text-ink">
         <span class="h-2 w-2 rounded-full { appMounted ? 'bg-ok' : 'bg-faint' }"></span>
         { appMounted ? 'Puzzle app connected' : 'Puzzle app unmounted' }
       </h1>
-      <dl class="mt-3 mb-0 grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1 text-[11px]">
+      <dl class="mt-3 mb-0 grid grid-cols-kv gap-x-3 gap-y-1 text-11">
         <dt class="text-faint">framework</dt>
         <dd class="m-0 font-mono text-ink">{ frameworkVersion }</dd>
         <dt class="text-faint">protocol</dt>
@@ -54,29 +54,29 @@
       <div class="mt-3 flex items-center gap-2">
         <button
           type="button"
-          class="rounded border border-line bg-raised px-2 py-1 text-[11px] text-ink hover:border-accent hover:text-accent disabled:opacity-50"
+          class="rounded border border-line bg-raised px-2 py-1 text-11 text-ink hover:border-accent hover:text-accent disabled:opacity-50"
           disabled={ probing }
           @click={ probe }>
           { probing ? 'Requesting…' : 'Probe snapshot:views' }
         </button>
         {#if probeResult}
-          <span class="font-mono text-[11px] text-ok">{ probeResult }</span>
+          <span class="font-mono text-11 text-ok">{ probeResult }</span>
         {/if}
         {#if probeError}
-          <span class="font-mono text-[11px] text-danger">{ probeError }</span>
+          <span class="font-mono text-11 text-danger">{ probeError }</span>
         {/if}
       </div>
     </section>
   {/if}
 
   {#if portError}
-    <p class="mt-2 mb-0 rounded border border-danger px-3 py-2 font-mono text-[11px] text-danger">
+    <p class="mt-2 mb-0 rounded border border-danger px-3 py-2 font-mono text-11 text-danger">
       { portError }
     </p>
   {/if}
 
   <section class="mt-3 rounded border border-line bg-surface overflow-hidden">
-    <h2 class="m-0 px-3 py-1.5 border-b border-line text-[11px] font-semibold uppercase tracking-wide text-faint">
+    <h2 class="m-0 px-3 py-1.5 border-b border-line text-11 font-semibold uppercase tracking-wide text-faint">
       Recent protocol messages
     </h2>
     <EventList limit={ 14 } />

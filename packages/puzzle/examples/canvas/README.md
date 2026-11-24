@@ -68,8 +68,4 @@ go run ./compiler/cmd/puzzle build examples/canvas
   normal tree and re-rendered with `pointer-events:none` so the drop-target
   hit-test is data-driven and the dragged node never occludes its target.
 - **Frames don't nest** (one level deep) and the stage is 1:1 scale —
-  pan/zoom and nested frames are future work; see [PLAN.md](./PLAN.md).
-
-Gotchas discovered while building (single-root `{#for}` bodies,
-`display:contents` wrappers, grip `stopPropagation`, the drag-stable layers
-tree) are written up in [PLAN.md](./PLAN.md).
+  pan/zoom and nested frames are future work.

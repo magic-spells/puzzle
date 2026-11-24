@@ -395,8 +395,8 @@ export function heatWidth(renders, peak) {
 
 /**
  * Heat ramp class per level. The strings are LITERAL because Tailwind v4 scans
- * this file (styles.css `@source`s the app's .js) for the class names it must
- * emit — a computed `bg-heat-<level>` would produce no CSS at all.
+ * this file (it scans the whole app root) for the class names it must emit — a
+ * computed `bg-heat-<level>` would produce no CSS at all.
  */
 const HEAT_BAR = ['bg-line', 'bg-heat-1', 'bg-heat-2', 'bg-heat-3', 'bg-heat-4'];
 

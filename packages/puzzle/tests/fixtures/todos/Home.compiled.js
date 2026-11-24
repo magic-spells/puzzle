@@ -149,7 +149,7 @@ TodoHome.prototype.render = function () {
                 new ViewNode('div', { class: 'font-mono text-2xl tabular-nums text-ink' }, [
                   new ViewNode('text', { value: __s(__d.activeTodos?.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'activeTodos.length' : 0) }),
                 ]),
-                new ViewNode('div', { class: 'mt-1 text-[10px] uppercase tracking-[0.22em] text-faint' }, [
+                new ViewNode('div', { class: 'mt-1 text-10 uppercase tracking-label text-faint' }, [
                   new ViewNode('text', { value: 'active' }),
                 ]),
               ]),
@@ -157,7 +157,7 @@ TodoHome.prototype.render = function () {
                 new ViewNode('div', { class: 'font-mono text-2xl tabular-nums text-ink' }, [
                   new ViewNode('text', { value: __s(__d.completedTodos?.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'completedTodos.length' : 0) }),
                 ]),
-                new ViewNode('div', { class: 'mt-1 text-[10px] uppercase tracking-[0.22em] text-faint' }, [
+                new ViewNode('div', { class: 'mt-1 text-10 uppercase tracking-label text-faint' }, [
                   new ViewNode('text', { value: 'done' }),
                 ]),
               ]),
@@ -165,7 +165,7 @@ TodoHome.prototype.render = function () {
                 new ViewNode('div', { class: 'font-mono text-2xl tabular-nums text-ink' }, [
                   new ViewNode('text', { value: __s(__d.todos?.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'todos.length' : 0) }),
                 ]),
-                new ViewNode('div', { class: 'mt-1 text-[10px] uppercase tracking-[0.22em] text-faint' }, [
+                new ViewNode('div', { class: 'mt-1 text-10 uppercase tracking-label text-faint' }, [
                   new ViewNode('text', { value: 'total' }),
                 ]),
               ]),

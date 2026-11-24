@@ -13,8 +13,8 @@
 
     <div slot="first" class="h-full flex flex-col min-h-0 overflow-hidden border-r border-line bg-surface">
       <header class="shrink-0 flex items-center gap-2 min-h-8 px-2 py-1.5 border-b border-line">
-        <span class="font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Tree</span>
-        <span class="font-mono text-[10px] tabular-nums text-faint">{ liveCount }</span>
+        <span class="font-mono text-10 font-semibold uppercase tracking-wider text-faint">Tree</span>
+        <span class="font-mono text-10 tabular-nums text-faint">{ liveCount }</span>
         <button
           type="button"
           data-reload-tree
@@ -24,24 +24,24 @@
       </header>
 
       {#if treeError}
-        <p class="m-0 px-2 py-1 font-mono text-[10px] text-danger break-all">{ treeError }</p>
+        <p class="m-0 px-2 py-1 font-mono text-10 text-danger break-all">{ treeError }</p>
       {/if}
 
       <div
-        class="flex-1 min-h-0 overflow-auto outline-none"
+        class="flex-1 min-h-0 overflow-auto outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2"
         tabindex="0"
         aria-label="View tree"
         @keydown:up:prevent={ moveSelection(-1) }
         @keydown:down:prevent={ moveSelection(1) }>
         {#if rows.length === 0}
-          <p class="m-0 px-2 py-2 text-[11px] text-faint">No views mounted.</p>
+          <p class="m-0 px-2 py-2 text-11 text-faint">No views mounted.</p>
         {:else}
           <ul class="m-0 p-0 list-none" role="tree">
             {#for row in rows}
               <li key={ row.id } role="treeitem">
                 <div
                   data-view-id="{ row.id }"
-                  class="dt-tree-row group flex items-center gap-1.5 min-h-[22px] py-0.5 pr-1 cursor-default { row.rowClass } { row.pulseClass }"
+                  class="dt-tree-row group flex items-center gap-1.5 min-h-5.5 py-0.5 pr-1 cursor-default { row.rowClass } { row.pulseClass }"
                   style="padding-left:{ row.indent };background-size:{ row.guideWidth } 100%"
                   title="{ row.title }"
                   @click={ select(row.id) }
@@ -51,7 +51,7 @@
                     <button
                       type="button"
                       data-twisty="{ row.id }"
-                      class="shrink-0 flex size-4 items-center justify-center text-muted transition-transform duration-[120ms] ease-out hover:text-ink { row.twistyClass }"
+                      class="shrink-0 flex size-4 items-center justify-center text-muted transition-transform duration-120 ease-out hover:text-ink { row.twistyClass }"
                       title="Expand or collapse"
                       @click:stop={ toggle(row.id) }>{#svg 'icons/chevron-right.svg'}</button>
                   {:else}
@@ -63,17 +63,17 @@
                     class="shrink-0 size-1.5 rounded-full { row.kindClass }"
                     aria-hidden="true"></span>
 
-                  <span class="shrink-0 font-mono text-[12px] leading-none { row.nameClass }">{ row.name }</span>
+                  <span class="shrink-0 font-mono leading-none { row.nameClass }">{ row.name }</span>
 
                   {#if row.hasModuleLabel}
-                    <span class="min-w-0 truncate font-mono text-[10px] leading-none { row.moduleClass }">{ row.moduleLabel }</span>
+                    <span class="min-w-0 truncate font-mono text-10 leading-none { row.moduleClass }">{ row.moduleLabel }</span>
                   {/if}
 
                   <button
                     type="button"
                     data-log="{ row.id }"
                     title="log:view — binds the live instance to $p"
-                    class="ml-auto shrink-0 hidden group-hover:block rounded px-1 font-mono text-[9px] uppercase tracking-wide text-faint hover:bg-raised hover:text-accent"
+                    class="ml-auto shrink-0 hidden group-hover:block rounded px-1 font-mono text-9 uppercase tracking-wide text-faint hover:bg-raised hover:text-accent"
                     @click:stop={ logRow(row.id) }>log</button>
                 </div>
               </li>
@@ -83,7 +83,7 @@
       </div>
 
       {#if toast}
-        <p class="shrink-0 m-0 px-2 py-1 border-t border-line font-mono text-[10px] text-ok">{ toast }</p>
+        <p class="shrink-0 m-0 px-2 py-1 border-t border-line font-mono text-10 text-ok">{ toast }</p>
       {/if}
     </div>
 
@@ -94,14 +94,14 @@
           class="py-8! px-4!" />
       {:else}
         <header class="shrink-0 flex items-baseline gap-2 min-h-9 px-3 py-2 leading-relaxed border-b border-line bg-surface">
-          <span class="shrink-0 font-mono text-[12px] font-semibold text-ink">{ detailName }</span>
-          <span class="min-w-0 truncate font-mono text-[10px] text-faint" title="{ detailModule }">{ detailModule }</span>
-          <span class="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-faint">#{ detailId }</span>
+          <span class="shrink-0 font-mono font-semibold text-ink">{ detailName }</span>
+          <span class="min-w-0 truncate font-mono text-10 text-faint" title="{ detailModule }">{ detailModule }</span>
+          <span class="ml-auto shrink-0 font-mono text-10 tabular-nums text-faint">#{ detailId }</span>
         </header>
 
         <div class="flex-1 min-h-0 overflow-auto">
         {#if inspectError}
-          <p class="m-3 mb-0 rounded border border-danger px-2 py-1 font-mono text-[11px] text-danger">{ inspectError }</p>
+          <p class="m-3 mb-0 rounded border border-danger px-2 py-1 font-mono text-11 text-danger">{ inspectError }</p>
         {/if}
 
         {#if hasInspect}
@@ -113,9 +113,9 @@
             </div>
 
             <section class="rounded border border-accent-soft">
-              <h2 class="m-0 px-2 py-1 text-[11px] font-semibold text-ink">
+              <h2 class="m-0 px-2 py-1 text-11 font-semibold text-ink">
                 State layers
-                <span class="ml-1 font-normal text-[10px] text-muted">
+                <span class="ml-1 font-normal text-10 text-muted">
                   a later setState() wins until the next data() commit replaces the derived layer
                 </span>
               </h2>

@@ -25,12 +25,19 @@
   /* Text — warm off-white stepping down to faint */
   --color-ink: #ece9e3;
   --color-muted: #93929a;
-  --color-faint: #807f86;
+  --color-faint: #88878e;
 
   /* The one accent — warm amber, plus a brighter hover and a muted danger */
   --color-accent: #e6a94d;
   --color-accent-2: #f2bd6a;
   --color-danger: #cf6b5e;
+
+  /* Small print — caps labels, the wordmark and the footer line */
+  --text-10: 10px;
+  --text-11: 11px;
+  --tracking-label: 0.22em;
+  --tracking-brand: 0.4em;
+  --tracking-footer: 0.15em;
 }
 
 /* Base styles — dark canvas everywhere, refined text rendering */
