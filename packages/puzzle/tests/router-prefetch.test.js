@@ -393,6 +393,30 @@ describe('router.prefetch()', () => {
 		expect(loader).toHaveBeenCalledTimes(2);
 		expect(el.querySelector('.lazy')).not.toBeNull();
 	});
+
+	it('takes a named target, as push() does (D196)', async () => {
+		const { loader, marker } = lazyRoute();
+		const { router } = await boot([
+			{ path: '/', view: HomeView },
+			{ path: '/reports/:id', name: 'report', view: marker },
+		]);
+
+		await expect(router.prefetch({ name: 'report', params: { id: 7 }, query: { tab: 1 } })).resolves.toBe(true);
+		// the same route a path names: its code is already in memory
+		await expect(router.prefetch('/reports/7')).resolves.toBe(true);
+		expect(loader).toHaveBeenCalledTimes(1);
+		expect(router.current.path).toBe('/');
+		// an unknown name throws what push() throws
+		const fromPush = (() => {
+			try {
+				router.push({ name: 'nope' });
+			} catch (error) {
+				return error;
+			}
+		})();
+		expect(fromPush.message).toMatch(/unknown route name "nope"/);
+		expect(() => router.prefetch({ name: 'nope' })).toThrow(fromPush.message);
+	});
 });
 
 describe('data-prefetch="visible"', () => {

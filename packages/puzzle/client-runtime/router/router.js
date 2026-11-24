@@ -174,7 +174,7 @@ export class Router {
 	#catchAll = null; // synthetic single-node Entry for path:'*' (matched last)
 	/** @type {readonly import('../../types/index.js').RouteView[] | null} */
 	#views = null; // router.views, built on first read (D183)
-	// route name → full path pattern, for named targets in url/push/replace (D196)
+	// route name → full path pattern, for named targets (D196)
 	/** @type {import('./routeNames.js').RouteNameTable} */
 	#names;
 	/** @type {Element | null} */
@@ -774,14 +774,15 @@ export class Router {
 	 * matched chain (D163) — without navigating (D195). No guard runs and no view
 	 * is constructed; a later navigation to the path finds the classes already
 	 * resolved and runs synchronously. An explicit call, so a guarded route loads
-	 * too (only automatic link prefetch skips those). Never rejects.
+	 * too (only automatic link prefetch skips those). Never rejects. A named
+	 * target (D196) resolves to its path first; a bad one throws, as from push().
 	 *
-	 * @param {string} path a router path string, not a named target
+	 * @param {string | NamedRouteTarget} target a path or a named target, as push() takes it
 	 * @returns {Promise<boolean>} true once the route's code is in memory (also
 	 *   for a route with none to load); false when nothing matched or a load failed
 	 */
-	prefetch(path) {
-		return this.#prefetch(path, true);
+	prefetch(target) {
+		return this.#prefetch(targetPath(target, this.#names), true);
 	}
 
 	/**

@@ -511,9 +511,10 @@ export interface Router {
 	 * matched chain — without navigating (D195). No guard runs and no view is
 	 * built; a later navigation to the path runs warm. Resolves `true` once the
 	 * code is in memory (also for a route with none to load), `false` when
-	 * nothing matched or a load failed. Never rejects.
+	 * nothing matched or a load failed. Never rejects. A named target (D196)
+	 * resolves through the route table first; a bad one throws, as from `push()`.
 	 */
-	prefetch(path: string): Promise<boolean>;
+	prefetch(target: RouteTarget): Promise<boolean>;
 	/** The current route snapshot, or null before the first navigation. */
 	readonly current: RouteSnapshot | null;
 	/** Every leaf route as frozen data (D183), built once on first read; the catch-all is left out. */

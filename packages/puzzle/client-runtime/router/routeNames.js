@@ -6,7 +6,7 @@
  * turns a named target back into the path string the rest of the router
  * already understands, so every consumer resolves names by one rule:
  *
- * - the live Router (url / push / replace), in every routing mode;
+ * - the live Router (url / push / replace / prefetch), in every routing mode;
  * - the hybrid prerender's url() shadow and the static router stub
  *   (ssg/index.js, ssg/assemble.js), so a prerendered href and the client's
  *   re-render can never disagree;
