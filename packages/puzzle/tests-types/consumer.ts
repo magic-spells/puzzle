@@ -302,13 +302,14 @@ class TodoListView extends PuzzleView {
 		this.ctx.router.go(-1);
 		// prefetch loads a lazy route's code and resolves a boolean (D195).
 		void this.ctx.router.prefetch('/settings').then((loaded: boolean) => loaded);
-		// @ts-expect-error prefetch takes a path string
+		// @ts-expect-error prefetch takes a path or a named target
 		void this.ctx.router.prefetch(42);
-		// named targets (D196): push, replace and url take { name, params?, query?, hash? }.
+		// named targets (D196): push, replace, url and prefetch take { name, params?, query?, hash? }.
 		const albumTarget: NamedRouteTarget = { name: 'album', params: { id: 7 }, query: { tab: 'tracks', tag: ['a', 'b'] }, hash: 'credits' };
 		const anyTarget: RouteTarget = albumTarget;
 		this.ctx.router.push(albumTarget);
 		this.ctx.router.replace({ name: 'settings' });
+		void this.ctx.router.prefetch({ name: 'settings' });
 		const albumHref: string = this.ctx.router.url(anyTarget, { locale: 'es' });
 		void albumHref;
 		// @ts-expect-error a named target needs its name.

@@ -758,8 +758,8 @@ export default class EditPost extends PuzzleView {
   route too, `data-prefetch="visible"` also loads when the link scrolls into
   view, and `data-prefetch="off"` never loads. `prefetch: false` in the app
   config turns the default off. `await router.prefetch(path)` loads a route's
-  code from a script and resolves `true` when it is ready. Links do not
-  prefetch under Save-Data or on a 2g connection.
+  code from a script (a named target works too) and resolves `true` when it
+  is ready. Links do not prefetch under Save-Data or on a 2g connection.
 - **Head metadata lives on `meta`** (puzzle ≥ 0.2.0): `title`, `description`,
   `canonical`, `socialImage` — static strings, each inherited leaf→root
   independently (`null` suppresses an inherited value). Define root-route
@@ -826,8 +826,8 @@ export default class EditPost extends PuzzleView {
 - Link or navigate **by route name** (puzzle ≥ 0.10.0) with an object of
   `name`, `params` and optional `query` and `hash`:
   `href="{ link({ name: 'todo', params: { id: t.id } }) }"`,
-  `router.push({ name: 'todo', params: { id } })`, `replace()`, or a guard's
-  redirect. `router.prefetch()` takes a path only. Names must be unique;
+  `router.push({ name: 'todo', params: { id } })`, `replace()`,
+  `router.prefetch()`, or a guard's redirect. Names must be unique;
   nested and index routes resolve by full path; params are URI-encoded. An
   unknown name or a missing param throws.
 
