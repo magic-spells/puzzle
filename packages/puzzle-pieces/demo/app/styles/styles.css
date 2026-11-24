@@ -146,15 +146,6 @@
  */
 
 /*
- * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
- * and JS so the utility classes they use are generated. Paths are relative to
- * this stylesheet (app/styles/), so "../" is the app root.
- */
-@source "../**/*.pzl";
-@source "../**/*.js";
-@source "../public/**/*.html";
-
-/*
  * dist/ is COMMITTED (GitHub Pages serves it), so it is not gitignored — which
  * means v4's automatic content detection also scans the PREVIOUS build's own
  * output. A class deleted from source then keeps its rule for exactly one more
