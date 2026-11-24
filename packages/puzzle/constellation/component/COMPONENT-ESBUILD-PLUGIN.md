@@ -16,17 +16,8 @@ connections:
   - FILE-STYLES
   - FILE-STYLES-WATCH
   - DECISION-D190-CONFIG-ENV
-verified_at: '2026-11-21T19:10:06.943Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
-notes:
-  - kind: state
-    text: >-
-      2026-11-08 (feat/0.10-codegen-trims, review F6q-Q2): Plugin.SetStripStamps(bool) makes
-      transformPZL pass an empty ModulePath, so codegen omits the D81 Class.__pzlModule stamp.
-      build.Build sets it through passContext only for a production SPA build (output unset, not
-      --mode development); dev, static and hybrid builds and every other plugin.New caller keep the
-      stamp. It is per build, not per pass, because the passes share one CompileCache. Saves ~17 gz
-      bytes per .pzl module in SPA production (todos: −122 raw / −52 gz).
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # esbuild plugin and build pipeline
@@ -43,9 +34,10 @@ esbuild messages, writing no intermediate modules. Each message carries its sour
 (`sourceLocation`), read from the `.pzl` or from the `{#svg}` asset the error names.
 Scripts use the JS or TS loader per `<script lang>`; styles collect in a mutex-protected
 path map; `{#svg}` files join the watch set. The generated module keeps the opaque script
-at its original line and byte column by padding its start with whitespace, so native
-JS/TS syntax and import errors report `.pzl` coordinates without rewriting script bytes
-(`TestPluginScriptErrorPositions`).
+at its original line and byte column by padding its start with whitespace
+(`codegen.AlignScript`, which the standalone compile behind `/vitest` also runs), so native
+JS/TS syntax and import errors and script stack traces report `.pzl` coordinates without
+rewriting script bytes (`TestPluginScriptErrorPositions`).
 
 - **The transform is pass-independent** (a pure function of app root, path, bytes), so a
   one-shot build memoizes it in a build-scoped `CompileCache` shared by all three plugin

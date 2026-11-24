@@ -1,6 +1,6 @@
 ---
 name: Puzzle themes — palettes, appearance runtime, design-system demo
-status: built
+status: verified
 change: feature
 branch: feat/pieces-themes
 connections:
@@ -9,52 +9,37 @@ connections:
   - DOC-DEMO-DOCS-SITE
 pr: https://github.com/magic-spells/puzzle/pull/137
 notes:
-  - kind: verified
-    text: >-
-      2026-09-18, PR #137 open against release/0.8.0 (head 88ef5f9). npm test 491/491; demo build
-      clean; puzzle check adds nothing beyond the 17 pre-existing piece errors. Headless Chromium
-      (own Playwright 1.63): 12 scheme×mode combos of /themes/compare and /themes/shell
-      screenshotted to demo/.playwright/themes/, computed --color-surface / --color-surface-frame /
-      --color-ink equal the values parsed from the CSS files (36/36), switcher click persists {
-      scheme, mode }, 0 console/page errors. Min AA ratios (light/medium/dark): default
-      3.57/3.11/3.79, dim 3.48/3.46/3.96, warm 3.39/3.56/3.58, void 3.43/3.93/3.89 (the 3.x floors
-      are the 3:1 non-text pairs). Status stays `building` until the PR merges.
-    sha: 88ef5f9
   - kind: gotcha
     text: >-
-      Two traps hit in this build. (1) The inline pre-paint in demo/app/public/index.html had a
-      stray second copy of its body after the closing tag — the parity test only compared the first
-      block, so it passed while every page threw "missing ) after argument list"; the test now
-      asserts exactly one inline copy and one </script> in <head>. Also an inline script ends at the
-      first literal `</script>` even inside a comment, so pre-paint.js spells it `<\/script>`. (2)
-      Puzzle drops the whitespace at a line break between an inline element and the next
-      text/element, so "<span>warm</span> or\n<span>void</span>" renders as "warm orvoid" — keep
-      such runs on one line. Also: getComputedStyle().getPropertyValue('--color-x') returns the
-      UNRESOLVED light-dark() text; the demo resolves colours by applying the var to a probe
-      element's background-color and reading that.
+      test/themes.test.mjs holds the demo's index.html to exactly one inline copy of pre-paint.js
+      and one </script> in <head>, before the stylesheet: a stray second body would sit as text in
+      <head> and throw on every page. An inline script ends at the first literal `</script>` even
+      inside a comment, so pre-paint.js spells it `<\/script>`.
+      getComputedStyle().getPropertyValue('--color-x') returns the UNRESOLVED light-dark() text; the
+      demo resolves colours by applying the var to a probe element's background-color and reading
+      that.
   - kind: state
     text: >-
-      2026-11-08 (0.10.0 review Q5, feat/0.10-pieces-date-range): BottomSheet and Sheet now feed
-      their overlay from tokens: `[--bs-overlay-background:var(--color-scrim)]` /
+      BottomSheet and Sheet feed their overlay from tokens:
+      `[--bs-overlay-background:var(--color-scrim)]` /
       `[--sheet-overlay-background:var(--color-scrim)]` and `[--*-overlay-blur:var(--blur-sm)]`
-      (8px). This replaces raw `rgb(0_0_0_/_0.5)` + `8px`, so the light scrim (slate/0.4) and the
-      palettes now apply. No new blur token was needed: Tailwind v4 keeps a default-theme var when
-      any generated utility (including an arbitrary property) references it via var(). Checked with
-      the demo's tailwindcss 4 CLI and in Chromium (`--blur-sm: 8px` emitted on :root). Dialog,
-      AlertDialog and Command use `bg-scrim` too. Dialog and AlertDialog write it as
-      `[:where(&)]:bg-scrim`, so a colour in `backdropClass` still wins. The `[--bs-handle-*:0px]` /
-      `[--sheet-handle-*:0px]` zeros stay: zero is not a design value, so a token for it would be
-      noise.
+      (8px), so the light scrim and the palettes apply. No blur token of our own is needed: Tailwind
+      v4 keeps a default-theme var when any generated utility (including an arbitrary property)
+      references it via var(). Dialog, AlertDialog and Command use `bg-scrim` too; Dialog and
+      AlertDialog write it as `[:where(&)]:bg-scrim`, so a colour in `backdropClass` still wins. The
+      `[--bs-handle-*:0px]` / `[--sheet-handle-*:0px]` zeros stay literal: zero is not a design
+      value, so a token for it would be noise.
   - kind: state
     text: >-
-      pieces.css now has a second, type-only `@theme` block after the palette block, holding
+      pieces.css has a second, type-only `@theme` block after the palette block, holding
       `--text-code` (0.8125rem / 1.25rem line-height). It sits outside the palette block on purpose:
       themes.test's token contract reads only the first `@theme` block, so cool/warm/void do not
-      restate a scheme-agnostic size. The demo's duplicate definition in styles.css is gone.
-      Code.pzl, markdown-doc.js and rich-text-doc.js use `text-code` instead of `text-[13px]`. An
-      app with an older pieces.css lacks the token until it runs `puzzle add theme default`, and
-      add-piece's stale-theme hint already prints that.
+      restate a scheme-agnostic size. Code.pzl, markdown-doc.js and rich-text-doc.js use
+      `text-code`. An app with an older pieces.css lacks the token until it runs `puzzle add theme
+      default`, and add-piece's stale-theme hint prints that.
     sha: 0c470749
+verified_at: '2026-11-24T18:13:21.786Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # Puzzle themes — palettes, appearance runtime, design-system demo
@@ -64,11 +49,11 @@ Decision record: [[DECISION-THEMES-IN-PIECES]].
 ## Scope
 
 
-- In: `registry/theme/{pieces,dim,warm,void}.css` re-tuned per Cory's palette notes with a new `medium` mode; `registry/theme/appearance.js` + `pre-paint.js`; package `exports` (`./themes/*.css`, `./appearance`, `./pre-paint`); `registry.json` `themes` + `modes`; tests (`test/themes.test.mjs`, `test/contrast.test.mjs`, `test/appearance.test.mjs`, `test/demo-theme-guard.test.mjs`, `test/lib/{color,roles,parse-theme}.mjs`); Sidebar piece `variant="rail"`; the new **`appearance-picker` piece** (`registry/ui/appearance-picker/`, controlled: `scheme`, `mode`, `schemes?`, `modes?`, `system?`, `@change({ scheme, mode })`; theme cards are `data-scheme`-scoped live miniatures of the shell; Pyramid's AppearancePanel / Sites' Appearance dialog ported so both can copy it in phase 2); the demo rebuilt as a frame / rail / panel shell (`layouts/Default.pzl`, `components/docs/AppearanceSwitcher.pzl` = rail-foot trigger + non-modal popover over the piece) with `/themes/:scheme`, `/themes/compare`, `/themes/shell`, `/themes/pieces` panels, `/components/appearance-picker` doc page, and a rewritten `/theming`; README, CLAUDE.md, framework SKILL.md §Styling, CHANGELOG 0.8.0 entry (0.7.1 notes folded in).
-- Out (follow-ups, each its own PR): Pyramid / Sites / account apps adopting the package and the picker piece; the org Puzzle app template.
+- In: `registry/theme/{pieces,cool,warm,void}.css` (four schemes × four styles: dark, dim, mixed, light); `registry/theme/appearance.js` + `pre-paint.js`; package `exports` (`./themes/*.css`, `./appearance`, `./pre-paint`); `registry.json` `themes` + `modes`; tests (`test/themes.test.mjs`, `test/contrast.test.mjs`, `test/appearance.test.mjs`, `test/demo-theme-guard.test.mjs`, `test/lib/{color,roles,parse-theme}.mjs`); Sidebar piece `variant="rail"`; the **`appearance-picker` piece** (`registry/ui/appearance-picker/`, controlled: `scheme`, `mode`, `schemes?`, `modes?`, `system?`, `@change({ scheme, mode })`; theme cards are `data-scheme`-scoped live miniatures of the shell); the demo's frame / rail / panel shell (`layouts/Default.pzl`, `components/docs/AppearanceSwitcher.pzl` = rail-foot trigger + non-modal popover over the piece) with `/themes/:scheme`, `/themes/compare`, `/themes/pieces` panels, the `/components/appearance-picker` doc page, and `/theming`; README, CLAUDE.md and the framework SKILL.md §Styling.
+- Out: Pyramid / Sites / account apps adopting the package and the picker piece; the org Puzzle app template.
 
 ## Acceptance
 
-- `npm test` green: all four files declare the identical token set; every palette × mode passes AA on every declared pair; medium blocks cover every differing token; demo `appearance.js` and the inline pre-paint are byte-equal to the registry; no colour literals in the demo shell/themes files.
-- `cd demo && npm run build` succeeds; `puzzle check` adds no errors beyond the pre-existing piece ones.
-- Headless browser pass: every scheme × mode renders in the compare grid and shell view; computed `--color-surface`, `--color-surface-frame`, `--color-ink` match the CSS files; zero console errors.
+- `npm test` green: all four files declare the identical token set; every palette × style passes AA on every declared pair; the dim and mixed blocks keep their shapes; demo `appearance.js` and the inline pre-paint are byte-equal to the registry; no colour literals in the demo shell/themes files.
+- `cd demo && npm run build` succeeds; `puzzle check` adds no errors.
+- Headless browser pass: every scheme × style renders in the compare grid; computed `--color-surface`, `--color-surface-frame`, `--color-ink` match the CSS files; zero console errors.

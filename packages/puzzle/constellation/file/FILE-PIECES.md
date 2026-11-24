@@ -6,16 +6,16 @@ language: go
 summary: Piece dependency resolution, safety preflight, copies, theme, and lock updates.
 connections:
   - COMPONENT-COMPILER-CLI
-verified_at: '2026-11-21T18:49:58.010Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 notes:
   - kind: gotcha
     text: >-
-      `planTheme`'s "already wired" test uses `piecesCssImported` (a live @import), never a
-      substring match on "pieces.css": a comment such as `/* TODO: move tokens to pieces.css */`
-      used to make `add piece` skip the palette silently while `add theme` copied it (review F8-B1,
-      `TestAddPieceCommentMentionIsNotWired`). AddThemes' default-theme switch therefore has no
-      mention-only arm. `EvalSymlinksAllowMissing` is shared from internal/fsutil with generate.
+      `planTheme` counts styles.css as wired only on a live `@import` of pieces.css
+      (`piecesCssImported`), never a substring match, so a comment that mentions pieces.css still
+      gets the palette copied (`TestAddPieceCommentMentionIsNotWired`). AddThemes' default-theme
+      switch has no mention-only arm for the same reason. `EvalSymlinksAllowMissing` is shared from
+      internal/fsutil with generate.
 ---
 
 # pieces.go

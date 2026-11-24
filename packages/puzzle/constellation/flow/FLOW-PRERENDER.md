@@ -34,17 +34,8 @@ connections:
   - DECISION-D179-STATIC-PATHS
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
   - DECISION-D196-NAMED-ROUTES
-verified_at: '2026-11-21T19:10:06.943Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
-notes:
-  - kind: verified
-    text: >-
-      Review 2026-11-08 F5 B2: an unmarked `prerender: false` static page now plays the routed
-      chain's enter by the router's initial-nav rule (topmost view plays, layout and deeper views
-      skipEnter, nested components enter); a marked page still skips everything. Pinned by
-      static-kernel.test.js 'a prerender:false page plays its routed view enter'. Q1: the
-      build-fetch wrapper is inlined in prerender() (no depth counter; it had one caller). npm test
-      3298/3298, build:static-docs ok, test:runtime-types ok.
+verified_at: '2026-11-24T18:02:16.140Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # Prerender flow
@@ -57,7 +48,7 @@ The two prerender modes on top of the SPA build ([[FLOW-BUILD]]): `hybrid` (prer
 2. **Prerender after the shell and public assets are staged, before the swap** — the production entry/CSS references and shell preloads are already rewritten by [[FILE-BUILD-SHELL]]. The shell is the injection template; a failure leaves the last good `dist/`.
 3. **Go generates a Node entry, bundles it, runs it — Go never renders.** The summary follows the last stdout sentinel (user logging is harmless). Missing `node`, a non-zero exit, the 120 s timeout or a missing sentinel fail the build with stderr shown.
 4. **Enumerate pages** with one unstarted memory Router per build: one entry per fixed leaf, one per `staticPaths` value ([[DECISION-D179-STATIC-PATHS]]), repeated per locale under prefix routing, default locale first ([[DECISION-D177-LOCALE-URL-PREFIXES]]). The prerenderer compiles no matchers of its own, so it can't disagree with the live router on path shape ([[DECISION-D126-PATH-SHAPE-AND-OUTPUT-OWNERSHIP]]).
-5. **Assemble each chain without a DOM** via `assembleChain` (`created()` + awaited `data()`, no `mounted()`, no animations; layout last), shared with the static kernel.
+5. **Assemble each chain without a DOM** via `assembleChain` (`created()` + awaited `data()`, no `mounted()`, no animations; layout last), shared with the static kernel. Each page gets its own router stub (`makeRouterStub`): a static page renders through it, and a hybrid page through the build Router with the stub's `url()` copied onto it, because a memory Router's own `url()` drops `routerBase`.
 6. **Serialize** mirroring ViewManager (inline components, shared slot expansion, controlled state as attributes, directives dropped, placeholders and Portals → nothing, RAWTEXT script/style per [[DECISION-D113-SSG-RAWTEXT-RULE]]).
 7. **Splice into the shell** against byte offsets compiled once per build ([[DECISION-D151-SHELL-HEAD-OWNERSHIP]]): managed head tags, the page markup, and the per-page islands (locale table, `hreflang` alternates, first-visit redirect).
 8. **Emit per mode.** Hybrid writes `<path>/index.html` (catch-all → `404.html`, other locales under `<locale>/`) with a marked container; `prerender: false` gets the untouched shell. Static strips the `app.js` tag, marks the target, and appends in one splice the data island, the read-state island (only if something settled, [[DECISION-D161-AUTO-FETCHING-FINDS]]), the names island (only if the page resolved a named link, or is a `prerender: false` page of an app that names a route, [[DECISION-D196-NAMED-ROUTES]]) and the page's module script. Slugs are assigned by walking the page list in order. With `site` set, `sitemap.xml` is written.

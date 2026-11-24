@@ -12,19 +12,16 @@ connections:
   - FILE-COMPONENT-SLOT
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
   - DECISION-D180-COMPONENT-SLOT
-verified_at: '2026-11-21T19:10:06.943Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 notes:
   - kind: state
     text: >-
-      2026-11-08 runtime trims (feat/0.10-runtime-trims; review F2-Q1/Q4/Q6). One carryLinks(from,
-      to) helper (el/component/instance plus the takeover fields) is now what a clone must carry to
-      stay patchable. keepOutgoing, stripSlotAttr and expandNode all call it, and keepOutgoing adds
-      its nodes/portal/slotEnd range fields after. The redundant `key` copies are gone: the ViewNode
-      constructor derives key from attrs.key. Also removed: the `child?.` guards after the !child
-      early return, html.js's dead moveHtml (live-HTML ranges move through moveComponentSlot with
-      end = htmlTail), ViewNode's unused isPortal getter (and its types line), and the default
-      exports of viewManager/ViewNode/animate/visibility.
+      A clone stays patchable only if it carries the live links of the vnode it replaces.
+      `carryLinks(from, to)` is the one helper for that (el, component, instance and the takeover
+      fields); `keepOutgoing`, `stripSlotAttr` and `expandNode` call it, and `keepOutgoing` then
+      adds the range fields (`nodes`, `portal`, `slotEnd`). A clone never copies `key`: the ViewNode
+      constructor derives it from `attrs.key`.
 ---
 
 # ViewManager and ViewNode

@@ -1,6 +1,6 @@
 ---
 name: DropdownMenu — menu-button family over dropdown-panel menu mode
-status: built
+status: verified
 framework: puzzle
 props:
   - name: trigger
@@ -25,40 +25,26 @@ connections:
 notes:
   - kind: state
     text: >-
-      2026-10-22: Trigger's `button` variant is Button's outline at md (`border border-border-strong
-      text-ink hover:bg-ink/6`, transparent), no longer the bg-surface pill, so it matches an
-      outline Button beside it.
+      Trigger's `button` variant is Button's outline at md (`border border-border-strong text-ink
+      hover:bg-ink/6`, transparent), so it matches an outline Button beside it.
   - kind: state
     text: >-
-      2026-11-08 (0.10.0, feat/0.10-pieces-overlays, review V-pieces-12 notes): the root `effect`
-      prop on DropdownMenu and DropdownMenu.Sub is deleted — it was forwarded to DropdownPanel,
-      whose data() never read it, so it was a no-op; `DropdownMenu.Content effect` (→ Panel →
-      <dropdown-panel effect>) is the one effect source. Docs tables updated to match. The copyable
-      Usage block no longer wires `@press` on rows alongside the root `@select` (same activation
-      fires both).
+      DropdownMenu.Sub renders its nested root with `arrow="flip"`, so submenu rows are written
+      `<DropdownMenu.Trigger variant="item" label="Export as"/>`: a filled Trigger body drops the
+      `[data-dropdown-arrow]` hook, and the chevron with it. The top-level root defaults
+      `arrow="none"`.
   - kind: state
     text: >-
-      2026-11-08 (0.10.0, feat/0.10-pieces-overlays, review V-pieces-07-09 P09-B1): DropdownMenu.Sub
-      renders its nested root with `arrow="flip"`, and every Sub example (Sub/DropdownMenu/Trigger
-      headers, DropdownMenuDoc hero + snippet, ContextMenuDoc hero + snippet) writes the row as
-      `<DropdownMenu.Trigger variant="item" label="Export as"/>`. GOTCHA: a filled Trigger body
-      replaces the D141 fallback, and with it the `[data-dropdown-arrow]` span, so a children-form
-      submenu trigger has no chevron whatever `arrow` says — only the `label=` form renders the
-      hook. The top-level root still defaults `arrow="none"` (open question for Cory).
-  - kind: state
-    text: >-
-      2026-11-08 review P09-Q6 / P13-Q8 (feat/0.10-pieces-dialog-chat): DropdownMenu.Shortcut's raw
-      `shadow-[inset_0_-1px_0_var(--color-border)]` is now the `shadow-kbd` utility, backed by a new
-      `--shadow-kbd` token in all four theme files. Same swap in Menubar.Shortcut and Kbd, so the
-      keycap seam is one token. Only that class changed in this family.
+      DropdownMenu.Shortcut, Menubar.Shortcut and Kbd draw the keycap seam with the `shadow-kbd`
+      utility, backed by the `--shadow-kbd` token in all four theme files.
+verified_at: '2026-11-24T18:13:21.786Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 A D167 compound family in `registry/ui/dropdown-menu/DropdownMenu/`: root plus `.Trigger`,
 `.Content`, `.Item`, `.Link`, `.Group`, `.Label`, `.Separator`, `.Shortcut`, `.Sub` and an
 `index.js` barrel. The root composes [[COMPONENT-DROPDOWN-PANEL]] with `menu` set, which
-puts `@magic-spells/dropdown-panel` >= 2.1.0 into **application-menu mode**. 0.7.0 replaced
-the 334-line flat port; the `items[]` array, `label`/`triggerClass` and the
-`slot="trigger"` escape hatch are gone.
+puts `@magic-spells/dropdown-panel` >= 2.1.0 into **application-menu mode**.
 
 ## Why this one claims `role="menu"` and Menubar does not
 
@@ -73,14 +59,15 @@ guards that.
 ## Gotchas
 
 - **Nothing in the family closes the menu.** `dropdown-panel:select` closes the whole chain
-  and returns focus to the ROOT trigger. The port's `closest('dropdown-component')` walk is
-  gone and must not return — two closers means two closes.
+  and returns focus to the ROOT trigger. No row may also walk `closest('dropdown-component')`
+  to close it — two closers means two closes.
 - **`@select` fires at the root, `@press` at the row, and both fire.** A submenu choice is
   reported by the root because that is where the chain closes; `Sub` passes `sub` to the
   base to silence the nested roots.
 - **`Sub` exists because an `Item` is a `<button>`** and cannot contain a
   `<dropdown-component>`; the nested trigger and panel must be that component's direct
-  children. `block` on the Sub host is load-bearing for `opens="right"`.
+  children. `block!` on the Sub host is load-bearing for `opens="right"`; the `!` is too,
+  because the root's own `inline-block` otherwise wins the cascade.
 - **`Sub.pzl` imports `./DropdownMenu.pzl`, not the barrel** — the barrel imports Sub, and a
   cycle through it leaves one side undefined.
 - **A `{#for}` may live inside a `Content`, never directly inside the root** around a

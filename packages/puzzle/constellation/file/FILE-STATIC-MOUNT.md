@@ -11,19 +11,15 @@ connections:
   - DECISION-D177-LOCALE-URL-PREFIXES
   - DECISION-D179-STATIC-PATHS
   - FILE-SSG-ASSEMBLE
-verified_at: '2026-11-21T18:49:58.010Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:02:16.140Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 notes:
   - kind: verified
     text: >-
-      The static module graph is router-free again (2026-11-08, feat/0.10-static-router). Router's
-      class static block (D185's idle accessor) was a side effect that kept the whole Router in
-      every output:'static' shared chunk because this kernel imports normalizeBase from
-      router/router.js; it is now a static method. Production build with the CLI from source:
-      examples/static-docs shared chunk 76,924 B / 25,606 gzip → 54,752 B / 18,452 gzip;
-      examples/i18n --static 85,949 / 29,182 → 62,524 / 21,586. popstate, pushState,
-      scrollRestoration and __puzzleScroll occur 0 times in every page module and chunk.
-      tests/static-docs-example.test.js now asserts no built module mentions popstate.
+      This kernel imports `normalizeBase` from router/router.js, so that module must carry no
+      import-time side effect such as a class static block: one keeps the whole Router in every
+      `output: 'static'` shared chunk. `tests/static-docs-example.test.js` asserts no built page
+      module or chunk mentions `popstate`.
 ---
 
 # static/index.js

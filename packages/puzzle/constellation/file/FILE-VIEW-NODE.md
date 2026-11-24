@@ -6,8 +6,8 @@ language: javascript
 summary: VNode values, slot/placeholder/Component-range constants, and list-key helpers.
 connections:
   - COMPONENT-VIEW-MANAGER
-verified_at: '2026-11-21T18:49:58.010Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:13:45.766Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # ViewNode.js

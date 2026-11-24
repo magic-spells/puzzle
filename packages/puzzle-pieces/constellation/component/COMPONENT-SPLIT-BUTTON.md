@@ -1,6 +1,6 @@
 ---
 name: SplitButton — fused action + menu family over dropdown-menu
-status: built
+status: verified
 framework: puzzle
 props:
   - name: variant
@@ -28,37 +28,35 @@ connections:
 notes:
   - kind: state
     text: >-
-      2026-10-22: Action and Menu carry Button's quiet recipes (primary solid ink, secondary ink
-      tint, outline transparent with border-border-strong, ghost tint hover); see the quiet-buttons
-      note on DECISION-SCHEMES-AND-STYLES. They are still verbatim copies of Button.pzl's VARIANT
-      map and must change with it.
+      Action's VARIANT map is a verbatim copy of Button.pzl's quiet recipes (primary solid ink,
+      secondary ink tint, outline transparent with border-border-strong, ghost tint hover). Menu
+      carries the same recipes with plain `hover:`, since its `<dropdown-trigger>` never matches
+      `:disabled`. Both must change with Button; see the quiet-buttons note on
+      DECISION-SCHEMES-AND-STYLES.
   - kind: state
     text: >-
-      Action now follows the button family's disabled rule (shared with button, button-group,
+      Action follows the button family's disabled rule (shared with button, button-group,
       copy-button, alert-dialog/popconfirm buttons, pagination prev/next, toggle, toggle-group):
-      `disabled:cursor-not-allowed` instead of `disabled:pointer-events-none`, so a disabled
+      `disabled:cursor-not-allowed` rather than `disabled:pointer-events-none`, so a disabled
       button's `title` tooltip shows, and every hover is `not-disabled:hover:…` so it stays flat. A
       native disabled <button> fires no click; onPress still re-checks. Menu deliberately keeps
       `opacity-50 pointer-events-none`: its <dropdown-trigger> is not a <button> (never matches
       :disabled), and pointer-events-none is the only thing stopping a click from opening the menu.
   - kind: state
     text: >-
-      2026-11-08 (0.10.0, feat/0.10-pieces-overlays, review V-pieces-12 B1/B2): every sample
-      (SplitButton/Menu/index headers, SplitButtonDoc usage + hero + variants) now wires rows
-      through the Menu's @select ONLY — Item @press and the root select fire on the same activation,
-      so wiring both ran each action twice. `SplitButton.Menu disabled` is documented as
-      click-blocking only: upstream <dropdown-trigger> keeps tabindex=0 and opens on
-      Enter/Space/ArrowDown with no disabled check (dropdown-panel 2.1.1 #handleTriggerKeydown). The
-      real fix is upstream — a `disabled` on <dropdown-trigger> (drop tabindex, aria-disabled,
-      ignore activation) — then one prop forwarded through DropdownMenu.Trigger. No piece-side
-      keydown guard by decision.
+      Wire rows through the Menu's @select only: Item @press and the root @select fire on the same
+      activation, so wiring both runs each action twice. `SplitButton.Menu disabled` blocks clicks
+      only: upstream `<dropdown-trigger>` keeps tabindex=0 and still opens on Enter/Space/ArrowDown.
+      The fix belongs upstream (a `disabled` on `<dropdown-trigger>`, then one prop forwarded
+      through DropdownMenu.Trigger); there is no piece-side keydown guard, by decision.
+verified_at: '2026-11-24T18:13:21.786Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 A D167 family in `registry/ui/split-button/SplitButton/`: `SplitButton` (layout shell),
 `.Action` (the primary `<button>`), `.Menu` (the caret half, composing
 [[COMPONENT-DROPDOWN-MENU]]) and the barrel, which re-exports DropdownMenu's row members for
-the same reason ContextMenu does. 0.7.0 replaced the 351-line flat port; `label` and
-`actions[]` are gone.
+the same reason ContextMenu does.
 
 Three members rather than a bare layout shell: a pure shell would have had to reach its
 halves with descendant selectors like

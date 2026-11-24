@@ -9,8 +9,8 @@ connections:
   - COMPONENT-ANIMATIONS
   - COMPONENT-DEVSTATE
   - DECISION-D115-MOUNT-FAILURE-RECOVERY-CONTRACT
-verified_at: '2026-11-21T18:57:28.823Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - client-runtime/views/viewManager.js
   - client-runtime/views/PuzzleView.js
@@ -46,8 +46,9 @@ with the real culprit named, and the framework continues.
   `router.start()`), and the `_mounted` boolean can't tell "my mount is live"
   from "a newer mount claimed the flag". A private `#mountEpoch` increments at
   every `mount()` entry and in `#teardown()`; each continuation captures its
-  epoch and bails on mismatch. The `beforeMount` abort path tears down only its
-  own cycle — a stale catch rethrows without touching the newer one.
+  epoch and bails on mismatch. The boot's one abort path (`beforeMount` through
+  `router.start()`) tears down only its own cycle — a stale catch rethrows
+  without touching the newer one.
 
 ## Alternatives rejected
 

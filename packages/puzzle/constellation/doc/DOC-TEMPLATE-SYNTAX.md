@@ -94,6 +94,7 @@ The built-ins: `round`, `currency`, `percentage`, `number_with_delimiter`, `comp
 
 - The trailing `, name` is optional: the 0-based index for item loops, the current number for ranges.
 - The collection can be any expression (`{#for t in todos.filter(t => !t.done)}`); a list the view reuses or that takes real logic belongs in `data()`.
+- The body is exactly one element or component, the row root. Text beside it, a second root, or an `{#if}` as the root is a compile error: wrap them in one element.
 - Rows are keyed automatically by the record's primary key (or `.id`). Add `key={ … }` on the row root for other data (§28).
 - Unchanged rows are reused without re-rendering. Change records through `update()` or the store, never by assigning a field (`todo.done = true` is invisible).
 - A missing list renders nothing; a non-list renders nothing and warns in development.

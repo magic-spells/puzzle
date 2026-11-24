@@ -1,5 +1,5 @@
 ---
-name: D196 — Named route targets for link(), url(), push() and replace()
+name: D196 — Named route targets for link(), url(), push(), replace() and prefetch()
 status: verified
 connections:
   - COMPONENT-ROUTER
@@ -18,11 +18,11 @@ connections:
   - DECISION-D87-ROUTE-GUARDS
   - DECISION-D177-LOCALE-URL-PREFIXES
   - DECISION-D182-NAVIGATION-RESULT
-verified_at: '2026-11-21T22:33:06.881Z'
-verified_sha: c4c10f303caeac8050633ea434af17e4d3a75001
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
-# D196 — Named route targets for `link()`, `url()`, `push()` and `replace()`
+# D196 — Named route targets for `link()`, `url()`, `push()`, `replace()` and `prefetch()`
 
 ## Context
 

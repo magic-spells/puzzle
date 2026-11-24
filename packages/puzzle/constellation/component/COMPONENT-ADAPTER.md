@@ -22,22 +22,14 @@ connections:
   - DECISION-D161-AUTO-FETCHING-FINDS
   - DECISION-D185-APP-IDLE
   - DECISION-D193-SERVER-QUERIES
-verified_at: '2026-11-21T22:33:06.881Z'
-verified_sha: c4c10f303caeac8050633ea434af17e4d3a75001
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 notes:
   - kind: state
     text: >-
-      2026-11-08 runtime trims (feat/0.10-runtime-trims; review F3-B1, F3-Q1/Q2/Q5/Q6). readBody no
-      longer swallows a failed res.text(): a 2xx whose body cannot be read now rejects the save
-      (record stays unsynced) instead of reconciling as a 204. Only responseData's non-OK branch
-      catches it (readBody(...).catch(noop)), so a 4xx/5xx with an unreadable body still throws
-      PuzzleAdapterError with its status (the 404 auto-fetch absence check keeps working). request()
-      goes through responseData. _saveRecordNow has one success tail: destructure once,
-      adoption/immutable-pk arms only decide the pk, one safeMerge, one notify (two on adoption: old
-      key then new), one _synced/stamp/persist. The explicit-null-pk arm is gone because the
-      pk-required guard throws first. _loadMany is folded into loadMany (the dev nudge is keyed on
-      the handle Proxy, not the method name); the handle Proxy has no set trap (the default lands on
-      the target).
+      A 2xx response whose body cannot be read rejects the save, and the record stays unsynced. Only
+      a non-OK response swallows an unreadable body, so a 4xx/5xx still throws PuzzleAdapterError
+      with its status and the 404 absence check keeps working.
 ---
 
 # Server adapter runtime

@@ -39,8 +39,8 @@ connections:
   - FEATURE-DEV-PROXY
   - DOC-TESTING
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
-verified_at: '2026-11-21T19:10:06.943Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:02:16.140Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 notes:
   - kind: state
     text: >-
@@ -74,6 +74,11 @@ and `compiler/internal/{dev,serve,preview,ui}`. Run from `packages/puzzle` with
   passes, static page emission, route dependency tracking, route head warnings, SPA code
   splitting and chunk pruning, locale files, the fixtures flag, and `.pzl` files read
   from installed packages (`package_pzl_test.go`).
+- **Runtime preflight** (`build/preflight_test.go`): a missing install names the nearest
+  lockfile's install command, a mistyped directory says so, and an installed runtime
+  across a breaking release from the CLI stops the command, naming both versions and
+  which one to upgrade. A patch difference passes, and `PUZZLE_RUNTIME` or an app inside
+  the repo is never compared ([[DECISION-D202-CLI-RUNTIME-VERSION-PAIR]]).
 - **Hashed names and preloads** (D181): `shell_test.go` and `shell_base_test.go` build
   SPA, hybrid and static output, including under single- and multi-segment deploy
   prefixes and every locale page and 404. They pin deterministic content-hashed

@@ -12,8 +12,8 @@ connections:
   - DECISION-D94-TESTING-EXPORT
   - DOC-SPEC-ROUTER
   - DOC-RELEASE-SURFACE
-verified_at: '2026-11-21T18:57:28.823Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - client-runtime/router/modes.js
   - client-runtime/router/router.js

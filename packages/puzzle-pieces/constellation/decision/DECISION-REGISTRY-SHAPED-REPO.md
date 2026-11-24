@@ -1,10 +1,12 @@
 ---
 name: Registry-shaped repo from day one
-status: built
+status: verified
 connections:
   - DOC-REGISTRY
   - FEATURE-ADD-CLI
   - DECISION-COPY-IN-DISTRIBUTION
+verified_at: '2026-11-24T18:13:21.786Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # Registry-shaped repo from day one

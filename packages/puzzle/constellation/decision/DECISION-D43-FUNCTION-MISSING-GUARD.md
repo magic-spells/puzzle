@@ -3,7 +3,7 @@ name: >-
   D43 — Library calls compile with the `__missing` guard: an unknown function passes the value
   through
 status: verified
-verified_at: '2026-11-21T18:53:41.145Z'
+verified_at: '2026-11-24T18:13:21.008Z'
 connections:
   - COMPONENT-CODEGEN
   - COMPONENT-FORMATTERS
@@ -14,7 +14,7 @@ connections:
   - DECISION-D176-EXPRESSION-LANGUAGE
 code_refs:
   - client-runtime/formatters.js
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D43 — Library calls compile with the `__missing` guard

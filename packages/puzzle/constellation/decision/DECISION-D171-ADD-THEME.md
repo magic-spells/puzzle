@@ -1,11 +1,13 @@
 ---
 name: D171 — `puzzle add theme <name…>` (palettes are registry content, copied like a piece)
-status: built
+status: verified
 connections:
   - DECISION-D169-REGISTRY-VERSION-FLOORS
   - DECISION-D32-CLI-TOOLING
   - DECISION-D03-SCRIPTS-REAL-JS
   - COMPONENT-COMPILER-CLI
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D171 — `puzzle add theme <name…>`

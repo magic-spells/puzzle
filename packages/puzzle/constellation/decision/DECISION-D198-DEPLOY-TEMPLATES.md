@@ -19,8 +19,8 @@ notes:
     text: >-
       Cloudflare Pages does not read `package.json` `engines`, and its default Node can be below the
       D200 floor, so `deploy/README.md` says to set `NODE_VERSION`.
-verified_at: '2026-11-21T18:57:28.823Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D198 — deploy templates and `puzzle add deploy <host>`
@@ -42,7 +42,8 @@ tested config per host, and `puzzle add deploy <host>` copies it in.
   no row or a row has no template.
 - **One template per output shape.** SPA and `hybrid` share one (prerendered
   `dist/<path>/index.html` is a real file every host serves before its
-  fallback); `static` has its own. The flag (`--static` / `--hybrid`, the same
+  fallback); `static` has its own. Cloudflare's one `_headers` serves both,
+  because Pages picks the routing itself. The flag (`--static` / `--hybrid`, the same
   `outputFlag` as `build`) wins, else `cfg.Output` from `puzzle.config.js`. A
   config that fails to load is an error, not a guess: the wrong template ships
   a site that 404s on refresh or serves the shell for missing pages.
@@ -75,7 +76,7 @@ tested config per host, and `puzzle add deploy <host>` copies it in.
 - **Magic Spells Sites is not a host here**: its deploy config isn't
   documented in the repo. Add a row when it is.
 
-## Verification (2026-11-19)
+## Verification
 
 Checked against built `examples/i18n` SPA/hybrid/static dists: Cloudflare with
 `wrangler pages dev`, Netlify with `netlify dev` plus its own headers parser,

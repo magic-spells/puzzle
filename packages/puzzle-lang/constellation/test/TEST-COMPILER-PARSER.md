@@ -3,8 +3,8 @@ name: Template parser, expression language, and section splitting
 kind: unit
 status: verified
 framework: go test
-verified_at: '2026-11-21T19:12:59.382Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:13:22.097Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 connections:
   - FILE-PARSER
   - FILE-PARSER-SECTIONS
@@ -111,7 +111,7 @@ loosening one fails a test on purpose.
   `MaxDepth` 5 and -1 behave as set, the wrapped `Parse` has no limit),
   `TestHostScannerEdges`, `TestHostLiftUnclosedBracesIsLinear`.
 - **Corpus proof** (`TestCorpusExpressionsParse`): every `.pzl` the monorepo ships
-  or tests with (examples, scaffold templates, pieces registry and demo, DevTools
+  or tests with (examples, the `puzzle init` starters, pieces registry and demo, DevTools
   panel, runtime fixtures, codegen and check goldens) must yield a tree at every
   expression position. Skips outside the monorepo.
 - **Time budgets** (`perf_test.go`, best of three, skipped under `-short`, 3× when
@@ -121,7 +121,7 @@ loosening one fails a test on purpose.
   locally; rerun idle before reading it as a regression.
 - Composition markers are unique per render path (`slot_paths_test.go`); the
   nesting scan counts exactly for well-formed input and treats `{#let}` as void
-  (`depth_test.go`, `TestLetIsVoidForDepth`); an inline SVG may start with a BOM
+  (`depth_test.go`; `TestLetIsVoidForDepth` in `host_test.go`); an inline SVG may start with a BOM
   (`TestScanSVGFile`); lowercase markers steer to the capitalized form; a second
   `{:else}` is named at the stray clause (`TestParseElseIfErrors`/`UnlessErrors`/
   `CaseErrors`, `TestParseErrorPositions`).

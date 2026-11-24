@@ -1,7 +1,7 @@
 ---
 name: "D20 — `<puzzle-view>` element for views/layouts only; reusable components render inline"
 status: verified
-verified_at: '2026-11-21T18:53:41.145Z'
+verified_at: '2026-11-24T18:05:31.213Z'
 connections:
   - COMPONENT-CODEGEN
   - COMPONENT-VIEW-MANAGER
@@ -9,7 +9,7 @@ connections:
 code_refs:
   - client-runtime/views/viewManager.js
   - client-runtime/ssg/serialize.js
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D20 — `<puzzle-view>` element for views/layouts only; components render inline

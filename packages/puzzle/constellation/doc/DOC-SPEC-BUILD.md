@@ -13,14 +13,8 @@ connections:
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
   - DECISION-D76-CLI-UPGRADE
   - DECISION-D194-VITEST-PLUGIN
-verified_at: '2026-11-21T19:10:06.943Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
-notes:
-  - kind: verified
-    text: >-
-      Review 2026-11-08 F5 B2: §36 static kernel sentence corrected — only a marked page
-      skipEnter()s the whole chain; an unmarked `prerender: false` page follows the router's
-      initial-nav rule (topmost view plays in). Pinned by static-kernel.test.js; npm test 3298/3298.
+verified_at: '2026-11-24T18:02:16.140Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 The contract for the toolchain: the CLI surface, dev HMR and build-error reporting, the `hybrid`/`static` output modes, update notification and `puzzle upgrade`, interactive `puzzle init`, the `/testing` utilities, the `--fixtures` switch, the DevTools bridge, code splitting and production names, and `puzzle check`. See [[DOC-SPEC]] for the section index.

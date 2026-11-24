@@ -14,13 +14,12 @@ notes:
   - kind: gotcha
     text: >-
       Strictness is `strictHash := hash && cfg.Build.HashNames != nil` (build.go): only an explicit
-      `true` with hashing actually on is strict. Keying it on "the key was written" alone made `{
-      splitting: true, hashNames: false }` strict too, because splitting still enters rewriteShell
-      for preloads, so a stale `/app.css` link failed the build that the opt-out should have left
-      lenient (review F7-B1, 2026-11-08). `TestStaleShellAssetOnlyFailsExplicitHash` has an
-      `explicit false with splitting` row.
-verified_at: '2026-11-21T18:57:28.823Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+      `true` with hashing on is strict. `{ splitting: true, hashNames: false }` still enters
+      rewriteShell for its preloads and must stay lenient, so a stale `/app.css` link there does not
+      fail the build. `TestStaleShellAssetOnlyFailsExplicitHash` has an `explicit false with
+      splitting` row.
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D181 — Hashed production output names and modulepreload

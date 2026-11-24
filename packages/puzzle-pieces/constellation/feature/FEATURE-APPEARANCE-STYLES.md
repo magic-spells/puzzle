@@ -21,13 +21,10 @@ notes:
       result unchanged. The demo index.html inline copy was re-synced byte for byte.
   - kind: state
     text: >-
-      2026-11-08 review fix P11-B3 (feat/0.10-pieces-slider-editor): appearance-picker's style group
-      always keeps one tab stop. With `system={false}` and a null/omitted `mode`, no tile matched
-      `currentKey`, so every tile got tabindex -1 and the radiogroup was unreachable by Tab. The
-      roving tabindex now falls back to the first option when the current key is not among the
-      options; aria-checked stays honest (nothing checked). Verified in Chromium on
-      AppearancePickerDoc: after clicking System in the second group, the system={false} group reads
-      dark:0, others -1.
+      appearance-picker's style group always keeps one tab stop. When the current key is not among
+      the options (`system={false}` with a null or omitted `mode`), the roving tabindex falls back
+      to the first option, so the radiogroup stays reachable by Tab; aria-checked stays honest
+      (nothing checked).
 ---
 
 # Appearance styles — Cool scheme, Dark/Dim/Mixed/Light, picker previews

@@ -7,8 +7,8 @@ summary: Browser/prerender resolution aliases, targets, defines, and shared opti
 connections:
   - COMPONENT-ESBUILD-PLUGIN
   - DECISION-D160-SPA-CODE-SPLITTING
-verified_at: '2026-11-21T18:49:58.010Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:02:16.140Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 notes:
   - kind: gotcha
     text: >-

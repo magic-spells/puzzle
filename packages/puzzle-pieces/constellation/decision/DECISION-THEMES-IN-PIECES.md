@@ -7,37 +7,18 @@ connections:
   - FEATURE-THEMES
   - DECISION-COPY-IN-DISTRIBUTION
 notes:
-  - kind: state
-    text: >-
-      Pyramid smoke (2026-09-18, detached worktree, nothing committed): with the package's four
-      files swapped in for web/app/styles/pieces.css + themes/*.css and Pyramid's 85 app-only tokens
-      appended in a second @theme block, `puzzle check` is clean across 132 .pzl files. Pyramid's
-      own guards fail as expected and are the phase-2 change list: contrast-tokens.test.mjs expects
-      Pyramid-only names (--color-text etc.), appearance-tokens.test.mjs's palette-block regex stops
-      at the first `}` inside a comment-bearing block and expects `mixed`, check-theme.mjs
-      allow-lists literals by path. 34 of the 68 shared tokens carry different values in the package
-      (the re-tune), and the package adds --color-brand-on-tint, --color-danger-on-tint,
-      --color-border-dashed.
   - kind: decision
     text: >-
       pre-paint.js hands its <script> parameters to appearance.js: it sets
       `window.__puzzleAppearance = { key, scheme, mode }` (from data-key / data-default-scheme /
       data-default-mode, outside its try) and appearance.js seeds `config.storageKey` and
       `config.fallback` from it at import time; `configure()` still overrides. Without it, boot()
-      fell back to `{ default, null }` and stripped the default pre-paint painted (flash to the OS
-      mode), and a custom data-key without a matching configure() made boot() read the wrong key.
-      Rejected: requiring apps to call configure() mirroring the attributes (two places to keep
-      equal, undocumented). Tested in test/appearance.test.mjs (pre-paint then fresh-import boot in
-      the same fake DOM). The picker's manifest `themes: [dim, warm, void]` makes `add piece
-      appearance-picker` print `puzzle add theme dim warm void` (framework D171).
-  - kind: decision
-    text: >-
-      2026-10-21 (0.9.0): the palette list and the MODE axis here are superseded by
-      DECISION-SCHEMES-AND-STYLES — schemes default | cool | warm | void (dim.css renamed cool.css)
-      and styles dark | dim | mixed | light on data-theme (medium became dim; mixed is a real style:
-      light half + dark frame). Values now come from the Magic Spells Design System Figma grid. The
-      rest of this record (hand-written CSS, unanchored selectors, frozen token names, runtime
-      files) stands.
+      would fall back to `{ default, null }` and strip the default pre-paint painted (a flash to the
+      OS mode), and a custom data-key without a matching configure() would make boot() read the
+      wrong key. Rejected: requiring apps to call configure() mirroring the attributes (two places
+      to keep equal, undocumented). Tested in test/appearance.test.mjs (pre-paint then fresh-import
+      boot in the same fake DOM). The picker's manifest `themes: [cool, warm, void]` makes `add
+      piece appearance-picker` print `puzzle add theme cool warm void` (framework D171).
 ---
 
 # Themes live in pieces as hand-written CSS

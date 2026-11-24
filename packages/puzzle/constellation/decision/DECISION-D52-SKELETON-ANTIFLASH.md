@@ -11,10 +11,10 @@ connections:
   - DOC-PUZZLE-FILE
   - DOC-SPEC
   - DOC-SPEC-VIEW
-verified_at: '2026-11-21T18:53:41.145Z'
+verified_at: '2026-11-24T18:13:21.008Z'
 code_refs:
   - client-runtime/views/PuzzleView.js
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D52 — Skeleton anti-flash: opt-in `min-duration` hold; no error section
@@ -22,7 +22,8 @@ verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 A skeleton that appears for a few milliseconds reads as a flicker. The fix is an opt-in minimum display time, not a delay. See [[DOC-SPEC-VIEW]] §16.
 
 ## Decision
-- **Minimum display once shown.** `<puzzle-skeleton min-duration="300">`: once the skeleton has rendered, the loaded swap waits until it has been up that many ms; data arriving later swaps immediately. Refreshes during the hold update the pending model, and one swap happens at expiry with the latest data. Destroy cancels the hold. `loaded` flips at swap time. Absent = 0. The hold only engages when a skeleton actually rendered (a hybrid takeover never shows one, [[DECISION-D39-SKELETON]]).
+
+- **Minimum display once shown.** `<puzzle-skeleton min-duration="300">`: once the skeleton has rendered, the loaded swap waits until it has been up that many ms; data arriving later swaps immediately. Refreshes during the hold update the pending model, and one swap happens at expiry with the latest data. `share()` readers of a changed key do not wait for the swap: they re-run at the end of each commit. Destroy cancels the hold. `loaded` flips at swap time. Absent = 0. The hold only engages when a skeleton actually rendered (a hybrid takeover never shows one, [[DECISION-D39-SKELETON]]).
 - **`min-duration` is the section tag's only legal attribute** — a static unsigned integer. A dynamic or malformed value, or any other attribute, is a compile error. Codegen emits `Name.prototype.skeletonMinDuration = 300` only when the attribute is given; the runtime reads `this.skeletonMinDuration ?? 0`.
 - **No declarative error section (won't build).** A `data()` failure belongs to the real template (catch in `data()`, return an error model, render it with ordinary conditionals — [[DOC-PUZZLE-FILE]] shows the pattern) or, uncaught, to the app `errorView` ([[DECISION-D145-ERROR-BOUNDARIES]]). A skeleton-time error section could not even name the failure, since only `created()` state is readable there.
 

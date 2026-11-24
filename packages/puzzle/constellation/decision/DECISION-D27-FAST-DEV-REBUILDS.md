@@ -3,7 +3,7 @@ name: >-
   D27 — Fast dev rebuilds: direct CLI resolution, a warm Tailwind watcher, an esbuild incremental
   context
 status: verified
-verified_at: '2026-11-21T18:53:41.145Z'
+verified_at: '2026-11-24T18:13:21.008Z'
 connections:
   - COMPONENT-DEV-SERVER
   - COMPONENT-ESBUILD-PLUGIN
@@ -19,7 +19,7 @@ code_refs:
   - compiler/internal/styles/resolve.go
   - compiler/internal/styles/styles.go
   - compiler/internal/styles/watch.go
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D27 — Fast dev rebuilds: direct CLI resolution, warm Tailwind watcher, esbuild incremental context

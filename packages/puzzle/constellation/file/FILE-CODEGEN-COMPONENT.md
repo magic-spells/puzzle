@@ -9,12 +9,6 @@ connections:
   - DECISION-D180-COMPONENT-SLOT
 verified_at: '2026-11-21T18:49:58.010Z'
 verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
-notes:
-  - kind: state
-    text: >-
-      2026-11-08 codegen trims: getter aliases are numbered by count (__pzlComponentSelector0, 1,
-      …); the loop that skipped an alias the user's own source already spelled is deleted (unusual
-      input, owner rule), along with componentSelectorSource and hasComponentSlot.
 ---
 
 # component.go

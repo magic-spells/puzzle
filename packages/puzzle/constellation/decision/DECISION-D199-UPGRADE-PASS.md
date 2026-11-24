@@ -17,8 +17,8 @@ code_refs:
   - compiler/internal/codemod/testdata/
   - compiler/cmd/puzzle/checkcmd.go
   - compiler/internal/codegen/outletwarn.go
-verified_at: '2026-11-23T05:34:09.489Z'
-verified_sha: f90f22201ff6b00245f353d5f5f90bb7634bb963
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D199 — the 0.10 upgrade pass, `puzzle check --fix`
@@ -46,6 +46,10 @@ first release published for outside feedback, so its renames get one.
   on an un-upgraded app fails with the command that fixes it. `--fix`
   rewrites the files, then type-checks; with no TypeScript installed it says
   it skipped the type check and exits zero, since the fix did its job.
+- **A CLI across a breaking release from the project's install stops first.**
+  `check` and `check --fix` call `build.PairRuntime` before the pass
+  ([[DECISION-D202-CLI-RUNTIME-VERSION-PAIR]]), so code is never rewritten for
+  the wrong release.
 - **Idempotent.** Every rewrite produces a spelling no rule matches, so a
   second run reports nothing. The fixture tests run the pass twice.
 - **Which tag replaces a bare `<Slot/>` is decided by file kind** (D20):
@@ -77,9 +81,10 @@ first release published for outside feedback, so its renames get one.
   over an existing file) and imports of it follow.
 - **It reads `app/` and `tests/`** (`.pzl`, `.js`, `.mjs`, `.ts`), skipping
   `node_modules`, dotted files and folders, the public folder (the build
-  copies it to `dist` as it is) and `.d.ts` files. An error the pass hits,
-  such as a file it cannot read, write or rename, stops `puzzle check` with
-  that error.
+  copies it to `dist` as it is) and `.d.ts` files. That list is
+  `codemod.SourceFiles`, and the type check takes its `.pzl` files under
+  `app/` from the same list. An error the pass hits, such as a file it cannot
+  read, write or rename, stops `puzzle check` with that error.
 
 ## Alternatives rejected
 

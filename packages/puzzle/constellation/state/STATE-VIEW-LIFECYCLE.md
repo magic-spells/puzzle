@@ -64,8 +64,8 @@ transitions:
   - from: updating
     to: mounted
     action: >-
-      beforeUpdate() then patch then afterUpdate(); the previous tree stays on screen until the new
-      one commits
+      beforeUpdate() then patch, then the views that read a changed shared key re-run, then
+      afterUpdate(); the previous tree stays on screen until the new one commits
   - from: mounted
     to: preparing
     guard: a gated navigation reuses this instance as an ancestor
@@ -138,8 +138,8 @@ connections:
   - DECISION-D73-SCROLL-TRIGGER-ANIMATIONS
   - DECISION-D178-AFTERUPDATE-PREV
   - DECISION-D161-AUTO-FETCHING-FINDS
-verified_at: '2026-11-21T19:10:06.943Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # PuzzleView lifecycle machine

@@ -1,7 +1,7 @@
 ---
 name: The registry — source of truth
 kind: guide
-status: built
+status: verified
 connections:
   - PLAN-PROJECT
   - DIAGRAM-TOPOLOGY
@@ -12,71 +12,21 @@ connections:
 notes:
   - kind: state
     text: >-
-      0.10.0 (claude/remove-unneeded-refresh): every piece moved to the seed/derive/set state
-      pattern (CLAUDE.md "Piece conventions") now that setState() re-runs data() when data() read
-      the written key (framework D23). Render-feeding instance fields became state keys: Hamburger
-      `uncontrolledOpen`, Tree `expandedMap`, Sidebar `openMap` / `uncontrolledCollapsed` /
-      `flyoutIndex` / `flyoutPos`, VirtualList `windowStart`, Select `label`. The refresh() calls
-      left are deliberate and commented: Toaster's module-store subscription, Code's FLIP height
-      measure, the charts' ResizeObserver width measure (LineChart, AreaChart, BarChart), opening a
-      row that takes focus at once (MarkdownEditor/RichTextEditor link row and block menu), the
-      open-edge seeds in Command / Combobox / MultiSelect / TimePicker, placement and morph-top
-      corrections in the pickers, Sidebar's flyout clamp, and Kanban's keyboard move announcement.
+      Pieces follow the seed/derive/set state pattern (CLAUDE.md "Piece conventions"): setState()
+      re-runs data() when data() read the written key (framework D23), so render-feeding values are
+      state keys, not instance fields. The refresh() calls that remain are deliberate and commented:
+      Toaster's module-store subscription, Code's FLIP height measure, the charts' ResizeObserver
+      width measure (LineChart, AreaChart, BarChart), opening a row that takes focus at once
+      (MarkdownEditor/RichTextEditor link row and block menu), the open-edge seeds in Command /
+      Combobox / MultiSelect / TimePicker, placement and morph-top corrections in the pickers,
+      Sidebar's flyout clamp, and Kanban's keyboard move announcement.
   - kind: state
     text: >-
-      0.8.0, feat/piece-image-zoom: new `image-zoom` piece — a WRAPPER over @magic-spells/image-zoom
-      (floor ^0.1.0, the only published release), see COMPONENT-IMAGE-ZOOM. Registry manifest +
-      registry.json row, demo copy, ImageZoomDoc page, nav/routes entries, `@import
-      "@magic-spells/image-zoom/css" layer(components)` in demo/app/styles/styles.css, and
-      test/image-zoom-wrapper.test.js (wired into all.test.js). The image is a PROP, not a slot —
-      the component caches its single `<img>` child at connect and writes the transform into its
-      inline style, so the piece owns that element; a `src` change re-attaches the host so the
-      component re-measures.
-  - kind: state
-    text: >-
-      0.8.0 (feat/piece-split-text): new piece `split-text` — a wrapper over
-      @magic-spells/split-text, floor ^0.2.0, one file (SplitText.pzl), no registry deps. Adds the
-      `@magic-spells/split-text/css` import to demo/app/styles/styles.css and a docs page at
-      /components/split-text. See COMPONENT-SPLIT-TEXT: replay is a `play` TOKEN prop
-      (edge-triggered in afterUpdate → element.split(), plus reveal() for trigger="manual"), which
-      is also the only way a changed attribute is applied since the element observes none; the host
-      binds no `style` (the element writes the timing custom properties there itself).
-  - kind: state
-    text: >-
-      2026-09-21 (0.8.0, chore/morph-engine-0.4.2): the `@magic-spells/morph-engine` floor moved
-      ^0.1.2 → ^0.4.2 in `demo/package.json` and in the three manifests that declare it
-      (date-picker, emoji-picker, emoji-picker-simple) plus their `registry.json` rows — one floor
-      per package, so all four had to move together. Nothing in 0.2–0.4 was removed or renamed, so
-      the pieces' surface (`new MorphEngine({ revealAt, lockScroll })`, `show({ from, to, display
-      })`, `hide()`, `on('shown'|'hidden'|'reveal'|'unreveal')`, `state`, `destroy()`) is untouched;
-      the new options (`cloneFit`, `handoff`, `container`) are all opt-in. Two 0.4.x fixes are why
-      the floor is worth raising for this registry: 0.4.1 normalizes computed colors to `rgba()` at
-      capture, which fixes the blob painting an opaque WHITE HAIRLINE border for the whole flight
-      whenever a source uses a Tailwind v4 opacity modifier (`border-border/60` serializes as
-      `oklab(L a b / α)`) on a dark theme — every morph piece styles its panel that way, so every
-      dark-mode flight was affected; it also makes `parseShadow` take the first VISIBLE OUTER shadow
-      instead of Tailwind's leading transparent placeholder rings. 0.4.2 adds a `container` option
-      so a blob flying into an open `showModal()` dialog is appended inside that dialog's subtree
-      rather than painted under the browser top layer. NOT adopted here and not needed today:
-      DatePicker and both emoji pickers morph into popovers, the docs SearchDialog's blob lands in
-      `document.body` at z-index 9999 and stays visible for the whole flight, and the Dialog piece
-      does not use morph-engine at all (its "Morphing dialogs" docs section points at Sheet, which
-      owns that flight internally). Revisit `container` only if a piece ever morphs into a real
-      `showModal()` dialog. Smoked on 3074 in light and dark: blob visible mid-flight with a
-      correctly themed dark border, no console errors.
-  - kind: state
-    text: >-
-      0.8.0 (feat/spinner-variants): `spinner` gains a `variant` prop (ring default + ticks, trace,
-      dots, snap, spark, heartbeat) and a new piece `shimmer-text` lands (101 pieces). Both are
-      CSS-only and carry their keyframes in their own `<style>` block — the pieces guide's second
-      sanctioned `<style>` exception, see DECISION-CSS-ONLY-MOTION. Manifests, registry.json rows,
-      demo copies, SpinnerDoc rewrite, new ShimmerTextDoc + nav/routes, README count, and
-      test/loading-pieces.test.js (wired into all.test.js). COMPONENT-SPINNER and
-      COMPONENT-SHIMMER-TEXT hold the per-design notes.
-  - kind: state
-    text: >-
-      0.8.0 adds `hamburger` (PR #148) — registry now 102 pieces; README count bumped. See
-      [[COMPONENT-HAMBURGER]].
+      date-picker, emoji-picker and emoji-picker-simple pin `@magic-spells/morph-engine@^0.4.2`.
+      0.4.1 normalizes captured colours to `rgba()`; without it a Tailwind v4 opacity-modified
+      border (`border-border/60`, serialized as `oklab(…)`) paints a white hairline on dark themes
+      for the whole flight. 0.4.2's `container` option is unused because no piece morphs into a
+      `showModal()` dialog; revisit it if one does.
   - kind: gotcha
     text: >-
       Every item-form `{#for}` row needs a key. With no `key={ … }` on the row root the runtime keys
@@ -95,84 +45,39 @@ notes:
       for each loop name), and on stale allow-list entries.
   - kind: state
     text: >-
-      2026-11-08 review fixes on feat/0.10-pieces-editor-kanban (pieces without their own card):
-
-      - RichTextEditor: an external value reset is kept off the undo stack (setMeta addToHistory
-      false). Link with a bare caret inserts linked text in both chromes. Links no longer get an
-      invented target="_blank" (Link HTMLAttributes target: null).
-
-      - RichTextEditor alignment: alignments are left/center/right only, so a pasted justify parses
-      to left, which is what the doc stores. The align shortcuts are swallowed when `tools` omits
-      'align'.
-
-      - RichTextEditor placeholder: one "visually empty" predicate (blankDoc: a single empty
-      textblock) drives both the placeholder and the blocks "/" hint, so the two never overlap.
-
-      - AspectRatio uses CSS `aspect-ratio` instead of the padding-bottom box, so a max-w cap or a
-      grid track keeps the ratio. The default `w-full` stays.
-
-      - MultiSelect: the listbox preventDefaults mousedown, so a pick no longer blurs the input.
-      Chip × buttons are tab stops with a focus ring. Chip keys use the value. min-w-16.
-
-      - PieChart: pointerleave is on each slice, so the tooltip clears off-slice.
-
-      - Checkbox: the disabled row's cursor is not-allowed; cursor-pointer and cursor-not-allowed
-      are now exclusive.
-
-      - PasswordField is documented as controlled only (claim 2: the bound value is re-applied on
-      every render), and the docs examples are now controlled.
+      Pieces with no card of their own: RichTextEditor keeps an external value reset off the undo
+      stack (`setMeta('addToHistory', false)`), renders links with no `target` (Tiptap's Link
+      defaults to `_blank`), supports left/center/right alignment only (a pasted justify parses to
+      left), and drives both the placeholder and the blocks "/" hint from one `blankDoc` predicate
+      so the two never overlap. AspectRatio uses CSS `aspect-ratio`, so a max-w cap or a grid track
+      keeps the ratio. MultiSelect keeps focus in its input on mousedown (`keepFocus`), so a pick
+      does not blur it. PasswordField is controlled only: every render re-applies `value`, so pair
+      it with `@change`.
   - kind: state
     text: >-
-      P06 review batch (feat/0.10-pieces-sidebar-carousel). Sidebar: the brand left-stripe marker on
-      the active submenu child is gone (owner's rule against coloured left-edge accent bars). The
-      submenu guide is a neutral `border-l` + `v.line` again, and the active child is shown only by
-      the row's `v.active` tint and weight. Inline and flyout children share `childLinkClass`, and
-      `overflow-hidden` is back on ROW_BASE. Raw sizes are now `w-15` / `min-w-40` / `ml-5.5`.
-      Carousel: the live region is `aria-live="off"` whenever `autoplay` is set; with one slide it
-      renders no dots and no arrows. ProgressRing, Rating, Sparkline: the default colour is
-      `[:where(&)]:text-brand` (Sparkline: `text-chart-1`), which has zero specificity, so any text
-      colour in `class` wins. No retint regex remains (Tabs uses the same `[:where(&)]` idiom).
-      DataTable: the demo copy is synced to the registry's 16cb42a7 header token.
+      Sidebar marks the active submenu child only with the row's `v.active` tint and weight, never a
+      coloured left stripe; the submenu guide is a neutral `border-l` in `v.line`. ProgressRing and
+      Rating set their default colour as `[:where(&)]:text-brand` (Sparkline
+      `[:where(&)]:text-chart-1`), which has zero specificity, so any text colour in `class` wins.
+      Tabs uses the same `[:where(&)]` idiom.
     sha: 0c470749
   - kind: state
     text: >-
-      Correction to the P06 Carousel note: the live region is `off` only while autoplay is actually
-      running (an interval is set, `paused` is false in data, and reduced motion is off). When hover
-      or focus pauses it, or reduced motion disables it, the region is `polite`, so a keyboard
-      user's Next still announces. Pause state lives in data (`paused`), written through `_pause()`,
-      which refreshes on change. It is no longer the `_paused` field.
+      Carousel's live region is `off` only while autoplay is actually running (`autoplay` > 0, not
+      `paused`, reduced motion off). When hover or focus pauses it, or reduced motion disables it,
+      the region is `polite`, so a keyboard user's Next still announces. Pause state is the `paused`
+      data key, written through `_pause()`. With one slide the carousel renders no dots and no
+      arrows.
     sha: a52e0c59
   - kind: state
     text: >-
-      2026-11-08 (feat/0.10-pieces-select-toast, review P08-Q1): demo-copy parity is ONE test,
-      test/registry-parity.test.js (~22 lines). It walks registry.json (every `files` entry of every
-      piece, family directories included) plus registry/lib/*.js and asserts the list of drifted
-      [source, copy] pairs is empty, so a new piece is covered with no test edit. It replaced the
-      eight hand-listed *-parity suites (337 lines: sheet, sidebar, dropdown-family,
-      collapsible-family, select-family, layout-family, rich-text, markdown), which skipped every
-      single-file piece and so missed the DataTable drift; the select ENOENT guard for the pre-0.7.0
-      flat Select.pzl was dropped as a migration leftover. Eight other suites still carry an inline
-      byte-compare (calendar-snippet, chart-math, hamburger, image-zoom-wrapper, language-switcher,
-      loading-pieces, puzzle-lang, split-text-wrapper) — now redundant, left for their owners to
-      trim.
-  - kind: state
-    text: >-
-      2026-11-08 (feat/0.10-pieces-select-toast, review P08/P10) piece fixes with no card of their
-      own: toast.js — the 66-line DismissTimer class is a ~20-line closure (no run token, no
-      _duration; it needs no fired state because firing calls dismiss(), which drops it), and a
-      store-level `paused` flag set by pauseAll/resumeAll means a toast that arrives while the stack
-      is hovered starts paused (P08-B5). Keyboard-focus pause (P08-B6) NOT built: it exceeds the
-      +3-line budget, and with one flag a focused toast dismissed by Enter fires no focusout, which
-      would leave every later toast paused. Stepper is CONTROLLED only — the uncontrolled clickable
-      mode could never move (P08-B11). Avatar/KanbanCard/ChatMessage initials discs are hsl(hue 45%
-      32%) so white initials pass AA on every hue (P08-B12). Badge outline uses ring-1 ring-inset
-      (no layout box), so all variants are 20px (P08-B13). NumberField step results round to
-      precision ?? 12 (P08-B8). EmojiPicker/EmojiPickerSimple morph panel is left-1/2 -ml-36,
-      centred on the trigger, still no horizontal clamp (P08-B4). TimePicker: one Escape fires @hide
-      once (column handler removed; the panel's onEscape covers it) and dead panelStyle is gone
-      (P10-B2/Q2). Progress binds false, not undefined, for absent aria-valuenow/aria-label and
-      shows no "0%" while indeterminate (P10-B4). ScrollArea min-h-6/min-w-6 (P10-Q4); Textarea
-      drops its dead child text (P10-Q7).
+      Toast: the store has one `paused` flag (pauseAll/resumeAll), so a toast that arrives while the
+      stack is hovered starts paused. Pausing on keyboard focus is deliberately not built: with one
+      flag, a focused toast dismissed by Enter fires no focusout and would leave every later toast
+      paused. Stepper is controlled only. Badge's outline variant uses `ring-1 ring-inset` (no
+      layout box), so every variant is 20px tall. NumberField's step buttons round to `precision ??
+      12`, which removes 0.1 + 0.2 noise. The EmojiPicker and EmojiPickerSimple morph panels are
+      centred on the trigger (`left-1/2 -ml-36`) with no horizontal clamp.
   - kind: state
     text: >-
       Each registry check has one owner. test/registry-parity.test.js byte-compares every demo copy.
@@ -181,6 +86,8 @@ notes:
       registry.json mirror or "exists on disk" check; add those to the owner instead. A new suite
       needs no wiring: `npm test` runs every test/*.test.js and test/*.test.mjs file once.
     sha: f90f22201ff6b00245f353d5f5f90bb7634bb963
+verified_at: '2026-11-24T18:13:21.786Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # The registry — source of truth
@@ -203,7 +110,7 @@ The manifest schema and per-field meaning live in CLAUDE.md; the load-bearing ru
 - `files` copy to `targetDir` (default `app/components/ui/`).
 - `registryDependencies` are resolved **transitively**: `lib/*.js` → `app/lib/`, sibling pieces (e.g. `date-picker` → `calendar`) → their own `targetDir`.
 - `dependencies` are **real npm packages, plain JS only** — `.pzl` never appears there. The morph pieces (DatePicker, EmojiPicker, EmojiPickerSimple) list `@magic-spells/morph-engine`.
-- Each `dependencies` entry is an npm INSTALL SPEC carrying a semver **floor**, not a bare package name: `"@magic-spells/collapsible-content@^1.2.0"`. The floor is the version the piece was built and demoed against, so it must equal what `demo/package.json` installs; one floor per package registry-wide. `puzzle add piece` prints the spec verbatim, which is what stops a wrapper from resolving against an npm `latest` older than the element it wraps (D169 in the framework plan — 0.7.0's `add piece accordion` installed collapsible-content 1.1.1 and lost `<collapsible-group>`). The CLI still accepts a bare name so third-party registries keep working; nothing here may ship one, and `test/registry-deps.test.js` enforces both that and the demo agreement.
+- Each `dependencies` entry is an npm INSTALL SPEC carrying a semver **floor**, not a bare package name: `"@magic-spells/collapsible-content@^1.2.0"`. The floor is the version the piece was built and demoed against, so it must equal what `demo/package.json` installs; one floor per package registry-wide. `puzzle add piece` prints the spec verbatim, which is what stops a wrapper from resolving against an npm `latest` older than the element it wraps (D169 in the framework plan). The CLI still accepts a bare name so third-party registries keep working; nothing here may ship one, and `test/registry-deps.test.js` enforces both that and the demo agreement.
 - `styles` lists the stylesheets a wrapper REQUIRES, in load order (`"@magic-spells/dialog-panel/css"`). `puzzle add piece` prints one `@import "<spec>" layer(components);` line per entry and never edits `styles.css`. dialog-panel is a peer of Sheet and BottomSheet, so they list its sheet before their own. Only the piece that installs a package lists its sheet: the dropdown family (DropdownMenu, Popover, HoverCard, …) gets dropdown-panel's through `registryDependencies`. An optional sheet such as a package's `/css/effects` is not listed; the piece's file header names it. `test/registry-deps.test.js` checks that each style's package is in the same manifest's `dependencies`, that the demo imports it the same way, and that a piece installing a package whose sheet the demo imports lists that sheet.
 - `description` is reused verbatim as the docs subtitle, so it must read as one clean sentence.
 
@@ -214,13 +121,13 @@ The manifest schema and per-field meaning live in CLAUDE.md; the load-bearing ru
 ## theme/pieces.css is the token source
 
 
-Every piece styles itself exclusively through the semantic utilities the `@theme` tokens generate (`bg-surface`, `text-ink`, `border-border`, `bg-brand`, `text-danger`, shell roles `bg-bar` / `bg-rail` / `bg-surface-panel`, …) — no hex inside components. Since 2026-09-18 ([[DECISION-THEMES-IN-PIECES]], [[FEATURE-THEMES]]), reshaped 2026-10-21 into four schemes × four styles ([[DECISION-SCHEMES-AND-STYLES]], [[FEATURE-APPEARANCE-STYLES]]), `registry/theme/` holds **four hand-written palette files and the runtime**:
+Every piece styles itself exclusively through the semantic utilities the `@theme` tokens generate (`bg-surface`, `text-ink`, `border-border`, `bg-brand`, `text-danger`, shell roles `bg-bar` / `bg-rail` / `bg-surface-panel`, …) — no hex inside components. Themes live in pieces ([[DECISION-THEMES-IN-PIECES]], [[FEATURE-THEMES]]) as four schemes × four styles ([[DECISION-SCHEMES-AND-STYLES]], [[FEATURE-APPEARANCE-STYLES]]), so `registry/theme/` holds **four hand-written palette files and the runtime**:
 
 - `pieces.css` — the default palette: `:root { color-scheme: light dark }` + `[data-theme]` color-scheme blocks (light and mixed → light, dark and dim → dark), the Tailwind v4 `@theme` block where every token is a `light-dark(light, dark)` pair, a `[data-theme='dim']` block (only the tokens that differ from dark), a `[data-theme='mixed']` block (exactly the frame roles, at their dark values), and a `[data-scheme='default']` restatement. Line 2 is the CLI's installed-detection marker — do not reword it.
-- `cool.css`, `warm.css`, `void.css` — every token restated inside `[data-scheme='x']`, plus that scheme's dim and mixed blocks. Inert until `data-scheme` selects them. (`cool.css` was `dim.css` before 0.9.0.)
+- `cool.css`, `warm.css`, `void.css` — every token restated inside `[data-scheme='x']`, plus that scheme's dim and mixed blocks. Inert until `data-scheme` selects them. The runtime reads a stored `dim` scheme as `cool`.
 - `appearance.js` (export `./appearance`) and `pre-paint.js` (export `./pre-paint`); `registry.json` lists `themes` (`{ name, file, label, description }`) and `modes` (the styles).
 
-Two attributes drive it: `data-scheme` = palette, `data-theme` = style (`dark | dim | mixed | light`; the runtime field is still called `mode`). Selectors are unanchored so any element can scope a subtree. The files ARE the source of truth (no generator, no JSON); `test/themes.test.mjs` holds the four to one identical token set and the dim/mixed block shapes, and `test/contrast.test.mjs` holds every palette × style to WCAG 2.2 AA over the pairs in `test/lib/roles.mjs`. Token NAMES are what Pyramid and Sites already use and are frozen. Consumers import the package exports (or copy the files) after `@import "tailwindcss"`.
+Two attributes drive it: `data-scheme` = palette, `data-theme` = style (`dark | dim | mixed | light`; the runtime field is called `mode`). Selectors are unanchored so any element can scope a subtree. The files ARE the source of truth (no generator, no JSON); `test/themes.test.mjs` holds the four to one identical token set and the dim/mixed block shapes, and `test/contrast.test.mjs` holds every palette × style to WCAG 2.2 AA over the pairs in `test/lib/roles.mjs`. Token NAMES are what Pyramid and Sites already use and are frozen. Consumers import the package exports (or copy the files) after `@import "tailwindcss"`.
 
 ## lib/ convention
 

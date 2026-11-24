@@ -12,58 +12,51 @@ connections:
 notes:
   - kind: decision
     text: >-
-      2026-10-21, Cory: "the delete buttons should always be the darker red with the white text on
-      all color schemes". There are three new CONSTANT tokens: `--color-danger-solid: #d11f1f`,
-      `--color-danger-solid-hover: #a41616` and `--color-danger-solid-ink: #ffffff`. They have the
-      same values in every scheme and style, with no light-dark(), and no dim or mixed block
-      overrides them. Each palette block states them (pieces.css @theme plus the
-      [data-scheme='default'] restatement, and cool/warm/void), as the token-set parity rule
-      requires. Every solid danger fill now uses them: Button `destructive`, SplitButton Action/Menu
-      `destructive`, the AlertDialog destructive confirm, the Popconfirm danger confirm, and the
-      delete buttons in the Dialog, Sheet and BottomSheet docs. `--color-danger`, `-dark`, `-ink`
-      and `-on-tint` stay per-scheme, for danger text, outlines, tints and indicator fills (Meter,
-      Timeline). contrast.test.mjs measures danger-solid-ink on danger-solid (5.35:1) and on
-      danger-solid-hover (7.76:1) in all 16 cells. This matches Pyramid 656aa2f6. The rejected
-      alternative was a dark-half pair: dark's #ef4444 with near-black text, whose hover went
-      LIGHTER (#f87171).
+      Delete buttons are always the darker red with white text, in every scheme. Three CONSTANT
+      tokens carry it: `--color-danger-solid: #d11f1f`, `--color-danger-solid-hover: #a41616` and
+      `--color-danger-solid-ink: #ffffff`, with the same values in every scheme and style (no
+      light-dark(), no dim or mixed override). Each palette block still states them (pieces.css
+      @theme plus the [data-scheme='default'] restatement, and cool/warm/void), as the token-set
+      parity rule requires. Every solid danger fill uses them: Button `destructive`, SplitButton
+      Action/Menu `destructive`, the AlertDialog destructive confirm, the Popconfirm danger confirm,
+      and the delete buttons in the Dialog, Sheet and BottomSheet docs. `--color-danger`, `-dark`,
+      `-ink` and `-on-tint` stay per-scheme, for danger text, outlines, tints and indicator fills
+      (Meter, Timeline). contrast.test.mjs measures danger-solid-ink on danger-solid (5.35:1) and on
+      danger-solid-hover (7.76:1) in all 16 cells. The rejected alternative was a dark-half pair:
+      dark's #ef4444 with near-black text, whose hover went LIGHTER (#f87171).
   - kind: decision
     text: >-
-      2026-10-22, quiet buttons. Cory: "the blue buttons really stand out and when there are a lot
-      of buttons on the screen it's too much to look at" and "we still want these buttons to be a
-      little different from the bg color so they stand out". Button fills no longer use brand.
-      primary = `bg-ink text-page hover:bg-ink/85`; secondary = `bg-ink/6 text-ink hover:bg-ink/10`
-      (an ink TINT, not a surface token, so it is a visible step off page, panel and raised in every
-      style; surface-sunken nearly vanished in dark); outline = `border border-border-strong
-      text-ink hover:bg-ink/6` (transparent so it sits on any ground; border-border was too faint
-      without the old bg-surface fill); ghost hovers on the same 6% tint; destructive unchanged. No
-      new tokens. Copies of the recipes changed with it: SplitButton Action/Menu, ButtonGroup,
-      CopyButton, AlertDialog and Popconfirm confirm buttons, the DropdownMenu `button` trigger,
-      Pagination's current page (now ink) and its hovers. Brand stays for focus rings, selection,
-      links, active indicators (Tabs `buttons` selected tab, Calendar selected day, Stepper
-      complete, Checkbox/Switch/Radio, chip remove hovers were left on brand as selection/badge
-      uses). contrast.test.mjs measures, per cell: page on ink and on ink/85 over
+      Quiet buttons: brand fills stood out too much on a screen full of buttons, but buttons must
+      still differ a little from the ground. Button fills do not use brand. primary = `bg-ink
+      text-page hover:bg-ink/85`; secondary = `bg-ink/6 text-ink hover:bg-ink/10` (an ink TINT, not
+      a surface token, so it is a visible step off page, panel and raised in every style); outline =
+      `border border-border-strong text-ink hover:bg-ink/6` (transparent so it sits on any ground);
+      ghost hovers on the same 6% tint; destructive uses the danger-solid tokens. No new tokens. The
+      same recipes are copied into SplitButton Action/Menu, ButtonGroup, CopyButton, AlertDialog and
+      Popconfirm confirm buttons, the DropdownMenu `button` trigger, and Pagination's current page
+      (ink) and its hovers. Brand stays for focus rings, selection, links and active indicators
+      (Tabs `buttons` selected tab, Calendar selected day, Stepper complete, Checkbox/Switch/Radio,
+      chip remove hovers). contrast.test.mjs measures, per cell: page on ink and on ink/85 over
       page/surface/raised ≥4.5; ink on ink/6 and ink/10 ≥4.5; ink/6 vs its ground ≥1.08:1 and ≥0.03
-      OKLCH L (observed min 1.10 and 0.036, Cool light). Gotcha: the tint and primary are panel-ink
-      based, so a Button drawn on the mixed style's dark frame paints dark-on-dark; anything on the
-      frame must use bar-*/rail-* utilities. Pyramid's controls.css and the Figma library follow.
+      OKLCH L. Gotcha: the tint and primary are panel-ink based, so a Button drawn on the mixed
+      style's dark frame paints dark-on-dark; anything on the frame must use bar-*/rail-* utilities.
   - kind: decision
     text: >-
-      2026-10-22: the button family's disabled look mirrors Pyramid's house CSS:
-      `disabled:opacity-50 disabled:cursor-not-allowed` (no `disabled:pointer-events-none`), and
-      every hover is written `not-disabled:hover:…` (compiles to `:not(:disabled):hover`). Why:
-      pointer-events-none killed the `title` tooltip, so apps wrapped disabled buttons in `<span
-      title>`. Applies to button, button-group, split-button Action, copy-button, alert-dialog and
-      popconfirm buttons, pagination prev/next, toggle, toggle-group, toolbar items. Non-<button>
-      triggers (split-button Menu, dropdown-menu Trigger) cannot match :disabled and are unchanged.
+      The button family's disabled look is `disabled:opacity-50 disabled:cursor-not-allowed` (no
+      `disabled:pointer-events-none`), and every hover is written `not-disabled:hover:…` (compiles
+      to `:not(:disabled):hover`). pointer-events-none would kill the `title` tooltip and force apps
+      to wrap disabled buttons in `<span title>`. It applies to button, button-group, split-button
+      Action, copy-button, alert-dialog and popconfirm buttons, pagination prev/next, toggle,
+      toggle-group and toolbar items. Non-<button> triggers (split-button Menu, dropdown-menu
+      Trigger) cannot match :disabled and do not use it.
   - kind: state
     text: >-
-      2026-11-08 (feat/0.10-pieces-dialog-chat, review P09-Q6 / P13-Q8): the token contract gains
-      one shadow, `--shadow-kbd: inset 0 -1px 0 var(--color-border)` (the keycap bottom seam used by
-      Kbd, DropdownMenu.Shortcut and Menubar.Shortcut). It is declared in pieces.css (@theme + the
-      [data-scheme='default'] restatement), cool/warm/void, test/lib/roles.mjs and demo
-      tokenNames.js. Existing token names are unchanged. An app whose pieces.css predates the token
-      renders keycaps without the seam until it runs `puzzle add theme default`, and `add piece`
-      prints that stale-theme hint.
+      The token contract includes one shadow, `--shadow-kbd: inset 0 -1px 0 var(--color-border)`
+      (the keycap bottom seam used by Kbd, DropdownMenu.Shortcut and Menubar.Shortcut). It is
+      declared in pieces.css (@theme + the [data-scheme='default'] restatement), cool/warm/void,
+      test/lib/roles.mjs and demo tokenNames.js. An app whose pieces.css predates the token renders
+      keycaps without the seam until it runs `puzzle add theme default`, and `add piece` prints that
+      stale-theme hint.
 ---
 
 # Appearance is four schemes × four styles

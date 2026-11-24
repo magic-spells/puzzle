@@ -10,12 +10,12 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-TEMPLATE
   - TEST-TODOS-INTEGRATION
-verified_at: '2026-11-21T18:53:41.145Z'
+verified_at: '2026-11-24T18:13:21.008Z'
 code_refs:
   - client-runtime/views/ViewNode.js
   - client-runtime/views/listBlock.js
   - compiler/internal/codegen/listblock.go
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D58 — List keying: pk-aware auto-key, explicit key override, null-key warning

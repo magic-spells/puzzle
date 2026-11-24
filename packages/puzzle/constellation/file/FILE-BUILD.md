@@ -10,17 +10,9 @@ connections:
   - DECISION-D160-SPA-CODE-SPLITTING
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
   - DECISION-D153-PUZZLE-SCRATCH-DIR
-verified_at: '2026-11-21T18:49:58.010Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:02:16.140Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 notes:
-  - kind: state
-    text: >-
-      2026-11-08 trims: the "refusing to replace unexpected dist path" guard is gone (`outdir` is
-      always `filepath.Join(absRoot, "dist")`, so it could not fire); `build.FileExists` is gone
-      (callers use `fsutil.FileExists`); profile.go has one spelling per concept (`*PhaseProfile`,
-      `NewPhaseProfile`, `ProfileEnabled`, `.Phase`, `.Report`, no lowercase shims); every esbuild
-      error block calls `formatBuildErrors(prefix, errs)`; `prerenderOnlyArgs` returns `[]string`
-      only (marshalling a `[]string` cannot fail).
   - kind: state
     text: >-
       `cfg.Env` ([[DECISION-D190-CONFIG-ENV]]) rides `passContext.env` into both prerender passes
@@ -42,7 +34,7 @@ last good output ([[FLOW-BUILD]]).
   name only while splitting is on — an app that never opts in keeps its
   `public/chunks/`, which is why `chunks` is not in `reservedOutputNames`.
 - **Hashing** ([[DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD]]):
-  `hash := !dev && cfg.HashNames()`; static mode's discarded SPA entry stays fixed.
+  `hash := !opts.Development && cfg.HashNames()`; static mode's discarded SPA entry stays fixed.
   When `cfg.Build.HashNames` is nil (default-on, not explicit), the
   [[FILE-BUILD-SHELL]] pre-check runs before bundling and clears `hashEntry` /
   `hashStyles` for a file the public HTML cannot follow, with one warning each. An

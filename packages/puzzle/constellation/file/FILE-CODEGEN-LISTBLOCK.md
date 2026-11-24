@@ -12,9 +12,8 @@ verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: state
     text: >-
-      2026-11-08 codegen trims: isExplicitKeyAttr is now the single key-directive predicate;
-      codegen.go's hasKeyAttr is a loop over it. No list-block output changed (all D170 goldens
-      byte-identical).
+      `isExplicitKeyAttr` is the one key-directive predicate; `hasKeyAttr` in codegen.go loops over
+      it.
 ---
 
 # listblock.go

@@ -14,19 +14,14 @@ connections:
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-VIEW
   - DOC-SPEC-BUILD
-verified_at: '2026-11-23T03:17:08.026Z'
-verified_sha: f90f22201ff6b00245f353d5f5f90bb7634bb963
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 notes:
   - kind: state
     text: >-
-      2026-11-08 (feat/0.10-types-devtools, review F10 B1/A1): extension side trimmed.
-      puzzle-devtools content-script relay no longer caps reconnects (MAX_RECONNECTS=20 removed):
-      Chrome recycles an idle MV3 worker every ~30s and an open port no longer resets the timer, so
-      a quiet tab used to exhaust the cap after ~10 min and the panel went dark; a dead extension
-      context (chrome.runtime.id gone) still ends the loop, matching panel-glue's uncapped
-      reconnect. hook.onRequest() now returns nothing (its off() was never called by this bridge,
-      which already drops the return value per the DevtoolsHook typedef); the 'unregisters cleanly'
-      test went with it.
+      The extension's content-script relay reconnects with no retry cap: Chrome recycles an idle MV3
+      service worker about every 30 seconds, so a capped relay leaves a quiet tab's panel dark. Only
+      a dead extension context (`chrome.runtime.id` gone) ends the loop.
 ---
 
 # devtools.js

@@ -1,7 +1,7 @@
 ---
 name: D61 — URL/history/title commit atomically with the incoming mount
 status: verified
-verified_at: '2026-11-21T18:53:41.145Z'
+verified_at: '2026-11-24T18:13:21.008Z'
 connections:
   - DECISION-D19-NAVIGATION-COMMIT
   - DECISION-D28-ANIMATIONS
@@ -14,7 +14,7 @@ connections:
 code_refs:
   - client-runtime/router/router.js
   - client-runtime/router/modes.js
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D61 — URL/history/title commit atomically with the incoming mount
@@ -27,7 +27,7 @@ Location side effects (pushState/replaceState, memory stack, title, scroll-key s
 - **Sequential (default):** out animation and morph-leave finish → final token checks → commit. A navigation superseded or failed during the out phase touches no location state.
 - **Overlap (D56):** the leaver is pinned and its out starts without await, then the same synchronous commit.
 - **Params-only:** gated refreshes + token check → `#commitLocation` right before `#commitState`.
-- **Pop:** the browser already moved the URL; `#commitLocation` adds only the title (and the memory-mode index). A failed pop can leave the URL ahead of the view — no rollback.
+- **Pop:** the browser already moved the URL; `#commitLocation` adds only the title (and the memory-mode index). A failed pop puts the URL back: `#recoverFailedNavigation` rewrites the popped entry to the committed path with `replaceState`. A navigation started while a pop is still loading (a link clicked during a slow Back) inherits that repair.
 - **Initial navigation:** never pushes; the title is still set at commit.
 - **Scroll:** `#navigate` *measures* `{scrollX, scrollY}` at navigation start; `#commitLocation` *persists* it.
 - A synchronous push/replace/go from inside the commit window (e.g. from `mounted()`) is deferred through the single last-wins `#pendingPush` slot.

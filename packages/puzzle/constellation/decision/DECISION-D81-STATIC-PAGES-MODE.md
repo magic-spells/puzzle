@@ -1,7 +1,7 @@
 ---
 name: 'D81 — output: ''static'' is a true static site: no router, per-page mount modules, path-shaped hrefs'
 status: verified
-verified_at: '2026-11-21T18:53:41.145Z'
+verified_at: '2026-11-24T18:13:21.008Z'
 connections:
   - DECISION-D67-HYBRID-PRERENDER
   - DECISION-D01-SPA-ONLY
@@ -15,17 +15,14 @@ connections:
   - FILE-BUILD-PRERENDER-PAGES
   - TEST-PRERENDER-OUTPUT
   - FLOW-PRERENDER
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 notes:
   - kind: verified
     text: >-
-      "No router" holds in the shipped bytes again (2026-11-08, feat/0.10-static-router). A class
-      static block in router.js (D185) had pinned the whole Router into every static site's shared
-      chunk through the kernel's, SSG assembler's and i18n's path-helper imports; it is now a
-      tree-shakable static method. examples/static-docs shared chunk 25,606 → 18,452 gzip (−28%),
-      examples/i18n --static 29,182 → 21,586 gzip, and no page module or chunk contains
-      popstate/pushState/scrollRestoration. Guarded by the popstate-absent assertion in
-      tests/static-docs-example.test.js.
+      router.js must stay free of class static blocks and other module-level side effects: the
+      static kernel, the SSG assembler and i18n import its path helpers, so a side effect there pins
+      the whole Router into every static page's shared chunk. The popstate-absent assertion in
+      tests/static-docs-example.test.js guards it.
 ---
 
 # D81 — `output: 'static'`: a true static site
@@ -45,7 +42,7 @@ Other static-mode rules:
 - `prerender: false` writes an empty-target shell that still gets a data island and entry script — rendered fully client-side. The kernel sets its route title, and its topmost view plays its enter, as on an SPA's first navigation.
 - `config.storage` is ignored (a live object serializes to a dead `{}`), with a warning whenever the config names the key, so a `window`-guarded value that reads `undefined` at build time still warns; a direct `mountStatic({ storage })` caller still gets persistence.
 - Shadowed routes are still written (no router, no matching — D126); two routes declaring the same path skip the second with reason `duplicate`.
-- `staging/.puzzle-prerender` and `_puzzle` are reserved in public output (both modes).
+- `_puzzle` is reserved in public output (`checkStaticReserved`, shared by the one-shot and dev static builds); `.puzzle-prerender` is reserved in both prerender modes.
 - **Locale prefix routing** ([[DECISION-D177-LOCALE-URL-PREFIXES]]): every route is written once per locale (`dist/<locale>/…`, default locale at the root), each `WrittenPage` carrying its `locale`. A route's locale pages share one slug and one entry module (`uniqueEntryPages` takes the first per slug; a slug whose pages name different modules is an error). The kernel takes the page's locale from the URL prefix, then its table island, and wraps the stub with `localizeRouterStub` so hrefs carry the prefix. Default-locale pages (404 included) carry the inline first-visit redirect script (`ssg/redirect.js`) unless `i18n.detect: false`.
 
 ## Alternatives rejected

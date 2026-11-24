@@ -18,11 +18,9 @@ verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: state
     text: >-
-      2026-11-08 codegen trims: ident()'s refData arm calls compiler.noteImport (once-per-name
-      import-collision warning at the identifier's own line:col). Deleted dead code: exprFacts.merge
-      (no caller), refThis (parser + checkTemplateExprs reject `this`), verbatimChain's
-      refBinding/ViewNode arm (no scope ever binds ViewNode), sortedKeys (now
-      slices.Sorted(maps.Keys)). exprWriter and CheckWriter merged into one exported ExprWriter.
+      `ident()`'s `refData` arm calls `noteImport`, which warns once per name, at the identifier's
+      own line and column, when a template reads a name imported in `<script>`. `ExprWriter` is the
+      one writer interface, shared by the render emitter and `WriteCheckValue`.
 ---
 
 # lower.go

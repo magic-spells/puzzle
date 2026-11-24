@@ -30,8 +30,8 @@ connections:
   - DOC-TESTING
   - TEST-TODOS-INTEGRATION
   - DECISION-D173-CORE-SEMANTICS
-verified_at: '2026-11-21T19:10:06.943Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:02:16.140Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # Codegen emission and golden files

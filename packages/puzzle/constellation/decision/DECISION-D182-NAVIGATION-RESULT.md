@@ -19,8 +19,8 @@ notes:
       The in-flight slot is opened with PENDING (a real promise), so it is truthy during a
       navigation's synchronous start. Test for the latch: tests/router-navigation-result.test.js "a
       replace() whose constructor throws leaves nothing in flight".
-verified_at: '2026-11-21T18:57:28.823Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D182 — push()/replace() resolve a NavigationResult

@@ -7,8 +7,8 @@ summary: Cobra root, build/dev/preview commands, version surface, and error hand
 connections:
   - COMPONENT-COMPILER-CLI
   - DECISION-D160-SPA-CODE-SPLITTING
-verified_at: '2026-11-01T19:19:18.479Z'
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_at: '2026-11-24T18:02:16.140Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - compiler/cmd/puzzle/summary.go
 ---

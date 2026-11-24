@@ -12,8 +12,8 @@ connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
   - DOC-TESTING
-verified_at: '2026-11-21T22:33:06.881Z'
-verified_sha: c4c10f303caeac8050633ea434af17e4d3a75001
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - client-runtime/fixtures/index.js
   - client-runtime/fixtures/state.js

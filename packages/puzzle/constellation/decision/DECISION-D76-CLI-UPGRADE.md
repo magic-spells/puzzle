@@ -7,8 +7,8 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-BUILD
   - TEST-CLI-COMMANDS
-verified_at: '2026-11-23T21:17:35.592Z'
-verified_sha: 6e9f34cfcf702663b2c22300ef8f3ffa3090a74d
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - compiler/cmd/puzzle/main.go
   - compiler/cmd/puzzle/updatecheck.go

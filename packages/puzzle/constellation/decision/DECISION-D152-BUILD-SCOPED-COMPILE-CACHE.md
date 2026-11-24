@@ -16,8 +16,8 @@ connections:
   - DECISION-D81-STATIC-PAGES-MODE
   - DECISION-D154-STATIC-DEV-WARM-REBUILDS
   - DECISION-D155-ROUTE-LEVEL-INVALIDATION
-verified_at: '2026-11-21T18:57:28.823Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 notes:
   - kind: gotcha
     text: >-
@@ -40,7 +40,8 @@ every `{#svg}` per use site) once per pass, for identical results.
 ## Decision
 
 One `passContext` per build (`compiler/internal/build/passctx.go`) is the only
-way build code constructs a `*plugin.Plugin`. It shares:
+way a one-shot build constructs a `*plugin.Plugin` (`StaticWatchBuilder.newPlugin`
+is its long-lived analogue). It shares:
 
 - **The usage scan** — `plugin.ScanUsage` runs once; every pass gets the same
   immutable `Usage`, so `Define` maps and the formatter manifest match by

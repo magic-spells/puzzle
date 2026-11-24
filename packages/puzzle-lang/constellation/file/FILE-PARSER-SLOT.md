@@ -7,8 +7,8 @@ summary: >-
   Composition-marker validation: <Children>/<Outlet>/<Slot>/<Portal>/<Snippet> attribute shapes, call-site
   slot rules, and the D173 V13 per-render-path marker uniqueness pass
   (validateSlots/walkSlots/walkBranches).
-verified_at: '2026-11-21T19:12:59.382Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:13:22.097Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 connections:
   - FILE-PARSER-COMPONENT
   - TEST-COMPILER-PARSER

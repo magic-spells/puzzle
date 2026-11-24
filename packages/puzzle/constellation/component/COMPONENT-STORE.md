@@ -14,26 +14,17 @@ connections:
   - DECISION-D161-AUTO-FETCHING-FINDS
   - DECISION-D184-STORE-OBSERVE
   - DECISION-D189-AGENT-HOOKS
-verified_at: '2026-11-21T19:10:06.943Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 notes:
   - kind: state
     text: >-
-      2026-11-08 runtime trims (feat/0.10-runtime-trims; review F3-Q4/Q7/Q9). The never-wired
-      `storageKey` Store option is deleted (PuzzleApp never passed it and Store is not exported);
-      the persistence key is the constant 'puzzle-store'. Two apps with storage on one origin still
-      share that key: per-app keys are an open design question for Cory, not built. _load() is one
-      try/catch over getItem + JSON.parse + _hydrateAll; an unreadable or corrupt blob now warns in
-      dev (it was silent) and is still fail-soft. The stale `dead` field is gone from the
-      handle-context comment, and the orphaned DELETED_SAVE_MESSAGE JSDoc is gone from model.js (the
-      constant lives in adapter.js).
+      The persistence key is the constant 'puzzle-store', so two apps with storage on one origin
+      share it. Per-app keys are an open design question, not built.
   - kind: state
     text: >-
-      Correction to the PR #248 note: after the `_load()` single try/catch, an unreadable storage
-      read, unparseable JSON or a hydration throw all warn via an ungated `console.warn`, in every
-      build (not dev-only). Before #248 only a hydration throw warned; the other two returned
-      silently. Still fail-soft: nothing throws out of the constructor and the call stays behind `if
-      (this.storage)`.
+      `_load()` warns through an ungated `console.warn` in every build, not only in dev, for an
+      unreadable storage read, unparseable JSON or a hydration throw.
     sha: 9b9c7687
 ---
 

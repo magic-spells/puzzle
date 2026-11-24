@@ -6,24 +6,18 @@ language: go
 summary: AST-to-ViewNode render emission, handlers, loops, slots, Component selection and arity padding.
 connections:
   - COMPONENT-CODEGEN
-verified_at: '2026-11-21T18:49:58.010Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:02:16.140Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 notes:
   - kind: state
     text: >-
-      2026-11-08 codegen trims (feat/0.10-codegen-trims, review F6/V-codegen):
-      SLOT_TAG/SNIPPET_TAG/PORTAL_TAG imports are now emission flags
-      (usesSlot/usesSnippet/usesPortal set in emitNode), like the other six imports; the
-      hasSlot/hasSnippet/hasPortal pre-walks are gone. The <script>-import collision warning is
-      raised by the lowerer at the read's own position (noteImport), so the post-hoc __d. re-lexer
-      is deleted. Module stamp is emitted only when Options.ModulePath is set (no basename
-      fallback); the plugin leaves it empty in production SPA builds, so pzlc output and the codegen
-      goldens carry no stamp. tplEscape → escapeTemplateText (a CR in a mixed attribute is now
-      spelled \r). Also: singleRoot helper for the three single-root checks, inlineIf helper, one
-      range emitFor arm, hasKeyAttr over isExplicitKeyAttr, sp via strings.Repeat, compile()'s
-      duplicate Component-reserved check removed (emitComponentSlot keeps it, positioned at the
-      <Component> use). TodoItem.compiled.js hand fixture regenerated from the compiler and pinned
-      by TestGoldenTodoItem.
+      The `SLOT_TAG`/`SNIPPET_TAG`/`PORTAL_TAG` imports are emission flags
+      (`usesSlot`/`usesSnippet`/`usesPortal`, set in `emitNode`) like the other helper imports;
+      there is no pre-walk. The `<script>`-import collision warning is raised by the lowerer at the
+      read's own position (`noteImport`). The `Class.__pzlModule` stamp is emitted only when
+      `Options.ModulePath` is set, so a production SPA build, pzlc output and the codegen goldens
+      carry none. `TodoItem.compiled.js` is pinned by `TestGoldenTodoItem`, beside the Home and
+      Default goldens.
 ---
 
 # codegen.go

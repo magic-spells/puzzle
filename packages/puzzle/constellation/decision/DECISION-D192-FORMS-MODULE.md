@@ -17,8 +17,8 @@ code_refs:
   - types/forms.d.ts
   - compiler/internal/codegen/binding.go
   - tests/forms.test.js
-verified_at: '2026-11-21T18:57:28.823Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 ## Context
@@ -63,12 +63,13 @@ created() {
   `Model.validate(values, { fields })` and keeps the first message per field.
   It adds no rule syntax of its own.
 - **Errors appear late and clear early.** `errors` holds only what the user
-  should see: a field's error shows once that field is `touched` (blurred) or
-  after a submit attempt, and from then on it re-checks on every edit, so it
-  clears the moment the input is fixed. `valid` covers every field regardless.
+  should see: a field's error shows once that field is `touched` (the user
+  left it, or a submit attempt touched every field), and from then on it
+  re-checks on every edit, so it clears the moment the input is fixed. `valid`
+  covers every field regardless.
 - **`changed` and `dirty`** compare each value to its baseline (dates by time).
-  The baseline is `from` at creation, and the submitted values after a
-  successful submit.
+  The baseline is `from` at creation, and the values a successful submit sent,
+  so a field edited while the save ran stays changed.
 - **`submit(event, fn)`** prevents the default, marks every field touched,
   validates, and stops (focusing the first invalid control) when invalid.
   Otherwise it sets `submitting`, awaits `fn(values)` with a plain copy, and

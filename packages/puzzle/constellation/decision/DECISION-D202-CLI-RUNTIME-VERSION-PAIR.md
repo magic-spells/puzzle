@@ -2,7 +2,7 @@
 name: >-
   D202 — The CLI and the installed runtime are on the same side of a breaking release, or the CLI
   stops
-status: built
+status: verified
 code_refs:
   - compiler/internal/build/preflight.go
   - compiler/internal/update/update.go
@@ -22,6 +22,8 @@ connections:
   - DOC-USER-GUIDE
   - DOC-RELEASE-SURFACE
   - TEST-CLI-COMMANDS
+verified_at: '2026-11-24T18:13:45.766Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D202 — The CLI and the installed runtime pair

@@ -139,8 +139,8 @@ connections:
   - DECISION-D159-ROUTER-MODE-FACTORIES
   - DECISION-D182-NAVIGATION-RESULT
   - DECISION-D196-NAMED-ROUTES
-verified_at: '2026-11-21T19:10:06.943Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # Navigation state machine
@@ -222,7 +222,8 @@ mounted), and rollback (racier than never committing).
 
 - Entry checks: a push to the committed path is a no-op only when nothing is in flight;
   with a navigation in flight it supersedes (and rewrites the committed entry rather than
-  stacking a duplicate). A second push to the in-flight target returns the first push's
+  stacking a duplicate, unless the browser sits on a popped entry, where it is an ordinary
+  push). A second push to the in-flight target returns the first push's
   promise, so `await router.push(p)` always means "p landed or failed". Guard redirects are
   exempt from the join, or a guard redirecting to its own path would await itself.
 - A named target passed to `push()` or `replace()` resolves to a path before the machine

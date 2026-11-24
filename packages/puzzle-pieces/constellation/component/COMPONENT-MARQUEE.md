@@ -1,6 +1,6 @@
 ---
 name: Marquee wrapper over scrolling-content
-status: built
+status: verified
 framework: puzzle
 props:
   - name: direction
@@ -20,14 +20,14 @@ props:
 connections:
   - DECISION-WRAP-WEB-COMPONENTS
   - DOC-REGISTRY
+verified_at: '2026-11-24T18:13:21.786Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
-Single-file wrapper over `@magic-spells/scrolling-content` 2.1.0 (0.7.0,
-feat/select-marquee-quantity), replacing the 364-line port (its own rAF loop, clone
-rebuild in `afterUpdate`, drag, hover gate). Vertical `up`/`down` is DROPPED — upstream
-has no vertical mode and no call site used it; it is an upstream feature if wanted.
-`fade` is new (upstream had it). `paused` is deliberately not exposed: upstream reflects
-it and a binding would fight the patcher.
+Single-file wrapper over `@magic-spells/scrolling-content` 2.1.0. There is no vertical
+`up`/`down`: upstream has no vertical mode, so it is an upstream feature if wanted.
+`paused` is deliberately not exposed: upstream reflects it and a binding would fight the
+patcher.
 
 ## The piece pre-authors the track
 
@@ -37,16 +37,16 @@ patcher inserts and patches children where they already live. Without that, upst
 would relocate Puzzle-owned nodes two levels down and later inserts would land outside
 the track. The host must contain the track/item at connect time (Puzzle's normal order).
 
-## What went upstream (2.1.0)
+## What upstream provides (2.1.0)
 
 A MutationObserver on the source `<scrolling-item>` (`childList`, `characterData`,
-`subtree`, one-rAF coalesced) that drops every clone and refills — the port's
-`afterUpdate` rebuild, moved to where it belongs; public `rebuild()`; `data-clone` on
-clones (already `aria-hidden` + `inert`); a `/css` export detected on the host by a
-`--scrolling-content-styles` sentinel so the import-time `<style>` injection is skipped;
-`pointerenter`/`pointerleave` gated on `pointerType === 'mouse'` (a touch tap used to
-pause forever); the pre-upgrade hide rule split so pre-authored markup shows as a static
-row and old browsers without `:has()` keep the 2.0.0 behaviour.
+`subtree`, one-rAF coalesced) that drops every clone and refills; public `rebuild()`;
+`data-clone` on clones (also `aria-hidden` + `inert`); a `/css` export detected on the host
+by a `--scrolling-content-styles` sentinel so the import-time `<style>` injection is skipped
+(`puzzle add piece` prints that `@import` line); `pointerenter`/`pointerleave` gated on
+`pointerType === 'mouse'`, so a touch tap does not latch it paused; a pre-upgrade hide rule
+that shows pre-authored markup as a static row, while a browser without `:has()` keeps the
+host hidden until upgrade.
 
 ## Gotchas
 

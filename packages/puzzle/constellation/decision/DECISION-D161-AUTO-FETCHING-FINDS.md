@@ -15,8 +15,8 @@ connections:
   - DOC-DATASTORE
   - DOC-SPEC-DATA
   - DECISION-D193-SERVER-QUERIES
-verified_at: '2026-11-21T18:57:28.823Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - client-runtime/datastore/adapter.js
   - client-runtime/datastore/store.js
@@ -59,11 +59,11 @@ An awaited `loadOne` inside `data()` loops (its own upsert notifies the subscrip
 **Relationships never fault.** `belongsTo`/`hasMany` getters use local-only lookups that record the same subscription keys — no N+1 storms.
 
 **Read state** (adapter-owned WeakMap keyed by Store; the no-adapter bundle carries none):
-- In-flight dedup by `recordKey` identity (single records) or by type (collections).
+- In-flight dedup by `recordKey` identity for single records (`_faultOne`); one `_faultMany` dedups a collection by its type and a [[DECISION-D193-SERVER-QUERIES]] query by its canonical key.
 - A never-persisted negative LRU (`MAX_ABSENT` 1000). Only a normalized 404 `PuzzleAdapterError` records absence; network/5xx/401/403/shape errors reject the run and poison nothing. Explicit `loadOne` bypasses the negative cache and clears the requested id on success.
 - Only the automatic path rejects a response whose pk differs from the requested id; explicit `loadOne` accepts it (slug endpoints).
 - The codecs unwrap a handle before keying.
-- **LOADED vs EXHAUSTIVE** (`loaded` / `complete` sets; exhaustive ⊆ loaded). Any successful no-options `loadMany` (empty array included) marks LOADED. Only the endpoint-generated REST transport marks EXHAUSTIVE, so a `findOne` miss owes no request; an authored or dialect `loadMany` may be a paginated first page. Options-bearing loads mark nothing.
+- **LOADED vs EXHAUSTIVE** (`loaded` / `complete` sets; exhaustive ⊆ loaded). Any successful no-options `loadMany` (empty array included) marks LOADED, unless an `invalidate(type)` came after it was sent. Only the endpoint-generated REST transport marks EXHAUSTIVE, so a `findOne` miss owes no request; an authored or dialect `loadMany` may be a paginated first page. Options-bearing loads mark nothing.
 
 **Removal outranks reads that predate it.** `delete()` and `destroy()` record absence stamped with the next dispatch-counter value (the D138 sequence). A response for that identity whose read was dispatched before the removal is dropped before any `_upsert` side effect; a collection load keeps its other rows and still marks the type. A read dispatched after the removal clears absence normally. Re-creating the identity clears absence and inherits the stamp as its load generation. A hydrated absence carries the lowest stamp.
 
@@ -71,7 +71,7 @@ An awaited `loadOne` inside `data()` loops (its own upsert notifies the subscrip
 
 **Staleness governs both outcomes.** The token/destroyed/leaving check that discards a superseded run's result also discards its failure — nothing reaches D145, `errorView` or committed state.
 
-**Prerender** fetches at build time through the same loop; a non-404 fault failure fails the build naming the route. Node has no page origin: an absolute `apiURL` is fetched for real; a model with no `endpoint` and no read verb never faults (seed it in `beforeMount({ store })`); an app-relative URL fails with a diagnostic naming both remedies. The seam is global `fetch`, since an authored verb can hardcode a path. Static output transfers read state (`{ v, complete, loaded, absent }`) in the data-island envelope so `mountStatic` doesn't refetch; loaded-only state is enough to emit it; an older kernel reading `complete` alone stays correct. Hybrid transfers nothing (takeover re-runs `data()`). HMR snapshots carry read state, never in-flight promises.
+**Prerender** fetches at build time through the same loop; a non-404 fault failure fails the build naming the route. Node has no page origin: an absolute `apiURL` is fetched for real; a model with no `endpoint` and no read verb never faults (seed it in `beforeMount({ store })`); an app-relative URL fails with a diagnostic naming both remedies. The seam is global `fetch`, since an authored verb can hardcode a path. Static output transfers read state (`{ v, complete, loaded, absent }`, plus `queries` when any exist) in the data-island envelope so `mountStatic` doesn't refetch; any non-empty list is enough to emit it; an older kernel reading `complete` alone stays correct. Hybrid transfers nothing (takeover re-runs `data()`). HMR snapshots carry read state, never in-flight promises.
 
 ## Gotchas
 

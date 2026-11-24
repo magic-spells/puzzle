@@ -1,7 +1,7 @@
 ---
 name: "D24 — Compiled component name comes from the export default class declaration"
 status: verified
-verified_at: '2026-11-21T18:53:41.145Z'
+verified_at: '2026-11-24T18:13:21.008Z'
 connections:
   - COMPONENT-CODEGEN
   - COMPONENT-ESBUILD-PLUGIN
@@ -12,7 +12,7 @@ connections:
 code_refs:
   - compiler/internal/codegen/classname.go
   - compiler/internal/codegen/codegen.go
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D24 — The compiled component name comes from the `export default class` declaration
@@ -26,6 +26,7 @@ verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 - An anonymous default class is a build error ("name your component class").
 - `<Name>` is any JavaScript identifier, Unicode included, read with the shared `jsident` rules ([[DECISION-D176-EXPRESSION-LANGUAGE]]). A name the scan cannot read to its end (a `\u` escape, a letter newer than Go's Unicode tables) is a positioned build error, never an assignment against a truncated name.
 - A `.pzl` with no `<script>` is legal: codegen synthesizes the runtime import plus an empty `PuzzleView` subclass named from the filename (non-identifier runes become `_`); the base `data()` returns its props, so `{ tone }` renders the `tone` prop ([[DECISION-D173-CORE-SEMANTICS]]).
+- One extraction serves every reader. `extractClassName` returns the name and its position (where the D197 reserved-name warning lands), and codegen hands the name to `puzzle check` as `Result.ClassName`, so check never reads it back out of the emitted JS.
 
 ## Alternatives rejected
 - Filename-derived naming — breaks the canonical app, where `Home.pzl` exports `class TodoHome`.

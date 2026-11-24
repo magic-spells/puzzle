@@ -9,30 +9,12 @@ connections:
 notes:
   - kind: state
     text: >-
-      SUPERSEDED 2026-08-22 — the three libs this feature ported (registry/lib/sheet-engine.js,
-      sheet-policy.js, sheet-drag.js) and their five Node suites were REMOVED when the sheet piece
-      became a thin wrapper over @magic-spells/sheet (DECISION-WRAP-WEB-COMPONENTS; commit 1093ded
-      on feat/sheet-wrapper). The motion, gesture and snap policy now run from the npm package and
-      are tested upstream; the only sheet-related test left in this repo is
-      test/sheet-wrapper.test.js (static wiring guards). sheet-math.js survives only because
-      bottom-sheet (still a port at that point) imports it — it goes when bottom-sheet is converted
-      (phase 2 of notes/2026-08-22-sheet-wrapper-plan.md). This card is history for how the port was
-      built, not a description of current code.
-  - kind: state
-    text: >-
-      2026-08-22 (phase 2, feat/sheet-wrapper): sheet-math.js is gone too. bottom-sheet became a
-      wrapper over @magic-spells/bottom-sheet, so registry/lib/sheet-math.js, its demo copy and
-      test/sheet-math.test.js were deleted and the sheet-math row was trimmed from
-      test/sheet-parity.test.js (which now only asserts the two wrapper .pzl copies stay
-      byte-identical). Nothing in this repo ports sheet motion any more — every suite under test/
-      that named a sheet lib is deleted; test/sheet-wrapper.test.js now carries the static wiring
-      guards for BOTH wrapper pieces.
-  - kind: state
-    text: >-
-      2026-11-08: test/sheet-parity.test.js is gone — the eight hand-listed parity suites were
-      replaced by one generic test/registry-parity.test.js that walks registry.json (every piece
-      file plus registry/lib/*.js) and byte-compares each to its demo copy. The sheet and
-      bottom-sheet wrapper copies are covered there.
+      No sheet motion library ships in `registry/lib/`: sheet and bottom-sheet wrap
+      `@magic-spells/sheet` and `@magic-spells/bottom-sheet`, whose motion, gesture and snap policy
+      are tested upstream. In this repo `test/sheet-wrapper.test.js` holds the static wiring guards
+      for both wrappers, and `test/registry-parity.test.js` byte-compares every registry file with
+      its demo copy. Both manifests list `styles` with dialog-panel's sheet before their own, the
+      order in which `puzzle add piece` prints the `@import` lines.
 ---
 
 # Port DOM-free sheet motion libraries

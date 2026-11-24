@@ -12,8 +12,8 @@ connections:
   - COMPONENT-PUZZLE-MODEL
   - DOC-SPEC
   - DOC-RELEASE-SURFACE
-verified_at: '2026-11-21T18:57:28.823Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - client-runtime/datastore/adapter.js
 ---
@@ -72,7 +72,7 @@ export default adapter.defaults({
 
 **Automatic fault eligibility is narrower than dispatch.** A tracked find faults only when the *model* declares server intent (its own verb function or `endpoint`); an app default supplies the dialect but does not make a local-only model server-backed. Explicit loads and writes use the full precedence.
 
-**LOADED vs EXHAUSTIVE.** Any successful no-options `loadMany` marks the type LOADED (a tracked `findMany` stops re-faulting). Only the endpoint-generated transport (endpoint declared, no model function, no dialect function for the verb) marks it EXHAUSTIVE, so a `findOne` miss owes no detail request. An authored `loadMany` may return a paginated first page; marking it exhaustive would report real records as missing.
+**LOADED vs EXHAUSTIVE.** Any successful no-options `loadMany` marks the type LOADED (a tracked `findMany` stops re-faulting), unless an `invalidate(type)` came after it was sent. Only the endpoint-generated transport (endpoint declared, no model function, no dialect function for the verb) marks it EXHAUSTIVE, so a `findOne` miss owes no detail request. An authored `loadMany` may return a paginated first page; marking it exhaustive would report real records as missing.
 
 `endpoint` is required only by a verb that needs it (per-verb "no adapter declared" error). Unknown non-function keys other than `endpoint` and D95 `mock` warn once per model in dev.
 

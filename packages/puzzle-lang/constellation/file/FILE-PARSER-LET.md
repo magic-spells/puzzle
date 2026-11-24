@@ -12,8 +12,8 @@ connections:
   - FILE-PARSER-HOST
   - FILE-PARSER-EXPRS
   - TEST-COMPILER-PARSER
-verified_at: '2026-11-21T19:12:59.382Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:14:05.661Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # let.go

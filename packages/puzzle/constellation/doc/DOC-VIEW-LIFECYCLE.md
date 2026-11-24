@@ -151,7 +151,7 @@ contract is [[DOC-SPEC-ROUTER]] §30. The rules that shape the diagram:
 | Parent re-render with new slot content only | no | re-render with the existing model (once mounted) |
 | `this.setState(...)` of a key `data()` read through `getData()` or `getState()` | yes | `data()` re-runs once before the next render, however many writes came first (D23) |
 | `this.setState(...)` of any other key | no | state merged, one render scheduled per frame |
-| A `shared` key this view's `data()` read changes | yes | the sharer's `share()` runs after its own commit; only views that read a changed key re-run ([[DECISION-D197-SHARE]]) |
+| A `shared` key this view's `data()` read changes | yes | the sharer's `share()` runs as its `data()` commits; a view that read a changed key re-runs once, after the sharer's patch and before its `afterUpdate()` ([[DECISION-D197-SHARE]]) |
 | Anything else (locals, direct DOM pokes) | no | not reactive by design |
 
 Both paths batch on the shared frame scheduler (`scheduler.js`,

@@ -27,8 +27,8 @@ connections:
   - FILE-VITEST-PLUGIN
   - DECISION-D196-NAMED-ROUTES
   - DECISION-D199-UPGRADE-PASS
-verified_at: '2026-11-23T03:11:02.446Z'
-verified_sha: f90f22201ff6b00245f353d5f5f90bb7634bb963
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # App-author test utilities

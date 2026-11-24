@@ -10,8 +10,8 @@ connections:
 notes:
   - kind: state
     text: >-
-      Hamburger (0.8.0, PR #148) is the third piece under this exception. Its reason is per-property
-      transition delays — the closed and open rules swap which of `translate`/`rotate` waits, giving
+      Hamburger is the third piece under this exception. Its reason is per-property transition
+      delays — the closed and open rules swap which of `translate`/`rotate` waits, giving
       collapse→rotate on open and unrotate→spread on close — which has no utility form without
       arbitrary values. It gates transitions inside `prefers-reduced-motion: no-preference` rather
       than disabling them in a reduce block. See [[COMPONENT-HAMBURGER]].

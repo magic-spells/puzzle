@@ -25,6 +25,9 @@ connections:
   - DECISION-REGISTRY-SHAPED-REPO
   - DECISION-DOCS-DEMO-SPLIT
   - DECISION-CONFIG-FIRST-API
+verified_at: '2026-11-24T18:13:21.786Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+status: verified
 ---
 
 # Puzzle Pieces
@@ -60,8 +63,8 @@ follows from it. See [[DECISION-COPY-IN-DISTRIBUTION]] and [[DECISION-WRAP-WEB-C
 
 - [[DECISION-COPY-IN-DISTRIBUTION]] — copy-in, not npm import (npm rejected for v1).
 - [[DECISION-WRAP-WEB-COMPONENTS]] — wrap the existing `@magic-spells/*` web components
-  directly whenever possible (2026-08-22; reversed the original rebuild-everything rule);
-  port only when wrapping genuinely can't work. Ported pieces still use no custom elements.
+  directly whenever possible; port only when wrapping genuinely can't work. Ported pieces
+  still use no custom elements.
 - [[DECISION-REGISTRY-SHAPED-REPO]] — registry-shaped from day one so the CLI stays a copier.
 - [[DECISION-CONFIG-FIRST-API]] — config-first APIs, because Puzzle has no cross-component context.
 - [[DECISION-DOCS-DEMO-SPLIT]] — docs in the demo app now, Astro on `magic-spells-site` later.
@@ -70,11 +73,11 @@ follows from it. See [[DECISION-COPY-IN-DISTRIBUTION]] and [[DECISION-WRAP-WEB-C
 
 All 104 pieces are built, compile-verified against the real compiler, and demo-verified.
 The [[FEATURE-ADD-CLI]] shipped in the Puzzle Go CLI (`puzzle add piece`).
-[[RELEASE-V0-1-0]] records the first publish (2026-07-22, the repo going public); since
-then the registry itself ships as the npm package `@magic-spells/puzzle-pieces`, which
-`puzzle add piece` resolves by default and which is **version-locked to the framework's
-major.minor** — so this package's version must equal the framework's exactly, and the
-matching pieces release must publish at or before the CLI release.
+[[RELEASE-V0-1-0]] records the first publish. The registry ships as the npm package
+`@magic-spells/puzzle-pieces`, which `puzzle add piece` resolves by default and which is
+**version-locked to the framework's major.minor** — so this package's version must equal
+the framework's exactly, and the matching pieces release must publish at or before the CLI
+release.
 
 The framework's `verify:published` checks the transport end to end: it asserts
 `@magic-spells/puzzle-pieces` exists at the framework version, scaffolds an app with the
@@ -93,10 +96,10 @@ monorepo (framework decision D162), with its own npm install and lockfile — th
 deliberately no npm workspaces. Sibling repos are linked in `connected_repos` above
 (`repo:` selector targets each); the framework's own plan is `repo: puzzle`.
 
-0.7.0 shape: most overlay and disclosure pieces are now wrappers or D167 **component
-families** over published `@magic-spells/*` web components — `DropdownPanel` is the
-shared base family behind DropdownMenu, ContextMenu, SplitButton, Popover, HoverCard,
-Menubar, Popconfirm and NavigationMenu — and `puzzle add piece` installs those compound
-pieces path-preserving. The six assembled app demos (analytics, chat, banking, admin,
-project board, storefront) moved out of `demo/` into their own `puzzle-demos` repo; the
-demo app keeps the piece copies, the `*Doc` pages, and the docs shell.
+Most overlay and disclosure pieces are wrappers or D167 **component families** over
+published `@magic-spells/*` web components — `DropdownPanel` is the shared base family
+behind DropdownMenu, ContextMenu, SplitButton, Popover, HoverCard, Menubar, Popconfirm and
+NavigationMenu — and `puzzle add piece` installs those compound pieces path-preserving. The
+assembled app demos (analytics, chat, banking, admin, project board, storefront) live in
+their own `puzzle-demos` repo; the demo app keeps the piece copies, the `*Doc` pages, and
+the docs shell.

@@ -16,8 +16,8 @@ connections:
 code_refs:
   - client-runtime/router/router.js
   - client-runtime/app.js
-verified_at: '2026-11-21T18:57:28.823Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D93 — Router focus management + route announcement: `focusBehavior`
@@ -30,11 +30,12 @@ out, a function `(to, from) => element` to choose the target. Spec: SPEC §51.
 ## Decision
 
 - **Gate before commit, target after mount.** `#resolveFocus` decides
-  *whether*: no for memory mode, `focusBehavior: false`, navigation #0
+  *whether*: no for memory mode, `focusBehavior: false` and navigation #0
   (`from == null` — including a guard redirect that re-enters #0 as a replace;
-  a user push superseding a slow #0 still focuses), a params-only *replace*
-  (D135), and a same-location locale rebuild (D175). Push, replace and pop all
-  move focus otherwise (browsers don't restore focus on client navigation).
+  a user push superseding a slow #0 still focuses). Its callers also skip a
+  params-only *replace* (D135) and a same-location locale rebuild (D175). Push,
+  replace and pop all move focus otherwise (browsers don't restore focus on
+  client navigation).
   `#applyFocus` runs last in `#commitState`, after the scroll landing, in the
   same post-mount, pre-paint window; a custom function runs there so it can
   query the committed DOM. A throw is reported through `onError` and treated as

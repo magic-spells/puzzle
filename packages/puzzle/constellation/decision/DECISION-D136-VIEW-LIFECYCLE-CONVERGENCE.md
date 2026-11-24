@@ -13,17 +13,8 @@ connections:
   - DOC-VIEW-LIFECYCLE
   - FILE-PUZZLE-VIEW
   - FILE-VIEW-MANAGER
-verified_at: '2026-11-21T18:57:28.823Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
-notes:
-  - kind: state
-    text: >-
-      2026-11-08 (feat/0.10-runtime-trims, review F2-Q3): the "spent-#outTask branch" is no longer
-      its own code path. playOut() runs one async task on `spent = #outTask !== null`. The rules
-      above hold unchanged: spent leaves still re-arm #leaving, unsubscribe and fire viewWillHide →
-      viewDidHide with zero duration, the task still rejects rather than throws, and viewDidHide is
-      still guarded on #leaving. Pinned by leave-inertness-and-hooks and router-transitions:
-      replaying the out animation on the spent case fails three tests.
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D136 — anchor-race enter deferral, failure recovery, leave inertness, start-abort teardown
@@ -68,19 +59,21 @@ is recognized from Router state.
   `_restoreFromLeaving()`: clears `#leaving`, cancels the animation fill, fires
   `viewWillShow` then `viewDidShow` (each contained separately, reported as phase
   `enter`), and refreshes once to re-track subscriptions.
-- Hooks are not spent with the animation (D28): the spent-`#outTask` branch runs
-  its own zero-duration `viewWillHide → viewDidHide` as an async task (the
-  router's `#startOverlapLeave` feeds `playOut()` into `Promise.all`, so a sync
-  throw would escape). `viewDidHide()` is guarded on `#leaving` still being set,
-  so a cancelled leave never announces a hide.
+- Hooks are not spent with the animation (D28): a spent leave (`#outTask`
+  already set) skips the out spec but still runs `viewWillHide → viewDidHide`
+  with zero duration, in the same async task as a normal leave (the router's
+  `#startOverlapLeave` feeds `playOut()` into `Promise.all`, so a sync throw
+  would escape). `viewDidHide()` is guarded on `#leaving` still being set, so a
+  cancelled leave never announces a hide.
 - A leave on a never-mounted view (first `data()` pending) makes it inert but
   fires no hide bracket — hooks pair with a completed mount.
 
 **4. `router.start()` abort parity.** `PuzzleApp.mount()` claims `_mounted`
 before awaiting `router.start()`. A rejected start (navigation-zero commit
-failure) runs the `beforeMount` abort pattern: epoch-guarded `#teardown()`, then
-rethrow. Router-owned post-commit `render()`/`mounted()` failures are reported
-and replaced locally under D145 and do not reject `start()`.
+failure) takes the boot's one abort path, the same as a `beforeMount` throw:
+epoch-guarded `#teardown()`, then rethrow. Router-owned post-commit
+`render()`/`mounted()` failures are reported and replaced locally under D145 and
+do not reject `start()`.
 
 ## Alternatives rejected
 

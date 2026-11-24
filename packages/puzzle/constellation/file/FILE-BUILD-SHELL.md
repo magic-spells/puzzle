@@ -11,14 +11,8 @@ connections:
   - FILE-BUILD-OPTIONS
   - DOC-SPEC-BUILD
   - TEST-BUILD-AND-DEV-PIPELINE
-verified_at: '2026-11-23T03:17:08.026Z'
-verified_sha: f90f22201ff6b00245f353d5f5f90bb7634bb963
-notes:
-  - kind: state
-    text: >-
-      2026-11-08 trims: the test-only `rewriteShellHTML` wrapper is gone;
-      `rewriteShellHTMLRefs(source, dir, renames, chunks, publicFiles, strict)` is the one rewriter,
-      and shell tests call it directly.
+verified_at: '2026-11-24T18:02:16.140Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # shell.go

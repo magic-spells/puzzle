@@ -10,8 +10,8 @@ connections:
   - FILE-STORE
   - FILE-ADAPTER
   - DECISION-D193-SERVER-QUERIES
-verified_at: '2026-11-21T18:57:28.823Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D138 — background loads respect in-flight edits and dispatch order
@@ -42,8 +42,8 @@ server's.
 from the store's read state (`seq`) and hands it to `_upsert`. The module
 `WeakMap` `LOAD_GENERATIONS` records the highest generation landed per record; a
 lower one is dropped for that record — no merge, no `_notify`, `_synced`
-untouched. `clearAbsent` and the collection-complete mark still run, since a
-stale response still proves the identity or collection exists.
+untouched. `clearAbsent` and the collection marks still run, since a stale
+response still proves the identity or collection exists.
 - `_saveRecordNow` takes a generation from the same counter and stamps the
   record on success (never lowering it), so a read dispatched before the save
   cannot roll back the acknowledged body. It does not route through `_upsert`.
@@ -55,7 +55,9 @@ stale response still proves the identity or collection exists.
   [[DECISION-D161-AUTO-FETCHING-FINDS]]; this card owns the counter.
 - `store.invalidate()` stamps its stale marks from the same counter, so a read
   dispatched before the mark leaves the data stale
-  ([[DECISION-D193-SERVER-QUERIES]]).
+  ([[DECISION-D193-SERVER-QUERIES]]). A collection load dispatched before an
+  `invalidate(type)` still lands its rows but marks the type neither loaded nor
+  complete, so the views reading it refetch.
 
 ## Alternatives rejected
 

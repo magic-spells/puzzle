@@ -30,8 +30,8 @@ connections:
   - DECISION-D67-HYBRID-PRERENDER
   - DECISION-D140-TAKEOVER-MOUNT-RESTORATION
   - DECISION-D196-NAMED-ROUTES
-verified_at: '2026-11-21T19:10:06.943Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:13:21.008Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 notes:
   - kind: state
     text: >-
@@ -60,10 +60,10 @@ The shape is **load, then leave, then commit**: nothing the user can see moves u
    - no match and no catch-all → warn, stay, resolve `'not-found'`; the cancellation token is left alone
 3. **Claim the token and freeze the snapshot** — `{ path, pathname, query, hash, route, params, chain }`, parsed once — and capture the departure scroll position while the outgoing page still has its full height. A pop's outgoing position is not read here: the popstate handler already saved it from the last `scroll` event, since some browsers jump to an anchor before `popstate` fires.
 4. **Run the guard chain** root → leaf, sequentially, before any view or layout exists ([[DECISION-D87-ROUTE-GUARDS]]).
-   - `false` → stay put (`'blocked'`); a throw → stay put (`'error'`, reported to `onError`); a blocked popstate rewrites the address bar back to the committed route
+   - `false` → stay put (`'blocked'`); a throw → stay put (`'error'`, reported to `onError`); after a pop, either one rewrites the address bar back to the committed route
    - a path string or named target → redirect with the denied verb — `push()` for a push, `replace()` for a pop or navigation zero; the denied URL never enters history; ten redirects without a commit trip the cycle cap (`'error'`)
    - a newer token across an awaited guard → abandon silently (`'superseded'`)
-5. **Resolve `lazy()` markers** for the whole chain in one `Promise.all` ([[DECISION-D163-LAZY-ROUTE-VIEWS]]); a rejection is a pre-commit failure that stays put (`'error'`), even with nothing committed yet, since no instance exists to hold an error view.
+5. **Resolve `lazy()` markers** for the whole chain in one `Promise.all` ([[DECISION-D163-LAZY-ROUTE-VIEWS]]); a rejection is a pre-commit failure that stays put (`'error'`) and repairs a pop's URL, even with nothing committed yet, since no instance exists to hold an error view.
 6. **Plan the chain.** Diff old and new route-node chains by identity: `keep` is the shared-prefix length, clamped back past any instance inside a still-animating outgoing unit. Fresh instances are constructed for `[keep..N]`; the layout is reused unless its class changed. A constructor throw is a pre-commit failure (instances dropped, never destroyed).
 7. **LOAD — the gate.** Fresh views `preload()` (constructor → `created()` → `data()`, off-DOM); reused ancestors `prepareRefresh()`, which runs `data()` against the destination and commits nothing ([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]). All of it is awaited together.
    - gated loads must all *start* before any skeleton-exempt preload opens its tracking scope, or the gate queues behind the fetch the exemption exists to skip

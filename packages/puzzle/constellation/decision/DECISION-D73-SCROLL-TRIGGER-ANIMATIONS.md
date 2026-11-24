@@ -9,12 +9,12 @@ connections:
   - DOC-VIEW-LIFECYCLE
   - DOC-USER-GUIDE
   - DECISION-D28-ANIMATIONS
-verified_at: '2026-11-21T18:53:41.145Z'
+verified_at: '2026-11-24T18:13:21.008Z'
 code_refs:
   - client-runtime/views/PuzzleView.js
   - client-runtime/views/animate.js
   - client-runtime/views/visibility.js
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D73 — Scroll-triggered enter animations: `trigger: 'visible'` on the `in` spec

@@ -10,8 +10,8 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-APP
-verified_at: '2026-11-21T18:57:28.823Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - client-runtime/views/PuzzleView.js
   - client-runtime/views/viewManager.js
@@ -47,7 +47,7 @@ Only current-run failures report: `PuzzleView.refresh` applies the same
 token/destroyed/leaving check to rejections as to fulfillments, and D161's
 settle loop checks `isStale()` on both arms. A throwing or rejecting `onError`
 is contained with its own `console.error` and never re-enters the funnel.
-Config lives in a WeakMap keyed by ctx — the three-service ctx is not widened.
+Config lives in a WeakMap keyed by ctx (`setErrorConfig`), so ctx is not widened.
 
 **The error view.** `new PuzzleApp({ errorView })` takes ONE ordinary compiled
 view (typically `app/views/AppError.pzl`); a non-view value is a construction
@@ -125,8 +125,7 @@ failure and IS contained.
 - A wrapper `<ErrorBoundary>` component — new grammar for what one config key
   expresses.
 - Global handler with no fallback UI — leaves the blank hole.
-- Widening ctx with the handler — the three-service ctx is a documented
-  selling point (D60).
+- Widening ctx with the handler — ctx stays the app's services and nothing else.
 
 ## Consequences
 

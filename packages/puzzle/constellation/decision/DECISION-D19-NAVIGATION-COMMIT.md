@@ -1,7 +1,7 @@
 ---
 name: "D19 — Navigation semantics: commit-ordered URL, nav tokens, catch-all 404, layout reuse"
 status: verified
-verified_at: '2026-11-21T18:53:41.145Z'
+verified_at: '2026-11-24T18:05:31.213Z'
 connections:
   - COMPONENT-ROUTER
   - DOC-VIEW-LIFECYCLE
@@ -13,7 +13,7 @@ code_refs:
   - client-runtime/router/routePath.js
   - client-runtime/views/PuzzleView.js
   - client-runtime/ssg/index.js
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D19 — Navigation semantics: data-gated commit, nav tokens, catch-all 404, layout reuse
@@ -22,7 +22,7 @@ See [[DOC-VIEW-LIFECYCLE]] §4.
 
 ## Decision
 
-- **With a page on screen, the URL commits only after the destination's `data()` resolves.** Every location side effect (pushState, title, memory stack, scroll-key save) runs in `#swap`'s synchronous commit window, after the out phase and the final token checks, immediately before mount ([[DECISION-D61-ATOMIC-LOCATION-COMMIT]]). A failed or superseded navigation changes nothing: no history entry, no URL/view divergence. With nothing committed yet a failed load commits (below).
+- **With a page on screen, the URL commits only after the destination's `data()` resolves.** Every location side effect (pushState, title, memory stack, a push's scroll-position save) runs in `#commitLocation`, the first step of the synchronous commit window: in `#swap` after the out phase and the final token checks, immediately before mount, or right before `#commitState` on a params-only navigation ([[DECISION-D61-ATOMIC-LOCATION-COMMIT]]). A failed or superseded navigation changes nothing: no history entry, no URL/view divergence. A path or hash pop is the one case where the browser moves the URL first: when neither the pop nor a navigation that superseded it lands, the router rewrites the popped entry back to the committed path. With nothing committed yet a failed load commits (below).
 - **Last navigation wins** via monotonic tokens.
 - **A `data()` rejection with a page on screen stays put.** It reports through the `onError` funnel ([[DECISION-D145-ERROR-BOUNDARIES]]), the current view stays, and `push()` resolves a failed result ([[DECISION-D182-NAVIGATION-RESULT]]). With nothing committed yet (a first load, or a navigation that starts before anything has committed) there is no current view: the top unit (the layout, else the root view) commits, the app `errorView` takes its place, and the navigation resolves `ok`; a hybrid takeover keeps its prerendered page instead. `app.mount()` resolves either way; only a commit-window throw on navigation zero rethrows.
 - **404s go to an optional catch-all `path: '*'` route**, always matched last.

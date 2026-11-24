@@ -1,6 +1,6 @@
 ---
 name: SplitText wrapper over split-text
-status: built
+status: verified
 framework: puzzle
 props:
   - name: split
@@ -32,19 +32,13 @@ props:
 connections:
   - DECISION-WRAP-WEB-COMPONENTS
   - DOC-REGISTRY
-notes:
-  - kind: state
-    text: >-
-      2026-11-08 review fix P05-B4 (feat/0.10-pieces-slider-editor): the "change the text AND bump
-      play" recipe is gone from the SplitText.pzl header and SplitTextDoc's "Content is static"
-      section — it replayed the OLD text (verifier reproduced). Both now say remount to change text.
-      No code change; the wrapper still has no content-sync path, deliberately.
+verified_at: '2026-11-24T18:13:21.786Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
-Single-file wrapper over `@magic-spells/split-text` 0.2.0 (0.8.0,
-feat/piece-split-text). A text reveal: the element splits its own text into words,
-graphemes or detected lines, masks each unit and animates it in on a CSS stagger.
-Nothing is ported — the splitter, the eight effect keyframes, the
+Single-file wrapper over `@magic-spells/split-text` 0.2.0. A text reveal: the element
+splits its own text into words, graphemes or detected lines, masks each unit and animates
+it in on a CSS stagger. Nothing is ported — the splitter, the eight effect keyframes, the
 IntersectionObserver trigger and the reduced-motion short-circuit are all upstream's.
 
 ## Replay is a token prop, not a method
@@ -90,7 +84,6 @@ It is also the ONLY way a changed attribute reaches the screen: the element decl
 ## Verified
 
 `test/split-text-wrapper.test.js` guards the manifest, the dynamic import inside
-`mounted()`, the absent `style` / `aria-label` bindings and the edge-triggered `play`.
-Browser-smoked on the docs page:
-word / chars / lines splitting, replay, the eight effects behind one token, the
-scroll-triggered reveal and a reduced-motion context (revealed, 0 units).
+`mounted()`, the absent `style` / `aria-label` bindings, the edge-triggered `play`, and the
+demo's `layer(components)` import of the stylesheet (the `@import` line `puzzle add piece`
+prints).

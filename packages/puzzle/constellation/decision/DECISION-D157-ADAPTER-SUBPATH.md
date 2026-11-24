@@ -15,8 +15,8 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - DOC-SPEC
   - DOC-RELEASE-SURFACE
-verified_at: '2026-11-21T18:57:28.823Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 code_refs:
   - client-runtime/datastore/adapter.js
   - client-runtime/capabilities.js
@@ -80,9 +80,12 @@ none of the adapter (D98's exclusion-by-unreferenced-module).
   adapter read D158 defaults); store internals the verbs call (`modelFor`,
   `_typeMap`, `_instantiate`, `removeRecord`, `_notify`, `_persist`,
   `recordKey`).
-- Per-record write-chain state and D161 read-state caches live at adapter
-  module scope in WeakMaps keyed by store; the static kernel reaches read-state
-  codecs through the `capabilities.js` relay.
+- Per-record write-chain state (a WeakMap keyed by record) and D161 read-state
+  caches (WeakMaps keyed by store) live at adapter module scope. The prerender
+  and the static kernel reach the read-state codecs through the
+  `capabilities.js` relay. The prerender writes a page's read island when any
+  envelope list holds an entry (`hasReadState`), `queries` included, so a page
+  whose only read is a server query keeps its data.
 - **Fixtures** (`/fixtures`) install the capability in `installFixtures()` so
   `Store.prototype._network` exists to mock.
 - **Types via augmentation**: `types/adapter.d.ts` declares the capability and

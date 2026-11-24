@@ -25,36 +25,26 @@ connections:
   - DOC-REGISTRY
   - DECISION-CONFIG-FIRST-API
 notes:
-  - kind: state
-    text: >-
-      0.10.0 (framework D23): every setState() + refresh() pair lost its refresh() except the
-      keyboard cross-column move, which keeps its refresh() on purpose so the announcement's
-      afterUpdate() runs before the `_refocusGrabbed` marker is armed (see the gotcha below).
   - kind: gotcha
     text: >-
-      The `_refocusGrabbed` marker for a keyboard cross-column move must be set AFTER the
-      announcement setState/refresh(), not before: refresh() runs afterUpdate() synchronously, and
-      afterUpdate() consumes and clears the marker — so a marker set first was eaten by the
-      announcement render and focus fell to <body> on the parent's real re-render. Fixed 2026-09-04
-      (Astra review F6) by moving the assignment to just before `_emitMove()`.
+      The keyboard cross-column move keeps its `this.refresh()` on purpose and sets the
+      `_refocusGrabbed` marker after it. refresh() runs afterUpdate() synchronously and
+      afterUpdate() consumes the marker; a marker set first, or a setState() render alone, is eaten
+      before the parent's re-render and focus falls to <body>.
   - kind: state
     text: >-
-      2026-11-08 (review P03-B1, P03-Q1). Keyboard Escape on a held card now DROPS it where it is,
-      the same as Space/Enter, and announces "Dropped …". Each arrow press already emitted a
-      committed @move, so the old "Move cancelled." claimed a revert that never happened. Restoring
-      the origin (+4 lines) was rejected for the zero-code option. A pointer drag still cancels on
-      Escape, with no @move. KanbanCard is now content-only: no `card`/`ghost` variants, no
-      `variant`/`grabbed`/`disabled`/`class` props, no forwarded events, and a `contents` root.
-      Kanban mounts it bare. The card surface, ghost chrome and the touch-pinch-zoom rationale live
-      only in Kanban.pzl. KanbanCard is −82 lines, 1318 → 901 B min+gz.
+      Keyboard Escape on a held card drops it where it is, like Space/Enter, and announces "Dropped
+      …": each arrow press already emitted a committed @move, so there is nothing to revert. A
+      pointer drag still cancels on Escape with no @move. KanbanCard is content-only: a `display:
+      contents` root and one `card` prop. The card surface, ghost chrome and drag handlers live in
+      Kanban.pzl.
   - kind: state
     text: >-
-      2026-11-08 (feat/0.10-pieces-select-toast, review P08-B12): KanbanCard's assignee initials
-      disc is hsl(hue 45% 32%), down from 45%, matching Avatar and ChatMessage. White initials at
-      L45 failed WCAG AA on 181/360 hues (worst 2.57:1); L32 is the highest lightness at S45 where
-      every hue passes (min 4.75:1). Keep the three copies of this formula in step.
-verified_at: '2026-11-21T19:13:00.327Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+      KanbanCard's assignee initials disc is `hsl(hue 45% 32%)`, the same formula as Avatar and
+      ChatMessage. L32 is the highest lightness at S45 where white initials pass WCAG AA on every
+      hue. Keep the three copies in step.
+verified_at: '2026-11-24T18:13:21.786Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # Kanban

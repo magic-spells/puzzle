@@ -3,7 +3,7 @@ name: >-
   D57 — HMR is a state-preserving reload: snapshot/restore across the SSE reload, not per-module
   swap
 status: verified
-verified_at: '2026-11-21T18:53:41.145Z'
+verified_at: '2026-11-24T18:13:21.008Z'
 connections:
   - DECISION-D27-FAST-DEV-REBUILDS
   - DECISION-D161-AUTO-FETCHING-FINDS
@@ -18,15 +18,7 @@ code_refs:
   - client-runtime/app.js
   - client-runtime/views/PuzzleView.js
   - client-runtime/datastore/store.js
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
-notes:
-  - kind: state
-    text: >-
-      2026-11-08 review B1 (V-views): phase 2 used `setState(saved)` only, so `data()` keys derived
-      from local state stayed stale after a dev reload (todos Completed tab showed all rows, Add
-      stayed disabled with a restored draft). restoreViewsFromStorage now calls `view.refresh()`
-      after `setState`; no extra paint, 0 production bytes (DCE'd). Covered by the hmr-dev-reload
-      "local drafts" test (`hasDraft` derived key).
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D57 — HMR is a state-preserving reload, not a per-module swap

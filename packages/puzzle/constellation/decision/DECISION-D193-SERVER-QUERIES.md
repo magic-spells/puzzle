@@ -1,6 +1,6 @@
 ---
 name: 'D193 — Server queries: query keys on findMany, store.invalidate(), and write status'
-status: built
+status: verified
 connections:
   - DECISION-D161-AUTO-FETCHING-FINDS
   - DECISION-D158-ADAPTER-FETCH-FUNCTIONS
@@ -19,6 +19,8 @@ code_refs:
   - client-runtime/capabilities.js
   - types/index.d.ts
   - types/adapter.d.ts
+verified_at: '2026-11-24T18:05:31.213Z'
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 Tracked `findMany` takes server query params that become part of the cache key, `store.invalidate()` marks server data stale so the views reading it refetch, and every `save()`/`delete()` exposes its pending and error state. All of it lives in the `/adapter` subpath.
@@ -54,7 +56,7 @@ data() {
 - **Cursors are just params.** `findMany('post', { query: { after: cursor } })` is one entry per cursor. "Load more" keeps the cursors it has walked in view state and reads each page; the store dedupes and caches every page. There is no accumulating query API.
 - **First load vs. no query.** A no-query tracked `findMany` behaves exactly as D161 (LOADED/EXHAUSTIVE marks, whole local collection). A query-bearing load marks neither: a page proves nothing about the whole collection.
 - **Untracked reads stay local.** Outside a tracked `data()` run, `findMany(type, { query })` returns the cached rows for that key (or `[]` if never loaded) and never fetches, like every other D161 local snapshot. On a store built without the capability, `query` is ignored with a once-per-type development warning.
-- **Explicit `store.loadMany(type, options)`** with non-nullish options now also writes the query entry for those options, so a handler-driven prefetch fills the same cache a later tracked read will hit.
+- **Explicit `store.loadMany(type, options)`** with non-nullish options also writes the query entry for those options, so a handler-driven prefetch fills the same cache a later tracked read will hit.
 - **Bounded.** Query entries live in an LRU of 200 per store. Evicting one only means the next tracked read of that key fetches again.
 
 ### 2. `store.invalidate()`
@@ -70,7 +72,7 @@ store.invalidate('post', { query: { page: 2 } }); // one query (exact key match)
   - `invalidate(type)`: every query entry of that type; the type's LOADED and EXHAUSTIVE marks are cleared (an exhaustive answer is stale too); the type's negative-cache entries are dropped; and a type stale mark is set at the current read generation, so every **synced** record of that type loaded before it is stale for `findOne`.
   - `invalidate(type, id)`: that record (if present and synced) and its negative-cache entry.
   - `invalidate(type, { query })`: that one query entry.
-- **How it reaches views.** Invalidation calls `_notify` for the type's collection key (and the record key for the id form), batched like any change. Every view whose `data()` read that type re-runs. During that run, a tracked read of a stale entry queues a refetch through the existing D161 fault path (same in-flight dedupe, same request map). The settle loop holds the commit until the refetch lands, so **the old rows stay on screen while the new ones load**, then the view commits once. Views reading fresh entries of the same type re-run `data()` once and commit unchanged rows.
+- **How it reaches views.** Invalidation notifies through the batched flush like any change: the type form notifies every subscribed key of the type (the collection and each record), the id form that record's key, and the query form the type's collection key. Every view that read a notified key re-runs. During that run, a tracked read of a stale entry queues a refetch through the existing D161 fault path (same in-flight dedupe, same request map). The settle loop holds the commit until the refetch lands, so **the old rows stay on screen while the new ones load**, then the view commits once. Views reading fresh entries of the same type re-run `data()` once and commit unchanged rows.
 - **Staleness test for a record.** The adapter already stamps each record with the generation of the last read that landed on it (`LOAD_GENERATIONS`). A tracked `findOne` hit refetches when the record is synced and its last read generation is older than the type's or the record's stale mark. Locally created, never-saved records are never stale.
 - **Refetch replaces a query's rows.** The new response's row list replaces the entry's old one, so a row the server dropped leaves that page. Records themselves are not deleted from the store by a refetch.
 - **Failures.** A refetch that fails rejects that view's run into the normal `errorView` path, as a first load does, and leaves the entry stale so the next run retries. A 404 on a stale record's refetch means the server no longer has it: the record is removed locally (which records it absent, D161) and the next pass reads `null`.
@@ -109,7 +111,7 @@ data() {
 
 ### 5. Bundle size
 
-Everything here is adapter-side, grafted onto the Store prototype by `installAdapter()` like D161's tracked pair. **An app without the `adapter` capability ships nothing new and its core bundle does not change.** Measured on production builds (all `dist/*.js`, gzip -9) against the base commit: every adapter app (`blog`, `chirp`, `music`, `stays`) grows by about 4.7 KB minified and **1.4–1.5 KB gzip**; `hello-world` and `todos`, which don't use the adapter, are byte-for-byte the same size minified.
+Everything here is adapter-side, grafted onto the Store prototype by `installAdapter()` like D161's tracked pair. **An app without the `adapter` capability ships none of it, and its core bundle does not change.**
 
 ## Alternatives rejected
 

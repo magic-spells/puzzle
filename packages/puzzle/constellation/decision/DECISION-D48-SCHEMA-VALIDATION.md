@@ -10,13 +10,13 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-DATA
   - DECISION-D50-ADAPTER-WRITE-SYNC
-verified_at: '2026-11-21T22:33:06.881Z'
+verified_at: '2026-11-24T18:13:21.008Z'
 code_refs:
   - client-runtime/model.js
   - client-runtime/datastore/store.js
   - client-runtime/datastore/adapter.js
   - client-runtime/fixtures/generator.js
-verified_sha: c4c10f303caeac8050633ea434af17e4d3a75001
+verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
 ---
 
 # D48 — Schema validation at the local write boundary
