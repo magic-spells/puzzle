@@ -1,5 +1,5 @@
 /**
- * Store — the reactive datastore (constellation/doc/DOC-SPEC.md §8, constellation/doc/DOC-RUNTIME-KERNEL.md).
+ * Store — the reactive datastore (constellation/doc/DOC-SPEC.md §8, constellation/component/COMPONENT-STORE.md).
  *
  * Records ARE instances of the registered model classes (PuzzleModel
  * subclasses). Queries made inside a tracking scope (a component's data()

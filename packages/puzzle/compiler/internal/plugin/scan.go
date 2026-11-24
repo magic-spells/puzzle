@@ -171,7 +171,7 @@ func (u Usage) Features() Features {
 // undeclared package, a pruned directory, a linked folder outside every
 // node_modules) is caught by the plugin after the pass instead: when it uses a
 // feature this build compiled out, the build fails naming the file and the
-// feature (Plugin.featureMismatches). See DOC-COMPILER-DESIGN §b.
+// feature (Plugin.featureMismatches). See DECISION-D89-FEATURE-USAGE-TREESHAKE, "What the scan reads".
 //
 // A long-lived dev builder calls UsageScanner.Scan (scanmemo.go) instead, which
 // is this same walk with a per-file memo in front of the parse; both share

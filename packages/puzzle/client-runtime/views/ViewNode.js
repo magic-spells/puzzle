@@ -1,6 +1,6 @@
 /**
- * ViewNode — one node in the virtual tree (constellation/doc/DOC-RUNTIME-KERNEL.md,
- * constellation/doc/DOC-APP-ANATOMY.md §4, D20).
+ * ViewNode — one node in the virtual tree (constellation/doc/DOC-VIEW-LIFECYCLE.md §1,
+ * constellation/component/COMPONENT-VIEW-MANAGER.md, D20).
  *
  * Pure data: the ViewManager owns all DOM creation and patching. Compiled
  * render functions build these trees:
@@ -17,7 +17,7 @@
  * - Component — `tag` is a PuzzleView subclass (a function); `attrs` are the
  *   child's props and `children` are its slot content (call-site markup).
  *   The ViewManager instantiates the class rather than creating an element
- *   (constellation/doc/DOC-APP-ANATOMY.md §4). Reusable components render inline — no wrapper
+ *   (constellation/component/COMPONENT-VIEW-MANAGER.md, "Components"). Reusable components render inline — no wrapper
  *   element around the child's root (D20).
  * - Slot marker — `tag === SLOT_TAG`. A child's render tree emits one where
  *   `<Children/>`/`<Outlet/>` appeared; the ViewManager substitutes the slot content
@@ -34,7 +34,7 @@
  * - `instance` (component vnodes only) pins a PRE-BUILT child instance the
  *   ViewManager must adopt instead of constructing one — the Router uses it to
  *   hand the layout a routed view whose `data()` already resolved pre-commit
- *   (constellation/doc/DOC-APP-ANATOMY.md §5, constellation/doc/DOC-VIEW-LIFECYCLE.md §4).
+ *   (constellation/doc/DOC-VIEW-LIFECYCLE.md §4).
  */
 
 import { PuzzleModel } from '../model.js';

@@ -1,4 +1,4 @@
-// Package build drives a full `puzzle build` (constellation/doc/DOC-COMPILER-DESIGN.md §b): one
+// Package build drives a full `puzzle build` (constellation/doc/DOC-COMPILER-DESIGN.md, "The lane"): one
 // esbuild api.Build pass over the app entry (app/app.ts or app/app.js) with the .pzl plugin registered, then
 // the collected global CSS and the static public/ assets are written next to
 // the bundle. It replaces the Phase 1 prototype orchestrator (internal/compiler,

@@ -229,7 +229,7 @@ func configureRuntime(absRoot string, buildOpts *api.BuildOptions, pl *plugin.Pl
 	// '@', so there is no collision surface.
 	buildOpts.Alias["@"] = filepath.Join(absRoot, "app")
 
-	// Resolution of '@magic-spells/puzzle' (constellation/doc/DOC-COMPILER-DESIGN.md §b).
+	// Resolution of '@magic-spells/puzzle' (constellation/component/COMPONENT-ESBUILD-PLUGIN.md, "Config and resolution").
 	//
 	// Three sources, most explicit first:
 	//

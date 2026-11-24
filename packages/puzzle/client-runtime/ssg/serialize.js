@@ -397,7 +397,7 @@ function rawtextContent(tag, attrs, text) {
  * with `route: null` — mirroring the browser, where the ViewManager mounts nested
  * components without a route (this.route stays null off-router, viewManager.js
  * ~264). `preload()` runs created() + awaited data() with NO DOM and NO
- * mounted()/animations (PuzzleView.preload, DOC-APP-ANATOMY §5). The resolved
+ * mounted()/animations (PuzzleView.preload, DOC-VIEW-LIFECYCLE §3). The resolved
  * render() tree is slot-expanded against the call-site children and serialized.
  * Always render(), never renderSkeleton() — a build has real data.
  *

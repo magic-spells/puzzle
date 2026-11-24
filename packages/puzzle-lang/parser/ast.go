@@ -3,7 +3,7 @@ package parser
 import "github.com/magic-spells/puzzle/packages/puzzle-lang/expr"
 
 // ast.go defines the template AST produced by the parser
-// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c). Every node carries
+// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md, "The lane" step 1). Every node carries
 // the Position of its opening token for error reporting and downstream codegen
 // (Step 2). The tree is what the compiler consumes; there is no intermediate
 // string form.
@@ -281,7 +281,7 @@ type EventAttr struct {
 
 // MixedAttr is a quoted attribute value that interleaves static text,
 // interpolations, and inline {#if} blocks
-// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c attribute-value
+// (packages/puzzle/constellation/doc/DOC-SPEC.md §6 attribute-value
 // mini-grammar). Codegen concatenates the parts.
 type MixedAttr struct {
 	Name  string

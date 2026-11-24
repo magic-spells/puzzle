@@ -1279,7 +1279,7 @@ export class PuzzleView {
 	/**
 	 * The DOM node occupying this component's position (null before mount).
 	 * While an async data() is in flight this is the anchor placeholder, so
-	 * a parent's sibling insertion refs stay valid (constellation/doc/DOC-APP-ANATOMY.md §4).
+	 * a parent's sibling insertion refs stay valid (constellation/component/COMPONENT-VIEW-MANAGER.md, "Reconciliation").
 	 *
 	 * @returns {Element | Comment | null}
 	 */
@@ -1371,7 +1371,7 @@ export class PuzzleView {
 	 * → render → mounted (constellation/doc/DOC-VIEW-LIFECYCLE.md §3).
 	 *
 	 * A parent's ViewManager also calls this to mount a child component
-	 * (constellation/doc/DOC-APP-ANATOMY.md §4): `children` is the slot content captured at the
+	 * (constellation/component/COMPONENT-VIEW-MANAGER.md, "Components"): `children` is the slot content captured at the
 	 * call site (rendered at the child's `<Children/>`) and `ref` is the DOM node
 	 * to insert before. The anchor placeholder reserves the position
 	 * synchronously so an async data() does not strand the parent's insertion
@@ -1404,8 +1404,8 @@ export class PuzzleView {
 		this.#children = children;
 		this.#vm.anchorAt(ref);
 
-		// preloaded: created() + data() already ran in preload() (constellation/doc/DOC-APP-ANATOMY.md
-		// §5) — just render the resolved model into the reserved position. This keeps
+		// preloaded: created() + data() already ran in preload() (constellation/doc/DOC-VIEW-LIFECYCLE.md
+		// §4) — just render the resolved model into the reserved position. This keeps
 		// the mount synchronous so the Router's COMMIT stays atomic (D19).
 		if (preloaded) {
 			// A preload that already failed paints nothing: its position goes straight
@@ -1523,7 +1523,7 @@ export class PuzzleView {
 	}
 
 	/**
-	 * Parent re-render hook (constellation/doc/DOC-APP-ANATOMY.md §4). The ViewManager reuses
+	 * Parent re-render hook (constellation/component/COMPONENT-VIEW-MANAGER.md, "Components"). The ViewManager reuses
 	 * this instance for a matching component vnode and forwards the fresh slot
 	 * content plus changed props: props re-run data() (prop reactivity); a slot
 	 * content swap alone re-renders without re-running data().

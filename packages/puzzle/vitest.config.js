@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 // Test-harness analogue of the compiler's esbuild plugin module-graph role
-// (constellation/doc/DOC-COMPILATION-FLOW.md, constellation/doc/DOC-SPEC.md §12). The Go
+// (constellation/doc/DOC-COMPILER-DESIGN.md, "The lane", constellation/doc/DOC-SPEC.md §12). The Go
 // compiler emits the .pzl <script> VERBATIM, so a component import survives as
 // its source specifier — the compiled Home.compiled.js contains
 // `import TodoItem from '../components/TodoItem.pzl'`. In a real `puzzle build`,

@@ -6,8 +6,8 @@ import (
 )
 
 // scan.go holds THE shared balanced-brace scanner and the top-level splitters
-// that build on the same quote/depth awareness. Per packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md
-// §c, a single balanced scan MUST back interpolations, block headers, and
+// that build on the same quote/depth awareness. Per packages/puzzle/constellation/component/COMPONENT-TEMPLATE-PARSER.md
+// "Expressions", a single balanced scan MUST back interpolations, block headers, and
 // attribute-value expression mode — three divergent scanners is how the
 // prototype died.
 

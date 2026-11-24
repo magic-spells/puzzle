@@ -10,7 +10,7 @@ import (
 )
 
 // lexer.go is the HTML-aware template lexer
-// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c). It tokenizes the
+// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md, "The lane" step 1). It tokenizes the
 // <puzzle-view> CONTENT only — <script>/<style> bodies are never scanned for
 // template syntax (that split happens in sections.go).
 //
@@ -201,7 +201,7 @@ func (l *lexer) lexRawText() (Token, error) {
 }
 
 // lexText scans literal text until the next '<' or unescaped '{'. \{ and \}
-// become literal braces (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c).
+// become literal braces (packages/puzzle/constellation/doc/DOC-SPEC.md §6).
 func (l *lexer) lexText() (Token, error) {
 	line, col, off := l.line, l.col, l.baseOffset+l.pos
 	var sb strings.Builder

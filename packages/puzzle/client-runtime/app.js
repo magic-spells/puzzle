@@ -1,5 +1,5 @@
 /**
- * PuzzleApp — the application class (constellation/doc/DOC-SPEC.md §1–§2, constellation/doc/DOC-APP-ANATOMY.md §3).
+ * PuzzleApp — the application class (constellation/doc/DOC-SPEC.md §1–§2, constellation/component/COMPONENT-PUZZLE-APP.md).
  *
  * Instantiate once with the v1 config surface and call `mount()`. The config
  * surface is frozen (SPEC §2): { target, routes, models, functions, apiURL,

@@ -10,11 +10,11 @@ import (
 )
 
 // parser.go is the recursive-descent parser over the lexer's token stream
-// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §c). It produces the
+// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md, "The lane" step 1). It produces the
 // AST in ast.go. Blocks and elements are cross-checked so a {/if} closing
 // across an unclosed <div> (or vice versa) is a positioned error naming BOTH the
 // opener and the offender
-// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md §e).
+// (packages/puzzle/constellation/doc/DOC-COMPILER-DESIGN.md, "No partial output").
 
 type parser struct {
 	lex  *lexer

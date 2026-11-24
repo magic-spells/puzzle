@@ -1,7 +1,7 @@
-// Package codegen turns a parsed .pzl template (constellation/doc/DOC-COMPILER-DESIGN.md §c) into
+// Package codegen turns a parsed .pzl template (constellation/doc/DOC-COMPILER-DESIGN.md, "The lane" step 1) into
 // the generated JS module — the user's <script> emitted VERBATIM plus an
 // injected runtime import and an appended `Name.prototype.render = function
-// () {…}` (constellation/doc/DOC-COMPILER-DESIGN.md §d, constellation/doc/DOC-APP-ANATOMY.md §1). The correctness
+// () {…}` (constellation/doc/DOC-COMPILER-DESIGN.md, "The lane" step 2). The correctness
 // anchor is the Phase 1 hand-written fixture
 // tests/fixtures/todos/Home.compiled.js (FILE-TESTS-FIXTURES-TODOS-HOME-COMPILED): this codegen reproduces its
 // render function mechanically.
@@ -411,7 +411,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, res *Result)
 	//    a scriptless .pzl).
 	b.WriteString(scripts)
 	// 2. injected runtime import (after the scripts, before the render tail —
-	//    exactly where the fixture places it, constellation/doc/DOC-APP-ANATOMY.md §1).
+	//    exactly where the fixture places it, constellation/doc/DOC-COMPILER-DESIGN.md, "The lane" step 2).
 	b.WriteString("\n")
 	b.WriteString(importLine)
 	b.WriteString("\n")
@@ -1768,7 +1768,7 @@ func (c *compiler) attrKV(tag string, a parser.Attr, scope scopeMap, isComponent
 			}
 		}
 		// DOM listener → '@name' key; component callback prop → bare `name`
-		// (D16, constellation/doc/DOC-APP-ANATOMY.md §1).
+		// (D16, constellation/doc/DOC-EVENTS.md, "Component events: callbacks down, calls up").
 		if isComponent {
 			if len(at.Modifiers) > 0 {
 				return "", c.cgErr(at.Pos, "event modifiers are not allowed on component callback props")
@@ -1787,7 +1787,7 @@ func (c *compiler) attrKV(tag string, a parser.Attr, scope scopeMap, isComponent
 	}
 }
 
-// emitMixed compiles a mixed attribute value (constellation/doc/DOC-COMPILER-DESIGN.md §c) to a
+// emitMixed compiles a mixed attribute value (constellation/doc/DOC-SPEC.md §6) to a
 // template literal; inline `{#if}` parts become `${cond ? '…' : ”}` ternaries.
 func (c *compiler) emitMixed(parts []parser.Part, scope scopeMap) string {
 	f := c.factSink()

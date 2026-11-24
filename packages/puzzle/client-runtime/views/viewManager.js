@@ -1,6 +1,6 @@
 /**
- * ViewManager — render → diff → patch for ViewNode trees (constellation/doc/DOC-RUNTIME-KERNEL.md,
- * constellation/doc/DOC-APP-ANATOMY.md §4, D20).
+ * ViewManager — render → diff → patch for ViewNode trees (constellation/doc/DOC-VIEW-LIFECYCLE.md §1,
+ * constellation/component/COMPONENT-VIEW-MANAGER.md, D20).
  *
  * Rewritten from the prototype:
  * - DOM links (`el`) transfer from old to new tree on every patch, so updates
@@ -14,7 +14,7 @@
  *   leaking the old one.
  * - Insertion uses childNodes-accurate reference nodes (text siblings counted).
  *
- * Composition (constellation/doc/DOC-APP-ANATOMY.md §4): a component vnode (class `tag`) is not
+ * Composition (constellation/component/COMPONENT-VIEW-MANAGER.md, "Components"): a component vnode (class `tag`) is not
  * an element — the manager instantiates the child with the owner's `ctx`,
  * mounts it inline at the vnode's position (D20, no wrapper), reuses the
  * instance across re-renders (refresh only on prop change), and destroys it
@@ -244,7 +244,7 @@ export class ViewManager {
 	 * @param {Node} container host node this manager renders into (an element, or
 	 *   the parent node a component vnode mounts into)
 	 * @param {object} ctx owner's { store, router, formatters } — passed to
-	 *   any child components this tree instantiates (constellation/doc/DOC-APP-ANATOMY.md §4)
+	 *   any child components this tree instantiates (constellation/component/COMPONENT-VIEW-MANAGER.md, "Components")
 	 * @param {import('./PuzzleView.js').PuzzleView|null} owner view whose render tree this manager patches
 	 */
 	constructor(container, ctx = {}, owner = null) {
@@ -1610,7 +1610,7 @@ function reassertSelectValue(el, attrs) {
 /**
  * Same class + key: reuse the child instance (transferred onto newVnode). Push
  * new slot content always, and re-run the child's data() only when props
- * shallow-differ (constellation/doc/DOC-APP-ANATOMY.md §4 — the SPEC §4 prop-reactivity rule).
+ * shallow-differ (constellation/component/COMPONENT-VIEW-MANAGER.md, "Components" — the SPEC §4 prop-reactivity rule).
  * `vnode.el` tracks the child's live root so keyed sibling moves land right.
  *
  * @param {ViewNode} oldVnode

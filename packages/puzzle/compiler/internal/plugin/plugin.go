@@ -1,7 +1,7 @@
 // Package plugin implements the esbuild onLoad plugin for *.pzl files
-// (constellation/doc/DOC-COMPILER-DESIGN.md §b). Everything happens in memory, per file:
+// (constellation/doc/DOC-COMPILER-DESIGN.md, "The lane"). Everything happens in memory, per file:
 // read → SplitSections → codegen.Compile → return JS. Parse/codegen errors
-// become esbuild api.Message values with file/line/col (§e) so the build fails
+// become esbuild api.Message values with file/line/col (DOC-COMPILER-DESIGN, "No partial output") so the build fails
 // with normal esbuild formatting; a file that fails to compile emits no output.
 //
 // <style> blocks are collected into a per-plugin, mutex-guarded map (esbuild
@@ -154,7 +154,7 @@ func (p *Plugin) setup(build api.PluginBuild) {
 		})
 
 		if len(res.errs) > 0 {
-			// Never emit partial output for a failed file (§e). WatchFiles still
+			// Never emit partial output for a failed file (DOC-COMPILER-DESIGN, "No partial output"). WatchFiles still
 			// carries any {#svg} paths seen (incl. a missing one) so esbuild
 			// invalidates this cached failure once the file appears (D46).
 			return api.OnLoadResult{
@@ -415,7 +415,7 @@ func (p *Plugin) relName(path string) string {
 }
 
 // toMessages converts a parser/codegen error into esbuild messages — one
-// message per ParseError, batching an ErrorList (§e).
+// message per ParseError, batching an ErrorList (DOC-COMPILER-DESIGN, "No partial output").
 func toMessages(err error, fallbackFile string, source func(string) []byte) []api.Message {
 	switch e := err.(type) {
 	case parser.ErrorList:
