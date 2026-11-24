@@ -1468,10 +1468,8 @@ palettes prints `puzzle add theme <names…>` for the missing ones. The printed 
 package's version floor — `npm install @magic-spells/collapsible-content@^1.2.0`
 — so a piece never resolves against an npm `latest` older than the component it
 wraps; run it as printed. The default source is the
-`@magic-spells/puzzle-pieces` npm package, version-locked to the CLI's
-major.minor (falls back to the newest OLDER release with a printed note, but
-never across a breaking release, so before 1.0 a missing match is an error).
-`--pieces-version` pins a release; `--registry` (or `$PUZZLE_PIECES_REGISTRY`)
+`@magic-spells/puzzle-pieces` npm package: the newest release on the CLI's
+own major.minor, or an error when there is none. `--pieces-version` pins a release; `--registry` (or `$PUZZLE_PIECES_REGISTRY`)
 takes `npm:<package>[@version]`, a local directory, or an http(s) URL. Once
 copied, a piece is YOUR code: import it like any component (`import Button
 from '../components/ui/Button.pzl'`) and use it as a capitalized tag. Pieces
