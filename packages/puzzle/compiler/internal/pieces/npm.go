@@ -8,14 +8,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/magic-spells/puzzle/compiler/internal/update"
 )
 
 // parseVersion splits a semver string into its numeric parts. A prerelease or
@@ -64,36 +61,6 @@ func selectVersion(published []string, cliVersion string) (string, error) {
 		}
 	}
 	return best, nil
-}
-
-// selectFallbackVersion implements the compatibility fallback for a zero-config
-// run whose own minor has no pieces release yet, which happens when the
-// compiler is published before the matching registry. It returns the newest
-// published NON-prerelease on a LOWER minor of the CLI's own major, or "" when
-// there is none (the caller then keeps the hard error).
-//
-// Older, never newer, and never across a breaking release (update.Breaking): a
-// registry authored for a later compiler may use grammar this binary does not
-// have, and one from before a breaking release may use grammar it no longer
-// accepts (0.9 pieces' bare <Slot/> under 0.10). Below 1.0 every minor is a
-// breaking release, so there is no fallback there.
-func selectFallbackVersion(published []string, cliVersion string) string {
-	_, cliMinor, _, _, ok := parseVersion(cliVersion)
-	if !ok {
-		return ""
-	}
-	best, bestMinor, bestPatch := "", -1, -1
-	for _, v := range published {
-		// No major test: update.Breaking already rejects every other major.
-		_, minor, patch, pre, ok := parseVersion(v)
-		if !ok || pre || minor >= cliMinor || update.Breaking(v, cliVersion) {
-			continue
-		}
-		if minor > bestMinor || minor == bestMinor && patch > bestPatch {
-			best, bestMinor, bestPatch = v, minor, patch
-		}
-	}
-	return best
 }
 
 // compareVersions orders two published version strings the way a release
@@ -273,21 +240,9 @@ type npmFetcher struct {
 	cliVersion string // the compiler's own version (version.Version); tests fix it
 	base       string // npm registry API root; tests point at an httptest.Server
 	configured string // the source string as configured, pre-resolution
-	notice     io.Writer
 
 	resolved string            // version actually fetched; set by load
 	files    map[string][]byte // registry-relative path → bytes
-}
-
-// noticeWriter is where the compatibility-fallback line goes. It is stderr and
-// not the command's normal writer because resolution happens lazily inside the
-// first Fetch, long before RenderSummary prints the report to stdout — keeping
-// the notice on stderr means it cannot land in the middle of that block.
-func (n *npmFetcher) noticeWriter() io.Writer {
-	if n.notice != nil {
-		return n.notice
-	}
-	return os.Stderr
 }
 
 var _ Fetcher = (*npmFetcher)(nil)
@@ -386,20 +341,8 @@ func (n *npmFetcher) resolve() (version, tarballURL string, err error) {
 		}
 		if pick == "" {
 			cliMajor, cliMinor, _, _, _ := parseVersion(n.cliVersion)
-			// No release on this compiler's own line, which happens when the
-			// compiler ships before the matching registry minor exists — so fall
-			// back to the newest OLDER release on the same side of a breaking
-			// release, or fail when there is none. The notice names both versions
-			// so the mismatch is never silent.
-			fallback := selectFallbackVersion(published, n.cliVersion)
-			if fallback == "" {
-				return "", "", fmt.Errorf("no %s release matches puzzle %s yet (need %d.%d.x; published: %s)",
-					n.pkg, n.cliVersion, cliMajor, cliMinor, newestPublished(published, maxListedVersions))
-			}
-			fmt.Fprintf(n.noticeWriter(),
-				"note: no %s release matches puzzle %s (%d.%d.x is not published yet) — using %s, the newest compatible release. Pin an exact one with --pieces-version.\n",
-				n.pkg, n.cliVersion, cliMajor, cliMinor, fallback)
-			pick = fallback
+			return "", "", fmt.Errorf("no %s release matches puzzle %s yet (need %d.%d.x; published: %s)",
+				n.pkg, n.cliVersion, cliMajor, cliMinor, newestPublished(published, maxListedVersions))
 		}
 	}
 	entry, ok := pack.Versions[pick]

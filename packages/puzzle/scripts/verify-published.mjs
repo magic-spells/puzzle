@@ -27,11 +27,10 @@
 //      pieces version, with PUZZLE_PIECES_REGISTRY deleted from the child env.
 //
 // Steps 6-7 exist because nothing else in the pipeline looks at the pieces
-// registry. When no pieces release matches the CLI's major.minor, a zero-config
-// `add piece` stops with an error, since before 1.0 every older minor is across
-// a breaking release (from 1.0 it falls back to an older minor of the same major
-// and prints a note). Either way the release shipped half-published, and it would
-// pass every other check. The env var matters as much as the assertion:
+// registry. When no pieces release matches the CLI's major.minor, every
+// zero-config `add piece` stops with an error: the release shipped
+// half-published, and it would pass every other check. The env var matters as
+// much as the assertion:
 // PUZZLE_PIECES_REGISTRY is exported in the maintainer's shell and points at the
 // in-repo registry, which would make this check pass by reading local files it
 // is supposed to be proving are on npm.
@@ -53,7 +52,6 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { PLATFORM_PACKAGES } from './inject-platform-pins.mjs';
-import { piecesFallbackNotice } from './release-checks.mjs';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const REGISTRY = 'https://registry.npmjs.org';
@@ -208,8 +206,7 @@ console.log(`  OK  installed puzzle --version → ${cliOut.trim()}`);
 // --- 6. The version-locked pieces release must exist ------------------------
 // `puzzle add piece` resolves @magic-spells/puzzle-pieces to the CLI's own
 // major.minor (D32 amendment). A framework release published without its pieces
-// release makes every zero-config `add piece` fail (from 1.0, fall back to an
-// older minor of the same major).
+// release makes every zero-config `add piece` fail.
 const PIECES_PACKAGE = '@magic-spells/puzzle-pieces';
 const piecesDoc = await packument(PIECES_PACKAGE);
 if (!piecesDoc) fail(`${PIECES_PACKAGE} is not on the registry at all`);
@@ -218,9 +215,8 @@ if (!piecesDoc.versions?.[version]) {
 		`${PIECES_PACKAGE}@${version} is not on the registry`,
 		'The pieces registry is version-locked to the framework: `puzzle add piece`\n' +
 			`resolves ${PIECES_PACKAGE} to the CLI's major.minor. Without ${version} on the\n` +
-			'registry, every zero-config `add piece` fails (from 1.0 it falls back to an\n' +
-			'older minor of the same major). Publish it from ../puzzle-pieces, then re-run\n' +
-			'this check.\n' +
+			'registry, every zero-config `add piece` fails. Publish it from\n' +
+			'../puzzle-pieces, then re-run this check.\n' +
 			`Published: ${Object.keys(piecesDoc.versions ?? {}).join(', ') || '(none)'}`
 	);
 }
@@ -254,8 +250,6 @@ try {
 
 // A small, dependency-free piece: the assertion is about RESOLUTION, so the
 // cheapest unit that exercises the whole fetch/unpack/copy path is the right one.
-// spawnSync, not execFileSync: the fallback notice goes to STDERR (so it cannot
-// land mid-summary), and execFileSync hands back only stdout on success.
 const PIECE = 'badge';
 const add = spawnSync(cliPath, ['add', 'piece', PIECE, '--dir', appDir], {
 	cwd: appDir,
@@ -272,15 +266,6 @@ if (add.error || add.status !== 0) {
 	);
 }
 
-const notice = piecesFallbackNotice(addOut);
-if (notice) {
-	fail(
-		`\`add piece\` fell back to an older pieces line:\n  ${notice}`,
-		`Publish ${PIECES_PACKAGE}@${version} — the fallback is correct behaviour for a\n` +
-			'user whose CLI is ahead of the registry, and a half-published release for us.'
-	);
-}
-
 const lockPath = join(appDir, 'pieces.lock');
 if (!existsSync(lockPath)) {
 	fail(`\`add piece ${PIECE}\` wrote no pieces.lock in ${appDir}`);
@@ -292,15 +277,14 @@ try {
 	fail(`could not parse ${lockPath}: ${err.message}`);
 }
 // The lock records the FULLY RESOLVED source, so it is the authoritative answer
-// to "which pieces release did this actually install" — a notice on stderr can be
-// missed, a resolved spec cannot.
+// to "which pieces release did this actually install".
 const expectedSource = `npm:${PIECES_PACKAGE}@${version}`;
 if (lock.registry !== expectedSource) {
 	fail(
 		`pieces.lock records registry "${lock.registry}", expected "${expectedSource}"`,
 		'`add piece` resolved a different release than the one this framework version\n' +
-			'is locked to. If it names an older version the pieces release is missing; if it\n' +
-			'names a path or URL, PUZZLE_PIECES_REGISTRY leaked into the child environment.'
+			'is locked to. If it names a path or URL, PUZZLE_PIECES_REGISTRY leaked into the\n' +
+			'child environment.'
 	);
 }
 console.log(`  OK  add piece ${PIECE} resolved ${lock.registry}`);

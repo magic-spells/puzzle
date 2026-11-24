@@ -1,8 +1,8 @@
 // The release scripts run by hand, once per release, on one machine — the worst
 // possible place to discover a check does not work. These are their pure
 // predicates, exercised against the REAL strings and report shapes they read in
-// production so a reworded Go notice or a changed npm report is a red test rather
-// than a silently-passing release gate.
+// production so a changed npm report is a red test rather than a silently-passing
+// release gate.
 
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
@@ -10,65 +10,12 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-	piecesFallbackNotice,
 	packedBinaryProblem,
 	readmeStatusProblem,
 	tagReminderLines,
 } from '../scripts/release-checks.mjs';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-
-describe('piecesFallbackNotice', () => {
-	// Verbatim from compiler/internal/pieces/npm.go, with the format verbs filled
-	// in the way the CLI fills them.
-	const NOTICE =
-		'note: no @magic-spells/puzzle-pieces release matches puzzle 1.3.0 (1.3.x is not published yet) ' +
-		'— using 1.2.0, the newest compatible release. Pin an exact one with --pieces-version.';
-
-	it('detects the fallback notice on its own', () => {
-		expect(piecesFallbackNotice(NOTICE)).toBe(NOTICE);
-	});
-
-	it('detects it inside a wall of other CLI output', () => {
-		const output = ['✓ badge', NOTICE, '  app/pieces/badge/Badge.pzl', ''].join('\n');
-		expect(piecesFallbackNotice(output)).toBe(NOTICE);
-	});
-
-	it('does not fire on a clean add', () => {
-		const output = [
-			'✓ added badge from npm:@magic-spells/puzzle-pieces@0.7.0',
-			'  app/pieces/badge/Badge.pzl',
-		].join('\n');
-		expect(piecesFallbackNotice(output)).toBeNull();
-	});
-
-	// The HARD-ERROR message shares this notice's opening clause. It is a
-	// different failure with a different remedy (nothing compatible exists at
-	// all), and it already exits non-zero, so the detector must not claim it.
-	it('does not fire on the no-compatible-release hard error', () => {
-		const hardError =
-			'no @magic-spells/puzzle-pieces release matches puzzle 0.7.0 yet (need 0.7.x; published: 0.5.0, 0.4.0)';
-		expect(piecesFallbackNotice(hardError)).toBeNull();
-	});
-
-	it('tolerates empty and missing input', () => {
-		expect(piecesFallbackNotice('')).toBeNull();
-		expect(piecesFallbackNotice(undefined)).toBeNull();
-	});
-
-	// The detector is a copy of a Go format string, which is exactly the kind of
-	// duplication that rots. Read the real one and assert the two still agree.
-	it('matches the notice the compiler actually formats', () => {
-		const src = readFileSync(join(repoRoot, 'compiler/internal/pieces/npm.go'), 'utf8');
-		const format = src.match(/"(note: no %s release matches puzzle[^"]*)"/);
-		expect(format, 'the fallback notice format string moved or was reworded').not.toBeNull();
-		const rendered = format[1]
-			.replace(/%s/g, 'X')
-			.replace(/%d\.%d/g, '0.7')
-			.replace(/\\n$/, '');
-		expect(piecesFallbackNotice(rendered)).not.toBeNull();
-	});
-});
 
 describe('packedBinaryProblem', () => {
 	const files = [
