@@ -51,7 +51,7 @@
                 <span
                   data-perf-wasted
                   class="font-mono text-26 font-semibold tabular-nums { wastedToneClass }">{ totalWasted }</span>
-                <span class="font-mono text-12 tabular-nums { wastedToneClass }">{ totalWastedPct }</span>
+                <span class="font-mono tabular-nums { wastedToneClass }">{ totalWastedPct }</span>
               </p>
               <p class="m-0 text-10 leading-snug text-muted">{ wastedHint }</p>
             </div>

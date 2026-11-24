@@ -63,7 +63,7 @@
                     class="shrink-0 size-1.5 rounded-full { row.kindClass }"
                     aria-hidden="true"></span>
 
-                  <span class="shrink-0 font-mono text-12 leading-none { row.nameClass }">{ row.name }</span>
+                  <span class="shrink-0 font-mono leading-none { row.nameClass }">{ row.name }</span>
 
                   {#if row.hasModuleLabel}
                     <span class="min-w-0 truncate font-mono text-10 leading-none { row.moduleClass }">{ row.moduleLabel }</span>
@@ -94,7 +94,7 @@
           class="py-8! px-4!" />
       {:else}
         <header class="shrink-0 flex items-baseline gap-2 min-h-9 px-3 py-2 leading-relaxed border-b border-line bg-surface">
-          <span class="shrink-0 font-mono text-12 font-semibold text-ink">{ detailName }</span>
+          <span class="shrink-0 font-mono font-semibold text-ink">{ detailName }</span>
           <span class="min-w-0 truncate font-mono text-10 text-faint" title="{ detailModule }">{ detailModule }</span>
           <span class="ml-auto shrink-0 font-mono text-10 tabular-nums text-faint">#{ detailId }</span>
         </header>

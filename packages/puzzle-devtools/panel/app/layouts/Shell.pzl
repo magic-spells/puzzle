@@ -6,7 +6,7 @@
       {#for item in nav}
         <a
           key={ item.path }
-          class="rounded px-2.5 py-1 text-12 no-underline { item.cls }"
+          class="rounded px-2.5 py-1 no-underline { item.cls }"
           href="{ link(item.path) }">{ item.label }</a>
       {/for}
     </nav>

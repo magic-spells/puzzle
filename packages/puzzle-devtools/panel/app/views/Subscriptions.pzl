@@ -72,7 +72,7 @@
         <Empty description="Select a store key to see which views re-render when it changes." class="py-8! px-4!" />
       {:else}
         <header class="shrink-0 flex items-baseline gap-2 min-h-9 px-3 py-2 leading-relaxed border-b border-line bg-surface">
-          <span class="shrink-0 font-mono text-12 font-semibold text-ink">{ selectedKey }</span>
+          <span class="shrink-0 font-mono font-semibold text-ink">{ selectedKey }</span>
           <span class="shrink-0 font-mono text-10 uppercase tracking-wide text-faint">{ selectedKind }</span>
           <span class="ml-auto shrink-0 font-mono text-10 tabular-nums text-faint">{ subscriberCount } subscriber{ subscriberSuffix }</span>
         </header>

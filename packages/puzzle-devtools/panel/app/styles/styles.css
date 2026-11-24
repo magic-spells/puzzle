@@ -72,7 +72,6 @@
 	--text-9: 9px;
 	--text-10: 10px;
 	--text-11: 11px;
-	--text-12: 12px;
 	--text-13: 13px;
 	--text-15: 15px;
 	--text-26: 26px;
@@ -232,9 +231,10 @@
 }
 
 /*
- * The re-render pulse (Views panel). A `flush` naming a view in its `notified`
- * list sets the row's `dt-pulse` class for ~600ms — the one thing in the panel
- * that says "this view just re-rendered because of that store write".
+ * The re-render pulse (Views and Subscriptions panels). A `flush` sets the
+ * `dt-pulse` class for ~600ms on the tree row of each view in its `notified`
+ * list and on the Subscriptions row of each key it wrote — the one thing in the
+ * panel that says "this re-rendered because of that store write".
  *
  * Deliberately UNLAYERED: Tailwind puts its utilities in a cascade layer, and
  * unlayered author styles win over every layered one, so a row that also

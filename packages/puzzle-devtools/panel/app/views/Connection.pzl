@@ -2,7 +2,7 @@
   {#if state === 'waiting'}
     <section class="rounded border border-line bg-surface p-4">
       <h1 class="m-0 text-13 font-semibold text-ink">No Puzzle app detected</h1>
-      <p class="mt-1.5 mb-0 text-12 text-muted leading-relaxed">
+      <p class="mt-1.5 mb-0 text-muted leading-relaxed">
         This page has not opened a DevTools bridge. That is expected when the page is
         not a Puzzle app, when it is a <strong class="font-medium text-ink">production build</strong>
         (the bridge is compiled out entirely), when it was built with
@@ -19,7 +19,7 @@
   {:else if state === 'version-mismatch'}
     <section class="rounded border border-warn bg-surface p-4">
       <h1 class="m-0 text-13 font-semibold text-ink">Protocol version mismatch</h1>
-      <p class="mt-1.5 mb-0 text-12 text-muted leading-relaxed">
+      <p class="mt-1.5 mb-0 text-muted leading-relaxed">
         A Puzzle app is running, but it speaks a wire protocol this extension cannot
         render. Nothing below would be trustworthy, so the panels stay closed.
       </p>
