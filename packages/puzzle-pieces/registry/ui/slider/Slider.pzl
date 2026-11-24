@@ -125,7 +125,7 @@ import {
 //   class                 string  — extra utilities merged onto the root
 //
 // Callbacks (value-first)
-//   @input   — live during drag / on each key step (single: (value); range: ({valueMin,valueMax}, thumb))
+//   @input   — live during drag / on each key step (single: (value); range: ({valueMin,valueMax}))
 //   @change  — commit on pointer release, track tap, and each key (native <input type=range> parity)
 //
 // Gesture model (carried over from the source — the point of the port):
@@ -591,13 +591,10 @@ export default class Slider extends PuzzleView {
     const fn = this.props[type];
     if (typeof fn !== 'function') return;
     if (this._isRange(this.props)) {
-      fn(
-        {
-          valueMin: thumb === 'min' ? value : committed.valueMin,
-          valueMax: thumb === 'max' ? value : committed.valueMax,
-        },
-        thumb
-      );
+      fn({
+        valueMin: thumb === 'min' ? value : committed.valueMin,
+        valueMax: thumb === 'max' ? value : committed.valueMax,
+      });
     } else {
       fn(value);
     }

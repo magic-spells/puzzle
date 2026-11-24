@@ -20,7 +20,7 @@
         class="ml-0.5 grid size-6 shrink-0 place-items-center rounded-md text-muted cursor-pointer transition-colors hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring disabled:opacity-50 disabled:pointer-events-none"
         aria-label={ removeLabel }
         disabled={ disabled }
-        @click={ handleRemove(event) }>
+        @click={ handleRemove }>
         <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M6 6l12 12M18 6L6 18" />
         </svg>
@@ -137,10 +137,10 @@ export default class ChatAttachment extends PuzzleView {
   }
 
   events = {
-    handleRemove: (event) => {
+    handleRemove: () => {
       if (this.getData().disabled) return;
       const { remove } = this.props;
-      if (typeof remove === 'function') remove(this.getData().name, event);
+      if (typeof remove === 'function') remove(this.getData().name);
     },
   };
 }

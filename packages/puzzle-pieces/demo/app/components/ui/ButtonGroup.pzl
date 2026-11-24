@@ -7,7 +7,7 @@
         class={ item.class }
         title={ item.title }
         disabled={ item.disabled }
-        @click={ press(item.value, event) }>
+        @click={ press(item.value) }>
         {#if item.icon}
           <svg class={ iconClass } viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d={ item.icon }/>
@@ -139,11 +139,11 @@ export default class ButtonGroup extends PuzzleView {
   }
 
   events = {
-    press: (value, event) => {
+    press: (value) => {
       const item = this.getData().items.find((i) => i.value === value);
       if (!item || item.disabled) return;
       const { press } = this.props;
-      if (typeof press === 'function') press(value, event);
+      if (typeof press === 'function') press(value);
     },
   };
 }

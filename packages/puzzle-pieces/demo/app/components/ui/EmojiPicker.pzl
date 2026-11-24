@@ -72,7 +72,7 @@
                 aria-label={ row.ariaLabel }
                 title={ row.title }
                 class={ row.rowClass }
-                @click={ choose(row, event) }
+                @click={ choose(row) }
                 @mouseenter={ hover(row) }>{ row.text }</li>
             {/for}
           {/if}
@@ -597,10 +597,10 @@ export default class EmojiPicker extends PuzzleView {
     this.element.querySelector(`#${CSS.escape(activeId)}`)?.scrollIntoView({ block: 'nearest' });
   }
 
-  _pick(opt, event) {
+  _pick(opt) {
     if (!opt) return;
     const { change } = this.props;
-    if (typeof change === 'function') change(opt.char, event);
+    if (typeof change === 'function') change(opt.char);
     this._requestClose({ restoreFocus: true });
   }
 
@@ -666,7 +666,7 @@ export default class EmojiPicker extends PuzzleView {
         case 'Enter': {
           event.preventDefault();
           const { options, activeIndex } = this.getData();
-          this._pick(options[activeIndex], event);
+          this._pick(options[activeIndex]);
           break;
         }
         case 'Tab':
@@ -685,9 +685,9 @@ export default class EmojiPicker extends PuzzleView {
       this._setActive(row.optIndex, false);
     },
 
-    choose: (row, event) => {
+    choose: (row) => {
       if (row.kind !== 'option') return;
-      this._pick(row, event);
+      this._pick(row);
     },
   };
 }

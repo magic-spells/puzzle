@@ -32,7 +32,7 @@
           class={ incClass }
           aria-label="Increase"
           disabled={ incDisabled }
-          @click={ stepUp(event) }>
+          @click={ stepUp }>
           <svg class="size-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <path d="M3.5 7L6 4.5 8.5 7" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
@@ -43,7 +43,7 @@
           class={ decClass }
           aria-label="Decrease"
           disabled={ decDisabled }
-          @click={ stepDown(event) }>
+          @click={ stepDown }>
           <svg class="size-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <path d="M3.5 5L6 7.5 8.5 5" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
@@ -181,31 +181,31 @@ export default class NumberField extends PuzzleView {
     return this.element?.querySelector('[data-numberfield-input]');
   }
 
-  emit(next, event) {
+  emit(next) {
     const { change } = this.props;
-    if (typeof change === 'function') change(next, event);
+    if (typeof change === 'function') change(next);
   }
 
   // Commit whatever text is in the field: empty → null (no snap-back), otherwise
   // parse, clamp to [min,max], round to precision, reflect in the field, and emit
   // if the result differs from the current controlled value.
-  commit(el, event) {
+  commit(el) {
     const { value, min, max, precision } = this.getData();
     const parsed = parseNum(el ? el.value : '');
     if (parsed === null) {
       if (el) el.value = '';
-      if (value !== null) this.emit(null, event);
+      if (value !== null) this.emit(null);
       return;
     }
     const next = roundTo(clampNum(parsed, min, max), precision);
     if (el) el.value = format(next, precision);
-    if (next !== value) this.emit(next, event);
+    if (next !== value) this.emit(next);
   }
 
   // Relative step (arrows/PageUp-Down/buttons). Base is the live (uncommitted) text
   // if numeric, else the controlled value; from an empty field the first step lands
   // on min (or 0), regardless of direction.
-  stepBy(delta, event) {
+  stepBy(delta) {
     const { value, min, max, precision, disabled } = this.getData();
     if (disabled) return;
     const el = this._inputEl();
@@ -214,17 +214,17 @@ export default class NumberField extends PuzzleView {
     const target = base === null ? (min != null ? min : 0) : base + delta;
     const next = roundTo(clampNum(target, min, max), precision ?? 12); // 12: no 0.1+0.2 noise
     if (el) el.value = format(next, precision);
-    if (next !== value) this.emit(next, event);
+    if (next !== value) this.emit(next);
   }
 
   // Absolute set (Home → min, End → max).
-  setTo(target, event) {
+  setTo(target) {
     const { value, min, max, precision, disabled } = this.getData();
     if (disabled) return;
     const el = this._inputEl();
     const next = roundTo(clampNum(target, min, max), precision);
     if (el) el.value = format(next, precision);
-    if (next !== value) this.emit(next, event);
+    if (next !== value) this.emit(next);
   }
 
   events = {
@@ -234,42 +234,42 @@ export default class NumberField extends PuzzleView {
       switch (event.key) {
         case 'ArrowUp':
           event.preventDefault();
-          this.stepBy(step, event);
+          this.stepBy(step);
           break;
         case 'ArrowDown':
           event.preventDefault();
-          this.stepBy(-step, event);
+          this.stepBy(-step);
           break;
         case 'PageUp':
           event.preventDefault();
-          this.stepBy(largeStep, event);
+          this.stepBy(largeStep);
           break;
         case 'PageDown':
           event.preventDefault();
-          this.stepBy(-largeStep, event);
+          this.stepBy(-largeStep);
           break;
         case 'Home':
           if (min != null) {
             event.preventDefault();
-            this.setTo(min, event);
+            this.setTo(min);
           }
           break;
         case 'End':
           if (max != null) {
             event.preventDefault();
-            this.setTo(max, event);
+            this.setTo(max);
           }
           break;
         case 'Enter':
-          this.commit(event.target, event);
+          this.commit(event.target);
           break;
         default:
           break;
       }
     },
-    onBlur: (event) => this.commit(event.target, event),
-    stepUp: (event) => this.stepBy(this.getData().step, event),
-    stepDown: (event) => this.stepBy(-this.getData().step, event),
+    onBlur: (event) => this.commit(event.target),
+    stepUp: () => this.stepBy(this.getData().step),
+    stepDown: () => this.stepBy(-this.getData().step),
   };
 }
 </script>

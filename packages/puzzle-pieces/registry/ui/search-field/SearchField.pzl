@@ -72,19 +72,19 @@ export default class SearchField extends PuzzleView {
   events = {
     handleInput: (event) => {
       const { change } = this.props;
-      if (typeof change === 'function') change(event.target.value, event);
+      if (typeof change === 'function') change(event.target.value);
     },
     handleSubmit: (event) => {
       // IME composition confirm must not act.
       if (event.isComposing) return;
       const { submit } = this.props;
-      if (typeof submit === 'function') submit(event.target.value, event);
+      if (typeof submit === 'function') submit(event.target.value);
     },
     handleClear: (event) => {
       // The clear button and input share the .relative wrapper.
       const input = event.currentTarget.parentElement?.querySelector('input');
       const { change } = this.props;
-      if (typeof change === 'function') change('', event);
+      if (typeof change === 'function') change('');
       if (input) input.focus();
     },
   };

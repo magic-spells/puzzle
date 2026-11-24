@@ -281,12 +281,12 @@ export default class DataTable extends PuzzleView {
     const { sortChange } = this.props;
     if (typeof sortChange === 'function') sortChange(next);
   }
-  _commitSelected(keys, event) {
+  _commitSelected(keys) {
     if (!this._selectedControlled()) {
       this.setState('uncontrolledSelected', keys);
     }
     const { select } = this.props;
-    if (typeof select === 'function') select(keys, event);
+    if (typeof select === 'function') select(keys);
   }
   _commitPage(n) {
     if (!this._pageControlled()) {
@@ -469,7 +469,7 @@ export default class DataTable extends PuzzleView {
       const set = new Set(this._effectiveSelected().map((k) => String(k)));
       if (checked) pageKeys.forEach((k) => set.add(k));
       else pageKeys.forEach((k) => set.delete(k));
-      this._commitSelected(Array.from(set), event);
+      this._commitSelected(Array.from(set));
     },
 
     toggleRow: (key, event) => {
@@ -477,7 +477,7 @@ export default class DataTable extends PuzzleView {
       const set = new Set(this._effectiveSelected().map((k) => String(k)));
       if (checked) set.add(String(key));
       else set.delete(String(key));
-      this._commitSelected(Array.from(set), event);
+      this._commitSelected(Array.from(set));
     },
 
     onPageChange: (n) => {

@@ -115,7 +115,7 @@ export default class DropdownMenu extends PuzzleView {
     onHide: () => this.props.hide?.(),
     // Returning the handler's own result is what lets a consumer cancel the
     // close by returning false — the base turns that into preventDefault().
-    onSelect: (value, event) => this.props.select?.(value, event),
+    onSelect: (value) => this.props.select?.(value),
   };
 }
 </script>

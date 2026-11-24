@@ -186,7 +186,7 @@ export default class DropdownPanel extends PuzzleView {
   // nested root is silenced by `sub` instead, so one chain reports once.
   #onSelect = (event) => {
     if (this.props.sub) return;
-    const result = this.props.select?.(event.detail?.value ?? null, event);
+    const result = this.props.select?.(event.detail?.value ?? null);
     // A handler that returns false cancels the close, leaving the menu open.
     if (result === false) event.preventDefault();
   };

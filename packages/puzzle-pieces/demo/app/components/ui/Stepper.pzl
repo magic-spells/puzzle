@@ -8,7 +8,7 @@
               type="button"
               class={ step.discClass }
               aria-label={ step.label }
-              @click={ press(step.index, event) }>
+              @click={ press(step.index) }>
               {#if step.complete}
                 <svg class="size-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
                   <path d="M5 10l3.5 3.5L15 6" stroke-linecap="round" stroke-linejoin="round"/>
@@ -188,7 +188,7 @@ export default class Stepper extends PuzzleView {
   }
 
   events = {
-    press: (index, event) => this.props.stepChange?.(index, event),
+    press: (index) => this.props.stepChange?.(index),
   };
 }
 </script>
