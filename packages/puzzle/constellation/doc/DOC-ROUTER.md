@@ -140,7 +140,7 @@ Plain `<a>` tags are intercepted — there is no link component. The browser kee
 
 ### By name
 
-`link()`, `router.url()`, `push()`, `replace()` and a guard's redirect take a named target as well as a path: `{ name, params, query?, hash? }`. The router builds the path from the route's pattern, so a route can move without its links changing ([[DECISION-D196-NAMED-ROUTES]]):
+`link()`, `router.url()`, `push()`, `replace()`, `prefetch()` and a guard's redirect take a named target as well as a path: `{ name, params, query?, hash? }`. The router builds the path from the route's pattern, so a route can move without its links changing ([[DECISION-D196-NAMED-ROUTES]]):
 
 ```html
 <a href="{ link({ name: 'album', params: { id: album.id } }) }">{ album.title }</a>
@@ -154,7 +154,7 @@ this.ctx.router.replace({ name: 'items', query: { q: 'cabin' } }); // → /items
 
 - Nested and index children resolve by their full path: `{ name: 'settings-profile' }` is `/settings/profile`.
 - Each param is URI-encoded, and `data({ params })` gets the value back as a string. `query` repeats a key for an array and drops `null`/`undefined`; `hash` takes `'faq'` or `'#faq'`.
-- Mistakes throw a `[puzzle]` error naming the route: an unknown name, a missing param, a param the pattern lacks, an unknown key, or a link to the `'*'` route. A bad target makes `push()`/`replace()` throw before navigating, unlike their usual resolved `NavigationResult`. Two routes with one name throw at startup in development.
+- Mistakes throw a `[puzzle]` error naming the route: an unknown name, a missing param, a param the pattern lacks, an unknown key, or a link to the `'*'` route. A bad target makes `push()`, `replace()` and `prefetch()` throw at once instead of resolving. Two routes with one name throw at startup in development.
 - A guard may return a named target to redirect.
 - Static pages resolve names too: a page whose prerender rendered a named link ships the name table in a small data island. On a prerendered page that rendered none, a named link that first renders in the browser (after a click, say) throws: link to it by path.
 - `puzzle check` does not check route names; an unknown name throws when the link renders, and a prerender fails the build.
@@ -194,7 +194,7 @@ A few things to know:
 - Only code loads. Guards don't run and `data()` doesn't run until the real navigation.
 - A route behind a `guard` isn't prefetched unless the link asks for it with `data-prefetch`, so gated code doesn't download for users who can't open it.
 - Nothing prefetches when the browser reports Save-Data or a 2g connection.
-- To warm a route yourself, after sign-in say, call `router.prefetch(path)`. It resolves `true` once the code is loaded and never navigates.
+- To warm a route yourself, after sign-in say, call `router.prefetch(path)` or `router.prefetch({ name: 'dashboard' })`. It resolves `true` once the code is loaded and never navigates.
 
 ## URL-backed state: `query` and `replace()`
 
@@ -331,7 +331,7 @@ Each entry is `{ path, params, name, meta, title, agent, chain }`. `agent` resol
 | `push(target)` | Navigate with a new history entry to a path or `{ name, params, query?, hash? }`. Resolves a `NavigationResult`; never rejects. |
 | `replace(target)` | Same, but replaces the current entry and leaves scroll alone. |
 | `go(n)` / `back()` / `forward()` | History movement in every mode. |
-| `prefetch(path)` | Load a path's lazy route code now, without navigating or running guards. Resolves `true` when loaded (or nothing to load), `false` on no match or a failed load. |
+| `prefetch(target)` | Load the lazy route code for a path or named target now, without navigating or running guards. Resolves `true` when loaded (or nothing to load), `false` on no match or a failed load. |
 | `url(target, options?)` | Mode-, base- and locale-correct href for a path or named target (what `link()` calls). |
 | `current` | The committed snapshot `{ path, pathname, query, hash, route, params, chain }`. |
 | `views` | Every leaf route as frozen `{ path, params, name, meta, title, agent, chain }` entries. |

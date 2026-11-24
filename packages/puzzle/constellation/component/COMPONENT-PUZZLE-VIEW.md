@@ -22,13 +22,12 @@ verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 notes:
   - kind: state
     text: >-
-      2026-11-08 runtime trims (feat/0.10-runtime-trims; review F2-Q1/Q3/Q4). playOut() is now one
-      path keyed on `const spent = this.#outTask !== null`. The spent case (a restored view leaving
-      for real) skips only the #outTask arm, _cancelOutAnimation, the enter cancel and the out spec.
-      It still re-arms #leaving, unsubscribes and fires the zero-duration hide bracket in the same
-      async task. The #plantFailurePlaceholder wrapper is inlined, and pending.reconcile is called
-      without `?.` (the getter always returns a function). The default export is removed; index.js
-      re-exports named bindings only.
+      `playOut()` is one path keyed on `const spent = this.#outTask !== null`. A restored view
+      leaving for real takes the spent case: it skips the `#outTask` arm, `_cancelOutAnimation()`,
+      the enter cancel and the out spec, but still re-arms `#leaving`, unsubscribes and fires the
+      zero-duration hide bracket in the same async task
+      ([[DECISION-D136-VIEW-LIFECYCLE-CONVERGENCE]]). `PuzzleView.js` has no default export;
+      `index.js` re-exports named bindings only.
 ---
 
 # PuzzleView
@@ -66,8 +65,15 @@ handle, by this view, during its own evaluation, may fault
   the newest closure. A reader's `shared` comes from walking `__parent` up to the
   first router-mounted view, so a layout's `share()` never reaches its page. Each
   sharer hands readers a Proxy that records the keys they read (enumerating counts
-  as every key); a publish re-runs `data()` only in readers of a key that changed
-  under `Object.is`.
+  as every key). `#publish()` returns the readers of a key that changed under
+  `Object.is`, each with its read record. `#renderSpan` passes them to
+  `#rerunReaders()` after the patch and before `afterUpdate()`. `#rerunReaders()`
+  empties the list as it walks it and skips a reader whose record is no longer the
+  one on the sharer's map: the patch destroyed it, or its new-props run already
+  started. `#commit` calls it again at its end, which re-runs the readers only when
+  the commit rendered nothing (a skeleton hold, a DOM-free preload). Emptying the
+  list is what stops a second run there: a Store runs async `data()` one at a time,
+  so a reader it holds back keeps its old record until its turn.
 - A `setState()` render goes through `schedule()` in `scheduler.js` (the shared
   [[DECISION-D63-HIDDEN-TAB-FLUSH]] frame rule). A render that lands first clears
   the flag, so the later frame is a no-op, unless a D23 `data()` re-run is still

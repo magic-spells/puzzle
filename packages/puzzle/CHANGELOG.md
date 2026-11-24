@@ -272,12 +272,14 @@ Production sizes: hello-world **23.9 KB gzip** (23.0 in 0.9.0), todos
   callbacks to every view its template mounts, at any depth and through slots,
   under `shared.<camelCaseClassName>` (`Tabs` → `shared.tabs`). `shared` is
   always an object, handlers read it as `this.shared`, and only nested views
-  whose `data()` read a changed shared key re-run (`puzzle check --fix`
-  rewrites old declarations, D199). A layout's `share()` does
-  not reach its routed page. Components named `Params`, `Props` or `Shared`
-  draw a compiler warning. In TypeScript, type the argument with the new
-  `DataInput<Props>` export. The DevTools Views inspector shows the `shared`
-  values a view receives, beside its params and props.
+  whose `data()` read a changed shared key re-run, after the sharer renders
+  and before its `afterUpdate()`, so a view that render removes does not run
+  again (`puzzle check --fix` rewrites old declarations, D199). A layout's
+  `share()` does not reach its routed page. Components named `Params`,
+  `Props` or `Shared` draw a compiler warning. In TypeScript, type the
+  argument with the new `DataInput<Props>` export. The DevTools Views
+  inspector shows the `shared` values a view receives, beside its params and
+  props.
 - **BREAKING: the router outlet is `<Outlet/>`; a bare `<Slot/>` is an error
   (D134).** Each marker now has one role: `<Outlet/>` is where a layout or
   view receives its child route, `<Children/>` is where a component receives
@@ -422,9 +424,10 @@ Production sizes: hello-world **23.9 KB gzip** (23.0 in 0.9.0), todos
   `query` key passed to `findMany` used to be ignored silently; without the
   adapter it now warns in development, and with it the read is a server query.
 - **Named routes (D196).** `link()`, `router.url()`, `router.push()`,
-  `router.replace()` and a guard's redirect take `{ name, params, query?, hash? }`
-  wherever they took a path, so `link({ name: 'album', params: { id: album.id } })`
-  keeps working when the route's path moves. Path strings work exactly as before.
+  `router.replace()`, `router.prefetch()` and a guard's redirect take
+  `{ name, params, query?, hash? }` wherever they took a path, so
+  `link({ name: 'album', params: { id: album.id } })` keeps working when the
+  route's path moves. Path strings work exactly as before.
   Nested and index routes resolve by their full path, params are URI-encoded,
   and `{ locale }` composes as it does with a path. An unknown name or a missing
   param throws a `[puzzle]` error that names the route, and two routes with one
@@ -481,9 +484,9 @@ Production sizes: hello-world **23.9 KB gzip** (23.0 in 0.9.0), todos
   `data-prefetch` on one link: `"off"` never, `"visible"` also when the link
   scrolls into view, and a bare `data-prefetch` (or `"intent"`) to prefetch a
   route that has a `guard`, which the default skips. Nothing prefetches under
-  Save-Data or on a 2g connection. `router.prefetch(path)` warms a route from
-  code and resolves `true` once it is loaded. Apps without `lazy()` grow by
-  about 60 B gzip; apps with it by about 0.75 KB.
+  Save-Data or on a 2g connection. `router.prefetch(path)` (or a named target)
+  warms a route from code and resolves `true` once it is loaded. Apps without
+  `lazy()` grow by about 60 B gzip; apps with it by about 0.75 KB.
 - **`puzzle add deploy <host>` writes a tested host config (D198).** One
   file per host, from the templates in `deploy/`: `vercel` (`vercel.json`),
   `netlify` (`netlify.toml`), `cloudflare` (`app/public/_headers`), `nginx`
@@ -594,7 +597,8 @@ Production sizes: hello-world **23.9 KB gzip** (23.0 in 0.9.0), todos
 - **The selected DevTools row has no left-edge bar (puzzle-devtools).** In the
   Views, Subscriptions and Store panels the selected row is marked by its tint
   and an accent, semibold name (in the Store table, the record's primary-key
-  cell).
+  cell). The re-render pulse now ends on the row's own background, so a
+  selected row shows none.
 - **Buttons are quiet: no brand fill (puzzle-pieces).** A screen with many
   buttons no longer reads as a wall of indigo. `button` `primary` is solid ink
   with the page colour as its text
@@ -633,10 +637,14 @@ Production sizes: hello-world **23.9 KB gzip** (23.0 in 0.9.0), todos
   picking a day in the right grid no longer moves both grids or drops focus;
   each open lands on the start month. Under `sm` the presets rail stacks above
   the grids, so the panel fits a 375px screen.
-- **Piece callbacks pass one argument (puzzle-pieces).** A component callback
-  forwards only the first value the child passes. The piece headers that
-  named a second one (`@change(value, event)`, `@select(value, event)`,
-  `calendar`'s `@change(iso, date)`, `image-zoom`'s pan) now show one.
+- **Piece callbacks pass one value (puzzle-pieces).** A component callback
+  forwards only the first value the child passes, so the pieces now pass only
+  that value and their headers show one. The DOM event is gone (`hamburger`'s
+  `@change` included), as are `calendar`'s and `date-picker`'s `Date`, and
+  `slider`'s range callback is `({ valueMin, valueMax })` with no `thumb`. Only
+  a parent that passed a callback as a prop (`change={ fn }`) or mounted a
+  piece from JavaScript sees the difference. `rich-text`'s and
+  `rich-text-editor`'s `resolveImage(ref, node)` keeps both.
 - **`sheet`, `bottom-sheet`, `dialog`, `alert-dialog` and `command` overlays
   use `--color-scrim` (puzzle-pieces).** In light mode the scrim is the
   palette's slate at 0.4 instead of black at 0.5, so it reads lighter and
@@ -827,6 +835,10 @@ you edited the files).
   Chrome restarts the extension's worker often, and the page relay gave up
   after 20 reconnects with no message between them, so after about ten minutes
   on an idle tab the panels stopped updating. It now reconnects every time.
+- **The DevTools Views tree shows keyboard focus (puzzle-devtools).** The tree
+  takes focus so the arrow keys can move the selection, but it drew no focus
+  indicator. It now shows a focus ring when the keyboard reaches it; a click
+  shows none.
 - **`eslint --fix` no longer deletes a `.pzl` file's template
   (eslint-plugin-puzzle).** Whitespace and formatting rules (core
   `no-multiple-empty-lines`, `@stylistic`, `neostandard`,
@@ -982,6 +994,20 @@ habit. Nothing existing breaks: renamed spellings stay accepted.
   `npx puzzle check --fix`. Only a 0.10 or later CLI can stop: an older global
   CLI still builds against the wrong runtime without a word, so upgrade the
   global CLI or use the project's own (`npm run …`, `npx puzzle …`).
+- **`puzzle add piece` and `add theme` never fall back across a breaking
+  release.** With no `@magic-spells/puzzle-pieces` release on the CLI's
+  major.minor, which happens only while a framework release is on npm before
+  its pieces release, they used to copy the newest older pieces release. Below
+  1.0 every older minor is across a breaking release (the 0.9 pieces use the
+  bare `<Slot/>` that 0.10 rejects), so they now stop before writing anything:
+
+  ```
+  no @magic-spells/puzzle-pieces release matches puzzle 0.10.0 yet (need 0.10.x; published: 0.6.0, 0.7.0, 0.8.0, 0.9.0)
+    (the default npm registry didn't yield a matching pieces release — point at a registry with --registry <path|url> or the PUZZLE_PIECES_REGISTRY env var)
+  ```
+
+  From 1.0 an older minor of the same major is still used, with a notice. An
+  explicit `--pieces-version` still pins a release on purpose.
 - **`puzzle add piece` prints the stylesheet imports a wrapper piece needs.** A
   piece that wraps a web component (`dialog`, `sheet`, `select`, `tabs`, the
   dropdown family, …) now prints one `@import "<package>/css" layer(components);`

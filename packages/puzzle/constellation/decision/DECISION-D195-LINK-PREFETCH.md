@@ -15,6 +15,7 @@ connections:
   - DOC-SPEC-ROUTER
   - DOC-ROUTER
   - DOC-RELEASE-SURFACE
+  - DECISION-D196-NAMED-ROUTES
 verified_at: '2026-11-21T18:57:28.823Z'
 verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
 ---
@@ -33,9 +34,9 @@ D163 made route views lazy: a `lazy()` section downloads on first navigation, an
 
 **App-wide: config `prefetch`** (boolean, default `true`), passed to the Router as its `prefetch` option. `false` turns off the default only; a link that names a mode still prefetches. A non-boolean throws at startup — `'hover'` reads like a mode Puzzle does not have.
 
-**Guards stay closed by default.** D163's rule is that gated code never downloads on its own. The app default skips a matched entry whose (inherited) guard list is non-empty. A link that names a mode, and `router.prefetch(path)`, load it anyway — the author has said the code is not secret. Guards never run during prefetch: they can have side effects and are written for a real navigation.
+**Guards stay closed by default.** D163's rule is that gated code never downloads on its own. The app default skips a matched entry whose (inherited) guard list is non-empty. A link that names a mode, and `router.prefetch()`, load it anyway — the author has said the code is not secret. Guards never run during prefetch: they can have side effects and are written for a real navigation.
 
-**`router.prefetch(path) → Promise<boolean>`** for programmatic warming (after login, on idle). Explicit, so it skips the guard rule and the connection check; never rejects; `true` means the code is in memory or there was nothing to load.
+**`router.prefetch(target) → Promise<boolean>`** for programmatic warming (after login, on idle). The target is a path or a named target ([[DECISION-D196-NAMED-ROUTES]]), resolved by the same `targetPath` as `push()`, so a bad one throws synchronously. Explicit, so it skips the guard rule and the connection check; never rejects; `true` means the code is in memory or there was nothing to load.
 
 **Respect the connection.** Automatic prefetch does nothing under `navigator.connection.saveData` or a 2g-class `effectiveType`. The chunk still loads on click.
 

@@ -84,8 +84,8 @@ Run with `npx vitest run tests/router tests/route-tree-shared tests/auth-example
 - **Link prefetch** (`router-prefetch`, D195): hover delay and cancel, touch and focus
   at once, lazy layouts, links a click would not take, Save-Data and 2g, hash mode,
   `data-prefetch` values and the `prefetch: false` default, the guard rule,
-  `router.prefetch()` results and retry after a failed load, `"visible"` links joining
-  and leaving, no listeners for an eager table, teardown at `stop()`.
+  `router.prefetch()` results, a named target, and retry after a failed load, `"visible"`
+  links joining and leaving, no listeners for an eager table, teardown at `stop()`.
 - **Route tree** (`route-tree-shared`): SSG enumeration and the router table agree.
 
 Transitions and morphs are [[TEST-TRANSITIONS-MORPH]]; locale prefixes are

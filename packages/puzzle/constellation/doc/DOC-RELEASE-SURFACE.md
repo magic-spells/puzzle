@@ -117,11 +117,11 @@ Contract: §3–§6, §17, §18, §24, §28, §31, §43, §47, §57, §64–§67
 §9, §14, §15, §19, §23, §26, §30, §33, §44, §45, §48, §51, §62, §69.
 
 - Path (default), hash and memory modes; nested routes, index and catch-all routes, layouts, `routerBase`. The snapshot carries `path`, `pathname`, frozen `query`, `hash`, `params`, `route`, `chain`.
-- `push`, `replace`, `go`, `back`, `forward`; same-origin link interception; `router.url(target, options?)` and the `link` function, where a target is a path or `{ name, params?, query?, hash? }` (D196). `push`/`replace` resolve a never-rejecting `NavigationResult` (D182; `catchAll: true` per D189).
+- `push`, `replace`, `go`, `back`, `forward`; same-origin link interception; `router.url(target, options?)`, the `link` function and `router.prefetch(target)`, where a target is a path or `{ name, params?, query?, hash? }` (D196). `push`/`replace` resolve a never-rejecting `NavigationResult` (D182; `catchAll: true` per D189).
 - `router.views` and the `agent` route field (D183).
 - Locale URL prefixes: `i18n.routing: 'prefix'` (path routing only) (D177).
 - Load-then-commit navigation; inherited `guard` (SPA only); `lazy()` views and layouts.
-- Link prefetch of lazy route code (D195): on intent by default, `data-prefetch` (`intent` / `visible` / `off`) per link, `router.prefetch(path)`; unguarded routes only unless the link asks.
+- Link prefetch of lazy route code (D195): on intent by default, `data-prefetch` (`intent` / `visible` / `off`) per link, `router.prefetch(target)`; unguarded routes only unless the link asks.
 - Head: `document.title` syncs on every navigation; description/canonical/social tags and `hreflang` are prerender-only.
 - `scrollBehavior`, `focusBehavior`; sequential or `overlap` transitions; WAAPI enter/leave animations including `trigger: 'visible'`; `/morph`.
 

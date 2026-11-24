@@ -26,7 +26,8 @@ Compound components (`Tabs` with `Tab`, a nested `Filter` chain, a `Form` with i
 - **`shared` is always an object.** `{}` when no ancestor shares, so `data({ shared: { filter = {} } })` never throws.
 - **Who sees it:** every view the sharer's render tree mounts (the owner chain, `__parent`), which includes slotted children because slot content mounts inside the component that renders it. The nearest same-named ancestor wins. The walk stops at a routed view: the router preloads layouts and pages in parallel, so a layout's `share()` cannot reach its page.
 - **Children change the sharer only through its callbacks.** There is no `setShared()` and no access to the parent's `setState()`. A function value reaches children as a stable wrapper that always calls the newest closure, so a re-run that makes a new arrow function never counts as a change.
-- **Reactivity reuses D23.** `share()` runs under the same read recorder as `data()`, so a `setState()` of a key it read re-runs `data()` and then `share()`. Each descendant's `data()` records which `shared` keys it read; after `share()` re-runs, only descendants that read a key whose value changed (`Object.is`) re-run, synchronously before the sharer renders.
+- **Reactivity reuses D23.** `share()` runs under the same read recorder as `data()`, so a `setState()` of a key it read re-runs `data()` and then `share()`. Each descendant's `data()` records which `shared` keys it read. `share()` runs before the sharer renders, so a child the render mounts or hands new props reads the new values. Descendants that read a key whose value changed (`Object.is`) re-run inside the sharer's render: after its DOM patch and before its `afterUpdate()`, so DevTools shows them as part of that update. A descendant the patch removed is skipped, and so is one that already re-ran with new props. Each reader re-runs at most once per update. A commit that renders nothing (a skeleton hold, a DOM-free preload) re-runs its readers at once.
+- **An async reader the render hands new props can still run `data()` twice.** A Store runs async `data()` one at a time, so that reader's new-props run can still be queued when the readers re-run. It still holds its old read record, so it re-runs for the shared change and then again for its props. Async readers that get no new props run once each.
 - **Handlers read `this.shared`**, an untracked getter returning the same object `data()` gets.
 - **The compiler warns on a component named `Params`, `Props` or `Shared`**, since its shared key would read like a built-in.
 
@@ -37,6 +38,8 @@ Compound components (`Tabs` with `Tab`, a nested `Filter` chain, a `Form` with i
 - **Let children call `setShared()` or the parent's `setState()`.** Two writers for one piece of state; a callback keeps the sharer in charge of its own rules.
 - **Pass shared values down the router chain (layout → page).** Layout and page `data()` run in parallel on navigation, so the page cannot wait for the layout's `share()` without serializing every route load.
 - **Re-run every descendant whenever `share()` re-runs.** Correct but wasteful on large trees; per-key read tracking is the same mechanism `data()` already uses for `getData()`.
+- **Re-run readers before the sharer renders.** A row the update removed re-ran against values that no longer held it, and a reader the same render handed new props ran `data()` twice.
+- **Re-run readers after the sharer's render returns.** The sharer's `afterUpdate()` would see its readers' old DOM.
 
 ## Consequences
 

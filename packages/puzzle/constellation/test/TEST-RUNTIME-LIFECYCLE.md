@@ -53,8 +53,12 @@ unmount, and [[COMPONENT-PUZZLE-VIEW]] from mount through destroy (the machine i
   unwinding.
 - **`share()`** (`share`, D197): the one-object `data()`, values reaching nested views
   at any depth and through slots under the sharer's camelCase name, `this.shared` in
-  handlers, only descendants whose `data()` read a changed key re-running, and a
-  layout's `share()` not reaching its routed page.
+  handlers, only descendants whose `data()` read a changed key re-running, after the
+  sharer's patch and before its `afterUpdate()` (a removed row never runs, a synchronous
+  reader re-propped by the same render runs once, async readers under a Store run once
+  each, a reader the held skeleton rendered still re-runs, and a chain of sharers
+  finishes inside the outer update), and a layout's `share()` not reaching its routed
+  page.
 - **Teardown** (`teardown-hook-guards`): a throwing `destroyed()` must not wedge the
   cascade or half-unmount the app.
 - **`<Component>` swaps** (`component-slot`, D180): the outgoing instance is completely

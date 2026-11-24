@@ -59,7 +59,7 @@ notes:
 
 # Puzzle themes — palettes, appearance runtime, design-system demo
 
-Brief: `docs/briefs/2026-09-18-puzzle-themes.md` (the spec). Decision record: [[DECISION-THEMES-IN-PIECES]].
+Decision record: [[DECISION-THEMES-IN-PIECES]].
 
 ## Scope
 

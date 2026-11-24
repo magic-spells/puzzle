@@ -36,22 +36,20 @@ notes:
       fragment guard still needs a committed #state).
   - kind: decision
     text: >-
-      0.10.0 F3 (review 2026-11-08, V-features F3): the router focus step honours an element the
-      view already focused or marked autofocus. In the default target (`#resolveFocusTarget`, no
-      custom focusBehavior): if focus is not already inside the committed leaf root (a `mounted()`
+      The default focus target (`#resolveFocusTarget`, no custom focusBehavior) respects a view that
+      chose its own focus. If focus is not already inside the committed leaf root (a `mounted()`
       focus call), it calls `focus({ preventScroll: true })` on the leaf's first `[autofocus]`
-      element itself; then it asks the DOM: focus inside the root → return null (no move, still
-      announces), else the root as before. Checking where focus actually landed covers a hidden,
+      element; then it asks the DOM where focus is: inside the root returns null (no move, still
+      announces), anywhere else returns the root. Asking where focus landed covers a hidden,
       disabled, inert or closed-`<dialog>` autofocus target (the pieces AlertDialog's Cancel button)
-      with no visibility logic, so `#focusElement` still only receives the root or a custom return
-      and its stamp rule is unchanged. Why: `#applyFocus` runs after mount, so it stole focus from
-      music Search's input on every client navigation; browsers only honour `autofocus` on first
-      load. Consequence for D135: a params-only PUSH from a control inside the reused leaf leaves
-      focus on that control when it survives the patch (D93's reason for moving focus is a stranded
-      keyboard position); if it is gone, the root is focused as before. No new option or API.
-      Rejected: returning the `[autofocus]` element as the target (a closed dialog's button takes no
-      focus, so focus fell to body); autofocus-only (a view focusing in mounted() would still lose
-      focus); a reused-view flag to keep D135's old push behaviour.
+      with no visibility logic, so `#focusElement` only ever receives the root or a custom return.
+      Why: `#applyFocus` runs after mount, so moving focus to the root stole it from an input the
+      view had focused (music Search), and browsers honour `autofocus` on first load only. For D135:
+      a params-only push from a control inside the reused leaf leaves focus on that control when the
+      patch keeps it; if the control is gone, the root takes focus. Rejected: returning the
+      `[autofocus]` element as the target (a closed dialog's button takes no focus, so focus fell to
+      body); handling `autofocus` only (a view that focuses in `mounted()` would still lose focus);
+      a reused-view flag to keep D135's old push behaviour.
   - kind: state
     text: >-
       Popstate saves the outgoing position from `#shown`, the window position as of the last
@@ -68,7 +66,7 @@ Route compiler and navigation state machine. The public contract is [[DOC-SPEC-R
 - `router/router.js` — the Router class: route compile, `#navigate`, `#swap`, `#commitLocation`, `#commitState`, scroll, focus, interception. Also exports `encodeURL`, `normalizeBase`, `localeBase`, `linkLocale`, `localePage`.
 - `router/routeTree.js` — the one nested-routes → leaf flatten (`walkRouteTree`), shared with the SSG pass.
 - `router/routePath.js` — path canonicalization and dynamic-segment shape (D126), shared with prerender.
-- `router/routeNames.js` — named route targets ([[DECISION-D196-NAMED-ROUTES]]): the name table and `targetPath`, which turns `{ name, params, query, hash }` into a path string before anything else reads it. DOM-free, so the live Router (`url`, `push`, `replace`, guard redirects), the hybrid prerender's `url()` shadow, the static router stub and the static page kernel (which reads the table from the page's names island) resolve names by one rule.
+- `router/routeNames.js` — named route targets ([[DECISION-D196-NAMED-ROUTES]]): the name table and `targetPath`, which turns `{ name, params, query, hash }` into a path string before anything else reads it. DOM-free, so the live Router (`url`, `push`, `replace`, `prefetch`, guard redirects), the hybrid prerender's `url()` shadow, the static router stub and the static page kernel (which reads the table from the page's names island) resolve names by one rule.
 - `router/viewClass.js` — view/layout value checks, kept out of `lazy.js` so validation survives the `__PUZZLE_HAS_LAZY__` fold.
 - `router/lazy.js` — the `lazy()` marker and resolver ([[DECISION-D163-LAZY-ROUTE-VIEWS]]).
 - `router/prefetch.js` — link prefetch ([[DECISION-D195-LINK-PREFETCH]]): document intent listeners, the `data-prefetch="visible"` scan, the per-router `prefetch` default in a WeakMap. Reached only behind the `__PUZZLE_HAS_LAZY__` probe.
@@ -109,7 +107,7 @@ Each leaf precomputes its guard chain (`entry.guards`, root → leaf) and, when 
 ## Link test and prefetch (D195)
 
 - `#linkPath(a)` is the single answer to "which in-app path would a click on this link navigate to" (null when a click would not be intercepted): `target`, `download`, the hash mode's `fragmentPath` for `#…`, `mailto:`/`tel:`, origin, the mode's `linkPath`, the locale-prefix check, `stripBase`. `#handleClick` and prefetch both call it, so a link never prefetches where a click would not navigate. The mode seams are pure (they return a path or null; the caller pushes).
-- `#prefetch(path, explicit)` matches and calls `resolveRouteViews(entry)` — D163's memoized resolver, so prefetch and navigation share one in-flight load. Without `explicit`, an entry with guards returns `false` before loading (gated code never downloads on its own). It never runs guards and never rejects; `router.prefetch(path)` is the explicit public form.
+- `#prefetch(path, explicit)` matches and calls `resolveRouteViews(entry)` — D163's memoized resolver, so prefetch and navigation share one in-flight load. Without `explicit`, an entry with guards returns `false` before loading (gated code never downloads on its own). It never runs guards and never rejects. `router.prefetch(target)` is the explicit public form; it resolves a named target through `targetPath` first, as `push()` does.
 - `watchLinks` runs at `start()` only when some entry or the catch-all has a marker; `stop()` calls `unwatchLinks`. The `prefetch` option is read from `arguments[1]` and validated in `prefetch.js`, so a lazy-free build carries no field, check or message for it.
 
 ## Navigation results (D182)

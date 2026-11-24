@@ -25,8 +25,7 @@ Many React component libraries lean on **compound components** — `<Select>` + 
 
 ## Decision
 
-
-Every piece uses a **config-first API**: data in as props, structure described by config objects, behavior out via value-first callbacks. `<Combobox options={…} value={…} @change={…}/>`, not a `<ComboboxTrigger>`+`<ComboboxContent>` family. Controlled-component discipline is the default: the parent owns `value`/`open`, props in / callbacks out, callbacks value-first (`this.props.change(value)`).
+Every piece uses a **config-first API**: data in as props, structure described by config objects, behavior out via value-first callbacks. `<Combobox options={…} value={…} @change={…}/>`, not a `<ComboboxTrigger>`+`<ComboboxContent>` family. Controlled-component discipline is the default: the parent owns `value`/`open`, props in / callbacks out, callbacks value-first (`this.props.change(value)`). A callback passes one value, since a second argument never reaches the parent: no DOM event, and one object such as slider's `{ valueMin, valueMax }` when there is more to send. A prop function the piece calls for an answer, such as rich-text's `resolveImage(ref, node)`, is a plain prop and receives both arguments.
 
 Presentational structure is caller-customizable without giving away behavioral ownership. Static regions use named slots; repeated regions use Puzzle's args-bearing marker + caller `<Snippet>` contract. The component keeps the semantic/interactive wrapper, focus model, ARIA, and event handlers, hands only documented render values to the snippet, and keeps its stock markup in the marker fallback so callers that supply no snippet render unchanged.
 

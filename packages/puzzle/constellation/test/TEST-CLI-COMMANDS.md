@@ -80,8 +80,10 @@ Run from `packages/puzzle` with `go test ./compiler/cmd/... ./compiler/internal/
   `skills/puzzle/SKILL.md` presents as working and requires the ones it shows as errors to
   fail, so the skill cannot teach syntax the compiler rejects.
 - **Pieces**: registry resolution and the npm transport: version lock to the CLI's
-  major.minor, the older-only fallback with its notice, the lock file, and the manifests'
-  `styles` printed in load order (`TestAddPiecePrintsStylesInLoadOrder`).
+  major.minor, the fallback with its notice within one major, and its refusal across a
+  breaking release (`TestAddRefusesPiecesAcrossBreakingRelease`: nothing written, for
+  `add piece` and `add theme`), the lock file, and the manifests' `styles` printed in load
+  order (`TestAddPiecePrintsStylesInLoadOrder`).
 
 Release scripts have JS suites: `tests/release-checks.test.js` (pieces fallback notice,
 packed-binary problems, tag reminder lines) and `tests/bin-shim-resolver.test.js`
