@@ -52,5 +52,9 @@ __APP_NAME__/
 - Add a page: a view under `app/views/` (`npx puzzle generate view Contact`),
   a route in `app/routes.js`, and a link in the header in
   `app/layouts/Default.pzl`.
+- Without `output: 'static'` in `puzzle.config.js`, Puzzle builds a
+  single-page app, as the
+  [default starter](https://github.com/magic-spells/puzzle-starter) does.
+- For TypeScript, see the [TypeScript static starter](https://github.com/magic-spells/puzzle-starter-static-ts).
 - Deploy: `npx puzzle add deploy` lists the hosts it writes a config for.
 - Read the docs at https://github.com/magic-spells/puzzle.
