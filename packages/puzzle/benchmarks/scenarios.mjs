@@ -379,8 +379,8 @@ export const OPS = [
 	},
 
 	// ── the handler A/B: identical ops, two handler spellings ───────────────
-	// Appended rather than interleaved, so `npm run bench` still runs the
-	// established suite first and unchanged. `--filter handlers-` runs ONLY this
+	// One block after `async-waterfall` rather than interleaved, so the ops
+	// before it run first and unchanged. `--filter handlers-` runs ONLY this
 	// comparison. Within each arm the behaviour gates come FIRST, so a variant
 	// that stopped working fails before any of its numbers are believed.
 	//

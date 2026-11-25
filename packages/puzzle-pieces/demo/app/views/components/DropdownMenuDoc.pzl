@@ -18,8 +18,9 @@
           <a class="text-brand underline underline-offset-2" href="#/components/menubar">Menubar</a>'s
           disclosure stance. The difference is that the component now implements the model those
           roles promise: one tab stop, arrows with wrap, Home/End, typeahead, Enter and Space
-          activation, Tab to close, and Escape one level at a time. So the piece authors no roles
-          at all — it would only be overwriting them.
+          activation, Tab to close, and Escape one level at a time. So the piece authors no menu
+          roles — the only roles it writes are Group's role="group" and Separator's
+          role="separator", which the component never sets.
         </p>
         <div class="mt-4 rounded-lg border border-border bg-surface-sunken p-4">
           <p class="text-sm font-medium text-ink">Breaking change in 0.7.0</p>
@@ -138,7 +139,9 @@
           <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
           <p class="mb-3 text-sm text-body">
             All of it lives in the web component's menu mode; this family adds no key handling of
-            its own, and authors no role, tabindex or aria-* attribute.
+            its own and authors no tabindex and no menu role or state — the only ARIA it writes is
+            Group's role="group" and aria-label, Separator's role="separator", a disabled Link's
+            aria-disabled and the trigger arrow's aria-hidden.
           </p>
           <div class="text-sm">
             {#for row in keyRows}
@@ -313,7 +316,7 @@ const reference = [
     summary: 'A submenu: the nested host a Trigger + Content pair need. An Item is a <button> and cannot contain one.',
     rows: [
       { name: 'trigger', desc: "'both' (default) | 'hover' | 'click'. Hover or ArrowRight opens it." },
-      { name: 'class', desc: 'Merged onto the host, after the load-bearing `block`.' },
+      { name: 'class', desc: 'Merged onto the host, after the load-bearing `block!`.' },
     ],
   },
   {

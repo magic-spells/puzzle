@@ -430,7 +430,7 @@ const codeResult = `<Button variant="outline" @press={ openConfirm }>Delete proj
 // tell which answer was given. Escape, a backdrop tap and a flick all report
 // null. A bottom sheet has no dismiss policy — those three are always open,
 // so a question that must be answered belongs in a Dialog, not here.
-// The footer slot takes a single direct child, so two buttons share a
+// bottom-sheet-footer is a plain block, so the two buttons share a flex
 // wrapper div that carries slot="footer".`;
 
 const codeHeader = `<BottomSheet
@@ -513,7 +513,7 @@ export default class BottomSheetDoc extends PuzzleView {
       ],
       slotRows: [
         { name: 'header', desc: 'Fills bottom-sheet-header, replacing the title heading entirely; a filled header brings its own heading and points labelledby at it. The grabber is a pseudo-element and survives it. Always a drag surface.' },
-        { name: 'footer', desc: 'Fills bottom-sheet-footer, pinned below the content at every snap and hidden while empty. Also a drag surface. Takes one direct child, so wrap multiple buttons in a div that carries the slot attribute.' },
+        { name: 'footer', desc: 'Fills bottom-sheet-footer, pinned below the content at every snap and hidden while empty. Also a drag surface. Every direct child that carries slot="footer" lands there, in order; bottom-sheet-footer is display: block, so wrap several buttons in a flex div to lay them out as a row.' },
         { name: 'default', desc: 'Untagged children become bottom-sheet-content, the scrollable region.' },
       ],
       cssRows: [

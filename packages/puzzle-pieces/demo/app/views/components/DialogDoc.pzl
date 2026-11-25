@@ -353,8 +353,8 @@ const codeHero = `<Button variant="outline" @press={ openHero }>Delete project</
 // tell which answer was given. Escape and a backdrop click report null.
 // Those attributes have to sit on a real <button> — a component tag takes
 // them as props and never puts them in the DOM.
-// The footer slot takes a single direct child, so two buttons share a
-// wrapper div that carries slot="footer".`;
+// Every direct child with slot="footer" lands in the footer row; the
+// wrapper div just groups the two buttons.`;
 
 const codeLocked = `<Dialog
   open={ lockedOpen }
@@ -482,8 +482,8 @@ export default class DialogDoc extends PuzzleView {
         { name: '@show()', desc: 'The entrance settled and the native dialog is in the top layer.' },
       ],
       slotRows: [
-        { name: 'header', desc: 'Replaces the stock title and description block entirely; a filled header brings its own heading and points labelledby at it. Takes one direct child.' },
-        { name: 'footer', desc: 'A right-aligned row below the body, hidden while empty. Takes one direct child, so wrap multiple buttons in a div that carries the slot attribute.' },
+        { name: 'header', desc: 'Replaces the stock title and description block entirely; a filled header brings its own heading and points labelledby at it. Every direct child that carries slot="header" renders there, in order.' },
+        { name: 'footer', desc: 'A right-aligned row below the body, hidden while empty. Every direct child that carries slot="footer" lands in that row, in order.' },
         { name: 'default', desc: 'Untagged children become the body, between the header and the footer, inside the scroll region.' },
       ],
       cssRows: [

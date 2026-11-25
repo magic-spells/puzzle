@@ -9,8 +9,8 @@ import puzzleLang, { puzzleJavascript } from './puzzle-lang.js';
 // Syntax highlighting for the Code piece, on highlight.js CORE + exactly the
 // grammars docs-style snippets use — the full hljs bundle ships ~190 languages
 // you don't want in app.js. Register more grammars here if your snippets need
-// them. The GitHub light/dark token palette lives in pieces.css under the
-// .hljs-* classes.
+// them. The GitHub light/dark token palette lives in Code.pzl's <style> block
+// under the .hljs-* classes.
 //
 // Registry lib file: copied to app/lib/highlight.js; pieces import it as
 // ../../lib/highlight.js. Requires `npm install highlight.js`.

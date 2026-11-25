@@ -60,8 +60,13 @@
         <CodeBlock code={ installCss }/>
         <p class="mt-3 text-sm text-body">
           The piece already bridges the sheet's divider colours to pieces.css tokens with an inline
-          style on the group host, so it matches the rest of the registry out of the box. Retune it
-          per instance by setting the same custom properties yourself:
+          style on the group host, so it matches the rest of the registry out of the box. SplitPanel
+          takes no <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">style</code>
+          prop: to change the colours, edit
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">ROOT_STYLE</code>
+          in your copy of
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">SplitPanel/SplitPanel.pzl</code>.
+          The gap and line width are not pinned, so a wrapper can set them:
         </p>
         <CodeBlock code={ installTokens } class="mt-3"/>
         <p class="mt-3 text-sm text-muted">
@@ -263,11 +268,9 @@ const installCss = `/* app/styles/styles.css */
 @import "tailwindcss";
 @import "@magic-spells/split-panel/css" layer(components); /* required */`;
 
-const installTokens = `<SplitPanel style="--split-panel-gap: 0.75rem;
-                    --split-panel-divider-color: var(--color-border);
-                    --split-panel-divider-line: 0.25rem">
-  …
-</SplitPanel>`;
+const installTokens = `<div style="--split-panel-gap: 0.75rem; --split-panel-divider-line: 0.25rem">
+  <SplitPanel class="h-80">…</SplitPanel>
+</div>`;
 
 const usageImport = `import SplitPanel from '@/components/ui/SplitPanel';`;
 

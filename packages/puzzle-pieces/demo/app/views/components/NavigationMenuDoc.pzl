@@ -15,7 +15,7 @@
         <p class="mt-3 text-body">
           Accessibility is the <strong class="font-medium text-ink">disclosure</strong> pattern, not
           menubar or menuitem roles: those promise a desktop-app keyboard model that links to pages
-          do not deliver. Every trigger is a real button the component wires with
+          do not deliver. Every trigger is a focusable role="button" element the component wires with
           <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-expanded</code>,
           and every item is a real
           <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<a>' }</code>
@@ -230,9 +230,9 @@
         <section id="spacing" class="scroll-mt-20">
           <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Spacing and the hover bridge</h2>
           <p class="text-sm text-body">
-            Every panel opens 8px clear of what opened it: below its trigger, below the bar for a
-            wide panel, and beside its row for a submenu, lifted so the submenu's first link lines
-            up with that row. A hover-opened panel would close the moment the pointer left the
+            A downward panel opens 8px clear of what opened it: below its trigger, or below the bar
+            for a wide panel. A submenu opens beside its row, 3px clear of the parent panel's edge,
+            lifted so the submenu's first link lines up with that row. A hover-opened panel would close the moment the pointer left the
             trigger for that gap, so the core stylesheet draws an invisible, hit-testable wedge —
             the <span class="font-medium text-ink">hover bridge</span> — under a downward trigger and
             beside a submenu's, which keeps the pointer inside the menu on the way across.

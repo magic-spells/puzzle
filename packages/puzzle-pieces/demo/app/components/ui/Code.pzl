@@ -67,7 +67,7 @@ import { highlight } from '../../lib/highlight.js';
 //
 // Props:
 //   code         the snippet string (required)
-//   lang         'javascript' | 'xml' | 'bash' — omit to auto-guess by shape
+//   lang         'javascript' | 'xml' | 'css' | 'json' | 'ini' | 'bash' | 'puzzle' — omit to auto-guess by shape
 //   numbers      line-number gutter, default true; sticky-left so it stays put
 //                while long lines scroll horizontally
 //   copy         corner copy button, default true

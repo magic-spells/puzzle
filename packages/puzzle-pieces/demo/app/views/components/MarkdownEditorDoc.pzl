@@ -87,11 +87,11 @@
         <section id="markdown-support" class="scroll-mt-20">
           <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Markdown support</h2>
           <p class="mb-3 text-sm text-body">
-            The toolbar and the typing shortcuts cover H1 through H3, bold, italic,
+            The toolbar covers H1 through H3 (the typing and Mod-Alt shortcuts go to H6), bold, italic,
             strikethrough, inline code, bullet lists, ordered lists, task lists, blockquotes,
             fenced code blocks, horizontal rules, links, and tables. Undo/redo use the standard
             shortcuts. When the caret is inside a table a second contextual toolbar appears with
-            the row, column, and header actions.
+            the row, column, and delete-table actions.
           </p>
           <p class="mb-3 text-sm text-body">Deliberately absent, and why:</p>
           <ul class="mb-3 list-disc space-y-3 pl-5 text-sm text-body">
@@ -109,13 +109,6 @@
                 The editor schema has no image node, so an image typed as markdown will NOT
                 survive the round trip — it comes back as literal text. The Markdown RENDERER
                 displays images fine; this is an editor-side limit only.
-              </div>
-            </li>
-            <li>
-              <div class="font-medium text-ink">H4 through H6</div>
-              <div>
-                Headings stop at three levels, which is the range a document body actually
-                needs and keeps the toolbar honest.
               </div>
             </li>
           </ul>
@@ -177,7 +170,7 @@ lists, quotes, and [links](https://example.com).
 `;
 
 const TABLE_MD = `Put the caret in a cell — a second toolbar appears with the
-row, column, and header actions.
+row, column, and delete-table actions.
 
 | Piece    | Value      | Renders with |
 | :------- | :--------- | :----------- |

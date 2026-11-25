@@ -47,7 +47,7 @@ lab exists to make.
 
 | path | contents |
 | --- | --- |
-| `benchmarks/.build/stress-src/` | a scratch copy of the example's source (`app/`, `public/`, `puzzle.config.js`, `package.json`) **and its `dist/`** — the bundle actually served |
+| `benchmarks/.build/stress-src/` | a scratch copy of the example's source (`app/`, which holds its `public/`, plus `puzzle.config.js` and `package.json`) **and its `dist/`** — the bundle actually served |
 | `benchmarks/.last-run.json` | the most recent run, so a failed run can still be diffed by hand |
 
 Plus `benchmarks/baseline.json`, but only under `npm run bench:update`, and
@@ -148,8 +148,9 @@ server in `runner.mjs`. The dev server is never involved and the example's own
 
 The runner does not trust the `--mode` flag; it greps the emitted bundle for
 `__PUZZLE_DEVTOOLS_HOOK__`, `import.meta.hot` and `puzzle:hmr` and refuses to
-run if a production build contains any of them. It also snapshots `dist/` before
-serving, so a rebuild in another terminal cannot change the bytes mid-suite.
+run if a production build contains any of them. It serves the staged copy's own
+`dist/`, which only this harness builds, so a `puzzle dev` rebuild in another
+terminal cannot change the bytes mid-suite.
 
 For the record, at 0.8.0 the production bundle is **238.6 KB** against the dev
 build's **690.4 KB**, and contains zero occurrences of the DevTools hook, HMR,
@@ -167,8 +168,12 @@ Alongside every median the table prints **MAD%** (median absolute deviation as a
 percentage of the median), the robust companion to a median. Quoting a standard
 deviation next to a median would describe a distribution nobody is reporting.
 
-No op is capped. If one ever is, the runner prints a `CAP` line in the LOG
-section and the table's `it` column shows the real count.
+Twelve ops record fewer than 15 iterations, declared in `scenarios.mjs`. The
+behaviour gates (`handlers-*/click-select`, `handlers-*/click-remove`,
+`virtual-list/native-scroll`, `listener-churn/click-select/*`,
+`form-state/type-event`) run once with no warmup, and
+`listener-churn/count-listeners/*` records 3. Each prints a `CAP` line in the
+LOG section, and the table's `it` column shows the real count.
 
 ### 3. Every iteration is prepared, and `validate()` gates the timed window
 
@@ -564,8 +569,9 @@ unaffected; the inline closure simply ignores the extra id argument.
 
 ### Running it
 
-`--filter handlers-` runs only this comparison: 20 entries appended to the end of
-`OPS`, with ids `handlers-inline/*` and `handlers-stable/*`. The existing
+`--filter handlers-` runs only this comparison: 20 entries placed after
+`async-waterfall` in `OPS`, with ids `handlers-inline/*` and
+`handlers-stable/*`. The existing
 `keyed-list/*` and `virtual-list/*` ids and params are untouched, and the
 `inline` arm deliberately does **not** pass `handlers=inline`. It is the
 default, so that arm's URL, render path and counters are identical to the plain
@@ -713,15 +719,15 @@ Production has no detector, so the burst arms are both safe and honest here.
 
 | op | script ms | paint ms | task | other | live nodes | views |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `navigate-burst/100` | — | **27.6** | 30.3 | 24.5 | 20 | 7 |
-| `params-burst/100` | — | **16.3** | 20.0 | 16.7 | 20 | 7 |
+| `navigate-burst/100` | — | **25.1** | 27.3 | 22.0 | 20 | 7 |
+| `params-burst/100` | — | **14.2** | 17.6 | 14.7 | 20 | 7 |
 
 Both report no `scriptMs`: a navigation is not a synchronous flush, so the
 scenario measures wall time around the whole loop, exactly as `async-waterfall`
 does. 0.7.0 on the same machine and browser measured `params-burst` at 18.0ms;
 its `navigate-burst` has no timing (see [Across releases](#across-releases)).
 
-That is 0.28ms per leaf-divergence navigation against 0.16ms for the params-only
+That is 0.25ms per leaf-divergence navigation against 0.14ms for the params-only
 control. The ancestors here render one span and an `<Outlet/>`, so the time says
 little on its own; the counters are the finding, and a real app's layouts
 multiply them by whatever they do per render.
@@ -762,8 +768,8 @@ and Chromium 151 for both releases:
 | ---: | --- | ---: | ---: | ---: | ---: |
 | 1,000 | 0.7.0 | 72.5 | 50.4 | 43.5 | **22.1ms (30.5%)** |
 | 10,000 | 0.7.0 | 855 | 542 | 505 | **313ms (36.6%)** |
-| 1,000 | 0.8.0 | 51.8 | 51.2 | 51.0 | 0.6ms, noise |
-| 10,000 | 0.8.0 | 570 | 564 | 583 | 6ms, noise |
+| 1,000 | 0.8.0 | 48.5 | 48.7 | 47.3 | −0.2ms, noise |
+| 10,000 | 0.8.0 | 544 | 547 | 544 | −3ms, noise |
 
 Structural counts over 20 renders of 10,000 rows:
 
@@ -775,8 +781,7 @@ Structural counts over 20 renders of 10,000 rows:
 
 The committed baseline gates on the zeros. Since D170 the `churn` arm's
 `@click={ selectRow(row) }` is cached on the row scope, so all three arms
-rebind nothing and time the same; `none` reading a little slower than the other
-two at 10,000 is inside the run-to-run band.
+rebind nothing and time the same, within the run-to-run band.
 
 **The canonical Puzzle handler spelling rebinds nothing**, and it never did:
 `@click={ onSelect }` compiles to a per-instance cached arrow and never fails
@@ -932,8 +937,9 @@ rejections, exit 0. Wall time ~13 minutes per suite.
   `params-100`, `back-forward-100`, `supersede-50`) are deliberately absent —
   their durations are inputs and the clamp guard would reject them — so their
   counters come from `probe.mjs` runs instead, and `listener-churn/rerender` is
-  the only listener arm timed at both sizes. The two unimplemented scenarios
-  in `examples/stress/README.md` obviously are not covered either. Add entries
+  the only listener arm timed at both sizes. The one unbuilt scenario in
+  `examples/stress/README.md` (`morph-flip`) obviously is not covered either.
+  Add entries
   to `scenarios.mjs` — nothing else needs to change.
 - **History is per-harness.** Each snapshot in `history/` was measured by its
   own release's harness and stress example, so a column is that release as its

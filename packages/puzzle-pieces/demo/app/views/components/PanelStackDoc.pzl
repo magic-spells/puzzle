@@ -277,7 +277,7 @@ const rootRows = [
   { name: 'defaultCurrent', desc: 'Uncontrolled seed, frozen into the attribute once. Seeds the stack as [root, current] so Back still works.' },
   { name: 'effect', desc: "'slide' (default) | 'stack'." },
   { name: 'class', desc: 'Merged onto the panel-stack host. Give it a size — the stack fills its parent.' },
-  { name: '@change(handle)', desc: 'Value-first, once per transition, derived from all three upstream events. A nested stack is filtered out by target.' },
+  { name: '@change(handle)', desc: 'Value-first, once per settled transition, from the component\'s panel-stack:change event. A nested stack is filtered out by target.' },
   { name: '@push(event)', desc: 'The raw event; event.detail is { fromHandle, toHandle }. Cancelable — event.preventDefault() blocks the push and the component restores itself.' },
   { name: '@pop(event)', desc: 'The raw event; event.detail is { fromHandle, toHandle }.' },
   { name: '@reset(event)', desc: 'The raw event; event.detail is { rootHandle }, when the stack collapses back to the root.' },

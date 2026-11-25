@@ -62,10 +62,10 @@
 @import "@magic-spells/collapsible-content/css" layer(components);
 
 /*
- * The Tabs family wraps @magic-spells/tab-group. This sheet is REQUIRED for one
- * rule above all: `tab-panel[hidden] { display: none }` is what actually hides
- * an inactive panel — without it every panel renders at once. It also sets the
- * strip's flex/overflow and the tab cursor. `layer(components)` for the usual
+ * The Tabs family wraps @magic-spells/tab-group. This sheet is REQUIRED: it
+ * makes <tab-list> the flex row the strip's gap and alignment depend on, gives
+ * the strip its horizontal scroll, and sets the tab cursor (inactive panels are
+ * hidden by Tailwind preflight's [hidden] rule). `layer(components)` for the usual
  * reason (plain element selectors), and it is load-bearing here: the pieces put
  * padding and colour utilities straight on <tab-list> and <tab-button>.
  */

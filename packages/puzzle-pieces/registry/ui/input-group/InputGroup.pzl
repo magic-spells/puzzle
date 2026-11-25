@@ -37,8 +37,8 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // InputGroup — a Field-compatible text input with fused leading/trailing addons.
-// It takes everything Field takes (label, hint/error, ARIA wiring, controlled
-// value via @change) and mirrors Field's markup EXACTLY — the only difference is
+// It takes Field's label, hint/error, ARIA wiring and controlled value via @change
+// (not form or autocomplete) and mirrors Field's markup EXACTLY — the only difference is
 // where the chrome lives. Here the BORDER, ROUNDING, BACKGROUND, and FOCUS RING
 // move up onto a group wrapper; the real <input> inside is borderless and
 // transparent, so `prefix`/`suffix` addons sit flush inside one continuous field.
@@ -72,7 +72,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //     <Kbd slot="suffix">⌘K</Kbd>
 //   </InputGroup>
 //
-// Props (all of Field's, plus the two slots):
+// Props (Field's, minus form and autocomplete, plus the two slots):
 //   label, hint, error, placeholder, value, type, disabled, name, id, required,
 //   class, and @change(value) (value-first). Named slots: prefix, suffix.
 let uid = 0;

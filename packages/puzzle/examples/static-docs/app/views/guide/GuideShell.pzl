@@ -22,7 +22,7 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
-// Nested shell (SPEC §12, D30). It defines meta.title in routes.js ("Guide · …");
+// Nested shell (SPEC §9, D30). It defines meta.title in routes.js ("Guide · …");
 // its index child defines none, so the static-build leaf → root title walk falls
 // through to this title at /guide/. The sibling overrides it at /guide/templates/.
 export default class GuideShell extends PuzzleView {}

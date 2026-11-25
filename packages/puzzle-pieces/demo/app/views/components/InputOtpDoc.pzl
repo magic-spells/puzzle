@@ -78,7 +78,7 @@
             <li><span class="font-medium text-ink">Backspace</span> — clears the current cell, or on an empty cell moves back and clears the previous one</li>
             <li><span class="font-medium text-ink">Delete</span> — clears the current cell in place</li>
             <li><span class="font-medium text-ink">Left / Right arrows</span> — move between cells</li>
-            <li><span class="font-medium text-ink">Home / End</span> — jump to the first or last cell</li>
+            <li><span class="font-medium text-ink">Home / End</span> — jump to the first cell, or to the last reachable one (the first empty cell until the code is full)</li>
           </ul>
           <ExampleBox code={ codeKeyboard }>
             <InputOtp value={ code } @change={ setCode } />

@@ -218,7 +218,8 @@ const quarterTicks = [0, 25, 50, 75, 100];
 // tickStep sets the generated interval. Marks are decoration, not detents — set
 // step to the same number and the thumb lands on every mark.
 <Slider value={ stepTen } min={ 0 } max={ 100 } step={ 10 } ticks={ true } tickStep={ 10 }
-  @change={ setStepTen } />`;
+  @change={ setStepTen } />
+// expose it to the template: data() { return { quarterTicks }; }`;
 
 const codeTickLabels = `// tickLabels renders the label row; tickLabels={ true } prints each tick's own
 // value. Labels thin to at most 11, but the first and last always survive.
@@ -230,7 +231,8 @@ const codeTickLabels = `// tickLabels renders the label row; tickLabels={ true }
 const percent = (v) => v + '%';
 
 <Slider value={ zoom } min={ 0 } max={ 200 } step={ 25 }
-  ticks={ true } tickStep={ 50 } tickLabels={ percent } @change={ setZoom } />`;
+  ticks={ true } tickStep={ 50 } tickLabels={ percent } @change={ setZoom } />
+// expose it to the template: data() { return { percent }; }`;
 
 const codeTickPosition = `// 'below' (default) — marks and labels sit in the gutter under the track
 <Slider value={ a } ticks={ true } tickStep={ 25 } tickLabels={ true } @change={ setA } />
@@ -264,7 +266,8 @@ const modeTicks = [
 ];
 
 <Slider value={ mode } min={ 0 } max={ 100 } step={ 25 }
-  ticks={ modeTicks } tickLabels={ true } @change={ setMode } />`;
+  ticks={ modeTicks } tickLabels={ true } @change={ setMode } />
+// expose them to the template: data() { return { redlineTicks, modeTicks }; }`;
 
 const codeDisabled = `<Slider label="Disabled" value={ 40 } disabled />`;
 

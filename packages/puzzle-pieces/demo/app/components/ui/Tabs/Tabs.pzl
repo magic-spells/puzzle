@@ -81,8 +81,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //      stylesheet only hides it. Inline, a panel's `pt-*` never pushes it off
 //      the list and a border/padding "box" wraps each line of text instead of
 //      the body. A flex item is blockified, so the panel becomes a real block
-//      WITHOUT a display utility on the host (which would outrank
-//      tab-panel[hidden] — see Panel.pzl).
+//      WITHOUT a display utility on the host (one would be harmless:
+//      preflight keeps a hidden panel hidden — see Panel.pzl).
 //   2. A hidden panel generates no box, so the flex gap separates the list
 //      from the ONE visible panel and nothing else.
 //

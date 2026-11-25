@@ -156,7 +156,7 @@ const installCss = `/* app/styles/styles.css */
 @import "@magic-spells/dropdown-panel/css" layer(components);         /* required */
 @import "@magic-spells/dropdown-panel/css/effects" layer(components); /* optional */`;
 
-const usageImport = `import Popconfirm from '@/components/ui/Popconfirm';`;
+const usageImport = `import Popconfirm from '@/components/ui/Popconfirm.pzl';`;
 
 const usageMarkup = `<Popconfirm title="Delete this item?" confirmLabel="Delete" variant="danger" @confirm={ remove }>
   <span class="…">Delete</span>

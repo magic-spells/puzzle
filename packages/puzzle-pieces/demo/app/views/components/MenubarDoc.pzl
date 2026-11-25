@@ -228,7 +228,7 @@ const codeHero = `// One bar, three menus, one nested submenu. Hover switches be
 
 const keyRows = [
   { name: 'Tab', desc: 'Moves between triggers. There is no Left/Right roving across the bar — the component is a disclosure, and the piece does not claim menubar roles it cannot honour.' },
-  { name: 'Enter / Space', desc: 'On a trigger: toggle its menu. On a row: activate it.' },
+  { name: 'Enter / Space', desc: 'On a trigger: toggle its menu. On an Item row: activate it (a Link row activates with Enter only).' },
   { name: 'ArrowDown / ArrowUp', desc: 'On a closed trigger: open and focus the first (or last) row. Inside an open menu: move row focus, wrapping at the ends.' },
   { name: 'Home / End', desc: 'Inside an open menu: first / last row.' },
   { name: 'ArrowRight / ArrowLeft', desc: 'Open an opens="right" submenu, and close it again returning focus to its trigger.' },

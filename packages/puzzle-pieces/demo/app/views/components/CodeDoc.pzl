@@ -24,8 +24,9 @@
         </p>
         <CodeBlock code={ installCmd }/>
         <p class="mt-3 text-sm text-muted">
-          The highlighter registers only the javascript, xml, and bash grammars (about 13 KB
-          gzipped total) — add more in app/lib/highlight.js if your snippets need them. The
+          The highlighter registers only the javascript, xml, css, json, ini and bash grammars
+          plus the Puzzle template grammar from app/lib/puzzle-lang.js, also reachable as html
+          (about 19 KB gzipped total) — add more in app/lib/highlight.js if your snippets need them. The
           token colors travel inside Code.pzl in a global { '<style>' } block, so there is
           nothing to merge into pieces.css — retheme the palette by editing the --hl-
           variables at the bottom of the file.
@@ -54,10 +55,11 @@
         <section id="languages" class="scroll-mt-20">
           <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Language detection</h2>
           <p class="mb-4 text-sm text-body">
-            The grammar is guessed from the snippet's shape — install-style commands go to
-            bash, snippets that open with a tag go to xml, and everything else (including
-            the common const-then-markup mix) goes to javascript, whose JSX support colors
-            embedded tags. Pass
+            The grammar is guessed from the snippet's shape — install-style commands (cp, npm,
+            npx, pnpm, yarn, mkdir, cd, git) go to bash; snippets that open with a tag, contain
+            a Puzzle block tag, or have any line starting with a tag (the common
+            const-then-markup mix) go to the Puzzle template grammar, which hands embedded
+            JavaScript back to the javascript grammar; everything else goes to javascript. Pass
             <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">lang</code>
             to override the guess.
           </p>
@@ -139,7 +141,7 @@ const codeCollapsible = `// starts as a dimmed three-line peek with a View Code 
 <Code code={ longSnippet } collapsible={ true } maxHeight="450px"/>`;
 
 const codeLang = `<Code code={ bashSnippet } numbers={ false }/>   // guessed: bash
-<Code code={ markupSnippet }/>                    // guessed: xml
+<Code code={ markupSnippet }/>                    // guessed: puzzle
 <Code code={ snippet } lang="javascript"/>        // explicit override`;
 
 export default class CodeDoc extends PuzzleView {

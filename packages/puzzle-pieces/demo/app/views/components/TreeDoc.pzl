@@ -106,7 +106,8 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Keyboard</h2>
         <p class="mb-4 text-sm text-body">
           The tree is a single Tab stop (roving tabindex): exactly one visible row is
-          tabbable — the selected row when visible, otherwise the first enabled root.
+          tabbable — the row you last focused, falling back to the selected row when visible,
+          then the first enabled row.
           Focus then moves with the arrow keys over the visible rows.
         </p>
         <div class="overflow-x-auto rounded-xl border border-border">
@@ -241,7 +242,8 @@ const nodes = [
 events = {
   onSelect: (id) => this.setState({ selected: id }),
   onToggle: ({ expanded }) => this.setState({ expanded }),
-};`;
+};
+// expose it to the template: data() { return { nodes }; }`;
 
 const codeControlled = `// Omit \`expanded\` and the Tree owns expansion internally. Pass it and the
 // parent owns it — @toggle({ id, expanded }) hands you the full next array.
@@ -264,7 +266,8 @@ const nodes = [
     children: [ { id: 'noa', label: 'Noa Lane', icon: user } ] },
 ];
 
-<Tree nodes={ nodes } value={ selected } @select={ onSelect } />`;
+<Tree nodes={ nodes } value={ selected } @select={ onSelect } />
+// expose it to the template: data() { return { nodes }; }`;
 
 const keys = [
   { key: 'Down / Up', action: 'Move focus to the next / previous visible row.' },
@@ -289,7 +292,7 @@ function allParentIds(nodes, out) {
 export default class TreeDoc extends PuzzleView {
   created() {
     this.setState({
-      selected: 'src/Tree.pzl',
+      selected: 'Tree.pzl',
       expanded: ['src', 'components'],
       selected2: '',
       expanded2: ['src'],

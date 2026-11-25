@@ -652,7 +652,8 @@ const codeSnaps = `<Button variant="outline" @press={ openSheet }>Open snapping 
 // No header slot: title alone gets the heading, the generated heading id,
 // and aria-labelledby wired for you — plus the component's grabber pill.
 // snap is optional-controlled: omit it and the sheet tracks its own snap.
-// snapChange fires only when a release commits a snap, never mid-drag,
+// snapChange fires whenever a different snap settles — after a release or
+// after a change to snap — never mid-drag,
 // and snap does not seed the opening rung — initialSnap does.
 // snapPoints is mobile-bottom only: past the breakpoint this sheet is a
 // centered dialog sized to its content and none of these lengths apply.`;
@@ -821,8 +822,8 @@ const codeDismiss = `<Button variant="outline" @press={ openConfirm }>Delete pro
 // data-action-hide-dialog closes the sheet through the component; the button's
 // data-result rides along in the @hide detail, so one handler can tell which
 // answer was given. Escape, a backdrop tap and a swipe all report null.
-// The footer slot takes a single direct child, so two buttons share a
-// wrapper div that carries slot="footer".`;
+// Each direct child with slot="footer" lands in the footer; the two buttons share a
+// wrapper div so one flex row lays them out.`;
 
 const codeSpring = `<Sheet open={ sheetOpen } labelledby="sheet-spring-title" spring="0.08 0.4" @hide={ close }>
   <div slot="header" class="pb-3">…heading + X…</div>
@@ -933,11 +934,11 @@ export default class SheetDoc extends PuzzleView {
       callbackRows: [
         { name: '@hide(detail)', desc: 'The exit finished. detail is { result, triggerElement }: result is the data-result of the [data-action-hide-dialog] button that closed it, and null for Escape, a backdrop tap or a swipe. Flip open back to false here.' },
         { name: '@show()', desc: 'The entrance settled and the native dialog is in the top layer.' },
-        { name: '@snapChange(index)', desc: 'A release committed a different snap; fires on commit, never mid-drag.' },
+        { name: '@snapChange(index)', desc: 'A different snap settled, after a release or after a change to the snap prop; fires on settle, never mid-drag.' },
       ],
       slotRows: [
         { name: 'header', desc: 'Fills sheet-header, replacing the title heading entirely; a filled header brings its own heading and points labelledby at it. The grabber is a pseudo-element and survives it. Always a drag surface.' },
-        { name: 'footer', desc: 'Fills sheet-footer, pinned below the content and hidden while empty. Takes one direct child, so wrap multiple buttons in a div that carries the slot attribute.' },
+        { name: 'footer', desc: 'Fills sheet-footer, pinned below the content and hidden while empty. Every direct child carrying slot="footer" lands there in order; wrap several buttons in one div when they need a shared layout.' },
         { name: 'default', desc: 'Untagged children become sheet-content, the scrollable region.' },
       ],
       cssRows: [

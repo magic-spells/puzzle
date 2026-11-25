@@ -5,8 +5,8 @@ hand-seeded developer-culture chirps, like and rechirp them, follow the cast,
 open a thread down to its root, search trending hashtags, and watch a live
 unread badge drain as you read your notifications. Where `examples/stays` is a
 light marketplace leaning on nested routes and `examples/music` shows off layout
-swaps, **Chirp exists to exercise the framework surface no other example
-touches**: skeleton loaders, `{#case}` / `{#unless}`, and event modifiers.
+swaps, **Chirp exercises skeleton loaders, `{#case}` / `{#unless}`, and event
+modifiers** in one app.
 
 Dark theme on purpose: true-black chrome, one chirp-blue accent (`#1d9bf0`), and
 a like-pink / rechirp-green pair for the toggle actions. No image assets
@@ -18,7 +18,7 @@ anywhere — every avatar and banner is a generated CSS gradient with an emoji.
 puzzle dev examples/chirp        # from packages/puzzle: go run ./compiler/cmd/puzzle dev examples/chirp
 ```
 
-## What this example demonstrates that the others don't
+## What this example demonstrates
 
 - **`<puzzle-skeleton>` loading templates (v1.8, D39 — SPEC §16)** — the FIRST
   example to use them. `Home.pzl` and `PostDetail.pzl` declare a skeleton

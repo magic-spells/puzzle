@@ -127,8 +127,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // its own heading plus a matching `labelledby` (there is no is-slot-filled
 // probe). Untagged children become the scrollable <bottom-sheet-content>. The
 // footer slot fills <bottom-sheet-footer>, which is `empty:hidden` so an
-// unfilled slot leaves no visible bar. A slot="…" attribute must sit on a
-// DIRECT child of the <BottomSheet> tag, so wrap two footer buttons in one div.
+// unfilled slot leaves no visible bar. A slot="…" attribute must sit on a DIRECT
+// child of the <BottomSheet> tag; each fills its slot in order (the footer is a block).
 //
 // LOADING. BOTH packages are imported, and both in mounted(). The bundle keeps
 // its dialog-panel peer external and never imports it — bottom-sheet.show()

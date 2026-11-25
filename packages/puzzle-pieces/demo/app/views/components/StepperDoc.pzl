@@ -118,7 +118,8 @@ const codeHero = `const checkout = [
 ];
 
 // value is the current step index — the parent owns it.
-<Stepper steps={ checkout } value={ 1 } />`;
+<Stepper steps={ checkout } value={ 1 } />
+// expose it to the template: data() { return { checkout }; }`;
 
 const codeVertical = `const onboarding = [
   { label: 'Create account', description: 'Your name and a password.' },
@@ -127,7 +128,8 @@ const codeVertical = `const onboarding = [
   { label: 'Done', description: 'Start using the workspace.' },
 ];
 
-<Stepper steps={ onboarding } value={ 1 } orientation="vertical" />`;
+<Stepper steps={ onboarding } value={ 1 } orientation="vertical" />
+// expose it to the template: data() { return { onboarding }; }`;
 
 const codeClickable = `// Completed/current steps become buttons; @stepChange fires on activation.
 <Stepper steps={ checkout } value={ step } clickable @stepChange={ setStep } />

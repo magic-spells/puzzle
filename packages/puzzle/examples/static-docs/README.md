@@ -122,8 +122,9 @@ work at any depth.
   child at `dist/guide/index.html`, while the templates sibling sets
   `description: null` — explicit suppression — so
   `dist/guide/templates/index.html` ships no description tags at all. Values
-  are static strings only; the same fields stay synced across SPA navigation in
-  hybrid/SPA builds.
+  are static strings only. In hybrid/SPA builds only `title` follows client-side
+  navigation; the description and social tags are written into each prerendered
+  page at build time.
 - **Nested routes + the title walk.** `/guide` is a shell view with an `<Outlet/>`,
   an **index child** (`path: ''`, no `meta.title` → inherits the shell's *"Guide ·
   …"*) and a **sibling child** (`path: 'templates'`, its own title wins at
@@ -142,7 +143,8 @@ work at any depth.
   build warns about that; keeping them in `app/functions.js` is the fix. Models
   come from [`app/models/index.js`](./app/models/index.js) the same way.
 - **Static, then interactive.** The Home page's counter is prerendered showing
-  *"Clicked 0 times"*. Load `dist/index.html`, then **click the button** — the
+  *"Clicked 0 times"*. Serve `dist/` (see *Serving `dist/`* below), open `/`,
+  then **click the button** — the
   page's module has mounted the view over the very same DOM, flash-free, and the
   counter (and its `plural` function) is now live. No router involved.
 
@@ -187,7 +189,8 @@ not emitted*.) In `hybrid` mode the same route also serves the live router's 404
 for unmatched client paths; in static mode there is no client router, so the file
 is what does the work.
 
-Open `dist/404.html` directly to see it.
+Serve `dist/` and open `/404.html` to see it; under `puzzle preview` any path
+that maps to no file gets it, with a 404 status.
 
 ## Serving `dist/`
 
@@ -201,7 +204,7 @@ python3 -m http.server -d dist 8080
 
 Because the pages are directory-style (`dist/guide/index.html`), the live URLs are
 **directory URLs** (`/guide/`, `/guide/templates/`), and navigation between them is
-ordinary `<a href="/guide/">` page loads. No history-API fallback is required —
+ordinary `<a href="/guide">` page loads. No history-API fallback is required —
 every URL maps to a real file on disk.
 
 ## Files
@@ -218,7 +221,7 @@ static-docs/
 │   │   └── principle.js           # trivial build-time model
 │   ├── styles/styles.css          # Tailwind v4, "warm paper" theme
 │   ├── public/index.html          # the shell (empty #app; /app.js tag stripped in static mode)
-│   ├── components/ContentCard.pzl # card chrome the layout forwards <Outlet/> through (D69)
+│   ├── components/ContentCard.pzl # card chrome the layout forwards <Outlet/> through (D71)
 │   ├── layouts/Default.pzl        # nav + footer chrome around <Outlet/>
 │   └── views/
 │       ├── Home.pzl               # interactive counter (client-mount demo)

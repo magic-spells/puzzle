@@ -16,7 +16,7 @@
 
   <main class="relative flex-1">
     <div class="max-w-3xl mx-auto px-6 py-14">
-      <!-- Default-slot forwarding (v1.36, D69): the router-filled <Outlet/> sits
+      <!-- Default-slot forwarding (v1.36, D71): the router-filled <Outlet/> sits
            INSIDE a component invocation, so the routed page renders within
            ContentCard's default slot — prerendered and in the browser alike. -->
       <ContentCard>
@@ -38,8 +38,8 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 import ContentCard from '../components/ContentCard.pzl';
 
-// A pure chrome layout (SPEC §12): header nav + footer around the routed <Outlet/>.
+// A pure chrome layout (SPEC §9): header nav + footer around the routed <Outlet/>.
 // No data() — it holds no build-time state, so the prerenderer just serializes
-// its markup once per page. The <Outlet/> is forwarded through ContentCard (D69).
+// its markup once per page. The <Outlet/> is forwarded through ContentCard (D71).
 export default class DefaultLayout extends PuzzleView {}
 </script>

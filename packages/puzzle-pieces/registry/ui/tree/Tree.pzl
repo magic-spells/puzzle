@@ -205,8 +205,8 @@ export default class Tree extends PuzzleView {
     // _setFocused), carried across data() re-runs through `prev` so a parent
     // re-render cannot lose the reader's place. Two fallbacks in order: the row is
     // gone or now disabled (a collapsed branch, a filtered list) → the selected
-    // row if visible → the first enabled root, which keeps the tree reachable at
-    // all times.
+    // row if visible → the first enabled visible row, which keeps the tree
+    // reachable at all times.
     const focusedId = prev && prev.focusedId != null ? prev.focusedId : null;
     let rovingId = null;
     if (focusedId && rows.some((r) => r.id === focusedId && !r.disabled)) {

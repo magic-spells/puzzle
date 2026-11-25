@@ -58,7 +58,7 @@
           <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">ResizeObserver</code>
           on the content watches for growth and keeps the newest message in view. Scroll up past
           the 40px band and pinning disengages: the auto-follow stops and the
-          <span class="font-medium text-ink">Jump to latest</span> pill fades in. Clicking it
+          <span class="font-medium text-ink">Jump to latest</span> pill appears. Clicking it
           smooth-scrolls to the bottom (instantly under
           <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink">prefers-reduced-motion</code>)
           and re-pins.

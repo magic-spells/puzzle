@@ -6,7 +6,7 @@
         <p class="mt-2 text-body">
           A presentational container with an optional title/description header, a default body slot, and a
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">footer</code>
-          slot for actions. Every region collapses when unused, so it drops in 1:1.
+          slot for actions. The header and footer collapse when unused, so it drops in 1:1.
         </p>
       </header>
 

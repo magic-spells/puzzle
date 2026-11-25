@@ -157,15 +157,16 @@ const codeHero = `const frameworks = [
   { value: 'remix', label: 'Remix' },
   { value: 'astro', label: 'Astro' },
 ];
+// expose it to the template: data() { return { frameworks }; }
 
 // value is an ARRAY; @change fires with the NEXT array on add or remove.
 <MultiSelect options={ frameworks } value={ picks } @change={ setPicks } />`;
 
 const codeBasic = `// Selected options are hidden from the list — the chips carry them.
 // Remove a chip (× or Backspace on an empty input) to re-add it.
-setPicks(next) {
-  this.setState('picks', next);
-}
+events = {
+  setPicks: (next) => this.setState('picks', next),
+};
 
 <MultiSelect
   label="Frameworks"
@@ -187,6 +188,7 @@ const techOptions = [
   { value: 'redis', label: 'Redis' },
   { value: 'mongo', label: 'MongoDB', disabled: true },
 ];
+// expose it to the template: data() { return { techOptions }; }
 
 <MultiSelect options={ techOptions } value={ tech } @change={ setTech } />`;
 

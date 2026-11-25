@@ -86,8 +86,8 @@ Browse them all in the [live component library](https://magicspells.io/puzzle-pi
 in [`registry/ui/`](./registry/ui/), or by running the docs app locally:
 
 ```sh
-npm run build:compiler                  # once, at the monorepo root: the demo runs ../../puzzle/puzzle
-cd demo && npm install && npm run dev   # http://localhost:3070
+npm run build:compiler                                         # once, at the monorepo root: the demo runs ../../puzzle/puzzle
+cd packages/puzzle-pieces/demo && npm install && npm run dev   # http://localhost:3070
 ```
 
 Every piece is a native Puzzle component compiling to plain semantic HTML with ARIA
@@ -156,9 +156,13 @@ Inline `@magic-spells/puzzle-pieces/pre-paint` in `<head>` before the stylesheet
 account never sees a white flash. Every palette × style passes WCAG 2.2 AA on every
 declared pair (`npm test` — `test/contrast.test.mjs`); the docs site's `/themes/*`
 panels show the live values and ratios. To add a palette: copy a scheme file, rename its
-selectors, retune the values, list it in `registry.json` `themes`, and add it to
-`SCHEMES` in `appearance.js` and `pre-paint.js` (and the demo's `tokenNames.js`); the
-tests enforce identical token sets and AA for the new file.
+selectors, retune the values, list it in `registry.json` `themes`, export it in
+`package.json`, and add it to `SCHEMES` in `appearance.js` and `pre-paint.js`, to
+`DEFAULT_SCHEMES` in the `appearance-picker` piece, and to `SCHEMES` in
+`test/lib/parse-theme.mjs` and the demo's `tokenNames.js`. Then sync the demo's copies of
+`appearance.js`, the inline pre-paint in `public/index.html` and `AppearancePicker.pzl`,
+import the file in the demo's `styles.css`, and run `npm test`: it enforces identical
+token sets and AA for the new file.
 
 ## License
 

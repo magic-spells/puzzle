@@ -240,7 +240,8 @@ const codeHero = `const items = [
 <Sidebar items={ items } activePath="/reports/overview" label="Main">
   <div slot="header">…brand…</div>
   <div slot="footer">…user card…</div>
-</Sidebar>`;
+</Sidebar>
+// expose it to the template: data() { return { items }; }`;
 
 const codeCollapsed = `// collapsed is OPTIONAL-CONTROLLED: pass it and the parent owns it.
 // @collapse(next) fires from the rail's built-in edge toggle too —
@@ -270,7 +271,8 @@ const items = [
   },
 ];
 
-<Sidebar items={ items } activePath="/reports/traffic" />`;
+<Sidebar items={ items } activePath="/reports/traffic" />
+// expose it to the template: data() { return { items }; }`;
 
 const codeSlots = `// header pins to the top, footer to the bottom (mt-auto).
 // Both collapse cleanly when nothing is slotted.

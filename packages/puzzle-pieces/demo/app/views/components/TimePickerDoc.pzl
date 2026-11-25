@@ -10,7 +10,9 @@
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>
           is always stored as a 24-hour
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">"HH:MM"</code>
-          string — display format never leaks into it. It is parent-owned: it emits
+          string
+          (<code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">"HH:MM:SS"</code>
+          with seconds) — display format never leaks into it. It is parent-owned: it emits
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>
           on every column pick.
         </p>

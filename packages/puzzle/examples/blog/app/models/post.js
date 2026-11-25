@@ -39,7 +39,7 @@ export default class Post extends PuzzleModel {
   static adapter = {
     endpoint: '/posts.json',
 
-    // The generated `loadOne` would GET /api/posts.json/3, and this demo's
+    // The generated `loadOne` would GET /api/posts.json/p3, and this demo's
     // "server" is a static file per collection — there are no per-record URLs.
     // A model can replace any single verb with its own fetch function (D158),
     // so map the per-record read onto the collection file instead: read it,

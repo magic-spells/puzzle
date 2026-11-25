@@ -14,8 +14,8 @@ const app = new PuzzleApp({
   models,
   adapter,
   // Route rides in location.hash (`…/index.html#/album/x`), so the built example
-  // hosts on any static host — GitHub Pages / S3 / file:// — with no server
-  // rewrite rules (SPEC §15, D34). App code stays path-shaped; only URLs differ.
+  // hosts on any static host — GitHub Pages / S3 — with no server rewrite rules
+  // (SPEC §15, D34); file:// cannot load it. App code stays path-shaped; only URLs differ.
   routerMode: hashRouter(),
   // No apiURL prefix: each model's adapter endpoint (e.g. '/artists.json') is
   // root-relative, so the seed files sit flat at the site root next to

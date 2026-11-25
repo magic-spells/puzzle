@@ -4,8 +4,9 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Input Group</h1>
         <p class="mt-2 text-body">
-          A Field-compatible input with fused leading and trailing addons. It takes everything
-          Field takes — label, hint or error, and ARIA wiring — then lets you slot a
+          A Field-compatible input with fused leading and trailing addons. It takes Field's
+          label, hint or error, and ARIA wiring (but not Field's form or autocomplete props) —
+          then lets you slot a
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">prefix</code>
           and
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">suffix</code>

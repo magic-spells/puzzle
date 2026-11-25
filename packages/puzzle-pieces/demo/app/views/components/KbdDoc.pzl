@@ -50,7 +50,7 @@
 
         <p class="text-sm text-body">
           Each key is its own piece, so chords are written as adjacent tags. Inline, they sit on the text
-          baseline and inherit the surrounding size, so they read naturally mid-sentence.
+          baseline at a fixed text-xs size, so they read naturally mid-sentence.
         </p>
       </div>
     </article>

@@ -237,11 +237,13 @@ CLI — it is unrelated and must not be bumped along with the release.
   and `ring` are held to 3:1.
 - **Adding a palette:** copy `registry/theme/cool.css` → `x.css`, rename the selectors,
   retune every value, add `{ name, file, label, description }` to `registry.json.themes`,
-  add it to `SCHEMES` in `appearance.js` AND `pre-paint.js` (they must agree), to
-  `SCHEMES` in `test/lib/parse-theme.mjs` and `demo/app/lib/tokenNames.js`, export it in
-  `package.json`, import it in `demo/app/styles/styles.css`, sync
-  `demo/app/lib/appearance.js` + the inline pre-paint in `demo/app/public/index.html`
-  (byte-equal, tested), run `npm test`.
+  export it in `package.json`, add it to `SCHEMES` in `appearance.js` AND `pre-paint.js`
+  (they must agree), to `DEFAULT_SCHEMES` in
+  `registry/ui/appearance-picker/AppearancePicker.pzl` (tested equal to `appearance.js`),
+  to `SCHEMES` in `test/lib/parse-theme.mjs` and `demo/app/lib/tokenNames.js`, sync
+  `demo/app/lib/appearance.js` + the inline pre-paint in `demo/app/public/index.html` +
+  `demo/app/components/ui/AppearancePicker.pzl` (byte-equal, tested), import it in
+  `demo/app/styles/styles.css`, run `npm test`.
 - **Demo:** `demo/app/styles/styles.css` imports the four registry files directly (no
   copies to sync). `demo/app/lib/appearance.js` IS a byte-identical copy (tested) and the
   inline `<script data-key="puzzle:appearance">` in `public/index.html` must equal

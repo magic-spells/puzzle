@@ -169,8 +169,8 @@ import Sidebar from '@/components/ui/Sidebar.pzl';
 import Toc from '@/components/docs/Toc.pzl';
 import { toast } from '@/components/ui/toast.js';
 
-// Pieces — the gallery page of the themes section. Unlike Compare and Shell it
-// renders NOTHING scoped: every piece below inherits the live data-scheme /
+// Pieces — the gallery page of the themes section. Unlike Compare and the scheme
+// panels it renders NOTHING scoped: every piece below inherits the live data-scheme /
 // data-theme from <html>, so the page itself is the demo. Switching the
 // appearance in the shell's switcher repaints it, which is why the view
 // subscribes rather than reading the appearance once.

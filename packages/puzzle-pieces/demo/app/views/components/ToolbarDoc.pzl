@@ -152,7 +152,8 @@ const codeHero = `const BOLD = 'M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 
 // parent — the toggle's pressed state is parent-owned
 events = {
   setMark: ({ value, pressed }) => this.setState({ marks: { ...this.getData().marks, [value]: pressed } }),
-};`;
+};
+// expose them to the template: data() { return { BOLD, ITALIC, UNDERLINE, ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT }; }`;
 
 const codeMixed = `// Buttons fire @press; the toggle fires @toggle({ value, pressed }); a separator groups them.
 <Toolbar label="Editor actions" @press={ act } @toggle={ setWrap } items={[

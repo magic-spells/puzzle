@@ -11,7 +11,7 @@ A complete todo application built with the Puzzle framework, demonstrating all c
 - ✅ Real-time todo statistics
 - ✅ Responsive design with beautiful UI
 - ✅ Fixture data for development (`puzzle dev --fixtures`, from `app/fixtures.js`)
-- 🔜 Keyboard shortcuts (Ctrl+N to focus input) — **planned, not in v1** (app-level global events are deferred, see [SPEC.md](../../constellation/doc/DOC-SPEC.md))
+- Keyboard shortcuts (Ctrl+N to focus input) are not built. App-level global `events` are rejected ([SPEC.md](../../constellation/doc/DOC-SPEC.md), Deferred features); a shortcut is a view-scoped `keydown` listener added in `mounted()` and removed in `destroyed()`.
 
 ## Architecture Highlights
 

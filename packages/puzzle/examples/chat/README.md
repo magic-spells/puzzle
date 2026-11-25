@@ -11,10 +11,10 @@ streaming cadence (and puzzle-max appends one closing line) and is stamped onto
 each assistant reply.
 
 Where `examples/mission-control/` shows off animations and `examples/stays/`
-leans into store reactivity, this demo exists for **feature coverage**: it is
-the one example that exercises the v1.5–v1.8 grammar and router additions
-together — skeleton loading, `{#case}`/`{#unless}`, event modifiers, nested
-routes, and store-driven streaming.
+leans into store reactivity, this demo exists for **feature coverage**: it
+exercises the v1.5–v1.8 grammar and router additions together — skeleton
+loading, `{#case}`/`{#unless}`, event modifiers, nested routes — plus
+store-driven streaming.
 
 ## Run it
 

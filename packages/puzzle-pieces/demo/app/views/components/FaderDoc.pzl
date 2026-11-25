@@ -126,15 +126,15 @@ const codeSteps = `// a numeric step quantizes to a detent. Matching tickStep to
 <Fader label="Quality" value={ stepped } min={ 0 } max={ 100 } step={ 10 }
   ticks={ true } tickStep={ 10 } unit="%" @change={ setStepped } />
 
-// step="any" is continuous — format the readout so it does not run to 15 decimals
+// step="any" is continuous (values round to 2 decimals) — formatValue sets the readout's precision
 const oneDp = (v) => v.toFixed(1);
 
 <Fader label="Blend" value={ fine } min={ 0 } max={ 100 } step="any" formatValue={ oneDp }
   @change={ setFine } />`;
 
 const codeVertical = `// orientation="vertical" flips every bit of geometry: the fill grows upward,
-// the readout sits above the strip and the label below. h-40 w-14 by default —
-// override through class.
+// the readout sits at the top of the strip and the label at the bottom.
+// h-40 w-14 by default — override through class.
 <Fader orientation="vertical" label="Low" value={ low } min={ -24 } max={ 24 } unit=" dB"
   @input={ setLow } @change={ setLow } />
 

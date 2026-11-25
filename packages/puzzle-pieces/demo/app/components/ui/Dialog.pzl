@@ -128,8 +128,8 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // heading plus a matching `labelledby` (there is no is-slot-filled probe).
 // Untagged children become the body. The footer slot fills a right-aligned row
 // that is `empty:hidden`, so an unfilled slot leaves no gap. A slot="…"
-// attribute must sit on a DIRECT child of the <Dialog> tag, so wrap two footer
-// buttons in one div. Header, body and footer share one scroll region: the
+// attribute must sit on a DIRECT child of the <Dialog> tag; every such child
+// lands in its slot, in order. Header, body and footer share one scroll region: the
 // panel caps at 85vh and scrolls inside its own rounded corners, while the
 // close button stays pinned outside that region.
 //

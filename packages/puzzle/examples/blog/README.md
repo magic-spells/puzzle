@@ -91,7 +91,7 @@ data({ params }) {
 }
 ```
 
-Land on `/posts/3` in a cold tab and the store has neither record. The finds
+Land on `/posts/p3` in a cold tab and the store has neither record. The finds
 still read like plain synchronous code because the view does not commit the
 first pass: a tracked miss returns `null` and queues a fetch, and Puzzle re-runs
 `data()` behind the batch until a pass comes back with every read warm (D161).
@@ -117,7 +117,7 @@ Three consequences worth internalizing:
 ### Mapping a per-record read onto a static file
 
 The generated REST defaults would GET `apiURL + endpoint + '/' + id` for a
-single record — `/api/posts.json/3` — and this demo's "server" is one static
+single record — `/api/posts.json/p3` — and this demo's "server" is one static
 file per collection, so there is no such URL. A model can replace any single
 adapter verb with its own fetch function, so `post.js` maps `loadOne` onto the
 collection file:
@@ -147,7 +147,9 @@ generated collection GET already lands on `/api/posts.json`.
 
 Requests are deduplicated and cached for the session: once a successful
 `findMany('post')` has run, the type is complete and later finds are pure local
-reads, so browsing from `/posts` into a post issues no request at all.
+reads, so browsing from `/posts` into a post reads the post locally and fetches
+only its author (one `loadOne`, a GET of `/api/users.json`) until that user is
+in the store.
 
 ### Dates arrive as ISO strings
 

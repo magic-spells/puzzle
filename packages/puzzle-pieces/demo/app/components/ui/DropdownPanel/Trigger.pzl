@@ -19,10 +19,10 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // a child selector. This member renders <dropdown-trigger> as its single root
 // and adds no wrapper, so that holds.
 //
-// DO NOT AUTHOR ARIA OR FOCUS ATTRIBUTES HERE. role="button", tabindex="0",
-// aria-haspopup, aria-expanded and aria-controls are DERIVED OUTPUT — the
-// component writes them at upgrade and on every state change, and will
-// overwrite anything you put there.
+// DO NOT AUTHOR ARIA OR FOCUS ATTRIBUTES HERE. role="button" and tabindex="0"
+// are added at upgrade when missing; aria-haspopup, aria-expanded and
+// aria-controls are DERIVED OUTPUT — the component writes them at upgrade and on
+// every state change, and will overwrite anything you put there.
 //
 // DO NOT STYLE dropdown-trigger::before. That pseudo-element is the hover
 // BRIDGE: an invisible, hit-testable, skewed shape that keeps the pointer

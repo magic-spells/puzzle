@@ -163,8 +163,8 @@ test('Tabs scopes its lookups to its own group', async () => {
 		false,
 		"Tab must not use Tailwind's disabled: variant — it compiles to :disabled"
 	);
-	// A display utility on <tab-panel> outranks tab-panel[hidden] and leaves
-	// every panel visible.
+	// The panel host carries no chrome: any default would collide with a
+	// consumer's own p-*/text-* utility (see Panel.pzl).
 	const panel = await readText('../registry/ui/tabs/Tabs/Panel.pzl');
 	assert.equal(/const PANEL =/.test(panel), false, 'Tabs.Panel carries no chrome of its own');
 });

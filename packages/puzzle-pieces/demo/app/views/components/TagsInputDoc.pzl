@@ -138,9 +138,9 @@ const usageImport = `import TagsInput from '@/components/ui/TagsInput.pzl';`;
 const usageMarkup = `<TagsInput value={ tags } @change={ setTags } />`;
 
 const codeHero = `// value is a string ARRAY; @change fires with the NEXT array on add or remove.
-setTags(next) {
-  this.setState('tags', next);
-}
+events = {
+  setTags: (next) => this.setState('tags', next),
+};
 
 <TagsInput value={ tags } @change={ setTags } />`;
 

@@ -286,14 +286,17 @@ enforced, not merely advised.
   templates (`puzzle add deploy <host>`); D199 the upgrade pass,
   `puzzle check --fix`, with the `<Outlet/>` rename (a bare `<Slot/>` is an
   error) and the `functions` config key (BREAKING); D200 the Node 24 minimum
-  (BREAKING); D201 `dev.proxy` `{ target, changeOrigin }`. Also BREAKING:
+  (BREAKING); D201 `dev.proxy` `{ target, changeOrigin }`; D202 the CLI stops
+  when it and the project's installed runtime are a breaking release apart
+  (`build`, `dev`, `check`, `generate`, `add piece`; `doctor` fails its runtime
+  row). Also BREAKING:
   production builds hash output names by default (D181), `puzzle check` needs
   TypeScript 7, React/Vue/Svelte spellings are compile errors (D147),
   `StoreOptions`/`PuzzleValue` are removed, and `injectShell` /
   `injectStaticShell` take no `title`. New examples: `auth`,
   `paginated-posts`. Production sizes: hello-world **23.9 KB gzip**, todos
   **27.8 KB gzip** (+0.9 KB and +0.8 KB over 0.9.0). The next free decision number
-  is **D202**.
+  is **D203**.
 - Product line: v1 through v1.81 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
   amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74, D160 = v1.75,

@@ -100,7 +100,7 @@ const codeSizes = `<Button size="sm" @press={ save }>Small</Button>
 <Button size="lg" @press={ save }>Large</Button>`;
 
 const codeStates = `<Button disabled>Disabled</Button>
-<Button variant="primary" loading={ saving }>Save changes</Button>
+<Button variant="primary" loading={ saving } @press={ save }>Save changes</Button>
 
 // parent
 events = {

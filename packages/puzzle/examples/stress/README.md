@@ -186,8 +186,9 @@ The comparison is apples-to-apples by construction:
 - **Same ops** — the mutation set lives in one place so neither scenario can
   drift into doing less work than the other.
 
-Windowing follows `examples/virtual-scroll`: fixed 36px rows, a computed visible
-slice, spacer divs above and below carrying the off-window geometry, and a
+Windowing follows `examples/virtual-scroll`: fixed-height rows (36px here,
+40px there), a computed visible slice, spacer divs above and below carrying the
+off-window geometry, and a
 `@scroll` handler that only re-renders when the start bucket actually changes.
 One deliberate difference from that example: it slices a plain array held on an
 instance field, whereas this **queries real store records every render**.
@@ -329,7 +330,8 @@ driver has already opted in.
 `N` mounted views each watch a distinct record out of `M`. Two modes, differing
 by a single line inside the child's `data()`:
 
-- `precision` — `store.findOne(type, id)`, subscribing to the key `sub|<id>`
+- `precision` — `store.findOne(type, id)`, subscribing to the record key
+  `sub <id>` (type, a space, then the id)
 - `fanout` — `store.findMany(type)`, subscribing to the key `sub`
 
 The op writes to a record **outside** the watched window, then counts how many
@@ -625,7 +627,7 @@ Production medians, 15 iterations, no instrumentation in either arm:
 
 | arm | script | to painted frame |
 | --- | ---: | ---: |
-| `rerender` (date + timeago) | **40.8ms** | 40.8ms |
+| `rerender` (datetime + timeago) | **40.8ms** | 40.8ms |
 | `rerender-raw` (control) | **31.4ms** | 31.4ms |
 | difference — the functions | **9.4ms** | **23%** |
 
@@ -649,8 +651,9 @@ probe arm.
 | `Intl.DateTimeFormat` | **0** |
 | `Intl.RelativeTimeFormat` | **0** |
 
-20,000 function calls, zero constructions: `date()` caches its
-`Intl.DateTimeFormat` per `(locale, options)`, `timeago()` its
+20,000 function calls, zero constructions: `datetime()` caches its
+`Intl.DateTimeFormat` per `(locale, options)` (the cache it shares with `date()`
+and `time()`), `timeago()` its
 `RelativeTimeFormat` outright, both built on first use — and everything this op
 runs is already warm from the arms before it. Before the cache this table read
 **10,000 and 10,000**, exactly one construction per call. The op is now the
@@ -690,7 +693,9 @@ not, for the shapes real Puzzle code uses. `@click={ onSelect }` compiles to
 (D62). `keyed-list`'s rows are exactly this shape, and it was measured directly
 rather than argued from the compiler output — `benchmarks/probe-listener-churn.mjs`
 patches `Element.prototype` from the DRIVER, so any scenario can be counted
-without touching the app:
+without touching the app. Measured before D170; since D170 the `inline` arm's
+child `data()` runs equal the `stable` arm's (100 and 1,000), and the listener
+columns are unchanged:
 
 | `keyed-list/update-every-10th` | child `data()` runs | `addEventListener` | `removeEventListener` |
 | --- | ---: | ---: | ---: |
@@ -699,8 +704,8 @@ without touching the app:
 | n=10,000 `handlers=inline` | 10,000 | **0** | **0** |
 | n=10,000 `handlers=stable` | 1,000 | **0** | **0** |
 
-The `inline` row at n=10,000 is the decisive one: **all 10,000 rows re-ran
-`data()` and re-rendered, and not one listener was rebound.** So the honest
+The `inline` row at n=10,000 is the decisive one: **before D170 all 10,000 rows
+re-ran `data()` and re-rendered, and not one listener was rebound.** So the honest
 first answer is that there is nothing here to optimise in idiomatic code.
 
 Churn required a data-capturing call on a DOM **element** inside a loop —
@@ -1044,13 +1049,13 @@ what keeps `.fs-draft` on the state layer and `.fs-bound` on the derived layer.
 places, and both of them now compare against the live DOM first:
 
 ```js
-// patchAttrs — the input path
-if (name === 'value' && (el.nodeName === 'INPUT' || el.nodeName === 'TEXTAREA')) {
-  if (el.value !== stringify(value)) setAttr(el, name, value);
-}
+// syncControlValue — the input/textarea path, called from patchAttrs
+if (el.value !== stringify(value, 0, ' ') &&
+    (typeof value != 'number' || el.valueAsNumber !== value))
+  setAttr(el, 'value', value, owner);
 
 // reassertSelectValue — after patchChildren, for every <select>
-const next = stringify(attrs.value);
+const next = stringify(attrs.value, 0, ' ');
 if (el.value === next) return;
 el.value = next;
 ```
@@ -1113,9 +1118,10 @@ look at what their render writes before reaching for the data layer.
 
 ### A re-render during typing does not write `value`, and nothing was pinning that
 
-There is no caret mechanism in Puzzle. `selectionStart` and `setSelectionRange`
-appear nowhere in the repo, and `document.activeElement` appears nowhere in
-`client-runtime/`. Caret safety is *emergent* from `patchAttrs`'s live-DOM
+There is no caret mechanism in Puzzle. Nothing in `client-runtime/` reads
+`selectionStart` or calls `setSelectionRange`, and its only
+`document.activeElement` reads, in the router's post-navigation focus step,
+never touch a caret. Caret safety is *emergent* from `patchAttrs`'s live-DOM
 compare: mid-keystroke the bound value already equals the live property, so
 nothing is written and the caret is never disturbed. `tests/vdom.test.js` pins
 that on a hand-built tree; nothing pinned it end to end at scale.
@@ -1317,7 +1323,7 @@ templates, so one `flip` attribute anywhere in `examples/stress` turns the defin
 true for the *whole* bundle and pulls `flip.js` into every other scenario's code.
 Measured on the production bundle, by building the identical source three ways:
 
-| build | `app.js` | `flip.js` in it |
+| build | app bundle (`app-<hash>.js`) | `flip.js` in it |
 | --- | ---: | --- |
 | before this scenario existed | 181,133 B | no |
 | with the scenario, `flip` attribute stripped | 191,031 B | no |
@@ -1552,8 +1558,9 @@ app/
 
 `RcLayout`, `RcNode` and `RcLeaf` live in `layouts/` and `views/` rather than
 `scenarios/` because `codegen.ModeForPath` compiles only those two directories
-as views — which is what makes `<Outlet/>` legal in them. Everything under
-`scenarios/` is a component.
+as views. A routed view's `<Outlet/>` belongs there; in a component, `<Outlet/>`
+draws a D199 warning and is filled by call-site content, like `<Children/>`.
+Everything under `scenarios/` is a component.
 
 Each new scenario owns its own store type (`nest`, `storm`, `fmt`, `loop`,
 `form`) so no scenario can disturb another's data. `islands` deliberately has

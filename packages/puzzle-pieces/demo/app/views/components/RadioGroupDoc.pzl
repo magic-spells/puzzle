@@ -85,7 +85,8 @@ const codeHints = `const planOptions = [
   { value: 'enterprise', label: 'Enterprise', hint: 'Talk to sales', disabled: true },
 ];
 
-<RadioGroup label="Plan" options={ planOptions } value={ plan } @change={ setPlan } />`;
+<RadioGroup label="Plan" options={ planOptions } value={ plan } @change={ setPlan } />
+// expose it to the template: data() { return { planOptions }; }`;
 
 export default class RadioGroupDoc extends PuzzleView {
   created() {

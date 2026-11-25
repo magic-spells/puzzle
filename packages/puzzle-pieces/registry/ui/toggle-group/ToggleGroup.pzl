@@ -23,24 +23,24 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // can deselect the active item (click it again → ''). Each button carries
 // aria-pressed; there is no roving/selected radio semantics.
 //
-// ICON STORY: Puzzle can't take a raw inline-SVG string through a prop (a
-// component only inlines SVG via the compile-time {#svg} block, which needs a
-// literal file path — not per-item data). So `items[].icon` is NOT rendered.
-// `label` is REQUIRED and is what shows. For an "icon-only" group today, pass a
-// short/single-character or emoji label (e.g. '≡', 'B', '★', '🔇'); it stays a
-// real accessible name. A future icon-slot story would need a slots-in-a-loop
-// primitive Puzzle doesn't have yet.
+// ICON STORY: `items[].icon` is NOT rendered — this piece never reads it.
+// (Per-item icons are possible: Toolbar, ButtonGroup, Tree and Timeline draw
+// each item's icon from an SVG path `d` string; ToggleGroup has no icon
+// support.) `label` is REQUIRED and is what shows. For an "icon-only" group
+// today, pass a short/single-character or emoji label (e.g. '≡', 'B', '★',
+// '🔇'); it stays a real accessible name, so screen readers still announce
+// the control.
 //
 //   // single-select (with deselect), '' = nothing selected
 //   <ToggleGroup items={ aligns } value={ align } @change={ setAlign }
 //                label="Text alignment"/>
 //
 //   // multiple-select, value is an array
-//   <ToggleGroup type="multiple" items={ marks } value={ marks$ }
+//   <ToggleGroup type="multiple" items={ markItems } value={ marks }
 //                @change={ setMarks } label="Text formatting"/>
 //
 //   // aligns = [{ value:'left', label:'Left' }, { value:'center', label:'Center' }]
-//   // marks  = [{ value:'bold', label:'B' }, { value:'italic', label:'I', disabled:true }]
+//   // markItems = [{ value:'bold', label:'B' }, { value:'italic', label:'I', disabled:true }]
 //
 // Props:
 //   items   [{ value, label, disabled? }] — label required (a11y name); icon ignored

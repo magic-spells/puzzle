@@ -72,8 +72,8 @@
  */
 
 // These are ROUTED views, not stage components, so they live in app/views and
-// app/layouts — `codegen.ModeForPath` compiles those two directories as views
-// (which is what makes `<Outlet/>` legal) and everything else as a component.
+// app/layouts — `codegen.ModeForPath` compiles those two as views, where a routed
+// `<Outlet/>` belongs (in a component it warns, D199), and the rest as components.
 import RcLayout from './layouts/RcLayout.pzl';
 import RcLeaf from './views/RcLeaf.pzl';
 import RcNode from './views/RcNode.pzl';
