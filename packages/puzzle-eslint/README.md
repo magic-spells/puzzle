@@ -41,7 +41,7 @@ comment, or regex will **not** truncate the body.
 Needs Node 24 or later.
 
 ```sh
-npm install --save-dev @magic-spells/eslint-plugin-puzzle eslint
+npm install --save-dev @magic-spells/eslint-plugin-puzzle eslint @eslint/js globals
 ```
 
 ## Usage (flat config)
@@ -52,12 +52,19 @@ A typical `eslint.config.js`:
 
 ```js
 import js from '@eslint/js';
+import globals from 'globals';
 import puzzle from '@magic-spells/eslint-plugin-puzzle';
 
 export default [
+  // Build output and the CLI's scratch folder are not source.
+  { ignores: ['dist/', '.puzzle/'] },
+
   // Your normal JS config. Because it is not restricted with `files`, it also
   // applies to the virtual `*.pzl/0_scripts.js` files the processor emits.
   js.configs.recommended,
+
+  // A Puzzle app runs in the browser: `document`, `window`, `setTimeout`.
+  { languageOptions: { globals: globals.browser } },
 
   // Wire the Puzzle processor onto every .pzl file and mark components
   // rendered as template tags as used.
