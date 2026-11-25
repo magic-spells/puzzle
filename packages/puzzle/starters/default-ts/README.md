@@ -60,6 +60,7 @@ checking them, so it stays fast; type-checking is its own step.
 - Puzzle builds a single-page app by default; `output: 'hybrid'` in
   `puzzle.config.js` also prerenders each route to HTML, and
   `output: 'static'` writes plain HTML pages with no router, as the
-  [static starter](https://github.com/magic-spells/puzzle-starter-static) does.
+  [static starter](https://github.com/magic-spells/puzzle-starter-static-ts) does.
+- For JavaScript, see the [JavaScript starter](https://github.com/magic-spells/puzzle-starter).
 - Deploy: `npx puzzle add deploy` lists the hosts it writes a config for.
 - Read the docs at https://github.com/magic-spells/puzzle.

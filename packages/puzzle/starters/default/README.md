@@ -55,5 +55,6 @@ __APP_NAME__/
   `puzzle.config.js` also prerenders each route to HTML, and
   `output: 'static'` writes plain HTML pages with no router, as the
   [static starter](https://github.com/magic-spells/puzzle-starter-static) does.
+- For TypeScript, see the [TypeScript starter](https://github.com/magic-spells/puzzle-starter-ts).
 - Deploy: `npx puzzle add deploy` lists the hosts it writes a config for.
 - Read the docs at https://github.com/magic-spells/puzzle.

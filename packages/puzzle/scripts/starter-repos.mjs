@@ -1,10 +1,9 @@
 #!/usr/bin/env node
-// Writes the two starter repos from the starters this CLI embeds
-// (`npm run starter-repos`): magic-spells/puzzle-starter is the default
-// starter and magic-spells/puzzle-starter-static the static one. Each folder is
-// what `puzzle init <repo> --template <name> --yes` writes, plus
-// `puzzle add deploy vercel` and `netlify` (so a host that clones a starter
-// into a new project builds it as is) and this package's MIT LICENSE.txt. The
+// Writes the starter repos in REPOS (magic-spells/<repo>) from the starters
+// this CLI embeds (`npm run starter-repos`). Each folder is what
+// `puzzle init <repo> --template <name> --typescript=<bool> --yes` writes plus
+// this package's MIT LICENSE.txt, and nothing else: no host config, since a
+// clone can deploy anywhere and its README names `npx puzzle add deploy`. The
 // licence is added here, not in starters/, because an app made with `puzzle
 // init` is its owner's to license. The repos are output: nobody edits them by
 // hand. Change starters/ here, and run this after a release is published.
@@ -25,8 +24,10 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const REPOS = [
-	{ repo: 'puzzle-starter', template: 'default' },
-	{ repo: 'puzzle-starter-static', template: 'static' },
+	{ repo: 'puzzle-starter', template: 'default', typescript: false },
+	{ repo: 'puzzle-starter-ts', template: 'default', typescript: true },
+	{ repo: 'puzzle-starter-static', template: 'static', typescript: false },
+	{ repo: 'puzzle-starter-static-ts', template: 'static', typescript: true },
 ];
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -45,12 +46,11 @@ const puzzle = (...args) =>
 
 const version = puzzle('version').split(' ').pop();
 
-for (const { repo, template } of REPOS) {
+for (const { repo, template, typescript } of REPOS) {
 	const dir = join(out, repo);
-	puzzle('init', dir, '--template', template, '--yes');
-	for (const host of ['vercel', 'netlify']) puzzle('add', 'deploy', host, '--dir', dir);
+	puzzle('init', dir, '--template', template, `--typescript=${typescript}`, '--yes');
 	copyFileSync(join(repoRoot, 'LICENSE.txt'), join(dir, 'LICENSE.txt'));
-	console.log(`wrote ${dir} (puzzle ${version}, ${template} starter)`);
+	console.log(`wrote ${dir} (puzzle ${version})`);
 }
 
 for (const { repo } of REPOS) {
