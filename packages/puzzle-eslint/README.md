@@ -17,11 +17,12 @@ the `<style>` body is real CSS, byte-for-byte.
 
 This plugin is a **processor**, not a new parser:
 
-- It extracts the `<script>` body into one virtual file
-  (`your-file.pzl/0_scripts.js` or `.ts`) and hands it to ESLint, so every rule
-  you already run — and any parser you layer on — applies to it unchanged. The
-  `<style>` body becomes a second virtual file, `*.pzl/*_styles.css`, which
-  ESLint lints only once you configure CSS ([below](#css-style)).
+- It extracts the `<script>` body into one virtual JS or TS file and hands it
+  to ESLint, so every rule you already run — and any parser you layer on —
+  applies to it unchanged. ESLint prefixes each block's name with its index,
+  so match it with the glob `*.pzl/*_scripts.js` (or `.ts`). The `<style>`
+  body becomes a second virtual file, `*.pzl/*_styles.css`, which ESLint
+  lints only once you configure CSS ([below](#css-style)).
 - Each virtual file is the original source up to the end of its body, with
   everything before the body blanked to spaces (newlines preserved), so
   reported line/column positions **and autofix ranges** land exactly on the
@@ -63,7 +64,7 @@ export default [
   { ignores: ['dist/', '.puzzle/'] },
 
   // Your normal JS config. Because it is not restricted with `files`, it also
-  // applies to the virtual `*.pzl/0_scripts.js` files the processor emits.
+  // applies to the virtual `*.pzl/*_scripts.js` files the processor emits.
   js.configs.recommended,
 
   // A Puzzle app runs in the browser: `document`, `window`, `setTimeout`.
@@ -117,12 +118,13 @@ which installs TypeScript 7, `npm install typescript-eslint` fails with
 TS 7.0" when the config loads. Until a release supports TypeScript 7, the
 setups below cannot run in a Puzzle TypeScript app.
 
-The processor names a TypeScript block `*.pzl/0_scripts.ts`. `recommended`
-covers only the JS blocks, because a TS block needs a TS parser: without one,
-ESLint would parse it as JavaScript and stop with a fatal error, so
-`recommended` leaves TS blocks unlinted. Add `puzzle.configs.typescript` after
-your TypeScript config to lint them with the same setup the JS blocks get
-(`puzzle/uses-template-components` on):
+A TypeScript block reaches ESLint as `*.pzl/*_scripts.ts` (ESLint prefixes
+each block's name with its index). `recommended` covers only the JS blocks,
+because a TS block needs a TS parser: without one, ESLint would parse it as
+JavaScript and stop with a fatal error, so `recommended` leaves TS blocks
+unlinted. Add `puzzle.configs.typescript` after your TypeScript config to lint
+them with the same setup the JS blocks get (`puzzle/uses-template-components`
+on):
 
 ```js
 import js from '@eslint/js';
@@ -166,13 +168,14 @@ until you add a CSS language. With [`@eslint/css`](https://github.com/eslint/css
 (ESLint 9.15 or later):
 
 ```sh
-npm install --save-dev @eslint/css
+npm install --save-dev @eslint/css tailwind-csstree
 ```
 
 ```js
 import js from '@eslint/js';
 import css from '@eslint/css';
 import globals from 'globals';
+import { tailwind4 } from 'tailwind-csstree';
 import puzzle from '@magic-spells/eslint-plugin-puzzle';
 
 export default [
@@ -190,23 +193,17 @@ export default [
   // Each <style> body is linted alone, so a custom property it reads from a
   // theme or another stylesheet is unknown to it.
   { files: ['**/*.css'], rules: { 'css/no-invalid-properties': ['error', { allowUnknownVariables: true }] } },
+  // Tailwind syntax (`@theme`) in app/styles, the stylesheet Tailwind compiles.
+  { files: ['app/styles/**/*.css'], languageOptions: { customSyntax: tailwind4 } },
 ];
 ```
 
 Reports and autofixes land on the `.pzl` file's own lines and touch only the
-`<style>` body. The body is linted as a stylesheet of its own: the rules see
-neither the template nor the `@scope ( … )` wrapper a `scoped` body gets at
-build time, so a declaration written directly in a scoped body, outside any
-rule, is a parse error here.
+`<style>` body.
 
-**Tailwind.** Puzzle runs only `app/styles/styles.css` (and the files it
-imports) through Tailwind, and its `@theme` is Tailwind syntax: run
-`npm install --save-dev tailwind-csstree`, add
-`import { tailwind4 } from 'tailwind-csstree';`, and add
-`{ files: ['app/styles/**/*.css'], languageOptions: { customSyntax: tailwind4 } }`
-after the CSS entries. A `<style>` body never goes through Tailwind (it is
-appended after Tailwind's output), so `@apply` or `@theme` there reaches the
-browser unprocessed, and `css/no-invalid-at-rules` is right to report it.
+A `<style>` block is plain CSS, never run through Tailwind: `@apply` and
+`@theme` are not processed there, and `css/no-invalid-at-rules` reports them.
+Your `@theme` tokens reach it as CSS variables (`var(--color-accent)`).
 
 ## Scope and limits
 
@@ -232,10 +229,13 @@ browser unprocessed, and `css/no-invalid-at-rules` is right to report it.
   expressions too; they live in template bytes, so ESLint does not see them.
 - A `.pzl` file with no `<script>` section produces no JS blocks (but section
   errors are still reported).
-- Format `.pzl` files with `@magic-spells/prettier-plugin-puzzle`.
-  `eslint-plugin-prettier` is safe here, but Prettier's diff folds a change on
-  the first line of the `<script>` body into the blanked region before it, so
-  that change is neither fixed nor reported.
+- Format `.pzl` files with `@magic-spells/prettier-plugin-puzzle`, run as its
+  own step (`npx prettier --check .`). With that plugin in your Prettier
+  config, `eslint-plugin-prettier` picks Prettier's parser from the `.pzl`
+  filename, hands the Puzzle parser the extracted block, and ESLint crashes
+  with `PzlSyntaxError: missing <puzzle-view> section`. Keep it off the `.pzl`
+  blocks: after its config, add
+  `{ files: ['**/*.pzl/**'], rules: { 'prettier/prettier': 'off' } }`.
 - **Section-error columns count UTF-16 code units.** The compiler's splitter
   counts UTF-8 bytes, so on a line holding non-ASCII text (`café`, `金額`, an
   emoji) a section error from this plugin and the same error from

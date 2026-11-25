@@ -520,6 +520,15 @@ Production sizes: hello-world **23.9 KB gzip** (23.0 in 0.9.0), todos
 - **A fixtures mock `handler` receives the request's `headers`.** The header
   set after `beforeRequest` ran, as a plain object with lower-case names, so a
   mock can answer 401 for a missing or expired token the way a real API does.
+- **ESLint lints a `.pzl` file's `<style>` body as CSS, opt-in through
+  `@eslint/css` (eslint-plugin-puzzle).** The processor now also hands the
+  `<style>` body, plain or `scoped`, to ESLint as `*.pzl/*_styles.css`. With
+  `@eslint/css` configured for `**/*.css`, its reports and autofixes land on
+  the `.pzl` file's own lines; without it nothing changes. The README's CSS
+  section has the setup: once CSS is linted, `js.configs.recommended` needs
+  `files: ['**/*.js']`, or the JS rules crash on the CSS. A `<style>` block is
+  plain CSS, so `css/no-invalid-at-rules` reports Tailwind's `@apply` and
+  `@theme` there.
 
 ### Changed
 
@@ -846,10 +855,10 @@ you edited the files).
   `<script>` tags and the `<style>` section as blank lines and trailing
   spaces, and `--fix` removed them. A fix now never reaches outside the
   `<script>` body, and `recommended` and `typescript` no longer turn off
-  `eol-last`, `no-trailing-spaces` and `unicode-bom`. Under
-  `eslint-plugin-prettier`, a change Prettier wants on the first line of the
-  body is neither fixed nor reported; format `.pzl` files with
-  `@magic-spells/prettier-plugin-puzzle`.
+  `eol-last`, `no-trailing-spaces` and `unicode-bom`. Format `.pzl` files
+  with `@magic-spells/prettier-plugin-puzzle` as its own step, and keep
+  `eslint-plugin-prettier` off the `.pzl` blocks (the plugin README has the
+  config line).
 
 - **Pieces added to a new app are readable.** After `puzzle init`,
   `puzzle add piece` and the printed `@import './pieces.css';` step, the

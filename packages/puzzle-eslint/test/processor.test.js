@@ -13,7 +13,7 @@ const fixture = (name) => readFileSync(join(here, 'fixtures', name), 'utf8');
 
 // A flat config that wires the processor and applies a few JS rules to the
 // extracted virtual files (via a no-`files` entry, which matches the virtual
-// `*.pzl/0_scripts.js` block).
+// `*.pzl/*_scripts.js` block).
 function makeConfig(rules) {
 	return [
 		...plugin.configs.recommended,
