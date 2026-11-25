@@ -15,8 +15,8 @@ connections:
   - DOC-RELEASE-SURFACE
   - COMPONENT-COMPILER-CLI
   - FLOW-BUILD
-verified_at: '2026-11-24T18:02:16.140Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_at: '2026-11-25T22:11:29.047Z'
+verified_sha: f3e1bd53c1ece77a3d5f9c14c44f234531faa7cb
 ---
 
 # Release flow
@@ -83,17 +83,20 @@ that installs with no working `puzzle` behind it.
    temp-dir install runs `puzzle --version`, puzzle-pieces exists at the EXACT version, and
    a scaffolded app's `add piece` resolves to it (read from `pieces.lock`, with
    `PUZZLE_PIECES_REGISTRY` deleted from the child env).
-10. **`npm run starter-repos -- --push`** (`scripts/starter-repos.mjs`) rewrites the two
-    starter repos, `magic-spells/puzzle-starter` (`default`) and
-    `magic-spells/puzzle-starter-static` (`static`), with this checkout's CLI: each is
-    `puzzle init <repo> --template <name> --yes` plus `puzzle add deploy vercel` and
-    `netlify` and the package's MIT `LICENSE.txt` (kept out of `starters/`: an app
-    `puzzle init` makes is its owner's to license), committed on top of the repo's `main`
-    as `puzzle <version>` and pushed. Run it from the published release commit, so the
-    repos match what npm ships. Before the first run, create both repos on GitHub empty (no
-    README or licence: each push replaces the whole tree). Never edit those repos by hand;
-    change `starters/` and run this again. Without `--push` it only writes the folders (a
-    temp dir, or `--out <dir>`) and prints what it would push.
+10. **`npm run starter-repos -- --push`** (`scripts/starter-repos.mjs`) rewrites the four
+    starter repos with this checkout's CLI: `magic-spells/puzzle-starter` (`default`),
+    `magic-spells/puzzle-starter-static` (`static`), and the same two in TypeScript,
+    `magic-spells/puzzle-starter-ts` and `magic-spells/puzzle-starter-static-ts`. Each is
+    `puzzle init <repo> --template <name> --typescript=<bool> --yes` plus the package's
+    MIT `LICENSE.txt` (kept out of `starters/`: an app `puzzle init` makes is its owner's
+    to license), and nothing else. The repos carry no host config: a clone can go to any
+    host, and its README points to `npx puzzle add deploy`. Each folder is committed on top
+    of the repo's `main` as `puzzle <version>` and pushed. Run it from the published
+    release commit, so the repos match what npm ships. Before the first run, create all
+    four repos on GitHub empty (no README or licence: each push replaces the whole tree).
+    Never edit those repos by hand; change `starters/` and run this again. Without
+    `--push` it only writes the folders (a temp dir, or `--out <dir>`) and prints what it
+    would push.
 11. **Hand off to Cory**: the `vX.Y.Z` tag AND the companion `packages/puzzle-lang/vX.Y.Z`
     tag (Go resolves subdirectory modules only through prefixed tags), the merge into
     `main`, and the devtools zip (`npm run build:compiler`, then `npm run build:zip` in

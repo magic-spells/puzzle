@@ -1,7 +1,7 @@
 ---
 name: 'D32 — CLI tooling: init, generate, add, doctor, info'
 status: verified
-verified_at: '2026-11-24T18:13:21.008Z'
+verified_at: '2026-11-25T22:11:29.047Z'
 connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
@@ -25,7 +25,7 @@ code_refs:
   - starters/default/package.json
   - starters/static/package.json
   - scripts/starter-repos.mjs
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_sha: f3e1bd53c1ece77a3d5f9c14c44f234531faa7cb
 ---
 
 # D32 — CLI tooling: `init`, `generate`, `add`, `doctor`, `info`
@@ -49,7 +49,7 @@ The scaffolding and tooling commands beside `dev`/`build` ([[DECISION-D13-CLI-DE
 
 - **`add`/`generate` never rewrite user JavaScript** ([[DECISION-D03-SCRIPTS-REAL-JS]]): model `generate` does not edit `app/models/index.js`, and an existing `puzzle.config.js` is never rewritten; the needed registration is printed as an exact snippet.
 - **Templates are real embedded file trees** under `starters/` (`starters/embed.go`, `go:embed`, `__APP_NAME__` substituted at write time).
-- **The starter repos are generated.** `npm run starter-repos` writes `magic-spells/puzzle-starter` (`default`) and `magic-spells/puzzle-starter-static` (`static`) as `puzzle init` output plus `add deploy vercel`, `add deploy netlify` and the package's MIT `LICENSE.txt` ([[FLOW-RELEASE]]). The licence is never in `starters/`: an app `puzzle init` makes is its owner's to license. Change `starters/`, never those repos by hand.
+- **The starter repos are generated.** `npm run starter-repos` writes four repos as `puzzle init` output plus the package's MIT `LICENSE.txt` ([[FLOW-RELEASE]]): `magic-spells/puzzle-starter` (`default`), `magic-spells/puzzle-starter-static` (`static`), and the same two with `--typescript`, `magic-spells/puzzle-starter-ts` and `magic-spells/puzzle-starter-static-ts`. They carry no host config; each README points to `npx puzzle add deploy` for the host the clone uses. Each starter README links to its sibling in the other language and to the other template in the same language. The licence is never in `starters/`: an app `puzzle init` makes is its owner's to license. Change `starters/`, never those repos by hand.
 - **Generated `.pzl` stubs are compile-checked** against the repo's own parser + codegen in tests, so the generators cannot drift from the language.
 - Each command registers itself from its own file in `compiler/cmd/puzzle/`; logic lives in `internal/scaffold` and `internal/generate`.
 - The scaffolded `package.json` pins `@magic-spells/puzzle` at the binary's release, and `release:prep` asserts it: a caret range does not cross a 0.x minor, and the embedded templates can only be corrected by rebuilding every platform binary.
@@ -60,3 +60,5 @@ The scaffolding and tooling commands beside `dev`/`build` ([[DECISION-D13-CLI-DE
 - String-building scaffold files in Go — real files stay diffable, editable and testable.
 - Prompting regardless of the stream — hangs CI, pipes and `npx` one-liners.
 - Fall back to an older pieces release when the matching one is missing. Rejected: the framework and its pieces ship together at one version, and an older release may not compile.
+- Ship host config files in the starter repos so a host builds a clone as is. Rejected: people deploy to many hosts, such as Cloudflare and Render; `puzzle add deploy <host>` writes the config for the one they pick.
+- Only JavaScript starter repos, with TypeScript left to `puzzle init --typescript`. Rejected: many developers look for a TypeScript starter first.

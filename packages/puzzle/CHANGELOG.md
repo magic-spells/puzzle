@@ -892,6 +892,11 @@ habit. Nothing existing breaks: renamed spellings stay accepted.
 - **Both starters have a `preview` script** (`npm run preview` runs
   `puzzle preview`). Their READMEs show `npm run build` and
   `npm run preview`, and write every other command as `npx puzzle …`.
+- **The starters are also published as template repos.**
+  `npm run starter-repos` generates four from the CLI's own starters:
+  `magic-spells/puzzle-starter`, `puzzle-starter-ts`, `puzzle-starter-static`
+  and `puzzle-starter-static-ts`. Each is `puzzle init` output plus the MIT
+  licence; `npx puzzle add deploy <host>` writes a host config.
 - **`-y` / `--yes`** on `init`, `add` and `upgrade` (and `upgrade skills`)
   takes every prompt's default without asking.
 - **`puzzle upgrade` upgrades the global CLI and this project.** Before it
