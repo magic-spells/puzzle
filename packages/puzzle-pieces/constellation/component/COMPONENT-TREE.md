@@ -23,8 +23,8 @@ code_refs:
 connections:
   - DOC-REGISTRY
   - DECISION-CONFIG-FIRST-API
-verified_at: '2026-11-24T18:13:21.786Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_at: '2026-11-25T20:18:49.983Z'
+verified_sha: 90b1721ee44900bf72257e0b2cee7bbf6159ecb6
 ---
 
 # Tree
