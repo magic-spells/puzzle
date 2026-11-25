@@ -2,8 +2,9 @@
 
 ESLint plugin for [Puzzle Framework](https://github.com/magic-spells/puzzle)
 `.pzl` single-file components. It lets your existing ESLint rules lint the
-`<script>` body of a `.pzl` file as real JavaScript / TypeScript, and it
-validates the file's section structure.
+`<script>` body of a `.pzl` file as real JavaScript / TypeScript and, once you
+configure a CSS language, the `<style>` body as CSS, and it validates the
+file's section structure.
 
 ESLint **>= 9, flat config only**.
 
@@ -11,20 +12,22 @@ ESLint **>= 9, flat config only**.
 
 A `.pzl` file is not JavaScript. It is up to four top-level sections in any
 order — `<puzzle-view>` (required), `<puzzle-skeleton>`, `<script>`, and
-`<style>`. Only the `<script>` body is real code (JS, or TS with
-`lang="ts"`), byte-for-byte.
+`<style>`. The `<script>` body is real code (JS, or TS with `lang="ts"`) and
+the `<style>` body is real CSS, byte-for-byte.
 
 This plugin is a **processor**, not a new parser:
 
 - It extracts the `<script>` body into one virtual file
   (`your-file.pzl/0_scripts.js` or `.ts`) and hands it to ESLint, so every rule
-  you already run — and any parser you layer on — applies to it unchanged.
-- The virtual file is the original source up to the end of the `<script>`
-  body, with everything before the body blanked to spaces (newlines
-  preserved), so reported line/column positions **and autofix ranges** land
-  exactly on the real file. Autofixes only ever touch bytes inside
-  `<script>`: whitespace rules see the blanked lead-in as blank lines and
-  trailing spaces, so a message whose fix would reach into it is dropped.
+  you already run — and any parser you layer on — applies to it unchanged. The
+  `<style>` body becomes a second virtual file, `*.pzl/*_styles.css`, which
+  ESLint lints only once you configure CSS ([below](#css-style)).
+- Each virtual file is the original source up to the end of its body, with
+  everything before the body blanked to spaces (newlines preserved), so
+  reported line/column positions **and autofix ranges** land exactly on the
+  real file. Autofixes only ever touch bytes inside the body: whitespace
+  rules see the blanked lead-in as blank lines and trailing spaces, so a
+  message whose fix would reach into it is dropped.
 - It validates section structure and reports problems (missing `<puzzle-view>`,
   duplicate sections, illegal section attributes, a `<script>`/`<style>` body
   truncated by a stray close tag, stray top-level content) as ESLint messages
@@ -155,13 +158,63 @@ export default [
 ];
 ```
 
+### CSS (`<style>`)
+
+The `<style>` body, plain or `scoped`, reaches ESLint as `*.pzl/*_styles.css`.
+ESLint lints it only when a config's `files` matches it, so nothing changes
+until you add a CSS language. With [`@eslint/css`](https://github.com/eslint/css)
+(ESLint 9.15 or later):
+
+```sh
+npm install --save-dev @eslint/css
+```
+
+```js
+import js from '@eslint/js';
+import css from '@eslint/css';
+import globals from 'globals';
+import puzzle from '@magic-spells/eslint-plugin-puzzle';
+
+export default [
+  { ignores: ['dist/', '.puzzle/'] },
+
+  // Scoped to JS: an entry with no `files` also reaches the CSS, and the JS
+  // rules crash on it. `**/*.js` still matches the `<script>` blocks.
+  { files: ['**/*.js'], ...js.configs.recommended },
+  { languageOptions: { globals: globals.browser } },
+
+  ...puzzle.configs.recommended,
+
+  // Your .css files and every .pzl <style> body.
+  { files: ['**/*.css'], language: 'css/css', ...css.configs.recommended },
+  // Each <style> body is linted alone, so a custom property it reads from a
+  // theme or another stylesheet is unknown to it.
+  { files: ['**/*.css'], rules: { 'css/no-invalid-properties': ['error', { allowUnknownVariables: true }] } },
+];
+```
+
+Reports and autofixes land on the `.pzl` file's own lines and touch only the
+`<style>` body. The body is linted as a stylesheet of its own: the rules see
+neither the template nor the `@scope ( … )` wrapper a `scoped` body gets at
+build time, so a declaration written directly in a scoped body, outside any
+rule, is a parse error here.
+
+**Tailwind.** Puzzle runs only `app/styles/styles.css` (and the files it
+imports) through Tailwind, and its `@theme` is Tailwind syntax: run
+`npm install --save-dev tailwind-csstree`, add
+`import { tailwind4 } from 'tailwind-csstree';`, and add
+`{ files: ['app/styles/**/*.css'], languageOptions: { customSyntax: tailwind4 } }`
+after the CSS entries. A `<style>` body never goes through Tailwind (it is
+appended after Tailwind's output), so `@apply` or `@theme` there reaches the
+browser unprocessed, and `css/no-invalid-at-rules` is right to report it.
+
 ## Scope and limits
 
-- **`<style>` linting is not handled here.** Use
-  [stylelint](https://stylelint.io/) for CSS.
+- **`<style>` is linted only through a CSS language you configure**; see
+  [CSS (`<style>`)](#css-style).
 - **Template linting (`<puzzle-view>` / `<puzzle-skeleton>` markup) is future
-  work.** This plugin lints the `<script>` body and validates section
-  structure only; it does not lint the Puzzle template grammar. Every template
+  work.** This plugin lints the `<script>` and `<style>` bodies and validates
+  section structure only; it does not lint the Puzzle template grammar. Every template
   construct splits correctly and passes through unjudged: dotted family tags
   (`<Frame.Header>`), the `\{` / `\}` brace escape, the `{#for}` range
   spellings, and every template expression (D176) — function calls

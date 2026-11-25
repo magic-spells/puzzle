@@ -1,12 +1,12 @@
 // processor.js — the ESLint processor for .pzl files.
 //
 // Design: this is a PROCESSOR, not a parser. Puzzle .pzl files are not JS, but
-// their <script> body IS real JavaScript/TypeScript, byte-for-byte. Rather than
-// teach ESLint a new grammar, we extract the <script> body into one virtual JS
-// (or TS) file and let the user's existing ESLint rules — and any parser they
-// layer on, e.g. @typescript-eslint — lint it.
+// their <script> body IS real JavaScript/TypeScript, byte-for-byte, and their
+// <style> body is real CSS. Rather than teach ESLint a new grammar, we extract
+// each body into a virtual JS/TS or CSS file and let the user's existing
+// ESLint config (e.g. @typescript-eslint, @eslint/css) lint it.
 //
-// The virtual file is the ORIGINAL source up to the end of the <script> body,
+// Each virtual file is the ORIGINAL source up to the end of its body,
 // with every code unit before the body replaced by a single space, preserving
 // '\n' and '\r' exactly. That keeps offsets, lines, and columns identical to
 // the real file, so message positions AND autofix ranges map 1:1 with no
@@ -23,7 +23,7 @@
 import { splitSections, scanBraceGroup, skipBraceSpan, isBlockRawOpen, scanBlockRaw } from './split.js';
 import { Linter } from 'eslint';
 
-// Carries each file's splitter errors and <script> body start from preprocess
+// Carries each file's splitter errors and body starts from preprocess
 // to postprocess, and the component names its template renders to the
 // puzzle/uses-template-components rule, keyed by filename.
 const fileStore = new Map();
@@ -258,31 +258,33 @@ export const processor = {
 
 	preprocess(text, filename) {
 		const { sections, errors } = splitSections(text, filename);
-		const script = sections.scripts;
-		// The body start in fix-range offsets, which count from after a leading BOM.
+		const { scripts, styles } = sections;
+		// One block per body: <script> as JS/TS, <style> as CSS. ESLint lints a
+		// block only when a config's `files` matches its name, so the CSS block
+		// is skipped until the user configures CSS.
+		const blocks = [];
+		if (scripts) blocks.push([scripts, `0_scripts.${scripts.lang === 'ts' ? 'ts' : 'js'}`]);
+		if (styles) blocks.push([styles, '1_styles.css']);
+		// Each body's start in fix-range offsets, which count from after a leading BOM.
 		const bom = text[0] === '\uFEFF' ? 1 : 0;
-		fileStore.set(filename, { errors, start: script?.contentStart - bom, tags: componentTags(sections) });
+		const starts = blocks.map(([section]) => section.contentStart - bom);
+		fileStore.set(filename, { errors, starts, tags: componentTags(sections) });
 
-		// No <script> section → nothing to lint as JS. Splitter errors are still
-		// surfaced in postprocess (which ESLint calls with an empty message set).
-		if (!script) {
-			return [];
-		}
-
-		const { contentStart, contentEnd, lang } = script;
-		const virtual = blankOutside(text, contentStart, contentEnd);
-		const ext = lang === 'ts' ? 'ts' : 'js';
-
-		return [{ text: virtual, filename: `0_scripts.${ext}` }];
+		// Splitter errors are surfaced in postprocess even with no blocks (ESLint
+		// then calls it with an empty message set).
+		return blocks.map(([section, name]) => ({
+			text: blankOutside(text, section.contentStart, section.contentEnd),
+			filename: name,
+		}));
 	},
 
 	postprocess(messages, filename) {
-		const { errors, start } = fileStore.get(filename);
+		const { errors, starts } = fileStore.get(filename);
 		fileStore.delete(filename);
 
-		// One block at most (the <script> body). A message whose fix reaches into
-		// the blanked lead-in goes, so --fix cannot delete it.
-		const flat = messages.flat().filter((m) => !m.fix || m.fix.range[0] >= start);
+		// One message list per block. A message whose fix reaches into its
+		// block's blanked lead-in goes, so --fix cannot delete it.
+		const flat = messages.flatMap((list, i) => list.filter((m) => !m.fix || m.fix.range[0] >= starts[i]));
 
 		for (const e of errors) {
 			flat.push({

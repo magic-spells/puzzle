@@ -1,11 +1,12 @@
 // index.js — the @magic-spells/eslint-plugin-puzzle plugin object.
 //
 // ESLint >= 9 flat config only. The plugin exposes a single processor
-// (`puzzle/puzzle`) that lints the <script> body of a .pzl file as real JS/TS
-// and reports section-structure errors, one rule
-// (`puzzle/uses-template-components`) that marks template component tags and
-// the dynamic Component is selector as used, a `recommended` flat-config array that wires them up,
-// and a `typescript` entry that extends the rule setup to `lang="ts"` blocks.
+// (`puzzle/puzzle`) that hands the <script> body of a .pzl file to ESLint as
+// real JS/TS and the <style> body as CSS and reports section-structure errors,
+// one rule (`puzzle/uses-template-components`) that marks template component
+// tags and the dynamic Component is selector as used, a `recommended`
+// flat-config array that wires them up, and a `typescript` entry that extends
+// the rule setup to `lang="ts"` blocks.
 
 import { createRequire } from 'node:module';
 import { processor, usesTemplateComponents } from './processor.js';
@@ -35,7 +36,9 @@ const plugin = {
 // recommended is a flat-config ARRAY:
 //   1. Apply the processor to every .pzl file. Its <script> body becomes a
 //      virtual JS/TS file that your OTHER config entries (e.g. @eslint/js
-//      recommended, @typescript-eslint) lint as ordinary code.
+//      recommended, @typescript-eslint) lint as ordinary code, and its <style>
+//      body a virtual CSS file, linted only once a CSS config (@eslint/css on
+//      `**/*.css`) matches it.
 //   2. On the virtual JS files, enable puzzle/uses-template-components. The
 //      glob is JS-only on purpose: a config entry whose `files` matches a
 //      virtual file makes ESLint lint it, and a `lang="ts"` block handed to
