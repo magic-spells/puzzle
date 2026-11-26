@@ -1045,19 +1045,15 @@ what keeps `.fs-draft` on the state layer and `.fs-bound` on the derived layer.
 
 ### Both controlled form properties write only on a real change
 
-`viewManager.js` handles the two controlled form properties in two different
-places, and both of them now compare against the live DOM first:
+`viewManager.js` compares a controlled `value` against the live DOM in one
+function, called from two places:
 
 ```js
-// syncControlValue — the input/textarea path, called from patchAttrs
+// syncControlValue: from patchAttrs for an input or textarea, and from
+// syncControl after patchChildren for an input, textarea or select
 if (el.value !== stringify(value, 0, ' ') &&
     (typeof value != 'number' || el.valueAsNumber !== value))
   setAttr(el, 'value', value, owner);
-
-// reassertSelectValue — after patchChildren, for every <select>
-const next = stringify(attrs.value, 0, ' ');
-if (el.value === next) return;
-el.value = next;
 ```
 
 The re-assertion exists for a good reason: a select's `value` cannot be applied
@@ -1071,9 +1067,9 @@ asserted counters.
 
 ### A changed select writes once, not twice
 
-A `<select>` is neither `INPUT` nor `TEXTAREA`, so its `value` goes through
+A `<select>` is neither an `input` nor a `textarea`, so its `value` goes through
 `patchAttrs`'s generic `oldAttrs[name] !== value` branch, which writes the
-changed value before the option list has patched; `reassertSelectValue` then
+changed value before the option list has patched; `syncControl` then
 finds the live property already equal and skips. `rerender-dirty` measures
 **4,000 writes for 4,000 selects patched — exactly one each**.
 

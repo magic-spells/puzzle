@@ -113,10 +113,10 @@ import {
 //     `client-runtime/views/viewManager.js` live-compares BOTH controlled form
 //     properties before writing:
 //
-//       patchAttrs()          if (name === 'value' && (INPUT || TEXTAREA)) {
+//       patchAttrs()          if (name === 'value' && (input || textarea)) {
 //                               if (el.value !== stringify(value)) setAttr(...)
 //                             }
-//       reassertSelectValue() if (el.value === next) return; el.value = next;
+//       syncControl()         after the children patch: the same live compare for a <select>
 //
 //     The select's re-assertion still runs after patchChildren settles — its
 //     `value` cannot be applied before the <option> children exist — but it
