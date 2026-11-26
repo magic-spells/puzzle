@@ -2184,15 +2184,15 @@ export class PuzzleView {
 		// Malformed spec → false: the mount path's playAnimation() does the
 		// warn/skip (no double warning, no hold, no defer).
 		if (!isValidSpec(spec)) return false;
-		const t = spec.trigger;
-		if (t !== 'visible') {
+		const trigger = spec.trigger;
+		if (trigger !== 'visible') {
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 				// Absent and 'mount' are the default; anything else falls back to it
 				// (§39 — an unknown value must never break rendering).
-				if (t !== undefined && t !== 'mount')
+				if (trigger !== undefined && trigger !== 'mount')
 					warnOnceForSpec(
 						spec,
-						`unknown animation in.trigger ${JSON.stringify(t)} (expected 'mount' or 'visible'); using 'mount'`
+						`unknown animation in.trigger ${JSON.stringify(trigger)} (expected 'mount' or 'visible'); using 'mount'`
 					);
 				// A `triggerAnchor` is meaningless without `trigger: 'visible'`, so a
 				// spec carrying only `triggerAnchor` must not silently arm anything (D73).

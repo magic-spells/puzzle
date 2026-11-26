@@ -995,8 +995,8 @@ export class Store {
 			keys = [...pending.keys()];
 			notified = new Set();
 		}
-		// Emptied before the first subscriber runs, so a write it makes queues for the
-		// next flush instead of being cleared with this batch.
+		// Emptied before any subscriber runs, so a write made during delivery queues for
+		// the next flush instead of being cleared with this batch.
 		pending.clear();
 		for (const [sub, [seq, key]] of targets) {
 			// Membership is re-checked at CALL time, not just at gather time: an
