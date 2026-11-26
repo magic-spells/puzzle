@@ -30,8 +30,8 @@ connections:
   - DECISION-D67-HYBRID-PRERENDER
   - DECISION-D140-TAKEOVER-MOUNT-RESTORATION
   - DECISION-D196-NAMED-ROUTES
-verified_at: '2026-11-24T18:13:21.008Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_at: '2026-11-26T23:52:46.217Z'
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
 notes:
   - kind: state
     text: >-
@@ -65,7 +65,7 @@ The shape is **load, then leave, then commit**: nothing the user can see moves u
    - a newer token across an awaited guard → abandon silently (`'superseded'`)
 5. **Resolve `lazy()` markers** for the whole chain in one `Promise.all` ([[DECISION-D163-LAZY-ROUTE-VIEWS]]); a rejection is a pre-commit failure that stays put (`'error'`) and repairs a pop's URL, even with nothing committed yet, since no instance exists to hold an error view.
 6. **Plan the chain.** Diff old and new route-node chains by identity: `keep` is the shared-prefix length, clamped back past any instance inside a still-animating outgoing unit. Fresh instances are constructed for `[keep..N]`; the layout is reused unless its class changed. A constructor throw is a pre-commit failure (instances dropped, never destroyed).
-7. **LOAD — the gate.** Fresh views `preload()` (constructor → `created()` → `data()`, off-DOM); reused ancestors `prepareRefresh()`, which runs `data()` against the destination and commits nothing ([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]). All of it is awaited together.
+7. **LOAD — the gate.** Fresh views `preload()` (constructor → `created()` → `data()`, off-DOM); reused ancestors `prepareRefresh()`, which runs `data()` against the destination and commits nothing ([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]). All of it is awaited together. A Store runs async `data()` one at a time, so the chain's async loads run one after another; the fetches a synchronous `data()` queues (D161) still overlap.
    - gated loads must all *start* before any skeleton-exempt preload opens its tracking scope, or the gate queues behind the fetch the exemption exists to skip
    - a fresh view with `<puzzle-skeleton>` starts its preload unawaited — except at navigation zero over prerendered markup, where it is awaited so real content replaces real content in one swap
    - a rejection with nothing committed yet (a first load, not a hybrid takeover) → report `phase: 'navigation'`, destroy every fresh instance but the top unit (layout, else root view), and go on to commit; its mount shows the `errorView` (or placeholder) in its place, and the navigation resolves `ok`

@@ -605,7 +605,7 @@ export const OPS = [
 			// mismatch above, which the runner reports first.
 			rcAncestorMutations: 700,
 		},
-		note: 'navigate-burst is the headline: 100 leaf-divergence navigations over a 5-level chain. 12 ancestor renders and 6 data() runs per navigation — 2 per level, down from 27 before D170, because the record-prop and identity bailouts now stop the reused-ancestor cascade instead of letting it re-render every slot-holding descendant (O(depth), not O(depth^2)). 500 of the 1,200 renders produce zero DOM mutations. rcAncestorMutations must stay at 700 — all of it at the divergence level, and all of it the router swapping and focusing the leaf rather than any ancestor repainting; a release/0.8.0 build measures the same 700.',
+		note: 'navigate-burst is the headline: 100 leaf-divergence navigations over a 5-level chain. 12 ancestor renders and 6 data() runs per navigation — 2 per level, down from 27 before D170, because the record-prop and identity bailouts now stop the reused-ancestor cascade instead of letting it re-render every slot-holding descendant (O(depth), not O(depth^2)). 1,100 of the 1,200 renders produce zero DOM mutations. rcAncestorMutations must stay at 700 — all of it at the divergence level, and all of it the router swapping and focusing the leaf rather than any ancestor repainting; a release/0.8.0 build measures the same 700.',
 	},
 	{
 		id: 'route-churn/params-burst/100',

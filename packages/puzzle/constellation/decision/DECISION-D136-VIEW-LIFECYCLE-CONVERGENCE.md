@@ -13,14 +13,15 @@ connections:
   - DOC-VIEW-LIFECYCLE
   - FILE-PUZZLE-VIEW
   - FILE-VIEW-MANAGER
-verified_at: '2026-11-24T18:05:31.213Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_at: '2026-11-26T23:52:46.217Z'
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
 ---
 
 # D136 — anchor-race enter deferral, failure recovery, leave inertness, start-abort teardown
 
-An anchor-race first mount (skeleton path) resolves `mount()` early while the
-view still sits on a comment anchor (`#pendingMountHook` set), and leaving views
+An anchor-race first mount (the non-skeleton branch, when its first `data()`
+run is superseded before it commits) resolves `mount()` early while the view
+still sits on a comment anchor (`#pendingMountHook` set), and leaving views
 stay in the DOM while they animate out. These four rules keep both windows
 contained, alongside the D115 mount-failure and D118 hook-containment contracts
 (SPEC §12/§34).
@@ -48,7 +49,8 @@ is recognized from Router state.
   `#completeMount()` early-return on `#leaving` beside `#destroyed`. The render
   and mount guards matter because a component with hide hooks but no
   `animations.out` also goes through `destroyAnimated()`, so its removal is
-  async.
+  async. A render a `setState()` scheduled before the leave still lands,
+  without its D23 `data()` re-run.
 - `#leaving` is set before `viewWillHide` fires, so the guards cover the hook
   window and a re-entrant `playOut()` returns the same promise. DOM listeners
   stay attached; pointer events on a fading element are an app concern.

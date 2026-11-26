@@ -1,7 +1,7 @@
 ---
 name: Function library (the formatter registry)
 status: verified
-verified_at: '2026-11-24T18:13:21.008Z'
+verified_at: '2026-11-26T23:52:46.217Z'
 connections:
   - COMPONENT-PUZZLE-APP
   - COMPONENT-CODEGEN
@@ -13,7 +13,7 @@ connections:
   - FILE-FORMATTER-REGISTRY
   - FILE-FORMATTER-BUILTINS
   - FILE-FORMATTER-ALL
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
 ---
 
 # Function library (the formatter registry)
@@ -27,8 +27,8 @@ the app's `functions` config key included (since 0.10, D7), they are "functions"
 
 ## Wiring
 
-- Codegen writes `(__f["name"] || __f.__missing("name"))(…)`; render functions receive
-  `registry.getAll()`, never the registry.
+- Codegen writes `__f.get("name")(…)`; render functions bind the registry itself
+  (`const __f = this.ctx.formatters;`), and `get()` falls back to the `__missing` factory.
 - **Name lists** (dev-only, tree-shaken): `STANDARD_FORMATTERS` (19, including `t`) and
   `PUZZLEKIT_FORMATTERS` (`link`, `timeago`). The same 21 names must match
   `codegen.LibraryFunctionNames`, `puzzle check`'s signatures and `LibraryFunctions` in
@@ -58,10 +58,6 @@ the app's `functions` config key included (since 0.10, D7), they are "functions"
 - **Handler shadows**: in dev, `PuzzleView.mount()` calls `warnHandlerShadows(view)` once per
   view and name, for each `events` key naming a library or app function (the compiler warns
   too, `checkHandler`).
-- **Unknown names** hit `__missing(name)`: dev reports once per registry + name with a
-  did-you-mean (`nearestFormatter`, edit distance ≤ 2, reused by i18n), or the replacement from
-  `REMOVED_FORMATTERS`, or the i18n hint for `t`; it returns a pass-through so the view still
-  renders ([[DECISION-D43-FUNCTION-MISSING-GUARD]]). All of it sits behind `__PUZZLE_DEV__`.
 
 ## Implementation gotchas
 

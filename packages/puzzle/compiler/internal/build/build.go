@@ -316,8 +316,9 @@ func Build(root string, opts Options) error {
 		}
 		// Strip console.* diagnostics from production bundles only (~570 B gzip),
 		// unless puzzle.config.js opts out with build.dropConsole: false. The
-		// framework's runtime advisory warnings are dev-mode-only by design — dev
-		// builds keep every console.* call intact regardless of this setting.
+		// framework's advisory warnings are dev-only anyway, but this also strips
+		// the console.error a contained framework error falls back to when the app
+		// has no onError hook. Dev builds keep every console.* call regardless.
 		if cfg.DropConsole() {
 			buildOpts.Drop = api.DropConsole
 		}

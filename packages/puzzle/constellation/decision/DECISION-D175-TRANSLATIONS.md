@@ -36,8 +36,8 @@ connections:
   - DECISION-D154-STATIC-DEV-WARM-REBUILDS
   - DECISION-D155-ROUTE-LEVEL-INVALIDATION
   - DECISION-D160-SPA-CODE-SPLITTING
-verified_at: '2026-11-24T18:13:21.008Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_at: '2026-11-26T23:52:46.217Z'
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
 ---
 
 # D175 — Translations: `t(key, vars)`, one locale file per language
@@ -247,8 +247,8 @@ the shared case table keeps the two in step.
   ([[DECISION-D145-ERROR-BOUNDARIES]]). Store records survive; `setState`
   state does not (state that must survive belongs in the store).
 - **A navigation in flight wins.** If a push, `replace()`, pop, `go()` or an
-  earlier rebuild is loading (`#pendingNavPromise`, filled via `#trackNav`),
-  the rebuild schedules `pending.then(again, again)` and `setLocale` resolves
+  earlier rebuild is loading (the router's `#inFlight` record, whose promise
+  `#beginNav` pairs), the rebuild schedules `pending.then(again, again)` and `setLocale` resolves
   once the strings are active — it must not wait, because the switch may come
   from inside that navigation (a layout `data()` or guard awaiting
   `setLocale(user.locale)`) and would wait on itself. The rebuild re-runs that

@@ -13,8 +13,8 @@ connections:
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
   - DECISION-D62-HANDLER-CACHING
   - TEST-COMPILER-CODEGEN
-verified_at: '2026-11-21T18:49:58.010Z'
-verified_sha: 2166a6dbdbd6d290441b38f41a12245f62b12980
+verified_at: '2026-11-26T23:52:46.217Z'
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
 notes:
   - kind: state
     text: >-
@@ -39,7 +39,7 @@ the file:
   threaded through emission.
 - **Every member step, index step and method call is guarded** (`?.`), handler
   arguments included. A library call lowers to
-  `(__f["name"] || __f.__missing("name"))(…)` (the D43 guard); a method stays the
+  `__f.get("name")(…)` (the D43 guard); a method stays the
   same JavaScript method; `Math.*` and the other allowed globals stay verbatim,
   except `Object.keys`/`values`/`entries` take their first argument as
   `(<arg> ?? {})` (`objectGlobalArgs`) so a missing value yields `[]`; a free

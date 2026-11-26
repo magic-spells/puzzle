@@ -772,7 +772,8 @@ export class Router {
 	 * Load the code a path's route needs — every `lazy()` view and layout in its
 	 * matched chain (D163) — without navigating (D195). No guard runs and no view
 	 * is constructed; a later navigation to the path finds the classes already
-	 * resolved and runs synchronously. An explicit call, so a guarded route loads
+	 * resolved and loads nothing (it still yields one microtask: #navigate awaits
+	 * the resolver). An explicit call, so a guarded route loads
 	 * too (only automatic link prefetch skips those). Never rejects. A named
 	 * target (D196) resolves to its path first; a bad one throws, as from push().
 	 *

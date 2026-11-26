@@ -10,8 +10,8 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-APP
-verified_at: '2026-11-24T18:05:31.213Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_at: '2026-11-26T23:52:46.217Z'
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
 code_refs:
   - client-runtime/views/PuzzleView.js
   - client-runtime/views/viewManager.js
@@ -32,7 +32,9 @@ replacement face, without per-view boilerplate.
 **The funnel (`client-runtime/errors.js`).** Every framework-contained app
 error goes through `reportError(ctx, error, info, ...consoleArgs)`.
 `new PuzzleApp({ onError })` registers the hook; without one the funnel
-replays the catch site's `console.error`. The hook gets `(error, info)` with a
+replays the catch site's `console.error`, which a default production build
+strips (D60): there such an error logs nothing unless `onError` reports it
+another way, and a console-based `onError` is stripped too. The hook gets `(error, info)` with a
 frozen `info = { phase, view, route }`; `view`/`route` are coerced to `null`
 when absent (the app phases always have `view: null`). The phase set is closed
 and pinned in tests-types (`PuzzleErrorInfo` in `types/index.d.ts`):
@@ -92,13 +94,14 @@ their state. Props: `error`, `info` (the same frozen object), and `retry`
   renders into generated HTML.
 
 **Rendering invariants.**
-- **Never patch over an unknown tree.** A throw mid-`patch()` sets the
-  manager's `treeUnknown`; the next `render()` goes to `renderFresh()`, which
-  releases both aborted trees' non-DOM resources (instances, refs, `:outside`
-  listeners, portals — guarded per tree), clears the bracketed range
-  (`unknownRange`, from the live siblings outside it), and mounts fresh.
+- **Never patch over an unknown tree.** A throw mid-`patch()` (or mid first
+  mount) records the manager's `aborted` (`{ range, trees }`); the next
+  `render()` goes to `renderFresh()`, which
+  releases those trees' non-DOM resources (instances, refs, `:outside`
+  listeners, portals — guarded per tree), clears the bracketed `range`
+  (from the live siblings outside it), and mounts fresh.
   `clear()` runs the same release. Known limit: bracketing needs the old root
-  to be a direct child of the container; otherwise `unknownRange` is null, and
+  to be a direct child of the container; otherwise `range` is null, and
   fresh content can land beside the corrupt content. Undecided.
 - **Pre-mount failures are buffered.** A failure that reaches a preloaded view
   before its `mount()` (a skeleton view's preload rejecting, the gate failure

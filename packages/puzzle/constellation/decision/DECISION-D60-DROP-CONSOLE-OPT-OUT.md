@@ -1,7 +1,7 @@
 ---
 name: 'D60 — build.dropConsole: production console stripping is opt-out'
 status: verified
-verified_at: '2026-11-24T18:13:21.008Z'
+verified_at: '2026-11-26T23:52:46.217Z'
 connections:
   - COMPONENT-ESBUILD-PLUGIN
   - DECISION-D26-TAILWIND-PIPELINE
@@ -9,7 +9,7 @@ code_refs:
   - compiler/internal/config/config.go
   - compiler/internal/build/build.go
   - compiler/internal/build/prerender_pages.go
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
 ---
 
 # D60 — `build.dropConsole`: production console stripping is opt-out
@@ -20,7 +20,7 @@ Production builds strip `console.*` calls (esbuild `Drop: api.DropConsole`) from
 
 - Key absent or no config → production strips. `false` → user console calls survive. Dev builds never strip.
 - A non-boolean value is rejected at config load, naming `build.dropConsole`.
-- The framework's own warnings are dev-only (`__PUZZLE_DEV__`), so stripping only ever affects app code.
+- The framework's own warnings are dev-only (`__PUZZLE_DEV__`), but the `console.error` a contained framework error falls back to without an `onError` hook (D145) is stripped too: in production such an error logs nothing unless `onError` reports it another way, and a console-based `onError` is stripped as well.
 
 ## Alternatives rejected
 

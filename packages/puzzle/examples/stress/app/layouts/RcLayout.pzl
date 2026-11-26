@@ -504,8 +504,8 @@ export default class RcLayout extends PuzzleView {
       `${op} [delay=${this.delay()}ms]: ${what}, ${navs} committed in ${clock}\n` +
       `  reused ancestors (layout + 5 levels): ${ancestorRenders} renders / ${ancestorDataRuns} data() runs ` +
       `= ${per(ancestorRenders)} renders and ${per(ancestorDataRuns)} data() runs per navigation\n` +
-      `  ancestor renders that mutated NOTHING: ${ancestorRenders - ancestorMutations} of ${ancestorRenders} ` +
-      `(${ancestorMutations} ancestor DOM mutations, ${measured.chrome} layout-chrome mutations)\n` +
+      `  ancestor DOM mutations: ${ancestorMutations} across ${ancestorRenders} renders ` +
+      `(${measured.chrome} layout-chrome mutations)\n` +
       `  per level  renders [${c.renders.join(', ')}]  data() [${c.dataRuns.join(', ')}]  mutations [${c.mutations.join(', ')}]\n` +
       `  leaf: ${c.dataRuns[RC_LEAF_LEVEL]} data() runs, ${c.leafMounts} mounts ` +
       `(${c.dataRuns[RC_LEAF_LEVEL] - c.leafMounts} for destinations that never committed)` +

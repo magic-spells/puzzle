@@ -16,8 +16,8 @@ connections:
   - COMPONENT-PUZZLE-MODEL
   - FLOW-REACTIVITY
   - DOC-VIEW-LIFECYCLE
-verified_at: '2026-11-24T18:05:31.213Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_at: '2026-11-26T23:52:46.217Z'
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
 ---
 
 # D170 — Persistent list blocks and an incremental virtual DOM
@@ -121,9 +121,9 @@ counter, fallback loop local, snippet parameter, arrow parameter) becomes
 
 - A vnode present in both old and new unkeyed lists pairs with itself (a
   cached vnode can shift index behind a variable-length unkeyed run).
-  `patchIndexedChildren` pre-scans for a reused vnode (`el != null`) not at its
-  positional partner and hands the list to `patchKeyedChildren`, which
-  re-pairs with an identity Set.
+  `patchChildren`'s one loop over both lists sees a reused vnode (`el != null`)
+  not at its positional partner and hands the list to `patchKeyedChildren`,
+  which re-pairs with an identity Set.
 - A cached vnode inside a fresh, shifted parent is reached by the incoming
   tree first; `keepOutgoing`/`outgoingOf` snapshot its links (el, component,
   instance, html nodes, portal range) so the old position releases or patches

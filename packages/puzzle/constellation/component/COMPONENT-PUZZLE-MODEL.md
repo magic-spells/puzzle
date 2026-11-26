@@ -10,8 +10,15 @@ connections:
   - DECISION-D48-SCHEMA-VALIDATION
   - DECISION-D114-CALENDAR-DATE-FORMATTERS
   - DECISION-D125-SAVE-RECONCILE-REVISION
-verified_at: '2026-11-24T18:05:31.213Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_at: '2026-11-26T23:52:46.217Z'
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
+notes:
+  - kind: gotcha
+    text: >-
+      Each schema object is normalized once into one cached entry (a module WeakMap keyed on the
+      schema: fields, relationships, primary key, `date()` fields), so `normalizedSchema()` and
+      `relationshipDefs()` return the same shared maps on every call. Callers must never write to
+      them; a subclass that inherits its parent's `schema` object shares the parent's entry.
 ---
 
 # PuzzleModel and `Puzzle.*`

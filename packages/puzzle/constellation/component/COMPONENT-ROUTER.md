@@ -18,14 +18,14 @@ connections:
   - DECISION-D182-NAVIGATION-RESULT
   - DECISION-D195-LINK-PREFETCH
   - DECISION-D196-NAMED-ROUTES
-verified_at: '2026-11-24T18:05:31.213Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_at: '2026-11-26T23:52:46.217Z'
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
 notes:
   - kind: state
     text: >-
       While the browser sits on a popped entry, two rules hold in #handlePopState and #navigate: (1)
       a popstate home to the committed entry (the D41 fragment branch, e.g. Back then Forward before
-      the Back lands) supersedes a pop still loading (`#popInFlight && #pendingNavPromise`) with
+      the Back lands) supersedes a pop still loading (`#inFlight?.pop`) with
       `#recoverFailedNavigation(++#token)` before #applyFragmentPop, so URL and tree stay together;
       a push or replace still loading writes its own URL at commit, so it is left to land; (2) no
       scroll save while `#urlMoved` is set: #scrollKey already names the popped entry, which was
@@ -84,7 +84,7 @@ Route compiler and navigation state machine. The public contract is [[DOC-SPEC-R
 [[DECISION-D177-LOCALE-URL-PREFIXES]]. Every branch sits behind the inline `__PUZZLE_HAS_LOCALE_ROUTING__` probe, so apps without `i18n.routing` ship none of it.
 
 - **Composed `#base`.** With prefix routing in path mode the constructor sets `#base = localeBase(routerBase, locale, defaultLocale)` once. Reading, writing and click interception use it; matching and `this.route` stay locale-free. It never changes while the app runs — `setLocale` is a page load. A route whose first segment is a non-default locale tag throws.
-- **`localeRouting` WeakMap** (module level, at the end of the file): Router → `{ base, locale, defaultLocale, locales, target, page }`. `target` is the in-flight navigation's path (`setLocaleTarget`, set for every verb in `#navigate`, cleared at commit or failure); `page()` reads `target ?? #state.path`. A WeakMap rather than private fields, because a class field would ship in every app. `localePage(router)` returns `router.url(page())` — the page `setLocale` reloads.
+- **`localeRouting` WeakMap** (module level, at the end of the file): Router → `{ base, locale, defaultLocale, locales, page }`. `page()` is a constructor closure that reads `#inFlight?.path ?? #state?.path` — the in-flight navigation's path (every verb), else the committed one. A WeakMap rather than private fields, because a class field would ship in every app. `localePage(router)` returns `router.url(page())` — the page `setLocale` reloads.
 - **`url(path)` options** are read from `arguments[1]` through `linkLocale`, so the method keeps one declared parameter (a JSDoc `@overload` types the second).
 - **Click interception:** after the mode's own `linkPath` seam, a link is taken only when `localeBase(routing.base, pathLocale(url.pathname, …), defaultLocale)` equals `#base`. `pathLocale` is the single prefix matcher, shared with `i18n.js`.
 - `push('/es/…')` routes as written and warns in development.
@@ -115,9 +115,9 @@ Each leaf precomputes its guard chain (`entry.guards`, root → leaf) and, when 
 [[DECISION-D182-NAVIGATION-RESULT]].
 
 - **Every `#navigate` exit returns a `NavigationResult`** — `fail(reason, err)`, `SUPERSEDED`, or `succeed(route)`. A new exit path that forgets this makes `push()` resolve `undefined`.
-- **The in-flight slot.** `#navigate` opens `#pendingNavPromise` with the module-private `PENDING` promise at its token bump; every verb's caller pairs the real promise through `#trackNav`, which writes only over `PENDING`. A navigation that ended inside its synchronous start has already cleared the slot, so nothing latches and `navigating()` (D185) reads false.
-- `#isCommittedNoop` gates the same-path no-op: committed path, chain intact, nothing in flight (`#guardRedirecting` exempt). `#joinInFlight` hands a same-key push or replace the in-flight navigation's promise from `#pendingNavPath`/`#pendingNavPromise` (a `PENDING` slot is re-read one microtask later); a guard redirect skips the join, or a guard redirecting to its own path would await itself forever.
-- **Commit-window throws:** the outer catch around the load/`#swap` block may run after `#commitLocation`, while `#state` still names the old route. When it owns the token it clears `#pendingNavPath`, `#pendingNavPromise` and the locale target, and sets `#state.chainInvalid`. It rethrows only for navigation zero (or a guard redirect continuing it, which `#guardStart` marks), so `app.mount()` keeps its teardown.
+- **The in-flight record.** `#inFlight = { path, joinable, pop, promise } | null` is written once, at `#navigate`'s token bump, with the module-private `PENDING` promise; a newer navigation replaces it, and it is cleared by assigning `null` (at commit, in `#recoverFailedNavigation`, in the commit-window catch and in `stop()`). `#beginNav` is `#navigate`'s only caller and pairs the real promise, writing only over `PENDING`. A navigation that ended inside its synchronous start has already cleared the record, so nothing latches and `navigating()` (D185) reads false.
+- `#isCommittedNoop` gates the same-path no-op: committed path, chain intact, nothing in flight (`#guardRedirecting` exempt). `#joinInFlight` hands a same-key push or replace the promise of a `joinable` in-flight record; when that record still holds `PENDING`, the join reads the same record's promise one microtask later; a guard redirect skips the join, or a guard redirecting to its own path would await itself forever.
+- **Commit-window throws:** the outer catch around the load/`#swap` block may run after `#commitLocation`, while `#state` still names the old route. When it owns the token it clears `#inFlight` and sets `#state.chainInvalid`. It rethrows only for navigation zero (or a guard redirect continuing it, which `#guardStart` marks), so `app.mount()` keeps its teardown.
 - **`#pendingPush`** (the commit-window deferral slot) carries the caller's resolver. Anything that clears the slot — a displacing `#defer`, `stop()` — must resolve the old entry `SUPERSEDED`, or that caller waits forever.
 
 ## Failure invariants
@@ -132,7 +132,7 @@ Each leaf precomputes its guard chain (`entry.guards`, root → leaf) and, when 
 
 `__failedView(null, true)` sets `chainInvalid`/`layoutInvalid` and re-navigates the committed path in replace mode with `retryView = REBUILD` (a module-private marker). The marker takes the skeleton-exempt path, skips scroll and focus, `skipEnter()`s fresh levels and parks the outgoing unit as `#pendingOut` (destroyed without its out animation). Every test of it sits behind the inline `__PUZZLE_HAS_I18N__` probe — a new class member would ship in every app.
 
-With a navigation in flight (`#pendingNavPromise` set — every verb pairs it, and it is cleared the moment a navigation ends, even inside its own synchronous start) it schedules `pending.then(again, again)` and returns null, so `setLocale` never waits on a navigation whose `data()` or guard may be awaiting it. A switch from inside a navigation's synchronous start (a layout's `data()` on first load) reads `PENDING`, which resolves one microtask later, by when the real promise is paired; it rebuilds once navigation zero commits. With none pending, the promise resolves on the rebuilt commit and rejects on failure. Tests: `tests/i18n-app.test.js`.
+With a navigation in flight (`#inFlight` set — `#beginNav` pairs every navigation's promise into it, and it is cleared the moment a navigation ends, even inside its own synchronous start) it schedules `pending.then(again, again)` on the record's promise and returns null, so `setLocale` never waits on a navigation whose `data()` or guard may be awaiting it. A switch from inside a navigation's synchronous start (a layout's `data()` on first load) reads `PENDING`, which resolves one microtask later, by when the real promise is paired; it rebuilds once navigation zero commits. With none pending, the promise resolves on the rebuilt commit and rejects on failure. Tests: `tests/i18n-app.test.js`.
 
 ## Mounting and transitions
 

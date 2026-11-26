@@ -17,8 +17,8 @@ connections:
   - DOC-SPEC-ROUTER
   - DOC-RELEASE-SURFACE
   - DECISION-D195-LINK-PREFETCH
-verified_at: '2026-11-24T18:05:31.213Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_at: '2026-11-26T23:52:46.217Z'
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
 ---
 
 ## Context
@@ -54,7 +54,7 @@ export default [
 **Build and prerender.** With `build.splitting: true` (D160) each loader becomes a chunk under `dist/chunks/`; with it off esbuild inlines the import and `lazy()` still works. `examples/blog` splits its `/settings` section this way. Both prerender modes await the markers; static per-page module collection reads `__pzlModule` off the resolved class, so static output has no runtime laziness.
 
 **Cost containment (preserve these):**
-- Per navigation: an entry with no markers stays synchronous — no allocation, no microtask; a warm lazy route is synchronous too.
+- Per navigation: an entry with no markers stays synchronous — no allocation, no microtask. A warm lazy route loads nothing, but still yields one microtask: `#navigate` always awaits the resolver.
 - Per bundle: `router/lazy.js` sits behind the D89 `__PUZZLE_HAS_LAZY__` define, false when no project source calls `lazy()`. So `validateRouteView` lives in `router.js`, and the shared `isViewClass`/`describeValue` live in `router/viewClass.js`, so neither module imports the other.
 - A marker reaching a compiled-out build falls through to `validateRouteView`'s throw, which names the gate — never mistaken for a class. That happens when routes come from an installed package: the scan reads `lazy()` from the project's scripts only, never from a package (the package walk reads `.pzl` files only, D89).
 - The resolver stays out of `ssg/assemble.js`, which is shared with the static browser kernel; only the Node prerender resolves markers and hands the classes in.

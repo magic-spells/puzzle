@@ -1,7 +1,7 @@
 ---
 name: 'D31 — Library tree-shaking: a manifest-seeded function registry pruned by a compile-time scan'
 status: verified
-verified_at: '2026-11-01T19:19:59.201Z'
+verified_at: '2026-11-26T23:52:46.217Z'
 connections:
   - COMPONENT-FORMATTERS
   - COMPONENT-ESBUILD-PLUGIN
@@ -9,7 +9,7 @@ connections:
   - DECISION-D43-FUNCTION-MISSING-GUARD
   - DECISION-D174-FUNCTION-LIBRARY
   - DECISION-D89-FEATURE-USAGE-TREESHAKE
-verified_sha: eec9ac3752f9949b92e3d63609700f34a3ae241f
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
 ---
 
 # D31 — Library tree-shaking: a manifest-seeded registry pruned by a compile-time scan
@@ -19,7 +19,7 @@ A bundle ships only the built-in library functions its templates call. See [[COM
 ## Decision
 
 - **Built-ins are pure named exports** in `client-runtime/formatters/builtins.js` (shared logic in non-exported helpers). `formatters/builtins.json` is the canonical name list, embedded by the Go compiler as its allowlist and kept honest by a vitest drift test. `formatters/builtins-all.js` default-exports the full map.
-- **The registry seeds from a manifest.** `FormatterRegistry` registers from the `@magic-spells/puzzle/formatters/manifest` import; [[COMPONENT-PUZZLE-APP]] then registers the app's `formatters` over it, so config overrides still work. Render code is unchanged — `getAll()` plus guarded calls ([[DECISION-D43-FUNCTION-MISSING-GUARD]]).
+- **The registry seeds from a manifest.** `FormatterRegistry` registers from the `@magic-spells/puzzle/formatters/manifest` import; [[COMPONENT-PUZZLE-APP]] then registers the app's `formatters` over it, so config overrides still work. Render code is unchanged — it binds the registry and calls through its guarded `get()` ([[DECISION-D43-FUNCTION-MISSING-GUARD]]).
 - **The compiler prunes.** `plugin.ScanUsage` parses every `.pzl` in the project, and in installed packages that declare `@magic-spells/puzzle`, for library calls before the bundle (in `build`, `watch` and every dev rebuild), and the plugin resolves the manifest specifier to a virtual module importing only the used names from `builtins.js`. A compiled `.pzl` the scan never read that calls a function the manifest lacks fails the build. Unbundled use (tests, raw imports) resolves the specifier to `builtins-all.js` through package `exports` and a vitest alias. The same scan feeds the feature DCE bits ([[DECISION-D89-FEATURE-USAGE-TREESHAKE]]).
 - **Always kept:** `escape` — the manifest adds it and the registry seeds it itself.
 - **Never in the manifest:** `raw` and `newline_to_br`. Codegen lowers them to the live-HTML node ([[DECISION-D174-FUNCTION-LIBRARY]]), so the scan records them only as the `HasRawHTML`/`HasRawSanitize` usage bits; seeding `raw` would pull the sanitizer into every bundle.

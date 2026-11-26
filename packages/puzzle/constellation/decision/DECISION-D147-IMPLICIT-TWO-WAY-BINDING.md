@@ -24,8 +24,8 @@ connections:
   - COMPONENT-TEMPLATE-PARSER
   - DECISION-D172-ONE-LANGUAGE-TWO-DIALECTS
   - DECISION-D192-FORMS-MODULE
-verified_at: '2026-11-24T18:05:31.213Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_at: '2026-11-26T23:52:46.217Z'
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
 code_refs:
   - client-runtime/views/PuzzleView.js
   - client-runtime/views/viewManager.js
@@ -47,8 +47,8 @@ answer has to be decidable from the template alone.
 The compiler synthesizes the write-back handler — zero new syntax. A classifier
 in `compiler/internal/codegen/binding.go` inspects the element; the runtime
 supplies one memoized dispatcher, `PuzzleView.__bind`. `viewManager.js`'s
-controlled props, caret-safe live-DOM compare (`syncControl`) and
-`reassertSelectValue` carry the rest.
+controlled props and caret-safe live-DOM compare (`syncControl`, which also
+re-asserts a `<select>`'s value once its options are patched) carry the rest.
 
 ### Trigger — all must hold
 

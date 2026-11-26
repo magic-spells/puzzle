@@ -12,8 +12,8 @@ connections:
   - FILE-COMPONENT-SLOT
   - DECISION-D170-INCREMENTAL-VDOM-LISTS
   - DECISION-D180-COMPONENT-SLOT
-verified_at: '2026-11-24T18:05:31.213Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_at: '2026-11-26T23:52:46.217Z'
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
 notes:
   - kind: state
     text: >-
@@ -45,7 +45,9 @@ the views can read it without importing each other.
   `{#if}` branches inside a stable wrapper. Codegen pads unequal branches with
   `PLACEHOLDER_TAG` comments. Exception: a vnode object present in both lists (a
   cached subtree shifted behind a variable-length run) always pairs with itself;
-  `patchIndexedChildren` detects that and delegates to `patchKeyedChildren`.
+  `patchChildren` decides in one loop over both lists, sending the list to
+  `patchKeyedChildren` when either side has a key or a new child already has an
+  element but is not the old child at its index, else to `patchIndexedChildren`.
 - **`sameNode`** = same tag, SameValueZero key, same `island` presence, same
   children shape (string `{#svg}` seed vs array), same `isText`. Anything else is
   a replacement. `isText` is `tag === 'text' && 'value' in attrs`, because an
@@ -64,10 +66,13 @@ the views can read it without importing each other.
   await), and a destroyed instance is routed to a recovery arm before
   `patchComponent`. `tests/keyed-move-el.test.js` pins this.
 - Controlled `value`/`checked` re-sync from the new value on every patch,
-  including browser-drifted values (`syncControl`, shared with `patchAttrs` and
-  `reassertSelectValue`), and are re-asserted once more after an element's attrs
-  and children are in, at mount and on patch, because a `<select>`'s options and
-  a range's `min`/`max`/`step` can land after its `value`.
+  including browser-drifted values: `patchAttrs` writes an input's or textarea's
+  against the live DOM, and `syncControl` (which checks `isControlTag(vnode.tag)`
+  itself) re-asserts them once more after an element's attrs and children are
+  in, at mount and on patch, because a `<select>`'s options and a range's
+  `min`/`max`/`step` can land after its `value`. A `<select>`'s `value` takes the
+  generic attr path and reaches `syncControlValue` only after its children are
+  patched.
 
 ## Identity short-circuit ([[DECISION-D170-INCREMENTAL-VDOM-LISTS]])
 
@@ -109,9 +114,11 @@ changed props rerun `data()`, slot-only changes only rerender.
   destroys it and refreshes the parent, reaching the same recovery arm.
 - **Unmount leave gate** is `child.__isMounted && (animations.out || __hasHideHooks)`.
   Keep `__isMounted` first: a never-mounted child takes the synchronous `destroy()`.
-- **`treeUnknown`**: when a patch throws partway, later diffs against that tree are
-  forbidden; `renderFresh` releases both aborted trees (instances, refs,
-  `outside` listeners, portals), clears only the manager's range and mounts fresh.
+- **`aborted`** (`{ range, trees } | null`): when a patch or a first mount throws
+  partway, the manager records the bracketed range and the trees it can no longer
+  trust, and later diffs against them are forbidden; `renderFresh` releases those
+  trees through `releaseNode` (instances, refs, `outside` listeners, portals),
+  clears only the recorded range and mounts fresh.
 
 ## Runtime component selection ([[DECISION-D180-COMPONENT-SLOT]])
 

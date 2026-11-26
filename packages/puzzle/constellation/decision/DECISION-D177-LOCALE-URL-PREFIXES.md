@@ -23,8 +23,8 @@ connections:
   - DOC-SPEC-BUILD
   - DOC-SPEC-ROUTER
   - TEST-I18N
-verified_at: '2026-11-24T18:13:21.008Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_at: '2026-11-26T23:52:46.217Z'
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
 ---
 
 # D177 — Locale URL prefixes
@@ -109,7 +109,8 @@ document per language.
 - **`setLocale(tag)` navigates** in prefix mode: store the choice, then load
   the same page under the other prefix, query and fragment kept. The page is
   the in-flight navigation's target when one is running (`localePage(router)`
-  reads it from a module-level WeakMap), else the committed URL. It is a full
+  reads the router's in-flight record through a module-level WeakMap; `stop()`
+  clears that record), else the committed URL. It is a full
   page load in every mode, so the router's base never changes while the app
   runs. It compares against the page's forced locale, not the stored one.
 - `i18n.dir` is `'rtl'` for right-to-left languages, else `'ltr'`.

@@ -43,7 +43,7 @@ const quiet = await app.idle({ timeout: 10000 }); // true when idle; false on ti
 `app.idle({ timeout = 10000 })` returns a promise of a boolean. It resolves `true` once two consecutive checks, one frame apart, find all of these clear:
 
 - no `mount()` in flight (the app's own `#mountPromise`);
-- no navigation in flight: the router's `#pendingNavPromise`, read through the static method `Router.navigating(router)`, so no instance member is added and a bundle that never references `Router` still drops the class;
+- no navigation in flight: the router's `#inFlight` record, read through the static method `Router.navigating(router)`, so no instance member is added and a bundle that never references `Router` still drops the class;
 - no scheduled store flush (`_flushScheduled`, which every pending notification and batched persist arms);
 - no store flush or view render job waiting for its frame: `scheduled()`, the scheduler's pending count (the one `renderTick()` waits on, D188). idle's own checks use `frame()`, not `schedule()`, so they never count themselves. This catches a render chain, such as an `afterUpdate()` that schedules another render every frame;
 - no async `data()` evaluation running (`_asyncTrackingChain`, which serializes them);

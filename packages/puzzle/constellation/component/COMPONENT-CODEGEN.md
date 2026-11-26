@@ -17,8 +17,8 @@ connections:
   - DECISION-D180-COMPONENT-SLOT
   - DECISION-D197-SHARE
   - DECISION-D199-UPGRADE-PASS
-verified_at: '2026-11-24T18:13:21.008Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_at: '2026-11-26T23:52:46.217Z'
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
 ---
 
 # Render-function codegen
@@ -99,8 +99,8 @@ table in `lower.go`'s header comment is the contract; the language rules are D17
 - **Guards** (D173 V4): every member, index and method step is written optional, handler
   arguments included — except a handler's free `event` chain, written as authored.
   `Object.keys/values/entries` get `(<arg> ?? {})` (`objectGlobalArgs`, render only).
-- **Calls**: a bare call is the library, `(__f["name"] || __f.__missing("name"))(…)`
-  ([[DECISION-D43-FUNCTION-MISSING-GUARD]]; `const __f` only when used); methods and allowed
+- **Calls**: a bare call is the library, `__f.get("name")(…)`
+  ([[DECISION-D43-FUNCTION-MISSING-GUARD]]; `const __f = this.ctx.formatters` only when used); methods and allowed
   globals are verbatim. Parentheses come from precedence, never source spacing. An expression
   position that STARTS with an object literal is an error (ambiguous with interpolation
   braces).
@@ -225,7 +225,7 @@ a row). A STATIC `island` children array is cached at any size
 ([[DECISION-D44-DOM-ISLANDS]] never patches it); a dynamic seed is not, since D44 re-seeds on
 remount. Excluded: nested subtrees of a cached one, snippet bodies, `mapDepth` bodies, subtrees
 holding controlled `value`/`checked`, and the render root. The `??=` prefix counts toward
-`startCol` in the `attrsMultiline` width decision.
+`startCol` in the `emitAttrs` width decision.
 
 Handler caching ([[DECISION-D62-HANDLER-CACHING]]): arguments are lowered into a scratch fact
 set (binding reads, data roots, library calls); `cacheable` = none → `this.__h`;
@@ -239,12 +239,15 @@ conditional is never cached. Modifiers stay in the attribute name for the ViewMa
   accepts an `Identifier` or a non-computed, non-optional `Member` on one (a bare loop
   variable never; a loop-var-rooted path yes); `detectAutoBind` applies the element
   conditions. Emitted as `'@<event>:bind': this.__bind(target, field, spec)`; it consumes no
-  `__h` index (`attrKV` runs twice per attr). A member-path target is `root ?? 0` — `null` is
+  `__h` index. A member-path target is `root ?? 0` — `null` is
   reserved for the bare-local form. Attr names match case-sensitively (`VALUE=` stays
   one-way).
 - **Conditional arity**: `if`/`unless`/`case` branches are padded with `ViewNode('#')` to the
   max static count only when every branch is stable; an item loop, a range body with an
-  explicit `key`, or a slot marker makes the whole conditional unpadded.
+  explicit `key`, or a slot marker makes the whole conditional unpadded. A stable conditional
+  whose padded branches are each exactly one vnode emits that vnode (`cond ? a : b`), not a
+  list. A children list that is exactly one list-valued child (a loop, or a conditional that
+  emits lists) is that child's expression, not an array spreading it.
 - **Inline SVG** ([[DECISION-D46-INLINE-SVG]]): reads one asset, validates a literal root,
   emits an island vnode, and registers the file as a watch input. Root attrs are literals:
   reserved names (`ref`, `island`, `key`, `flip`) dropped, `@@name` escapes decoded. Scans are

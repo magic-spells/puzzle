@@ -16,11 +16,12 @@ connections:
 notes:
   - kind: gotcha
     text: >-
-      The in-flight slot is opened with PENDING (a real promise), so it is truthy during a
-      navigation's synchronous start. Test for the latch: tests/router-navigation-result.test.js "a
-      replace() whose constructor throws leaves nothing in flight".
-verified_at: '2026-11-24T18:05:31.213Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+      The in-flight record is opened with PENDING (a real promise) as its promise, so it is non-null
+      during a navigation's synchronous start. Test for the latch:
+      tests/router-navigation-result.test.js "a replace() whose constructor throws leaves nothing in
+      flight".
+verified_at: '2026-11-26T23:52:46.217Z'
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
 ---
 
 # D182 — push()/replace() resolve a NavigationResult
@@ -54,7 +55,7 @@ type NavigationResult =
 - `'not-found'`: no route matched and there is no catch-all; the development warning stays.
 - `'error'` with `error`: a throwing guard, the ten-redirect cycle cap (its own `Error`), a lazy load, view/layout construction or `data()` failure, or a synchronous throw inside the commit window. Each is reported to `onError` (phase `navigation`). `#runGuards` returns an `{ error }` marker for the first two, and `#navigate` runs the same recovery and pop-URL repair as for `false`. With nothing committed yet (a pop landing during navigation zero) there is no URL to repair. A `data()` failure with nothing committed yet (a first load, or a navigation that starts before anything has committed) outside a hybrid takeover is not `'error'`: it commits with the error view in the page's place and resolves `ok` ([[DECISION-D19-NAVIGATION-COMMIT]]).
 
-**"Did not complete", not "nothing committed".** Every reason except a commit-window throw leaves the URL, DOM and `router.current` untouched. A commit-window throw can land after `#commitLocation`, with the URL and DOM on the target, while `#commitState` never ran. The catch releases the in-flight latch (`#pendingNavPath`, `#pendingNavPromise`, the locale target) so a retry navigates again, and sets `chainInvalid` so the next navigation rebuilds every level.
+**"Did not complete", not "nothing committed".** Every reason except a commit-window throw leaves the URL, DOM and `router.current` untouched. A commit-window throw can land after `#commitLocation`, with the URL and DOM on the target, while `#commitState` never ran. The catch releases the in-flight record (`#inFlight = null`) so a retry navigates again, and sets `chainInvalid` so the next navigation rebuilds every level.
 
 **Strictly never rejects**, with one exception: start()'s navigation zero (the `#navigate` with no verb, plus a guard redirect continuing it, which `#guardStart` marks). Its commit-window throw rethrows, so `app.mount()` still rejects and tears down. A push that supersedes navigation zero, or runs after a failed or blocked one, resolves like any other.
 
@@ -71,18 +72,18 @@ type NavigationResult =
 
 Each row has its own test in `tests/router-navigation-result.test.js`.
 
-- `#isCommittedNoop` gates the no-op: the committed path, an intact chain, and `#pendingNavPromise` empty. `#navigate` opens that slot at its token bump with a module-private `PENDING` promise, so a push fired from `created()` of a view being built — before the caller pairs the real promise — already sees a navigation in flight.
-- "Replace semantics" is `#navigate` in replace mode, tracked like a push: `push()` passes `track: true`, so `#navigate` records `#pendingNavPath` at its token bump, before it runs synchronously into `preload()`/`created()`. A same-path push from that `created()` therefore joins the rebuild instead of no-opping against the old snapshot or, over an invalidated chain, rebuilding again for each fresh view.
-- **Pairing.** Every verb's caller (push, replace, pop, `go()`, retry, the locale rebuild, navigation zero) pairs its promise through `#trackNav`, which writes the slot only while it still reads `PENDING`. A navigation that ended inside its synchronous start (a constructor throw, a reused ancestor's synchronous `data()` throw) has already cleared the slot at a clear point (commit, recovery, a commit-window throw, `stop()`), and a re-entrant navigation fired inside that stretch has paired its own promise, so a finished navigation never latches: `navigating()` and `app.idle()` (D185) see it as over, and the locale rebuild never waits on a settled promise. One gap: a re-entrant push to a path no route matches (no catch-all) fired from inside another navigation's synchronous start opens no slot of its own, so its `'not-found'` promise pairs into the outer navigation's slot until that navigation ends.
+- `#isCommittedNoop` gates the no-op: the committed path, an intact chain, and no `#inFlight` record. `#navigate` opens that record at its token bump with a module-private `PENDING` promise, so a push fired from `created()` of a view being built — before the caller pairs the real promise — already sees a navigation in flight.
+- "Replace semantics" is `#navigate` in replace mode, joinable like a push: `push()` passes `joinable: true`, so the record `#navigate` writes at its token bump is joinable before it runs synchronously into `preload()`/`created()`. A same-path push from that `created()` therefore joins the rebuild instead of no-opping against the old snapshot or, over an invalidated chain, rebuilding again for each fresh view.
+- **Pairing.** Every verb (push, replace, pop, `go()`, retry, the locale rebuild, navigation zero) starts through `#beginNav`, `#navigate`'s only caller, which pairs the returned promise into the record only while it still reads `PENDING`. A navigation that ended inside its synchronous start (a constructor throw, a reused ancestor's synchronous `data()` throw) has already cleared the record at a clear point (commit, recovery, a commit-window throw, `stop()`), and a re-entrant navigation fired inside that stretch has replaced the record and paired its own promise, so a finished navigation never latches: `navigating()` and `app.idle()` (D185) see it as over, and the locale rebuild never waits on a settled promise. One gap: a re-entrant push to a path no route matches (no catch-all) fired from inside another navigation's synchronous start opens no record of its own, so its `'not-found'` promise pairs into the outer navigation's record until that navigation ends.
 - `#urlMoved` says the browser sits on a popped entry: a pop in flight, or a navigation that superseded one. `push()` reads it for this row. A urlless mode never sets it, so the memory row keeps replace semantics.
 - A guard redirect to the committed path stays a no-op (D87's loop safety): the only navigation in flight is the one being redirected.
 - `replace()` to the committed path is a no-op under the same rule; otherwise it joins a push's rebuild of that path when one is in flight, and failing both it is an ordinary replace. A `replace()` to any other path is always an ordinary replace; during a plain `push()` to that same uncommitted path it supersedes the push, so the replace's history semantics hold.
 
 ### Joining an in-flight navigation
 
-A push to the path a push already has in flight (a plain push or a rebuild) returns that push's promise (`#joinInFlight`), so all callers share one result object. A replace joins only a rebuild of the committed path; it records no path of its own, so it is only ever joined onto a push.
+A push to the path a push already has in flight (a plain push or a rebuild) returns that push's promise (`#joinInFlight`), so all callers share one result object. A replace joins only a rebuild of the committed path; its own record is not joinable, so it is only ever joined onto a push.
 
-A call fired synchronously from inside `#navigate` before the promise is paired (a `created()` hook pushing or replacing its own path) reads the slot again one microtask later. If `#pendingNavPath` still names its path it gets the in-flight result; otherwise a navigation fired in between took the token, and it resolves `'superseded'`, never the other navigation's result. Without the replace join, a `replace()` of its own path from `created()` during a rebuild would supersede it and construct a fresh view whose `created()` replaces again, until the stack overflows. A guard redirect never joins (D87): it would wait on the denied navigation's own promise.
+A call fired synchronously from inside `#navigate` before the promise is paired (a `created()` hook pushing or replacing its own path) reads the promise of the record it joined again one microtask later. By then that record holds its navigation's promise, which the call gets; a record that ended or was replaced before the pairing still holds `PENDING`, which resolves `'superseded'` — never the other navigation's result. Without the replace join, a `replace()` of its own path from `created()` during a rebuild would supersede it and construct a fresh view whose `created()` replaces again, until the stack overflows. A guard redirect never joins (D87): it would wait on the denied navigation's own promise.
 
 ### Commit-window deferral
 

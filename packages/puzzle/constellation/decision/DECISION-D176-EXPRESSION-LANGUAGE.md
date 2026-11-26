@@ -243,7 +243,7 @@ date takes only `< <= > >=` and binary `-` (milliseconds) in both hosts.
   loop/snippet/arrow bindings and before data (D180), without widening the
   grammar or calls. Every member step, index step and method call gets `?.`
   (handler args too); `Object.*` take `<arg> ?? {}`; a library call is
-  `(__f["name"] || __f.__missing("name"))(…)`; methods and `Math.*` stay as
+  `__f.get("name")(…)`; methods and `Math.*` stay as
   written. D170 row facts and D62 handler-caching verdicts come off the same
   tree.
 - **`puzzle check`** (D165) emits TypeScript from the same tree: no added

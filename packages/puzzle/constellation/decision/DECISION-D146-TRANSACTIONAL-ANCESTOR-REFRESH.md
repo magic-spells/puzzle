@@ -12,8 +12,8 @@ connections:
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-STORE
-verified_at: '2026-11-24T18:05:31.213Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_at: '2026-11-26T23:52:46.217Z'
+verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
 code_refs:
   - client-runtime/views/PuzzleView.js
   - client-runtime/router/router.js
@@ -37,16 +37,18 @@ subscriptions under the old URL.
 
 Reused ancestors join the atomic commit through two phases.
 
-**Prepare.** `PuzzleView.prepareRefresh({ params, props, route })`
+**Prepare.** `PuzzleView.prepareRefresh({ params, route })`
 (router-internal, untyped) runs `data()` against the destination, captures the
 model and the tracked subscriptions, renders nothing, and mutates no committed
 field. It returns `{ ready, commit(), discard() }`, or null where `refresh()`
 would no-op (destroyed, leaving, dev-profiler-blocked). The router pushes
-`ready` into the gated `loads` array where the inline refresh sat.
+`ready` into the gated `loads` array where the inline refresh sat. Props are
+outside the transaction: a prepared run reads the view's live props, and a
+props update during the gate bumps `#runToken`, so commit re-derives.
 
 **Commit / discard.** `#commitState` calls `commit()` on each prepared ancestor
 synchronously after `#state` is assigned, inside the `#committing` window.
-`commit()` swaps params/props/route, applies the held subscription reconcile,
+`commit()` swaps params/route, applies the held subscription reconcile,
 bumps `#runToken`, and re-renders from the computed model — `data()` runs once.
 `#navigate` wraps the load phase and `#swap` in a `finally` that discards every
 handle. It covers every exit that does not commit, both supersession returns

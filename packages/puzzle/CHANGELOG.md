@@ -218,6 +218,44 @@ the capitalized `<Slot/>`, so change a lowercase `<slot>` by hand.
 `'static'` now produces a genuinely static site — no router, no `app.js`. This
 one is *not* a compile error; it silently builds a different product.
 
+## 0.10.1
+
+Production sizes: hello-world **23.7 KB gzip** (23.9 in 0.10.0), todos
+**27.6 KB gzip** (27.8).
+
+### Changed
+
+- **Each model schema is normalized once.** A model's fields, relationships,
+  primary key and `date()` fields are worked out the first time they are asked
+  for and shared after that, so default-keyed lists and record
+  create/update/destroy do less work per row.
+- **Form-control syncing is decided from the template's tag.** Whether an
+  element's `value` or `checked` is kept in step with the live DOM now follows
+  the tag the template wrote (`input`, `textarea`, `select`) instead of reading
+  the element's `nodeName` back from the DOM.
+- **Smaller compiled templates.** A library call compiles to
+  `__f.get("name")(…)` on the registry, a conditional whose branches are each
+  one node emits that node instead of a one-item list, and a lone list-valued
+  child is the children list itself. Across 341 templates the compiled output
+  is about half a percent smaller (−0.52% min+gzip).
+- **Internal simplifications** in the router (one record for the navigation in
+  flight), views and the view manager, with no behavior change beyond the
+  fixes below.
+- **Testing: a hand-built `ctx.formatters` needs `get(name)`.** Compiled render
+  code now calls the registry's `get(name)` instead of reading `getAll()`. The
+  `/testing` context builds a real registry, so tests that use it are
+  unaffected; a test that passes its own `ctx.formatters` double must give it
+  a `get(name)` method.
+
+### Fixed
+
+- **A `data()` key named like an `Object.prototype` member is dropped when
+  `data()` stops returning it.** A key such as `toString` or `constructor`
+  stayed visible to the template after a later `data()` run left it out.
+- **`router.stop()` clears the navigation in flight.** Under locale prefix
+  routing, a locale switch after `stop()` interrupted a navigation reloads the
+  page in the address bar, not the stopped navigation's destination.
+
 ## 0.10.0 — 2026-11-20
 
 Production sizes: hello-world **23.9 KB gzip** (23.0 in 0.9.0), todos
