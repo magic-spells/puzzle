@@ -1053,9 +1053,7 @@ export function mount(vnode, parent, ref, ctx, owner = null) {
 		// here, which no reader minds: `el.remove()` on a parentless node is a no-op and
 		// every devperf/insertion-ref site tests `parentNode` first.
 		vnode.el = el;
-		for (const [name, value] of Object.entries(vnode.attrs)) {
-			setAttr(el, name, value, owner);
-		}
+		for (const name in vnode.attrs) setAttr(el, name, vnode.attrs[name], owner);
 		// Element ref (v1.39, D72): populate this.refs[name] with the live element the
 		// moment it is created, BEFORE children mount and BEFORE the owning view's
 		// mounted() hook fires (mount completes fully before mounted()). setAttr above
@@ -1858,13 +1856,13 @@ function releaseSubtree(vnode) {
 	// keyed-row removal, parent-subtree teardown, full view destroy). Plain
 	// element listeners die with the element and need no sweep. The map is the
 	// authoritative record of what is attached; skip the '\x00once' spent flags.
+	// The substring test is exact: modifiers are a closed set the parser checks,
+	// and only `outside` starts with "outside".
 	const listeners = /** @type {ListenerHost | null} */ (vnode.el)?.[LISTENERS];
 	if (listeners) {
-		for (const key of Object.keys(listeners)) {
-			if (key.endsWith(ONCE_SPENT)) continue;
-			const [event, ...mods] = key.slice(1).split(':');
-			if (!mods.includes('outside')) continue;
-			document.removeEventListener(event, listeners[key], OUTSIDE_OPTS);
+		for (const key in listeners) {
+			if (!key.includes(':outside') || key.endsWith(ONCE_SPENT)) continue;
+			document.removeEventListener(key.slice(1, key.indexOf(':')), listeners[key], OUTSIDE_OPTS);
 			delete listeners[key];
 			delete listeners[key + ONCE_SPENT];
 		}
@@ -1939,7 +1937,8 @@ function releaseAborted(trees) {
  * @param {PuzzleView | null} [owner]
  */
 function patchAttrs(el, tag, oldAttrs, newAttrs, owner = null) {
-	for (const [name, value] of Object.entries(newAttrs)) {
+	for (const name in newAttrs) {
+		const value = newAttrs[name];
 		// Element ref (v1.39, D72): the element PERSISTS through this patch. The
 		// normal case is a cached setter identical on both sides (===) → nothing to
 		// do; the ref already points at this el. Only a DIFFERING ref value (a
@@ -1968,7 +1967,7 @@ function patchAttrs(el, tag, oldAttrs, newAttrs, owner = null) {
 			setAttr(el, name, value, owner);
 		}
 	}
-	for (const name of Object.keys(oldAttrs)) {
+	for (const name in oldAttrs) {
 		if (name in newAttrs) continue;
 		// A persisting element dropping its `ref` (hand-written render — the compiler
 		// emits ref statically) releases it: fire null so this.refs[name] clears.
@@ -1986,6 +1985,15 @@ function patchAttrs(el, tag, oldAttrs, newAttrs, owner = null) {
  * nodes are matched by (tag, key) and their DOM moved into position;
  * everything else falls back to index alignment.
  *
+ * One unkeyed shape takes the keyed path too. A cached vnode (D170:
+ * `this.__c[n]`, a row's `s.c[n]`) is the SAME object in both lists, and index
+ * pairing assumes it stays at its index. A variable-length unkeyed run before it
+ * (an unkeyed `{#for}`, slot content) shifts it, and pairing by index would then
+ * patch another old vnode INTO it and unmount it as a leftover — the one live
+ * element it describes. A fresh vnode has no `el`, so a mounted one at a
+ * different index is the only sign; the keyed path pairs it with itself and
+ * moves it.
+ *
  * @param {Node} el the parent (an element, or a portal's outlet)
  * @param {ViewNode[]} oldChildren
  * @param {ViewNode[]} newChildren
@@ -1994,12 +2002,16 @@ function patchAttrs(el, tag, oldAttrs, newAttrs, owner = null) {
  * @param {Node | null} [tail] the insertion ref for appended children
  */
 function patchChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
-	const keyed = oldChildren.some((c) => c.key != null) || newChildren.some((c) => c.key != null);
-	if (keyed) {
-		patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail);
-	} else {
-		patchIndexedChildren(el, oldChildren, newChildren, ctx, owner, tail);
+	const n = Math.max(oldChildren.length, newChildren.length);
+	for (let i = 0; i < n; i++) {
+		const old = oldChildren[i];
+		const child = newChildren[i];
+		if (old?.key != null || child?.key != null || (child?.el != null && child !== old)) {
+			patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail);
+			return;
+		}
 	}
+	patchIndexedChildren(el, oldChildren, newChildren, ctx, owner, tail);
 }
 
 // `tail` is the insertion reference for children appended at the END of the
@@ -2015,20 +2027,6 @@ function patchChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
  * @param {Node | null} [tail]
  */
 function patchIndexedChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
-	// A cached vnode (D170: `this.__c[n]`, a row's `s.c[n]`) is the SAME object in
-	// both lists, and index pairing assumes it stays at its index. A
-	// variable-length unkeyed run before it (an unkeyed `{#for}`, slot content)
-	// shifts it, and pairing by index would then patch another old vnode INTO it
-	// and unmount it as a leftover — the one live element it describes. A fresh
-	// vnode has no `el`, so a mounted one at a different index is the only sign;
-	// such a list takes the keyed path, which pairs it with itself and moves it.
-	for (let i = 0; i < newChildren.length; i++) {
-		const child = newChildren[i];
-		if (child.el != null && child !== oldChildren[i]) {
-			patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail);
-			return;
-		}
-	}
 	const common = Math.min(oldChildren.length, newChildren.length);
 	for (let i = 0; i < common; i++) {
 		patch(oldChildren[i], newChildren[i], el, ctx, owner);
@@ -2207,7 +2205,7 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail = nul
 
 	// A cached unkeyed vnode (D170) that moved to another unkeyed index is the
 	// same object as an old child, so positional pairing just handed it to a
-	// DIFFERENT old node — see patchIndexedChildren. Pair again: every new child
+	// DIFFERENT old node — see patchChildren. Pair again: every new child
 	// that is also an old one pairs with itself, and the rest consume the old
 	// nodes nothing reused, still positionally. The move pass below then puts
 	// each in place. Reached only when a mounted vnode sat off its positional
