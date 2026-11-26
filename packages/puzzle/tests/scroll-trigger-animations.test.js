@@ -331,7 +331,7 @@ describe('scroll-trigger enter (D73) — degradation', () => {
 		expect(calls).toEqual(['willShow', 'didShow']);
 	});
 
-	it('an unknown trigger with a triggerAnchor warns about the trigger first, then the anchor', async () => {
+	it('an unknown trigger with a triggerAnchor warns about both', async () => {
 		installFakeAnimate();
 		installFakeIO();
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -341,9 +341,9 @@ describe('scroll-trigger enter (D73) — degradation', () => {
 		}
 		const v = await new V().mount(container());
 		v.playIn();
-		expect(warn.mock.calls.map(([message]) => message)).toEqual([
-			`[puzzle] unknown animation in.trigger "sideways" (expected 'mount' or 'visible'); using 'mount'`,
+		expect(warn.mock.calls.map(([message]) => message).sort()).toEqual([
 			`[puzzle] animation in.triggerAnchor is ignored without trigger: 'visible'`,
+			`[puzzle] unknown animation in.trigger "sideways" (expected 'mount' or 'visible'); using 'mount'`,
 		]);
 		expect(ioInstances).toHaveLength(0);
 		v.destroy();

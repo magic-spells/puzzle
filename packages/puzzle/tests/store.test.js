@@ -555,18 +555,6 @@ describe('Store — subscriptions & reactivity (SPEC §8)', () => {
 		expect(view.onStoreChange).not.toHaveBeenCalled();
 	});
 
-	it('unsubscribe removes an emptied key from subscribersByKey (no unbounded growth)', () => {
-		const store = makeStore();
-		const component = { onStoreChange: vi.fn() };
-
-		store.withTracking(component, () => store.findOne('todo', 't1'));
-		expect(store.subscribersByKey.has('todo t1')).toBe(true);
-
-		store.unsubscribe(component);
-		// The now-empty key set is deleted rather than left as a dangling Set.
-		expect(store.subscribersByKey.has('todo t1')).toBe(false);
-	});
-
 	it('unsubscribe drops every key a subscriber holds from both indexes', () => {
 		const store = makeStore();
 		const component = { onStoreChange: vi.fn() };
@@ -576,9 +564,11 @@ describe('Store — subscriptions & reactivity (SPEC §8)', () => {
 			store.findOne('todo', 't2');
 		});
 		expect(store.keysBySubscriber.get(component).size).toBe(3);
+		expect(store.subscribersByKey.size).toBe(3);
 
 		store.unsubscribe(component);
 		expect(store.keysBySubscriber.has(component)).toBe(false);
+		// Each now-empty key set is deleted rather than left as a dangling Set.
 		expect(store.subscribersByKey.size).toBe(0);
 	});
 
