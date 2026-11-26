@@ -247,3 +247,35 @@ export default class T extends PuzzleView {}
 		t.Errorf("a balanced {#case} must not emit any placeholder\n%s", got)
 	}
 }
+
+// TestConditionalListOrVnode pins where a conditional is a list and where it is
+// one vnode. It is emitted as `cond ? a : b` only when every branch, once
+// padded, is exactly one vnode. In the first four a branch is not: a loop sits
+// beside its one static slot (directly, then inside a nested conditional), it
+// has no content at all, or it is an unpadded empty default beside a slot
+// marker. Picking "the" vnode there would drop nodes or index an empty branch,
+// so each stays a spread list. In the last the list is an element's only
+// child, so it is the children argument itself.
+func TestConditionalListOrVnode(t *testing.T) {
+	for _, tc := range []struct{ body, want string }{
+		{`{#if show}{#for 1...3, i}<span>{ i }</span>{/for}<p>fixed</p>{/if}`, "...(__d.show"},
+		{`{#if show}{#if more}{#for 1...3, i}<span>{ i }</span>{/for}<p>fixed</p>{/if}{/if}`, "...(__d.show"},
+		{`{#if show}{/if}`, "...(__d.show"},
+		{`{#case state}{:when 'a'}<Children/>{:when 'b'}<span>b</span>{/case}`, "...(((__c) =>"},
+		{`<div>{#if show}<p>a</p><p>b</p>{/if}</div>`, "new ViewNode('div', {}, (__d.show"},
+	} {
+		got := compileSrc(t, `<puzzle-view>
+  `+tc.body+`
+  <input placeholder="name" />
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class T extends PuzzleView {}
+</script>
+`)
+		if !strings.Contains(got, tc.want) {
+			t.Errorf("%s: want %q in\n%s", tc.body, tc.want, got)
+		}
+	}
+}
