@@ -254,7 +254,7 @@ export default class FormState extends PuzzleView {
     };
 
     // Computed ONCE and cached. Reading it live from stats() would go through
-    // the probe while a probe is installed and drift the normalization count by
+    // the probe while a probe is installed and drift the call count by
     // one, which is exactly the kind of instrument-measuring-itself bug the
     // whole file is built to avoid.
     this.schemaFieldCount = Object.keys(Model.normalizedSchema()).length;
@@ -811,13 +811,13 @@ export default class FormState extends PuzzleView {
       return { ok: false, detail: `the draft input reads "${draftShown}", the state layer holds "${draftHeld}"` };
     }
 
-    // fsSchemaNormalizations === 1 per keystroke depends on the store having NO
-    // storage: _persist() no-ops without it, and a configured storage would add
-    // a full _serializeAll() to every flush. Asserted rather than reasoned about.
+    // The typing arms are only comparable with NO storage on the store:
+    // _persist() no-ops without it, and a configured storage would add a full
+    // _serializeAll() to every flush. Asserted rather than reasoned about.
     if (this.ctx.store.storage != null) {
       return {
         ok: false,
-        detail: 'the store has storage configured — every flush would also serialize the whole store and the schema counts would not mean what they say',
+        detail: 'the store has storage configured — every flush would also serialize the whole store and the typing arms\' timings would not be comparable',
       };
     }
 

@@ -1144,9 +1144,9 @@ controlled input in every Puzzle app now eats the caret on re-render.
 `fsDataRuns` of 0 in `type-store` means the store comparison measured nothing.
 `fsSchemaNormalizations` of anything but 200 in `type-store` means the
 validation pass moved, or that `primaryKey()` calls `normalizedSchema()` again
-(the count was 600 when it did). `validate()` also fails outright if the store has storage
-configured, because every flush would then serialize the whole store and the
-schema counts would stop meaning what they say.
+(the count was 600 when it did). `validate()` also fails outright if the store
+has storage configured: every flush would then serialize the whole store, and
+the two typing arms' timings would stop being comparable.
 ## Scenario 12 — `flip-churn`
 
 **Probes:** the one place the D85 FLIP implementation interleaves layout reads

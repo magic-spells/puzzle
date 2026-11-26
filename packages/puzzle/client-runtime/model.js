@@ -686,11 +686,14 @@ export function assertSchemaNames(Model, type) {
 }
 
 // A schema never changes once its class is defined, so each schema object is
-// normalized once: the field map, the primary key and the `date()` fields.
-// Every caller shares the result and must never write to it.
-/** @type {WeakMap<object, { fields: Record<string, FieldDef>, pk: string, dates: string[] }>} */
+// normalized once: its fields, its relationships, the primary key and the
+// `date()` fields. Every caller shares the result and must never write to it.
+/**
+ * @type {WeakMap<object, { fields: Record<string, FieldDef>,
+ *   rels: Record<string, RelationshipDef>, pk: string, dates: string[] }>}
+ */
 const NORMALIZED = new WeakMap();
-const NO_SCHEMA = {};
+const NO_SCHEMA = {}; // the one key every model without a schema shares
 
 /** @param {typeof PuzzleModel} Model */
 function normalized(Model) {
@@ -699,16 +702,19 @@ function normalized(Model) {
 	if (!entry) {
 		/** @type {Record<string, FieldDef>} */
 		const fields = {};
-		for (const [field, value] of Object.entries(schema)) {
-			// Relationships are schema entries but NOT fields (constellation/doc/DOC-SPEC.md §21,
-			// D49): exclude them so applyDefaults, primaryKey, and the §20
-			// validation engine (_collectErrors iterates this map) never see them.
-			if (value instanceof RelationshipBuilder) continue;
-			fields[field] = value instanceof FieldBuilder ? value.def : value;
+		/** @type {Record<string, RelationshipDef>} */
+		const rels = {};
+		for (const [name, value] of Object.entries(schema)) {
+			// A relationship is a schema entry but NOT a field (constellation/doc/DOC-SPEC.md
+			// §21, D49): kept apart so applyDefaults, primaryKey and the §20
+			// validation engine (_collectErrors iterates `fields`) never see one.
+			if (value instanceof RelationshipBuilder) rels[name] = value.def;
+			else fields[name] = value instanceof FieldBuilder ? value.def : value;
 		}
 		const names = Object.keys(fields);
 		entry = {
 			fields,
+			rels,
 			pk: names.find((name) => fields[name].primary) ?? 'id',
 			dates: names.filter((name) => fields[name].type === 'date'),
 		};
@@ -748,10 +754,10 @@ function normalized(Model) {
  */
 export function coerceJSONDates(Model, data) {
 	if (!data || typeof data !== 'object') return data;
-	const fields = normalized(Model).dates;
-	if (fields.length === 0) return data;
+	const dates = normalized(Model).dates;
+	if (dates.length === 0) return data;
 	let out = data;
-	for (const field of fields) {
+	for (const field of dates) {
 		if (!Object.prototype.hasOwnProperty.call(data, field)) continue;
 		const value = data[field];
 		if (typeof value !== 'string' && typeof value !== 'number') continue;
@@ -807,7 +813,7 @@ export class PuzzleModel {
 	 * Normalized descriptor map for this model's schema:
 	 * FieldBuilder values collapse to their .def, plain descriptors pass through.
 	 * Shared, never a copy: read it, never write to it.
-	 * @returns {Record<string, FieldDef>}
+	 * @returns {Readonly<Record<string, FieldDef>>}
 	 */
 	static normalizedSchema() {
 		return normalized(this).fields;
@@ -817,17 +823,11 @@ export class PuzzleModel {
 	 * Relationship descriptors declared on this model's schema:
 	 * name → `{ kind, type, key? }`. The Store reads this at construction to
 	 * install lazy getters (constellation/doc/DOC-SPEC.md §21, D49). Empty when
-	 * the model declares none.
-	 * @returns {Record<string, RelationshipDef>}
+	 * the model declares none. Shared, never a copy: read it, never write to it.
+	 * @returns {Readonly<Record<string, RelationshipDef>>}
 	 */
 	static relationshipDefs() {
-		const schema = this.schema || {};
-		/** @type {Record<string, RelationshipDef>} */
-		const out = {};
-		for (const [name, value] of Object.entries(schema)) {
-			if (value instanceof RelationshipBuilder) out[name] = value.def;
-		}
-		return out;
+		return normalized(this).rels;
 	}
 
 	/**

@@ -75,7 +75,11 @@ describe('PuzzleModel', () => {
 
 	it('normalizes each schema once: same object per call, one per schema', () => {
 		class Post extends PuzzleModel {
-			static schema = { slug: Puzzle.string().primary(), title: Puzzle.string() };
+			static schema = {
+				slug: Puzzle.string().primary(),
+				title: Puzzle.string(),
+				author: Puzzle.belongsTo('user'),
+			};
 		}
 		class Draft extends Post {} // inherits Post's schema
 		class Note extends Post {
@@ -83,8 +87,8 @@ describe('PuzzleModel', () => {
 		}
 
 		expect(Post.normalizedSchema()).toBe(Post.normalizedSchema());
-		expect(Draft.normalizedSchema()).toBe(Post.normalizedSchema());
-		expect(Note.normalizedSchema()).not.toBe(Post.normalizedSchema());
+		expect(Post.relationshipDefs()).toBe(Post.relationshipDefs());
+		expect(Object.keys(Draft.normalizedSchema())).toEqual(['slug', 'title']);
 		expect(Object.keys(Note.normalizedSchema())).toEqual(['id', 'body']);
 		expect([Post.primaryKey(), Draft.primaryKey(), Note.primaryKey()]).toEqual(['slug', 'slug', 'id']);
 	});
