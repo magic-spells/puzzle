@@ -17,7 +17,7 @@
  * - Module state and typedefs; `fail`/`SUPERSEDED`/`PENDING`/`succeed`.
  * - class Router: fields; constructor (route compile, option validation);
  *   start/stop; the verbs push/replace/go/back/forward and their in-flight
- *   bookkeeping (#joinInFlight, #isCommittedNoop, #trackNav, #defer);
+ *   bookkeeping (#joinInFlight, #isCommittedNoop, #beginNav, #defer);
  *   url/current/views; #runGuards and failure recovery; #navigate (match →
  *   token → guards → lazy → construct → load); #commitLocation and #swap (the
  *   commit window); __failedView (error-view retry, locale rebuild); mount,
@@ -103,6 +103,14 @@ import { reportError } from '../errors.js';
  */
 
 /**
+ * The verb flags one navigation runs with (#beginNav → #navigate). `retryView` is
+ * the failed view whose error view pressed retry, or the REBUILD marker.
+ * @typedef {{ push: boolean, pop?: boolean, replace?: boolean,
+ *   savedPosition?: ScrollPosition | null, memoryIndex?: number | null, joinable?: boolean,
+ *   retryView?: PuzzleView | { __retryErrorView?: undefined } | null }} NavigateOptions
+ */
+
+/**
  * Everything #navigate resolved for one navigation, handed to #swap to commit.
  * @typedef {{ rawPath: string, entry: RouteEntry, views: PuzzleView[], keys: string[],
  *   layout: PuzzleView | null, layoutClass: LayoutClassValue, reuseLayout: boolean, keep: number,
@@ -149,7 +157,7 @@ const SCROLL_MAX_ENTRIES = 50;
 const fail = (reason, error) => ({ ok: false, reason, error });
 const SUPERSEDED = Object.freeze(fail('superseded'));
 
-// The in-flight navigation's promise from #navigate's token bump until #trackNav
+// The in-flight navigation's promise from #navigate's token bump until #beginNav
 // pairs the real one. A navigation that ends inside that synchronous stretch (a
 // constructor throw, a sync data() throw) clears #inFlight, so the pairing that
 // follows finds nothing to fill — the promise of a finished navigation never
@@ -201,7 +209,7 @@ export class Router {
 	//   it (#handlePopState).
 	// - promise: what a joining caller gets back, so it settles when this
 	//   navigation does; a locale rebuild (__failedView(null, true), D175) waits on
-	//   it too. PENDING until the caller's #trackNav pairs it.
+	//   it too. PENDING until #beginNav pairs it.
 	/** @type {{ path: string, joinable: boolean, pop: boolean, promise: Promise<NavigationResult> } | null} */
 	#inFlight = null;
 	// Whether a popstate left the address bar on an entry nothing has committed
@@ -617,7 +625,7 @@ export class Router {
 		// our mode — a hash-mode app loaded at a non-route fragment (or none) routes
 		// '/' (#currentPath → null).
 		const path = this.#mode?.urlless ? this.#mode.start() : (this.#currentPath() ?? '/');
-		await this.#trackNav(this.#navigate(path, { push: false }));
+		await this.#beginNav(path, { push: false });
 		return this;
 	}
 
@@ -880,8 +888,7 @@ export class Router {
 		// created() then joins this navigation (the in-flight guard above) instead
 		// of no-opping against the old snapshot or, over an invalidated chain,
 		// re-entering asReplace once per fresh view until the stack overflows.
-		const nav = this.#navigate(path, asReplace ? { push: false, replace: true, joinable: true } : { push: true });
-		return this.#trackNav(nav);
+		return this.#beginNav(path, asReplace ? { push: false, replace: true, joinable: true } : { push: true });
 	}
 
 	/**
@@ -919,7 +926,7 @@ export class Router {
 		// (D182). Any other path keeps an ordinary replace that supersedes.
 		return (
 			(this.#state && key === sameNavKey(this.#state.path) && this.#joinInFlight(key)) ||
-			this.#trackNav(this.#navigate(path, { push: false, replace: true }))
+			this.#beginNav(path, { push: false, replace: true })
 		);
 	}
 
@@ -944,7 +951,7 @@ export class Router {
 		const inFlight = this.#inFlight;
 		if (this.#guardRedirecting || !inFlight?.joinable || key !== sameNavKey(inFlight.path)) return null;
 		// A PENDING promise is read again on a microtask: a push or replace fired
-		// synchronously from inside #navigate (a created() hook) runs before #trackNav
+		// synchronously from inside #navigate (a created() hook) runs before #beginNav
 		// pairs the promise. One tick later the record this call joined holds the
 		// real one — or still PENDING, which resolves 'superseded', when that
 		// navigation ended or was replaced before the pairing.
@@ -971,17 +978,20 @@ export class Router {
 	}
 
 	/**
-	 * Pair a navigation's promise with the #inFlight record its #navigate call
-	 * opened — every verb's caller, the only place the promise exists. #navigate
-	 * runs synchronously to its first await, so the record still holds PENDING
-	 * only if it is this navigation's: an unmatched path never opened one, a
-	 * navigation that already ended cleared it, and a re-entrant one fired inside
-	 * that stretch replaced it and paired its own promise, which must stand.
+	 * Start a navigation and pair its promise with the #inFlight record it opened.
+	 * The one caller of #navigate, so every verb's navigation is paired: the
+	 * promise exists only once #navigate returns. It runs synchronously to its
+	 * first await, so the record still holds PENDING only if it is this
+	 * navigation's: an unmatched path never opened one, a navigation that already
+	 * ended cleared it, and a re-entrant one fired inside that stretch replaced it
+	 * and paired its own promise, which must stand.
 	 *
-	 * @param {Promise<NavigationResult>} nav
+	 * @param {string} rawPath
+	 * @param {NavigateOptions} options
 	 * @returns {Promise<NavigationResult>}
 	 */
-	#trackNav(nav) {
+	#beginNav(rawPath, options) {
+		const nav = this.#navigate(rawPath, options);
 		if (this.#inFlight?.promise === PENDING) this.#inFlight.promise = nav;
 		return nav;
 	}
@@ -1062,7 +1072,7 @@ export class Router {
 		const target = mode.go(n);
 		if (!target) return;
 		return /** @type {Promise<any>} */ (
-			this.#trackNav(this.#navigate(target.path, { push: false, pop: true, memoryIndex: target.index }))
+			this.#beginNav(target.path, { push: false, pop: true, memoryIndex: target.index })
 		);
 	}
 
@@ -1290,10 +1300,7 @@ export class Router {
 
 	/**
 	 * @param {string} rawPath
-	 * @param {{ push: boolean, pop?: boolean, replace?: boolean,
-	 *   savedPosition?: ScrollPosition | null, memoryIndex?: number | null, joinable?: boolean,
-	 *   retryView?: PuzzleView | { __retryErrorView?: undefined } | null }} options the verb flags;
-	 *   `retryView` is the failed view whose error view pressed retry, or the REBUILD marker
+	 * @param {NavigateOptions} options
 	 * @returns {Promise<NavigationResult>} what push()/replace() resolve (D182)
 	 */
 	async #navigate(
@@ -1377,9 +1384,9 @@ export class Router {
 		// via the `joinable` option): the double-click guard must NOT suppress a push
 		// that SUPERSEDES an in-flight pop/replace to the same path — memory-mode
 		// back()-then-push('/same') is push-vs-pop (truncate+append vs index move), a
-		// real navigation despite the shared path. The promise is PENDING until the
-		// caller's #trackNav pairs it the moment this call returns: the promise object
-		// does not exist yet inside #navigate.
+		// real navigation despite the shared path. The promise is PENDING until
+		// #beginNav pairs it the moment this call returns: the promise object does not
+		// exist yet inside #navigate.
 		this.#inFlight = {
 			path: rawPath,
 			joinable: push || joinable,
@@ -2353,7 +2360,7 @@ export class Router {
 			// Tracked like a replace, so a switch made from inside this rebuild (its
 			// data() or guard asking for another locale) waits for it instead of
 			// starting a second rebuild that this one's data() would wait on.
-			const nav = this.#trackNav(this.#navigate(st.path, { push: false, replace: true, retryView: REBUILD }));
+			const nav = this.#beginNav(st.path, { push: false, replace: true, retryView: REBUILD });
 			const token = this.#token;
 			return nav.then(() => {
 				if (this.#token === token && this.#state === st) {
@@ -2365,7 +2372,7 @@ export class Router {
 		const routed = st.layout === view || st.views.includes(view);
 		if (retry) {
 			return routed
-				? this.#trackNav(this.#navigate(st.path, { push: false, replace: true, retryView: view }))
+				? this.#beginNav(st.path, { push: false, replace: true, retryView: view })
 				: null;
 		}
 		if (st.layout === view) {
@@ -3242,7 +3249,7 @@ export class Router {
 			return;
 		}
 		this.#urlMoved = true;
-		this.#trackNav(this.#navigate(path, { push: false, pop: true, savedPosition }));
+		this.#beginNav(path, { push: false, pop: true, savedPosition });
 	}
 
 	/**
