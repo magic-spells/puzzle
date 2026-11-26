@@ -789,8 +789,8 @@ export class Store {
 		this._heldKeys.delete(subscriber);
 		const keys = this.keysBySubscriber.get(subscriber);
 		if (!keys) return;
-		// Copy first: _dropSubscription mutates this set (and may delete it).
-		for (const key of [...keys]) this._dropSubscription(key, subscriber);
+		// Safe to iterate live: _dropSubscription deletes only the key being visited.
+		for (const key of keys) this._dropSubscription(key, subscriber);
 	}
 
 	/**
@@ -964,10 +964,8 @@ export class Store {
 
 	/** Notify each pending subscriber exactly once. Extracted from flush(). */
 	_deliverNotifications() {
-		if (this._pendingKeys.size === 0) return;
-
-		const pending = [...this._pendingKeys];
-		this._pendingKeys.clear();
+		const pending = this._pendingKeys;
+		if (pending.size === 0) return;
 
 		// Gather first, deliver second. Every target's set is read BEFORE any
 		// subscriber runs: a subscriber's sync data() can mount a child that
@@ -994,9 +992,12 @@ export class Store {
 		let keys;
 		let notified;
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-			keys = pending.map(([key]) => key);
+			keys = [...pending.keys()];
 			notified = new Set();
 		}
+		// Emptied before the first subscriber runs, so a write it makes queues for the
+		// next flush instead of being cleared with this batch.
+		pending.clear();
 		for (const [sub, [seq, key]] of targets) {
 			// Membership is re-checked at CALL time, not just at gather time: an
 			// earlier subscriber in this same batch may have unsubscribed this one

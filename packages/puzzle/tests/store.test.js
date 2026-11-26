@@ -567,6 +567,21 @@ describe('Store — subscriptions & reactivity (SPEC §8)', () => {
 		expect(store.subscribersByKey.has('todo t1')).toBe(false);
 	});
 
+	it('unsubscribe drops every key a subscriber holds from both indexes', () => {
+		const store = makeStore();
+		const component = { onStoreChange: vi.fn() };
+		store.withTracking(component, () => {
+			store.findMany('todo');
+			store.findOne('todo', 't1');
+			store.findOne('todo', 't2');
+		});
+		expect(store.keysBySubscriber.get(component).size).toBe(3);
+
+		store.unsubscribe(component);
+		expect(store.keysBySubscriber.has(component)).toBe(false);
+		expect(store.subscribersByKey.size).toBe(0);
+	});
+
 	it("a tracked eval that THROWS keeps the subscriber's last-good subscriptions", () => {
 		const store = makeStore();
 		store.createRecord('todo', { id: 'ok', text: 'ok' });
