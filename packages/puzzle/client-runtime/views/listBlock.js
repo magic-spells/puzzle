@@ -371,7 +371,7 @@ function revisionOf(item) {
  * caller (it holds for every class); here every field is checked against the
  * model's own schema and relationship names, ONCE per (block, constructor) — the
  * verdict is a property of the class, not of the record, and a list of 1,000
- * todos must not pay 1,000 schema walks. Formatters are display-pure by SPEC
+ * todos must not repeat the check 1,000 times. Formatters are display-pure by SPEC
  * contract and do not count.
  *
  * @param {ListBlock} block
