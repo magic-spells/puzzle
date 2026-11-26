@@ -48,8 +48,8 @@ import {
 /** @import { AnimationSpec, PrevViewState, RouteSnapshot } from '../../types/index.js' */
 
 /**
- * The { params, props, route } a prepared data() run evaluates against (D146).
- * @typedef {{ params: Record<string, any>, props: any, route: RouteSnapshot | null }} EvalScope
+ * The { params, route } a prepared data() run evaluates against (D146).
+ * @typedef {{ params: Record<string, any>, route: RouteSnapshot | null }} EvalScope
  */
 
 /**
@@ -119,8 +119,9 @@ function warnThisHandlers(view) {
 }
 
 /**
- * What the router and parents hand refresh()/preload()/prepareRefresh(): the
- * navigation's params and route snapshot, or a parent's new props.
+ * What the router and parents hand refresh()/preload(): the navigation's params
+ * and route snapshot, or a parent's new props. prepareRefresh() takes the same
+ * object without props.
  * @typedef {{ params?: Record<string, any>, props?: any, route?: any }} RefreshInput
  */
 
@@ -189,9 +190,8 @@ export class PuzzleView {
 	// rebuilt by #recompose() on every commit and written straight by setState().
 	// Precedence: a data() commit wins over an EARLIER setState for a key (derived
 	// overlays state); a LATER setState wins over the derived value for that key until
-	// the next commit (setState writes #data directly). getData() hands out copies of
-	// #data, so its identity is internal — but it is mutated in place regardless, so
-	// setState's direct writes and the recompose target stay the one object.
+	// the next commit (setState writes #data directly). getData() hands out copies, so
+	// nothing outside the class holds #data and a commit can replace it.
 	/** @type {Record<string, any>} */
 	#data = {};
 	/** @type {Record<string, any>} */
@@ -343,7 +343,7 @@ export class PuzzleView {
 	// this prototype by the adapter capability (D157).
 	_dataAsyncShape = false;
 
-	// D146: the { params, props, route } a PREPARED (not yet committed) data() run
+	// D146: the { params, route } a PREPARED (not yet committed) data() run
 	// evaluates against. Non-null only while such an evaluation is in flight; the
 	// params/route getters read it, and every entry point save/restores it (exact
 	// stack discipline for nested synchronous evals, mirroring Store._tracking).
@@ -1609,17 +1609,7 @@ export class PuzzleView {
 		if (route !== undefined) this.#route = route;
 
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-			if (
-				!devperfPrepareData(
-					this,
-					params || route !== undefined
-						? 'route'
-						: props !== undefined
-							? 'props'
-							: undefined
-				)
-			)
-				return;
+			if (!devperfPrepareData(this, { params, props, route })) return;
 		}
 		const token = ++this.#runToken;
 		// This run reads the current state, so a pending setState()-driven re-run is
@@ -1715,29 +1705,18 @@ export class PuzzleView {
 	 * A SYNCHRONOUS data() throw propagates out of this call exactly as it does out
 	 * of refresh() (withTracking rethrows), already reconciled as a failure.
 	 *
-	 * @param {RefreshInput} [input]
+	 * @param {Omit<RefreshInput, 'props'>} [input] the destination
 	 * @returns {?{ready: Promise<void>, commit: () => void, discard: () => void}}
 	 */
-	prepareRefresh({ params, props, route } = {}) {
+	prepareRefresh({ params, route } = {}) {
 		if (this.#destroyed || this.#leaving) return null;
 
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-			if (
-				!devperfPrepareData(
-					this,
-					params || route !== undefined
-						? 'route'
-						: props !== undefined
-							? 'props'
-							: undefined
-				)
-			)
-				return null;
+			if (!devperfPrepareData(this, { params, route })) return null;
 		}
 
 		const scope = {
 			params: params ?? this.#params,
-			props: props ?? this.#props,
 			route: route !== undefined ? route : this.#route,
 		};
 		// The held-eval channel: withTracking parks its success reconcile here instead
@@ -1794,7 +1773,7 @@ export class PuzzleView {
 			const mine = this.#beginEvalRun(scope);
 			let out;
 			try {
-				out = this.#runData(scope.params, scope.props);
+				out = this.#runData(scope.params, this.#props);
 			} catch (err) {
 				this.#endEvalRun(mine);
 				throw err;
@@ -1848,7 +1827,6 @@ export class PuzzleView {
 				}
 				pending.reconcile(true);
 				this.#params = scope.params;
-				this.#props = scope.props;
 				this.#route = scope.route;
 				// Bumping the token HERE (not at prepare) is what orders this commit
 				// against a mid-gate store-change refresh: while the gate is open the
@@ -1978,13 +1956,10 @@ export class PuzzleView {
 	}
 
 	/**
-	 * Report a view failure into the D145 funnel. Normally logging is enough, but
-	 * an anchor-race mount whose superseding first render failed can never reach
-	 * #completeMount(). Recover through the same instance-owned placeholder
-	 * contract mountComponent uses so the next parent patch creates a fresh view.
-	 *
-	 * Router-preloaded views never set #pendingMountHook: preload() resolves before
-	 * their synchronous mount, so Router ownership remains untouched.
+	 * Report a view failure into the D145 funnel, then replace this view with the
+	 * app's error view (__showErrorView; a view with no ViewManager yet holds the
+	 * failure until mount). A failing error view instead tears itself down,
+	 * leaving the failed view's placeholder holding the position.
 	 *
 	 * @param {string} message the console prefix
 	 * @param {unknown} err
@@ -1997,10 +1972,6 @@ export class PuzzleView {
 			this.__errorViewFailed();
 			marker?.remove();
 			return;
-		}
-		if (this.#pendingMountHook) {
-			this.#pendingMountHook = false;
-			this.#enterPending = false;
 		}
 		this.__showErrorView(err, info);
 	}
@@ -2213,45 +2184,25 @@ export class PuzzleView {
 		// Malformed spec → false: the mount path's playAnimation() does the
 		// warn/skip (no double warning, no hold, no defer).
 		if (!isValidSpec(spec)) return false;
-		if (this.#inTrigger(spec) !== 'visible') {
-			// A `triggerAnchor` is meaningless without `trigger: 'visible'` (trigger
-			// absent/'mount'/unknown). Warn once here — where trigger resolves — so a
-			// spec carrying only `triggerAnchor` doesn't silently arm anything (D73).
-			if (
-				(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
-				spec.triggerAnchor !== undefined
-			) {
-				warnOnceForSpec(
-					spec,
-					`animation in.triggerAnchor is ignored without trigger: 'visible'`
-				);
+		const trigger = spec.trigger;
+		if (trigger !== 'visible') {
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				// Absent and 'mount' are the default; anything else falls back to it
+				// (§39 — an unknown value must never break rendering).
+				if (trigger !== undefined && trigger !== 'mount')
+					warnOnceForSpec(
+						spec,
+						`unknown animation in.trigger ${JSON.stringify(trigger)} (expected 'mount' or 'visible'); using 'mount'`
+					);
+				// A `triggerAnchor` is meaningless without `trigger: 'visible'`, so a
+				// spec carrying only `triggerAnchor` must not silently arm anything (D73).
+				if (spec.triggerAnchor !== undefined)
+					warnOnceForSpec(spec, `animation in.triggerAnchor is ignored without trigger: 'visible'`);
 			}
 			return false;
 		}
 		// Degrade to mount behavior where the hold is unsupported or unwanted.
-		if (typeof IntersectionObserver !== 'function') return false;
-		if (prefersReducedMotion()) return false;
-		return true;
-	}
-
-	/**
-	 * Resolve the enter `trigger` to 'mount' | 'visible'. Absent or 'mount' →
-	 * 'mount'; 'visible' → 'visible'; anything else warns once per spec object and
-	 * falls back to 'mount' (§39 — an unknown value must never break rendering).
-	 *
-	 * @param {AnimationSpec} spec
-	 * @returns {'mount' | 'visible'}
-	 */
-	#inTrigger(spec) {
-		const t = spec.trigger;
-		if (t === undefined || t === 'mount') return 'mount';
-		if (t === 'visible') return 'visible';
-		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
-			warnOnceForSpec(
-				spec,
-				`unknown animation in.trigger ${JSON.stringify(t)} (expected 'mount' or 'visible'); using 'mount'`
-			);
-		return 'mount';
+		return typeof IntersectionObserver === 'function' && !prefersReducedMotion();
 	}
 
 	/**
@@ -2702,7 +2653,6 @@ export class PuzzleView {
 			if (this.#holdTimer === null) {
 				this.#holdTimer = setTimeout(() => {
 					this.#holdTimer = null;
-					if (this.#destroyed) return; // torn down mid-hold — no late render
 					// A timer callback: nothing up the stack catches, so funnel here.
 					try {
 						this.#swapLoaded();
@@ -2749,15 +2699,10 @@ export class PuzzleView {
 
 	/**
 	 * Rebuild the visible #data from the two layers (Change C): { ...#state,
-	 * ...#derived }. Mutates #data IN PLACE to keep it the one object setState writes to
-	 * — drop keys no longer contributed by either layer, then assign the composition.
+	 * ...#derived }.
 	 */
 	#recompose() {
-		const composed = { ...this.#state, ...this.#derived };
-		for (const key of Object.keys(this.#data)) {
-			if (!(key in composed)) delete this.#data[key];
-		}
-		Object.assign(this.#data, composed);
+		this.#data = { ...this.#state, ...this.#derived };
 		// Layer-clobber diagnostic (D147 hazard 4, dev only). A bare bind writes the
 		// STATE layer, but the composition above puts the DERIVED layer last — so a key data()
 		// also derives from a record or prop is reverted the moment data() commits, and
@@ -2925,10 +2870,9 @@ export class PuzzleView {
 		// A render landing NOW satisfies the frame #scheduleRender armed, so its rAF
 		// no-ops instead of repeating it — unless that frame also owes the D23 data()
 		// re-run, which only the flush pays (a slot-only parent update or an older async
-		// commit renders without running data()). `&&=`: a re-run flagged with no frame
-		// armed never claims one. AFTER both bails, which must not drop a pending render;
-		// a setState later in this same tick re-arms if the flag cleared.
-		this.#updateScheduled &&= this.#rerunData;
+		// commit renders without running data()). AFTER both bails, which must not drop
+		// a pending render; a setState later in this same tick re-arms if the flag cleared.
+		if (!this.#rerunData) this.#updateScheduled = false;
 		this.#renderSeq++;
 		const isUpdate = this.#mounted;
 

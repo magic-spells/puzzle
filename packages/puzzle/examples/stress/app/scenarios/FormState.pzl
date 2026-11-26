@@ -113,10 +113,10 @@ import {
 //     `client-runtime/views/viewManager.js` live-compares BOTH controlled form
 //     properties before writing:
 //
-//       patchAttrs()          if (name === 'value' && (INPUT || TEXTAREA)) {
+//       patchAttrs()          if (name === 'value' && (input || textarea)) {
 //                               if (el.value !== stringify(value)) setAttr(...)
 //                             }
-//       reassertSelectValue() if (el.value === next) return; el.value = next;
+//       syncControl()         after the children patch: the same live compare for a <select>
 //
 //     The select's re-assertion still runs after patchChildren settles — its
 //     `value` cannot be applied before the <option> children exist — but it
@@ -132,15 +132,15 @@ import {
 //     (8,000 where one-each is 4,000). The zeros in the clean and typing arms
 //     and the dirty arm's exactly-one-write are what the counters pin now.
 //
-// Q2 — ONE KEYSTROKE THROUGH record.update() NORMALIZES THE SCHEMA THREE TIMES.
+// Q2 — ONE KEYSTROKE THROUGH record.update() READS THE SCHEMA ONCE.
 //
-//     `PuzzleModel.normalizedSchema()` (client-runtime/model.js) rebuilds its
-//     descriptor map from Object.entries(this.schema) on every call and is not
-//     memoized. A single-field update() reaches it via primaryKey() (the
-//     immutable-pk guard), _collectErrors() (the §20 validation pass) and
-//     Store.recordChanged() -> primaryKey() again. The count is MEASURED here,
-//     not asserted from the source: the probe wraps the method and the op
-//     throws if the total is not exactly 3 per keystroke.
+//     `PuzzleModel.normalizedSchema()` (client-runtime/model.js) builds its
+//     descriptor map once per schema and shares it. A single-field update()
+//     calls it once, from _collectErrors() (the §20 validation pass);
+//     primaryKey() (the immutable-pk guard, and Store.recordChanged()'s notify
+//     key) reads the same cached entry without calling it. The count is
+//     MEASURED here, not asserted from the source: the probe wraps the method
+//     and the run fails if the total is not exactly 1 per keystroke.
 //
 // Q3 — A RE-RENDER DURING TYPING MUST NOT WRITE `value`.
 //
@@ -254,7 +254,7 @@ export default class FormState extends PuzzleView {
     };
 
     // Computed ONCE and cached. Reading it live from stats() would go through
-    // the probe while a probe is installed and drift the normalization count by
+    // the probe while a probe is installed and drift the call count by
     // one, which is exactly the kind of instrument-measuring-itself bug the
     // whole file is built to avoid.
     this.schemaFieldCount = Object.keys(Model.normalizedSchema()).length;
@@ -294,7 +294,7 @@ export default class FormState extends PuzzleView {
       note: this.note,
       resultText: result
         ? `${result.op}: ${result.renders} renders · ${result.inputWrites} input writes · ` +
-          `${result.selectWrites} select writes · ${result.schemaCalls} schema normalizations`
+          `${result.selectWrites} select writes · ${result.schemaCalls} normalizedSchema() calls`
         : 'no run yet',
       resultCls: result ? 'text-accent' : 'text-faint',
       // Renders, counted one level below the data object so #recompose()'s
@@ -722,7 +722,7 @@ export default class FormState extends PuzzleView {
     this.note =
       ` · ${r.renders} renders / ${r.dataRuns} data() runs · ` +
       `input value writes ${r.inputWrites} · select value writes ${r.selectWrites} · ` +
-      `schema normalizations ${r.schemaCalls}`;
+      `normalizedSchema() calls ${r.schemaCalls}`;
     this.refresh();
 
     return {
@@ -811,13 +811,13 @@ export default class FormState extends PuzzleView {
       return { ok: false, detail: `the draft input reads "${draftShown}", the state layer holds "${draftHeld}"` };
     }
 
-    // fsSchemaNormalizations === 3 per keystroke depends on the store having NO
-    // storage: _persist() no-ops without it, and a configured storage would add
-    // a full _serializeAll() to every flush. Asserted rather than reasoned about.
+    // The typing arms are only comparable with NO storage on the store:
+    // _persist() no-ops without it, and a configured storage would add a full
+    // _serializeAll() to every flush. Asserted rather than reasoned about.
     if (this.ctx.store.storage != null) {
       return {
         ok: false,
-        detail: 'the store has storage configured — every flush would also serialize the whole store and the schema counts would not mean what they say',
+        detail: 'the store has storage configured — every flush would also serialize the whole store and the typing arms\' timings would not be comparable',
       };
     }
 

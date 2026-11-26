@@ -555,16 +555,21 @@ describe('Store — subscriptions & reactivity (SPEC §8)', () => {
 		expect(view.onStoreChange).not.toHaveBeenCalled();
 	});
 
-	it('unsubscribe removes an emptied key from subscribersByKey (no unbounded growth)', () => {
+	it('unsubscribe drops every key a subscriber holds from both indexes', () => {
 		const store = makeStore();
 		const component = { onStoreChange: vi.fn() };
-
-		store.withTracking(component, () => store.findOne('todo', 't1'));
-		expect(store.subscribersByKey.has('todo t1')).toBe(true);
+		store.withTracking(component, () => {
+			store.findMany('todo');
+			store.findOne('todo', 't1');
+			store.findOne('todo', 't2');
+		});
+		expect(store.keysBySubscriber.get(component).size).toBe(3);
+		expect(store.subscribersByKey.size).toBe(3);
 
 		store.unsubscribe(component);
-		// The now-empty key set is deleted rather than left as a dangling Set.
-		expect(store.subscribersByKey.has('todo t1')).toBe(false);
+		expect(store.keysBySubscriber.has(component)).toBe(false);
+		// Each now-empty key set is deleted rather than left as a dangling Set.
+		expect(store.subscribersByKey.size).toBe(0);
 	});
 
 	it("a tracked eval that THROWS keeps the subscriber's last-good subscriptions", () => {

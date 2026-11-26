@@ -864,7 +864,7 @@ describe('Router — same-path push is a no-op (v-next)', () => {
 describe('Router — same-path push WHILE in flight (double-click, Fix 1)', () => {
 	// A held data() lets a second click land on the active link before the first
 	// navigation commits. The committed #state still names the OLD route there, so
-	// only the in-flight-target guard (#pendingNavPath) can catch the double-click.
+	// only the in-flight-target guard (#inFlight) can catch the double-click.
 	it('two rapid pushes to the same path run exactly one navigation / one data()', async () => {
 		let release;
 		const held = new Promise((r) => {
@@ -1142,8 +1142,8 @@ describe('Router — guard-redirect budget resets per navigation (Fix 2, D87)', 
 	// A guard whose verdict is the very path being denied — the inherited-guard
 	// mistake (a guard on the parent bounces to '/login', and '/login' is a child
 	// that inherits it). Since the redirect inherits the denied PUSH verb, it
-	// re-enters through push() while the denied navigation still owns
-	// #pendingNavPath, so push()'s in-flight double-click guard would hand the
+	// re-enters through push() while the denied navigation is still in flight
+	// (#inFlight), so push()'s in-flight double-click guard would hand the
 	// redirect that navigation's OWN promise and #navigate's `await` would wait on
 	// itself forever. push() exempts a guard re-entry (#guardRedirecting) so the
 	// self-redirect supersedes normally and trips the redirect limit — a loud,

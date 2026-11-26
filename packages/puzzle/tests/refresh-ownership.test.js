@@ -308,7 +308,6 @@ async function prepareFixture(withAdapter) {
 	const route = view.instance.route;
 	const prepared = view.instance.prepareRefresh({
 		params: { id: '2' },
-		props: { label: 'prepared' },
 		route: { path: '/org/2/home', params: { id: '2' } },
 	});
 	await f.started.promise;
@@ -360,7 +359,7 @@ describe.each([false, true])('R2 — prepared refresh decisions (adapter=%s)', (
 		f.prepared.commit();
 		f.prepared.discard();
 		expect(f.view.instance.params.id).toBe('2');
-		expect(f.view.instance.props.label).toBe('prepared');
+		expect(f.view.instance.props.label).toBe('committed'); // a navigation moves params and route, never props
 		expect(f.view.instance.route.path).toBe('/org/2/home');
 		expect(f.view.find('h1').textContent).toBe('ORG 2');
 		expect(keys(f.view.store, f.view.instance)).toEqual(['org 2']);

@@ -215,6 +215,18 @@ describe('store.observe (D184)', () => {
 		expect(late).toHaveBeenCalledTimes(1);
 	});
 
+	it('a write made by a callback is delivered by the next flush, not dropped with this one', () => {
+		const store = new Store({ task: Task, note: Task });
+		const notes = vi.fn();
+		store.observe('note', notes);
+		store.observe('task', () => store.createRecord('note', { id: 1 }));
+		store.createRecord('task', { id: 1 });
+		store.flush();
+		expect(notes).not.toHaveBeenCalled(); // targets were gathered before the write
+		store.flush();
+		expect(notes).toHaveBeenCalledTimes(1);
+	});
+
 	it('logs a rejected async callback without breaking delivery to the others', async () => {
 		const store = makeStore();
 		const err = vi.spyOn(console, 'error').mockImplementation(() => {});

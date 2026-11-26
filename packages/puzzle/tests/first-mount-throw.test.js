@@ -10,7 +10,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { PORTAL_TAG, SLOT_TAG, ViewNode } from '../client-runtime/views/ViewNode.js';
-import { ViewManager } from '../client-runtime/views/viewManager.js';
+import { ViewManager, expandSlots } from '../client-runtime/views/viewManager.js';
 import { teardownPortals } from '../client-runtime/views/portal.js';
 import { Store } from '../client-runtime/datastore/store.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
@@ -83,9 +83,9 @@ describe('first mount that throws (D145)', () => {
 
 		// (1) The manager knows the tree is unknown and kept the incoming tree — the
 		// only handle on what got built.
-		expect(vm.treeUnknown).toBe(true);
+		expect(vm.aborted).not.toBe(null);
 		expect(vm.currentTree).toBe(null);
-		expect(vm.unknownTrees).toHaveLength(1);
+		expect(vm.aborted.trees).toHaveLength(1);
 		// mount() inserts the root into the container LAST, so nothing landed.
 		expect(host.querySelector('.shell')).toBe(null);
 
@@ -103,7 +103,7 @@ describe('first mount that throws (D145)', () => {
 		expect(store.subscribersByKey.size).toBe(0);
 
 		// (4) …and the fresh mount landed, exactly once.
-		expect(vm.treeUnknown).toBe(false);
+		expect(vm.aborted).toBe(null);
 		expect(vm.currentTree).toBe(tree);
 		expect(host.querySelectorAll('.shell')).toHaveLength(1);
 		expect(host.querySelector('.ok').textContent).toBe('fine');
@@ -180,8 +180,7 @@ describe('first mount that throws (D145)', () => {
 		vm.clear();
 		await tick();
 		expect(store.keysBySubscriber.size).toBe(0);
-		expect(vm.unknownTrees).toBe(null);
-		expect(vm.treeUnknown).toBe(false);
+		expect(vm.aborted).toBe(null);
 	});
 
 	it('detaches `outside` listeners the failed mount had already parked on document', async () => {
@@ -259,8 +258,8 @@ describe('first mount that throws (D145)', () => {
 		expect(() => vm.render(h('div', {}, [portal([h('p', {}, [text('x')])]), comp(Exploding)]))).toThrow(
 			'anchored boom'
 		);
-		expect(vm.unknownRange).not.toBe(null);
-		expect(vm.unknownRange.after).toBe(anchor);
+		expect(vm.aborted.range).not.toBe(null);
+		expect(vm.aborted.range.after).toBe(anchor);
 		expect(anchor.parentNode).toBe(host);
 
 		vm.render(h('div', { class: 'ok' }, [text('fine')]));
@@ -276,14 +275,13 @@ describe('first mount that throws (D145)', () => {
 	});
 });
 
-// renderFresh() is RECOVERY machinery: it runs after a render threw, and every
-// path that reaches it (an ordinary render over an unknown tree, the failure
-// placeholder) builds its tree the ordinary way. Only the SSG/static takeover
-// hands ViewManager an already-expanded tree, and only for a view's very first
-// mount — __takeoverTree is read and DELETED there, so a recovery render can
-// never carry one. That is why renderFresh() takes no `slotsExpanded` flag; this
-// pins the behavior it must keep.
-describe('recovery renders always expand their own slots', () => {
+// render() expands a tree before it decides how to apply it, so the render after
+// a throw expands exactly as any other: an ordinary tree has its markers
+// substituted, and a takeover's already-expanded tree (`slotsExpanded`) mounts as
+// it is. PuzzleView never hands an aborted manager a takeover tree —
+// __takeoverTree is read and DELETED by a view's very first mount, on a fresh
+// manager — but the manager does not rely on that.
+describe('a recovery render expands its slots as any render does', () => {
 	it('substitutes markers in the tree that follows a failed render', () => {
 		const host = container();
 		const vm = new ViewManager(host, {});
@@ -299,11 +297,34 @@ describe('recovery renders always expand their own slots', () => {
 		}
 
 		expect(() => vm.render(h('div', {}, [comp(Exploding)]))).toThrow('recovery boom');
-		expect(vm.treeUnknown).toBe(true);
+		expect(vm.aborted).not.toBe(null);
 
 		vm.render(h('div', { class: 'recovered' }, [new ViewNode(SLOT_TAG)]));
 
-		expect(vm.treeUnknown).toBe(false);
+		expect(vm.aborted).toBe(null);
+		expect(host.querySelector('.recovered .filled').textContent).toBe('content');
+	});
+
+	it('mounts a takeover tree that follows a failed render as the very tree it was handed', () => {
+		const host = container();
+		const vm = new ViewManager(host, {});
+		vm.slotChildren = [h('span', { class: 'filled' }, [text('content')])];
+
+		class Exploding extends PuzzleView {
+			boom = (() => {
+				throw new Error('takeover boom');
+			})();
+			render() {
+				return h('span');
+			}
+		}
+
+		expect(() => vm.render(h('div', {}, [comp(Exploding)]))).toThrow('takeover boom');
+
+		const prepared = expandSlots(h('div', { class: 'recovered' }, [new ViewNode(SLOT_TAG)]), vm.slotChildren);
+		expect(vm.render(prepared, true)).toBe(prepared);
+		expect(vm.currentTree).toBe(prepared);
+		expect(vm.aborted).toBe(null);
 		expect(host.querySelector('.recovered .filled').textContent).toBe('content');
 	});
 });
