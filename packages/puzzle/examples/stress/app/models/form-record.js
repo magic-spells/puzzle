@@ -4,23 +4,13 @@ import { Puzzle, PuzzleModel } from '@magic-spells/puzzle';
  * A realistic 24-field form record — `form-state`'s single `form:draft` record.
  *
  * It is deliberately NOT `StressRecord`. The whole point of the `type-store`
- * arm is what ONE `record.update({ text })` costs, and the dominant term in that
- * cost is `PuzzleModel.normalizedSchema()` (client-runtime/model.js), which is
- * recomputed from scratch on every call:
+ * arm is what ONE `record.update({ text })` costs, and the part of that cost
+ * that grows with the schema is `_collectErrors()`, the §20 validation pass: it
+ * iterates ALL declared fields and skips the ones not in the patch, so the
+ * `fields` filter narrows the CHECKS but never the iteration. The normalized
+ * schema it walks is built once per schema and shared (client-runtime/model.js).
  *
- *   Object.entries(this.schema) → filter relationships → collapse FieldBuilders
- *
- * That is O(schema fields), it is not memoized, and a single-field update()
- * reaches it three times:
- *
- *   1. `primaryKey()`          — the immutable-pk guard in update()
- *   2. `_collectErrors()`      — the §20 validation pass (which iterates ALL
- *                                declared fields and skips the ones not in the
- *                                patch, so the `fields` filter narrows the
- *                                CHECKS but never the iteration)
- *   3. `primaryKey()` again    — Store.recordChanged() building the notify key
- *
- * A 9-field record would understate that by nearly 3x. Twenty-four fields is an
+ * A 9-field record would understate that walk. Twenty-four fields is an
  * ordinary signup/checkout form, so the number the scenario reports is one an
  * app author can recognise.
  *

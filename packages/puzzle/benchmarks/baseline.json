@@ -1425,7 +1425,7 @@
 				"fsDataRuns": 200,
 				"fsInputValueWrites": 0,
 				"fsSelectValueWrites": 0,
-				"fsSchemaNormalizations": 600
+				"fsSchemaNormalizations": 200
 			}
 		},
 		"form-state/type-event/200": {
@@ -1449,7 +1449,7 @@
 				"fsDataRuns": 1,
 				"fsInputValueWrites": 0,
 				"fsSelectValueWrites": 0,
-				"fsSchemaNormalizations": 3
+				"fsSchemaNormalizations": 1
 			}
 		},
 		"flip-churn/shuffle/500": {

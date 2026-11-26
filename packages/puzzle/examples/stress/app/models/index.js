@@ -18,10 +18,9 @@ import FormRecord from './form-record.js';
  * (`row-1`, `sub-1`, `nest-1`), so the id spaces never collide.
  *
  * `form` is the exception, and deliberately so. `form-state` measures what a
- * single-field `record.update()` costs, and the dominant term is
- * `PuzzleModel.normalizedSchema()` running once per declared field per call —
- * three times per update. StressRecord's 9 fields would understate that by
- * nearly 3x, so FormRecord declares the 24 fields of an ordinary signup form
+ * single-field `record.update()` costs, and its validation pass walks every
+ * declared field. StressRecord's 9 fields would understate that, so FormRecord
+ * declares the 24 fields of an ordinary signup form
  * with a realistic required/min/max/oneOf rule mix. Sharing StressRecord would
  * have made the number unrecognisable to an app author.
  *
