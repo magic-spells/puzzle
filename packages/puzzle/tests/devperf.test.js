@@ -67,6 +67,32 @@ describe('dev performance render instrumentation', () => {
 		expect(renders[0].patchDuration).toBeGreaterThanOrEqual(0);
 	});
 
+	it('names a data() run\'s cause from what its refresh was handed', async () => {
+		class Echo extends PuzzleView {
+			render() {
+				return h('div', {}, [text('x')]);
+			}
+		}
+
+		const view = await mountView(Echo);
+		handles.push(view);
+		const causes = [];
+		cleanups.push(
+			devperfInstallSink((event) => {
+				if (event.type === 'render') causes.push(event.causes);
+			})
+		);
+
+		view.instance.refresh({ params: { id: '2' } });
+		view.instance.refresh({ props: { tone: 'warm' } });
+		view.instance.refresh();
+		const prepared = view.instance.prepareRefresh({ params: { id: '3' } });
+		await prepared.ready;
+		prepared.commit();
+
+		expect(causes).toEqual([['route'], ['props'], ['refresh'], ['route']]);
+	});
+
 	it('surfaces serialized async data() head-of-line deferrals with count and time', async () => {
 		const store = new Store();
 		let release;

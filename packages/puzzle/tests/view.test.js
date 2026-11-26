@@ -848,6 +848,18 @@ describe('PuzzleView — two-layer data()/setState semantics (Change C, SPEC §4
 		expect(v.getData().b).toBe(99);
 	});
 
+	it('1b. an omitted key named like an Object.prototype member disappears too', async () => {
+		let phase = 1;
+		const v = makeView(() => (phase === 1 ? { a: 1, toString: 'own' } : { a: 1 }));
+		await v.mount(container());
+		const before = v.getData();
+
+		phase = 2;
+		v.refresh();
+		expect(Object.hasOwn(v.getData(), 'toString')).toBe(false);
+		expect(before).toEqual({ a: 1, toString: 'own' }); // an earlier copy is unaffected
+	});
+
 	it('2. local setState state survives data() re-runs when the model omits the key', async () => {
 		const v = makeView(() => ({ n: 1 }));
 		await v.mount(container());
