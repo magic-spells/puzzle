@@ -848,13 +848,13 @@ export const OPS = [
 					fsDataRuns: keystrokes,
 					fsInputValueWrites: 0,
 					fsSelectValueWrites: 0,
-					// THREE per keystroke. primaryKey() for the immutable-pk guard,
-					// _collectErrors() for the §20 validation pass, then primaryKey()
-					// again inside Store.recordChanged(). normalizedSchema() rebuilds
-					// its 24-entry map from scratch every time; nothing memoizes it.
-					fsSchemaNormalizations: keystrokes * 3,
+					// ONE per keystroke: _collectErrors() for the §20 validation
+					// pass. The map is built once per schema and shared; primaryKey()
+					// (the immutable-pk guard and Store.recordChanged()'s notify key)
+					// reads the same cached entry without calling normalizedSchema().
+					fsSchemaNormalizations: keystrokes,
 				},
-				note: 'type-store is type-local\'s A/B partner: the same 200 real keystrokes, the same grid, the same probes, routed through record.update() + store.flush() instead of setState(). Its delta against type-local is the only ms comparison here that is fair, because the instrument load is identical by construction. 600 normalizedSchema() calls for 200 single-field updates is 3 per keystroke, and none of them are memoized.',
+				note: 'type-store is type-local\'s A/B partner: the same 200 real keystrokes, the same grid, the same probes, routed through record.update() + store.flush() instead of setState(). Its delta against type-local is the only ms comparison here that is fair, because the instrument load is identical by construction. 200 normalizedSchema() calls for 200 single-field updates is 1 per keystroke, each a read of the map built once per schema.',
 			},
 			{
 				...common,
@@ -870,7 +870,7 @@ export const OPS = [
 					fsDataRuns: 1,
 					fsInputValueWrites: 0,
 					fsSelectValueWrites: 0,
-					fsSchemaNormalizations: 3,
+					fsSchemaNormalizations: 1,
 				},
 				note: 'type-event is a BEHAVIOUR GATE, not a measurement: two real input events, one per binding, each of which must reach state AND the DOM or the op throws. Both bindings are covered because both typing arms are measured, and an arm that quietly stopped working would otherwise just look fast. The caret position is READ and reported in detail; it is deliberately not a counter, because Blink short-circuits some identical value assignments and a passing caret check could mean the engine preserved it rather than the framework. Ignore its timings.',
 			},
