@@ -2869,10 +2869,9 @@ export class PuzzleView {
 		// A render landing NOW satisfies the frame #scheduleRender armed, so its rAF
 		// no-ops instead of repeating it — unless that frame also owes the D23 data()
 		// re-run, which only the flush pays (a slot-only parent update or an older async
-		// commit renders without running data()). `&&=`: a re-run flagged with no frame
-		// armed never claims one. AFTER both bails, which must not drop a pending render;
-		// a setState later in this same tick re-arms if the flag cleared.
-		this.#updateScheduled &&= this.#rerunData;
+		// commit renders without running data()). AFTER both bails, which must not drop
+		// a pending render; a setState later in this same tick re-arms if the flag cleared.
+		if (!this.#rerunData) this.#updateScheduled = false;
 		this.#renderSeq++;
 		const isUpdate = this.#mounted;
 
