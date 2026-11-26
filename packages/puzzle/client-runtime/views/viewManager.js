@@ -1858,17 +1858,24 @@ function releaseSubtree(vnode) {
 	// Inline-SVG seed (v1.14, D46): string children are inert markup, never vnodes
 	// — no refs or component instances hide inside them.
 	if (typeof vnode.children === 'string') return;
-	for (let child of vnode.children) {
-		if (outgoing !== null) child = outgoingOf(child);
-		// A portal inside a removed subtree: its teleported children live in the
-		// outlet, so the ancestor's el.remove() reaches neither their DOM nor their
-		// instances — tear the whole portal down explicitly.
-		if (child.tag === PORTAL_TAG) {
-			if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
-				unmountPortal(child, unmount);
-		} else if (child.isComponent) (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) ? release(child.component) : child.component?.destroy();
-		else if (!child.isText) releaseSubtree(child);
-	}
+	for (const child of vnode.children) releaseNode(outgoing !== null ? outgoingOf(child) : child);
+}
+
+/**
+ * Release what one vnode of a removed tree holds beyond its own DOM: a portal's
+ * teleported range, a component instance, or an element's subtree.
+ *
+ * @param {ViewNode} vnode
+ */
+function releaseNode(vnode) {
+	// A portal inside a removed subtree: its teleported children live in the
+	// outlet, so the ancestor's el.remove() reaches neither their DOM nor their
+	// instances — tear the whole portal down explicitly.
+	if (vnode.tag === PORTAL_TAG) {
+		if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
+			unmountPortal(vnode, unmount);
+	} else if (vnode.isComponent) (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) ? release(vnode.component) : vnode.component?.destroy();
+	else if (!vnode.isText) releaseSubtree(vnode);
 }
 
 /**
@@ -1904,11 +1911,7 @@ function releaseSubtree(vnode) {
 function releaseAborted(trees) {
 	for (const tree of trees) {
 		try {
-			if (tree.tag === PORTAL_TAG) {
-				if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
-					unmountPortal(tree, unmount);
-			} else if (tree.isComponent) (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) ? release(tree.component) : tree.component?.destroy();
-			else if (!tree.isText) releaseSubtree(tree);
+			releaseNode(tree);
 		} catch (err) {
 			console.error('[puzzle] releasing an aborted render failed:', err);
 		}
