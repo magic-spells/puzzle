@@ -55,21 +55,15 @@ ExprMethods.prototype.render = function () {
     new ViewNode('p', { class: 'label' }, [
       new ViewNode('text', { value: __s(__f.get("currency")(__d.price, '$'), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'currency(price, \'$\')' : 0) + ' ' + __s(__f.get("truncate")(__f.get("capitalize")(__d.title), 20), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'truncate(capitalize(title), 20)' : 0) }),
     ]),
-    ...(__d.items?.filter((item) => !item?.done)?.length > 0
-      ? [
-          new ViewNode('ul', {},
-            __l(this, this, 0, __d.items?.filter((item) => !item?.done), (s) =>
-              new ViewNode('li', {
-                key: s.k,
-                class: 'row',
-              }, [
-                new ViewNode('text', { value: __s(s.i + 1, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'i + 1' : 0) + '. ' + __s(s.item?.name?.trim(), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.name.trim()' : 0) + ' — ' + __s(s.item?.tags?.map((tag) => tag?.toUpperCase())?.join('/'), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.tags.map(tag => tag.toUpperCase()).join(\'/\')' : 0) + ' ' + __s(s.item?.qty, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.qty' : 0) }),
-              ])
-            , __L0)
-          ),
-        ]
-      : [
-          new ViewNode('#'),
-        ]),
+    __d.items?.filter((item) => !item?.done)?.length > 0
+      ? new ViewNode('ul', {}, __l(this, this, 0, __d.items?.filter((item) => !item?.done), (s) =>
+          new ViewNode('li', {
+            key: s.k,
+            class: 'row',
+          }, [
+            new ViewNode('text', { value: __s(s.i + 1, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'i + 1' : 0) + '. ' + __s(s.item?.name?.trim(), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.name.trim()' : 0) + ' — ' + __s(s.item?.tags?.map((tag) => tag?.toUpperCase())?.join('/'), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.tags.map(tag => tag.toUpperCase()).join(\'/\')' : 0) + ' ' + __s(s.item?.qty, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.qty' : 0) }),
+          ])
+        , __L0))
+      : new ViewNode('#'),
   ]);
 };

@@ -59,25 +59,21 @@ TodoItem.prototype.render = function () {
           new ViewNode('div', {
             class: `w-5 h-5 rounded-md border transition-colors ${__d.todo?.completed ? 'bg-accent border-accent' : ''}${!__d.todo?.completed ? 'border-white/25 group-hover:border-white/40' : ''}`,
           }, []),
-          ...(__d.todo?.completed
-            ? [
-                (this.__c[0] ??= new ViewNode('div', { class: 'absolute inset-0 flex items-center justify-center' }, [
-                  new ViewNode('svg', {
-                    class: 'w-3 h-3 text-page',
-                    fill: 'currentColor',
-                    viewBox: '0 0 20 20',
-                  }, [
-                    new ViewNode('path', {
-                      'fill-rule': 'evenodd',
-                      d: 'M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z',
-                      'clip-rule': 'evenodd',
-                    }, []),
-                  ]),
-                ])),
-              ]
-            : [
-                new ViewNode('#'),
-              ]),
+          __d.todo?.completed
+            ? (this.__c[0] ??= new ViewNode('div', { class: 'absolute inset-0 flex items-center justify-center' }, [
+                new ViewNode('svg', {
+                  class: 'w-3 h-3 text-page',
+                  fill: 'currentColor',
+                  viewBox: '0 0 20 20',
+                }, [
+                  new ViewNode('path', {
+                    'fill-rule': 'evenodd',
+                    d: 'M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z',
+                    'clip-rule': 'evenodd',
+                  }, []),
+                ]),
+              ]))
+            : new ViewNode('#'),
         ]),
       ]),
       new ViewNode('span', {

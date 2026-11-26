@@ -25,19 +25,15 @@ MarkerFallbacks.prototype.render = function () {
       ]),
     ] }),
     new ViewNode(SLOT_TAG, { name: 'control', fallback: () => [
-      ...(__d.show
-        ? [
-            new ViewNode('button', {
-              ref: this.__ref("fallbackButton"),
-              '@click': ((this.__h ??= {})[0] ??= (event) => this.events.activate(event)),
-            }, [
-              new ViewNode('text', { value: 'Ready' }),
-            ]),
-          ]
-        : [
-            new ViewNode('span', {}, [
-              new ViewNode('text', { value: 'Waiting' }),
-            ]),
+      __d.show
+        ? new ViewNode('button', {
+            ref: this.__ref("fallbackButton"),
+            '@click': ((this.__h ??= {})[0] ??= (event) => this.events.activate(event)),
+          }, [
+            new ViewNode('text', { value: 'Ready' }),
+          ])
+        : new ViewNode('span', {}, [
+            new ViewNode('text', { value: 'Waiting' }),
           ]),
     ] }),
     new ViewNode(SLOT_TAG, { name: 'component', fallback: () => [

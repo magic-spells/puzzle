@@ -13,7 +13,7 @@ import (
 // or 0..N slot expansion stay unpadded. These tests pin that stability gate.
 
 // TestNoElseIfPadsWithPlaceholder: a no-else {#if} whose then-branch has content
-// emits placeholders in the else array instead of `: []`, so toggling the
+// pads its else branch with a placeholder instead of `: []`, so toggling the
 // condition keeps the children-array length constant.
 func TestNoElseIfPadsWithPlaceholder(t *testing.T) {
 	got := compileSrc(t, `<puzzle-view>
@@ -47,7 +47,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
 </script>
 `)
-	if !strings.Contains(got, ": []),") {
+	if !strings.Contains(got, ": [])") {
 		t.Errorf("a {#for}-only {#if} branch has static length 0 — the else must stay empty (no placeholder)\n%s", got)
 	}
 	if strings.Contains(got, "new ViewNode('#')") {

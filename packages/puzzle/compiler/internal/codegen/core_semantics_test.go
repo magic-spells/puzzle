@@ -75,10 +75,10 @@ func TestConditionHeadersKeepJavaScriptOr(t *testing.T) {
   {#case status || 'none'}{:when 'a'}<b>d</b>{/case}
   <p class="x {#if on || off}on{/if}">y</p>`))
 	wantAll(t, got,
-		"...(__d.tags || __d.others",
-		"...(__d.a || __d.b",
-		"...(!(__d.user || __d.guest)",
-		"])(__d.status || 'none')),",
+		"    __d.tags || __d.others\n",
+		": __d.a || __d.b\n",
+		"    !(__d.user || __d.guest)\n",
+		")(__d.status || 'none'),",
 		"class: `x ${__d.on || __d.off ? 'on' : ''}`",
 	)
 	if strings.Contains(got, "__f") {
@@ -123,11 +123,11 @@ func TestTernaryConditionIsGrouped(t *testing.T) {
   <p class="y {#if on}a{#if p ? q : r}b{/if}{/if}">z</p>
   {#if x ?? y}<b>c</b>{/if}`))
 	wantAll(t, got,
-		"...((__d.mode === 'edit' ? __d.canEdit : __d.canView)\n",
-		"...((__d.a ? __d.b : __d.c)\n",
+		"    (__d.mode === 'edit' ? __d.canEdit : __d.canView)\n",
+		": (__d.a ? __d.b : __d.c)\n",
 		"${(__d.m ? __d.e : __d.v) ? 'on' : ''}",
 		"((__d.p ? __d.q : __d.r) ? 'b' : '')",
-		"...(__d.x ?? __d.y\n",
+		"    __d.x ?? __d.y\n",
 	)
 	nodeCheck(t, got)
 }
@@ -168,7 +168,7 @@ func TestLooseEqualityKeepsJavaScriptMeaning(t *testing.T) {
 	got := compileSrc(t, coreSrc(`  {#if count == '1'}<b>a</b>{/if}
   <p data-x={ a != null }>{ x == null ? 'none' : x }</p>`))
 	wantAll(t, got,
-		"...(__d.count == '1'",
+		"    __d.count == '1'\n",
 		"'data-x': __d.a != null",
 		"__s(__d.x == null ? 'none' : __d.x,",
 	)
@@ -230,7 +230,7 @@ func TestLoopGuardImports(t *testing.T) {
 	mapped := compileSrc(t, coreSrc(`  <Card><Snippet rows>{#for r in rows}<li>{ r.name }</li>{/for}</Snippet></Card>`))
 	wantAll(t, mapped,
 		"loopItems as __e",
-		"...__e(rows).map((r) =>",
+		"(__e(rows).map((r) =>",
 	)
 	if strings.Contains(mapped, "loopRange") {
 		t.Errorf("no range loop, no loopRange import:\n%s", mapped)
@@ -300,14 +300,14 @@ func TestExpressionLanguageInEveryPosition(t *testing.T) {
 		{"component prop with an arrow", "  <Card items={ list.filter(x => x.on) } />", "items: __d.list?.filter((x) => x?.on)"},
 		{"marker argument", `  <Slot name="row" item={ rows.at(0) } />`, "item: __d.rows?.at(0)"},
 		{"key", "  {#for t in todos}<li key={ t.id.toString() }>x</li>{/for}", "key: (t) => t?.id?.toString()"},
-		{"if subject", "  {#if items.includes(x)}<b>a</b>{/if}", "...(__d.items?.includes(__d.x)"},
-		{"case subject", "  {#case kind.trim()}{:when 'a'}<b>d</b>{/case}", "])(__d.kind?.trim()))"},
+		{"if subject", "  {#if items.includes(x)}<b>a</b>{/if}", "    __d.items?.includes(__d.x)\n"},
+		{"case subject", "  {#case kind.trim()}{:when 'a'}<b>d</b>{/case}", ")(__d.kind?.trim()),"},
 		{"when value", "  {#case kind}{:when modes.at(0)}<b>d</b>{/case}", "__c === (__d.modes?.at(0))"},
 		{"for collection", "  {#for t in todos.filter(t => !t.done)}<li>x</li>{/for}", "__l(this, this, 0, __d.todos?.filter((t) => !t?.done), (s) =>"},
 		{"range bound", "  {#for 1...Math.max(n, 1)}<li>x</li>{/for}", "__r(1, Math.max(__d.n, 1))"},
 		{"template literal", "  <p>{ `${a} ${b}` }</p>", "__s(`${__d.a} ${__d.b}`,"},
 		{"length", "  <p>{ items.length }</p>", "__s(__d.items?.length,"},
-		{"length condition", "  {#if items.length}<b>a</b>{/if}", "...(__d.items?.length\n"},
+		{"length condition", "  {#if items.length}<b>a</b>{/if}", "    __d.items?.length\n"},
 		{"nullish fallback", "  <p>{ name ?? 'anon' }</p>", "__s(__d.name ?? 'anon',"},
 		{"handler condition", "  <button @click={ items.some(i => i.on) ? save : null }>x</button>", "(__d.items?.some((i) => i?.on)) ? (event) => this.events.save(event) : null"},
 		{"handler arguments", "  <button @click={ save(x.trim(), items.length) }>x</button>", "this.events.save(__d.x?.trim(), __d.items?.length)"},
@@ -355,7 +355,7 @@ func TestCalledLoopKeyKeepsMap(t *testing.T) {
 func TestSizeIsAnOrdinaryField(t *testing.T) {
 	got := compileSrc(t, coreSrc(`  <p>{ file.size } { items.length }</p>
   {#if items.length > 0}<b>a</b>{/if}`))
-	wantAll(t, got, "__d.file?.size", "__d.items?.length", "...(__d.items?.length > 0")
+	wantAll(t, got, "__d.file?.size", "__d.items?.length", "    __d.items?.length > 0\n")
 	if strings.Contains(got, "sizeOf") || strings.Contains(got, "__z") {
 		t.Errorf("no module imports a size helper:\n%s", got)
 	}

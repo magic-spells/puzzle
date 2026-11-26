@@ -792,19 +792,6 @@ func (c *compiler) emitElement(tagStr string, attrs []parser.Attr, children []pa
 		return "", err
 	}
 
-	// Sole-{#for} child: pass the .map()/list array directly as the children
-	// argument (no [] wrapper), matching the fixture's list <div>.
-	if len(processed) == 1 && processed[0].node != nil {
-		if f, ok := processed[0].node.(*parser.For); ok {
-			mapExpr, err := c.emitFor(f, ind+2, scope)
-			if err != nil {
-				return "", err
-			}
-			return "new ViewNode(" + tagStr + ", " + attrsSeg + ",\n" +
-				sp(ind+2) + mapExpr + "\n" + sp(ind) + ")", nil
-		}
-	}
-
 	// A STATIC island children array is cached as a unit at any size (D44 +
 	// D170): the element's own attrs and listeners still patch, but a seed that
 	// is identical on every mount need only be allocated once.
@@ -826,17 +813,32 @@ func (c *compiler) emitElement(tagStr string, attrs []parser.Attr, children []pa
 }
 
 // emitArray emits a children array `[…]` with each element at elemIndent and
-// the closing bracket at elemIndent-2. Empty → "[]".
+// the closing bracket at elemIndent-2. Empty → "[]". A child that is a list
+// (emitItem) is spread into the array, unless it is the only child: then it IS
+// the array, written where the array would open.
 func (c *compiler) emitArray(items []item, elemIndent int, scope scopeMap) (string, error) {
 	if len(items) == 0 {
 		return "[]", nil
 	}
+	if len(items) == 1 {
+		_, _, one, err := c.condStaticLen(items, scope)
+		if err != nil {
+			return "", err
+		}
+		if !one {
+			js, _, err := c.emitItem(items[0], elemIndent-2, scope)
+			return js, err
+		}
+	}
 	var b strings.Builder
 	b.WriteString("[\n")
 	for _, it := range items {
-		s, err := c.emitItem(it, elemIndent, scope)
+		s, list, err := c.emitItem(it, elemIndent, scope)
 		if err != nil {
 			return "", err
+		}
+		if list {
+			s = "..." + s
 		}
 		b.WriteString(sp(elemIndent))
 		b.WriteString(s)
@@ -847,7 +849,25 @@ func (c *compiler) emitArray(items []item, elemIndent int, scope scopeMap) (stri
 	return b.String(), nil
 }
 
-func (c *compiler) emitItem(it item, ind int, scope scopeMap) (string, error) {
+// emitItem emits one processed child: one vnode, or a list of them (list) — a
+// {#for}, or a conditional whose branches are not each one vnode — which the
+// enclosing array spreads.
+func (c *compiler) emitItem(it item, ind int, scope scopeMap) (js string, list bool, err error) {
+	switch n := it.node.(type) {
+	case *parser.If:
+		return c.emitIf(n, ind, scope)
+	case *parser.Case:
+		return c.emitCase(n, ind, scope)
+	case *parser.For:
+		js, err = c.emitFor(n, ind, scope)
+		return js, true, err
+	}
+	js, err = c.emitVnode(it, ind, scope)
+	return js, false, err
+}
+
+// emitVnode emits a processed child that is exactly one vnode.
+func (c *compiler) emitVnode(it item, ind int, scope scopeMap) (string, error) {
 	if it.placeholder {
 		// Arity-padding placeholder: an empty comment vnode holding a stable index
 		// slot so a conditional's branches stay the same length (see branches).
@@ -892,16 +912,6 @@ func (c *compiler) emitItem(it item, ind int, scope scopeMap) (string, error) {
 		// placeholder at this position. Attribute-free by grammar.
 		c.usesPortal = true
 		return c.emitElement("PORTAL_TAG", nil, n.Children, ind, ind, false, scope)
-	case *parser.If:
-		return c.emitIf(n, ind, scope)
-	case *parser.Case:
-		return c.emitCase(n, ind, scope)
-	case *parser.For:
-		m, err := c.emitFor(n, ind, scope)
-		if err != nil {
-			return "", err
-		}
-		return "..." + m, nil
 	case *parser.Interpolation:
 		// Only a markup interpolation is kept as a node (processChildren).
 		return c.emitMarkup(n, scope)
@@ -1009,33 +1019,48 @@ func (c *compiler) emitSnippet(n *parser.Snippet, ind int, scope scopeMap) (stri
 		sp(ind) + "})", nil
 }
 
-// emitIf compiles `{#if}/{:else}` spanning siblings to a spread ternary
-// `...(cond ? [then] : [else|[]])`. When both branches have provably fixed vnode
-// occupancy, the shorter array is padded to the same static count so toggling
-// `cond` cannot shift and remount trailing siblings. Item-form loops (nullable
-// ViewNode.keyOf rows) and slot markers (0..N expansion) make occupancy unstable;
-// an unstable conditional emits both branches unpadded, byte-identically to the
-// pre-padding form. Nested conditionals make this decision independently.
-func (c *compiler) emitIf(n *parser.If, ind int, scope scopeMap) (string, error) {
+// emitIf compiles `{#if}/{:else}` spanning siblings to a ternary. When both
+// branches have provably fixed vnode occupancy, the shorter one is padded to the
+// same static count so toggling `cond` cannot shift and remount trailing
+// siblings, and when each is then exactly one vnode the ternary picks that vnode,
+// `cond ? a : b`. Otherwise it is a list, `(cond ? [then] : [else|[]])`.
+// Item-form loops (nullable ViewNode.keyOf rows) and slot markers (0..N
+// expansion) make occupancy unstable; an unstable conditional emits both
+// branches unpadded. Nested conditionals make this decision independently.
+func (c *compiler) emitIf(n *parser.If, ind int, scope scopeMap) (string, bool, error) {
 	// A condition is a value position for guarded access.
 	f := c.factSink()
 	cond := c.cond(n.CondAST, scope, f)
 	c.absorb(f, scope)
-	branches, _, _, err := c.branches(condBodies(n), scope)
+	set, err := c.branches(condBodies(n), scope)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	thenArr, err := c.emitArray(branches[0], ind+6, scope)
+	then, err := c.emitBranch(set.items[0], set.single, ind+4, scope)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	elsePart, err := c.emitArray(branches[1], ind+6, scope)
+	els, err := c.emitBranch(set.items[1], set.single, ind+4, scope)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	return "...(" + cond + "\n" +
-		sp(ind+2) + "? " + thenArr + "\n" +
-		sp(ind+2) + ": " + elsePart + ")", nil
+	out := cond + "\n" +
+		sp(ind+2) + "? " + then + "\n" +
+		sp(ind+2) + ": " + els
+	if set.single {
+		return out, false, nil
+	}
+	return "(" + out + ")", true, nil
+}
+
+// emitBranch emits one conditional branch starting at column ind: its one
+// vnode when every branch is a single vnode, else its array.
+func (c *compiler) emitBranch(items []item, single bool, ind int, scope scopeMap) (string, error) {
+	if single {
+		js, _, err := c.emitItem(items[0], ind, scope)
+		return js, err
+	}
+	return c.emitArray(items, ind+2, scope)
 }
 
 // condBodies lists an `{#if}`'s or `{#case}`'s branch bodies in emission order;
@@ -1054,50 +1079,64 @@ func condBodies(n parser.Node) [][]parser.Node {
 	return nil
 }
 
-// branches processes a conditional's branch bodies and reports the longest
-// one's static vnode count and whether every branch has provably fixed
-// occupancy (condStaticLen). When every branch does, each shorter one is padded
-// with placeholders to that count, so toggling between branches cannot shift
-// and remount trailing siblings.
-func (c *compiler) branches(bodies [][]parser.Node, scope scopeMap) ([][]item, int, bool, error) {
-	items := make([][]item, len(bodies))
+// branchSet is a conditional's processed branches (see branches).
+type branchSet struct {
+	items  [][]item // each branch, padded when stable
+	maxLen int      // the longest branch's static vnode count
+	stable bool     // every branch has provably fixed occupancy
+	single bool     // every branch is exactly one vnode
+}
+
+// branches processes a conditional's branch bodies and measures them
+// (condStaticLen). When every branch has provably fixed occupancy, each shorter
+// one is padded with placeholders to the longest one's static count, so
+// toggling between branches cannot shift and remount trailing siblings.
+func (c *compiler) branches(bodies [][]parser.Node, scope scopeMap) (branchSet, error) {
+	set := branchSet{items: make([][]item, len(bodies)), stable: true}
 	lens := make([]int, len(bodies))
-	maxLen, stable := 0, true
+	// Padded to a longest branch of one vnode, a branch is one vnode when it
+	// already was or when it was empty and becomes a lone placeholder.
+	single := true
 	for i, body := range bodies {
 		branch, err := c.processChildren(body, scope)
 		if err != nil {
-			return nil, 0, false, err
+			return branchSet{}, err
 		}
-		l, branchStable, err := c.condStaticLen(branch, scope)
+		l, stable, one, err := c.condStaticLen(branch, scope)
 		if err != nil {
-			return nil, 0, false, err
+			return branchSet{}, err
 		}
-		items[i], lens[i] = branch, l
-		maxLen = max(maxLen, l)
-		stable = stable && branchStable
+		set.items[i], lens[i] = branch, l
+		set.maxLen = max(set.maxLen, l)
+		set.stable = set.stable && stable
+		single = single && (one || len(branch) == 0)
 	}
-	if stable {
-		for i := range items {
-			for n := lens[i]; n < maxLen; n++ {
-				items[i] = append(items[i], item{placeholder: true})
+	if set.stable {
+		for i := range set.items {
+			for n := lens[i]; n < set.maxLen; n++ {
+				set.items[i] = append(set.items[i], item{placeholder: true})
 			}
 		}
 	}
-	return items, maxLen, stable, nil
+	set.single = set.stable && set.maxLen == 1 && single
+	return set, nil
 }
 
-// condStaticLen reports both the static vnode count and whether a processed child
-// list's runtime occupancy is provably fixed. Text runs, padding placeholders,
-// elements, and components each occupy exactly one slot; element/component
-// children are deliberately not inspected. Nested conditionals contribute their
-// max branch length and are stable only when every branch is stable. Loops
-// contribute zero static slots, but are stable only for range form without an
-// explicit body-root key: generated range keys never resolve null, while
-// item-form ViewNode.keyOf rows and author key expressions can. Slot markers are
-// unstable because the runtime expands them to 0..N nodes.
-func (c *compiler) condStaticLen(items []item, scope scopeMap) (int, bool, error) {
+// condStaticLen reports a processed child list's static vnode count, whether its
+// runtime occupancy is provably fixed, and whether it is exactly one child that
+// emits one vnode rather than a list (emitItem). Text runs, padding
+// placeholders, elements, and components each occupy exactly one slot;
+// element/component children are deliberately not inspected. Nested
+// conditionals contribute their max branch length, are stable only when every
+// branch is stable, and are one vnode only when every branch is. Loops are
+// lists contributing zero static slots, and are stable only for range form
+// without an explicit body-root key: generated range keys never resolve null,
+// while item-form ViewNode.keyOf rows and author key expressions can. Slot
+// markers are unstable because the runtime expands them to 0..N nodes.
+func (c *compiler) condStaticLen(items []item, scope scopeMap) (int, bool, bool, error) {
 	n := 0
 	stable := true
+	one := len(items) == 1
 	for _, it := range items {
 		if it.textOK || it.placeholder {
 			n++
@@ -1105,9 +1144,10 @@ func (c *compiler) condStaticLen(items []item, scope scopeMap) (int, bool, error
 		}
 		switch node := it.node.(type) {
 		case *parser.For:
+			one = false
 			provablyKeyed, err := c.forRowsProvablyKeyed(node, scope)
 			if err != nil {
-				return 0, false, err
+				return 0, false, false, err
 			}
 			if !provablyKeyed {
 				stable = false
@@ -1121,67 +1161,72 @@ func (c *compiler) condStaticLen(items []item, scope scopeMap) (int, bool, error
 			// when they emit them, so this pass's facts are suppressed (see
 			// forBodyRoot).
 			c.analyzing++
-			_, m, childStable, err := c.branches(condBodies(node), scope)
+			set, err := c.branches(condBodies(node), scope)
 			c.analyzing--
 			if err != nil {
-				return 0, false, err
+				return 0, false, false, err
 			}
-			n += m
-			if !childStable {
+			n += set.maxLen
+			if !set.stable {
 				stable = false
 			}
+			one = one && set.single
 		default:
 			// Element, component, and resolved {#svg} nodes occupy one slot.
 			n++
 		}
 	}
-	return n, stable, nil
+	return n, stable, one, nil
 }
 
-// emitCase compiles a `{#case}/{:when}` block to a spread IIFE that binds the
-// case expression to a temp (`__c`) ONCE, then chains strict-`===` ternaries —
-// one per clause, its OR-matched values joined with `||` — falling through to
-// the optional {:else} array (or `[]`). Binding once (vs. desugaring to nested
+// emitCase compiles a `{#case}/{:when}` block to an IIFE that binds the case
+// expression to a temp (`__c`) ONCE, then chains strict-`===` ternaries — one
+// per clause, its OR-matched values joined with `||` — falling through to the
+// optional {:else} (or `[]`). Like emitIf, it picks a vnode when every branch
+// is one, and an array otherwise. Binding once (vs. desugaring to nested
 // {#if} that would re-emit the expression per clause) keeps evaluation to a
 // single read, which matters if the data value is a getter. `__c` shadows
 // cleanly in nested cases: user expressions never resolve to it, and each arm
 // only ever compares its own `__c`.
-func (c *compiler) emitCase(n *parser.Case, ind int, scope scopeMap) (string, error) {
+func (c *compiler) emitCase(n *parser.Case, ind int, scope scopeMap) (string, bool, error) {
 	caseExpr := c.value(n.ExprAST, scope)
 
 	// Padding applies only when every branch has provably fixed occupancy; an
 	// item-form loop, explicit-key range loop, or slot marker makes the whole case
 	// emit unpadded. Nested conditionals still decide their own padding independently.
-	branches, _, _, err := c.branches(condBodies(n), scope)
+	set, err := c.branches(condBodies(n), scope)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	var b strings.Builder
-	b.WriteString("...(((__c) =>\n")
+	b.WriteString("((__c) =>\n")
 	for i, cl := range n.Clauses {
 		conds := make([]string, len(cl.ValuesAST))
 		for k, v := range cl.ValuesAST {
 			conds[k] = "__c === (" + c.value(v, scope) + ")"
 		}
 		condStr := strings.Join(conds, " || ")
-		arr, err := c.emitArray(branches[i], ind+8, scope)
+		arm, err := c.emitBranch(set.items[i], set.single, ind+6, scope)
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
 		if i == 0 {
 			b.WriteString(sp(ind+2) + condStr + "\n")
 		} else {
 			b.WriteString(sp(ind+4) + ": " + condStr + "\n")
 		}
-		b.WriteString(sp(ind+4) + "? " + arr + "\n")
+		b.WriteString(sp(ind+4) + "? " + arm + "\n")
 	}
-	elseArr, err := c.emitArray(branches[len(n.Clauses)], ind+8, scope)
+	arm, err := c.emitBranch(set.items[len(n.Clauses)], set.single, ind+6, scope)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	b.WriteString(sp(ind+4) + ": " + elseArr + ")(" + caseExpr + "))")
-	return b.String(), nil
+	b.WriteString(sp(ind+4) + ": " + arm + ")(" + caseExpr + ")")
+	if set.single {
+		return b.String(), false, nil
+	}
+	return "(" + b.String() + ")", true, nil
 }
 
 // emitFor compiles a {#for}. Named form → `__e(<coll>).map((item) => <body>)`

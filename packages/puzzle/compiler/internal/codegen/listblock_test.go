@@ -254,7 +254,7 @@ func TestListBlockNestedLoops(t *testing.T) {
 		"const __L1 = { key: (item) => ViewNode.keyOf(item), fields: ['name'] };",
 		"__l(this, this, 0, __d.groups, (s) =>",
 		"__l(this, s, 1, s.item?.items, (s1) =>",
-		"new ViewNode('p', {\n            key: s1.k,",
+		"new ViewNode('p', {\n        key: s1.k,",
 		"'@click': (s1.h0 ??= (event) => this.events.pick(s1.item, s.item)),",
 	} {
 		if !strings.Contains(got, want) {

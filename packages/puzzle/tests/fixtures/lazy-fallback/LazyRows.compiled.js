@@ -49,30 +49,26 @@ LazyRows.prototype.render = function () {
   const __f = this.ctx.formatters;
 
   return new ViewNode('div', { class: 'lazy-lists' }, [
-    new ViewNode('ul', { class: 'lazy-rows' },
-      __l(this, this, 0, __d.rows, (s) =>
-        new ViewNode('li', { key: s.k }, [
-          new ViewNode(SLOT_TAG, { name: 'row', args: { item: s.item?.item, index: s.item?.index }, fallback: () => [
-            new ViewNode('text', { value: __s(s.item?.item, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'row.item' : 0) }),
-          ] }),
-          new ViewNode(SLOT_TAG, { name: 'note', args: { item: s.item?.item }, fallback: () => [
-            new ViewNode('em', { class: 'lazy-note' }, [
-              new ViewNode('text', { value: __s(__f.get("probe")(s.item?.item), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'probe(row.item)' : 0) }),
-            ]),
-          ] }),
-        ])
-      , __L0)
-    ),
-    new ViewNode('ol', { class: 'lazy-names' },
-      __l(this, this, 1, __d.names, (s) =>
-        new ViewNode('li', { key: s.k }, [
-          new ViewNode(SLOT_TAG, { name: 'name', args: { value: s.item }, fallback: () => [
-            new ViewNode('i', { class: 'lazy-name' }, [
-              new ViewNode('text', { value: __s(__f.get("probeName")(s.item), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'probeName(name)' : 0) }),
-            ]),
-          ] }),
-        ])
-      , __L1)
-    ),
+    new ViewNode('ul', { class: 'lazy-rows' }, __l(this, this, 0, __d.rows, (s) =>
+      new ViewNode('li', { key: s.k }, [
+        new ViewNode(SLOT_TAG, { name: 'row', args: { item: s.item?.item, index: s.item?.index }, fallback: () => [
+          new ViewNode('text', { value: __s(s.item?.item, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'row.item' : 0) }),
+        ] }),
+        new ViewNode(SLOT_TAG, { name: 'note', args: { item: s.item?.item }, fallback: () => [
+          new ViewNode('em', { class: 'lazy-note' }, [
+            new ViewNode('text', { value: __s(__f.get("probe")(s.item?.item), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'probe(row.item)' : 0) }),
+          ]),
+        ] }),
+      ])
+    , __L0)),
+    new ViewNode('ol', { class: 'lazy-names' }, __l(this, this, 1, __d.names, (s) =>
+      new ViewNode('li', { key: s.k }, [
+        new ViewNode(SLOT_TAG, { name: 'name', args: { value: s.item }, fallback: () => [
+          new ViewNode('i', { class: 'lazy-name' }, [
+            new ViewNode('text', { value: __s(__f.get("probeName")(s.item), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'probeName(name)' : 0) }),
+          ]),
+        ] }),
+      ])
+    , __L1)),
   ]);
 };

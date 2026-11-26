@@ -93,89 +93,65 @@ CoreHost.prototype.render = function () {
     new ViewNode('p', { class: 'nested' }, [
       new ViewNode('text', { value: __s(__f.get("echo")('x', { outer: { inner: __d.n }, 'quoted-key': __d.unit }), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'echo(\'x\', { outer: { inner: n }, \'quoted-key\': unit })' : 0) }),
     ]),
-    ...(__d.tags?.length || __d.flagged
-      ? [
-          new ViewNode('p', { class: 'has-tags' }, [
-            new ViewNode('text', { value: 'tags' }),
-          ]),
-        ]
-      : [
-          new ViewNode('p', { class: 'no-tags' }, [
-            new ViewNode('text', { value: 'none' }),
-          ]),
+    __d.tags?.length || __d.flagged
+      ? new ViewNode('p', { class: 'has-tags' }, [
+          new ViewNode('text', { value: 'tags' }),
+        ])
+      : new ViewNode('p', { class: 'no-tags' }, [
+          new ViewNode('text', { value: 'none' }),
         ]),
-    ...(!(__d.tags?.length || __d.flagged)
-      ? [
-          new ViewNode('p', { class: 'unless' }, [
-            new ViewNode('text', { value: 'empty' }),
-          ]),
-        ]
-      : [
-          new ViewNode('#'),
-        ]),
-    ...(((__c) =>
+    !(__d.tags?.length || __d.flagged)
+      ? new ViewNode('p', { class: 'unless' }, [
+          new ViewNode('text', { value: 'empty' }),
+        ])
+      : new ViewNode('#'),
+    ((__c) =>
       __c === ('open')
-        ? [
-            new ViewNode('p', { class: 'case' }, [
-              new ViewNode('text', { value: 'open' }),
-            ]),
-          ]
-        : [
-            new ViewNode('p', { class: 'case' }, [
-              new ViewNode('text', { value: 'other' }),
-            ]),
-          ])(__d.status || 'none')),
+        ? new ViewNode('p', { class: 'case' }, [
+            new ViewNode('text', { value: 'open' }),
+          ])
+        : new ViewNode('p', { class: 'case' }, [
+            new ViewNode('text', { value: 'other' }),
+          ]))(__d.status || 'none'),
     new ViewNode('p', { class: 'eq' }, [
       new ViewNode('text', { value: __s(__d.one == '1' ? 'loose' : 'strict', typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'one == \'1\' ? \'loose\' : \'strict\'' : 0) }),
     ]),
-    ...((__d.mode === 'edit' ? __d.canEdit : __d.canView)
-      ? [
-          new ViewNode('p', { class: 'tern' }, [
-            new ViewNode('text', { value: 'yes' }),
-          ]),
-        ]
-      : [
-          new ViewNode('p', { class: 'tern' }, [
-            new ViewNode('text', { value: 'no' }),
-          ]),
+    (__d.mode === 'edit' ? __d.canEdit : __d.canView)
+      ? new ViewNode('p', { class: 'tern' }, [
+          new ViewNode('text', { value: 'yes' }),
+        ])
+      : new ViewNode('p', { class: 'tern' }, [
+          new ViewNode('text', { value: 'no' }),
         ]),
     new ViewNode('p', {
       class: `tern-attr ${(__d.mode === 'edit' ? __d.canEdit : __d.canView) ? 'on' : ''}`,
     }, [
       new ViewNode('text', { value: 't' }),
     ]),
-    new ViewNode('ul', { class: 'string-loop' },
-      __l(this, this, 0, __d.word, (s) =>
-        new ViewNode('li', { key: s.k }, [
-          new ViewNode('text', { value: __s(s.item, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'ch' : 0) }),
-        ])
-      , __L0)
-    ),
-    new ViewNode('ul', { class: 'missing-loop' },
-      __l(this, this, 1, __d.missing, (s) =>
-        new ViewNode('li', { key: s.k }, [
-          new ViewNode('text', { value: __s(s.item, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'm' : 0) }),
-        ])
-      , __L1)
-    ),
-    new ViewNode('ul', { class: 'range' },
-      __r(1, __d.count).map((k) =>
-        new ViewNode('li', { key: k }, [
-          new ViewNode('text', { value: __s(k, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'k' : 0) }),
-        ])
-      )
-    ),
+    new ViewNode('ul', { class: 'string-loop' }, __l(this, this, 0, __d.word, (s) =>
+      new ViewNode('li', { key: s.k }, [
+        new ViewNode('text', { value: __s(s.item, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'ch' : 0) }),
+      ])
+    , __L0)),
+    new ViewNode('ul', { class: 'missing-loop' }, __l(this, this, 1, __d.missing, (s) =>
+      new ViewNode('li', { key: s.k }, [
+        new ViewNode('text', { value: __s(s.item, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'm' : 0) }),
+      ])
+    , __L1)),
+    new ViewNode('ul', { class: 'range' }, __r(1, __d.count).map((k) =>
+      new ViewNode('li', { key: k }, [
+        new ViewNode('text', { value: __s(k, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'k' : 0) }),
+      ])
+    )),
     ...[1].map((__i) =>
       new ViewNode('div', {
         key: __i,
         class: 'mapped',
-      },
-        __e(__d.word).map((ch) =>
-          new ViewNode('b', { key: ViewNode.keyOf(ch) }, [
-            new ViewNode('text', { value: __s(ch, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'ch' : 0) }),
-          ])
-        )
-      )
+      }, __e(__d.word).map((ch) =>
+        new ViewNode('b', { key: ViewNode.keyOf(ch) }, [
+          new ViewNode('text', { value: __s(ch, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'ch' : 0) }),
+        ])
+      ))
     ),
     new ViewNode(Chip, { tone: 'warm' }, []),
     new ViewNode('input', {

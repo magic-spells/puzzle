@@ -12,12 +12,10 @@ import { ViewNode, loopRange as __r } from '@magic-spells/puzzle';
 RangeFor.prototype.render = function () {
   const __d = this.getData();
 
-  return new ViewNode('puzzle-view', { class: 'dots' },
-    __r(1, __d.count).map((__i) =>
-      new ViewNode('span', {
-        key: __i,
-        class: 'dot',
-      }, [])
-    )
-  );
+  return new ViewNode('puzzle-view', { class: 'dots' }, __r(1, __d.count).map((__i) =>
+    new ViewNode('span', {
+      key: __i,
+      class: 'dot',
+    }, [])
+  ));
 };

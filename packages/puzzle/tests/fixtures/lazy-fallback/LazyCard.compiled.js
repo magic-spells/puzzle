@@ -36,16 +36,14 @@ LazyCard.prototype.render = function () {
         ]),
       ] }),
     ]),
-    new ViewNode(SLOT_TAG, { fallback: () => [
-      ...__l(this, this, 0, __d.tips, (s) =>
-        new ViewNode('i', {
-          key: s.k,
-          class: 'lazy-tip',
-        }, [
-          new ViewNode('text', { value: __s(s.item, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'tip' : 0) }),
-        ])
-      , __L0),
-    ] }),
+    new ViewNode(SLOT_TAG, { fallback: () => __l(this, this, 0, __d.tips, (s) =>
+      new ViewNode('i', {
+        key: s.k,
+        class: 'lazy-tip',
+      }, [
+        new ViewNode('text', { value: __s(s.item, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'tip' : 0) }),
+      ])
+    , __L0) }),
     new ViewNode('input', { class: 'lazy-card-input' }, []),
   ]);
 };

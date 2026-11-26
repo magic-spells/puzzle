@@ -22,22 +22,18 @@ PortalHost.prototype.render = function () {
     new ViewNode('button', { '@click': ((this.__h ??= {})[0] ??= (event) => this.events.open(event)) }, [
       new ViewNode('text', { value: 'Open' }),
     ]),
-    ...(__d.showing
-      ? [
-          new ViewNode(PORTAL_TAG, {}, [
-            new ViewNode('div', {
-              class: 'pzl-overlay',
-              '@click:outside': ((this.__h ??= {})[1] ??= (event) => this.events.close(event)),
-            }, [
-              new ViewNode('h2', {}, [
-                new ViewNode('text', { value: __s(__d.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'title' : 0) }),
-              ]),
-              new ViewNode(NowPlaying, { song: __d.song }, []),
+    __d.showing
+      ? new ViewNode(PORTAL_TAG, {}, [
+          new ViewNode('div', {
+            class: 'pzl-overlay',
+            '@click:outside': ((this.__h ??= {})[1] ??= (event) => this.events.close(event)),
+          }, [
+            new ViewNode('h2', {}, [
+              new ViewNode('text', { value: __s(__d.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'title' : 0) }),
             ]),
+            new ViewNode(NowPlaying, { song: __d.song }, []),
           ]),
-        ]
-      : [
-          new ViewNode('#'),
-        ]),
+        ])
+      : new ViewNode('#'),
   ]);
 };

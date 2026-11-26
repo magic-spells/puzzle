@@ -176,75 +176,53 @@ TodoHome.prototype.render = function () {
                 '@click': ((this.__h ??= {})[1] ??= (event) => this.events.setFilter('all')),
               }, [
                 new ViewNode('text', { value: 'All ' }),
-                ...(__d.currentFilter === 'all'
-                  ? [
-                      new ViewNode('span', { class: 'absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent' }, []),
-                    ]
-                  : [
-                      new ViewNode('#'),
-                    ]),
+                __d.currentFilter === 'all'
+                  ? new ViewNode('span', { class: 'absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent' }, [])
+                  : new ViewNode('#'),
               ]),
               new ViewNode('button', {
                 class: `relative flex-1 py-3.5 text-sm font-medium transition-colors ${__d.currentFilter === 'active' ? 'text-accent' : ''}${__d.currentFilter !== 'active' ? 'text-muted hover:text-ink' : ''}`,
                 '@click': ((this.__h ??= {})[2] ??= (event) => this.events.setFilter('active')),
               }, [
                 new ViewNode('text', { value: 'Active ' }),
-                ...(__d.currentFilter === 'active'
-                  ? [
-                      new ViewNode('span', { class: 'absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent' }, []),
-                    ]
-                  : [
-                      new ViewNode('#'),
-                    ]),
+                __d.currentFilter === 'active'
+                  ? new ViewNode('span', { class: 'absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent' }, [])
+                  : new ViewNode('#'),
               ]),
               new ViewNode('button', {
                 class: `relative flex-1 py-3.5 text-sm font-medium transition-colors ${__d.currentFilter === 'completed' ? 'text-accent' : ''}${__d.currentFilter !== 'completed' ? 'text-muted hover:text-ink' : ''}`,
                 '@click': ((this.__h ??= {})[3] ??= (event) => this.events.setFilter('completed')),
               }, [
                 new ViewNode('text', { value: 'Completed ' }),
-                ...(__d.currentFilter === 'completed'
-                  ? [
-                      new ViewNode('span', { class: 'absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent' }, []),
-                    ]
-                  : [
-                      new ViewNode('#'),
-                    ]),
+                __d.currentFilter === 'completed'
+                  ? new ViewNode('span', { class: 'absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent' }, [])
+                  : new ViewNode('#'),
               ]),
             ]),
-            new ViewNode('div', { class: 'max-h-96 overflow-y-auto' },
-              __l(this, this, 0, __d.filteredTodos, (s) =>
-                new ViewNode(TodoItem, {
-                  key: s.k,
-                  todo: s.item,
-                  remove: (s.h0 ??= (event) => this.events.deleteTodo(s.item)),
-                }, [])
-              , __L0)
-            ),
+            new ViewNode('div', { class: 'max-h-96 overflow-y-auto' }, __l(this, this, 0, __d.filteredTodos, (s) =>
+              new ViewNode(TodoItem, {
+                key: s.k,
+                todo: s.item,
+                remove: (s.h0 ??= (event) => this.events.deleteTodo(s.item)),
+              }, [])
+            , __L0)),
             new ViewNode('div', { class: 'p-5 flex flex-col sm:flex-row gap-2.5 justify-center' }, [
-              ...(__d.completedTodos?.length > 0
-                ? [
-                    new ViewNode('button', {
-                      class: 'px-4 py-2.5 rounded-xl border border-hairline text-muted hover:text-ink hover:border-white/20 text-sm font-medium transition-colors',
-                      '@click': ((this.__h ??= {})[4] ??= (event) => this.events.clearCompleted(event)),
-                    }, [
-                      new ViewNode('text', { value: 'Clear completed (' + __s(__d.completedTodos?.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'completedTodos.length' : 0) + ')' }),
-                    ]),
-                  ]
-                : [
-                    new ViewNode('#'),
-                  ]),
-              ...(__d.activeTodos?.length > 0
-                ? [
-                    new ViewNode('button', {
-                      class: 'px-4 py-2.5 rounded-xl border border-accent/40 text-accent hover:bg-accent/10 text-sm font-medium transition-colors',
-                      '@click': ((this.__h ??= {})[5] ??= (event) => this.events.markAllComplete(event)),
-                    }, [
-                      new ViewNode('text', { value: 'Complete all' }),
-                    ]),
-                  ]
-                : [
-                    new ViewNode('#'),
-                  ]),
+              __d.completedTodos?.length > 0
+                ? new ViewNode('button', {
+                    class: 'px-4 py-2.5 rounded-xl border border-hairline text-muted hover:text-ink hover:border-white/20 text-sm font-medium transition-colors',
+                    '@click': ((this.__h ??= {})[4] ??= (event) => this.events.clearCompleted(event)),
+                  }, [
+                    new ViewNode('text', { value: 'Clear completed (' + __s(__d.completedTodos?.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'completedTodos.length' : 0) + ')' }),
+                  ])
+                : new ViewNode('#'),
+              __d.activeTodos?.length > 0
+                ? new ViewNode('button', {
+                    class: 'px-4 py-2.5 rounded-xl border border-accent/40 text-accent hover:bg-accent/10 text-sm font-medium transition-colors',
+                    '@click': ((this.__h ??= {})[5] ??= (event) => this.events.markAllComplete(event)),
+                  }, [
+                    new ViewNode('text', { value: 'Complete all' }),
+                  ])
+                : new ViewNode('#'),
             ]),
           ]
         : [

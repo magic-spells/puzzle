@@ -49,17 +49,15 @@ ExprHandlers.prototype.render = function () {
     }, [
       new ViewNode('text', { value: 'Purge' }),
     ]),
-    new ViewNode('ul', {},
-      __l(this, this, 0, __d.items, (s) =>
-        new ViewNode('li', {
-          key: s.k,
-          '@click': (s.h0 ??= (event) => this.events.select(s.item?.id, s.i)),
-          '@dblclick': (s.h1 ??= (event) => this.events.edit(s.item, event.detail)),
-          '@keydown:enter': (s.item?.done) ? (event) => this.events.undo(s.item) : null,
-        }, [
-          new ViewNode('text', { value: __s(s.item?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.name' : 0) }),
-        ])
-      , __L0)
-    ),
+    new ViewNode('ul', {}, __l(this, this, 0, __d.items, (s) =>
+      new ViewNode('li', {
+        key: s.k,
+        '@click': (s.h0 ??= (event) => this.events.select(s.item?.id, s.i)),
+        '@dblclick': (s.h1 ??= (event) => this.events.edit(s.item, event.detail)),
+        '@keydown:enter': (s.item?.done) ? (event) => this.events.undo(s.item) : null,
+      }, [
+        new ViewNode('text', { value: __s(s.item?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.name' : 0) }),
+      ])
+    , __L0)),
   ]);
 };

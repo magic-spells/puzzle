@@ -44,23 +44,17 @@ RawHost.prototype.render = function () {
       new ViewNode('#html', { value: __s(__d.note, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'newline_to_br(note)' : 0), br: true }),
     ]),
     new ViewNode('div', { class: 'cond' }, [
-      ...(__d.flag
-        ? [
-            new ViewNode('#html', { value: __s(__d.extra, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'raw(extra)' : 0) }),
-          ]
-        : [
-            new ViewNode('text', { value: 'plain' }),
-          ]),
+      __d.flag
+        ? new ViewNode('#html', { value: __s(__d.extra, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'raw(extra)' : 0) })
+        : new ViewNode('text', { value: 'plain' }),
       new ViewNode('text', { value: ' tail' }),
     ]),
-    new ViewNode('ul', { class: 'rows' },
-      __l(this, this, 0, __d.rows, (s) =>
-        new ViewNode('li', { key: s.k }, [
-          new ViewNode('text', { value: __s(s.item?.label, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'row.label' : 0) + ': ' }),
-          new ViewNode('#html', { value: __s(s.item?.html, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'raw(row.html)' : 0) }),
-        ])
-      , __L0)
-    ),
+    new ViewNode('ul', { class: 'rows' }, __l(this, this, 0, __d.rows, (s) =>
+      new ViewNode('li', { key: s.k }, [
+        new ViewNode('text', { value: __s(s.item?.label, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'row.label' : 0) + ': ' }),
+        new ViewNode('#html', { value: __s(s.item?.html, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'raw(row.html)' : 0) }),
+      ])
+    , __L0)),
     new ViewNode('div', { class: 'keyed' }, [
       new ViewNode('#html', { value: __s(__d.header, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'raw(header)' : 0) }),
       ...__l(this, this, 1, __d.rows, (s) =>

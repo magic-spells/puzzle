@@ -50,29 +50,21 @@ PostForm.prototype.render = function () {
         value: __d.form?.values?.title,
         '@input:bind': this.__bind(__d.form?.values ?? 0, 'title', 'v'),
       }, []),
-      ...(__d.form?.errors?.title
-        ? [
-            new ViewNode('p', { class: 'title-error' }, [
-              new ViewNode('text', { value: __s(__d.form?.errors?.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'form.errors.title' : 0) }),
-            ]),
-          ]
-        : [
-            new ViewNode('#'),
-          ]),
+      __d.form?.errors?.title
+        ? new ViewNode('p', { class: 'title-error' }, [
+            new ViewNode('text', { value: __s(__d.form?.errors?.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'form.errors.title' : 0) }),
+          ])
+        : new ViewNode('#'),
       new ViewNode(Field, {
         form: __d.form,
         name: 'body',
         label: 'Body',
       }, []),
-      ...(__d.form?.error
-        ? [
-            new ViewNode('p', { class: 'form-error' }, [
-              new ViewNode('text', { value: __s(__d.form?.error, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'form.error' : 0) }),
-            ]),
-          ]
-        : [
-            new ViewNode('#'),
-          ]),
+      __d.form?.error
+        ? new ViewNode('p', { class: 'form-error' }, [
+            new ViewNode('text', { value: __s(__d.form?.error, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'form.error' : 0) }),
+          ])
+        : new ViewNode('#'),
       new ViewNode('p', { class: 'flags' }, [
         new ViewNode('text', { value: __s(__d.form?.dirty ? 'dirty' : 'clean', typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'form.dirty ? \'dirty\' : \'clean\'' : 0) + ' ' + __s(__d.form?.submitting ? 'busy' : 'idle', typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'form.submitting ? \'busy\' : \'idle\'' : 0) }),
       ]),
