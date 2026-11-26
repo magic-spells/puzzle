@@ -7,13 +7,14 @@ import (
 
 // for_item_ident_test.go — the {#for} loop variable is validated as a bare JS
 // identifier (parser reuses isBareIdent). A '$'-prefixed name is a legal
-// identifier and must compile: the lambda param stays intact and body references
-// resolve against the loop scope, not the data model. A name like "todo-item" is
-// rejected in the parser (see parser package tests) and never reaches codegen.
+// identifier and must compile: an explicit key's arrow param stays intact and
+// body references resolve against the loop scope, not the data model. A name
+// like "todo-item" is rejected in the parser (see parser package tests) and
+// never reaches codegen.
 
 func TestForItemDollarIdentifier(t *testing.T) {
 	got := compileSrc(t, `<puzzle-view>
-  <ul>{#for $foo in items}<li>{ $foo }</li>{/for}</ul>
+  <ul>{#for $foo in items}<li key={ $foo.id }>{ $foo }</li>{/for}</ul>
 </puzzle-view>
 
 <script>
@@ -28,7 +29,7 @@ export default class T extends PuzzleView { data() { return { items: [] }; } }
 	}
 	// The identifier survives intact in the site meta's key arrow, which is
 	// where the loop variable is still spelled out (D170 emission contract).
-	if !strings.Contains(got, "const __L0 = { key: ($foo) => ViewNode.keyOf($foo) };") {
+	if !strings.Contains(got, "const __L0 = { key: ($foo) => $foo?.id };") {
 		t.Errorf("expected the key arrow to keep the intact identifier, got:\n%s", got)
 	}
 	// The loop variable is in scope inside the body: a bare `{ $foo }` reads the
@@ -53,14 +54,14 @@ func TestForAllowedIdentifiersCompile(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := compileSrc(t, `<puzzle-view>{#for `+tc.item+` in items, `+tc.counter+`}<div>{ `+tc.item+` }</div>{/for}</puzzle-view>
+			got := compileSrc(t, `<puzzle-view>{#for `+tc.item+` in items, `+tc.counter+`}<div key={ `+tc.item+`.id + `+tc.counter+` }>{ `+tc.item+` }</div>{/for}</puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView { data() { return { items: [] }; } }
 </script>`)
 			// A lowered loop spells the identifiers in the site meta's key arrow;
 			// the body reads them off the row scope.
-			if !strings.Contains(got, "key: ("+tc.item+") => ViewNode.keyOf("+tc.item+")") {
+			if !strings.Contains(got, "key: ("+tc.item+", "+tc.counter+") => "+tc.item+"?.id + "+tc.counter) {
 				t.Errorf("allowed loop identifiers did not compile intact:\n%s", got)
 			}
 			if !strings.Contains(got, "__l(this, this, 0, __d.items, (s) =>") {

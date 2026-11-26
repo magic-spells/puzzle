@@ -9,7 +9,7 @@ export default class ExprHandlers extends PuzzleView {
 
 import { ViewNode, displayValue as __s, listRows as __l } from '@magic-spells/puzzle';
 
-const __L0 = { key: (item) => ViewNode.keyOf(item), fields: ['done', 'name'] };
+const __L0 = { key: ViewNode.keyOf, fields: ['done', 'name'] };
 
 ExprHandlers.prototype.render = function () {
   const __d = this.getData();

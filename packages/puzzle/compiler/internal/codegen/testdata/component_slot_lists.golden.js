@@ -6,9 +6,9 @@ export default class Slots extends Object {}
 
 import { ViewNode, listRows as __l, dynamicComponent as __dc } from '@magic-spells/puzzle';
 
-const __L0 = { key: (row) => ViewNode.keyOf(row), fields: ['props', 'title', 'type'] };
+const __L0 = { key: ViewNode.keyOf, fields: ['props', 'title', 'type'] };
 const __L1 = { key: (row) => row?.slug, fields: ['props'], volatile: true };
-const __L2 = { key: (row) => ViewNode.keyOf(row), fields: ['props', 'title'] };
+const __L2 = { key: ViewNode.keyOf, fields: ['props', 'title'] };
 
 Slots.prototype.render = function () {
   const __d = this.getData();

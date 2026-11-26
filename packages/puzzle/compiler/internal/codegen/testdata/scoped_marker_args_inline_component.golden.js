@@ -7,7 +7,7 @@ export default class ScopedMarkerArgs extends PuzzleView {
 
 import { ViewNode, SLOT_TAG, displayValue as __s, listRows as __l } from '@magic-spells/puzzle';
 
-const __L0 = { key: (user) => ViewNode.keyOf(user), roots: 1, fields: ['name'] };
+const __L0 = { key: ViewNode.keyOf, roots: 1, fields: ['name'] };
 
 ScopedMarkerArgs.prototype.render = function () {
   const __d = this.getData();

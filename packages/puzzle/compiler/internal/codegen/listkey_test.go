@@ -23,7 +23,7 @@ export default class T extends PuzzleView { data() { return { items: [] }; } }
 `)
 	// The synthetic key is hoisted into the site meta; the row root carries the
 	// block's resolved key (D170 emission contract). The RESOLVER is unchanged.
-	if !strings.Contains(got, "const __L0 = { key: (item) => ViewNode.keyOf(item)") {
+	if !strings.Contains(got, "const __L0 = { key: ViewNode.keyOf") {
 		t.Errorf("item-form site meta must carry ViewNode.keyOf(item):\n%s", got)
 	}
 	if !strings.Contains(got, "new ViewNode('li', { key: s.k }") {

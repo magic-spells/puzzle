@@ -17,7 +17,7 @@ import (
 // array — cached row vnodes for rows whose inputs did not change:
 //
 //	import { ViewNode, listRows as __l } from '@magic-spells/puzzle';
-//	const __L0 = { key: (todo) => ViewNode.keyOf(todo) };
+//	const __L0 = { key: ViewNode.keyOf };
 //	…
 //	__l(this, this, 0, __d.filteredTodos, (s) =>
 //	  new ViewNode(TodoItem, { key: s.k, todo: s.item, … }, [])
@@ -303,7 +303,8 @@ func (c *compiler) emitListCall(f *parser.For, ind int, scope scopeMap, keyArrow
 // listKeyArrow builds the site meta's `key:` function and reports whether the
 // site can be lowered at all.
 //
-// The synthetic key is the D58 resolver, hoisted verbatim. An explicit
+// The synthetic key is the D58 resolver itself: listRows calls `key(item, i)`
+// bare, and the static keyOf reads neither `this` nor the index. An explicit
 // `key={ … }` moves into the meta with the loop locals left BARE (they are the
 // arrow's own parameters), which is only possible while the expression reads
 // nothing that lives inside render(): the const sits at module scope, where
@@ -316,7 +317,7 @@ func (c *compiler) listKeyArrow(f *parser.For, scope scopeMap) (arrow string, lo
 		return "", false, err
 	}
 	if !explicitKey {
-		return "(" + f.Item + ") => ViewNode.keyOf(" + f.Item + ")", true, nil
+		return "ViewNode.keyOf", true, nil
 	}
 
 	// The arrow's scope is its OWN parameters, not the enclosing render scope.

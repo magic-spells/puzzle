@@ -9,7 +9,7 @@ export default class KeyedFor extends PuzzleView {
 
 import { ViewNode, displayValue as __s, listRows as __l } from '@magic-spells/puzzle';
 
-const __L0 = { key: (item) => ViewNode.keyOf(item), fields: ['name'] };
+const __L0 = { key: ViewNode.keyOf, fields: ['name'] };
 
 KeyedFor.prototype.render = function () {
   const __d = this.getData();

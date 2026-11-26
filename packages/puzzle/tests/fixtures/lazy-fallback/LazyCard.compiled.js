@@ -22,7 +22,7 @@ export default class LazyCard extends PuzzleView {
 
 import { ViewNode, SLOT_TAG, displayValue as __s, listRows as __l } from '@magic-spells/puzzle';
 
-const __L0 = { key: (tip) => ViewNode.keyOf(tip) };
+const __L0 = { key: ViewNode.keyOf };
 
 LazyCard.prototype.render = function () {
   const __d = this.getData();

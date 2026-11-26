@@ -9,7 +9,7 @@ export default class ExprMethods extends PuzzleView {
 
 import { ViewNode, displayValue as __s, listRows as __l } from '@magic-spells/puzzle';
 
-const __L0 = { key: (item) => ViewNode.keyOf(item), counter: true, fields: ['qty'], deep: true };
+const __L0 = { key: ViewNode.keyOf, counter: true, fields: ['qty'], deep: true };
 
 ExprMethods.prototype.render = function () {
   const __d = this.getData();

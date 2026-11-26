@@ -96,7 +96,7 @@ export default class Icons extends PuzzleView { data() { return { items: [] }; }
 	if !strings.Contains(res.JS, "__svg_0(s.k)") {
 		t.Errorf("{#svg} as {#for}-body root must thread the key as the factory arg:\n%s", res.JS)
 	}
-	if !strings.Contains(res.JS, "const __L0 = { key: (item) => ViewNode.keyOf(item) };") {
+	if !strings.Contains(res.JS, "const __L0 = { key: ViewNode.keyOf };") {
 		t.Errorf("{#svg} row root must still carry the D58 synthetic key:\n%s", res.JS)
 	}
 }

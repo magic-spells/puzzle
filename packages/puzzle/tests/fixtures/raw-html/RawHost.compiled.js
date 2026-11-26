@@ -24,8 +24,8 @@ export default class RawHost extends PuzzleView {
 
 import { ViewNode, displayValue as __s, listRows as __l } from '@magic-spells/puzzle';
 
-const __L0 = { key: (row) => ViewNode.keyOf(row), fields: ['html', 'label'] };
-const __L1 = { key: (row) => ViewNode.keyOf(row), fields: ['label'] };
+const __L0 = { key: ViewNode.keyOf, fields: ['html', 'label'] };
+const __L1 = { key: ViewNode.keyOf, fields: ['label'] };
 
 RawHost.prototype.render = function () {
   const __d = this.getData();

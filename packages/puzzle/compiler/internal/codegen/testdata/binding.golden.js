@@ -36,7 +36,7 @@ export default class Binding extends PuzzleView {
 
 import { ViewNode, listRows as __l } from '@magic-spells/puzzle';
 
-const __L0 = { key: (todo) => ViewNode.keyOf(todo), ctrl: true, fields: ['completed'] };
+const __L0 = { key: ViewNode.keyOf, ctrl: true, fields: ['completed'] };
 
 Binding.prototype.render = function () {
   const __d = this.getData();

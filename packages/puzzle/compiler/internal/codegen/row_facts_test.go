@@ -45,7 +45,7 @@ func TestRowFactsHandlerArgumentsAreFireTime(t *testing.T) {
 	got := compileSrc(t, listSrc(
 		"  {#for todo in todos, i}<li @click={ remove(todo.id, todo.author.id, i) }>{ todo.text }</li>{/for}",
 	))
-	if !strings.Contains(got, "const __L0 = { key: (todo) => ViewNode.keyOf(todo), fields: ['text'] };") {
+	if !strings.Contains(got, "const __L0 = { key: ViewNode.keyOf, fields: ['text'] };") {
 		t.Errorf("handler-argument reads must not reach the site meta:\n%s", got)
 	}
 	if !strings.Contains(got, "(s.h0 ??= (event) => this.events.remove(s.item?.id, s.item?.author?.id, s.i))") {

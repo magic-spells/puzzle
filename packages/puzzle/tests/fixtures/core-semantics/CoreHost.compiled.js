@@ -67,8 +67,8 @@ export default class CoreHost extends PuzzleView {
 
 import { ViewNode, displayValue as __s, listRows as __l, loopItems as __e, loopRange as __r } from '@magic-spells/puzzle';
 
-const __L0 = { key: (ch) => ViewNode.keyOf(ch) };
-const __L1 = { key: (m) => ViewNode.keyOf(m) };
+const __L0 = { key: ViewNode.keyOf };
+const __L1 = { key: ViewNode.keyOf };
 
 CoreHost.prototype.render = function () {
   const __d = this.getData();
