@@ -936,15 +936,11 @@ func (c *compiler) emitSlot(n *parser.Slot, ind int, scope scopeMap) (string, er
 		attrs = append(attrs, "name: "+jsString(n.Name))
 	}
 	if len(n.Args) > 0 {
-		kvs := make([]string, 0, len(n.Args))
-		for _, arg := range n.Args {
-			kv, err := c.attrKV("", arg, scope, false)
-			if err != nil {
-				return "", err
-			}
-			kvs = append(kvs, kv)
+		kvs, err := c.attrKVs("", n.Args, scope, false)
+		if err != nil {
+			return "", err
 		}
-		attrs = append(attrs, "args: { "+strings.Join(kvs, ", ")+" }")
+		attrs = append(attrs, "args: "+attrObject(kvs, 0, true))
 	}
 	if len(n.Children) > 0 {
 		// The fallback body (D141) is emitted as a thunk, never as the marker's
@@ -1133,10 +1129,8 @@ func (c *compiler) branches(bodies [][]parser.Node, scope scopeMap) (branchSet, 
 // without an explicit body-root key: generated range keys never resolve null,
 // while item-form ViewNode.keyOf rows and author key expressions can. Slot
 // markers are unstable because the runtime expands them to 0..N nodes.
-func (c *compiler) condStaticLen(items []item, scope scopeMap) (int, bool, bool, error) {
-	n := 0
-	stable := true
-	one := len(items) == 1
+func (c *compiler) condStaticLen(items []item, scope scopeMap) (n int, stable, one bool, err error) {
+	stable, one = true, len(items) == 1
 	for _, it := range items {
 		if it.textOK || it.placeholder {
 			n++
