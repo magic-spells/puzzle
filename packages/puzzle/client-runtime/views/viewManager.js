@@ -260,23 +260,24 @@ export class ViewManager {
 		// lands — needed because a child's mount() awaits async data() while the
 		// synchronous parent patch must already have a stable insertion ref.
 		this.anchor = null;
-		// A render threw partway — a patch(), or the very first mount(). The DOM
-		// matches NEITHER currentTree nor the tree that was being applied, so nothing
-		// may be diffed against it again. The
-		// next render routes through renderFresh() while this is set (D145).
-		this.treeUnknown = false;
-		// The two live siblings bracketing this manager's DOM range, captured
-		// immediately before the render that threw. Both sit OUTSIDE the range, so an
-		// aborted render cannot have moved or removed them — they are the only
-		// trustworthy handles on the corrupt range. (A failed FIRST mount brackets the
-		// anchor's slot: that is the only stretch of container it could have dirtied.)
-		this.unknownRange = null;
-		// The vnode trees involved in that aborted render — both of a patch's, or the
-		// single incoming one of a failed first mount. Their DOM positions are
-		// lies, but their INSTANCE bookkeeping is not: nested component instances,
-		// element refs and document-level `outside` listeners are reachable only
-		// through them, and clearing the range by DOM removal releases none of it.
-		this.unknownTrees = null;
+		// Set when a render threw partway — a patch(), or the very first mount(). The
+		// DOM matches NEITHER currentTree nor the tree that was being applied, so
+		// nothing may be diffed against it again: the next render routes through
+		// renderFresh() while this is set (D145).
+		//
+		// `range` holds the two live siblings bracketing this manager's DOM range,
+		// captured immediately before the render that threw. Both sit OUTSIDE the
+		// range, so an aborted render cannot have moved or removed them — they are the
+		// only trustworthy handles on the corrupt range. (A failed FIRST mount brackets
+		// the anchor's slot: that is the only stretch of container it could have
+		// dirtied.) It is null when there was no such handle.
+		//
+		// `trees` are the vnode trees involved — both of a patch's, or the single
+		// incoming one of a failed first mount. Their DOM positions are lies, but their
+		// INSTANCE bookkeeping is not: nested component instances, element refs and
+		// document-level `outside` listeners are reachable only through them, and
+		// clearing the range by DOM removal releases none of it.
+		this.aborted = null;
 	}
 
 	/**
@@ -337,12 +338,6 @@ export class ViewManager {
 		const owner = this.owner;
 		const walk = owner?.__walk;
 		if (walk) owner.__walk = false;
-		// D145's "never patched over an unknown tree" is an invariant of the manager.
-		// Route the next ordinary render through a fresh mount so it never diffs
-		// against vnodes whose DOM links may be detached. A recovery render is always
-		// an ORDINARY one — the takeover's prepared tree exists only for a view's
-		// first mount — so renderFresh() expands unconditionally.
-		if (this.treeUnknown) return this.renderFresh(rawTree);
 		// SSG/static takeover preloads nested components by walking the expanded tree
 		// and stores that exact tree for mount; re-expanding it would repeat that work
 		// for no change in output. Only a takeover build can ever pass the flag, so
@@ -353,6 +348,10 @@ export class ViewManager {
 			(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && slotsExpanded
 				? rawTree
 				: expandSlots(rawTree, this.slotChildren, this.owner?.constructor);
+		// D145's "never patched over an unknown tree" is an invariant of the manager.
+		// Route the next render through a fresh mount so it never diffs against
+		// vnodes whose DOM links may be detached.
+		if (this.aborted) return this.renderFresh(newTree);
 		if (!this.currentTree) {
 			// A FIRST mount throws too (a component's class-field initializer, a
 			// `String(symbol)` in a text node), and it needs the same D145 machinery —
@@ -377,12 +376,10 @@ export class ViewManager {
 			try {
 				mount(newTree, this.container, this.anchor, this.ctx, this.owner);
 			} catch (err) {
-				this.treeUnknown = true;
-				this.unknownRange = anchored ? { before, after: this.anchor } : null;
 				// ONE tree: a first mount has no outgoing tree. The incoming one is the
 				// only record of what got instantiated before the throw, and
 				// releaseAborted() is the only thing that can still reach it.
-				this.unknownTrees = [newTree];
+				this.aborted = { range: anchored ? { before, after: this.anchor } : null, trees: [newTree] };
 				throw err;
 			}
 			if (this.anchor) {
@@ -397,7 +394,7 @@ export class ViewManager {
 			// below) would then describe a tree that no longer exists — diffing the
 			// error face against it resolves insertion refs to moved or removed
 			// nodes. Record the corrupt range instead and leave `currentTree` alone:
-			// neither tree is true, so the manager reports the tree as UNKNOWN and
+			// neither tree is true, so the manager records the render as `aborted` and
 			// the next render goes through renderFresh().
 			const el = this.currentTree.el ?? null;
 			const bracketed = el != null && el.parentNode === this.container;
@@ -408,11 +405,9 @@ export class ViewManager {
 			try {
 				patch(this.currentTree, newTree, this.container, this.ctx, this.owner);
 			} catch (err) {
-				this.treeUnknown = true;
-				this.unknownRange = bracketed ? { before, after } : null;
 				// BOTH trees: the aborted patch may have mounted components from the
 				// new one and left components from the old one live.
-				this.unknownTrees = [this.currentTree, newTree];
+				this.aborted = { range: bracketed ? { before, after } : null, trees: [this.currentTree, newTree] };
 				throw err;
 			} finally {
 				walking = outer;
@@ -423,8 +418,8 @@ export class ViewManager {
 	}
 
 	/**
-	 * Mount `rawTree` over a DOM range this manager can no longer describe (see
-	 * `treeUnknown`). The vnode tree is untrustworthy, so the old content is
+	 * Mount `newTree` over a DOM range this manager can no longer describe (see
+	 * `aborted`). The vnode tree is untrustworthy, so the old content is
 	 * cleared by DOM removal across the bracketed range rather than by an
 	 * unmount() walk, then the new tree is mounted from scratch. The anchor
 	 * comment, if this manager still holds one, survives the clear and is the
@@ -436,14 +431,12 @@ export class ViewManager {
 	 * document, and portaled content sits outside the range entirely — none of it
 	 * is reachable again once currentTree becomes the error face.
 	 *
-	 * @param {ViewNode} rawTree
+	 * @param {ViewNode} newTree the slot-expanded tree to mount
 	 * @returns {ViewNode}
 	 */
-	renderFresh(rawTree) {
-		const newTree = expandSlots(rawTree, this.slotChildren, this.owner?.constructor);
-		releaseAborted(this.unknownTrees);
-		this.unknownTrees = null;
-		const range = this.unknownRange;
+	renderFresh(newTree) {
+		const { range, trees } = this.aborted;
+		releaseAborted(trees);
 		let removed = false;
 		if (range) {
 			const { before, after } = range;
@@ -473,8 +466,7 @@ export class ViewManager {
 					: null;
 
 		this.currentTree = null;
-		this.treeUnknown = false;
-		this.unknownRange = null;
+		this.aborted = null;
 		mount(newTree, this.container, ref, this.ctx, this.owner);
 		if (this.anchor) {
 			this.anchor.remove();
@@ -493,7 +485,7 @@ export class ViewManager {
 	 * @returns {Comment} the recovery marker
 	 */
 	plantFailurePlaceholder() {
-		if (this.treeUnknown) {
+		if (this.aborted) {
 			const tree = this.renderFresh(new ViewNode(PLACEHOLDER_TAG));
 			this.currentTree = null;
 			// A PLACEHOLDER_TAG vnode mounts as an empty comment.
@@ -521,10 +513,7 @@ export class ViewManager {
 		// A destroy that arrives BEFORE any replacement render still has to release the
 		// aborted patch's two trees — unmount(currentTree) below reaches only the old
 		// one, and only through positions that may no longer be true.
-		if (this.unknownTrees) {
-			releaseAborted(this.unknownTrees);
-			this.unknownTrees = null;
-		}
+		if (this.aborted) releaseAborted(this.aborted.trees);
 		if (this.currentTree) unmount(this.currentTree);
 		if (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) releasePins(this.slotChildren);
 		if (this.anchor) {
@@ -534,8 +523,7 @@ export class ViewManager {
 			this.anchor = null;
 		}
 		this.currentTree = null;
-		this.treeUnknown = false;
-		this.unknownRange = null;
+		this.aborted = null;
 	}
 }
 
@@ -1885,7 +1873,7 @@ function releaseSubtree(vnode) {
 
 /**
  * Release the non-DOM resources held by the vnode trees of a render that threw
- * partway (ViewManager.treeUnknown) — both trees of an aborted patch, or the single
+ * partway (ViewManager.aborted) — both trees of an aborted patch, or the single
  * incoming tree of an aborted FIRST mount, which nothing else can reach at all
  * (currentTree is still null, so clear()'s unmount walk covers nothing).
  * The DOM is cleared separately, by range
@@ -1911,12 +1899,10 @@ function releaseSubtree(vnode) {
  * ordinary removal. A hand-written render tree can still throw mid-walk; it forfeits
  * the rest of THAT tree's release, and the error view mounts regardless.
  *
- * @param {Array<ViewNode | null> | null} trees
+ * @param {ViewNode[]} trees
  */
 function releaseAborted(trees) {
-	if (!trees) return;
 	for (const tree of trees) {
-		if (!tree) continue;
 		try {
 			if (tree.tag === PORTAL_TAG) {
 				if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
