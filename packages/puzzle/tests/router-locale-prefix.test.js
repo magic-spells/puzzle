@@ -9,7 +9,7 @@
 // locale's pages is a real page load. Same jsdom conventions as
 // router-base.test.js: boot at a URL by replaceState before start().
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Router } from '../client-runtime/router/router.js';
+import { Router, localePage } from '../client-runtime/router/router.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
 import { localizeRouterStub, makeRouterStub } from '../client-runtime/ssg/assemble.js';
@@ -47,11 +47,11 @@ const LOCALES = ['en', 'es', 'pt-BR'];
 let routers = [];
 
 /** Boot a router at `url` for `locale` (the page's locale, as app.js reads it). */
-async function boot(url, locale, { base = '', ...options } = {}) {
+async function boot(url, locale, { base = '', table = routes, ...options } = {}) {
 	history.replaceState({}, '', url);
 	const el = document.createElement('div');
 	document.body.appendChild(el);
-	const router = new Router(routes, { base, locale, defaultLocale: 'en', locales: LOCALES, ...options });
+	const router = new Router(table, { base, locale, defaultLocale: 'en', locales: LOCALES, ...options });
 	routers.push(router);
 	await router.start(el, { store: null, router: null, formatters: null });
 	return { router, el };
@@ -154,6 +154,33 @@ describe('Router locale prefix — writing the URL (D177)', () => {
 		expect(router.current.route.name).toBe('not-found');
 		expect(location.pathname).toBe('/es/about');
 		expect(warn.mock.calls.some(([msg]) => /starts with a locale prefix/.test(msg))).toBe(true);
+	});
+});
+
+// localePage is the page a setLocale reloads: the navigation in flight, else the
+// committed page. stop() abandons the navigation in flight, so nothing names it
+// afterwards and the address bar is the page again.
+describe('Router locale prefix — localePage (D177)', () => {
+	it('names the navigation in flight, else the committed page, and nothing once stopped', async () => {
+		let release;
+		const gate = new Promise((r) => (release = r));
+		class Slow extends PuzzleView {
+			async data() {
+				await gate;
+				return {};
+			}
+			render() {
+				return h('puzzle-view', {}, [text('slow')]);
+			}
+		}
+		const { router } = await boot('/es/about', 'es', { table: [...routes, { path: '/slow', view: Slow }] });
+		expect(localePage(router)).toBe('/es/about');
+		const slow = router.push('/slow?x=1#top');
+		expect(localePage(router)).toBe('/es/slow?x=1#top');
+		router.stop();
+		expect(localePage(router)).toBe(null);
+		release();
+		expect(await slow).toMatchObject({ ok: false, reason: 'superseded' });
 	});
 });
 
