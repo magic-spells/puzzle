@@ -13,8 +13,8 @@ connections:
   - DECISION-D181-HASHED-OUTPUT-NAMES-AND-MODULEPRELOAD
   - DECISION-D76-CLI-UPGRADE
   - DECISION-D194-VITEST-PLUGIN
-verified_at: '2026-11-24T18:02:16.140Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_at: '2026-11-26T05:26:02.017Z'
+verified_sha: 2f5f6d0cebefc1d6b3c8f4cde3f4b4795d3e78c3
 ---
 
 The contract for the toolchain: the CLI surface, dev HMR and build-error reporting, the `hybrid`/`static` output modes, update notification and `puzzle upgrade`, interactive `puzzle init`, the `/testing` utilities, the `--fixtures` switch, the DevTools bridge, code splitting and production names, and `puzzle check`. See [[DOC-SPEC]] for the section index.

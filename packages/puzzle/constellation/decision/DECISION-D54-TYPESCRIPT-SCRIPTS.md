@@ -3,7 +3,7 @@ name: >-
   D54 — TypeScript: `<script lang="ts">` transpile-only, an `app/app.ts` entry, typed scaffolds and
   stubs
 status: verified
-verified_at: '2026-11-25T22:11:29.047Z'
+verified_at: '2026-11-26T05:26:02.017Z'
 connections:
   - DECISION-D03-SCRIPTS-REAL-JS
   - DECISION-D09-GO-ESBUILD-COMPILER
@@ -27,7 +27,7 @@ code_refs:
   - compiler/internal/build/entry.go
   - compiler/internal/generate/generate.go
   - compiler/internal/generate/templates.go
-verified_sha: f3e1bd53c1ece77a3d5f9c14c44f234531faa7cb
+verified_sha: 2f5f6d0cebefc1d6b3c8f4cde3f4b4795d3e78c3
 ---
 
 # D54 — TypeScript: `<script lang="ts">`, transpile-only

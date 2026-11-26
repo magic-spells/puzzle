@@ -6,14 +6,14 @@ language: go
 summary: Tailwind, piece, theme, deploy-template and agent-skill add command wiring and user-owned-file boundaries.
 connections:
   - COMPONENT-COMPILER-CLI
-verified_at: '2026-11-24T18:02:16.140Z'
+verified_at: '2026-11-26T05:26:02.017Z'
 code_refs:
   - compiler/cmd/puzzle/add_skills.go
   - compiler/cmd/puzzle/add_deploy.go
   - deploy/embed.go
   - skills/embed.go
   - skills/puzzle/SKILL.md
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_sha: 2f5f6d0cebefc1d6b3c8f4cde3f4b4795d3e78c3
 notes:
   - kind: state
     text: >-

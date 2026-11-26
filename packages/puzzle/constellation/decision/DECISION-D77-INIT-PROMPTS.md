@@ -8,8 +8,8 @@ connections:
   - DECISION-D76-CLI-UPGRADE
 code_refs:
   - compiler/cmd/puzzle/initcmd.go
-verified_at: '2026-11-23T20:45:09.431Z'
-verified_sha: 15992ae87ef804f8a7f5572264cd0a099b40385f
+verified_at: '2026-11-26T05:26:02.017Z'
+verified_sha: 2f5f6d0cebefc1d6b3c8f4cde3f4b4795d3e78c3
 ---
 
 # D77 — Interactive `puzzle init` prompts

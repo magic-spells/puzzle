@@ -1,7 +1,7 @@
 ---
 name: 'D32 — CLI tooling: init, generate, add, doctor, info'
 status: verified
-verified_at: '2026-11-25T22:11:29.047Z'
+verified_at: '2026-11-26T05:26:02.017Z'
 connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
@@ -25,7 +25,7 @@ code_refs:
   - starters/default/package.json
   - starters/static/package.json
   - scripts/starter-repos.mjs
-verified_sha: f3e1bd53c1ece77a3d5f9c14c44f234531faa7cb
+verified_sha: 2f5f6d0cebefc1d6b3c8f4cde3f4b4795d3e78c3
 ---
 
 # D32 — CLI tooling: `init`, `generate`, `add`, `doctor`, `info`

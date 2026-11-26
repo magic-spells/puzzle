@@ -22,8 +22,8 @@ connections:
   - DOC-TESTING
   - DECISION-D198-DEPLOY-TEMPLATES
   - DECISION-D199-UPGRADE-PASS
-verified_at: '2026-11-24T18:02:16.140Z'
-verified_sha: 0b6e58cdc34055741ad520c827f3d9c2b58d4e77
+verified_at: '2026-11-26T05:26:02.017Z'
+verified_sha: 2f5f6d0cebefc1d6b3c8f4cde3f4b4795d3e78c3
 ---
 
 # CLI commands, scaffolds, and pieces
