@@ -544,7 +544,7 @@ export declare class FormatterRegistry {
 	register(name: string, fn: Formatter): void;
 	/** Look up a function by name (returns a pass-through for unknown names). */
 	get(name: string): Formatter;
-	/** The raw name → function map handed to compiled render code. */
+	/** The raw name → function map itself, not a copy. Compiled render code calls `get()`. */
 	getAll(): Record<string, Formatter>;
 }
 

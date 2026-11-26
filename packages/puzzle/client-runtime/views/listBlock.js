@@ -8,7 +8,7 @@
  * not change:
  *
  *   import { ViewNode, listRows as __l } from '@magic-spells/puzzle';
- *   const __L0 = { key: (todo) => ViewNode.keyOf(todo) };
+ *   const __L0 = { key: ViewNode.keyOf };
  *   …
  *   __l(this, this, 0, __d.filteredTodos, (s) =>
  *     new ViewNode(TodoItem, { key: s.k, todo: s.item,

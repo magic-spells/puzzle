@@ -160,11 +160,12 @@ func (u Usage) Features() Features {
 // cannot read or parse rather than failing. Rationale: a false positive only
 // leaves a small runtime module in the bundle, whereas a false negative
 // silently removes a used feature. Since v1.12
-// (D43) an unseeded builtin no longer crashes the render — codegen wraps every
-// call in the __missing typo-guard, so the value passes through with a
-// console.error — but the scan still seeds every USED builtin so the guard stays
-// a *typo* guard, not a bundling crutch: correctly-spelled builtins must resolve
-// to the real formatter, not the pass-through. A genuinely broken .pzl that the
+// (D43) an unseeded builtin no longer crashes the render — every compiled call
+// goes through the registry's get(), whose __missing typo-guard passes the
+// value through with a console.error — but the scan still seeds every USED
+// builtin so the guard stays a *typo* guard, not a bundling crutch:
+// correctly-spelled builtins must resolve to the real formatter, not the
+// pass-through. A genuinely broken .pzl that the
 // app actually imports is still reported — with position info — by the esbuild
 // .pzl OnLoad pass; the scan must not preempt that by failing the build over a
 // file nothing imports. A .pzl the app imports that NEITHER walk read (an

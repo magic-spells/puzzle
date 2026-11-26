@@ -196,8 +196,9 @@ export default class Formatters extends PuzzleView {
 
   /**
    * Wrap the two registry entries so their calls and self-time are countable.
-   * Compiled render code reads `this.ctx.formatters.getAll()` once per render and
-   * indexes it, so re-registering replaces what every later render calls.
+   * Compiled render code looks each function up through
+   * `this.ctx.formatters.get(name)` on every call, so re-registering replaces
+   * what every later call runs.
    */
   installFormatterProbe() {
     const registry = this.ctx.formatters;
