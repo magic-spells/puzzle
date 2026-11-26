@@ -11,7 +11,7 @@ minimal app is **23.9 KB gzip** with the router, store and validation
 included, and the complete todos example is **27.8 KB gzip**. The CLI is a
 single prebuilt binary: no Babel, no bundler config, no postinstall scripts.
 
-**[Live demo: Puzzle Sounds](https://puzzle-music-demo.vercel.app/)**, a
+**[Live demo: Puzzle Sounds](https://puzzle-music-demo.magicspells.io/)**, a
 Spotify-style music app with layout swaps, view transitions, skeleton loading,
 shared-element morphs, and a player whose state survives a reload. Source:
 [`packages/puzzle/examples/music`](packages/puzzle/examples/music).
@@ -316,7 +316,7 @@ Every example is a complete app under
 
 | Example | What it shows |
 |---|---|
-| [music](packages/puzzle/examples/music) | The [live demo](https://puzzle-music-demo.vercel.app/): layout swaps, view transitions, skeletons, shared-element morphs, hash routing |
+| [music](packages/puzzle/examples/music) | The [live demo](https://puzzle-music-demo.magicspells.io/): layout swaps, view transitions, skeletons, shared-element morphs, hash routing |
 | [todos](packages/puzzle/examples/todos) | The canonical app: a model, the store, two-way form binding, an All / Active / Completed toggle |
 | [i18n](packages/puzzle/examples/i18n) | Translations in three languages, plural forms, a live locale switch |
 | [stays](packages/puzzle/examples/stays) | An Airbnb-style marketplace: nested routes, callback props, store updates across pages |

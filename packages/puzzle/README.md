@@ -2,7 +2,7 @@
 
 A SPA-first JavaScript framework with single-file components, reactive data binding, and Go-based compilation.
 
-**[▶ Live demo](https://puzzle-music-demo.vercel.app/)** — the [music example app](examples/music) built with Puzzle.
+**[▶ Live demo](https://puzzle-music-demo.magicspells.io/)** — the [music example app](examples/music) built with Puzzle.
 
 - **~200 ms production builds** — compile, bundle, Tailwind, and minify, end to end (todos example, Apple Silicon)
 - **Small apps, honestly measured** — a minimal app is 23.9 KB gzip with the router, store, and validation included, not just a view layer; the complete todos example ships at 27.8 KB gzip. Regenerated every release by `npm run measure:size`
