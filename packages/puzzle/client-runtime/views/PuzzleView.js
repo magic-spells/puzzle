@@ -189,9 +189,8 @@ export class PuzzleView {
 	// rebuilt by #recompose() on every commit and written straight by setState().
 	// Precedence: a data() commit wins over an EARLIER setState for a key (derived
 	// overlays state); a LATER setState wins over the derived value for that key until
-	// the next commit (setState writes #data directly). getData() hands out copies of
-	// #data, so its identity is internal — but it is mutated in place regardless, so
-	// setState's direct writes and the recompose target stay the one object.
+	// the next commit (setState writes #data directly). getData() hands out copies, so
+	// nothing outside the class holds #data and a commit can replace it.
 	/** @type {Record<string, any>} */
 	#data = {};
 	/** @type {Record<string, any>} */
@@ -2709,15 +2708,10 @@ export class PuzzleView {
 
 	/**
 	 * Rebuild the visible #data from the two layers (Change C): { ...#state,
-	 * ...#derived }. Mutates #data IN PLACE to keep it the one object setState writes to
-	 * — drop keys no longer contributed by either layer, then assign the composition.
+	 * ...#derived }.
 	 */
 	#recompose() {
-		const composed = { ...this.#state, ...this.#derived };
-		for (const key of Object.keys(this.#data)) {
-			if (!(key in composed)) delete this.#data[key];
-		}
-		Object.assign(this.#data, composed);
+		this.#data = { ...this.#state, ...this.#derived };
 		// Layer-clobber diagnostic (D147 hazard 4, dev only). A bare bind writes the
 		// STATE layer, but the composition above puts the DERIVED layer last — so a key data()
 		// also derives from a record or prop is reverted the moment data() commits, and
