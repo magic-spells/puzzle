@@ -7,7 +7,7 @@
  * it). Undefined means true for unbundled tests.
  */
 
-/** @import { PuzzleView } from './views/PuzzleView.js' */
+/** @import { PuzzleView, RefreshInput } from './views/PuzzleView.js' */
 /** @import { Store } from './datastore/store.js' */
 
 /**
@@ -385,24 +385,28 @@ function claimExecution(state, chain, view) {
 
 /**
  * @param {PuzzleView} view
- * @param {string} [cause]
+ * @param {RefreshInput} input what the refresh was handed: new params or a route
+ *   snapshot make the cause 'route', new props make it 'props'
  * @returns {true | null} null when the recursion guard blocked this run
  */
-export function devperfPrepareData(view, cause) {
+export function devperfPrepareData(view, { params, props, route }) {
 	const state = viewState(view);
 	const chain = chainForView(state);
 	if (chain.blockedViews.has(state.id)) return null;
-	const resolvedCause =
-		cause ||
-		(state.pendingCauses.size > 0
-			? [...state.pendingCauses][state.pendingCauses.size - 1]
-			: state.dataRuns === 0
-				? 'initial'
-				: 'refresh');
+	const cause =
+		params || route !== undefined
+			? 'route'
+			: props !== undefined
+				? 'props'
+				: state.pendingCauses.size > 0
+					? [...state.pendingCauses][state.pendingCauses.size - 1]
+					: state.dataRuns === 0
+						? 'initial'
+						: 'refresh';
 	const depth = claimExecution(state, chain, view);
 	if (!depth) return null;
 	state.pendingChain = chain;
-	state.pendingCauses.add(resolvedCause);
+	state.pendingCauses.add(cause);
 	state.dataExecutionChain = chain;
 	chain.pendingData++;
 	touch(chain);
@@ -411,7 +415,7 @@ export function devperfPrepareData(view, cause) {
 		queue = [];
 		preparedData.set(view, queue);
 	}
-	queue.push({ view, state, chain, cause: resolvedCause, depth, started: false });
+	queue.push({ view, state, chain, cause, depth, started: false });
 	return true;
 }
 

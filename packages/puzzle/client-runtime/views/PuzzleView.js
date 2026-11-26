@@ -1608,17 +1608,7 @@ export class PuzzleView {
 		if (route !== undefined) this.#route = route;
 
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-			if (
-				!devperfPrepareData(
-					this,
-					params || route !== undefined
-						? 'route'
-						: props !== undefined
-							? 'props'
-							: undefined
-				)
-			)
-				return;
+			if (!devperfPrepareData(this, { params, props, route })) return;
 		}
 		const token = ++this.#runToken;
 		// This run reads the current state, so a pending setState()-driven re-run is
@@ -1721,7 +1711,7 @@ export class PuzzleView {
 		if (this.#destroyed || this.#leaving) return null;
 
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-			if (!devperfPrepareData(this, params || route !== undefined ? 'route' : undefined)) return null;
+			if (!devperfPrepareData(this, { params, route })) return null;
 		}
 
 		const scope = {
