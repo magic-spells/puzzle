@@ -201,9 +201,12 @@ describe('ViewManager — form bindings (properties, not attributes)', () => {
 			h('form', {}, [h('p', {}, [text('hi')]), h('button', { value: 'go' }, []), h('input', { value: 'a' })]);
 		vm.render(tree());
 		const reads = vi.spyOn(Node.prototype, 'nodeName', 'get');
-		vm.render(tree());
-		expect(reads).not.toHaveBeenCalled();
-		reads.mockRestore();
+		try {
+			vm.render(tree());
+			expect(reads).not.toHaveBeenCalled();
+		} finally {
+			reads.mockRestore();
+		}
 	});
 });
 

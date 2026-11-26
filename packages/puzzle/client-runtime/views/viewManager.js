@@ -277,6 +277,7 @@ export class ViewManager {
 		// INSTANCE bookkeeping is not: nested component instances, element refs and
 		// document-level `outside` listeners are reachable only through them, and
 		// clearing the range by DOM removal releases none of it.
+		/** @type {{ range: { before: Node | null, after: Node | null } | null, trees: ViewNode[] } | null} */
 		this.aborted = null;
 	}
 
@@ -1524,6 +1525,7 @@ function syncControlChecked(el, value, owner) {
  * never the element's nodeName: syncControl runs it for every element, and
  * listBlock's `collectControls` for every row it builds. A `<li value="3">` or a
  * `<progress value=…>` is not a control and keeps the ordinary vnode compare.
+ * The tag is compared as written, so an uppercase `h('INPUT')` is not a control.
  *
  * @param {unknown} tag
  * @returns {boolean}
