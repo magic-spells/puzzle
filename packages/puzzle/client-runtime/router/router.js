@@ -193,16 +193,16 @@ export class Router {
 	// - path: its target, whatever the verb. localePage names it (D177), so a
 	//   setLocale from this navigation's guard or data() reloads the page it is
 	//   headed to, not the one the address bar still shows.
-	// - join: whether a same-key push() or replace() joins it instead of superseding
-	//   it (#joinInFlight): a push, or push()'s replace form. The committed #state
-	//   still names the OLD route until commit, so only this catches a second click
-	//   on a link whose navigation is still loading.
+	// - joinable: whether a same-key push() or replace() joins it instead of
+	//   superseding it (#joinInFlight): a push, or push()'s replace form. The
+	//   committed #state still names the OLD route until commit, so only this
+	//   catches a second click on a link whose navigation is still loading.
 	// - pop: whether it is a pop; a Forward home to the committed entry supersedes
 	//   it (#handlePopState).
 	// - promise: what a joining caller gets back, so it settles when this
 	//   navigation does; a locale rebuild (__failedView(null, true), D175) waits on
 	//   it too. PENDING until the caller's #trackNav pairs it.
-	/** @type {{ path: string, join: boolean, pop: boolean, promise: Promise<NavigationResult> } | null} */
+	/** @type {{ path: string, joinable: boolean, pop: boolean, promise: Promise<NavigationResult> } | null} */
 	#inFlight = null;
 	// Whether a popstate left the address bar on an entry nothing has committed
 	// since. Set in #handlePopState, cleared when a navigation commits its
@@ -875,12 +875,12 @@ export class Router {
 		// ordinary push. Joinable like a push either way, so a second click returns
 		// this navigation's promise (above).
 		const asReplace = !!this.#state && key === sameNavKey(this.#state.path) && !this.#urlMoved;
-		// `join` makes the replace joinable from its token bump, as a push is,
+		// `joinable` marks the replace from its token bump, as a push is marked,
 		// BEFORE #navigate runs into preload()/created(): a same-path push from
 		// created() then joins this navigation (the in-flight guard above) instead
 		// of no-opping against the old snapshot or, over an invalidated chain,
 		// re-entering asReplace once per fresh view until the stack overflows.
-		const nav = this.#navigate(path, asReplace ? { push: false, replace: true, join: true } : { push: true });
+		const nav = this.#navigate(path, asReplace ? { push: false, replace: true, joinable: true } : { push: true });
 		return this.#trackNav(nav);
 	}
 
@@ -942,7 +942,7 @@ export class Router {
 	 */
 	#joinInFlight(key) {
 		const inFlight = this.#inFlight;
-		if (this.#guardRedirecting || !inFlight?.join || key !== sameNavKey(inFlight.path)) return null;
+		if (this.#guardRedirecting || !inFlight?.joinable || key !== sameNavKey(inFlight.path)) return null;
 		// A PENDING promise is read again on a microtask: a push or replace fired
 		// synchronously from inside #navigate (a created() hook) runs before #trackNav
 		// pairs the promise. One tick later the record this call joined holds the
@@ -1291,7 +1291,7 @@ export class Router {
 	/**
 	 * @param {string} rawPath
 	 * @param {{ push: boolean, pop?: boolean, replace?: boolean,
-	 *   savedPosition?: ScrollPosition | null, memoryIndex?: number | null, join?: boolean,
+	 *   savedPosition?: ScrollPosition | null, memoryIndex?: number | null, joinable?: boolean,
 	 *   retryView?: PuzzleView | { __retryErrorView?: undefined } | null }} options the verb flags;
 	 *   `retryView` is the failed view whose error view pressed retry, or the REBUILD marker
 	 * @returns {Promise<NavigationResult>} what push()/replace() resolve (D182)
@@ -1317,7 +1317,7 @@ export class Router {
 			retryView = null,
 			// push()'s replace-semantics form (a push to the committed path): joinable
 			// like a push, so a same-path push mid-flight joins it.
-			join = false,
+			joinable = false,
 		}
 	) {
 		// Parsed ONCE per navigation (D83): the pathname to match, and the snapshot's
@@ -1374,15 +1374,15 @@ export class Router {
 		this.#guardRedirecting = false;
 		if (!guardReentry) this.#guardRedirectCount = 0;
 		// Only a genuine push is joinable (push()'s replace-semantics form included,
-		// via `join`): the double-click guard must NOT suppress a push that SUPERSEDES
-		// an in-flight pop/replace to the same path — memory-mode back()-then-
-		// push('/same') is push-vs-pop (truncate+append vs index move), a real
-		// navigation despite the shared path. The promise is PENDING until the
+		// via the `joinable` option): the double-click guard must NOT suppress a push
+		// that SUPERSEDES an in-flight pop/replace to the same path — memory-mode
+		// back()-then-push('/same') is push-vs-pop (truncate+append vs index move), a
+		// real navigation despite the shared path. The promise is PENDING until the
 		// caller's #trackNav pairs it the moment this call returns: the promise object
 		// does not exist yet inside #navigate.
 		this.#inFlight = {
 			path: rawPath,
-			join: push || join,
+			joinable: push || joinable,
 			// A guard redirect re-enters as a replace but continues the denied
 			// navigation, so it keeps that one's flag: a Forward home supersedes a
 			// redirected pop as it would the pop itself.
