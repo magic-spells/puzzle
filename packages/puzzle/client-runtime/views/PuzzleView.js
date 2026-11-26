@@ -2213,45 +2213,25 @@ export class PuzzleView {
 		// Malformed spec → false: the mount path's playAnimation() does the
 		// warn/skip (no double warning, no hold, no defer).
 		if (!isValidSpec(spec)) return false;
-		if (this.#inTrigger(spec) !== 'visible') {
-			// A `triggerAnchor` is meaningless without `trigger: 'visible'` (trigger
-			// absent/'mount'/unknown). Warn once here — where trigger resolves — so a
-			// spec carrying only `triggerAnchor` doesn't silently arm anything (D73).
-			if (
-				(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
-				spec.triggerAnchor !== undefined
-			) {
-				warnOnceForSpec(
-					spec,
-					`animation in.triggerAnchor is ignored without trigger: 'visible'`
-				);
+		const t = spec.trigger;
+		if (t !== 'visible') {
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				// Absent and 'mount' are the default; anything else falls back to it
+				// (§39 — an unknown value must never break rendering).
+				if (t !== undefined && t !== 'mount')
+					warnOnceForSpec(
+						spec,
+						`unknown animation in.trigger ${JSON.stringify(t)} (expected 'mount' or 'visible'); using 'mount'`
+					);
+				// A `triggerAnchor` is meaningless without `trigger: 'visible'`, so a
+				// spec carrying only `triggerAnchor` must not silently arm anything (D73).
+				if (spec.triggerAnchor !== undefined)
+					warnOnceForSpec(spec, `animation in.triggerAnchor is ignored without trigger: 'visible'`);
 			}
 			return false;
 		}
 		// Degrade to mount behavior where the hold is unsupported or unwanted.
-		if (typeof IntersectionObserver !== 'function') return false;
-		if (prefersReducedMotion()) return false;
-		return true;
-	}
-
-	/**
-	 * Resolve the enter `trigger` to 'mount' | 'visible'. Absent or 'mount' →
-	 * 'mount'; 'visible' → 'visible'; anything else warns once per spec object and
-	 * falls back to 'mount' (§39 — an unknown value must never break rendering).
-	 *
-	 * @param {AnimationSpec} spec
-	 * @returns {'mount' | 'visible'}
-	 */
-	#inTrigger(spec) {
-		const t = spec.trigger;
-		if (t === undefined || t === 'mount') return 'mount';
-		if (t === 'visible') return 'visible';
-		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
-			warnOnceForSpec(
-				spec,
-				`unknown animation in.trigger ${JSON.stringify(t)} (expected 'mount' or 'visible'); using 'mount'`
-			);
-		return 'mount';
+		return typeof IntersectionObserver === 'function' && !prefersReducedMotion();
 	}
 
 	/**
