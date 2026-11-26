@@ -48,8 +48,8 @@ import {
 /** @import { AnimationSpec, PrevViewState, RouteSnapshot } from '../../types/index.js' */
 
 /**
- * The { params, props, route } a prepared data() run evaluates against (D146).
- * @typedef {{ params: Record<string, any>, props: any, route: RouteSnapshot | null }} EvalScope
+ * The { params, route } a prepared data() run evaluates against (D146).
+ * @typedef {{ params: Record<string, any>, route: RouteSnapshot | null }} EvalScope
  */
 
 /**
@@ -343,7 +343,7 @@ export class PuzzleView {
 	// this prototype by the adapter capability (D157).
 	_dataAsyncShape = false;
 
-	// D146: the { params, props, route } a PREPARED (not yet committed) data() run
+	// D146: the { params, route } a PREPARED (not yet committed) data() run
 	// evaluates against. Non-null only while such an evaluation is in flight; the
 	// params/route getters read it, and every entry point save/restores it (exact
 	// stack discipline for nested synchronous evals, mirroring Store._tracking).
@@ -1715,29 +1715,18 @@ export class PuzzleView {
 	 * A SYNCHRONOUS data() throw propagates out of this call exactly as it does out
 	 * of refresh() (withTracking rethrows), already reconciled as a failure.
 	 *
-	 * @param {RefreshInput} [input]
+	 * @param {{ params?: Record<string, any>, route?: any }} [input] the destination
 	 * @returns {?{ready: Promise<void>, commit: () => void, discard: () => void}}
 	 */
-	prepareRefresh({ params, props, route } = {}) {
+	prepareRefresh({ params, route } = {}) {
 		if (this.#destroyed || this.#leaving) return null;
 
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-			if (
-				!devperfPrepareData(
-					this,
-					params || route !== undefined
-						? 'route'
-						: props !== undefined
-							? 'props'
-							: undefined
-				)
-			)
-				return null;
+			if (!devperfPrepareData(this, params || route !== undefined ? 'route' : undefined)) return null;
 		}
 
 		const scope = {
 			params: params ?? this.#params,
-			props: props ?? this.#props,
 			route: route !== undefined ? route : this.#route,
 		};
 		// The held-eval channel: withTracking parks its success reconcile here instead
@@ -1794,7 +1783,7 @@ export class PuzzleView {
 			const mine = this.#beginEvalRun(scope);
 			let out;
 			try {
-				out = this.#runData(scope.params, scope.props);
+				out = this.#runData(scope.params, this.#props);
 			} catch (err) {
 				this.#endEvalRun(mine);
 				throw err;
@@ -1848,7 +1837,6 @@ export class PuzzleView {
 				}
 				pending.reconcile(true);
 				this.#params = scope.params;
-				this.#props = scope.props;
 				this.#route = scope.route;
 				// Bumping the token HERE (not at prepare) is what orders this commit
 				// against a mid-gate store-change refresh: while the gate is open the
@@ -1978,13 +1966,10 @@ export class PuzzleView {
 	}
 
 	/**
-	 * Report a view failure into the D145 funnel. Normally logging is enough, but
-	 * an anchor-race mount whose superseding first render failed can never reach
-	 * #completeMount(). Recover through the same instance-owned placeholder
-	 * contract mountComponent uses so the next parent patch creates a fresh view.
-	 *
-	 * Router-preloaded views never set #pendingMountHook: preload() resolves before
-	 * their synchronous mount, so Router ownership remains untouched.
+	 * Report a view failure into the D145 funnel, then replace this view with the
+	 * app's error view (__showErrorView; a view with no ViewManager yet holds the
+	 * failure until mount). A failing error view instead tears itself down,
+	 * leaving the failed view's placeholder holding the position.
 	 *
 	 * @param {string} message the console prefix
 	 * @param {unknown} err
@@ -1997,10 +1982,6 @@ export class PuzzleView {
 			this.__errorViewFailed();
 			marker?.remove();
 			return;
-		}
-		if (this.#pendingMountHook) {
-			this.#pendingMountHook = false;
-			this.#enterPending = false;
 		}
 		this.__showErrorView(err, info);
 	}
@@ -2682,7 +2663,6 @@ export class PuzzleView {
 			if (this.#holdTimer === null) {
 				this.#holdTimer = setTimeout(() => {
 					this.#holdTimer = null;
-					if (this.#destroyed) return; // torn down mid-hold — no late render
 					// A timer callback: nothing up the stack catches, so funnel here.
 					try {
 						this.#swapLoaded();
