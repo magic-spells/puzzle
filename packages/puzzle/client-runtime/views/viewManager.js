@@ -260,23 +260,25 @@ export class ViewManager {
 		// lands — needed because a child's mount() awaits async data() while the
 		// synchronous parent patch must already have a stable insertion ref.
 		this.anchor = null;
-		// A render threw partway — a patch(), or the very first mount(). The DOM
-		// matches NEITHER currentTree nor the tree that was being applied, so nothing
-		// may be diffed against it again. The
-		// next render routes through renderFresh() while this is set (D145).
-		this.treeUnknown = false;
-		// The two live siblings bracketing this manager's DOM range, captured
-		// immediately before the render that threw. Both sit OUTSIDE the range, so an
-		// aborted render cannot have moved or removed them — they are the only
-		// trustworthy handles on the corrupt range. (A failed FIRST mount brackets the
-		// anchor's slot: that is the only stretch of container it could have dirtied.)
-		this.unknownRange = null;
-		// The vnode trees involved in that aborted render — both of a patch's, or the
-		// single incoming one of a failed first mount. Their DOM positions are
-		// lies, but their INSTANCE bookkeeping is not: nested component instances,
-		// element refs and document-level `outside` listeners are reachable only
-		// through them, and clearing the range by DOM removal releases none of it.
-		this.unknownTrees = null;
+		// Set when a render threw partway — a patch(), or the very first mount(). The
+		// DOM matches NEITHER currentTree nor the tree that was being applied, so
+		// nothing may be diffed against it again: the next render routes through
+		// renderFresh() while this is set (D145).
+		//
+		// `range` holds the two live siblings bracketing this manager's DOM range,
+		// captured immediately before the render that threw. Both sit OUTSIDE the
+		// range, so an aborted render cannot have moved or removed them — they are the
+		// only trustworthy handles on the corrupt range. (A failed FIRST mount brackets
+		// the anchor's slot: that is the only stretch of container it could have
+		// dirtied.) It is null when there was no such handle.
+		//
+		// `trees` are the vnode trees involved — both of a patch's, or the single
+		// incoming one of a failed first mount. Their DOM positions are lies, but their
+		// INSTANCE bookkeeping is not: nested component instances, element refs and
+		// document-level `outside` listeners are reachable only through them, and
+		// clearing the range by DOM removal releases none of it.
+		/** @type {{ range: { before: Node | null, after: Node | null } | null, trees: ViewNode[] } | null} */
+		this.aborted = null;
 	}
 
 	/**
@@ -337,12 +339,6 @@ export class ViewManager {
 		const owner = this.owner;
 		const walk = owner?.__walk;
 		if (walk) owner.__walk = false;
-		// D145's "never patched over an unknown tree" is an invariant of the manager.
-		// Route the next ordinary render through a fresh mount so it never diffs
-		// against vnodes whose DOM links may be detached. A recovery render is always
-		// an ORDINARY one — the takeover's prepared tree exists only for a view's
-		// first mount — so renderFresh() expands unconditionally.
-		if (this.treeUnknown) return this.renderFresh(rawTree);
 		// SSG/static takeover preloads nested components by walking the expanded tree
 		// and stores that exact tree for mount; re-expanding it would repeat that work
 		// for no change in output. Only a takeover build can ever pass the flag, so
@@ -353,6 +349,10 @@ export class ViewManager {
 			(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && slotsExpanded
 				? rawTree
 				: expandSlots(rawTree, this.slotChildren, this.owner?.constructor);
+		// D145's "never patched over an unknown tree" is an invariant of the manager.
+		// Route the next render through a fresh mount so it never diffs against
+		// vnodes whose DOM links may be detached.
+		if (this.aborted) return this.renderFresh(newTree);
 		if (!this.currentTree) {
 			// A FIRST mount throws too (a component's class-field initializer, a
 			// `String(symbol)` in a text node), and it needs the same D145 machinery —
@@ -377,12 +377,10 @@ export class ViewManager {
 			try {
 				mount(newTree, this.container, this.anchor, this.ctx, this.owner);
 			} catch (err) {
-				this.treeUnknown = true;
-				this.unknownRange = anchored ? { before, after: this.anchor } : null;
 				// ONE tree: a first mount has no outgoing tree. The incoming one is the
 				// only record of what got instantiated before the throw, and
 				// releaseAborted() is the only thing that can still reach it.
-				this.unknownTrees = [newTree];
+				this.aborted = { range: anchored ? { before, after: this.anchor } : null, trees: [newTree] };
 				throw err;
 			}
 			if (this.anchor) {
@@ -397,7 +395,7 @@ export class ViewManager {
 			// below) would then describe a tree that no longer exists — diffing the
 			// error face against it resolves insertion refs to moved or removed
 			// nodes. Record the corrupt range instead and leave `currentTree` alone:
-			// neither tree is true, so the manager reports the tree as UNKNOWN and
+			// neither tree is true, so the manager records the render as `aborted` and
 			// the next render goes through renderFresh().
 			const el = this.currentTree.el ?? null;
 			const bracketed = el != null && el.parentNode === this.container;
@@ -408,11 +406,9 @@ export class ViewManager {
 			try {
 				patch(this.currentTree, newTree, this.container, this.ctx, this.owner);
 			} catch (err) {
-				this.treeUnknown = true;
-				this.unknownRange = bracketed ? { before, after } : null;
 				// BOTH trees: the aborted patch may have mounted components from the
 				// new one and left components from the old one live.
-				this.unknownTrees = [this.currentTree, newTree];
+				this.aborted = { range: bracketed ? { before, after } : null, trees: [this.currentTree, newTree] };
 				throw err;
 			} finally {
 				walking = outer;
@@ -423,8 +419,8 @@ export class ViewManager {
 	}
 
 	/**
-	 * Mount `rawTree` over a DOM range this manager can no longer describe (see
-	 * `treeUnknown`). The vnode tree is untrustworthy, so the old content is
+	 * Mount `newTree` over a DOM range this manager can no longer describe (see
+	 * `aborted`). The vnode tree is untrustworthy, so the old content is
 	 * cleared by DOM removal across the bracketed range rather than by an
 	 * unmount() walk, then the new tree is mounted from scratch. The anchor
 	 * comment, if this manager still holds one, survives the clear and is the
@@ -436,14 +432,12 @@ export class ViewManager {
 	 * document, and portaled content sits outside the range entirely — none of it
 	 * is reachable again once currentTree becomes the error face.
 	 *
-	 * @param {ViewNode} rawTree
+	 * @param {ViewNode} newTree the slot-expanded tree to mount
 	 * @returns {ViewNode}
 	 */
-	renderFresh(rawTree) {
-		const newTree = expandSlots(rawTree, this.slotChildren, this.owner?.constructor);
-		releaseAborted(this.unknownTrees);
-		this.unknownTrees = null;
-		const range = this.unknownRange;
+	renderFresh(newTree) {
+		const { range, trees } = this.aborted;
+		releaseAborted(trees);
 		let removed = false;
 		if (range) {
 			const { before, after } = range;
@@ -473,8 +467,7 @@ export class ViewManager {
 					: null;
 
 		this.currentTree = null;
-		this.treeUnknown = false;
-		this.unknownRange = null;
+		this.aborted = null;
 		mount(newTree, this.container, ref, this.ctx, this.owner);
 		if (this.anchor) {
 			this.anchor.remove();
@@ -493,7 +486,7 @@ export class ViewManager {
 	 * @returns {Comment} the recovery marker
 	 */
 	plantFailurePlaceholder() {
-		if (this.treeUnknown) {
+		if (this.aborted) {
 			const tree = this.renderFresh(new ViewNode(PLACEHOLDER_TAG));
 			this.currentTree = null;
 			// A PLACEHOLDER_TAG vnode mounts as an empty comment.
@@ -521,10 +514,7 @@ export class ViewManager {
 		// A destroy that arrives BEFORE any replacement render still has to release the
 		// aborted patch's two trees — unmount(currentTree) below reaches only the old
 		// one, and only through positions that may no longer be true.
-		if (this.unknownTrees) {
-			releaseAborted(this.unknownTrees);
-			this.unknownTrees = null;
-		}
+		if (this.aborted) releaseAborted(this.aborted.trees);
 		if (this.currentTree) unmount(this.currentTree);
 		if (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) releasePins(this.slotChildren);
 		if (this.anchor) {
@@ -534,8 +524,7 @@ export class ViewManager {
 			this.anchor = null;
 		}
 		this.currentTree = null;
-		this.treeUnknown = false;
-		this.unknownRange = null;
+		this.aborted = null;
 	}
 }
 
@@ -1053,9 +1042,7 @@ export function mount(vnode, parent, ref, ctx, owner = null) {
 		// here, which no reader minds: `el.remove()` on a parentless node is a no-op and
 		// every devperf/insertion-ref site tests `parentNode` first.
 		vnode.el = el;
-		for (const [name, value] of Object.entries(vnode.attrs)) {
-			setAttr(el, name, value, owner);
-		}
+		for (const name in vnode.attrs) setAttr(el, name, vnode.attrs[name], owner);
 		// Element ref (v1.39, D72): populate this.refs[name] with the live element the
 		// moment it is created, BEFORE children mount and BEFORE the owning view's
 		// mounted() hook fires (mount completes fully before mounted()). setAttr above
@@ -1082,7 +1069,7 @@ export function mount(vnode, parent, ref, ctx, owner = null) {
 		// <select>'s BEFORE its <option> children exist (the browser silently falls
 		// back to the first option), a range's before a later `min`/`max`/`step` (the
 		// browser clamps it to the defaults). Re-assert it now that both are in (SPEC §5).
-		syncControl(el, vnode.attrs, owner);
+		syncControl(el, vnode, owner);
 	}
 	// Insertion stays LAST: mount() builds detached and attaches the finished subtree
 	// in one move, so a throw leaves the container holding nothing this call put there.
@@ -1293,10 +1280,7 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 			// vnode, and the clone carries no `controls`), so it re-asserts itself
 			// here; a fresh row would have restored it through patchAttrs.
 			if (newVnode.controls) reassertControls(newVnode.controls, owner);
-			else if (isControlTag(newVnode.tag) && newVnode.el) {
-				const attrs = newVnode.attrs;
-				if ('value' in attrs || 'checked' in attrs) syncControl(newVnode.el, attrs, owner);
-			}
+			else if (newVnode.el) syncControl(newVnode.el, newVnode, owner);
 			return;
 		}
 	}
@@ -1430,7 +1414,7 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 	}
 
 	// Past the text/placeholder/html/portal arms, `el` is an element.
-	patchAttrs(/** @type {Element} */ (el), oldVnode.attrs, newVnode.attrs, owner);
+	patchAttrs(/** @type {Element} */ (el), newVnode.tag, oldVnode.attrs, newVnode.attrs, owner);
 
 	// DOM island (constellation/doc/DOC-SPEC.md §17, D44): a static `island` attr
 	// makes this element's children browser-/component-owned after mount. The
@@ -1466,7 +1450,7 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 	// selection can desync — and a range's new `value` was clamped to its old
 	// `max` when a later attr raised it in this same pass. Re-assert the
 	// controlled value once attrs and children have settled (SPEC §5).
-	syncControl(el, newVnode.attrs, owner);
+	syncControl(el, newVnode, owner);
 }
 
 /**
@@ -1492,7 +1476,13 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
  * elements carrying a plain `value` (<li>, <progress>, <button>) never reach
  * here and keep the vnode compare.
  *
- * @param {HTMLInputElement | HTMLTextAreaElement} el
+ * A <select>'s `value` drifts the same way (the user picks another option, or
+ * the option list churns under an unchanged value) and takes the same compare,
+ * but only from syncControl, once its options exist; patchAttrs gives it the
+ * generic path. A select has no `valueAsNumber`, so the number echo never
+ * applies to it.
+ *
+ * @param {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} el
  * @param {unknown} value the bound value
  * @param {PuzzleView | null} owner
  */
@@ -1531,39 +1521,36 @@ function syncControlChecked(el, value, owner) {
 
 /**
  * The three form tags whose `value`/`checked` the patcher re-asserts against the
- * LIVE DOM. The same predicate listBlock's `collectControls` walks with — a
- * `<li value="3">` or a `<progress value=…>` is not a control and keeps the
- * ordinary vnode compare.
+ * LIVE DOM. This is the one "is it a control" test, and it reads the vnode's tag,
+ * never the element's nodeName: syncControl runs it for every element, and
+ * listBlock's `collectControls` for every row it builds. A `<li value="3">` or a
+ * `<progress value=…>` is not a control and keeps the ordinary vnode compare.
+ * The tag is compared as written, so an uppercase `h('INPUT')` is not a control.
  *
  * @param {unknown} tag
  * @returns {boolean}
  */
-function isControlTag(tag) {
+export function isControlTag(tag) {
 	return tag === 'input' || tag === 'textarea' || tag === 'select';
 }
 
 /**
  * Re-assert every controlled value in ONE element's attrs against the live DOM.
- * mount() and patch() run it once attrs and children have settled (a select's
- * options, a range's min/max); the identity short-circuit runs it for a cached
- * subtree, which has no attr or children pass of its own.
+ * mount() and patch() run it for every element once attrs and children have
+ * settled (a select's options, a range's min/max); the identity short-circuit
+ * runs it for a cached subtree, which has no attr or children pass of its own.
+ * Anything that is not a control returns on its tag, without touching the DOM.
  *
- * @param {Node} el a control's live element (dispatched on nodeName)
- * @param {Record<string, any>} attrs
+ * @param {Node} el the vnode's live element
+ * @param {ViewNode} vnode
  * @param {PuzzleView | null} owner
  */
-function syncControl(el, attrs, owner) {
-	const node = el.nodeName;
-	if (node === 'INPUT') {
-		if ('value' in attrs) syncControlValue(/** @type {HTMLInputElement} */ (el), attrs.value, owner);
-		if ('checked' in attrs) syncControlChecked(/** @type {HTMLInputElement} */ (el), attrs.checked, owner);
-		return;
-	}
-	if (node === 'TEXTAREA') {
-		if ('value' in attrs) syncControlValue(/** @type {HTMLTextAreaElement} */ (el), attrs.value, owner);
-		return;
-	}
-	reassertSelectValue(el, attrs);
+function syncControl(el, vnode, owner) {
+	const tag = vnode.tag;
+	if (!isControlTag(tag)) return;
+	const attrs = vnode.attrs;
+	if ('value' in attrs) syncControlValue(/** @type {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} */ (el), attrs.value, owner);
+	if (tag === 'input' && 'checked' in attrs) syncControlChecked(/** @type {HTMLInputElement} */ (el), attrs.checked, owner);
 }
 
 /**
@@ -1580,31 +1567,8 @@ function reassertControls(controls, owner) {
 	for (let i = 0; i < controls.length; i++) {
 		const vnode = controls[i];
 		const el = vnode.el ?? slotClones.get(vnode)?.el;
-		if (el) syncControl(el, vnode.attrs, owner);
+		if (el) syncControl(el, vnode, owner);
 	}
-}
-
-/**
- * Re-apply a <select>'s controlled `value` after its <option> children exist.
- * A no-op for any other element or a select without a controlled `value` attr.
- * Uses the same stringify coercion setAttr does; native fallback handles a value
- * that no longer matches any option (leaves selectedIndex where the browser puts it).
- *
- * @param {Node} el any mounted element (only a SELECT is touched)
- * @param {Record<string, any>} attrs
- */
-function reassertSelectValue(el, attrs) {
-	if (el.nodeName !== 'SELECT' || !('value' in attrs)) return;
-	// Compare against the LIVE property first, exactly as the INPUT/TEXTAREA branch of
-	// patchAttrs does: a settled select re-asserted on every patch wrote the value it
-	// already had and charged devperf a phantom DOM mutation. When the option list
-	// churned (or the user changed the selection out of band) the live value differs
-	// and the write still happens.
-	const next = stringify(attrs.value, 0, ' ');
-	if (/** @type {HTMLSelectElement} */ (el).value === next) return;
-	/** @type {HTMLSelectElement} */ (el).value = next;
-	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
-		devperfMutation();
 }
 
 /**
@@ -1882,13 +1846,13 @@ function releaseSubtree(vnode) {
 	// keyed-row removal, parent-subtree teardown, full view destroy). Plain
 	// element listeners die with the element and need no sweep. The map is the
 	// authoritative record of what is attached; skip the '\x00once' spent flags.
+	// The substring test is exact: modifiers are a closed set the parser checks,
+	// and only `outside` starts with "outside".
 	const listeners = /** @type {ListenerHost | null} */ (vnode.el)?.[LISTENERS];
 	if (listeners) {
-		for (const key of Object.keys(listeners)) {
-			if (key.endsWith(ONCE_SPENT)) continue;
-			const [event, ...mods] = key.slice(1).split(':');
-			if (!mods.includes('outside')) continue;
-			document.removeEventListener(event, listeners[key], OUTSIDE_OPTS);
+		for (const key in listeners) {
+			if (!key.includes(':outside') || key.endsWith(ONCE_SPENT)) continue;
+			document.removeEventListener(key.slice(1, key.indexOf(':')), listeners[key], OUTSIDE_OPTS);
 			delete listeners[key];
 			delete listeners[key + ONCE_SPENT];
 		}
@@ -1896,22 +1860,29 @@ function releaseSubtree(vnode) {
 	// Inline-SVG seed (v1.14, D46): string children are inert markup, never vnodes
 	// — no refs or component instances hide inside them.
 	if (typeof vnode.children === 'string') return;
-	for (let child of vnode.children) {
-		if (outgoing !== null) child = outgoingOf(child);
-		// A portal inside a removed subtree: its teleported children live in the
-		// outlet, so the ancestor's el.remove() reaches neither their DOM nor their
-		// instances — tear the whole portal down explicitly.
-		if (child.tag === PORTAL_TAG) {
-			if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
-				unmountPortal(child, unmount);
-		} else if (child.isComponent) (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) ? release(child.component) : child.component?.destroy();
-		else if (!child.isText) releaseSubtree(child);
-	}
+	for (const child of vnode.children) releaseNode(outgoing !== null ? outgoingOf(child) : child);
+}
+
+/**
+ * Release what one vnode of a removed tree holds beyond its own DOM: a portal's
+ * teleported range, a component instance, or an element's subtree.
+ *
+ * @param {ViewNode} vnode
+ */
+function releaseNode(vnode) {
+	// A portal inside a removed subtree: its teleported children live in the
+	// outlet, so the ancestor's el.remove() reaches neither their DOM nor their
+	// instances — tear the whole portal down explicitly.
+	if (vnode.tag === PORTAL_TAG) {
+		if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
+			unmountPortal(vnode, unmount);
+	} else if (vnode.isComponent) (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) ? release(vnode.component) : vnode.component?.destroy();
+	else if (!vnode.isText) releaseSubtree(vnode);
 }
 
 /**
  * Release the non-DOM resources held by the vnode trees of a render that threw
- * partway (ViewManager.treeUnknown) — both trees of an aborted patch, or the single
+ * partway (ViewManager.aborted) — both trees of an aborted patch, or the single
  * incoming tree of an aborted FIRST mount, which nothing else can reach at all
  * (currentTree is still null, so clear()'s unmount walk covers nothing).
  * The DOM is cleared separately, by range
@@ -1937,18 +1908,12 @@ function releaseSubtree(vnode) {
  * ordinary removal. A hand-written render tree can still throw mid-walk; it forfeits
  * the rest of THAT tree's release, and the error view mounts regardless.
  *
- * @param {Array<ViewNode | null> | null} trees
+ * @param {ViewNode[]} trees
  */
 function releaseAborted(trees) {
-	if (!trees) return;
 	for (const tree of trees) {
-		if (!tree) continue;
 		try {
-			if (tree.tag === PORTAL_TAG) {
-				if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
-					unmountPortal(tree, unmount);
-			} else if (tree.isComponent) (typeof __PUZZLE_HAS_CONDITIONAL_SLOT__ === 'undefined' || __PUZZLE_HAS_CONDITIONAL_SLOT__) ? release(tree.component) : tree.component?.destroy();
-			else if (!tree.isText) releaseSubtree(tree);
+			releaseNode(tree);
 		} catch (err) {
 			console.error('[puzzle] releasing an aborted render failed:', err);
 		}
@@ -1957,12 +1922,14 @@ function releaseAborted(trees) {
 
 /**
  * @param {Element} el the persisting element
+ * @param {string} tag its vnode tag, which says whether it is a control
  * @param {Record<string, any>} oldAttrs
  * @param {Record<string, any>} newAttrs
  * @param {PuzzleView | null} [owner]
  */
-function patchAttrs(el, oldAttrs, newAttrs, owner = null) {
-	for (const [name, value] of Object.entries(newAttrs)) {
+function patchAttrs(el, tag, oldAttrs, newAttrs, owner = null) {
+	for (const name in newAttrs) {
+		const value = newAttrs[name];
 		// Element ref (v1.39, D72): the element PERSISTS through this patch. The
 		// normal case is a cached setter identical on both sides (===) → nothing to
 		// do; the ref already points at this el. Only a DIFFERING ref value (a
@@ -1983,15 +1950,15 @@ function patchAttrs(el, oldAttrs, newAttrs, owner = null) {
 		// the write after the element's other attrs, which shows (a radio's `checked`
 		// against a `name` patched in the same pass). A <select>'s `value` takes the
 		// generic path; it is re-asserted once its options have patched.
-		if (name === 'value' && (el.nodeName === 'INPUT' || el.nodeName === 'TEXTAREA')) {
+		if (name === 'value' && (tag === 'input' || tag === 'textarea')) {
 			syncControlValue(/** @type {HTMLInputElement | HTMLTextAreaElement} */ (el), value, owner);
-		} else if (name === 'checked' && el.nodeName === 'INPUT') {
+		} else if (name === 'checked' && tag === 'input') {
 			syncControlChecked(/** @type {HTMLInputElement} */ (el), value, owner);
 		} else if (oldAttrs[name] !== value) {
 			setAttr(el, name, value, owner);
 		}
 	}
-	for (const name of Object.keys(oldAttrs)) {
+	for (const name in oldAttrs) {
 		if (name in newAttrs) continue;
 		// A persisting element dropping its `ref` (hand-written render — the compiler
 		// emits ref statically) releases it: fire null so this.refs[name] clears.
@@ -2009,6 +1976,15 @@ function patchAttrs(el, oldAttrs, newAttrs, owner = null) {
  * nodes are matched by (tag, key) and their DOM moved into position;
  * everything else falls back to index alignment.
  *
+ * One unkeyed shape takes the keyed path too. A cached vnode (D170:
+ * `this.__c[n]`, a row's `s.c[n]`) is the SAME object in both lists, and index
+ * pairing assumes it stays at its index. A variable-length unkeyed run before it
+ * (an unkeyed `{#for}`, slot content) shifts it, and pairing by index would then
+ * patch another old vnode INTO it and unmount it as a leftover — the one live
+ * element it describes. A fresh vnode has no `el`, so a mounted one at a
+ * different index is the only sign; the keyed path pairs it with itself and
+ * moves it.
+ *
  * @param {Node} el the parent (an element, or a portal's outlet)
  * @param {ViewNode[]} oldChildren
  * @param {ViewNode[]} newChildren
@@ -2017,12 +1993,16 @@ function patchAttrs(el, oldAttrs, newAttrs, owner = null) {
  * @param {Node | null} [tail] the insertion ref for appended children
  */
 function patchChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
-	const keyed = oldChildren.some((c) => c.key != null) || newChildren.some((c) => c.key != null);
-	if (keyed) {
-		patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail);
-	} else {
-		patchIndexedChildren(el, oldChildren, newChildren, ctx, owner, tail);
+	const n = Math.max(oldChildren.length, newChildren.length);
+	for (let i = 0; i < n; i++) {
+		const old = oldChildren[i];
+		const child = newChildren[i];
+		if (old?.key != null || child?.key != null || (child?.el != null && child !== old)) {
+			patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail);
+			return;
+		}
 	}
+	patchIndexedChildren(el, oldChildren, newChildren, ctx, owner, tail);
 }
 
 // `tail` is the insertion reference for children appended at the END of the
@@ -2038,20 +2018,6 @@ function patchChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
  * @param {Node | null} [tail]
  */
 function patchIndexedChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
-	// A cached vnode (D170: `this.__c[n]`, a row's `s.c[n]`) is the SAME object in
-	// both lists, and index pairing assumes it stays at its index. A
-	// variable-length unkeyed run before it (an unkeyed `{#for}`, slot content)
-	// shifts it, and pairing by index would then patch another old vnode INTO it
-	// and unmount it as a leftover — the one live element it describes. A fresh
-	// vnode has no `el`, so a mounted one at a different index is the only sign;
-	// such a list takes the keyed path, which pairs it with itself and moves it.
-	for (let i = 0; i < newChildren.length; i++) {
-		const child = newChildren[i];
-		if (child.el != null && child !== oldChildren[i]) {
-			patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail);
-			return;
-		}
-	}
 	const common = Math.min(oldChildren.length, newChildren.length);
 	for (let i = 0; i < common; i++) {
 		patch(oldChildren[i], newChildren[i], el, ctx, owner);
@@ -2230,7 +2196,7 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail = nul
 
 	// A cached unkeyed vnode (D170) that moved to another unkeyed index is the
 	// same object as an old child, so positional pairing just handed it to a
-	// DIFFERENT old node — see patchIndexedChildren. Pair again: every new child
+	// DIFFERENT old node — see patchChildren. Pair again: every new child
 	// that is also an old one pairs with itself, and the rest consume the old
 	// nodes nothing reused, still positionally. The move pass below then puts
 	// each in place. Reached only when a mounted vnode sat off its positional

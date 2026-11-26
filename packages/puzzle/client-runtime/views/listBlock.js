@@ -34,6 +34,7 @@
 
 import { RENDER_REV } from '../renderRev.js';
 import { devperfListRows } from '../devperf.js';
+import { isControlTag } from './viewManager.js';
 
 /** @import { ViewNode } from './ViewNode.js' */
 
@@ -456,11 +457,8 @@ function collectControls(vnode) {
  * @param {ViewNode[]} out
  */
 function collectInto(vnode, out) {
-	const tag = vnode.tag;
 	const attrs = vnode.attrs;
-	if (tag === 'input' || tag === 'textarea' || tag === 'select') {
-		if ('value' in attrs || 'checked' in attrs) out.push(vnode);
-	}
+	if (isControlTag(vnode.tag) && ('value' in attrs || 'checked' in attrs)) out.push(vnode);
 	if ('island' in attrs) return;
 	const children = vnode.children;
 	if (typeof children === 'string') return;
