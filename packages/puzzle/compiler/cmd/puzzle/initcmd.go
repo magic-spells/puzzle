@@ -17,11 +17,13 @@ import (
 // registered here (not in main.go) so the three CLI commands can live in
 // separate files; rootCmd is the package-level command in main.go.
 var initCmd = &cobra.Command{
-	Use:   "init [app-name]",
-	Short: "Scaffold a new Puzzle application",
+	Use:     "init [app-name]",
+	Aliases: []string{"create"},
+	Short:   "Scaffold a new Puzzle application",
 	Long: `Create a new Puzzle app. The argument is the app's directory: a bare name
 (my-app) creates ./my-app, and a path (../apps/my-app) creates the app in that
 parent directory, the way create-vite does. Its last segment is the app name.
+puzzle create is the same command.
 
 The target directory must not already exist and be non-empty. The app name
 becomes an npm package name, so it must be lowercase letters, digits and

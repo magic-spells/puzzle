@@ -393,6 +393,44 @@ func TestInitPositionalPathCreatesInParent(t *testing.T) {
 	}
 }
 
+// TestCreateIsInit: `puzzle create` is init under another name, so the same
+// arguments write the same app, flags included.
+func TestCreateIsInit(t *testing.T) {
+	for _, flags := range [][]string{{"--yes"}, {"--yes", "--template", "static", "--typescript"}} {
+		t.Run(strings.Join(flags, " "), func(t *testing.T) {
+			tree := func(command string) map[string]string {
+				dir := filepath.Join(t.TempDir(), "demo")
+				var err error
+				captureStdout(t, func() { _, err = execRoot(t, append([]string{command, dir}, flags...)...) })
+				if err != nil {
+					t.Fatalf("puzzle %s: %v", command, err)
+				}
+				files := map[string]string{}
+				err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+					if err != nil || info.IsDir() {
+						return err
+					}
+					data, err := os.ReadFile(path)
+					rel, _ := filepath.Rel(dir, path)
+					files[rel] = string(data)
+					return err
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				return files
+			}
+			fromInit, fromCreate := tree("init"), tree("create")
+			if !reflect.DeepEqual(fromCreate, fromInit) {
+				t.Errorf("puzzle create %v wrote a different tree from puzzle init", flags)
+			}
+			if len(flags) > 1 && (fromCreate["tsconfig.json"] == "" || !strings.Contains(fromCreate["puzzle.config.js"], "output: 'static'")) {
+				t.Errorf("puzzle create %v dropped --template static or --typescript", flags)
+			}
+		})
+	}
+}
+
 // captureStdout runs fn with os.Stdout redirected to a pipe and returns what it
 // wrote (the build summary prints to os.Stdout, not cobra's output stream).
 func captureStdout(t *testing.T, fn func()) string {
