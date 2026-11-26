@@ -2079,10 +2079,9 @@ export class Router {
 		// The outgoing unit this transition animates out: the OLD layout when a
 		// fresh layout replaces it (layout swap, keep=0), otherwise the topmost
 		// SWAPPED old view cur.views[keep] (its destroy cascades to deeper views).
-		let oldAnimator = null;
-		if (cur) {
-			oldAnimator = !reuseLayout && cur.layout ? cur.layout : cur.views[keep];
-		}
+		// Null only while nothing has committed: a chain always ends on a leaf and
+		// #swap never runs params-only, so keep is below the committed chain's length.
+		const oldAnimator = cur && (!reuseLayout && cur.layout ? cur.layout : cur.views[keep]);
 
 		// The incoming unit — same shape as oldAnimator, computed once and reused
 		// below both for transition-mode resolution and morph pairing (D65/D55).
@@ -2103,7 +2102,7 @@ export class Router {
 			const stalled = this.#pendingOut;
 			this.#pendingOut = null;
 			stalled.destroy();
-			if (oldAnimator && oldAnimator !== stalled) oldAnimator.destroy();
+			if (oldAnimator !== stalled) oldAnimator.destroy();
 			skipOut = true;
 		}
 
@@ -2113,7 +2112,7 @@ export class Router {
 		// concurrently. The leaver tears down on its own out-settle (#startOverlapLeave).
 		// SEQUENTIAL (default): fully play the out and destroy BEFORE the IN phase —
 		// byte-identical to v1.23.
-		if (!skipOut && cur && oldAnimator) {
+		if (!skipOut && cur) {
 			if (overlap) {
 				this.#startOverlapLeave(oldAnimator, next.to);
 			} else {
