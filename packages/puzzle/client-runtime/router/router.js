@@ -1384,8 +1384,9 @@ export class Router {
 			path: rawPath,
 			joinable: push || joinable,
 			// A guard redirect re-enters as a replace but continues the denied
-			// navigation, so it keeps that one's flag: a Forward home supersedes a
-			// redirected pop as it would the pop itself.
+			// navigation, which is still in flight (it is awaiting this re-entry), so
+			// it keeps that one's flag: a Forward home supersedes a redirected pop as
+			// it would the pop itself.
 			pop: guardReentry ? this.#inFlight.pop : pop,
 			promise: PENDING,
 		};
