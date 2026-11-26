@@ -73,6 +73,22 @@ describe('PuzzleModel', () => {
 		expect(Bare.primaryKey()).toBe('id');
 	});
 
+	it('normalizes each schema once: same object per call, one per schema', () => {
+		class Post extends PuzzleModel {
+			static schema = { slug: Puzzle.string().primary(), title: Puzzle.string() };
+		}
+		class Draft extends Post {} // inherits Post's schema
+		class Note extends Post {
+			static schema = { id: Puzzle.string(), body: Puzzle.string() };
+		}
+
+		expect(Post.normalizedSchema()).toBe(Post.normalizedSchema());
+		expect(Draft.normalizedSchema()).toBe(Post.normalizedSchema());
+		expect(Note.normalizedSchema()).not.toBe(Post.normalizedSchema());
+		expect(Object.keys(Note.normalizedSchema())).toEqual(['id', 'body']);
+		expect([Post.primaryKey(), Draft.primaryKey(), Note.primaryKey()]).toEqual(['slug', 'slug', 'id']);
+	});
+
 	it('applyDefaults fills missing fields, invoking function defaults per record', () => {
 		const a = Todo.applyDefaults({ text: 'ship v1' });
 		expect(a.completed).toBe(false);

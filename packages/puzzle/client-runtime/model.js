@@ -685,25 +685,36 @@ export function assertSchemaNames(Model, type) {
 	}
 }
 
-// Per-model list of `date()` field names, computed once. normalizedSchema()
-// rebuilds an object on every call, and hydration runs per record in a loop.
-/** @type {WeakMap<typeof PuzzleModel, string[]>} */
-const DATE_FIELDS = new WeakMap();
+// A schema never changes once its class is defined, so each schema object is
+// normalized once: the field map, the primary key and the `date()` fields.
+// Every caller shares the result and must never write to it.
+/** @type {WeakMap<object, { fields: Record<string, FieldDef>, pk: string, dates: string[] }>} */
+const NORMALIZED = new WeakMap();
+const NO_SCHEMA = {};
 
-/**
- * @param {typeof PuzzleModel} Model
- * @returns {string[]}
- */
-function dateFieldsFor(Model) {
-	let fields = DATE_FIELDS.get(Model);
-	if (!fields) {
-		fields = [];
-		for (const [name, def] of Object.entries(Model.normalizedSchema())) {
-			if (def && def.type === 'date') fields.push(name);
+/** @param {typeof PuzzleModel} Model */
+function normalized(Model) {
+	const schema = Model.schema || NO_SCHEMA;
+	let entry = NORMALIZED.get(schema);
+	if (!entry) {
+		/** @type {Record<string, FieldDef>} */
+		const fields = {};
+		for (const [field, value] of Object.entries(schema)) {
+			// Relationships are schema entries but NOT fields (constellation/doc/DOC-SPEC.md §21,
+			// D49): exclude them so applyDefaults, primaryKey, and the §20
+			// validation engine (_collectErrors iterates this map) never see them.
+			if (value instanceof RelationshipBuilder) continue;
+			fields[field] = value instanceof FieldBuilder ? value.def : value;
 		}
-		DATE_FIELDS.set(Model, fields);
+		const names = Object.keys(fields);
+		entry = {
+			fields,
+			pk: names.find((name) => fields[name].primary) ?? 'id',
+			dates: names.filter((name) => fields[name].type === 'date'),
+		};
+		NORMALIZED.set(schema, entry);
 	}
-	return fields;
+	return entry;
 }
 
 /**
@@ -736,10 +747,8 @@ function dateFieldsFor(Model) {
  * @returns {any}
  */
 export function coerceJSONDates(Model, data) {
-	if (!data || typeof data !== 'object' || typeof Model?.normalizedSchema !== 'function') {
-		return data;
-	}
-	const fields = dateFieldsFor(Model);
+	if (!data || typeof data !== 'object') return data;
+	const fields = normalized(Model).dates;
 	if (fields.length === 0) return data;
 	let out = data;
 	for (const field of fields) {
@@ -797,20 +806,11 @@ export class PuzzleModel {
 	/**
 	 * Normalized descriptor map for this model's schema:
 	 * FieldBuilder values collapse to their .def, plain descriptors pass through.
+	 * Shared, never a copy: read it, never write to it.
 	 * @returns {Record<string, FieldDef>}
 	 */
 	static normalizedSchema() {
-		const schema = this.schema || {};
-		/** @type {Record<string, FieldDef>} */
-		const out = {};
-		for (const [field, value] of Object.entries(schema)) {
-			// Relationships are schema entries but NOT fields (constellation/doc/DOC-SPEC.md §21,
-			// D49): exclude them so applyDefaults, primaryKey, and the §20
-			// validation engine (_collectErrors iterates this map) never see them.
-			if (value instanceof RelationshipBuilder) continue;
-			out[field] = value instanceof FieldBuilder ? value.def : value;
-		}
-		return out;
+		return normalized(this).fields;
 	}
 
 	/**
@@ -835,10 +835,7 @@ export class PuzzleModel {
 	 * @returns {string}
 	 */
 	static primaryKey() {
-		for (const [field, def] of Object.entries(this.normalizedSchema())) {
-			if (def.primary) return field;
-		}
-		return 'id';
+		return normalized(this).pk;
 	}
 
 	/**

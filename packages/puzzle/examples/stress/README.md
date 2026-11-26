@@ -1017,8 +1017,8 @@ be an input, and which the runner's clamp guard would rightly reject).
 | `rerender` (clean) | 20 | 20 | **0** | **0** | 0 |
 | `rerender-dirty` (control) | 20 | 20 | 4,000 | **4,000** | 0 |
 | `type-local` (setState) | 200 | **0** | 0 | **0** | 0 |
-| `type-store` (record.update) | 200 | 200 | 0 | 0 | **600** |
-| `type-event` (gate) | 2 | 1 | 0 | 0 | 3 |
+| `type-store` (record.update) | 200 | 200 | 0 | 0 | **200** |
+| `type-event` (gate) | 2 | 1 | 0 | 0 | 1 |
 
 Production medians, 15 iterations: `rerender` ~18ms, `rerender-dirty` ~26ms,
 `type-local` ~128ms, `type-store` ~130ms. All four carry the probes, so none of
@@ -1084,30 +1084,25 @@ that redundancy was found at all. It now doubles as the liveness canary:
 because that would make the clean arm's zero a dead code path rather than a
 finding.
 
-### One keystroke through `record.update()` normalizes the schema three times
+### One keystroke through `record.update()` reads the schema once
 
-`PuzzleModel.normalizedSchema()` rebuilds its descriptor map from
-`Object.entries(this.schema)` on every call and is not memoized. A single-field
-`update()` reaches it three times:
+`PuzzleModel.normalizedSchema()` builds its descriptor map once per schema and
+shares it. A single-field `update()` calls it once, from `_collectErrors()` (the
+§20 validation pass). `primaryKey()`, called by the immutable-primary-key guard
+at the top of `update()` and by `Store.recordChanged()` for the notify key,
+reads the same cached entry without calling it.
 
-| call site | why |
-| --- | --- |
-| `primaryKey()` | the immutable-primary-key guard at the top of `update()` |
-| `_collectErrors()` | the §20 validation pass |
-| `Store.recordChanged()` → `primaryKey()` | building the notify key |
-
-200 keystrokes, **600 calls**, each one an `Object.entries` over 24 fields plus a
-`RelationshipBuilder` filter. `_collectErrors`'s `fields` filter narrows the
+200 keystrokes, **200 calls**. `_collectErrors`'s `fields` filter narrows the
 *checks* to the patched key but never the *iteration* — all 24 entries are
 walked either way. The count is measured by wrapping the method, not asserted
-from the source, and the op throws if it is not exactly 3 per keystroke.
+from the source, and the run fails if it is not exactly 1 per keystroke.
 
-And yet the A/B built to price that round trip still **cannot see it**. With
+The A/B built to price that round trip still **cannot see it**. With
 the 40,000 select writes gone from both arms, the typing ops dropped from
 ~145–150ms to ~128–130ms — and `type-store` still lands within the run-to-run
 spread of `type-local`: +2.5ms and +4ms over 200 keystrokes across the two
 post-fix runs. The honest reading remains an upper bound, not a measurement:
-validation over 24 fields, three schema normalizations, subscriber notification
+validation over 24 fields, the schema reads, subscriber notification
 and a full `data()` re-run together cost **under ~20µs per keystroke**, and are
 not reliably separable from the local path at this size.
 
@@ -1147,10 +1142,9 @@ settled select is paying writes again. `fsInputValueWrites` above 0 in
 `rerender` would mean the input's live-DOM compare has been lost and every
 controlled input in every Puzzle app now eats the caret on re-render.
 `fsDataRuns` of 0 in `type-store` means the store comparison measured nothing.
-`fsSchemaNormalizations` of anything but 600 in `type-store` means either the
-guard, the validation pass or the notify key moved — or that someone memoized
-`normalizedSchema()`, in which case the number should be 0 and this table needs
-rewriting. `validate()` also fails outright if the store has storage
+`fsSchemaNormalizations` of anything but 200 in `type-store` means the
+validation pass moved, or that `primaryKey()` calls `normalizedSchema()` again
+(the count was 600 when it did). `validate()` also fails outright if the store has storage
 configured, because every flush would then serialize the whole store and the
 schema counts would stop meaning what they say.
 ## Scenario 12 — `flip-churn`
@@ -1567,9 +1561,8 @@ Each new scenario owns its own store type (`nest`, `storm`, `fmt`, `loop`,
 none: its 20,000 nodes are plain DOM built from instance state, and giving it a
 type would imply the frozen subtree was reactive. `form` is the one type that
 also gets its own model CLASS: `form-state` measures what a single-field
-`update()` costs, and that cost is dominated by `normalizedSchema()` running
-over every declared field three times per call site, so a 9-field
-`StressRecord` would understate it by nearly 3x.
+`update()` costs, and its validation pass walks every declared field, so a
+9-field `StressRecord` would understate it.
 
 Fixtures are installed directly in `app.js` rather than via `--fixtures`, so
 `store.seed()` is available as a tool each scenario calls on demand and
