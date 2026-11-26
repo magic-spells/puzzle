@@ -50,15 +50,15 @@ func TestLibraryCallInEveryValuePosition(t *testing.T) {
   <p class="x {#if on}{ capitalize(label) }{/if}">y</p>`))
 	wantAll(t, got,
 		// A brace-only attribute: a guarded library call.
-		`title: (__f["currency"] || __f.__missing("currency"))(__d.price),`,
+		`title: __f.get("currency")(__d.price),`,
 		// `||` stays logical OR.
 		`'data-or': __d.a || __d.b,`,
 		// A component prop: a library call over a method.
-		`items: (__f["truncate"] || __f.__missing("truncate"))(__d.list?.join(', '), 20)`,
+		`items: __f.get("truncate")(__d.list?.join(', '), 20)`,
 		// An interpolation inside an attribute value's inline {#if} branch.
-		`(__f["capitalize"] || __f.__missing("capitalize"))(__d.label)`,
+		`__f.get("capitalize")(__d.label)`,
 		// The registry read the calls need.
-		"const __f = this.ctx.formatters.getAll();",
+		"const __f = this.ctx.formatters;",
 	)
 	if regexp.MustCompile(`[^|]\| __[df]\.`).MatchString(got) {
 		t.Errorf("a pipe compiled to a bitwise OR:\n%s", got)
@@ -142,7 +142,7 @@ func TestTransformedFormValueIsOneWay(t *testing.T) {
 	}
 	wantAll(t, got,
 		`value: __d.name?.toUpperCase()`,
-		`value: (__f["capitalize"] || __f.__missing("capitalize"))(__d.name)`,
+		`value: __f.get("capitalize")(__d.name)`,
 	)
 }
 
@@ -156,7 +156,7 @@ func TestLibraryLoopKeyKeepsMap(t *testing.T) {
 	}
 	wantAll(t, got,
 		"__e(__d.items).map((item) =>",
-		`key: (__f["slugify"] || __f.__missing("slugify"))(item?.id)`,
+		`key: __f.get("slugify")(item?.id)`,
 	)
 }
 
@@ -202,11 +202,11 @@ func TestObjectLiteralFunctionArgumentsCompile(t *testing.T) {
   <Card label={ t(key, { nested: { deep: n }, 'x-y': 1 }) } />
   {#for item in items}<li>{ t('row', { item, i: item.id }) }</li>{/for}`))
 	wantAll(t, got,
-		`(__f["t"] || __f.__missing("t"))('cart.count', { count: __d.n })`,
-		`(__f["resize"] || __f.__missing("resize"))(__d.photo, { height: 480, fit: __d.fit })`,
-		`(__f["t"] || __f.__missing("t"))('alt', { name: __d.user?.name })`,
-		`(__f["t"] || __f.__missing("t"))(__d.key, { nested: { deep: __d.n }, 'x-y': 1 })`,
-		`(__f["t"] || __f.__missing("t"))('row', { item: s.item, i: s.item?.id })`,
+		`__f.get("t")('cart.count', { count: __d.n })`,
+		`__f.get("resize")(__d.photo, { height: 480, fit: __d.fit })`,
+		`__f.get("t")('alt', { name: __d.user?.name })`,
+		`__f.get("t")(__d.key, { nested: { deep: __d.n }, 'x-y': 1 })`,
+		`__f.get("t")('row', { item: s.item, i: s.item?.id })`,
 	)
 	if strings.Contains(got, "__d.count:") || strings.Contains(got, "__d.height") {
 		t.Errorf("an object literal key was scoped:\n%s", got)
@@ -291,7 +291,7 @@ func TestExpressionLanguageInEveryPosition(t *testing.T) {
 		name, body, want string
 	}{
 		{"method in text", "  <p>{ name.toUpperCase() }</p>", "__s(__d.name?.toUpperCase(),"},
-		{"library function in text", "  <p>{ currency(price) }</p>", `__s((__f["currency"] || __f.__missing("currency"))(__d.price),`},
+		{"library function in text", "  <p>{ currency(price) }</p>", `__s(__f.get("currency")(__d.price),`},
 		{"Math", "  <p>{ Math.round(x) }</p>", "__s(Math.round(__d.x),"},
 		{"at(-1)", "  <p>{ items.at(-1) }</p>", "__d.items?.at(-1)"},
 		{"brace attribute", "  <button disabled={ !draft.trim() }>x</button>", "disabled: !__d.draft?.trim()"},
@@ -346,7 +346,7 @@ func TestCalledLoopKeyKeepsMap(t *testing.T) {
 	}
 	wantAll(t, got,
 		"__e(__d.items).map((item) =>",
-		`key: (__f["slugify"] || __f.__missing("slugify"))(item?.id)`,
+		`key: __f.get("slugify")(item?.id)`,
 	)
 }
 

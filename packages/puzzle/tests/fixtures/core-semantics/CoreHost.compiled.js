@@ -72,7 +72,7 @@ const __L1 = { key: (m) => ViewNode.keyOf(m) };
 
 CoreHost.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
+  const __f = this.ctx.formatters;
 
   return new ViewNode('puzzle-view', { class: 'core' }, [
     new ViewNode('p', { class: 'deep' }, [
@@ -83,15 +83,15 @@ CoreHost.prototype.render = function () {
     ]),
     new ViewNode('p', {
       class: 'title',
-      title: (__f["money"] || __f.__missing("money"))(__d.price),
+      title: __f.get("money")(__d.price),
     }, [
       new ViewNode('text', { value: 't' }),
     ]),
     new ViewNode('p', { class: 'label' }, [
-      new ViewNode('text', { value: __s((__f["t"] || __f.__missing("t"))('cart.count', { count: __d.n, unit: __d.unit }), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 't(\'cart.count\', { count: n, unit })' : 0) }),
+      new ViewNode('text', { value: __s(__f.get("t")('cart.count', { count: __d.n, unit: __d.unit }), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 't(\'cart.count\', { count: n, unit })' : 0) }),
     ]),
     new ViewNode('p', { class: 'nested' }, [
-      new ViewNode('text', { value: __s((__f["echo"] || __f.__missing("echo"))('x', { outer: { inner: __d.n }, 'quoted-key': __d.unit }), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'echo(\'x\', { outer: { inner: n }, \'quoted-key\': unit })' : 0) }),
+      new ViewNode('text', { value: __s(__f.get("echo")('x', { outer: { inner: __d.n }, 'quoted-key': __d.unit }), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'echo(\'x\', { outer: { inner: n }, \'quoted-key\': unit })' : 0) }),
     ]),
     ...(__d.tags?.length || __d.flagged
       ? [

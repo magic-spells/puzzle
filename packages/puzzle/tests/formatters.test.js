@@ -168,9 +168,9 @@ describe('FormatterRegistry', () => {
 		expect([...builtinNames].sort()).toEqual(Object.keys(fullBuiltins).sort());
 	});
 
-	it('exposes the raw function map compiled render code needs', () => {
-		// Compiled code calls __formatters.escape(...) and the guarded form
-		// (__formatters.name || __formatters.__missing('name'))(...) directly (D43).
+	it('exposes the raw function map and the __missing factory get() falls back to', () => {
+		// Compiled code calls registry.get('name')(...), which reads this map and
+		// falls back to __missing for an unknown name (D43).
 		expect(typeof f.escape).toBe('function');
 		// __missing is a FACTORY (D43): it takes the offending name and returns a
 		// pass-through formatter.

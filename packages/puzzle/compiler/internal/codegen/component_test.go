@@ -196,7 +196,7 @@ export default class Home extends Object {}
 		"const __pzlComponentSelector1 = () => __f;",
 		"const __pzlComponentSelector2 = () => s;",
 		"const __pzlComponentSelector3 = () => s1;",
-		"const __d = this.getData();", "const __f = this.ctx.formatters.getAll();",
+		"const __d = this.getData();", "const __f = this.ctx.formatters;",
 		"__dc(__pzlComponentSelector0(),",
 		"__dc(__pzlComponentSelector1()?.cards?.[__pzlComponentSelector1()?.prefix],",
 		"__dc(__pzlComponentSelector2()?.[s.item?.type],",

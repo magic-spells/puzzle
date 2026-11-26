@@ -38,7 +38,7 @@ import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
 TodoItem.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
+  const __f = this.ctx.formatters;
 
   return new ViewNode('div', { class: 'overflow-hidden' }, [
     new ViewNode('div', {
@@ -86,7 +86,7 @@ TodoItem.prototype.render = function () {
         new ViewNode('text', { value: __s(__d.todo?.text, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'todo.text' : 0) }),
       ]),
       new ViewNode('span', { class: 'ml-4 shrink-0 font-mono text-11 text-faint tabular-nums' }, [
-        new ViewNode('text', { value: __s((__f["datetime"] || __f.__missing("datetime"))(__d.todo?.createdAt, 'short'), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'datetime(todo.createdAt, \'short\')' : 0) }),
+        new ViewNode('text', { value: __s(__f.get("datetime")(__d.todo?.createdAt, 'short'), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'datetime(todo.createdAt, \'short\')' : 0) }),
       ]),
       new ViewNode('button', {
         class: 'ml-3 w-7 h-7 shrink-0 rounded-md flex items-center justify-center text-xl leading-none text-faint hover:text-danger hover:bg-danger/10 opacity-0 group-hover:opacity-100 transition-all',

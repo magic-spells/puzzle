@@ -13,7 +13,7 @@ const __L0 = { key: (item) => ViewNode.keyOf(item), fields: ['done', 'name'] };
 
 ExprHandlers.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
+  const __f = this.ctx.formatters;
 
   return new ViewNode('puzzle-view', { class: 'handlers' }, [
     new ViewNode('button', { '@click': ((this.__h ??= {})[0] ??= (event) => this.events.clear(event)) }, [
@@ -40,7 +40,7 @@ ExprHandlers.prototype.render = function () {
       new ViewNode('text', { value: 'Pick' }),
     ]),
     new ViewNode('button', {
-      '@click': (event) => this.events.notify((__f["t"] || __f.__missing("t"))('saved', { name: __d.user?.name })),
+      '@click': (event) => this.events.notify(__f.get("t")('saved', { name: __d.user?.name })),
     }, [
       new ViewNode('text', { value: 'Notify' }),
     ]),

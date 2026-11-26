@@ -26,13 +26,13 @@ const __L0 = { key: (tip) => ViewNode.keyOf(tip) };
 
 LazyCard.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
+  const __f = this.ctx.formatters;
 
   return new ViewNode('div', { class: 'lazy-card' }, [
     new ViewNode('h3', {}, [
       new ViewNode(SLOT_TAG, { name: 'label', fallback: () => [
         new ViewNode('em', { class: 'lazy-card-fallback' }, [
-          new ViewNode('text', { value: __s((__f["probe"] || __f.__missing("probe"))(__d.label), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'probe(label)' : 0) }),
+          new ViewNode('text', { value: __s(__f.get("probe")(__d.label), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'probe(label)' : 0) }),
         ]),
       ] }),
     ]),

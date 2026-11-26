@@ -44,10 +44,10 @@ class Layout extends PuzzleView {
 		constructed.push('layout');
 	}
 	render() {
-		// Through the formatter map, exactly as a compiled `{ t('layout.brand') }`.
-		const f = this.ctx.formatters.getAll();
+		// Through the registry, exactly as a compiled `{ t('layout.brand') }`.
+		const f = this.ctx.formatters;
 		return h('puzzle-view', { class: 'layout' }, [
-			h('header', {}, [text(f.t('layout.brand'))]),
+			h('header', {}, [text(f.get('t')('layout.brand'))]),
 			h('main', {}, [slot()]),
 		]);
 	}

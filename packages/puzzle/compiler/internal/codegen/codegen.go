@@ -442,7 +442,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, res *Result)
 	// (usesFormatters, set by absorbFlags). rootExpr and skelExpr are both fully
 	// built above, so the flag is final here.
 	if c.usesFormatters {
-		b.WriteString("  const __f = this.ctx.formatters.getAll();\n")
+		b.WriteString("  const __f = this.ctx.formatters;\n")
 	}
 	b.WriteString("\n")
 	b.WriteString("  return ")
@@ -475,7 +475,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, res *Result)
 		b.WriteString(".prototype.renderSkeleton = function () {\n")
 		b.WriteString("  const __d = this.getData();\n")
 		if c.usesFormatters {
-			b.WriteString("  const __f = this.ctx.formatters.getAll();\n")
+			b.WriteString("  const __f = this.ctx.formatters;\n")
 		}
 		b.WriteString("\n")
 		b.WriteString("  return ")
@@ -553,7 +553,7 @@ type compiler struct {
 
 	// Set when an emitted expression calls a library function, which is the
 	// only thing that reads __f. It gates
-	// the `const __f = this.ctx.formatters.getAll()` line in BOTH render() and
+	// the `const __f = this.ctx.formatters` line in BOTH render() and
 	// renderSkeleton() — module-wide, so a call in either body emits the line in
 	// both. A third tracker of the same signal is internal/plugin/scan.go
 	// collectUsage (the built-in tree-shaking allow-list); the two are kept in

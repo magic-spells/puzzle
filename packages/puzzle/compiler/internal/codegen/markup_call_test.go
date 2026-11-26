@@ -20,7 +20,7 @@ func TestMarkupCallLowersToLiveHTML(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		`new ViewNode('#html', { value: __s((__f["truncate"] || __f.__missing("truncate"))(__d.body, 40), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'raw(truncate(body, 40))' : 0) })`,
+		`new ViewNode('#html', { value: __s(__f.get("truncate")(__d.body, 40), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'raw(truncate(body, 40))' : 0) })`,
 		`new ViewNode('#html', { value: __s(__d.note, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'newline_to_br(note)' : 0), br: true })`,
 		`new ViewNode('#html', { value: __s(s.item?.html,`,
 		`new ViewNode('text', { value: 'Before ' })`,
@@ -30,7 +30,7 @@ func TestMarkupCallLowersToLiveHTML(t *testing.T) {
 			t.Errorf("missing %s in:\n%s", want, got)
 		}
 	}
-	for _, forbidden := range []string{`__f["raw"]`, `__f["newline_to_br"]`} {
+	for _, forbidden := range []string{`__f.get("raw")`, `__f.get("newline_to_br")`} {
 		if strings.Contains(got, forbidden) {
 			t.Errorf("markup function reached the registry (%s):\n%s", forbidden, got)
 		}

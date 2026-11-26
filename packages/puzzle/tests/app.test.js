@@ -30,13 +30,13 @@ class HomeView extends PuzzleView {
 }
 
 // A view that formats a value through ctx.formatters — proves config formatters
-// reach the render path (views call this.ctx.formatters.getAll()).
+// reach the render path (compiled views call this.ctx.formatters.get(name)).
 class FormatView extends PuzzleView {
 	render() {
-		const f = this.ctx.formatters.getAll();
+		const f = this.ctx.formatters;
 		return h('puzzle-view', { class: 'fmt' }, [
-			text(f.shout('hi')), // custom formatter
-			text(f.timeago('ab')), // built-in, possibly overridden
+			text(f.get('shout')('hi')), // custom formatter
+			text(f.get('timeago')('ab')), // built-in, possibly overridden
 		]);
 	}
 }

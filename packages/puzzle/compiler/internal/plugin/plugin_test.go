@@ -1019,7 +1019,7 @@ export default class Bio extends PuzzleView {}
 
 // A component imported from a sibling directory (outside app/) still ships its
 // functions: the scan walks the whole project so `truncate` is seeded and the
-// generated render's guarded `(__f["truncate"] || __f.__missing("truncate"))(...)` call
+// generated render's guarded `__f.get("truncate")(...)` call
 // resolves to the real function instead of the D43 pass-through.
 func TestScanFormattersOutsideAppDir(t *testing.T) {
 	root := writeApp(t, map[string]string{

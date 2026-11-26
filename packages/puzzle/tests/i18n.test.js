@@ -375,7 +375,7 @@ describe('the t formatter', () => {
 	it('the D43 guard names i18n when t is used without translations', () => {
 		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const registry = makeFormatterRegistry();
-		const t = registry.getAll().t || registry.getAll().__missing('t');
+		const t = registry.get('t');
 		expect(t('cart.title')).toBe('cart.title');
 		expect(error.mock.calls[0][0]).toContain('needs translations');
 		expect(error.mock.calls[0][0]).toContain('i18n');

@@ -13,7 +13,7 @@ const __L0 = { key: (item) => ViewNode.keyOf(item), counter: true, fields: ['qty
 
 ExprMethods.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
+  const __f = this.ctx.formatters;
 
   return new ViewNode('puzzle-view', { class: 'methods' }, [
     new ViewNode('h1', { title: __d.title?.trim() }, [
@@ -53,7 +53,7 @@ ExprMethods.prototype.render = function () {
       new ViewNode('text', { value: __s(__d.items?.find((item) => item?.qty > 1)?.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'items.find(item => item.qty > 1)?.name' : 0) }),
     ]),
     new ViewNode('p', { class: 'label' }, [
-      new ViewNode('text', { value: __s((__f["currency"] || __f.__missing("currency"))(__d.price, '$'), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'currency(price, \'$\')' : 0) + ' ' + __s((__f["truncate"] || __f.__missing("truncate"))((__f["capitalize"] || __f.__missing("capitalize"))(__d.title), 20), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'truncate(capitalize(title), 20)' : 0) }),
+      new ViewNode('text', { value: __s(__f.get("currency")(__d.price, '$'), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'currency(price, \'$\')' : 0) + ' ' + __s(__f.get("truncate")(__f.get("capitalize")(__d.title), 20), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'truncate(capitalize(title), 20)' : 0) }),
     ]),
     ...(__d.items?.filter((item) => !item?.done)?.length > 0
       ? [

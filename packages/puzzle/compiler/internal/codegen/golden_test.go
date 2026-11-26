@@ -70,42 +70,38 @@ func TestGoldens(t *testing.T) {
 	}
 }
 
-// TestFormatterMissingGuard asserts the D43 emission contract explicitly (v1.12):
-// every formatter call is wrapped as `(__f["name"] || __f.__missing("name"))(…)`,
-// with BRACKET access and a JSON-quoted name, and NO bare `__f[...]` read
-// survives. Bracket access (not dot) matches the runtime registry's arbitrary
-// string keys and lets the __missing guard engage for names like `foo-bar` that
-// dot access would have parsed as subtraction. This guards the golden from a
-// blind `-update` silently reverting the contract.
+// TestFormatterMissingGuard asserts the D43 emission contract explicitly: every
+// library call reads the registry through its own get(), `__f.get("name")(…)`,
+// with a JSON-quoted name, and nothing else reads `__f`. get() returns the
+// registered function or the __missing pass-through, so a direct `__f[…]` or
+// `__f.name` read would skip the guard. This guards the golden from a blind
+// `-update` silently reverting the contract.
 func TestFormatterMissingGuard(t *testing.T) {
 	got := compileFile(t, "testdata/formatter_chain.pzl", ModeView)
 	for _, want := range []string{
-		`(__f["capitalize"] || __f.__missing("capitalize"))(__d.title)`,
-		`(__f["truncate"] || __f.__missing("truncate"))(`,
-		`(__f["currency"] || __f.__missing("currency"))(__d.price, '$', 2)`,
+		`__f.get("capitalize")(__d.title)`,
+		`__f.get("truncate")(`,
+		`__f.get("currency")(__d.price, '$', 2)`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("compiled output missing guarded formatter call %q\n%s", want, got)
 		}
 	}
-	// No bare, unguarded `__f[...]` read may survive: every formatter access is
-	// the guarded opener `(__f["NAME"] || …`, so each is immediately preceded by '('.
-	for _, m := range formatterAccessRE.FindAllStringIndex(got, -1) {
-		if m[0] == 0 || got[m[0]-1] != '(' {
-			t.Errorf("compiled output has a bare, unguarded __f[...] access:\n%s", got)
+	for _, m := range formatterReadRE.FindAllStringIndex(got, -1) {
+		if !strings.HasPrefix(got[m[0]:], `__f.get("`) {
+			t.Errorf("compiled output reads __f other than through get():\n%s", got)
 		}
 	}
 }
 
-// formatterAccessRE matches a bracketed formatter read `__f[` — the opener of a
-// guarded formatter access.
-var formatterAccessRE = regexp.MustCompile(`__f\[`)
+// formatterReadRE matches a read off the registry binding, `__f.` or `__f[`.
+var formatterReadRE = regexp.MustCompile(`__f[.[]`)
 
-// TestFunctionNameIsBracketAccess pins that a library call reads the registry
-// by bracket access with a JSON-quoted key, so any identifier the grammar
-// accepts — a Unicode name, a `$` — is the registry key as written, and a
-// missing one reaches the D43 __missing guard.
-func TestFunctionNameIsBracketAccess(t *testing.T) {
+// TestFunctionNameIsQuotedKey pins that a library call names its registry key
+// as a JSON-quoted string, so any identifier the grammar accepts — a Unicode
+// name, a `$` — is the key as written, and a missing one reaches the D43
+// __missing guard.
+func TestFunctionNameIsQuotedKey(t *testing.T) {
 	got := compileSrc(t, `<puzzle-view>
   <p>{ größe(x) } { $fmt(x) }</p>
 </puzzle-view>
@@ -116,8 +112,8 @@ export default class T extends PuzzleView { data() { return { x: '' }; } }
 </script>
 `)
 	for _, want := range []string{
-		`(__f["größe"] || __f.__missing("größe"))(__d.x)`,
-		`(__f["$fmt"] || __f.__missing("$fmt"))(__d.x)`,
+		`__f.get("größe")(__d.x)`,
+		`__f.get("$fmt")(__d.x)`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
