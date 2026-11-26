@@ -1,7 +1,7 @@
 ---
 name: 'D60 — build.dropConsole: production console stripping is opt-out'
 status: verified
-verified_at: '2026-11-26T23:52:46.217Z'
+verified_at: '2026-11-26T23:57:59.769Z'
 connections:
   - COMPONENT-ESBUILD-PLUGIN
   - DECISION-D26-TAILWIND-PIPELINE
@@ -9,7 +9,7 @@ code_refs:
   - compiler/internal/config/config.go
   - compiler/internal/build/build.go
   - compiler/internal/build/prerender_pages.go
-verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
+verified_sha: 42caff556e2193519bafa0a0d1d951072b7cf830
 ---
 
 # D60 — `build.dropConsole`: production console stripping is opt-out

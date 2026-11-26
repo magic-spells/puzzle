@@ -20,8 +20,8 @@ notes:
       during a navigation's synchronous start. Test for the latch:
       tests/router-navigation-result.test.js "a replace() whose constructor throws leaves nothing in
       flight".
-verified_at: '2026-11-26T23:52:46.217Z'
-verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
+verified_at: '2026-11-26T23:57:59.769Z'
+verified_sha: 42caff556e2193519bafa0a0d1d951072b7cf830
 ---
 
 # D182 — push()/replace() resolve a NavigationResult

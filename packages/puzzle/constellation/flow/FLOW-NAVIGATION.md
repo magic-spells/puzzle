@@ -30,8 +30,8 @@ connections:
   - DECISION-D67-HYBRID-PRERENDER
   - DECISION-D140-TAKEOVER-MOUNT-RESTORATION
   - DECISION-D196-NAMED-ROUTES
-verified_at: '2026-11-26T23:52:46.217Z'
-verified_sha: 54ef73f8f23d7eed3a5998b1e571212b4e24200d
+verified_at: '2026-11-26T23:57:59.769Z'
+verified_sha: 42caff556e2193519bafa0a0d1d951072b7cf830
 notes:
   - kind: state
     text: >-
