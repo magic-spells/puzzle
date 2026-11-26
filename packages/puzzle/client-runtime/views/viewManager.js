@@ -1082,7 +1082,7 @@ export function mount(vnode, parent, ref, ctx, owner = null) {
 		// <select>'s BEFORE its <option> children exist (the browser silently falls
 		// back to the first option), a range's before a later `min`/`max`/`step` (the
 		// browser clamps it to the defaults). Re-assert it now that both are in (SPEC §5).
-		syncControl(el, vnode.attrs, owner);
+		syncControl(el, vnode, owner);
 	}
 	// Insertion stays LAST: mount() builds detached and attaches the finished subtree
 	// in one move, so a throw leaves the container holding nothing this call put there.
@@ -1293,10 +1293,7 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 			// vnode, and the clone carries no `controls`), so it re-asserts itself
 			// here; a fresh row would have restored it through patchAttrs.
 			if (newVnode.controls) reassertControls(newVnode.controls, owner);
-			else if (isControlTag(newVnode.tag) && newVnode.el) {
-				const attrs = newVnode.attrs;
-				if ('value' in attrs || 'checked' in attrs) syncControl(newVnode.el, attrs, owner);
-			}
+			else if (newVnode.el) syncControl(newVnode.el, newVnode, owner);
 			return;
 		}
 	}
@@ -1430,7 +1427,7 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 	}
 
 	// Past the text/placeholder/html/portal arms, `el` is an element.
-	patchAttrs(/** @type {Element} */ (el), oldVnode.attrs, newVnode.attrs, owner);
+	patchAttrs(/** @type {Element} */ (el), newVnode.tag, oldVnode.attrs, newVnode.attrs, owner);
 
 	// DOM island (constellation/doc/DOC-SPEC.md §17, D44): a static `island` attr
 	// makes this element's children browser-/component-owned after mount. The
@@ -1466,7 +1463,7 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 	// selection can desync — and a range's new `value` was clamped to its old
 	// `max` when a later attr raised it in this same pass. Re-assert the
 	// controlled value once attrs and children have settled (SPEC §5).
-	syncControl(el, newVnode.attrs, owner);
+	syncControl(el, newVnode, owner);
 }
 
 /**
@@ -1492,7 +1489,13 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
  * elements carrying a plain `value` (<li>, <progress>, <button>) never reach
  * here and keep the vnode compare.
  *
- * @param {HTMLInputElement | HTMLTextAreaElement} el
+ * A <select>'s `value` drifts the same way (the user picks another option, or
+ * the option list churns under an unchanged value) and takes the same compare,
+ * but only from syncControl, once its options exist; patchAttrs gives it the
+ * generic path. A select has no `valueAsNumber`, so the number echo never
+ * applies to it.
+ *
+ * @param {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} el
  * @param {unknown} value the bound value
  * @param {PuzzleView | null} owner
  */
@@ -1531,39 +1534,35 @@ function syncControlChecked(el, value, owner) {
 
 /**
  * The three form tags whose `value`/`checked` the patcher re-asserts against the
- * LIVE DOM. The same predicate listBlock's `collectControls` walks with — a
- * `<li value="3">` or a `<progress value=…>` is not a control and keeps the
- * ordinary vnode compare.
+ * LIVE DOM. This is the one "is it a control" test, and it reads the vnode's tag,
+ * never the element's nodeName: syncControl runs it for every element, and
+ * listBlock's `collectControls` for every row it builds. A `<li value="3">` or a
+ * `<progress value=…>` is not a control and keeps the ordinary vnode compare.
  *
  * @param {unknown} tag
  * @returns {boolean}
  */
-function isControlTag(tag) {
+export function isControlTag(tag) {
 	return tag === 'input' || tag === 'textarea' || tag === 'select';
 }
 
 /**
  * Re-assert every controlled value in ONE element's attrs against the live DOM.
- * mount() and patch() run it once attrs and children have settled (a select's
- * options, a range's min/max); the identity short-circuit runs it for a cached
- * subtree, which has no attr or children pass of its own.
+ * mount() and patch() run it for every element once attrs and children have
+ * settled (a select's options, a range's min/max); the identity short-circuit
+ * runs it for a cached subtree, which has no attr or children pass of its own.
+ * Anything that is not a control returns on its tag, without touching the DOM.
  *
- * @param {Node} el a control's live element (dispatched on nodeName)
- * @param {Record<string, any>} attrs
+ * @param {Node} el the vnode's live element
+ * @param {ViewNode} vnode
  * @param {PuzzleView | null} owner
  */
-function syncControl(el, attrs, owner) {
-	const node = el.nodeName;
-	if (node === 'INPUT') {
-		if ('value' in attrs) syncControlValue(/** @type {HTMLInputElement} */ (el), attrs.value, owner);
-		if ('checked' in attrs) syncControlChecked(/** @type {HTMLInputElement} */ (el), attrs.checked, owner);
-		return;
-	}
-	if (node === 'TEXTAREA') {
-		if ('value' in attrs) syncControlValue(/** @type {HTMLTextAreaElement} */ (el), attrs.value, owner);
-		return;
-	}
-	reassertSelectValue(el, attrs);
+function syncControl(el, vnode, owner) {
+	const tag = vnode.tag;
+	if (!isControlTag(tag)) return;
+	const attrs = vnode.attrs;
+	if ('value' in attrs) syncControlValue(/** @type {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} */ (el), attrs.value, owner);
+	if (tag === 'input' && 'checked' in attrs) syncControlChecked(/** @type {HTMLInputElement} */ (el), attrs.checked, owner);
 }
 
 /**
@@ -1580,31 +1579,8 @@ function reassertControls(controls, owner) {
 	for (let i = 0; i < controls.length; i++) {
 		const vnode = controls[i];
 		const el = vnode.el ?? slotClones.get(vnode)?.el;
-		if (el) syncControl(el, vnode.attrs, owner);
+		if (el) syncControl(el, vnode, owner);
 	}
-}
-
-/**
- * Re-apply a <select>'s controlled `value` after its <option> children exist.
- * A no-op for any other element or a select without a controlled `value` attr.
- * Uses the same stringify coercion setAttr does; native fallback handles a value
- * that no longer matches any option (leaves selectedIndex where the browser puts it).
- *
- * @param {Node} el any mounted element (only a SELECT is touched)
- * @param {Record<string, any>} attrs
- */
-function reassertSelectValue(el, attrs) {
-	if (el.nodeName !== 'SELECT' || !('value' in attrs)) return;
-	// Compare against the LIVE property first, exactly as the INPUT/TEXTAREA branch of
-	// patchAttrs does: a settled select re-asserted on every patch wrote the value it
-	// already had and charged devperf a phantom DOM mutation. When the option list
-	// churned (or the user changed the selection out of band) the live value differs
-	// and the write still happens.
-	const next = stringify(attrs.value, 0, ' ');
-	if (/** @type {HTMLSelectElement} */ (el).value === next) return;
-	/** @type {HTMLSelectElement} */ (el).value = next;
-	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
-		devperfMutation();
 }
 
 /**
@@ -1957,11 +1933,12 @@ function releaseAborted(trees) {
 
 /**
  * @param {Element} el the persisting element
+ * @param {string} tag its vnode tag, which says whether it is a control
  * @param {Record<string, any>} oldAttrs
  * @param {Record<string, any>} newAttrs
  * @param {PuzzleView | null} [owner]
  */
-function patchAttrs(el, oldAttrs, newAttrs, owner = null) {
+function patchAttrs(el, tag, oldAttrs, newAttrs, owner = null) {
 	for (const [name, value] of Object.entries(newAttrs)) {
 		// Element ref (v1.39, D72): the element PERSISTS through this patch. The
 		// normal case is a cached setter identical on both sides (===) → nothing to
@@ -1983,9 +1960,9 @@ function patchAttrs(el, oldAttrs, newAttrs, owner = null) {
 		// the write after the element's other attrs, which shows (a radio's `checked`
 		// against a `name` patched in the same pass). A <select>'s `value` takes the
 		// generic path; it is re-asserted once its options have patched.
-		if (name === 'value' && (el.nodeName === 'INPUT' || el.nodeName === 'TEXTAREA')) {
+		if (name === 'value' && (tag === 'input' || tag === 'textarea')) {
 			syncControlValue(/** @type {HTMLInputElement | HTMLTextAreaElement} */ (el), value, owner);
-		} else if (name === 'checked' && el.nodeName === 'INPUT') {
+		} else if (name === 'checked' && tag === 'input') {
 			syncControlChecked(/** @type {HTMLInputElement} */ (el), value, owner);
 		} else if (oldAttrs[name] !== value) {
 			setAttr(el, name, value, owner);

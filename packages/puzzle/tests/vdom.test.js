@@ -191,6 +191,20 @@ describe('ViewManager — form bindings (properties, not attributes)', () => {
 		vm.render(h('input', { type: 'number', value: 11 }));
 		expect(input.value).toBe('11');
 	});
+
+	it('tells controls apart by the vnode tag, never by asking the DOM', () => {
+		// Every element ends its mount and patch in syncControl, and every `value` or
+		// `checked` attr goes through patchAttrs's control test, so a nodeName read in
+		// either is paid on every render.
+		const { vm } = setup();
+		const tree = () =>
+			h('form', {}, [h('p', {}, [text('hi')]), h('button', { value: 'go' }, []), h('input', { value: 'a' })]);
+		vm.render(tree());
+		const reads = vi.spyOn(Node.prototype, 'nodeName', 'get');
+		vm.render(tree());
+		expect(reads).not.toHaveBeenCalled();
+		reads.mockRestore();
+	});
 });
 
 describe('ViewManager — events (@ attrs)', () => {

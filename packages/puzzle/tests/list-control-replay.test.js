@@ -100,6 +100,21 @@ describe('what a cached row re-asserts', () => {
 
 		expect(far.value).toBe('bound');
 	});
+
+	it('puts back a <select> option the user picked out of band', () => {
+		const option = (value) => h('option', { value }, [text(value)]);
+		const { container, render } = setup((s) =>
+			h('li', { key: s.k }, [h('select', { value: 'b' }, [option('a'), option('b')])])
+		);
+		render();
+
+		const select = container.querySelector('select');
+		select.value = 'a';
+
+		render();
+
+		expect(select.value).toBe('b');
+	});
 });
 
 describe('a cached control reached through an ordinary patch', () => {
