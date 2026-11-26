@@ -887,6 +887,8 @@ habit. Nothing existing breaks: renamed spellings stay accepted.
   `../apps`, like create-vite. Usage reads `init [app-name]`. `--dir` still
   works as a hidden compatibility alias (to be deprecated later); given both,
   the path resolves against `--dir`.
+- **`puzzle create` is `puzzle init`:** the same command under the name most
+  JavaScript tools use, with the same flags, prompts and output.
 - **The default starter is dark only and links to the docs.** Its home page
   ends with four boxes that link to the Puzzle docs, the tutorial, the Puzzle
   site and the Puzzle Pieces site, each opening in a new tab. Its muted text

@@ -949,7 +949,7 @@ and `init --dir` still work as hidden compatibility aliases (no notice in
 | --- | --- |
 | `puzzle` | `-v, --version`, `--no-color` |
 | `version` | (none) |
-| `init [app-name]` | `-t, --template <default\|static>`, `--typescript`, `-y, --yes` |
+| `init [app-name]` (alias `create`) | `-t, --template <default\|static>`, `--typescript`, `-y, --yes` |
 | `dev [dir]` | `-p, --port <n>` (3000), `--strict-port`, `--host [ip]` / `--host=<addr>`, `-o, --open`, `--fixtures`, `--profile-build` |
 | `build [dir]` | `-m, --mode <production\|development>`, `--static`, `--hybrid`, `--fixtures`, `-q, --quiet`, `--profile-build` |
 | `preview [dir]` | `-p, --port <n>` (4000), `--strict-port`, `--host [ip]` / `--host=<addr>` |
