@@ -86,7 +86,11 @@ this card holds the implementation rules behind it.
   [[DECISION-D153-PUZZLE-SCRATCH-DIR]].
 - **`init`** — embedded `default`/`static` trees plus `-ts` overlays (`starters/`, written
   by `internal/scaffold`); writes `tsconfig.json` or `jsconfig.json`, never both. TTY
-  prompts (D77) are gated on a real isatty check AND no `--yes`.
+  prompts (D77) are gated on a real isatty check AND no `--yes`. `create` is a cobra
+  `Aliases` entry on the same command, so it shares the flags, prompts and output.
+  Nothing in the CLI keys off the command name: the update notice and the D202 check are
+  called from each command's own `RunE`, and `normalizeHostArgs` reads only `dev` and
+  `preview`.
 - **`generate`** — `IsTypeScriptApp` (a root `tsconfig.json`) switches every stub. Reserved
   marker names are refused for components and `Component` for every `.pzl` scaffold
   (D180), with a rename hint before any write. Family collisions are all-or-nothing;

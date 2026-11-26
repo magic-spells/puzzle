@@ -38,7 +38,8 @@ Run from `packages/puzzle` with `go test ./compiler/cmd/... ./compiler/internal/
   commands: `--force`/`-f` on `add` and `generate`, `--overwrite` as a silent hidden
   alias (a 0.9 `upgrade` re-execs the new binary with it, so it must not print a
   deprecation), persistent `--yes`, `build -m`/`-q` (quiet suppresses the summary),
-  `--port`/`--host`, `--no-color`, `version` matching `--version`, and stable
+  `--port`/`--host`, `--no-color`, `version` matching `--version`, `create` writing the same app
+  as `init` (`TestCreateIsInit`), and stable
   `info --json` / `doctor --json` keys. A renamed or dropped flag fails here, not in
   someone's script.
 - **The version pair** ([[DECISION-D202-CLI-RUNTIME-VERSION-PAIR]]):

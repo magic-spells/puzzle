@@ -420,7 +420,7 @@ func TestCreateIsInit(t *testing.T) {
 				}
 				return files
 			}
-			fromInit, fromCreate := tree("init"), tree("create")
+			fromCreate, fromInit := tree("create"), tree("init")
 			if !reflect.DeepEqual(fromCreate, fromInit) {
 				t.Errorf("puzzle create %v wrote a different tree from puzzle init", flags)
 			}
