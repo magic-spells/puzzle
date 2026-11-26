@@ -153,8 +153,10 @@ const SUPERSEDED = Object.freeze(fail('superseded'));
 // pairs the real one. A navigation that ends inside that synchronous stretch (a
 // constructor throw, a sync data() throw) clears #inFlight, so the pairing that
 // follows finds nothing to fill — the promise of a finished navigation never
-// latches (D182, D185). A real promise, so a waiter that reads it before the
-// pairing (__failedView's rebuild) simply runs one microtask later.
+// latches (D182, D185). A real promise that resolves 'superseded': a waiter that
+// reads it before the pairing (__failedView's rebuild) simply runs one microtask
+// later, and a joiner whose navigation never had its promise paired gets the
+// true answer (#joinInFlight).
 const PENDING = Promise.resolve(SUPERSEDED);
 
 /**
@@ -943,16 +945,12 @@ export class Router {
 		if (this.#guardRedirecting || !inFlight?.join || key !== sameNavKey(inFlight.path)) return null;
 		// A PENDING promise is read again on a microtask: a push or replace fired
 		// synchronously from inside #navigate (a created() hook) runs before #trackNav
-		// pairs the promise; one tick later #inFlight holds the real one — if it is
-		// still this path's. Otherwise a navigation fired in between took the token,
-		// so the one this call joined was superseded.
+		// pairs the promise. One tick later the record this call joined holds the
+		// real one — or still PENDING, which resolves 'superseded', when that
+		// navigation ended or was replaced before the pairing.
 		return inFlight.promise !== PENDING
 			? inFlight.promise
-			: Promise.resolve().then(
-					() =>
-						(this.#inFlight?.join && sameNavKey(this.#inFlight.path) === key && this.#inFlight.promise) ||
-						SUPERSEDED
-				);
+			: Promise.resolve().then(() => inFlight.promise);
 	}
 
 	/**
