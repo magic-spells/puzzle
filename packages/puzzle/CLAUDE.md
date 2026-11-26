@@ -68,8 +68,8 @@ enforced, not merely advised.
   `0.1.2` (the embedded agent skill + `puzzle add skills`, D78/v1.45), `0.2.0`
   (2026-07-24), `0.3.0` (2026-07-25), `0.3.1` (2026-07-25), `0.4.0`
   (2026-07-28), `0.5.0` (2026-08-07), `0.6.0` (2026-08-15), `0.7.0`
-  (2026-09-09), `0.8.0` (2026-10-01), and **`0.9.0` (2026-10-21, the current
-  `latest`)** are live on npm (six packages since 0.7.0 — the root plus five platform binaries — MIT,
+  (2026-09-09), `0.8.0` (2026-10-01), `0.9.0` (2026-10-21), and **`0.10.0` (published
+  2026-11-26, the current `latest`)** are live on npm (six packages since 0.7.0 — the root plus five platform binaries — MIT,
   manual publish via
   `npm run release:prep` — there is no CI publish). Everything from D88 onward
   shipped in `0.3.0` — minor, not patch: two new export subpaths (`./testing`,
